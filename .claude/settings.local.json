@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:/Users/Usuario/Desktop/SdG PP\" 2>/dev/null; echo \"---DESKTOP---\"; ls \"C:/Users/Usuario/Desktop\" 2>/dev/null)"
+    ]
+  }
+}
