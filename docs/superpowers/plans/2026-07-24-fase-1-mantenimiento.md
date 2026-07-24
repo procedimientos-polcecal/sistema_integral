@@ -126,12 +126,14 @@ falta ajustar), `lib/core/access.test.ts`
 **Files:** `app/(app)/mantenimiento/ordenes/**`,
 `app/api/mantenimiento/ordenes/route.ts`, `app/api/mantenimiento/ordenes/link/route.ts`
 
-- [ ] **Step 1:** Portar listado/Kanban y alta manual de OT (sin la llamada a Sheets de
-      `POST /api/work-orders` original).
-- [ ] **Step 2:** Portar cambio de estado (sin reescritura en Sheets) y vínculo con
-      mantenimiento programado.
-- [ ] **Step 3:** Verificar tipos.
-- [ ] **Step 4:** Commit.
+- [x] **Step 1:** Portar listado/Kanban y alta manual de OT. Se eliminó por completo el
+      código de integración con Sheets (JWT/OAuth2 manual, `appendToSheet`,
+      `updateSheetRow`) — no solo se dejó de llamar, se quitó del archivo ya que no
+      aplica en esta fase.
+- [x] **Step 2:** Portar cambio de estado y vínculo con mantenimiento programado
+      (`/api/mantenimiento/ordenes/link`).
+- [x] **Step 3:** Verificar tipos y build.
+- [x] **Step 4:** Commit.
 
 ### Task 8: Planificación diaria (+ impresión)
 

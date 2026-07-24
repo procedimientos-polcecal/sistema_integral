@@ -1,0 +1,133 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const estado       = searchParams.get("estado");
+  const equipment_id = searchParams.get("equipment_id");
+  const search       = searchParams.get("q");
+  const page         = Number(searchParams.get("page") ?? 1);
+  const limit        = 50;
+
+  let query = supabase
+    .from("ordenes_trabajo")
+    .select("*", { count: "exact" })
+    .order("ot_number", { ascending: false })
+    .range((page - 1) * limit, page * limit - 1);
+
+  if (estado)       query = query.eq("estado", estado);
+  if (equipment_id) query = query.eq("equipment_id", equipment_id);
+  if (search) {
+    // Sanitizar: quitar caracteres que rompen el filtro PostgREST (,()*\)
+    const safe = search.replace(/[,()*\\%]/g, "").trim();
+    if (safe) {
+      query = query.or(`descripcion.ilike.%${safe}%,equipo_raw.ilike.%${safe}%,sector_raw.ilike.%${safe}%`);
+    }
+  }
+
+  const { data, count, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ data, count });
+}
+
+// ── POST: crear OT manualmente desde la app ─────────────────────────────────
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const {
+    equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
+    especialidad, tipo, quien, descripcion, repuesto,
+    fecha, fecha_ejecucion, fecha_cierre,
+    estado, contratista, horas, operario_1, operario_2, operario_3, prioridad,
+    schedule_id,
+  } = body;
+
+  if (!descripcion?.trim()) {
+    return NextResponse.json({ error: "La descripción es requerida" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  const { data: last } = await admin
+    .from("ordenes_trabajo").select("ot_number").order("ot_number", { ascending: false }).limit(1).single();
+  const ot_number = (last?.ot_number ?? 0) + 1;
+
+  const record = {
+    ot_number,
+    fecha:           fecha || new Date().toISOString().slice(0, 10),
+    sector_id:       sector_id || null,
+    sector_raw:      sector_raw || null,
+    equipo_raw:      equipo_raw || null,
+    equipo_code:     equipo_code || null,
+    equipment_id:    equipment_id || null,
+    especialidad:    especialidad || null,
+    tipo:            tipo || null,
+    quien:           quien || null,
+    descripcion:     descripcion.trim(),
+    repuesto:        repuesto?.trim() || null,
+    fecha_ejecucion: fecha_ejecucion || null,
+    fecha_cierre:    fecha_cierre || null,
+    estado:          estado || "POR_HACER",
+    contratista:     contratista?.trim() || null,
+    horas:           horas ? Number(horas) : null,
+    operario_1:      operario_1?.trim() || null,
+    operario_2:      operario_2?.trim() || null,
+    operario_3:      operario_3?.trim() || null,
+    prioridad:       prioridad || null,
+    schedule_id:     schedule_id || null,
+    app_created:     true,
+    created_by:      user.id,
+    created_at_app:  new Date().toISOString(),
+    synced_at:       new Date().toISOString(),
+  };
+
+  const { data: inserted, error } = await admin
+    .from("ordenes_trabajo").insert(record).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ data: inserted, ot_number });
+}
+
+// ── PATCH: actualizar estado de una OT desde la app ─────────────────────────
+const VALID_ESTADOS = ["REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "SUSPENDIDA"];
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  const { id, estado } = await request.json();
+  if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
+  if (!estado || !VALID_ESTADOS.includes(estado)) {
+    return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+  }
+
+  // Solo se permite actualizar el estado. No aceptamos otros campos del body
+  // para evitar escritura arbitraria de columnas (mass-assignment).
+  const admin = createAdminClient();
+  const update = { estado, synced_at: new Date().toISOString() };
+
+  const { data: updated, error } = await admin
+    .from("ordenes_trabajo").update(update).eq("id", id).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ data: updated });
+}
