@@ -78,14 +78,18 @@ falta ajustar), `lib/core/access.test.ts`
 `app/(app)/mantenimiento/equipos/[id]/checklist/ChecklistEditor.tsx`,
 `app/api/mantenimiento/equipos/[id]/route.ts`, `app/api/mantenimiento/equipos/import/route.ts`
 
-- [ ] **Step 1:** Portar listado + import Excel, reapuntando `plants`→`empresas`,
+- [x] **Step 1:** Portar listado + import Excel, reapuntando `plants`→`empresas`,
       `sectors`→`sectores`, `app_users`→`usuarios`, chequeo de rol hardcodeado →
-      `nivel` de `usuario_modulos`.
-- [ ] **Step 2:** Portar detalle + cambio de estado + edición.
-- [ ] **Step 3:** Portar editor de checklist.
-- [ ] **Step 4:** Verificar tipos.
-- [ ] **Step 5:** Verificar en navegador (con `.env.local` cargado por el usuario).
-- [ ] **Step 6:** Commit.
+      `nivel` de `usuario_modulos`. También se portó `InfoTip` (`components/InfoTip.tsx`)
+      y las clases utilitarias de Mantenimiento (`.input`, `.btn-primary`, `.card`,
+      `.badge`, `.table-base`, etc.) a `app/globals.css`.
+- [x] **Step 2:** Portar detalle + cambio de estado + edición.
+- [x] **Step 3:** Portar editor de checklist.
+- [x] **Step 4:** Verificar tipos y build: `npx tsc --noEmit` y `npm run build` — ambos
+      exitosos.
+- [ ] **Step 5:** Verificar en navegador — **pendiente**: falta `.env.local` con las
+      credenciales del Supabase del SdG (ver instrucciones dadas al usuario).
+- [x] **Step 6:** Commit.
 
 ### Task 5: Dashboard de Mantenimiento
 

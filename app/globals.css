@@ -3,6 +3,20 @@
 :root {
   --background: #f9fafb;
   --foreground: #0a0f1c;
+
+  /* Portado de Mantenimiento: primitivas de UI reusadas por sus pantallas */
+  --orange:       #F59E0B;
+  --orange-dark:  #D97706;
+
+  --card:        #FFFFFF;
+  --border:      #E2E8F0;
+  --border-dark: #CBD5E1;
+
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.1);
 }
 
 html, body {
@@ -11,4 +25,144 @@ html, body {
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* ─── Input / Select ─── */
+.input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  padding: 9px 12px;
+  font-size: 14px;
+  background: var(--card);
+  color: var(--text-primary);
+  transition: border-color .15s, box-shadow .15s;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+}
+.input::placeholder { color: var(--text-muted); }
+
+/* ─── Buttons ─── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--orange);
+  color: #0A0F1C;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  box-shadow: 0 1px 3px rgba(245,158,11,.3);
+}
+.btn-primary:hover { background: var(--orange-dark); box-shadow: 0 4px 12px rgba(245,158,11,.25); }
+.btn-primary:active { transform: scale(.98); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.btn-secondary:hover { background: var(--background); border-color: var(--border-dark); }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn-ghost:hover { background: var(--background); color: var(--text-primary); }
+
+/* ─── Card ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Section title ─── */
+.section-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ─── Empty state ─── */
+.empty-state {
+  border-radius: 12px;
+  border: 1.5px dashed var(--border);
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* ─── Badge ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.badge-op    { background: #DCFCE7; color: #15803D; }
+.badge-mant  { background: #DBEAFE; color: #1D4ED8; }
+.badge-rep   { background: #FEE2E2; color: #DC2626; }
+.badge-st    { background: #FEF3C7; color: #B45309; }
+.badge-fs    { background: #F1F5F9; color: #475569; }
+.badge-baja  { background: #F8FAFC; color: #64748B; }
+
+/* ─── Table ─── */
+.table-base { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table-base thead th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: #F8FAFC;
+  border-bottom: 1px solid var(--border);
+}
+.table-base tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.table-base tbody tr:hover { background: #FAFBFC; }
+.table-base tbody td { padding: 12px 16px; color: var(--text-secondary); }
+.table-base tbody td:first-child { color: var(--text-primary); }
+
+:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
 }
