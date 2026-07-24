@@ -21,25 +21,25 @@ lectura, para copiar/portar código).
 `supabase/migrations/005_mantenimiento_schema.sql`,
 `supabase/migrations/006_mantenimiento_rls.sql`
 
-- [ ] **Step 1:** `004_nucleo_ajustes_mantenimiento.sql` — `empresas.status plant_status`
+- [x] **Step 1:** `004_nucleo_ajustes_mantenimiento.sql` — `empresas.status plant_status`
       (crear tipo `plant_status`), `empresa_status_log`; `sectores.empresa_id` a nullable,
       `sectores.transversal boolean`, `sectores.status plant_status`, constraint
       `empresa_id/transversal` mutuamente excluyentes, índice único parcial para nombre de
       sectores transversales.
-- [ ] **Step 2:** `005_mantenimiento_schema.sql` — tablas de dominio listadas en el spec
+- [x] **Step 2:** `005_mantenimiento_schema.sql` — tablas de dominio listadas en el spec
       (`equipos`, `equipos_checklists`, `mantenimientos_programados`,
       `mantenimientos_ejecuciones`, `equipos_status_log`, `sectores_status_log`,
       `ordenes_trabajo`, `planificacion_diaria`, `planificacion_diaria_items`), enums
       propios (`equipment_status`, `criticality_level`, `maintenance_type`,
       `schedule_type`, `schedule_status`), trigger `equipos_updated_at`, trigger
       `sync_equipos_status_from_ot`.
-- [ ] **Step 3:** `006_mantenimiento_rls.sql` — función `puede_editar_mantenimiento()`,
+- [x] **Step 3:** `006_mantenimiento_rls.sql` — función `puede_editar_mantenimiento()`,
       RLS en todas las tablas nuevas (lectura abierta a authenticated, escritura gateada),
       bucket `execution-photos` + policies corregidas.
-- [ ] **Step 4:** Seed de prueba — 2-3 equipos, 1 checklist, 1 mantenimiento programado, en
+- [x] **Step 4:** Seed de prueba — 2-3 equipos, 1 checklist, 1 mantenimiento programado, en
       `supabase/migrations/007_seed_mantenimiento.sql`, idempotente.
-- [ ] **Step 5:** Verificar tipos: `npx tsc --noEmit`.
-- [ ] **Step 6:** Commit.
+- [x] **Step 5:** Verificar tipos: `npx tsc --noEmit`.
+- [x] **Step 6:** Commit.
 
 ### Task 2: Tipos TS del dominio + registrar módulo en nav/acceso
 
