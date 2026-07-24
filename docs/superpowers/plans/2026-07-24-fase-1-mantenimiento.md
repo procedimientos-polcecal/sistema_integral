@@ -96,9 +96,12 @@ falta ajustar), `lib/core/access.test.ts`
 **Files:** `app/(app)/mantenimiento/page.tsx`,
 `app/(app)/mantenimiento/DashboardClient.tsx`
 
-- [ ] **Step 1:** Portar KPIs, gráficos (recharts), modal de cambio de estado de sector.
-- [ ] **Step 2:** Verificar tipos.
-- [ ] **Step 3:** Commit.
+- [x] **Step 1:** Portar KPIs, gráficos (recharts), modal de cambio de estado de sector.
+      Incluye `app/api/mantenimiento/sectores/status/route.ts` (no estaba en el plan
+      original de archivos, pero el dashboard depende de él). Sectores transversales
+      se muestran con un chip "Transversal" además de las empresas.
+- [x] **Step 2:** Verificar tipos y build.
+- [x] **Step 3:** Commit.
 
 ### Task 6: Mantenimientos programados + Ejecuciones + Historial
 
