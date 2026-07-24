@@ -157,12 +157,14 @@ falta ajustar), `lib/core/access.test.ts`
 - [x] **Step 1:** `npm test` → verde (6/6).
 - [x] **Step 2:** `npx tsc --noEmit` → sin errores.
 - [x] **Step 3:** `npm run build` → build exitoso (21 rutas del módulo Mantenimiento).
-- [ ] **Step 4:** Flujo manual completo (con `.env.local` y seed aplicados): login → ver
-      Mantenimiento en el sidebar → navegar cada pantalla → crear/editar un equipo → crear
-      un mantenimiento programado → registrar una ejecución → crear y mover una OT → armar
-      un plan diario e imprimirlo. **Pendiente**: falta que se cargue `.env.local` con las
-      credenciales del Supabase del SdG y se apliquen las migraciones
-      (`supabase/migrations/001` a `007`) para poder probar contra datos reales.
+- [x] **Step 4 (parcial):** `.env.local` cargado y migraciones 001-007 aplicadas contra el
+      Supabase real del SdG. Verificado en navegador con el primer usuario `admin_sistema`
+      (`procedimientos@polcecal.com`): login → sidebar filtra correctamente → Equipos
+      muestra los 2 equipos de seed con empresa/sector reconciliados → Dashboard muestra
+      estado de sectores por empresa, KPIs y gráficos → Administración (núcleo, Fase 0)
+      sigue funcionando. **Falta probar** los flujos de escritura: crear/editar equipo,
+      crear mantenimiento programado, registrar ejecución, crear/mover OT, armar e
+      imprimir un plan diario — para hacerlo desde la UI, no solo lectura.
 
 **Definición de "hecho" para Fase 1:** el módulo de Mantenimiento funciona de punta a
 punta sobre el núcleo unificado (empresas/sectores/usuarios compartidos con RRHH), con
