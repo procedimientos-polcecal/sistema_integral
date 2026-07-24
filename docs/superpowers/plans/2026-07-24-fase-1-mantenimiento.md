@@ -109,13 +109,17 @@ falta ajustar), `lib/core/access.test.ts`
 `app/(app)/mantenimiento/ejecuciones/**`, `app/(app)/mantenimiento/historial/**`,
 `app/api/mantenimiento/ejecuciones/route.ts`
 
-- [ ] **Step 1:** Portar CRUD de programaciones (crear/editar/pausar/eliminar, fotos de
-      referencia a Storage).
-- [ ] **Step 2:** Portar registro de ejecuciones (con avance de `next_date`), sin el envío
-      de mail (queda comentado/pendiente de integración de Resend).
-- [ ] **Step 3:** Portar historial + export CSV.
-- [ ] **Step 4:** Verificar tipos.
-- [ ] **Step 5:** Commit.
+- [x] **Step 1:** Portar CRUD de programaciones (crear/editar/pausar/eliminar, fotos de
+      referencia a Storage). Se agregó `usuariosConAccesoMantenimiento()` en
+      `lib/mantenimiento/auth.ts` para no listar en el módulo a usuarios que solo tienen
+      acceso a RRHH/Remises. Se portó también `ConfirmProvider` (envuelve el layout del
+      módulo).
+- [x] **Step 2:** Portar registro de ejecuciones (con avance de `next_date`). Se descartó
+      la rama offline (Dexie) — fuera de alcance de esta fase según el spec — y el envío
+      de mail (Resend, integración diferida).
+- [x] **Step 3:** Portar historial + export CSV.
+- [x] **Step 4:** Verificar tipos y build.
+- [x] **Step 5:** Commit.
 
 ### Task 7: Órdenes de trabajo (CRUD manual, sin Sheets)
 
