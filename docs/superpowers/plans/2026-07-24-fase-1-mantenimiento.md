@@ -61,11 +61,12 @@ falta ajustar), `lib/core/access.test.ts`
 
 **Files:** `app/(app)/mantenimiento/layout.tsx`
 
-- [ ] **Step 1:** Layout que redirige si el usuario no tiene `mantenimiento` en
+- [x] **Step 1:** Layout que redirige si el usuario no tiene `mantenimiento` en
       `modulosVisibles`; expone `nivel` de acceso (lectura/edicion/admin) a las páginas
-      hijas vía contexto o prop drilling simple.
-- [ ] **Step 2:** Verificar tipos.
-- [ ] **Step 3:** Commit.
+      hijas vía contexto (`lib/mantenimiento/context.tsx` — `NivelMantenimientoProvider`,
+      `useNivelMantenimiento`, `usePuedeEditarMantenimiento`).
+- [x] **Step 2:** Verificar tipos.
+- [x] **Step 3:** Commit.
 
 ### Task 4: Página Equipos (listado + detalle + checklist)
 
