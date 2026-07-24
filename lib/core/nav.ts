@@ -26,6 +26,14 @@ export const NAV: NavItem[] = [
     label: "Mantenimiento",
     href: "/mantenimiento",
     modulo: "mantenimiento",
+    children: [
+      { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
+      { label: "Mantenimientos", href: "/mantenimiento/mantenimientos", modulo: "mantenimiento" },
+      { label: "Ejecuciones", href: "/mantenimiento/ejecuciones", modulo: "mantenimiento" },
+      { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
+      { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      { label: "Planificación diaria", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+    ],
   },
   {
     label: "Administración",

@@ -12,3 +12,18 @@ export function modulosVisibles(rol: Rol, grants: UsuarioModulo[]): Modulo[] {
   const concedidos = new Set(grants.map((g) => g.modulo));
   return MODULOS_ORDEN.filter((m) => concedidos.has(m));
 }
+
+/**
+ * Nivel de acceso del usuario dentro de un módulo puntual.
+ * admin_sistema siempre tiene nivel "admin"; el resto usa su grant en
+ * usuario_modulos (o null si no tiene acceso a ese módulo).
+ */
+export function nivelEnModulo(
+  rol: Rol,
+  grants: UsuarioModulo[],
+  modulo: Modulo
+): UsuarioModulo["nivel"] | null {
+  if (rol === "admin_sistema") return "admin";
+  const grant = grants.find((g) => g.modulo === modulo);
+  return grant ? grant.nivel : null;
+}

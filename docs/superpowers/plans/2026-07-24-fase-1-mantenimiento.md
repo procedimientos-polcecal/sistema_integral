@@ -46,16 +46,16 @@ lectura, para copiar/portar código).
 **Files:** `lib/mantenimiento/types.ts`, `lib/core/nav.ts`, `lib/core/access.ts` (si hace
 falta ajustar), `lib/core/access.test.ts`
 
-- [ ] **Step 1:** `lib/mantenimiento/types.ts` — espejo TS de las tablas nuevas (mismo
+- [x] **Step 1:** `lib/mantenimiento/types.ts` — espejo TS de las tablas nuevas (mismo
       patrón que `lib/core/types.ts`).
-- [ ] **Step 2:** Agregar entrada "Mantenimiento" a `NAV` en `lib/core/nav.ts` con sus
+- [x] **Step 2:** Agregar entrada "Mantenimiento" a `NAV` en `lib/core/nav.ts` con sus
       hijos (Equipos, Mantenimientos, Ejecuciones, Historial, Órdenes de trabajo,
       Planificación).
-- [ ] **Step 3:** Revisar `modulosVisibles`/tests — ya soporta el módulo `mantenimiento`
-      del enum `Modulo` del núcleo (Fase 0 ya lo incluía); confirmar con test si hace
-      falta un caso nuevo.
-- [ ] **Step 4:** Verificar tipos y tests: `npx tsc --noEmit && npm test`.
-- [ ] **Step 5:** Commit.
+- [x] **Step 3:** Revisar `modulosVisibles`/tests — ya soporta el módulo `mantenimiento`
+      del enum `Modulo` del núcleo (Fase 0 ya lo incluía); se agregó además
+      `nivelEnModulo()` (TDD) para que el layout del módulo resuelva el nivel de acceso.
+- [x] **Step 4:** Verificar tipos y tests: `npx tsc --noEmit && npm test`.
+- [x] **Step 5:** Commit.
 
 ### Task 3: Layout y guarda de acceso del módulo
 
