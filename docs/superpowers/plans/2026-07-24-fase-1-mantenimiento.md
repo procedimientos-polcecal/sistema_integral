@@ -154,13 +154,15 @@ falta ajustar), `lib/core/access.test.ts`
 
 ### Task 9: Verificación final de la Fase 1
 
-- [ ] **Step 1:** `npm test` → verde.
-- [ ] **Step 2:** `npx tsc --noEmit` → sin errores.
-- [ ] **Step 3:** `npm run build` → build exitoso.
+- [x] **Step 1:** `npm test` → verde (6/6).
+- [x] **Step 2:** `npx tsc --noEmit` → sin errores.
+- [x] **Step 3:** `npm run build` → build exitoso (21 rutas del módulo Mantenimiento).
 - [ ] **Step 4:** Flujo manual completo (con `.env.local` y seed aplicados): login → ver
       Mantenimiento en el sidebar → navegar cada pantalla → crear/editar un equipo → crear
       un mantenimiento programado → registrar una ejecución → crear y mover una OT → armar
-      un plan diario e imprimirlo.
+      un plan diario e imprimirlo. **Pendiente**: falta que se cargue `.env.local` con las
+      credenciales del Supabase del SdG y se apliquen las migraciones
+      (`supabase/migrations/001` a `007`) para poder probar contra datos reales.
 
 **Definición de "hecho" para Fase 1:** el módulo de Mantenimiento funciona de punta a
 punta sobre el núcleo unificado (empresas/sectores/usuarios compartidos con RRHH), con
