@@ -141,14 +141,16 @@ falta ajustar), `lib/core/access.test.ts`
 `app/api/mantenimiento/planificacion/route.ts`,
 `app/api/mantenimiento/planificacion/[id]/route.ts`
 
-- [ ] **Step 1:** Portar listado/detalle de planes, agregar/quitar OT, asignar
-      responsable. Corregir el hallazgo del reporte: el detalle y el listado deben usar
-      el cliente de sesión del usuario (RLS), no `createAdminClient()`, salvo que la
-      operación puntual lo requiera.
-- [ ] **Step 2:** Portar vista de impresión — agregar el chequeo de sesión/rol que
-      faltaba en el original.
-- [ ] **Step 3:** Verificar tipos.
-- [ ] **Step 4:** Commit.
+- [x] **Step 1:** Portar listado/detalle de planes, agregar/quitar OT, asignar
+      responsable. Corregido el hallazgo del reporte: todas las rutas usan el cliente de
+      sesión del usuario (RLS vía `puedeEditarMantenimiento()`), no `createAdminClient()`.
+- [x] **Step 2:** Portar vista de impresión — se agregó el chequeo de sesión/acceso al
+      módulo que faltaba en el original. Se descartó además el layout con `<html>/<body>`
+      anidados del original (HTML inválido: ya había un layout raíz con esas etiquetas);
+      el CSS `@media print` ya existente en `ImprimirClient` alcanza para ocultar el
+      sidebar (`<aside>`) al imprimir/exportar.
+- [x] **Step 3:** Verificar tipos y build (21 rutas de mantenimiento compilando).
+- [x] **Step 4:** Commit.
 
 ### Task 9: Verificación final de la Fase 1
 
