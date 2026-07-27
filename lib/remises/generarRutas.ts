@@ -219,3 +219,91 @@ export async function agregarHojaRuta(
 
   return { hojaId: hoja.id };
 }
+
+export interface GrupoAplicar {
+  vehiculoId: string;
+  empleadoIds: string[];
+}
+
+/**
+ * Aplica un conjunto de grupos (vehículo + empleados) a una fecha/turno/tipo
+ * destino, recalculando el orden y la geometría contra los datos actuales
+ * (empleados/vehículos pueden haber cambiado desde que se guardó el grupo).
+ * Usado tanto por "Aplicar plantilla" como por "Reutilizar" desde Historial
+ * — ambos son la misma operación con distinto origen de los grupos.
+ * Reemplaza cualquier hoja de ruta previa para esa fecha/turno/tipo.
+ */
+export async function aplicarGrupos(
+  supabase: SupabaseClient,
+  params: { fecha: string; turnoId: string; tipo: "ida" | "vuelta"; grupos: GrupoAplicar[] }
+): Promise<{ hojasCreadas: number; gruposOmitidos: number } | { error: string }> {
+  const { fecha, turnoId, tipo, grupos } = params;
+
+  const { data: config } = await supabase.from("remises_config").select("fabrica_lat, fabrica_lng, velocidad_kmh").eq("id", 1).single();
+  if (!config?.fabrica_lat || !config?.fabrica_lng) return { error: "Configurá la ubicación de la fábrica primero" };
+  const fabrica: Punto = { lat: Number(config.fabrica_lat), lng: Number(config.fabrica_lng) };
+
+  await supabase.from("hojas_ruta").delete().eq("fecha", fecha).eq("turno_id", turnoId).eq("tipo", tipo);
+
+  const todosEmpleadoIds = [...new Set(grupos.flatMap((g) => g.empleadoIds))];
+  const [{ data: vehiculos }, { data: empleadosRaw }] = await Promise.all([
+    supabase.from("vehiculos").select("id, chofer_id").in("id", grupos.map((g) => g.vehiculoId)),
+    supabase.from("empleados").select("id, remises_empleados_datos(lat, lng)").in("id", todosEmpleadoIds),
+  ]);
+  const vehiculosPorId = new Map((vehiculos ?? []).map((v) => [v.id, v]));
+  const empleadosPorId = new Map<string, Punto & { id: string }>();
+  for (const e of empleadosRaw ?? []) {
+    const d = e.remises_empleados_datos as unknown as { lat: number | null; lng: number | null } | null;
+    if (d?.lat != null && d?.lng != null) empleadosPorId.set(e.id, { id: e.id, lat: Number(d.lat), lng: Number(d.lng) });
+  }
+
+  // Marcar asistencia real para que esta fecha/turno quede consistente con lo generado.
+  const asistenciaFilas = todosEmpleadoIds.map((empleado_id) => ({ empleado_id, fecha, turno_id: turnoId }));
+  if (asistenciaFilas.length) {
+    await supabase.from("remises_asistencia").upsert(asistenciaFilas, { onConflict: "empleado_id,fecha,turno_id", ignoreDuplicates: true });
+  }
+
+  let hojasCreadas = 0;
+  let gruposOmitidos = 0;
+  for (const g of grupos) {
+    const veh = vehiculosPorId.get(g.vehiculoId);
+    const emps = g.empleadoIds.map((id) => empleadosPorId.get(id)).filter((e): e is Punto & { id: string } => !!e);
+    if (!veh || !emps.length) {
+      gruposOmitidos++;
+      continue;
+    }
+
+    let orderedEmps = emps;
+    const allPoints = [fabrica, ...emps];
+    const matriz = await getMatrizDistancias(allPoints);
+    if (matriz) {
+      const idx = vecinoMasCercanoMatriz(0, emps.map((_, i) => i + 1), matriz.duraciones);
+      orderedEmps = idx.map((i) => emps[i - 1]);
+    } else {
+      orderedEmps = vecinoMasCercano(fabrica, emps);
+    }
+    if (tipo === "ida") orderedEmps = orderedEmps.slice().reverse();
+
+    const waypoints: Punto[] = tipo === "ida" ? [...orderedEmps, fabrica] : [fabrica, ...orderedEmps];
+    const geometriaRes = await getGeometriaRuta(waypoints);
+    const km = geometriaRes ? Math.round(geometriaRes.distanciaKm * 10) / 10 : Math.round(distanciaRuta(waypoints) * 10) / 10;
+    const minutos = geometriaRes
+      ? Math.round(geometriaRes.duracionMin)
+      : Math.round((km / (Number(config.velocidad_kmh) || 40)) * 60);
+    const geometria = geometriaRes ? geometriaRes.geometria : null;
+
+    const { data: hoja, error } = await supabase
+      .from("hojas_ruta")
+      .insert({ fecha, turno_id: turnoId, tipo, vehiculo_id: g.vehiculoId, chofer_id: veh.chofer_id, km, minutos, geometria })
+      .select("id")
+      .single();
+    if (error || !hoja) {
+      gruposOmitidos++;
+      continue;
+    }
+    await supabase.from("asientos").insert(orderedEmps.map((e, i) => ({ hoja_ruta_id: hoja.id, empleado_id: e.id, orden: i })));
+    hojasCreadas++;
+  }
+
+  return { hojasCreadas, gruposOmitidos };
+}

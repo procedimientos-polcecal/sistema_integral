@@ -143,12 +143,12 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 
 **Files:** `app/(app)/remises/historial/**`, `app/api/remises/plantillas/**`
 
-- [ ] **Step 1:** API plantillas (crear desde una hoja de ruta existente o desde cero,
+- [x] **Step 1:** API plantillas (crear desde una hoja de ruta existente o desde cero,
       aplicar a una fecha — vuelve a correr OSRM contra datos actuales).
-- [ ] **Step 2:** "Historial" en la pantalla es una consulta de `hojas_ruta` pasadas
+- [x] **Step 2:** "Historial" en la pantalla es una consulta de `hojas_ruta` pasadas
       agrupadas por fecha (no una tabla propia — ver decisión #6 del spec), con
       "Reutilizar" (aplicar como si fuera plantilla) y "Guardar como plantilla".
-- [ ] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 8: Impresión de hoja de ruta
 
