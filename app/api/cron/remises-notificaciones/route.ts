@@ -1,0 +1,72 @@
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarPush } from "@/lib/remises/webpush";
+
+function manana(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Corre vía Vercel Cron a las 22:00 UTC (19:00 Argentina), igual que la
+ * Cloud Function del original: notifica a cada empleado con remis asignado
+ * para el día siguiente. Usa el cliente admin (service role) porque no hay
+ * sesión de usuario en un cron job — RLS no aplica acá.
+ */
+export async function GET(request: Request) {
+  const auth = request.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const admin = createAdminClient();
+  const fecha = manana();
+  const fmtFecha = fecha.split("-").reverse().join("/");
+
+  const { data: hojas } = await admin
+    .from("hojas_ruta")
+    .select("tipo, hora_salida, vehiculos(nombre), asientos(empleado_id)")
+    .eq("fecha", fecha);
+
+  const porEmpleado = new Map<string, { tipo: string; vehiculo: string | null; horaSalida: string | null }[]>();
+  for (const h of (hojas ?? []) as any[]) {
+    for (const a of h.asientos ?? []) {
+      const lista = porEmpleado.get(a.empleado_id) ?? [];
+      lista.push({ tipo: h.tipo, vehiculo: h.vehiculos?.nombre ?? null, horaSalida: h.hora_salida ?? null });
+      porEmpleado.set(a.empleado_id, lista);
+    }
+  }
+
+  let enviados = 0;
+  let tokensInvalidos = 0;
+  for (const [empleadoId, asignaciones] of porEmpleado) {
+    const { data: usuario } = await admin.from("usuarios").select("id").eq("empleado_id", empleadoId).maybeSingle();
+    if (!usuario) continue;
+
+    const { data: token } = await admin
+      .from("remises_push_tokens")
+      .select("endpoint, p256dh, auth")
+      .eq("usuario_id", usuario.id)
+      .maybeSingle();
+    if (!token) continue;
+
+    const primera = asignaciones[0];
+    const title = `Remis para mañana ${fmtFecha}`;
+    const body = [
+      primera.vehiculo ?? "tu remis",
+      primera.horaSalida ? `Salida: ${primera.horaSalida}` : "",
+      asignaciones.length > 1 ? `(${asignaciones.length} remises asignados)` : "",
+    ].filter(Boolean).join("\n");
+
+    const ok = await enviarPush(token, { title, body });
+    if (ok) {
+      enviados++;
+    } else {
+      tokensInvalidos++;
+      await admin.from("remises_push_tokens").delete().eq("usuario_id", usuario.id);
+    }
+  }
+
+  return NextResponse.json({ fecha, empleadosConRuta: porEmpleado.size, enviados, tokensInvalidos });
+}

@@ -55,6 +55,22 @@ as $$
   )
 $$;
 
+-- ¿La sesión actual tiene un asiento propio en esta hoja de ruta? Deja ver
+-- a los "compañeros de viaje" (el resto de los asientos de la misma hoja),
+-- no solo el propio — sin esto "Mi remis" no podría mostrar quién más va.
+create or replace function public.es_mi_hoja_ruta(p_hoja_ruta_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select coalesce(
+    exists (
+      select 1 from asientos
+      where hoja_ruta_id = p_hoja_ruta_id and es_mi_asiento(empleado_id)
+    ),
+    false
+  )
+$$;
+
 alter table choferes                    enable row level security;
 alter table vehiculos                   enable row level security;
 alter table remises_turnos              enable row level security;
@@ -74,16 +90,14 @@ alter table remises_push_tokens         enable row level security;
 -- vehículo y chofer, no solo el asiento).
 create policy choferes_select on choferes for select to authenticated using (
   tiene_acceso_remises() or exists (
-    select 1 from hojas_ruta join asientos on asientos.hoja_ruta_id = hojas_ruta.id
-    where hojas_ruta.chofer_id = choferes.id and es_mi_asiento(asientos.empleado_id)
+    select 1 from hojas_ruta where hojas_ruta.chofer_id = choferes.id and es_mi_hoja_ruta(hojas_ruta.id)
   )
 );
 create policy choferes_write  on choferes for all    to authenticated using (puede_editar_remises()) with check (puede_editar_remises());
 
 create policy vehiculos_select on vehiculos for select to authenticated using (
   tiene_acceso_remises() or exists (
-    select 1 from hojas_ruta join asientos on asientos.hoja_ruta_id = hojas_ruta.id
-    where hojas_ruta.vehiculo_id = vehiculos.id and es_mi_asiento(asientos.empleado_id)
+    select 1 from hojas_ruta where hojas_ruta.vehiculo_id = vehiculos.id and es_mi_hoja_ruta(hojas_ruta.id)
   )
 );
 create policy vehiculos_write  on vehiculos for all    to authenticated using (puede_editar_remises()) with check (puede_editar_remises());
@@ -104,15 +118,13 @@ create policy remises_plan_semana_write  on remises_plan_semana for all    to au
 -- vinculado si tiene un asiento en esa hoja (auto-servicio "Mi remis"
 -- necesita el vehículo/chofer/hora de salida de su propia hoja de ruta).
 create policy hojas_ruta_select on hojas_ruta for select to authenticated using (
-  tiene_acceso_remises() or exists (
-    select 1 from asientos where asientos.hoja_ruta_id = hojas_ruta.id and es_mi_asiento(asientos.empleado_id)
-  )
+  tiene_acceso_remises() or es_mi_hoja_ruta(hojas_ruta.id)
 );
 create policy hojas_ruta_write  on hojas_ruta for all    to authenticated using (puede_editar_remises()) with check (puede_editar_remises());
 
 -- asientos: acceso de módulo normal, MÁS lectura propia para el empleado
 -- vinculado (auto-servicio), sin pasar por tiene_acceso_remises().
-create policy asientos_select on asientos for select to authenticated using (tiene_acceso_remises() or es_mi_asiento(empleado_id));
+create policy asientos_select on asientos for select to authenticated using (tiene_acceso_remises() or es_mi_hoja_ruta(hoja_ruta_id));
 create policy asientos_write  on asientos for all    to authenticated using (puede_editar_remises()) with check (puede_editar_remises());
 
 create policy remises_plantillas_select on remises_plantillas for select to authenticated using (tiene_acceso_remises());

@@ -187,21 +187,21 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 
 **Files:** `app/(app)/remises/mi-remis/page.tsx`, `app/api/remises/mi-remis/**`
 
-- [ ] **Step 1:** Flujo de creación de cuenta vinculada: desde la ficha de empleado
+- [x] **Step 1:** Flujo de creación de cuenta vinculada: desde la ficha de empleado
       (Task 5), un admin de Remises puede generar/enviar acceso (mismo patrón ya
       construido en RRHH — cuenta Supabase Auth + email, o link de reseteo si ya
       existe la cuenta).
-- [ ] **Step 2:** API `GET /api/remises/mi-remis` — resuelve `empleado_id` desde la
+- [x] **Step 2:** API `GET /api/remises/mi-remis` — resuelve `empleado_id` desde la
       sesión (`usuarios.empleado_id`), devuelve sus asientos de hoy/mañana con
       vehículo/chofer/hora de salida/compañeros de viaje. 403 si no hay
       `empleado_id` vinculado.
-- [ ] **Step 3:** Pantalla mínima "Mi remis": toggle Hoy/Mañana, tarjeta con la
+- [x] **Step 3:** Pantalla mínima "Mi remis": toggle Hoy/Mañana, tarjeta con la
       asignación (o estado vacío "sin remis asignado"), botón para activar
       notificaciones push (ver Task 11).
-- [ ] **Step 4:** Guard de layout/routing: esta ruta es accesible para cualquier
+- [x] **Step 4:** Guard de layout/routing: esta ruta es accesible para cualquier
       usuario autenticado con `empleado_id` vinculado, sin requerir nivel de módulo
       `remises` (a diferencia del resto del panel).
-- [ ] **Step 5:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 5:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 11: Notificaciones push (Web Push + Vercel Cron)
 
@@ -209,24 +209,24 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 `vercel.json`, `app/api/cron/remises-notificaciones/route.ts`,
 `lib/remises/webpush.ts`
 
-- [ ] **Step 1:** Generar par de claves VAPID propio del SdG (`web-push
+- [x] **Step 1:** Generar par de claves VAPID propio del SdG (`web-push
       generate-vapid-keys`), guardar en variables de entorno
       (`WEBPUSH_VAPID_PUBLIC_KEY`/`WEBPUSH_VAPID_PRIVATE_KEY`).
-- [ ] **Step 2:** Registro de suscripción del lado del cliente en "Mi remis" (Task
+- [x] **Step 2:** Registro de suscripción del lado del cliente en "Mi remis" (Task
       10): `Notification.requestPermission()` +
       `serviceWorker.pushManager.subscribe({applicationServerKey})`, POST a
       `/api/remises/mi-remis/push-token` que upsertea `remises_push_tokens`.
-- [ ] **Step 3:** Manejador `push`/`notificationclick` en el service worker (sin
+- [x] **Step 3:** Manejador `push`/`notificationclick` en el service worker (sin
       dependencia de Firebase — Web Push nativo).
-- [ ] **Step 4:** Route Handler de cron (`app/api/cron/remises-notificaciones`,
+- [x] **Step 4:** Route Handler de cron (`app/api/cron/remises-notificaciones`,
       protegido por el header `Authorization: Bearer $CRON_SECRET` que agrega Vercel
       Cron): para cada `asientos` de mañana, agrupa por empleado, envía vía
       `web-push` con la `remises_push_tokens` de su `usuario_id` vinculado; si el
       envío falla por suscripción inválida, borra el token (mismo comportamiento que
       el original con tokens FCM inválidos).
-- [ ] **Step 5:** `vercel.json` con `crons: [{ path: "/api/cron/remises-notificaciones",
+- [x] **Step 5:** `vercel.json` con `crons: [{ path: "/api/cron/remises-notificaciones",
       schedule: "0 22 * * *" }]`.
-- [ ] **Step 6:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 6:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 12: Navegación
 

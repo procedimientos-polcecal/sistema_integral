@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import InfoTip from "@/components/InfoTip";
@@ -142,6 +142,30 @@ function EmpleadoModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [cuentaEmail, setCuentaEmail] = useState<string | null | undefined>(undefined);
+  const [nuevoEmail, setNuevoEmail] = useState("");
+  const [creandoCuenta, setCreandoCuenta] = useState(false);
+  const [avisoCuenta, setAvisoCuenta] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/remises/empleados/${empleado.id}/cuenta`).then((r) => r.json()).then((d) => setCuentaEmail(d.email));
+  }, [empleado.id]);
+
+  async function darAcceso() {
+    if (!nuevoEmail.trim()) return;
+    setCreandoCuenta(true);
+    setAvisoCuenta(null);
+    const res = await fetch(`/api/remises/empleados/${empleado.id}/cuenta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: nuevoEmail.trim() }),
+    });
+    const data = await res.json();
+    setCreandoCuenta(false);
+    if (res.ok) { setCuentaEmail(nuevoEmail.trim()); setAvisoCuenta("Cuenta creada — se envió un link para definir contraseña."); }
+    else setAvisoCuenta(data.error ?? "No se pudo dar acceso");
+  }
+
   async function geocodificar() {
     if (!form.direccion.trim()) return;
     setGeocodificando(true);
@@ -209,6 +233,27 @@ function EmpleadoModal({
             </button>
           </div>
         </form>
+
+        <div className="border-t border-gray-100 mt-4 pt-4">
+          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+            Acceso "Mi remis"
+            <InfoTip text="Da acceso al empleado para que vea desde su celular en qué remis viaja y active notificaciones. Se le manda un email para que defina su propia contraseña." />
+          </h4>
+          {cuentaEmail === undefined ? (
+            <p className="text-xs text-gray-400">Cargando...</p>
+          ) : cuentaEmail ? (
+            <p className="text-xs text-emerald-600">Tiene acceso con {cuentaEmail}</p>
+          ) : (
+            <div className="flex gap-2">
+              <input type="email" value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} placeholder="email@ejemplo.com"
+                className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              <button type="button" onClick={darAcceso} disabled={creandoCuenta} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                {creandoCuenta ? "..." : "Dar acceso"}
+              </button>
+            </div>
+          )}
+          {avisoCuenta && <p className="text-xs text-gray-500 mt-1">{avisoCuenta}</p>}
+        </div>
       </div>
     </div>
   );
