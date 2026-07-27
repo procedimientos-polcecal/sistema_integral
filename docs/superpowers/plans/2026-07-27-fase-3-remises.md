@@ -54,22 +54,22 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `lib/remises/engine/clustering.ts`, `lib/remises/engine/tsp.ts`,
 `lib/remises/engine/geo.ts` (+ `.test.ts` de cada uno)
 
-- [ ] **Step 1:** Haversine + utilidades geo (`lib/remises/engine/geo.ts`), portadas
+- [x] **Step 1:** Haversine + utilidades geo (`lib/remises/engine/geo.ts`), portadas
       literales del original.
-- [ ] **Step 2:** K-means con capacidad (`clusterWithCapacity`, k-means++ seeding, 15
+- [x] **Step 2:** K-means con capacidad (`clusterWithCapacity`, k-means++ seeding, 15
       iteraciones, rebalanceo por capacidad) — función pura, mismo algoritmo.
-- [ ] **Step 3:** Nearest-neighbor TSP (con matriz de duraciones real o fallback
+- [x] **Step 3:** Nearest-neighbor TSP (con matriz de duraciones real o fallback
       Haversine) + la lógica de reversión Ida-vs-Vuelta documentada en el original.
-- [ ] **Step 4:** Tests para clustering (capacidad respetada, todos los empleados
+- [x] **Step 4:** Tests para clustering (capacidad respetada, todos los empleados
       asignados, determinismo con seed fija) y TSP (orden válido, fábrica en la
       posición correcta según tipo).
-- [ ] **Step 5:** Cliente OSRM (`lib/remises/engine/osrm.ts`): matriz de duraciones
+- [x] **Step 5:** Cliente OSRM (`lib/remises/engine/osrm.ts`): matriz de duraciones
       (`/table/v1`) y geometría de ruta (`/route/v1`, con `continue_straight=true` y
       fallback sin el flag, y fallback final a línea recta si OSRM no responde).
       Cliente Nominatim (`lib/remises/engine/geocode.ts`): geocodificación con
       `viewbox`/ciudad de referencia, mismo comportamiento que el original.
-- [ ] **Step 6:** `npx tsc --noEmit`, `npm test` — verde.
-- [ ] **Step 7:** Commit.
+- [x] **Step 6:** `npx tsc --noEmit`, `npm test` — verde.
+- [x] **Step 7:** Commit.
 
 ### Task 3: Choferes + Vehículos (CRUD)
 
