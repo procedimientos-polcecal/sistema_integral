@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { es_admin_check } from "@/lib/rrhh/route-utils";
-import { xlsxResponse } from "@/lib/rrhh/xlsxExport";
+import { xlsxResponse } from "@/lib/core/xlsxExport";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

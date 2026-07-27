@@ -76,17 +76,17 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `app/(app)/remises/vehiculos/**`, `app/api/remises/choferes/**`,
 `app/api/remises/vehiculos/**`
 
-- [ ] **Step 1:** API choferes (GET/POST/PUT/DELETE, `puede_editar_check`/
+- [x] **Step 1:** API choferes (GET/POST/PUT/DELETE, `puede_editar_check`/
       `es_admin_check` según corresponda, "borrado seguro" si tiene vehículo o
       historial asociado — bloquear en vez de romper FKs).
-- [ ] **Step 2:** API vehículos (mismo patrón, `chofer_id` opcional).
-- [ ] **Step 3:** Pantalla `remises/vehiculos`: listado + modales de alta/edición para
+- [x] **Step 2:** API vehículos (mismo patrón, `chofer_id` opcional).
+- [x] **Step 3:** Pantalla `remises/vehiculos`: listado + modales de alta/edición para
       ambas entidades (choferes se gestionan desde la misma pantalla, como submenú o
       tab, ya que en el original viven juntos conceptualmente).
-- [ ] **Step 4:** Import/export Excel de vehículos (mismas columnas del original:
+- [x] **Step 4:** Import/export Excel de vehículos (mismas columnas del original:
       Nombre/Vehículo, Conductor, Capacidad, Teléfono — al importar, resolver/crear el
       chofer por nombre).
-- [ ] **Step 5:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 5:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 4: Turnos + Configuración
 

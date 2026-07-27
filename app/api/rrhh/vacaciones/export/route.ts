@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { xlsxResponse } from "@/lib/rrhh/xlsxExport";
+import { xlsxResponse } from "@/lib/core/xlsxExport";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
