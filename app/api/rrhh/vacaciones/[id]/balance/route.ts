@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { diasCorrespondientes, type TramoVacaciones } from "@/lib/rrhh/engine/vacaciones";
 
-export async function GET(request: Request, { params }: { params: Promise<{ employeeId: string }> }) {
-  const { employeeId } = await params;
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: employeeId } = await params;
   const supabase = await createClient();
   const check = await tiene_acceso_check(supabase);
   if (check) return check;
