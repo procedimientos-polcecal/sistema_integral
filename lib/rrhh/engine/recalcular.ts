@@ -23,7 +23,13 @@ function fechaStr(d: Date): string {
 
 export async function getConfigLiquidacion(
   supabase: SupabaseClient
-): Promise<PayrollConfigLike & { horasFrancoCompensatorio: number }> {
+): Promise<
+  PayrollConfigLike & {
+    horasFrancoCompensatorio: number;
+    multiplicadorExtra50: number;
+    multiplicadorExtra100: number;
+  }
+> {
   const { data, error } = await supabase.from("config_liquidacion").select("*").eq("id", 1).single();
   if (error || !data) throw new Error(`No se pudo leer config_liquidacion: ${error?.message}`);
   return {
@@ -31,6 +37,8 @@ export async function getConfigLiquidacion(
     horaCorteSabado: data.hora_corte_sabado,
     feriadoComoDomingo: data.feriado_como_domingo,
     horasFrancoCompensatorio: Number(data.horas_franco_compensatorio),
+    multiplicadorExtra50: Number(data.multiplicador_extra_50),
+    multiplicadorExtra100: Number(data.multiplicador_extra_100),
   };
 }
 
