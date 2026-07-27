@@ -108,25 +108,25 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `app/(app)/remises/page.tsx` (Hoy), `app/api/remises/asistencia/**`,
 `app/api/remises/generar/**`, `app/api/remises/hojas-ruta/**`
 
-- [ ] **Step 1:** Extender ficha de empleado existente de RRHH (o pantalla propia
+- [x] **Step 1:** Extender ficha de empleado existente de RRHH (o pantalla propia
       mínima) con los campos de `remises_empleados_datos` (dirección de recogida,
       lat/lng, turno default) + geocodificación individual y masiva ("Geocodificar
       faltantes").
-- [ ] **Step 2:** API asistencia (toggle por empleado/fecha/turno, auto-seed desde
+- [x] **Step 2:** API asistencia (toggle por empleado/fecha/turno, auto-seed desde
       `turno_default_id`).
-- [ ] **Step 3:** API generar rutas (`POST /api/remises/generar`): corre clustering +
+- [x] **Step 3:** API generar rutas (`POST /api/remises/generar`): corre clustering +
       TSP + OSRM, inserta `hojas_ruta` + `asientos` (reemplaza cualquier generación
       previa para esa fecha/turno/tipo — regenerar es idempotente/destructivo como en
       el original).
-- [ ] **Step 4:** Edición manual post-generación: reordenar parada, mover empleado
+- [x] **Step 4:** Edición manual post-generación: reordenar parada, mover empleado
       entre vehículos, agregar/quitar empleado, agregar/quitar vehículo — cada una
       invalida `geometria` (null) y dispara un re-fetch de OSRM solo para la hoja de
       ruta afectada.
-- [ ] **Step 5:** Pantalla "Hoy": selector fecha+turno, sub-tabs Asistencia/Rutas
+- [x] **Step 5:** Pantalla "Hoy": selector fecha+turno, sub-tabs Asistencia/Rutas
       Ida/Rutas Vuelta, mapa Leaflet con las rutas generadas, tarjetas de ruta con
       hora de salida editable, acciones (Google Maps/Waze, WhatsApp/Email/copiar,
       imprimir — ver Task 9, agregar/quitar persona, quitar vehículo).
-- [ ] **Step 6:** `npx tsc --noEmit`, `npm test`, `npm run build`. Commit.
+- [x] **Step 6:** `npx tsc --noEmit`, `npm test`, `npm run build`. Commit.
 
 ### Task 6: Semana
 
