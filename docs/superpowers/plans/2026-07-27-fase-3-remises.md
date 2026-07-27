@@ -154,13 +154,13 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 
 **Files:** `app/(app)/remises/hoja-ruta/[id]/imprimir/page.tsx`
 
-- [ ] **Step 1:** Página imprimible dedicada (reutilizando el patrón de
+- [x] **Step 1:** Página imprimible dedicada (reutilizando el patrón de
       `mantenimiento/planificacion/[id]/imprimir`: ruta propia + CSS `@media print`,
       no popup `window.open`) con los datos de una `hoja_ruta` (vehículo, chofer,
       fecha, turno, hora de salida, lista de paradas en orden).
-- [ ] **Step 2:** Botón "Imprimir" en la tarjeta de ruta (Task 5) navega a esta
+- [x] **Step 2:** Botón "Imprimir" en la tarjeta de ruta (Task 5) navega a esta
       página en una nueva pestaña.
-- [ ] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 9: Import/Export Excel (asistencia/rutas)
 
