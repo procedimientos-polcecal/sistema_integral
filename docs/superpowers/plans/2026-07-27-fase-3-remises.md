@@ -29,25 +29,25 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `supabase/migrations/012_remises_schema.sql`, `013_remises_rls.sql`,
 `014_seed_remises.sql`
 
-- [ ] **Step 1:** `alter table usuarios add column empleado_id uuid references
+- [x] **Step 1:** `alter table usuarios add column empleado_id uuid references
       empleados(id) on delete set null` (vínculo opcional para auto-servicio).
-- [ ] **Step 2:** Enum `remises_tipo_hoja` (`ida`/`vuelta`).
-- [ ] **Step 3:** Tablas: `choferes`, `vehiculos`, `remises_turnos`,
+- [x] **Step 2:** Enum `remises_tipo_hoja` (`ida`/`vuelta`).
+- [x] **Step 3:** Tablas: `choferes`, `vehiculos`, `remises_turnos`,
       `remises_empleados_datos`, `remises_asistencia`, `remises_plan_semana`,
       `hojas_ruta`, `asientos`, `remises_plantillas`, `remises_plantillas_grupos`,
       `remises_config` (singleton, seed `id=1` con defaults), `remises_push_tokens`.
-- [ ] **Step 4:** Funciones `puede_editar_remises()`, `es_admin_remises()`,
+- [x] **Step 4:** Funciones `puede_editar_remises()`, `es_admin_remises()`,
       `tiene_acceso_remises()` (mismo patrón que RRHH/Mantenimiento) + RLS de todas
       las tablas nuevas.
-- [ ] **Step 5:** Policy separada para auto-servicio: un usuario con
+- [x] **Step 5:** Policy separada para auto-servicio: un usuario con
       `usuarios.empleado_id` no nulo puede leer (no escribir) `asientos`/`hojas_ruta`
       donde `asientos.empleado_id = su empleado_id` — **sin** pasar por
       `tiene_acceso_remises()` (no tiene ni necesita nivel de módulo).
-- [ ] **Step 6:** Seed: 3 `remises_turnos` de ejemplo (Mañana/Tarde/Noche, mismos
+- [x] **Step 6:** Seed: 3 `remises_turnos` de ejemplo (Mañana/Tarde/Noche, mismos
       horarios/colores que `DEFAULT_SHIFTS` del original), `remises_config` con
       defaults (velocidad 40 km/h).
-- [ ] **Step 7:** Verificar tipos: `npx tsc --noEmit` — sin errores.
-- [ ] **Step 8:** Commit.
+- [x] **Step 7:** Verificar tipos: `npx tsc --noEmit` — sin errores.
+- [x] **Step 8:** Pendiente aplicar contra la base real — armé `supabase/migrations_fase3_combined.sql` (012-014) para el SQL Editor, mismo procedimiento que Fases 1-2. Commit.
 
 ### Task 2: Motor de generación de rutas — funciones puras + tests
 
