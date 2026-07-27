@@ -132,12 +132,12 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 
 **Files:** `app/(app)/remises/semana/**`, `app/api/remises/plan-semana/**`
 
-- [ ] **Step 1:** API plan semanal (toggle Va/No va por empleado/fecha/turno/tipo).
-- [ ] **Step 2:** Pantalla Semana: navegador de semana (lunes a lunes), selector de
+- [x] **Step 1:** API plan semanal (toggle Va/No va por empleado/fecha/turno/tipo).
+- [x] **Step 2:** Pantalla Semana: navegador de semana (lunes a lunes), selector de
       día, dos tarjetas Ida/Vuelta con toggle por empleado, "Generar rutas" que copia
       el plan a `remises_asistencia` de esa fecha y llama al mismo endpoint de
       generación del Task 5.
-- [ ] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 7: Plantillas + Historial
 
