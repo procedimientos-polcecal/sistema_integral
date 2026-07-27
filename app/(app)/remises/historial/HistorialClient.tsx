@@ -15,7 +15,10 @@ function fmt(iso: string): string {
 export default function HistorialClient({ turnos }: { turnos: any[] }) {
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold text-gray-900">Historial</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Historial</h1>
+        <a href="/api/remises/export?scope=hist" className="text-sm text-blue-600 hover:underline">Exportar historial</a>
+      </div>
       <PlantillasSection turnos={turnos} />
       <HistorialSection turnos={turnos} />
     </div>

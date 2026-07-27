@@ -39,10 +39,13 @@ export default function SemanaClient({ turnos }: { turnos: any[] }) {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-        Semana
-        <InfoTip text="Planificá con anticipación quién viaja cada día de la semana, sin afectar la asistencia real de Hoy hasta que generés las rutas para ese día." />
-      </h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          Semana
+          <InfoTip text="Planificá con anticipación quién viaja cada día de la semana, sin afectar la asistencia real de Hoy hasta que generés las rutas para ese día." />
+        </h1>
+        <a href="/api/remises/export?scope=week" className="text-sm text-blue-600 hover:underline">Exportar semana</a>
+      </div>
 
       {turnos.length > 1 && (
         <div className="flex gap-1.5 mb-4">

@@ -166,14 +166,22 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 
 **Files:** `app/api/remises/export/**`
 
-- [ ] **Step 1:** Export día/semana/historial en XLSX/CSV/HTML, mismo shape de
-      columnas del original (`Fecha, Turno, Búsqueda, Tipo, Remis, Conductor, #,
-      Empleado, Dirección`), reusando `xlsxResponse` de `lib/rrhh/xlsxExport.ts` (o
-      generalizándolo a `lib/core/xlsxExport.ts` si conviene compartirlo entre
-      módulos — evaluar en implementación).
-- [ ] **Step 2:** Import de empleados con parser CSV real (no el `split(',')` naive
-      del original) o restringir el import a XLSX únicamente.
-- [ ] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 1:** Export día/semana/historial en XLSX, mismo shape de columnas del
+      original (`Fecha, Turno, Búsqueda, Tipo, Remis, Conductor, #, Empleado,
+      Dirección`), vía `lib/core/xlsxExport.ts` (ya generalizado ahí desde la Task 3;
+      se le agregó `xlsxMultiSheetResponse` para el export semanal, un sheet por
+      día). Se deja afuera el coloreado por grupo de vehículo (`xlsx-js-style`) y
+      los formatos CSV/HTML del original — es una mejora cosmética, no funcional,
+      y no vale agregar una dependencia nueva solo para eso; se puede sumar después
+      si hace falta.
+- [x] **Step 2:** Import de empleados: no aplica en el port. En el original,
+      Remises podía crear empleados nuevos desde cero vía Excel; acá los empleados
+      son la tabla `empleados` del núcleo, compartida con RRHH — crearlos ya es
+      responsabilidad del importador de RRHH (`/api/rrhh/empleados/import/*`, con
+      parser real, no el `split(',')` naive del original). Lo que Remises necesita
+      (dirección de recogida por empleado) se carga desde la ficha individual
+      (Task 5) — no hay un caso de uso real para importar eso en masa por ahora.
+- [x] **Step 3:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 10: Auto-servicio del empleado ("Mi remis")
 

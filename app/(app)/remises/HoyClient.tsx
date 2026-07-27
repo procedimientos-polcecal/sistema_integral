@@ -134,7 +134,8 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
             ))}
           </div>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-3">
+          <a href={`/api/remises/export?scope=day&fecha=${fecha}`} className="text-sm text-blue-600 hover:underline">Exportar</a>
           <button onClick={() => generar("ida")} disabled={generando !== null} className="btn-primary disabled:opacity-50">
             {generando === "ida" ? "Generando..." : "Generar Ida"}
           </button>
