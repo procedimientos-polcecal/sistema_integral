@@ -12,7 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("nombre, apellido, rol")
+    .select("nombre, apellido, rol, empleado_id")
     .eq("id", user.id)
     .single();
 
@@ -42,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         modulos={modulos}
         rol={rol}
         usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
+        esEmpleadoRemises={!!usuario.empleado_id}
       />
       <main className="flex-1 overflow-auto p-6">{children}</main>
     </div>

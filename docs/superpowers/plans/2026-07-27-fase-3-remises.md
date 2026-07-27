@@ -233,18 +233,18 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `lib/core/nav.ts`, `lib/remises/auth.ts`, `lib/remises/route-utils.ts`,
 `app/(app)/remises/layout.tsx`
 
-- [ ] **Step 1:** `lib/remises/auth.ts` (`nivelRemisesDe`, `puedeEditarRemises`,
+- [x] **Step 1:** `lib/remises/auth.ts` (`nivelRemisesDe`, `puedeEditarRemises`,
       `esAdminRemises`) + `lib/remises/route-utils.ts` (`tiene_acceso_check`,
       `puede_editar_check`, `es_admin_check`), mismo patrón que RRHH.
-- [ ] **Step 2:** `app/(app)/remises/layout.tsx`: guard de módulo (redirect si sin
+- [x] **Step 2:** `app/(app)/remises/layout.tsx`: guard de módulo (redirect si sin
       acceso), salvo para `/remises/mi-remis` que tiene su propio guard (Task 10) y
       no debería vivir bajo este layout si el layout exige nivel de módulo — decidir
       en implementación si `mi-remis` va fuera de `app/(app)/remises/` o si el layout
       distingue el caso.
-- [ ] **Step 3:** `NAV`: mover "Remises" a grupo de nivel superior (Hoy, Semana,
+- [x] **Step 3:** `NAV`: mover "Remises" a grupo de nivel superior (Hoy, Semana,
       Vehículos, Historial, Configuración), corregir el placeholder actual
       (`/rrhh/remises` → `/remises`).
-- [ ] **Step 4:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 4:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 13: Migración de datos reales de producción
 

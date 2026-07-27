@@ -13,10 +13,13 @@ export function Sidebar({
   modulos,
   rol,
   usuarioNombre,
+  esEmpleadoRemises = false,
 }: {
   modulos: Modulo[];
   rol: Rol;
   usuarioNombre: string;
+  /** Cuenta vinculada a un empleado (auto-servicio "Mi remis") — no depende del nivel de módulo. */
+  esEmpleadoRemises?: boolean;
 }) {
   const set = new Set(modulos);
   const esAdmin = rol === "admin_sistema" || rol === "admin";
@@ -25,6 +28,11 @@ export function Sidebar({
     <aside className="flex w-64 flex-col bg-[#0A0F1C] text-gray-200">
       <div className="px-5 py-4 text-lg font-bold text-white">SdG</div>
       <nav className="flex-1 space-y-1 px-3">
+        {esEmpleadoRemises && (
+          <Link href="/mi-remis" className="block rounded px-3 py-2 text-sm hover:bg-white/10">
+            Mi remis
+          </Link>
+        )}
         {NAV.filter((i) => visible(i, set, esAdmin)).map((item) => (
           <div key={item.href}>
             <Link

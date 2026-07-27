@@ -26,7 +26,19 @@ export const NAV: NavItem[] = [
       { label: "Liquidaciones", href: "/rrhh/liquidaciones", modulo: "rrhh" },
       { label: "Analítico", href: "/rrhh/analitico", modulo: "rrhh" },
       { label: "Administración RRHH", href: "/rrhh/administracion", modulo: "rrhh" },
-      { label: "Remises", href: "/rrhh/remises", modulo: "remises" },
+    ],
+  },
+  {
+    label: "Remises",
+    href: "/remises",
+    modulo: "remises",
+    children: [
+      { label: "Hoy", href: "/remises", modulo: "remises" },
+      { label: "Semana", href: "/remises/semana", modulo: "remises" },
+      { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
+      { label: "Vehículos", href: "/remises/vehiculos", modulo: "remises" },
+      { label: "Historial", href: "/remises/historial", modulo: "remises" },
+      { label: "Configuración", href: "/remises/configuracion", modulo: "remises" },
     ],
   },
   {
