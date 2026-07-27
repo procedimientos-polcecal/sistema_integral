@@ -273,15 +273,21 @@ esto.
 
 ### Task 14: Verificación final de la Fase 3
 
-- [ ] **Step 1:** `npm test` → verde (tests nuevos del motor de rutas + los ya
-      existentes de Fases 0-2).
-- [ ] **Step 2:** `npx tsc --noEmit` → sin errores.
-- [ ] **Step 3:** `npm run build` → build exitoso.
+- [x] **Step 1:** `npm test` → verde (71 tests: los 17 nuevos del motor de rutas +
+      los 54 ya existentes de Fases 0-2).
+- [x] **Step 2:** `npx tsc --noEmit` → sin errores.
+- [x] **Step 3:** `npm run build` → build exitoso.
+      Además: server de dev levantado y verificado sin errores en las 10 rutas
+      nuevas de `/remises/*` y `/mi-remis` (redirect a login limpio, sin
+      excepciones en logs) — mismo chequeo que atrapó el bug de rutas dinámicas
+      en la Fase 2.
 - [ ] **Step 4:** Flujo manual completo: login admin → Vehículos/Choferes →
       Configuración (fábrica) → Empleados (geocodificar) → Hoy (asistencia → generar
       Ida/Vuelta → editar manualmente → imprimir) → Semana → Historial/Plantillas →
       vincular un empleado a una cuenta → login como ese empleado → Mi remis →
       activar notificaciones.
+      Requiere credenciales reales que Claude no puede ni debe tipear — falta que
+      un humano haga el recorrido autenticado (mismo límite que en la Fase 2).
 
 **Definición de "hecho" para Fase 3:** Remises funciona de punta a punta sobre el
 núcleo unificado, sin ninguna dependencia de Firebase, con el bug `seats`/`stops`
