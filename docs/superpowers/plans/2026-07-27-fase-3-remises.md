@@ -93,15 +93,15 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
 **Files:** `app/(app)/remises/configuracion/**`, `app/api/remises/turnos/**`,
 `app/api/remises/configuracion/**`
 
-- [ ] **Step 1:** API turnos (CRUD, borrado cascadea a `remises_asistencia`/
+- [x] **Step 1:** API turnos (CRUD, borrado cascadea a `remises_asistencia`/
       `remises_plan_semana`/`hojas_ruta` de ese turno — igual que el original, con
       confirmación explícita en la UI).
-- [ ] **Step 2:** API configuración (fábrica + geocodificación + velocidad + ciudad de
+- [x] **Step 2:** API configuración (fábrica + geocodificación + velocidad + ciudad de
       referencia).
-- [ ] **Step 3:** Pantalla Configuración: mapa Leaflet para pin de fábrica (reutilizar
+- [x] **Step 3:** Pantalla Configuración: mapa Leaflet para pin de fábrica (reutilizar
       patrón de mapa si Mantenimiento/RRHH ya tienen alguno; si no, primer uso de
       Leaflet en el SdG — agregar dependencia), turnos, velocidad, ciudad.
-- [ ] **Step 4:** `npx tsc --noEmit`, `npm run build`. Commit.
+- [x] **Step 4:** `npx tsc --noEmit`, `npm run build`. Commit.
 
 ### Task 5: Empleados de Remises (extensión) + Asistencia + Generación de rutas (Hoy)
 
