@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
-import FichadaEditModal from "./FichadaEditModal";
+import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
