@@ -5,6 +5,8 @@ export interface NavItem {
   href: string;
   // Módulo requerido para ver el item (undefined = siempre visible si hay sesión).
   modulo?: Modulo;
+  // Además del módulo, restringe el item a admin_sistema/admin.
+  soloAdmin?: boolean;
   children?: NavItem[];
 }
 
@@ -17,15 +19,49 @@ export const NAV: NavItem[] = [
     modulo: "rrhh",
     children: [
       { label: "Dashboard", href: "/rrhh", modulo: "rrhh" },
-      { label: "Empleados", href: "/rrhh/empleados", modulo: "rrhh" },
-      { label: "Fichadas", href: "/rrhh/fichadas", modulo: "rrhh" },
-      { label: "Asistencia", href: "/rrhh/asistencia", modulo: "rrhh" },
-      { label: "Ausencias", href: "/rrhh/ausencias", modulo: "rrhh" },
-      { label: "Vacaciones", href: "/rrhh/vacaciones", modulo: "rrhh" },
+      {
+        label: "Administración",
+        href: "/rrhh/empleados",
+        modulo: "rrhh",
+        children: [
+          { label: "Empleados", href: "/rrhh/empleados", modulo: "rrhh" },
+          { label: "Usuarios", href: "/administracion/usuarios", modulo: "rrhh", soloAdmin: true },
+          { label: "Turnos", href: "/rrhh/turnos", modulo: "rrhh", soloAdmin: true },
+          { label: "Feriados", href: "/rrhh/feriados", modulo: "rrhh", soloAdmin: true },
+        ],
+      },
+      {
+        label: "Control",
+        href: "/rrhh/fichadas",
+        modulo: "rrhh",
+        children: [
+          { label: "Marcaciones", href: "/rrhh/fichadas", modulo: "rrhh" },
+          { label: "Licencias", href: "/rrhh/ausencias?tab=licencias", modulo: "rrhh" },
+          { label: "Ausencias", href: "/rrhh/ausencias?tab=injustificadas", modulo: "rrhh" },
+        ],
+      },
+      {
+        label: "Asistencia",
+        href: "/rrhh/asistencia",
+        modulo: "rrhh",
+        children: [
+          { label: "Por período", href: "/rrhh/asistencia?tab=periodo", modulo: "rrhh" },
+          { label: "Por día", href: "/rrhh/asistencia?tab=dia", modulo: "rrhh" },
+        ],
+      },
+      {
+        label: "Vacaciones",
+        href: "/rrhh/vacaciones",
+        modulo: "rrhh",
+        children: [
+          { label: "Por empleado", href: "/rrhh/vacaciones?tab=balance", modulo: "rrhh" },
+          { label: "Historial", href: "/rrhh/vacaciones?tab=historial", modulo: "rrhh" },
+        ],
+      },
       { label: "Francos", href: "/rrhh/francos", modulo: "rrhh" },
       { label: "Liquidaciones", href: "/rrhh/liquidaciones", modulo: "rrhh" },
+      { label: "Configuración", href: "/rrhh/configuracion", modulo: "rrhh", soloAdmin: true },
       { label: "Analítico", href: "/rrhh/analitico", modulo: "rrhh" },
-      { label: "Administración RRHH", href: "/rrhh/administracion", modulo: "rrhh" },
     ],
   },
   {

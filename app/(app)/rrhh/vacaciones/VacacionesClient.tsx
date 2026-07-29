@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 
 export default function VacacionesClient({ empleados }: { empleados: any[] }) {
-  const [tab, setTab] = useState<"balance" | "historial">("balance");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [tab, setTabState] = useState<"balance" | "historial">(
+    searchParams.get("tab") === "historial" ? "historial" : "balance"
+  );
+  function setTab(t: "balance" | "historial") {
+    setTabState(t);
+    router.replace(`${pathname}?tab=${t}`, { scroll: false });
+  }
 
   return (
     <div>

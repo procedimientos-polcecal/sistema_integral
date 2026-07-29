@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import VacacionesClient from "./VacacionesClient";
 
 export default async function VacacionesPage() {
@@ -16,5 +17,9 @@ export default async function VacacionesPage() {
     .order("apellido")
     .order("nombre");
 
-  return <VacacionesClient empleados={empleados ?? []} />;
+  return (
+    <Suspense fallback={null}>
+      <VacacionesClient empleados={empleados ?? []} />
+    </Suspense>
+  );
 }

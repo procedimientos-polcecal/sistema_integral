@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { modulosVisibles } from "@/lib/core/access";
@@ -38,12 +39,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar
-        modulos={modulos}
-        rol={rol}
-        usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
-        esEmpleadoRemises={!!usuario.empleado_id}
-      />
+      <Suspense fallback={null}>
+        <Sidebar
+          modulos={modulos}
+          rol={rol}
+          usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
+          esEmpleadoRemises={!!usuario.empleado_id}
+        />
+      </Suspense>
       <main className="flex-1 overflow-auto p-6">{children}</main>
     </div>
   );

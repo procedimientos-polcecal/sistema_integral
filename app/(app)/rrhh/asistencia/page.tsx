@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import AsistenciaClient from "./AsistenciaClient";
 
 export default async function AsistenciaPage() {
@@ -9,5 +10,9 @@ export default async function AsistenciaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  return <AsistenciaClient />;
+  return (
+    <Suspense fallback={null}>
+      <AsistenciaClient />
+    </Suspense>
+  );
 }

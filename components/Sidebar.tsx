@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { NAV, type NavItem } from "@/lib/core/nav";
 import type { Modulo, Rol } from "@/lib/core/types";
 import { logout } from "@/app/login/actions";
@@ -10,9 +10,17 @@ import { logout } from "@/app/login/actions";
 const COLAPSADO_KEY = "sdg-sidebar-colapsado";
 
 function visible(item: NavItem, modulos: Set<Modulo>, esAdmin: boolean): boolean {
-  if (item.href === "/administracion") return esAdmin;
+  if (item.soloAdmin || item.href === "/administracion") return esAdmin;
   if (!item.modulo) return true;
   return modulos.has(item.modulo);
+}
+
+/** Compara contra pathname+query si el href trae `?...`, si no, solo pathname. */
+function esRutaActiva(href: string, pathname: string, search: string): boolean {
+  const [rutaHref, queryHref] = href.split("?");
+  if (rutaHref !== pathname) return false;
+  if (!queryHref) return true;
+  return search === queryHref;
 }
 
 function iconFor(href: string) {
@@ -47,9 +55,11 @@ export function Sidebar({
   const set = new Set(modulos);
   const esAdmin = rol === "admin_sistema" || rol === "admin";
   const pathname = usePathname();
+  const search = useSearchParams().toString();
 
   const items = NAV.filter((i) => visible(i, set, esAdmin));
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
 
   useEffect(() => {
@@ -60,11 +70,19 @@ export function Sidebar({
     localStorage.setItem(COLAPSADO_KEY, colapsado ? "1" : "0");
   }, [colapsado]);
 
-  // Si la ruta actual pertenece a un sector con sub-páginas, lo despliega solo.
+  // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo despliega solo.
   useEffect(() => {
-    const activo = items.find((i) => i.children?.some((c) => c.href === pathname));
-    if (activo) setAbierto(activo.label);
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+    for (const item of items) {
+      if (!item.children) continue;
+      const hijoDirectoActivo = item.children.some((c) => !c.children && esRutaActiva(c.href, pathname, search));
+      const subgrupoActivo = item.children.find((c) => c.children?.some((n) => esRutaActiva(n.href, pathname, search)));
+      if (hijoDirectoActivo || subgrupoActivo) {
+        setAbierto(item.label);
+        if (subgrupoActivo) setAbiertoSub(subgrupoActivo.label);
+        return;
+      }
+    }
+  }, [pathname, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <aside
@@ -99,7 +117,7 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
         {esEmpleadoRemises && (
-          <Link href="/mi-remis" title={colapsado ? "Mi remis" : undefined} className={`nav-link ${pathname === "/mi-remis" ? "active" : ""} ${colapsado ? "justify-center" : ""}`}>
+          <Link href="/mi-remis" title={colapsado ? "Mi remis" : undefined} className={`nav-link ${esRutaActiva("/mi-remis", pathname, search) ? "active" : ""} ${colapsado ? "justify-center" : ""}`}>
             <IconCar />
             {!colapsado && "Mi remis"}
           </Link>
@@ -114,7 +132,7 @@ export function Sidebar({
                 key={item.href}
                 href={item.href}
                 title={colapsado ? item.label : undefined}
-                className={`nav-link ${pathname === item.href ? "active" : ""} ${colapsado ? "justify-center" : ""}`}
+                className={`nav-link ${esRutaActiva(item.href, pathname, search) ? "active" : ""} ${colapsado ? "justify-center" : ""}`}
               >
                 <Icon />
                 {!colapsado && item.label}
@@ -123,18 +141,16 @@ export function Sidebar({
           }
 
           const hijosVisibles = item.children.filter((c) => visible(c, set, esAdmin));
-          const hijoActivo = hijosVisibles.some((c) => c.href === pathname);
+          const hijoActivo = hijosVisibles.some(
+            (c) => esRutaActiva(c.href, pathname, search) || c.children?.some((n) => esRutaActiva(n.href, pathname, search))
+          );
 
           // Colapsado: sin lugar para desplegar sub-ítems, un click entra
-          // directo a la primera página del sector.
+          // directo a la primera página del sector (o del primer sub-grupo).
           if (colapsado) {
+            const primerHref = hijosVisibles[0]?.children?.[0]?.href ?? hijosVisibles[0]?.href ?? item.href;
             return (
-              <Link
-                key={item.href}
-                href={hijosVisibles[0]?.href ?? item.href}
-                title={item.label}
-                className={`nav-link justify-center ${hijoActivo ? "active" : ""}`}
-              >
+              <Link key={item.href} href={primerHref} title={item.label} className={`nav-link justify-center ${hijoActivo ? "active" : ""}`}>
                 <Icon />
               </Link>
             );
@@ -151,26 +167,46 @@ export function Sidebar({
               >
                 <Icon />
                 <span style={{ flex: 1 }}>{item.label}</span>
-                <svg
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  className="shrink-0 transition-transform duration-150"
-                  style={{ transform: desplegado ? "rotate(180deg)" : "none" }}
-                >
-                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <ChevronIcon abierto={desplegado} />
               </button>
               {desplegado && (
                 <div>
-                  {hijosVisibles.map((c) => (
-                    <Link key={c.href} href={c.href} className={`nav-link-sub ${c.href === pathname ? "active" : ""}`}>
-                      {c.label}
-                    </Link>
-                  ))}
+                  {hijosVisibles.map((c) => {
+                    if (!c.children) {
+                      return (
+                        <Link key={c.href} href={c.href} className={`nav-link-sub ${esRutaActiva(c.href, pathname, search) ? "active" : ""}`}>
+                          {c.label}
+                        </Link>
+                      );
+                    }
+
+                    const nietosVisibles = c.children.filter((n) => visible(n, set, esAdmin));
+                    const nietoActivo = nietosVisibles.some((n) => esRutaActiva(n.href, pathname, search));
+                    const subDesplegado = abiertoSub === c.label;
+                    return (
+                      <div key={c.href}>
+                        <button
+                          type="button"
+                          onClick={() => setAbiertoSub(subDesplegado ? null : c.label)}
+                          aria-expanded={subDesplegado}
+                          className={`nav-link-sub w-full text-left ${nietoActivo ? "active" : ""}`}
+                          style={{ background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          <span style={{ flex: 1 }}>{c.label}</span>
+                          <ChevronIcon abierto={subDesplegado} small />
+                        </button>
+                        {subDesplegado && (
+                          <div className="ml-3">
+                            {nietosVisibles.map((n) => (
+                              <Link key={n.href} href={n.href} className={`nav-link-sub ${esRutaActiva(n.href, pathname, search) ? "active" : ""}`}>
+                                {n.label}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -179,10 +215,14 @@ export function Sidebar({
       </nav>
 
       <div className="border-t px-3 py-3" style={{ borderColor: "var(--sidebar-border)" }}>
-        {!colapsado && (
-          <div className="truncate px-1 pb-2 text-sm" style={{ color: "var(--sidebar-text)" }}>
+        {colapsado ? (
+          <Link href="/mi-cuenta" title="Mi cuenta" className="mb-1 flex w-full items-center justify-center rounded-lg py-2 transition hover:bg-white/10" style={{ color: "var(--sidebar-text)" }}>
+            <IconUsers />
+          </Link>
+        ) : (
+          <Link href="/mi-cuenta" className="block truncate px-1 pb-2 text-sm hover:underline" style={{ color: "var(--sidebar-text)" }}>
             {usuarioNombre}
-          </div>
+          </Link>
         )}
         <form action={logout}>
           <button
@@ -197,6 +237,24 @@ export function Sidebar({
         </form>
       </div>
     </aside>
+  );
+}
+
+function ChevronIcon({ abierto, small = false }: { abierto: boolean; small?: boolean }) {
+  const size = small ? 10 : 12;
+  return (
+    <svg
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      className="shrink-0 transition-transform duration-150"
+      style={{ transform: abierto ? "rotate(180deg)" : "none" }}
+    >
+      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

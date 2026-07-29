@@ -1,18 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
-import AusenciasClient from "./AusenciasClient";
+import { esAdminRrhh } from "@/lib/rrhh/auth";
+import TurnosClient from "./TurnosClient";
 
-export default async function AusenciasPage() {
+export default async function TurnosPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  if (!(await esAdminRrhh(supabase, user.id))) redirect("/rrhh");
 
-  return (
-    <Suspense fallback={null}>
-      <AusenciasClient />
-    </Suspense>
-  );
+  return <TurnosClient />;
 }

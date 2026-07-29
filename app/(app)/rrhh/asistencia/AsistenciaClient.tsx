@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
@@ -78,7 +79,16 @@ function ClasificarModal({ seleccion, onClose, onSaved }: {
 }
 
 export default function AsistenciaClient() {
-  const [tab, setTab] = useState<"periodo" | "dia">("periodo");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [tab, setTabState] = useState<"periodo" | "dia">(
+    searchParams.get("tab") === "dia" ? "dia" : "periodo"
+  );
+  function setTab(t: "periodo" | "dia") {
+    setTabState(t);
+    router.replace(`${pathname}?tab=${t}`, { scroll: false });
+  }
 
   return (
     <div>

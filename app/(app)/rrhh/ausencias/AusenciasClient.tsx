@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 
 export default function AusenciasClient() {
-  const [tab, setTab] = useState<"injustificadas" | "licencias">("injustificadas");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [tab, setTabState] = useState<"injustificadas" | "licencias">(
+    searchParams.get("tab") === "licencias" ? "licencias" : "injustificadas"
+  );
+  function setTab(t: "injustificadas" | "licencias") {
+    setTabState(t);
+    router.replace(`${pathname}?tab=${t}`, { scroll: false });
+  }
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [ausencias, setAusencias] = useState<any[]>([]);
