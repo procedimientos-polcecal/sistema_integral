@@ -7,3 +7,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 supabase/migrations_*combined.sql
+scripts/export-firestore-org/node_modules/
+scripts/export-firestore-org/orgs_*.json
+.vercel

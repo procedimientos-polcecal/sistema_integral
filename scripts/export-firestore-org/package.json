@@ -1,0 +1,8 @@
+{
+  "name": "export-firestore-org",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "firebase": "^10.12.0"
+  }
+}

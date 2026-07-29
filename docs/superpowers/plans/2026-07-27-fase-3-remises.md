@@ -47,7 +47,13 @@ datos reales de producción (bloqueado hasta conseguir credenciales de Firestore
       horarios/colores que `DEFAULT_SHIFTS` del original), `remises_config` con
       defaults (velocidad 40 km/h).
 - [x] **Step 7:** Verificar tipos: `npx tsc --noEmit` — sin errores.
-- [x] **Step 8:** Pendiente aplicar contra la base real — armé `supabase/migrations_fase3_combined.sql` (012-014) para el SQL Editor, mismo procedimiento que Fases 1-2. Commit.
+- [x] **Step 8:** Aplicado contra la base real — verificado 2026-07-28 vía REST
+      (`GET .../rest/v1/<tabla>?limit=1`) que las 12 tablas responden 200: `choferes`,
+      `vehiculos`, `remises_turnos`, `remises_empleados_datos`, `remises_asistencia`,
+      `remises_plan_semana`, `hojas_ruta`, `asientos`, `remises_plantillas`,
+      `remises_plantillas_grupos`, `remises_config` (1 fila, seed), `remises_push_tokens`.
+      Todas vacías salvo el seed de `remises_config`. `supabase/migrations_fase3_combined.sql`
+      queda como referencia (012-014) del SQL Editor.
 
 ### Task 2: Motor de generación de rutas — funciones puras + tests
 
