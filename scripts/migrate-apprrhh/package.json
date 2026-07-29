@@ -1,0 +1,8 @@
+{
+  "name": "migrate-apprrhh",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
