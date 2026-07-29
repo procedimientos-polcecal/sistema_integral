@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { NAV, type NavItem } from "@/lib/core/nav";
@@ -9,8 +9,9 @@ import { logout } from "@/app/login/actions";
 
 const COLAPSADO_KEY = "sdg-sidebar-colapsado";
 
-function visible(item: NavItem, modulos: Set<Modulo>, esAdmin: boolean): boolean {
-  if (item.soloAdmin || item.href === "/administracion") return esAdmin;
+function visible(item: NavItem, modulos: Set<Modulo>, esAdminGlobal: boolean, adminModulos: Set<Modulo>): boolean {
+  if (item.soloAdminGlobal) return esAdminGlobal;
+  if (item.soloAdmin) return item.modulo ? adminModulos.has(item.modulo) : esAdminGlobal;
   if (!item.modulo) return true;
   return modulos.has(item.modulo);
 }
@@ -23,41 +24,70 @@ function esRutaActiva(href: string, pathname: string, search: string): boolean {
   return search === queryHref;
 }
 
-function iconFor(href: string) {
-  switch (href) {
-    case "/":
-      return IconDash;
-    case "/rrhh":
-      return IconUsers;
-    case "/remises":
-      return IconCar;
-    case "/mantenimiento":
-      return IconWrench;
-    case "/administracion":
-      return IconCog;
-    default:
-      return IconDash;
-  }
+// Un ícono por página/grupo, para que cada ítem del sidebar sea reconocible
+// de un vistazo (mismo criterio que APPRRHH: un ícono por etiqueta, reusado
+// entre módulos cuando el concepto es el mismo — ej. "Historial" o "Configuración").
+const ICONOS: Record<string, () => ReactElement> = {
+  "Inicio": IconDash,
+  "RRHH": IconUsers,
+  "Remises": IconCar,
+  "Mantenimiento": IconWrench,
+  "Administración": IconCog,
+  "Dashboard": IconDash,
+  "Empleados": IconUser,
+  "Usuarios": IconKey,
+  "Turnos": IconClock,
+  "Feriados": IconCalendar,
+  "Control": IconCheck,
+  "Marcaciones": IconCheck,
+  "Licencias": IconFile,
+  "Ausencias": IconAlert,
+  "Asistencia": IconClock,
+  "Por período": IconCalendar,
+  "Por día": IconClock,
+  "Vacaciones": IconSun,
+  "Por empleado": IconUser,
+  "Historial": IconList,
+  "Francos": IconSun,
+  "Liquidaciones": IconCash,
+  "Configuración": IconCog,
+  "Analítico": IconChart,
+  "Hoy": IconCheck,
+  "Semana": IconCalendar,
+  "Vehículos": IconCar,
+  "Equipos": IconWrench,
+  "Mantenimientos": IconClipboard,
+  "Ejecuciones": IconBolt,
+  "Órdenes de trabajo": IconClipboard,
+  "Planificación diaria": IconCalendar,
+};
+
+function iconForItem(item: NavItem) {
+  return ICONOS[item.label] ?? IconDash;
 }
 
 export function Sidebar({
   modulos,
+  modulosAdmin,
   rol,
   usuarioNombre,
   esEmpleadoRemises = false,
 }: {
   modulos: Modulo[];
+  /** Módulos donde el usuario tiene nivel "admin" (no solo acceso) — gatea los ítems soloAdmin de cada módulo. */
+  modulosAdmin: Modulo[];
   rol: Rol;
   usuarioNombre: string;
   /** Cuenta vinculada a un empleado (auto-servicio "Mi remis") — no depende del nivel de módulo. */
   esEmpleadoRemises?: boolean;
 }) {
   const set = new Set(modulos);
-  const esAdmin = rol === "admin_sistema" || rol === "admin";
+  const adminSet = new Set(modulosAdmin);
+  const esAdminGlobal = rol === "admin_sistema" || rol === "admin";
   const pathname = usePathname();
   const search = useSearchParams().toString();
 
-  const items = NAV.filter((i) => visible(i, set, esAdmin));
+  const items = NAV.filter((i) => visible(i, set, esAdminGlobal, adminSet));
   const [abierto, setAbierto] = useState<string | null>(null);
   const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
@@ -124,7 +154,7 @@ export function Sidebar({
         )}
 
         {items.map((item) => {
-          const Icon = iconFor(item.href);
+          const Icon = iconForItem(item);
 
           if (!item.children) {
             return (
@@ -140,7 +170,7 @@ export function Sidebar({
             );
           }
 
-          const hijosVisibles = item.children.filter((c) => visible(c, set, esAdmin));
+          const hijosVisibles = item.children.filter((c) => visible(c, set, esAdminGlobal, adminSet));
           const hijoActivo = hijosVisibles.some(
             (c) => esRutaActiva(c.href, pathname, search) || c.children?.some((n) => esRutaActiva(n.href, pathname, search))
           );
@@ -172,15 +202,17 @@ export function Sidebar({
               {desplegado && (
                 <div>
                   {hijosVisibles.map((c) => {
+                    const CIcon = iconForItem(c);
                     if (!c.children) {
                       return (
                         <Link key={c.href} href={c.href} className={`nav-link-sub ${esRutaActiva(c.href, pathname, search) ? "active" : ""}`}>
+                          <CIcon />
                           {c.label}
                         </Link>
                       );
                     }
 
-                    const nietosVisibles = c.children.filter((n) => visible(n, set, esAdmin));
+                    const nietosVisibles = c.children.filter((n) => visible(n, set, esAdminGlobal, adminSet));
                     const nietoActivo = nietosVisibles.some((n) => esRutaActiva(n.href, pathname, search));
                     const subDesplegado = abiertoSub === c.label;
                     return (
@@ -192,16 +224,21 @@ export function Sidebar({
                           className={`nav-link-sub w-full text-left ${nietoActivo ? "active" : ""}`}
                           style={{ background: "none", border: "none", cursor: "pointer" }}
                         >
+                          <CIcon />
                           <span style={{ flex: 1 }}>{c.label}</span>
                           <ChevronIcon abierto={subDesplegado} small />
                         </button>
                         {subDesplegado && (
                           <div className="ml-3">
-                            {nietosVisibles.map((n) => (
-                              <Link key={n.href} href={n.href} className={`nav-link-sub ${esRutaActiva(n.href, pathname, search) ? "active" : ""}`}>
-                                {n.label}
-                              </Link>
-                            ))}
+                            {nietosVisibles.map((n) => {
+                              const NIcon = iconForItem(n);
+                              return (
+                                <Link key={n.href} href={n.href} className={`nav-link-sub ${esRutaActiva(n.href, pathname, search) ? "active" : ""}`}>
+                                  <NIcon />
+                                  {n.label}
+                                </Link>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -293,6 +330,101 @@ function IconCog() {
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function IconUser() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0116 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconKey() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <circle cx="7" cy="15" r="3" />
+      <path d="M9.5 12.5L19 3m-4 4l2 2m-5 1l2 2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconClock() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconCalendar() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconCheck() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconFile() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 3v5h5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconAlert() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 9v4m0 4h.01M10.29 3.86l-8.18 14.18A2 2 0 004 21h16a2 2 0 001.89-2.96L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconSun() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconList() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconCash() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m3-4a3 3 0 116 0 3 3 0 01-6 0zm11 0a2 2 0 01-2 2h-6a2 2 0 01-2-2v-2a2 2 0 012-2h6a2 2 0 012 2v2z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconChart() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M3 3v18h18M8 17V10m5 7V6m5 11v-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconClipboard() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 3h6a1 1 0 011 1v1a1 1 0 01-1 1H9a1 1 0 01-1-1V4a1 1 0 011-1z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconBolt() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

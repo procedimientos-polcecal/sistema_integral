@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
-import { modulosVisibles } from "@/lib/core/access";
+import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -35,13 +35,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq("usuario_id", user.id);
 
   const rol = usuario.rol as Rol;
-  const modulos = modulosVisibles(rol, (grants ?? []) as UsuarioModulo[]);
+  const grantsList = (grants ?? []) as UsuarioModulo[];
+  const modulos = modulosVisibles(rol, grantsList);
+  const modulosAdmin = MODULOS_ORDEN.filter((m) => nivelEnModulo(rol, grantsList, m) === "admin");
 
   return (
     <div className="flex min-h-screen">
       <Suspense fallback={null}>
         <Sidebar
           modulos={modulos}
+          modulosAdmin={modulosAdmin}
           rol={rol}
           usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
           esEmpleadoRemises={!!usuario.empleado_id}
