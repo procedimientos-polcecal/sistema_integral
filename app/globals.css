@@ -22,8 +22,9 @@
   --background:   #F1F5F9;
   --foreground:   #0F172A;
 
-  /* Sidebar — verde bosque */
+  /* Sidebar — verde bosque, con una variante más oscura para el degradé sutil de fondo */
   --sidebar-bg:      #1E3625;
+  --sidebar-bg-dark: #142519;
   --sidebar-border:  #2A4A34;
   --sidebar-text:    #A9C2AE;
   --sidebar-hover:   #274531;

@@ -28,7 +28,26 @@ export async function GET() {
     modulos.has("mantenimiento") ? resumenMantenimiento(supabase, hoyStr) : Promise.resolve(null),
   ]);
 
-  return NextResponse.json({ rrhh, remises, mantenimiento });
+  // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
+  const notificaciones: { id: string; titulo: string; cantidad: number; href: string }[] = [];
+  if (rrhh && rrhh.sinClasificarHoy > 0) {
+    notificaciones.push({
+      id: "rrhh-sin-clasificar",
+      titulo: "Ausencias sin clasificar hoy",
+      cantidad: rrhh.sinClasificarHoy,
+      href: "/rrhh/asistencia?tab=dia",
+    });
+  }
+  if (mantenimiento && mantenimiento.vencidos > 0) {
+    notificaciones.push({
+      id: "mant-vencidos",
+      titulo: "Mantenimientos vencidos",
+      cantidad: mantenimiento.vencidos,
+      href: "/mantenimiento",
+    });
+  }
+
+  return NextResponse.json({ rrhh, remises, mantenimiento, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -38,13 +57,14 @@ async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, h
   await recalcularPeriodoCacheado(supabase, hoy, hoy);
   const { data: calculos } = await supabase
     .from("calculos_diarios")
-    .select("ausente")
+    .select("ausente, justificada")
     .in("empleado_id", idsOrDummy(empleadoIds))
     .eq("fecha", hoyStr);
 
   const totalActivos = empleadoIds.length;
   const ausentesHoy = (calculos ?? []).filter((c) => c.ausente).length;
-  return { empleadosActivos: totalActivos, presentesHoy: totalActivos - ausentesHoy, ausentesHoy };
+  const sinClasificarHoy = (calculos ?? []).filter((c) => c.ausente && c.justificada === null).length;
+  return { empleadosActivos: totalActivos, presentesHoy: totalActivos - ausentesHoy, ausentesHoy, sinClasificarHoy };
 }
 
 async function resumenRemises(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {

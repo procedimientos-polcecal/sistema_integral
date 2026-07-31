@@ -114,7 +114,7 @@ export function Sidebar({
   return (
     <aside
       className={`flex flex-col shrink-0 transition-[width] duration-200 ${colapsado ? "w-[68px]" : "w-60"}`}
-      style={{ background: "var(--sidebar-bg)", borderRight: "1px solid var(--sidebar-border)" }}
+      style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderRight: "1px solid var(--sidebar-border)" }}
     >
       <div className="relative flex h-14 items-center justify-end border-b px-3" style={{ borderColor: "var(--sidebar-border)" }}>
         <button

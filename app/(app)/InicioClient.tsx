@@ -39,12 +39,12 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             href="/rrhh"
             color="#1E7D34"
             icon={<IconUsers />}
-            filas={
+            hero={resumen?.rrhh ? { label: "Ausentes hoy", valor: resumen.rrhh.ausentesHoy } : null}
+            secundarias={
               resumen?.rrhh
                 ? [
                     { label: "Empleados activos", valor: resumen.rrhh.empleadosActivos },
                     { label: "Presentes hoy", valor: resumen.rrhh.presentesHoy },
-                    { label: "Ausentes hoy", valor: resumen.rrhh.ausentesHoy },
                   ]
                 : null
             }
@@ -57,14 +57,8 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             href="/remises"
             color="#2563EB"
             icon={<IconCar />}
-            filas={
-              resumen?.remises
-                ? [
-                    { label: "Vehículos activos", valor: resumen.remises.vehiculosActivos },
-                    { label: "Empleados con turno hoy", valor: resumen.remises.empleadosConTurnoHoy },
-                  ]
-                : null
-            }
+            hero={resumen?.remises ? { label: "Empleados con turno hoy", valor: resumen.remises.empleadosConTurnoHoy } : null}
+            secundarias={resumen?.remises ? [{ label: "Vehículos activos", valor: resumen.remises.vehiculosActivos }] : null}
           />
         )}
 
@@ -74,11 +68,11 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             href="/mantenimiento"
             color="#D97706"
             icon={<IconWrench />}
-            filas={
+            hero={resumen?.mantenimiento ? { label: "Mantenimientos vencidos", valor: resumen.mantenimiento.vencidos } : null}
+            secundarias={
               resumen?.mantenimiento
                 ? [
                     { label: "Equipos operativos", valor: `${resumen.mantenimiento.equiposOperativos} / ${resumen.mantenimiento.equiposTotal}` },
-                    { label: "Mantenimientos vencidos", valor: resumen.mantenimiento.vencidos },
                     { label: "Órdenes pendientes", valor: resumen.mantenimiento.otPendientes },
                   ]
                 : null
@@ -95,38 +89,58 @@ function ModuloCard({
   href,
   color,
   icon,
-  filas,
+  hero,
+  secundarias,
 }: {
   titulo: string;
   href: string;
   color: string;
   icon: React.ReactNode;
-  filas: { label: string; valor: string | number }[] | null;
+  hero: { label: string; valor: string | number } | null;
+  secundarias: { label: string; valor: string | number }[] | null;
 }) {
   return (
-    <div className="card flex flex-col p-5">
-      <div className="mb-4 flex items-center gap-3">
+    <Link
+      href={href}
+      className="card group flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg"
+      style={{ borderTop: `3px solid ${color}` }}
+    >
+      <div className="flex items-center gap-3 p-5 pb-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: color }}>
           {icon}
         </span>
-        <h2 className="font-semibold text-gray-900">{titulo}</h2>
+        <h2 className="flex-1 font-semibold text-gray-900">{titulo}</h2>
+        <span className="text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-gray-400">→</span>
       </div>
 
-      <div className="flex-1 space-y-2.5">
-        {filas === null
-          ? [0, 1, 2].map((i) => <div key={i} className="h-4 w-3/4 animate-pulse rounded bg-gray-100" />)
-          : filas.map((f) => (
-              <div key={f.label} className="flex items-baseline justify-between text-sm">
-                <span className="text-gray-500">{f.label}</span>
-                <span className="font-semibold text-gray-900">{f.valor}</span>
+      <div className="px-5 pb-3">
+        {hero === null ? (
+          <div className="h-10 w-24 animate-pulse rounded bg-gray-100" />
+        ) : (
+          <>
+            <div className="text-4xl font-bold tabular-nums" style={{ color }}>
+              {hero.valor}
+            </div>
+            <div className="mt-0.5 text-sm text-gray-500">{hero.label}</div>
+          </>
+        )}
+      </div>
+
+      <div className="mt-auto flex divide-x border-t" style={{ borderColor: "var(--border)" }}>
+        {secundarias === null
+          ? [0, 1].map((i) => (
+              <div key={i} className="flex-1 px-5 py-3">
+                <div className="h-3 w-16 animate-pulse rounded bg-gray-100" />
+              </div>
+            ))
+          : secundarias.map((s) => (
+              <div key={s.label} className="flex-1 px-5 py-3">
+                <div className="text-base font-semibold text-gray-900 tabular-nums">{s.valor}</div>
+                <div className="text-xs text-gray-500">{s.label}</div>
               </div>
             ))}
       </div>
-
-      <Link href={href} className="btn-ghost mt-4 self-start">
-        Ver más →
-      </Link>
-    </div>
+    </Link>
   );
 }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/app/login/actions";
 import { GlobalSearch } from "./GlobalSearch";
+import { NotificationsBell } from "./NotificationsBell";
 
 export function Header({ usuarioNombre }: { usuarioNombre: string }) {
   const iniciales =
@@ -14,7 +15,7 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
   return (
     <header
       className="flex h-14 shrink-0 items-center gap-4 px-4"
-      style={{ background: "var(--sidebar-bg)", borderBottom: "1px solid var(--sidebar-border)" }}
+      style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderBottom: "1px solid var(--sidebar-border)" }}
     >
       <Link href="/" title="Inicio" className="flex shrink-0 items-center">
         <img
@@ -31,6 +32,7 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <NotificationsBell />
         <Link
           href="/mi-cuenta"
           className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/10"
