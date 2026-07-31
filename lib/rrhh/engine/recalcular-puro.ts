@@ -102,10 +102,15 @@ export function ajustarFichadasPorTurno(
     grupo.forEach((f, i) => {
       const esPrimera = i === 0;
       const esUltima = i === grupo.length - 1;
-      // Dentro del margen (incluida la llegada temprana) se acredita desde el
-      // horario pactado; pasado el margen de tardanza, se pierde ese tiempo
-      // real (se acredita desde que fichó, no desde el horario del turno).
-      const horaEntrada = esPrimera ? (tarde ? f.horaEntrada : anchorInicio) : f.horaEntrada;
+      // Dentro del margen se acredita desde el horario pactado. Pasado el
+      // margen de tardanza, se pierde ese tiempo real (se acredita desde que
+      // fichó, no desde el horario del turno). Si en cambio llegó mucho antes
+      // (más allá del margen), se acredita el tiempo real de más como con
+      // cualquier otro desvío grande: si no, un turno detectado por su hora
+      // de entrada real (ej. entró a las 4 y matcheó "Oficina" 08-16 por ser
+      // el más cercano) le recortaría silenciosamente todas las horas
+      // trabajadas antes del inicio nominal del turno.
+      const horaEntrada = esPrimera ? (Math.abs(desvioEntrada) > turno.toleranciaMinutos ? f.horaEntrada : anchorInicio) : f.horaEntrada;
       let horaSalida = f.horaSalida;
       if (esUltima && f.horaSalida) {
         const desvioSalida = (f.horaSalida.getTime() - anchorFin.getTime()) / 60_000;

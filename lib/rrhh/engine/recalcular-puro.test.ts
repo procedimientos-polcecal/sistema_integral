@@ -99,6 +99,22 @@ describe("ajustarFichadasPorTurno", () => {
     expect(retiroAnticipadoPorDia.get(dia.getTime())).toBe(true);
   });
 
+  it("caso real: llegó mucho antes del inicio del turno detectado, se acredita el tiempo real (no se recorta la entrada)", () => {
+    const turnosConOficina = [
+      { id: "oficina", horaInicio: "08:00", horaFin: "16:00", toleranciaMinutos: 20 },
+      { id: "manana", horaInicio: "04:00", horaFin: "12:00", toleranciaMinutos: 20 },
+      { id: "tarde", horaInicio: "12:00", horaFin: "20:00", toleranciaMinutos: 20 },
+    ];
+    const dia = toUtcDateOnly(2026, 6, 13);
+    // entró a las 4 y se fue a las 19:55: matchea "oficina" (08-16) por
+    // distancia combinada, pero entró 4hs antes de su inicio nominal (08:00),
+    // muy por fuera del margen de 20min -> no se debe recortar a las 8:00.
+    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 7, 13, 4, 0), horaSalida: d(2026, 7, 13, 19, 55) }];
+    const { ajustadas, tardePorDia } = ajustarFichadasPorTurno(fichadas, turnosConOficina);
+    expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 7, 13, 4, 0), horaSalida: d(2026, 7, 13, 19, 55) }]);
+    expect(tardePorDia.get(dia.getTime())).toBe(false);
+  });
+
   it("detecta el turno más cercano por horario de entrada entre varios candidatos", () => {
     const dia = toUtcDateOnly(2026, 5, 5);
     const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 13, 55), horaSalida: d(2026, 6, 5, 22, 0) }];

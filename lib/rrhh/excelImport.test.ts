@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseDateString, parseMarcaciones, parseNumeroAR } from "./excelImport";
+import * as XLSX from "xlsx";
+import { parseDateString, parseMarcaciones, parseNumeroAR, parseWorkbookAllSheets } from "./excelImport";
 
 describe("parseDateString", () => {
   it("interpreta DD/MM/YYYY con prefijo de día de semana (formato reloj)", () => {
@@ -43,6 +44,41 @@ describe("parseMarcaciones", () => {
 
   it("cadena vacía no produce marcaciones", () => {
     expect(parseMarcaciones("")).toEqual([]);
+  });
+});
+
+function bufferDeFilas(filas: unknown[][]): Buffer {
+  const sheet = XLSX.utils.aoa_to_sheet(filas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, "Marcaciones y Horas");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+}
+
+describe("parseWorkbookAllSheets", () => {
+  it("detecta el encabezado real cuando el reporte trae filas de filtros/título antes (caso reloj biométrico)", () => {
+    const buf = bufferDeFilas([
+      ["Filtros", "", "Fecha Desde: 22/07/2026", "Fecha Hasta: 27/07/2026"],
+      ["", "", "", ""],
+      ["Empleado", "Legajo", "Fecha", "Marcaciones"],
+      ["AGOSTA, HORACIO", "PC_233", "Mi 22/07/2026", "E 11:50 - S 19:46"],
+      ["ROSSI, NICOLAS", "PS_019", "Ju 23/07/2026", "E 08:05 - S 16:02"],
+    ]);
+    const { sheetNames, sheets } = parseWorkbookAllSheets(buf);
+    const sheet = sheets[sheetNames[0]];
+    expect(sheet.headers).toEqual(["Empleado", "Legajo", "Fecha", "Marcaciones"]);
+    expect(sheet.rows).toHaveLength(2);
+    expect(sheet.rows[0]).toMatchObject({ Empleado: "AGOSTA, HORACIO", Legajo: "PC_233" });
+  });
+
+  it("cuando el encabezado ya es la primera fila, se comporta igual que antes", () => {
+    const buf = bufferDeFilas([
+      ["Legajo", "Fecha", "Marcaciones"],
+      ["PC_233", "Mi 22/07/2026", "E 11:50 - S 19:46"],
+    ]);
+    const { sheetNames, sheets } = parseWorkbookAllSheets(buf);
+    const sheet = sheets[sheetNames[0]];
+    expect(sheet.headers).toEqual(["Legajo", "Fecha", "Marcaciones"]);
+    expect(sheet.rows).toHaveLength(1);
   });
 });
 

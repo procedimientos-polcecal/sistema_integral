@@ -14,14 +14,40 @@ export interface ParsedSheet {
   headers: string[];
 }
 
+const KEYWORDS_ENCABEZADO = ["legajo", "fecha", "marcacion", "entrada", "salida", "empleado", "sector"];
+
+/**
+ * Los reportes reales de reloj biométrico suelen traer filas de filtros o
+ * título antes del encabezado real (ej. "Fecha Desde: ...", una fila en
+ * blanco), así que no siempre la primera fila de la hoja es el encabezado.
+ * Se detecta buscando, entre las primeras filas, la que mejor matchea las
+ * palabras clave esperadas de una planilla de marcaciones.
+ */
+function detectarFilaEncabezado(filasCrudas: unknown[][]): number {
+  let mejorFila = 0;
+  let mejorScore = -1;
+  const limite = Math.min(filasCrudas.length, 20);
+  for (let i = 0; i < limite; i++) {
+    const celdas = (filasCrudas[i] ?? []).map((c) => String(c ?? "").toLowerCase());
+    const score = KEYWORDS_ENCABEZADO.reduce((acc, kw) => acc + (celdas.some((c) => c.includes(kw)) ? 1 : 0), 0);
+    if (score > mejorScore) {
+      mejorScore = score;
+      mejorFila = i;
+    }
+  }
+  return mejorFila;
+}
+
 /** Parsea TODAS las hojas de un archivo (los reportes reales suelen venir con varias, ej. una de parámetros y otra con los datos). */
 export function parseWorkbookAllSheets(buffer: Buffer): { sheetNames: string[]; sheets: Record<string, ParsedSheet> } {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheets: Record<string, ParsedSheet> = {};
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-    const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const filasCrudas = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    const filaEncabezado = detectarFilaEncabezado(filasCrudas);
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", range: filaEncabezado });
+    const headers = rows.length > 0 ? Object.keys(rows[0]) : (filasCrudas[filaEncabezado] ?? []).map((h) => String(h ?? ""));
     sheets[name] = { rows, headers };
   }
   return { sheetNames: wb.SheetNames, sheets };

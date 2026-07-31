@@ -56,7 +56,9 @@ export default function FichadaEditModal({
         }))
       : [{ id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false }]
   );
-  const [horasInput, setHorasInput] = useState(totalActual.toFixed(1));
+  const [normalesInput, setNormalesInput] = useState(horasNormales.toFixed(1));
+  const [extra50Input, setExtra50Input] = useState(horasExtra50.toFixed(1));
+  const [extra100Input, setExtra100Input] = useState(horasExtra100.toFixed(1));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,12 +103,24 @@ export default function FichadaEditModal({
         }
       }
 
-      const nuevoTotal = Number(horasInput);
-      if (!Number.isNaN(nuevoTotal) && Math.abs(nuevoTotal - totalActual) > 0.01) {
+      const nuevoNormales = Number(normalesInput);
+      const nuevoExtra50 = Number(extra50Input);
+      const nuevoExtra100 = Number(extra100Input);
+      const cambiaron =
+        Math.abs(nuevoNormales - horasNormales) > 0.01 ||
+        Math.abs(nuevoExtra50 - horasExtra50) > 0.01 ||
+        Math.abs(nuevoExtra100 - horasExtra100) > 0.01;
+      if (![nuevoNormales, nuevoExtra50, nuevoExtra100].some(Number.isNaN) && cambiaron) {
         const res = await fetch("/api/rrhh/asistencia/horas-manual", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ employeeId, fecha, horasTrabajadas: nuevoTotal }),
+          body: JSON.stringify({
+            employeeId,
+            fecha,
+            horasNormales: nuevoNormales,
+            horasExtra50: nuevoExtra50,
+            horasExtra100: nuevoExtra100,
+          }),
         });
         if (!res.ok) {
           const data = await res.json();
@@ -130,7 +144,7 @@ export default function FichadaEditModal({
       const res = await fetch("/api/rrhh/asistencia/horas-manual", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, fecha, horasTrabajadas: null }),
+        body: JSON.stringify({ employeeId, fecha, horasNormales: null }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -194,15 +208,33 @@ export default function FichadaEditModal({
         </button>
 
         <div className="border-t border-gray-200 pt-4 mb-2">
-          <label className="block text-xs text-gray-500 mb-1">Horas trabajadas (total del día)</label>
-          <div className="flex items-center gap-3">
-            <input type="number" step="0.1" min="0" max="24" value={horasInput}
-              onChange={(e) => setHorasInput(e.target.value)}
-              className="w-28 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
-            <span className="text-xs text-gray-400">Calculado automáticamente: {totalActual.toFixed(1)}hs</span>
+          <label className="block text-xs text-gray-500 mb-1">Horas trabajadas</label>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] text-gray-400 mb-1">Normales</label>
+              <input type="number" step="0.1" min="0" max="24" value={normalesInput}
+                onChange={(e) => setNormalesInput(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-gray-400 mb-1">Extra 50%</label>
+              <input type="number" step="0.1" min="0" max="24" value={extra50Input}
+                onChange={(e) => setExtra50Input(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-gray-400 mb-1">Extra 100%</label>
+              <input type="number" step="0.1" min="0" max="24" value={extra100Input}
+                onChange={(e) => setExtra100Input(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+            </div>
           </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Total: {(Number(normalesInput || 0) + Number(extra50Input || 0) + Number(extra100Input || 0)).toFixed(1)}hs · Calculado
+            automáticamente: {totalActual.toFixed(1)}hs
+          </p>
           <p className="text-xs text-gray-400 mt-1">
-            Si cambiás este valor, queda fijado manualmente y no se recalcula solo con las marcaciones de arriba.
+            Si cambiás estos valores, quedan fijados manualmente y no se recalculan solos con las marcaciones de arriba.
           </p>
           {horasManual && (
             <button type="button" onClick={restablecerHoras} disabled={guardando} className="text-xs text-amber-700 hover:underline mt-1">
