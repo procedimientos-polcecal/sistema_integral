@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
+import { Header } from "@/components/Header";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
@@ -40,17 +41,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const modulosAdmin = MODULOS_ORDEN.filter((m) => nivelEnModulo(rol, grantsList, m) === "admin");
 
   return (
-    <div className="flex min-h-screen">
-      <Suspense fallback={null}>
+    <div className="flex h-screen flex-col">
+      <Header usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()} />
+      <div className="flex min-h-0 flex-1">
         <Sidebar
           modulos={modulos}
           modulosAdmin={modulosAdmin}
           rol={rol}
-          usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
           esEmpleadoRemises={!!usuario.empleado_id}
         />
-      </Suspense>
-      <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-6">{children}</main>
+      </div>
     </div>
   );
 }

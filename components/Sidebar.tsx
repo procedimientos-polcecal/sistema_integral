@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { NAV, type NavItem } from "@/lib/core/nav";
 import type { Modulo, Rol } from "@/lib/core/types";
-import { logout } from "@/app/login/actions";
 
 const COLAPSADO_KEY = "sdg-sidebar-colapsado";
 
@@ -70,14 +69,12 @@ export function Sidebar({
   modulos,
   modulosAdmin,
   rol,
-  usuarioNombre,
   esEmpleadoRemises = false,
 }: {
   modulos: Modulo[];
   /** Módulos donde el usuario tiene nivel "admin" (no solo acceso) — gatea los ítems soloAdmin de cada módulo. */
   modulosAdmin: Modulo[];
   rol: Rol;
-  usuarioNombre: string;
   /** Cuenta vinculada a un empleado (auto-servicio "Mi remis") — no depende del nivel de módulo. */
   esEmpleadoRemises?: boolean;
 }) {
@@ -119,30 +116,18 @@ export function Sidebar({
       className={`flex flex-col shrink-0 transition-[width] duration-200 ${colapsado ? "w-[68px]" : "w-60"}`}
       style={{ background: "var(--sidebar-bg)", borderRight: "1px solid var(--sidebar-border)" }}
     >
-      <div className="relative border-b px-3 pb-4 pt-5 text-center" style={{ borderColor: "var(--sidebar-border)" }}>
+      <div className="relative flex h-14 items-center justify-end border-b px-3" style={{ borderColor: "var(--sidebar-border)" }}>
         <button
           type="button"
           onClick={() => setColapsado((v) => !v)}
           aria-label={colapsado ? "Mostrar panel lateral" : "Esconder panel lateral"}
-          className="absolute top-3 flex h-6 w-6 items-center justify-center rounded transition hover:bg-white/10"
-          style={{ color: "var(--sidebar-text)", right: colapsado ? "50%" : "0.75rem", transform: colapsado ? "translateX(50%)" : "none" }}
+          className={`flex h-6 w-6 items-center justify-center rounded transition hover:bg-white/10 ${colapsado ? "mx-auto" : ""}`}
+          style={{ color: "var(--sidebar-text)" }}
         >
           <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: colapsado ? "rotate(180deg)" : "none" }}>
             <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        {colapsado ? (
-          <div className="mx-auto flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white/95">
-            <img src="/logo.png" alt="SdG" style={{ width: 24, height: 24, objectFit: "contain" }} />
-          </div>
-        ) : (
-          <>
-            <img src="/logo.png" alt="Polcecal / Polysan" width={130} style={{ margin: "0 auto", objectFit: "contain" }} />
-            <div className="mt-1.5 text-[10px] uppercase tracking-[.06em]" style={{ color: "var(--sidebar-text)", opacity: 0.7 }}>
-              SdG
-            </div>
-          </>
-        )}
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
@@ -250,29 +235,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      <div className="border-t px-3 py-3" style={{ borderColor: "var(--sidebar-border)" }}>
-        {colapsado ? (
-          <Link href="/mi-cuenta" title="Mi cuenta" className="mb-1 flex w-full items-center justify-center rounded-lg py-2 transition hover:bg-white/10" style={{ color: "var(--sidebar-text)" }}>
-            <IconUsers />
-          </Link>
-        ) : (
-          <Link href="/mi-cuenta" className="block truncate px-1 pb-2 text-sm hover:underline" style={{ color: "var(--sidebar-text)" }}>
-            {usuarioNombre}
-          </Link>
-        )}
-        <form action={logout}>
-          <button
-            type="submit"
-            title={colapsado ? "Cerrar sesión" : undefined}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition hover:bg-white/10 ${colapsado ? "justify-center" : ""}`}
-            style={{ color: "var(--sidebar-text)", background: "none", border: "none", cursor: "pointer" }}
-          >
-            <IconLogout />
-            {!colapsado && "Cerrar sesión"}
-          </button>
-        </form>
-      </div>
     </aside>
   );
 }
@@ -425,13 +387,6 @@ function IconBolt() {
   return (
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconLogout() {
-  return (
-    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
-      <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

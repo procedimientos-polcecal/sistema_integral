@@ -1,10 +1,15 @@
-export default function InicioPage() {
-  return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-bold text-gray-900">Bienvenido al SdG</h1>
-      <p className="text-gray-600">
-        Usá el menú de la izquierda para entrar a los módulos habilitados para tu cuenta.
-      </p>
-    </div>
-  );
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import InicioClient from "./InicioClient";
+
+export default async function InicioPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: usuario } = await supabase.from("usuarios").select("nombre").eq("id", user.id).single();
+
+  return <InicioClient nombreUsuario={usuario?.nombre ?? ""} />;
 }

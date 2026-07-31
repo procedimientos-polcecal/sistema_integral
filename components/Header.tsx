@@ -1,0 +1,56 @@
+import Link from "next/link";
+import { logout } from "@/app/login/actions";
+import { GlobalSearch } from "./GlobalSearch";
+
+export function Header({ usuarioNombre }: { usuarioNombre: string }) {
+  const inicial = usuarioNombre.trim().charAt(0).toUpperCase() || "?";
+
+  return (
+    <header
+      className="flex h-14 shrink-0 items-center gap-4 px-4"
+      style={{ background: "var(--sidebar-bg)", borderBottom: "1px solid var(--sidebar-border)" }}
+    >
+      <Link href="/" title="Inicio" className="flex shrink-0 items-center">
+        <img src="/logo.png" alt="Polcecal / Polysan" style={{ height: 32, width: "auto", objectFit: "contain" }} />
+      </Link>
+
+      <div className="max-w-xl flex-1">
+        <GlobalSearch />
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <Link
+          href="/mi-cuenta"
+          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/10"
+          style={{ color: "var(--sidebar-text)" }}
+        >
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+            style={{ background: "var(--primary-tint)" }}
+          >
+            {inicial}
+          </span>
+          <span className="hidden truncate sm:inline">{usuarioNombre}</span>
+        </Link>
+        <form action={logout}>
+          <button
+            type="submit"
+            title="Cerrar sesión"
+            className="flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-white/10"
+            style={{ color: "var(--sidebar-text)", background: "none", border: "none", cursor: "pointer" }}
+          >
+            <IconLogout />
+          </button>
+        </form>
+      </div>
+    </header>
+  );
+}
+
+function IconLogout() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
