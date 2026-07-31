@@ -3,7 +3,13 @@ import { logout } from "@/app/login/actions";
 import { GlobalSearch } from "./GlobalSearch";
 
 export function Header({ usuarioNombre }: { usuarioNombre: string }) {
-  const inicial = usuarioNombre.trim().charAt(0).toUpperCase() || "?";
+  const iniciales =
+    usuarioNombre
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p.charAt(0).toUpperCase())
+      .join("") || "?";
 
   return (
     <header
@@ -11,24 +17,30 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
       style={{ background: "var(--sidebar-bg)", borderBottom: "1px solid var(--sidebar-border)" }}
     >
       <Link href="/" title="Inicio" className="flex shrink-0 items-center">
-        <img src="/logo.png" alt="Polcecal / Polysan" style={{ height: 32, width: "auto", objectFit: "contain" }} />
+        <img
+          src="/logo.png"
+          alt="Polcecal / Polysan"
+          style={{ height: 32, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }}
+        />
       </Link>
 
-      <div className="max-w-xl flex-1">
+      <div className="flex-1" />
+
+      <div className="w-full max-w-[360px]">
         <GlobalSearch />
       </div>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Link
           href="/mi-cuenta"
           className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/10"
           style={{ color: "var(--sidebar-text)" }}
         >
           <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-            style={{ background: "var(--primary-tint)" }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+            style={{ background: "var(--primary-tint)", color: "var(--sidebar-bg)" }}
           >
-            {inicial}
+            {iniciales}
           </span>
           <span className="hidden truncate sm:inline">{usuarioNombre}</span>
         </Link>

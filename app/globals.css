@@ -8,7 +8,10 @@
   --primary:       #1E7D34;
   --primary-light: #E6F4EA;
   --primary-dark:  #145A26;
-  --primary-tint:  #46B869;
+  /* Dorado apagado — acento de identidad (ítem activo del sidebar, avatar
+     del header). Acotado a esa zona a propósito, no es el --accent de los
+     botones del resto de la app. */
+  --primary-tint:  #C9A227;
   --accent:        #E8A020;
   --accent-light:  #FDF1DC;
   --accent-dark:   #C17F10;
@@ -19,12 +22,12 @@
   --background:   #F1F5F9;
   --foreground:   #0F172A;
 
-  /* Sidebar */
-  --sidebar-bg:      #0F1B14;
-  --sidebar-border:  #1C2C22;
-  --sidebar-text:    #94A3B8;
-  --sidebar-hover:   #17251C;
-  --sidebar-active:  #1B3325;
+  /* Sidebar — verde bosque */
+  --sidebar-bg:      #1E3625;
+  --sidebar-border:  #2A4A34;
+  --sidebar-text:    #A9C2AE;
+  --sidebar-hover:   #274531;
+  --sidebar-active:  #2F5239;
 
   /* Content */
   --bg:          #F1F5F9;
