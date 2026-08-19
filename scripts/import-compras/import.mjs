@@ -264,20 +264,107 @@ console.log(
   `${nombreCanonico.size} proveedores (de ${new Set(registros.map((r) => r.proveedor).filter(Boolean)).size} nombres crudos)`
 );
 
+// --- Conexion -----------------------------------------------
+// Se conecta también en dry-run: sin leer sectores y equipos no se puede
+// anticipar cuántas ubicaciones van a quedar enlazadas al núcleo, que es
+// justamente lo que hay que revisar antes de escribir nada.
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const hayCredenciales = Boolean(url && key);
+
+// En dry-run las credenciales son opcionales: sin ellas se informa igual la
+// fusión de la planilla, sólo que no se puede anticipar el cruce con el núcleo.
+if (!hayCredenciales && !DRY_RUN) {
+  console.error();
+  console.error("Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
+
+const db = hayCredenciales
+  ? createClient(url, key, { auth: { persistSession: false } })
+  : null;
+
+// --- Cruce de "dónde se necesita" con el núcleo --------------
+// Varias ubicaciones de la planilla son equipos reales de Mantenimiento
+// (CAT 950G, Doosan 225 n°1) o sectores del núcleo. Enlazarlas permite ver el
+// gasto por máquina; lo que no se identifica queda como texto en ubicacion_raw.
+
+let idEmpresa = new Map();
+let idSector = new Map();
+let idEquipo = new Map();
+
+if (db) {
+  const [{ data: empresasDb }, { data: sectoresDb }, { data: equiposDb }] = await Promise.all([
+    db.from("empresas").select("id, nombre"),
+    db.from("sectores").select("id, nombre"),
+    db.from("equipos").select("id, name, code"),
+  ]);
+
+  idEmpresa = new Map((empresasDb ?? []).map((e) => [norm(e.nombre), e.id]));
+  idSector = new Map((sectoresDb ?? []).map((s) => [norm(s.nombre), s.id]));
+  for (const eq of equiposDb ?? []) {
+    idEquipo.set(norm(eq.name), eq.id);
+    idEquipo.set(norm(eq.code), eq.id);
+  }
+}
+
+const resolverUbicacion = (u) => {
+  const clave = u ? norm(u) : null;
+  return {
+    sector_id: clave ? idSector.get(clave) ?? null : null,
+    equipo_id: clave ? idEquipo.get(clave) ?? null : null,
+  };
+};
+
+// Se cuentan RI, no ubicaciones distintas: es lo que importa para el gasto.
+if (db) {
+  let riConSector = 0, riConEquipo = 0;
+  for (const r of registros) {
+    const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
+    if (sector_id) riConSector++;
+    else if (equipo_id) riConEquipo++;
+  }
+
+  const sinResolver = ubicaciones
+    .filter((u) => {
+      const { sector_id, equipo_id } = resolverUbicacion(u);
+      return !sector_id && !equipo_id;
+    })
+    .map((u) => ({ u, n: registros.filter((r) => r.ubicacion === u).length }))
+    .sort((a, b) => b.n - a.n);
+
+  console.log(
+    `\nCruce con el núcleo: ${riConSector} RI enlazados a sectores, ` +
+    `${riConEquipo} a equipos, ${registros.length - riConSector - riConEquipo} sólo con texto.`
+  );
+
+  if (sinResolver.length > 0) {
+    console.log(`\nUbicaciones sin equivalente en el núcleo (${sinResolver.length}):`);
+    for (const { u, n } of sinResolver.slice(0, 15)) {
+      console.log(`   ${String(n).padStart(4)} RI  ${u}`);
+    }
+    if (sinResolver.length > 15) console.log(`   … y ${sinResolver.length - 15} más`);
+    console.log(
+      "\n   No es un error: esos RI guardan la ubicación como texto. Si alguna" +
+      "\n   corresponde a un sector o equipo que ya existe con otro nombre," +
+      "\n   conviene unificarlo antes de importar para no perder el enlace."
+    );
+  }
+} else {
+  console.log();
+  console.log("Sin credenciales: no se puede anticipar el cruce con el núcleo.");
+  console.log("Para verlo, corré el dry-run parado en sistema_integral, que es");
+  console.log("donde está el .env.local con las claves de Supabase.");
+}
+
+
 if (DRY_RUN) {
   console.log("\n--dry-run: no se escribió nada en la base.");
   process.exit(0);
 }
 
-// ── Carga a Supabase ─────────────────────────────────────────
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) {
-  console.error("\nFaltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
-  process.exit(1);
-}
-const db = createClient(url, key, { auth: { persistSession: false } });
+// --- Carga a Supabase ----------------------------------------
 
 // Áreas
 if (areas.length > 0) {
@@ -308,28 +395,8 @@ if (nuevosProveedores.length > 0) {
   for (const p of provDb ?? []) idProveedor.set(claveProveedor(p.nombre), p.id);
 }
 
-// Referencias del núcleo: empresa, y sector/equipo para "dónde se necesita"
-const [{ data: empresasDb }, { data: sectoresDb }, { data: equiposDb }] = await Promise.all([
-  db.from("empresas").select("id, nombre"),
-  db.from("sectores").select("id, nombre"),
-  db.from("equipos").select("id, name, code"),
-]);
-
-const idEmpresa = new Map((empresasDb ?? []).map((e) => [norm(e.nombre), e.id]));
-const idSector = new Map((sectoresDb ?? []).map((s) => [norm(s.nombre), s.id]));
-const idEquipo = new Map();
-for (const eq of equiposDb ?? []) {
-  idEquipo.set(norm(eq.name), eq.id);
-  idEquipo.set(norm(eq.code), eq.id);
-}
-
-let conSector = 0, conEquipo = 0;
 const aInsertar = registros.map((r) => {
-  const clave = r.ubicacion ? norm(r.ubicacion) : null;
-  const sector_id = clave ? idSector.get(clave) ?? null : null;
-  const equipo_id = clave ? idEquipo.get(clave) ?? null : null;
-  if (sector_id) conSector++;
-  if (equipo_id) conEquipo++;
+  const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
 
   return {
     nro_ri: r.nro_ri,
@@ -362,11 +429,6 @@ const aInsertar = registros.map((r) => {
     sheets_fila: r.sheets_fila,
   };
 });
-
-console.log(
-  `\nUbicaciones resueltas contra el núcleo: ${conSector} a sectores, ${conEquipo} a equipos ` +
-  `(el resto queda como texto en ubicacion_raw).`
-);
 
 console.log(`Cargando ${aInsertar.length} requerimientos…`);
 for (let i = 0; i < aInsertar.length; i += 500) {
