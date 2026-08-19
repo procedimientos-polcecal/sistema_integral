@@ -306,23 +306,51 @@ if (db) {
 const idUbicacion = new Map(ubicacionesDb.map((u) => [norm(u.nombre), u.id]));
 
 if (db) {
+  const nuevas = ubicaciones.filter((u) => !idUbicacion.has(norm(u)));
   const enCatalogo = registros.filter(
     (r) => r.ubicacion && idUbicacion.has(norm(r.ubicacion))
   ).length;
-  const nuevas = ubicaciones.filter((u) => !idUbicacion.has(norm(u)));
+  const sinUbicacion = registros.filter((r) => !r.ubicacion).length;
+  const cuantos = (u) => registros.filter((r) => r.ubicacion === u).length;
 
   console.log(
-    `\nUbicaciones: ${enCatalogo} RI enlazados al catálogo, ` +
-    `${registros.length - enCatalogo} sin ubicación reconocida.`
+    `\nUbicaciones: ${enCatalogo} RI ya enlazados al catálogo, ` +
+    `${registros.length - enCatalogo - sinUbicacion} a la espera de las que se den de alta, ` +
+    `${sinUbicacion} sin ubicación cargada en la planilla.`
   );
 
   if (nuevas.length > 0) {
     console.log(`\nSe van a dar de alta ${nuevas.length} ubicaciones nuevas:`);
-    for (const u of nuevas.slice(0, 15)) console.log(`   ${u}`);
-    if (nuevas.length > 15) console.log(`   … y ${nuevas.length - 15} más`);
+    for (const u of nuevas.slice(0, 20)) {
+      console.log(`   ${String(cuantos(u)).padStart(4)} RI  ${u}`);
+    }
+    if (nuevas.length > 20) console.log(`   … y ${nuevas.length - 20} más`);
+  }
+
+  // Nombres casi iguales: casi siempre uno es un error de tipeo, y si no se
+  // unifica quedan dos ubicaciones para el mismo lugar. Se avisa pero no se
+  // corrige solo: "Planta de trituración 1" y "2" también se parecen en un
+  // caracter y son lugares distintos.
+  const parecidos = [];
+  for (const a of ubicaciones) {
+    for (const b of ubicaciones) {
+      if (a >= b) continue;
+      const na = norm(a), nb = norm(b);
+      if (na === nb || Math.abs(na.length - nb.length) > 1) continue;
+      let d = 0;
+      const largo = Math.max(na.length, nb.length);
+      for (let i = 0; i < largo; i++) if (na[i] !== nb[i]) d++;
+      if (d === 1) parecidos.push([a, b]);
+    }
+  }
+  if (parecidos.length > 0) {
+    console.log(`\nHay ${parecidos.length} pares de nombres casi iguales. Revisá si alguno es un error de tipeo:`);
+    for (const [a, b] of parecidos) {
+      console.log(`   "${a}" (${cuantos(a)} RI)  vs  "${b}" (${cuantos(b)} RI)`);
+    }
     console.log(
-      "\n   Si alguna es una variante mal escrita de otra que ya está en el" +
-      "\n   catálogo, conviene unificarla antes de importar."
+      "\n   Si alguno lo es, conviene corregirlo en la planilla antes de importar:" +
+      "\n   si no, la sincronización lo vuelve a crear en cada corrida."
     );
   }
 } else {
