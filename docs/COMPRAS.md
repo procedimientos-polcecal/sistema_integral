@@ -85,6 +85,23 @@ transacción en que se lo agrega.
 
 Después, dar acceso al módulo desde `/administracion/usuarios`.
 
+### Si la base ya tuvo el repo COMPRAS suelto
+
+Antes de portarlo, Compras existió como app aparte
+(`procedimientos-polcecal/COMPRAS`, hoy archivado). Si sus migraciones llegaron
+a correrse en esta base, hay dos choques:
+
+- `rol_actual()` allá devolvía `text` y leía de `app_users`; acá devuelve
+  `user_role` y lee de `usuarios`. Postgres no deja cambiarle el tipo de
+  retorno a una función existente, así que **la 002 falla** con
+  `42P13: cannot change return type of existing function`.
+- La tabla `proveedores` ya existe con `bigserial`, y la **015 falla** al
+  intentar crearla con `uuid`.
+
+Se resuelve con `supabase/limpiar-compras-standalone.sql`, que verifica que esas
+tablas estén vacías antes de borrarlas. El histórico no se pierde: se recarga
+desde el xlsx con el importador.
+
 ### Importar el histórico
 
 ```bash
