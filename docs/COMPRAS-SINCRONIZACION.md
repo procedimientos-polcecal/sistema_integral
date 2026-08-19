@@ -30,8 +30,14 @@ normalidad.
 - Da de alta áreas y proveedores nuevos que aparezcan.
 - Resuelve "dónde se necesita" contra sectores y equipos del núcleo.
 - Omite los RI ya gestionados en el sistema.
-- Se dispara por: cron cada 2 horas, el botón de `/compras/configuracion`, o el
-  webhook del Apps Script cuando alguien edita la planilla.
+- Se dispara por: el webhook del Apps Script cuando alguien edita la planilla,
+  el botón de `/compras/configuracion`, y un cron diario a las 9 UTC (6 de la
+  mañana en Argentina), para que el día arranque con los datos frescos.
+
+  El cron es diario y no más seguido porque **el plan Hobby de Vercel sólo
+  admite una ejecución por día**: una frecuencia mayor hace fallar el deploy
+  entero, no sólo el cron. Con plan Pro se puede bajar a `0 */2 * * *`. Igual el
+  webhook cubre la inmediatez, así que el cron es sólo la red de seguridad.
 
 **Sistema → planilla** (`exportarRequerimiento`)
 
