@@ -28,6 +28,13 @@ export function urlBase(request: Request): string {
   return `${protocolo}://${host}`;
 }
 
+/**
+ * Los links del correo van a /auth/confirm y no directo a /reset-password: el
+ * `?code=` que manda Supabase hay que canjearlo por una sesión, y eso sólo
+ * funciona en un Route Handler, que puede escribir cookies.
+ */
+const DESTINO_LINK = "/auth/confirm?next=/reset-password";
+
 export interface LinkAcceso {
   link: string | null;
   /** Motivo por el que no se pudo generar, para mostrárselo al administrador. */
@@ -46,7 +53,7 @@ export async function generarLinkAcceso(email: string, base: string): Promise<Li
   const { data, error } = await admin.auth.admin.generateLink({
     type: "recovery",
     email,
-    options: { redirectTo: `${base}/reset-password` },
+    options: { redirectTo: `${base}${DESTINO_LINK}` },
   });
 
   if (error) return { link: null, error: error.message };
@@ -61,7 +68,7 @@ export async function generarLinkAcceso(email: string, base: string): Promise<Li
 export async function intentarEnviarCorreo(email: string, base: string): Promise<string | null> {
   const admin = createAdminClient();
   const { error } = await admin.auth.resetPasswordForEmail(email, {
-    redirectTo: `${base}/reset-password`,
+    redirectTo: `${base}${DESTINO_LINK}`,
   });
   return error ? error.message : null;
 }

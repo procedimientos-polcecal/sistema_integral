@@ -19,7 +19,8 @@ export async function solicitarReset(formData: FormData) {
   // No se distingue el caso "email inexistente" en la respuesta a propósito,
   // para no revelar qué emails existen en el sistema.
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${base}/reset-password`,
+    // Va al canje del código, que es quien deja la sesión lista.
+    redirectTo: `${base}/auth/confirm?next=/reset-password`,
   });
 
   redirect("/forgot-password?enviado=1");

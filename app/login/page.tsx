@@ -11,6 +11,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   dominio: "Sólo se puede ingresar con una cuenta @polcecal.com.",
   sin_alta: "Tu cuenta de Google es válida, pero todavía no fue dada de alta en el sistema. Pedísela a un administrador.",
   inactivo: "Tu cuenta está desactivada. Si creés que es un error, avisale a un administrador.",
+  link_invalido: "El link no es válido o ya venció. Pedí uno nuevo desde «Olvidé mi contraseña».",
 };
 
 export default async function LoginPage({
