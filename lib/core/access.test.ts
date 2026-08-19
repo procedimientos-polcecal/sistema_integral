@@ -15,6 +15,7 @@ describe("modulosVisibles", () => {
       "rrhh",
       "mantenimiento",
       "remises",
+      "compras",
     ]);
   });
 

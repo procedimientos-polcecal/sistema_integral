@@ -96,6 +96,23 @@ export const NAV: NavItem[] = [
     ],
   },
   {
+    label: "Compras",
+    href: "/compras",
+    modulo: "compras",
+    children: [
+      { label: "Dashboard", href: "/compras", modulo: "compras" },
+      { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
+      { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAdmin: true },
+      { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
+      { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
+      { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },
+    ],
+  },
+  // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
+  // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
+  // nada; aprobar y comprar sí, y eso queda dentro del módulo.
+  { label: "Mis pedidos", href: "/mis-pedidos" },
+  {
     label: "Administración",
     href: "/administracion",
     soloAdminGlobal: true,
