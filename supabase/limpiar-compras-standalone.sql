@@ -85,6 +85,7 @@ end $$;
 -- ── 4. Listo ─────────────────────────────────────────────────
 -- Si el núcleo ya está migrado (empresas/sectores/usuarios con datos y
 -- policies), NO vuelvas a correr 001-014: sólo faltan las de Compras.
---   015_nucleo_ajustes_compras.sql
---   016_compras_schema.sql
---   017_compras_rls.sql
+--   015_nucleo_compras_enum.sql      (sola: agrega el valor al enum)
+--   016_nucleo_ajustes_compras.sql
+--   017_compras_schema.sql
+--   018_compras_rls.sql

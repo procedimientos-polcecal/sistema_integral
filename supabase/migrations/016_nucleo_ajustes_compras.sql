@@ -1,13 +1,11 @@
 -- ============================================================
 -- SdG — Ajustes al núcleo para admitir el módulo Compras
 --
--- Va separado del esquema del módulo a propósito: Postgres no deja usar un
--- valor nuevo de enum en la misma transacción en que se lo agrega, así que
--- 'compras' se suma acá y recién se usa en 016.
+-- Requiere que 015_nucleo_compras_enum.sql ya haya corrido y commiteado: las
+-- funciones de permisos de acá abajo mencionan 'compras' en su cuerpo, y
+-- Postgres valida eso al crearlas. Si se corren juntas falla con
+-- 55P04 "unsafe use of new value".
 -- ============================================================
-
--- Nuevo módulo del sistema.
-alter type modulo add value if not exists 'compras';
 
 -- ── Proveedores: padrón compartido ───────────────────────────
 -- Vive en el núcleo y no dentro de Compras porque Mantenimiento ya venía

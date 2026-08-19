@@ -16,7 +16,7 @@ En la práctica: apenas alguien toca un requerimiento desde el sistema (lo
 aprueba, le elige proveedor, le carga un costo), queda marcado con
 `editado_en_app = true` y **la planilla ya no puede pisarlo**.
 
-Lo hace un trigger de base (`compras_marcar_editado_en_app`, migración 016), no
+Lo hace un trigger de base (`compras_marcar_editado_en_app`, migración 017), no
 el código de una ruta: así no depende de que alguien se acuerde de marcarlo.
 
 Los RI que nadie tocó en el sistema se siguen actualizando desde la planilla con

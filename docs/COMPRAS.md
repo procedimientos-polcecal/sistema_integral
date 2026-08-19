@@ -75,13 +75,17 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
 
 Aplicar las migraciones en orden:
 
-1. `015_nucleo_ajustes_compras.sql` — agrega el módulo al enum, crea el padrón
-   de proveedores y los helpers de permisos.
-2. `016_compras_schema.sql` — tablas del módulo.
-3. `017_compras_rls.sql` — políticas.
+1. `015_nucleo_compras_enum.sql` — agrega `compras` al enum de módulos.
+2. `016_nucleo_ajustes_compras.sql` — padrón de proveedores y funciones de permisos.
+3. `017_compras_schema.sql` — tablas del módulo.
+4. `018_compras_rls.sql` — políticas.
 
-Van separadas porque Postgres no deja usar un valor de enum en la misma
-transacción en que se lo agrega.
+**Hay que correrlas de a una**, no pegadas en una sola ejecución. La 015 tiene
+una sola sentencia a propósito: Postgres no deja usar un valor de enum nuevo
+hasta que su transacción commitee, y el editor SQL de Supabase corre cada script
+en una transacción. Si 015 y 016 van juntas, falla con
+`55P04: unsafe use of new value "compras"` — porque el cuerpo de
+`puede_editar_compras()` menciona `'compras'` y se valida al crear la función.
 
 Después, dar acceso al módulo desde `/administracion/usuarios`.
 

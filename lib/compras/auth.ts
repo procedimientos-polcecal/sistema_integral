@@ -14,7 +14,7 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
  * gerencia sobre el gasto, no una tarea operativa.
  *
  * El alta de un RI queda fuera de este esquema: la puede hacer cualquier
- * usuario activo del sistema (ver 017_compras_rls.sql).
+ * usuario activo del sistema (ver 018_compras_rls.sql).
  */
 
 export async function nivelComprasDe(
