@@ -52,20 +52,39 @@ drop table if exists public.proveedores               cascade;
 drop table if exists public.app_users cascade;
 
 -- ── 3. Funciones del COMPRAS suelto ──────────────────────────
--- rol_actual() es la que rompe la 002: allá devolvía text, acá user_role.
--- La 002_nucleo_rls.sql la vuelve a crear con la firma correcta.
--- En el SdG ninguna policy la usa todavía, así que el cascade no rompe nada.
-drop function if exists public.rol_actual()            cascade;
+-- Las del SdG llevan prefijo (compras_log_cambio_estado, etc.), así que estas
+-- sin prefijo son restos del repo viejo. set_updated_at() NO se toca: esa sí
+-- la usan Mantenimiento y RRHH.
 drop function if exists public.touch_updated_at()      cascade;
 drop function if exists public.log_cambio_estado()     cascade;
 drop function if exists public.siguiente_nro_ri()      cascade;
 drop function if exists public.marcar_editado_en_app() cascade;
 
+-- rol_actual() es un caso aparte: existe en los dos proyectos con firmas
+-- distintas y por eso choca. Sólo se borra si quedó la vieja (devuelve text y
+-- lee de app_users). Si la que está viva es la del núcleo (user_role sobre
+-- usuarios), se deja intacta: borrarla sin recrearla dejaría a es_admin() y a
+-- las policies futuras sin su función de apoyo.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'rol_actual'
+      and pg_get_function_result(p.oid) = 'text'
+  ) then
+    drop function public.rol_actual() cascade;
+    raise notice 'Se borró rol_actual() vieja (text). Recreá la del núcleo con 002_nucleo_rls.sql.';
+  else
+    raise notice 'rol_actual() es la del núcleo (user_role): se deja como está.';
+  end if;
+end $$;
+
 -- ── 4. Listo ─────────────────────────────────────────────────
--- Ahora sí, correr en orden desde supabase/migrations/:
---   001_nucleo_schema.sql          (si no corrió todavía)
---   002_nucleo_rls.sql
---   ... hasta 014
+-- Si el núcleo ya está migrado (empresas/sectores/usuarios con datos y
+-- policies), NO vuelvas a correr 001-014: sólo faltan las de Compras.
 --   015_nucleo_ajustes_compras.sql
 --   016_compras_schema.sql
 --   017_compras_rls.sql
