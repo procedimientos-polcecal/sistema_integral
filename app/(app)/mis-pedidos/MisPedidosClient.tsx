@@ -11,13 +11,12 @@ import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 type Opcion = { id: string; nombre: string };
 
 export default function MisPedidosClient({
-  pedidos, areas, empresas, sectores, equipos,
+  pedidos, areas, empresas, ubicaciones,
 }: {
   pedidos: RequerimientoConRelaciones[];
   areas: Opcion[];
   empresas: Opcion[];
-  sectores: Opcion[];
-  equipos: { id: string; name: string; code: string }[];
+  ubicaciones: Opcion[];
 }) {
   const router = useRouter();
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -105,8 +104,7 @@ export default function MisPedidosClient({
         <NuevoRequerimientoModal
           areas={areas}
           empresas={empresas}
-          sectores={sectores}
-          equipos={equipos}
+          ubicaciones={ubicaciones}
           onClose={() => setModalAbierto(false)}
           onSaved={() => { setModalAbierto(false); router.refresh(); }}
         />

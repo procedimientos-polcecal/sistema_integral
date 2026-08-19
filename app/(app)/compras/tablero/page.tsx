@@ -13,7 +13,7 @@ export default async function TableroPage() {
   // Todo lo aprobado que todavía no se recibió.
   const { data } = await supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), sectores(nombre), equipos(name, code)")
+    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
     .eq("estado_aprobacion", "APROBADA")
     .in("estado_compra", ["PARA_COMPRAR", "EN_COMPARATIVA", "PEDIDO"])
     .order("fecha", { ascending: true });

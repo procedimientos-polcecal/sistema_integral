@@ -139,7 +139,7 @@ export default function TableroClient({
                   items.map((r) => {
                     const dias = diasRestantes(r.fecha_necesidad);
                     const vencido = dias !== null && dias < 0;
-                    const donde = r.equipos?.code ?? r.sectores?.nombre ?? r.ubicacion_raw;
+                    const donde = r.compras_ubicaciones?.nombre ?? r.ubicacion_raw;
                     return (
                       <article
                         key={r.id}

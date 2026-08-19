@@ -13,17 +13,16 @@ export default async function MisPedidosPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: pedidos }, { data: areas }, { data: empresas }, { data: sectores }, { data: equipos }] =
+  const [{ data: pedidos }, { data: areas }, { data: empresas }, { data: ubicaciones }] =
     await Promise.all([
       supabase
         .from("compras_requerimientos")
-        .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), sectores(nombre), equipos(name, code)")
+        .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
         .eq("solicitante_id", user.id)
         .order("nro_ri", { ascending: false }),
       supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
       supabase.from("empresas").select("id, nombre").order("nombre"),
-      supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre"),
-      supabase.from("equipos").select("id, name, code").eq("is_active", true).order("code"),
+      supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
     ]);
 
   return (
@@ -31,8 +30,7 @@ export default async function MisPedidosPage() {
       pedidos={(pedidos ?? []) as RequerimientoConRelaciones[]}
       areas={areas ?? []}
       empresas={empresas ?? []}
-      sectores={sectores ?? []}
-      equipos={equipos ?? []}
+      ubicaciones={ubicaciones ?? []}
     />
   );
 }

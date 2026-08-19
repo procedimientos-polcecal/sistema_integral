@@ -63,10 +63,13 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
   guardaba el contratista de cada OT como texto libre; ahora
   `ordenes_trabajo.proveedor_id` apunta al mismo padrón, sin perder el texto
   original (mismo patrón que `equipo_raw` / `equipment_id`).
-- **"Dónde se necesita"** se resuelve contra el núcleo cuando se puede: varias
-  ubicaciones de la planilla (`CAT 950G`, `Doosan 225 n°1`) son equipos reales
-  del módulo Mantenimiento. Enlazarlas permite ver cuánto se gastó por máquina.
-  Lo que no se puede identificar queda en `ubicacion_raw`.
+- **"Dónde se necesita"** es un catálogo propio (`compras_ubicaciones`) con las
+  38 ubicaciones de la planilla. No se usan los `sectores` del núcleo porque
+  son organizativos (Calidad, Finanzas) y no lugares físicos: ninguno cruza.
+  Cada ubicación puede apuntar opcionalmente a un sector o a un equipo, y ese
+  enlace vive en el catálogo, no en cada requerimiento — cuando se cargue la
+  flota real hay que mapear 38 filas una vez, no 1825. `ubicacion_raw` conserva
+  el texto original de la planilla como respaldo.
 - **"Paga: Ambas"** se guarda como `empresa_id = null`, igual que
   `sectores.transversal` resuelve el "AMBOS" de Mantenimiento. Es habitual:
   pasa en más de un tercio de los RI.
@@ -79,6 +82,7 @@ Aplicar las migraciones en orden:
 2. `016_nucleo_ajustes_compras.sql` — padrón de proveedores y funciones de permisos.
 3. `017_compras_schema.sql` — tablas del módulo.
 4. `018_compras_rls.sql` — políticas.
+5. `019_compras_ubicaciones.sql` — catálogo de "dónde se necesita".
 
 **Hay que correrlas de a una**, no pegadas en una sola ejecución. La 015 tiene
 una sola sentencia a propósito: Postgres no deja usar un valor de enum nuevo

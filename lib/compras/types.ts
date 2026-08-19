@@ -10,6 +10,16 @@ export type EstadoCompra =
 
 export type Prioridad = "URGENTE" | "1 SEMANA" | "2 SEMANAS" | "NORMAL" | "LEVE";
 
+export interface UbicacionCompras {
+  id: string;
+  nombre: string;
+  tipo: string | null;
+  sector_id: string | null;
+  equipo_id: string | null;
+  orden: number;
+  activo: boolean;
+}
+
 export interface AreaCompras {
   id: string;
   nombre: string;
@@ -41,8 +51,7 @@ export interface Requerimiento {
   cantidad: number | null;
 
   ubicacion_raw: string | null;
-  sector_id: string | null;
-  equipo_id: string | null;
+  ubicacion_id: string | null;
 
   fecha_necesidad: string | null;
   detalle_extra: string | null;
@@ -82,8 +91,7 @@ export interface RequerimientoConRelaciones extends Requerimiento {
   compras_areas: { nombre: string } | null;
   empresas: { nombre: string } | null;
   proveedores: { nombre: string } | null;
-  sectores: { nombre: string } | null;
-  equipos: { name: string; code: string } | null;
+  compras_ubicaciones: { nombre: string } | null;
 }
 
 export interface Cotizacion {

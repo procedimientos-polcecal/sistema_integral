@@ -10,12 +10,11 @@ type Opcion = { id: string; nombre: string };
  * que se mantiene igual de corto: sólo descripción y área son obligatorias.
  */
 export default function NuevoRequerimientoModal({
-  areas, empresas, sectores, equipos, onClose, onSaved,
+  areas, empresas, ubicaciones, onClose, onSaved,
 }: {
   areas: Opcion[];
   empresas: Opcion[];
-  sectores: Opcion[];
-  equipos: { id: string; name: string; code: string }[];
+  ubicaciones: Opcion[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -29,11 +28,7 @@ export default function NuevoRequerimientoModal({
   const [detalle, setDetalle] = useState("");
   const [imagenUrl, setImagenUrl] = useState("");
 
-  // Dónde se necesita: sector, equipo puntual, o texto libre si no está en el catálogo.
-  const [donde, setDonde] = useState<"sector" | "equipo" | "texto">("sector");
-  const [sectorId, setSectorId] = useState("");
-  const [equipoId, setEquipoId] = useState("");
-  const [ubicacionRaw, setUbicacionRaw] = useState("");
+  const [ubicacionId, setUbicacionId] = useState("");
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -56,9 +51,7 @@ export default function NuevoRequerimientoModal({
         empresa_id: empresaId || null,
         detalle_extra: detalle.trim() || null,
         imagen_url: imagenUrl.trim() || null,
-        sector_id: donde === "sector" ? sectorId || null : null,
-        equipo_id: donde === "equipo" ? equipoId || null : null,
-        ubicacion_raw: donde === "texto" ? ubicacionRaw.trim() || null : null,
+        ubicacion_id: ubicacionId || null,
       }),
     });
 
@@ -165,58 +158,20 @@ export default function NuevoRequerimientoModal({
 
           {/* Dónde se necesita */}
           <Campo label="Dónde se necesita">
-            <div className="mb-2 flex gap-3 text-sm">
-              {([["sector", "Un sector"], ["equipo", "Un equipo"], ["texto", "Otro"]] as const).map(
-                ([valor, etiqueta]) => (
-                  <label key={valor} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      checked={donde === valor}
-                      onChange={() => setDonde(valor)}
-                    />
-                    {etiqueta}
-                  </label>
-                )
-              )}
-            </div>
-
-            {donde === "sector" && (
-              <select
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                value={sectorId}
-                onChange={(e) => setSectorId(e.target.value)}
-              >
-                <option value="">Elegir sector…</option>
-                {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </select>
-            )}
-
-            {donde === "equipo" && (
-              <>
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={equipoId}
-                  onChange={(e) => setEquipoId(e.target.value)}
-                >
-                  <option value="">Elegir equipo…</option>
-                  {equipos.map((eq) => (
-                    <option key={eq.id} value={eq.id}>{eq.code} — {eq.name}</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-slate-500">
-                  Enlazarlo al equipo permite ver después cuánto se gastó en esa máquina.
-                </p>
-              </>
-            )}
-
-            {donde === "texto" && (
-              <input
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                value={ubicacionRaw}
-                onChange={(e) => setUbicacionRaw(e.target.value)}
-                placeholder="Pañol, oficinas, taller eléctrico…"
-              />
-            )}
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={ubicacionId}
+              onChange={(e) => setUbicacionId(e.target.value)}
+            >
+              <option value="">Sin especificar</option>
+              {ubicaciones.map((u) => (
+                <option key={u.id} value={u.id}>{u.nombre}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              ¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos
+              lo escriben igual y se puede filtrar por ubicación.
+            </p>
           </Campo>
 
           <Campo label="Detalle extra">

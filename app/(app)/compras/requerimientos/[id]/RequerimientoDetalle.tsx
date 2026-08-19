@@ -98,11 +98,7 @@ export default function RequerimientoDetalle({
               <Dato label="Cantidad" valor={r.cantidad !== null ? String(r.cantidad) : null} />
               <Dato
                 label="Dónde se necesita"
-                valor={
-                  r.equipos
-                    ? `${r.equipos.code} — ${r.equipos.name}`
-                    : r.sectores?.nombre ?? r.ubicacion_raw
-                }
+                valor={r.compras_ubicaciones?.nombre ?? r.ubicacion_raw}
               />
               <Dato
                 label="Para cuándo"

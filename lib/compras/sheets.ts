@@ -325,7 +325,8 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     // Catálogos y referencias
     const idArea = await asegurarAreas(admin, registros.map((r) => r.datos.area));
     const idProveedor = await asegurarProveedores(admin, registros.map((r) => r.datos.proveedor));
-    const { porEmpresa, porSector, porEquipo } = await mapasDelNucleo(admin);
+    const porEmpresa = await mapaEmpresas(admin);
+    const idUbicacion = await asegurarUbicaciones(admin, registros.map((r) => r.datos.ubicacion));
 
     // Los RI ya gestionados desde la app no se pisan.
     const { data: existentes } = await admin
@@ -355,10 +356,9 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         descripcion: d.descripcion ?? "(sin descripción)",
         codigo: d.codigo ?? null,
         cantidad: d.cantidad ?? null,
-        // Se guarda el texto original y, si se lo pudo identificar, la referencia.
+        // Se guarda el texto original como respaldo; ubicacion_id es el dato bueno.
         ubicacion_raw: ubicacion,
-        sector_id: clave ? porSector.get(clave) ?? null : null,
-        equipo_id: clave ? porEquipo.get(clave) ?? null : null,
+        ubicacion_id: clave ? idUbicacion.get(clave) ?? null : null,
         fecha_necesidad: d.fecha_necesidad ?? null,
         detalle_extra: d.detalle_extra ?? null,
         imagen_url: d.imagen_url ?? null,
@@ -443,31 +443,26 @@ async function asegurarProveedores(admin: Admin, valores: unknown[]) {
   return porClave;
 }
 
+/** "AMBAS" no es una empresa: los RI compartidos quedan con empresa_id en null. */
+async function mapaEmpresas(admin: Admin) {
+  const { data } = await admin.from("empresas").select("id, nombre");
+  return new Map((data ?? []).map((e) => [norm(e.nombre), e.id as string]));
+}
+
 /**
- * Mapas para resolver el texto de la planilla contra el núcleo.
- * Varias ubicaciones ("CAT 950G", "Doosan 225 n°1") son equipos reales del
- * módulo Mantenimiento: enlazarlas permite ver el gasto por máquina.
+ * Da de alta las ubicaciones nuevas que traiga la planilla y devuelve el mapa
+ * normalizado -> id. El enlace de cada ubicación a un sector o equipo del
+ * núcleo se administra desde el catálogo, no acá.
  */
-async function mapasDelNucleo(admin: Admin) {
-  const [{ data: empresas }, { data: sectores }, { data: equipos }] = await Promise.all([
-    admin.from("empresas").select("id, nombre"),
-    admin.from("sectores").select("id, nombre"),
-    admin.from("equipos").select("id, name, code"),
-  ]);
-
-  const porEmpresa = new Map<string, string>();
-  for (const e of empresas ?? []) porEmpresa.set(norm(e.nombre), e.id as string);
-
-  const porSector = new Map<string, string>();
-  for (const s of sectores ?? []) porSector.set(norm(s.nombre), s.id as string);
-
-  const porEquipo = new Map<string, string>();
-  for (const eq of equipos ?? []) {
-    porEquipo.set(norm(eq.name), eq.id as string);
-    porEquipo.set(norm(eq.code), eq.id as string);
+async function asegurarUbicaciones(admin: Admin, valores: unknown[]) {
+  const nombres = [...new Set(valores.filter(Boolean).map(String))];
+  if (nombres.length > 0) {
+    await admin
+      .from("compras_ubicaciones")
+      .upsert(nombres.map((nombre) => ({ nombre })), { onConflict: "nombre", ignoreDuplicates: true });
   }
-
-  return { porEmpresa, porSector, porEquipo };
+  const { data } = await admin.from("compras_ubicaciones").select("id, nombre");
+  return new Map((data ?? []).map((u) => [norm(u.nombre as string), u.id as string]));
 }
 
 // ── Exportar: app → planilla ─────────────────────────────────

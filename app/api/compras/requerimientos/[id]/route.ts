@@ -14,8 +14,8 @@ import { exportarRequerimiento } from "@/lib/compras/sheets";
  */
 
 const CAMPOS_ALTA = [
-  "descripcion", "area_id", "codigo", "cantidad", "ubicacion_raw", "sector_id",
-  "equipo_id", "fecha_necesidad", "detalle_extra", "imagen_url", "prioridad", "empresa_id",
+  "descripcion", "area_id", "codigo", "cantidad", "ubicacion_id",
+  "fecha_necesidad", "detalle_extra", "imagen_url", "prioridad", "empresa_id",
 ] as const;
 
 const CAMPOS_APROBACION = ["estado_aprobacion", "motivo_rechazo"] as const;

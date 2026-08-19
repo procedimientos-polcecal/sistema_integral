@@ -16,7 +16,7 @@ export default async function AprobacionesPage() {
   // lo reordena por urgencia sin perder la antigüedad como desempate.
   const { data } = await supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), sectores(nombre), equipos(name, code)")
+    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
     .in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])
     .order("fecha", { ascending: true });
 

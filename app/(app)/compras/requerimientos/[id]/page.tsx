@@ -13,7 +13,7 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
 
   const { data: requerimiento } = await supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), sectores(nombre), equipos(name, code)")
+    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
     .eq("id", id)
     .single();
 

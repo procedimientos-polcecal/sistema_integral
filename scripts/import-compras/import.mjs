@@ -285,77 +285,49 @@ const db = hayCredenciales
   ? createClient(url, key, { auth: { persistSession: false } })
   : null;
 
-// --- Cruce de "dónde se necesita" con el núcleo --------------
-// Varias ubicaciones de la planilla son equipos reales de Mantenimiento
-// (CAT 950G, Doosan 225 n°1) o sectores del núcleo. Enlazarlas permite ver el
-// gasto por máquina; lo que no se identifica queda como texto en ubicacion_raw.
+// --- Catalogo de ubicaciones ---------------------------------
+// "Donde se necesita" tiene su propio catalogo (compras_ubicaciones). El enlace
+// de cada ubicacion a un sector o equipo del nucleo se administra desde ahi,
+// no por requerimiento: cuando exista la flota real hay que mapear 38 filas
+// una vez, no 1825.
 
 let idEmpresa = new Map();
-let idSector = new Map();
-let idEquipo = new Map();
+let ubicacionesDb = [];
 
 if (db) {
-  const [{ data: empresasDb }, { data: sectoresDb }, { data: equiposDb }] = await Promise.all([
+  const [{ data: empresasDb }, { data: ubisDb }] = await Promise.all([
     db.from("empresas").select("id, nombre"),
-    db.from("sectores").select("id, nombre"),
-    db.from("equipos").select("id, name, code"),
+    db.from("compras_ubicaciones").select("id, nombre"),
   ]);
-
   idEmpresa = new Map((empresasDb ?? []).map((e) => [norm(e.nombre), e.id]));
-  idSector = new Map((sectoresDb ?? []).map((s) => [norm(s.nombre), s.id]));
-  for (const eq of equiposDb ?? []) {
-    idEquipo.set(norm(eq.name), eq.id);
-    idEquipo.set(norm(eq.code), eq.id);
-  }
+  ubicacionesDb = ubisDb ?? [];
 }
 
-const resolverUbicacion = (u) => {
-  const clave = u ? norm(u) : null;
-  return {
-    sector_id: clave ? idSector.get(clave) ?? null : null,
-    equipo_id: clave ? idEquipo.get(clave) ?? null : null,
-  };
-};
+const idUbicacion = new Map(ubicacionesDb.map((u) => [norm(u.nombre), u.id]));
 
-// Se cuentan RI, no ubicaciones distintas: es lo que importa para el gasto.
 if (db) {
-  let riConSector = 0, riConEquipo = 0;
-  for (const r of registros) {
-    const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
-    if (sector_id) riConSector++;
-    else if (equipo_id) riConEquipo++;
-  }
-
-  const sinResolver = ubicaciones
-    .filter((u) => {
-      const { sector_id, equipo_id } = resolverUbicacion(u);
-      return !sector_id && !equipo_id;
-    })
-    .map((u) => ({ u, n: registros.filter((r) => r.ubicacion === u).length }))
-    .sort((a, b) => b.n - a.n);
+  const enCatalogo = registros.filter(
+    (r) => r.ubicacion && idUbicacion.has(norm(r.ubicacion))
+  ).length;
+  const nuevas = ubicaciones.filter((u) => !idUbicacion.has(norm(u)));
 
   console.log(
-    `\nCruce con el núcleo: ${riConSector} RI enlazados a sectores, ` +
-    `${riConEquipo} a equipos, ${registros.length - riConSector - riConEquipo} sólo con texto.`
+    `\nUbicaciones: ${enCatalogo} RI enlazados al catálogo, ` +
+    `${registros.length - enCatalogo} sin ubicación reconocida.`
   );
 
-  if (sinResolver.length > 0) {
-    console.log(`\nUbicaciones sin equivalente en el núcleo (${sinResolver.length}):`);
-    for (const { u, n } of sinResolver.slice(0, 15)) {
-      console.log(`   ${String(n).padStart(4)} RI  ${u}`);
-    }
-    if (sinResolver.length > 15) console.log(`   … y ${sinResolver.length - 15} más`);
+  if (nuevas.length > 0) {
+    console.log(`\nSe van a dar de alta ${nuevas.length} ubicaciones nuevas:`);
+    for (const u of nuevas.slice(0, 15)) console.log(`   ${u}`);
+    if (nuevas.length > 15) console.log(`   … y ${nuevas.length - 15} más`);
     console.log(
-      "\n   No es un error: esos RI guardan la ubicación como texto y no se" +
-      "\n   pierde nada. sector_id y equipo_id quedan en null y se pueden" +
-      "\n   completar después con un backfill, sin volver a importar."
+      "\n   Si alguna es una variante mal escrita de otra que ya está en el" +
+      "\n   catálogo, conviene unificarla antes de importar."
     );
   }
 } else {
   console.log();
-  console.log("Sin credenciales: no se puede anticipar el cruce con el núcleo.");
-  console.log("Para verlo, corré el dry-run parado en sistema_integral, que es");
-  console.log("donde está el .env.local con las claves de Supabase.");
+  console.log("Sin credenciales: no se puede anticipar el cruce con el catálogo.");
 }
 
 
@@ -394,8 +366,24 @@ if (DRY_RUN) {
     for (const p of provDb ?? []) idProveedor.set(claveProveedor(p.nombre), p.id);
   }
 
+  // Ubicaciones: el catalogo base lo siembra la migracion 019; aca se suman las
+  // que aparezcan en la planilla y todavia no esten.
+  const nuevasUbicaciones = ubicaciones.filter((u) => !idUbicacion.has(norm(u)));
+  if (nuevasUbicaciones.length > 0) {
+    const { error } = await db
+      .from("compras_ubicaciones")
+      .upsert(nuevasUbicaciones.map((nombre) => ({ nombre })), {
+        onConflict: "nombre", ignoreDuplicates: true,
+      });
+    if (error) { console.error("compras_ubicaciones:", error.message); process.exit(1); }
+    const { data: ubiDb } = await db.from("compras_ubicaciones").select("id, nombre");
+    for (const u of ubiDb ?? []) idUbicacion.set(norm(u.nombre), u.id);
+    console.log(`  ${nuevasUbicaciones.length} ubicaciones nuevas dadas de alta`);
+  }
+
+
   const aInsertar = registros.map((r) => {
-    const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
+    const clave = r.ubicacion ? norm(r.ubicacion) : null;
 
     return {
       nro_ri: r.nro_ri,
@@ -405,8 +393,7 @@ if (DRY_RUN) {
       codigo: r.codigo,
       cantidad: r.cantidad,
       ubicacion_raw: r.ubicacion,
-      sector_id,
-      equipo_id,
+      ubicacion_id: clave ? idUbicacion.get(clave) ?? null : null,
       fecha_necesidad: r.fecha_necesidad,
       detalle_extra: r.detalle_extra,
       imagen_url: r.imagen_url,

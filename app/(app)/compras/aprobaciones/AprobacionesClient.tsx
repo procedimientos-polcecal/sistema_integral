@@ -143,7 +143,7 @@ export default function AprobacionesClient({
                   {filas.map((f) => {
                     const dias = diasRestantes(f.fecha_necesidad);
                     const vencido = dias !== null && dias < 0;
-                    const donde = f.equipos?.code ?? f.sectores?.nombre ?? f.ubicacion_raw;
+                    const donde = f.compras_ubicaciones?.nombre ?? f.ubicacion_raw;
                     return (
                       <tr key={f.id} className="hover:bg-slate-50">
                         {puedeAprobar && (

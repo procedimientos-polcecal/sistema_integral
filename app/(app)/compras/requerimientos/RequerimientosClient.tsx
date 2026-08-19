@@ -16,13 +16,12 @@ const POR_PAGINA = 50;
 type Opcion = { id: string; nombre: string };
 
 export default function RequerimientosClient({
-  areas, proveedores, empresas, sectores, equipos, canEdit,
+  areas, proveedores, empresas, ubicaciones, canEdit,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
   empresas: Opcion[];
-  sectores: Opcion[];
-  equipos: { id: string; name: string; code: string }[];
+  ubicaciones: Opcion[];
   canEdit: boolean;
 }) {
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
@@ -40,6 +39,7 @@ export default function RequerimientosClient({
   const [prioridad, setPrioridad] = useState("");
   const [empresa, setEmpresa] = useState("");
   const [proveedor, setProveedor] = useState("");
+  const [ubicacion, setUbicacion] = useState("");
 
   // La búsqueda espera un momento para no consultar en cada tecla.
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function RequerimientosClient({
 
   useEffect(() => {
     setPagina(0);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor]);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -59,7 +59,7 @@ export default function RequerimientosClient({
     let q = supabase
       .from("compras_requerimientos")
       .select(
-        "*, compras_areas(nombre), empresas(nombre), proveedores(nombre), sectores(nombre), equipos(name, code)",
+        "*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)",
         { count: "exact" }
       );
 
@@ -79,6 +79,7 @@ export default function RequerimientosClient({
     if (prioridad) q = q.eq("prioridad", prioridad);
     if (empresa) q = empresa === "AMBAS" ? q.is("empresa_id", null) : q.eq("empresa_id", empresa);
     if (proveedor) q = q.eq("proveedor_id", proveedor);
+    if (ubicacion) q = q.eq("ubicacion_id", ubicacion);
 
     const desde = pagina * POR_PAGINA;
     const { data, error: err, count } = await q
@@ -93,12 +94,14 @@ export default function RequerimientosClient({
       setTotal(count ?? 0);
     }
     setCargando(false);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, pagina]);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
-  const hayFiltros = !!(busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor);
+  const hayFiltros = !!(
+    busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion
+  );
 
   const totalPantalla = useMemo(
     () => filas.reduce((acc, f) => acc + (f.costo_iva ?? 0) + (f.costo_envio ?? 0), 0),
@@ -107,7 +110,7 @@ export default function RequerimientosClient({
 
   function limpiar() {
     setBusqueda(""); setArea(""); setAprobacion(""); setCompra("");
-    setPrioridad(""); setEmpresa(""); setProveedor("");
+    setPrioridad(""); setEmpresa(""); setProveedor(""); setUbicacion("");
   }
 
   return (
@@ -130,7 +133,7 @@ export default function RequerimientosClient({
 
       {/* Filtros */}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-9">
           <input
             className="col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
             placeholder="Buscar texto o N° de RI…"
@@ -149,6 +152,8 @@ export default function RequerimientosClient({
             opciones={[...empresas.map((e) => [e.id, e.nombre] as [string, string]), ["AMBAS", "Ambas"]]} />
           <Select value={proveedor} onChange={setProveedor} vacio="Todo proveedor"
             opciones={proveedores.map((p) => [p.id, p.nombre])} />
+          <Select value={ubicacion} onChange={setUbicacion} vacio="Cualquier ubicación"
+            opciones={ubicaciones.map((u) => [u.id, u.nombre])} />
         </div>
         {hayFiltros && (
           <button onClick={limpiar} className="mt-2 text-xs text-slate-500 hover:text-slate-800">
@@ -194,7 +199,7 @@ export default function RequerimientosClient({
                 filas.map((f) => {
                   const dias = f.estado_compra === "RECIBIDO" ? null : diasRestantes(f.fecha_necesidad);
                   const vencido = dias !== null && dias < 0;
-                  const donde = f.equipos ? `${f.equipos.code}` : f.sectores?.nombre ?? f.ubicacion_raw;
+                  const donde = f.compras_ubicaciones?.nombre ?? f.ubicacion_raw;
                   return (
                     <tr key={f.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 font-mono">
@@ -264,8 +269,7 @@ export default function RequerimientosClient({
         <NuevoRequerimientoModal
           areas={areas}
           empresas={empresas}
-          sectores={sectores}
-          equipos={equipos}
+          ubicaciones={ubicaciones}
           onClose={() => setModalAbierto(false)}
           onSaved={() => { setModalAbierto(false); cargar(); }}
         />
