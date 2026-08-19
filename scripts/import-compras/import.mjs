@@ -346,9 +346,9 @@ if (db) {
     }
     if (sinResolver.length > 15) console.log(`   … y ${sinResolver.length - 15} más`);
     console.log(
-      "\n   No es un error: esos RI guardan la ubicación como texto. Si alguna" +
-      "\n   corresponde a un sector o equipo que ya existe con otro nombre," +
-      "\n   conviene unificarlo antes de importar para no perder el enlace."
+      "\n   No es un error: esos RI guardan la ubicación como texto y no se" +
+      "\n   pierde nada. sector_id y equipo_id quedan en null y se pueden" +
+      "\n   completar después con un backfill, sin volver a importar."
     );
   }
 } else {
