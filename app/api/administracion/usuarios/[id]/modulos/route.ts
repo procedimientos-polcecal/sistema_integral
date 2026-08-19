@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/core/route-utils";
+import { MODULOS_ORDEN } from "@/lib/core/access";
 
-const MODULOS = ["rrhh", "remises", "mantenimiento"] as const;
+// Misma fuente que la navegación y el panel: una lista propia acá ya dejó
+// afuera a Compras una vez.
+const MODULOS: readonly string[] = MODULOS_ORDEN;
 const NIVELES = ["lectura", "edicion", "admin"] as const;
 
 /**

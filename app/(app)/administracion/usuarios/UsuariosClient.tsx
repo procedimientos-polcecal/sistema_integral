@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { MODULOS_ORDEN } from "@/lib/core/access";
+import type { Modulo } from "@/lib/core/types";
 
 type Rol = "admin_sistema" | "admin" | "encargado" | "operario";
-type Modulo = "rrhh" | "remises" | "mantenimiento";
 type Nivel = "lectura" | "edicion" | "admin";
 
 interface UsuarioModulo {
@@ -30,8 +31,15 @@ const ROL_LABEL: Record<Rol, string> = {
   operario: "Operario",
 };
 
-const MODULOS: Modulo[] = ["rrhh", "remises", "mantenimiento"];
-const MODULO_LABEL: Record<Modulo, string> = { rrhh: "RRHH", remises: "Remises", mantenimiento: "Mantenimiento" };
+// Sale de MODULOS_ORDEN y no de una lista propia: cuando se sumó Compras, esta
+// copia quedó desactualizada y no había forma de asignar el módulo a nadie.
+const MODULOS = MODULOS_ORDEN;
+const MODULO_LABEL: Record<Modulo, string> = {
+  rrhh: "RRHH",
+  remises: "Remises",
+  mantenimiento: "Mantenimiento",
+  compras: "Compras",
+};
 const NIVEL_LABEL: Record<Nivel, string> = { lectura: "Lectura", edicion: "Edición", admin: "Admin" };
 
 export default function UsuariosClient({ usuariosIniciales }: { usuariosIniciales: Usuario[] }) {
@@ -246,7 +254,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
 function EditarUsuarioModal({ usuario, onClose, onSaved }: { usuario: Usuario; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ nombre: usuario.nombre, apellido: usuario.apellido, rol: usuario.rol, activo: usuario.activo });
   const [grants, setGrants] = useState<Record<Modulo, Nivel | "">>(() => {
-    const base: Record<Modulo, Nivel | ""> = { rrhh: "", remises: "", mantenimiento: "" };
+    const base = Object.fromEntries(MODULOS.map((m) => [m, ""])) as Record<Modulo, Nivel | "">;
     for (const m of usuario.usuario_modulos) base[m.modulo] = m.nivel;
     return base;
   });
