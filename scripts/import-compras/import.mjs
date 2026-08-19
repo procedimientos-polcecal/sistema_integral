@@ -360,85 +360,86 @@ if (db) {
 
 
 if (DRY_RUN) {
-  console.log("\n--dry-run: no se escribió nada en la base.");
-  process.exit(0);
-}
+  console.log();
+  console.log("--dry-run: no se escribió nada en la base.");
+} else {
+  // --- Carga a Supabase ----------------------------------------
 
-// --- Carga a Supabase ----------------------------------------
-
-// Áreas
-if (areas.length > 0) {
-  const { error } = await db
-    .from("compras_areas")
-    .upsert(areas.map((nombre, i) => ({ nombre, orden: i * 10 })), {
-      onConflict: "nombre", ignoreDuplicates: true,
-    });
-  if (error) { console.error("compras_areas:", error.message); process.exit(1); }
-}
-const { data: areasDb } = await db.from("compras_areas").select("id, nombre");
-const idArea = new Map((areasDb ?? []).map((a) => [a.nombre, a.id]));
-
-// Proveedores (padrón compartido del núcleo)
-const { data: provDb0 } = await db.from("proveedores").select("id, nombre");
-const idProveedor = new Map((provDb0 ?? []).map((p) => [claveProveedor(p.nombre), p.id]));
-const nuevosProveedores = [...nombreCanonico.values()].filter(
-  (n) => !idProveedor.has(claveProveedor(n))
-);
-if (nuevosProveedores.length > 0) {
-  const { error } = await db
-    .from("proveedores")
-    .upsert(nuevosProveedores.map((nombre) => ({ nombre })), {
-      onConflict: "nombre", ignoreDuplicates: true,
-    });
-  if (error) { console.error("proveedores:", error.message); process.exit(1); }
-  const { data: provDb } = await db.from("proveedores").select("id, nombre");
-  for (const p of provDb ?? []) idProveedor.set(claveProveedor(p.nombre), p.id);
-}
-
-const aInsertar = registros.map((r) => {
-  const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
-
-  return {
-    nro_ri: r.nro_ri,
-    fecha: r.fecha ?? new Date().toISOString(),
-    area_id: r.area ? idArea.get(r.area) ?? null : null,
-    descripcion: r.descripcion,
-    codigo: r.codigo,
-    cantidad: r.cantidad,
-    ubicacion_raw: r.ubicacion,
-    sector_id,
-    equipo_id,
-    fecha_necesidad: r.fecha_necesidad,
-    detalle_extra: r.detalle_extra,
-    imagen_url: r.imagen_url,
-    prioridad: r.prioridad,
-    // "AMBAS" no es una empresa: queda en null.
-    empresa_id: idEmpresa.get(r.empresa) ?? null,
-    solicitante_nombre: r.solicitante_nombre,
-    estado_aprobacion: r.estado_aprobacion,
-    aprobador: r.aprobador,
-    estado_compra: r.estado_compra,
-    comparativa_url: r.comparativa_url,
-    proveedor_id: r.proveedor
-      ? idProveedor.get(claveProveedor(nombreCanonico.get(claveProveedor(r.proveedor)) ?? r.proveedor)) ?? null
-      : null,
-    costo_iva: r.costo_iva,
-    costo_envio: r.costo_envio,
-    origen: "import",
-    hoja_origen: r.hoja_origen,
-    sheets_fila: r.sheets_fila,
-  };
-});
-
-console.log(`Cargando ${aInsertar.length} requerimientos…`);
-for (let i = 0; i < aInsertar.length; i += 500) {
-  const lote = aInsertar.slice(i, i + 500);
-  const { error } = await db.from("compras_requerimientos").upsert(lote, { onConflict: "nro_ri" });
-  if (error) {
-    console.error(`  lote ${i}–${i + lote.length}: ${error.message}`);
-    process.exit(1);
+  // Áreas
+  if (areas.length > 0) {
+    const { error } = await db
+      .from("compras_areas")
+      .upsert(areas.map((nombre, i) => ({ nombre, orden: i * 10 })), {
+        onConflict: "nombre", ignoreDuplicates: true,
+      });
+    if (error) { console.error("compras_areas:", error.message); process.exit(1); }
   }
-  console.log(`  ${Math.min(i + 500, aInsertar.length)}/${aInsertar.length}`);
-}
+  const { data: areasDb } = await db.from("compras_areas").select("id, nombre");
+  const idArea = new Map((areasDb ?? []).map((a) => [a.nombre, a.id]));
 
-console.log("\nImportación terminada.");
+  // Proveedores (padrón compartido del núcleo)
+  const { data: provDb0 } = await db.from("proveedores").select("id, nombre");
+  const idProveedor = new Map((provDb0 ?? []).map((p) => [claveProveedor(p.nombre), p.id]));
+  const nuevosProveedores = [...nombreCanonico.values()].filter(
+    (n) => !idProveedor.has(claveProveedor(n))
+  );
+  if (nuevosProveedores.length > 0) {
+    const { error } = await db
+      .from("proveedores")
+      .upsert(nuevosProveedores.map((nombre) => ({ nombre })), {
+        onConflict: "nombre", ignoreDuplicates: true,
+      });
+    if (error) { console.error("proveedores:", error.message); process.exit(1); }
+    const { data: provDb } = await db.from("proveedores").select("id, nombre");
+    for (const p of provDb ?? []) idProveedor.set(claveProveedor(p.nombre), p.id);
+  }
+
+  const aInsertar = registros.map((r) => {
+    const { sector_id, equipo_id } = resolverUbicacion(r.ubicacion);
+
+    return {
+      nro_ri: r.nro_ri,
+      fecha: r.fecha ?? new Date().toISOString(),
+      area_id: r.area ? idArea.get(r.area) ?? null : null,
+      descripcion: r.descripcion,
+      codigo: r.codigo,
+      cantidad: r.cantidad,
+      ubicacion_raw: r.ubicacion,
+      sector_id,
+      equipo_id,
+      fecha_necesidad: r.fecha_necesidad,
+      detalle_extra: r.detalle_extra,
+      imagen_url: r.imagen_url,
+      prioridad: r.prioridad,
+      // "AMBAS" no es una empresa: queda en null.
+      empresa_id: idEmpresa.get(r.empresa) ?? null,
+      solicitante_nombre: r.solicitante_nombre,
+      estado_aprobacion: r.estado_aprobacion,
+      aprobador: r.aprobador,
+      estado_compra: r.estado_compra,
+      comparativa_url: r.comparativa_url,
+      proveedor_id: r.proveedor
+        ? idProveedor.get(claveProveedor(nombreCanonico.get(claveProveedor(r.proveedor)) ?? r.proveedor)) ?? null
+        : null,
+      costo_iva: r.costo_iva,
+      costo_envio: r.costo_envio,
+      origen: "import",
+      hoja_origen: r.hoja_origen,
+      sheets_fila: r.sheets_fila,
+    };
+  });
+
+  console.log(`Cargando ${aInsertar.length} requerimientos…`);
+  for (let i = 0; i < aInsertar.length; i += 500) {
+    const lote = aInsertar.slice(i, i + 500);
+    const { error } = await db.from("compras_requerimientos").upsert(lote, { onConflict: "nro_ri" });
+    if (error) {
+      console.error(`  lote ${i}–${i + lote.length}: ${error.message}`);
+      process.exit(1);
+    }
+    console.log(`  ${Math.min(i + 500, aInsertar.length)}/${aInsertar.length}`);
+  }
+
+  console.log("\nImportación terminada.");
+
+}
