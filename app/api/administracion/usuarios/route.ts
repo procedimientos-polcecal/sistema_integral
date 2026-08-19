@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/core/route-utils";
+import { generarLinkAcceso, intentarEnviarCorreo, urlBase } from "@/lib/core/auth-links";
 
 export async function GET() {
   const supabase = await createClient();
@@ -63,13 +64,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: errorUsuario.message }, { status: 500 });
   }
 
-  const { error: errorLink } = await supabase.auth.resetPasswordForEmail(email);
-  if (errorLink) {
-    return NextResponse.json(
-      { error: `Usuario creado pero no se pudo enviar el link de acceso: ${errorLink.message}` },
-      { status: 500 }
-    );
-  }
+  // El usuario ya existe: a partir de acá nada debería hacer fallar el alta.
+  // Se genera el link de acceso y, aparte, se intenta el correo. Si el correo
+  // no sale (el SMTP por defecto de Supabase está muy limitado), el
+  // administrador igual se lleva el link para pasárselo a la persona.
+  const base = urlBase(request);
+  const { link, error: errorLink } = await generarLinkAcceso(email, base);
+  const errorCorreo = await intentarEnviarCorreo(email, base);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    link_acceso: link,
+    aviso: errorLink
+      ? `El usuario quedó creado, pero no se pudo generar el link: ${errorLink}`
+      : errorCorreo
+      ? "El usuario quedó creado. No se pudo enviar el correo, así que pasale el link de acceso vos."
+      : null,
+  });
 }

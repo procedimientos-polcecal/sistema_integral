@@ -7,7 +7,12 @@ export function GoogleSignInButton() {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        // `hd` sugiere el dominio en la pantalla de Google, pero es sólo una
+        // ayuda visual: el control de verdad lo hace /auth/callback.
+        queryParams: { hd: "polcecal.com", prompt: "select_account" },
+      },
     });
   }
 

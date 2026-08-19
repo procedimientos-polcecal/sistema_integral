@@ -2,12 +2,24 @@ import Link from "next/link";
 import { login } from "./actions";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
+/**
+ * El callback de Google redirige con un código corto en lugar del texto, para
+ * no armar mensajes en la URL. `login()` sigue mandando el texto directo.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  oauth: "No se pudo completar el ingreso con Google. Probá de nuevo.",
+  dominio: "Sólo se puede ingresar con una cuenta @polcecal.com.",
+  sin_alta: "Tu cuenta de Google es válida, pero todavía no fue dada de alta en el sistema. Pedísela a un administrador.",
+  inactivo: "Tu cuenta está desactivada. Si creés que es un error, avisale a un administrador.",
+};
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const mensajeError = error ? (MENSAJES_ERROR[error] ?? error) : null;
 
   return (
     <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
@@ -102,9 +114,9 @@ export default async function LoginPage({
               <input id="password" name="password" type="password" required placeholder="••••••••" className="input" />
             </div>
 
-            {error && (
+            {mensajeError && (
               <div className="rounded-lg border px-3.5 py-2.5 text-sm" style={{ background: "#FEF2F2", borderColor: "#FECACA", color: "#DC2626" }}>
-                {error}
+                {mensajeError}
               </div>
             )}
 

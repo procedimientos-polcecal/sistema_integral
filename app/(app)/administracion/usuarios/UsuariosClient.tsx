@@ -142,6 +142,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   const [form, setForm] = useState({ email: "", nombre: "", apellido: "", rol: "operario" as Rol });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<{ link: string; aviso: string | null } | null>(null);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
@@ -153,17 +154,55 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
       body: JSON.stringify(form),
     });
     setGuardando(false);
-    if (res.ok) onSaved();
-    else {
-      const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
       setError(data.error ?? "No se pudo crear el usuario");
+      return;
     }
+    // El usuario ya existe. Si el correo no salió, el link es la única forma de
+    // que la persona entre, así que se muestra en vez de cerrar el modal.
+    if (data.link_acceso) {
+      setResultado({ link: data.link_acceso, aviso: data.aviso ?? null });
+      return;
+    }
+    onSaved();
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h2 className="font-medium text-gray-900 mb-4">Nuevo usuario</h2>
+
+        {resultado ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">
+              Usuario creado. Pasale este link para que defina su contraseña:
+            </p>
+            <textarea
+              readOnly
+              rows={3}
+              value={resultado.link}
+              onClick={(e) => e.currentTarget.select()}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
+            />
+            <p className="text-xs text-amber-700">
+              Es de un solo uso y caduca. Tratalo como una contraseña temporal.
+            </p>
+            {resultado.aviso && <p className="text-xs text-gray-500">{resultado.aviso}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(resultado.link)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                Copiar
+              </button>
+              <button type="button" onClick={onSaved} className="btn-primary px-4 py-2 text-sm">
+                Listo
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={crear} className="space-y-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Email</label>
@@ -198,6 +237,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
