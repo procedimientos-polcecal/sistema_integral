@@ -38,19 +38,69 @@ lugar de `/reset-password`.
 
 ### 2. Proveedor de Google
 
-**Authentication → Providers → Google**, activarlo y cargar *Client ID* y
-*Client Secret* de Google Cloud Console. Sin eso el botón devuelve
+Son dos consolas: primero se crean las credenciales en Google, después se pegan
+en Supabase. Sin esto el botón devuelve
 `Unsupported provider: provider is not enabled`.
 
-En Google Cloud Console → *Credentials* → OAuth 2.0 Client ID, el
-**Authorized redirect URI** tiene que ser el callback de Supabase:
+#### 2.1 Google Cloud Console
 
-```
-https://<TU-PROYECTO>.supabase.co/auth/v1/callback
+1. [console.cloud.google.com](https://console.cloud.google.com) → elegir o crear
+   un proyecto (por ejemplo *SdG POLCECAL*).
+2. **APIs y servicios → Pantalla de consentimiento de OAuth**.
+   - Si `polcecal.com` es un dominio de Google Workspace, Google ofrece el tipo
+     **Interno**: conviene, porque restringe el acceso a la organización sin
+     pasar por el proceso de verificación de Google.
+   - Si sólo aparece **Externo**, hay que completar los datos de la app y, para
+     evitar la verificación, agregar a la gente en *Usuarios de prueba*. La
+     restricción de dominio igual la hace la app en `/auth/callback`.
+   - Permisos (*scopes*): alcanzan `email`, `profile` y `openid`.
+3. **Credenciales → Crear credenciales → ID de cliente de OAuth**, tipo
+   **Aplicación web**.
+4. Completar:
+
+   **Orígenes de JavaScript autorizados**
+   ```
+   http://localhost:3000
+   https://TU-DOMINIO
+   ```
+
+   **URI de redireccionamiento autorizados**
+   ```
+   https://<TU-PROYECTO>.supabase.co/auth/v1/callback
+   ```
+
+   Acá va **el callback de Supabase, no el de la app**. Es el error más común:
+   Google le responde a Supabase, y recién después Supabase redirige a
+   `/auth/callback` del SdG. Si se pone la URL de la app, Google rechaza el
+   intento con `redirect_uri_mismatch`.
+5. Copiar el *Client ID* y el *Client Secret*.
+
+#### 2.2 Supabase
+
+**Authentication → Providers → Google**: activarlo, pegar las dos credenciales y
+guardar. Los cambios tardan unos segundos en propagarse.
+
+#### 2.3 Verificar
+
+El endpoint de configuración es público (necesita la clave anónima) y dice qué
+proveedores quedaron activos:
+
+```bash
+curl -s -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY"   "https://<TU-PROYECTO>.supabase.co/auth/v1/settings"
 ```
 
-Va el de Supabase, no el de la app: Google le responde a Supabase, y Supabase
-después redirige a `/auth/callback`.
+Tiene que aparecer `"google": true`. Si sigue en `false`, no se guardó.
+
+### 2bis. Cerrar el registro abierto
+
+**Authentication → Sign In / Providers → Email**, desactivar *Allow new users to
+sign up*.
+
+Todas las altas pasan por `/administracion/usuarios`, que usa la API de
+administración y no se ve afectada. Con el registro abierto, en cambio,
+cualquiera que tenga la clave anónima —que es pública por diseño— puede crear
+una cuenta en `auth.users` contra la API de Supabase. No entraría al sistema,
+porque le faltaría la fila en `usuarios`, pero no hay motivo para dejarlo.
 
 ### 3. SMTP propio
 
