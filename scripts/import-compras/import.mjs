@@ -31,8 +31,11 @@ function cargarEnv() {
     const archivo = path.join(process.cwd(), nombre);
     if (!fs.existsSync(archivo)) continue;
     for (const linea of fs.readFileSync(archivo, "utf8").split(/\r?\n/)) {
+      // Se recorta el valor: es habitual que al pegar una clave quede un
+      // espacio adelante, y un header con espacio inicial puede terminar
+      // descartado por el servidor.
       const m = linea.match(/^([A-Z0-9_]+)=(.*)$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
     }
   }
 }
