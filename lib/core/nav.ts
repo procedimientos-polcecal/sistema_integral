@@ -105,6 +105,7 @@ export const NAV: NavItem[] = [
       { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAdmin: true },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
+      { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
       { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },
     ],
   },

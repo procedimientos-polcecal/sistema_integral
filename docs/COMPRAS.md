@@ -54,6 +54,7 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
 | `/compras/aprobaciones` | Cola por urgencia y antigüedad, con aprobación en tanda |
 | `/compras/tablero` | Para comprar → En comparativa → Pedido |
 | `/compras/proveedores` | Padrón compartido con Mantenimiento, con volumen por proveedor |
+| `/compras/ubicaciones` | Catálogo de "dónde se necesita", con detección de duplicados y fusión |
 | `/compras/configuracion` | Estado de la sincronización con la planilla |
 | `/mis-pedidos` | Fuera del módulo: cualquier usuario pide y sigue lo suyo |
 
