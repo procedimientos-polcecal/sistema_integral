@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fechaHora } from "@/lib/compras/constants";
 import type { Sincronizacion } from "@/lib/compras/types";
@@ -9,7 +9,7 @@ export default function ConfiguracionClient({
   sincronizaciones, aprobadores, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
 }: {
   sincronizaciones: Sincronizacion[];
-  aprobadores: { id: string; nombre: string; apellido: string; email: string }[];
+  aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
   /** RI creados en la app en los últimos 30 días. */
   nuevosApp: number;
   /** RI que en esos 30 días entraron por el formulario de Google. */
@@ -136,17 +136,20 @@ export default function ConfiguracionClient({
             en la planilla.
           </p>
         ) : (
-          <ul className="space-y-1 text-sm">
+          <ul className="space-y-2">
             {aprobadores.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-slate-900">{a.nombre} {a.apellido}</span>
-                <span className="font-mono text-xs text-slate-500">{a.email}</span>
-              </li>
+              <FilaAprobador key={a.id} aprobador={a} />
             ))}
           </ul>
         )}
 
         <p className="mt-3 text-xs text-slate-500">
+          El <strong>alias</strong> es con el que la persona figura en el desplegable de la
+          planilla. Sin él, la aprobación no se escribe: se avisa y queda para corregir a
+          mano, en vez de meter un texto que la validación rechaza.
+        </p>
+
+        <p className="mt-2 text-xs text-slate-500">
           Ser administrador del sistema <strong>no</strong> alcanza para aprobar: hace falta
           estar en esta lista. Es a propósito, para que el permiso sea el mismo en los
           dos lados y no dependa de quién administra el sistema.
@@ -263,5 +266,80 @@ function Leyenda({ color, texto }: { color: string; texto: string }) {
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
       {texto}
     </span>
+  );
+}
+
+/** Una persona que puede aprobar, con su alias en la planilla. */
+function FilaAprobador({
+  aprobador,
+}: {
+  aprobador: { id: string; nombre: string; apellido: string; email: string; alias: string | null };
+}) {
+  const router = useRouter();
+  const [alias, setAlias] = useState(aprobador.alias ?? "");
+  const [opciones, setOpciones] = useState<string[]>([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  // Las opciones se leen de la planilla: si suman un aprobador allá, aparece acá.
+  useEffect(() => {
+    fetch("/api/compras/sheets/opciones")
+      .then((r) => r.json())
+      .then((d) => setOpciones(d.opciones ?? []))
+      .catch(() => setOpciones([]));
+  }, []);
+
+  // De "APROBADA (MAXI)" interesa sólo el alias.
+  const sugeridos = [
+    ...new Set(
+      opciones
+        .map((o) => o.match(/\(([^)]+)\)/)?.[1])
+        .filter((v): v is string => Boolean(v))
+    ),
+  ];
+
+  async function guardar(valor: string) {
+    setGuardando(true);
+    setError("");
+    const res = await fetch("/api/compras/aprobadores", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario_id: aprobador.id, alias_planilla: valor }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      setError(b.error ?? "No se pudo guardar.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <span className="text-slate-900">{aprobador.nombre} {aprobador.apellido}</span>
+      <span className="font-mono text-xs text-slate-500">{aprobador.email}</span>
+
+      <span className="ml-auto flex items-center gap-2">
+        <span className="text-xs text-slate-500">alias:</span>
+        <input
+          list={`alias-${aprobador.id}`}
+          className="w-28 rounded border border-slate-300 px-2 py-1 font-mono text-xs uppercase"
+          value={alias}
+          disabled={guardando}
+          placeholder="sin definir"
+          onChange={(e) => setAlias(e.target.value.toUpperCase())}
+          onBlur={() => alias !== (aprobador.alias ?? "") && guardar(alias)}
+        />
+        <datalist id={`alias-${aprobador.id}`}>
+          {sugeridos.map((o) => <option key={o} value={o} />)}
+        </datalist>
+        {!aprobador.alias && (
+          <span className="text-xs text-amber-700">falta</span>
+        )}
+      </span>
+
+      {error && <span className="w-full text-xs text-red-600">{error}</span>}
+    </li>
   );
 }

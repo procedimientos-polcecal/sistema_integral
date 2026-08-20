@@ -489,19 +489,84 @@ const ETIQUETA_ESTADO_COMPRA: Record<string, string> = {
   DENEGADO: "DENEGADO",
 };
 
-const ETIQUETA_ESTADO_APROBACION: Record<string, string> = {
-  PENDIENTE: "",
-  EN_REVISION: "EN REVISIÓN",
-  APROBADA: "APROBADA",
-  DENEGADA: "DENEGADA",
-};
-
 const letraColumna = (i: number) => String.fromCharCode(65 + i);
 
 export interface ResultadoExportacion {
   escritas: string[];
   /** Celdas que la planilla no dejó tocar, con el motivo en lenguaje llano. */
   bloqueadas: string[];
+}
+
+/**
+ * Opciones válidas del desplegable de aprobación del master.
+ *
+ * Se leen de la planilla y no se escriben a mano: si mañana suman un tercer
+ * aprobador, la lista cambia sola. La validación es estricta, así que escribir
+ * algo que no esté acá deja la celda fuera de rango y rompe las fórmulas y
+ * filtros que dependen de esos textos exactos.
+ */
+export async function opcionesAprobacion(): Promise<string[]> {
+  const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
+  const idx = indexarColumnas(encabezado[0] ?? []);
+  const col = idx[COLUMNA_APROBACION];
+  if (col < 0) return [];
+
+  const letra = letraColumna(col);
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
+    `?ranges=${encodeURIComponent(`${HOJA_MASTER}!${letra}2:${letra}2`)}` +
+    `&fields=sheets(data(rowData(values(dataValidation))))&includeGridData=true`;
+
+  const token = await obtenerToken(false);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  const dv = json.sheets?.[0]?.data?.[0]?.rowData?.[0]?.values?.[0]?.dataValidation;
+  return (dv?.condition?.values ?? [])
+    .map((v: { userEnteredValue?: string }) => v.userEnteredValue)
+    .filter((v: string | undefined): v is string => Boolean(v));
+}
+
+/**
+ * Arma el texto de aprobación tal como lo espera la planilla.
+ *
+ * Devuelve null cuando no se puede armar un valor válido: es preferible avisar
+ * que la celda no se pudo escribir antes que meterle un texto fuera de la lista.
+ */
+export function textoAprobacion(
+  estado: string,
+  alias: string | null,
+  opciones: string[]
+): { valor: string | null; motivo?: string } {
+  const buscar = (texto: string) =>
+    opciones.find((o) => norm(o) === norm(texto)) ?? null;
+
+  if (estado === "DENEGADA") {
+    const v = buscar("DENEGADA");
+    return v ? { valor: v } : { valor: null, motivo: "la planilla no ofrece DENEGADA" };
+  }
+  if (estado === "EN_REVISION") {
+    const v = buscar("EN REVISIÓN");
+    return v ? { valor: v } : { valor: null, motivo: "la planilla no ofrece EN REVISIÓN" };
+  }
+  if (estado !== "APROBADA") return { valor: null };
+
+  const limpio = (alias ?? "").trim();
+  if (!limpio) {
+    return {
+      valor: null,
+      motivo: "falta el alias del aprobador; cargalo en Configuración de Compras",
+    };
+  }
+
+  const v = buscar(`APROBADA (${limpio})`);
+  return v
+    ? { valor: v }
+    : {
+        valor: null,
+        motivo: `la planilla no tiene la opción «APROBADA (${limpio.toUpperCase()})»`,
+      };
 }
 
 /** Busca en qué fila del master está un RI. */
@@ -564,26 +629,41 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
   const bloqueadas: string[] = [];
 
   // ── Estado de aprobación, en el master ──
-  const etiquetaAprobacion = ETIQUETA_ESTADO_APROBACION[r.estado_aprobacion as string];
-  if (etiquetaAprobacion !== undefined && r.estado_aprobacion !== "PENDIENTE") {
-    const fila = r.hoja_origen === HOJA_MASTER && r.sheets_fila
-      ? (r.sheets_fila as number)
-      : await filaEnMaster(r.nro_ri as number);
+  if (r.estado_aprobacion !== "PENDIENTE") {
+    // El alias es con el que la persona figura en el desplegable de la planilla.
+    const { data: aprobador } = r.aprobado_por
+      ? await admin
+          .from("compras_aprobadores")
+          .select("alias_planilla")
+          .eq("usuario_id", r.aprobado_por)
+          .maybeSingle()
+      : { data: null };
 
-    if (fila) {
-      const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
-      const idx = indexarColumnas(encabezado[0] ?? []);
-      if (idx[COLUMNA_APROBACION] >= 0) {
-        const texto = r.aprobador
-          ? `${etiquetaAprobacion} (${r.aprobador})`
-          : etiquetaAprobacion;
-        const motivo = await escribirCelda(
-          token,
-          `${HOJA_MASTER}!${letraColumna(idx[COLUMNA_APROBACION])}${fila}`,
-          texto
-        );
-        if (motivo) bloqueadas.push(`aprobación (${motivo})`);
-        else escritas.push("aprobación");
+    const { valor, motivo } = textoAprobacion(
+      r.estado_aprobacion as string,
+      aprobador?.alias_planilla ?? null,
+      await opcionesAprobacion()
+    );
+
+    if (!valor) {
+      if (motivo) bloqueadas.push(`aprobación (${motivo})`);
+    } else {
+      const fila = r.hoja_origen === HOJA_MASTER && r.sheets_fila
+        ? (r.sheets_fila as number)
+        : await filaEnMaster(r.nro_ri as number);
+
+      if (fila) {
+        const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
+        const idx = indexarColumnas(encabezado[0] ?? []);
+        if (idx[COLUMNA_APROBACION] >= 0) {
+          const fallo = await escribirCelda(
+            token,
+            `${HOJA_MASTER}!${letraColumna(idx[COLUMNA_APROBACION])}${fila}`,
+            valor
+          );
+          if (fallo) bloqueadas.push(`aprobación (${fallo})`);
+          else escritas.push("aprobación");
+        }
       }
     }
   }

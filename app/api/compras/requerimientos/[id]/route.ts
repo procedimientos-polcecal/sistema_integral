@@ -87,6 +87,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (cambios.estado_aprobacion === "APROBADA" || cambios.estado_aprobacion === "DENEGADA") {
       cambios.aprobador = nombreUsuario;
+      // Referencia al usuario: es por donde se busca su alias en la planilla.
+      cambios.aprobado_por = user.id;
       cambios.aprobado_en = new Date().toISOString();
 
       // Aprobar pone el pedido en la cola de Compras; denegar lo cierra.

@@ -47,6 +47,28 @@ normalidad.
 - Si Sheets falla, el cambio ya quedó guardado: se avisa en pantalla pero la
   operación no se rompe.
 
+### El alias de cada aprobador
+
+La columna de aprobación del master tiene una lista desplegable **estricta**:
+
+```
+APROBADA (NICO) · APROBADA (MAXI) · DENEGADA · EN REVISIÓN
+```
+
+Al aprobar, la app tiene que escribir exactamente una de esas opciones. Por eso
+cada aprobador lleva un **alias** —`NICO`, `MAXI`— que se carga en
+`/compras/configuracion`, al lado de su nombre. No se deduce del nombre de pila:
+`MAXI` no sale de `Maximiliano` sin adivinar, y adivinar mal deja la celda fuera
+de la validación y rompe las fórmulas que dependen de esos textos exactos.
+
+Las opciones se leen de la planilla, no están escritas en el código: si suman un
+tercer aprobador allá, aparece solo como sugerencia acá.
+
+**Si falta el alias, la aprobación no se escribe** y se avisa en la ficha del
+requerimiento. Es preferible a escribir un valor que la planilla rechaza.
+
+`DENEGADA` y `EN REVISIÓN` van sin sufijo: no llevan quién decidió.
+
 ### Celdas que la planilla no deja escribir
 
 La planilla tiene un modelo de permisos propio y **la cuenta de servicio no

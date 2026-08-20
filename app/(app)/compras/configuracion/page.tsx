@@ -45,10 +45,19 @@ export default async function ConfiguracionPage() {
 
   const aprobadores = await aprobadoresDeCompras(supabase);
 
+  // Con qué alias figura cada uno en el desplegable de la planilla.
+  const { data: alias } = await supabase
+    .from("compras_aprobadores")
+    .select("usuario_id, alias_planilla");
+  const porUsuario = Object.fromEntries(
+    (alias ?? []).map((a) => [a.usuario_id as string, a.alias_planilla as string])
+  );
+  const conAlias = aprobadores.map((a) => ({ ...a, alias: porUsuario[a.id] ?? null }));
+
   return (
     <ConfiguracionClient
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
-      aprobadores={aprobadores}
+      aprobadores={conAlias}
       nuevosApp={nuevosApp ?? 0}
       nuevosPlanilla={nuevosPlanilla ?? 0}
       abiertos={abiertos ?? 0}
