@@ -19,7 +19,7 @@ export default async function TableroPage() {
     .in("estado_compra", COLUMNAS_TABLERO)
     .order("fecha", { ascending: true });
 
-  const [nivel, { data: aprobadores }, { data: proveedores }] = await Promise.all([
+  const [nivel, { data: grants }, { data: alias }, { data: proveedores }] = await Promise.all([
     nivelComprasDe(supabase, user.id),
     // Quiénes pueden aprobar una compra: los mismos que aprueban los RI.
     supabase
@@ -27,15 +27,24 @@ export default async function TableroPage() {
       .select("usuarios(id, nombre, apellido)")
       .eq("modulo", "compras")
       .eq("nivel", "admin"),
+    // El alias es como se los nombra en la planilla: NICO, MAXI.
+    supabase.from("compras_aprobadores").select("usuario_id, alias_planilla"),
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
+
+  const aliasPorUsuario = Object.fromEntries(
+    (alias ?? []).map((a) => [a.usuario_id as string, a.alias_planilla as string])
+  );
+
+  const aprobadores = (grants ?? [])
+    .map((g) => g.usuarios as unknown as { id: string; nombre: string; apellido: string } | null)
+    .filter((u): u is { id: string; nombre: string; apellido: string } => Boolean(u))
+    .map((u) => ({ ...u, alias: aliasPorUsuario[u.id] ?? null }));
 
   return (
     <TableroClient
       requerimientos={(data ?? []) as RequerimientoConRelaciones[]}
-      aprobadores={(aprobadores ?? [])
-        .map((g) => g.usuarios as unknown as { id: string; nombre: string; apellido: string } | null)
-        .filter((u): u is { id: string; nombre: string; apellido: string } => Boolean(u))}
+      aprobadores={aprobadores}
       proveedores={proveedores ?? []}
       usuarioId={user.id}
       canEdit={nivel === "edicion" || nivel === "admin"}

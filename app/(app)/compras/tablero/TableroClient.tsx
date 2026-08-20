@@ -12,7 +12,25 @@ import {
 const PIDE_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
-type Persona = { id: string; nombre: string; apellido: string };
+type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
+
+/**
+ * Un color por aprobador, para distinguir de un vistazo lo de cada uno.
+ *
+ * Sale del orden en la lista y no de un hash: con dos o tres personas el hash
+ * puede darles tonos parecidos, que es justo lo que hay que evitar.
+ */
+const COLORES_APROBADOR = [
+  { chip: "bg-violet-100 text-violet-800", borde: "border-l-violet-400" },
+  { chip: "bg-cyan-100 text-cyan-800", borde: "border-l-cyan-400" },
+  { chip: "bg-rose-100 text-rose-800", borde: "border-l-rose-400" },
+  { chip: "bg-lime-100 text-lime-800", borde: "border-l-lime-400" },
+];
+
+/** Cómo se lo nombra: el alias de la planilla si lo tiene, si no el nombre. */
+function nombreCorto(p: Persona): string {
+  return p.alias ?? p.nombre;
+}
 
 export default function TableroClient({
   requerimientos, aprobadores, proveedores, usuarioId, canEdit,
@@ -28,6 +46,8 @@ export default function TableroClient({
   const [error, setError] = useState("");
   // Cada paso deja algo cargado; el modal junta esos datos antes de avanzar.
   const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
+  // Filtro por a quién le toca aprobar: "" todos, "MIO" lo propio, o un id.
+  const [asignado, setAsignado] = useState("");
   const [area, setArea] = useState("");
   const [empresa, setEmpresa] = useState("");
 
@@ -39,6 +59,13 @@ export default function TableroClient({
   const filtrados = useMemo(() => {
     let base = requerimientos;
     if (area) base = base.filter((r) => r.compras_areas?.nombre === area);
+    if (asignado) {
+      base = base.filter((r) =>
+        asignado === "MIO"
+          ? r.compra_asignada_a === usuarioId
+          : r.compra_asignada_a === asignado
+      );
+    }
     if (empresa) {
       base = base.filter((r) =>
         empresa === "AMBAS" ? r.empresa_id === null : r.empresas?.nombre === empresa
@@ -49,7 +76,7 @@ export default function TableroClient({
         pesoPrioridad(a.prioridad) - pesoPrioridad(b.prioridad) ||
         new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
     );
-  }, [requerimientos, area, empresa]);
+  }, [requerimientos, area, empresa, asignado, usuarioId]);
 
   const comprometido = useMemo(
     () => filtrados.reduce((acc, r) => acc + (r.costo_iva ?? 0) + (r.costo_envio ?? 0), 0),
@@ -117,6 +144,20 @@ export default function TableroClient({
           <option value="POLYSAN">POLYSAN</option>
           <option value="AMBAS">Ambas</option>
         </select>
+
+        <select
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          value={asignado}
+          onChange={(e) => setAsignado(e.target.value)}
+        >
+          <option value="">Aprueba cualquiera</option>
+          {aprobadores.some((a) => a.id === usuarioId) && (
+            <option value="MIO">Las que apruebo yo</option>
+          )}
+          {aprobadores.map((a) => (
+            <option key={a.id} value={a.id}>Aprueba {nombreCorto(a)}</option>
+          ))}
+        </select>
       </div>
 
       {error && (
@@ -146,6 +187,26 @@ export default function TableroClient({
                 </span>
               </header>
 
+              {columna === "PARA_COMPRAR" && items.length > 0 && (
+                <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-2">
+                  {aprobadores.map((a, i) => {
+                    const cuantas = items.filter((r) => r.compra_asignada_a === a.id).length;
+                    if (cuantas === 0) return null;
+                    const c = COLORES_APROBADOR[i % COLORES_APROBADOR.length];
+                    return (
+                      <span key={a.id} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.chip}`}>
+                        {nombreCorto(a)}: {cuantas}
+                      </span>
+                    );
+                  })}
+                  {items.some((r) => !r.compra_asignada_a) && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                      sin asignar: {items.filter((r) => !r.compra_asignada_a).length}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="max-h-[70vh] space-y-2 overflow-y-auto p-3">
                 {items.length === 0 ? (
                   <p className="py-8 text-center text-sm text-slate-400">Nada en esta etapa.</p>
@@ -154,10 +215,25 @@ export default function TableroClient({
                     const dias = diasRestantes(r.fecha_necesidad);
                     const vencido = dias !== null && dias < 0;
                     const donde = r.compras_ubicaciones?.nombre ?? r.ubicacion_raw;
+
+                    // A quién le toca, o quién ya la aprobó según la etapa.
+                    const idQuien =
+                      r.estado_compra === "PARA_COMPRAR"
+                        ? r.compra_asignada_a
+                        : r.compra_aprobada_por ?? r.compra_asignada_a;
+                    const indice = aprobadores.findIndex((a) => a.id === idQuien);
+                    const quien = indice >= 0 ? aprobadores[indice] : null;
+                    const color = quien ? COLORES_APROBADOR[indice % COLORES_APROBADOR.length] : null;
                     return (
                       <article
                         key={r.id}
-                        className={`rounded-lg border bg-white p-3 ${vencido ? "border-l-4 border-l-red-500 border-slate-200" : "border-slate-200"}`}
+                        className={`rounded-lg border bg-white p-3 ${
+                          vencido
+                            ? "border-l-4 border-l-red-500 border-slate-200"
+                            : quien && color
+                            ? `border-l-4 ${color.borde} border-slate-200`
+                            : "border-slate-200"
+                        }`}
                       >
                         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                           <Link
@@ -170,6 +246,16 @@ export default function TableroClient({
                             {etiquetaPrioridad(r.prioridad).label}
                           </span>
                           <span className="text-[11px] text-slate-400">{etiquetaEmpresa(r.empresas?.nombre, r.paga_ambas)}</span>
+
+                          {quien && color && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${color.chip}`}
+                              title={`${quien.nombre} ${quien.apellido}`}
+                            >
+                              {r.estado_compra === "PARA_COMPRAR" ? "→ " : "✓ "}
+                              {nombreCorto(quien)}
+                            </span>
+                          )}
                         </div>
 
                         <Link
