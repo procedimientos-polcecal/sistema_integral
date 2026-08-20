@@ -569,6 +569,44 @@ export function textoAprobacion(
       };
 }
 
+/**
+ * Alias del aprobador en la planilla.
+ *
+ * Lo normal es resolverlo por `aprobado_por`. Las aprobaciones anteriores a que
+ * existiera esa columna sólo guardaron el nombre en texto, así que como
+ * respaldo se lo busca por nombre y apellido: son unas pocas y si no quedarían
+ * sin poder escribirse nunca.
+ */
+async function aliasDelAprobador(
+  admin: Admin,
+  aprobadoPor: string | null,
+  nombreGuardado: string | null
+): Promise<string | null> {
+  if (aprobadoPor) {
+    const { data } = await admin
+      .from("compras_aprobadores")
+      .select("alias_planilla")
+      .eq("usuario_id", aprobadoPor)
+      .maybeSingle();
+    if (data?.alias_planilla) return data.alias_planilla as string;
+  }
+
+  if (!nombreGuardado) return null;
+
+  const { data: candidatos } = await admin
+    .from("compras_aprobadores")
+    .select("alias_planilla, usuarios(nombre, apellido)");
+
+  const buscado = norm(nombreGuardado);
+  for (const c of candidatos ?? []) {
+    const u = c.usuarios as unknown as { nombre: string; apellido: string } | null;
+    if (u && norm(`${u.nombre} ${u.apellido}`) === buscado) {
+      return c.alias_planilla as string;
+    }
+  }
+  return null;
+}
+
 /** Busca en qué fila del master está un RI. */
 async function filaEnMaster(nroRi: number): Promise<number | null> {
   const filas = await leerPestana(`${HOJA_MASTER}!A:A`);
@@ -631,17 +669,15 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
   // ── Estado de aprobación, en el master ──
   if (r.estado_aprobacion !== "PENDIENTE") {
     // El alias es con el que la persona figura en el desplegable de la planilla.
-    const { data: aprobador } = r.aprobado_por
-      ? await admin
-          .from("compras_aprobadores")
-          .select("alias_planilla")
-          .eq("usuario_id", r.aprobado_por)
-          .maybeSingle()
-      : { data: null };
+    const alias = await aliasDelAprobador(
+      admin,
+      r.aprobado_por as string | null,
+      r.aprobador as string | null
+    );
 
     const { valor, motivo } = textoAprobacion(
       r.estado_aprobacion as string,
-      aprobador?.alias_planilla ?? null,
+      alias,
       await opcionesAprobacion()
     );
 
@@ -694,12 +730,58 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
     }
   }
 
-  if (escritas.length > 0) {
-    await admin
-      .from("compras_requerimientos")
-      .update({ sheets_sincronizado_en: new Date().toISOString() })
-      .eq("id", requerimientoId);
-  }
+  // Se deja anotado qué quedó sin escribir. Sin esto, un rechazo de la planilla
+  // se perdía apenas se cerraba el aviso: el RI ya estaba aprobado, la app no
+  // volvía a ofrecer aprobarlo y no había manera de reintentar.
+  await admin
+    .from("compras_requerimientos")
+    .update({
+      sheets_pendiente: bloqueadas.length > 0 ? bloqueadas.join("; ") : null,
+      sheets_intentado_en: new Date().toISOString(),
+      ...(escritas.length > 0 ? { sheets_sincronizado_en: new Date().toISOString() } : {}),
+    })
+    .eq("id", requerimientoId);
 
   return { escritas, bloqueadas };
+}
+
+export interface ResultadoReintento {
+  intentados: number;
+  resueltos: number;
+  siguenPendientes: number;
+}
+
+/**
+ * Reintenta las escrituras que la planilla había rechazado.
+ *
+ * Casi siempre el motivo es corregible desde afuera —se cargó el alias que
+ * faltaba, o alguien sumó la cuenta de servicio a la protección—, así que el
+ * reintento es lo que hace que las dos herramientas vuelvan a coincidir sin
+ * tener que tocar el requerimiento de nuevo.
+ */
+export async function reintentarPendientes(limite = 50): Promise<ResultadoReintento> {
+  const admin = createAdminClient();
+
+  const { data: pendientes } = await admin
+    .from("compras_requerimientos")
+    .select("id")
+    .not("sheets_pendiente", "is", null)
+    .order("sheets_intentado_en", { ascending: true })
+    .limit(limite);
+
+  let resueltos = 0;
+  let siguenPendientes = 0;
+
+  for (const r of pendientes ?? []) {
+    try {
+      const { bloqueadas } = await exportarRequerimiento(r.id as string);
+      if (bloqueadas.length === 0) resueltos++;
+      else siguenPendientes++;
+    } catch {
+      // Si la planilla no responde, queda pendiente para la próxima.
+      siguenPendientes++;
+    }
+  }
+
+  return { intentados: pendientes?.length ?? 0, resueltos, siguenPendientes };
 }

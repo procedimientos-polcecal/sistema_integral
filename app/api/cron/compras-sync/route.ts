@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { importarDesdeSheets } from "@/lib/compras/sheets";
+import { importarDesdeSheets, reintentarPendientes } from "@/lib/compras/sheets";
 
 export const maxDuration = 300;
 
@@ -25,7 +25,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    return NextResponse.json(await importarDesdeSheets("cron"));
+    const importado = await importarDesdeSheets("cron");
+    // Y de paso reintenta lo que la planilla había rechazado: casi siempre el
+    // motivo se corrigió afuera (se cargó un alias, se dio un permiso).
+    const reintento = await reintentarPendientes();
+    return NextResponse.json({ ...importado, reintento });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

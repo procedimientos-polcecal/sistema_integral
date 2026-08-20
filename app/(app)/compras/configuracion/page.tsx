@@ -43,6 +43,14 @@ export default async function ConfiguracionPage() {
     cuenta((q) => q),
   ]);
 
+  // Lo que la planilla rechazó y sigue sin escribirse.
+  const { data: pendientes } = await supabase
+    .from("compras_requerimientos")
+    .select("id, nro_ri, descripcion, sheets_pendiente, sheets_intentado_en")
+    .not("sheets_pendiente", "is", null)
+    .order("nro_ri", { ascending: false })
+    .limit(50);
+
   const aprobadores = await aprobadoresDeCompras(supabase);
 
   // Con qué alias figura cada uno en el desplegable de la planilla.
@@ -58,6 +66,7 @@ export default async function ConfiguracionPage() {
     <ConfiguracionClient
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}
+      pendientes={pendientes ?? []}
       nuevosApp={nuevosApp ?? 0}
       nuevosPlanilla={nuevosPlanilla ?? 0}
       abiertos={abiertos ?? 0}

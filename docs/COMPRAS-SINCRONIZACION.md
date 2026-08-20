@@ -84,9 +84,17 @@ Por eso **cada celda se escribe por separado y no en un solo lote**: con un batc
 único, una celda protegida hacía fallar la escritura entera y no se guardaba
 tampoco lo que sí estaba permitido.
 
-Lo que no se pudo escribir aparece como aviso en la ficha del requerimiento, con
-el detalle de qué campo fue. No se silencia: si se silenciara, alguien miraría
-la planilla creyendo que está al día.
+Lo que no se pudo escribir **queda anotado en el requerimiento** y aparece en
+`/compras/configuracion`, arriba de todo, con el motivo y un botón de reintentar.
+
+Eso es lo que mantiene las dos herramientas alineadas. Sin ese registro, un
+rechazo se perdía apenas se cerraba el aviso: el RI ya estaba aprobado, así que
+su ficha no volvía a ofrecer la acción, y no había forma de reintentar la
+escritura ni de enterarse de que la planilla había quedado atrás.
+
+El reintento también corre solo en cada sincronización. Casi siempre el motivo
+se corrige afuera —se carga el alias que faltaba, se da permiso sobre la
+celda—, así que los pendientes se acomodan sin que nadie los toque.
 
 Para que la app también pueda escribir esas celdas hay que **agregar
 `sheets-reader@mantenimientopp.iam.gserviceaccount.com` como editor de la

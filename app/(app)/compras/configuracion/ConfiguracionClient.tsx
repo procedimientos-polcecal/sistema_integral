@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fechaHora } from "@/lib/compras/constants";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
+  sincronizaciones, aprobadores, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
 }: {
   sincronizaciones: Sincronizacion[];
   aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
+  /** Requerimientos cuyo cambio no se pudo escribir en la planilla. */
+  pendientes: {
+    id: string;
+    nro_ri: number;
+    descripcion: string;
+    sheets_pendiente: string;
+    sheets_intentado_en: string | null;
+  }[];
   /** RI creados en la app en los últimos 30 días. */
   nuevosApp: number;
   /** RI que en esos 30 días entraron por el formulario de Google. */
@@ -117,6 +126,8 @@ export default function ConfiguracionClient({
           </div>
         </div>
       </section>
+
+      {pendientes.length > 0 && <PanelPendientes pendientes={pendientes} />}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -341,5 +352,94 @@ function FilaAprobador({
 
       {error && <span className="w-full text-xs text-red-600">{error}</span>}
     </li>
+  );
+}
+
+/**
+ * Cambios hechos en el sistema que la planilla rechazó.
+ *
+ * Se muestran arriba de todo porque son la única forma de enterarse: el
+ * requerimiento ya quedó aprobado, así que su ficha no vuelve a ofrecer la
+ * acción, y sin esta lista la diferencia entre las dos herramientas quedaría
+ * invisible.
+ */
+function PanelPendientes({
+  pendientes,
+}: {
+  pendientes: {
+    id: string;
+    nro_ri: number;
+    descripcion: string;
+    sheets_pendiente: string;
+    sheets_intentado_en: string | null;
+  }[];
+}) {
+  const router = useRouter();
+  const [reintentando, setReintentando] = useState(false);
+  const [resultado, setResultado] = useState<string | null>(null);
+
+  async function reintentar() {
+    setReintentando(true);
+    setResultado(null);
+    const res = await fetch("/api/compras/sheets/reintentar", { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setReintentando(false);
+
+    if (!res.ok) {
+      setResultado(body.error ?? "No se pudo reintentar.");
+      return;
+    }
+    setResultado(
+      body.resueltos > 0
+        ? `Se escribieron ${body.resueltos} de ${body.intentados}.` +
+          (body.siguenPendientes > 0 ? ` Quedan ${body.siguenPendientes}.` : "")
+        : "La planilla los sigue rechazando por el mismo motivo."
+    );
+    router.refresh();
+  }
+
+  return (
+    <section className="rounded-xl border border-amber-300 bg-amber-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-amber-900">
+            {pendientes.length} {pendientes.length === 1 ? "cambio" : "cambios"} sin reflejar en la planilla
+          </h2>
+          <p className="mt-1 text-xs text-amber-800">
+            Están guardados acá, pero la planilla los rechazó. Corregí el motivo
+            —cargar el alias que falta, o dar permiso sobre la celda— y reintentá.
+          </p>
+        </div>
+        <button
+          onClick={reintentar}
+          disabled={reintentando}
+          className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+        >
+          {reintentando ? "Reintentando…" : "Reintentar"}
+        </button>
+      </div>
+
+      {resultado && <p className="mt-3 text-sm text-amber-900">{resultado}</p>}
+
+      <ul className="mt-3 space-y-1.5">
+        {pendientes.map((p) => (
+          <li key={p.id} className="text-sm">
+            <Link
+              href={`/compras/requerimientos/${p.id}`}
+              className="font-mono text-xs font-semibold text-amber-900 hover:underline"
+            >
+              RI {p.nro_ri}
+            </Link>
+            <span className="ml-2 text-slate-700">{p.descripcion}</span>
+            <div className="text-xs text-amber-800">{p.sheets_pendiente}</div>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 text-xs text-amber-800">
+        El reintento también corre solo en cada sincronización, así que si el
+        motivo se resuelve afuera se acomodan sin que nadie haga nada.
+      </p>
+    </section>
   );
 }
