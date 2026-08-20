@@ -99,9 +99,16 @@ llamadas externas y fallaría en silencio.
 
 ## Cuándo apagar la planilla
 
-`/compras/configuracion` muestra qué porcentaje de los requerimientos ya se
-gestiona desde el sistema. Cuando ese número se acerque al total y los RI nuevos
-entren por `/mis-pedidos` en lugar del formulario:
+`/compras/configuracion` muestra dos indicadores. El que decide es **por dónde
+entran los pedidos nuevos** en los últimos 30 días: cuando esa barra sea toda
+verde, la planilla dejó de usarse para cargar.
+
+El segundo, *pedidos abiertos gestionados desde acá*, mide sólo lo que sigue en
+circulación. Medir contra el total del histórico no serviría: los ~1800 RI
+importados están cerrados hace meses y nadie los va a volver a tocar, así que
+ese porcentaje se quedaría clavado cerca de cero y no diría nada.
+
+Cuando los RI nuevos entren por `/mis-pedidos` en lugar del formulario:
 
 1. Quitar el cron `compras-sync` de `vercel.json`.
 2. Borrar el activador del Apps Script.

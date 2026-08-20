@@ -6,10 +6,17 @@ import { fechaHora } from "@/lib/compras/constants";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
-  sincronizaciones, gestionadosEnApp, total,
+  sincronizaciones, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
 }: {
   sincronizaciones: Sincronizacion[];
-  gestionadosEnApp: number;
+  /** RI creados en la app en los últimos 30 días. */
+  nuevosApp: number;
+  /** RI que en esos 30 días entraron por el formulario de Google. */
+  nuevosPlanilla: number;
+  /** RI todavía en circulación: ni recibidos ni denegados. */
+  abiertos: number;
+  abiertosGestionados: number;
+  gestionados: number;
   total: number;
 }) {
   const router = useRouter();
@@ -38,7 +45,6 @@ export default function ConfiguracionClient({
   }
 
   const ultima = sincronizaciones[0];
-  const avance = total > 0 ? Math.round((gestionadosEnApp / total) * 100) : 0;
 
   return (
     <div className="max-w-4xl space-y-4">
@@ -57,20 +63,57 @@ export default function ConfiguracionClient({
           <li>· Los cambios de compra hechos acá se escriben de vuelta en la pestaña del área correspondiente.</li>
         </ul>
 
-        <div className="mt-4">
-          <div className="mb-1 flex items-baseline justify-between text-sm">
-            <span className="text-slate-600">Requerimientos ya gestionados en el sistema</span>
-            <span className="font-mono text-slate-900">
-              {gestionadosEnApp.toLocaleString("es-AR")} / {total.toLocaleString("es-AR")} ({avance}%)
-            </span>
+        <div className="mt-5 space-y-5">
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+              <span className="font-medium text-slate-700">Por dónde entran los pedidos nuevos</span>
+              <span className="text-xs text-slate-500">últimos 30 días</span>
+            </div>
+
+            {nuevosApp + nuevosPlanilla === 0 ? (
+              <p className="text-sm text-slate-400">No entró ningún pedido nuevo en este período.</p>
+            ) : (
+              <>
+                <Barra
+                  partes={[
+                    { valor: nuevosApp, color: "var(--primary)", etiqueta: "por el sistema" },
+                    { valor: nuevosPlanilla, color: "#CBD5E1", etiqueta: "por la planilla" },
+                  ]}
+                />
+                <div className="mt-2 flex flex-wrap gap-4 text-xs">
+                  <Leyenda color="var(--primary)" texto={`${nuevosApp} por el sistema`} />
+                  <Leyenda color="#CBD5E1" texto={`${nuevosPlanilla} por la planilla`} />
+                </div>
+              </>
+            )}
+
+            <p className="mt-2 text-xs text-slate-500">
+              Éste es el indicador que decide. Cuando la barra sea toda verde, la planilla
+              dejó de usarse para cargar y se puede apagar la sincronización.
+            </p>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${avance}%` }} />
+
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+              <span className="font-medium text-slate-700">Pedidos abiertos gestionados desde acá</span>
+              <span className="font-mono text-slate-900">
+                {abiertosGestionados} / {abiertos}
+              </span>
+            </div>
+            <Barra
+              partes={[
+                { valor: abiertosGestionados, color: "var(--primary)", etiqueta: "gestionados" },
+                { valor: Math.max(abiertos - abiertosGestionados, 0), color: "#E2E8F0", etiqueta: "sin tocar" },
+              ]}
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              Sólo cuenta lo que sigue en circulación. Los {total.toLocaleString("es-AR")} del
+              histórico incluyen pedidos ya cerrados hace meses que nadie va a volver a tocar:
+              medirlos contra el total no diría nada.
+              {gestionados > abiertosGestionados &&
+                ` En total hay ${gestionados} requerimientos tocados desde el sistema, contando los ya cerrados.`}
+            </p>
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Cuando este número se acerque al total y los RI nuevos entren por acá en lugar del
-            formulario, la planilla deja de hacer falta.
-          </p>
         </div>
       </section>
 
@@ -147,5 +190,42 @@ export default function ConfiguracionClient({
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Barra de proporción. Se le da un ancho mínimo a cada parte con valor, para
+ * que un 3% siga leyéndose como una barra y no como un punto perdido.
+ */
+function Barra({ partes }: { partes: { valor: number; color: string; etiqueta: string }[] }) {
+  const total = partes.reduce((a, p) => a + p.valor, 0);
+  if (total === 0) return null;
+
+  return (
+    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+      {partes.map((p, i) =>
+        p.valor === 0 ? null : (
+          <div
+            key={i}
+            title={`${p.valor} ${p.etiqueta}`}
+            className="h-full transition-all"
+            style={{
+              width: `${(p.valor / total) * 100}%`,
+              minWidth: 6,
+              background: p.color,
+            }}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+function Leyenda({ color, texto }: { color: string; texto: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-slate-600">
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+      {texto}
+    </span>
   );
 }
