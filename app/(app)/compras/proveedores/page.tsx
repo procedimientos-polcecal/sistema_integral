@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { traerTodo } from "@/lib/core/paginado";
 import { nivelComprasDe } from "@/lib/compras/auth";
 import ProveedoresClient from "./ProveedoresClient";
 import type { Proveedor } from "@/lib/compras/types";
@@ -10,17 +11,21 @@ export default async function ProveedoresPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: proveedores }, { data: compras }] = await Promise.all([
-    supabase.from("proveedores").select("*").order("nombre"),
-    // Compras y monto por proveedor, para ordenar por relevancia real.
-    supabase
-      .from("compras_requerimientos")
-      .select("proveedor_id, costo_iva, costo_envio")
-      .not("proveedor_id", "is", null),
-  ]);
+  const { data: proveedores } = await supabase.from("proveedores").select("*").order("nombre");
+
+  // Compras y monto por proveedor, para ordenar por relevancia real.
+  // Paginado: sin esto el volumen se calculaba sobre 1000 RI.
+  const compras = await traerTodo<{ proveedor_id: string; costo_iva: number | null; costo_envio: number | null }>(
+    (desde, hasta) =>
+      supabase
+        .from("compras_requerimientos")
+        .select("proveedor_id, costo_iva, costo_envio")
+        .not("proveedor_id", "is", null)
+        .range(desde, hasta)
+  );
 
   const estadisticas: Record<string, { pedidos: number; monto: number }> = {};
-  for (const c of compras ?? []) {
+  for (const c of compras) {
     const id = c.proveedor_id as string;
     const previo = estadisticas[id] ?? { pedidos: 0, monto: 0 };
     estadisticas[id] = {

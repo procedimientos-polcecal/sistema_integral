@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { traerTodo } from "@/lib/core/paginado";
 import DashboardClient from "./DashboardClient";
 
 export default async function ComprasDashboardPage() {
@@ -21,12 +22,16 @@ export default async function ComprasDashboardPage() {
   ]);
 
   // Para los gráficos sólo se traen las columnas necesarias de lo que tiene costo.
-  const { data: conCosto } = await supabase
-    .from("compras_requerimientos")
-    .select("fecha, costo_iva, costo_envio, empresas(nombre), compras_areas(nombre), proveedores(nombre)")
-    .not("costo_iva", "is", null)
-    .order("fecha", { ascending: false })
-    .limit(3000);
+  // Paginado: con .limit(3000) PostgREST devolvía 1000 igual, así que el gasto
+  // total y los gráficos salían subestimados sin que nada lo indicara.
+  const conCosto = await traerTodo<Record<string, unknown>>((desde, hasta) =>
+    supabase
+      .from("compras_requerimientos")
+      .select("fecha, costo_iva, costo_envio, empresas(nombre), compras_areas(nombre), proveedores(nombre)")
+      .not("costo_iva", "is", null)
+      .order("fecha", { ascending: false })
+      .range(desde, hasta)
+  );
 
   const { data: recientes } = await supabase
     .from("compras_requerimientos")
@@ -44,7 +49,7 @@ export default async function ComprasDashboardPage() {
         pedidos: pedidos.count ?? 0,
         urgentes: urgentes.count ?? 0,
       }}
-      conCosto={(conCosto ?? []) as never[]}
+      conCosto={conCosto as never[]}
       recientes={(recientes ?? []) as never[]}
     />
   );

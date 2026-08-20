@@ -12,6 +12,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { traerTodo } from "@/lib/core/paginado";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -329,12 +330,18 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     const idUbicacion = await asegurarUbicaciones(admin, registros.map((r) => r.datos.ubicacion));
 
     // Los RI ya gestionados desde la app no se pisan.
-    const { data: existentes } = await admin
-      .from("compras_requerimientos")
-      .select("nro_ri, editado_en_app");
-    const estado = new Map(
-      (existentes ?? []).map((r) => [r.nro_ri as number, r.editado_en_app as boolean])
+    //
+    // Va paginado: PostgREST corta en 1000 filas, y con la tabla más grande que
+    // eso el resguardo dejaba de aplicar sobre el resto — la planilla revertía
+    // aprobaciones y proveedores cargados desde el sistema, sin ruido alguno.
+    const existentes = await traerTodo<{ nro_ri: number; editado_en_app: boolean }>(
+      (desde, hasta) =>
+        admin
+          .from("compras_requerimientos")
+          .select("nro_ri, editado_en_app")
+          .range(desde, hasta)
     );
+    const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
 
     const aEscribir: Record<string, unknown>[] = [];
     let omitidas = 0;
