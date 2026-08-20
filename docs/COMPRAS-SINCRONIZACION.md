@@ -71,7 +71,23 @@ sincronización no corra a dejar un endpoint abierto.
 
 Instalar `docs/compras-apps-script.gs` en la planilla siguiendo las
 instrucciones del propio archivo. Es opcional: sin él la sincronización sigue
-funcionando por cron, con hasta 2 horas de demora.
+funcionando por cron, con hasta un día de demora.
+
+Hacen falta **dos activadores**, no uno:
+
+| Función | Evento |
+|---|---|
+| `alEnviarFormulario` | De la hoja de cálculo → Al enviarse el formulario |
+| `alEditar` | De la hoja de cálculo → Al editar |
+
+"Al editar" **no se dispara** cuando entra una respuesta del formulario de
+Google, y el formulario es por donde llegan los RI nuevos. Con un solo
+activador de edición, un pedido recién cargado no se avisa hasta el cron del día
+siguiente — justo el caso que la sincronización tiene que cubrir.
+
+Los dos tienen que ser activadores **instalables**, creados desde el menú de
+Activadores. Un activador simple (una función llamada `onEdit`) no puede hacer
+llamadas externas y fallaría en silencio.
 
 ### 4. Verificación
 
