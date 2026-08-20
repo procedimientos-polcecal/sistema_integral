@@ -20,6 +20,15 @@ const CAMPOS_ALTA = [
 
 const CAMPOS_APROBACION = ["estado_aprobacion", "motivo_rechazo"] as const;
 
+/**
+ * Los define quien aprueba, no quien pide.
+ *
+ * Es la regla real del circuito: el área dice qué necesita, y gerencia decide
+ * qué tan urgente es y quién lo paga. Dejárselo al solicitante es lo que llevó
+ * a que el 68% del histórico esté marcado URGENTE.
+ */
+const CAMPOS_DEL_APROBADOR = ["prioridad", "empresa_id"] as const;
+
 const CAMPOS_COMPRA = [
   "estado_compra", "comparativa_url", "proveedor_id", "costo_iva",
   "costo_envio", "oc_numero", "fecha_pedido", "fecha_recepcion",
@@ -57,7 +66,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const cambios: Record<string, unknown> = {};
 
   // ── Campos del alta ────────────────────────────────────────
-  if (CAMPOS_ALTA.some((c) => c in body)) {
+  // Prioridad y empresa van aparte: quien aprueba puede fijarlas aunque no
+  // tenga permiso para editar el resto del pedido.
+  const camposAlta = CAMPOS_ALTA.filter(
+    (c) => c in body && !CAMPOS_DEL_APROBADOR.includes(c as never)
+  );
+
+  if (camposAlta.length > 0) {
     const esPropioEditable =
       actual.solicitante_id === user.id &&
       ["PENDIENTE", "EN_REVISION"].includes(actual.estado_aprobacion);
@@ -68,7 +83,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         { status: 403 }
       );
     }
-    for (const campo of CAMPOS_ALTA) if (campo in body) cambios[campo] = body[campo];
+    for (const campo of camposAlta) cambios[campo] = body[campo];
+  }
+
+  // ── Prioridad y quién paga ─────────────────────────────────
+  if (CAMPOS_DEL_APROBADOR.some((c) => c in body)) {
+    const esPropioPendiente =
+      actual.solicitante_id === user.id &&
+      ["PENDIENTE", "EN_REVISION"].includes(actual.estado_aprobacion);
+
+    // El solicitante las sugiere mientras el pedido esté pendiente; la palabra
+    // final es de quien aprueba.
+    if (!permisos.puedeAprobar && !permisos.puedeEditar && !esPropioPendiente) {
+      return NextResponse.json(
+        { error: "La prioridad y quién paga las define quien aprueba" },
+        { status: 403 }
+      );
+    }
+    for (const campo of CAMPOS_DEL_APROBADOR) if (campo in body) cambios[campo] = body[campo];
 
     if ("prioridad" in cambios && !PRIORIDADES.includes(cambios.prioridad as never)) {
       return NextResponse.json({ error: "Prioridad inválida" }, { status: 400 });

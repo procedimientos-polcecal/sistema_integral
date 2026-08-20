@@ -4,20 +4,21 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ESTADOS_COMPRA, COMPRA_LABELS, APROBACION_LABELS, PRIORIDAD_LABELS,
+  ESTADOS_COMPRA, COMPRA_LABELS, APROBACION_LABELS, PRIORIDAD_LABELS, PRIORIDADES,
   moneda, fecha, fechaHora, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type {
-  RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra,
+  RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
 
 export default function RequerimientoDetalle({
-  requerimiento: r, historial, cotizaciones, proveedores, puedeEditar, puedeAprobar,
+  requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   historial: HistorialItem[];
   cotizaciones: Cotizacion[];
   proveedores: { id: string; nombre: string }[];
+  empresas: { id: string; nombre: string }[];
   puedeEditar: boolean;
   puedeAprobar: boolean;
 }) {
@@ -35,6 +36,10 @@ export default function RequerimientoDetalle({
 
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
+
+  // Los define quien aprueba: el área pide, gerencia decide urgencia y quién paga.
+  const [prioridad, setPrioridad] = useState<Prioridad>(r.prioridad);
+  const [empresaId, setEmpresaId] = useState(r.empresa_id ?? "");
 
   async function guardar(cambios: Record<string, unknown>) {
     setGuardando(true);
@@ -265,10 +270,55 @@ export default function RequerimientoDetalle({
                 {r.motivo_rechazo && <div className="pt-1 text-red-600">Motivo: {r.motivo_rechazo}</div>}
               </div>
             ) : puedeAprobar ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm text-slate-500">Este requerimiento espera tu decisión.</p>
+
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">
+                    Confirmá la urgencia y quién paga: lo que cargó el área es una
+                    sugerencia.
+                  </p>
+
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Prioridad
+                    </span>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      value={prioridad}
+                      onChange={(e) => setPrioridad(e.target.value as Prioridad)}
+                    >
+                      {PRIORIDADES.map((p) => (
+                        <option key={p} value={p}>{PRIORIDAD_LABELS[p].label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Quién paga
+                    </span>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      value={empresaId}
+                      onChange={(e) => setEmpresaId(e.target.value)}
+                    >
+                      <option value="">Ambas</option>
+                      {empresas.map((e2) => (
+                        <option key={e2.id} value={e2.id}>{e2.nombre}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
                 <button
-                  onClick={() => guardar({ estado_aprobacion: "APROBADA" })}
+                  onClick={() =>
+                    guardar({
+                      estado_aprobacion: "APROBADA",
+                      prioridad,
+                      empresa_id: empresaId || null,
+                    })
+                  }
                   disabled={guardando}
                   className="w-full rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >

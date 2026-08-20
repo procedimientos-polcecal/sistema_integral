@@ -11,7 +11,13 @@ decisiones de personas distintas:
 
 1. **Alta** — un área carga un Requerimiento Interno (RI): qué necesita, cuánto,
    dónde y para cuándo. Hoja `Requerimientos internos`.
-2. **Aprobación** — gerencia aprueba o deniega. Columna `Estado` del master.
+2. **Aprobación** — gerencia aprueba o deniega, y de paso **define la prioridad
+   y quién paga**. Columnas `PRIORIDAD`, `Empresa` y `Estado` del master.
+
+   Esos dos campos no los fija quien pide: el área sugiere, gerencia decide. Es
+   la regla real del circuito, y es lo que explica que el 68% del histórico esté
+   marcado `URGENTE` — cuando la urgencia la declara el que pide, deja de
+   distinguir.
 3. **Compra** — Compras arma la comparativa, elige proveedor, carga el costo y
    sigue el pedido hasta que llega. Hojas `RI <ÁREA>`.
 

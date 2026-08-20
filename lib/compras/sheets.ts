@@ -477,8 +477,21 @@ async function asegurarUbicaciones(admin: Admin, valores: unknown[]) {
 /** Columnas de la hoja de área que gestiona Compras. */
 const COLUMNAS_COMPRA = ["comparativa", "proveedor", "estado", "costo_iva", "costo_envio"] as const;
 
-/** Columna del master donde vive el estado de aprobación. */
+/** Columnas del master que escribe la app al aprobar. */
 const COLUMNA_APROBACION = "estado";
+const COLUMNAS_DEL_APROBADOR = ["prioridad", "empresa"] as const;
+
+/**
+ * La base guarda las empresas en mayúsculas (POLCECAL) y el desplegable de la
+ * planilla las espera capitalizadas (Polcecal). Sin null = "Ambas".
+ */
+export function empresaParaPlanilla(nombre: string | null | undefined): string {
+  if (!nombre) return "Ambas";
+  const n = nombre.trim().toUpperCase();
+  if (n === "POLCECAL") return "Polcecal";
+  if (n === "POLYSAN") return "Polysan";
+  return nombre;
+}
 
 const ETIQUETA_ESTADO_COMPRA: Record<string, string> = {
   SIN_INICIAR: "",
@@ -656,7 +669,7 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
   const admin = createAdminClient();
   const { data: r } = await admin
     .from("compras_requerimientos")
-    .select("*, proveedores(nombre)")
+    .select("*, proveedores(nombre), empresas(nombre)")
     .eq("id", requerimientoId)
     .single();
 
@@ -691,6 +704,7 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
       if (fila) {
         const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
         const idx = indexarColumnas(encabezado[0] ?? []);
+
         if (idx[COLUMNA_APROBACION] >= 0) {
           const fallo = await escribirCelda(
             token,
@@ -699,6 +713,24 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
           );
           if (fallo) bloqueadas.push(`aprobación (${fallo})`);
           else escritas.push("aprobación");
+        }
+
+        // Prioridad y quién paga se deciden al aprobar, así que se escriben
+        // junto con la aprobación y no antes.
+        const valoresAprobador: Record<string, string> = {
+          prioridad: (r.prioridad as string) ?? "",
+          empresa: empresaParaPlanilla((r.empresas as { nombre: string } | null)?.nombre),
+        };
+
+        for (const clave of COLUMNAS_DEL_APROBADOR) {
+          if (idx[clave] < 0) continue;
+          const fallo = await escribirCelda(
+            token,
+            `${HOJA_MASTER}!${letraColumna(idx[clave])}${fila}`,
+            valoresAprobador[clave]
+          );
+          if (fallo) bloqueadas.push(`${clave} (${fallo})`);
+          else escritas.push(clave);
         }
       }
     }

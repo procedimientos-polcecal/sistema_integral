@@ -33,6 +33,8 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
+  const { data: empresas } = await supabase.from("empresas").select("id, nombre").order("nombre");
+
   const permisos = await permisosComprasDe(supabase, user.id);
 
   return (
@@ -41,6 +43,7 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
       historial={(historial ?? []) as HistorialItem[]}
       cotizaciones={(cotizaciones ?? []) as Cotizacion[]}
       proveedores={proveedores ?? []}
+      empresas={empresas ?? []}
       puedeEditar={permisos.puedeEditar}
       puedeAprobar={permisos.puedeAprobar}
     />

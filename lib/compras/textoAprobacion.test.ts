@@ -41,3 +41,23 @@ describe("textoAprobacion", () => {
     expect(textoAprobacion("APROBADA", "JUAN", conTercero).valor).toBe("APROBADA (JUAN)");
   });
 });
+
+import { empresaParaPlanilla } from "./sheets";
+
+describe("empresaParaPlanilla", () => {
+  // La base las guarda en mayúsculas; el desplegable de la planilla las espera
+  // capitalizadas. Escribir "POLCECAL" dejaría la celda fuera de la validación.
+  it("capitaliza como espera la planilla", () => {
+    expect(empresaParaPlanilla("POLCECAL")).toBe("Polcecal");
+    expect(empresaParaPlanilla("POLYSAN")).toBe("Polysan");
+  });
+
+  it("sin empresa es «Ambas», que es una opción real del desplegable", () => {
+    expect(empresaParaPlanilla(null)).toBe("Ambas");
+    expect(empresaParaPlanilla(undefined)).toBe("Ambas");
+  });
+
+  it("tolera que ya venga capitalizada", () => {
+    expect(empresaParaPlanilla("Polcecal")).toBe("Polcecal");
+  });
+});
