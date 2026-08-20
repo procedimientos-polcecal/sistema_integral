@@ -27,8 +27,26 @@ decisiones de personas distintas:
    Para que `Ambas` siga siendo expresable, quién paga tiene tres estados:
    `empresa_id` apunta a una empresa, o `paga_ambas` marca las dos, o ninguno de
    los dos y está sin definir.
-3. **Compra** — Compras arma la comparativa, elige proveedor, carga el costo y
-   sigue el pedido hasta que llega. Hojas `RI <ÁREA>`.
+3. **Compra** — el circuito propio de Compras, en la hoja `RI <ÁREA>`:
+
+   | Estado | Quién actúa | Qué deja cargado |
+   |---|---|---|
+   | Sin iniciar | Compras | — |
+   | En comparativa | Compras | junta los presupuestos |
+   | Para comprar | **NICO o MAXI** | la comparativa y a quién le toca aprobarla |
+   | Compra aprobada | Compras | quién la aprobó y cuándo |
+   | Pedido | — | fecha, proveedor, costo + IVA y envío |
+
+   En la planilla el estado dice a quién le toca: `PARA COMPRAR (NICO)`. Ese
+   nombre no es decorativo — **sólo esa persona puede aprobar esa compra**. Si
+   hay que cambiarla, Compras reasigna.
+
+   Cada paso deja cargado lo suyo y la app no deja avanzar sin eso: llegar a
+   `PEDIDO` sin proveedor ni costo es llegar a un pedido que después nadie puede
+   seguir.
+
+   `RECIBIDO` existe en la app pero **no en el desplegable de la planilla**, así
+   que no se escribe. Se define al desarrollar el seguimiento de compra.
 
 Por eso cada requerimiento lleva **dos estados independientes**:
 
@@ -111,6 +129,11 @@ Aplicar las migraciones en orden:
 4. `018_compras_rls.sql` — políticas.
 5. `019_compras_ubicaciones.sql` — catálogo de "dónde se necesita".
 6. `020_compras_aprobar_explicito.sql` — aprobar exige estar en la lista.
+7. `021_compras_alias_planilla.sql` — alias de cada aprobador en la planilla.
+8. `022_compras_sheets_pendiente.sql` — qué quedó sin escribir en la planilla.
+9. `023_compras_sin_valores_por_defecto.sql` — prioridad y quién paga sin default.
+10. `024_compras_estado_aprobado.sql` — el estado `APROBADO` (va sola).
+11. `025_compras_circuito_compra.sql` — asignación y aprobación de la compra.
 
 **Hay que correrlas de a una**, no pegadas en una sola ejecución. La 015 tiene
 una sola sentencia a propósito: Postgres no deja usar un valor de enum nuevo

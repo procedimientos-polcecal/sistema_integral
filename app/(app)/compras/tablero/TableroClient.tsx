@@ -4,21 +4,30 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  COLUMNAS_TABLERO, SIGUIENTE_ESTADO, COMPRA_LABELS,
+  COLUMNAS_TABLERO, SIGUIENTE_ESTADO, ACCION_SIGUIENTE, COMPRA_LABELS,
   etiquetaPrioridad, pesoPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
+
+/** Pasos que no se pueden dar sin cargar antes lo que producen. */
+const PIDE_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
+type Persona = { id: string; nombre: string; apellido: string };
+
 export default function TableroClient({
-  requerimientos,
-  canEdit,
+  requerimientos, aprobadores, proveedores, usuarioId, canEdit,
 }: {
   requerimientos: RequerimientoConRelaciones[];
+  aprobadores: Persona[];
+  proveedores: { id: string; nombre: string }[];
+  usuarioId: string;
   canEdit: boolean;
 }) {
   const router = useRouter();
   const [procesando, setProcesando] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Cada paso deja algo cargado; el modal junta esos datos antes de avanzar.
+  const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
   const [area, setArea] = useState("");
   const [empresa, setEmpresa] = useState("");
 
@@ -47,31 +56,36 @@ export default function TableroClient({
     [filtrados]
   );
 
-  async function avanzar(r: RequerimientoConRelaciones) {
+  async function avanzar(r: RequerimientoConRelaciones, extra?: Record<string, unknown>) {
     const destino = SIGUIENTE_ESTADO[r.estado_compra];
-    if (!destino) return;
-
-    // Emitir un pedido sin proveedor definido no tiene sentido.
-    if (destino === "PEDIDO" && !r.proveedor_id) {
-      setError(`El RI ${r.nro_ri} necesita un proveedor antes de pasar a Pedido.`);
-      return;
-    }
+    if (!destino) return false;
 
     setProcesando(r.id);
     setError("");
     const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado_compra: destino }),
+      body: JSON.stringify({ estado_compra: destino, ...extra }),
     });
     setProcesando(null);
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "No se pudo actualizar el estado.");
-      return;
+      return false;
     }
     router.refresh();
+    return true;
+  }
+
+  /**
+   * Aprobar la compra es de quien la tiene asignada, no de Compras: en la
+   * planilla el estado dice a quién le toca, y que apruebe otro dejaría los dos
+   * lados diciendo cosas distintas.
+   */
+  function puedeAvanzar(r: RequerimientoConRelaciones): boolean {
+    if (r.estado_compra === "PARA_COMPRAR") return r.compra_asignada_a === usuarioId;
+    return canEdit;
   }
 
   return (
@@ -178,14 +192,24 @@ export default function TableroClient({
                           </div>
                         </div>
 
-                        {canEdit && siguiente && (
+                        {siguiente && puedeAvanzar(r) && (
                           <button
-                            onClick={() => avanzar(r)}
+                            onClick={() =>
+                              PIDE_DATOS.includes(r.estado_compra) ? setAvanzando(r) : avanzar(r)
+                            }
                             disabled={procesando === r.id}
                             className="mt-2.5 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                           >
-                            {procesando === r.id ? "Actualizando…" : `Pasar a ${COMPRA_LABELS[siguiente].label} →`}
+                            {procesando === r.id
+                              ? "Actualizando…"
+                              : `${ACCION_SIGUIENTE[r.estado_compra] ?? "Avanzar"} →`}
                           </button>
+                        )}
+
+                        {r.estado_compra === "PARA_COMPRAR" && r.compra_asignada_a !== usuarioId && (
+                          <p className="mt-2 text-[11px] text-slate-400">
+                            Esperando el visto bueno de quien la tiene asignada.
+                          </p>
                         )}
                       </article>
                     );
@@ -195,6 +219,181 @@ export default function TableroClient({
             </section>
           );
         })}
+      </div>
+
+      {avanzando && (
+        <ModalAvanzar
+          requerimiento={avanzando}
+          aprobadores={aprobadores}
+          proveedores={proveedores}
+          onClose={() => setAvanzando(null)}
+          onConfirmar={(extra) => avanzar(avanzando, extra)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Junta lo que hace falta antes de avanzar.
+ *
+ * Cada paso del circuito deja algo cargado: la comparativa y a quien le toca
+ * aprobarla, o el proveedor y el costo del pedido. Pedirlo aca evita llegar a
+ * PEDIDO sin con que seguir la compra despues.
+ */
+function ModalAvanzar({
+  requerimiento: r, aprobadores, proveedores, onClose, onConfirmar,
+}: {
+  requerimiento: RequerimientoConRelaciones;
+  aprobadores: Persona[];
+  proveedores: { id: string; nombre: string }[];
+  onClose: () => void;
+  onConfirmar: (extra: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const destino = SIGUIENTE_ESTADO[r.estado_compra]!;
+  const esComparativa = destino === "PARA_COMPRAR";
+
+  const [comparativa, setComparativa] = useState(r.comparativa_url ?? "");
+  const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
+  const [proveedorId, setProveedorId] = useState(r.proveedor_id ?? "");
+  const [costoIva, setCostoIva] = useState(r.costo_iva !== null ? String(r.costo_iva) : "");
+  const [costoEnvio, setCostoEnvio] = useState(r.costo_envio !== null ? String(r.costo_envio) : "");
+  const [guardando, setGuardando] = useState(false);
+
+  const listo = esComparativa
+    ? Boolean(comparativa.trim() && asignadoA)
+    : Boolean(proveedorId && costoIva);
+
+  async function confirmar() {
+    setGuardando(true);
+    const ok = await onConfirmar(
+      esComparativa
+        ? { comparativa_url: comparativa.trim(), compra_asignada_a: asignadoA }
+        : {
+            proveedor_id: proveedorId,
+            costo_iva: Number(costoIva),
+            costo_envio: costoEnvio === "" ? null : Number(costoEnvio),
+          }
+    );
+    setGuardando(false);
+    if (ok) onClose();
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
+    >
+      <div onClick={(e) => e.stopPropagation()} className="mt-20 w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            {esComparativa ? "Comparativa lista" : "Registrar el pedido"}
+          </h2>
+          <p className="text-sm text-slate-500">RI {r.nro_ri} · {r.descripcion}</p>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          {esComparativa ? (
+            <>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Enlace a la comparativa
+                </span>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={comparativa}
+                  onChange={(e) => setComparativa(e.target.value)}
+                  placeholder="https://…"
+                  autoFocus
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  A quien le toca aprobarla
+                </span>
+                <select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={asignadoA}
+                  onChange={(e) => setAsignadoA(e.target.value)}
+                >
+                  <option value="">Elegir…</option>
+                  {aprobadores.map((a) => (
+                    <option key={a.id} value={a.id}>{a.nombre} {a.apellido}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  Es lo que va entre parentesis en el estado de la planilla, y solo esa
+                  persona va a poder aprobarla.
+                </p>
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Proveedor elegido
+                </span>
+                <select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={proveedorId}
+                  onChange={(e) => setProveedorId(e.target.value)}
+                  autoFocus
+                >
+                  <option value="">Elegir…</option>
+                  {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Costo + IVA
+                  </span>
+                  <input
+                    type="number" step="0.01" min="0"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={costoIva}
+                    onChange={(e) => setCostoIva(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Envio
+                  </span>
+                  <input
+                    type="number" step="0.01" min="0"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={costoEnvio}
+                    onChange={(e) => setCostoEnvio(e.target.value)}
+                    placeholder="Si tiene"
+                  />
+                </label>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                La fecha de pedido se registra sola con la de hoy.
+              </p>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              disabled={guardando}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirmar}
+              disabled={guardando || !listo}
+              className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : `Pasar a ${COMPRA_LABELS[destino].label}`}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

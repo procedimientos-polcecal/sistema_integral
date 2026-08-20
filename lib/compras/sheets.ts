@@ -226,11 +226,12 @@ export function estadoCompraDe(valor: unknown) {
     return { estado: "EN_COMPARATIVA", aprobador: null };
   }
   if (base.startsWith("PARA COMPRAR")) {
-    // "(POR APROBAR)" no nombra a una persona: dice que falta la aprobación.
+    // El paréntesis dice a quién le toca aprobar la compra. "(POR APROBAR)" no
+    // nombra a nadie: sólo marca que falta.
     const esPersona = quien && !/POR APROBAR/i.test(quien);
     return { estado: "PARA_COMPRAR", aprobador: esPersona ? quien : null };
   }
-  if (base.startsWith("APROBAD")) return { estado: "PARA_COMPRAR", aprobador: quien };
+  if (base.startsWith("APROBAD")) return { estado: "APROBADO", aprobador: quien };
   return { estado: "SIN_INICIAR", aprobador: null };
 }
 
@@ -516,14 +517,32 @@ export function empresaParaPlanilla(
   return nombre;
 }
 
-const ETIQUETA_ESTADO_COMPRA: Record<string, string> = {
+/**
+ * Cómo se llama cada estado en el desplegable de la planilla.
+ *
+ * PARA_COMPRAR se arma aparte: lleva entre paréntesis a quién le toca aprobar.
+ * RECIBIDO no está en el desplegable —el seguimiento de la recepción todavía no
+ * se definió— así que no se escribe.
+ */
+const ETIQUETA_ESTADO_COMPRA: Record<string, string | null> = {
   SIN_INICIAR: "",
-  PARA_COMPRAR: "PARA COMPRAR",
   EN_COMPARATIVA: "EN PROCESO (COMPARATIVA)",
+  APROBADO: "APROBADO",
   PEDIDO: "PEDIDO",
-  RECIBIDO: "RECIBIDO",
   DENEGADO: "DENEGADO",
+  RECIBIDO: null,
 };
+
+/** "PARA COMPRAR (NICO)" según a quién se le asignó. */
+export function textoParaComprar(alias: string | null): { valor: string | null; motivo?: string } {
+  if (!alias) {
+    return {
+      valor: null,
+      motivo: "falta asignar a quién le toca aprobar la compra",
+    };
+  }
+  return { valor: `PARA COMPRAR (${alias.trim().toUpperCase()})` };
+}
 
 const letraColumna = (i: number) => String.fromCharCode(65 + i);
 
@@ -767,20 +786,34 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
     const encabezado = await leerPestana(`${r.hoja_origen}!A1:R1`);
     if (encabezado.length > 0) {
       const idx = indexarColumnas(encabezado[0]);
-      const valores: Record<string, string> = {
+      // El estado se resuelve aparte porque PARA_COMPRAR necesita el alias de
+      // quien tiene que aprobar, y RECIBIDO directamente no se escribe.
+      let estadoTexto: string | null = null;
+      if (r.estado_compra === "PARA_COMPRAR") {
+        const alias = await aliasDelAprobador(admin, r.compra_asignada_a as string | null, null);
+        const { valor, motivo } = textoParaComprar(alias);
+        estadoTexto = valor;
+        if (!valor && motivo) bloqueadas.push(`estado (${motivo})`);
+      } else {
+        estadoTexto = ETIQUETA_ESTADO_COMPRA[r.estado_compra as string] ?? "";
+      }
+
+      const valores: Record<string, string | null> = {
         comparativa: (r.comparativa_url as string) ?? "",
         proveedor: (r.proveedores as { nombre: string } | null)?.nombre ?? "",
-        estado: ETIQUETA_ESTADO_COMPRA[r.estado_compra as string] ?? "",
+        estado: estadoTexto,
         costo_iva: r.costo_iva !== null ? String(r.costo_iva) : "",
         costo_envio: r.costo_envio !== null ? String(r.costo_envio) : "",
       };
 
       for (const clave of COLUMNAS_COMPRA) {
         if (idx[clave] < 0) continue;
+        const valor = valores[clave];
+        if (valor === null) continue;   // no corresponde escribir esta celda
         const motivo = await escribirCelda(
           token,
           `${r.hoja_origen}!${letraColumna(idx[clave])}${r.sheets_fila}`,
-          valores[clave]
+          valor
         );
         if (motivo) bloqueadas.push(`${clave} (${motivo})`);
         else escritas.push(clave);

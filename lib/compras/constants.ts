@@ -5,7 +5,7 @@ export const ESTADOS_APROBACION: EstadoAprobacion[] = [
 ];
 
 export const ESTADOS_COMPRA: EstadoCompra[] = [
-  "SIN_INICIAR", "PARA_COMPRAR", "EN_COMPARATIVA", "PEDIDO", "RECIBIDO", "DENEGADO",
+  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO", "RECIBIDO", "DENEGADO",
 ];
 
 export const PRIORIDADES: Prioridad[] = [
@@ -20,12 +20,13 @@ export const APROBACION_LABELS: Record<EstadoAprobacion, { label: string; color:
 };
 
 export const COMPRA_LABELS: Record<EstadoCompra, { label: string; color: string }> = {
-  SIN_INICIAR:    { label: "Sin iniciar",    color: "bg-gray-100 text-gray-600" },
-  PARA_COMPRAR:   { label: "Para comprar",   color: "bg-yellow-100 text-yellow-800" },
-  EN_COMPARATIVA: { label: "En comparativa", color: "bg-blue-100 text-blue-800" },
-  PEDIDO:         { label: "Pedido",         color: "bg-indigo-100 text-indigo-800" },
-  RECIBIDO:       { label: "Recibido",       color: "bg-green-100 text-green-800" },
-  DENEGADO:       { label: "Denegado",       color: "bg-red-100 text-red-800" },
+  SIN_INICIAR:    { label: "Sin iniciar",     color: "bg-gray-100 text-gray-600" },
+  EN_COMPARATIVA: { label: "En comparativa",  color: "bg-blue-100 text-blue-800" },
+  PARA_COMPRAR:   { label: "Para comprar",    color: "bg-yellow-100 text-yellow-800" },
+  APROBADO:       { label: "Compra aprobada", color: "bg-teal-100 text-teal-800" },
+  PEDIDO:         { label: "Pedido",          color: "bg-indigo-100 text-indigo-800" },
+  RECIBIDO:       { label: "Recibido",        color: "bg-green-100 text-green-800" },
+  DENEGADO:       { label: "Denegado",        color: "bg-red-100 text-red-800" },
 };
 
 export const PRIORIDAD_LABELS: Record<Prioridad, { label: string; color: string }> = {
@@ -53,13 +54,34 @@ export function pesoPrioridad(p: Prioridad | null | undefined): number {
 }
 
 /** Columnas del tablero, en el orden en que avanza el trabajo. */
-export const COLUMNAS_TABLERO: EstadoCompra[] = ["PARA_COMPRAR", "EN_COMPARATIVA", "PEDIDO"];
+export const COLUMNAS_TABLERO: EstadoCompra[] = [
+  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO",
+];
 
-/** A qué estado pasa cada columna con el botón de avanzar. */
+/** A qué estado pasa cada columna al avanzar, y con qué texto se ofrece. */
 export const SIGUIENTE_ESTADO: Partial<Record<EstadoCompra, EstadoCompra>> = {
-  PARA_COMPRAR: "EN_COMPARATIVA",
-  EN_COMPARATIVA: "PEDIDO",
-  PEDIDO: "RECIBIDO",
+  SIN_INICIAR: "EN_COMPARATIVA",
+  EN_COMPARATIVA: "PARA_COMPRAR",
+  PARA_COMPRAR: "APROBADO",
+  APROBADO: "PEDIDO",
+};
+
+export const ACCION_SIGUIENTE: Partial<Record<EstadoCompra, string>> = {
+  SIN_INICIAR: "Pasar a comparativa",
+  EN_COMPARATIVA: "Comparativa lista",
+  PARA_COMPRAR: "Aprobar la compra",
+  APROBADO: "Registrar el pedido",
+};
+
+/**
+ * Qué hace falta tener cargado para poder pasar a cada estado.
+ *
+ * No es validación por validación: son los datos que el paso produce. Pasar a
+ * PEDIDO sin proveedor ni costo deja un pedido que después nadie puede seguir.
+ */
+export const REQUISITOS: Partial<Record<EstadoCompra, string[]>> = {
+  PARA_COMPRAR: ["comparativa_url", "compra_asignada_a"],
+  PEDIDO: ["proveedor_id", "costo_iva"],
 };
 
 // ── Formato ──────────────────────────────────────────────────

@@ -1,9 +1,11 @@
 export type EstadoAprobacion = "PENDIENTE" | "EN_REVISION" | "APROBADA" | "DENEGADA";
 
+/** En el orden en que avanza el trabajo. */
 export type EstadoCompra =
   | "SIN_INICIAR"
-  | "PARA_COMPRAR"
   | "EN_COMPARATIVA"
+  | "PARA_COMPRAR"
+  | "APROBADO"
   | "PEDIDO"
   | "RECIBIDO"
   | "DENEGADO";
@@ -71,6 +73,10 @@ export interface Requerimiento {
   motivo_rechazo: string | null;
 
   estado_compra: EstadoCompra;
+  /** A quién le toca aprobar la compra: el «(NICO)» del estado en la planilla. */
+  compra_asignada_a: string | null;
+  compra_aprobada_por: string | null;
+  compra_aprobada_en: string | null;
   comparativa_url: string | null;
   proveedor_id: string | null;
   costo_iva: number | null;

@@ -32,7 +32,20 @@ const CAMPOS_DEL_APROBADOR = ["prioridad", "empresa_id", "paga_ambas"] as const;
 const CAMPOS_COMPRA = [
   "estado_compra", "comparativa_url", "proveedor_id", "costo_iva",
   "costo_envio", "oc_numero", "fecha_pedido", "fecha_recepcion",
+  "compra_asignada_a",
 ] as const;
+
+/** Qué hace falta tener cargado antes de pasar a cada estado. */
+const FALTA: Record<string, { campo: string; queda: string }[]> = {
+  PARA_COMPRAR: [
+    { campo: "comparativa_url", queda: "la comparativa" },
+    { campo: "compra_asignada_a", queda: "a quién le toca aprobarla" },
+  ],
+  PEDIDO: [
+    { campo: "proveedor_id", queda: "el proveedor elegido" },
+    { campo: "costo_iva", queda: "el costo + IVA" },
+  ],
+};
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -146,11 +159,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     for (const campo of CAMPOS_COMPRA) if (campo in body) cambios[campo] = body[campo];
 
+    const nuevoEstado = cambios.estado_compra as string | undefined;
+
+    // Aprobar la compra es de quien la tiene asignada, no de Compras. En la
+    // planilla el estado dice a quién le toca; que apruebe otro dejaría los dos
+    // lados diciendo cosas distintas.
+    if (nuevoEstado === "APROBADO") {
+      if (actual.compra_asignada_a !== user.id) {
+        return NextResponse.json(
+          { error: "Esta compra la tiene que aprobar la persona a la que se le asignó" },
+          { status: 403 }
+        );
+      }
+      cambios.compra_aprobada_por = user.id;
+      cambios.compra_aprobada_en = new Date().toISOString();
+    }
+
+    // Cada paso deja cargado lo suyo. Sin esto se llega a PEDIDO sin proveedor
+    // ni costo, y después no hay con qué seguir la compra.
+    for (const { campo, queda } of FALTA[nuevoEstado ?? ""] ?? []) {
+      const valor = campo in cambios ? cambios[campo] : actual[campo];
+      if (valor === null || valor === undefined || valor === "") {
+        return NextResponse.json(
+          { error: `Antes de avanzar hay que cargar ${queda}.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Fechas automáticas al avanzar de etapa, si no vinieron explícitas.
-    if (cambios.estado_compra === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {
+    if (nuevoEstado === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {
       cambios.fecha_pedido = new Date().toISOString().slice(0, 10);
     }
-    if (cambios.estado_compra === "RECIBIDO" && !actual.fecha_recepcion && !("fecha_recepcion" in cambios)) {
+    if (nuevoEstado === "RECIBIDO" && !actual.fecha_recepcion && !("fecha_recepcion" in cambios)) {
       cambios.fecha_recepcion = new Date().toISOString().slice(0, 10);
     }
   }
