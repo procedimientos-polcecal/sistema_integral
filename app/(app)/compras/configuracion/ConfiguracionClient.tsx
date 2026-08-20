@@ -6,9 +6,10 @@ import { fechaHora } from "@/lib/compras/constants";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
-  sincronizaciones, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
+  sincronizaciones, aprobadores, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
 }: {
   sincronizaciones: Sincronizacion[];
+  aprobadores: { id: string; nombre: string; apellido: string; email: string }[];
   /** RI creados en la app en los últimos 30 días. */
   nuevosApp: number;
   /** RI que en esos 30 días entraron por el formulario de Google. */
@@ -115,6 +116,41 @@ export default function ConfiguracionClient({
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Quiénes pueden aprobar
+        </h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Esta lista tiene que coincidir con los editores de la protección
+          «APROBACIÓN DE GERENCIA» de la planilla. Son los dos lados del mismo
+          control: si acá hay alguien que allá no está, la app aprobaría algo que
+          la planilla no dejaría aprobar.
+        </p>
+
+        {aprobadores.length === 0 ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Nadie puede aprobar todavía. Asigná el módulo Compras con nivel
+            <strong> admin</strong> desde Administración → Usuarios a quienes aprueban
+            en la planilla.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {aprobadores.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-slate-900">{a.nombre} {a.apellido}</span>
+                <span className="font-mono text-xs text-slate-500">{a.email}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="mt-3 text-xs text-slate-500">
+          Ser administrador del sistema <strong>no</strong> alcanza para aprobar: hace falta
+          estar en esta lista. Es a propósito, para que el permiso sea el mismo en los
+          dos lados y no dependa de quién administra el sistema.
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { permisosComprasDe } from "@/lib/compras/auth";
+import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
 import ConfiguracionClient from "./ConfiguracionClient";
 import type { Sincronizacion } from "@/lib/compras/types";
 
@@ -43,9 +43,12 @@ export default async function ConfiguracionPage() {
     cuenta((q) => q),
   ]);
 
+  const aprobadores = await aprobadoresDeCompras(supabase);
+
   return (
     <ConfiguracionClient
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
+      aprobadores={aprobadores}
       nuevosApp={nuevosApp ?? 0}
       nuevosPlanilla={nuevosPlanilla ?? 0}
       abiertos={abiertos ?? 0}

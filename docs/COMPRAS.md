@@ -39,6 +39,17 @@ Los tres niveles del núcleo (`usuario_modulos.nivel`) se mapean así:
 Aprobar es más restrictivo que comprar a propósito: es una decisión sobre el
 gasto, no una tarea operativa.
 
+**Y es el único permiso donde ser administrador del sistema no alcanza.** La
+planilla restringe la columna de aprobación del master a una lista de cuentas
+(protección "APROBACIÓN DE GERENCIA"), y la app espeja esa misma lista: hace
+falta el módulo Compras con nivel `admin`, sin atajos. Si un admin pudiera
+aprobar sin estar en la lista, los dos lados dirían cosas distintas sobre quién
+aprueba, justo en el control que más importa.
+
+La lista vigente se ve en `/compras/configuracion`, para compararla con la de la
+planilla. Las dos se mantienen a mano: no hay forma de leer los editores de una
+protección de Google desde afuera de ella.
+
 **El alta es la excepción**: la puede hacer cualquier usuario activo del
 sistema, tenga o no el módulo, desde `/mis-pedidos`. Son nueve áreas las que
 piden materiales y exigirles un permiso convertiría a Compras en un cuello de
@@ -84,6 +95,7 @@ Aplicar las migraciones en orden:
 3. `017_compras_schema.sql` — tablas del módulo.
 4. `018_compras_rls.sql` — políticas.
 5. `019_compras_ubicaciones.sql` — catálogo de "dónde se necesita".
+6. `020_compras_aprobar_explicito.sql` — aprobar exige estar en la lista.
 
 **Hay que correrlas de a una**, no pegadas en una sola ejecución. La 015 tiene
 una sola sentencia a propósito: Postgres no deja usar un valor de enum nuevo
