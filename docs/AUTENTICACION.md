@@ -82,14 +82,19 @@ guardar. Los cambios tardan unos segundos en propagarse.
 
 #### 2.3 Verificar
 
-El endpoint de configuración es público (necesita la clave anónima) y dice qué
-proveedores quedaron activos:
+El endpoint de configuración dice qué proveedores quedaron activos. Necesita la
+clave anónima; este comando la toma del `.env.local` para no depender de tener
+nada exportado en la terminal:
 
 ```bash
-curl -s -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY"   "https://<TU-PROYECTO>.supabase.co/auth/v1/settings"
+curl -s -H "apikey: $(grep '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.local | cut -d= -f2-)" "https://<TU-PROYECTO>.supabase.co/auth/v1/settings"
 ```
 
 Tiene que aparecer `"google": true`. Si sigue en `false`, no se guardó.
+
+Si la respuesta es `{"message":"No API key found in request"}`, no es un problema
+de configuración: la petición salió sin la clave, casi siempre porque la variable
+estaba vacía en esa terminal.
 
 ### 2bis. Cerrar el registro abierto
 
