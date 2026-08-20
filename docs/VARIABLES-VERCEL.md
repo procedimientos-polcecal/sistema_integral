@@ -15,13 +15,25 @@ Sin estas la app no arranca o rompe al entrar.
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Dirección de la base | Supabase → **Project Settings → Data API → Project URL**. Es `https://<ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Dirección de la base | Supabase → **Project Settings → API → Project URL**. Es sólo el origen: `https://<ref>.supabase.co`, sin ninguna ruta detrás. Ver el aviso de abajo |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Login y consultas del navegador, siempre limitadas por RLS | Supabase → **Project Settings → API Keys → `anon` / `publishable`** |
 | `SUPABASE_SERVICE_ROLE_KEY` | Rutas de administración, alta de usuarios, importador y sincronización | Supabase → **Project Settings → API Keys → `service_role` / `secret`** |
 | `NEXT_PUBLIC_APP_URL` | Base de los links de los correos | La URL del deploy, sin barra final: `https://tu-app.vercel.app` |
 
+> **Cuidado con la URL.** La pantalla de *Data API* muestra el endpoint REST,
+> que termina en `/rest/v1`. Ésa **no** es la que va. La librería arma sus rutas
+> pegándole `/auth/v1/...` a esta base, así que con `/rest/v1` el login termina
+> pidiendo `/rest/v1/auth/v1/authorize` y responde
+> `{"message":"No API key found in request"}` — un mensaje que hace pensar en
+> una clave mal cargada cuando el problema es la URL. La app ahora recorta ese
+> sufijo sola y avisa por consola, pero conviene cargarla bien.
+
 Las dos primeras empiezan con `NEXT_PUBLIC_` y **viajan al navegador**: son
 públicas por diseño y no hay problema en que se vean.
+
+Los valores no deben tener espacios al principio ni al final. Al pegar una clave
+larga es fácil que quede uno adelante; en local Next lo recorta, pero en Vercel
+el valor se guarda tal cual.
 
 `SUPABASE_SERVICE_ROLE_KEY` es lo contrario: **saltea todas las políticas RLS**.
 Nunca va en una variable `NEXT_PUBLIC_`, nunca en el repositorio, y si alguna vez
