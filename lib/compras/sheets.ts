@@ -474,8 +474,11 @@ async function asegurarUbicaciones(admin: Admin, valores: unknown[]) {
 
 // ── Exportar: app → planilla ─────────────────────────────────
 
-/** Columnas que gestiona Compras y que la app escribe de vuelta. */
+/** Columnas de la hoja de área que gestiona Compras. */
 const COLUMNAS_COMPRA = ["comparativa", "proveedor", "estado", "costo_iva", "costo_envio"] as const;
+
+/** Columna del master donde vive el estado de aprobación. */
+const COLUMNA_APROBACION = "estado";
 
 const ETIQUETA_ESTADO_COMPRA: Record<string, string> = {
   SIN_INICIAR: "",
@@ -486,15 +489,66 @@ const ETIQUETA_ESTADO_COMPRA: Record<string, string> = {
   DENEGADO: "DENEGADO",
 };
 
+const ETIQUETA_ESTADO_APROBACION: Record<string, string> = {
+  PENDIENTE: "",
+  EN_REVISION: "EN REVISIÓN",
+  APROBADA: "APROBADA",
+  DENEGADA: "DENEGADA",
+};
+
 const letraColumna = (i: number) => String.fromCharCode(65 + i);
 
+export interface ResultadoExportacion {
+  escritas: string[];
+  /** Celdas que la planilla no dejó tocar, con el motivo en lenguaje llano. */
+  bloqueadas: string[];
+}
+
+/** Busca en qué fila del master está un RI. */
+async function filaEnMaster(nroRi: number): Promise<number | null> {
+  const filas = await leerPestana(`${HOJA_MASTER}!A:A`);
+  for (let i = 1; i < filas.length; i++) {
+    const n = Number(String(filas[i]?.[0] ?? "").replace(/[^0-9]/g, ""));
+    if (n === nroRi) return i + 1;
+  }
+  return null;
+}
+
+/** Escribe una celda. Devuelve null si salió bien, o el motivo si no. */
+async function escribirCelda(token: string, rango: string, valor: string): Promise<string | null> {
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
+    `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values: [[valor]] }),
+  });
+  if (res.ok) return null;
+
+  const cuerpo = await res.text();
+  // La planilla tiene rangos protegidos: la aprobación sólo la pueden tocar
+  // ciertas cuentas, y un script bloquea el Estado de cada fila al aprobarla.
+  if (cuerpo.includes("protected")) return "celda protegida en la planilla";
+  return `error ${res.status}`;
+}
+
 /**
- * Escribe en la planilla el estado de compra de un requerimiento.
- * Devuelve false sin hacer nada si el RI no vino de la planilla o si falta
- * configuración: la app tiene que seguir andando aunque Sheets no esté.
+ * Refleja en la planilla lo que se gestionó desde el sistema.
+ *
+ * Cada celda se escribe por separado y no en un solo lote: la planilla tiene
+ * 841 rangos protegidos —el Estado de cada fila ya aprobada, y la columna de
+ * aprobación del master, reservada a ciertas cuentas—. Con un batch único, una
+ * sola celda protegida hacía fallar la escritura entera y no se guardaba
+ * tampoco el proveedor ni los costos, que sí están permitidos.
+ *
+ * Lo que no se pudo escribir se devuelve para avisarlo, en vez de dar por
+ * hecho que la planilla quedó al día.
  */
-export async function exportarRequerimiento(requerimientoId: string): Promise<boolean> {
-  if (!process.env.GOOGLE_SHEETS_COMPRAS_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return false;
+export async function exportarRequerimiento(requerimientoId: string): Promise<ResultadoExportacion> {
+  const vacio: ResultadoExportacion = { escritas: [], bloqueadas: [] };
+  if (!process.env.GOOGLE_SHEETS_COMPRAS_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return vacio;
 
   const admin = createAdminClient();
   const { data: r } = await admin
@@ -503,45 +557,69 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<bo
     .eq("id", requerimientoId)
     .single();
 
-  if (!r?.hoja_origen || !r.sheets_fila || r.hoja_origen === HOJA_MASTER) return false;
-
-  const encabezado = await leerPestana(`${r.hoja_origen}!A1:R1`);
-  if (encabezado.length === 0) return false;
-  const idx = indexarColumnas(encabezado[0]);
-
-  const valores: Record<string, string> = {
-    comparativa: r.comparativa_url ?? "",
-    proveedor: (r.proveedores as { nombre: string } | null)?.nombre ?? "",
-    estado: ETIQUETA_ESTADO_COMPRA[r.estado_compra as string] ?? "",
-    costo_iva: r.costo_iva !== null ? String(r.costo_iva) : "",
-    costo_envio: r.costo_envio !== null ? String(r.costo_envio) : "",
-  };
-
-  const data = COLUMNAS_COMPRA
-    .filter((clave) => idx[clave] >= 0)
-    .map((clave) => ({
-      range: `${r.hoja_origen}!${letraColumna(idx[clave])}${r.sheets_fila}`,
-      values: [[valores[clave]]],
-    }));
-
-  if (data.length === 0) return false;
+  if (!r) return vacio;
 
   const token = await obtenerToken(true);
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}/values:batchUpdate`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
+  const escritas: string[] = [];
+  const bloqueadas: string[] = [];
+
+  // ── Estado de aprobación, en el master ──
+  const etiquetaAprobacion = ETIQUETA_ESTADO_APROBACION[r.estado_aprobacion as string];
+  if (etiquetaAprobacion !== undefined && r.estado_aprobacion !== "PENDIENTE") {
+    const fila = r.hoja_origen === HOJA_MASTER && r.sheets_fila
+      ? (r.sheets_fila as number)
+      : await filaEnMaster(r.nro_ri as number);
+
+    if (fila) {
+      const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
+      const idx = indexarColumnas(encabezado[0] ?? []);
+      if (idx[COLUMNA_APROBACION] >= 0) {
+        const texto = r.aprobador
+          ? `${etiquetaAprobacion} (${r.aprobador})`
+          : etiquetaAprobacion;
+        const motivo = await escribirCelda(
+          token,
+          `${HOJA_MASTER}!${letraColumna(idx[COLUMNA_APROBACION])}${fila}`,
+          texto
+        );
+        if (motivo) bloqueadas.push(`aprobación (${motivo})`);
+        else escritas.push("aprobación");
+      }
     }
-  );
+  }
 
-  if (!res.ok) throw new Error(`Sheets batchUpdate ${res.status}: ${await res.text()}`);
+  // ── Columnas de compra, en la hoja del área ──
+  if (r.hoja_origen && r.sheets_fila && r.hoja_origen !== HOJA_MASTER) {
+    const encabezado = await leerPestana(`${r.hoja_origen}!A1:R1`);
+    if (encabezado.length > 0) {
+      const idx = indexarColumnas(encabezado[0]);
+      const valores: Record<string, string> = {
+        comparativa: (r.comparativa_url as string) ?? "",
+        proveedor: (r.proveedores as { nombre: string } | null)?.nombre ?? "",
+        estado: ETIQUETA_ESTADO_COMPRA[r.estado_compra as string] ?? "",
+        costo_iva: r.costo_iva !== null ? String(r.costo_iva) : "",
+        costo_envio: r.costo_envio !== null ? String(r.costo_envio) : "",
+      };
 
-  await admin
-    .from("compras_requerimientos")
-    .update({ sheets_sincronizado_en: new Date().toISOString() })
-    .eq("id", requerimientoId);
+      for (const clave of COLUMNAS_COMPRA) {
+        if (idx[clave] < 0) continue;
+        const motivo = await escribirCelda(
+          token,
+          `${r.hoja_origen}!${letraColumna(idx[clave])}${r.sheets_fila}`,
+          valores[clave]
+        );
+        if (motivo) bloqueadas.push(`${clave} (${motivo})`);
+        else escritas.push(clave);
+      }
+    }
+  }
 
-  return true;
+  if (escritas.length > 0) {
+    await admin
+      .from("compras_requerimientos")
+      .update({ sheets_sincronizado_en: new Date().toISOString() })
+      .eq("id", requerimientoId);
+  }
+
+  return { escritas, bloqueadas };
 }

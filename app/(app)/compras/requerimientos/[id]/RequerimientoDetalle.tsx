@@ -24,6 +24,7 @@ export default function RequerimientoDetalle({
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const [estadoCompra, setEstadoCompra] = useState<EstadoCompra>(r.estado_compra);
   const [proveedorId, setProveedorId] = useState(r.proveedor_id ?? "");
@@ -44,11 +45,14 @@ export default function RequerimientoDetalle({
       body: JSON.stringify(cambios),
     });
     setGuardando(false);
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setError(body.error ?? "No se pudo guardar el cambio.");
       return false;
     }
+    // El cambio quedó guardado, pero la planilla puede haber rechazado alguna
+    // celda protegida. Hay que decirlo: si no, se asume que quedó sincronizada.
+    setAviso(body.aviso_sheets ?? null);
     router.refresh();
     return true;
   }
@@ -84,6 +88,12 @@ export default function RequerimientoDetalle({
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      {aviso && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {aviso}
+        </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">

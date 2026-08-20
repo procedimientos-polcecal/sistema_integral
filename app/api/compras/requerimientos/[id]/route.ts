@@ -145,10 +145,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Reflejar el cambio en la planilla mientras dure la transición. Si Sheets
   // falla, el cambio ya está guardado: se avisa sin romper la operación.
+  //
+  // Se dispara también al aprobar, no sólo al tocar la compra: la aprobación va
+  // en el master y antes no se escribía nunca.
   let avisoSheets: string | null = null;
-  if (CAMPOS_COMPRA.some((c) => c in cambios)) {
+  const tocaPlanilla =
+    CAMPOS_COMPRA.some((c) => c in cambios) || "estado_aprobacion" in cambios;
+
+  if (tocaPlanilla) {
     try {
-      await exportarRequerimiento(id);
+      const { bloqueadas } = await exportarRequerimiento(id);
+      if (bloqueadas.length > 0) {
+        avisoSheets =
+          "El cambio se guardó, pero la planilla no dejó actualizar: " +
+          bloqueadas.join(", ") +
+          ". Hay que corregirlo a mano ahí.";
+      }
     } catch (e) {
       avisoSheets = e instanceof Error ? e.message : String(e);
       console.error(`No se pudo escribir el RI ${id} en la planilla:`, avisoSheets);

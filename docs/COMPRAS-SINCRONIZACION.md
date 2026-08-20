@@ -41,11 +41,36 @@ normalidad.
 
 **Sistema → planilla** (`exportarRequerimiento`)
 
-- Al guardar un cambio de compra, escribe de vuelta en la pestaña del área las
-  columnas que gestiona Compras: comparativa, proveedor, estado, costo + IVA y
-  costo de envío.
-- Si Sheets falla, el cambio ya quedó guardado: la respuesta incluye un
-  `aviso_sheets` pero la operación no se rompe.
+- Al aprobar, escribe el estado en la columna correspondiente del master.
+- Al guardar un cambio de compra, escribe en la pestaña del área: comparativa,
+  proveedor, estado, costo + IVA y costo de envío.
+- Si Sheets falla, el cambio ya quedó guardado: se avisa en pantalla pero la
+  operación no se rompe.
+
+### Celdas que la planilla no deja escribir
+
+La planilla tiene un modelo de permisos propio y **la cuenta de servicio no
+puede sortearlo**:
+
+| Celda | Estado |
+|---|---|
+| Estado de aprobación en el master | **Bloqueada** — protección "APROBACIÓN DE GERENCIA", reservada a ciertas cuentas |
+| Estado de compra de una fila ya aprobada | **Bloqueada** — hay 841 protecciones automáticas, una por fila, que pone un script de la planilla al aprobar |
+| Proveedor, costos, comparativa | Se escriben sin problema |
+
+Por eso **cada celda se escribe por separado y no en un solo lote**: con un batch
+único, una celda protegida hacía fallar la escritura entera y no se guardaba
+tampoco lo que sí estaba permitido.
+
+Lo que no se pudo escribir aparece como aviso en la ficha del requerimiento, con
+el detalle de qué campo fue. No se silencia: si se silenciara, alguien miraría
+la planilla creyendo que está al día.
+
+Para que la app también pueda escribir esas celdas hay que **agregar
+`sheets-reader@mantenimientopp.iam.gserviceaccount.com` como editor de la
+protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
+protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
+control de quién aprueba pasa a estar en los permisos de la app.
 
 ## Puesta en marcha
 
