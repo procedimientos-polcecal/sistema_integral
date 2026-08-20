@@ -41,6 +41,17 @@ export const PESO_PRIORIDAD: Record<Prioridad, number> = {
   URGENTE: 0, "1 SEMANA": 1, "2 SEMANAS": 2, NORMAL: 3, LEVE: 4,
 };
 
+/**
+ * Peso de ordenamiento tolerando la prioridad sin definir.
+ *
+ * Va última: mientras nadie la fijó, no hay motivo para adelantarla sobre algo
+ * que sí se evaluó como urgente. Entre varias sin definir manda la antigüedad,
+ * que es el desempate de las colas.
+ */
+export function pesoPrioridad(p: Prioridad | null | undefined): number {
+  return p ? PESO_PRIORIDAD[p] : 99;
+}
+
 /** Columnas del tablero, en el orden en que avanza el trabajo. */
 export const COLUMNAS_TABLERO: EstadoCompra[] = ["PARA_COMPRAR", "EN_COMPARATIVA", "PEDIDO"];
 
@@ -92,7 +103,25 @@ export function diasRestantes(fechaNecesidad: string | null | undefined): number
   return Math.round((d.getTime() - hoy.getTime()) / 86_400_000);
 }
 
-/** "Ambas" cuando el RI no tiene empresa: el costo se reparte. */
-export function etiquetaEmpresa(nombre: string | null | undefined): string {
-  return nombre ?? "Ambas";
+/**
+ * Quién paga, en texto.
+ *
+ * Hay tres estados y conviene que se distingan a simple vista: una empresa,
+ * las dos, o todavía sin decidir. Antes "sin decidir" se mostraba como
+ * "Ambas", que es una decisión distinta.
+ */
+export function etiquetaEmpresa(
+  nombre: string | null | undefined,
+  pagaAmbas?: boolean
+): string {
+  if (nombre) return nombre;
+  return pagaAmbas ? "Ambas" : SIN_DEFINIR;
+}
+
+/** Cómo se muestra lo que todavía nadie decidió. */
+export const SIN_DEFINIR = "—";
+
+/** Etiqueta de prioridad, contemplando que puede no estar definida. */
+export function etiquetaPrioridad(p: Prioridad | null | undefined) {
+  return p ? PRIORIDAD_LABELS[p] : { label: SIN_DEFINIR, color: "bg-slate-100 text-slate-400" };
 }

@@ -27,7 +27,7 @@ const CAMPOS_APROBACION = ["estado_aprobacion", "motivo_rechazo"] as const;
  * qué tan urgente es y quién lo paga. Dejárselo al solicitante es lo que llevó
  * a que el 68% del histórico esté marcado URGENTE.
  */
-const CAMPOS_DEL_APROBADOR = ["prioridad", "empresa_id"] as const;
+const CAMPOS_DEL_APROBADOR = ["prioridad", "empresa_id", "paga_ambas"] as const;
 
 const CAMPOS_COMPRA = [
   "estado_compra", "comparativa_url", "proveedor_id", "costo_iva",

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
-  APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS,
+  APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
   moneda, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
@@ -222,8 +222,8 @@ export default function RequerimientosClient({
                       <td className="px-3 py-2 text-slate-600">{f.compras_areas?.nombre ?? "—"}</td>
                       <td className="px-3 py-2 text-slate-600">{donde ?? "—"}</td>
                       <td className="px-3 py-2 text-right text-slate-600">{f.cantidad ?? "—"}</td>
-                      <td className="px-3 py-2"><Chip {...PRIORIDAD_LABELS[f.prioridad]} /></td>
-                      <td className="px-3 py-2 text-slate-600">{etiquetaEmpresa(f.empresas?.nombre)}</td>
+                      <td className="px-3 py-2"><Chip {...etiquetaPrioridad(f.prioridad)} /></td>
+                      <td className="px-3 py-2 text-slate-600">{etiquetaEmpresa(f.empresas?.nombre, f.paga_ambas)}</td>
                       <td className="px-3 py-2"><Chip {...APROBACION_LABELS[f.estado_aprobacion]} /></td>
                       <td className="px-3 py-2"><Chip {...COMPRA_LABELS[f.estado_compra]} /></td>
                       <td className="px-3 py-2 text-slate-600">{f.proveedores?.nombre ?? "—"}</td>

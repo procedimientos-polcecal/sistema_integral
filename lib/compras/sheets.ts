@@ -177,10 +177,27 @@ function fechaISO(v: unknown): string | null {
 }
 
 const PRIORIDADES_VALIDAS = new Set(["URGENTE", "1 SEMANA", "2 SEMANAS", "NORMAL", "LEVE"]);
+
+/** Sin valor por defecto: la celda vacía significa "todavía no se decidió". */
 const prioridadDe = (v: unknown) => {
   const s = norm(v);
-  return PRIORIDADES_VALIDAS.has(s) ? s : "NORMAL";
+  return PRIORIDADES_VALIDAS.has(s) ? s : null;
 };
+
+/**
+ * Qué dice la planilla sobre quién paga.
+ *
+ * La celda vacía ya no se toma como "Ambas": son cosas distintas —una es una
+ * decisión y la otra su ausencia— y hasta ahora se confundían. "Ambas" sólo
+ * cuando la planilla lo dice.
+ */
+const pagaDe = (v: unknown): { empresa: string | null; ambas: boolean } => {
+  const s = norm(v);
+  if (s === "AMBAS") return { empresa: null, ambas: true };
+  if (s === "POLCECAL" || s === "POLYSAN") return { empresa: s, ambas: false };
+  return { empresa: null, ambas: false };
+};
+
 
 function partirEstado(valor: unknown) {
   const s = norm(valor);
@@ -290,7 +307,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             detalle_extra: texto(val(fila, "detalle_extra")),
             imagen_url: texto(val(fila, "imagen")),
             prioridad: prioridadDe(val(fila, "prioridad")),
-            empresa: norm(val(fila, "empresa")),
+            paga: pagaDe(val(fila, "empresa")),
             solicitante_nombre: texto(val(fila, "solicita")),
             estado_aprobacion: apro.estado,
             aprobador: apro.aprobador,
@@ -369,9 +386,11 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         fecha_necesidad: d.fecha_necesidad ?? null,
         detalle_extra: d.detalle_extra ?? null,
         imagen_url: d.imagen_url ?? null,
-        prioridad: d.prioridad ?? "NORMAL",
-        // "AMBAS" no es una empresa: queda en null.
-        empresa_id: porEmpresa.get(String(d.empresa ?? "")) ?? null,
+        prioridad: d.prioridad ?? null,
+        empresa_id: (d.paga as { empresa: string | null })?.empresa
+          ? porEmpresa.get((d.paga as { empresa: string }).empresa) ?? null
+          : null,
+        paga_ambas: (d.paga as { ambas: boolean })?.ambas ?? false,
         solicitante_nombre: d.solicitante_nombre ?? null,
         estado_aprobacion: d.estado_aprobacion ?? "PENDIENTE",
         aprobador: d.aprobador ?? null,
@@ -485,8 +504,12 @@ const COLUMNAS_DEL_APROBADOR = ["prioridad", "empresa"] as const;
  * La base guarda las empresas en mayúsculas (POLCECAL) y el desplegable de la
  * planilla las espera capitalizadas (Polcecal). Sin null = "Ambas".
  */
-export function empresaParaPlanilla(nombre: string | null | undefined): string {
-  if (!nombre) return "Ambas";
+export function empresaParaPlanilla(
+  nombre: string | null | undefined,
+  pagaAmbas = false
+): string {
+  // Sin definir se escribe vacío: la planilla también distingue el caso.
+  if (!nombre) return pagaAmbas ? "Ambas" : "";
   const n = nombre.trim().toUpperCase();
   if (n === "POLCECAL") return "Polcecal";
   if (n === "POLYSAN") return "Polysan";
@@ -719,7 +742,10 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
         // junto con la aprobación y no antes.
         const valoresAprobador: Record<string, string> = {
           prioridad: (r.prioridad as string) ?? "",
-          empresa: empresaParaPlanilla((r.empresas as { nombre: string } | null)?.nombre),
+          empresa: empresaParaPlanilla(
+            (r.empresas as { nombre: string } | null)?.nombre,
+            r.paga_ambas === true
+          ),
         };
 
         for (const clave of COLUMNAS_DEL_APROBADOR) {

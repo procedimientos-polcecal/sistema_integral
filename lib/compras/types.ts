@@ -56,8 +56,11 @@ export interface Requerimiento {
   fecha_necesidad: string | null;
   detalle_extra: string | null;
   imagen_url: string | null;
-  prioridad: Prioridad;
+  /** La define quien aprueba: null mientras no se haya decidido. */
+  prioridad: Prioridad | null;
   empresa_id: string | null;
+  /** true = la pagan las dos. Con empresa_id null y esto false, sin definir. */
+  paga_ambas: boolean;
 
   solicitante_id: string | null;
   solicitante_nombre: string | null;

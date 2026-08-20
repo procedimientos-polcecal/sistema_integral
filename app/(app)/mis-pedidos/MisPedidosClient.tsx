@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import {
-  APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, fecha, moneda,
+  APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha, moneda,
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
@@ -88,7 +88,7 @@ export default function MisPedidosClient({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{p.cantidad ?? "—"}</td>
-                    <td className="px-3 py-2"><Chip {...PRIORIDAD_LABELS[p.prioridad]} /></td>
+                    <td className="px-3 py-2"><Chip {...etiquetaPrioridad(p.prioridad)} /></td>
                     <td className="px-3 py-2"><Chip {...APROBACION_LABELS[p.estado_aprobacion]} /></td>
                     <td className="px-3 py-2"><Chip {...COMPRA_LABELS[p.estado_compra]} /></td>
                     <td className="px-3 py-2 text-slate-600">{p.proveedores?.nombre ?? "—"}</td>

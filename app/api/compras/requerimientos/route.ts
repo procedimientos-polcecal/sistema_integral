@@ -38,7 +38,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Hay que describir qué se necesita" }, { status: 400 });
   }
 
-  const prioridad = PRIORIDADES.includes(body.prioridad) ? body.prioridad : "NORMAL";
+  // Sin valor por defecto: si no la sugieren, queda sin definir hasta que
+  // alguien apruebe. Poner "NORMAL" sería inventar una decisión.
+  const prioridad = PRIORIDADES.includes(body.prioridad) ? body.prioridad : null;
 
   const registro = {
     descripcion,
@@ -50,7 +52,8 @@ export async function POST(request: Request) {
     detalle_extra: body.detalle_extra ?? null,
     imagen_url: body.imagen_url ?? null,
     prioridad,
-    empresa_id: body.empresa_id ?? null,   // null = ambas
+    empresa_id: body.empresa_id ?? null,
+    paga_ambas: body.paga_ambas === true,
     solicitante_id: user.id,
     solicitante_nombre: `${usuario.nombre} ${usuario.apellido}`.trim(),
     estado_aprobacion: "PENDIENTE" as const,

@@ -23,8 +23,9 @@ export default function NuevoRequerimientoModal({
   const [cantidad, setCantidad] = useState("");
   const [codigo, setCodigo] = useState("");
   const [fechaNecesidad, setFechaNecesidad] = useState("");
-  const [prioridad, setPrioridad] = useState("NORMAL");
-  const [empresaId, setEmpresaId] = useState("");   // "" = Ambas
+  // Sin valor por defecto: las define quien aprueba. Se pueden sugerir.
+  const [prioridad, setPrioridad] = useState("");
+  const [paga, setPaga] = useState("");
   const [detalle, setDetalle] = useState("");
   const [imagenUrl, setImagenUrl] = useState("");
 
@@ -47,8 +48,9 @@ export default function NuevoRequerimientoModal({
         cantidad: cantidad ? Number(cantidad) : null,
         codigo: codigo.trim() || null,
         fecha_necesidad: fechaNecesidad || null,
-        prioridad,
-        empresa_id: empresaId || null,
+        prioridad: prioridad || null,
+        empresa_id: paga === "AMBAS" ? null : paga || null,
+        paga_ambas: paga === "AMBAS",
         detalle_extra: detalle.trim() || null,
         imagen_url: imagenUrl.trim() || null,
         ubicacion_id: ubicacionId || null,
@@ -132,26 +134,28 @@ export default function NuevoRequerimientoModal({
               />
             </Campo>
 
-            <Campo label="Prioridad">
+            <Campo label="Prioridad sugerida">
               <select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={prioridad}
                 onChange={(e) => setPrioridad(e.target.value)}
               >
+                <option value="">Sin definir</option>
                 {PRIORIDADES.map((p) => (
                   <option key={p} value={p}>{PRIORIDAD_LABELS[p].label}</option>
                 ))}
               </select>
             </Campo>
 
-            <Campo label="Empresa que paga">
+            <Campo label="Quién paga (sugerido)">
               <select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                value={empresaId}
-                onChange={(e) => setEmpresaId(e.target.value)}
+                value={paga}
+                onChange={(e) => setPaga(e.target.value)}
               >
-                <option value="">Ambas</option>
+                <option value="">Sin definir</option>
                 {empresas.map((e2) => <option key={e2.id} value={e2.id}>{e2.nombre}</option>)}
+                <option value="AMBAS">Ambas</option>
               </select>
             </Campo>
           </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ESTADOS_COMPRA, COMPRA_LABELS, APROBACION_LABELS, PRIORIDAD_LABELS, PRIORIDADES,
+  ESTADOS_COMPRA, COMPRA_LABELS, APROBACION_LABELS, PRIORIDAD_LABELS, PRIORIDADES, etiquetaPrioridad,
   moneda, fecha, fechaHora, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type {
@@ -38,8 +38,12 @@ export default function RequerimientoDetalle({
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
 
   // Los define quien aprueba: el área pide, gerencia decide urgencia y quién paga.
-  const [prioridad, setPrioridad] = useState<Prioridad>(r.prioridad);
-  const [empresaId, setEmpresaId] = useState(r.empresa_id ?? "");
+  // Arrancan como estén: si nadie las definió, vacías. Hay que elegir para
+  // poder aprobar — es la decisión que la aprobación tiene que dejar tomada.
+  const [prioridad, setPrioridad] = useState<Prioridad | "">(r.prioridad ?? "");
+  const [paga, setPaga] = useState<string>(
+    r.empresa_id ?? (r.paga_ambas ? "AMBAS" : "")
+  );
 
   async function guardar(cambios: Record<string, unknown>) {
     setGuardando(true);
@@ -76,8 +80,8 @@ export default function RequerimientoDetalle({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-400">RI N° {r.nro_ri}</span>
-            <Chip {...PRIORIDAD_LABELS[r.prioridad]} />
-            <span className="text-xs text-slate-500">Paga: {etiquetaEmpresa(r.empresas?.nombre)}</span>
+            <Chip {...etiquetaPrioridad(r.prioridad)} />
+            <span className="text-xs text-slate-500">Paga: {etiquetaEmpresa(r.empresas?.nombre, r.paga_ambas)}</span>
           </div>
           <h1 className="mt-1 text-xl font-bold text-slate-900">{r.descripcion}</h1>
           <p className="text-sm text-slate-500">
@@ -288,6 +292,7 @@ export default function RequerimientoDetalle({
                       value={prioridad}
                       onChange={(e) => setPrioridad(e.target.value as Prioridad)}
                     >
+                      <option value="">Elegir…</option>
                       {PRIORIDADES.map((p) => (
                         <option key={p} value={p}>{PRIORIDAD_LABELS[p].label}</option>
                       ))}
@@ -300,13 +305,14 @@ export default function RequerimientoDetalle({
                     </span>
                     <select
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={empresaId}
-                      onChange={(e) => setEmpresaId(e.target.value)}
+                      value={paga}
+                      onChange={(e) => setPaga(e.target.value)}
                     >
-                      <option value="">Ambas</option>
+                      <option value="">Elegir…</option>
                       {empresas.map((e2) => (
                         <option key={e2.id} value={e2.id}>{e2.nombre}</option>
                       ))}
+                      <option value="AMBAS">Ambas</option>
                     </select>
                   </label>
                 </div>
@@ -316,10 +322,12 @@ export default function RequerimientoDetalle({
                     guardar({
                       estado_aprobacion: "APROBADA",
                       prioridad,
-                      empresa_id: empresaId || null,
+                      empresa_id: paga === "AMBAS" ? null : paga,
+                      paga_ambas: paga === "AMBAS",
                     })
                   }
-                  disabled={guardando}
+                  disabled={guardando || !prioridad || !paga}
+                  title={!prioridad || !paga ? "Elegí la prioridad y quién paga" : undefined}
                   className="w-full rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
                 >
                   Aprobar

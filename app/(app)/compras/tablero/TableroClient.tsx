@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  COLUMNAS_TABLERO, SIGUIENTE_ESTADO, COMPRA_LABELS, PRIORIDAD_LABELS,
-  PESO_PRIORIDAD, moneda, fecha, diasRestantes, etiquetaEmpresa,
+  COLUMNAS_TABLERO, SIGUIENTE_ESTADO, COMPRA_LABELS,
+  etiquetaPrioridad, pesoPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
@@ -37,7 +37,7 @@ export default function TableroClient({
     }
     return [...base].sort(
       (a, b) =>
-        PESO_PRIORIDAD[a.prioridad] - PESO_PRIORIDAD[b.prioridad] ||
+        pesoPrioridad(a.prioridad) - pesoPrioridad(b.prioridad) ||
         new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
     );
   }, [requerimientos, area, empresa]);
@@ -152,10 +152,10 @@ export default function TableroClient({
                           >
                             RI {r.nro_ri}
                           </Link>
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${PRIORIDAD_LABELS[r.prioridad].color}`}>
-                            {PRIORIDAD_LABELS[r.prioridad].label}
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${etiquetaPrioridad(r.prioridad).color}`}>
+                            {etiquetaPrioridad(r.prioridad).label}
                           </span>
-                          <span className="text-[11px] text-slate-400">{etiquetaEmpresa(r.empresas?.nombre)}</span>
+                          <span className="text-[11px] text-slate-400">{etiquetaEmpresa(r.empresas?.nombre, r.paga_ambas)}</span>
                         </div>
 
                         <Link

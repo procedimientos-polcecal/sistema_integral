@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  PRIORIDAD_LABELS, PESO_PRIORIDAD, fecha, diasRestantes, etiquetaEmpresa,
+  etiquetaPrioridad, pesoPrioridad, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
@@ -31,7 +31,7 @@ export default function AprobacionesClient({
     const base = area ? pendientes.filter((r) => r.compras_areas?.nombre === area) : pendientes;
     return [...base].sort(
       (a, b) =>
-        PESO_PRIORIDAD[a.prioridad] - PESO_PRIORIDAD[b.prioridad] ||
+        pesoPrioridad(a.prioridad) - pesoPrioridad(b.prioridad) ||
         new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
     );
   }, [pendientes, area]);
@@ -174,11 +174,11 @@ export default function AprobacionesClient({
                         <td className="px-3 py-2 text-slate-600">{donde ?? "—"}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{f.cantidad ?? "—"}</td>
                         <td className="px-3 py-2">
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${PRIORIDAD_LABELS[f.prioridad].color}`}>
-                            {PRIORIDAD_LABELS[f.prioridad].label}
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${etiquetaPrioridad(f.prioridad).color}`}>
+                            {etiquetaPrioridad(f.prioridad).label}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{etiquetaEmpresa(f.empresas?.nombre)}</td>
+                        <td className="px-3 py-2 text-slate-600">{etiquetaEmpresa(f.empresas?.nombre, f.paga_ambas)}</td>
                         <td className={`whitespace-nowrap px-3 py-2 ${vencido ? "font-semibold text-red-600" : "text-slate-600"}`}>
                           {f.fecha_necesidad ? fecha(f.fecha_necesidad) : "—"}
                         </td>

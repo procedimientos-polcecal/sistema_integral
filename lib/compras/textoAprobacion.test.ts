@@ -52,9 +52,15 @@ describe("empresaParaPlanilla", () => {
     expect(empresaParaPlanilla("POLYSAN")).toBe("Polysan");
   });
 
-  it("sin empresa es «Ambas», que es una opción real del desplegable", () => {
-    expect(empresaParaPlanilla(null)).toBe("Ambas");
-    expect(empresaParaPlanilla(undefined)).toBe("Ambas");
+  it("«Ambas» sólo cuando se decidió que la pagan las dos", () => {
+    expect(empresaParaPlanilla(null, true)).toBe("Ambas");
+  });
+
+  it("sin decidir se escribe vacío, no «Ambas»", () => {
+    // Antes la ausencia de decisión se escribía como una decisión.
+    expect(empresaParaPlanilla(null)).toBe("");
+    expect(empresaParaPlanilla(null, false)).toBe("");
+    expect(empresaParaPlanilla(undefined)).toBe("");
   });
 
   it("tolera que ya venga capitalizada", () => {

@@ -18,6 +18,15 @@ decisiones de personas distintas:
    la regla real del circuito, y es lo que explica que el 68% del histórico esté
    marcado `URGENTE` — cuando la urgencia la declara el que pide, deja de
    distinguir.
+
+   **Nacen sin valor y se muestran como «—».** No hay `NORMAL` ni `Ambas` por
+   defecto: un valor por defecto es una decisión disfrazada de dato, y encima una
+   que después nadie revisa porque el campo ya "tiene algo". Sin definirlos no se
+   puede aprobar.
+
+   Para que `Ambas` siga siendo expresable, quién paga tiene tres estados:
+   `empresa_id` apunta a una empresa, o `paga_ambas` marca las dos, o ninguno de
+   los dos y está sin definir.
 3. **Compra** — Compras arma la comparativa, elige proveedor, carga el costo y
    sigue el pedido hasta que llega. Hojas `RI <ÁREA>`.
 

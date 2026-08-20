@@ -79,7 +79,16 @@ const soloFecha = (v) => {
 };
 
 const PRIORIDADES = new Set(["URGENTE", "1 SEMANA", "2 SEMANAS", "NORMAL", "LEVE"]);
-const prioridad = (v) => (PRIORIDADES.has(norm(v)) ? norm(v) : "NORMAL");
+// Sin valor por defecto: la celda vacia significa que nadie la definio todavia.
+const prioridad = (v) => (PRIORIDADES.has(norm(v)) ? norm(v) : null);
+
+// "Ambas" solo cuando la planilla lo dice; vacio es "sin definir".
+const pagaDe = (v) => {
+  const s = norm(v);
+  if (s === "AMBAS") return { empresa: null, ambas: true };
+  if (s === "POLCECAL" || s === "POLYSAN") return { empresa: s, ambas: false };
+  return { empresa: null, ambas: false };
+};
 
 function partirEstado(valor) {
   const s = norm(valor);
@@ -158,7 +167,7 @@ for (const f of leerHoja(HOJA_MASTER)) {
     detalle_extra: texto(f["DETALLE EXTRA"]),
     imagen_url: texto(f["IMAGEN COMPLEMENTARIA"] ?? f["IMAGEN"]),
     prioridad: prioridad(f["PRIORIDAD"]),
-    empresa: norm(f["Empresa"] ?? f["PAGA"]),
+    paga: pagaDe(f["Empresa"] ?? f["PAGA"]),
     solicitante_nombre: texto(f["SOLICITA"]),
     estado_aprobacion: apro.estado,
     aprobador: apro.aprobador,
@@ -202,7 +211,7 @@ for (const hoja of wb.SheetNames.filter((n) => n.startsWith("RI "))) {
         detalle_extra: texto(f["DETALLE EXTRA"]),
         imagen_url: texto(f["IMAGEN"]),
         prioridad: prioridad(f["PRIORIDAD"]),
-        empresa: norm(f["PAGA"]),
+        paga: pagaDe(f["PAGA"]),
         solicitante_nombre: texto(f["SOLICITA"]),
         estado_aprobacion: compra.estado === "DENEGADO" ? "DENEGADA" : apro.estado,
         aprobador: compra.aprobador ?? apro.aprobador,
@@ -430,7 +439,8 @@ if (DRY_RUN) {
       imagen_url: r.imagen_url,
       prioridad: r.prioridad,
       // "AMBAS" no es una empresa: queda en null.
-      empresa_id: idEmpresa.get(r.empresa) ?? null,
+      empresa_id: r.paga.empresa ? idEmpresa.get(r.paga.empresa) ?? null : null,
+      paga_ambas: r.paga.ambas,
       solicitante_nombre: r.solicitante_nombre,
       estado_aprobacion: r.estado_aprobacion,
       aprobador: r.aprobador,
