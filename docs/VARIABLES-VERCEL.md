@@ -45,11 +45,48 @@ funcionando y se puede importar a mano.
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Google Cloud Console → **IAM y administración → Cuentas de servicio** → crear una → **Claves → Agregar clave → JSON**. Se pega el archivo entero, en una sola línea |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 
 Además hay que **compartir la planilla con el `client_email` de esa cuenta de
 servicio, como Editor** — no como lector: la app escribe de vuelta el estado de
 las compras.
+
+### Si Google bloquea la creación de claves
+
+Muchas organizaciones tienen activada la política
+`iam.disableServiceAccountKeyCreation`, que impide generar claves JSON nuevas.
+El mensaje aparece al intentar **Claves → Agregar clave**.
+
+Esa política bloquea **crear** claves, no usar las que ya existen. La app de
+Mantenimiento tiene una que sigue vigente:
+
+```
+sheets-reader@mantenimientopp.iam.gserviceaccount.com
+```
+
+Alcanza con **compartirle la planilla PEDIDOS DE COMPRA como Editor** y reusar
+el mismo `GOOGLE_SERVICE_ACCOUNT_JSON`, que está en el `.env.local` de la app de
+Mantenimiento.
+
+Lo que se pierde con esto: las dos apps quedan atadas a una sola credencial. Si
+algún día se rota o se borra, se caen las dos sincronizaciones a la vez. Es
+aceptable para algo que además es transitorio, pero conviene tenerlo anotado.
+
+Alternativas, si se prefiere no acoplarlas:
+
+- Pedirle a quien tenga el rol *Administrador de políticas de la organización*
+  una excepción para este proyecto. La política se puede acotar a un proyecto,
+  no hace falta apagarla para toda la empresa.
+- **Workload Identity Federation** con los tokens OIDC de Vercel: es la
+  alternativa sin claves que recomienda Google. Más trabajo de configuración, y
+  no sirve para el importador que se corre desde una máquina.
+- Dar vuelta la sincronización para que **el Apps Script haga el trabajo**: ese
+  script ya tiene acceso a la planilla sin ninguna credencial, porque corre con
+  la autorización de quien lo instala. Sería no necesitar cuenta de servicio
+  nunca más, a cambio de mover código a Apps Script.
+
+**Nada de esto bloquea la importación del histórico**: el importador lee el
+archivo `.xlsx` local y no toca la API de Google.
 
 ## Notificaciones push (módulo Remises)
 
