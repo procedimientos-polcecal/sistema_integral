@@ -132,6 +132,12 @@ solo lugar:
 total = unitario × cantidad × (1 − descuento) × (1 + IVA) + envío
 ```
 
+**La comparativa se muestra de dos formas.** Mientras Compras la arma, una fila
+por proveedor: el trabajo es administrar filas. Cuando le toca decidir a la
+persona asignada, la comparación pasa a ser una matriz —atributos en filas, un
+proveedor por columna, con la diferencia contra el más barato— porque ahí el
+trabajo es comparar. En el teléfono esa vista se convierte en tarjetas apiladas.
+
 **Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
 de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
 

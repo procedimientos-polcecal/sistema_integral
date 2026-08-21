@@ -1,7 +1,7 @@
 # Compras — La comparativa de proveedores — Design Spec
 
 **Fecha:** 2026-08-21
-**Estado:** Diseño aprobado — pendiente de plan de implementación
+**Estado:** Implementado y en producción
 
 ## Objetivo
 
@@ -191,13 +191,40 @@ tiene 476 líneas: sumarle esto adentro la haría inmanejable.
 4. **Ver y elegir.** La persona asignada aprueba la compra con uno de los
    presupuestos.
 
-### Punto abierto: cómo se muestra
+### Cómo se muestra: dos momentos, dos formas
 
-A pedido del usuario, la forma de mostrar la comparativa se trabaja aparte, con
-alternativas a la vista, antes de decidir. Punto de partida acordado: tabla
-ordenada por total, el más barato señalado (informativo, no decisorio), aviso
-cuando `precio_hasta` ya pasó, y un botón por fila para que la persona asignada
-apruebe la compra con ese presupuesto.
+Resuelto después de mirar alternativas. Los mismos datos se muestran de dos
+maneras, porque son dos trabajos distintos y el circuito ya los distingue:
+
+| Momento | Quién | El trabajo es | La forma |
+|---|---|---|---|
+| `EN_COMPARATIVA` | Compras | administrar filas | una fila por proveedor |
+| `PARA_COMPRAR` | el asignado | decidir | comparación atributo por atributo |
+
+Mientras Compras arma la comparativa lo que hace es agregar, revisar y borrar:
+para eso conviene la tabla compacta, que además aguanta cualquier cantidad de
+presupuestos y deja la acción de borrar donde se la espera.
+
+Cuando le toca decidir a NICO o MAXI, en cambio, hay que poder comparar atributo
+por atributo. Es lo que hace visible el caso que motivó sumar el envío al total:
+el proveedor con el unitario más bajo puede terminar siendo el total más alto
+por el flete, y un IVA del 10,5% compensa un precio alto. En pantalla grande eso
+es una **matriz** —la planilla dada vuelta, atributos en filas y un proveedor por
+columna— con una fila de **diferencia contra el más barato**, que es el número
+que más ayuda a decidir y el que nadie calcula a mano.
+
+En el teléfono la matriz no sirve: obliga a un scroll horizontal que arruina
+justamente la comparación. Ahí la misma vista pasa a **tarjetas apiladas**, una
+por proveedor. Aprueban desde los dos lados, así que cambia por ancho de
+pantalla, no por dispositivo.
+
+No agrega estado: la bandera que elige la vista es la misma que ya decidía si
+mostrar "Aprobar con este" o "Borrar".
+
+**Los importes se muestran con centavos.** `moneda()` redondea a pesos, que
+alcanza para un tablero pero no para una comparativa: dos presupuestos pueden
+diferir por centavos y el redondeo lo esconde justo cuando alguien está
+eligiendo. Para eso está `monedaExacta()`.
 
 ## Escribir en Drive
 
