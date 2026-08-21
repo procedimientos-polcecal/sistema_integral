@@ -1,0 +1,310 @@
+/**
+ * La comparativa de proveedores, en la forma que tiene la planilla.
+ *
+ * Todo lo que se puede decidir sin hablar con Google vive acá: la fórmula del
+ * total, el mapeo de columnas por nombre, la regla de la columna A y cómo se
+ * arma una fila para escribirla. Así se puede testear sin red y sin
+ * credenciales.
+ *
+ * La plantilla de referencia es "00. COMPARATIVA DE PROVEEDORES GENERICO".
+ */
+
+import { norm } from "@/lib/compras/texto";
+
+/** Las 19 columnas de la plantilla, en orden. */
+export const COLUMNAS_COMPARATIVA = [
+  "NRO RI", "FECHA", "ÁREA", "DESCRIPCION", "PROVEEDOR", "MARCA",
+  "UNIDAD DE MEDIDA", "PRECIO UNITARIO", "CANTIDAD", "ENVÍO", "DESCUENTO",
+  "IVA", "PRECIO TOTAL", "PRECIO HASTA", "PLAZOS", "CONDICIONES DE PAGO",
+  "DISPONIBILIDAD", "COMENTARIO", "ELECCIÓN",
+] as const;
+
+/** Días de pago del desplegable de la columna PLAZOS. */
+export const PLAZOS_PAGO = [0, 15, 21, 30, 45, 60, 90, 120, 150] as const;
+
+/**
+ * Desplegable de DISPONIBILIDAD, copiado tal cual.
+ *
+ * "1-3 día" está en singular en la planilla. Corregirlo haría que la validación
+ * de datos de Sheets rechace el valor al escribirlo.
+ */
+export const DISPONIBILIDADES = [
+  "Inmediata", "1-3 día", "4-7 días", "8-15 días",
+  "16-30 días", "31-45 días", "46-60 días",
+] as const;
+
+export type ClaveColumna =
+  | "nro_ri" | "fecha" | "area" | "descripcion" | "proveedor" | "marca"
+  | "unidad_medida" | "precio_unitario" | "cantidad" | "envio" | "descuento"
+  | "iva" | "precio_total" | "precio_hasta" | "plazos" | "condiciones_pago"
+  | "disponibilidad" | "comentario" | "eleccion";
+
+const ENCABEZADO_DE: Record<ClaveColumna, string> = {
+  nro_ri: "NRO RI", fecha: "FECHA", area: "ÁREA", descripcion: "DESCRIPCION",
+  proveedor: "PROVEEDOR", marca: "MARCA", unidad_medida: "UNIDAD DE MEDIDA",
+  precio_unitario: "PRECIO UNITARIO", cantidad: "CANTIDAD", envio: "ENVÍO",
+  descuento: "DESCUENTO", iva: "IVA", precio_total: "PRECIO TOTAL",
+  precio_hasta: "PRECIO HASTA", plazos: "PLAZOS",
+  condiciones_pago: "CONDICIONES DE PAGO", disponibilidad: "DISPONIBILIDAD",
+  comentario: "COMENTARIO", eleccion: "ELECCIÓN",
+};
+
+/** Sin estas columnas la planilla no es una comparativa y no se toca. */
+const IMPRESCINDIBLES: ClaveColumna[] = ["nro_ri", "proveedor", "precio_unitario"];
+
+export type Indice = Record<ClaveColumna, number>;
+
+export type ResultadoMapeo =
+  | { ok: true; idx: Indice }
+  | { ok: false; faltan: string[] };
+
+/**
+ * Ubica cada columna por NOMBRE, no por posición.
+ *
+ * Escribir por posición en un archivo con otra estructura es la forma más fácil
+ * de arruinar la planilla de alguien. Si falta algo imprescindible, no se
+ * escribe: se avisa qué falta.
+ */
+export function mapearEncabezados(encabezado: string[]): ResultadoMapeo {
+  const normalizado = encabezado.map(norm);
+  const idx = {} as Indice;
+
+  for (const [clave, titulo] of Object.entries(ENCABEZADO_DE) as [ClaveColumna, string][]) {
+    idx[clave] = normalizado.indexOf(norm(titulo));
+  }
+
+  const faltan = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map((c) => ENCABEZADO_DE[c]);
+  return faltan.length > 0 ? { ok: false, faltan } : { ok: true, idx };
+}
+
+// ── Lectura de valores ───────────────────────────────────────
+
+const texto = (v: unknown): string | null => {
+  const s = String(v ?? "").trim();
+  return s === "" ? null : s;
+};
+
+/**
+ * Números como los escribe la gente: "1.500,50", "$ 1500", "10%".
+ *
+ * Un porcentaje vuelve como fracción (10% → 0.1), que es como lo guarda la
+ * planilla y como lo espera la fórmula del total.
+ */
+export function numero(v: unknown): number | null {
+  const bruto = String(v ?? "").trim();
+  if (bruto === "") return null;
+
+  const esPorcentaje = bruto.includes("%");
+  const limpio = bruto.replace(/[^\d.,-]/g, "");
+  if (limpio === "") return null;
+
+  // Si tiene los dos separadores, el último es el decimal.
+  const ultimaComa = limpio.lastIndexOf(",");
+  const ultimoPunto = limpio.lastIndexOf(".");
+  let normalizado: string;
+  if (ultimaComa >= 0 && ultimoPunto >= 0) {
+    normalizado = ultimaComa > ultimoPunto
+      ? limpio.replace(/\./g, "").replace(",", ".")
+      : limpio.replace(/,/g, "");
+  } else {
+    normalizado = limpio.replace(",", ".");
+  }
+
+  const n = Number(normalizado);
+  if (!isFinite(n)) return null;
+  return esPorcentaje ? n / 100 : n;
+}
+
+/** Fechas de la planilla (d/m/yyyy) a ISO. */
+export function fechaISO(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  if (s === "") return null;
+
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    const anio = y.length === 2 ? `20${y}` : y;
+    return `${anio}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const iso = s.match(/^\d{4}-\d{2}-\d{2}/);
+  return iso ? iso[0] : null;
+}
+
+// ── El total ─────────────────────────────────────────────────
+
+/**
+ * El total de un presupuesto.
+ *
+ * Espeja la columna generada `compras_cotizaciones.precio_total` (migración
+ * 026). Existe en TypeScript sólo para mostrarlo mientras alguien escribe el
+ * formulario: la que se guarda y por la que se ordena es la de la base. Si una
+ * cambia, la otra tiene que cambiar igual — los casos de `comparativa.test.ts`
+ * están para que no se pueda mover una sola.
+ *
+ * La fórmula de la planilla dejaba el envío afuera; acá se suma.
+ */
+export function totalCotizacion(c: {
+  precio_unitario: number | null;
+  cantidad: number | null;
+  descuento: number | null;
+  iva: number | null;
+  costo_envio: number | null;
+}): number {
+  const bruto =
+    (c.precio_unitario ?? 0) *
+    (c.cantidad ?? 1) *
+    (1 - (c.descuento ?? 0)) *
+    (1 + (c.iva ?? 0));
+
+  return Math.round((bruto + (c.costo_envio ?? 0)) * 100) / 100;
+}
+
+// ── La regla de la columna A ─────────────────────────────────
+
+export interface FilaPropia {
+  fila: string[];
+  /** Fila real de la planilla, contando el encabezado. */
+  numeroFila: number;
+}
+
+/**
+ * Qué filas de la planilla son de este requerimiento.
+ *
+ * Los archivos tienen nombres genéricos que no dicen a qué RI corresponden, así
+ * que el vínculo es la columna A. Se traen las filas cuya columna A esté vacía
+ * —todavía nadie las reclamó— o sea este RI. Las de otro RI se dejan quietas y
+ * se cuentan para poder avisar. Así una misma planilla sirve a varios pedidos a
+ * lo largo del tiempo sin que se pisen.
+ *
+ * `filas` no incluye el encabezado; la primera es la fila 2 de la planilla.
+ */
+export function filasParaEsteRi(
+  filas: string[][],
+  columnaNroRi: number,
+  nroRi: number
+): { propias: FilaPropia[]; ajenas: number } {
+  const propias: FilaPropia[] = [];
+  let ajenas = 0;
+
+  filas.forEach((fila, i) => {
+    // Una fila sin nada escrito no es de nadie.
+    if (fila.every((c) => String(c ?? "").trim() === "")) return;
+
+    const marca = String(fila[columnaNroRi] ?? "").trim();
+    if (marca === "" || Number(marca) === nroRi) {
+      propias.push({ fila, numeroFila: i + 2 });
+    } else {
+      ajenas += 1;
+    }
+  });
+
+  return { propias, ajenas };
+}
+
+// ── Parsear y escribir ───────────────────────────────────────
+
+export interface CotizacionLeida {
+  proveedor_nombre: string;
+  marca: string | null;
+  unidad_medida: string | null;
+  precio_unitario: number | null;
+  cantidad: number | null;
+  costo_envio: number | null;
+  descuento: number | null;
+  iva: number | null;
+  precio_hasta: string | null;
+  plazo_pago_dias: number | null;
+  condiciones_pago: string | null;
+  disponibilidad: string | null;
+  comentario: string | null;
+}
+
+/** Una fila de la planilla como presupuesto. `null` si no lo es. */
+export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null {
+  const en = (c: ClaveColumna) => (idx[c] >= 0 ? fila[idx[c]] : undefined);
+
+  const proveedor = texto(en("proveedor"));
+  const unitario = numero(en("precio_unitario"));
+
+  // Sin proveedor o sin precio no hay nada que comparar.
+  if (!proveedor || unitario === null) return null;
+
+  return {
+    proveedor_nombre: proveedor,
+    marca: texto(en("marca")),
+    unidad_medida: texto(en("unidad_medida")),
+    precio_unitario: unitario,
+    cantidad: numero(en("cantidad")),
+    costo_envio: numero(en("envio")),
+    descuento: numero(en("descuento")),
+    iva: numero(en("iva")),
+    precio_hasta: fechaISO(en("precio_hasta")),
+    plazo_pago_dias: numero(en("plazos")),
+    condiciones_pago: texto(en("condiciones_pago")),
+    disponibilidad: texto(en("disponibilidad")),
+    comentario: texto(en("comentario")),
+  };
+}
+
+const porcentaje = (v: number | null | undefined) =>
+  v === null || v === undefined ? "" : `${Math.round(v * 10000) / 100}%`;
+
+/** Letra de columna de Sheets a partir del índice (0 → A). */
+export const letraColumna = (i: number) => String.fromCharCode(65 + i);
+
+/**
+ * Arma la fila para escribirla en la planilla.
+ *
+ * El total va como FÓRMULA y no como número, para que la planilla siga siendo
+ * una planilla: si alguien corrige un precio ahí, el total se recalcula. Es la
+ * fórmula corregida, con el envío sumado — las filas viejas conservan la
+ * original hasta que alguien las toque.
+ */
+export function filaParaPlanilla(args: {
+  idx: Indice;
+  numeroFila: number;
+  nroRi: number;
+  fecha: string | null;
+  area: string | null;
+  descripcion: string | null;
+  cotizacion: CotizacionLeida;
+}): string[] {
+  const { idx, numeroFila: n, nroRi, cotizacion: c } = args;
+  const fila: string[] = new Array(COLUMNAS_COMPARATIVA.length).fill("");
+
+  const poner = (clave: ClaveColumna, valor: string) => {
+    if (idx[clave] >= 0) fila[idx[clave]] = valor;
+  };
+
+  const col = (clave: ClaveColumna) => letraColumna(idx[clave]);
+
+  poner("nro_ri", String(nroRi));
+  poner("fecha", args.fecha ?? "");
+  poner("area", args.area ?? "");
+  poner("descripcion", args.descripcion ?? "");
+  poner("proveedor", c.proveedor_nombre);
+  poner("marca", c.marca ?? "");
+  poner("unidad_medida", c.unidad_medida ?? "");
+  poner("precio_unitario", c.precio_unitario === null ? "" : String(c.precio_unitario));
+  poner("cantidad", c.cantidad === null ? "" : String(c.cantidad));
+  poner("envio", c.costo_envio === null ? "" : String(c.costo_envio));
+  poner("descuento", porcentaje(c.descuento));
+  poner("iva", porcentaje(c.iva));
+  poner("precio_hasta", c.precio_hasta ?? "");
+  poner("plazos", c.plazo_pago_dias === null ? "" : String(c.plazo_pago_dias));
+  poner("condiciones_pago", c.condiciones_pago ?? "");
+  poner("disponibilidad", c.disponibilidad ?? "");
+  poner("comentario", c.comentario ?? "");
+  poner("eleccion", "FALSE");
+
+  if (idx.precio_total >= 0 && idx.precio_unitario >= 0) {
+    poner(
+      "precio_total",
+      `=${col("precio_unitario")}${n}*${col("cantidad")}${n}` +
+        `*(1-${col("descuento")}${n})*(1+${col("iva")}${n})` +
+        `+${col("envio")}${n}`
+    );
+  }
+
+  return fila;
+}
