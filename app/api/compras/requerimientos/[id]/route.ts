@@ -35,12 +35,13 @@ const CAMPOS_COMPRA = [
   "compra_asignada_a",
 ] as const;
 
-/** Qué hace falta tener cargado antes de pasar a cada estado. */
+/**
+ * Qué hace falta tener cargado antes de pasar a cada estado.
+ *
+ * PARA_COMPRAR no está acá: lo que exige no es un campo del requerimiento sino
+ * que haya presupuestos cargados, y eso hay que contarlo. Se valida más abajo.
+ */
 const FALTA: Record<string, { campo: string; queda: string }[]> = {
-  PARA_COMPRAR: [
-    { campo: "comparativa_url", queda: "la comparativa" },
-    { campo: "compra_asignada_a", queda: "a quién le toca aprobarla" },
-  ],
   PEDIDO: [
     { campo: "proveedor_id", queda: "el proveedor elegido" },
     { campo: "costo_iva", queda: "el costo + IVA" },
@@ -136,9 +137,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       cambios.aprobado_por = user.id;
       cambios.aprobado_en = new Date().toISOString();
 
-      // Aprobar pone el pedido en la cola de Compras; denegar lo cierra.
+      // Aprobar pone el pedido a juntar presupuestos, que es el paso que sigue;
+      // denegar lo cierra.
+      //
+      // Antes lo dejaba en PARA_COMPRAR, salteando la comparativa. Y como esta
+      // asignación no pasa por la validación de requisitos —que vive en la rama
+      // de compra— el RI quedaba "para comprar" sin comparativa ni asignado,
+      // que es justo lo que esa validación existe para evitar.
       if (cambios.estado_aprobacion === "APROBADA" && actual.estado_compra === "SIN_INICIAR") {
-        cambios.estado_compra = "PARA_COMPRAR";
+        cambios.estado_compra = "EN_COMPARATIVA";
       }
       if (cambios.estado_aprobacion === "DENEGADA") {
         cambios.estado_compra = "DENEGADO";
@@ -173,6 +180,77 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       cambios.compra_aprobada_por = user.id;
       cambios.compra_aprobada_en = new Date().toISOString();
+    }
+
+    // Cuántos presupuestos alcanza lo decide Compras. Lo que el sistema exige
+    // es que haya algo que mirar: sin eso, la persona asignada no puede elegir.
+    if (nuevoEstado === "PARA_COMPRAR") {
+      const { count } = await admin
+        .from("compras_cotizaciones")
+        .select("id", { count: "exact", head: true })
+        .eq("requerimiento_id", id);
+
+      const link = "comparativa_url" in cambios ? cambios.comparativa_url : actual.comparativa_url;
+      if ((count ?? 0) === 0 && !link) {
+        return NextResponse.json(
+          { error: "Antes de avanzar hay que cargar al menos un presupuesto o el link de la comparativa." },
+          { status: 409 }
+        );
+      }
+
+      const asignado =
+        "compra_asignada_a" in cambios ? cambios.compra_asignada_a : actual.compra_asignada_a;
+      if (!asignado) {
+        return NextResponse.json(
+          { error: "Antes de avanzar hay que cargar a quién le toca aprobarla." },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Aprobar la compra es elegir un presupuesto. Si hay presupuestos cargados
+    // y ninguno está elegido, esto se llamó por la vía equivocada: la que
+    // corresponde es POST /api/compras/cotizaciones/[id]/elegir.
+    if (nuevoEstado === "APROBADO") {
+      const { data: cotizaciones } = await admin
+        .from("compras_cotizaciones")
+        .select("id, elegida")
+        .eq("requerimiento_id", id);
+
+      const hay = (cotizaciones ?? []).length > 0;
+      const elegida = (cotizaciones ?? []).some((c) => c.elegida);
+      if (hay && !elegida) {
+        return NextResponse.json(
+          { error: "Para aprobar la compra hay que elegir uno de los presupuestos." },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Al registrar el pedido, el proveedor y los costos salen del presupuesto
+    // elegido en vez de tipearse de nuevo. `costo_iva` es el total sin el
+    // envío, porque en el RI el envío va en su propio campo y la ficha suma los
+    // dos: así el total del RI coincide con el del presupuesto.
+    if (nuevoEstado === "PEDIDO") {
+      const { data: elegida } = await admin
+        .from("compras_cotizaciones")
+        .select("proveedor_id, precio_total, costo_envio")
+        .eq("requerimiento_id", id)
+        .eq("elegida", true)
+        .maybeSingle();
+
+      if (elegida) {
+        const envio = elegida.costo_envio ?? 0;
+        if (!("proveedor_id" in cambios) && !actual.proveedor_id) {
+          cambios.proveedor_id = elegida.proveedor_id;
+        }
+        if (!("costo_iva" in cambios) && actual.costo_iva === null) {
+          cambios.costo_iva = Number(((elegida.precio_total ?? 0) - envio).toFixed(2));
+        }
+        if (!("costo_envio" in cambios) && actual.costo_envio === null) {
+          cambios.costo_envio = envio;
+        }
+      }
     }
 
     // Cada paso deja cargado lo suyo. Sin esto se llega a PEDIDO sin proveedor

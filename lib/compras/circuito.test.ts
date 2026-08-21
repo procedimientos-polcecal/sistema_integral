@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { COLUMNAS_TABLERO, SIGUIENTE_ESTADO, ACCION_SIGUIENTE, COMPRA_LABELS } from "./constants";
+import {
+  COLUMNAS_TABLERO, SIGUIENTE_ESTADO, ACCION_SIGUIENTE, COMPRA_LABELS, REQUISITOS,
+} from "./constants";
 import type { EstadoCompra } from "./types";
 
 /**
@@ -44,5 +46,22 @@ describe("circuito de compra", () => {
 
   it("PEDIDO es el final del tablero: lo que sigue es el seguimiento", () => {
     expect(SIGUIENTE_ESTADO.PEDIDO).toBeUndefined();
+  });
+});
+
+/**
+ * Aprobar un RI lo deja al principio del circuito de compra, no en
+ * PARA_COMPRAR: todavia falta juntar los presupuestos. La migracion 025 ya
+ * habia corregido los datos, pero la ruta seguia poniendo PARA_COMPRAR — y como
+ * lo hacia en la rama de aprobacion, tampoco se validaban los requisitos, asi
+ * que el RI quedaba "para comprar" sin comparativa ni asignado.
+ */
+describe("aprobar un RI lo pone a juntar presupuestos", () => {
+  it("el primer estado del circuito de compra es EN_COMPARATIVA", () => {
+    expect(SIGUIENTE_ESTADO.SIN_INICIAR).toBe("EN_COMPARATIVA");
+  });
+
+  it("PARA_COMPRAR exige la comparativa y a quien le toca", () => {
+    expect(REQUISITOS.PARA_COMPRAR).toEqual(["comparativa", "compra_asignada_a"]);
   });
 });
