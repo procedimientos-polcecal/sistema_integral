@@ -32,8 +32,8 @@ decisiones de personas distintas:
    | Estado | Quién actúa | Qué deja cargado |
    |---|---|---|
    | Sin iniciar | Compras | — |
-   | En comparativa | Compras | junta los presupuestos |
-   | Para comprar | **NICO o MAXI** | la comparativa y a quién le toca aprobarla |
+   | En comparativa | Compras | carga los presupuestos y elige la planilla |
+   | Para comprar | **NICO o MAXI** | eligen un presupuesto: elegir **es** aprobar |
    | Compra aprobada | Compras | quién la aprobó y cuándo |
    | Pedido | — | fecha, proveedor, costo + IVA y envío |
 
@@ -94,13 +94,46 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
 |---|---|
 | `/compras` | Indicadores, gasto por mes/área/empresa, principales proveedores |
 | `/compras/requerimientos` | Listado completo con filtros, paginado en el servidor |
-| `/compras/requerimientos/[id]` | Ficha: datos, aprobación, gestión de compra, comparativa e historial |
+| `/compras/requerimientos/[id]` | Ficha: datos, aprobación, gestión de compra, **comparativa editable** e historial |
 | `/compras/aprobaciones` | Cola por urgencia y antigüedad, con aprobación en tanda |
 | `/compras/tablero` | Para comprar → En comparativa → Pedido |
 | `/compras/proveedores` | Padrón compartido con Mantenimiento, con volumen por proveedor |
 | `/compras/ubicaciones` | Catálogo de "dónde se necesita", con detección de duplicados y fusión |
 | `/compras/configuracion` | Estado de la sincronización con la planilla |
 | `/mis-pedidos` | Fuera del módulo: cualquier usuario pide y sigue lo suyo |
+
+## La comparativa
+
+Los presupuestos se cargan en la ficha del RI, no en Google Sheets. El circuito
+es el que sigue:
+
+1. Compras **elige de la carpeta de Drive** la planilla de comparativa de ese
+   artículo. Los nombres de los archivos son genéricos y no dicen a qué RI
+   corresponden, así que lo elige la persona; el vínculo real es la columna A.
+2. Compras **carga cada presupuesto** en un formulario con los campos de la
+   planilla: proveedor, marca, unidad, precio unitario, cantidad, envío,
+   descuento, IVA, hasta cuándo vale el precio, plazo de pago, condiciones,
+   disponibilidad y comentario. Cada uno queda también como fila en la planilla.
+3. Compras pasa el RI a **Para comprar** y designa a quién le toca.
+4. Esa persona **aprueba la compra eligiendo un presupuesto**. Es un solo acto.
+5. Al registrar el **Pedido**, el proveedor y los costos se bajan del
+   presupuesto elegido en vez de tipearse otra vez.
+
+**Cuántos presupuestos alcanza lo decide Compras.** No hay mínimo: hay casos de
+proveedor único y casos urgentes donde exigir tres frena el pedido sin motivo. Lo
+único que se exige para avanzar es que haya algo que mirar.
+
+**El total suma el envío.** La fórmula de la planilla lo dejaba afuera, y eso
+hace que dos presupuestos no sean comparables cuando uno cobra el flete y el otro
+no. Lo calcula la base, en una columna generada, para que la cuenta viva en un
+solo lugar:
+
+```
+total = unitario × cantidad × (1 − descuento) × (1 + IVA) + envío
+```
+
+**Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
+de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
 
 ## Integración con el resto del SdG
 

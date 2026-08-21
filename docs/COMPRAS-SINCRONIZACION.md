@@ -102,13 +102,60 @@ protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
 protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
 control de quién aprueba pasa a estar en los permisos de la app.
 
+## La carpeta de comparativas
+
+Aparte de la planilla PEDIDOS DE COMPRA, el módulo usa una **carpeta de Drive**
+donde vive una planilla por comparativa, todas con la forma de
+`00. COMPARATIVA DE PROVEEDORES GENERICO`. Se configura con
+`GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` y la cuenta de servicio necesita permiso de
+**Editor** sobre la carpeta.
+
+### La columna A es el vínculo
+
+Los nombres de los archivos son genéricos y a veces no corresponden a lo que
+pidió el RI, así que no se pueden mapear automáticamente. Adentro, en cambio,
+cada fila lleva su `NRO RI` en la columna A. De ahí sale la regla: al adjuntar
+una planilla se traen **las filas cuya columna A esté vacía o sea este RI**, y
+las que tengan otro número se dejan quietas y se informan. Así una misma
+planilla sirve a varios pedidos a lo largo del tiempo sin pisarse. Cuando la app
+reclama una fila libre, le escribe el N° de RI.
+
+### Qué escribe la app
+
+| Cuándo | Qué |
+|---|---|
+| Se carga un presupuesto | Una fila nueva con todos los campos y el N° de RI |
+| Se adjunta una planilla | El N° de RI en la columna A de las filas que estaban libres |
+| Se elige un presupuesto | La casilla `ELECCIÓN` de esa fila |
+| Se borra un presupuesto | La fila **se vacía**, no se elimina |
+
+Borrar la fila correría todas las de abajo y dejaría mal el `drive_fila` de los
+demás presupuestos, que es justo el número que permite volver sobre una fila sin
+duplicarla.
+
+### Dos precauciones
+
+**Antes de escribir, se leen los encabezados** y se mapea por nombre de columna,
+no por posición. Si la planilla no tiene la forma esperada, no se escribe y se
+avisa qué columnas faltan: escribir a ciegas en un archivo con otra estructura es
+la forma más fácil de arruinar la planilla de alguien.
+
+**Las filas nuevas llevan la fórmula del total con el envío sumado** — la
+corregida. Las viejas conservan la original hasta que alguien las toque, así que
+por un tiempo una misma planilla puede tener las dos. Queda anotado como deuda:
+no se reescriben filas ajenas en silencio.
+
+Si Drive falla, el presupuesto **ya quedó guardado** en el sistema: se avisa en
+pantalla y no se rompe la operación, el mismo criterio que la sincronización con
+el master.
+
 ## Puesta en marcha
 
 ### 1. Cuenta de servicio de Google
 
 Se puede reutilizar la de Mantenimiento o crear una nueva. Hay que **compartir
-la planilla PEDIDOS DE COMPRA con esa cuenta como Editor** — no como lector: el
-sistema necesita escribir.
+con esa cuenta como Editor** — no como lector, el sistema necesita escribir —
+dos cosas: la planilla PEDIDOS DE COMPRA y la carpeta de comparativas.
 
 ### 2. Variables en Vercel
 

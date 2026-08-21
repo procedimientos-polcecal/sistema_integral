@@ -58,10 +58,13 @@ funcionando y se puede importar a mano.
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
+| `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
-Además hay que **compartir la planilla con el `client_email` de esa cuenta de
-servicio, como Editor** — no como lector: la app escribe de vuelta el estado de
-las compras.
+Además hay que **compartir con el `client_email` de esa cuenta de servicio,
+como Editor** — no como lector — dos cosas: la planilla PEDIDOS DE COMPRA, y la
+**carpeta de comparativas**. En los dos casos la app escribe de vuelta: el
+estado de las compras en la planilla, y en la carpeta los presupuestos que se
+cargan, el N° de RI en la columna A y la casilla de elección.
 
 ### Si Google bloquea la creación de claves
 
@@ -147,6 +150,7 @@ CRON_SECRET=
 SHEETS_WEBHOOK_SECRET=
 GOOGLE_SHEETS_COMPRAS_ID=1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80
 GOOGLE_SERVICE_ACCOUNT_JSON=
+GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
 WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
