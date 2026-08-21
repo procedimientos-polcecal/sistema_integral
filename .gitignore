@@ -10,3 +10,6 @@ supabase/migrations_*combined.sql
 scripts/export-firestore-org/node_modules/
 scripts/export-firestore-org/orgs_*.json
 .vercel
+
+# Grafo de conocimiento (se regenera con /graphify)
+graphify-out/
