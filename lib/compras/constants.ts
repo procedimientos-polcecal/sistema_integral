@@ -101,6 +101,29 @@ export function moneda(valor: number | null | undefined): string {
   return valor === null || valor === undefined ? "—" : fmtMoneda.format(valor);
 }
 
+const fmtMonedaExacta = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Importe con centavos.
+ *
+ * `moneda()` redondea a pesos, que alcanza para un tablero pero no para una
+ * comparativa: dos presupuestos pueden diferir por centavos y el redondeo lo
+ * esconde justo cuando alguien esta eligiendo.
+ *
+ * Intl separa el signo con un espacio duro (U+00A0); se pasa a espacio normal
+ * para que el texto sea comparable y buscable.
+ */
+export function monedaExacta(valor: number | null | undefined): string {
+  return valor === null || valor === undefined
+    ? SIN_DEFINIR
+    : fmtMonedaExacta.format(valor).replace(/\u00a0/g, " ");
+}
+
 export function fecha(valor: string | null | undefined): string {
   if (!valor) return "—";
   const d = new Date(valor.length <= 10 ? valor + "T12:00:00" : valor);

@@ -10,6 +10,7 @@
  */
 
 import { norm } from "@/lib/compras/texto";
+import { monedaExacta } from "@/lib/compras/constants";
 
 /** Las 19 columnas de la plantilla, en orden. */
 export const COLUMNAS_COMPARATIVA = [
@@ -307,4 +308,57 @@ export function filaParaPlanilla(args: {
   }
 
   return fila;
+}
+
+// ── Para mostrarla ────────────────────────────────────
+
+/**
+ * Cuánto más caro que el más barato.
+ *
+ * Es el número que más ayuda a decidir y el que nadie calcula a mano: "16% más"
+ * dice mucho más que dos totales al lado. El más barato devuelve `null`, porque
+ * "+0%" sería ruido.
+ */
+export function diferenciaPorcentual(
+  total: number | null | undefined,
+  minimo: number | null | undefined
+): string | null {
+  if (total === null || total === undefined) return null;
+  if (!minimo || minimo <= 0) return null;
+  if (total <= minimo) return null;
+  return `+${Math.round((total / minimo - 1) * 100)}%`;
+}
+
+const pct = (v: number) => `${Math.round(v * 10000) / 100}%`;
+
+/**
+ * La cuenta que hay detrás del total, en una línea.
+ *
+ * Sin esto el total es un número que hay que creer. Con esto se ve de dónde
+ * sale, que es lo que permite discutirlo: el unitario más bajo puede terminar
+ * siendo el total más alto por el envío.
+ */
+export function detalleCotizacion(c: {
+  marca: string | null;
+  precio_unitario: number | null;
+  cantidad: number | null;
+  descuento: number | null;
+  iva: number | null;
+  costo_envio: number | null;
+}): string {
+  const partes: string[] = [];
+  if (c.marca) partes.push(c.marca);
+
+  const unitario = monedaExacta(c.precio_unitario);
+  partes.push(
+    c.cantidad === null || c.cantidad === undefined
+      ? unitario
+      : `${unitario} × ${c.cantidad}`
+  );
+
+  if (c.descuento) partes.push(`−${pct(c.descuento)}`);
+  partes.push(`IVA ${pct(c.iva ?? 0)}`);
+  if (c.costo_envio) partes.push(`+ ${monedaExacta(c.costo_envio)} de envío`);
+
+  return partes.join(" · ");
 }

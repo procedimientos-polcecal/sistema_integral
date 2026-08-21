@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   COLUMNAS_COMPARATIVA, mapearEncabezados, filasParaEsteRi,
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
+  diferenciaPorcentual, detalleCotizacion,
 } from "./comparativa";
 
 const ENCABEZADO = [...COLUMNAS_COMPARATIVA];
@@ -152,5 +153,44 @@ describe("listas de la planilla", () => {
     // "1-3 día" está en singular en la planilla. Corregirlo acá haría que la
     // validación de datos de Sheets rechace el valor al escribirlo.
     expect(DISPONIBILIDADES[1]).toBe("1-3 día");
+  });
+});
+
+describe("diferencia contra el mas barato", () => {
+  it("el mas barato no muestra diferencia", () => {
+    expect(diferenciaPorcentual(6536.18, 6536.18)).toBeNull();
+  });
+
+  it("los demas se expresan como porcentaje de mas", () => {
+    expect(diferenciaPorcentual(7602.4, 6536.18)).toBe("+16%");
+    expect(diferenciaPorcentual(7743.6, 6536.18)).toBe("+18%");
+  });
+
+  it("sin un minimo con el que comparar, no hay diferencia", () => {
+    expect(diferenciaPorcentual(1000, 0)).toBeNull();
+    expect(diferenciaPorcentual(null, 6536.18)).toBeNull();
+  });
+});
+
+describe("detalle de un presupuesto en una linea", () => {
+  it("arma la cuenta que hay detras del total", () => {
+    expect(detalleCotizacion({
+      marca: "XCMG", precio_unitario: 1500.5, cantidad: 4,
+      descuento: 0.1, iva: 0.21, costo_envio: null,
+    })).toBe("XCMG · $ 1.500,50 × 4 · −10% · IVA 21%");
+  });
+
+  it("suma el envio cuando lo hay y omite el descuento cuando no", () => {
+    expect(detalleCotizacion({
+      marca: null, precio_unitario: 1290, cantidad: 4,
+      descuento: 0, iva: 0.21, costo_envio: 1500,
+    })).toBe("$ 1.290,00 × 4 · IVA 21% · + $ 1.500,00 de envío");
+  });
+
+  it("una cotizacion por monto total no muestra la multiplicacion", () => {
+    expect(detalleCotizacion({
+      marca: null, precio_unitario: 1000, cantidad: null,
+      descuento: null, iva: 0, costo_envio: null,
+    })).toBe("$ 1.000,00 · IVA 0%");
   });
 });
