@@ -13,6 +13,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
+import { norm } from "@/lib/compras/texto";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -87,11 +88,6 @@ async function listarPestanas(): Promise<string[]> {
 }
 
 // ── Normalización ────────────────────────────────────────────
-
-const norm = (s: unknown) =>
-  String(s ?? "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .trim().toUpperCase().replace(/[°º.]/g, "").replace(/\s+/g, " ");
 
 /**
  * Los encabezados no son idénticos entre pestañas: la cantidad viene como
