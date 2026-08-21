@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { permisosComprasDe } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
+import { costosParaElPedido } from "@/lib/compras/comparativa";
 
 /**
  * Modificación de un requerimiento.
@@ -240,15 +241,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .maybeSingle();
 
       if (elegida) {
-        const envio = elegida.costo_envio ?? 0;
+        const desdeElegida = costosParaElPedido(elegida);
         if (!("proveedor_id" in cambios) && !actual.proveedor_id) {
-          cambios.proveedor_id = elegida.proveedor_id;
+          cambios.proveedor_id = desdeElegida.proveedor_id;
         }
         if (!("costo_iva" in cambios) && actual.costo_iva === null) {
-          cambios.costo_iva = Number(((elegida.precio_total ?? 0) - envio).toFixed(2));
+          cambios.costo_iva = desdeElegida.costo_iva;
         }
         if (!("costo_envio" in cambios) && actual.costo_envio === null) {
-          cambios.costo_envio = envio;
+          cambios.costo_envio = desdeElegida.costo_envio;
         }
       }
     }

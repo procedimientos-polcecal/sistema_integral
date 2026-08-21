@@ -15,6 +15,22 @@ import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/typ
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
 
 /**
+ * Con qué comparativa cuenta un RI.
+ *
+ * Lo arma la página, que es la que puede consultar la base. El tablero lo usa
+ * para no pedir dos veces lo que ya está cargado.
+ */
+export interface ResumenComparativa {
+  cuantos: number;
+  elegida: {
+    proveedor_id: string;
+    proveedor_nombre: string | null;
+    costo_iva: number;
+    costo_envio: number;
+  } | null;
+}
+
+/**
  * Un color por aprobador, para distinguir de un vistazo lo de cada uno.
  *
  * Sale del orden en la lista y no de un hash: con dos o tres personas el hash
@@ -33,13 +49,14 @@ function nombreCorto(p: Persona): string {
 }
 
 export default function TableroClient({
-  requerimientos, aprobadores, proveedores, usuarioId, canEdit,
+  requerimientos, aprobadores, proveedores, usuarioId, canEdit, resumen,
 }: {
   requerimientos: RequerimientoConRelaciones[];
   aprobadores: Persona[];
   proveedores: { id: string; nombre: string }[];
   usuarioId: string;
   canEdit: boolean;
+  resumen: Record<string, ResumenComparativa>;
 }) {
   const router = useRouter();
   const [procesando, setProcesando] = useState<string | null>(null);
@@ -312,6 +329,7 @@ export default function TableroClient({
           requerimiento={avanzando}
           aprobadores={aprobadores}
           proveedores={proveedores}
+          comparativa={resumen[avanzando.id] ?? { cuantos: 0, elegida: null }}
           onClose={() => setAvanzando(null)}
           onConfirmar={(extra) => avanzar(avanzando, extra)}
         />
@@ -328,33 +346,54 @@ export default function TableroClient({
  * PEDIDO sin con que seguir la compra despues.
  */
 function ModalAvanzar({
-  requerimiento: r, aprobadores, proveedores, onClose, onConfirmar,
+  requerimiento: r, aprobadores, proveedores, comparativa, onClose, onConfirmar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   aprobadores: Persona[];
   proveedores: { id: string; nombre: string }[];
+  comparativa: ResumenComparativa;
   onClose: () => void;
   onConfirmar: (extra: Record<string, unknown>) => Promise<boolean>;
 }) {
   const destino = SIGUIENTE_ESTADO[r.estado_compra]!;
   const esComparativa = destino === "PARA_COMPRAR";
 
-  const [comparativa, setComparativa] = useState(r.comparativa_url ?? "");
+  const elegida = comparativa.elegida;
+
+  const [enlace, setEnlace] = useState(r.comparativa_url ?? "");
   const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
-  const [proveedorId, setProveedorId] = useState(r.proveedor_id ?? "");
-  const [costoIva, setCostoIva] = useState(r.costo_iva !== null ? String(r.costo_iva) : "");
-  const [costoEnvio, setCostoEnvio] = useState(r.costo_envio !== null ? String(r.costo_envio) : "");
+
+  // El pedido arranca con lo que dejó el presupuesto elegido en vez de en
+  // blanco: es lo que la ruta va a guardar igual, y verlo antes permite
+  // corregirlo si hace falta.
+  const [proveedorId, setProveedorId] = useState(r.proveedor_id ?? elegida?.proveedor_id ?? "");
+  const [costoIva, setCostoIva] = useState(
+    r.costo_iva !== null ? String(r.costo_iva) : elegida ? String(elegida.costo_iva) : ""
+  );
+  const [costoEnvio, setCostoEnvio] = useState(
+    r.costo_envio !== null ? String(r.costo_envio) : elegida ? String(elegida.costo_envio) : ""
+  );
   const [guardando, setGuardando] = useState(false);
 
+  // Cuántos presupuestos alcanza lo decide Compras. Lo que hace falta es que
+  // haya algo que mirar: presupuestos cargados en el sistema, o el link a una
+  // planilla, que es como quedaron los RI históricos.
+  const hayPresupuestos = comparativa.cuantos > 0;
+
   const listo = esComparativa
-    ? Boolean(comparativa.trim() && asignadoA)
+    ? Boolean(asignadoA && (hayPresupuestos || enlace.trim()))
     : Boolean(proveedorId && costoIva);
 
   async function confirmar() {
     setGuardando(true);
     const ok = await onConfirmar(
       esComparativa
-        ? { comparativa_url: comparativa.trim(), compra_asignada_a: asignadoA }
+        ? {
+            compra_asignada_a: asignadoA,
+            // El link se manda sólo si se escribió: cuando la comparativa vive
+            // en el sistema no hay que pisar lo que ya apunta a la planilla.
+            ...(enlace.trim() ? { comparativa_url: enlace.trim() } : {}),
+          }
         : {
             proveedor_id: proveedorId,
             costo_iva: Number(costoIva),
@@ -381,18 +420,44 @@ function ModalAvanzar({
         <div className="space-y-4 px-6 py-5">
           {esComparativa ? (
             <>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Enlace a la comparativa
-                </span>
-                <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={comparativa}
-                  onChange={(e) => setComparativa(e.target.value)}
-                  placeholder="https://…"
-                  autoFocus
-                />
-              </label>
+              {hayPresupuestos ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                  <p className="text-slate-700">
+                    {comparativa.cuantos} presupuesto{comparativa.cuantos === 1 ? "" : "s"} cargado
+                    {comparativa.cuantos === 1 ? "" : "s"}.
+                  </p>
+                  <Link
+                    href={`/compras/requerimientos/${r.id}`}
+                    className="text-xs text-[var(--primary)] hover:underline"
+                  >
+                    Ver la comparativa o cargar otro →
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                    <p>Todavía no hay presupuestos cargados.</p>
+                    <Link
+                      href={`/compras/requerimientos/${r.id}`}
+                      className="text-xs font-semibold hover:underline"
+                    >
+                      Cargarlos en la ficha del pedido →
+                    </Link>
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      O el enlace a una planilla
+                    </span>
+                    <input
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      value={enlace}
+                      onChange={(e) => setEnlace(e.target.value)}
+                      placeholder="https://…"
+                    />
+                  </label>
+                </div>
+              )}
 
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -416,6 +481,14 @@ function ModalAvanzar({
             </>
           ) : (
             <>
+              {elegida && (
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600">
+                  Sale del presupuesto que se aprobó
+                  {elegida.proveedor_nombre ? `, de ${elegida.proveedor_nombre}` : ""}. Si algo
+                  cambió al hacer el pedido, corregilo acá.
+                </p>
+              )}
+
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Proveedor elegido

@@ -362,3 +362,26 @@ export function detalleCotizacion(c: {
 
   return partes.join(" · ");
 }
+
+/**
+ * Qué proveedor y qué costos deja el presupuesto elegido en el requerimiento.
+ *
+ * `costo_iva` es el total SIN el envío, porque en el requerimiento el envío va
+ * en su propio campo y la ficha suma los dos: así el total del RI coincide con
+ * el del presupuesto en vez de contar el flete dos veces.
+ *
+ * Vive acá y no en la ruta porque lo usan los dos lados: la ruta al pasar a
+ * PEDIDO, y el tablero para mostrar de antemano con qué va a quedar.
+ */
+export function costosParaElPedido(c: {
+  proveedor_id: string;
+  precio_total: number | null;
+  costo_envio: number | null;
+}): { proveedor_id: string; costo_iva: number; costo_envio: number } {
+  const envio = c.costo_envio ?? 0;
+  return {
+    proveedor_id: c.proveedor_id,
+    costo_iva: Number(((c.precio_total ?? 0) - envio).toFixed(2)),
+    costo_envio: envio,
+  };
+}

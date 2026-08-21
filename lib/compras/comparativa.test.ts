@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   COLUMNAS_COMPARATIVA, mapearEncabezados, filasParaEsteRi,
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
-  diferenciaPorcentual, detalleCotizacion,
+  diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
 } from "./comparativa";
 
 const ENCABEZADO = [...COLUMNAS_COMPARATIVA];
@@ -192,5 +192,20 @@ describe("detalle de un presupuesto en una linea", () => {
       marca: null, precio_unitario: 1000, cantidad: null,
       descuento: null, iva: 0, costo_envio: null,
     })).toBe("$ 1.000,00 · IVA 0%");
+  });
+});
+
+describe("que deja el presupuesto elegido en el requerimiento", () => {
+  it("el costo + IVA es el total sin el envio, que va en su propio campo", () => {
+    // 6.243,60 de mercaderia + 1.500 de envio = 7.743,60 de total
+    expect(costosParaElPedido({
+      proveedor_id: "prov-1", precio_total: 7743.6, costo_envio: 1500,
+    })).toEqual({ proveedor_id: "prov-1", costo_iva: 6243.6, costo_envio: 1500 });
+  });
+
+  it("sin envio, el costo + IVA es todo el total", () => {
+    expect(costosParaElPedido({
+      proveedor_id: "prov-2", precio_total: 6536.18, costo_envio: null,
+    })).toEqual({ proveedor_id: "prov-2", costo_iva: 6536.18, costo_envio: 0 });
   });
 });
