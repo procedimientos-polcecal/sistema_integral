@@ -78,9 +78,14 @@ export const ACCION_SIGUIENTE: Partial<Record<EstadoCompra, string>> = {
  *
  * No es validación por validación: son los datos que el paso produce. Pasar a
  * PEDIDO sin proveedor ni costo deja un pedido que después nadie puede seguir.
+ *
+ * `PARA_COMPRAR` ya no exige el link de la comparativa: exige que haya algo que
+ * mirar —un presupuesto cargado o el link— porque si no, la persona asignada no
+ * puede elegir. Cuántos presupuestos alcanza lo decide Compras, no el sistema.
+ * La verificación vive en la ruta, que es la que puede contarlos.
  */
 export const REQUISITOS: Partial<Record<EstadoCompra, string[]>> = {
-  PARA_COMPRAR: ["comparativa_url", "compra_asignada_a"],
+  PARA_COMPRAR: ["comparativa", "compra_asignada_a"],
   PEDIDO: ["proveedor_id", "costo_iva"],
 };
 

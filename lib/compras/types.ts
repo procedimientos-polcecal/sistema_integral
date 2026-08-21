@@ -78,6 +78,9 @@ export interface Requerimiento {
   compra_aprobada_por: string | null;
   compra_aprobada_en: string | null;
   comparativa_url: string | null;
+  /** Archivo de la carpeta de comparativas de Drive del que salen los presupuestos. */
+  comparativa_drive_id: string | null;
+  comparativa_nombre: string | null;
   proveedor_id: string | null;
   costo_iva: number | null;
   costo_envio: number | null;
@@ -103,17 +106,37 @@ export interface RequerimientoConRelaciones extends Requerimiento {
   compras_ubicaciones: { nombre: string } | null;
 }
 
+/**
+ * Un presupuesto de un proveedor, con la forma de la planilla de comparativa.
+ *
+ * La planilla separa dos cosas que antes estaban mezcladas en `plazo_entrega`:
+ * el plazo de PAGO (en días) y la DISPONIBILIDAD (cuándo llega).
+ */
 export interface Cotizacion {
   id: string;
   requerimiento_id: string;
   proveedor_id: string;
+  marca: string | null;
+  unidad_medida: string | null;
   precio_unitario: number | null;
-  precio_total: number | null;
+  cantidad: number | null;
   costo_envio: number | null;
-  plazo_entrega: string | null;
-  condiciones: string | null;
+  /** Fracciones: 0.10 es 10%. */
+  descuento: number | null;
+  iva: number | null;
+  /** Lo calcula la base: columna generada (migración 026). */
+  precio_total: number | null;
+  /** Hasta cuándo vale ese precio. */
+  precio_hasta: string | null;
+  plazo_pago_dias: number | null;
+  condiciones_pago: string | null;
+  disponibilidad: string | null;
+  comentario: string | null;
   url: string | null;
   elegida: boolean;
+  /** `app` = cargada en el sistema; `drive` = leída de la planilla. */
+  origen: string;
+  drive_fila: number | null;
   created_at: string;
   proveedores?: { nombre: string } | null;
 }
