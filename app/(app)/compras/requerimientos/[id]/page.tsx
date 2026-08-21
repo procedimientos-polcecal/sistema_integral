@@ -37,6 +37,10 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
 
   const permisos = await permisosComprasDe(supabase, user.id);
 
+  // Aprobar la compra es de quien la tiene asignada: la comparativa le
+  // ofrece elegir solo a esa persona.
+  const esAsignado = requerimiento.compra_asignada_a === user.id;
+
   return (
     <RequerimientoDetalle
       requerimiento={requerimiento as RequerimientoConRelaciones}
@@ -46,6 +50,7 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
       empresas={empresas ?? []}
       puedeEditar={permisos.puedeEditar}
       puedeAprobar={permisos.puedeAprobar}
+      esAsignado={esAsignado}
     />
   );
 }

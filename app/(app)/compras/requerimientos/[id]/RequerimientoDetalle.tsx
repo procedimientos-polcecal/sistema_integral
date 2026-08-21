@@ -10,9 +10,11 @@ import {
 import type {
   RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
+import Comparativa from "./Comparativa";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
+  esAsignado,
 }: {
   requerimiento: RequerimientoConRelaciones;
   historial: HistorialItem[];
@@ -21,6 +23,7 @@ export default function RequerimientoDetalle({
   empresas: { id: string; nombre: string }[];
   puedeEditar: boolean;
   puedeAprobar: boolean;
+  esAsignado: boolean;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -221,41 +224,13 @@ export default function RequerimientoDetalle({
             </section>
           )}
 
-          {/* Comparativa */}
-          {cotizaciones.length > 0 && (
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <h2 className="px-5 pt-5 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Comparativa de proveedores
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Proveedor</th>
-                      <th className="px-3 py-2 text-right">Unitario</th>
-                      <th className="px-3 py-2 text-right">Total</th>
-                      <th className="px-3 py-2 text-left">Plazo</th>
-                      <th className="px-3 py-2 text-left">Condiciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {cotizaciones.map((c) => (
-                      <tr key={c.id} className={c.elegida ? "bg-green-50" : ""}>
-                        <td className={`px-3 py-2 ${c.elegida ? "font-semibold" : ""}`}>
-                          {c.proveedores?.nombre ?? "—"}
-                          {c.elegida && <span className="ml-1.5 text-xs text-green-700">✓ elegida</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono">{moneda(c.precio_unitario)}</td>
-                        <td className="px-3 py-2 text-right font-mono">{moneda(c.precio_total)}</td>
-                        <td className="px-3 py-2 text-slate-600">{c.plazo_entrega ?? "—"}</td>
-                        <td className="px-3 py-2 text-slate-600">{c.condiciones ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          <Comparativa
+            requerimiento={r}
+            cotizaciones={cotizaciones}
+            proveedores={proveedores}
+            puedeEditar={puedeEditar}
+            esAsignado={esAsignado}
+          />
         </div>
 
         {/* Columna lateral */}
