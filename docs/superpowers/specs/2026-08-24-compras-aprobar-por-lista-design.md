@@ -53,6 +53,21 @@ lugar.
 `admin` vuelve a significar administración —es lo que tiene un `admin_sistema`—
 y deja de ser un rol de decisión sobre el gasto.
 
+**El administrador y los que aprueban son dos cosas separadas, sin cruce.** No
+hay nivel que dé permiso de aprobar, y estar en la lista no da permiso de
+administrar:
+
+| | Administra | Aprueba |
+|---|---|---|
+| Nivel `admin` (o `admin_sistema`) sin estar en la lista | sí | **no** |
+| En la lista con nivel `lectura` | no | **sí** |
+| En la lista y además `admin` | sí | sí |
+
+Que NICO y MAXI aprueben no requiere darles ningún nivel especial: alcanza con
+que estén en la lista y tengan acceso al módulo. Y quien administre el sistema no
+puede aprobar un gasto por el solo hecho de administrarlo, que es el cruce que
+este cambio viene a cortar.
+
 **Avanzar no es aprobar.** `edicion` mueve el RI a comparativa, a "para
 comprar" y a "pedido". El paso de `PARA_COMPRAR` a `APROBADO` no está en esa
 lista: no es un avance operativo sino la decisión sobre el gasto, y sigue siendo
