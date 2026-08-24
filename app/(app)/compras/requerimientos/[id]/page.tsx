@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { permisosComprasDe } from "@/lib/compras/auth";
+import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
 import RequerimientoDetalle from "./RequerimientoDetalle";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
 
@@ -35,6 +35,10 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
 
   const { data: empresas } = await supabase.from("empresas").select("id, nombre").order("nombre");
 
+  // Quiénes pueden aprobar una compra: es a uno de ellos a quien Compras se
+  // la asigna.
+  const aprobadores = await aprobadoresDeCompras(supabase);
+
   const permisos = await permisosComprasDe(supabase, user.id);
 
   // Aprobar la compra es de quien la tiene asignada: la comparativa le
@@ -51,6 +55,7 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
       puedeEditar={permisos.puedeEditar}
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
+      aprobadores={aprobadores}
     />
   );
 }

@@ -320,6 +320,9 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
           });
           if (compra.estado === "DENEGADO") datos.estado_aprobacion = "DENEGADA";
           datos.aprobador ??= compra.aprobador;
+          // El paréntesis de "PARA COMPRAR (NICO)" dice a quién le toca aprobar
+          // esa compra. Se guarda para resolverlo contra los alias más abajo.
+          datos.asignado_alias = compra.aprobador;
         }
 
         porRi.set(nro, {
@@ -338,6 +341,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     const idArea = await asegurarAreas(admin, registros.map((r) => r.datos.area));
     const idProveedor = await asegurarProveedores(admin, registros.map((r) => r.datos.proveedor));
     const porEmpresa = await mapaEmpresas(admin);
+    const porAlias = await mapaAlias(admin);
     const idUbicacion = await asegurarUbicaciones(admin, registros.map((r) => r.datos.ubicacion));
 
     // Los RI ya gestionados desde la app no se pisan.
@@ -350,10 +354,11 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       editado_en_app: boolean;
       estado_aprobacion: string;
       estado_compra: string;
+      compra_asignada_a: string | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -407,6 +412,16 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         proveedor_id: d.proveedor
           ? idProveedor.get(claveProveedor(String(d.proveedor))) ?? null
           : null,
+        // Sin esto, un RI que la planilla marca "PARA COMPRAR (NICO)" llegaba a
+        // la app sin asignar, y como aprobar la compra es de quien la tiene
+        // asignada, no lo podía aprobar nadie.
+        // Si el alias no está registrado en /compras/configuracion no se puede
+        // resolver, y ahí se conserva lo que hubiera: no saber quién es no es
+        // razon para dejar la compra sin nadie que pueda aprobarla.
+        compra_asignada_a:
+          (d.asignado_alias ? porAlias.get(norm(d.asignado_alias)) : null) ??
+          previo.get(registro.nro_ri)?.compra_asignada_a ??
+          null,
         costo_iva: d.costo_iva ?? null,
         costo_envio: d.costo_envio ?? null,
         origen: "sheets",
@@ -478,6 +493,22 @@ async function asegurarProveedores(admin: Admin, valores: unknown[]) {
 }
 
 /** "AMBAS" no es una empresa: los RI compartidos quedan con empresa_id en null. */
+/**
+ * Alias de la planilla → usuario. "NICO" y "MAXI" son como los nombra la
+ * planilla; el sistema necesita el id para saber quién puede aprobar.
+ */
+async function mapaAlias(admin: Admin) {
+  const { data } = await admin
+    .from("compras_aprobadores")
+    .select("usuario_id, alias_planilla");
+
+  return new Map(
+    (data ?? [])
+      .filter((a) => a.alias_planilla)
+      .map((a) => [norm(a.alias_planilla), a.usuario_id as string])
+  );
+}
+
 async function mapaEmpresas(admin: Admin) {
   const { data } = await admin.from("empresas").select("id, nombre");
   return new Map((data ?? []).map((e) => [norm(e.nombre), e.id as string]));

@@ -14,7 +14,7 @@ import Comparativa from "./Comparativa";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado,
+  esAsignado, aprobadores,
 }: {
   requerimiento: RequerimientoConRelaciones;
   historial: HistorialItem[];
@@ -24,6 +24,7 @@ export default function RequerimientoDetalle({
   puedeEditar: boolean;
   puedeAprobar: boolean;
   esAsignado: boolean;
+  aprobadores: { id: string; nombre: string; apellido: string }[];
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -36,6 +37,7 @@ export default function RequerimientoDetalle({
   const [costoEnvio, setCostoEnvio] = useState(r.costo_envio !== null ? String(r.costo_envio) : "");
   const [comparativaUrl, setComparativaUrl] = useState(r.comparativa_url ?? "");
   const [ocNumero, setOcNumero] = useState(r.oc_numero ?? "");
+  const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
 
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
@@ -199,6 +201,22 @@ export default function RequerimientoDetalle({
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={ocNumero} onChange={(e) => setOcNumero(e.target.value)} placeholder="Opcional" />
                 </Campo>
+                <Campo label="A quién le toca aprobarla">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={asignadoA}
+                    onChange={(e) => setAsignadoA(e.target.value)}
+                  >
+                    <option value="">Sin asignar</option>
+                    {aprobadores.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nombre} {a.apellido}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Es lo que va entre paréntesis en el estado de la planilla, y sólo esa
+                    persona puede aprobar la compra.
+                  </p>
+                </Campo>
                 <Campo label="Enlace a la comparativa">
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={comparativaUrl} onChange={(e) => setComparativaUrl(e.target.value)} placeholder="https://…" />
@@ -214,6 +232,7 @@ export default function RequerimientoDetalle({
                     costo_envio: costoEnvio === "" ? null : Number(costoEnvio),
                     comparativa_url: comparativaUrl.trim() || null,
                     oc_numero: ocNumero.trim() || null,
+                    compra_asignada_a: asignadoA || null,
                   })
                 }
                 disabled={guardando}
