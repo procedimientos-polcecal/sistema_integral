@@ -1,46 +1,52 @@
 import { describe, it, expect } from "vitest";
-import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "./access";
-import { NAV, type NavItem } from "./nav";
-import type { Modulo, Rol, UsuarioModulo } from "./types";
+import { NAV, puedeVerItem, type NavItem, type ContextoNav } from "./nav";
+import type { Modulo } from "./types";
 
-/** Misma función que usa components/Sidebar.tsx para filtrar. */
-function visible(item: NavItem, modulos: Set<Modulo>, esAdminGlobal: boolean, adminModulos: Set<Modulo>): boolean {
-  if (item.soloAdminGlobal) return esAdminGlobal;
-  if (item.soloAdmin) return item.modulo ? adminModulos.has(item.modulo) : esAdminGlobal;
-  if (!item.modulo) return true;
-  return modulos.has(item.modulo);
-}
+const itemsDeCompras = (): NavItem[] => {
+  const grupo = NAV.find((n) => n.label === "Compras");
+  if (!grupo?.children) throw new Error("falta el grupo Compras");
+  return grupo.children;
+};
 
-/** Reproduce lo que arma app/(app)/layout.tsx y renderiza el Sidebar. */
-function etiquetasDelSidebar(rol: Rol, grants: UsuarioModulo[]): string[] {
-  const modulos = new Set(modulosVisibles(rol, grants));
-  const modulosAdmin = new Set(MODULOS_ORDEN.filter((m) => nivelEnModulo(rol, grants, m) === "admin"));
-  const esAdminGlobal = rol === "admin_sistema" || rol === "admin";
-  return NAV.filter((i) => visible(i, modulos, esAdminGlobal, modulosAdmin)).map((i) => i.label);
-}
+const ctx = (over: Partial<ContextoNav> = {}): ContextoNav => ({
+  modulos: new Set<Modulo>(["compras"]),
+  adminModulos: new Set<Modulo>(),
+  esAdminGlobal: false,
+  esAprobadorCompras: false,
+  ...over,
+});
 
-const grant = (modulo: Modulo, nivel: UsuarioModulo["nivel"]): UsuarioModulo =>
-  ({ id: modulo, usuario_id: "u", modulo, nivel });
+const visibles = (c: ContextoNav) =>
+  itemsDeCompras().filter((i) => puedeVerItem(i, c)).map((i) => i.label);
 
-describe("visibilidad del módulo Compras en el sidebar", () => {
-  it("admin_sistema lo ve aunque no tenga ningún grant", () => {
-    expect(etiquetasDelSidebar("admin_sistema", [])).toContain("Compras");
+describe("menu de Compras", () => {
+  it("quien tiene el modulo ve el trabajo del dia a dia", () => {
+    const v = visibles(ctx());
+    expect(v).toContain("Tablero");
+    expect(v).toContain("Requerimientos");
   });
 
-  it("admin_sistema lo ve con grants de otros módulos", () => {
-    const grants = [grant("rrhh", "admin"), grant("remises", "admin"), grant("mantenimiento", "admin")];
-    expect(etiquetasDelSidebar("admin_sistema", grants)).toContain("Compras");
+  /**
+   * Aprobar dejo de depender del nivel: administrar el modulo y autorizar un
+   * gasto son cosas distintas y las hacen personas distintas.
+   */
+  it("sin estar en la lista no se ven las pantallas de aprobar, ni siendo admin", () => {
+    const v = visibles(ctx({ adminModulos: new Set<Modulo>(["compras"]), esAdminGlobal: true }));
+    expect(v).not.toContain("Aprobaciones");
+    expect(v).not.toContain("Para aprobar");
+    // Administrar si, que es lo suyo.
+    expect(v).toContain("Configuración");
   });
 
-  it("un operario con grant de compras lo ve", () => {
-    expect(etiquetasDelSidebar("operario", [grant("compras", "lectura")])).toContain("Compras");
+  it("quien esta en la lista ve las dos, sin ser admin", () => {
+    const v = visibles(ctx({ esAprobadorCompras: true }));
+    expect(v).toContain("Aprobaciones");
+    expect(v).toContain("Para aprobar");
+    expect(v).not.toContain("Configuración");
   });
 
-  it("un operario sin grant de compras no lo ve", () => {
-    expect(etiquetasDelSidebar("operario", [grant("rrhh", "admin")])).not.toContain("Compras");
-  });
-
-  it("«Mis pedidos» lo ve cualquiera, tenga o no el módulo", () => {
-    expect(etiquetasDelSidebar("operario", [])).toContain("Mis pedidos");
+  it("quien no tiene el modulo no ve nada de Compras", () => {
+    const ajeno = ctx({ modulos: new Set<Modulo>(), esAprobadorCompras: true });
+    expect(visibles(ajeno)).toHaveLength(0);
   });
 });

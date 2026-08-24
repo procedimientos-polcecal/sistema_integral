@@ -9,6 +9,13 @@ export interface NavItem {
   // Configuración de RRHH: cualquier admin del módulo, no hace falta ser
   // admin_sistema/admin global).
   soloAdmin?: boolean;
+  /**
+   * Sólo para quien está en la lista de aprobadores de Compras.
+   *
+   * Aprobar no depende del nivel: administrar el módulo y autorizar un gasto son
+   * cosas distintas y las hacen personas distintas.
+   */
+  soloAprobadorCompras?: boolean;
   // Restringe a admin_sistema/admin global, sin importar el módulo (ej.
   // Usuarios: gestiona permisos de todos los módulos, no es RRHH-específico).
   soloAdminGlobal?: boolean;
@@ -102,7 +109,8 @@ export const NAV: NavItem[] = [
     children: [
       { label: "Dashboard", href: "/compras", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
-      { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAdmin: true },
+      { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorCompras: true },
+      { label: "Para aprobar", href: "/compras/para-aprobar", modulo: "compras", soloAprobadorCompras: true },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
       { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
@@ -119,3 +127,28 @@ export const NAV: NavItem[] = [
     soloAdminGlobal: true,
   },
 ];
+
+export interface ContextoNav {
+  modulos: Set<Modulo>;
+  adminModulos: Set<Modulo>;
+  esAdminGlobal: boolean;
+  esAprobadorCompras: boolean;
+}
+
+/**
+ * Si un ítem se ve o no.
+ *
+ * Vive acá y no en el Sidebar porque el test lo estaba reimplementando: dos
+ * copias de una regla de permisos es una copia de más, y la que se testea no era
+ * la que corre.
+ *
+ * El módulo se comprueba primero: quien no tiene Compras no ve "Para aprobar"
+ * aunque esté en la lista.
+ */
+export function puedeVerItem(item: NavItem, ctx: ContextoNav): boolean {
+  if (item.modulo && !ctx.modulos.has(item.modulo)) return false;
+  if (item.soloAdminGlobal) return ctx.esAdminGlobal;
+  if (item.soloAprobadorCompras) return ctx.esAprobadorCompras;
+  if (item.soloAdmin) return item.modulo ? ctx.adminModulos.has(item.modulo) : ctx.esAdminGlobal;
+  return true;
+}

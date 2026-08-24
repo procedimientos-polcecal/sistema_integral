@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
+import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -60,6 +61,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const modulos = modulosVisibles(rol, grantsList);
   const modulosAdmin = MODULOS_ORDEN.filter((m) => nivelEnModulo(rol, grantsList, m) === "admin");
 
+  // Aprobar en Compras no depende del nivel: sale de la lista.
+  const esAprobadorCompras = await puedeAprobarCompras(supabase, user.id);
+
   return (
     <div className="flex h-screen flex-col">
       <Header usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()} />
@@ -68,6 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           modulos={modulos}
           modulosAdmin={modulosAdmin}
           rol={rol}
+          esAprobadorCompras={esAprobadorCompras}
           esEmpleadoRemises={!!usuario.empleado_id}
         />
         <main className="flex-1 overflow-auto p-6">{children}</main>

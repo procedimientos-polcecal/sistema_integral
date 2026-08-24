@@ -3,17 +3,10 @@
 import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { NAV, type NavItem } from "@/lib/core/nav";
+import { NAV, puedeVerItem, type NavItem } from "@/lib/core/nav";
 import type { Modulo, Rol } from "@/lib/core/types";
 
 const COLAPSADO_KEY = "sdg-sidebar-colapsado";
-
-function visible(item: NavItem, modulos: Set<Modulo>, esAdminGlobal: boolean, adminModulos: Set<Modulo>): boolean {
-  if (item.soloAdminGlobal) return esAdminGlobal;
-  if (item.soloAdmin) return item.modulo ? adminModulos.has(item.modulo) : esAdminGlobal;
-  if (!item.modulo) return true;
-  return modulos.has(item.modulo);
-}
 
 /** Compara contra pathname+query si el href trae `?...`, si no, solo pathname. */
 function esRutaActiva(href: string, pathname: string, search: string): boolean {
@@ -69,22 +62,26 @@ export function Sidebar({
   modulos,
   modulosAdmin,
   rol,
+  esAprobadorCompras,
   esEmpleadoRemises = false,
 }: {
   modulos: Modulo[];
   /** Módulos donde el usuario tiene nivel "admin" (no solo acceso) — gatea los ítems soloAdmin de cada módulo. */
   modulosAdmin: Modulo[];
   rol: Rol;
+  /** Aprobar no depende del nivel: sale de la lista de Compras. */
+  esAprobadorCompras: boolean;
   /** Cuenta vinculada a un empleado (auto-servicio "Mi remis") — no depende del nivel de módulo. */
   esEmpleadoRemises?: boolean;
 }) {
   const set = new Set(modulos);
   const adminSet = new Set(modulosAdmin);
   const esAdminGlobal = rol === "admin_sistema" || rol === "admin";
+  const ctx = { modulos: set, adminModulos: adminSet, esAdminGlobal, esAprobadorCompras };
   const pathname = usePathname();
   const search = useSearchParams().toString();
 
-  const items = NAV.filter((i) => visible(i, set, esAdminGlobal, adminSet));
+  const items = NAV.filter((i) => puedeVerItem(i, ctx));
   const [abierto, setAbierto] = useState<string | null>(null);
   const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
@@ -155,7 +152,7 @@ export function Sidebar({
             );
           }
 
-          const hijosVisibles = item.children.filter((c) => visible(c, set, esAdminGlobal, adminSet));
+          const hijosVisibles = item.children.filter((c) => puedeVerItem(c, ctx));
           const hijoActivo = hijosVisibles.some(
             (c) => esRutaActiva(c.href, pathname, search) || c.children?.some((n) => esRutaActiva(n.href, pathname, search))
           );
@@ -197,7 +194,7 @@ export function Sidebar({
                       );
                     }
 
-                    const nietosVisibles = c.children.filter((n) => visible(n, set, esAdminGlobal, adminSet));
+                    const nietosVisibles = c.children.filter((n) => puedeVerItem(n, ctx));
                     const nietoActivo = nietosVisibles.some((n) => esRutaActiva(n.href, pathname, search));
                     const subDesplegado = abiertoSub === c.label;
                     return (
