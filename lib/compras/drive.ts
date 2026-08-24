@@ -15,6 +15,7 @@ import {
   SCOPE_SHEETS, SCOPE_DRIVE_LECTURA,
 } from "@/lib/compras/google";
 import { letraColumna } from "@/lib/compras/comparativa";
+export { urlDePlanilla } from "@/lib/compras/vincular";
 
 export interface ArchivoComparativa {
   id: string;
@@ -62,21 +63,28 @@ export async function listarComparativas(): Promise<ArchivoComparativa[]> {
   );
 }
 
-/** Nombre de la primera pestaña de una planilla. */
-async function primeraPestana(token: string, fileId: string): Promise<string> {
+/**
+ * Cómo se llama el archivo y su primera pestaña.
+ *
+ * El nombre sale de acá y no de la API de Drive, así funciona aunque Drive no
+ * esté habilitado en el proyecto de Google.
+ */
+async function cabecera(token: string, fileId: string): Promise<{ nombre: string; pestana: string }> {
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
-    `?fields=sheets.properties.title`;
+    `?fields=properties.title,sheets.properties.title`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const json = await res.json();
-  const titulo = json.sheets?.[0]?.properties?.title;
-  if (!titulo) throw new Error("La planilla no tiene pestañas");
-  return titulo;
+  const pestana = json.sheets?.[0]?.properties?.title;
+  if (!pestana) throw new Error("La planilla no tiene pestañas");
+  return { nombre: json.properties?.title ?? fileId, pestana };
 }
 
 export interface ComparativaLeida {
+  /** Cómo se llama el archivo, para poder nombrarlo en la ficha. */
+  nombre: string;
   pestana: string;
   encabezado: string[];
   filas: string[][];
@@ -85,7 +93,7 @@ export interface ComparativaLeida {
 /** Lee una comparativa completa: encabezado y filas. */
 export async function leerComparativa(fileId: string): Promise<ComparativaLeida> {
   const token = await obtenerToken([SCOPE_SHEETS]);
-  const pestana = await primeraPestana(token, fileId);
+  const { nombre, pestana } = await cabecera(token, fileId);
 
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
@@ -94,7 +102,7 @@ export async function leerComparativa(fileId: string): Promise<ComparativaLeida>
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const valores = ((await res.json()).values ?? []) as string[][];
-  return { pestana, encabezado: valores[0] ?? [], filas: valores.slice(1) };
+  return { nombre, pestana, encabezado: valores[0] ?? [], filas: valores.slice(1) };
 }
 
 /**
@@ -177,6 +185,3 @@ export async function vaciarFila(
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 }
 
-/** El link para abrir la planilla. */
-export const urlDePlanilla = (fileId: string) =>
-  `https://docs.google.com/spreadsheets/d/${fileId}`;

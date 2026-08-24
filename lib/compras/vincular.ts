@@ -43,3 +43,13 @@ export function idDePlanilla(url: string | null | undefined): string | null {
 
   return null;
 }
+
+/**
+ * El link para abrir una planilla a partir de su id.
+ *
+ * Vive acá y no en drive.ts porque lo usa también la pantalla, y drive.ts
+ * arrastra el JWT y las variables de entorno: no puede entrar a un componente
+ * cliente.
+ */
+export const urlDePlanilla = (fileId: string) =>
+  `https://docs.google.com/spreadsheets/d/${fileId}`;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { urlDePlanilla } from "@/lib/compras/vincular";
 import type { Cotizacion, RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorComparativa from "./SelectorComparativa";
 import PresupuestoForm from "./PresupuestoForm";
@@ -127,8 +128,15 @@ export default function Comparativa({
           {r.comparativa_nombre && (
             <p className="mt-0.5 text-sm text-slate-600">
               Planilla:{" "}
-              {r.comparativa_url ? (
-                <a href={r.comparativa_url} target="_blank" rel="noreferrer" className="underline">
+              {/* El link sale del id, no de comparativa_url: esa columna guarda
+                  el texto visible de la celda de la planilla, que dice "LINK". */}
+              {r.comparativa_drive_id ? (
+                <a
+                  href={urlDePlanilla(r.comparativa_drive_id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
                   {r.comparativa_nombre}
                 </a>
               ) : (

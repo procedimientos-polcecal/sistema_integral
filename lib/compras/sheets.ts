@@ -14,6 +14,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
 import { norm } from "@/lib/compras/texto";
+import { linkDeCelda } from "@/lib/compras/vincular";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/compras/google";
@@ -528,6 +529,72 @@ async function asegurarUbicaciones(admin: Admin, valores: unknown[]) {
   }
   const { data } = await admin.from("compras_ubicaciones").select("id, nombre");
   return new Map((data ?? []).map((u) => [norm(u.nombre as string), u.id as string]));
+}
+
+// ── Los links de comparativa que esconde la planilla ────
+
+interface CeldaConLink {
+  formattedValue?: string;
+  userEnteredValue?: { formulaValue?: string };
+  hyperlink?: string;
+  textFormatRuns?: { format?: { link?: { uri?: string } } }[];
+}
+
+/**
+ * A qué planilla de comparativa apunta cada requerimiento.
+ *
+ * La celda muestra "LINK" y esconde el hipervínculo detrás, así que leerla con
+ * la API de valores —que devuelve el texto visible— no sirve: por eso en la base
+ * quedó guardado el texto "LINK" y no la URL. Acá se pide la grilla con la
+ * fórmula y el hipervínculo de cada celda, que cubre las dos formas de cargarlo.
+ *
+ * Se lee una vez por pestaña, no una por requerimiento.
+ */
+export async function leerLinksDeComparativa(): Promise<Map<number, string>> {
+  const token = await obtenerToken(false);
+  const pestanas = (await listarPestanas()).filter((p) => p !== HOJA_MASTER);
+
+  const campos =
+    "sheets(properties(title),data(rowData(values(" +
+    "formattedValue,userEnteredValue(formulaValue),hyperlink," +
+    "textFormatRuns(format(link(uri)))))))";
+
+  const rangos = pestanas.map((p) => `ranges=${encodeURIComponent(`${p}!A:R`)}`).join("&");
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
+    `?${rangos}&fields=${encodeURIComponent(campos)}`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+
+  const json = await res.json();
+  const porRi = new Map<number, string>();
+
+  for (const hoja of json.sheets ?? []) {
+    const filas: { values?: CeldaConLink[] }[] = hoja.data?.[0]?.rowData ?? [];
+    if (filas.length === 0) continue;
+
+    const encabezado = (filas[0].values ?? []).map((c) => norm(c?.formattedValue));
+    const idx = indexarColumnas(encabezado);
+    if (idx.comparativa < 0) continue;
+
+    for (let f = 1; f < filas.length; f++) {
+      const celdas = filas[f].values ?? [];
+      const nro = Number(String(celdas[idx.nro_ri]?.formattedValue ?? "").replace(/[^0-9]/g, ""));
+      if (!nro || isNaN(nro)) continue;
+
+      const celda = celdas[idx.comparativa];
+      if (!celda) continue;
+
+      const link = linkDeCelda(
+        celda.userEnteredValue?.formulaValue ?? celda.formattedValue,
+        celda.hyperlink ?? celda.textFormatRuns?.[0]?.format?.link?.uri
+      );
+      if (link) porRi.set(nro, link);
+    }
+  }
+
+  return porRi;
 }
 
 // ── Exportar: app → planilla ─────────────────────────────────

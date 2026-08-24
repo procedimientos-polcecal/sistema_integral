@@ -130,6 +130,8 @@ export default function ConfiguracionClient({
 
       {pendientes.length > 0 && <PanelPendientes pendientes={pendientes} />}
 
+      <VincularComparativas />
+
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Quiénes pueden aprobar
@@ -282,6 +284,100 @@ function Leyenda({ color, texto }: { color: string; texto: string }) {
       <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
       {texto}
     </span>
+  );
+}
+
+/**
+ * Rescatar los links de comparativa que la planilla tenía escondidos.
+ *
+ * La celda muestra "LINK" y guarda el hipervínculo detrás, así que al sistema
+ * había llegado el texto y no la URL. Esto los trae en tanda, agrupando por
+ * archivo: muchos pedidos apuntan a la misma planilla.
+ *
+ * Va con dry-run primero, como el resto de las operaciones masivas del módulo.
+ */
+function VincularComparativas() {
+  const router = useRouter();
+  const [corriendo, setCorriendo] = useState(false);
+  const [resultado, setResultado] = useState<string | null>(null);
+  const [problemas, setProblemas] = useState<string[]>([]);
+  const [restantes, setRestantes] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  async function correr(aplicar: boolean) {
+    setCorriendo(true);
+    setError("");
+    setResultado(null);
+    setProblemas([]);
+
+    const res = await fetch(
+      `/api/compras/comparativas/vincular?filas=1${aplicar ? "&aplicar=1" : ""}`,
+      { method: "POST" }
+    );
+    const b = await res.json().catch(() => ({}));
+    setCorriendo(false);
+
+    if (!res.ok) {
+      setError(b.error ?? "No se pudo leer la planilla.");
+      return;
+    }
+
+    setRestantes(b.archivos_restantes);
+    setProblemas(b.problemas ?? []);
+    setResultado(
+      `${b.dry_run ? "Simulacion: " : ""}` +
+      `${b.vinculados} requerimiento(s) vinculados a ${b.archivos_procesados} planilla(s), ` +
+      `con ${b.presupuestos} presupuesto(s). ` +
+      `${b.sin_link} sin link en la celda` +
+      (b.link_no_es_planilla > 0 ? `, ${b.link_no_es_planilla} con un link que no es una planilla` : "") +
+      `. Quedan ${b.archivos_restantes} planilla(s) por procesar.`
+    );
+    if (aplicar) router.refresh();
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Comparativas de la planilla
+      </h2>
+      <p className="mb-3 text-sm text-slate-600">
+        La columna de comparativa de cada hoja muestra “LINK” y esconde el
+        hipervínculo detrás, así que al sistema llegó el texto y no la dirección.
+        Esto va a buscarla y enlaza cada pedido con su planilla, trayendo los
+        presupuestos que tengan su N° de RI.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => correr(false)}
+          disabled={corriendo}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {corriendo ? "Leyendo…" : "Simular"}
+        </button>
+        <button
+          onClick={() => correr(true)}
+          disabled={corriendo}
+          className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        >
+          Vincular
+        </button>
+      </div>
+
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {resultado && <p className="mt-2 text-sm text-slate-700">{resultado}</p>}
+      {restantes !== null && restantes > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          Se procesa de a 20 planillas por vez para no pasarse del tiempo límite:
+          volvé a apretar hasta que queden 0.
+        </p>
+      )}
+      {problemas.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-amber-800">
+          {problemas.slice(0, 10).map((p, i) => <li key={i}>· {p}</li>)}
+        </ul>
+      )}
+    </section>
   );
 }
 
