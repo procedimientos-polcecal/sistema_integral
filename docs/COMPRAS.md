@@ -66,8 +66,8 @@ Los tres niveles del núcleo (`usuario_modulos.nivel`) se mapean así:
 | Nivel | Puede |
 |---|---|
 | `lectura` | Consultar todo el circuito |
-| `edicion` | Gestionar la compra: proveedor, comparativa, costos, estados |
-| `admin` | Además aprobar o denegar |
+| `edicion` | Cargar comparativas y presupuestos, gestionar proveedor, costos y OC, asignar a quién le toca aprobar, y avanzar los estados del circuito |
+| `admin` | Lo mismo, y además administrar el módulo: quiénes están en la lista de aprobadores |
 
 Aprobar es más restrictivo que comprar a propósito: es una decisión sobre el
 gasto, no una tarea operativa.
@@ -95,12 +95,22 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
 | `/compras` | Indicadores, gasto por mes/área/empresa, principales proveedores |
 | `/compras/requerimientos` | Listado completo con filtros, paginado en el servidor |
 | `/compras/requerimientos/[id]` | Ficha: datos, aprobación, gestión de compra, **comparativa editable** e historial |
+| `/compras/para-aprobar` | Bandeja de quien aprueba: lo suyo arriba, lo de otros abajo |
 | `/compras/aprobaciones` | Cola por urgencia y antigüedad, con aprobación en tanda |
 | `/compras/tablero` | Para comprar → En comparativa → Pedido |
 | `/compras/proveedores` | Padrón compartido con Mantenimiento, con volumen por proveedor |
 | `/compras/ubicaciones` | Catálogo de "dónde se necesita", con detección de duplicados y fusión |
 | `/compras/configuracion` | Estado de la sincronización con la planilla |
 | `/mis-pedidos` | Fuera del módulo: cualquier usuario pide y sigue lo suyo |
+
+**Aprobar no es un nivel: es estar en la lista** de `/compras/configuracion`.
+Vale para las dos aprobaciones —la del requerimiento y la de la compra— y no
+alcanza con ser administrador del módulo ni del sistema. Administrar es
+configurar; aprobar es autorizar plata, y las hacen personas distintas.
+
+Aprobar una compra pide las dos cosas: estar en la lista y ser la persona a la
+que se le asignó.
+
 
 ## La comparativa
 
