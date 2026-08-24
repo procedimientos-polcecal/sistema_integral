@@ -84,6 +84,13 @@ queda pendiente, en vez de meter un valor que la validación rechaza.
 1846 requerimientos eso hacía que la sincronización revirtiera aprobaciones sin
 ruido. Usar siempre `traerTodo()` de `lib/core/paginado.ts`.
 
+**La planilla escribe las fechas en d/m, no en m/d.** El parser suponía lo
+contrario y daba vuelta el día y el mes en toda fecha cuyo día fuera 12 o menos:
+el 39% de los RI. La forma de detectarlo fue la secuencia de N° de RI, que es
+correlativa —los 1795 a 1811, del 11 y 12 de agosto, figuraban en noviembre y
+diciembre, y el 1812, del 13, estaba bien porque 13 no puede ser un mes—.
+Corregido en el parser; los datos guardados se arreglan releyendo la planilla.
+
 **Un `.in()` con muchos ids arma una URL que PostgREST rechaza.** Filtrar por
 una lista de 1000 UUID da una URL de 37 KB y la respuesta es `400`, sin decir por
 qué. Y como `traerTodo()` lanza al ver el error, un Server Component que use eso
