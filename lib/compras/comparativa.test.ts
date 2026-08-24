@@ -247,3 +247,44 @@ describe("variantes del encabezado", () => {
     expect(r.faltan.join(" ")).toContain("N° RI");
   });
 });
+
+/**
+ * `plazo_pago_dias` es la unica columna entera que sale de la planilla, y ahi
+ * la gente escribe lo que quiere. Un decimal hacia fallar el INSERT entero con
+ * "invalid input syntax for type integer", asi que una sola celda rara dejaba
+ * sin adjuntar toda la comparativa.
+ */
+describe("el plazo de pago entra en una columna entera", () => {
+  const idx = (() => {
+    const r = mapearEncabezados([...COLUMNAS_COMPARATIVA]);
+    if (!r.ok) throw new Error("encabezado invalido");
+    return r.idx;
+  })();
+
+  const conPlazo = (valor: string) => {
+    const fila = new Array(19).fill("");
+    fila[0] = "1850";
+    fila[4] = "Repuestos SA";
+    fila[7] = "1000";
+    fila[14] = valor;
+    return parsearFila(fila, idx);
+  };
+
+  it("redondea un decimal en vez de romper el insert", () => {
+    expect(conPlazo("30.6")?.plazo_pago_dias).toBe(31);
+    expect(conPlazo("30,4")?.plazo_pago_dias).toBe(30);
+  });
+
+  it("un entero queda igual", () => {
+    expect(conPlazo("30")?.plazo_pago_dias).toBe(30);
+    expect(conPlazo("60 dias")?.plazo_pago_dias).toBe(60);
+  });
+
+  it("lo que no es un plazo de pago queda sin definir, no en cualquier cosa", () => {
+    // "30/60" son dos opciones, no 3060 dias.
+    expect(conPlazo("30/60")?.plazo_pago_dias).toBeNull();
+    expect(conPlazo("contado")?.plazo_pago_dias).toBeNull();
+    expect(conPlazo("")?.plazo_pago_dias).toBeNull();
+    expect(conPlazo("-5")?.plazo_pago_dias).toBeNull();
+  });
+});

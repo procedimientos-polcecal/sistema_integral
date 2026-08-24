@@ -145,9 +145,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .eq("requerimiento_id", id)
     .eq("origen", "drive");
 
+  // Primero de una, que es lo normal y lo rápido. Si algo de una fila no entra
+  // —un decimal en una columna entera, un porcentaje escrito como monto— se
+  // reintenta fila por fila para que una celda rara no se lleve puesta la
+  // comparativa entera, y se dice cuál es: quien la tiene que corregir necesita
+  // el número de fila, no el mensaje de Postgres.
+  const rechazadas: string[] = [];
+
   if (nuevas.length > 0) {
     const { error } = await admin.from("compras_cotizaciones").insert(nuevas);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (error) {
+      const entraron: Record<string, unknown>[] = [];
+      for (const fila of nuevas) {
+        const { error: suyo } = await admin.from("compras_cotizaciones").insert(fila);
+        if (suyo) rechazadas.push(`fila ${fila.drive_fila}: ${suyo.message}`);
+        else entraron.push(fila);
+      }
+      if (entraron.length === 0) {
+        return NextResponse.json(
+          { error: "Ninguna fila de esa planilla se pudo cargar. " + rechazadas.join(" · ") },
+          { status: 400 }
+        );
+      }
+      nuevas.length = 0;
+      nuevas.push(...entraron);
+    }
   }
 
   const { error: errorRi } = await admin
@@ -167,5 +190,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ajenas,
     sin_precio: sinPrecio,
     proveedores_nuevos: proveedoresNuevos,
+    rechazadas,
   });
 }

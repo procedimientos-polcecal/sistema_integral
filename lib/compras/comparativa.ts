@@ -155,6 +155,29 @@ export function numero(v: unknown): number | null {
   return esPorcentaje ? n / 100 : n;
 }
 
+/**
+ * Días de plazo de pago, que van a una columna `integer`.
+ *
+ * En esa celda la gente escribe lo que quiere, y un decimal hacía fallar el
+ * INSERT entero con "invalid input syntax for type integer": una sola celda
+ * rara dejaba sin adjuntar toda la comparativa. Se redondea.
+ *
+ * Lo que no puede ser un plazo de pago queda sin definir en vez de guardarse
+ * como cualquier cosa: "30/60" son dos opciones, no 3060 días. El tope es un
+ * año, que ya es más de lo que nadie financia.
+ */
+export function diasDePlazo(v: unknown): number | null {
+  const bruto = String(v ?? "").trim();
+  // Varios números separados no son un plazo: no hay forma de elegir cuál.
+  if (/\d\s*[/|]\s*\d/.test(bruto)) return null;
+
+  const n = numero(bruto);
+  if (n === null) return null;
+
+  const dias = Math.round(n);
+  return dias < 0 || dias > 365 ? null : dias;
+}
+
 /** Fechas de la planilla (d/m/yyyy) a ISO. */
 export function fechaISO(v: unknown): string | null {
   const s = String(v ?? "").trim();
@@ -279,7 +302,7 @@ export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null
     descuento: numero(en("descuento")),
     iva: numero(en("iva")),
     precio_hasta: fechaISO(en("precio_hasta")),
-    plazo_pago_dias: numero(en("plazos")),
+    plazo_pago_dias: diasDePlazo(en("plazos")),
     condiciones_pago: texto(en("condiciones_pago")),
     disponibilidad: texto(en("disponibilidad")),
     comentario: texto(en("comentario")),

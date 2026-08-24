@@ -67,6 +67,11 @@ export default function SelectorComparativa({
     if (body.proveedores_nuevos?.length) {
       partes.push(`Proveedores nuevos: ${body.proveedores_nuevos.join(", ")}.`);
     }
+    if (body.rechazadas?.length) {
+      partes.push(
+        `No se pudieron cargar ${body.rechazadas.length} fila(s): ${body.rechazadas.join(" · ")}`
+      );
+    }
     onListo(partes.join(" "));
   }
 
