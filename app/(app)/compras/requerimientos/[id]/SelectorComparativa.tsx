@@ -64,6 +64,12 @@ export default function SelectorComparativa({
       partes.push(`${body.ajenas} fila(s) son de otro RI y se dejaron como estaban.`);
     }
     if (body.sin_precio > 0) partes.push(`${body.sin_precio} fila(s) sin precio se ignoraron.`);
+    if (body.sin_ri > 0) {
+      partes.push(
+        `${body.sin_ri} fila(s) de esa planilla no tienen número de RI, así que no se ` +
+        "sabe de qué pedido son y quedaron afuera."
+      );
+    }
     if (body.proveedores_nuevos?.length) {
       partes.push(`Proveedores nuevos: ${body.proveedores_nuevos.join(", ")}.`);
     }

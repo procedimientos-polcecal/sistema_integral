@@ -107,8 +107,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { error } = await admin.from("compras_cotizaciones").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+  // Sólo se vacía la fila que agregó la app. Las que vinieron de la planilla son
+  // de la planilla: borrar el presupuesto acá no puede borrarle a nadie una
+  // cotización que cargó a mano hace dos años.
   let avisoDrive: string | null = null;
-  if (ri.comparativa_drive_id && cotizacion.drive_fila) {
+  if (ri.comparativa_drive_id && cotizacion.drive_fila && cotizacion.origen === "app") {
     try {
       const planilla = await leerComparativa(ri.comparativa_drive_id);
       await vaciarFila(

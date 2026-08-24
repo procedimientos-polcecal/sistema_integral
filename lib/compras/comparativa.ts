@@ -233,11 +233,15 @@ export interface FilaPropia {
 /**
  * Qué filas de la planilla son de este requerimiento.
  *
- * Los archivos tienen nombres genéricos que no dicen a qué RI corresponden, así
- * que el vínculo es la columna A. Se traen las filas cuya columna A esté vacía
- * —todavía nadie las reclamó— o sea este RI. Las de otro RI se dejan quietas y
- * se cuentan para poder avisar. Así una misma planilla sirve a varios pedidos a
- * lo largo del tiempo sin que se pisen.
+ * Sólo las que tienen ESTE número de RI en la columna A. Las demás se dejan
+ * quietas y se cuentan aparte.
+ *
+ * Antes también se tomaban las de columna A vacía, con la idea de que "nadie las
+ * reclamó todavía". Con la planilla real eso resultó desastroso: las planillas
+ * son por artículo y acumulan cotizaciones de años sin etiquetar, así que una
+ * sola de CORREAS le pegó 238 presupuestos ajenos a un pedido de una correa. Una
+ * fila sin número no significa "es de este RI", significa "no se sabe de cuál
+ * es", y adivinar es peor que no traerla.
  *
  * `filas` no incluye el encabezado; la primera es la fila 2 de la planilla.
  */
@@ -245,23 +249,22 @@ export function filasParaEsteRi(
   filas: string[][],
   columnaNroRi: number,
   nroRi: number
-): { propias: FilaPropia[]; ajenas: number } {
+): { propias: FilaPropia[]; ajenas: number; sinRi: number } {
   const propias: FilaPropia[] = [];
   let ajenas = 0;
+  let sinRi = 0;
 
   filas.forEach((fila, i) => {
     // Una fila sin nada escrito no es de nadie.
     if (fila.every((c) => String(c ?? "").trim() === "")) return;
 
     const marca = String(fila[columnaNroRi] ?? "").trim();
-    if (marca === "" || Number(marca) === nroRi) {
-      propias.push({ fila, numeroFila: i + 2 });
-    } else {
-      ajenas += 1;
-    }
+    if (marca === "") sinRi += 1;
+    else if (Number(marca) === nroRi) propias.push({ fila, numeroFila: i + 2 });
+    else ajenas += 1;
   });
 
-  return { propias, ajenas };
+  return { propias, ajenas, sinRi };
 }
 
 // ── Parsear y escribir ───────────────────────────────────────

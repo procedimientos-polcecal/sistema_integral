@@ -64,22 +64,37 @@ describe("mapeo de encabezados", () => {
 
 describe("regla de la columna A", () => {
   const filas = [
-    ["", "", "", "", "Proveedor Vacio", "", "", "100"],       // fila 2: libre
+    ["", "", "", "", "Proveedor Sin Ri", "", "", "100"],      // fila 2: sin numero
     ["1850", "", "", "", "Proveedor Propio", "", "", "200"],  // fila 3: de este RI
     ["999", "", "", "", "Proveedor Ajeno", "", "", "300"],    // fila 4: de otro RI
-    ["", "", "", "", "", "", "", ""],                         // fila 5: vacía
+    ["", "", "", "", "", "", "", ""],                         // fila 5: vacia
   ];
 
-  it("trae las filas vacías y las de este RI, e ignora las de otro", () => {
+  it("trae solo las filas de este RI", () => {
     const r = filasParaEsteRi(filas, 0, 1850);
-    expect(r.propias.map((p) => p.numeroFila)).toEqual([2, 3]);
+    expect(r.propias.map((p) => p.numeroFila)).toEqual([3]);
+  });
+
+  /**
+   * Antes una fila sin numero se tomaba como propia. Las planillas son por
+   * articulo y acumulan cotizaciones de años sin etiquetar, asi que esa regla
+   * le pego 238 presupuestos ajenos a un solo pedido. Sin numero no significa
+   * "es de este RI", significa "no se sabe de cual es".
+   */
+  it("no reclama las filas sin numero: las cuenta aparte", () => {
+    const r = filasParaEsteRi(filas, 0, 1850);
+    expect(r.sinRi).toBe(1);
+    expect(r.propias).toHaveLength(1);
+  });
+
+  it("las de otro RI se cuentan y no se tocan", () => {
+    const r = filasParaEsteRi(filas, 0, 1850);
     expect(r.ajenas).toBe(1);
   });
 
-  it("no cuenta las filas vacías como ajenas ni como propias", () => {
+  it("una fila del todo vacia no cuenta para ningun lado", () => {
     const r = filasParaEsteRi(filas, 0, 1850);
-    expect(r.propias).toHaveLength(2);
-    expect(r.ajenas).toBe(1);
+    expect(r.propias.length + r.ajenas + r.sinRi).toBe(3);
   });
 });
 

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import {
-  leerComparativa, escribirCelda, urlDePlanilla, carpetaConfigurada,
+  leerComparativa, urlDePlanilla, carpetaConfigurada,
 } from "@/lib/compras/drive";
 import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
 import { claveProveedor } from "@/lib/compras/sheets";
@@ -87,7 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const { propias, ajenas } = filasParaEsteRi(planilla.filas, mapeo.idx.nro_ri, ri.nro_ri);
+  const { propias, ajenas, sinRi } = filasParaEsteRi(planilla.filas, mapeo.idx.nro_ri, ri.nro_ri);
 
   // Proveedores por nombre normalizado, para resolver cada fila.
   const { data: proveedores } = await admin.from("proveedores").select("id, nombre");
@@ -126,16 +126,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       created_by: user.id,
     });
 
-    // La columna A es el vínculo: si la fila estaba libre, queda reclamada.
-    if (String(fila[mapeo.idx.nro_ri] ?? "").trim() === "") {
-      try {
-        await escribirCelda(
-          driveId, planilla.pestana, mapeo.idx.nro_ri, numeroFila, String(ri.nro_ri)
-        );
-      } catch {
-        // No es motivo para abortar: el presupuesto ya se va a guardar acá.
-      }
-    }
   }
 
   // Sobre las filas de la planilla manda la planilla: se reemplazan.
@@ -189,6 +179,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     traidas: nuevas.length,
     ajenas,
     sin_precio: sinPrecio,
+    sin_ri: sinRi,
     proveedores_nuevos: proveedoresNuevos,
     rechazadas,
   });
