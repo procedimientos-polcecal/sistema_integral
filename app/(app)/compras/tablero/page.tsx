@@ -4,7 +4,7 @@ import { nivelComprasDe } from "@/lib/compras/auth";
 import { COLUMNAS_TABLERO } from "@/lib/compras/constants";
 import { traerTodo } from "@/lib/core/paginado";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
-import TableroClient from "./TableroClient";
+import TableroClient, { PIDE_DATOS } from "./TableroClient";
 import type { ResumenComparativa } from "./TableroClient";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
@@ -35,15 +35,18 @@ export default async function TableroPage() {
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
-  // Con qué comparativa cuenta cada RI del tablero.
+  // Con qué comparativa cuenta cada RI.
   //
-  // El tablero lo necesita para dos cosas: no exigir el link cuando ya hay
-  // presupuestos cargados, y mostrar de antemano con qué proveedor y qué costo
-  // va a quedar el pedido. El `in` es sobre los RI del tablero, que es una cola
-  // de trabajo y por lo tanto acotada.
-  const ids = (data ?? []).map((r) => r.id as string);
-
-  const cotizaciones = ids.length === 0 ? [] : await traerTodo<{
+  // El diálogo del tablero lo usa para dos cosas: no exigir el link cuando ya
+  // hay presupuestos cargados, y mostrar de antemano con qué proveedor y qué
+  // costo va a quedar el pedido.
+  //
+  // El filtro va por el ESTADO del requerimiento y no por una lista de ids.
+  // Mandar los ids parecía razonable —"el tablero es una cola de trabajo"— pero
+  // el tablero arrastra todo el histórico: son 1767 RI, y una lista así arma una
+  // URL de 37 KB que PostgREST rechaza con 400. Filtrando por estado la consulta
+  // queda acotada por construcción, sin depender de cuántos RI haya.
+  const cotizaciones = await traerTodo<{
     requerimiento_id: string;
     elegida: boolean;
     proveedor_id: string;
@@ -52,8 +55,10 @@ export default async function TableroPage() {
   }>((desde, hasta) =>
     supabase
       .from("compras_cotizaciones")
-      .select("requerimiento_id, elegida, proveedor_id, precio_total, costo_envio")
-      .in("requerimiento_id", ids)
+      .select(
+        "requerimiento_id, elegida, proveedor_id, precio_total, costo_envio, compras_requerimientos!inner(estado_compra)"
+      )
+      .in("compras_requerimientos.estado_compra", PIDE_DATOS)
       .range(desde, hasta)
   );
 
@@ -63,12 +68,12 @@ export default async function TableroPage() {
     (proveedores ?? []).map((p) => [p.id as string, p.nombre as string])
   );
 
+  // Sólo entran los RI que tienen alguna cotización; el resto lo resuelve el
+  // valor por defecto donde se lo usa.
   const resumen: Record<string, ResumenComparativa> = {};
-  for (const id of ids) resumen[id] = { cuantos: 0, elegida: null };
 
   for (const c of cotizaciones) {
-    const r = resumen[c.requerimiento_id];
-    if (!r) continue;
+    const r = (resumen[c.requerimiento_id] ??= { cuantos: 0, elegida: null });
     r.cuantos += 1;
     if (c.elegida) {
       r.elegida = {

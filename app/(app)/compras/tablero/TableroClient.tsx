@@ -8,8 +8,14 @@ import {
   etiquetaPrioridad, pesoPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 
-/** Pasos que no se pueden dar sin cargar antes lo que producen. */
-const PIDE_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
+/**
+ * Pasos que no se pueden dar sin cargar antes lo que producen.
+ *
+ * Se exporta porque la página trae el resumen de la comparativa sólo para estos
+ * estados: son los únicos en los que se abre el diálogo que lo usa. Si las dos
+ * listas se separan, el diálogo diría que no hay presupuestos cuando los hay.
+ */
+export const PIDE_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
