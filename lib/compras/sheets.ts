@@ -186,19 +186,32 @@ function partirEstado(valor: unknown) {
   return m ? { base: m[1].trim(), quien: m[2].trim() } : { base: s, quien: null };
 }
 
-/** "APROBADA (NICO)" → el paréntesis es quién aprobó, no otro estado. */
+/**
+ * "APROBADA (NICO)" → el paréntesis es quién aprobó, no otro estado.
+ *
+ * Devuelve `null` cuando no se puede leer: la celda vacía o con algo inesperado
+ * significa "no sé", no "pendiente". Devolver el valor por defecto hacía que la
+ * sincronización pisara aprobaciones ya dadas.
+ */
 export function estadoAprobacionDe(valor: unknown) {
   const { base, quien } = partirEstado(valor);
-  if (!base) return { estado: "PENDIENTE", aprobador: null as string | null };
+  if (!base) return { estado: null as string | null, aprobador: null as string | null };
   if (base.startsWith("APROBAD")) return { estado: "APROBADA", aprobador: quien };
   if (base.startsWith("DENEGAD") || base.startsWith("RECHAZ")) return { estado: "DENEGADA", aprobador: quien };
   if (base.includes("REVISI")) return { estado: "EN_REVISION", aprobador: null };
-  return { estado: "PENDIENTE", aprobador: null };
+  return { estado: null, aprobador: null };
 }
 
+/**
+ * El estado de compra que dice la hoja del área.
+ *
+ * Devuelve `null` cuando no se puede leer, por la misma razon que arriba: en una
+ * sola corrida, tomar la celda ilegible como SIN_INICIAR mandó 15 requerimientos
+ * de PEDIDO a foja cero.
+ */
 export function estadoCompraDe(valor: unknown) {
   const { base, quien } = partirEstado(valor);
-  if (!base) return { estado: "SIN_INICIAR", aprobador: null as string | null };
+  if (!base) return { estado: null as string | null, aprobador: null as string | null };
   if (base === "PEDIDO") return { estado: "PEDIDO", aprobador: null };
   if (base === "RECIBIDO") return { estado: "RECIBIDO", aprobador: null };
   if (base.startsWith("DENEGAD")) return { estado: "DENEGADO", aprobador: null };
@@ -212,7 +225,7 @@ export function estadoCompraDe(valor: unknown) {
     return { estado: "PARA_COMPRAR", aprobador: esPersona ? quien : null };
   }
   if (base.startsWith("APROBAD")) return { estado: "APROBADO", aprobador: quien };
-  return { estado: "SIN_INICIAR", aprobador: null };
+  return { estado: null, aprobador: null };
 }
 
 /** "MORC SRL" y "MORC" son el mismo proveedor. */
@@ -332,14 +345,21 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     // Va paginado: PostgREST corta en 1000 filas, y con la tabla más grande que
     // eso el resguardo dejaba de aplicar sobre el resto — la planilla revertía
     // aprobaciones y proveedores cargados desde el sistema, sin ruido alguno.
-    const existentes = await traerTodo<{ nro_ri: number; editado_en_app: boolean }>(
-      (desde, hasta) =>
-        admin
-          .from("compras_requerimientos")
-          .select("nro_ri, editado_en_app")
-          .range(desde, hasta)
+    const existentes = await traerTodo<{
+      nro_ri: number;
+      editado_en_app: boolean;
+      estado_aprobacion: string;
+      estado_compra: string;
+    }>((desde, hasta) =>
+      admin
+        .from("compras_requerimientos")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra")
+        .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
+    // Lo que ya sabemos de cada RI, para no pisarlo con un valor por defecto
+    // cuando la planilla no dice nada.
+    const previo = new Map(existentes.map((r) => [r.nro_ri, r]));
 
     const aEscribir: Record<string, unknown>[] = [];
     let omitidas = 0;
@@ -373,9 +393,16 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
           : null,
         paga_ambas: (d.paga as { ambas: boolean })?.ambas ?? false,
         solicitante_nombre: d.solicitante_nombre ?? null,
-        estado_aprobacion: d.estado_aprobacion ?? "PENDIENTE",
+        // Que la planilla no diga nada no significa "sin aprobar" ni "sin
+        // iniciar": significa que no se pudo leer. Pisar con el valor por
+        // defecto revertia compras ya hechas —15 pasaron de PEDIDO a
+        // SIN_INICIAR en una sola corrida—, asi que se conserva lo que habia y
+        // el default queda solo para un RI que no existia.
+        estado_aprobacion:
+          d.estado_aprobacion ?? previo.get(registro.nro_ri)?.estado_aprobacion ?? "PENDIENTE",
         aprobador: d.aprobador ?? null,
-        estado_compra: d.estado_compra ?? "SIN_INICIAR",
+        estado_compra:
+          d.estado_compra ?? previo.get(registro.nro_ri)?.estado_compra ?? "SIN_INICIAR",
         comparativa_url: d.comparativa_url ?? null,
         proveedor_id: d.proveedor
           ? idProveedor.get(claveProveedor(String(d.proveedor))) ?? null
