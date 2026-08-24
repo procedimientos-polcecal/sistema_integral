@@ -62,10 +62,18 @@ export default async function ConfiguracionPage() {
   );
   const conAlias = aprobadores.map((a) => ({ ...a, alias: porUsuario[a.id] ?? null }));
 
+  // Para poder sumar a alguien a la lista hace falta saber a quién.
+  const { data: usuarios } = await supabase
+    .from("usuarios")
+    .select("id, nombre, apellido, email")
+    .eq("activo", true)
+    .order("nombre");
+
   return (
     <ConfiguracionClient
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}
+      usuarios={usuarios ?? []}
       pendientes={pendientes ?? []}
       nuevosApp={nuevosApp ?? 0}
       nuevosPlanilla={nuevosPlanilla ?? 0}

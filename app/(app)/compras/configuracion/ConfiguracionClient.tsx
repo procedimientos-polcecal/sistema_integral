@@ -7,10 +7,11 @@ import { fechaHora } from "@/lib/compras/constants";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
+  sincronizaciones, aprobadores, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
 }: {
   sincronizaciones: Sincronizacion[];
   aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
+  usuarios: { id: string; nombre: string; apellido: string; email: string }[];
   /** Requerimientos cuyo cambio no se pudo escribir en la planilla. */
   pendientes: {
     id: string;
@@ -142,17 +143,20 @@ export default function ConfiguracionClient({
 
         {aprobadores.length === 0 ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Nadie puede aprobar todavía. Asigná el módulo Compras con nivel
-            <strong> admin</strong> desde Administración → Usuarios a quienes aprueban
-            en la planilla.
+            Nadie puede aprobar todavía: ni los requerimientos ni las compras.
+            Sumá acá abajo a quienes aprueban en la planilla.
           </p>
         ) : (
           <ul className="space-y-2">
             {aprobadores.map((a) => (
-              <FilaAprobador key={a.id} aprobador={a} />
+              <FilaAprobador key={a.id} aprobador={a} soloQueda={aprobadores.length === 1} />
             ))}
           </ul>
         )}
+
+        <SumarAprobador
+          usuarios={usuarios.filter((u) => !aprobadores.some((a) => a.id === u.id))}
+        />
 
         <p className="mt-3 text-xs text-slate-500">
           El <strong>alias</strong> es con el que la persona figura en el desplegable de la
@@ -161,9 +165,10 @@ export default function ConfiguracionClient({
         </p>
 
         <p className="mt-2 text-xs text-slate-500">
-          Ser administrador del sistema <strong>no</strong> alcanza para aprobar: hace falta
-          estar en esta lista. Es a propósito, para que el permiso sea el mismo en los
-          dos lados y no dependa de quién administra el sistema.
+          <strong>Estar en esta lista es el permiso de aprobar</strong>, tanto los
+          requerimientos como las compras. No depende del nivel de acceso: ser
+          administrador —del módulo o del sistema— no alcanza. Administrar es
+          configurar; aprobar es autorizar plata, y las hacen personas distintas.
         </p>
       </section>
 
@@ -280,11 +285,74 @@ function Leyenda({ color, texto }: { color: string; texto: string }) {
   );
 }
 
+/**
+ * Sumar a alguien a la lista.
+ *
+ * Estar en la lista es el permiso de aprobar, así que esto no es configurar un
+ * alias: es dar permiso. El alias se carga después, en la fila.
+ */
+function SumarAprobador({
+  usuarios,
+}: {
+  usuarios: { id: string; nombre: string; apellido: string; email: string }[];
+}) {
+  const router = useRouter();
+  const [elegido, setElegido] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function sumar() {
+    setGuardando(true);
+    setError("");
+    const res = await fetch("/api/compras/aprobadores", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario_id: elegido }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo sumar.");
+      return;
+    }
+    setElegido("");
+    router.refresh();
+  }
+
+  if (usuarios.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Sumar a alguien…</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
+          ))}
+        </select>
+        <button
+          onClick={sumar}
+          disabled={!elegido || guardando}
+          className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        >
+          {guardando ? "Sumando…" : "Sumar a la lista"}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 /** Una persona que puede aprobar, con su alias en la planilla. */
 function FilaAprobador({
-  aprobador,
+  aprobador, soloQueda,
 }: {
   aprobador: { id: string; nombre: string; apellido: string; email: string; alias: string | null };
+  /** Si es el último, quitarlo dejaría a nadie aprobando. */
+  soloQueda: boolean;
 }) {
   const router = useRouter();
   const [alias, setAlias] = useState(aprobador.alias ?? "");
@@ -326,6 +394,21 @@ function FilaAprobador({
     router.refresh();
   }
 
+  async function quitar() {
+    if (!confirm(`¿Sacar a ${aprobador.nombre} de la lista? Deja de poder aprobar.`)) return;
+    setGuardando(true);
+    setError("");
+    const res = await fetch(`/api/compras/aprobadores?usuario_id=${aprobador.id}`, {
+      method: "DELETE",
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo quitar.");
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <span className="text-slate-900">{aprobador.nombre} {aprobador.apellido}</span>
@@ -348,6 +431,15 @@ function FilaAprobador({
         {!aprobador.alias && (
           <span className="text-xs text-amber-700">falta</span>
         )}
+
+        <button
+          onClick={quitar}
+          disabled={guardando || soloQueda}
+          title={soloQueda ? "Es el único que puede aprobar" : "Sacar de la lista"}
+          className="text-xs text-slate-400 hover:text-red-600 disabled:cursor-not-allowed disabled:hover:text-slate-400"
+        >
+          Quitar
+        </button>
       </span>
 
       {error && <span className="w-full text-xs text-red-600">{error}</span>}
