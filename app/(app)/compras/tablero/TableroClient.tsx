@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   COLUMNAS_TABLERO, SIGUIENTE_ESTADO, ACCION_SIGUIENTE, COMPRA_LABELS,
-  etiquetaPrioridad, pesoPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
-  ESTADOS_QUE_PIDEN_DATOS,
+  etiquetaPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
+  ESTADOS_QUE_PIDEN_DATOS, ORDENES_TABLERO, ordenarRequerimientos,
 } from "@/lib/compras/constants";
+import type { OrdenTablero } from "@/lib/compras/constants";
 
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
@@ -72,6 +73,8 @@ export default function TableroClient({
   const [asignado, setAsignado] = useState("");
   const [area, setArea] = useState("");
   const [empresa, setEmpresa] = useState("");
+  // El orden es de cada columna: el trabajo que se hace en cada una es distinto.
+  const [orden, setOrden] = useState<Partial<Record<EstadoCompra, OrdenTablero>>>({});
 
   const areas = useMemo(
     () => [...new Set(requerimientos.map((r) => r.compras_areas?.nombre).filter(Boolean) as string[])].sort(),
@@ -93,11 +96,7 @@ export default function TableroClient({
         empresa === "AMBAS" ? r.empresa_id === null : r.empresas?.nombre === empresa
       );
     }
-    return [...base].sort(
-      (a, b) =>
-        pesoPrioridad(a.prioridad) - pesoPrioridad(b.prioridad) ||
-        new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
-    );
+    return base;
   }, [requerimientos, area, empresa, asignado, usuarioId]);
 
   const comprometido = useMemo(
@@ -204,7 +203,11 @@ export default function TableroClient({
 
       <div className="grid gap-4 lg:grid-cols-3">
         {COLUMNAS_TABLERO.map((columna) => {
-          const items = filtrados.filter((r) => r.estado_compra === columna);
+          const criterio = orden[columna] ?? "prioridad";
+          const items = ordenarRequerimientos(
+            filtrados.filter((r) => r.estado_compra === columna),
+            criterio
+          );
           const totalColumna = items.reduce((acc, r) => acc + (r.costo_iva ?? 0) + (r.costo_envio ?? 0), 0);
           const siguiente = SIGUIENTE_ESTADO[columna] as EstadoCompra | undefined;
 
@@ -220,6 +223,23 @@ export default function TableroClient({
               </header>
 
               {/* Un recorte que no se avisa se lee como "no hay nada más". */}
+              {items.length > 1 && (
+                <div className="border-b border-slate-200 px-4 py-1.5">
+                  <select
+                    aria-label={`Ordenar ${COMPRA_LABELS[columna].label}`}
+                    value={criterio}
+                    onChange={(e) =>
+                      setOrden((o) => ({ ...o, [columna]: e.target.value as OrdenTablero }))
+                    }
+                    className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-600"
+                  >
+                    {ORDENES_TABLERO.map((o) => (
+                      <option key={o.valor} value={o.valor}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {columna === "PEDIDO" && pedidosViejos > 0 && (
                 <p className="border-b border-slate-200 px-4 py-2 text-[11px] text-slate-500">
                   Últimos {diasDePedido} días. Hay {pedidosViejos} pedidos anteriores:

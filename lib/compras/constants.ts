@@ -53,6 +53,49 @@ export function pesoPrioridad(p: Prioridad | null | undefined): number {
   return p ? PESO_PRIORIDAD[p] : 99;
 }
 
+/**
+ * Cómo se ordena una columna del tablero.
+ *
+ * Cada una por su cuenta, porque el trabajo es distinto: en "Para comprar"
+ * interesa la urgencia, y en "Pedido" lo que se movió recién.
+ */
+export type OrdenTablero = "prioridad" | "numero" | "cambio";
+
+export const ORDENES_TABLERO: { valor: OrdenTablero; label: string }[] = [
+  { valor: "prioridad", label: "Por prioridad" },
+  { valor: "numero", label: "Por N° de RI" },
+  { valor: "cambio", label: "Por cambio reciente" },
+];
+
+interface Ordenable {
+  nro_ri: number;
+  prioridad: Prioridad | null;
+  fecha: string;
+  updated_at: string;
+}
+
+/** Devuelve una copia ordenada: no toca el arreglo que recibe. */
+export function ordenarRequerimientos<T extends Ordenable>(
+  items: T[],
+  criterio: OrdenTablero
+): T[] {
+  const copia = [...items];
+  const cuando = (v: string) => new Date(v).getTime();
+
+  if (criterio === "numero") return copia.sort((a, b) => b.nro_ri - a.nro_ri);
+  if (criterio === "cambio") {
+    return copia.sort((a, b) => cuando(b.updated_at) - cuando(a.updated_at));
+  }
+
+  // Por prioridad, y a igual urgencia lo más viejo primero: es lo que lleva
+  // más tiempo esperando.
+  return copia.sort(
+    (a, b) =>
+      pesoPrioridad(a.prioridad) - pesoPrioridad(b.prioridad) ||
+      cuando(a.fecha) - cuando(b.fecha)
+  );
+}
+
 /** Columnas del tablero, en el orden en que avanza el trabajo. */
 export const COLUMNAS_TABLERO: EstadoCompra[] = [
   "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO",
