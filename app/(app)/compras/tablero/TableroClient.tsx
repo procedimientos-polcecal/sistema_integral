@@ -6,16 +6,9 @@ import { useRouter } from "next/navigation";
 import {
   COLUMNAS_TABLERO, SIGUIENTE_ESTADO, ACCION_SIGUIENTE, COMPRA_LABELS,
   etiquetaPrioridad, pesoPrioridad, moneda, fecha, diasRestantes, etiquetaEmpresa,
+  ESTADOS_QUE_PIDEN_DATOS,
 } from "@/lib/compras/constants";
 
-/**
- * Pasos que no se pueden dar sin cargar antes lo que producen.
- *
- * Se exporta porque la página trae el resumen de la comparativa sólo para estos
- * estados: son los únicos en los que se abre el diálogo que lo usa. Si las dos
- * listas se separan, el diálogo diría que no hay presupuestos cuando los hay.
- */
-export const PIDE_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
 import type { RequerimientoConRelaciones, EstadoCompra } from "@/lib/compras/types";
 
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
@@ -319,7 +312,7 @@ export default function TableroClient({
                         {siguiente && puedeAvanzar(r) && (
                           <button
                             onClick={() =>
-                              PIDE_DATOS.includes(r.estado_compra) ? setAvanzando(r) : avanzar(r)
+                              ESTADOS_QUE_PIDEN_DATOS.includes(r.estado_compra) ? setAvanzando(r) : avanzar(r)
                             }
                             disabled={procesando === r.id}
                             className="mt-2.5 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"

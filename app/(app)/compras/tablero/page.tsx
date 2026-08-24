@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelComprasDe } from "@/lib/compras/auth";
-import { ESTADOS_EN_CURSO, DIAS_DE_PEDIDO } from "@/lib/compras/constants";
+import {
+  ESTADOS_EN_CURSO, DIAS_DE_PEDIDO, ESTADOS_QUE_PIDEN_DATOS,
+} from "@/lib/compras/constants";
 import { traerTodo } from "@/lib/core/paginado";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
-import TableroClient, { PIDE_DATOS } from "./TableroClient";
+import TableroClient from "./TableroClient";
 import type { ResumenComparativa } from "./TableroClient";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
@@ -95,7 +97,7 @@ export default async function TableroPage() {
       .select(
         "requerimiento_id, elegida, proveedor_id, precio_total, costo_envio, compras_requerimientos!inner(estado_compra)"
       )
-      .in("compras_requerimientos.estado_compra", PIDE_DATOS)
+      .in("compras_requerimientos.estado_compra", ESTADOS_QUE_PIDEN_DATOS)
       .range(desde, hasta)
   );
 

@@ -64,6 +64,18 @@ export const ESTADOS_EN_CURSO: EstadoCompra[] = [
 ];
 
 /**
+ * Pasos que no se pueden dar sin cargar antes lo que producen.
+ *
+ * Vive acá y no en el tablero porque lo usan los dos lados: el componente, para
+ * abrir el diálogo que junta esos datos, y la página, que trae el resumen de la
+ * comparativa sólo para estos estados. Tenerlo en el componente obligaba a la
+ * página —que es de servidor— a importar de un módulo `"use client"`, y de ahí
+ * no se recibe el valor sino una referencia de cliente: la consulta salía con
+ * basura y la página se caía entera.
+ */
+export const ESTADOS_QUE_PIDEN_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
+
+/**
  * Cuánto tiempo se queda un pedido en el tablero.
  *
  * La columna PEDIDO acumula el histórico entero porque nada lo pasa a RECIBIDO
