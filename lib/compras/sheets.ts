@@ -116,21 +116,40 @@ function numero(v: unknown): number | null {
 }
 
 /** La API de Sheets devuelve las fechas como texto formateado, no como serial. */
-function fechaISO(v: unknown): string | null {
+/**
+ * Fechas de la planilla, que las escribe en d/m/aaaa.
+ *
+ * Antes esto suponía M/D —"el formato de la mayoría de las filas"— y daba vuelta
+ * el día y el mes en toda fecha cuyo día fuera 12 o menos: el 39% de los
+ * requerimientos, incluida `fecha_necesidad`, que es la que dispara el "vencido"
+ * del tablero.
+ *
+ * Lo delataba la secuencia de RI, que es correlativa: los RI 1795 a 1811, del 11
+ * y 12 de agosto, quedaron guardados como noviembre y diciembre, y el 1812 —del
+ * 13 de agosto— quedó bien, porque 13 no puede ser un mes y ahí el parser
+ * acertaba por descarte. Una fecha así sólo puede venir de d/m.
+ *
+ * No hay mezcla que adivinar: la planilla tiene un solo locale para todas sus
+ * celdas.
+ */
+export function fechaISO(v: unknown): string | null {
   const s = texto(v);
   if (!s) return null;
 
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (m) {
-    const [, a, b, anio] = m;
-    // Si el primer número no puede ser un mes, es D/M; si no, M/D, que es el
-    // formato de la mayoría de las filas de la planilla.
-    const dia = Number(a) > 12 ? Number(a) : Number(b);
-    const mes = Number(a) > 12 ? Number(b) : Number(a);
-    const anioCompleto = anio.length === 2 ? 2000 + Number(anio) : Number(anio);
-    const d = new Date(anioCompleto, mes - 1, dia);
-    if (isNaN(d.getTime())) return null;
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dia = Number(m[1]);
+    const mes = Number(m[2]);
+    const anio = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+
+    // Una fecha imposible se descarta en vez de corregirse sola: dejar que
+    // `new Date` haga rodar el 31 de febrero al 3 de marzo esconde el problema.
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+    const d = new Date(anio, mes - 1, dia);
+    if (isNaN(d.getTime()) || d.getMonth() !== mes - 1) return null;
+
+    return `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
   }
 
   const d = new Date(s);
