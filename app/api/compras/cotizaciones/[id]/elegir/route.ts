@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { leerComparativa, escribirCelda } from "@/lib/compras/drive";
 import { mapearEncabezados } from "@/lib/compras/comparativa";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
+import { puedeAprobarCompras } from "@/lib/compras/auth";
 
 /**
  * Elegir un presupuesto ES aprobar la compra.
@@ -48,6 +49,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       { status: 403 }
     );
   }
+  // Estar asignado no alcanza: hay que seguir estando en la lista. Alguien pudo
+  // quedar asignado y después salir de ella.
+  if (!(await puedeAprobarCompras(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Aprobar una compra requiere estar en la lista de aprobadores" },
+      { status: 403 }
+    );
+  }
+
   if (ri.estado_compra !== "PARA_COMPRAR") {
     return NextResponse.json(
       { error: "Sólo se puede elegir un presupuesto cuando la compra está para comprar" },
