@@ -45,50 +45,65 @@ export async function puedeEditarCompras(
 }
 
 /**
- * Aprobar exige el permiso explícito del módulo con nivel admin.
+ * Aprobar es estar en la lista, no tener un nivel.
  *
- * A diferencia del resto, acá NO alcanza con ser admin del sistema: la planilla
- * restringe la columna de aprobación a una lista de personas y la app espeja
- * esa misma lista. Si un admin pudiera aprobar sin estar en ella, los dos lados
- * dirían cosas distintas sobre quién aprueba, que es justo lo que hay que
- * evitar mientras convivan.
+ * A diferencia del resto, acá NO alcanza con ser admin del sistema ni admin del
+ * módulo: la planilla restringe la columna de aprobación a ciertas cuentas y la
+ * app espeja esa misma regla. Administrar el módulo y autorizar un gasto son
+ * cosas distintas, y las hacen personas distintas.
  *
- * Por eso se consulta el grant directo y no nivelEnModulo(), que le devuelve
- * "admin" a cualquier admin_sistema.
+ * Vale para las dos aprobaciones: la del requerimiento y la de la compra.
  */
 export async function puedeAprobarCompras(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
   const { data } = await supabase
-    .from("usuario_modulos")
-    .select("nivel")
+    .from("compras_aprobadores")
+    .select("usuario_id")
     .eq("usuario_id", userId)
-    .eq("modulo", "compras")
     .maybeSingle();
 
-  return data?.nivel === "admin";
+  return Boolean(data);
 }
 
-/** Quiénes pueden aprobar hoy. Se compara con la lista de la planilla. */
+/** Administrar el módulo: entre otras cosas, quién está en la lista. */
+export async function esAdminCompras(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  return (await nivelComprasDe(supabase, userId)) === "admin";
+}
+
+/** Quiénes pueden aprobar. Es la misma fuente que el permiso. */
 export interface Aprobador {
   id: string;
   nombre: string;
   apellido: string;
   email: string;
+  alias: string | null;
 }
 
 export async function aprobadoresDeCompras(supabase: SupabaseClient): Promise<Aprobador[]> {
   const { data } = await supabase
-    .from("usuario_modulos")
-    .select("usuarios(id, nombre, apellido, email, activo)")
-    .eq("modulo", "compras")
-    .eq("nivel", "admin");
+    .from("compras_aprobadores")
+    .select("alias_planilla, usuarios(id, nombre, apellido, email, activo)");
+
+  type Usuario = { id: string; nombre: string; apellido: string; email: string; activo: boolean };
 
   return (data ?? [])
-    .map((g) => g.usuarios as unknown as (Aprobador & { activo: boolean }) | null)
-    .filter((u): u is Aprobador & { activo: boolean } => Boolean(u?.activo))
-    .map(({ id, nombre, apellido, email }) => ({ id, nombre, apellido, email }))
+    .map((fila) => ({
+      alias: (fila.alias_planilla ?? null) as string | null,
+      usuario: fila.usuarios as unknown as Usuario | null,
+    }))
+    .filter((f): f is { alias: string | null; usuario: Usuario } => Boolean(f.usuario?.activo))
+    .map(({ alias, usuario }) => ({
+      id: usuario.id,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      alias,
+    }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
