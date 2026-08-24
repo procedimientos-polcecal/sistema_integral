@@ -58,6 +58,24 @@ export const COLUMNAS_TABLERO: EstadoCompra[] = [
   "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO",
 ];
 
+/** Lo que todavía es trabajo por hacer: el tablero lo trae completo. */
+export const ESTADOS_EN_CURSO: EstadoCompra[] = [
+  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO",
+];
+
+/**
+ * Cuánto tiempo se queda un pedido en el tablero.
+ *
+ * La columna PEDIDO acumula el histórico entero porque nada lo pasa a RECIBIDO
+ * todavía: más de 1600 pedidos cerrados que no son trabajo en curso. Traerlos
+ * hace del tablero un archivo. Lo viejo se consulta desde Requerimientos, que
+ * tiene filtros y paginado.
+ *
+ * Cuando exista el seguimiento de recepción esto sobra: los pedidos van a salir
+ * de la columna al recibirse, que es como debería haber sido siempre.
+ */
+export const DIAS_DE_PEDIDO = 90;
+
 /** A qué estado pasa cada columna al avanzar, y con qué texto se ofrece. */
 export const SIGUIENTE_ESTADO: Partial<Record<EstadoCompra, EstadoCompra>> = {
   SIN_INICIAR: "EN_COMPARATIVA",

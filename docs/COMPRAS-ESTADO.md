@@ -117,17 +117,11 @@ Hacen falta los dos activadores.
 
 ## Lo que quedó pendiente
 
-0. **El tablero muestra los 1000 RI más VIEJOS, no el trabajo en curso.** La
-   consulta principal de `/compras/tablero` no pagina, y PostgREST corta en 1000
-   ordenando por fecha ascendente: hoy el tablero llega hasta el RI 1139, del
-   29/04/2026, y no muestra nada posterior. De esos 1000 lugares, 977 se los
-   lleva la columna `PEDIDO`, que acumula el histórico importado porque nada lo
-   pasa a `RECIBIDO` todavía. Se destapa al resolver el punto 1, pero mientras
-   tanto conviene acotar qué arrastra la columna `PEDIDO` — es una decisión de
-   cómo se quiere usar el tablero, no sólo de paginado.
-
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
-   plazos. Es lo próximo según lo hablado.
+   plazos. Es lo próximo según lo hablado. Además destraba el tablero: hoy la
+   columna PEDIDO muestra sólo los últimos 90 días (`DIAS_DE_PEDIDO`) porque
+   acumula 1169 pedidos cerrados que nada saca de ahí. Con `RECIBIDO` salen
+   solos y la ventana sobra.
 2. **La comparativa en sí** — hoy es un enlace y una tabla `compras_cotizaciones`
    sin pantalla. Estaba anotado como "lo trabajamos después".
 3. **Sumar la cuenta de servicio a "APROBACIÓN DE GERENCIA"**, si se quiere que

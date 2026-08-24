@@ -56,6 +56,7 @@ function nombreCorto(p: Persona): string {
 
 export default function TableroClient({
   requerimientos, aprobadores, proveedores, usuarioId, canEdit, resumen,
+  pedidosViejos, diasDePedido,
 }: {
   requerimientos: RequerimientoConRelaciones[];
   aprobadores: Persona[];
@@ -63,6 +64,9 @@ export default function TableroClient({
   usuarioId: string;
   canEdit: boolean;
   resumen: Record<string, ResumenComparativa>;
+  /** Pedidos que quedaron fuera de la ventana del tablero. */
+  pedidosViejos: number;
+  diasDePedido: number;
 }) {
   const router = useRouter();
   const [procesando, setProcesando] = useState<string | null>(null);
@@ -209,6 +213,17 @@ export default function TableroClient({
                   {items.length}{totalColumna > 0 && ` · ${moneda(totalColumna)}`}
                 </span>
               </header>
+
+              {/* Un recorte que no se avisa se lee como "no hay nada más". */}
+              {columna === "PEDIDO" && pedidosViejos > 0 && (
+                <p className="border-b border-slate-200 px-4 py-2 text-[11px] text-slate-500">
+                  Últimos {diasDePedido} días. Hay {pedidosViejos} pedidos anteriores:
+                  {" "}
+                  <Link href="/compras/requerimientos?estado_compra=PEDIDO" className="text-[var(--primary)] hover:underline">
+                    verlos en requerimientos
+                  </Link>
+                </p>
+              )}
 
               {columna === "PARA_COMPRAR" && items.length > 0 && (
                 <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-2">

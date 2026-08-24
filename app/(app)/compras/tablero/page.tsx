@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelComprasDe } from "@/lib/compras/auth";
-import { COLUMNAS_TABLERO } from "@/lib/compras/constants";
+import { ESTADOS_EN_CURSO, DIAS_DE_PEDIDO } from "@/lib/compras/constants";
 import { traerTodo } from "@/lib/core/paginado";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import TableroClient, { PIDE_DATOS } from "./TableroClient";
@@ -14,13 +14,50 @@ export default async function TableroPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Todo lo aprobado que todavía no se recibió.
-  const { data } = await supabase
+  // El trabajo en curso: todo lo que todavía no llegó a PEDIDO.
+  //
+  // Va paginado. Sin paginar, PostgREST corta en 1000 y no avisa: el tablero
+  // mostraba los 1000 RI más VIEJOS —llegaba hasta abril— y no mostraba nada
+  // posterior, porque 977 de esos 1000 lugares se los llevaba PEDIDO.
+  const enCurso = await traerTodo<RequerimientoConRelaciones>((desde, hasta) =>
+    supabase
+      .from("compras_requerimientos")
+      .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+      .eq("estado_aprobacion", "APROBADA")
+      .in("estado_compra", ESTADOS_EN_CURSO)
+      .order("fecha", { ascending: true })
+      .range(desde, hasta)
+  );
+
+  // De lo ya pedido, sólo lo reciente.
+  //
+  // La columna PEDIDO acumula el histórico entero porque nada lo pasa a
+  // RECIBIDO todavía: son más de 1600 pedidos cerrados que no son trabajo en
+  // curso. Traerlos hace del tablero un archivo en vez de un tablero. Lo que
+  // queda afuera se dice en pantalla, no se esconde.
+  const corte = new Date();
+  corte.setDate(corte.getDate() - DIAS_DE_PEDIDO);
+  const desdeISO = corte.toISOString().slice(0, 10);
+
+  const pedidos = await traerTodo<RequerimientoConRelaciones>((desde, hasta) =>
+    supabase
+      .from("compras_requerimientos")
+      .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+      .eq("estado_aprobacion", "APROBADA")
+      .eq("estado_compra", "PEDIDO")
+      .gte("fecha", desdeISO)
+      .order("fecha", { ascending: true })
+      .range(desde, hasta)
+  );
+
+  const { count: pedidosViejos } = await supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+    .select("id", { count: "exact", head: true })
     .eq("estado_aprobacion", "APROBADA")
-    .in("estado_compra", COLUMNAS_TABLERO)
-    .order("fecha", { ascending: true });
+    .eq("estado_compra", "PEDIDO")
+    .lt("fecha", desdeISO);
+
+  const data = [...enCurso, ...pedidos];
 
   const [nivel, { data: grants }, { data: alias }, { data: proveedores }] = await Promise.all([
     nivelComprasDe(supabase, user.id),
@@ -94,12 +131,14 @@ export default async function TableroPage() {
 
   return (
     <TableroClient
-      requerimientos={(data ?? []) as RequerimientoConRelaciones[]}
+      requerimientos={data}
       aprobadores={aprobadores}
       proveedores={proveedores ?? []}
       usuarioId={user.id}
       canEdit={nivel === "edicion" || nivel === "admin"}
       resumen={resumen}
+      pedidosViejos={pedidosViejos ?? 0}
+      diasDePedido={DIAS_DE_PEDIDO}
     />
   );
 }
