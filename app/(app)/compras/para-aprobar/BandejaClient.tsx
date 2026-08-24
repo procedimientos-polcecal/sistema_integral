@@ -1,0 +1,160 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { etiquetaPrioridad, fecha, diasRestantes, moneda } from "@/lib/compras/constants";
+import { repartirBandeja } from "@/lib/compras/bandeja";
+import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
+import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
+
+/**
+ * La bandeja de quien aprueba compras.
+ *
+ * Arriba lo que espera su decisión, abajo lo que espera a otro. Cada pedido se
+ * despliega con su comparativa completa, así se decide sin salir de acá: elegir
+ * un presupuesto ES aprobar la compra.
+ */
+export default function BandejaClient({
+  requerimientos, cotizaciones, usuarioId,
+}: {
+  requerimientos: RequerimientoConRelaciones[];
+  cotizaciones: Record<string, Cotizacion[]>;
+  usuarioId: string;
+}) {
+  const router = useRouter();
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const [eligiendo, setEligiendo] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const { mios, deOtros } = repartirBandeja(requerimientos, usuarioId);
+
+  async function elegir(c: Cotizacion) {
+    setEligiendo(c.id);
+    setError("");
+    const res = await fetch(`/api/compras/cotizaciones/${c.id}/elegir`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setEligiendo(null);
+    if (!res.ok) {
+      setError(body.error ?? "No se pudo aprobar la compra.");
+      return;
+    }
+    setAviso(body.aviso_drive ?? null);
+    setAbierto(null);
+    router.refresh();
+  }
+
+  function Pedido({ r, mio }: { r: RequerimientoConRelaciones; mio: boolean }) {
+    const suyas = cotizaciones[r.id] ?? [];
+    const totales = suyas.map((c) => c.precio_total).filter((t): t is number => t !== null);
+    const minimo = totales.length > 0 ? Math.min(...totales) : null;
+    const dias = diasRestantes(r.fecha_necesidad);
+    const vencido = dias !== null && dias < 0;
+
+    return (
+      <article className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-start justify-between gap-2 px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/compras/requerimientos/${r.id}`}
+                className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline"
+              >
+                RI {r.nro_ri}
+              </Link>
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${etiquetaPrioridad(r.prioridad).color}`}>
+                {etiquetaPrioridad(r.prioridad).label}
+              </span>
+            </div>
+            <p className="mt-1 text-sm font-semibold text-slate-900">{r.descripcion}</p>
+            <p className="text-xs text-slate-500">
+              {r.compras_areas?.nombre ?? "Sin área"} · Pedido el {fecha(r.fecha)}
+              {r.fecha_necesidad && (
+                <span className={vencido ? " font-semibold text-red-600" : ""}>
+                  {vencido
+                    ? ` · vencido hace ${Math.abs(dias!)} d`
+                    : ` · se necesita el ${fecha(r.fecha_necesidad)}`}
+                </span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {suyas.length === 0
+                ? "Sin presupuestos cargados"
+                : `${suyas.length} presupuesto${suyas.length === 1 ? "" : "s"} · el más barato ${moneda(minimo)}`}
+            </p>
+          </div>
+
+          {mio && (
+            <button
+              onClick={() => setAbierto(abierto === r.id ? null : r.id)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              {abierto === r.id ? "Cerrar" : "Ver y decidir"}
+            </button>
+          )}
+        </div>
+
+        {mio && abierto === r.id && (
+          <div className="border-t border-slate-100 px-5 py-4">
+            {suyas.length > 0 ? (
+              <ComparativaDecision
+                cotizaciones={suyas}
+                minimo={minimo}
+                onElegir={elegir}
+                eligiendo={eligiendo}
+              />
+            ) : (
+              <p className="text-sm text-slate-500">
+                No hay presupuestos cargados en el sistema.{" "}
+                {r.comparativa_url && (
+                  <a href={r.comparativa_url} target="_blank" rel="noreferrer" className="underline">
+                    Ver la comparativa en la planilla
+                  </a>
+                )}
+              </p>
+            )}
+          </div>
+        )}
+      </article>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Para aprobar</h1>
+        <p className="text-sm text-slate-500">
+          Compras esperando el visto bueno. Elegir un presupuesto aprueba la compra.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+      {aviso && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{aviso}</div>
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Te toca a vos ({mios.length})
+        </h2>
+        {mios.length === 0 ? (
+          <p className="text-sm text-slate-400">No tenés compras esperando tu decisión.</p>
+        ) : (
+          mios.map((r) => <Pedido key={r.id} r={r} mio />)
+        )}
+      </section>
+
+      {deOtros.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Esperando a otros ({deOtros.length})
+          </h2>
+          {deOtros.map((r) => <Pedido key={r.id} r={r} mio={false} />)}
+        </section>
+      )}
+    </div>
+  );
+}
