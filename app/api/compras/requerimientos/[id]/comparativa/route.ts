@@ -77,8 +77,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json(
       {
         error:
-          "Esa planilla no tiene la forma de una comparativa: faltan las columnas " +
-          mapeo.faltan.join(", ") + ".",
+          "Esa planilla no tiene la forma de una comparativa. Falta: " +
+          mapeo.faltan.join("; ") +
+          ". Los encabezados que tiene son: " +
+          (mapeo.encontrados.length > 0 ? mapeo.encontrados.join(", ") : "ninguno") +
+          ".",
       },
       { status: 409 }
     );

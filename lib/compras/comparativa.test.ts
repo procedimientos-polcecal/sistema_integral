@@ -56,8 +56,9 @@ describe("mapeo de encabezados", () => {
     const r = mapearEncabezados(["FECHA", "COSA", "OTRA COSA"]);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.faltan).toContain("PROVEEDOR");
-    expect(r.faltan).toContain("PRECIO UNITARIO");
+    const dice = r.faltan.join(" | ");
+    expect(dice).toContain("PROVEEDOR");
+    expect(dice).toContain("PRECIO UNITARIO");
   });
 });
 
@@ -207,5 +208,42 @@ describe("que deja el presupuesto elegido en el requerimiento", () => {
     expect(costosParaElPedido({
       proveedor_id: "prov-2", precio_total: 6536.18, costo_envio: null,
     })).toEqual({ proveedor_id: "prov-2", costo_iva: 6536.18, costo_envio: 0 });
+  });
+});
+
+/**
+ * Los encabezados no son identicos entre planillas: el numero de RI aparece
+ * como "NRO RI", "N° RI" o "N RI" segun quien la haya armado. Como la columna A
+ * es el vinculo con el pedido, no reconocerla deja la planilla afuera entera.
+ */
+describe("variantes del encabezado", () => {
+  const conNroRi = (titulo: string): string[] => [titulo, ...COLUMNAS_COMPARATIVA.slice(1)];
+
+  it("reconoce el numero de RI escrito de varias formas", () => {
+    for (const titulo of ["NRO RI", "N° RI", "Nº RI", "N RI", "N. RI", "NUMERO RI"]) {
+      const r = mapearEncabezados(conNroRi(titulo));
+      expect(r.ok, `no reconocio "${titulo}"`).toBe(true);
+      if (r.ok) expect(r.idx.nro_ri).toBe(0);
+    }
+  });
+
+  it("reconoce las variantes de cantidad y precio unitario", () => {
+    const cabecera: string[] = [...COLUMNAS_COMPARATIVA];
+    cabecera[7] = "PRECIO UNIT.";
+    cabecera[8] = "CAN";
+    const r = mapearEncabezados(cabecera);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.idx.precio_unitario).toBe(7);
+    expect(r.idx.cantidad).toBe(8);
+  });
+
+  it("cuando falta algo, dice tambien que encabezados encontro", () => {
+    const r = mapearEncabezados(["FECHA", "COSA"]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.encontrados).toEqual(["FECHA", "COSA"]);
+    // El nombre que falta se ofrece con sus variantes, para poder corregir la planilla.
+    expect(r.faltan.join(" ")).toContain("N° RI");
   });
 });

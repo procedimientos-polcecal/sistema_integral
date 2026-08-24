@@ -40,14 +40,36 @@ export type ClaveColumna =
   | "iva" | "precio_total" | "precio_hasta" | "plazos" | "condiciones_pago"
   | "disponibilidad" | "comentario" | "eleccion";
 
-const ENCABEZADO_DE: Record<ClaveColumna, string> = {
-  nro_ri: "NRO RI", fecha: "FECHA", area: "ÁREA", descripcion: "DESCRIPCION",
-  proveedor: "PROVEEDOR", marca: "MARCA", unidad_medida: "UNIDAD DE MEDIDA",
-  precio_unitario: "PRECIO UNITARIO", cantidad: "CANTIDAD", envio: "ENVÍO",
-  descuento: "DESCUENTO", iva: "IVA", precio_total: "PRECIO TOTAL",
-  precio_hasta: "PRECIO HASTA", plazos: "PLAZOS",
-  condiciones_pago: "CONDICIONES DE PAGO", disponibilidad: "DISPONIBILIDAD",
-  comentario: "COMENTARIO", eleccion: "ELECCIÓN",
+/**
+ * Cómo puede venir escrito cada encabezado. El primero es el nombre canónico.
+ *
+ * No son idénticos entre planillas: el número de RI aparece como `NRO RI`,
+ * `N° RI` o `N RI` según quién la armó. Y como la columna A es el vínculo con
+ * el pedido, no reconocerla deja la planilla afuera entera.
+ *
+ * `norm()` ya saca acentos, grados y puntos, así que `N° RI`, `Nº RI` y `N. RI`
+ * llegan acá como `N RI`: alcanza con listar esa forma.
+ */
+const ALIAS: Record<ClaveColumna, string[]> = {
+  nro_ri: ["NRO RI", "N RI", "NUMERO RI", "N DE RI"],
+  fecha: ["FECHA"],
+  area: ["ÁREA", "AREA", "SECTOR"],
+  descripcion: ["DESCRIPCION", "DESCRIPCIÓN", "DETALLE"],
+  proveedor: ["PROVEEDOR", "PROVEEDORES"],
+  marca: ["MARCA"],
+  unidad_medida: ["UNIDAD DE MEDIDA", "UNIDAD", "U MEDIDA", "UM"],
+  precio_unitario: ["PRECIO UNITARIO", "PRECIO UNIT", "P UNITARIO", "UNITARIO"],
+  cantidad: ["CANTIDAD", "CAN", "CANT"],
+  envio: ["ENVÍO", "ENVIO", "FLETE"],
+  descuento: ["DESCUENTO", "DESC"],
+  iva: ["IVA"],
+  precio_total: ["PRECIO TOTAL", "TOTAL"],
+  precio_hasta: ["PRECIO HASTA", "VALIDO HASTA", "VÁLIDO HASTA"],
+  plazos: ["PLAZOS", "PLAZO", "PLAZO DE PAGO"],
+  condiciones_pago: ["CONDICIONES DE PAGO", "CONDICIONES"],
+  disponibilidad: ["DISPONIBILIDAD", "ENTREGA"],
+  comentario: ["COMENTARIO", "COMENTARIOS", "OBSERVACIONES"],
+  eleccion: ["ELECCIÓN", "ELECCION", "ELEGIDO"],
 };
 
 /** Sin estas columnas la planilla no es una comparativa y no se toca. */
@@ -57,7 +79,7 @@ export type Indice = Record<ClaveColumna, number>;
 
 export type ResultadoMapeo =
   | { ok: true; idx: Indice }
-  | { ok: false; faltan: string[] };
+  | { ok: false; faltan: string[]; encontrados: string[] };
 
 /**
  * Ubica cada columna por NOMBRE, no por posición.
@@ -70,12 +92,29 @@ export function mapearEncabezados(encabezado: string[]): ResultadoMapeo {
   const normalizado = encabezado.map(norm);
   const idx = {} as Indice;
 
-  for (const [clave, titulo] of Object.entries(ENCABEZADO_DE) as [ClaveColumna, string][]) {
-    idx[clave] = normalizado.indexOf(norm(titulo));
+  for (const [clave, alias] of Object.entries(ALIAS) as [ClaveColumna, string[]][]) {
+    idx[clave] = -1;
+    for (const nombre of alias) {
+      const i = normalizado.indexOf(norm(nombre));
+      if (i >= 0) { idx[clave] = i; break; }
+    }
   }
 
-  const faltan = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map((c) => ENCABEZADO_DE[c]);
-  return faltan.length > 0 ? { ok: false, faltan } : { ok: true, idx };
+  // Lo que falta se nombra con sus variantes, y se dice qué encabezados había:
+  // sin eso, corregir la planilla es adivinar.
+  const faltan = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map((c) => nombreConVariantes(c));
+
+  return faltan.length > 0
+    ? { ok: false, faltan, encontrados: encabezado.filter((h) => String(h ?? "").trim() !== "") }
+    : { ok: true, idx };
+}
+
+/** "NRO RI (o N° RI, NUMERO RI)", para que se pueda corregir la planilla. */
+function nombreConVariantes(clave: ClaveColumna): string {
+  const [canonico, ...resto] = ALIAS[clave];
+  // "N RI" se muestra como "N° RI", que es como lo escribe la gente.
+  const legibles = resto.map((v) => (v === "N RI" ? "N° RI" : v));
+  return legibles.length > 0 ? `${canonico} (o ${legibles.join(", ")})` : canonico;
 }
 
 // ── Lectura de valores ───────────────────────────────────────
