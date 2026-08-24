@@ -84,6 +84,14 @@ queda pendiente, en vez de meter un valor que la validación rechaza.
 1846 requerimientos eso hacía que la sincronización revirtiera aprobaciones sin
 ruido. Usar siempre `traerTodo()` de `lib/core/paginado.ts`.
 
+**Un `.in()` con muchos ids arma una URL que PostgREST rechaza.** Filtrar por
+una lista de 1000 UUID da una URL de 37 KB y la respuesta es `400`, sin decir por
+qué. Y como `traerTodo()` lanza al ver el error, un Server Component que use eso
+se cae entero. Cuando el conjunto puede ser grande, hay que filtrar por una
+condición —el estado, la fecha— y no por la lista de ids. Ojo con razonar "esta
+tabla es chica": el tablero parecía una cola de trabajo acotada y arrastra los
+1767 RI del histórico.
+
 **El valor de un enum no se puede usar en la misma transacción** en que se
 agrega. Por eso las migraciones 015 y 024 tienen una sola sentencia.
 
@@ -101,6 +109,15 @@ degrada el cron: hace fallar el deploy entero.
 Hacen falta los dos activadores.
 
 ## Lo que quedó pendiente
+
+0. **El tablero muestra los 1000 RI más VIEJOS, no el trabajo en curso.** La
+   consulta principal de `/compras/tablero` no pagina, y PostgREST corta en 1000
+   ordenando por fecha ascendente: hoy el tablero llega hasta el RI 1139, del
+   29/04/2026, y no muestra nada posterior. De esos 1000 lugares, 977 se los
+   lleva la columna `PEDIDO`, que acumula el histórico importado porque nada lo
+   pasa a `RECIBIDO` todavía. Se destapa al resolver el punto 1, pero mientras
+   tanto conviene acotar qué arrastra la columna `PEDIDO` — es una decisión de
+   cómo se quiere usar el tablero, no sólo de paginado.
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
    plazos. Es lo próximo según lo hablado.
