@@ -56,3 +56,70 @@ export async function obtenerToken(scopes: string[]): Promise<string> {
   if (!datos.access_token) throw new Error(`Google OAuth: ${JSON.stringify(datos)}`);
   return datos.access_token;
 }
+
+// ── Errores ──────────────────────────────────────────────────
+
+interface ErrorDeGoogle {
+  code?: number;
+  message?: string;
+  errors?: { reason?: string }[];
+  details?: {
+    reason?: string;
+    metadata?: { serviceTitle?: string; activationUrl?: string };
+  }[];
+}
+
+/**
+ * Traduce un error de Google a algo accionable.
+ *
+ * La API contesta con un JSON de treinta líneas que en pantalla no dice nada:
+ * quien lo lee necesita saber qué ir a tocar, y casi siempre es una de tres
+ * cosas —habilitar la API, compartir la carpeta, o corregir el ID—.
+ */
+export function mensajeDeGoogle(
+  estado: number,
+  cuerpo: string,
+  cuentaDeServicio?: string
+): string {
+  let error: ErrorDeGoogle = {};
+  try {
+    error = (JSON.parse(cuerpo)?.error ?? {}) as ErrorDeGoogle;
+  } catch {
+    // Hay respuestas que ni siquiera son JSON (un 502 del proxy, por ejemplo).
+  }
+
+  const razones = new Set<string>();
+  for (const e of error.errors ?? []) if (e.reason) razones.add(e.reason);
+  for (const d of error.details ?? []) if (d.reason) razones.add(d.reason);
+
+  if (razones.has("SERVICE_DISABLED") || razones.has("accessNotConfigured")) {
+    const detalle = (error.details ?? []).find((d) => d.metadata?.activationUrl);
+    const api = detalle?.metadata?.serviceTitle ?? "La API de Google";
+    const url = detalle?.metadata?.activationUrl;
+
+    return (
+      `${api} no está habilitada en el proyecto de Google Cloud. ` +
+      (url ? `Habilitala acá y esperá unos minutos a que propague: ${url}` : "Hay que habilitarla en la consola de Google Cloud.")
+    );
+  }
+
+  if (estado === 403) {
+    const quien = cuentaDeServicio ? `la cuenta de servicio ${cuentaDeServicio}` : "la cuenta de servicio";
+    return `Google no dio acceso: lo más probable es que la carpeta no esté compartida con ${quien} como editor. (${error.message ?? estado})`;
+  }
+
+  if (estado === 404) {
+    return `Google no encuentra ese archivo o carpeta: conviene revisar el ID configurado. (${error.message ?? estado})`;
+  }
+
+  return `Google respondió ${estado}: ${error.message ?? cuerpo.slice(0, 200)}`;
+}
+
+/** El mail de la cuenta de servicio, para poder nombrarlo en los avisos. */
+export function cuentaDeServicio(): string | undefined {
+  try {
+    return JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "{}").client_email;
+  } catch {
+    return undefined;
+  }
+}

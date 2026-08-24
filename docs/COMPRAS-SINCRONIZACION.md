@@ -110,6 +110,17 @@ donde vive una planilla por comparativa, todas con la forma de
 `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` y la cuenta de servicio necesita permiso de
 **Editor** sobre la carpeta.
 
+### Antes de nada: habilitar la API de Drive
+
+Listar una carpeta usa la **Google Drive API**, que es un servicio distinto de
+la de Sheets y se habilita aparte en el proyecto de Google Cloud. Si no está
+habilitada, Google contesta 403 con `SERVICE_DISABLED` y el selector de
+comparativas no muestra nada.
+
+Se habilita una sola vez, en la consola de Google Cloud del proyecto al que
+pertenece la cuenta de servicio, y tarda unos minutos en propagar. La app
+traduce ese error y muestra el link directo para habilitarla.
+
 ### La columna A es el vínculo
 
 Los nombres de los archivos son genéricos y a veces no corresponden a lo que

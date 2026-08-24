@@ -49,7 +49,7 @@ function nombreCorto(p: Persona): string {
 
 export default function TableroClient({
   requerimientos, aprobadores, proveedores, usuarioId, canEdit, resumen,
-  pedidosViejos, diasDePedido,
+  pedidosViejos, diasDePedido, fallo,
 }: {
   requerimientos: RequerimientoConRelaciones[];
   aprobadores: Persona[];
@@ -60,6 +60,8 @@ export default function TableroClient({
   /** Pedidos que quedaron fuera de la ventana del tablero. */
   pedidosViejos: number;
   diasDePedido: number;
+  /** Qué falló al traer los datos, si algo falló. */
+  fallo: string | null;
 }) {
   const router = useRouter();
   const [procesando, setProcesando] = useState<string | null>(null);
@@ -179,6 +181,16 @@ export default function TableroClient({
           ))}
         </select>
       </div>
+
+      {fallo && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="font-semibold">No se pudieron traer los requerimientos.</p>
+          <p className="mt-1">
+            El tablero está incompleto o vacío por eso, no porque no haya trabajo.
+          </p>
+          <p className="mt-1 font-mono text-xs break-all">{fallo}</p>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>

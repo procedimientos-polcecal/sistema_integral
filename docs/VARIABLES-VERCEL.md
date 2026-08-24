@@ -60,6 +60,10 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
+Para la carpeta de comparativas hace falta además **habilitar la Google Drive
+API** en el proyecto de Google Cloud: es un servicio aparte del de Sheets. Sin
+eso Google contesta 403 y el selector de comparativas queda vacío.
+
 Además hay que **compartir con el `client_email` de esa cuenta de servicio,
 como Editor** — no como lector — dos cosas: la planilla PEDIDOS DE COMPRA, y la
 **carpeta de comparativas**. En los dos casos la app escribe de vuelta: el

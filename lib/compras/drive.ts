@@ -11,7 +11,7 @@
  */
 
 import {
-  obtenerToken, hayCredencialesGoogle,
+  obtenerToken, hayCredencialesGoogle, mensajeDeGoogle, cuentaDeServicio,
   SCOPE_SHEETS, SCOPE_DRIVE_LECTURA,
 } from "@/lib/compras/google";
 import { letraColumna } from "@/lib/compras/comparativa";
@@ -49,7 +49,7 @@ export async function listarComparativas(): Promise<ArchivoComparativa[]> {
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?${parametros}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Drive API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const json = await res.json();
   return (json.files ?? []).map(
@@ -68,7 +68,7 @@ async function primeraPestana(token: string, fileId: string): Promise<string> {
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
     `?fields=sheets.properties.title`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const json = await res.json();
   const titulo = json.sheets?.[0]?.properties?.title;
@@ -91,7 +91,7 @@ export async function leerComparativa(fileId: string): Promise<ComparativaLeida>
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
     `/values/${encodeURIComponent(pestana)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const valores = ((await res.json()).values ?? []) as string[][];
   return { pestana, encabezado: valores[0] ?? [], filas: valores.slice(1) };
@@ -120,7 +120,7 @@ export async function agregarFila(
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [valores] }),
   });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   // updatedRange viene como "Hoja 1!A7:S7".
   const rango: string = (await res.json()).updates?.updatedRange ?? "";
@@ -148,7 +148,7 @@ export async function escribirCelda(
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [[valor]] }),
   });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 }
 
 /**
@@ -174,7 +174,7 @@ export async function vaciarFila(
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 }
 
 /** El link para abrir la planilla. */
