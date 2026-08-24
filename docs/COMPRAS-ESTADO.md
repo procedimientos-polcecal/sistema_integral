@@ -84,6 +84,21 @@ queda pendiente, en vez de meter un valor que la validación rechaza.
 1846 requerimientos eso hacía que la sincronización revirtiera aprobaciones sin
 ruido. Usar siempre `traerTodo()` de `lib/core/paginado.ts`.
 
+**Una planilla de comparativa es por artículo, no por pedido.** Acumula
+cotizaciones de años para el mismo artículo, de muchos RI distintos y en su
+mayoría sin etiquetar. La regla "traer las filas con la columna A vacía o de este
+RI" parecía razonable y le pegó 238 presupuestos ajenos a un solo pedido, además
+de estamparle ese número a 238 filas de la planilla. Sin número no significa "es
+de este RI", significa "no se sabe de cuál es".
+
+**El trigger de `editado_en_app` no distingue quién escribe.** Marcaba la fila
+ante cualquier cambio de estado, proveedor o costos, y la sincronización escribe
+esos mismos campos con el mismo cliente admin: la primera sincronización
+congelaba el RI y la app no volvía a mirar la planilla. Corregido en la 027, que
+lo distingue por `sheets_sincronizado_en`. Para saber qué se editó de verdad en
+la app no sirve mirar el proveedor ni el costo —eso lo carga la sincronización—:
+el marcador es el `usuario_id` del historial.
+
 **La planilla escribe las fechas en d/m, no en m/d.** El parser suponía lo
 contrario y daba vuelta el día y el mes en toda fecha cuyo día fuera 12 o menos:
 el 39% de los RI. La forma de detectarlo fue la secuencia de N° de RI, que es
