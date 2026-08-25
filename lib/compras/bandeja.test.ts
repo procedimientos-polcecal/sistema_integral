@@ -61,3 +61,30 @@ describe("reparto de la bandeja", () => {
     expect(mios.length + deOtros.length).toBe(items.length);
   });
 });
+
+describe("orden de la bandeja", () => {
+  const yo = "usuario-nico";
+  const items = [
+    ri(1, yo, "NORMAL"),
+    ri(3, yo, "URGENTE"),
+    ri(2, yo, null),
+  ];
+
+  it("por defecto va por prioridad, como venia", () => {
+    expect(repartirBandeja(items, yo).mios.map((x) => x.nro_ri)).toEqual([3, 1, 2]);
+  });
+
+  it("se puede pedir por numero de RI", () => {
+    expect(repartirBandeja(items, yo, "numero").mios.map((x) => x.nro_ri)).toEqual([3, 2, 1]);
+  });
+
+  it("y por cambio reciente", () => {
+    expect(repartirBandeja(items, yo, "cambio").mios.map((x) => x.nro_ri)).toEqual([3, 2, 1]);
+  });
+
+  it("el criterio vale para los dos bloques", () => {
+    const mezcla = [ri(1, yo, null), ri(5, "otro", null), ri(3, "otro", null)];
+    const r = repartirBandeja(mezcla, yo, "numero");
+    expect(r.deOtros.map((x) => x.nro_ri)).toEqual([5, 3]);
+  });
+});

@@ -3,7 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { etiquetaPrioridad, fecha, diasRestantes, moneda } from "@/lib/compras/constants";
+import {
+  etiquetaPrioridad, fecha, diasRestantes, moneda, ORDENES_TABLERO,
+} from "@/lib/compras/constants";
+import type { OrdenTablero } from "@/lib/compras/constants";
 import { repartirBandeja } from "@/lib/compras/bandeja";
 import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
@@ -27,8 +30,11 @@ export default function BandejaClient({
   const [eligiendo, setEligiendo] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
+  // Un solo criterio para los dos bloques: ordenar distinto arriba y abajo
+  // hace más difícil comparar una cola con la otra.
+  const [orden, setOrden] = useState<OrdenTablero>("prioridad");
 
-  const { mios, deOtros } = repartirBandeja(requerimientos, usuarioId);
+  const { mios, deOtros } = repartirBandeja(requerimientos, usuarioId, orden);
 
   async function elegir(c: Cotizacion) {
     setEligiendo(c.id);
@@ -122,11 +128,26 @@ export default function BandejaClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Para aprobar</h1>
-        <p className="text-sm text-slate-500">
-          Compras esperando el visto bueno. Elegir un presupuesto aprueba la compra.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Para aprobar</h1>
+          <p className="text-sm text-slate-500">
+            Compras esperando el visto bueno. Elegir un presupuesto aprueba la compra.
+          </p>
+        </div>
+
+        {requerimientos.length > 1 && (
+          <select
+            aria-label="Ordenar la bandeja"
+            value={orden}
+            onChange={(e) => setOrden(e.target.value as OrdenTablero)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            {ORDENES_TABLERO.map((o) => (
+              <option key={o.valor} value={o.valor}>{o.label}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {error && (

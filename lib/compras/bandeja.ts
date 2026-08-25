@@ -6,6 +6,7 @@
  */
 
 import { ordenarRequerimientos } from "@/lib/compras/constants";
+import type { OrdenTablero } from "@/lib/compras/constants";
 import type { Prioridad } from "@/lib/compras/types";
 
 export type Permitido = { ok: true } | { ok: false; motivo: string };
@@ -41,16 +42,20 @@ interface EnBandeja {
  * Ver la cola del otro sirve para saber si algo está demorado, y tenerla aparte
  * evita confundir "lo que tengo que hacer" con "lo que estoy esperando". Lo que
  * no tiene a nadie asignado cae abajo: no es de nadie todavía.
+ *
+ * El criterio de orden vale para los dos bloques: si se ordena por urgencia,
+ * se ordena por urgencia de los dos lados.
  */
 export function repartirBandeja<T extends EnBandeja>(
   items: T[],
-  usuarioId: string
+  usuarioId: string,
+  criterio: OrdenTablero = "prioridad"
 ): { mios: T[]; deOtros: T[] } {
   const mios = items.filter((r) => r.compra_asignada_a === usuarioId);
   const deOtros = items.filter((r) => r.compra_asignada_a !== usuarioId);
 
   return {
-    mios: ordenarRequerimientos(mios, "prioridad"),
-    deOtros: ordenarRequerimientos(deOtros, "prioridad"),
+    mios: ordenarRequerimientos(mios, criterio),
+    deOtros: ordenarRequerimientos(deOtros, criterio),
   };
 }
