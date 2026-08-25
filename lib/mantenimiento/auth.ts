@@ -2,6 +2,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nivelEnModulo } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
+/**
+ * Permisos del módulo Mantenimiento.
+ *
+ * Los tres niveles del núcleo se mapean así:
+ *   lectura → consulta
+ *   edicion → opera: OT, avisos, ejecuciones, producción, órdenes de servicio
+ *   admin   → además configura el catálogo: tipos, contratistas, operarios
+ *
+ * En la base los espejan `mant_puede_ver()`, `mant_puede_editar()` y
+ * `mant_es_admin()`. Las dos mitades tienen que decir lo mismo: la migración
+ * 029 alineó `mant_nivel()` con `nivelEnModulo()` para que un `admin_sistema`
+ * tenga admin de los dos lados.
+ *
+ * La guía de integración propone crear un helper `mantNivel`: no hace falta,
+ * es lo que hace `nivelMantenimientoDe()` desde antes.
+ */
+
 export async function nivelMantenimientoDe(
   supabase: SupabaseClient,
   userId: string
@@ -27,6 +44,20 @@ export async function puedeEditarMantenimiento(
 ): Promise<boolean> {
   const nivel = await nivelMantenimientoDe(supabase, userId);
   return nivel === "edicion" || nivel === "admin";
+}
+
+/**
+ * Administrar el módulo: tipos de equipo, contratistas, operarios.
+ *
+ * Es el espejo en el código de `mant_es_admin()` en la base, y la contraparte
+ * de `puedeEditarMantenimiento()`: operar es una cosa, configurar el catálogo
+ * con el que después todos trabajan es otra.
+ */
+export async function esAdminMantenimiento(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  return (await nivelMantenimientoDe(supabase, userId)) === "admin";
 }
 
 export interface UsuarioBasico {
