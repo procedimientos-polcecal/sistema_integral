@@ -15,7 +15,10 @@ Estado: **en producción, con el histórico cargado y la sincronización andando
 - Deploy: `https://sistema-integral-one.vercel.app`
 - Supabase: proyecto `sqfdqoxyqkaekxlluvpg`
 - 1.846 requerimientos, 163 proveedores, 37 ubicaciones, 9 áreas
-- Migraciones aplicadas: hasta la **025**
+- Migraciones aplicadas: hasta la **025**. La **030** —la vista que alimenta
+  los indicadores del tablero— está escrita y **todavía no aplicada**: hasta
+  que se corra, el tablero muestra los cinco indicadores en cero con el
+  cartel de que no pudo traer el resumen.
 
 ## El circuito, tal como funciona de verdad
 
@@ -133,10 +136,9 @@ Hacen falta los dos activadores.
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
-   plazos. Es lo próximo según lo hablado. Además destraba el tablero: hoy la
-   columna PEDIDO muestra sólo los últimos 90 días (`DIAS_DE_PEDIDO`) porque
-   acumula 1169 pedidos cerrados que nada saca de ahí. Con `RECIBIDO` salen
-   solos y la ventana sobra.
+   plazos. Es lo próximo según lo hablado. Cuando exista, se suma como sexto
+   indicador del tablero y `SIGUIENTE_ESTADO` gana un paso; el indicador PEDIDO
+   va a dejar de crecer solo, que es lo que hoy lo hace poco informativo.
 2. **La comparativa en sí** — hoy es un enlace y una tabla `compras_cotizaciones`
    sin pantalla. Estaba anotado como "lo trabajamos después".
 3. **Sumar la cuenta de servicio a "APROBACIÓN DE GERENCIA"**, si se quiere que
@@ -156,6 +158,7 @@ Hacen falta los dos activadores.
 |---|---|
 | Copia de trabajo | `C:\Users\Usuario\Desktop\SdG PP` |
 | Módulo | `app/(app)/compras`, `lib/compras`, `app/api/compras` |
+| El tablero | Cinco indicadores; el detalle vive en Requerimientos y en la bandeja: [el diseño](superpowers/specs/2026-08-25-tablero-compras-indicadores-design.md) |
 | Migraciones | `supabase/migrations/015` a `025` |
 | Importador | `scripts/import-compras/import.mjs` (idempotente, tiene `--dry-run`) |
 | Cómo funciona | [COMPRAS.md](COMPRAS.md) |
