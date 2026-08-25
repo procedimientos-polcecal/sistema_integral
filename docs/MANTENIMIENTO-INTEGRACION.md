@@ -86,7 +86,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
 | 2 | Avisos | **hecho** — sincronización y listado |
 | 3 | OT: **sincronización, filtro por especialidad y parada de sector hechos**; falta registrar realizado e iniciar OT | en curso |
-| 4 | Producción semanal | pendiente |
+| 4 | Producción semanal | **hecho** |
 | 5 | Órdenes de servicio y comparativas | pendiente |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | pendiente |
 | 7 | Dashboard: KPIs y gráficos | pendiente |
@@ -156,9 +156,32 @@ mientras lo decide.
 La marca **no viene de la planilla ni vuelve a ella**: es un dato propio del
 sistema. La planilla no tiene esa columna.
 
-Falta mostrarla en la planificación de producción y en el dashboard, que es
-donde sirve para decidir dónde meter una reparación sin frenar el despacho. Va
-con esas features.
+Ya se muestra en producción semanal, al lado del nombre del sector. Falta el
+dashboard.
+
+## Producción semanal
+
+Una fila por semana y sector, con los siete días. La pantalla edita un día pero
+manda la semana entera, que es como está guardada (`days`, `turnos` y `motivos`
+son arreglos de siete en un `jsonb`). La API normaliza todo a siete antes de
+guardar: un arreglo de otro largo rompería la grilla al leerla.
+
+**Las fechas se arman con las partes locales, no con `toISOString()`.** El
+origen calcula el lunes convirtiendo a UTC; la medianoche local de un huso
+positivo cae el día anterior y la semana entera se corre. Vercel corre en UTC y
+las pantallas en Argentina, así que acá la lógica de fechas vive en
+`lib/mantenimiento/produccion.ts`, con tests.
+
+Arranca en la semana que viene: es la que se planifica, no la que ya empezó.
+
+Los sectores se agrupan por empresa porque la ventana de reparación se decide
+por planta: si **todos** los sectores de una empresa están libres un día, ese día
+se puede parar sin frenar el despacho. Al lado de cada sector se muestra lo que
+tiene pendiente —OT y OS— para aprovechar la ventana, y la marca de "parar" si
+alguna OT pendiente lo exige.
+
+Las OS ya se consultan aunque la tabla esté vacía: la feature 5 la va a llenar y
+la pantalla no necesita cambiar.
 
 ## Lo que quedó anotado para decidir después
 

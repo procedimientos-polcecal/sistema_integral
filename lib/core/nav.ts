@@ -101,6 +101,7 @@ export const NAV: NavItem[] = [
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
       { label: "Planificación diaria", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+      { label: "Producción semanal", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
     ],
   },
   {
