@@ -207,3 +207,66 @@ export interface Aviso {
   equipos?: { name: string; code: string | null } | null;
   sectores?: { nombre: string } | null;
 }
+
+/**
+ * Una orden de servicio: un trabajo que se le pide a un tercero.
+ *
+ * A diferencia de la OT, que la hace el personal propio. Vive en su planilla
+ * —una pestaña por área— y acá es un espejo con seguimiento.
+ */
+export interface OrdenServicio {
+  id: string;
+  os_number: number | null;
+  fecha: string | null;
+  area: string | null;
+  sector_raw: string | null;
+  sector_id: string | null;
+  equipo_raw: string | null;
+  equipo_code: string | null;
+  equipment_id: string | null;
+  descripcion: string | null;
+  fecha_requerimiento: string | null;
+  detalle_extra: string | null;
+  imagen: string | null;
+  prioridad: string | null;
+  empresa: string | null;
+  comparativa: string | null;
+  proveedor_elegido: string | null;
+  estado: string | null;
+  cuit: string | null;
+  tiene_orden_compra: string | null;
+  costo: number | null;
+  fecha_pedido: string | null;
+  fecha_realizacion: string | null;
+  observaciones: string | null;
+  app_created: boolean;
+  sheets_tab: string | null;
+  sheets_row: number | null;
+  synced_at: string | null;
+  created_at: string;
+  equipos?: { name: string; code: string | null } | null;
+  sectores?: { nombre: string } | null;
+}
+
+/** Una cotización de la comparativa de una OS. */
+export interface CotizacionOS {
+  id: string;
+  os_number: number | null;
+  fecha: string | null;
+  area: string | null;
+  sector: string | null;
+  equipo_raw: string | null;
+  descripcion: string | null;
+  proveedor: string;
+  precio_unitario: string | null;
+  /** Fracción: 0.21. La planilla lo muestra como "21%". */
+  iva: number | null;
+  precio_total: string | null;
+  vigencia_hasta: string | null;
+  plazos: string | null;
+  condiciones_pago: string | null;
+  otras_especificaciones: string | null;
+  eleccion: boolean;
+  sheets_tab: string | null;
+  sheets_row: number | null;
+}

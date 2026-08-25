@@ -87,7 +87,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | 2 | Avisos | **hecho** — sincronización y listado |
 | 3 | OT: **sincronización, filtro por especialidad y parada de sector hechos**; falta registrar realizado e iniciar OT | en curso |
 | 4 | Producción semanal | **hecho** |
-| 5 | Órdenes de servicio y comparativas | pendiente |
+| 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | pendiente |
 | 7 | Dashboard: KPIs y gráficos | pendiente |
 
@@ -183,12 +183,82 @@ alguna OT pendiente lo exige.
 Las OS ya se consultan aunque la tabla esté vacía: la feature 5 la va a llenar y
 la pantalla no necesita cambiar.
 
+## Órdenes de servicio y sus comparativas
+
+Una OS es un trabajo que se le pide a un **tercero** —una reparación, un
+servicio, una fabricación—, a diferencia de la OT, que la hace el personal
+propio. Van aparte de los requerimientos de Compras: aquéllos piden materiales,
+éstas piden trabajo.
+
+Son **dos planillas**:
+
+- **OS**: una pestaña por área (`SERVICIOS`, `MANTENIMIENTO`, `TALLER VIAL`,
+  `PRODUCCIÓN`, `LABORATORIO`, `ALMACÉN`, `INVERSIONES`, `DESPACHO`, `CANTERA`,
+  `OTRA`). Cada pestaña arma su encabezado a su manera, así que se lee **por
+  encabezado** y no por posición, con alias por columna. Las OS nuevas se cargan
+  en `SERVICIOS`, la hoja maestra.
+- **Comparativas** (`COMPARATIVA DE PROVEEDORES MANTENIMIENTO`): una pestaña por
+  sector, quince columnas fijas A..O iguales en las doce, así que se lee por
+  posición. Varias filas con el mismo N° de OS son las ofertas que se
+  compararon; `ELECCIÓN` marca cuál se tomó.
+
+### Verificado contra la planilla de comparativas
+
+147 cotizaciones sobre 117 órdenes, leídas enteras con el parser del módulo:
+
+- **El IVA viene como fracción** (0.21) leyendo sin formato, y como `"21%"`
+  leyendo con formato. El código de origen hacía `Number("21%")` → NaN: con
+  formato perdía el IVA de todas las filas.
+- **21 cotizaciones no tienen IVA** cargado; ninguna se queda sin fecha ni sin
+  total.
+- **Dos OS tienen más de una cotización elegida** (147 y 207) y **siete no
+  tienen ninguna**. La planilla lo permite; la app no: elegir una desmarca las
+  demás, y lo hace por número de OS, que es lo que corresponde porque la 207
+  está cotizada en dos pestañas distintas.
+- **Tres OS tienen elegida una que no es la más barata** (49, 161, 181). Puede
+  estar bien —plazo, garantía, quién puede venir mañana—, pero se muestra.
+- Una fila de "Planta Filler 2" tiene la fecha en 2026 mientras sus hermanas
+  dicen 2025: es un error de tipeo de la planilla, no de la lectura.
+
+### La trampa de los decimales
+
+`monto()` tenía que distinguir tres formas del mismo número: el que manda Sheets
+sin formato (`1848315.535`), el que escribe una persona (`" $1.972.500,00"`) y
+el que sale de `String(n)` al guardarlo. Tomar todos los puntos por separadores
+de miles daba **mil veces el precio**: hacía aparecer diferencias de miles de
+millones donde la elegida era, de hecho, la más barata. La regla es: con coma,
+formato argentino; sin coma, un punto solo es decimal y varios son de miles.
+
+### Escribir en la planilla
+
+Antes de escribir en una fila se comprueba que **siga siendo la misma**: se lee
+esa fila y se contrasta el N° de OS y el proveedor. El número de fila que
+guardamos se corre en cuanto alguien inserta una fila en el medio, y escribir a
+ciegas pisaría la cotización de otro proveedor —en Compras eso ya pasó: 238
+filas quedaron marcadas mal.
+
+Borrar una cotización **vacía** su fila en vez de eliminarla: eliminarla correría
+todas las de abajo y dejaría mal el número de fila de las demás.
+
+La sincronización de comparativas es un **refresco completo** —se borra el espejo
+y se vuelve a leer— porque en la planilla se corrigen y se borran filas. Si no
+se pudo leer nada, no se toca nada: una planilla inaccesible borraría el espejo
+entero.
+
+### Lo que falta
+
+**El ID de la planilla de OS.** El repo de origen nunca tuvo configurado
+`GOOGLE_SHEETS_OS_ID`, así que no se pudo verificar su forma contra la planilla
+de verdad como se hizo con las demás. El código está completo y responde
+"Falta configurar GOOGLE_SHEETS_OS_ID" hasta que se cargue.
+
 ## Lo que quedó anotado para decidir después
 
 **`contratistas` y `proveedores` son casi lo mismo.** El delta creó
 `contratistas` como tabla propia del módulo, y el ERP ya tiene `proveedores`
-compartido con Compras. Conviene resolverlo al portar las OT, que es donde se
-usa.
+compartido con Compras. Las OS y sus comparativas guardan el proveedor como
+**texto**, como en la planilla, y no lo enlazan a `proveedores`: enlazarlos es
+una decisión aparte que conviene tomar junto con la de `contratistas`.
 
 **Al portar, revisar `UNFORMATTED_VALUE`.** La app de origen arregló un bug de
 fechas en null leyendo Sheets sin formatear. Este ERP tiene su propio lector en

@@ -56,3 +56,59 @@ export function codigoDeEquipo(texto: string | null | undefined): string | null 
   const m = s.match(/\b([A-Z]{2,}-[A-Z0-9]+-\d+)\b/i);
   return m ? m[1].toUpperCase() : null;
 }
+
+/** Sin acentos, sin mayúsculas y sin espacios de más, para comparar textos. */
+export const normalizar = (v: unknown): string =>
+  String(v ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Un importe de la planilla.
+ *
+ * Sin formato llega como número. Pero la columna es de texto porque a veces
+ * alguien escribe el precio en dólares —"U$D 286"— o con el formato argentino
+ * puesto a mano, y eso no se puede perder: se rescata el número de adentro.
+ */
+export function monto(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  if (typeof valor === "number") return isFinite(valor) ? valor : null;
+
+  const crudo = String(valor).replace(/[^\d,.-]/g, "");
+  if (crudo === "") return null;
+
+  // Con coma, es formato argentino: la coma decide los decimales y los puntos
+  // son de miles. Sin coma, un punto solo es el decimal —así queda guardado un
+  // número que pasó por String()— y varios sólo pueden ser de miles.
+  const limpio = crudo.includes(",")
+    ? crudo.replace(/\./g, "").replace(",", ".")
+    : (crudo.match(/\./g) ?? []).length > 1
+      ? crudo.replace(/\./g, "")
+      : crudo;
+
+  const n = Number(limpio);
+  return isFinite(n) ? n : null;
+}
+
+/**
+ * El IVA como fracción: 0.21.
+ *
+ * Sin formato la celda ya llega así. Leída con formato dice "21%", y tomarla
+ * como número daría veintiún veces el precio.
+ */
+export function porcentaje(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  if (typeof valor === "number") return isFinite(valor) ? valor : null;
+
+  const s = String(valor).trim();
+  const n = Number(s.replace("%", "").replace(",", ".").trim());
+  if (!isFinite(n)) return null;
+
+  return s.includes("%") ? n / 100 : n;
+}
+
+/** Una marca de la planilla: el booleano crudo, o cómo se escribe a mano. */
+export function siNo(valor: unknown): boolean {
+  if (typeof valor === "boolean") return valor;
+  const s = normalizar(valor);
+  return s === "true" || s === "verdadero" || s === "si" || s === "x" || s === "1";
+}
