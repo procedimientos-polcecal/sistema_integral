@@ -96,40 +96,24 @@ export function ordenarRequerimientos<T extends Ordenable>(
   );
 }
 
-/** Columnas del tablero, en el orden en que avanza el trabajo. */
+/**
+ * Las etapas de la compra, en el orden en que avanza el trabajo.
+ *
+ * Fueron las columnas del kanban y hoy son los indicadores del tablero. El
+ * nombre quedó: sigue siendo el mismo recorrido.
+ */
 export const COLUMNAS_TABLERO: EstadoCompra[] = [
   "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO",
-];
-
-/** Lo que todavía es trabajo por hacer: el tablero lo trae completo. */
-export const ESTADOS_EN_CURSO: EstadoCompra[] = [
-  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO",
 ];
 
 /**
  * Pasos que no se pueden dar sin cargar antes lo que producen.
  *
- * Vive acá y no en el tablero porque lo usan los dos lados: el componente, para
- * abrir el diálogo que junta esos datos, y la página, que trae el resumen de la
- * comparativa sólo para estos estados. Tenerlo en el componente obligaba a la
- * página —que es de servidor— a importar de un módulo `"use client"`, y de ahí
- * no se recibe el valor sino una referencia de cliente: la consulta salía con
- * basura y la página se caía entera.
+ * Vive acá y no en la pantalla que lo usa: es una regla del circuito, no una
+ * decisión de una tabla. El listado lo mira para saber si el botón abre el
+ * diálogo que junta esos datos o avanza directamente.
  */
 export const ESTADOS_QUE_PIDEN_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
-
-/**
- * Cuánto tiempo se queda un pedido en el tablero.
- *
- * La columna PEDIDO acumula el histórico entero porque nada lo pasa a RECIBIDO
- * todavía: más de 1600 pedidos cerrados que no son trabajo en curso. Traerlos
- * hace del tablero un archivo. Lo viejo se consulta desde Requerimientos, que
- * tiene filtros y paginado.
- *
- * Cuando exista el seguimiento de recepción esto sobra: los pedidos van a salir
- * de la columna al recibirse, que es como debería haber sido siempre.
- */
-export const DIAS_DE_PEDIDO = 90;
 
 /** A qué estado pasa cada columna al avanzar, y con qué texto se ofrece. */
 export const SIGUIENTE_ESTADO: Partial<Record<EstadoCompra, EstadoCompra>> = {

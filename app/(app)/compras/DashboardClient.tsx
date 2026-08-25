@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import Indicador from "@/components/Indicador";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
@@ -117,12 +118,12 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <Tarjeta titulo="Requerimientos" valor={contadores.total} href="/compras/requerimientos" />
-        <Tarjeta titulo="Esperando aprobación" valor={contadores.pendientes} href="/compras/aprobaciones" acento="text-amber-600" />
-        <Tarjeta titulo="Para comprar" valor={contadores.paraComprar} href="/compras/tablero" acento="text-amber-600" />
-        <Tarjeta titulo="En comparativa" valor={contadores.enComparativa} href="/compras/tablero" acento="text-blue-600" />
-        <Tarjeta titulo="Pedidos en curso" valor={contadores.pedidos} href="/compras/tablero" acento="text-indigo-600" />
-        <Tarjeta titulo="Urgentes sin cerrar" valor={contadores.urgentes} href="/compras/tablero" acento="text-red-600" />
+        <Indicador titulo="Requerimientos" valor={contadores.total} href="/compras/requerimientos" />
+        <Indicador titulo="Esperando aprobación" valor={contadores.pendientes} href="/compras/aprobaciones" acento="text-amber-600" />
+        <Indicador titulo="Para comprar" valor={contadores.paraComprar} href="/compras/tablero" acento="text-amber-600" />
+        <Indicador titulo="En comparativa" valor={contadores.enComparativa} href="/compras/tablero" acento="text-blue-600" />
+        <Indicador titulo="Pedidos en curso" valor={contadores.pedidos} href="/compras/tablero" acento="text-indigo-600" />
+        <Indicador titulo="Urgentes sin cerrar" valor={contadores.urgentes} href="/compras/tablero" acento="text-red-600" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -264,23 +265,5 @@ function Chip({ label, color }: { label: string; color: string }) {
     <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
       {label}
     </span>
-  );
-}
-
-function Tarjeta({
-  titulo, valor, href, acento,
-}: {
-  titulo: string;
-  valor: number;
-  href: string;
-  acento?: string;
-}) {
-  return (
-    <Link href={href} className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{titulo}</div>
-      <div className={`mt-1 text-2xl font-bold ${acento ?? "text-slate-900"}`}>
-        {valor.toLocaleString("es-AR")}
-      </div>
-    </Link>
   );
 }

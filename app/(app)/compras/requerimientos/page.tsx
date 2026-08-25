@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { nivelComprasDe } from "@/lib/compras/auth";
+import { nivelComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
+import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
 import RequerimientosClient from "./RequerimientosClient";
 
-export default async function RequerimientosPage() {
+export default async function RequerimientosPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,7 +22,31 @@ export default async function RequerimientosPage() {
       supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
     ]);
 
-  const nivel = await nivelComprasDe(supabase, user.id);
+  const [nivel, aprobadores] = await Promise.all([
+    nivelComprasDe(supabase, user.id),
+    // Quiénes pueden aprobar una compra. Sale de `compras_aprobadores` y no de
+    // los grants del módulo: administrar Compras y estar autorizado a aprobar
+    // un gasto son cosas distintas, y las hacen personas distintas.
+    aprobadoresDeCompras(supabase),
+  ]);
+
+  // Los filtros de la URL se validan acá, que es donde están los catálogos: es
+  // así como el tablero lleva a cada etapa. Un valor que no corresponde a nada
+  // conocido se descarta antes de llegar a la pantalla.
+  const params = await searchParams;
+  const filtrosIniciales = leerFiltrosDeLaUrl(
+    new URLSearchParams(
+      Object.entries(params).flatMap(([k, v]) =>
+        v === undefined ? [] : [[k, Array.isArray(v) ? (v[0] ?? "") : v] as [string, string]]
+      )
+    ),
+    {
+      areas: (areas ?? []).map((a) => a.id as string),
+      empresas: (empresas ?? []).map((e) => e.id as string),
+      proveedores: (proveedores ?? []).map((p) => p.id as string),
+      ubicaciones: (ubicaciones ?? []).map((u) => u.id as string),
+    }
+  );
 
   return (
     <RequerimientosClient
@@ -25,7 +54,12 @@ export default async function RequerimientosPage() {
       proveedores={proveedores ?? []}
       empresas={empresas ?? []}
       ubicaciones={ubicaciones ?? []}
+      aprobadores={aprobadores.map((a) => ({
+        id: a.id, nombre: a.nombre, apellido: a.apellido, alias: a.alias,
+      }))}
+      usuarioId={user.id}
       canEdit={nivel === "edicion" || nivel === "admin"}
+      filtrosIniciales={filtrosIniciales}
     />
   );
 }

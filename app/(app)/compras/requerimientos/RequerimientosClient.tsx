@@ -4,25 +4,41 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
+import ModalAvanzar from "./ModalAvanzar";
+import type { ResumenComparativa } from "./ModalAvanzar";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
   moneda, fecha, diasRestantes, etiquetaEmpresa,
+  SIGUIENTE_ESTADO, ACCION_SIGUIENTE, ESTADOS_QUE_PIDEN_DATOS,
 } from "@/lib/compras/constants";
+import { costosParaElPedido } from "@/lib/compras/comparativa";
+import type { FiltrosCompras } from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
 const POR_PAGINA = 50;
 
 type Opcion = { id: string; nombre: string };
+type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
+
+/** Cómo se lo nombra: el alias de la planilla si lo tiene, si no el nombre. */
+function nombreCorto(p: Persona): string {
+  return p.alias ?? p.nombre;
+}
 
 export default function RequerimientosClient({
-  areas, proveedores, empresas, ubicaciones, canEdit,
+  areas, proveedores, empresas, ubicaciones, aprobadores, usuarioId, canEdit,
+  filtrosIniciales,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
+  aprobadores: Persona[];
+  usuarioId: string;
   canEdit: boolean;
+  /** Lo que venía en la URL, ya validado por la página. */
+  filtrosIniciales: FiltrosCompras;
 }) {
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
@@ -31,15 +47,26 @@ export default function RequerimientosClient({
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
 
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaAplicada, setBusquedaAplicada] = useState("");
-  const [area, setArea] = useState("");
-  const [aprobacion, setAprobacion] = useState("");
-  const [compra, setCompra] = useState("");
-  const [prioridad, setPrioridad] = useState("");
-  const [empresa, setEmpresa] = useState("");
-  const [proveedor, setProveedor] = useState("");
-  const [ubicacion, setUbicacion] = useState("");
+  // Los filtros arrancan con lo que trajo la URL: es como el tablero lleva a
+  // cada etapa. De ahí en más los maneja la pantalla; la URL no se reescribe al
+  // tocar un desplegable, es el punto de entrada y no un espejo del estado.
+  const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda);
+  const [busquedaAplicada, setBusquedaAplicada] = useState(filtrosIniciales.busqueda);
+  const [area, setArea] = useState(filtrosIniciales.area);
+  const [aprobacion, setAprobacion] = useState(filtrosIniciales.aprobacion);
+  const [compra, setCompra] = useState(filtrosIniciales.compra);
+  const [prioridad, setPrioridad] = useState(filtrosIniciales.prioridad);
+  const [empresa, setEmpresa] = useState(filtrosIniciales.empresa);
+  const [proveedor, setProveedor] = useState(filtrosIniciales.proveedor);
+  const [ubicacion, setUbicacion] = useState(filtrosIniciales.ubicacion);
+
+  // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
+  // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
+  // qué proveedor y qué costo va a quedar el pedido.
+  const [resumenes, setResumenes] = useState<Record<string, ResumenComparativa>>({});
+  const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
+  const [procesando, setProcesando] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState("");
 
   // La búsqueda espera un momento para no consultar en cada tecla.
   useEffect(() => {
@@ -89,12 +116,78 @@ export default function RequerimientosClient({
     if (err) {
       setError(err.message);
       setFilas([]);
-    } else {
-      setFilas((data ?? []) as RequerimientoConRelaciones[]);
-      setTotal(count ?? 0);
+      setResumenes({});
+      setCargando(false);
+      return;
     }
+
+    const nuevas = (data ?? []) as RequerimientoConRelaciones[];
+    setFilas(nuevas);
+    setTotal(count ?? 0);
     setCargando(false);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina]);
+
+    // Los presupuestos, sólo de las filas que están en pantalla.
+    //
+    // Se filtra por los ids y no por el estado porque son 50 como mucho: son
+    // unos 2 KB de URL. Filtrar por estado traería los del histórico entero, y
+    // una lista de mil ids arma una URL de 37 KB que PostgREST rechaza con 400.
+    const ids = nuevas.map((f) => f.id);
+    if (ids.length === 0) {
+      setResumenes({});
+      return;
+    }
+
+    const { data: cotizaciones } = await supabase
+      .from("compras_cotizaciones")
+      .select("requerimiento_id, elegida, proveedor_id, precio_total, costo_envio")
+      .in("requerimiento_id", ids);
+
+    const nombrePorProveedor = new Map(proveedores.map((p) => [p.id, p.nombre]));
+    const resumen: Record<string, ResumenComparativa> = {};
+    for (const c of (cotizaciones ?? []) as {
+      requerimiento_id: string; elegida: boolean; proveedor_id: string;
+      precio_total: number | null; costo_envio: number | null;
+    }[]) {
+      const r = (resumen[c.requerimiento_id] ??= { cuantos: 0, elegida: null });
+      r.cuantos += 1;
+      if (c.elegida) {
+        r.elegida = {
+          ...costosParaElPedido(c),
+          proveedor_nombre: nombrePorProveedor.get(c.proveedor_id) ?? null,
+        };
+      }
+    }
+    setResumenes(resumen);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina, proveedores]);
+
+  /**
+   * Avanza el RI a la etapa siguiente.
+   *
+   * Recarga la tabla con su propia consulta y no con router.refresh(): las
+   * filas las trae el cliente, así que refrescar el árbol de servidor no las
+   * cambiaría.
+   */
+  async function avanzar(r: RequerimientoConRelaciones, extra?: Record<string, unknown>) {
+    const destino = SIGUIENTE_ESTADO[r.estado_compra];
+    if (!destino) return false;
+
+    setProcesando(r.id);
+    setErrorAccion("");
+    const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado_compra: destino, ...extra }),
+    });
+    setProcesando(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setErrorAccion(body.error ?? "No se pudo actualizar el estado.");
+      return false;
+    }
+    await cargar();
+    return true;
+  }
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -102,6 +195,9 @@ export default function RequerimientosClient({
   const hayFiltros = !!(
     busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion
   );
+
+  // La tabla tiene una columna más cuando se puede gestionar la compra.
+  const columnas = canEdit ? 13 : 12;
 
   const totalPantalla = useMemo(
     () => filas.reduce((acc, f) => acc + (f.costo_iva ?? 0) + (f.costo_envio ?? 0), 0),
@@ -168,6 +264,12 @@ export default function RequerimientosClient({
         </div>
       )}
 
+      {errorAccion && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorAccion}
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
@@ -186,13 +288,14 @@ export default function RequerimientosClient({
                 <th className="px-3 py-2 text-left">Compra</th>
                 <th className="px-3 py-2 text-left">Proveedor</th>
                 <th className="px-3 py-2 text-right">Costo + IVA</th>
+                {canEdit && <th className="px-3 py-2 text-left">Acción</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
-                <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">Cargando…</td></tr>
+                <tr><td colSpan={columnas} className="px-3 py-10 text-center text-slate-400">Cargando…</td></tr>
               ) : filas.length === 0 ? (
-                <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">
+                <tr><td colSpan={columnas} className="px-3 py-10 text-center text-slate-400">
                   {hayFiltros ? "Ningún requerimiento coincide con los filtros." : "Todavía no hay requerimientos cargados."}
                 </td></tr>
               ) : (
@@ -230,6 +333,21 @@ export default function RequerimientosClient({
                       <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-slate-700">
                         {moneda(f.costo_iva)}
                       </td>
+                      {canEdit && (
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <Accion
+                            r={f}
+                            aprobadores={aprobadores}
+                            usuarioId={usuarioId}
+                            procesando={procesando === f.id}
+                            onAvanzar={() =>
+                              ESTADOS_QUE_PIDEN_DATOS.includes(f.estado_compra)
+                                ? setAvanzando(f)
+                                : avanzar(f)
+                            }
+                          />
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -265,6 +383,17 @@ export default function RequerimientosClient({
         )}
       </div>
 
+      {avanzando && (
+        <ModalAvanzar
+          requerimiento={avanzando}
+          aprobadores={aprobadores}
+          proveedores={proveedores}
+          comparativa={resumenes[avanzando.id] ?? { cuantos: 0, elegida: null }}
+          onClose={() => setAvanzando(null)}
+          onConfirmar={(extra) => avanzar(avanzando, extra)}
+        />
+      )}
+
       {modalAbierto && (
         <NuevoRequerimientoModal
           areas={areas}
@@ -275,6 +404,54 @@ export default function RequerimientosClient({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * El paso siguiente de una fila, si lo hay.
+ *
+ * No toda fila tiene uno, y decir por qué importa tanto como ofrecer el botón:
+ *
+ *  - sin aprobación de gerencia el circuito de compra ni siquiera arrancó
+ *  - en PEDIDO, RECIBIDO o DENEGADO no hay paso que dar desde acá
+ *  - en PARA_COMPRAR el paso es de quien la tiene asignada y de nadie más: en
+ *    la planilla el estado dice a quién le toca, y que apruebe otro dejaría los
+ *    dos lados diciendo cosas distintas
+ */
+function Accion({
+  r, aprobadores, usuarioId, procesando, onAvanzar,
+}: {
+  r: RequerimientoConRelaciones;
+  aprobadores: Persona[];
+  usuarioId: string;
+  procesando: boolean;
+  onAvanzar: () => void;
+}) {
+  const siguiente = SIGUIENTE_ESTADO[r.estado_compra];
+  const tenue = "text-xs text-slate-400";
+
+  if (r.estado_aprobacion !== "APROBADA") {
+    return <span className={tenue}>Sin aprobar</span>;
+  }
+  if (!siguiente) return <span className={tenue}>—</span>;
+
+  if (r.estado_compra === "PARA_COMPRAR" && r.compra_asignada_a !== usuarioId) {
+    const quien = aprobadores.find((a) => a.id === r.compra_asignada_a);
+    return (
+      <span className={tenue}>
+        {quien ? `Espera a ${nombreCorto(quien)}` : "Sin asignar"}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={onAvanzar}
+      disabled={procesando}
+      className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {procesando ? "Actualizando…" : `${ACCION_SIGUIENTE[r.estado_compra] ?? "Avanzar"} →`}
+    </button>
   );
 }
 
