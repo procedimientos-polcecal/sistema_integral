@@ -4,11 +4,16 @@
  * Un aviso (N° OA) dice que algo necesita mantenimiento. De un aviso puede
  * salir después una orden de trabajo.
  *
- * La planilla se lee **por posición de columna**, no por encabezado, porque así
- * está armada en el origen: A el número, B la fecha, C el sector, D el equipo,
- * E la descripción, F la urgencia, G quién avisó, J si ya tiene OT y K las
- * observaciones. Si alguien inserta una columna en el medio, esto se rompe en
- * silencio — está anotado en la doc del módulo.
+ * La planilla se lee **por posición de columna**, no por encabezado, porque
+ * así está armada en el origen: A el número, B la fecha, C el sector, D el
+ * equipo, E la descripción, F la urgencia, G quién avisó, J si ya tiene OT,
+ * K la imagen y L las observaciones. H e I son restos de una fórmula que parte
+ * el nombre en dos y no se leen.
+ *
+ * Verificado contra la planilla: el código de origen leía las observaciones de
+ * K, que hoy es la imagen, así que los avisos con foto guardaban la URL de
+ * Drive en el campo de observaciones. Si alguien inserta una columna en el
+ * medio, esto se rompe en silencio.
  */
 
 /** Columna de cada dato, contando desde A = 0. */
@@ -21,12 +26,21 @@ const COL = {
   urgencia: 5,
   quien: 6,
   otAsignada: 9,
-  observaciones: 10,
+  imagen: 10,
+  observaciones: 11,
 } as const;
 
+/**
+ * El texto de una celda, o null.
+ *
+ * Una celda con error de fórmula —"#REF!", "#N/A"— se lee como vacía: la
+ * planilla tiene una que deja el mensaje de error en la celda de quién avisó,
+ * y guardarlo sería guardar el error como si fuera un nombre.
+ */
 const texto = (v: unknown): string | null => {
   const s = String(v ?? "").trim();
-  return s === "" ? null : s;
+  if (s === "") return null;
+  return /^#(REF|N\/A|VALUE|NAME|DIV\/0|NULL|NUM)/i.test(s) ? null : s;
 };
 
 /**
@@ -78,6 +92,8 @@ export interface AvisoLeido {
   quien_aviso: string | null;
   ot_asignada: string | null;
   observaciones: string | null;
+  /** La columna "Imagen": un link de Drive a la foto del aviso. */
+  reference_photos: string[] | null;
   sheets_row: number;
 }
 
@@ -87,6 +103,7 @@ export function filaDeAviso(fila: unknown[], numeroFila: number): AvisoLeido | n
   if (!oa) return null;
 
   const equipoRaw = texto(fila[COL.equipo]);
+  const imagen = texto(fila[COL.imagen]);
 
   return {
     oa_number: oa,
@@ -99,6 +116,7 @@ export function filaDeAviso(fila: unknown[], numeroFila: number): AvisoLeido | n
     quien_aviso: texto(fila[COL.quien]),
     ot_asignada: texto(fila[COL.otAsignada]),
     observaciones: texto(fila[COL.observaciones]),
+    reference_photos: imagen ? [imagen] : null,
     sheets_row: numeroFila,
   };
 }
@@ -106,8 +124,9 @@ export function filaDeAviso(fila: unknown[], numeroFila: number): AvisoLeido | n
 /**
  * Qué prioridad de OT le corresponde a la urgencia del aviso.
  *
- * En la planilla la urgencia viene con emoji —"🔴 Alta", "🟡 Media"—, así que
- * se busca la palabra adentro en vez de comparar la celda entera.
+ * En la planilla la urgencia viene con emoji —"🟠 Alta", "🟡 Media", "🟢 Baja"—,
+ * verificado contra ella, así que se busca la palabra adentro en vez de
+ * comparar la celda entera.
  */
 export function prioridadDeUrgencia(urgencia: string | null | undefined): string {
   const s = String(urgencia ?? "");

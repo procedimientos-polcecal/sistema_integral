@@ -84,7 +84,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | | Feature | Estado |
 |---|---|---|
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
-| 2 | Avisos | pendiente |
+| 2 | Avisos | **hecho** — sincronización y listado |
 | 3 | OT: filtro por especialidad, parada de sector, registrar realizado, iniciar OT | pendiente |
 | 4 | Producción semanal | pendiente |
 | 5 | Órdenes de servicio y comparativas | pendiente |
@@ -94,6 +94,33 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 El dashboard va último porque mide sobre lo que las demás cargan. Las
 integraciones con Sheets y Drive no son una etapa aparte: cada feature se lleva
 la suya.
+
+## La planilla de avisos, verificada
+
+Se llama `AVISOS`, la pestaña también, y tenía 139 filas al portarla. Sus
+columnas, contra la planilla de verdad:
+
+`N° OA | FECHA | SECTOR | EQUIPO | DESCRIPCIÓN | URGENCIA | QUIÉN AVISÓ |
+Column 10 | Column 11 | OT ASIGNADA | Imagen | Observaciones`
+
+Tres cosas que sólo aparecieron al leerla:
+
+- **El código de origen leía las observaciones de la columna K**, que hoy es
+  `Imagen`. Los avisos con foto guardaban la URL de Drive como si fuera una
+  observación. Acá la imagen va a `reference_photos` y las observaciones a L.
+- **H e I son restos de una fórmula** que parte el nombre de quien avisó en dos.
+  No se leen.
+- **Una celda con `#REF!`** en la fila del aviso A1. Las celdas con error de
+  fórmula se leen como vacías: guardar el mensaje sería guardarlo como si fuera
+  un nombre.
+
+La urgencia viene con emoji —`🟠 Alta`, `🟡 Media`, `🟢 Baja`—, así que se
+busca la palabra adentro y no se compara la celda entera.
+
+Se lee por posición de columna, como en el origen. Es frágil: si alguien inserta
+una columna en el medio, se rompe en silencio. Conviene pasarlo a mapeo por
+encabezado —como se hizo con las comparativas de Compras— la próxima vez que se
+toque.
 
 ## Lo que quedó anotado para decidir después
 
