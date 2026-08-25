@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const estado       = searchParams.get("estado");
   const equipment_id = searchParams.get("equipment_id");
+  const especialidad = searchParams.get("especialidad");
   const search       = searchParams.get("q");
   const page         = Number(searchParams.get("page") ?? 1);
   const limit        = 50;
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
 
   if (estado)       query = query.eq("estado", estado);
   if (equipment_id) query = query.eq("equipment_id", equipment_id);
+  if (especialidad) query = query.eq("especialidad", especialidad);
   if (search) {
     // Sanitizar: quitar caracteres que rompen el filtro PostgREST (,()*\)
     const safe = search.replace(/[,()*\\%]/g, "").trim();

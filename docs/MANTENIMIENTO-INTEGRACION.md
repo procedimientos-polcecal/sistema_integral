@@ -85,7 +85,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 |---|---|---|
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
 | 2 | Avisos | **hecho** — sincronización y listado |
-| 3 | OT: filtro por especialidad, parada de sector, registrar realizado, iniciar OT | pendiente |
+| 3 | OT: **sincronización y filtro por especialidad hechos**; falta parada de sector, registrar realizado e iniciar OT | en curso |
 | 4 | Producción semanal | pendiente |
 | 5 | Órdenes de servicio y comparativas | pendiente |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | pendiente |
@@ -121,6 +121,27 @@ Se lee por posición de columna, como en el origen. Es frágil: si alguien inser
 una columna en el medio, se rompe en silencio. Conviene pasarlo a mapeo por
 encabezado —como se hizo con las comparativas de Compras— la próxima vez que se
 toque.
+
+## La planilla de OT, verificada
+
+Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portarla.
+Sus columnas coinciden con lo que leía el código de origen:
+
+`A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
+H descripción · I repuesto · J ejecución · K cierre · L (calculada) · M estado ·
+N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
+U próxima fecha · V fotos · W observaciones`
+
+**La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
+día" calculado; el estado está en M. Confundirlas daría por atrasada media
+planilla.
+
+Estados: `Realizado`, `Atrasado`, `Por hacer`, `En proceso` — el mismo
+vocabulario que ya usaba el ERP, así que la traducción portó directo.
+Especialidades: `MECÁNICO`, `ELÉCTRICO`, `CIVIL`, `LUBRICACIÓN`.
+
+Un guión suelto en un campo de texto se lee como vacío: es cómo se escribe "acá
+no va nada" en una planilla, no un contratista llamado "-".
 
 ## Lo que quedó anotado para decidir después
 

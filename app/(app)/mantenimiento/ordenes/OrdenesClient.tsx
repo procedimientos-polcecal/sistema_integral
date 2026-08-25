@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import NuevaOTModal from "./NuevaOTModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
@@ -30,6 +31,9 @@ export default function OrdenesClient({
   const [loading, setLoading]   = useState(true);
   const [estadoFilter, setEstadoFilter] = useState("");
   const [search, setSearch]     = useState("");
+  const [especialidad, setEspecialidad] = useState("");
+  const [sincronizando, setSincronizando] = useState(false);
+  const [avisoSync, setAvisoSync] = useState<string | null>(null);
   const [page, setPage]         = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showNew, setShowNew]   = useState(false);
@@ -43,12 +47,28 @@ export default function OrdenesClient({
     const params = new URLSearchParams({ page: String(page) });
     if (estadoFilter) params.set("estado", estadoFilter);
     if (search)       params.set("q", search);
+    if (especialidad) params.set("especialidad", especialidad);
     const res = await fetch(`/api/mantenimiento/ordenes?${params}`);
     const json = await res.json();
     setOrders(json.data ?? []);
     setCount(json.count ?? 0);
     setLoading(false);
-  }, [page, estadoFilter, search]);
+  }, [page, estadoFilter, search, especialidad]);
+
+  async function sincronizar() {
+    setSincronizando(true);
+    setAvisoSync(null);
+    const res = await fetch("/api/mantenimiento/ordenes/sync", { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setSincronizando(false);
+    setAvisoSync(
+      res.ok
+        ? `Se leyeron ${body.leidas} filas y se guardaron ${body.guardadas} órdenes.` +
+          (body.sin_equipo > 0 ? ` ${body.sin_equipo} sin equipo enlazado.` : "")
+        : (body.error ?? "No se pudo sincronizar.")
+    );
+    if (res.ok) load();
+  }
 
   const KANBAN_ESTADOS = ["ATRASADO", "EN_PROCESO", "POR_HACER", "REALIZADO"];
   const loadKanban = useCallback(async () => {
@@ -107,6 +127,12 @@ export default function OrdenesClient({
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {canEdit && (
+            <button onClick={sincronizar} disabled={sincronizando}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              {sincronizando ? "Trayendo…" : "Traer de la planilla"}
+            </button>
+          )}
+          {canEdit && (
             <button onClick={() => setShowNew(true)}
               className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,6 +154,12 @@ export default function OrdenesClient({
         </div>
       </div>
 
+      {avisoSync && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          {avisoSync}
+        </div>
+      )}
+
       {view === "list" && (
         <div className="flex gap-2 flex-wrap">
           {ESTADOS.map((e) => (
@@ -142,6 +174,14 @@ export default function OrdenesClient({
               {e.label}
             </button>
           ))}
+          <select
+            value={especialidad}
+            onChange={(e) => { setEspecialidad(e.target.value); setPage(1); }}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+          >
+            <option value="">Toda especialidad</option>
+            {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
+          </select>
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Buscar equipo, sector, descripción..."
             className="w-full sm:w-60 sm:ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
