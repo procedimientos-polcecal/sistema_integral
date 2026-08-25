@@ -13,7 +13,7 @@
 import {
   obtenerToken, hayCredencialesGoogle, mensajeDeGoogle, cuentaDeServicio,
   SCOPE_SHEETS, SCOPE_DRIVE_LECTURA,
-} from "@/lib/compras/google";
+} from "@/lib/core/google";
 import { letraColumna } from "@/lib/compras/comparativa";
 export { urlDePlanilla } from "@/lib/compras/vincular";
 

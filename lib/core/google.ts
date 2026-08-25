@@ -1,11 +1,12 @@
 /**
- * Autenticación con Google para el módulo Compras.
+ * Autenticación con Google, compartida por los módulos que hablan con Sheets y
+ * Drive —hoy Compras y Mantenimiento—.
  *
  * Es un JWT firmado a mano en vez de la librería `googleapis`: son 40 líneas,
  * no arrastra dependencias y funciona igual en el runtime de Vercel.
  *
- * La cuenta de servicio necesita permiso de EDITOR sobre la planilla
- * "PEDIDOS DE COMPRA" y sobre la carpeta de comparativas de Drive.
+ * Es una sola cuenta de servicio para todo: necesita permiso sobre cada
+ * planilla y carpeta que se quiera leer, y de EDITOR sobre las que se escriben.
  */
 
 export const SCOPE_SHEETS = "https://www.googleapis.com/auth/spreadsheets";

@@ -17,7 +17,7 @@ import { norm } from "@/lib/compras/texto";
 import { linkDeCelda } from "@/lib/compras/vincular";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
-} from "@/lib/compras/google";
+} from "@/lib/core/google";
 
 const HOJA_MASTER = "Requerimientos internos";
 

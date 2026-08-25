@@ -175,3 +175,35 @@ export interface PlanificacionDiariaItem {
   orden: number;
   created_at: string;
 }
+
+/**
+ * Un aviso: alguien reporta que algo necesita mantenimiento.
+ *
+ * Espeja la planilla de avisos; de un aviso puede salir después una orden de
+ * trabajo, y ahí queda enlazado por `work_order_id`.
+ */
+export interface Aviso {
+  id: string;
+  oa_number: string | null;
+  fecha: string | null;
+  sector_raw: string | null;
+  sector_id: string | null;
+  equipo_raw: string | null;
+  equipo_code: string | null;
+  equipment_id: string | null;
+  descripcion: string | null;
+  urgencia: string | null;
+  quien_aviso: string | null;
+  /** Lo que dice la planilla: "si", un N° de OT, o vacío. */
+  ot_asignada: string | null;
+  work_order_id: string | null;
+  observaciones: string | null;
+  repuesto: string | null;
+  reference_photos: string[] | null;
+  app_created: boolean;
+  sheets_row: number | null;
+  synced_at: string | null;
+  created_at: string;
+  equipos?: { name: string; code: string | null } | null;
+  sectores?: { nombre: string } | null;
+}
