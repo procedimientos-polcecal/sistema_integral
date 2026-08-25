@@ -85,7 +85,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 |---|---|---|
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
 | 2 | Avisos | **hecho** — sincronización y listado |
-| 3 | OT: **sincronización y filtro por especialidad hechos**; falta parada de sector, registrar realizado e iniciar OT | en curso |
+| 3 | OT: **sincronización, filtro por especialidad y parada de sector hechos**; falta registrar realizado e iniciar OT | en curso |
 | 4 | Producción semanal | pendiente |
 | 5 | Órdenes de servicio y comparativas | pendiente |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | pendiente |
@@ -142,6 +142,23 @@ Especialidades: `MECÁNICO`, `ELÉCTRICO`, `CIVIL`, `LUBRICACIÓN`.
 
 Un guión suelto en un campo de texto se lee como vacío: es cómo se escribe "acá
 no va nada" en una planilla, no un contratista llamado "-".
+
+## "Requiere parar el sector": una diferencia con el origen
+
+En la app de origen la marca sólo se pone **al crear** la OT: no hay forma de
+marcarla después. Acá eso no alcanzaba, porque las 1.728 órdenes vienen de la
+planilla y llegan todas sin la marca, así que la alerta no se vería nunca.
+
+Se puede marcar y desmarcar desde el detalle de cualquier OT, sin confirmación:
+es una marca que se pone y se saca, y quien la pone está mirando la orden
+mientras lo decide.
+
+La marca **no viene de la planilla ni vuelve a ella**: es un dato propio del
+sistema. La planilla no tiene esa columna.
+
+Falta mostrarla en la planificación de producción y en el dashboard, que es
+donde sirve para decidir dónde meter una reparación sin frenar el despacho. Va
+con esas features.
 
 ## Lo que quedó anotado para decidir después
 

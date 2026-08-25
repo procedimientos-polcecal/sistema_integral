@@ -94,6 +94,7 @@ export async function POST(request: Request) {
     app_created:     true,
     created_by:      user.id,
     created_at_app:  new Date().toISOString(),
+    requiere_parada_sector: Boolean(body.requiere_parada_sector),
     synced_at:       new Date().toISOString(),
   };
 
@@ -116,16 +117,33 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { id, estado } = await request.json();
+  const body = await request.json();
+  const { id, estado, requiere_parada_sector } = body ?? {};
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
-  if (!estado || !VALID_ESTADOS.includes(estado)) {
-    return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+
+  // Sólo estos dos campos. No se acepta el resto del body para evitar
+  // escritura arbitraria de columnas (mass-assignment).
+  const update: Record<string, unknown> = { synced_at: new Date().toISOString() };
+
+  if (estado !== undefined) {
+    if (!VALID_ESTADOS.includes(estado)) {
+      return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+    }
+    update.estado = estado;
   }
 
-  // Solo se permite actualizar el estado. No aceptamos otros campos del body
-  // para evitar escritura arbitraria de columnas (mass-assignment).
+  // Que el trabajo obligue a parar el sector no viene de la planilla: se marca
+  // acá. Y se puede marcar en cualquier momento, no sólo al crear la OT: las
+  // 1728 que vinieron de la planilla llegaron todas sin la marca.
+  if (requiere_parada_sector !== undefined) {
+    update.requiere_parada_sector = Boolean(requiere_parada_sector);
+  }
+
+  if (Object.keys(update).length === 1) {
+    return NextResponse.json({ error: "No se envió ningún cambio" }, { status: 400 });
+  }
+
   const admin = createAdminClient();
-  const update = { estado, synced_at: new Date().toISOString() };
 
   const { data: updated, error } = await admin
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();

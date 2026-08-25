@@ -91,6 +91,22 @@ export default function OrdenesClient({
     else load();
   }, [view, load, loadKanban]);
 
+  /**
+   * Marcar o desmarcar que el trabajo obliga a parar el sector.
+   *
+   * Sin confirmación: es una marca que se pone y se saca, y el que la pone
+   * suele estar frente a la OT decidiéndolo. Pedir confirmación para cada
+   * tilde molesta más de lo que protege.
+   */
+  async function cambiarParada(id: string, valor: boolean) {
+    await fetch("/api/mantenimiento/ordenes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, requiere_parada_sector: valor }),
+    });
+    load();
+  }
+
   async function changeEstado(id: string, estado: string) {
     const meta = estadoMeta(estado);
     const ok = await confirm({
@@ -249,6 +265,16 @@ export default function OrdenesClient({
                         style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
                         {meta.label}
                       </span>
+                      {/* Mientras el trabajo no esté hecho, que pare el sector es
+                          lo más importante de esta fila: bloquea produccion. */}
+                      {o.requiere_parada_sector && o.estado !== "REALIZADO" && (
+                        <span
+                          title="Requiere parar el sector"
+                          className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+                        >
+                          Parar sector
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400 shrink-0 hidden md:block">
                         {o.fecha ? new Date(o.fecha).toLocaleDateString("es-AR") : "—"}
                       </span>
@@ -257,7 +283,14 @@ export default function OrdenesClient({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
-                    {isOpen && <OTDetail order={o} canEdit={canEdit} onChangeEstado={changeEstado} />}
+                    {isOpen && (
+                      <OTDetail
+                        order={o}
+                        canEdit={canEdit}
+                        onChangeEstado={changeEstado}
+                        onCambiarParada={cambiarParada}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -287,8 +320,11 @@ export default function OrdenesClient({
   );
 }
 
-function OTDetail({ order: o, canEdit, onChangeEstado }: {
-  order: any; canEdit: boolean; onChangeEstado: (id: string, estado: string) => void;
+function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada }: {
+  order: any;
+  canEdit: boolean;
+  onChangeEstado: (id: string, estado: string) => void;
+  onCambiarParada: (id: string, valor: boolean) => void;
 }) {
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
@@ -306,6 +342,28 @@ function OTDetail({ order: o, canEdit, onChangeEstado }: {
         <D label="Fecha cierre"    value={o.fecha_cierre   ? new Date(o.fecha_cierre).toLocaleDateString("es-AR")   : null} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>
+
+      {canEdit && (
+        <label
+          className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5"
+          style={{
+            borderColor: o.requiere_parada_sector ? "#FECACA" : "#E2E8F0",
+            background: o.requiere_parada_sector ? "#FEF2F2" : "#fff",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(o.requiere_parada_sector)}
+            onChange={(e) => onCambiarParada(o.id, e.target.checked)}
+          />
+          <span
+            className="text-sm font-medium"
+            style={{ color: o.requiere_parada_sector ? "#DC2626" : "#374151" }}
+          >
+            Este trabajo requiere parar el sector
+          </span>
+        </label>
+      )}
       {o.descripcion && (
         <div>
           <p className="text-xs text-gray-500 font-medium mb-0.5">Descripción</p>

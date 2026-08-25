@@ -40,9 +40,10 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     operario_2:     "",
     operario_3:     "",
     prioridad:      "MEDIA",
+    requiere_parada_sector: false,
   });
 
-  function f(key: string, value: string) {
+  function f(key: string, value: string | boolean) {
     setForm(p => {
       const next: any = { ...p, [key]: value };
       if (key === "equipment_id" && value) {
@@ -189,6 +190,28 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input value={form.operario_3} onChange={e => f("operario_3", e.target.value)} className="input" placeholder="—" />
             </F>
           </div>
+
+          {/* Va con el resto del formulario y no escondido entre los campos:
+              decide si el trabajo frena la produccion del sector. */}
+          <label
+            className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border px-3 py-2"
+            style={{
+              borderColor: form.requiere_parada_sector ? "#FECACA" : "#E2E8F0",
+              background: form.requiere_parada_sector ? "#FEF2F2" : "#fff",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={form.requiere_parada_sector}
+              onChange={(e) => f("requiere_parada_sector", e.target.checked)}
+            />
+            <span
+              className="text-sm font-medium"
+              style={{ color: form.requiere_parada_sector ? "#DC2626" : "#374151" }}
+            >
+              Este trabajo requiere parar el sector
+            </span>
+          </label>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
