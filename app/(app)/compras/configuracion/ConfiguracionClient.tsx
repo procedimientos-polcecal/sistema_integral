@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fechaHora } from "@/lib/compras/constants";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
@@ -178,13 +179,26 @@ export default function ConfiguracionClient({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sincronización manual</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {ultima
-                ? `Última corrida: ${fechaHora(ultima.created_at)} (${ultima.origen})`
-                : "Todavía no se ejecutó ninguna sincronización."}
+            <div className="mt-1 text-sm text-slate-500">
+              {ultima ? (
+                <>
+                  <UltimaSincronizacion
+                    cuando={ultima.created_at}
+                    ok={!ultima.error}
+                    error={ultima.error}
+                  />
+                  <span className="text-xs text-slate-400"> · {fechaHora(ultima.created_at)} ({ultima.origen})</span>
+                </>
+              ) : (
+                "Todavía no se ejecutó ninguna sincronización."
+              )}
               <br />
-              Además corre automáticamente cada 2 horas.
-            </p>
+              {/* Decía "cada 2 horas" y no es cierto: el plan Hobby de Vercel
+                  sólo admite crons diarios, así que corre una vez por día. Un
+                  cartel que promete más de lo que pasa es peor que no tenerlo. */}
+              Además corre automáticamente una vez por día, a las 9. La planilla
+              también avisa sola cuando alguien la edita.
+            </div>
           </div>
           <button
             onClick={sincronizar}

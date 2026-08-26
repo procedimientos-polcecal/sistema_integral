@@ -4,6 +4,7 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import RequerimientosClient from "./RequerimientosClient";
 
 export default async function RequerimientosPage({
@@ -20,7 +21,7 @@ export default async function RequerimientosPage({
   // donde alcanza con una.
   const [
     { data: areas }, { data: proveedores }, { data: empresas }, { data: ubicaciones },
-    { nivel }, aprobadores,
+    { nivel }, aprobadores, sync,
   ] = await Promise.all([
     supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
@@ -32,6 +33,9 @@ export default async function RequerimientosPage({
     // los grants del módulo: administrar Compras y estar autorizado a aprobar
     // un gasto son cosas distintas, y las hacen personas distintas.
     aprobadoresDeCompras(supabase),
+    // Esta tabla es el espejo de la planilla: cuándo se actualizó es parte de
+    // lo que hay que saber para leerla.
+    ultimaSincronizacionDe(supabase, "compras", "planilla"),
   ]);
 
   // Los filtros de la URL se validan acá, que es donde están los catálogos: es
@@ -64,6 +68,7 @@ export default async function RequerimientosPage({
       usuarioId={user.id}
       canEdit={nivel === "edicion" || nivel === "admin"}
       filtrosIniciales={filtrosIniciales}
+      sync={sync}
     />
   );
 }

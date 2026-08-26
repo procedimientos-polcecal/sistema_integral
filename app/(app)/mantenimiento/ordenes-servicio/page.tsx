@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
@@ -37,8 +38,12 @@ export default async function OrdenesServicioPage() {
     if (c.os_number) cotizacionesPorOS[c.os_number] = (cotizacionesPorOS[c.os_number] ?? 0) + 1;
   }
 
+  // Esta pantalla espeja una planilla: cuándo se trajo es parte del dato.
+  const sync = await ultimaSincronizacionDe(supabase, "mantenimiento", "ordenes-servicio");
+
   return (
     <OrdenesServicioClient
+      sync={sync}
       puedeEditar={puedeEditar}
       ordenes={ordenes}
       cotizacionesPorOS={cotizacionesPorOS}

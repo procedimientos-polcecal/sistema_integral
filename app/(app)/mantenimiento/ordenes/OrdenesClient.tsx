@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
 import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
@@ -22,11 +24,13 @@ export function estadoMeta(v: string) {
 }
 
 export default function OrdenesClient({
-  canEdit, sectores, equipos,
+  canEdit, sectores, equipos, sync
 }: {
   canEdit: boolean;
   sectores: any[];
   equipos: any[];
+  /** Cuándo se trajo por última vez lo de la planilla. */
+  sync: UltimaSync | null;
 }) {
   const confirm = useConfirm();
   const [orders, setOrders]     = useState<any[]>([]);
@@ -171,6 +175,11 @@ export default function OrdenesClient({
             Órdenes de Trabajo
             <InfoTip text="Listado de todas las órdenes de trabajo (OT). Podés verlas como lista o como tablero Kanban por estado, filtrarlas, crear nuevas y cambiar su estado (Por hacer, En proceso, Atrasado, Realizado)." />
           </h1>
+          <UltimaSincronizacion
+            cuando={sync?.created_at}
+            ok={sync?.ok ?? true}
+            error={sync?.error}
+          />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {canEdit && (

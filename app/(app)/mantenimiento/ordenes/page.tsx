@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import OrdenesClient from "./OrdenesClient";
@@ -19,8 +20,12 @@ export default async function OrdenesPage() {
     supabase.from("equipos").select("id, name, code, sector_id, status").eq("is_active", true).order("code"),
   ]);
 
+  // Esta pantalla espeja una planilla: cuándo se trajo es parte del dato.
+  const sync = await ultimaSincronizacionDe(supabase, "mantenimiento", "ordenes");
+
   return (
     <OrdenesClient
+      sync={sync}
       canEdit={canEdit}
       sectores={sectores}
       equipos={equipos ?? []}

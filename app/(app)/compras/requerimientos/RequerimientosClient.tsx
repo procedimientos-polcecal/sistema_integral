@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmProvider";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
 import type { ResumenComparativa } from "./ModalAvanzar";
@@ -30,7 +32,7 @@ function nombreCorto(p: Persona): string {
 
 export default function RequerimientosClient({
   areas, proveedores, empresas, ubicaciones, aprobadores, usuarioId, canEdit,
-  filtrosIniciales,
+  filtrosIniciales, sync,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
@@ -41,6 +43,8 @@ export default function RequerimientosClient({
   canEdit: boolean;
   /** Lo que venía en la URL, ya validado por la página. */
   filtrosIniciales: FiltrosCompras;
+  /** Cuándo se trajo por última vez lo de la planilla. */
+  sync: UltimaSync | null;
 }) {
   const confirmar = useConfirm();
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
@@ -273,7 +277,14 @@ export default function RequerimientosClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+            <UltimaSincronizacion
+              cuando={sync?.created_at}
+              ok={sync?.ok ?? true}
+              error={sync?.error}
+            />
+          </div>
           <p className="text-sm text-slate-500">
             {cargando ? "Cargando…" : `${total.toLocaleString("es-AR")} requerimiento${total === 1 ? "" : "s"}`}
             {hayFiltros && !cargando ? " con los filtros aplicados" : ""}

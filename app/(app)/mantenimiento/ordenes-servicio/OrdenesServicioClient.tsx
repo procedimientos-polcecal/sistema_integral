@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fecha, moneda } from "@/lib/compras/constants";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { OrdenServicio } from "@/lib/mantenimiento/types";
 import DetalleOS from "./DetalleOS";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
@@ -16,11 +18,13 @@ import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
  * cuándo se terminó.
  */
 export default function OrdenesServicioClient({
-  ordenes, cotizacionesPorOS, puedeEditar,
+  ordenes, cotizacionesPorOS, puedeEditar, sync
 }: {
   ordenes: OrdenServicio[];
   cotizacionesPorOS: Record<number, number>;
   puedeEditar: boolean;
+  /** Cuándo se trajo por última vez lo de la planilla. */
+  sync: UltimaSync | null;
 }) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -102,7 +106,14 @@ export default function OrdenesServicioClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Órdenes de servicio</h1>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h1 className="text-xl font-bold text-slate-900">Órdenes de servicio</h1>
+            <UltimaSincronizacion
+              cuando={sync?.created_at}
+              ok={sync?.ok ?? true}
+              error={sync?.error}
+            />
+          </div>
           <p className="text-sm text-slate-500">
             {visibles.length === ordenes.length
               ? `${ordenes.length} orden${ordenes.length === 1 ? "" : "es"}`

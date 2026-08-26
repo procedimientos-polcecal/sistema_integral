@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fecha } from "@/lib/compras/constants";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
@@ -15,10 +17,12 @@ import NuevoAvisoModal from "./NuevoAvisoModal";
  * cada uno es algo que alguien vio y nadie tomó.
  */
 export default function AvisosClient({
-  avisos, puedeEditar,
+  avisos, puedeEditar, sync
 }: {
   avisos: Aviso[];
   puedeEditar: boolean;
+  /** Cuándo se trajo por última vez lo de la planilla. */
+  sync: UltimaSync | null;
 }) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -121,7 +125,14 @@ export default function AvisosClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Avisos</h1>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h1 className="text-xl font-bold text-slate-900">Avisos</h1>
+            <UltimaSincronizacion
+              cuando={sync?.created_at}
+              ok={sync?.ok ?? true}
+              error={sync?.error}
+            />
+          </div>
           <p className="text-sm text-slate-500">
             {visibles.length === avisos.length
               ? `${avisos.length} aviso${avisos.length === 1 ? "" : "s"}`

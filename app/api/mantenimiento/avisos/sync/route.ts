@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, listarPestanas } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
@@ -89,9 +90,17 @@ export async function POST() {
       .from("avisos")
       .upsert(lote, { onConflict: "oa_number" });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
+      });
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     guardados += lote.length;
   }
 
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
+  });
   return NextResponse.json({ leidas: filas.length - 1, guardados, sin_equipo: sinEquipo });
 }

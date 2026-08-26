@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores } from "@/lib/core/sheets";
 import { COMPARATIVA_PESTANAS, filaDeComparativa } from "@/lib/mantenimiento/comparativas";
@@ -98,11 +99,19 @@ export async function POST() {
   for (let i = 0; i < cotizaciones.length; i += 500) {
     const lote = cotizaciones.slice(i, i + 500);
     const { error } = await admin.from("os_comparativas").insert(lote);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "comparativas", ok: false, error: error.message,
+      });
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     guardadas += lote.length;
   }
 
   const ordenes = new Set(cotizaciones.map((c) => c.os_number)).size;
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "comparativas", ok: true, filas: guardadas,
+  });
   return NextResponse.json({
     guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
   });

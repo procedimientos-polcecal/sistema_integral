@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
@@ -118,10 +119,18 @@ export async function POST() {
       .from("ordenes_servicio")
       .upsert(lote, { onConflict: "os_number" });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "ordenes-servicio", ok: false, error: error.message,
+      });
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     guardadas += lote.length;
   }
 
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "ordenes-servicio", ok: true, filas: guardadas,
+  });
   return NextResponse.json({
     guardadas,
     sin_equipo: sinEquipo,

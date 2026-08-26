@@ -5,6 +5,8 @@ import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { COMPRA_LABELS, moneda } from "@/lib/compras/constants";
 import { armarIndicadores } from "@/lib/compras/tablero";
 import Indicador from "@/components/Indicador";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import type { EstadoCompra } from "@/lib/compras/types";
 
 interface FilaResumen {
@@ -22,10 +24,12 @@ export default async function TableroPage() {
   // Cinco filas: la vista agrupa en la base. El tablero anterior traía los
   // requerimientos para contarlos, y por eso tenía que recortar PEDIDO a los
   // últimos 90 días.
-  const [{ data: resumen, error }, { puedeAprobar }] = await Promise.all([
+  const [{ data: resumen, error }, { puedeAprobar }, sync] = await Promise.all([
     supabase.from("compras_resumen_por_estado").select("estado_compra, cantidad, monto"),
     // Ya lo calculó el layout: vuelve sin salir a la red.
     permisosComprasActuales(),
+    // Estos números salen de la planilla: si quedó vieja, dicen otra cosa.
+    ultimaSincronizacionDe(supabase, "compras", "planilla"),
   ]);
 
   const indicadores = armarIndicadores(
@@ -48,7 +52,14 @@ export default async function TableroPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Tablero de compras</h1>
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h1 className="text-xl font-bold text-slate-900">Tablero de compras</h1>
+          <UltimaSincronizacion
+            cuando={sync?.created_at}
+            ok={sync?.ok ?? true}
+            error={sync?.error}
+          />
+        </div>
         <p className="text-sm text-slate-500">
           {enCurso} requerimiento{enCurso === 1 ? "" : "s"} aprobados esperando algo.
           Tocá una etapa para trabajarla.
