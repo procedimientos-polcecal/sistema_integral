@@ -14,6 +14,24 @@ function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undef
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
 }
 
+/**
+ * El equipo de una ejecución.
+ *
+ * Puede venir por tres caminos: el enlace directo, el mantenimiento programado
+ * o —cuando la ejecución nació de una OT— ninguno de los dos, porque la orden
+ * no siempre está enlazada a una máquina del sistema.
+ */
+function equipoDe(e: any) {
+  return e.equipo ?? e.schedule?.equipos ?? null;
+}
+
+/** De qué fue el trabajo: el tipo de mantenimiento, o la OT que lo originó. */
+function motivoDe(e: any): string {
+  if (e.schedule?.maintenance_type) return e.schedule.maintenance_type;
+  if (e.orden?.ot_number) return `OT #${e.orden.ot_number}`;
+  return "—";
+}
+
 export default function HistorialClient({ executions }: { executions: any[] }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -23,10 +41,10 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
     const q = search.toLowerCase();
     return executions.filter((e) => {
       if (filterStatus && e.execution_status !== filterStatus) return false;
-      if (filterType && e.schedule?.maintenance_type !== filterType) return false;
+      if (filterType && motivoDe(e) !== filterType) return false;
       if (q) {
-        const code = e.schedule?.equipos?.code?.toLowerCase() ?? "";
-        const name = e.schedule?.equipos?.name?.toLowerCase() ?? "";
+        const code = equipoDe(e)?.code?.toLowerCase() ?? "";
+        const name = equipoDe(e)?.name?.toLowerCase() ?? "";
         const obs  = e.observations?.toLowerCase() ?? "";
         if (!code.includes(q) && !name.includes(q) && !obs.includes(q)) return false;
       }
@@ -39,11 +57,11 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
       ["Fecha", "Código", "Equipo", "Empresa", "Sector", "Tipo", "Estado", "Duración (h)", "Ejecutado por", "Observaciones"],
       ...filtered.map((e) => [
         new Date(e.executed_at).toLocaleDateString("es-AR"),
-        e.schedule?.equipos?.code ?? "",
-        e.schedule?.equipos?.name ?? "",
-        e.schedule?.equipos?.sectores?.empresas?.nombre ?? "",
-        e.schedule?.equipos?.sectores?.nombre ?? "",
-        e.schedule?.maintenance_type ?? "",
+        equipoDe(e)?.code ?? "",
+        equipoDe(e)?.name ?? "",
+        equipoDe(e)?.sectores?.empresas?.nombre ?? "",
+        equipoDe(e)?.sectores?.nombre ?? "",
+        motivoDe(e),
         e.execution_status,
         e.duration_hours ?? "",
         nombreCompleto(e.executor),
@@ -60,7 +78,7 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
     URL.revokeObjectURL(url);
   }
 
-  const types = [...new Set(executions.map((e) => e.schedule?.maintenance_type).filter(Boolean))];
+  const types = [...new Set(executions.map(motivoDe).filter((t) => t !== "—"))].sort();
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
@@ -122,10 +140,10 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
                   {new Date(e.executed_at).toLocaleDateString("es-AR")}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="font-medium text-gray-900">{e.schedule?.equipos?.code}</span>
-                  <span className="text-gray-500 ml-1">{e.schedule?.equipos?.name}</span>
+                  <span className="font-medium text-gray-900">{equipoDe(e)?.code ?? "—"}</span>
+                  <span className="text-gray-500 ml-1">{equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{e.schedule?.maintenance_type}</td>
+                <td className="px-4 py-3 text-gray-500">{motivoDe(e)}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[e.execution_status] ?? ""}`}>
                     {e.execution_status}
@@ -147,13 +165,13 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
         {filtered.map((e: any) => (
           <div key={e.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-gray-900 text-sm">{e.schedule?.equipos?.code} — {e.schedule?.equipos?.name}</span>
+              <span className="font-medium text-gray-900 text-sm">{equipoDe(e)?.code ?? "—"} — {equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${STATUS_COLORS[e.execution_status] ?? ""}`}>
                 {e.execution_status}
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              {new Date(e.executed_at).toLocaleDateString("es-AR")} · {e.schedule?.maintenance_type}
+              {new Date(e.executed_at).toLocaleDateString("es-AR")} · {motivoDe(e)}
               {e.duration_hours ? ` · ${e.duration_hours} h` : ""}
             </p>
             {e.observations && <p className="text-xs text-gray-400 line-clamp-2">{e.observations}</p>}

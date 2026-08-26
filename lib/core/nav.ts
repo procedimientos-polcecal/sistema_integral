@@ -104,11 +104,6 @@ export const NAV: NavItem[] = [
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
-      // Estas dos no están en la app de Mantenimiento, donde el preventivo
-      // vive dentro de Planificación. Acá son pantallas propias y sacarlas del
-      // menú sería esconderlas.
-      { label: "Mantenimientos", href: "/mantenimiento/mantenimientos", modulo: "mantenimiento" },
-      { label: "Ejecuciones", href: "/mantenimiento/ejecuciones", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
       {

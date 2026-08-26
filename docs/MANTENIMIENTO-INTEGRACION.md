@@ -527,13 +527,21 @@ códigos que las planillas nombran, el libro los tiene **todos**.
 
 ## El menú, igual que en la app de Mantenimiento
 
-El mismo orden y los mismos nombres: Dashboard, Equipos, Avisos, Órdenes de
-trabajo, Órdenes de servicio, Planificación, Producción, Historial, Usuarios y
-Configuración.
+El mismo orden y los mismos nombres, y **sólo** ésos: Dashboard, Equipos,
+Avisos, Órdenes de trabajo, Órdenes de servicio, Planificación, Producción,
+Historial, Usuarios y Configuración.
 
-Dos ítems que la app de origen no tiene quedaron igual: **Mantenimientos** y
-**Ejecuciones**. Allá el preventivo vive dentro de Planificación; acá son
-pantallas propias que ya existían, y sacarlas del menú sería esconderlas.
+**Mantenimientos** y **Ejecuciones** salieron. Eran pantallas propias del ERP
+que la app de Mantenimiento no tiene —allá el preventivo vive dentro de
+Planificación— y sumaban dos entradas a un menú que ya tenía diez. Las páginas
+quedan en el repo pero sin acceso desde el menú.
+
+Sacar Ejecuciones no dejó nada huérfano porque **Historial muestra lo mismo**.
+Pero traía sólo las ejecuciones colgadas de un mantenimiento programado, así que
+dejaba afuera todo lo que se registra al cerrar una OT —que es por donde entra
+la mayor parte del trabajo de la planta—. Ahora muestra las dos, y el equipo lo
+busca por el enlace directo, por el mantenimiento programado o, si no hay
+ninguno, por la orden.
 
 **Usuarios** apunta a `/administracion/usuarios`, que es donde el SdG los
 administra para todos los módulos —igual que hace RRHH— en vez de tener una
