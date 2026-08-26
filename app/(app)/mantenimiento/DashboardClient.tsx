@@ -6,7 +6,9 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
 } from "recharts";
+import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
+import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,89 @@ const QUIEN_COLORS: Record<string, string> = {
   Propio: "#3B82F6", Contratado: "#8B5CF6", Mixto: "#F59E0B", Otro: "#94A3B8",
 };
 
+/** Los nombres de esos sectores, para decir cuáles hay que parar. */
+function nombresDeSectores(sectores: any[], ids: string[]): string {
+  const nombres = ids
+    .map((id) => sectores.find((s) => s.id === id)?.nombre)
+    .filter(Boolean);
+  return nombres.length <= 3
+    ? nombres.join(", ")
+    : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+}
+
+/**
+ * Dónde se puede reparar la semana que viene sin frenar el despacho.
+ *
+ * Es lo que vuelve útil la planificación de producción: los días en que una
+ * planta entera está libre son la ventana para intervenir.
+ */
+function VentanasDeReparacion({ ventanas, semana }: {
+  ventanas: VentanaDeReparacion[];
+  semana: string;
+}) {
+  const [a, m, d] = semana.split("-");
+  const desde = `${d}/${m}/${a}`;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <h2 className="text-sm font-semibold text-gray-700">Ventanas para reparar</h2>
+        <Link href="/mantenimiento/produccion" className="text-xs text-blue-500 hover:underline">
+          Semana del {desde} →
+        </Link>
+      </div>
+
+      {ventanas.length === 0 ? (
+        <p className="py-4 text-center text-sm text-gray-400">
+          Ninguna planta queda libre un día entero la semana que viene, o todavía no se cargó
+          la producción.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {ventanas.map((v) => (
+            <div key={v.empresa} className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-emerald-900">{v.empresa}</span>
+                <span className="text-xs text-emerald-800">{v.dias.join(", ")}</span>
+              </div>
+              {v.pendientes > 0 && (
+                <p className="mt-0.5 text-xs text-amber-700">
+                  {v.pendientes} pendiente{v.pendientes === 1 ? "" : "s"} de mantenimiento
+                  {v.aParar > 0 && `, ${v.aParar} que exige${v.aParar === 1 ? "" : "n"} parar el sector`}.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Cuántas órdenes de trabajo se abrieron cada mes del último año. */
+function OrdenesPorMes({ datos }: { datos: { mes: string; cantidad: number }[] }) {
+  const maximo = Math.max(1, ...datos.map((d) => d.cantidad));
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <h2 className="text-sm font-semibold text-gray-700 mb-4">Órdenes de trabajo por mes</h2>
+      <div className="flex items-end gap-1.5 h-36">
+        {datos.map((d) => (
+          <div key={d.mes} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+            <span className="text-[10px] text-gray-400">{d.cantidad || ""}</span>
+            <div
+              className="w-full rounded-t bg-slate-800"
+              style={{ height: `${Math.max(2, (d.cantidad / maximo) * 100)}%` }}
+              title={`${d.mes}: ${d.cantidad}`}
+            />
+            <span className="text-[10px] text-gray-400 truncate w-full text-center">{d.mes}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
   if (!u) return "—";
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
@@ -68,7 +153,8 @@ function empresaDe(s: any): string {
 
 export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
-  empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally, canEdit,
+  empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
+  otPorMes, otMes, ventanas, semanaQueViene, sectoresParados, avisosSinOT, osPendientes, canEdit,
 }: {
   usuario: any;
   equipos: any[];
@@ -81,6 +167,13 @@ export default function DashboardClient({
   otStats: { estado: string; count: number }[];
   tipoTally: Record<string, number>;
   quienTally: Record<string, number>;
+  otPorMes: { mes: string; cantidad: number }[];
+  otMes: number;
+  ventanas: VentanaDeReparacion[];
+  semanaQueViene: string;
+  sectoresParados: string[];
+  avisosSinOT: number;
+  osPendientes: number;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -243,6 +336,7 @@ export default function DashboardClient({
       </div>
 
       {(() => {
+        const aParar = new Set(sectoresParados);
         const visibleSectors = plantFilter === "TODAS"
           ? sectores
           : sectores.filter((s: any) => empresaDe(s) === plantFilter);
@@ -265,6 +359,13 @@ export default function DashboardClient({
                           style={{ color: meta.color, borderColor: meta.border, background: "white" }}>
                           {meta.label}
                         </span>
+                        {/* Hay una OT pendiente que necesita el sector parado. */}
+                        {aParar.has(sector.id) && (
+                          <span
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600"
+                            title="Hay una OT pendiente que requiere parar este sector"
+                          >Parar</span>
+                        )}
                       </div>
                       {plantFilter === "TODAS" && (
                         <p className="text-xs text-gray-400 mt-0.5">{empresaDe(sector) === "TRANSVERSAL" ? "Transversal" : empresaDe(sector)}</p>
@@ -332,6 +433,22 @@ export default function DashboardClient({
         <KpiCard label="Vencidos"         value={overdue.length}  accent={overdue.length > 0 ? "#EF4444" : "#22C55E"} />
         <KpiCard label="Próximos 7 días"  value={upcoming.length} accent="#F59E0B" />
       </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="OT este mes"        value={otMes}        accent="#0F172A" />
+        <KpiCard label="Avisos sin OT"      value={avisosSinOT}  accent={avisosSinOT > 0 ? "#F59E0B" : "#22C55E"} />
+        <KpiCard label="OS sin terminar"    value={osPendientes} accent="#3B82F6" />
+        <KpiCard
+          label="Sectores a parar"
+          value={sectoresParados.length}
+          accent={sectoresParados.length > 0 ? "#EF4444" : "#22C55E"}
+          sub={sectoresParados.length > 0 ? nombresDeSectores(sectores, sectoresParados) : undefined}
+        />
+      </div>
+
+      <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
+
+      <OrdenesPorMes datos={otPorMes} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-5">

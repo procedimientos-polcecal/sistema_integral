@@ -89,7 +89,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | 4 | Producción semanal | **hecho** |
 | 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | **hecho** |
-| 7 | Dashboard: KPIs y gráficos | pendiente |
+| 7 | Dashboard: KPIs y gráficos | **hecho** |
 
 El dashboard va último porque mide sobre lo que las demás cargan. Las
 integraciones con Sheets y Drive no son una etapa aparte: cada feature se lleva
@@ -156,8 +156,8 @@ mientras lo decide.
 La marca **no viene de la planilla ni vuelve a ella**: es un dato propio del
 sistema. La planilla no tiene esa columna.
 
-Ya se muestra en producción semanal, al lado del nombre del sector. Falta el
-dashboard.
+Ya se muestra en producción semanal y en el dashboard, al lado del nombre del
+sector, y como indicador propio ("Sectores a parar").
 
 ## Producción semanal
 
@@ -292,6 +292,34 @@ Tres cosas que se corrigieron respecto del código de origen:
 Esta hoja **no se pudo contrastar contra el archivo de verdad** —no lo tenemos—,
 así que los alias de columna son deliberadamente amplios: `año_fabricacion` y
 `anio_fabricacion`, con o sin mayúsculas, con o sin espacios.
+
+## El tablero
+
+El módulo ya tenía tablero —estado de equipos, sectores, vencidos, próximos—.
+Lo que sumó la feature 7 es lo que las demás hicieron medible:
+
+- **OT este mes**, **avisos sin OT**, **OS sin terminar** y **sectores a parar**.
+- **Órdenes de trabajo por mes**, los últimos doce.
+- **Ventanas para reparar**: los días de la semana que viene en que una planta
+  entera queda libre, con cuánto hay pendiente para aprovecharlas. Es lo que
+  vuelve útil la planificación de producción.
+- La marca **Parar** en la tarjeta de cada sector que tiene una OT pendiente que
+  lo exige.
+
+Dos decisiones que valen la pena:
+
+**Una empresa sin plan cargado no genera ventana.** Sin plan todos los días
+parecen libres, y anunciar una ventana que nadie planificó es peor que no
+anunciar ninguna.
+
+**Los totales se cuentan en la base, no acá.** El tablero traía hasta 10.000
+órdenes para contarlas en memoria; ahora usa `count` con `head`. Con 1.728
+órdenes andaba, pero es exactamente la forma de romperse en silencio cuando la
+planilla crezca —el mismo tope de filas que ya nos mordió en Compras—.
+
+Los meses se arman con las partes locales de la fecha y no con `toISOString()`,
+por lo mismo que en producción semanal: en un servidor en UTC el primero del mes
+cae el último del anterior y las órdenes se cuentan en el mes equivocado.
 
 ## Lo que quedó anotado para decidir después
 
