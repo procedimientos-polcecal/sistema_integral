@@ -8,12 +8,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import { indiceDeProveedores, buscarProveedor } from "@/lib/core/proveedores";
 
 export interface Enlaces {
   /** Equipo por código, en mayúsculas. */
   porCodigo: Map<string, { id: string; sector_id: string | null }>;
   /** Sector por nombre, en minúsculas y sin espacios de más. */
   porSector: Map<string, string>;
+  /** Proveedor por nombre normalizado. */
+  porProveedor: Map<string, string>;
 }
 
 /** Los equipos y sectores cargados, listos para buscar. */
@@ -24,13 +27,32 @@ export async function cargarEnlaces(admin: SupabaseClient): Promise<Enlaces> {
   const sectores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
     admin.from("sectores").select("id, nombre").range(desde, hasta)
   );
+  const proveedores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
+    admin.from("proveedores").select("id, nombre").range(desde, hasta)
+  );
 
   return {
     porCodigo: new Map(
       equipos.filter((e) => e.code).map((e) => [e.code!.toUpperCase(), { id: e.id, sector_id: e.sector_id }])
     ),
     porSector: new Map(sectores.map((s) => [s.nombre.toLowerCase().trim(), s.id])),
+    porProveedor: indiceDeProveedores(proveedores),
   };
+}
+
+/**
+ * El proveedor que se llama así, si lo conocemos.
+ *
+ * No inventa: un nombre que no está en la lista queda sin enlazar y el texto
+ * crudo se conserva igual. Crear proveedores desde una sincronización llenaría
+ * la lista que Compras usa todos los días con cada variante de escritura que
+ * alguien tipeó en una planilla.
+ */
+export function proveedorDe(
+  enlaces: Enlaces,
+  nombre: string | null | undefined
+): string | null {
+  return buscarProveedor(enlaces.porProveedor, nombre);
 }
 
 /**

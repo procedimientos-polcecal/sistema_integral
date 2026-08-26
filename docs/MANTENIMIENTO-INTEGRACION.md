@@ -24,6 +24,8 @@ configuración, no código:
 | `GOOGLE_SHEETS_AVISOS_ID` | `1Iyfy3AzEASPpYU3zNBKr3rg5BkAM_DC1X9E8RJo6ZX4` |
 | `GOOGLE_SHEETS_OT_ID` | `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo` |
 | Migración 031 | Ejecuciones que cuelgan de una OT. |
+| Migración 032 | Los contratistas pasan a `proveedores`. |
+| **Cargar los equipos** | Hay **2** cargados, así que **1701 de 1728 OT** y 137 de 138 avisos quedaron sin equipo ni sector. Es el cuello de botella del módulo entero. |
 | Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
 | El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |
 
@@ -425,13 +427,50 @@ Los meses se arman con las partes locales de la fecha y no con `toISOString()`,
 por lo mismo que en producción semanal: en un servidor en UTC el primero del mes
 cae el último del anterior y las órdenes se cuentan en el mes equivocado.
 
+## Un solo lugar para los proveedores
+
+El delta trajo una tabla `contratistas` propia del módulo, con dos filas y una
+sola columna. Pero `proveedores` existe desde la migración 016 con
+`es_contratista`, y su comentario decía exactamente esto: distingue a quién
+presta servicios de quién provee materiales, y un mismo proveedor puede ser las
+dos cosas. La decisión ya estaba tomada en el repo; la **migración 032** la
+cumple: pasa las dos filas, borra la tabla y suma `proveedor_id` a
+`ordenes_trabajo`, `ordenes_servicio` y `os_comparativas`.
+
+**El nombre en texto se conserva.** Es lo que dice la planilla y la planilla
+manda; `proveedor_id` es el enlace que permite cruzar el trabajo de un proveedor
+entre Compras y Mantenimiento.
+
+### Lo que las planillas tienen para dar
+
+77 proveedores distintos entre la comparativa de OS, la columna contratista de
+las OT y el proveedor elegido de las OS. De ésos:
+
+- **18 están escritos de más de una forma** y sólo cambian mayúsculas, acentos
+  o puntos —"Candia" y "CANDIA", "NELO Electrónica" y "NELO electronica"—. La
+  normalización los une sola.
+- **Cinco pares son el mismo escrito corto y largo**: "Cortadi" y "Domingo
+  Cortadi", "Villa Arrieta" y "Met. Villa Arrieta", "Don Alfredo" con sus tres
+  variantes, "Giacobino" y "Cristian Giacobino", "Ing Mazzeo" e "Ing. Mazzeo".
+  Ésos **no se unen solos**: decidir si son el mismo es de quien los conoce, así
+  que se sugieren y se fusionan a mano.
+
+Para sugerirlos hay una lista de palabras de rubro —metalúrgica, mecanizados,
+ingeniería, transporte— que no identifican a nadie. Sin ella, "CN Mecanizados" y
+"Gundel mecanizados" quedaban como el mismo proveedor por compartir el oficio.
+
+### La sincronización no crea proveedores
+
+Enlaza los que reconoce y **avisa** los que no, con un botón para sumarlos como
+contratistas. Crearlos sola llenaría la lista que Compras usa todos los días con
+cada variante de escritura que alguien tipeó en una planilla. Y el aviso muestra
+primero cuáles parecen repetidos, que es el momento de unificarlos: después hay
+que fusionar dos fichas.
+
 ## Lo que quedó anotado para decidir después
 
-**`contratistas` y `proveedores` son casi lo mismo.** El delta creó
-`contratistas` como tabla propia del módulo, y el ERP ya tiene `proveedores`
-compartido con Compras. Las OS y sus comparativas guardan el proveedor como
-**texto**, como en la planilla, y no lo enlazan a `proveedores`: enlazarlos es
-una decisión aparte que conviene tomar junto con la de `contratistas`.
+**Resuelto: los contratistas son proveedores.** Ver `## Un solo lugar para los
+proveedores`.
 
 **Al portar, revisar `UNFORMATTED_VALUE`.** La app de origen arregló un bug de
 fechas en null leyendo Sheets sin formatear. Este ERP tiene su propio lector en

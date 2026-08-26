@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { traerTodo } from "@/lib/core/paginado";
 import { leerValores, listarPestanas } from "@/lib/core/sheets";
+import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
 
 export const maxDuration = 300;
@@ -58,33 +58,29 @@ export async function POST() {
 
   const admin = createAdminClient();
 
-  const equipos = await traerTodo<{ id: string; code: string | null; sector_id: string | null }>(
-    (desde, hasta) => admin.from("equipos").select("id, code, sector_id").range(desde, hasta)
-  );
-  const sectores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
-    admin.from("sectores").select("id, nombre").range(desde, hasta)
-  );
-
-  const porCodigo = new Map(equipos.filter((e) => e.code).map((e) => [e.code!.toUpperCase(), e]));
-  const porSector = new Map(sectores.map((s) => [s.nombre.toLowerCase().trim(), s.id]));
+  const enlaces = await cargarEnlaces(admin);
 
   const registros: Record<string, unknown>[] = [];
+  const sinProveedor = new Set<string>();
   let sinEquipo = 0;
 
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
 
-    const equipo = orden.equipo_code ? porCodigo.get(orden.equipo_code) : undefined;
-    if (!equipo) sinEquipo += 1;
+    const { equipment_id, sector_id } = resolver(enlaces, orden);
+    if (!equipment_id) sinEquipo += 1;
+
+    // El contratista es un proveedor del SdG: si lo reconocemos, se enlaza.
+    // El nombre crudo se conserva porque es lo que dice la planilla.
+    const proveedor_id = proveedorDe(enlaces, orden.contratista);
+    if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
 
     registros.push({
       ...orden,
-      equipment_id: equipo?.id ?? null,
-      sector_id:
-        equipo?.sector_id ??
-        porSector.get((orden.sector_raw ?? "").toLowerCase().trim()) ??
-        null,
+      equipment_id,
+      sector_id,
+      proveedor_id,
       synced_at: new Date().toISOString(),
     });
   }
@@ -100,5 +96,10 @@ export async function POST() {
     guardadas += lote.length;
   }
 
-  return NextResponse.json({ leidas: filas.length - 1, guardadas, sin_equipo: sinEquipo });
+  return NextResponse.json({
+    leidas: filas.length - 1,
+    guardadas,
+    sin_equipo: sinEquipo,
+    sin_proveedor: [...sinProveedor],
+  });
 }

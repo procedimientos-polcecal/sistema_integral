@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores } from "@/lib/core/sheets";
 import { COMPARATIVA_PESTANAS, filaDeComparativa } from "@/lib/mantenimiento/comparativas";
+import { cargarEnlaces, proveedorDe } from "@/lib/mantenimiento/enlaces";
 
 export const maxDuration = 300;
 
@@ -34,8 +35,12 @@ export async function POST() {
     );
   }
 
+  const admin = createAdminClient();
+  const enlaces = await cargarEnlaces(admin);
+
   const cotizaciones: Record<string, unknown>[] = [];
   const sinLeer: string[] = [];
+  const sinProveedor = new Set<string>();
   const cuando = new Date().toISOString();
 
   for (const pestana of COMPARATIVA_PESTANAS) {
@@ -51,7 +56,12 @@ export async function POST() {
 
     for (let i = 1; i < filas.length; i++) {
       const cot = filaDeComparativa(filas[i], i + 1, pestana);
-      if (cot) cotizaciones.push({ ...cot, synced_at: cuando });
+      if (!cot) continue;
+
+      const proveedor_id = proveedorDe(enlaces, cot.proveedor);
+      if (!proveedor_id) sinProveedor.add(cot.proveedor);
+
+      cotizaciones.push({ ...cot, proveedor_id, synced_at: cuando });
     }
   }
 
@@ -69,8 +79,6 @@ export async function POST() {
       { status: 502 }
     );
   }
-
-  const admin = createAdminClient();
 
   // Refresco completo: en la planilla se corrigen y se borran filas, y sólo
   // volviendo a leerla entera queda igual de los dos lados.
@@ -91,5 +99,7 @@ export async function POST() {
   }
 
   const ordenes = new Set(cotizaciones.map((c) => c.os_number)).size;
-  return NextResponse.json({ guardadas, ordenes, sin_leer: sinLeer });
+  return NextResponse.json({
+    guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
+  });
 }

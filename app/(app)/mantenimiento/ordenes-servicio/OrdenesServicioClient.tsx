@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fecha, moneda } from "@/lib/compras/constants";
 import type { OrdenServicio } from "@/lib/mantenimiento/types";
 import DetalleOS from "./DetalleOS";
+import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 
 /**
  * Las órdenes de servicio.
@@ -30,6 +31,7 @@ export default function OrdenesServicioClient({
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
   const [abierta, setAbierta] = useState<OrdenServicio | null>(null);
+  const [sinProveedor, setSinProveedor] = useState<string[]>([]);
 
   // Las áreas y los estados salen de los datos: cada pestaña de la planilla
   // escribe los suyos y una lista fija quedaría corta en cuanto agreguen uno.
@@ -75,6 +77,12 @@ export default function OrdenesServicioClient({
 
     // Filas de la planilla con proveedor o costo cargados pero sin ninguna OS
     // a la izquierda: el FILTER las corrió y el seguimiento quedó colgado.
+    // Los proveedores que la planilla nombra y el sistema no conoce.
+    setSinProveedor([...new Set<string>([
+      ...(osBody.sin_proveedor ?? []),
+      ...(compBody.sin_proveedor ?? []),
+    ])]);
+
     const huerfanas: string[] = osBody.huerfanas ?? [];
     setAviso(
       [
@@ -121,6 +129,12 @@ export default function OrdenesServicioClient({
       {aviso && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{aviso}</div>
       )}
+
+      <ProveedoresDesconocidos
+        nombres={sinProveedor}
+        puedeEditar={puedeEditar}
+        onSumados={() => { setSinProveedor([]); router.refresh(); }}
+      />
 
       <div className="flex flex-wrap gap-2">
         <input

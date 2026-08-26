@@ -5,6 +5,7 @@ import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import NuevaOTModal from "./NuevaOTModal";
 import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
+import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 
@@ -45,6 +46,7 @@ export default function OrdenesClient({
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [iniciando, setIniciando] = useState<any | null>(null);
   const [registrando, setRegistrando] = useState<any | null>(null);
+  const [sinProveedor, setSinProveedor] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +73,7 @@ export default function OrdenesClient({
           (body.sin_equipo > 0 ? ` ${body.sin_equipo} sin equipo enlazado.` : "")
         : (body.error ?? "No se pudo sincronizar.")
     );
+    setSinProveedor(res.ok ? body.sin_proveedor ?? [] : []);
     if (res.ok) load();
   }
 
@@ -203,6 +206,12 @@ export default function OrdenesClient({
           {avisoSync}
         </div>
       )}
+
+      <ProveedoresDesconocidos
+        nombres={sinProveedor}
+        puedeEditar={canEdit}
+        onSumados={() => { setSinProveedor([]); sincronizar(); }}
+      />
 
       {view === "list" && (
         <div className="flex gap-2 flex-wrap">

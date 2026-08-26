@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
-import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
+import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import {
   OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
 } from "@/lib/mantenimiento/os";
@@ -46,6 +46,7 @@ export async function POST() {
   const porNumero = new Map<number, Record<string, unknown>>();
   const sinLeer: string[] = [];
   const huerfanas: string[] = [];
+  const sinProveedor = new Set<string>();
   let sinEquipo = 0;
 
   for (const pestana of OS_PESTANAS) {
@@ -80,11 +81,16 @@ export async function POST() {
       const { equipment_id, sector_id } = resolver(enlaces, os);
       if (!equipment_id) sinEquipo += 1;
 
+      // El proveedor se enlaza si lo conocemos; el nombre crudo queda igual.
+      const proveedor_id = proveedorDe(enlaces, os.proveedor_elegido);
+      if (os.proveedor_elegido && !proveedor_id) sinProveedor.add(os.proveedor_elegido);
+
       porNumero.set(os.os_number, {
         ...os,
         comparativa: link ?? os.comparativa,
         equipment_id,
         sector_id,
+        proveedor_id,
         synced_at: cuando,
       });
     }
@@ -121,5 +127,6 @@ export async function POST() {
     sin_equipo: sinEquipo,
     sin_leer: sinLeer,
     huerfanas,
+    sin_proveedor: [...sinProveedor],
   });
 }
