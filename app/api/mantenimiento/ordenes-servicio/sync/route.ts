@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { leerValores, listarPestanas } from "@/lib/core/sheets";
+import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
+import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
-import { OS_PESTANAS, mapearEncabezados, filaDeOS } from "@/lib/mantenimiento/os";
+import {
+  OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
+} from "@/lib/mantenimiento/os";
 
 export const maxDuration = 300;
 
@@ -42,6 +45,7 @@ export async function POST() {
   // última leída, y por eso se ordena por número recién al final.
   const porNumero = new Map<number, Record<string, unknown>>();
   const sinLeer: string[] = [];
+  const huerfanas: string[] = [];
   let sinEquipo = 0;
 
   for (const pestana of OS_PESTANAS) {
@@ -56,14 +60,33 @@ export async function POST() {
 
     const idx = mapearEncabezados(filas[0]);
 
+    // La comparativa es un `HYPERLINK` y la celda sólo muestra "LINK": la URL
+    // hay que sacarla de la fórmula o del hipervínculo, o se guarda la palabra.
+    const formulas = idx.comparativa >= 0
+      ? await leerFormulas(planilla, pestana).catch(() => [] as string[][])
+      : [];
+
     for (let i = 1; i < filas.length; i++) {
       const os = filaDeOS(filas[i], idx, pestana, i + 1);
-      if (!os) continue;
 
+      if (!os) {
+        // Seguimiento sin orden: el FILTER corrió las filas y lo escrito a
+        // mano quedó colgado de ninguna OS. No se importa, se avisa.
+        if (seguimientoHuerfano(filas[i])) huerfanas.push(`${pestana}!${i + 1}`);
+        continue;
+      }
+
+      const link = linkDeCelda(formulas[i]?.[idx.comparativa], null);
       const { equipment_id, sector_id } = resolver(enlaces, os);
       if (!equipment_id) sinEquipo += 1;
 
-      porNumero.set(os.os_number, { ...os, equipment_id, sector_id, synced_at: cuando });
+      porNumero.set(os.os_number, {
+        ...os,
+        comparativa: link ?? os.comparativa,
+        equipment_id,
+        sector_id,
+        synced_at: cuando,
+      });
     }
   }
 
@@ -93,5 +116,10 @@ export async function POST() {
     guardadas += lote.length;
   }
 
-  return NextResponse.json({ guardadas, sin_equipo: sinEquipo, sin_leer: sinLeer });
+  return NextResponse.json({
+    guardadas,
+    sin_equipo: sinEquipo,
+    sin_leer: sinLeer,
+    huerfanas,
+  });
 }

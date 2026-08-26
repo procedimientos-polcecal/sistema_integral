@@ -7,28 +7,8 @@
  * hipervínculo pegado sobre el texto, según cómo la haya cargado cada uno.
  */
 
-/**
- * La URL detrás de una celda, mirando las tres formas en que puede estar.
- *
- * La fórmula gana sobre el hipervínculo porque es más específica: si alguien
- * escribió `=HYPERLINK(...)`, ése es el destino que quiso.
- */
-export function linkDeCelda(
-  formula: string | null | undefined,
-  hipervinculo: string | null | undefined
-): string | null {
-  const f = String(formula ?? "").trim();
-
-  const enFormula = f.match(/^=\s*HYPERLINK\s*\(\s*"([^"]+)"/i);
-  if (enFormula) return enFormula[1];
-
-  if (hipervinculo && hipervinculo.trim()) return hipervinculo.trim();
-
-  // Alguien pudo pegar la URL como texto plano.
-  if (/^https?:\/\//i.test(f)) return f;
-
-  return null;
-}
+// `linkDeCelda` vive en core: la usan Compras y Mantenimiento por igual.
+export { linkDeCelda } from "@/lib/core/links";
 
 /** El id del archivo dentro de un link de Google. `null` si no hay ninguno. */
 export function idDePlanilla(url: string | null | undefined): string | null {

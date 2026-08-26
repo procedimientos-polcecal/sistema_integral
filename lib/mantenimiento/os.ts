@@ -6,19 +6,43 @@
  * propio. Van aparte de los requerimientos de Compras: aquéllos piden
  * materiales, éstas piden trabajo.
  *
- * La planilla tiene **una pestaña por área** y cada una arma su encabezado a su
- * manera, así que se lee por encabezado y no por posición: es lo que evita que
- * agregar una columna en una pestaña rompa la lectura de las otras.
+ * **Cómo está armada la planilla**, verificado contra ella:
+ *
+ * - `SERVICIOS` es la hoja maestra, pero **no se escribe**: sus columnas A..J
+ *   son un `QUERY(IMPORTRANGE(...))` sobre la planilla de respuestas de un
+ *   formulario de Google. Las OS nacen ahí, no acá. Sólo K (empresa) y L
+ *   (estado) están escritas a mano.
+ * - Cada pestaña de área es un `FILTER(SERVICIOS!A2:K; área=…; estado="APROBADO")`.
+ *   Es decir: **A..K son fórmula** y sólo las columnas siguientes —comparativa,
+ *   proveedor, estado, costo, fechas, observaciones— son valores escritos a
+ *   mano. El seguimiento vive ahí.
+ * - Y por eso el número de fila es inestable: cuando una OS entra o sale del
+ *   `FILTER`, las de abajo se corren, pero el seguimiento escrito a mano **no
+ *   se corre con ellas**. Antes de escribir hay que verificar la fila.
+ *
+ * Se lee por encabezado y no por posición: cada pestaña arma el suyo a su
+ * manera y no todas traen las mismas columnas.
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo, normalizar, monto } from "@/lib/mantenimiento/planilla";
 
 /**
+ * Un campo de texto de la planilla.
+ *
+ * El guión suelto es como se escribe "acá no va nada": 39 filas lo tienen en
+ * la columna del equipo, y ninguna se refiere a una máquina llamada "-".
+ */
+const campo = (v: unknown): string | null => {
+  const s = texto(v);
+  return s === null || s === "-" ? null : s;
+};
+
+/**
  * Las pestañas de la planilla, una por área.
  *
- * SERVICIOS va primera porque es la hoja maestra: ahí se cargan las OS nuevas
- * y de ahí salen las demás filtradas por área. "OTRA" es el cajón de lo que no
- * tiene pestaña propia.
+ * SERVICIOS va primera porque es la hoja maestra —la que tiene todas— y de ahí
+ * salen las demás filtradas por área. "OTRA" es el cajón de lo que no tiene
+ * pestaña propia.
  */
 export const OS_PESTANAS = [
   "SERVICIOS",
@@ -135,52 +159,92 @@ export function filaDeOS(
   const osNumber = Number(celda("os_number"));
   if (!osNumber || isNaN(osNumber)) return null;
 
-  const equipoRaw = texto(celda("equipo_raw"));
+  const equipoRaw = campo(celda("equipo_raw"));
 
   return {
     os_number: osNumber,
     fecha: fechaDeSheets(celda("fecha")),
     // Sin área en la celda vale la pestaña: la pestaña ES el área.
-    area: texto(celda("area")) ?? pestana,
-    sector_raw: texto(celda("sector_raw")),
+    area: campo(celda("area")) ?? pestana,
+    sector_raw: campo(celda("sector_raw")),
     equipo_raw: equipoRaw,
     equipo_code: codigoDeEquipo(equipoRaw),
-    descripcion: texto(celda("descripcion")),
+    descripcion: campo(celda("descripcion")),
     fecha_requerimiento: fechaDeSheets(celda("fecha_requerimiento")),
-    detalle_extra: texto(celda("detalle_extra")),
-    imagen: texto(celda("imagen")),
-    prioridad: texto(celda("prioridad")),
-    empresa: texto(celda("empresa")),
-    comparativa: texto(celda("comparativa")),
-    proveedor_elegido: texto(celda("proveedor_elegido")),
-    estado: texto(celda("estado")),
-    cuit: texto(celda("cuit")),
-    tiene_orden_compra: texto(celda("tiene_orden_compra")),
+    detalle_extra: campo(celda("detalle_extra")),
+    imagen: campo(celda("imagen")),
+    prioridad: campo(celda("prioridad")),
+    empresa: campo(celda("empresa")),
+    comparativa: campo(celda("comparativa")),
+    proveedor_elegido: campo(celda("proveedor_elegido")),
+    estado: campo(celda("estado")),
+    cuit: campo(celda("cuit")),
+    tiene_orden_compra: campo(celda("tiene_orden_compra")),
     costo: monto(celda("costo")),
     fecha_pedido: fechaDeSheets(celda("fecha_pedido")),
     fecha_realizacion: fechaDeSheets(celda("fecha_realizacion")),
-    observaciones: texto(celda("observaciones")),
+    observaciones: campo(celda("observaciones")),
     sheets_tab: pestana,
     sheets_row: numeroFila,
   };
 }
 
 /**
- * El valor de cada columna para escribir una fila nueva en la planilla.
+ * Los estados por los que pasa una OS, verificados contra la planilla.
  *
- * Se arma siguiendo el encabezado de la pestaña, no un orden fijo: cada
- * pestaña tiene el suyo y escribir a ciegas correría los datos de columna.
+ * En orden del circuito: se pide, se revisa, se aprueba, se comparan
+ * proveedores y se acepta uno. No son los de las OT ni los de Compras.
  */
-export function filaParaPlanilla(
-  encabezado: unknown[], valores: Record<string, string | number | null>
-): (string | number)[] {
-  return encabezado.map((h) => {
-    const clave = claveDeEncabezado(h);
-    for (const [nombre, alias] of Object.entries(ALIAS_OS)) {
-      if (alias.some((a) => claveDeEncabezado(a) === clave)) {
-        return valores[nombre] ?? "";
-      }
-    }
-    return "";
-  });
+export const ESTADOS_OS = [
+  "POR APROBAR",
+  "EN REVISIÓN",
+  "APROBADO",
+  "EN PROCESO (COMPARATIVA)",
+  "ACEPTADO",
+] as const;
+
+/** Con qué estado nace una OS. */
+export const ESTADO_INICIAL_OS = "POR APROBAR";
+
+/**
+ * Las prioridades de la planilla, de más a menos urgente.
+ *
+ * Verificadas contra ella: no son ALTA/MEDIA/BAJA como en las órdenes de
+ * trabajo, y usar ésas dejaría dos vocabularios para lo mismo.
+ */
+export const PRIORIDADES_OS = ["URGENTE", "1 SEMANA", "NORMAL", "LEVE"] as const;
+
+/**
+ * Lo que la app puede escribir en la planilla: el seguimiento.
+ *
+ * Todo lo demás —el número, la fecha, el área, el sector, el equipo, la
+ * descripción, la prioridad, la empresa— llega por fórmula desde SERVICIOS, y
+ * SERVICIOS a su vez lo importa del formulario. Escribir ahí no cambia el dato:
+ * rompe la fórmula, y con ella toda la pestaña.
+ */
+const SEGUIMIENTO = [
+  "comparativa", "proveedor_elegido", "estado", "cuit", "tiene_orden_compra",
+  "costo", "fecha_pedido", "fecha_realizacion", "observaciones",
+];
+
+/** Si ese dato se puede escribir en la planilla. */
+export function puedeEscribirse(clave: string): boolean {
+  return SEGUIMIENTO.includes(clave);
+}
+
+/**
+ * Si una fila tiene seguimiento cargado pero ninguna OS a la izquierda.
+ *
+ * Pasa porque el `FILTER` corre las filas cuando una OS entra o sale, y el
+ * seguimiento escrito a mano no se corre con ellas: queda un proveedor, un
+ * costo o una fecha colgados de ninguna orden. Detectarlo es lo único que se
+ * puede hacer desde afuera —arreglarlo es a mano, en la planilla—.
+ */
+export function seguimientoHuerfano(fila: unknown[]): boolean {
+  // A..K es lo que trae el FILTER. La L —COMPARATIVA— no cuenta: dice "LINK"
+  // en las mil filas de la pestaña, vengan o no con una OS, así que mirarla
+  // daría por huérfana a la planilla entera. La señal empieza en la M.
+  const delFilter = fila.slice(0, 11).some((c) => texto(c) !== null);
+  const aMano = fila.slice(12).some((c) => texto(c) !== null);
+  return aMano && !delFilter;
 }

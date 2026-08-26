@@ -19,16 +19,13 @@ export default async function OrdenesServicioPage() {
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const puedeEditar = nivel === "edicion" || nivel === "admin";
 
-  const [ordenes, { data: sectores }] = await Promise.all([
-    traerTodo<OrdenServicio>((desde, hasta) =>
-      supabase
-        .from("ordenes_servicio")
-        .select("*, equipos(name, code), sectores(nombre)")
-        .order("os_number", { ascending: false })
-        .range(desde, hasta)
-    ),
-    supabase.from("sectores").select("id, nombre").order("nombre"),
-  ]);
+  const ordenes = await traerTodo<OrdenServicio>((desde, hasta) =>
+    supabase
+      .from("ordenes_servicio")
+      .select("*, equipos(name, code), sectores(nombre)")
+      .order("os_number", { ascending: false })
+      .range(desde, hasta)
+  );
 
   // Cuántas cotizaciones tiene cada OS, para no abrir una comparativa vacía.
   const cotizaciones = await traerTodo<{ os_number: number | null }>((desde, hasta) =>
@@ -44,7 +41,6 @@ export default async function OrdenesServicioPage() {
     <OrdenesServicioClient
       puedeEditar={puedeEditar}
       ordenes={ordenes}
-      sectores={sectores ?? []}
       cotizacionesPorOS={cotizacionesPorOS}
     />
   );

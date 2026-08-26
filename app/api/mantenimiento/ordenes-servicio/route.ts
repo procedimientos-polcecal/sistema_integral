@@ -2,17 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
-import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
-import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
-import {
-  ALIAS_OS, claveDeEncabezado, filaParaPlanilla,
-} from "@/lib/mantenimiento/os";
+import { leerValores, escribirCeldas } from "@/lib/core/sheets";
+import { ALIAS_OS, claveDeEncabezado, puedeEscribirse } from "@/lib/mantenimiento/os";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_OS_ID ?? "";
-
-/** Las OS nuevas se cargan siempre en la hoja maestra. */
-const HOJA_MAESTRA = "SERVICIOS";
 
 /** GET — el listado, con filtros. */
 export async function GET(request: Request) {
@@ -57,16 +50,44 @@ export async function GET(request: Request) {
  * devuelve el problema para que la pantalla lo muestre.
  */
 async function escribirEnPlanilla(
-  pestana: string, fila: number, campos: { clave: string; valor: string }[]
+  orden: { os_number: number | null; sheets_tab: string | null; sheets_row: number | null },
+  campos: { clave: string; valor: string }[]
 ): Promise<string | null> {
   const planilla = PLANILLA();
+  const pestana = orden.sheets_tab;
+  const fila = orden.sheets_row;
   if (!planilla || !pestana || !fila) return null;
+
+  // SERVICIOS es todo fórmula salvo dos columnas, y ninguna de ellas es
+  // seguimiento: no hay nada que escribir ahí.
+  if (pestana === "SERVICIOS") {
+    return "Esta OS todavía no está aprobada, así que no tiene fila de seguimiento en la planilla. " +
+           "Se guardó en el sistema.";
+  }
 
   try {
     const encabezado = (await leerValores(planilla, `${pestana}!1:1`))[0] ?? [];
     const claves = encabezado.map(claveDeEncabezado);
 
+    // Que la fila siga siendo la de esta OS. El FILTER de la pestaña corre las
+    // filas cuando una orden entra o sale, y el seguimiento escrito a mano no
+    // se corre con ellas: escribir a ciegas se lo daría a otra orden.
+    const columnaNumero = claves.findIndex((h) =>
+      ALIAS_OS.os_number.some((a) => claveDeEncabezado(a) === h)
+    );
+    const enLaPlanilla = (await leerValores(
+      planilla, `${pestana}!A${fila}:Z${fila}`, { sinFormato: true }
+    ))[0] ?? [];
+
+    if (Number(enLaPlanilla[columnaNumero >= 0 ? columnaNumero : 0]) !== orden.os_number) {
+      return `La fila ${fila} de "${pestana}" ya no es la de la OS #${orden.os_number}. ` +
+             "Sincronizá las órdenes de servicio y volvé a intentar.";
+    }
+
     const celdas = campos
+      // Sólo el seguimiento. El resto de la fila es fórmula, y escribir ahí no
+      // cambia el dato: rompe la fórmula y con ella toda la pestaña.
+      .filter((c) => puedeEscribirse(c.clave))
       .map((c) => ({
         columna: claves.findIndex((h) =>
           (ALIAS_OS[c.clave] ?? []).some((a) => claveDeEncabezado(a) === h)
@@ -145,115 +166,17 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const planilla_error = await escribirEnPlanilla(
-    data.sheets_tab, data.sheets_row, enPlanilla
-  );
+  const planilla_error = await escribirEnPlanilla(data, enPlanilla);
 
   return NextResponse.json({ data, planilla_error });
 }
 
-/** POST — una OS nueva, que además se agrega a la planilla. */
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    return NextResponse.json(
-      { error: "Crear una orden de servicio requiere nivel de edición en Mantenimiento" },
-      { status: 403 }
-    );
-  }
-
-  const b = await request.json().catch(() => null);
-  const descripcion = String(b?.descripcion ?? "").trim();
-  const area = String(b?.area ?? "").trim();
-  if (!descripcion) return NextResponse.json({ error: "Falta la descripción" }, { status: 400 });
-  if (!area) return NextResponse.json({ error: "Falta el área" }, { status: 400 });
-
-  const admin = createAdminClient();
-
-  // El próximo número. La planilla y la app comparten la numeración, así que
-  // conviene sincronizar antes de crear.
-  const { data: ultima } = await admin
-    .from("ordenes_servicio")
-    .select("os_number")
-    .order("os_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const osNumber = (ultima?.os_number ?? 0) + 1;
-
-  const equipoRaw = String(b.equipo_raw ?? "").trim() || null;
-  const equipoCode = codigoDeEquipo(equipoRaw);
-  const sectorRaw = String(b.sector_raw ?? "").trim() || null;
-
-  const enlaces = await cargarEnlaces(admin);
-  const { equipment_id, sector_id } = resolver(enlaces, {
-    equipo_code: equipoCode,
-    sector_raw: sectorRaw,
-  });
-
-  const hoy = new Date().toISOString().slice(0, 10);
-  const registro = {
-    os_number: osNumber,
-    fecha: hoy,
-    area,
-    sector_raw: sectorRaw,
-    sector_id: b.sector_id || sector_id,
-    equipo_raw: equipoRaw,
-    equipo_code: equipoCode,
-    equipment_id,
-    descripcion,
-    detalle_extra: String(b.detalle_extra ?? "").trim() || null,
-    prioridad: String(b.prioridad ?? "").trim() || null,
-    empresa: String(b.empresa ?? "").trim() || null,
-    proveedor_elegido: String(b.proveedor_elegido ?? "").trim() || null,
-    estado: String(b.estado ?? "").trim() || "PENDIENTE",
-    observaciones: String(b.observaciones ?? "").trim() || null,
-    app_created: true,
-    sheets_tab: HOJA_MAESTRA,
-    created_by: user.id,
-  };
-
-  const { data, error } = await admin
-    .from("ordenes_servicio")
-    .insert(registro)
-    .select()
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-  // Y a la planilla, que es la base de información. Si falla, la OS ya existe
-  // en la app: se avisa y queda para escribirla a mano.
-  let planilla_error: string | null = null;
-  const planilla = PLANILLA();
-  if (planilla) {
-    try {
-      const encabezado = (await leerValores(planilla, `${HOJA_MAESTRA}!1:1`))[0] ?? [];
-      const fila = filaParaPlanilla(encabezado, {
-        os_number: osNumber,
-        fecha: fechaAR(hoy),
-        area: registro.area,
-        sector_raw: registro.sector_raw,
-        equipo_raw: registro.equipo_raw,
-        descripcion: registro.descripcion,
-        detalle_extra: registro.detalle_extra,
-        prioridad: registro.prioridad,
-        empresa: registro.empresa,
-        proveedor_elegido: registro.proveedor_elegido,
-        estado: registro.estado,
-        observaciones: registro.observaciones,
-      });
-      // El número siempre va primero, aunque el encabezado no se reconozca.
-      if (fila.length > 0) fila[0] = osNumber;
-
-      const numeroFila = await agregarFila(planilla, HOJA_MAESTRA, fila);
-      await admin.from("ordenes_servicio").update({ sheets_row: numeroFila }).eq("id", data.id);
-    } catch (e) {
-      planilla_error = e instanceof Error ? e.message : String(e);
-    }
-  } else {
-    planilla_error = "Falta configurar GOOGLE_SHEETS_OS_ID: la OS quedó sólo en la app.";
-  }
-
-  return NextResponse.json({ data, os_number: osNumber, planilla_error });
-}
+/**
+ * No hay POST: las órdenes de servicio **no se crean acá**.
+ *
+ * `SERVICIOS` importa sus columnas del formulario de Google donde se piden, y
+ * las pestañas de área son un `FILTER` sobre ella. Agregar una fila desde la
+ * app quedaría fuera del rango de la fórmula, sin número asignado y sin
+ * aparecer en ninguna pestaña. Una OS se pide en el formulario; acá se le hace
+ * el seguimiento.
+ */

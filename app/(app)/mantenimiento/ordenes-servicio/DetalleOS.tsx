@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fecha, monedaExacta } from "@/lib/compras/constants";
 import { monto } from "@/lib/mantenimiento/planilla";
 import { resumenDeCotizaciones } from "@/lib/mantenimiento/comparativas";
+import { ESTADOS_OS } from "@/lib/mantenimiento/os";
 import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 
 /**
@@ -135,13 +136,19 @@ export default function DetalleOS({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo etiqueta="Estado">
-              <input
+              <select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
                 disabled={!puedeEditar}
-                placeholder="PENDIENTE, PEDIDO, REALIZADO…"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
-              />
+              >
+                <option value="">Sin estado</option>
+                {/* Los de la planilla. Si trae uno que no está en la lista se
+                    suma, para no perderlo al guardar. */}
+                {[...new Set([...ESTADOS_OS, ...(estado ? [estado] : [])])].map((e) => (
+                  <option key={e} value={e}>{e}</option>
+                ))}
+              </select>
             </Campo>
             <Campo etiqueta="Proveedor">
               <input
@@ -196,7 +203,18 @@ export default function DetalleOS({
         {/* Comparativa */}
         <div className="space-y-2">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-bold text-slate-800">Comparativa</h3>
+            <h3 className="text-sm font-bold text-slate-800">
+              Comparativa
+              {/* La planilla guarda el link detrás de la palabra "LINK". */}
+              {orden.comparativa?.startsWith("http") && (
+                <a
+                  href={orden.comparativa}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 text-xs font-normal text-blue-600 hover:underline"
+                >ver la planilla</a>
+              )}
+            </h3>
             {resumen.cantidad > 0 && resumen.seEligioLaMasBarata === false && (
               <span className="text-xs text-amber-700">
                 La elegida está {monedaExacta(resumen.diferencia)} por encima de la más barata.

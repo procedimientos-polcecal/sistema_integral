@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   OS_PESTANAS, ALIAS_OS, pestanaDeArea, mapearEncabezados, filaDeOS,
+  ESTADOS_OS, PRIORIDADES_OS, ESTADO_INICIAL_OS, puedeEscribirse, seguimientoHuerfano,
 } from "./os";
 
 describe("pestanaDeArea", () => {
@@ -115,5 +116,92 @@ describe("filaDeOS", () => {
   it("no inventa fecha cuando la celda está vacía", () => {
     const fila = [142, "", "Mantenimiento"];
     expect(filaDeOS(fila, idx, "MANTENIMIENTO", 5)!.fecha).toBeNull();
+  });
+});
+
+describe("el vocabulario de la planilla", () => {
+  it("tiene los estados que la planilla usa de verdad", () => {
+    // Verificado sobre las 220 OS cargadas.
+    expect(ESTADOS_OS).toEqual([
+      "POR APROBAR", "EN REVISIÓN", "APROBADO",
+      "EN PROCESO (COMPARATIVA)", "ACEPTADO",
+    ]);
+  });
+
+  it("tiene las prioridades que la planilla usa de verdad", () => {
+    // No son ALTA/MEDIA/BAJA como en las OT.
+    expect(PRIORIDADES_OS).toEqual(["URGENTE", "1 SEMANA", "NORMAL", "LEVE"]);
+  });
+
+  it("arranca una OS nueva en el primer estado del circuito", () => {
+    expect(ESTADO_INICIAL_OS).toBe("POR APROBAR");
+  });
+});
+
+describe("puedeEscribirse", () => {
+  it("deja escribir el seguimiento", () => {
+    // Son las columnas a la derecha del FILTER: valores escritos a mano.
+    expect(puedeEscribirse("estado")).toBe(true);
+    expect(puedeEscribirse("proveedor_elegido")).toBe(true);
+    expect(puedeEscribirse("costo")).toBe(true);
+    expect(puedeEscribirse("fecha_realizacion")).toBe(true);
+    expect(puedeEscribirse("observaciones")).toBe(true);
+  });
+
+  it("no deja tocar lo que es fórmula", () => {
+    // En las pestañas de área, A..K son un FILTER sobre SERVICIOS; escribir
+    // ahí rompe la fórmula y con ella toda la pestaña.
+    expect(puedeEscribirse("os_number")).toBe(false);
+    expect(puedeEscribirse("fecha")).toBe(false);
+    expect(puedeEscribirse("area")).toBe(false);
+    expect(puedeEscribirse("descripcion")).toBe(false);
+    expect(puedeEscribirse("empresa")).toBe(false);
+  });
+});
+
+describe("filaDeOS con la planilla de verdad", () => {
+  const idx = mapearEncabezados(["N° OS", "FECHA", "ÁREA", "SECTOR", "EQUIPO"]);
+
+  it("no toma un guión suelto como equipo", () => {
+    // 39 filas de la planilla tienen "-" en EQUIPO.
+    const fila = [91, 46000, "OTRA", "Otros", "-"];
+    expect(filaDeOS(fila, idx, "OTRA", 5)!.equipo_raw).toBeNull();
+  });
+
+  it("lee la fecha aunque venga con hora", () => {
+    // La planilla la carga un formulario: "28/11/2025 10:45:13".
+    expect(filaDeOS([1, "28/11/2025 10:45:13"], idx, "SERVICIOS", 2)!.fecha)
+      .toBe("2025-11-28");
+  });
+
+  it("descarta la fila con #N/A en el número", () => {
+    // Las pestañas sin ninguna OS aprobada muestran el error del FILTER.
+    expect(filaDeOS(["#N/A", "", ""], idx, "DESPACHO", 2)).toBeNull();
+  });
+});
+
+describe("seguimientoHuerfano", () => {
+  const vacias = (n: number) => Array(n).fill("");
+
+  it("detecta una fila con seguimiento pero sin OS", () => {
+    // El FILTER corre las filas y el seguimiento escrito a mano no se corre
+    // con ellas: queda un proveedor colgado de ninguna orden.
+    expect(seguimientoHuerfano([...vacias(11), "LINK", "Metalúrgica Mario", "ACEPTADO"]))
+      .toBe(true);
+  });
+
+  it("no marca una fila del todo vacía", () => {
+    expect(seguimientoHuerfano(vacias(4))).toBe(false);
+  });
+
+  it("no marca la plantilla: 'LINK' está en las mil filas", () => {
+    // La columna COMPARATIVA viene precargada hasta el final de la pestaña.
+    // Contarla daría por huérfana la planilla entera.
+    expect(seguimientoHuerfano([...vacias(11), "LINK"])).toBe(false);
+  });
+
+  it("no marca una fila que sí tiene su OS", () => {
+    expect(seguimientoHuerfano([16, 46000, "Mantenimiento", ...vacias(8), "LINK", "ConMet"]))
+      .toBe(false);
   });
 });

@@ -125,3 +125,25 @@ export async function agregarFila(
   if (!fila) throw new Error(`No se pudo leer la fila escrita: ${rango}`);
   return Number(fila[1]);
 }
+
+/**
+ * Las fórmulas de una pestaña, en vez de sus valores.
+ *
+ * Sirve para rescatar lo que la celda esconde: un `HYPERLINK` muestra "LINK" y
+ * guarda la URL adentro. Leer valores devolvería la palabra.
+ */
+export async function leerFormulas(
+  planillaId: string,
+  pestana: string
+): Promise<string[][]> {
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+    `/values/${encodeURIComponent(pestana)}?valueRenderOption=FORMULA`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+
+  return ((await res.json()).values ?? []) as string[][];
+}

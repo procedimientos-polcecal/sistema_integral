@@ -20,7 +20,6 @@ configuración, no código:
 
 | Falta | Para qué |
 |---|---|
-| `GOOGLE_SHEETS_OS_ID` | La planilla de órdenes de servicio. **No la tenemos**: el repo de origen nunca la configuró, así que su forma no se pudo verificar. |
 | `GOOGLE_SHEETS_COMPARATIVAS_ID` | `1I2m7K2eUelBXjTp3uoRI0CjWd52gkIdSlmC2mjId1io` |
 | `GOOGLE_SHEETS_AVISOS_ID` | `1Iyfy3AzEASPpYU3zNBKr3rg5BkAM_DC1X9E8RJo6ZX4` |
 | `GOOGLE_SHEETS_OT_ID` | `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo` |
@@ -309,12 +308,53 @@ y se vuelve a leer— porque en la planilla se corrigen y se borran filas. Si no
 se pudo leer nada, no se toca nada: una planilla inaccesible borraría el espejo
 entero.
 
-### Lo que falta
+### La planilla de OS, verificada
 
-**El ID de la planilla de OS.** El repo de origen nunca tuvo configurado
-`GOOGLE_SHEETS_OS_ID`, así que no se pudo verificar su forma contra la planilla
-de verdad como se hizo con las demás. El código está completo y responde
-"Falta configurar GOOGLE_SHEETS_OS_ID" hasta que se cargue.
+Se llama `PEDIDO ORDEN DE SERVICIO` y tenía **220 órdenes** al portarla, del
+28/11/2025 al 24/08/2026. Verla de verdad cambió el diseño, porque **casi toda
+la planilla es fórmula**:
+
+- **`SERVICIOS` no se escribe.** Sus columnas A..J son un
+  `QUERY(IMPORTRANGE(...))` sobre la planilla de respuestas de un **formulario
+  de Google**: ahí es donde la gente pide una OS. Sólo K (empresa) y L (estado)
+  están escritas a mano. Su encabezado de la columna A dice literalmente
+  `"je d"`, así que el número se toma por posición.
+- **Cada pestaña de área es un `FILTER`** sobre SERVICIOS, filtrando por área y
+  por estado `APROBADO`. A..K son fórmula; **el seguimiento vive de la L en
+  adelante** —comparativa, proveedor, estado, costo, fechas, observaciones— y
+  ésas sí son valores escritos a mano.
+- Sólo `MANTENIMIENTO` tiene todas las columnas. Las demás no traen `CUIT` ni
+  `FECHA DE PEDIDO`, y `SERVICIOS` no trae ninguna de seguimiento.
+
+**Por eso no se puede crear una OS desde la app.** Una fila agregada quedaría
+fuera del rango de la fórmula, sin número asignado y sin aparecer en ninguna
+pestaña. Se pide por el formulario; en el ERP se le hace el seguimiento. El
+botón "Nueva OS" se sacó y la ruta POST no existe.
+
+**Y por eso el número de fila es inestable.** Cuando una OS entra o sale del
+`FILTER` —basta con que le cambien el estado en SERVICIOS— las filas de abajo se
+corren, pero el seguimiento escrito a mano **no se corre con ellas**. Antes de
+escribir se comprueba que la fila siga siendo la de esa OS; y la sincronización
+avisa si encuentra filas con seguimiento cargado y ninguna orden al lado. Hoy no
+hay ninguna, pero es cuestión de tiempo.
+
+Tres cosas más que sólo aparecieron al leerla:
+
+- **El vocabulario es propio.** Los estados son `POR APROBAR`, `EN REVISIÓN`,
+  `APROBADO`, `EN PROCESO (COMPARATIVA)` y `ACEPTADO`; las prioridades,
+  `URGENTE`, `1 SEMANA`, `NORMAL` y `LEVE`. La pantalla ofrecía `PENDIENTE` y
+  `ALTA/MEDIA/BAJA`, que no existen en ningún lado.
+- **La comparativa es un `HYPERLINK`**: la celda muestra "LINK" y guarda la URL
+  adentro. Guardar lo que se ve habría guardado la palabra. Las 31 de
+  `TALLER VIAL` tienen link de verdad; las 167 de `MANTENIMIENTO` dicen "LINK"
+  sin ningún link detrás.
+- **39 filas tienen `-` en la columna del equipo.** Es cómo se escribe "acá no
+  va nada", igual que en las OT.
+
+De las 437 filas leídas salen **220 órdenes distintas**: las pestañas de área
+repiten las de SERVICIOS. Gana la de área, que es la que trae el seguimiento —a
+costa de su columna `ESTADO`, que significa otra cosa que la de SERVICIOS: allá
+es el estado de aprobación, acá el del servicio—.
 
 ## La ficha técnica de los equipos
 

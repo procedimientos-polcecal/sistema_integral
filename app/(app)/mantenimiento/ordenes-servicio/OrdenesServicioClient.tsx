@@ -5,20 +5,19 @@ import { useRouter } from "next/navigation";
 import { fecha, moneda } from "@/lib/compras/constants";
 import type { OrdenServicio } from "@/lib/mantenimiento/types";
 import DetalleOS from "./DetalleOS";
-import NuevaOSModal from "./NuevaOSModal";
 
 /**
  * Las órdenes de servicio.
  *
- * La planilla manda —acá es un espejo con seguimiento—, así que lo que se hace
- * en la pantalla es buscar una OS, ver su comparativa y anotar cómo viene:
- * cuándo se pidió, quién lo hace, cuándo se terminó.
+ * Las OS **no se crean acá**: se piden por el formulario de Google, que es de
+ * donde la planilla las importa. Lo que se hace en esta pantalla es buscar una,
+ * ver su comparativa y anotar cómo viene: cuándo se pidió, quién lo hace,
+ * cuándo se terminó.
  */
 export default function OrdenesServicioClient({
-  ordenes, sectores, cotizacionesPorOS, puedeEditar,
+  ordenes, cotizacionesPorOS, puedeEditar,
 }: {
   ordenes: OrdenServicio[];
-  sectores: { id: string; nombre: string }[];
   cotizacionesPorOS: Record<number, number>;
   puedeEditar: boolean;
 }) {
@@ -31,7 +30,6 @@ export default function OrdenesServicioClient({
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
   const [abierta, setAbierta] = useState<OrdenServicio | null>(null);
-  const [creando, setCreando] = useState(false);
 
   // Las áreas y los estados salen de los datos: cada pestaña de la planilla
   // escribe los suyos y una lista fija quedaría corta en cuanto agreguen uno.
@@ -74,7 +72,20 @@ export default function OrdenesServicioClient({
       os.ok && `${osBody.guardadas} órdenes`,
       comp.ok && `${compBody.guardadas} cotizaciones de ${compBody.ordenes} órdenes`,
     ].filter(Boolean);
-    if (hechos.length > 0) setAviso(`Se trajeron ${hechos.join(" y ")}.`);
+
+    // Filas de la planilla con proveedor o costo cargados pero sin ninguna OS
+    // a la izquierda: el FILTER las corrió y el seguimiento quedó colgado.
+    const huerfanas: string[] = osBody.huerfanas ?? [];
+    setAviso(
+      [
+        hechos.length > 0 && `Se trajeron ${hechos.join(" y ")}.`,
+        huerfanas.length > 0 &&
+          `Ojo: ${huerfanas.length} fila${huerfanas.length === 1 ? "" : "s"} de la planilla ` +
+          `tiene${huerfanas.length === 1 ? "" : "n"} seguimiento cargado pero ninguna OS al lado ` +
+          `(${huerfanas.slice(0, 5).join(", ")}${huerfanas.length > 5 ? "…" : ""}). ` +
+          "Hay que acomodarlas a mano en la planilla.",
+      ].filter(Boolean).join(" ")
+    );
 
     router.refresh();
   }
@@ -94,21 +105,13 @@ export default function OrdenesServicioClient({
         </div>
 
         {puedeEditar && (
-          <div className="flex gap-2">
-            <button
-              onClick={sincronizar}
-              disabled={sincronizando}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              {sincronizando ? "Trayendo…" : "Traer de la planilla"}
-            </button>
-            <button
-              onClick={() => setCreando(true)}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-            >
-              Nueva OS
-            </button>
-          </div>
+          <button
+            onClick={sincronizar}
+            disabled={sincronizando}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {sincronizando ? "Trayendo…" : "Traer de la planilla"}
+          </button>
         )}
       </div>
 
@@ -225,14 +228,6 @@ export default function OrdenesServicioClient({
         />
       )}
 
-      {creando && (
-        <NuevaOSModal
-          areas={areas}
-          sectores={sectores}
-          onCerrar={() => setCreando(false)}
-          onCreada={() => { setCreando(false); router.refresh(); }}
-        />
-      )}
     </div>
   );
 }
