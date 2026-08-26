@@ -93,16 +93,30 @@ export const NAV: NavItem[] = [
     label: "Mantenimiento",
     href: "/mantenimiento",
     modulo: "mantenimiento",
+    // El mismo orden que la app de Mantenimiento: se entra por el tablero, se
+    // mira una máquina, y de ahí para abajo el trabajo — lo que se avisa, lo
+    // que se hace y lo que se planifica.
     children: [
+      { label: "Dashboard", href: "/mantenimiento", modulo: "mantenimiento" },
       { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
+      { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
+      { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+      { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
+      // Estas dos no están en la app de Mantenimiento, donde el preventivo
+      // vive dentro de Planificación. Acá son pantallas propias y sacarlas del
+      // menú sería esconderlas.
       { label: "Mantenimientos", href: "/mantenimiento/mantenimientos", modulo: "mantenimiento" },
       { label: "Ejecuciones", href: "/mantenimiento/ejecuciones", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
-      { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
-      { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
-      { label: "Planificación diaria", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
-      { label: "Producción semanal", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
+      { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
+      {
+        label: "Configuración",
+        href: "/mantenimiento/configuracion",
+        modulo: "mantenimiento",
+        soloAdmin: true,
+      },
     ],
   },
   {

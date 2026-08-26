@@ -477,6 +477,37 @@ Medido contra las 1.728 OT y los 138 avisos ya cargados: enlazan a un equipo el
 **83%** y el **90%**; y quedan con sector conocido el **93%** y el **97%**. De los
 códigos que las planillas nombran, el libro los tiene **todos**.
 
+## El menú, igual que en la app de Mantenimiento
+
+El mismo orden y los mismos nombres: Dashboard, Equipos, Avisos, Órdenes de
+trabajo, Órdenes de servicio, Planificación, Producción, Historial, Usuarios y
+Configuración.
+
+Dos ítems que la app de origen no tiene quedaron igual: **Mantenimientos** y
+**Ejecuciones**. Allá el preventivo vive dentro de Planificación; acá son
+pantallas propias que ya existían, y sacarlas del menú sería esconderlas.
+
+**Usuarios** apunta a `/administracion/usuarios`, que es donde el SdG los
+administra para todos los módulos —igual que hace RRHH— en vez de tener una
+pantalla propia.
+
+## Configuración de Mantenimiento
+
+Las listas de las que come el módulo, para que registrar una orden de trabajo
+sea elegir y no escribir. Escribir cada vez es cómo terminan "Candia" y "CANDIA"
+siendo dos personas distintas.
+
+- **Operarios**, con sus tres posiciones: la orden tiene tres columnas de
+  operario y cada una tiene su propia lista.
+- **Contratistas**: los proveedores marcados como tales. Sacar uno de acá no lo
+  borra —la ficha es de todo el SdG y Compras le sigue comprando—: sólo le quita
+  la marca.
+- **Tipos de equipo** y **sectores de planta**: de sólo lectura, porque vienen
+  del libro BD Equipos y se cargan importándolo.
+
+Administrar operarios pide ser admin del módulo; los contratistas, nivel de
+edición: sumar a quien vino a hacer un trabajo es parte de registrarlo.
+
 ## Un solo lugar para los proveedores
 
 El delta trajo una tabla `contratistas` propia del módulo, con dos filas y una

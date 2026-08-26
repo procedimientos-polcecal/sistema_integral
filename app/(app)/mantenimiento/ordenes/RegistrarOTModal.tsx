@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * Registrar el trabajo de una orden.
@@ -59,6 +59,22 @@ export default function RegistrarOTModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
+
+  // Las listas de Configuración: se elige de ellas en vez de escribir. Es lo
+  // que evita que "Candia" y "CANDIA" terminen siendo dos personas distintas.
+  const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
+  const [contratistas, setContratistas] = useState<{ id: string; nombre: string }[]>([]);
+
+  const traerListas = useCallback(async () => {
+    const [o, c] = await Promise.all([
+      fetch("/api/mantenimiento/operarios"),
+      fetch("/api/mantenimiento/proveedores"),
+    ]);
+    if (o.ok) setOperarios((await o.json()).data ?? []);
+    if (c.ok) setContratistas((await c.json()).data ?? []);
+  }, []);
+
+  useEffect(() => { traerListas(); }, [traerListas]);
 
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
@@ -176,12 +192,19 @@ export default function RegistrarOTModal({
           </Campo>
 
           <Campo etiqueta="Contratista">
-            <input
+            <select
               value={contratista}
               onChange={(e) => setContratista(e.target.value)}
-              placeholder="—"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
+            >
+              <option value="">Lo hizo personal propio</option>
+              {/* Si la OT ya traía uno que no está en la lista, se suma para
+                  no perderlo al guardar. */}
+              {[...new Set([
+                ...contratistas.map((c) => c.nombre),
+                ...(contratista ? [contratista] : []),
+              ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </Campo>
         </div>
 
@@ -191,15 +214,24 @@ export default function RegistrarOTModal({
               [operario1, setOperario1],
               [operario2, setOperario2],
               [operario3, setOperario3],
-            ].map(([valor, set], i) => (
-              <input
-                key={i}
-                value={valor as string}
-                onChange={(e) => (set as (v: string) => void)(e.target.value)}
-                placeholder={`Operario ${i + 1}`}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            ))}
+            ].map(([valor, set], i) => {
+              // Cada columna de la orden tiene su propia lista de gente.
+              const suyos = operarios.filter((o) => o.slot === i + 1).map((o) => o.nombre);
+              const elegido = valor as string;
+              return (
+                <select
+                  key={i}
+                  value={elegido}
+                  onChange={(e) => (set as (v: string) => void)(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Operario {i + 1}</option>
+                  {[...new Set([...suyos, ...(elegido ? [elegido] : [])])].sort().map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              );
+            })}
           </div>
         </Campo>
 

@@ -6,12 +6,34 @@ import { claveDeProveedor, indiceDeProveedores } from "@/lib/core/proveedores";
 import { traerTodo } from "@/lib/core/paginado";
 
 /**
- * Sumar a la lista de proveedores los que aparecen en las planillas.
+ * Los contratistas del módulo son proveedores del SdG.
  *
- * `proveedores` es una sola lista para todo el SdG, así que los que entran por
- * acá quedan marcados como contratistas: prestan un servicio, no venden
- * materiales. Un mismo proveedor puede ser las dos cosas y nadie le saca la
- * marca de Compras al ponerle ésta.
+ * `proveedores` es una sola lista para todo el sistema y `es_contratista`
+ * distingue a quién presta un servicio de quién vende materiales. Un mismo
+ * proveedor puede ser las dos cosas.
+ */
+
+/** GET — los contratistas: los proveedores que prestan servicios. */
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { data, error } = await supabase
+    .from("proveedores")
+    .select("id, nombre, cuit, activo")
+    .eq("es_contratista", true)
+    .order("nombre");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ data });
+}
+
+/**
+ * POST — sumar a la lista los que aparecen en las planillas.
+ *
+ * Los que entran por acá quedan marcados como contratistas, y a los que ya
+ * están nadie les saca la marca que tengan de Compras.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -71,4 +93,34 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ creados, marcados: aMarcar.length });
+}
+
+/**
+ * DELETE ?id= — saca a un proveedor de la lista de contratistas.
+ *
+ * No lo borra: la ficha es de todo el SdG y Compras puede seguir comprándole.
+ * Lo único que se saca es la marca de que también presta servicios.
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Sacar un contratista requiere nivel de edición en Mantenimiento" },
+      { status: 403 }
+    );
+  }
+
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Falta el proveedor" }, { status: 400 });
+
+  const { error } = await createAdminClient()
+    .from("proveedores")
+    .update({ es_contratista: false })
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }
