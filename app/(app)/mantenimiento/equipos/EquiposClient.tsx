@@ -31,11 +31,10 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   const [filterSector, setFilterSector] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: number; created: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<
+    { updated: number; created: number; errors: string[]; extra?: string } | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fichaInputRef = useRef<HTMLInputElement>(null);
-  const [importandoFicha, setImportandoFicha] = useState(false);
-  const [resultadoFicha, setResultadoFicha] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -109,60 +108,40 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
     try {
       const res = await fetch("/api/mantenimiento/equipos/import", { method: "POST", body: fd });
       const data = await res.json();
+
       if (!res.ok) {
         setImportResult({ updated: 0, created: 0, errors: [data.error ?? "Error al importar"] });
-      } else {
-        setImportResult(data);
-        if (data.created > 0 || data.updated > 0) router.refresh();
+        return;
       }
+
+      // El importador acepta dos formatos y cuenta cosas distintas en cada uno:
+      // del libro salen además sectores, tipos y componentes.
+      setImportResult({
+        created: data.equipos_nuevos ?? 0,
+        updated: data.equipos_actualizados ?? 0,
+        errors: [
+          ...(data.errores ?? []),
+          ...(data.sin_sector?.length > 0
+            ? [`Sin sector en el libro, quedaron afuera: ${data.sin_sector.join(", ")}`]
+            : []),
+          ...(data.sin_tipo?.length > 0
+            ? [`Con un tipo que no está en el catálogo, se cargaron sin él: ${data.sin_tipo.join(", ")}`]
+            : []),
+        ],
+        extra:
+          data.formato === "libro"
+            ? [
+                data.sectores > 0 && `${data.sectores} sectores de planta`,
+                data.tipos > 0 && `${data.tipos} tipos de equipo`,
+                data.componentes > 0 && `${data.componentes} componentes`,
+              ].filter(Boolean).join(", ")
+            : "",
+      });
+      if ((data.equipos_nuevos ?? 0) > 0 || (data.equipos_actualizados ?? 0) > 0) router.refresh();
     } catch {
       setImportResult({ updated: 0, created: 0, errors: ["Error de red al importar"] });
     } finally {
       setImporting(false);
-    }
-  }
-
-  // ─── Ficha técnica: el libro BD Equipos ─────────────────────────
-  // No crea equipos: completa los que ya están, enlazando por código.
-  async function importarFicha(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-
-    setImportandoFicha(true);
-    setResultadoFicha(null);
-
-    const fd = new FormData();
-    fd.append("file", file);
-
-    try {
-      const res = await fetch("/api/mantenimiento/equipos/import-bd", { method: "POST", body: fd });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setResultadoFicha(data.error ?? "No se pudo importar.");
-        return;
-      }
-
-      const partes = [
-        data.sectores > 0 && `${data.sectores} sectores`,
-        data.equipos_nuevos > 0 && `${data.equipos_nuevos} equipos nuevos`,
-        data.equipos_actualizados > 0 && `${data.equipos_actualizados} equipos actualizados`,
-        data.tipos > 0 && `${data.tipos} tipos`,
-        data.componentes > 0 && `${data.componentes} componentes`,
-      ].filter(Boolean);
-
-      setResultadoFicha(
-        `Se importaron ${partes.join(", ")}.` +
-        (data.sin_sector?.length > 0
-          ? ` Estos equipos quedaron afuera porque su sector no está en el libro: ${data.sin_sector.join(", ")}.`
-          : "")
-      );
-      router.refresh();
-    } catch {
-      setResultadoFicha("Error de red al importar.");
-    } finally {
-      setImportandoFicha(false);
     }
   }
 
@@ -198,7 +177,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12" />
                 </svg>
-                {importing ? "Importando..." : "Importar Excel"}
+                {importing ? "Importando..." : "Importar equipos"}
               </button>
               <input
                 ref={fileInputRef}
@@ -207,32 +186,11 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
                 className="hidden"
                 onChange={handleImport}
               />
-
-              <button
-                onClick={() => fichaInputRef.current?.click()}
-                disabled={importandoFicha}
-                title="El libro BD Equipos: sectores, equipos, tipos y componentes"
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                {importandoFicha ? "Importando..." : "Importar BD Equipos"}
-              </button>
-              <input
-                ref={fichaInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={importarFicha}
-              />
             </>
           )}
         </div>
       </div>
 
-      {resultadoFicha && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          {resultadoFicha}
-        </div>
-      )}
 
       {importResult && (
         <div className={`rounded-xl border px-4 py-3 text-sm space-y-1 ${
@@ -244,6 +202,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
             <span className="font-medium">
               {importResult.created > 0 && `${importResult.created} equipo(s) creados. `}
               {importResult.updated > 0 && `${importResult.updated} equipo(s) actualizados. `}
+              {importResult.extra && `Además: ${importResult.extra}. `}
               {importResult.errors.length > 0 && `${importResult.errors.length} error(es).`}
             </span>
             <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>

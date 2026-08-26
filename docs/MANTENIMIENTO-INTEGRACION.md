@@ -26,6 +26,7 @@ configuración, no código:
 | Migración 031 | Ejecuciones que cuelgan de una OT. |
 | Migración 032 | Los contratistas pasan a `proveedores`. |
 | Migración 033 | `sectores.codigo` y `es_de_planta`. |
+| Migración 034 | El código de sector, único de verdad. |
 | Importar el libro | "Importar BD Equipos" en el listado de equipos, y después volver a sincronizar OT y avisos para que enlacen. |
 | Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
 | El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |

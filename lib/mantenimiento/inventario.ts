@@ -33,6 +33,15 @@ export function estadoDelLibro(valor: unknown): string {
   return "OPERATIVO";
 }
 
+/**
+ * Si esa "planta" del libro es en realidad las dos.
+ *
+ * El libro llama `AMBOS` a lo que el SdG llama transversal: un sector que no es
+ * de una empresa sino compartido —los compresores, los equipos móviles—.
+ */
+export const esPlantaCompartida = (planta: unknown): boolean =>
+  normalizar(planta) === "ambos";
+
 export interface PlantaLeida {
   codigo: string;
   nombre: string;
@@ -48,7 +57,7 @@ export function filaDePlanta(fila: FilaDelLibro): PlantaLeida | null {
   return {
     codigo,
     nombre: texto(fila.nombre_planta) ?? codigo,
-    compartida: normalizar(codigo) === "ambos",
+    compartida: esPlantaCompartida(codigo),
   };
 }
 
