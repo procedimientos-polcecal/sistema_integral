@@ -62,7 +62,9 @@ Tiene un modelo de permisos propio y la cuenta de servicio no lo puede sortear:
 
 | Celda | Estado |
 |---|---|
-| Aprobación en el master (col. M) | Protegida — "APROBACIÓN DE GERENCIA" |
+| Aprobación en el master (col. M) | **Se escribe.** Tiene la protección
+  "APROBACIÓN DE GERENCIA", pero la cuenta de servicio pasa: verificado el
+  26/08/2026, RI 1048, 1841 y 1860 |
 | Estado de compra de una fila aprobada | Protegida — 841 protecciones automáticas |
 | Prioridad, empresa, proveedor, costos | Se escriben sin problema |
 
@@ -133,6 +135,14 @@ degrada el cron: hace fallar el deploy entero.
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.
 
+**En la columna de aprobación la planilla escribe el ALIAS, no el nombre.**
+Dice `NICO`, no `Nicolas Lenzetti`. El respaldo que resuelve quién aprobó
+cuando el RI no tiene `aprobado_por` —que son 1810, o sea el histórico entero—
+buscaba sólo por nombre y apellido, así que no acertaba nunca y la
+sincronización informaba que faltaba un alias que estaba cargado. Corregido:
+ahora prueba primero contra el alias. Ojo con la conclusión fácil de que "falta
+un dato": había que mirar qué texto guardó cada origen.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
@@ -141,8 +151,13 @@ Hacen falta los dos activadores.
    va a dejar de crecer solo, que es lo que hoy lo hace poco informativo.
 2. **La comparativa en sí** — hoy es un enlace y una tabla `compras_cotizaciones`
    sin pantalla. Estaba anotado como "lo trabajamos después".
-3. **Sumar la cuenta de servicio a "APROBACIÓN DE GERENCIA"**, si se quiere que
-   la aprobación llegue a la planilla. Sin eso queda pendiente y se avisa.
+3. **La fila 2 del master entró como RI 1.** Es la fila plantilla, con las
+   fórmulas que usa el resto de la planilla —de ahí que su descripción sea "dd"
+   y su código "de"—, pero el importador la levantó como un requerimiento más.
+   Se la aprobó desde la app y quedó encolada una escritura sobre esas
+   fórmulas; el 26/08/2026 se la sacó de pendientes a mano, y va a volver
+   apenas alguien toque ese RI. Lo que corresponde es que el importador y la
+   sincronización la ignoren.
 4. **`Autoelevador HCMG` es un error de tipeo de `XCMG`** (2 RI). Se fusiona
    desde `/compras/ubicaciones`, pero conviene corregirlo también en la planilla
    o la sincronización lo recrea.
