@@ -1,0 +1,50 @@
+# Sincroniza Compras con su planilla cada 15 minutos.
+#
+# El cron vive acá y no en vercel.json porque el plan Hobby de Vercel sólo
+# admite crons diarios: poner una frecuencia mayor no degrada el cron, hace
+# fallar el deploy entero. Desde acá la frecuencia es libre y no puede romper
+# nada del lado de Vercel.
+#
+# El endpoint ya se protege solo: exige el mismo CRON_SECRET que usa el cron de
+# Vercel, y sin él responde 503 en vez de quedar abierto.
+#
+# Nota sobre la puntualidad: los crons de GitHub Actions se atrasan cuando hay
+# cola, a veces varios minutos. Para esto alcanza — el webhook de la planilla
+# ya avisa cuando alguien la edita, y esto es la red que junta lo que se le
+# escape.
+
+name: Sincronizar Compras
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  # Para poder correrlo a mano desde la pestaña Actions cuando haga falta.
+  workflow_dispatch:
+
+concurrency:
+  # Si una corrida se demora, la siguiente espera en vez de pisarla: la
+  # importación lee y escribe la misma planilla.
+  group: compras-sync
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pedir la sincronización
+        run: |
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.APP_URL }}/api/cron/compras-sync")
+
+          echo "HTTP $codigo"
+          cat respuesta.json
+          echo
+
+          # Que el workflow falle cuando la sincronización falla: si no, el
+          # tilde verde diría que todo anda mientras nada se actualiza.
+          if [ "$codigo" != "200" ]; then
+            echo "::error::La sincronización devolvió $codigo"
+            exit 1
+          fi

@@ -151,7 +151,12 @@ Supabase muestra esa URL y copiarla rompe el login con un mensaje que habla de
 la clave. La app ahora la recorta sola y avisa.
 
 **El plan Hobby de Vercel sólo admite crons diarios.** Una frecuencia mayor no
-degrada el cron: hace fallar el deploy entero.
+degrada el cron: hace fallar el deploy entero. Por eso la sincronización cada 15
+minutos vive en un workflow de GitHub Actions
+(`.github/workflows/compras-sync.yml`) que le pega al mismo endpoint con el
+mismo `CRON_SECRET`. El cron de `vercel.json` queda como red de seguridad. Los
+crons de Actions se atrasan cuando hay cola, así que "cada 15 minutos" es
+aproximado.
 
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.

@@ -4,7 +4,12 @@ import { importarDesdeSheets, reintentarPendientes } from "@/lib/compras/sheets"
 export const maxDuration = 300;
 
 /**
- * Trae de la planilla los RI nuevos cada 2 horas, mientras dure la transición.
+ * Trae de la planilla los RI nuevos, mientras dure la transición.
+ *
+ * Lo llaman dos relojes: el cron diario de Vercel que está en vercel.json, y el
+ * workflow de GitHub Actions que corre cada 15 minutos. El de Vercel queda como
+ * red de seguridad por si Actions falla; la frecuencia real la marca el otro,
+ * porque el plan Hobby no admite crons más seguidos que un día.
  *
  * Falla cerrado: sin CRON_SECRET configurado devuelve 503 en vez de quedar
  * abierto a cualquiera que conozca la URL.

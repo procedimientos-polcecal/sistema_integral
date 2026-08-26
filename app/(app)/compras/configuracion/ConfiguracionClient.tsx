@@ -193,11 +193,12 @@ export default function ConfiguracionClient({
                 "Todavía no se ejecutó ninguna sincronización."
               )}
               <br />
-              {/* Decía "cada 2 horas" y no es cierto: el plan Hobby de Vercel
-                  sólo admite crons diarios, así que corre una vez por día. Un
-                  cartel que promete más de lo que pasa es peor que no tenerlo. */}
-              Además corre automáticamente una vez por día, a las 9. La planilla
-              también avisa sola cuando alguien la edita.
+              {/* Decía "cada 2 horas" y no era cierto. Ahora la frecuencia la
+                  marca el workflow de GitHub Actions, porque el plan Hobby de
+                  Vercel sólo admite crons diarios. Un cartel que promete más de
+                  lo que pasa es peor que no tenerlo. */}
+              Además corre sola cada 15 minutos, y la planilla avisa apenas
+              alguien la edita.
             </div>
           </div>
           <button
