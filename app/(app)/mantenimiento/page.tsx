@@ -4,12 +4,8 @@ import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import { lunesDe } from "@/lib/mantenimiento/produccion";
 import { ultimosMeses, sectoresAParar, ventanasDeReparacion } from "@/lib/mantenimiento/dashboard";
 import DashboardClient from "./DashboardClient";
+import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
 
-/** El nombre de la empresa del sector, venga el embed como objeto o como arreglo. */
-function nombreDeEmpresa(embed: unknown): string {
-  const uno = Array.isArray(embed) ? embed[0] : embed;
-  return (uno as { nombre?: string } | null)?.nombre ?? "Sin empresa";
-}
 
 export default async function MantenimientoDashboardPage() {
   const supabase = await createClient();
@@ -28,7 +24,7 @@ export default async function MantenimientoDashboardPage() {
     { data: upcoming },
     { data: overdue },
     { data: empresas },
-    { data: sectores },
+    sectores,
     { data: sectoresStatusLog },
     { data: recentExecutions },
   ] = await Promise.all([
@@ -50,9 +46,12 @@ export default async function MantenimientoDashboardPage() {
       .order("next_date", { ascending: true })
       .limit(10),
     supabase.from("empresas").select("id, nombre, status").order("nombre"),
-    supabase.from("sectores").select("id, nombre, status, empresas(nombre)").order("nombre"),
+    sectoresDePlanta(supabase, "id, nombre, codigo, status, empresas(nombre)"),
+    // Sólo los cambios de sectores de planta: los organizativos los mueve RRHH
+    // y en este tablero no dicen nada.
     supabase.from("sectores_status_log")
-      .select("*, sector:sector_id(nombre, empresas(nombre)), changed_by_user:changed_by(nombre, apellido)")
+      .select("*, sector:sector_id!inner(nombre, es_de_planta, empresas(nombre)), changed_by_user:changed_by(nombre, apellido)")
+      .eq("sector.es_de_planta", true)
       .order("changed_at", { ascending: false })
       .limit(20),
     supabase.from("mantenimientos_ejecuciones")
@@ -142,9 +141,11 @@ export default async function MantenimientoDashboardPage() {
     ]);
 
   const pendientes = otPendientes ?? [];
-  const conEmpresa = (sectores ?? []).map((s) => ({
+  const conEmpresa = sectores.map((s) => ({
     id: s.id as string,
-    empresa: nombreDeEmpresa(s.empresas),
+    // Los transversales —compresores, equipos móviles— sirven a las dos
+    // empresas y forman su propio grupo para la ventana de reparación.
+    empresa: empresaDelSector(s.empresas) ?? "Las dos empresas",
   }));
 
   const ventanas = ventanasDeReparacion(conEmpresa, planes ?? [], pendientes);
@@ -160,7 +161,7 @@ export default async function MantenimientoDashboardPage() {
       upcoming={upcoming ?? []}
       overdue={overdue ?? []}
       empresas={empresas ?? []}
-      sectores={sectores ?? []}
+      sectores={sectores}
       sectoresStatusLog={sectoresStatusLog ?? []}
       recentExecutions={recentExecutions ?? []}
       otStats={otStats}

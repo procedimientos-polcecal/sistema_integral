@@ -252,7 +252,8 @@ export default function ProduccionClient({
         <p className="py-12 text-center text-sm text-slate-400">Trayendo la semana…</p>
       ) : sectores.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
-          No hay sectores cargados.
+          No hay sectores de planta cargados. Vienen del libro BD Equipos: se importa desde
+          Equipos.
         </p>
       ) : (
         <div className="space-y-5">

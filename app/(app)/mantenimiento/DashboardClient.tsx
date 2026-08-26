@@ -345,7 +345,7 @@ export default function DashboardClient({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {visibleSectors.map((sector: any) => {
                 const meta = PLANT_STATUS_META[sector.status ?? "ACTIVA"] ?? PLANT_STATUS_META.ACTIVA;
-                const lastChange = sectoresStatusLog.find((l: any) => l.sector?.nombre === sector.nombre);
+                const lastChange = sectoresStatusLog.find((l: any) => l.sector_id === sector.id);
                 return (
                   <div key={sector.id} className="rounded-xl border p-4 flex items-start justify-between gap-3"
                     style={{ background: meta.bg, borderColor: meta.border }}>

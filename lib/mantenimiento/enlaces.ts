@@ -30,8 +30,11 @@ export async function cargarEnlaces(admin: SupabaseClient): Promise<Enlaces> {
   const equipos = await traerTodo<{ id: string; code: string | null; sector_id: string | null }>(
     (desde, hasta) => admin.from("equipos").select("id, code, sector_id").range(desde, hasta)
   );
+  // Sólo los de planta: un aviso que dice "Mantenimiento" tiene que caer en el
+  // sector donde está la máquina, no en el sector de RRHH que se llama igual.
   const sectores = await traerTodo<{ id: string; nombre: string; codigo: string | null }>(
-    (desde, hasta) => admin.from("sectores").select("id, nombre, codigo").range(desde, hasta)
+    (desde, hasta) =>
+      admin.from("sectores").select("id, nombre, codigo").eq("es_de_planta", true).range(desde, hasta)
   );
   const proveedores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
     admin.from("proveedores").select("id, nombre").range(desde, hasta)

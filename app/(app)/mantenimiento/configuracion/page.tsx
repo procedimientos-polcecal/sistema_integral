@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { esAdminMantenimiento, nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import ConfiguracionClient from "./ConfiguracionClient";
+import { empresaDelSector } from "@/lib/mantenimiento/sectores";
 
 /**
  * Las listas de las que come el módulo.
@@ -51,14 +52,9 @@ export default async function ConfiguracionMantenimientoPage() {
         id: s.id as string,
         codigo: s.codigo as string | null,
         nombre: s.nombre as string,
-        empresa: nombreDeEmpresa(s.empresas),
+        empresa: empresaDelSector(s.empresas),
       }))}
     />
   );
 }
 
-/** El nombre de la empresa del sector, venga el embed como objeto o como arreglo. */
-function nombreDeEmpresa(embed: unknown): string | null {
-  const uno = Array.isArray(embed) ? embed[0] : embed;
-  return (uno as { nombre?: string } | null)?.nombre ?? null;
-}

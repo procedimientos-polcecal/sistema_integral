@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import EquiposClient from "./EquiposClient";
+import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 
 export default async function EquiposPage() {
   const supabase = await createClient();
@@ -11,9 +12,9 @@ export default async function EquiposPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: empresas }, { data: sectores }, { data: equipos }] = await Promise.all([
+  const [{ data: empresas }, sectores, { data: equipos }] = await Promise.all([
     supabase.from("empresas").select("*").order("nombre"),
-    supabase.from("sectores").select("*, empresas(nombre)").order("nombre"),
+    sectoresDePlanta(supabase, "*, empresas(nombre)"),
     supabase
       .from("equipos")
       .select("*, sectores(nombre, empresas(nombre))")
@@ -27,7 +28,7 @@ export default async function EquiposPage() {
   return (
     <EquiposClient
       empresas={empresas ?? []}
-      sectores={sectores ?? []}
+      sectores={sectores}
       equipos={equipos ?? []}
       canEdit={canEdit}
     />

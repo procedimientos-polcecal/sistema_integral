@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import EquipoDetalle from "./EquipoDetalle";
+import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 
 export default async function EquipoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,16 +13,13 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: equipo }, { data: sectores }, { data: historial }] = await Promise.all([
+  const [{ data: equipo }, sectores, { data: historial }] = await Promise.all([
     supabase
       .from("equipos")
       .select("*, sectores(id, nombre, empresas(id, nombre))")
       .eq("id", id)
       .single(),
-    supabase
-      .from("sectores")
-      .select("id, nombre, empresas(id, nombre)")
-      .order("nombre"),
+    sectoresDePlanta(supabase, "id, nombre, codigo, empresas(id, nombre)"),
     supabase
       .from("equipos_status_log")
       .select("*, changed_by_user:changed_by(nombre, apellido)")
@@ -38,7 +36,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   return (
     <EquipoDetalle
       equipo={equipo}
-      sectores={sectores ?? []}
+      sectores={sectores}
       historial={historial ?? []}
       canEdit={canEdit}
     />

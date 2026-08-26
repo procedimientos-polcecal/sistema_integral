@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { nivelMantenimientoDe, usuariosConAccesoMantenimiento } from "@/lib/mantenimiento/auth";
 import PlanDetalle from "./PlanDetalle";
+import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 
 export default async function PlanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,7 +15,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";
 
-  const [{ data: plan }, { data: pendingOTs }, usuarios, { data: sectores }] = await Promise.all([
+  const [{ data: plan }, { data: pendingOTs }, usuarios, sectores] = await Promise.all([
     supabase.from("planificacion_diaria")
       .select("*, created_by_user:created_by(nombre, apellido), planificacion_diaria_items(*, assigned_user:assigned_to(nombre, apellido))")
       .eq("id", id).single(),
@@ -25,7 +26,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       .order("ot_number", { ascending: false })
       .limit(300),
     usuariosConAccesoMantenimiento(supabase),
-    supabase.from("sectores").select("id, nombre, empresas(nombre)").order("nombre"),
+    sectoresDePlanta(supabase),
   ]);
 
   if (!plan) notFound();
@@ -35,7 +36,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       plan={plan}
       pendingOTs={pendingOTs ?? []}
       usuarios={usuarios}
-      sectores={sectores ?? []}
+      sectores={sectores}
       canEdit={canEdit}
     />
   );

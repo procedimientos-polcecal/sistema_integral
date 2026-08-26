@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import ProduccionClient from "./ProduccionClient";
+import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
 
 /**
  * La planificación de producción de la semana.
@@ -10,11 +11,6 @@ import ProduccionClient from "./ProduccionClient";
  * la grilla sirve justamente para cruzar las dos cosas y meter las reparaciones
  * donde el sector ya está parado.
  */
-/** El nombre de la empresa del sector, venga el embed como objeto o como arreglo. */
-function nombreDeEmpresa(embed: unknown): string | null {
-  const uno = Array.isArray(embed) ? embed[0] : embed;
-  return (uno as { nombre?: string } | null)?.nombre ?? null;
-}
 
 export default async function ProduccionPage() {
   const supabase = await createClient();
@@ -24,8 +20,8 @@ export default async function ProduccionPage() {
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const puedeEditar = nivel === "edicion" || nivel === "admin";
 
-  const [{ data: sectores }, { data: ot }, { data: os }] = await Promise.all([
-    supabase.from("sectores").select("id, nombre, empresas(nombre)").order("nombre"),
+  const [sectores, { data: ot }, { data: os }] = await Promise.all([
+    sectoresDePlanta(supabase),
     supabase
       .from("ordenes_trabajo")
       .select("id, ot_number, descripcion, equipo_raw, prioridad, estado, sector_id, requiere_parada_sector")
@@ -42,10 +38,10 @@ export default async function ProduccionPage() {
   // La empresa del sector se aplana acá: PostgREST devuelve el embed como
   // arreglo o como objeto según la relación, y la pantalla sólo quiere el
   // nombre para agrupar.
-  const conEmpresa = (sectores ?? []).map((s) => ({
+  const conEmpresa = (sectores).map((s) => ({
     id: s.id as string,
     nombre: s.nombre as string,
-    empresa: nombreDeEmpresa(s.empresas),
+    empresa: empresaDelSector(s.empresas),
   }));
 
   return (

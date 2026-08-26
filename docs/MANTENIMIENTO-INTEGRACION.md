@@ -457,7 +457,19 @@ nombre. No se partió la tabla en dos porque avisos, OT y OS ya apuntan a
 `sectores.id`, y partirla obligaría a rehacer esos enlaces sin ganar nada.
 
 `AMBOS` no es una empresa: es donde van los equipos que sirven a las dos
-—compresores y equipos móviles—, y esos sectores quedan sin empresa.
+—compresores y equipos móviles—. En el SdG eso ya tenía nombre, `transversal`, y
+la base exige una cosa o la otra: o el sector tiene empresa, o está marcado
+transversal.
+
+**Distinguirlos no alcanza si después las pantallas no filtran.** El tablero
+mostraba "Tesorería" al lado de "Trituración 1" porque seis pantallas traían
+todos los sectores. El filtro vive ahora en `lib/mantenimiento/sectores.ts` y no
+repetido en cada una: se pone en cinco lugares, falta en el sexto, y vuelve la
+mezcla.
+
+También filtra el **enlace por nombre** de la sincronización. Sin eso, un aviso
+que dice "Mantenimiento" caía en el sector de RRHH que se llama igual — y era
+exactamente lo que estaba pasando con las 27 órdenes que tenían sector.
 
 ## Reconocer un equipo en un texto libre
 
