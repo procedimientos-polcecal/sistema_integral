@@ -142,3 +142,19 @@ describe("buscarCodigo", () => {
     expect(buscarCodigo("Bomba de agua", conocidos)).toBeNull();
   });
 });
+
+describe("buscarCodigo con códigos de sector", () => {
+  const sectores = ["PO-A1", "PO-C1", "AMB-EM"];
+
+  it("reconoce el sector cuando el trabajo no es sobre una máquina", () => {
+    // 296 OT dicen cosas como "PO-C1 - Edificio": no hay equipo, pero sí se
+    // sabe en qué sector se trabajó.
+    expect(buscarCodigo("PO-C1 - Edificio", sectores)).toBe("PO-C1");
+  });
+
+  it("no confunde el sector con un equipo de ese sector", () => {
+    // "PO-A1" está dentro de "PO-A1-01", pero son cosas distintas y el equipo
+    // ya se resolvió antes.
+    expect(buscarCodigo("PO-A1-01 Acarreador", sectores)).toBeNull();
+  });
+});

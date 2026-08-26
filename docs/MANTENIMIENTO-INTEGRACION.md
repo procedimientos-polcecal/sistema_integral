@@ -469,6 +469,14 @@ Ningún patrón razonable distingue "EM2" de cualquier otra sigla suelta, así q
 se busca **contra los códigos que existen de verdad**. Gana el más largo: "EM1"
 está dentro de "EM16", y tomar el corto mandaría el trabajo a otra máquina.
 
+Y cuando no hay equipo, se busca el **código del sector**: casi 300 órdenes dicen
+cosas como "PO-C1 - Edificio" o "Vestuario" —trabajos que no son sobre ninguna
+máquina, pero que igual pasaron en algún lado—.
+
+Medido contra las 1.728 OT y los 138 avisos ya cargados: enlazan a un equipo el
+**83%** y el **90%**; y quedan con sector conocido el **93%** y el **97%**. De los
+códigos que las planillas nombran, el libro los tiene **todos**.
+
 ## Un solo lugar para los proveedores
 
 El delta trajo una tabla `contratistas` propia del módulo, con dos filas y una

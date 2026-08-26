@@ -20,6 +20,9 @@ export interface Enlaces {
   porProveedor: Map<string, string>;
   /** Los códigos de equipo que existen, para reconocerlos en un texto libre. */
   codigos: string[];
+  /** Sector por código de planta —PO-A1—, y los códigos para reconocerlos. */
+  porCodigoDeSector: Map<string, string>;
+  codigosDeSector: string[];
 }
 
 /** Los equipos y sectores cargados, listos para buscar. */
@@ -27,8 +30,8 @@ export async function cargarEnlaces(admin: SupabaseClient): Promise<Enlaces> {
   const equipos = await traerTodo<{ id: string; code: string | null; sector_id: string | null }>(
     (desde, hasta) => admin.from("equipos").select("id, code, sector_id").range(desde, hasta)
   );
-  const sectores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
-    admin.from("sectores").select("id, nombre").range(desde, hasta)
+  const sectores = await traerTodo<{ id: string; nombre: string; codigo: string | null }>(
+    (desde, hasta) => admin.from("sectores").select("id, nombre, codigo").range(desde, hasta)
   );
   const proveedores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
     admin.from("proveedores").select("id, nombre").range(desde, hasta)
@@ -41,6 +44,10 @@ export async function cargarEnlaces(admin: SupabaseClient): Promise<Enlaces> {
     porSector: new Map(sectores.map((s) => [s.nombre.toLowerCase().trim(), s.id])),
     porProveedor: indiceDeProveedores(proveedores),
     codigos: equipos.map((e) => e.code).filter((c): c is string => Boolean(c)),
+    porCodigoDeSector: new Map(
+      sectores.filter((s) => s.codigo).map((s) => [s.codigo!.toUpperCase(), s.id])
+    ),
+    codigosDeSector: sectores.map((s) => s.codigo).filter((c): c is string => Boolean(c)),
   };
 }
 
@@ -81,10 +88,19 @@ export function resolver(
     if (code) equipo = enlaces.porCodigo.get(code.toUpperCase());
   }
 
+  // Sin equipo todavía puede saberse el sector: casi 300 órdenes dicen cosas
+  // como "PO-C1 - Edificio" —un trabajo que no es sobre ninguna máquina, pero
+  // que igual pasó en algún lado—.
+  const porTexto = equipo
+    ? null
+    : buscarCodigo(fila.equipo_raw, enlaces.codigosDeSector)
+      ?? buscarCodigo(fila.sector_raw, enlaces.codigosDeSector);
+
   return {
     equipment_id: equipo?.id ?? null,
     sector_id:
       equipo?.sector_id ??
+      (porTexto ? enlaces.porCodigoDeSector.get(porTexto.toUpperCase()) ?? null : null) ??
       enlaces.porSector.get((fila.sector_raw ?? "").toLowerCase().trim()) ??
       null,
   };
