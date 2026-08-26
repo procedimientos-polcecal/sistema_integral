@@ -14,6 +14,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
 import { norm } from "@/lib/compras/texto";
+import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda } from "@/lib/compras/vincular";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
@@ -281,6 +282,10 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         const fila = filas[f];
         const nro = Number(String(val(fila, "nro_ri") ?? "").replace(/[^0-9]/g, ""));
         if (!nro || isNaN(nro)) continue;
+        // La fila plantilla tiene número de RI pero no es un requerimiento: son
+        // las fórmulas que la planilla arrastra al resto. Ni se lee ni se
+        // cuenta, así que tampoco se la puede crear de nuevo.
+        if (esFilaPlantilla(nro)) continue;
         leidas++;
 
         const esMaster = pestana === HOJA_MASTER;
@@ -855,6 +860,19 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
     .single();
 
   if (!r) return vacio;
+
+  // Sobre la fila plantilla no se escribe nunca: escribirle la aprobación
+  // pisaría las fórmulas que usa el resto de la planilla. Se limpia lo que
+  // hubiera quedado encolado, porque si no el reintento la elige para siempre.
+  if (esFilaPlantilla(r.nro_ri as number)) {
+    if (r.sheets_pendiente) {
+      await admin
+        .from("compras_requerimientos")
+        .update({ sheets_pendiente: null, sheets_intentado_en: null })
+        .eq("id", requerimientoId);
+    }
+    return vacio;
+  }
 
   const token = await obtenerToken(true);
   const escritas: string[] = [];

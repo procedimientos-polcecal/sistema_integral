@@ -97,6 +97,26 @@ export function ordenarRequerimientos<T extends Ordenable>(
 }
 
 /**
+ * El N° de RI que no es un requerimiento.
+ *
+ * La fila 2 del master —la primera debajo del encabezado— es la plantilla de
+ * la planilla: está ahí para que Sheets arrastre sus fórmulas al resto, y su
+ * contenido es de prueba ("dd", código "de"). El importador la levantó como
+ * una fila más porque tiene número de RI, y después alguien la aprobó desde la
+ * app, con lo que quedó encolada una escritura sobre esas fórmulas.
+ *
+ * Se la reconoce por el número y no por la posición: si mañana mueven filas,
+ * el número la sigue. El riesgo asumido es el inverso —un RI 1 de verdad
+ * quedaría invisible—, y no existe: la serie real arranca en el 2.
+ */
+export const RI_PLANTILLA = 1;
+
+/** Si esta fila de la planilla hay que dejarla en paz. */
+export function esFilaPlantilla(nroRi: number): boolean {
+  return nroRi === RI_PLANTILLA;
+}
+
+/**
  * Las etapas de la compra, en el orden en que avanza el trabajo.
  *
  * Fueron las columnas del kanban y hoy son los indicadores del tablero. El

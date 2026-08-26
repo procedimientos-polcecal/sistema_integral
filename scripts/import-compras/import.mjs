@@ -151,9 +151,16 @@ const proveedorDe = (f) => texto(f["PROVEEDOR ELEGIDO"] ?? f["PROVEEDOR"]);
 
 const porRi = new Map();
 
+// El N° de RI que no es un requerimiento: la fila 2 del master es la plantilla
+// con las fórmulas que la planilla arrastra al resto. Tiene número, así que
+// entraba como una fila más. Se repite acá y no se importa de lib/compras
+// porque este script es JS suelto y corre por su cuenta.
+const RI_PLANTILLA = 1;
+
 // 1) Master: alta + aprobación
 for (const f of leerHoja(HOJA_MASTER)) {
   const nro = Math.round(numero(f["N° RI"]));
+  if (nro === RI_PLANTILLA) continue;
   const apro = estadoAprobacion(f["Estado"]);
   porRi.set(nro, {
     nro_ri: nro,
@@ -190,6 +197,7 @@ for (const hoja of wb.SheetNames.filter((n) => n.startsWith("RI "))) {
   for (let i = 0; i < filas.length; i++) {
     const f = filas[i];
     const nro = Math.round(numero(f["N° RI"]));
+    if (nro === RI_PLANTILLA) continue;
     const compra = estadoCompra(f["Estado"]);
     const previo = porRi.get(nro);
 

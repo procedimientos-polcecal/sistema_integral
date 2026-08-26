@@ -53,6 +53,16 @@ disfrazada de dato. Las define gerencia al aprobar, y sin definirlas no se puede
 aprobar. Para que "Ambas" siga siendo expresable, quién paga tiene tres estados:
 `empresa_id`, o `paga_ambas`, o ninguno de los dos.
 
+**El RI 1 no existe: era la fila plantilla.** La fila 2 del master está ahí
+para que Sheets arrastre sus fórmulas al resto, y su contenido es de prueba
+—descripción "dd", código "de"—. Tenía número de RI, así que el importador la
+levantó como una fila más, y aprobarla desde la app encoló una escritura sobre
+esas fórmulas. Desde el 26/08/2026 se la ignora en los dos sentidos y el
+registro se borró de la base. Se la reconoce por el número (`RI_PLANTILLA`) y
+no por la posición, para que sobreviva a que muevan filas; el riesgo inverso
+—que un RI 1 legítimo quede invisible— no existe, porque la serie real arranca
+en el 2.
+
 **Las hojas `RI <ÁREA>` no son entidades.** Las 1764 filas cruzan todas contra
 el master: son vistas filtradas. Acá son un filtro.
 
@@ -151,20 +161,13 @@ un dato": había que mirar qué texto guardó cada origen.
    va a dejar de crecer solo, que es lo que hoy lo hace poco informativo.
 2. **La comparativa en sí** — hoy es un enlace y una tabla `compras_cotizaciones`
    sin pantalla. Estaba anotado como "lo trabajamos después".
-3. **La fila 2 del master entró como RI 1.** Es la fila plantilla, con las
-   fórmulas que usa el resto de la planilla —de ahí que su descripción sea "dd"
-   y su código "de"—, pero el importador la levantó como un requerimiento más.
-   Se la aprobó desde la app y quedó encolada una escritura sobre esas
-   fórmulas; el 26/08/2026 se la sacó de pendientes a mano, y va a volver
-   apenas alguien toque ese RI. Lo que corresponde es que el importador y la
-   sincronización la ignoren.
-4. **`Autoelevador HCMG` es un error de tipeo de `XCMG`** (2 RI). Se fusiona
+3. **`Autoelevador HCMG` es un error de tipeo de `XCMG`** (2 RI). Se fusiona
    desde `/compras/ubicaciones`, pero conviene corregirlo también en la planilla
    o la sincronización lo recrea.
-5. **54 rutas de RRHH y Remises no validan sesión por su cuenta** y dependen del
+4. **54 rutas de RRHH y Remises no validan sesión por su cuenta** y dependen del
    middleware. Hoy ninguna usa el cliente admin, así que RLS las cubre, pero
    conviene revisarlo con calma.
-6. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
+5. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
    era quién cargaba la prioridad sino el criterio, y eso se conversa.
 
 ## Dónde está cada cosa
