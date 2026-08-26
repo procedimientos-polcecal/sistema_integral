@@ -3,14 +3,16 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fecha } from "@/lib/compras/constants";
+import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
 import type { Aviso } from "@/lib/mantenimiento/types";
+import NuevoAvisoModal from "./NuevoAvisoModal";
 
 /**
  * Los avisos: lo que alguien reportó que necesita mantenimiento.
  *
- * La planilla manda — acá es un espejo — así que la pantalla es de consulta y
- * un botón para volver a traerla. Lo que se hace con un aviso es generarle una
- * orden de trabajo, que viene después.
+ * Es el primer eslabón del módulo. De acá salen las órdenes de trabajo, y por
+ * eso lo que importa de la pantalla son los avisos que todavía no tienen una:
+ * cada uno es algo que alguien vio y nadie tomó.
  */
 export default function AvisosClient({
   avisos, puedeEditar,
@@ -25,6 +27,8 @@ export default function AvisosClient({
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<string | null>(null);
+  const [creando, setCreando] = useState(false);
+  const [generando, setGenerando] = useState<string | null>(null);
 
   /** Un aviso tiene OT si la app la generó o si la planilla dice que sí. */
   const tieneOt = (a: Aviso) => Boolean(a.work_order_id) || Boolean(a.ot_asignada);
@@ -69,6 +73,50 @@ export default function AvisosClient({
     router.refresh();
   }
 
+  /**
+   * De un aviso sale una orden de trabajo.
+   *
+   * La OT nace correctiva —alguien reportó una falla, no es un preventivo
+   * programado— y con la prioridad que le corresponde a la urgencia del aviso.
+   * El aviso queda apuntando a ella para que nadie genere una segunda.
+   */
+  async function generarOT(aviso: Aviso) {
+    setGenerando(aviso.id);
+    setError("");
+    setResultado(null);
+
+    const res = await fetch("/api/mantenimiento/ordenes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        aviso_id: aviso.id,
+        equipment_id: aviso.equipment_id,
+        sector_id: aviso.sector_id,
+        sector_raw: aviso.sector_raw,
+        equipo_raw: aviso.equipo_raw,
+        equipo_code: aviso.equipo_code,
+        descripcion: aviso.descripcion ?? `Aviso ${aviso.oa_number}`,
+        repuesto: aviso.repuesto,
+        tipo: "CORRECTIVO",
+        estado: "POR_HACER",
+        prioridad: prioridadDeUrgencia(aviso.urgencia),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setGenerando(null);
+
+    if (!res.ok) { setError(body.error ?? "No se pudo generar la OT."); return; }
+
+    setResultado(
+      [
+        `Se generó la OT #${body.ot_number} y el aviso ${aviso.oa_number} quedó marcado.`,
+        body.planilla_error && `Ojo: no se pudo escribir en la planilla de OT (${body.planilla_error}).`,
+        body.aviso_error && `Ojo: no se pudo marcar el aviso en su planilla (${body.aviso_error}).`,
+      ].filter(Boolean).join(" ")
+    );
+    router.refresh();
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -84,13 +132,21 @@ export default function AvisosClient({
         </div>
 
         {puedeEditar && (
-          <button
-            onClick={sincronizar}
-            disabled={sincronizando}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {sincronizando ? "Trayendo…" : "Traer de la planilla"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={sincronizar}
+              disabled={sincronizando}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {sincronizando ? "Trayendo…" : "Traer de la planilla"}
+            </button>
+            <button
+              onClick={() => setCreando(true)}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Nuevo aviso
+            </button>
+          </div>
         )}
       </div>
 
@@ -164,7 +220,17 @@ export default function AvisosClient({
                   <td className="px-3 py-2 text-slate-600">{a.quien_aviso ?? "—"}</td>
                   <td className="px-3 py-2">
                     {tieneOt(a) ? (
-                      <span className="text-xs text-slate-500">{a.ot_asignada ?? "sí"}</span>
+                      <span className="text-xs text-slate-500">
+                        {a.ot_asignada ? `OT #${a.ot_asignada}` : "sí"}
+                      </span>
+                    ) : puedeEditar ? (
+                      <button
+                        onClick={() => generarOT(a)}
+                        disabled={generando !== null}
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        {generando === a.id ? "Generando…" : "Generar OT"}
+                      </button>
                     ) : (
                       <span className="text-xs text-amber-700">pendiente</span>
                     )}
@@ -174,6 +240,17 @@ export default function AvisosClient({
             </tbody>
           </table>
         </div>
+      )}
+
+      {creando && (
+        <NuevoAvisoModal
+          onCerrar={() => setCreando(false)}
+          onCreado={(oa) => {
+            setCreando(false);
+            setResultado(`Se cargó el aviso ${oa}.`);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

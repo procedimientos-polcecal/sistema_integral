@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { leerValores, escribirCeldas } from "@/lib/core/sheets";
-import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/ordenes";
+import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
+import {
+  celdasParaRegistrar, filaParaLaPlanillaDeOT, type RegistroDeOT,
+} from "@/lib/mantenimiento/ordenes";
+import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
     especialidad, tipo, quien, descripcion, repuesto,
     fecha, fecha_ejecucion, fecha_cierre,
     estado, contratista, horas, operario_1, operario_2, operario_3, prioridad,
-    schedule_id,
+    schedule_id, aviso_id,
   } = body;
 
   if (!descripcion?.trim()) {
@@ -66,9 +69,7 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  const { data: last } = await admin
-    .from("ordenes_trabajo").select("ot_number").order("ot_number", { ascending: false }).limit(1).single();
-  const ot_number = (last?.ot_number ?? 0) + 1;
+  const ot_number = await proximoNumeroDeOT(admin);
 
   const record = {
     ot_number,
@@ -104,7 +105,109 @@ export async function POST(request: Request) {
     .from("ordenes_trabajo").insert(record).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ data: inserted, ot_number });
+  // A la planilla, que es la base. Best-effort: la OT ya existe en el sistema y
+  // que Google esté caído no puede tirarla abajo, pero hay que decirlo.
+  let planilla_error: string | null = null;
+  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
+
+  if (planilla) {
+    try {
+      const fila = await agregarFila(planilla, pestana, filaParaLaPlanillaDeOT(inserted));
+      await admin.from("ordenes_trabajo").update({ sheets_row: fila }).eq("id", inserted.id);
+    } catch (e) {
+      planilla_error = e instanceof Error ? e.message : String(e);
+    }
+  } else {
+    planilla_error = "Falta configurar GOOGLE_SHEETS_OT_ID: la OT quedó sólo en la app.";
+  }
+
+  // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
+  // alguien genere dos órdenes para el mismo problema.
+  let aviso_error: string | null = null;
+  if (aviso_id) {
+    aviso_error = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
+  }
+
+  return NextResponse.json({ data: inserted, ot_number, planilla_error, aviso_error });
+}
+
+/**
+ * El próximo número de OT, leído de la planilla.
+ *
+ * De la planilla y no de la base porque la planilla es la fuente: alguien pudo
+ * cargar una orden ahí desde la última sincronización, y tomar el máximo de la
+ * base daría un número que ya existe. No es teórico —al escribir esto la
+ * planilla iba cuatro órdenes adelante—, y dos OT con el mismo número dejan la
+ * escritura de vuelta apuntando a la fila equivocada.
+ *
+ * Si la planilla no se puede leer, vale el máximo de la base: es peor no poder
+ * crear la orden que arriesgar un número repetido, y el aviso lo dice.
+ */
+async function proximoNumeroDeOT(admin: ReturnType<typeof createAdminClient>): Promise<number> {
+  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
+
+  let mayor = 0;
+
+  if (planilla) {
+    try {
+      const filas = await leerValores(planilla, `${pestana}!A:A`, { sinFormato: true });
+      for (const fila of filas.slice(1)) {
+        const n = Number(fila[0]);
+        if (!isNaN(n)) mayor = Math.max(mayor, n);
+      }
+    } catch {
+      // Se cae al máximo de la base, abajo.
+    }
+  }
+
+  const { data: ultima } = await admin
+    .from("ordenes_trabajo")
+    .select("ot_number")
+    .order("ot_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return Math.max(mayor, ultima?.ot_number ?? 0) + 1;
+}
+
+/**
+ * Deja el aviso apuntando a la OT que se generó, de los dos lados.
+ *
+ * En la planilla de avisos se escribe el número en la columna "OT ASIGNADA",
+ * que es donde lo busca quien no entra al sistema.
+ */
+async function marcarElAviso(
+  admin: ReturnType<typeof createAdminClient>,
+  avisoId: string,
+  otId: string,
+  otNumber: number
+): Promise<string | null> {
+  const { data: aviso, error } = await admin
+    .from("avisos")
+    .update({ work_order_id: otId, ot_asignada: String(otNumber) })
+    .eq("id", avisoId)
+    .select("sheets_row")
+    .single();
+
+  if (error) return error.message;
+
+  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
+  if (!planilla || !aviso?.sheets_row) return null;
+
+  try {
+    await escribirCeldas(planilla, [{
+      pestana,
+      fila: aviso.sheets_row,
+      columna: COLUMNA_OT_ASIGNADA,
+      valor: String(otNumber),
+    }]);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 // ── PATCH: actualizar estado de una OT desde la app ─────────────────────────

@@ -85,3 +85,68 @@ export function prioridadDeUrgencia(urgencia: string | null | undefined): string
   if (/baja/i.test(s)) return "BAJA";
   return "MEDIA";
 }
+
+/**
+ * Las urgencias de la planilla, con su emoji.
+ *
+ * Se escriben igual que ahí —"🟠 Alta", no "ALTA"— o quedarían dos vocabularios
+ * para lo mismo y la próxima lectura no los reconocería igual.
+ */
+export const URGENCIAS = ["🟠 Alta", "🟡 Media", "🟢 Baja"] as const;
+
+/** La columna donde la planilla anota qué OT se generó. */
+export const COLUMNA_OT_ASIGNADA = COL.otAsignada;
+
+/**
+ * El próximo número de aviso.
+ *
+ * Van como `A1`, `A2`… y se compara el número, no el texto: alfabéticamente
+ * "A9" es mayor que "A10" y el próximo aviso pisaría uno existente.
+ */
+export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]): string {
+  const mayor = existentes.reduce((max, n) => {
+    const m = String(n ?? "").trim().match(/^A(\d+)$/i);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+
+  return `A${mayor + 1}`;
+}
+
+/** Una fecha ISO como la escribe la planilla. */
+const fechaAR = (iso: string | null | undefined): string => {
+  if (!iso) return "";
+  const [a, m, d] = String(iso).slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
+};
+
+/**
+ * Un aviso nuevo, como las celdas de la planilla.
+ *
+ * Las columnas H e I quedan vacías a propósito: son restos de una fórmula que
+ * parte en dos el nombre de quien avisó, y escribir ahí pisaría lo que la
+ * planilla calcula sola.
+ */
+export function filaParaLaPlanilla(aviso: {
+  oa_number: string;
+  fecha?: string | null;
+  sector_raw?: string | null;
+  equipo_raw?: string | null;
+  descripcion?: string | null;
+  urgencia?: string | null;
+  quien_aviso?: string | null;
+  observaciones?: string | null;
+}): string[] {
+  // Hasta la L —las observaciones—, que es la última que se lee.
+  const fila = new Array(COL.observaciones + 1).fill("");
+
+  fila[COL.oa] = aviso.oa_number;
+  fila[COL.fecha] = fechaAR(aviso.fecha);
+  fila[COL.sector] = aviso.sector_raw ?? "";
+  fila[COL.equipo] = aviso.equipo_raw ?? "";
+  fila[COL.descripcion] = aviso.descripcion ?? "";
+  fila[COL.urgencia] = aviso.urgencia ?? "";
+  fila[COL.quien] = aviso.quien_aviso ?? "";
+  fila[COL.observaciones] = aviso.observaciones ?? "";
+
+  return fila;
+}

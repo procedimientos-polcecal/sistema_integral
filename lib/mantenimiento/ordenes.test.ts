@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estadoDeTexto, filaDeOrden, celdasParaRegistrar } from "./ordenes";
+import {
+  estadoDeTexto, filaDeOrden, celdasParaRegistrar, filaParaLaPlanillaDeOT,
+} from "./ordenes";
 
 /**
  * Los cuatro estados que usa la planilla, verificados contra ella:
@@ -131,5 +133,46 @@ describe("celdasParaRegistrar", () => {
     expect(celdasParaRegistrar({ contratista: null })).toEqual([
       { letra: "N", columna: 13, valor: "" },
     ]);
+  });
+});
+
+describe("filaParaLaPlanillaDeOT", () => {
+  const ot = {
+    ot_number: 2350,
+    fecha: "2026-08-26",
+    sector_raw: "Calcinación",
+    equipo_raw: "PO-B1-27 – Cadena de arrastre 6",
+    especialidad: "MECÁNICO",
+    tipo: "CORRECTIVO",
+    quien: "Propio",
+    descripcion: "No arranca",
+    repuesto: "Rodamiento 6206",
+    estado: "POR_HACER",
+    prioridad: "ALTA",
+  };
+
+  it("pone cada dato en su columna", () => {
+    const f = filaParaLaPlanillaDeOT(ot);
+    expect(f[0]).toBe(2350);
+    expect(f[1]).toBe("26/08/2026");
+    expect(f[2]).toBe("Calcinación");
+    expect(f[3]).toBe("PO-B1-27 – Cadena de arrastre 6");
+    expect(f[4]).toBe("MECÁNICO");
+    expect(f[7]).toBe("No arranca");
+    expect(f[8]).toBe("Rodamiento 6206");
+    expect(f[18]).toBe("ALTA");
+  });
+
+  it("escribe el estado como lo escribe la planilla", () => {
+    expect(filaParaLaPlanillaDeOT(ot)[12]).toBe("Por hacer");
+  });
+
+  it("deja vacía la columna L, que es una fórmula", () => {
+    // "Column 19" calcula atrasado/al día sola.
+    expect(filaParaLaPlanillaDeOT(ot)[11]).toBe("");
+  });
+
+  it("llega hasta las observaciones", () => {
+    expect(filaParaLaPlanillaDeOT(ot)).toHaveLength(23);
   });
 });

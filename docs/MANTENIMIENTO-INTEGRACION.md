@@ -618,8 +618,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 
 | Falta | Qué es | Cuánto pesa |
 |---|---|---|
-| **Crear un aviso** | Cargar un aviso desde la app y escribirlo en la planilla. Hoy sólo se traen. | Alto |
-| **Generar una OT desde un aviso** | Con un botón: crea la OT, la agrega a la planilla y marca el aviso. | Alto |
 | **Repuestos de una OT** | Qué repuestos hace falta conseguir. La tabla existe y está vacía. | Medio |
 | **Consultar el inventario** | Ver en vivo, contra la planilla de inventario, si hay stock de un repuesto. | Medio |
 | **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
@@ -628,6 +626,33 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 | **Webhooks de las planillas** | Que un cambio en el Sheets llegue solo, sin esperar al cron. | Bajo |
 | **Alertas de OT atrasadas** | Un cron que avisa lo que se venció. | Medio |
 | **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
+
+## De un aviso sale una orden
+
+El aviso es el primer eslabón: alguien vio que algo anda mal. Hasta ahora sólo
+se podían traer de la planilla; ahora se cargan desde la app y de cada uno se
+genera su orden de trabajo con un botón.
+
+Las dos cosas escriben **primero en la planilla** —es la base y de ahí lee quien
+no entra al sistema— y después acá.
+
+**Los números salen de la planilla, no de la base.** Alguien pudo cargar un
+aviso o una orden ahí desde la última sincronización, y tomar el máximo de la
+base daría un número que ya existe. No es teórico: al escribir esto la planilla
+de OT iba **cuatro órdenes adelante** de la base. Dos OT con el mismo número
+dejan la escritura de vuelta apuntando a la fila equivocada.
+
+La OT que nace de un aviso es **correctiva** —alguien reportó una falla, no es
+un preventivo programado— y hereda la prioridad de la urgencia del aviso. El
+aviso queda apuntando a ella de los dos lados: en el sistema con
+`work_order_id`, y en la planilla con el número en la columna "OT ASIGNADA", que
+es donde lo busca quien no usa la app. Eso es lo que evita que alguien genere
+una segunda orden para el mismo problema.
+
+Al cargar un aviso, elegir la máquina de la lista completa el sector solo: la
+máquina sabe dónde está. Y las urgencias se escriben **con su emoji** —"🟠 Alta",
+no "ALTA"— porque así están en la planilla, y dos vocabularios para lo mismo es
+cómo la próxima lectura deja de reconocerlas.
 
 ## Los datos: qué está y qué no
 

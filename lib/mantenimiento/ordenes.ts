@@ -215,3 +215,60 @@ function fechaParaLaPlanilla(iso: string | null | undefined): string {
   const [a, m, d] = String(iso).slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
 }
+
+/**
+ * Una orden nueva, como las celdas de la planilla.
+ *
+ * La columna L se deja vacía: es la fórmula que calcula atrasado/al día, y la
+ * planilla la completa sola al agregarse la fila.
+ */
+export function filaParaLaPlanillaDeOT(orden: {
+  ot_number: number;
+  fecha?: string | null;
+  sector_raw?: string | null;
+  equipo_raw?: string | null;
+  especialidad?: string | null;
+  tipo?: string | null;
+  quien?: string | null;
+  descripcion?: string | null;
+  repuesto?: string | null;
+  fecha_ejecucion?: string | null;
+  fecha_cierre?: string | null;
+  estado?: string | null;
+  contratista?: string | null;
+  horas?: number | null;
+  operario_1?: string | null;
+  operario_2?: string | null;
+  operario_3?: string | null;
+  prioridad?: string | null;
+  frecuencia?: string | null;
+  proxima_fecha?: string | null;
+  observaciones?: string | null;
+}): (string | number)[] {
+  // Hasta la W —las observaciones—, que es la última que se lee.
+  const fila: (string | number)[] = new Array(COL.observaciones + 1).fill("");
+
+  fila[COL.otNumber] = orden.ot_number;
+  fila[COL.fecha] = fechaParaLaPlanilla(orden.fecha);
+  fila[COL.sector] = orden.sector_raw ?? "";
+  fila[COL.equipo] = orden.equipo_raw ?? "";
+  fila[COL.especialidad] = orden.especialidad ?? "";
+  fila[COL.tipo] = orden.tipo ?? "";
+  fila[COL.quien] = orden.quien ?? "";
+  fila[COL.descripcion] = orden.descripcion ?? "";
+  fila[COL.repuesto] = orden.repuesto ?? "";
+  fila[COL.fechaEjecucion] = fechaParaLaPlanilla(orden.fecha_ejecucion);
+  fila[COL.fechaCierre] = fechaParaLaPlanilla(orden.fecha_cierre);
+  fila[COL.estado] = orden.estado ? EN_LA_PLANILLA[orden.estado] ?? orden.estado : "";
+  fila[COL.contratista] = orden.contratista ?? "";
+  fila[COL.horas] = orden.horas ?? "";
+  fila[COL.operario1] = orden.operario_1 ?? "";
+  fila[COL.operario2] = orden.operario_2 ?? "";
+  fila[COL.operario3] = orden.operario_3 ?? "";
+  fila[COL.prioridad] = orden.prioridad ?? "";
+  fila[COL.frecuencia] = orden.frecuencia ?? "";
+  fila[COL.proximaFecha] = fechaParaLaPlanilla(orden.proxima_fecha);
+  fila[COL.observaciones] = orden.observaciones ?? "";
+
+  return fila;
+}
