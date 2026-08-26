@@ -215,6 +215,9 @@ export function estadoCompraDe(valor: unknown) {
   const { base, quien } = partirEstado(valor);
   if (!base) return { estado: null as string | null, aprobador: null as string | null };
   if (base === "PEDIDO") return { estado: "PEDIDO", aprobador: null };
+  // Un pedido frenado a propósito. Va antes que el resto porque "EN ESPERA"
+  // empieza igual que "EN PROCESO" y ese chequeo se lo llevaría puesto.
+  if (base.startsWith("EN ESPERA")) return { estado: "EN_ESPERA", aprobador: null };
   if (base === "RECIBIDO") return { estado: "RECIBIDO", aprobador: null };
   if (base.startsWith("DENEGAD")) return { estado: "DENEGADO", aprobador: null };
   if (base.includes("COMPARATIVA") || base.startsWith("EN PROCESO")) {
@@ -641,6 +644,7 @@ const ETIQUETA_ESTADO_COMPRA: Record<string, string | null> = {
   PEDIDO: "PEDIDO",
   DENEGADO: "DENEGADO",
   RECIBIDO: null,
+  EN_ESPERA: "EN ESPERA",
 };
 
 /** "PARA COMPRAR (NICO)" según a quién se le asignó. */

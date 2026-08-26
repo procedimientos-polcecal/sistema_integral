@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { armarIndicadores, destinoDeLaEtapa } from "./tablero";
+import { armarIndicadores, destinoDeLaEtapa, ETAPAS_DEL_TABLERO } from "./tablero";
 import { COLUMNAS_TABLERO } from "./constants";
 
 describe("a donde lleva cada indicador", () => {
@@ -21,9 +21,16 @@ describe("a donde lleva cada indicador", () => {
 });
 
 describe("los indicadores del tablero", () => {
-  it("estan las cinco etapas, en el orden del circuito", () => {
+  it("estan las cinco etapas del circuito, y despues la espera", () => {
     const i = armarIndicadores([], false);
-    expect(i.map((x) => x.estado)).toEqual(COLUMNAS_TABLERO);
+    expect(i.map((x) => x.estado)).toEqual([...COLUMNAS_TABLERO, "EN_ESPERA"]);
+  });
+
+  it("la espera se muestra pero NO es parte del circuito", () => {
+    // COLUMNAS_TABLERO es el recorrido del trabajo; la espera es un desvio.
+    // Mezclarlas haria que el circuito diga que despues de PEDIDO se espera.
+    expect(COLUMNAS_TABLERO).not.toContain("EN_ESPERA");
+    expect(ETAPAS_DEL_TABLERO).toContain("EN_ESPERA");
   });
 
   it("una etapa sin trabajo va en cero, no desaparece", () => {
@@ -48,7 +55,7 @@ describe("los indicadores del tablero", () => {
       [{ estado_compra: "DENEGADO", cantidad: 40, monto: 0 }],
       false
     );
-    expect(i).toHaveLength(COLUMNAS_TABLERO.length);
+    expect(i).toHaveLength(ETAPAS_DEL_TABLERO.length);
     expect(i.some((x) => x.estado === "DENEGADO")).toBe(false);
   });
 });

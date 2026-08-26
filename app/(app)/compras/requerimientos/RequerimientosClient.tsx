@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirm } from "@/components/ConfirmProvider";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
 import type { ResumenComparativa } from "./ModalAvanzar";
@@ -41,6 +42,7 @@ export default function RequerimientosClient({
   /** Lo que venía en la URL, ya validado por la página. */
   filtrosIniciales: FiltrosCompras;
 }) {
+  const confirmar = useConfirm();
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(0);
@@ -197,6 +199,51 @@ export default function RequerimientosClient({
     busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion
   );
 
+  /**
+   * Frenar un pedido sin cerrarlo, y devolverlo a donde estaba.
+   *
+   * La etapa de la que sale no se manda: la guarda el servidor, que ya sabe en
+   * cuál está. Al volver se la pide de vuelta al requerimiento.
+   */
+  async function cambiarEspera(r: RequerimientoConRelaciones, aEspera: boolean) {
+    const ok = await confirmar(
+      aEspera
+        ? {
+            title: "Poner en espera",
+            message:
+              `El RI ${r.nro_ri} sale de la cola de trabajo sin cerrarse, y vuelve a ` +
+              `«${COMPRA_LABELS[r.estado_compra].label}» cuando lo saques.`,
+            confirmText: "Poner en espera",
+          }
+        : {
+            title: "Sacar de la espera",
+            message: `El RI ${r.nro_ri} vuelve a «${
+              COMPRA_LABELS[r.etapa_previa ?? "SIN_INICIAR"].label
+            }» y retoma el circuito donde estaba.`,
+            confirmText: "Sacar de la espera",
+          }
+    );
+    if (!ok) return;
+
+    setProcesando(r.id);
+    setErrorAccion("");
+    const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        estado_compra: aEspera ? "EN_ESPERA" : r.etapa_previa ?? "SIN_INICIAR",
+      }),
+    });
+    setProcesando(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setErrorAccion(body.error ?? "No se pudo cambiar el estado.");
+      return;
+    }
+    await cargar();
+  }
+
   // La tabla tiene una columna más cuando se puede gestionar la compra.
   const columnas = canEdit ? 13 : 12;
 
@@ -341,6 +388,7 @@ export default function RequerimientosClient({
                             aprobadores={aprobadores}
                             usuarioId={usuarioId}
                             procesando={procesando === f.id}
+                            onEspera={(aEspera) => cambiarEspera(f, aEspera)}
                             onAvanzar={() =>
                               ESTADOS_CON_DIALOGO.includes(f.estado_compra)
                                 ? setAvanzando(f)
@@ -455,39 +503,64 @@ export default function RequerimientosClient({
  *    dos lados diciendo cosas distintas
  */
 function Accion({
-  r, aprobadores, usuarioId, procesando, onAvanzar,
+  r, aprobadores, usuarioId, procesando, onAvanzar, onEspera,
 }: {
   r: RequerimientoConRelaciones;
   aprobadores: Persona[];
   usuarioId: string;
   procesando: boolean;
   onAvanzar: () => void;
+  onEspera: (aEspera: boolean) => void;
 }) {
   const siguiente = SIGUIENTE_ESTADO[r.estado_compra];
   const tenue = "text-xs text-slate-400";
+  const chico = "text-[11px] text-slate-500 underline hover:text-slate-800 disabled:opacity-50";
 
   if (r.estado_aprobacion !== "APROBADA") {
     return <span className={tenue}>Sin aprobar</span>;
   }
+
+  // Un pedido frenado no ofrece avanzar: primero hay que sacarlo de la espera,
+  // y vuelve a la etapa donde estaba.
+  if (r.estado_compra === "EN_ESPERA") {
+    return (
+      <button onClick={() => onEspera(false)} disabled={procesando} className={chico}>
+        {procesando ? "Actualizando…" : "Sacar de la espera"}
+      </button>
+    );
+  }
+
   if (!siguiente) return <span className={tenue}>—</span>;
+
+  const espera = (
+    <button onClick={() => onEspera(true)} disabled={procesando} className={chico}>
+      Poner en espera
+    </button>
+  );
 
   if (r.estado_compra === "PARA_COMPRAR" && r.compra_asignada_a !== usuarioId) {
     const quien = aprobadores.find((a) => a.id === r.compra_asignada_a);
     return (
-      <span className={tenue}>
-        {quien ? `Espera a ${nombreCorto(quien)}` : "Sin asignar"}
-      </span>
+      <div className="space-y-1">
+        <span className={`block ${tenue}`}>
+          {quien ? `Espera a ${nombreCorto(quien)}` : "Sin asignar"}
+        </span>
+        {espera}
+      </div>
     );
   }
 
   return (
-    <button
-      onClick={onAvanzar}
-      disabled={procesando}
-      className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-    >
-      {procesando ? "Actualizando…" : `${ACCION_SIGUIENTE[r.estado_compra] ?? "Avanzar"} →`}
-    </button>
+    <div className="space-y-1">
+      <button
+        onClick={onAvanzar}
+        disabled={procesando}
+        className="block rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+      >
+        {procesando ? "Actualizando…" : `${ACCION_SIGUIENTE[r.estado_compra] ?? "Avanzar"} →`}
+      </button>
+      {espera}
+    </div>
   );
 }
 

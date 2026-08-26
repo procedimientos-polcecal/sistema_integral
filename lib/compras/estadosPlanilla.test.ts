@@ -65,3 +65,28 @@ describe("estado de aprobación de la planilla", () => {
     expect(estadoAprobacionDe("EN REVISIÓN").estado).toBe("EN_REVISION");
   });
 });
+
+/**
+ * "EN ESPERA" es un pedido frenado a proposito. Comparte prefijo con
+ * "EN PROCESO (COMPARATIVA)", asi que el orden de los chequeos importa: si el
+ * de PROCESO corriera primero, toda espera se leeria como comparativa y los
+ * pedidos frenados volverian solos a la cola en cada sincronizacion.
+ */
+describe("EN ESPERA, el pedido frenado", () => {
+  it("se lee como EN_ESPERA y no como comparativa", () => {
+    expect(estadoCompraDe("EN ESPERA").estado).toBe("EN_ESPERA");
+  });
+
+  it("no se confunde con EN PROCESO (COMPARATIVA)", () => {
+    expect(estadoCompraDe("EN PROCESO (COMPARATIVA)").estado).toBe("EN_COMPARATIVA");
+  });
+
+  it("tolera mayusculas y espacios como el resto", () => {
+    expect(estadoCompraDe("  en espera  ").estado).toBe("EN_ESPERA");
+    expect(estadoCompraDe("En Espera").estado).toBe("EN_ESPERA");
+  });
+
+  it("no aprueba a nadie: la espera no nombra personas", () => {
+    expect(estadoCompraDe("EN ESPERA").aprobador).toBeNull();
+  });
+});

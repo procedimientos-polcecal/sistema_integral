@@ -170,6 +170,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const nuevoEstado = cambios.estado_compra as string | undefined;
 
+    // ── Poner en espera y sacar de la espera ───────────────
+    //
+    // La etapa de la que sale la guarda el servidor leyendo el estado actual,
+    // no el cliente: es un dato que la base ya tiene, y confiar en que lo
+    // manden bien no agrega nada.
+    const veniaEnEspera = actual.estado_compra === "EN_ESPERA";
+
+    if (nuevoEstado === "EN_ESPERA") {
+      if (veniaEnEspera) {
+        return NextResponse.json({ error: "Ya estaba en espera" }, { status: 409 });
+      }
+      cambios.etapa_previa = actual.estado_compra;
+    }
+
+    // Volver de la espera no es avanzar: es retomar donde estaba. Por eso más
+    // abajo no corren las exigencias de etapa — un pedido frenado seis meses
+    // que perdió su comparativa quedaría atrapado en la espera, que es
+    // justamente lo que esto viene a evitar.
+    const vuelveDeLaEspera = veniaEnEspera && !!nuevoEstado && nuevoEstado !== "EN_ESPERA";
+    if (vuelveDeLaEspera) cambios.etapa_previa = null;
+
     // Aprobar la compra es de quien la tiene asignada, no de Compras. En la
     // planilla el estado dice a quién le toca; que apruebe otro dejaría los dos
     // lados diciendo cosas distintas.
@@ -188,7 +209,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Cuántos presupuestos alcanza lo decide Compras. Lo que el sistema exige
     // es que haya algo que mirar: sin eso, la persona asignada no puede elegir.
-    if (nuevoEstado === "PARA_COMPRAR") {
+    if (nuevoEstado === "PARA_COMPRAR" && !vuelveDeLaEspera) {
       const { count } = await admin
         .from("compras_cotizaciones")
         .select("id", { count: "exact", head: true })
@@ -252,7 +273,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Cada paso deja cargado lo suyo. Sin esto se llega a PEDIDO sin proveedor
     // ni costo, y después no hay con qué seguir la compra.
-    for (const { campo, queda } of FALTA[nuevoEstado ?? ""] ?? []) {
+    for (const { campo, queda } of (vuelveDeLaEspera ? [] : FALTA[nuevoEstado ?? ""] ?? [])) {
       const valor = campo in cambios ? cambios[campo] : actual[campo];
       if (valor === null || valor === undefined || valor === "") {
         return NextResponse.json(

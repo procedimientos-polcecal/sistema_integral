@@ -19,7 +19,19 @@ const ACENTO: Record<EstadoCompra, string | undefined> = {
   PEDIDO: "text-indigo-600",
   RECIBIDO: "text-green-600",
   DENEGADO: "text-red-600",
+  EN_ESPERA: "text-slate-500",
 };
+
+/**
+ * Las cifras que muestra el tablero.
+ *
+ * Son las cinco etapas del circuito más la espera. `COLUMNAS_TABLERO` no la
+ * incluye y no debe incluirla: eso es el recorrido del trabajo, y la espera es
+ * un desvío. Pero tiene que verse igual —si los pedidos frenados desaparecen de
+ * todas las pantallas, en un año tenemos el mismo problema sin nombre para
+ * buscarlo—.
+ */
+export const ETAPAS_DEL_TABLERO: EstadoCompra[] = [...COLUMNAS_TABLERO, "EN_ESPERA"];
 
 /**
  * A dónde lleva tocar una etapa.
@@ -59,7 +71,7 @@ export function armarIndicadores(
 ): Indicador[] {
   const porEstado = new Map(resumen.map((r) => [r.estado_compra, r]));
 
-  return COLUMNAS_TABLERO.map((estado) => {
+  return ETAPAS_DEL_TABLERO.map((estado) => {
     const fila = porEstado.get(estado);
     return {
       estado,

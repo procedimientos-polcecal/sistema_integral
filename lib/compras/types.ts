@@ -1,6 +1,13 @@
 export type EstadoAprobacion = "PENDIENTE" | "EN_REVISION" | "APROBADA" | "DENEGADA";
 
-/** En el orden en que avanza el trabajo. */
+/**
+ * En el orden en que avanza el trabajo.
+ *
+ * `EN_ESPERA` no es una etapa sino un desvío: un pedido frenado a propósito
+ * —un stock de emergencia, algo que espera otra decisión— que no está en curso
+ * pero tampoco se denegó. Sale de la cola activa y vuelve a la etapa de la que
+ * salió, que se guarda en `etapa_previa`.
+ */
 export type EstadoCompra =
   | "SIN_INICIAR"
   | "EN_COMPARATIVA"
@@ -8,7 +15,8 @@ export type EstadoCompra =
   | "APROBADO"
   | "PEDIDO"
   | "RECIBIDO"
-  | "DENEGADO";
+  | "DENEGADO"
+  | "EN_ESPERA";
 
 export type Prioridad = "URGENTE" | "1 SEMANA" | "2 SEMANAS" | "NORMAL" | "LEVE";
 
@@ -73,6 +81,8 @@ export interface Requerimiento {
   motivo_rechazo: string | null;
 
   estado_compra: EstadoCompra;
+  /** De qué etapa salió, si está EN_ESPERA. Nula si no lo está. */
+  etapa_previa: EstadoCompra | null;
   /** A quién le toca aprobar la compra: el «(NICO)» del estado en la planilla. */
   compra_asignada_a: string | null;
   compra_aprobada_por: string | null;

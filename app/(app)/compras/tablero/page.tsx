@@ -37,8 +37,10 @@ export default async function TableroPage() {
     puedeAprobar
   );
 
+  // Lo que de verdad es cola de trabajo: ni lo ya pedido, ni lo frenado a
+  // propósito.
   const enCurso = indicadores
-    .filter((i) => i.estado !== "PEDIDO")
+    .filter((i) => i.estado !== "PEDIDO" && i.estado !== "EN_ESPERA")
     .reduce((acc, i) => acc + i.cantidad, 0);
 
   return (
@@ -61,7 +63,7 @@ export default async function TableroPage() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {indicadores.map((i) => (
           <Indicador
             key={i.estado}

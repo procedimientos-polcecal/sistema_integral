@@ -5,7 +5,8 @@ export const ESTADOS_APROBACION: EstadoAprobacion[] = [
 ];
 
 export const ESTADOS_COMPRA: EstadoCompra[] = [
-  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO", "RECIBIDO", "DENEGADO",
+  "SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO", "RECIBIDO",
+  "DENEGADO", "EN_ESPERA",
 ];
 
 export const PRIORIDADES: Prioridad[] = [
@@ -27,6 +28,8 @@ export const COMPRA_LABELS: Record<EstadoCompra, { label: string; color: string 
   PEDIDO:         { label: "Pedido",          color: "bg-indigo-100 text-indigo-800" },
   RECIBIDO:       { label: "Recibido",        color: "bg-green-100 text-green-800" },
   DENEGADO:       { label: "Denegado",        color: "bg-red-100 text-red-800" },
+  // Gris a propósito: no es un paso del trabajo sino un pedido frenado.
+  EN_ESPERA:      { label: "En espera",       color: "bg-slate-200 text-slate-600" },
 };
 
 export const PRIORIDAD_LABELS: Record<Prioridad, { label: string; color: string }> = {
