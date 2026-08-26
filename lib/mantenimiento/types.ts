@@ -47,6 +47,65 @@ export interface Equipo {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+
+  // ── Ficha técnica ────────────────────────────────────────
+  // Lo que se releva recorriendo la planta. Todo opcional: la ficha se
+  // completa de a poco y un equipo recién dado de alta no tiene nada de esto.
+  tipo_id?: string | null;
+  tipo_equipo?: string | null;
+  descripcion_proceso?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  nro_serie?: string | null;
+  anio_fabricacion?: number | null;
+  anio_instalacion?: number | null;
+  tension_v?: string | null;
+  intensidad_nominal_a?: number | null;
+  rpm_motor?: number | null;
+  fp_cos_phi?: number | null;
+  relacion_reduccion?: string | null;
+  rpm_salida?: number | null;
+  rodamiento_motor_de?: string | null;
+  rodamiento_motor_nde?: string | null;
+  rodamiento_carga?: string | null;
+  rodamiento_otro?: string | null;
+  ubicacion_fisica?: string | null;
+  nivel_altura_m?: number | null;
+  origen_equipo?: string | null;
+  horas_marcha?: number | null;
+  proveedor_repuesto_critico?: string | null;
+  fecha_ultimo_relevamiento?: string | null;
+  relevado_por?: string | null;
+  foto_registro_url?: string | null;
+}
+
+/** Un componente del equipo: de qué está hecho. */
+export interface ComponenteEquipo {
+  id: string;
+  equipment_id: string;
+  /** El identificador del relevamiento, "COMP-0001". */
+  componente_id: string | null;
+  nombre: string;
+  categoria: string | null;
+  especificacion: string | null;
+  material: string | null;
+  cantidad: string | null;
+  proveedor_critico: string | null;
+  criticidad: string | null;
+  foto_url: string | null;
+  fecha_relevamiento: string | null;
+  relevado_por: string | null;
+  created_at: string;
+}
+
+/** Un repuesto que conviene tener para el equipo. */
+export interface RepuestoEquipo {
+  id: string;
+  equipment_id: string;
+  name: string;
+  code: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
 export interface ChecklistItem {

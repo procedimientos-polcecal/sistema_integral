@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import FichaTecnica from "./FichaTecnica";
+import ComponentesYRepuestos from "./ComponentesYRepuestos";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -275,6 +277,10 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit }: 
           </div>
         </div>
       )}
+
+      <FichaTecnica equipo={equipo} puedeEditar={canEdit} />
+
+      <ComponentesYRepuestos equipoId={equipo.id} puedeEditar={canEdit} />
 
       {historial.length > 0 && (
         <section>

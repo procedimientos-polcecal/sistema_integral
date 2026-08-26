@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { fichaDesdeFormulario } from "@/lib/mantenimiento/ficha";
 
 const REQUIRES_REASON = ["EN_MANTENIMIENTO", "EN_REPARACION", "STANDBY", "FUERA_DE_SERVICIO", "DADO_DE_BAJA"];
 
@@ -40,6 +41,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       changed_by:   user.id,
     });
 
+    return NextResponse.json({ success: true });
+  }
+
+  // ── Ficha técnica ────────────────────────────────────────────────────────
+  // Va aparte del alta/edición porque son datos de relevamiento: los carga
+  // quien recorre la planta, no quien da de alta la máquina.
+  if (body.action === "ficha") {
+    const campos = fichaDesdeFormulario(body.campos ?? {});
+    if (Object.keys(campos).length === 0) {
+      return NextResponse.json({ error: "No hay nada para cambiar" }, { status: 400 });
+    }
+
+    const { error: fichaErr } = await admin.from("equipos").update(campos).eq("id", id);
+    if (fichaErr) return NextResponse.json({ error: fichaErr.message }, { status: 400 });
     return NextResponse.json({ success: true });
   }
 

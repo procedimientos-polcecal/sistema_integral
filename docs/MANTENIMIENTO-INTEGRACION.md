@@ -88,7 +88,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | 3 | OT: **sincronización, filtro por especialidad y parada de sector hechos**; falta registrar realizado e iniciar OT | en curso |
 | 4 | Producción semanal | **hecho** |
 | 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
-| 6 | Equipos: ficha técnica, tipos, componentes, repuestos | pendiente |
+| 6 | Equipos: ficha técnica, tipos, componentes, repuestos | **hecho** |
 | 7 | Dashboard: KPIs y gráficos | pendiente |
 
 El dashboard va último porque mide sobre lo que las demás cargan. Las
@@ -251,6 +251,47 @@ entero.
 `GOOGLE_SHEETS_OS_ID`, así que no se pudo verificar su forma contra la planilla
 de verdad como se hizo con las demás. El código está completo y responde
 "Falta configurar GOOGLE_SHEETS_OS_ID" hasta que se cargue.
+
+## La ficha técnica de los equipos
+
+El módulo ya tenía los equipos —nombre, sector, estado, criticidad—. Lo que
+sumó esta feature son los datos de **relevamiento**: marca, modelo, rodamientos,
+tensión, rpm, dónde está físicamente, de qué está hecha y qué repuestos conviene
+tener.
+
+Va aparte del alta del equipo a propósito: son datos de otro momento y de otra
+persona. Quien da de alta la máquina sabe su nombre y su sector; la marca del
+rodamiento la anota quien la abre.
+
+Se carga de dos maneras:
+
+- **Importando el libro "BD Equipos"** (`Importar ficha técnica` en el listado),
+  con sus tres hojas: `TIPO_EQUIPO`, `EQUIPOS` y `COMPONENTES`.
+- **A mano**, desde la ficha de cada equipo.
+
+**La importación no crea equipos.** Enlaza por código con los que ya están
+cargados y devuelve la lista de códigos que no encontró, en vez de inventar
+máquinas que nadie dio de alta.
+
+**Una celda vacía no borra nada.** En la hoja significa "todavía no lo relevé",
+así que la importación sólo escribe los campos que vinieron con algo. En el
+formulario es al revés —vaciar un campo lo borra—, y por eso son dos funciones
+distintas y no una con una bandera.
+
+Tres cosas que se corrigieron respecto del código de origen:
+
+- Usaba `Number(v) || null`, que **convertía el 0 en null**: un equipo con 0
+  horas de marcha quedaba sin dato.
+- Contaba como importados los componentes **aunque el insert fallara**
+  (`if (!error) result.componentes += lote.length`), así que informaba éxito
+  sobre filas que no se guardaron.
+- Hacía `upsert(..., { onConflict: "componente_id" })` sobre filas cuyo
+  `componente_id` puede ser nulo. Acá se separan: las que traen identificador se
+  pueden reimportar sin duplicarse, las que no, se insertan y ya.
+
+Esta hoja **no se pudo contrastar contra el archivo de verdad** —no lo tenemos—,
+así que los alias de columna son deliberadamente amplios: `año_fabricacion` y
+`anio_fabricacion`, con o sin mayúsculas, con o sin espacios.
 
 ## Lo que quedó anotado para decidir después
 

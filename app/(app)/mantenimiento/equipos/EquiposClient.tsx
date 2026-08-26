@@ -33,6 +33,9 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: number; created: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fichaInputRef = useRef<HTMLInputElement>(null);
+  const [importandoFicha, setImportandoFicha] = useState(false);
+  const [resultadoFicha, setResultadoFicha] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -119,6 +122,47 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
     }
   }
 
+  // ─── Ficha técnica: el libro BD Equipos ─────────────────────────
+  // No crea equipos: completa los que ya están, enlazando por código.
+  async function importarFicha(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setImportandoFicha(true);
+    setResultadoFicha(null);
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    try {
+      const res = await fetch("/api/mantenimiento/equipos/import-ficha", { method: "POST", body: fd });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setResultadoFicha(data.error ?? "No se pudo importar.");
+        return;
+      }
+
+      const partes = [
+        `${data.tipos} tipos`,
+        `${data.equipos} fichas`,
+        `${data.componentes} componentes`,
+      ];
+      setResultadoFicha(
+        `Se importaron ${partes.join(", ")}.` +
+        (data.sin_equipo?.length > 0
+          ? ` No se encontraron estos equipos: ${data.sin_equipo.join(", ")}.`
+          : "")
+      );
+      router.refresh();
+    } catch {
+      setResultadoFicha("Error de red al importar.");
+    } finally {
+      setImportandoFicha(false);
+    }
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -160,10 +204,32 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
                 className="hidden"
                 onChange={handleImport}
               />
+
+              <button
+                onClick={() => fichaInputRef.current?.click()}
+                disabled={importandoFicha}
+                title="El libro BD Equipos: tipos, ficha técnica y componentes"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {importandoFicha ? "Importando..." : "Importar ficha técnica"}
+              </button>
+              <input
+                ref={fichaInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={importarFicha}
+              />
             </>
           )}
         </div>
       </div>
+
+      {resultadoFicha && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          {resultadoFicha}
+        </div>
+      )}
 
       {importResult && (
         <div className={`rounded-xl border px-4 py-3 text-sm space-y-1 ${
