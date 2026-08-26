@@ -136,7 +136,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
     fd.append("file", file);
 
     try {
-      const res = await fetch("/api/mantenimiento/equipos/import-ficha", { method: "POST", body: fd });
+      const res = await fetch("/api/mantenimiento/equipos/import-bd", { method: "POST", body: fd });
       const data = await res.json();
 
       if (!res.ok) {
@@ -145,14 +145,17 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
       }
 
       const partes = [
-        `${data.tipos} tipos`,
-        `${data.equipos} fichas`,
-        `${data.componentes} componentes`,
-      ];
+        data.sectores > 0 && `${data.sectores} sectores`,
+        data.equipos_nuevos > 0 && `${data.equipos_nuevos} equipos nuevos`,
+        data.equipos_actualizados > 0 && `${data.equipos_actualizados} equipos actualizados`,
+        data.tipos > 0 && `${data.tipos} tipos`,
+        data.componentes > 0 && `${data.componentes} componentes`,
+      ].filter(Boolean);
+
       setResultadoFicha(
         `Se importaron ${partes.join(", ")}.` +
-        (data.sin_equipo?.length > 0
-          ? ` No se encontraron estos equipos: ${data.sin_equipo.join(", ")}.`
+        (data.sin_sector?.length > 0
+          ? ` Estos equipos quedaron afuera porque su sector no está en el libro: ${data.sin_sector.join(", ")}.`
           : "")
       );
       router.refresh();
@@ -208,10 +211,10 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
               <button
                 onClick={() => fichaInputRef.current?.click()}
                 disabled={importandoFicha}
-                title="El libro BD Equipos: tipos, ficha técnica y componentes"
+                title="El libro BD Equipos: sectores, equipos, tipos y componentes"
                 className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                {importandoFicha ? "Importando..." : "Importar ficha técnica"}
+                {importandoFicha ? "Importando..." : "Importar BD Equipos"}
               </button>
               <input
                 ref={fichaInputRef}

@@ -9,6 +9,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { indiceDeProveedores, buscarProveedor } from "@/lib/core/proveedores";
+import { buscarCodigo } from "@/lib/mantenimiento/inventario";
 
 export interface Enlaces {
   /** Equipo por código, en mayúsculas. */
@@ -17,6 +18,8 @@ export interface Enlaces {
   porSector: Map<string, string>;
   /** Proveedor por nombre normalizado. */
   porProveedor: Map<string, string>;
+  /** Los códigos de equipo que existen, para reconocerlos en un texto libre. */
+  codigos: string[];
 }
 
 /** Los equipos y sectores cargados, listos para buscar. */
@@ -37,6 +40,7 @@ export async function cargarEnlaces(admin: SupabaseClient): Promise<Enlaces> {
     ),
     porSector: new Map(sectores.map((s) => [s.nombre.toLowerCase().trim(), s.id])),
     porProveedor: indiceDeProveedores(proveedores),
+    codigos: equipos.map((e) => e.code).filter((c): c is string => Boolean(c)),
   };
 }
 
@@ -64,9 +68,18 @@ export function proveedorDe(
  */
 export function resolver(
   enlaces: Enlaces,
-  fila: { equipo_code: string | null; sector_raw?: string | null }
+  fila: { equipo_code: string | null; equipo_raw?: string | null; sector_raw?: string | null }
 ): { equipment_id: string | null; sector_id: string | null } {
-  const equipo = fila.equipo_code ? enlaces.porCodigo.get(fila.equipo_code) : undefined;
+  let equipo = fila.equipo_code
+    ? enlaces.porCodigo.get(fila.equipo_code.toUpperCase())
+    : undefined;
+
+  // El patrón no alcanza para los 21 equipos compartidos, que se llaman "C1" o
+  // "EM2": ésos hay que buscarlos contra los códigos que existen de verdad.
+  if (!equipo && fila.equipo_raw) {
+    const code = buscarCodigo(fila.equipo_raw, enlaces.codigos);
+    if (code) equipo = enlaces.porCodigo.get(code.toUpperCase());
+  }
 
   return {
     equipment_id: equipo?.id ?? null,

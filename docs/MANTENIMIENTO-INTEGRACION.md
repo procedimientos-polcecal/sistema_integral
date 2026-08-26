@@ -25,7 +25,8 @@ configuración, no código:
 | `GOOGLE_SHEETS_OT_ID` | `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo` |
 | Migración 031 | Ejecuciones que cuelgan de una OT. |
 | Migración 032 | Los contratistas pasan a `proveedores`. |
-| **Cargar los equipos** | Hay **2** cargados, así que **1701 de 1728 OT** y 137 de 138 avisos quedaron sin equipo ni sector. Es el cuello de botella del módulo entero. |
+| Migración 033 | `sectores.codigo` y `es_de_planta`. |
+| Importar el libro | "Importar BD Equipos" en el listado de equipos, y después volver a sincronizar OT y avisos para que enlacen. |
 | Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
 | El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |
 
@@ -375,9 +376,24 @@ Se carga de dos maneras:
   con sus tres hojas: `TIPO_EQUIPO`, `EQUIPOS` y `COMPONENTES`.
 - **A mano**, desde la ficha de cada equipo.
 
-**La importación no crea equipos.** Enlaza por código con los que ya están
-cargados y devuelve la lista de códigos que no encontró, en vez de inventar
-máquinas que nadie dio de alta.
+El libro tiene nueve hojas y el importador usa cuatro: `SECTORES` (15),
+`EQUIPOS` (239), `TIPO_EQUIPO` (26) y `COMPONENTES` (398). Se puede volver a
+importar cuantas veces haga falta: sectores y equipos se reconocen por su
+código.
+
+Al portarlo, el libro traía el **padrón** —qué máquinas hay, cómo se llaman,
+dónde están y para qué sirven— pero casi nada del **relevamiento**: de 239
+equipos, 15 tienen marca, 20 modelo, ninguno rodamientos ni año, y la criticidad
+está vacía en todos. Por eso el importador crea los equipos con lo que hay y
+completa el resto a medida que el libro avanza.
+
+**Un equipo sin estado se da por operativo.** Son 215 de 239, y darlos por fuera
+de servicio apagaría media planta en el tablero. Los 24 que traen estado lo
+abrevian: `op`, `rep`, `fuera`.
+
+**Un equipo sin sector no se crea.** La columna es obligatoria y colgarlo de
+cualquier sector lo pondría en una planta donde no está: se informa y queda
+afuera.
 
 **Una celda vacía no borra nada.** En la hoja significa "todavía no lo relevé",
 así que la importación sólo escribe los campos que vinieron con algo. En el
@@ -426,6 +442,32 @@ planilla crezca —el mismo tope de filas que ya nos mordió en Compras—.
 Los meses se arman con las partes locales de la fecha y no con `toISOString()`,
 por lo mismo que en producción semanal: en un servidor en UTC el primero del mes
 cae el último del anterior y las órdenes se cuentan en el mes equivocado.
+
+## Los sectores de planta, aparte de los organizativos
+
+`sectores` guardaba dos cosas distintas con el mismo nombre: dónde trabaja una
+persona —"Administración", "Producción (RRHH)"— y dónde está una máquina
+—"Calcinación", "Filler 2", "Compresores"—. Son taxonomías distintas y las usa
+gente distinta.
+
+La **migración 033** las distingue con `es_de_planta`, y suma `codigo` —PO-A1,
+PY-B1, AMB-C1— que es lo que permite reimportar el libro sin adivinar por
+nombre. No se partió la tabla en dos porque avisos, OT y OS ya apuntan a
+`sectores.id`, y partirla obligaría a rehacer esos enlaces sin ganar nada.
+
+`AMBOS` no es una empresa: es donde van los equipos que sirven a las dos
+—compresores y equipos móviles—, y esos sectores quedan sin empresa.
+
+## Reconocer un equipo en un texto libre
+
+Las planillas nombran al equipo escribiendo, y el código está metido adentro:
+"PO-B1-27 – Cadena de arrastre 6". El patrón alcanzaba hasta que aparecieron los
+**21 equipos compartidos**, que se llaman `C1` o `EM2` — y la planilla de OS dice
+"EM2 - Caterpillar 320 C".
+
+Ningún patrón razonable distingue "EM2" de cualquier otra sigla suelta, así que
+se busca **contra los códigos que existen de verdad**. Gana el más largo: "EM1"
+está dentro de "EM16", y tomar el corto mandaría el trabajo a otra máquina.
 
 ## Un solo lugar para los proveedores
 

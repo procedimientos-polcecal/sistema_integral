@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { traerTodo } from "@/lib/core/paginado";
 import { leerValores, listarPestanas } from "@/lib/core/sheets";
+import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 
 export const maxDuration = 300;
@@ -62,20 +62,7 @@ export async function POST() {
   if (filas.length < 2) return NextResponse.json({ leidas: 0, guardados: 0, sin_equipo: 0 });
 
   const admin = createAdminClient();
-
-  // Con qué enlazar cada aviso: el equipo por código, y el sector por nombre
-  // cuando el equipo no se pudo identificar.
-  const equipos = await traerTodo<{ id: string; code: string | null; sector_id: string | null }>(
-    (desde, hasta) => admin.from("equipos").select("id, code, sector_id").range(desde, hasta)
-  );
-  const sectores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
-    admin.from("sectores").select("id, nombre").range(desde, hasta)
-  );
-
-  const porCodigo = new Map(
-    equipos.filter((e) => e.code).map((e) => [e.code!.toUpperCase(), e])
-  );
-  const porSector = new Map(sectores.map((s) => [s.nombre.toLowerCase().trim(), s.id]));
+  const enlaces = await cargarEnlaces(admin);
 
   const registros: Record<string, unknown>[] = [];
   let sinEquipo = 0;
@@ -84,16 +71,13 @@ export async function POST() {
     const aviso = filaDeAviso(filas[i + 1], i + 2);
     if (!aviso) continue;
 
-    const equipo = aviso.equipo_code ? porCodigo.get(aviso.equipo_code) : undefined;
-    if (!equipo) sinEquipo += 1;
+    const { equipment_id, sector_id } = resolver(enlaces, aviso);
+    if (!equipment_id) sinEquipo += 1;
 
     registros.push({
       ...aviso,
-      equipment_id: equipo?.id ?? null,
-      sector_id:
-        equipo?.sector_id ??
-        porSector.get((aviso.sector_raw ?? "").toLowerCase().trim()) ??
-        null,
+      equipment_id,
+      sector_id,
       synced_at: new Date().toISOString(),
     });
   }
