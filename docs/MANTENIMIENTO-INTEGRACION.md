@@ -85,7 +85,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 |---|---|---|
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
 | 2 | Avisos | **hecho** — sincronización y listado |
-| 3 | OT: sincronización, especialidad, parada de sector e inicio de OT hechos; falta registrar realizado | en curso |
+| 3 | Órdenes de trabajo | **hecho** (la foto a Drive quedó afuera) |
 | 4 | Producción semanal | **hecho** |
 | 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | **hecho** |
@@ -158,6 +158,41 @@ sistema. La planilla no tiene esa columna.
 
 Ya se muestra en producción semanal y en el dashboard, al lado del nombre del
 sector, y como indicador propio ("Sectores a parar").
+
+## Registrar el trabajo de una OT
+
+Dar por realizada una OT sin decir qué se hizo pierde justamente lo que sirve
+después. Marcarla como "Realizado" abre el registro: cómo salió, cuándo, cuántas
+horas, quiénes, y qué se encontró.
+
+Queda de los dos lados. En el sistema como **ejecución**
+(`mantenimientos_ejecuciones`), que hasta ahora sólo podía colgar de un
+mantenimiento programado —la **migración 031** le suma `work_order_id`, porque
+la mayor parte del trabajo de la planta entra por una OT—. Y en la planilla,
+cada dato en su columna: M el estado, K el cierre, N el contratista, O las
+horas, P/Q/R los operarios, W las observaciones.
+
+**La columna L no se escribe nunca**: es la fórmula que calcula atrasado/al día,
+y pisarla rompería el cálculo de toda la planilla.
+
+**El estado se escribe como lo escribe la planilla.** La app guarda
+`EN_PROCESO`; la planilla dice "En proceso". Escribirle el vocabulario de la app
+la dejaría con dos formas del mismo estado y la próxima lectura no las
+reconocería igual.
+
+Antes de escribir se comprueba que la fila **siga siendo la de esta OT** —se lee
+la columna A y se compara el número—. Si no coincide no se escribe nada y se
+pide sincronizar: el número de fila se corre en cuanto alguien inserta una fila
+arriba.
+
+Escribir en la planilla es best-effort: si Google está caído, o la planilla no
+está compartida como editor, el trabajo igual quedó registrado y la pantalla
+dice qué falta completar a mano.
+
+**La foto quedó afuera.** El origen la sube a Drive con un Apps Script propio
+(`/api/fotos-drive`) y escribe el link en la columna V. Ese endpoint no existe
+acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que
+cuando haya dónde subirla es sumar el campo.
 
 ## Iniciar una OT pregunta por el equipo
 

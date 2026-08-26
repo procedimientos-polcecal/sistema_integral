@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { leerValores, escribirCeldas } from "@/lib/core/sheets";
+import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/ordenes";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -121,8 +123,8 @@ export async function PATCH(request: Request) {
   const { id, estado, requiere_parada_sector } = body ?? {};
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
 
-  // Sólo estos dos campos. No se acepta el resto del body para evitar
-  // escritura arbitraria de columnas (mass-assignment).
+  // Lista blanca. No se acepta el resto del body para evitar escritura
+  // arbitraria de columnas (mass-assignment).
   const update: Record<string, unknown> = { synced_at: new Date().toISOString() };
 
   if (estado !== undefined) {
@@ -131,6 +133,30 @@ export async function PATCH(request: Request) {
     }
     update.estado = estado;
   }
+
+  // Lo que se anota al registrar el trabajo. Cada uno tiene su columna en la
+  // planilla, así que se guardan acá y se escriben allá.
+  const registro: RegistroDeOT = {};
+  const texto = (v: unknown) => String(v ?? "").trim() || null;
+
+  for (const campo of ["contratista", "operario_1", "operario_2", "operario_3", "observaciones"] as const) {
+    if (body[campo] !== undefined) {
+      update[campo] = texto(body[campo]);
+      registro[campo] = update[campo] as string | null;
+    }
+  }
+  if (body.horas !== undefined) {
+    const n = Number(body.horas);
+    update.horas = body.horas === null || body.horas === "" || isNaN(n) ? null : n;
+    registro.horas = update.horas as number | null;
+  }
+  if (body.fecha_cierre !== undefined) {
+    update.fecha_cierre = body.fecha_cierre || null;
+    registro.fecha_cierre = update.fecha_cierre as string | null;
+  }
+  if (estado !== undefined) registro.estado = estado;
+  // La foto va a la planilla pero no a la tabla: acá vive en la ejecución.
+  if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
 
   // Que el trabajo obligue a parar el sector no viene de la planilla: se marca
   // acá. Y se puede marcar en cualquier momento, no sólo al crear la OT: las
@@ -149,5 +175,48 @@ export async function PATCH(request: Request) {
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ data: updated });
+  const planilla_error = await escribirEnLaPlanilla(updated, registro);
+  return NextResponse.json({ data: updated, planilla_error });
+}
+
+/**
+ * Escribe en la planilla lo que se registró en la app.
+ *
+ * Best-effort: la app ya guardó, y que Google esté caído o que la planilla no
+ * esté compartida como editor no puede tirar abajo el registro del trabajo. Se
+ * devuelve el problema para que la pantalla lo muestre.
+ *
+ * Antes de escribir se comprueba que la fila **siga siendo la de esta OT**: el
+ * número de fila que guardamos se corre si alguien inserta una fila arriba, y
+ * escribir a ciegas pisaría el trabajo de otro.
+ */
+async function escribirEnLaPlanilla(
+  orden: { ot_number: number | null; sheets_row: number | null },
+  registro: RegistroDeOT
+): Promise<string | null> {
+  const celdas = celdasParaRegistrar(registro);
+  if (celdas.length === 0) return null;
+
+  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
+  if (!planilla || !orden.sheets_row) return null;
+
+  try {
+    const fila = (await leerValores(
+      planilla, `${pestana}!A${orden.sheets_row}:A${orden.sheets_row}`, { sinFormato: true }
+    ))[0] ?? [];
+
+    if (Number(fila[0]) !== orden.ot_number) {
+      return "La fila de la planilla ya no es la de esta OT — alguien la movió. " +
+             "Sincronizá las órdenes y volvé a intentar.";
+    }
+
+    await escribirCeldas(
+      planilla,
+      celdas.map((c) => ({ pestana, fila: orden.sheets_row!, columna: c.columna, valor: c.valor }))
+    );
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }

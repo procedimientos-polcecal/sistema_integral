@@ -8,17 +8,37 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
-  const { data: schedule } = await supabase
-    .from("mantenimientos_programados")
-    .select("*, equipos(name, code)")
-    .eq("id", body.schedule_id)
-    .single();
+  // Una ejecución cuelga de un mantenimiento programado **o** de una orden de
+  // trabajo: la mayor parte del trabajo de la planta entra por una OT.
+  const { data: schedule } = body.schedule_id
+    ? await supabase
+        .from("mantenimientos_programados")
+        .select("*, equipos(name, code)")
+        .eq("id", body.schedule_id)
+        .single()
+    : { data: null };
+
+  const { data: orden } = body.work_order_id
+    ? await supabase
+        .from("ordenes_trabajo")
+        .select("equipment_id")
+        .eq("id", body.work_order_id)
+        .maybeSingle()
+    : { data: null };
+
+  if (!schedule && !orden) {
+    return NextResponse.json(
+      { error: "La ejecución tiene que ser de un mantenimiento programado o de una OT" },
+      { status: 400 }
+    );
+  }
 
   const { data: execution, error } = await supabase
     .from("mantenimientos_ejecuciones")
     .insert({
-      schedule_id:          body.schedule_id,
-      equipment_id:         schedule?.equipment_id ?? null,
+      schedule_id:          body.schedule_id ?? null,
+      work_order_id:        body.work_order_id ?? null,
+      equipment_id:         schedule?.equipment_id ?? orden?.equipment_id ?? null,
       executed_by:          user.id,
       execution_status:     body.execution_status,
       executed_at:          body.executed_at,

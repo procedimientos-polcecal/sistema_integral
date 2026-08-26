@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import NuevaOTModal from "./NuevaOTModal";
 import IniciarOTModal from "./IniciarOTModal";
+import RegistrarOTModal from "./RegistrarOTModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 
@@ -43,6 +44,7 @@ export default function OrdenesClient({
   const [kanbanData, setKanbanData] = useState<Record<string, { items: any[]; count: number }>>({});
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [iniciando, setIniciando] = useState<any | null>(null);
+  const [registrando, setRegistrando] = useState<any | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,10 +120,20 @@ export default function OrdenesClient({
    * desarmada.
    */
   async function changeEstado(id: string, estado: string) {
+    const buscar = () =>
+      orders.find((o: any) => o.id === id)
+      ?? Object.values(kanbanData).flatMap((c: any) => c.items).find((o: any) => o.id === id);
+
     if (estado === "EN_PROCESO") {
-      const orden = orders.find((o: any) => o.id === id)
-        ?? Object.values(kanbanData).flatMap((c: any) => c.items).find((o: any) => o.id === id);
+      const orden = buscar();
       if (orden) { setIniciando(orden); return; }
+    }
+
+    // Dar por realizada una OT sin decir qué se hizo pierde justamente lo que
+    // sirve después: el modal lo pregunta y de paso lo escribe en la planilla.
+    if (estado === "REALIZADO") {
+      const orden = buscar();
+      if (orden) { setRegistrando(orden); return; }
     }
 
     const meta = estadoMeta(estado);
@@ -330,6 +342,18 @@ export default function OrdenesClient({
           equipos={equipos}
           onClose={() => setShowNew(false)}
           onCreated={() => { setShowNew(false); load(); }}
+        />
+      )}
+
+      {registrando && (
+        <RegistrarOTModal
+          orden={registrando}
+          onCerrar={() => setRegistrando(null)}
+          onRegistrada={() => {
+            setRegistrando(null);
+            if (view === "kanban") loadKanban();
+            else load();
+          }}
         />
       )}
 

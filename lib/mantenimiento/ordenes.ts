@@ -47,6 +47,8 @@ const COL = {
   prioridad: 18,
   frecuencia: 19,
   proximaFecha: 20,
+  fotos: 21,
+  observaciones: 22,
 } as const;
 
 /**
@@ -139,4 +141,77 @@ export function filaDeOrden(fila: unknown[], numeroFila: number): OrdenLeida | n
     proxima_fecha: fechaDeSheets(fila[COL.proximaFecha]),
     sheets_row: numeroFila,
   };
+}
+
+/**
+ * El texto del estado tal como lo escribe la planilla.
+ *
+ * La app guarda `EN_PROCESO`; la planilla dice "En proceso". Escribirle el
+ * vocabulario de la app la dejaría con dos formas del mismo estado.
+ */
+const EN_LA_PLANILLA: Record<string, string> = {
+  REALIZADO: "Realizado",
+  EN_PROCESO: "En proceso",
+  ATRASADO: "Atrasado",
+  POR_HACER: "Por hacer",
+  SUSPENDIDA: "Suspendida",
+};
+
+/** La letra de una columna: 0 → A. La planilla llega hasta la W. */
+const letra = (i: number) => String.fromCharCode(65 + i);
+
+export interface RegistroDeOT {
+  estado?: string | null;
+  fecha_cierre?: string | null;
+  horas?: number | null;
+  contratista?: string | null;
+  operario_1?: string | null;
+  operario_2?: string | null;
+  operario_3?: string | null;
+  observaciones?: string | null;
+  foto_url?: string | null;
+}
+
+/**
+ * Qué celdas hay que escribir en la planilla al registrar el trabajo.
+ *
+ * Sólo las que se pasaron: la planilla es la fuente y no se toca lo que nadie
+ * cambió. Pasar un campo en `null` **sí** lo vacía —es "sacá lo que había"—,
+ * que es distinto de no pasarlo.
+ *
+ * La columna L no se escribe nunca: es la fórmula que calcula atrasado/al día.
+ */
+export function celdasParaRegistrar(
+  registro: RegistroDeOT
+): { letra: string; columna: number; valor: string }[] {
+  const celdas: { letra: string; columna: number; valor: string }[] = [];
+
+  const sumar = (columna: number, valor: string) =>
+    celdas.push({ letra: letra(columna), columna, valor });
+
+  if (registro.estado !== undefined) {
+    const v = registro.estado;
+    sumar(COL.estado, v ? EN_LA_PLANILLA[v] ?? v : "");
+  }
+  if (registro.fecha_cierre !== undefined) {
+    sumar(COL.fechaCierre, fechaParaLaPlanilla(registro.fecha_cierre));
+  }
+  if (registro.horas !== undefined) {
+    sumar(COL.horas, registro.horas === null ? "" : String(registro.horas));
+  }
+  if (registro.contratista !== undefined) sumar(COL.contratista, registro.contratista ?? "");
+  if (registro.operario_1 !== undefined) sumar(COL.operario1, registro.operario_1 ?? "");
+  if (registro.operario_2 !== undefined) sumar(COL.operario2, registro.operario_2 ?? "");
+  if (registro.operario_3 !== undefined) sumar(COL.operario3, registro.operario_3 ?? "");
+  if (registro.foto_url !== undefined) sumar(COL.fotos, registro.foto_url ?? "");
+  if (registro.observaciones !== undefined) sumar(COL.observaciones, registro.observaciones ?? "");
+
+  return celdas;
+}
+
+/** Una fecha ISO como la escribe la planilla. */
+function fechaParaLaPlanilla(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [a, m, d] = String(iso).slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
 }

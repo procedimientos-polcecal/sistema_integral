@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { estadoDeTexto, filaDeOrden } from "./ordenes";
+import { estadoDeTexto, filaDeOrden, celdasParaRegistrar } from "./ordenes";
 
 /**
  * Los cuatro estados que usa la planilla, verificados contra ella:
@@ -78,5 +78,58 @@ describe("una fila de la planilla como orden de trabajo", () => {
     const o = filaDeOrden(fila, 3);
     expect(o?.contratista).toBeNull();
     expect(o?.operario_1).toBeNull();
+  });
+});
+
+describe("celdasParaRegistrar", () => {
+  const registro = {
+    estado: "REALIZADO",
+    fecha_cierre: "2026-08-25",
+    horas: 3.5,
+    contratista: "ConMet",
+    operario_1: "Pérez",
+    operario_2: null,
+    operario_3: null,
+    observaciones: "Se cambió el rodamiento",
+    foto_url: null,
+  };
+
+  it("manda cada dato a su columna", () => {
+    const celdas = celdasParaRegistrar(registro);
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    // Verificado contra la planilla: M estado, K cierre, O horas, W observaciones.
+    expect(de("M")).toBe("Realizado");
+    expect(de("K")).toBe("25/08/2026");
+    expect(de("O")).toBe("3.5");
+    expect(de("N")).toBe("ConMet");
+    expect(de("P")).toBe("Pérez");
+    expect(de("W")).toBe("Se cambió el rodamiento");
+  });
+
+  it("no escribe la columna L, que es una fórmula", () => {
+    // "Column 19" calcula atrasado/al día. Pisarla rompería el cálculo de
+    // toda la planilla.
+    expect(celdasParaRegistrar(registro).map((c) => c.letra)).not.toContain("L");
+  });
+
+  it("escribe el estado como lo escribe la planilla, no como lo guarda la app", () => {
+    expect(celdasParaRegistrar({ estado: "EN_PROCESO" }).find((c) => c.letra === "M")?.valor)
+      .toBe("En proceso");
+    expect(celdasParaRegistrar({ estado: "POR_HACER" }).find((c) => c.letra === "M")?.valor)
+      .toBe("Por hacer");
+  });
+
+  it("sólo manda lo que se pasó", () => {
+    const celdas = celdasParaRegistrar({ observaciones: "sólo esto" });
+    expect(celdas).toHaveLength(1);
+    expect(celdas[0].letra).toBe("W");
+  });
+
+  it("vaciar un campo lo vacía en la planilla", () => {
+    // Distinto de no pasarlo: pasarlo en null es "sacá lo que había".
+    expect(celdasParaRegistrar({ contratista: null })).toEqual([
+      { letra: "N", columna: 13, valor: "" },
+    ]);
   });
 });
