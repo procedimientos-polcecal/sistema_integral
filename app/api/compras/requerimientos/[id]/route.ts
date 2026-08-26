@@ -3,9 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { permisosComprasDe } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
+import type { EstadoCompra } from "@/lib/compras/types";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
+import { faltaElMotivo } from "@/lib/compras/devolucion";
 
 /**
  * Modificación de un requerimiento.
@@ -182,6 +184,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Ya estaba en espera" }, { status: 409 });
       }
       cambios.etapa_previa = actual.estado_compra;
+    }
+
+    // Devolver un pedido a comparativa no puede ser mudo.
+    //
+    // Quien aprueba lo devuelve porque le falta algo —un presupuesto vencido,
+    // uno solo cuando hacen falta tres, un flete sin cotizar—, y Compras lo
+    // recibe de vuelta sin saber qué corregir si no se lo dice. Sin motivo, lo
+    // más probable es que el pedido vuelva igual que como se fue.
+    //
+    // La regla vive acá y no sólo en el formulario: una validación que existe
+    // en el botón deja de existir apenas alguien llame a la API de otra forma.
+    //
+    // Se exige sólo en la devolución —de PARA_COMPRAR a EN_COMPARATIVA—; llegar
+    // a comparativa desde cualquier otro lado no es devolver nada.
+    if (faltaElMotivo(actual.estado_compra, nuevoEstado as EstadoCompra, body.nota)) {
+      return NextResponse.json(
+        { error: "Para devolver el pedido a comparativa hay que decir qué falta." },
+        { status: 400 }
+      );
     }
 
     // Volver de la espera no es avanzar: es retomar donde estaba. Por eso más

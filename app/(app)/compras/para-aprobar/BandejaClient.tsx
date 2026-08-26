@@ -10,6 +10,7 @@ import type { OrdenTablero } from "@/lib/compras/constants";
 import { repartirBandeja } from "@/lib/compras/bandeja";
 import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
 import AprobarSinComparativa from "../AprobarSinComparativa";
+import { useConfirm } from "@/components/ConfirmProvider";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
 
 /**
@@ -28,6 +29,7 @@ export default function BandejaClient({
   usuarioId: string;
 }) {
   const router = useRouter();
+  const confirmar = useConfirm();
   const [abierto, setAbierto] = useState<string | null>(null);
   const [eligiendo, setEligiendo] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -39,6 +41,9 @@ export default function BandejaClient({
   // cargados va escondida al pie: la comparativa manda la pantalla.
   const [sinComparativa, setSinComparativa] = useState<string | null>(null);
   const [aprobando, setAprobando] = useState<string | null>(null);
+  // Qué pedido está mostrando el formulario de devolución, y con qué motivo.
+  const [devolviendo, setDevolviendo] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState("");
 
   const { mios, deOtros } = repartirBandeja(requerimientos, usuarioId, orden);
 
@@ -86,6 +91,49 @@ export default function BandejaClient({
     setSinComparativa(null);
     setAbierto(null);
     router.refresh();
+  }
+
+  /**
+   * Mover el pedido sin decidirlo.
+   *
+   * Las dos salidas van por el mismo PATCH, que es el que ya sabe guardar la
+   * etapa previa al frenar y exigir el motivo al devolver.
+   */
+  async function moverPedido(
+    r: RequerimientoConRelaciones,
+    destino: "EN_ESPERA" | "EN_COMPARATIVA",
+    nota?: string
+  ) {
+    setAprobando(r.id);
+    setError("");
+    const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado_compra: destino, ...(nota ? { nota } : {}) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setAprobando(null);
+
+    if (!res.ok) {
+      setError(body.error ?? "No se pudo mover el pedido.");
+      return;
+    }
+    setAviso(body.aviso_sheets ?? null);
+    setDevolviendo(null);
+    setMotivo("");
+    setAbierto(null);
+    router.refresh();
+  }
+
+  async function ponerEnEspera(r: RequerimientoConRelaciones) {
+    const ok = await confirmar({
+      title: "Poner en espera",
+      message:
+        `El RI ${r.nro_ri} sale de tu bandeja sin cerrarse, y vuelve acá con vos ` +
+        `asignado cuando lo saques de la espera.`,
+      confirmText: "Poner en espera",
+    });
+    if (ok) await moverPedido(r, "EN_ESPERA");
   }
 
   function Pedido({ r, mio }: { r: RequerimientoConRelaciones; mio: boolean }) {
@@ -192,6 +240,65 @@ export default function BandejaClient({
                 />
               </>
             )}
+
+            {/* Las dos salidas que no deciden la compra. Van al pie y en los
+                dos casos: que haya presupuestos no significa que alcancen. */}
+            <div className="border-t border-slate-100 pt-3">
+              {devolviendo === r.id ? (
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Qué falta
+                    </span>
+                    <textarea
+                      rows={2}
+                      autoFocus
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="Conseguir un tercer presupuesto, el de Ferretemás está vencido…"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Compras lo va a leer en el historial del pedido. Sin esto, vuelve sin
+                      saber qué corregir.
+                    </span>
+                  </label>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => { setDevolviendo(null); setMotivo(""); }}
+                      disabled={aprobando === r.id}
+                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => moverPedido(r, "EN_COMPARATIVA", motivo.trim())}
+                      disabled={aprobando === r.id || !motivo.trim()}
+                      className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                    >
+                      {aprobando === r.id ? "Devolviendo…" : "Devolver a comparativa"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-4">
+                  <button
+                    onClick={() => ponerEnEspera(r)}
+                    disabled={aprobando === r.id}
+                    className="text-xs text-slate-500 underline hover:text-slate-800 disabled:opacity-50"
+                  >
+                    Poner en espera
+                  </button>
+                  <button
+                    onClick={() => { setDevolviendo(r.id); setMotivo(""); }}
+                    disabled={aprobando === r.id}
+                    className="text-xs text-slate-500 underline hover:text-slate-800 disabled:opacity-50"
+                  >
+                    Devolver a comparativa
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </article>
