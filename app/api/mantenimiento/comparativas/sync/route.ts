@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores } from "@/lib/core/sheets";
 import { COMPARATIVA_PESTANAS, filaDeComparativa } from "@/lib/mantenimiento/comparativas";
-import { cargarEnlaces, proveedorDe } from "@/lib/mantenimiento/enlaces";
+import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 
 export const maxDuration = 300;
 
@@ -61,7 +61,11 @@ export async function POST() {
       const proveedor_id = proveedorDe(enlaces, cot.proveedor);
       if (!proveedor_id) sinProveedor.add(cot.proveedor);
 
-      cotizaciones.push({ ...cot, proveedor_id, synced_at: cuando });
+      // La cotización dice de qué máquina es: sirve para ver lo que se cotizó
+      // de un equipo sin pasar por la OS.
+      const { equipment_id } = resolver(enlaces, cot);
+
+      cotizaciones.push({ ...cot, proveedor_id, equipment_id, synced_at: cuando });
     }
   }
 

@@ -7,6 +7,8 @@ import {
   pestanaDeSector, filaParaComparativa, coincideLaFila,
   COLUMNA_ELECCION, COLUMNAS_COMPARATIVA,
 } from "@/lib/mantenimiento/comparativas";
+import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
+import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_COMPARATIVAS_ID ?? "";
 
@@ -126,10 +128,23 @@ export async function POST(request: Request) {
     );
   }
 
+  // Los mismos enlaces que hace la sincronización, para que una cotización
+  // cargada acá quede igual de completa que una traída de la planilla.
+  const enlaces = await cargarEnlaces(admin);
+  const equipo_code = codigoDeEquipo(cotizacion.equipo_raw);
+  const { equipment_id } = resolver(enlaces, {
+    equipo_code,
+    equipo_raw: cotizacion.equipo_raw,
+    sector_raw: cotizacion.sector,
+  });
+
   const { data, error } = await admin
     .from("os_comparativas")
     .insert({
       ...cotizacion,
+      equipo_code,
+      equipment_id,
+      proveedor_id: proveedorDe(enlaces, proveedor),
       sheets_tab: pestana,
       sheets_row: sheetsRow,
       synced_at: new Date().toISOString(),

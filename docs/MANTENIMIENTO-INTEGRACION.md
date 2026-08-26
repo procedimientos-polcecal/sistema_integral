@@ -27,6 +27,7 @@ configuración, no código:
 | Migración 032 | Los contratistas pasan a `proveedores`. |
 | Migración 033 | `sectores.codigo` y `es_de_planta`. |
 | Migración 034 | El código de sector, único de verdad. |
+| Migración 035 | `os_comparativas` guarda de qué equipo es. |
 | Importar el libro | "Importar BD Equipos" en el listado de equipos, y después volver a sincronizar OT y avisos para que enlacen. |
 | Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
 | El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |
@@ -295,6 +296,33 @@ el que sale de `String(n)` al guardarlo. Tomar todos los puntos por separadores
 de miles daba **mil veces el precio**: hacía aparecer diferencias de miles de
 millones donde la elegida era, de hecho, la más barata. La regla es: con coma,
 formato argentino; sin coma, un punto solo es decimal y varios son de miles.
+
+### Cargar una cotización desde la app
+
+La comparativa se puede trabajar sin abrir el Sheets: se carga el presupuesto
+que llegó por mail y se escribe **primero en la planilla** y después en el
+espejo. Al revés quedaría una cotización que la próxima sincronización borra sin
+dejar rastro, porque el refresco es completo.
+
+El proveedor se elige de la lista de contratistas en vez de escribirse —en las
+planillas hay cinco maneras de escribir "Don Alfredo" justamente porque cada uno
+lo tipeaba de nuevo—, con la opción de sumar uno que no esté.
+
+A la planilla van **números**, no lo que se tipeó: sus fórmulas los usan. Y el
+IVA va como fracción, que es como lo guarda —muestra "21%" y vale 0.21—.
+
+Sacar una cotización **vacía** su fila en vez de borrarla, por lo mismo de
+siempre: borrarla correría todas las de abajo.
+
+### Una columna que faltaba
+
+`os_comparativas` guardaba el equipo sólo como texto libre, mientras
+`ordenes_servicio` y `avisos` guardan además el código y el enlace. Faltaba de
+verdad: la sincronización leía `equipo_code`, lo mandaba en el insert, y el lote
+entero fallaba con "Could not find the 'equipo_code' column". Por eso no entró
+ninguna de las 147 cotizaciones. La **migración 035** suma esa columna y
+`equipment_id`, y ahora se puede ver lo que se cotizó de una máquina sin pasar
+por la OS.
 
 ### Escribir en la planilla
 

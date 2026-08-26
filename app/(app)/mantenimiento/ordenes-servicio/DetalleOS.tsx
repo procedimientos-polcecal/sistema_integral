@@ -6,6 +6,7 @@ import { monto } from "@/lib/mantenimiento/planilla";
 import { resumenDeCotizaciones } from "@/lib/mantenimiento/comparativas";
 import { ESTADOS_OS } from "@/lib/mantenimiento/os";
 import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
+import CotizacionForm from "./CotizacionForm";
 
 /**
  * Una orden de servicio abierta: cómo viene y qué se cotizó.
@@ -25,6 +26,7 @@ export default function DetalleOS({
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [cargandoComparativa, setCargandoComparativa] = useState(true);
+  const [cargandoNueva, setCargandoNueva] = useState(false);
 
   const [estado, setEstado] = useState(orden.estado ?? "");
   const [proveedor, setProveedor] = useState(orden.proveedor_elegido ?? "");
@@ -85,6 +87,22 @@ export default function DetalleOS({
 
     if (!res.ok) { setError(body.error ?? "No se pudo elegir."); return; }
     if (!cot.eleccion) setProveedor(cot.proveedor);
+    traerComparativa();
+    onCambio();
+  }
+
+  /** Sacar una cotización: se vacía su fila en la planilla y se borra acá. */
+  async function borrar(cot: CotizacionOS) {
+    setGuardando(true);
+    setError("");
+
+    const res = await fetch(`/api/mantenimiento/comparativas?id=${cot.id}`, { method: "DELETE" });
+    setGuardando(false);
+
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo borrar.");
+      return;
+    }
     traerComparativa();
     onCambio();
   }
@@ -215,12 +233,31 @@ export default function DetalleOS({
                 >ver la planilla</a>
               )}
             </h3>
-            {resumen.cantidad > 0 && resumen.seEligioLaMasBarata === false && (
-              <span className="text-xs text-amber-700">
-                La elegida está {monedaExacta(resumen.diferencia)} por encima de la más barata.
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {resumen.cantidad > 0 && resumen.seEligioLaMasBarata === false && (
+                <span className="text-xs text-amber-700">
+                  La elegida está {monedaExacta(resumen.diferencia)} por encima de la más barata.
+                </span>
+              )}
+              {puedeEditar && !cargandoNueva && orden.os_number && (
+                <button
+                  onClick={() => setCargandoNueva(true)}
+                  className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cargar cotización
+                </button>
+              )}
+            </div>
           </div>
+
+          {cargandoNueva && orden.os_number && (
+            <CotizacionForm
+              osNumber={orden.os_number}
+              sector={orden.sector_raw ?? orden.sectores?.nombre ?? null}
+              onCerrar={() => setCargandoNueva(false)}
+              onCargada={() => { setCargandoNueva(false); traerComparativa(); onCambio(); }}
+            />
+          )}
 
           {cargandoComparativa ? (
             <p className="py-6 text-center text-sm text-slate-400">Trayendo las cotizaciones…</p>
@@ -284,6 +321,14 @@ export default function DetalleOS({
                             </button>
                           ) : (
                             c.eleccion && <span className="text-xs font-semibold text-emerald-700">Elegida</span>
+                          )}
+                          {puedeEditar && (
+                            <button
+                              onClick={() => borrar(c)}
+                              disabled={guardando}
+                              className="ml-1.5 text-xs text-slate-400 hover:text-red-600 disabled:opacity-50"
+                              title="Sacar esta cotización de la comparativa"
+                            >×</button>
                           )}
                         </td>
                       </tr>
