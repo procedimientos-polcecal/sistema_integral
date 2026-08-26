@@ -85,7 +85,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 |---|---|---|
 | 1 | Cimientos: permisos y nombres | **hecho** (migración 029) |
 | 2 | Avisos | **hecho** — sincronización y listado |
-| 3 | OT: **sincronización, filtro por especialidad y parada de sector hechos**; falta registrar realizado e iniciar OT | en curso |
+| 3 | OT: sincronización, especialidad, parada de sector e inicio de OT hechos; falta registrar realizado | en curso |
 | 4 | Producción semanal | **hecho** |
 | 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | **hecho** |
@@ -158,6 +158,22 @@ sistema. La planilla no tiene esa columna.
 
 Ya se muestra en producción semanal y en el dashboard, al lado del nombre del
 sector, y como indicador propio ("Sectores a parar").
+
+## Iniciar una OT pregunta por el equipo
+
+Pasar una OT a "en proceso" quiere decir que alguien va a intervenir la máquina.
+Si no se pregunta ahí en qué estado queda el equipo, el sistema termina
+mostrando una máquina operativa mientras está desarmada.
+
+El modal sólo ofrece los tres estados que tienen sentido durante un trabajo
+—operativo, en mantenimiento, fuera de servicio— y pide motivo para los dos que
+dejan la máquina parada. Si el estado elegido es el que ya tenía, no se registra
+el cambio: una línea de historial que dice "pasó de operativo a operativo" es
+ruido.
+
+Cuando la OT no está enlazada a ningún equipo del sistema —pasa con las que
+vienen de la planilla sin código reconocible— el modal lo dice y sólo cambia el
+estado de la OT.
 
 ## Producción semanal
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import NuevaOTModal from "./NuevaOTModal";
+import IniciarOTModal from "./IniciarOTModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 
@@ -41,6 +42,7 @@ export default function OrdenesClient({
 
   const [kanbanData, setKanbanData] = useState<Record<string, { items: any[]; count: number }>>({});
   const [kanbanLoading, setKanbanLoading] = useState(false);
+  const [iniciando, setIniciando] = useState<any | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,7 +109,21 @@ export default function OrdenesClient({
     load();
   }
 
+  /**
+   * Cambiar el estado de una OT.
+   *
+   * Pasarla a "en proceso" abre el modal de inicio en vez de confirmar y ya:
+   * empezar el trabajo casi siempre cambia el estado del equipo, y si no se
+   * pregunta ahí queda una máquina figurando operativa mientras está
+   * desarmada.
+   */
   async function changeEstado(id: string, estado: string) {
+    if (estado === "EN_PROCESO") {
+      const orden = orders.find((o: any) => o.id === id)
+        ?? Object.values(kanbanData).flatMap((c: any) => c.items).find((o: any) => o.id === id);
+      if (orden) { setIniciando(orden); return; }
+    }
+
     const meta = estadoMeta(estado);
     const ok = await confirm({
       title: "Cambiar estado de la OT",
@@ -314,6 +330,22 @@ export default function OrdenesClient({
           equipos={equipos}
           onClose={() => setShowNew(false)}
           onCreated={() => { setShowNew(false); load(); }}
+        />
+      )}
+
+      {iniciando && (
+        <IniciarOTModal
+          orden={iniciando}
+          equipoId={iniciando.equipment_id ?? null}
+          estadoActual={
+            equipos.find((e: any) => e.id === iniciando.equipment_id)?.status ?? null
+          }
+          onCerrar={() => setIniciando(null)}
+          onIniciada={() => {
+            setIniciando(null);
+            if (view === "kanban") loadKanban();
+            else load();
+          }}
         />
       )}
     </div>
