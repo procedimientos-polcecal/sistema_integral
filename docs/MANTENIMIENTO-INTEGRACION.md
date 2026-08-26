@@ -15,8 +15,21 @@ existen, `ordenes_trabajo` y `equipos` tienen sus columnas, y los helpers
 `mant_nivel()` / `mant_puede_ver()` / `mant_puede_editar()` / `mant_es_admin()`
 responden.
 
-El código del ERP todavía **no usa nada de eso**: las tablas están vacías y no
-hay pantallas. Portar las features es el trabajo pendiente.
+Las siete features están portadas. Lo que falta para que anden es
+configuración, no código:
+
+| Falta | Para qué |
+|---|---|
+| `GOOGLE_SHEETS_OS_ID` | La planilla de órdenes de servicio. **No la tenemos**: el repo de origen nunca la configuró, así que su forma no se pudo verificar. |
+| `GOOGLE_SHEETS_COMPARATIVAS_ID` | `1I2m7K2eUelBXjTp3uoRI0CjWd52gkIdSlmC2mjId1io` |
+| `GOOGLE_SHEETS_AVISOS_ID` | `1Iyfy3AzEASPpYU3zNBKr3rg5BkAM_DC1X9E8RJo6ZX4` |
+| `GOOGLE_SHEETS_OT_ID` | `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo` |
+| Migración 031 | Ejecuciones que cuelgan de una OT. |
+| Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
+| El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |
+
+Cada escritura en una planilla es best-effort y avisa qué no se pudo escribir,
+así que la app sirve igual mientras eso se resuelve.
 
 ## Decisiones
 
