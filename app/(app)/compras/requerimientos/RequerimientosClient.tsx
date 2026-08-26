@@ -6,11 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
 import type { ResumenComparativa } from "./ModalAvanzar";
+import AprobarSinComparativa from "../AprobarSinComparativa";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
   moneda, fecha, diasRestantes, etiquetaEmpresa,
-  SIGUIENTE_ESTADO, ACCION_SIGUIENTE, ESTADOS_QUE_PIDEN_DATOS,
+  SIGUIENTE_ESTADO, ACCION_SIGUIENTE, ESTADOS_CON_DIALOGO,
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import type { FiltrosCompras } from "@/lib/compras/filtrosUrl";
@@ -341,7 +342,7 @@ export default function RequerimientosClient({
                             usuarioId={usuarioId}
                             procesando={procesando === f.id}
                             onAvanzar={() =>
-                              ESTADOS_QUE_PIDEN_DATOS.includes(f.estado_compra)
+                              ESTADOS_CON_DIALOGO.includes(f.estado_compra)
                                 ? setAvanzando(f)
                                 : avanzar(f)
                             }
@@ -383,7 +384,42 @@ export default function RequerimientosClient({
         )}
       </div>
 
-      {avanzando && (
+      {/* Aprobar la compra tiene su propio diálogo: no exige nada, avisa que va
+          sin comparativa y ofrece cargar el proveedor y el costo. Antes este
+          botón avanzaba a ciegas, sin avisar ni dejar cargar nada, mientras la
+          bandeja ni siquiera lo ofrecía. */}
+      {avanzando?.estado_compra === "PARA_COMPRAR" && (
+        <div
+          onClick={() => setAvanzando(null)}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mt-20 w-full max-w-lg rounded-xl bg-white shadow-xl"
+          >
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-900">Aprobar la compra</h2>
+              <p className="text-sm text-slate-500">
+                RI {avanzando.nro_ri} · {avanzando.descripcion}
+              </p>
+            </div>
+            <div className="px-6 py-5">
+              <AprobarSinComparativa
+                proveedores={proveedores}
+                presupuestosSinMirar={resumenes[avanzando.id]?.cuantos ?? 0}
+                aprobando={procesando === avanzando.id}
+                onAprobar={async (datos) => {
+                  const ok = await avanzar(avanzando, datos);
+                  if (ok) setAvanzando(null);
+                }}
+                onCancelar={() => setAvanzando(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {avanzando && avanzando.estado_compra !== "PARA_COMPRAR" && (
         <ModalAvanzar
           requerimiento={avanzando}
           aprobadores={aprobadores}

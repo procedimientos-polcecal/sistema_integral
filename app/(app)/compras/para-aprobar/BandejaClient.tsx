@@ -9,6 +9,7 @@ import {
 import type { OrdenTablero } from "@/lib/compras/constants";
 import { repartirBandeja } from "@/lib/compras/bandeja";
 import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
+import AprobarSinComparativa from "../AprobarSinComparativa";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
 
 /**
@@ -19,10 +20,11 @@ import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types
  * un presupuesto ES aprobar la compra.
  */
 export default function BandejaClient({
-  requerimientos, cotizaciones, usuarioId,
+  requerimientos, cotizaciones, proveedores, usuarioId,
 }: {
   requerimientos: RequerimientoConRelaciones[];
   cotizaciones: Record<string, Cotizacion[]>;
+  proveedores: { id: string; nombre: string }[];
   usuarioId: string;
 }) {
   const router = useRouter();
@@ -33,6 +35,10 @@ export default function BandejaClient({
   // Un solo criterio para los dos bloques: ordenar distinto arriba y abajo
   // hace más difícil comparar una cola con la otra.
   const [orden, setOrden] = useState<OrdenTablero>("prioridad");
+  // Qué pedido está mostrando la salida sin comparativa. Con presupuestos
+  // cargados va escondida al pie: la comparativa manda la pantalla.
+  const [sinComparativa, setSinComparativa] = useState<string | null>(null);
+  const [aprobando, setAprobando] = useState<string | null>(null);
 
   const { mios, deOtros } = repartirBandeja(requerimientos, usuarioId, orden);
 
@@ -47,6 +53,37 @@ export default function BandejaClient({
       return;
     }
     setAviso(body.aviso_drive ?? null);
+    setAbierto(null);
+    router.refresh();
+  }
+
+  /**
+   * Aprobar sin elegir un presupuesto.
+   *
+   * Va por el PATCH del requerimiento y no por la ruta de elegir, que necesita
+   * una cotización. El proveedor y el costo viajan en el mismo cambio si se
+   * cargaron.
+   */
+  async function aprobarSinComparativa(
+    r: RequerimientoConRelaciones,
+    datos: { proveedor_id?: string; costo_iva?: number }
+  ) {
+    setAprobando(r.id);
+    setError("");
+    const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado_compra: "APROBADO", ...datos }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setAprobando(null);
+
+    if (!res.ok) {
+      setError(body.error ?? "No se pudo aprobar la compra.");
+      return;
+    }
+    setAviso(body.aviso_sheets ?? null);
+    setSinComparativa(null);
     setAbierto(null);
     router.refresh();
   }
@@ -102,23 +139,58 @@ export default function BandejaClient({
         </div>
 
         {mio && abierto === r.id && (
-          <div className="border-t border-slate-100 px-5 py-4">
+          <div className="space-y-4 border-t border-slate-100 px-5 py-4">
             {suyas.length > 0 ? (
-              <ComparativaDecision
-                cotizaciones={suyas}
-                minimo={minimo}
-                onElegir={elegir}
-                eligiendo={eligiendo}
-              />
-            ) : (
-              <p className="text-sm text-slate-500">
-                No hay presupuestos cargados en el sistema.{" "}
-                {r.comparativa_url && (
-                  <a href={r.comparativa_url} target="_blank" rel="noreferrer" className="underline">
-                    Ver la comparativa en la planilla
-                  </a>
+              <>
+                <ComparativaDecision
+                  cotizaciones={suyas}
+                  minimo={minimo}
+                  onElegir={elegir}
+                  eligiendo={eligiendo}
+                />
+
+                {/* Con presupuestos cargados la comparativa manda: aprobar sin
+                    elegir queda al pie, disponible pero en segundo plano. */}
+                {sinComparativa === r.id ? (
+                  <div className="border-t border-slate-100 pt-4">
+                    <AprobarSinComparativa
+                      proveedores={proveedores}
+                      presupuestosSinMirar={suyas.length}
+                      aprobando={aprobando === r.id}
+                      onAprobar={(datos) => aprobarSinComparativa(r, datos)}
+                      onCancelar={() => setSinComparativa(null)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSinComparativa(r.id)}
+                    className="text-xs text-slate-500 underline hover:text-slate-800"
+                  >
+                    Aprobar sin elegir ninguno
+                  </button>
                 )}
-              </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500">
+                  No hay presupuestos cargados en el sistema.{" "}
+                  {r.comparativa_url && (
+                    <a href={r.comparativa_url} target="_blank" rel="noreferrer" className="underline">
+                      Ver la comparativa en la planilla
+                    </a>
+                  )}
+                </p>
+
+                {/* Sin presupuestos no hay nada que elegir: acá esta es LA
+                    acción, no una salida de emergencia. Antes la bandeja no
+                    ofrecía ninguna y el pedido quedaba trabado. */}
+                <AprobarSinComparativa
+                  proveedores={proveedores}
+                  presupuestosSinMirar={0}
+                  aprobando={aprobando === r.id}
+                  onAprobar={(datos) => aprobarSinComparativa(r, datos)}
+                />
+              </>
             )}
           </div>
         )}

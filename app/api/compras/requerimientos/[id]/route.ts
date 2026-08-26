@@ -5,6 +5,7 @@ import { permisosComprasDe } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
+import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
 
 /**
  * Modificación de un requerimiento.
@@ -173,11 +174,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // planilla el estado dice a quién le toca; que apruebe otro dejaría los dos
     // lados diciendo cosas distintas.
     if (nuevoEstado === "APROBADO") {
-      if (actual.compra_asignada_a !== user.id) {
-        return NextResponse.json(
-          { error: "Esta compra la tiene que aprobar la persona a la que se le asignó" },
-          { status: 403 }
-        );
+      const veredicto = puedeAprobarLaCompra({
+        asignadaA: actual.compra_asignada_a as string | null,
+        usuarioId: user.id,
+        estaEnLaLista: permisos.puedeAprobar,
+      });
+      if (!veredicto.ok) {
+        return NextResponse.json({ error: veredicto.error }, { status: veredicto.estado });
       }
       cambios.compra_aprobada_por = user.id;
       cambios.compra_aprobada_en = new Date().toISOString();
@@ -209,24 +212,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    // Aprobar la compra es elegir un presupuesto. Si hay presupuestos cargados
-    // y ninguno está elegido, esto se llamó por la vía equivocada: la que
-    // corresponde es POST /api/compras/cotizaciones/[id]/elegir.
-    if (nuevoEstado === "APROBADO") {
-      const { data: cotizaciones } = await admin
-        .from("compras_cotizaciones")
-        .select("id, elegida")
-        .eq("requerimiento_id", id);
-
-      const hay = (cotizaciones ?? []).length > 0;
-      const elegida = (cotizaciones ?? []).some((c) => c.elegida);
-      if (hay && !elegida) {
-        return NextResponse.json(
-          { error: "Para aprobar la compra hay que elegir uno de los presupuestos." },
-          { status: 409 }
-        );
-      }
-    }
+    // Aprobar sin elegir un presupuesto se permite, y es deliberado.
+    //
+    // Antes esto devolvía 409: aprobar la compra ERA elegir un presupuesto. Pero
+    // hay compras que no se comparan —proveedor único, urgencia, monto menor— y
+    // la regla dejaba trabados esos pedidos en la bandeja, que sin presupuestos
+    // no ofrecía ninguna acción. La contrapartida hay que tenerla presente: el
+    // sistema ya no garantiza que una compra con presupuestos se aprobó
+    // mirándolos. Eso pasó a ser decisión de quien aprueba.
+    //
+    // Que no haya ninguna cotización elegida es lo que deja constancia de que
+    // se aprobó sin comparar; por eso no hace falta un campo aparte.
 
     // Al registrar el pedido, el proveedor y los costos salen del presupuesto
     // elegido en vez de tipearse de nuevo. `costo_iva` es el total sin el

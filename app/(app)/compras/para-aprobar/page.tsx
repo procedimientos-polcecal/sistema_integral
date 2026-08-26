@@ -47,10 +47,15 @@ export default async function ParaAprobarPage() {
     (porRequerimiento[c.requerimiento_id] ??= []).push(c);
   }
 
+  // Para aprobar sin comparativa se puede dejar cargado a quién se le compra.
+  const { data: proveedores } = await supabase
+    .from("proveedores").select("id, nombre").eq("activo", true).order("nombre");
+
   return (
     <BandejaClient
       requerimientos={requerimientos}
       cotizaciones={porRequerimiento}
+      proveedores={proveedores ?? []}
       usuarioId={user.id}
     />
   );

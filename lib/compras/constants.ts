@@ -127,13 +127,19 @@ export const COLUMNAS_TABLERO: EstadoCompra[] = [
 ];
 
 /**
- * Pasos que no se pueden dar sin cargar antes lo que producen.
+ * Pasos que no se dan de un botonazo: abren un diálogo antes.
  *
- * Vive acá y no en la pantalla que lo usa: es una regla del circuito, no una
- * decisión de una tabla. El listado lo mira para saber si el botón abre el
- * diálogo que junta esos datos o avanza directamente.
+ * En `EN_COMPARATIVA` y `APROBADO` el diálogo **exige** lo que el paso produce
+ * —a quién le toca aprobar, o el proveedor y el costo del pedido—. En
+ * `PARA_COMPRAR` no exige nada: avisa que se está aprobando sin comparativa y
+ * ofrece cargar el proveedor y el costo si ya se saben.
+ *
+ * Por eso ya no se llama ESTADOS_QUE_PIDEN_DATOS: con los tres adentro, ese
+ * nombre mentía sobre un tercio de los casos.
  */
-export const ESTADOS_QUE_PIDEN_DATOS: EstadoCompra[] = ["EN_COMPARATIVA", "APROBADO"];
+export const ESTADOS_CON_DIALOGO: EstadoCompra[] = [
+  "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO",
+];
 
 /** A qué estado pasa cada columna al avanzar, y con qué texto se ofrece. */
 export const SIGUIENTE_ESTADO: Partial<Record<EstadoCompra, EstadoCompra>> = {

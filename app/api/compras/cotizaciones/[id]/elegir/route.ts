@@ -5,6 +5,7 @@ import { leerComparativa, escribirCelda } from "@/lib/compras/drive";
 import { mapearEncabezados } from "@/lib/compras/comparativa";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
 
 /**
  * Elegir un presupuesto ES aprobar la compra.
@@ -43,26 +44,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .single();
   if (!ri) return NextResponse.json({ error: "El requerimiento no existe" }, { status: 404 });
 
-  if (ri.compra_asignada_a !== user.id) {
-    return NextResponse.json(
-      { error: "Esta compra la tiene que aprobar la persona a la que se le asignó" },
-      { status: 403 }
-    );
-  }
-  // Estar asignado no alcanza: hay que seguir estando en la lista. Alguien pudo
-  // quedar asignado y después salir de ella.
-  if (!(await puedeAprobarCompras(supabase, user.id))) {
-    return NextResponse.json(
-      { error: "Aprobar una compra requiere estar en la lista de aprobadores" },
-      { status: 403 }
-    );
-  }
-
-  if (ri.estado_compra !== "PARA_COMPRAR") {
-    return NextResponse.json(
-      { error: "Sólo se puede elegir un presupuesto cuando la compra está para comprar" },
-      { status: 409 }
-    );
+  const veredicto = puedeAprobarLaCompra({
+    asignadaA: ri.compra_asignada_a as string | null,
+    usuarioId: user.id,
+    estaEnLaLista: await puedeAprobarCompras(supabase, user.id),
+    estadoCompra: ri.estado_compra as string,
+  });
+  if (!veredicto.ok) {
+    return NextResponse.json({ error: veredicto.error }, { status: veredicto.estado });
   }
 
   // Una sola elegida por requerimiento.
