@@ -116,25 +116,66 @@ function VentanasDeReparacion({ ventanas, semana }: {
   );
 }
 
-/** Cuántas órdenes de trabajo se abrieron cada mes del último año. */
-function OrdenesPorMes({ datos }: { datos: { mes: string; cantidad: number }[] }) {
-  const maximo = Math.max(1, ...datos.map((d) => d.cantidad));
-
+/**
+ * Las órdenes del mes y cómo viene el año.
+ *
+ * El número solo no dice nada —139 puede ser mucho o poco— y la serie sola
+ * obliga a buscar el último mes con la vista. Juntos se leen de un vistazo, y
+ * por eso la barra del mes en curso va en otro color.
+ */
+function OrdenesPorMes({ datos, delMes, mes }: {
+  datos: { mes: string; cantidad: number }[];
+  delMes: number;
+  mes: string;
+}) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
-      <h2 className="text-sm font-semibold text-gray-700 mb-4">Órdenes de trabajo por mes</h2>
-      <div className="flex items-end gap-1.5 h-36">
-        {datos.map((d) => (
-          <div key={d.mes} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-            <span className="text-[10px] text-gray-400">{d.cantidad || ""}</span>
-            <div
-              className="w-full rounded-t bg-slate-800"
-              style={{ height: `${Math.max(2, (d.cantidad / maximo) * 100)}%` }}
-              title={`${d.mes}: ${d.cantidad}`}
-            />
-            <span className="text-[10px] text-gray-400 truncate w-full text-center">{d.mes}</span>
-          </div>
-        ))}
+      <div className="flex flex-col gap-5 md:flex-row">
+        <Link
+          href="/mantenimiento/ordenes"
+          className="flex shrink-0 flex-col justify-center rounded-xl transition-colors hover:bg-gray-50 md:-m-2 md:w-44 md:p-2"
+        >
+          <div className="text-4xl font-bold text-gray-900">{delMes}</div>
+          <div className="mt-1 text-xs text-gray-500">OTs generadas en {mes}</div>
+          <div className="mt-1 text-xs text-blue-600">Ver órdenes →</div>
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-xs font-medium text-gray-400">
+            OTs generadas por mes (últimos 12)
+          </p>
+          <ResponsiveContainer width="100%" height={170}>
+            <BarChart data={datos} barSize={16}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+              <XAxis
+                dataKey="mes"
+                tick={{ fontSize: 10, fill: "#94A3B8" }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#94A3B8" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" }}
+                formatter={(v) => [`${v ?? 0} OTs`, ""]}
+                cursor={{ fill: "#F8FAFC" }}
+              />
+              <Bar dataKey="cantidad" radius={[4, 4, 0, 0]} name="OTs">
+                {/* El mes en curso, destacado: es el único que todavía puede
+                    cambiar, y compararlo con los cerrados sin verlo distinto
+                    hace creer que la actividad cayó. */}
+                {datos.map((_, i) => (
+                  <Cell key={i} fill={i === datos.length - 1 ? "#1D4ED8" : "#93C5FD"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -154,7 +195,8 @@ function empresaDe(s: any): string {
 export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
   empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
-  otPorMes, otMes, ventanas, semanaQueViene, sectoresParados, avisosSinOT, osPendientes, canEdit,
+  otPorMes, otMes, mesActual, ventanas, semanaQueViene, sectoresParados,
+  avisosSinOT, osPendientes, canEdit,
 }: {
   usuario: any;
   equipos: any[];
@@ -169,6 +211,7 @@ export default function DashboardClient({
   quienTally: Record<string, number>;
   otPorMes: { mes: string; cantidad: number }[];
   otMes: number;
+  mesActual: string;
   ventanas: VentanaDeReparacion[];
   semanaQueViene: string;
   sectoresParados: string[];
@@ -434,8 +477,7 @@ export default function DashboardClient({
         <KpiCard label="Próximos 7 días"  value={upcoming.length} accent="#F59E0B" />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="OT este mes"        value={otMes}        accent="#0F172A" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <KpiCard label="Avisos sin OT"      value={avisosSinOT}  accent={avisosSinOT > 0 ? "#F59E0B" : "#22C55E"} />
         <KpiCard label="OS sin terminar"    value={osPendientes} accent="#3B82F6" />
         <KpiCard
@@ -448,7 +490,7 @@ export default function DashboardClient({
 
       <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
 
-      <OrdenesPorMes datos={otPorMes} />
+      <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-5">

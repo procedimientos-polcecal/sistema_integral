@@ -422,7 +422,12 @@ El módulo ya tenía tablero —estado de equipos, sectores, vencidos, próximos
 Lo que sumó la feature 7 es lo que las demás hicieron medible:
 
 - **OT este mes**, **avisos sin OT**, **OS sin terminar** y **sectores a parar**.
-- **Órdenes de trabajo por mes**, los últimos doce.
+- **Las órdenes del mes y cómo viene el año**, en un solo panel: el número
+  grande al lado de la serie de los últimos doce meses. El número solo no dice
+  nada —139 puede ser mucho o poco— y la serie sola obliga a buscar el último
+  mes con la vista. La barra del mes en curso va en otro color: es la única que
+  todavía puede crecer, y verla igual que las cerradas hace creer que la
+  actividad cayó.
 - **Ventanas para reparar**: los días de la semana que viene en que una planta
   entera queda libre, con cuánto hay pendiente para aprovecharlas. Es lo que
   vuelve útil la planificación de producción.
@@ -442,7 +447,9 @@ planilla crezca —el mismo tope de filas que ya nos mordió en Compras—.
 
 Los meses se arman con las partes locales de la fecha y no con `toISOString()`,
 por lo mismo que en producción semanal: en un servidor en UTC el primero del mes
-cae el último del anterior y las órdenes se cuentan en el mes equivocado.
+cae el último del anterior y las órdenes se cuentan en el mes equivocado. Y el
+nombre del mes sale de una lista y no de `toLocaleDateString`: un servidor sin
+locale español diría "OTs generadas en August".
 
 ## Los sectores de planta, aparte de los organizativos
 

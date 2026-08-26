@@ -13,6 +13,20 @@ const MESES = [
   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
 ];
 
+/** Los meses escritos enteros, para los títulos. */
+const MESES_LARGOS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+/**
+ * El mes de esa fecha, escrito entero.
+ *
+ * De una lista y no de `toLocaleDateString`: un servidor sin locale español
+ * devuelve "August", y el indicador diría "OT generadas en August".
+ */
+export const nombreDelMes = (fecha: Date): string => MESES_LARGOS[fecha.getMonth()];
+
 export interface Mes {
   etiqueta: string;
   /** El primer día del mes, inclusive. */

@@ -2,7 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import { lunesDe } from "@/lib/mantenimiento/produccion";
-import { ultimosMeses, sectoresAParar, ventanasDeReparacion } from "@/lib/mantenimiento/dashboard";
+import {
+  ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
+} from "@/lib/mantenimiento/dashboard";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
 
@@ -113,6 +115,7 @@ export default async function MantenimientoDashboardPage() {
   );
   const otPorMes = meses.map((m, i) => ({ mes: m.etiqueta, cantidad: porMes[i].count ?? 0 }));
   const otMes = otPorMes[otPorMes.length - 1]?.cantidad ?? 0;
+  const mesActual = nombreDelMes(new Date());
 
   // ── Ventanas de reparación de la semana que viene ───────────────────
   const semanaQueViene = (() => {
@@ -169,6 +172,7 @@ export default async function MantenimientoDashboardPage() {
       quienTally={quienTally}
       otPorMes={otPorMes}
       otMes={otMes}
+      mesActual={mesActual}
       ventanas={ventanas}
       semanaQueViene={semanaQueViene}
       sectoresParados={sectoresParados}

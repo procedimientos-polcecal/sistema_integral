@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { ultimosMeses, sectoresAParar, ventanasDeReparacion } from "./dashboard";
+import {
+  ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
+} from "./dashboard";
 
 describe("ultimosMeses", () => {
   const meses = ultimosMeses(new Date(2026, 7, 25), 12);
@@ -98,5 +100,19 @@ describe("ventanasDeReparacion", () => {
       []
     );
     expect(ventanas).toHaveLength(0);
+  });
+});
+
+describe("nombreDelMes", () => {
+  it("da el mes escrito entero, para el título del indicador", () => {
+    expect(nombreDelMes(new Date(2026, 7, 25))).toBe("Agosto");
+    expect(nombreDelMes(new Date(2026, 0, 1))).toBe("Enero");
+    expect(nombreDelMes(new Date(2026, 11, 31))).toBe("Diciembre");
+  });
+
+  it("no depende del locale del servidor", () => {
+    // `toLocaleDateString` en un servidor sin locale español devuelve
+    // "August", y el indicador diría "OT generadas en August".
+    expect(nombreDelMes(new Date(2026, 2, 10))).toBe("Marzo");
   });
 });
