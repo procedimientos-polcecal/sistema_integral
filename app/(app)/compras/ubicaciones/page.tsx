@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
-import { nivelComprasDe } from "@/lib/compras/auth";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import UbicacionesClient from "./UbicacionesClient";
 import type { UbicacionCompras } from "@/lib/compras/types";
 
 export default async function UbicacionesPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
   const [{ data: ubicaciones }, { data: sectores }, { data: equipos }] =
@@ -34,7 +35,7 @@ export default async function UbicacionesPage() {
     conteo[id] = (conteo[id] ?? 0) + 1;
   }
 
-  const nivel = await nivelComprasDe(supabase, user.id);
+  const { nivel } = await permisosComprasActuales();
 
   return (
     <UbicacionesClient

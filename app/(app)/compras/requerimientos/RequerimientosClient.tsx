@@ -119,49 +119,61 @@ export default function RequerimientosClient({
     if (err) {
       setError(err.message);
       setFilas([]);
-      setResumenes({});
       setCargando(false);
       return;
     }
 
-    const nuevas = (data ?? []) as RequerimientoConRelaciones[];
-    setFilas(nuevas);
+    setFilas((data ?? []) as RequerimientoConRelaciones[]);
     setTotal(count ?? 0);
     setCargando(false);
+    // Lo que se haya guardado de presupuestos deja de valer: esto corre al
+    // cambiar de filtro o de página, y también después de cada acción. Guardar
+    // de menos es preferible a mostrar una comparativa que ya cambió.
+    setResumenes({});
 
-    // Los presupuestos, sólo de las filas que están en pantalla.
-    //
-    // Se filtra por los ids y no por el estado porque son 50 como mucho: son
-    // unos 2 KB de URL. Filtrar por estado traería los del histórico entero, y
-    // una lista de mil ids arma una URL de 37 KB que PostgREST rechaza con 400.
-    const ids = nuevas.map((f) => f.id);
-    if (ids.length === 0) {
-      setResumenes({});
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina]);
+
+  /**
+   * Los presupuestos de un requerimiento, recién cuando se los va a mirar.
+   *
+   * Antes se traían junto con cada página de la tabla, y se pagaban de nuevo
+   * con cada cambio de filtro, para algo que se usa al tocar un botón. Es un
+   * viaje del navegador hasta Virginia: unos 330 ms que nadie estaba usando.
+   *
+   * Lo que ya se pidió no se vuelve a pedir: el diálogo se abre y se cierra
+   * varias veces sobre el mismo pedido.
+   */
+  async function abrirDialogo(r: RequerimientoConRelaciones) {
+    if (resumenes[r.id]) {
+      setAvanzando(r);
       return;
     }
 
+    setProcesando(r.id);
+    const supabase = createClient();
     const { data: cotizaciones } = await supabase
       .from("compras_cotizaciones")
       .select("requerimiento_id, elegida, proveedor_id, precio_total, costo_envio")
-      .in("requerimiento_id", ids);
+      .eq("requerimiento_id", r.id);
+    setProcesando(null);
 
     const nombrePorProveedor = new Map(proveedores.map((p) => [p.id, p.nombre]));
-    const resumen: Record<string, ResumenComparativa> = {};
+    const resumen: ResumenComparativa = { cuantos: 0, elegida: null };
     for (const c of (cotizaciones ?? []) as {
-      requerimiento_id: string; elegida: boolean; proveedor_id: string;
+      elegida: boolean; proveedor_id: string;
       precio_total: number | null; costo_envio: number | null;
     }[]) {
-      const r = (resumen[c.requerimiento_id] ??= { cuantos: 0, elegida: null });
-      r.cuantos += 1;
+      resumen.cuantos += 1;
       if (c.elegida) {
-        r.elegida = {
+        resumen.elegida = {
           ...costosParaElPedido(c),
           proveedor_nombre: nombrePorProveedor.get(c.proveedor_id) ?? null,
         };
       }
     }
-    setResumenes(resumen);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina, proveedores]);
+    setResumenes((previos) => ({ ...previos, [r.id]: resumen }));
+    setAvanzando(r);
+  }
 
   /**
    * Avanza el RI a la etapa siguiente.
@@ -391,7 +403,7 @@ export default function RequerimientosClient({
                             onEspera={(aEspera) => cambiarEspera(f, aEspera)}
                             onAvanzar={() =>
                               ESTADOS_CON_DIALOGO.includes(f.estado_compra)
-                                ? setAvanzando(f)
+                                ? abrirDialogo(f)
                                 : avanzar(f)
                             }
                           />

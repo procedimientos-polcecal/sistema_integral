@@ -1,16 +1,18 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe } from "@/lib/compras/auth";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import AprobacionesClient from "./AprobacionesClient";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
 export default async function AprobacionesPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const permisos = await permisosComprasDe(supabase, user.id);
+  const permisos = await permisosComprasActuales();
 
   // Todo lo que espera decisión, de lo más viejo a lo más nuevo: el cliente
   // lo reordena por urgencia sin perder la antigüedad como desempate.

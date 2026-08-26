@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { usuarioActual } from "@/lib/core/sesion";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { COMPRA_LABELS, moneda } from "@/lib/compras/constants";
 import { armarIndicadores } from "@/lib/compras/tablero";
 import Indicador from "@/components/Indicador";
@@ -15,15 +16,16 @@ interface FilaResumen {
 export default async function TableroPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
   // Cinco filas: la vista agrupa en la base. El tablero anterior traía los
   // requerimientos para contarlos, y por eso tenía que recortar PEDIDO a los
   // últimos 90 días.
-  const [{ data: resumen, error }, puedeAprobar] = await Promise.all([
+  const [{ data: resumen, error }, { puedeAprobar }] = await Promise.all([
     supabase.from("compras_resumen_por_estado").select("estado_compra, cantidad, monto"),
-    puedeAprobarCompras(supabase, user.id),
+    // Ya lo calculó el layout: vuelve sin salir a la red.
+    permisosComprasActuales(),
   ]);
 
   const indicadores = armarIndicadores(

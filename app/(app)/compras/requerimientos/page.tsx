@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { nivelComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
+import { usuarioActual } from "@/lib/core/sesion";
+import { aprobadoresDeCompras } from "@/lib/compras/auth";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
 import RequerimientosClient from "./RequerimientosClient";
 
@@ -11,19 +13,21 @@ export default async function RequerimientosPage({
 }) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const [{ data: areas }, { data: proveedores }, { data: empresas }, { data: ubicaciones }] =
-    await Promise.all([
-      supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
-      supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
-      supabase.from("empresas").select("id, nombre").order("nombre"),
-      supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
-    ]);
-
-  const [nivel, aprobadores] = await Promise.all([
-    nivelComprasDe(supabase, user.id),
+  // Todo junto: ninguna de estas depende de otra, y en serie serían dos esperas
+  // donde alcanza con una.
+  const [
+    { data: areas }, { data: proveedores }, { data: empresas }, { data: ubicaciones },
+    { nivel }, aprobadores,
+  ] = await Promise.all([
+    supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
+    supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
+    supabase.from("empresas").select("id, nombre").order("nombre"),
+    supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
+    // Ya lo calculó el layout: acá vuelve sin salir a la red.
+    permisosComprasActuales(),
     // Quiénes pueden aprobar una compra. Sale de `compras_aprobadores` y no de
     // los grants del módulo: administrar Compras y estar autorizado a aprobar
     // un gasto son cosas distintas, y las hacen personas distintas.

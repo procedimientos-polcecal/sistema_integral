@@ -1,16 +1,18 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import ConfiguracionClient from "./ConfiguracionClient";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default async function ConfiguracionPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const permisos = await permisosComprasDe(supabase, user.id);
+  const permisos = await permisosComprasActuales();
   if (!permisos.puedeEditar) redirect("/compras");
 
   // La pregunta que importa es "¿ya puedo apagar la planilla?", y eso se

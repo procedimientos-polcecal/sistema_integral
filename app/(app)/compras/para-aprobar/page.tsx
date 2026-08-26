@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { usuarioActual } from "@/lib/core/sesion";
+import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { traerTodo } from "@/lib/core/paginado";
 import BandejaClient from "./BandejaClient";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
@@ -8,11 +9,12 @@ import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types
 export default async function ParaAprobarPage() {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioActual();
   if (!user) redirect("/login");
 
   // La bandeja es de quienes aprueban: no tiene nada que mostrarle a nadie más.
-  if (!(await puedeAprobarCompras(supabase, user.id))) redirect("/compras");
+  const { puedeAprobar } = await permisosComprasActuales();
+  if (!puedeAprobar) redirect("/compras");
 
   const requerimientos = await traerTodo<RequerimientoConRelaciones>((desde, hasta) =>
     supabase
