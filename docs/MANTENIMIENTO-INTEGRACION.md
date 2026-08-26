@@ -612,6 +612,38 @@ volver a leer las planillas, y la sincronización de comparativas borra y
 reinserta: pasar por ahí para llenar una columna es caro y arriesgado sin
 motivo.
 
+## Lo que la app vieja tiene y el SdG todavía no
+
+Relevado comparando las dos apps ruta por ruta, no de memoria.
+
+| Falta | Qué es | Cuánto pesa |
+|---|---|---|
+| **Crear un aviso** | Cargar un aviso desde la app y escribirlo en la planilla. Hoy sólo se traen. | Alto |
+| **Generar una OT desde un aviso** | Con un botón: crea la OT, la agrega a la planilla y marca el aviso. | Alto |
+| **Repuestos de una OT** | Qué repuestos hace falta conseguir. La tabla existe y está vacía. | Medio |
+| **Consultar el inventario** | Ver en vivo, contra la planilla de inventario, si hay stock de un repuesto. | Medio |
+| **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
+| **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
+| **Sincronización automática** | Un cron que trae las planillas solo. Hoy es a mano, con el botón. | Medio |
+| **Webhooks de las planillas** | Que un cambio en el Sheets llegue solo, sin esperar al cron. | Bajo |
+| **Alertas de OT atrasadas** | Un cron que avisa lo que se venció. | Medio |
+| **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
+
+## Los datos: qué está y qué no
+
+**Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
+1.728, órdenes de servicio 220, cotizaciones 147, equipos 239, componentes 398,
+tipos 26, sectores de planta 15.
+
+**Lo que vivía sólo en la base de la app vieja no se migró**, porque no viaja
+por las planillas: los checklists de equipos, los mantenimientos programados,
+las ejecuciones ya registradas con sus fotos, el plan de producción cargado, los
+repuestos por OT, el orden manual y las marcas de "requiere parar el sector".
+
+**No está verificado, y no es lo mismo que estar vacío.** La app vieja usa otra
+base de Supabase y de ella sólo tenemos la clave pública, que con RLS no
+devuelve nada. Para saber qué hay ahí hace falta su `service_role`.
+
 ## Lo que quedó anotado para decidir después
 
 **Resuelto: los contratistas son proveedores.** Ver `## Un solo lugar para los
