@@ -70,6 +70,11 @@ describe("nombresParecidos", () => {
     expect(nombresParecidos(["CN Mecanizados", "Gundel mecanizados"])).toHaveLength(0);
   });
 
+  it("junta el mismo nombre pegado y separado", () => {
+    // Los dos están en las órdenes: "ConMet" y "Con-Met".
+    expect(nombresParecidos(["ConMet", "Con-Met"])).toHaveLength(1);
+  });
+
   it("no devuelve grupos de uno", () => {
     expect(nombresParecidos(["Candia", "Neuma", "ConMet"])).toHaveLength(0);
   });

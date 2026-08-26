@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -68,6 +68,8 @@ export default function ConfiguracionClient({
       <Operarios operarios={operarios} esAdmin={esAdmin} llamar={llamar} />
 
       <Contratistas contratistas={contratistas} puedeEditar={puedeEditar} llamar={llamar} />
+
+      <ProveedoresSueltos puedeEditar={puedeEditar} />
 
       <TiposDeEquipo tipos={tipos} />
 
@@ -262,6 +264,118 @@ function Contratistas({
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
           >Sumar</button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Los proveedores que las órdenes nombran y la lista no tiene.
+ *
+ * Mientras no estén, ese trabajo no se puede cruzar entre Compras y
+ * Mantenimiento: la orden dice quién lo hizo pero el sistema no sabe quién es.
+ */
+function ProveedoresSueltos({ puedeEditar }: { puedeEditar: boolean }) {
+  const [nombres, setNombres] = useState<string[]>([]);
+  const [parecidos, setParecidos] = useState<string[][]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [trabajando, setTrabajando] = useState(false);
+  const [hecho, setHecho] = useState("");
+  const [error, setError] = useState("");
+
+  const traer = useCallback(async () => {
+    setCargando(true);
+    const res = await fetch("/api/mantenimiento/proveedores/sueltos");
+    setCargando(false);
+    if (!res.ok) { setError("No se pudo consultar."); return; }
+
+    const body = await res.json();
+    setNombres(body.nombres ?? []);
+    setParecidos(body.parecidos ?? []);
+  }, []);
+
+  useEffect(() => { traer(); }, [traer]);
+
+  async function resolver(sumar: boolean) {
+    setTrabajando(true);
+    setError("");
+
+    const res = await fetch("/api/mantenimiento/proveedores/sueltos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sumar }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setTrabajando(false);
+
+    if (!res.ok) { setError(body.error ?? "No se pudo."); return; }
+
+    const total = Object.values(body.enlazados ?? {}).reduce((a: number, b) => a + Number(b), 0);
+    setHecho(
+      [
+        body.creados > 0 && `Se sumaron ${body.creados} proveedores.`,
+        `Quedaron enlazados ${total} registros.`,
+      ].filter(Boolean).join(" ")
+    );
+    traer();
+  }
+
+  if (cargando) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-slate-700">
+        Proveedores sin reconocer
+        <span className="ml-2 text-xs font-normal text-slate-400">{nombres.length}</span>
+      </h2>
+      <p className="mb-3 mt-0.5 text-xs text-slate-500">
+        Nombres que aparecen en las órdenes de trabajo, las de servicio o las comparativas y no
+        están en la lista de proveedores. Hasta que estén, ese trabajo no se puede cruzar con
+        Compras.
+      </p>
+
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+      {hecho && <p className="mb-2 text-sm font-semibold text-emerald-700">{hecho}</p>}
+
+      {nombres.length === 0 ? (
+        <p className="py-2 text-sm text-slate-400">
+          Están todos reconocidos.
+        </p>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-slate-600">{nombres.join(" · ")}</p>
+
+          {parecidos.length > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="font-semibold">
+                Estos parecen el mismo escrito de dos formas — conviene unificarlos en la planilla
+                antes de sumarlos, porque después hay que fusionar dos fichas:
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {parecidos.map((g) => <li key={g[0]}>· {g.join("  =  ")}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {puedeEditar && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => resolver(true)}
+                disabled={trabajando}
+                className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {trabajando ? "Trabajando…" : "Sumarlos y enlazar todo"}
+              </button>
+              <button
+                onClick={() => resolver(false)}
+                disabled={trabajando}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Sólo enlazar los que ya están
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

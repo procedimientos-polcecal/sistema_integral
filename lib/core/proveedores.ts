@@ -124,6 +124,10 @@ export function nombresParecidos(nombres: string[]): string[][] {
 function unoContieneAlOtro(a: string, b: string): boolean {
   if (a === b) return true;
 
+  // El mismo nombre pegado o separado: "ConMet" y "Con-Met" son uno solo.
+  const pegado = (s: string) => s.replace(/[\s-]+/g, "");
+  if (pegado(a) === pegado(b)) return true;
+
   const [corto, largo] = a.length <= b.length ? [a, b] : [b, a];
   const propiasDelCorto = palabrasPropias(corto);
   if (propiasDelCorto.length === 0) return false;

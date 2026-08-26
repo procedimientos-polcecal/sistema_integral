@@ -590,11 +590,19 @@ ingeniería, transporte— que no identifican a nadie. Sin ella, "CN Mecanizados
 
 ### La sincronización no crea proveedores
 
-Enlaza los que reconoce y **avisa** los que no, con un botón para sumarlos como
-contratistas. Crearlos sola llenaría la lista que Compras usa todos los días con
-cada variante de escritura que alguien tipeó en una planilla. Y el aviso muestra
-primero cuáles parecen repetidos, que es el momento de unificarlos: después hay
-que fusionar dos fichas.
+Enlaza los que reconoce y **avisa** los que no. Crearlos sola llenaría la lista
+que Compras usa todos los días con cada variante de escritura que alguien tipeó
+en una planilla.
+
+Ese aviso se cierra y no vuelve, así que lo mismo vive en **Configuración →
+Proveedores sin reconocer**: qué nombres usan las órdenes y no están en la
+lista, cuáles parecen el mismo escrito de dos formas, y dos botones —sumarlos
+todos, o sólo enlazar los que ya estaban—.
+
+**Enlazar va aparte de sincronizar.** Completar `proveedor_id` no necesita
+volver a leer las planillas, y la sincronización de comparativas borra y
+reinserta: pasar por ahí para llenar una columna es caro y arriesgado sin
+motivo.
 
 ## Lo que quedó anotado para decidir después
 
