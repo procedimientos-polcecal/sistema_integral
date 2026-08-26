@@ -48,6 +48,17 @@ admin del sistema no alcanza: la planilla restringe la columna de aprobación a
 ciertas cuentas y la app espeja esa misma regla. Las dos listas se mantienen a
 mano porque Google no deja leer los editores de una protección desde afuera.
 
+**Aprobar la compra ya no obliga a comparar.** Hasta el 26/08/2026, aprobar la
+compra *era* elegir un presupuesto: la ruta rechazaba cualquier otra vía. Pero
+hay compras que no se comparan —proveedor único, urgencia, monto menor— y la
+regla dejaba trabados esos pedidos en la bandeja, que sin presupuestos no
+ofrecía ninguna acción. Ahora se avisa y se aprueba igual, con el proveedor y el
+costo opcionales. La contrapartida es real: el sistema ya no garantiza que una
+compra con presupuestos se aprobó mirándolos. Por eso, cuando los hay, la salida
+queda al pie y en segundo plano. Que no haya ninguna cotización elegida es lo
+que deja constancia de que se aprobó sin comparar — de ahí también sale el
+recuento, si alguna vez hace falta.
+
 **Prioridad y quién paga nacen vacías.** Un valor por defecto es una decisión
 disfrazada de dato. Las define gerencia al aprobar, y sin definirlas no se puede
 aprobar. Para que "Ambas" siga siendo expresable, quién paga tiene tres estados:
