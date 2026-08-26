@@ -37,7 +37,6 @@ export const NAV: NavItem[] = [
         modulo: "rrhh",
         children: [
           { label: "Empleados", href: "/rrhh/empleados", modulo: "rrhh" },
-          { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
           { label: "Turnos", href: "/rrhh/turnos", modulo: "rrhh", soloAdmin: true },
           { label: "Feriados", href: "/rrhh/feriados", modulo: "rrhh", soloAdmin: true },
         ],
@@ -105,7 +104,6 @@ export const NAV: NavItem[] = [
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
-      { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
       {
         label: "Configuración",
         href: "/mantenimiento/configuracion",
@@ -133,10 +131,17 @@ export const NAV: NavItem[] = [
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
   { label: "Mis pedidos", href: "/mis-pedidos" },
+  // Los usuarios y las empresas son de todo el SdG, no de un módulo: se
+  // administran acá y no repetidos dentro de cada uno. Estaban colgados de RRHH
+  // y de Mantenimiento, que es donde alguien los fue necesitando primero.
   {
     label: "Administración",
     href: "/administracion",
     soloAdminGlobal: true,
+    children: [
+      { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
+      { label: "Empresas", href: "/administracion/empresas", soloAdminGlobal: true },
+    ],
   },
 ];
 
