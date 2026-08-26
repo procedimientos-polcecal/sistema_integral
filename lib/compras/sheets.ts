@@ -729,13 +729,50 @@ export function textoAprobacion(
       };
 }
 
+/** Un aprobador, como hace falta para reconocerlo por lo que quedó escrito. */
+export interface CandidatoAprobador {
+  alias_planilla: string | null;
+  usuarios: { nombre: string; apellido: string } | null;
+}
+
+/**
+ * Reconoce al aprobador por el texto que quedó guardado en el RI.
+ *
+ * Ese texto tiene dos orígenes distintos y hay que aceptar los dos:
+ *
+ *  - los 1810 RI que vienen de la planilla guardaron el **alias** —dice
+ *    "NICO", no "Nicolas Lenzetti"—, porque es lo que la planilla escribe;
+ *  - los aprobados en la app antes de que existiera `aprobado_por` guardaron
+ *    el nombre y apellido.
+ *
+ * Buscar sólo por nombre, como se hacía, no acertaba nunca con los primeros:
+ * comparaba "NICO" contra "Nicolas Lenzetti" y devolvía null, así que la
+ * sincronización informaba que faltaba un alias que en realidad estaba
+ * cargado. El alias va primero porque es el caso masivo.
+ */
+export function aliasSegunLoEscrito(
+  candidatos: CandidatoAprobador[],
+  textoGuardado: string | null
+): string | null {
+  if (!textoGuardado) return null;
+  const buscado = norm(textoGuardado);
+
+  for (const c of candidatos) {
+    if (c.alias_planilla && norm(c.alias_planilla) === buscado) return c.alias_planilla;
+  }
+  for (const c of candidatos) {
+    const u = c.usuarios;
+    if (u && norm(`${u.nombre} ${u.apellido}`) === buscado) return c.alias_planilla;
+  }
+  return null;
+}
+
 /**
  * Alias del aprobador en la planilla.
  *
- * Lo normal es resolverlo por `aprobado_por`. Las aprobaciones anteriores a que
- * existiera esa columna sólo guardaron el nombre en texto, así que como
- * respaldo se lo busca por nombre y apellido: son unas pocas y si no quedarían
- * sin poder escribirse nunca.
+ * Lo normal es resolverlo por `aprobado_por`. Cuando no está —que es casi
+ * siempre, porque el histórico entró por importación— se lo reconoce por el
+ * texto que quedó guardado.
  */
 async function aliasDelAprobador(
   admin: Admin,
@@ -751,20 +788,17 @@ async function aliasDelAprobador(
     if (data?.alias_planilla) return data.alias_planilla as string;
   }
 
-  if (!nombreGuardado) return null;
-
   const { data: candidatos } = await admin
     .from("compras_aprobadores")
     .select("alias_planilla, usuarios(nombre, apellido)");
 
-  const buscado = norm(nombreGuardado);
-  for (const c of candidatos ?? []) {
-    const u = c.usuarios as unknown as { nombre: string; apellido: string } | null;
-    if (u && norm(`${u.nombre} ${u.apellido}`) === buscado) {
-      return c.alias_planilla as string;
-    }
-  }
-  return null;
+  return aliasSegunLoEscrito(
+    (candidatos ?? []).map((c) => ({
+      alias_planilla: c.alias_planilla as string | null,
+      usuarios: c.usuarios as unknown as { nombre: string; apellido: string } | null,
+    })),
+    nombreGuardado
+  );
 }
 
 /** Busca en qué fila del master está un RI. */

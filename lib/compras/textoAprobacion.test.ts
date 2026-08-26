@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { textoAprobacion } from "./sheets";
+import { textoAprobacion, aliasSegunLoEscrito } from "./sheets";
 
 // Las opciones reales del desplegable de la planilla.
 const OPCIONES = ["APROBADA (NICO)", "DENEGADA", "EN REVISIÓN", "APROBADA (MAXI)"];
@@ -65,5 +65,44 @@ describe("empresaParaPlanilla", () => {
 
   it("tolera que ya venga capitalizada", () => {
     expect(empresaParaPlanilla("Polcecal")).toBe("Polcecal");
+  });
+});
+
+/**
+ * Quien aprobo, reconocido por el texto que quedo guardado en el RI.
+ *
+ * Los 1810 RI que vienen de la planilla guardaron el ALIAS —"NICO"—, no el
+ * nombre. Buscar solo por nombre no acertaba con ninguno y la sincronizacion
+ * informaba que faltaba un alias que estaba cargado.
+ */
+describe("aliasSegunLoEscrito", () => {
+  const candidatos = [
+    { alias_planilla: "NICO", usuarios: { nombre: "Nicolas", apellido: "Lenzetti" } },
+    { alias_planilla: "MAXI", usuarios: { nombre: "Maximiliano", apellido: "Lenzetti" } },
+    { alias_planilla: null, usuarios: { nombre: "Admin", apellido: "SdG" } },
+  ];
+
+  it("reconoce el alias, que es lo que escribe la planilla", () => {
+    expect(aliasSegunLoEscrito(candidatos, "NICO")).toBe("NICO");
+    expect(aliasSegunLoEscrito(candidatos, "MAXI")).toBe("MAXI");
+  });
+
+  it("sigue reconociendo el nombre, que es lo que guardaba la app", () => {
+    expect(aliasSegunLoEscrito(candidatos, "Maximiliano Lenzetti")).toBe("MAXI");
+  });
+
+  it("no le molestan mayusculas ni espacios de mas", () => {
+    expect(aliasSegunLoEscrito(candidatos, " nico ")).toBe("NICO");
+  });
+
+  it("quien esta en la lista pero sin alias sigue sin alias", () => {
+    // No es lo mismo "no lo reconozco" que "no tiene con que figurar en la
+    // planilla": el segundo caso es real y hay que seguir avisandolo.
+    expect(aliasSegunLoEscrito(candidatos, "Admin SdG")).toBeNull();
+  });
+
+  it("un desconocido no se confunde con nadie", () => {
+    expect(aliasSegunLoEscrito(candidatos, "PEPE")).toBeNull();
+    expect(aliasSegunLoEscrito(candidatos, null)).toBeNull();
   });
 });
