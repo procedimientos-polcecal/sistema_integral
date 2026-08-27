@@ -13,3 +13,4 @@ scripts/export-firestore-org/orgs_*.json
 
 # Grafo de conocimiento (se regenera con /graphify)
 graphify-out/
+scripts/import-proveedores/a-revisar.json
