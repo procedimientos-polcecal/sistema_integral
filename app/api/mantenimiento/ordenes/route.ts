@@ -7,6 +7,7 @@ import {
   celdasParaRegistrar, filaParaLaPlanillaDeOT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
+import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -21,11 +22,18 @@ export async function GET(request: Request) {
   const page         = Number(searchParams.get("page") ?? 1);
   const limit        = 50;
 
+  // Las que todavía esperan algo, todas juntas y sin paginar: son unas treinta
+  // sobre mil setecientas, y ordenarlas a mano no se puede hacer de a páginas.
+  const pendientes = searchParams.get("pendientes") === "1";
+
   let query = supabase
     .from("ordenes_trabajo")
     .select("*", { count: "exact" })
-    .order("ot_number", { ascending: false })
-    .range((page - 1) * limit, page * limit - 1);
+    .order("ot_number", { ascending: false });
+
+  query = pendientes
+    ? query.in("estado", ESTA_PENDIENTE).limit(300)
+    : query.range((page - 1) * limit, page * limit - 1);
 
   if (estado)       query = query.eq("estado", estado);
   if (equipment_id) query = query.eq("equipment_id", equipment_id);

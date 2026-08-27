@@ -10,6 +10,7 @@ import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
+import OrdenarTrabajo from "./OrdenarTrabajo";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 
@@ -49,7 +50,7 @@ export default function OrdenesClient({
   const [page, setPage]         = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showNew, setShowNew]   = useState(false);
-  const [view, setView]         = useState<"list" | "kanban">("list");
+  const [view, setView]         = useState<"list" | "kanban" | "orden">("list");
 
   const [kanbanData, setKanbanData] = useState<Record<string, { items: any[]; count: number }>>({});
   const [kanbanLoading, setKanbanLoading] = useState(false);
@@ -105,7 +106,8 @@ export default function OrdenesClient({
 
   useEffect(() => {
     if (view === "kanban") loadKanban();
-    else load();
+    else if (view === "list") load();
+    // El modo "qué hacer primero" trae lo suyo: son las pendientes sin paginar.
   }, [view, load, loadKanban]);
 
   /**
@@ -212,6 +214,11 @@ export default function OrdenesClient({
               className={`px-3 py-2 text-xs font-medium transition-colors ${view === "kanban" ? "bg-gray-900 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
               Kanban
             </button>
+            <button onClick={() => setView("orden")}
+              title="En qué orden hacer lo que está pendiente"
+              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "orden" ? "bg-gray-900 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+              Qué hacer primero
+            </button>
           </div>
         </div>
       </div>
@@ -227,6 +234,8 @@ export default function OrdenesClient({
         puedeEditar={canEdit}
         onSumados={() => { setSinProveedor([]); sincronizar(); }}
       />
+
+      {view === "orden" && <OrdenarTrabajo puedeEditar={canEdit} />}
 
       {view === "list" && (
         <div className="flex gap-2 flex-wrap">

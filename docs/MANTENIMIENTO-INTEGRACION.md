@@ -618,7 +618,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 
 | Falta | Qué es | Cuánto pesa |
 |---|---|---|
-| **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
 | **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
 | **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
 
@@ -734,6 +733,31 @@ Google que vive en otra planilla y llegan por `IMPORTRANGE`, y eso no dispara
 "Al editar". Las trae el cron. Si hiciera falta que lleguen al toque, el mismo
 script va en la planilla de respuestas del formulario, con el activador "Al
 enviarse el formulario".
+
+## En qué orden hacer el trabajo
+
+Hay dos órdenes y el manual gana. El **sugerido** sale de los datos —lo atrasado
+primero, después lo urgente, después lo que espera hace más— y el **manual** sale
+de lo que sabe quien reparte el trabajo y los datos no: que el repuesto llega el
+jueves, que conviene aprovechar que el sector está parado.
+
+Se ordenan **sólo las pendientes**. De las 1.741 órdenes cargadas hay 32
+esperando algo y 1.709 realizadas: poner en fila las que ya se hicieron no le
+sirve a nadie, y además no se puede ordenar a mano una lista paginada de a
+cincuenta.
+
+Las que nadie tocó van después de las ordenadas, con el orden sugerido entre
+ellas. Así poner tres arriba no obliga a ordenar las otras veintinueve. Si dos
+quedan con el mismo número —pasa al ordenar una lista filtrada— desempata el
+número de OT, que es estable.
+
+Se arrastra, **y también hay botones de subir y bajar**: arrastrar no anda en el
+teléfono, que es desde donde se mira esto parado al lado de la máquina.
+
+El orden **no se escribe en la planilla**: es una decisión del día a día, no un
+dato de la orden, y la planilla no tiene dónde ponerlo. Y se puede volver al
+sugerido de una, porque si no la única forma de deshacer un orden viejo sería
+arrastrar las treinta de nuevo.
 
 ## Las órdenes atrasadas
 
