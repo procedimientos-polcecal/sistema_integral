@@ -20,6 +20,21 @@ const visibles = (c: ContextoNav) =>
   itemsDeCompras().filter((i) => puedeVerItem(i, c)).map((i) => i.label);
 
 describe("menu de Compras", () => {
+  it("va en el orden del trabajo, con el tablero primero", () => {
+    // El tablero es la entrada del modulo: dice de un vistazo cuanto hay en
+    // cada etapa. Queda fijado para que no se de vuelta sin querer, igual que
+    // el orden del circuito.
+    expect(itemsDeCompras().map((i) => i.label)).toEqual([
+      "Tablero",
+      "Requerimientos",
+      "Aprobaciones",
+      "Para aprobar",
+      "Proveedores",
+      "Ubicaciones",
+      "Configuración",
+    ]);
+  });
+
   it("quien tiene el modulo ve el trabajo del dia a dia", () => {
     const v = visibles(ctx());
     expect(v).toContain("Tablero");
