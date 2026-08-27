@@ -620,7 +620,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 |---|---|---|
 | **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
 | **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
-| **Webhooks de las planillas** | Que un cambio en el Sheets llegue solo, sin esperar al cron. | Bajo |
 | **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
 
 ## De un aviso sale una orden
@@ -710,6 +709,31 @@ mal—, así que la pantalla puede decir cuál quedó vieja y por qué.
 
 Verificado corriendo las cuatro: 138 avisos, 1.741 órdenes de trabajo, 221 de
 servicio y 150 cotizaciones, en 21 segundos.
+
+## El aviso desde la planilla
+
+El cron trae todo cada quince minutos. El webhook es para no esperarlos: cuando
+alguien edita una planilla, su Apps Script avisa y la app la relee.
+
+Es **un solo endpoint para las cuatro planillas** y recibe cuál cambió en
+`?recurso=`. Cuatro endpoints iguales serían cuatro lugares donde arreglar lo
+mismo; así el Apps Script es el mismo archivo con una propiedad distinta en cada
+planilla (`docs/mantenimiento-apps-script.gs`). Sin recurso corre las cuatro:
+una planilla mal configurada tiene que traer de más, no de menos.
+
+No viaja el contenido de la celda, sólo el aviso de que hubo un cambio. El
+secreto es lo único que se manda.
+
+**Hubo que dejarlo pasar por el middleware.** Todo lo que no sea `/api/cron/` va
+al login, y un webhook no tiene cookie de sesión: sin la excepción, el Apps
+Script recibía un 307 y no llegaba nunca. Se listan uno por uno a propósito
+—dejar pasar todo `/api` abriría las rutas que confían en ese redirect—.
+
+**Las OS nuevas no las va a traer el webhook.** Entran por un formulario de
+Google que vive en otra planilla y llegan por `IMPORTRANGE`, y eso no dispara
+"Al editar". Las trae el cron. Si hiciera falta que lleguen al toque, el mismo
+script va en la planilla de respuestas del formulario, con el activador "Al
+enviarse el formulario".
 
 ## Las órdenes atrasadas
 

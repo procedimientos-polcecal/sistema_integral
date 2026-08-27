@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
   // seguridad que no conviene sacar de un plumazo.
   const esEndpointDeMaquina =
     path.startsWith("/api/cron/") ||
-    path === "/api/compras/sheets/webhook";
+    path === "/api/compras/sheets/webhook" ||
+    path === "/api/mantenimiento/sheets/webhook";
 
   const isPublicPath =
     path === "/login" ||
