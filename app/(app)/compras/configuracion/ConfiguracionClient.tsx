@@ -7,6 +7,16 @@ import { fechaHora } from "@/lib/compras/constants";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { Sincronizacion } from "@/lib/compras/types";
 
+/** Lo que devuelve la importación de proveedores. */
+interface Importacion {
+  leidos: number;
+  actualizados: number;
+  altas: number;
+  unidos: { antes: string; ahora: string }[];
+  aRevisar: { nombre: string; candidatos: string[]; porque: string }[];
+  fallos: string[];
+}
+
 export default function ConfiguracionClient({
   sincronizaciones, aprobadores, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio
 }: {
@@ -35,8 +45,30 @@ export default function ConfiguracionClient({
 }) {
   const router = useRouter();
   const [sincronizando, setSincronizando] = useState(false);
+
+  // La importación de la base de proveedores desde el Excel de administración.
+  const [importando, setImportando] = useState(false);
+  const [importacion, setImportacion] = useState<Importacion | null>(null);
+  const [errorImportar, setErrorImportar] = useState("");
   const [resultado, setResultado] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  async function importarProveedores() {
+    setImportando(true);
+    setErrorImportar("");
+    setImportacion(null);
+
+    const res = await fetch("/api/compras/proveedores/importar", { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setImportando(false);
+
+    if (!res.ok) {
+      setErrorImportar(body.error ?? "No se pudo traer la base de proveedores.");
+      return;
+    }
+    setImportacion(body as Importacion);
+    router.refresh();
+  }
 
   async function sincronizar() {
     setSincronizando(true);
@@ -175,6 +207,86 @@ export default function ConfiguracionClient({
           administrador —del módulo o del sistema— no alcanza. Administrar es
           configurar; aprobar es autorizar plata, y las hacen personas distintas.
         </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Base de proveedores
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              La lista de verdad la lleva administración en su Excel. Esto la trae
+              cuando cambia; se puede repetir cuantas veces haga falta.
+            </p>
+          </div>
+          <button
+            onClick={importarProveedores}
+            disabled={importando}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {importando ? "Trayendo…" : "Traer proveedores"}
+          </button>
+        </div>
+
+        {importacion && (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              Se leyeron {importacion.leidos} proveedores del archivo:{" "}
+              <strong>{importacion.actualizados}</strong> actualizados y{" "}
+              <strong>{importacion.altas}</strong> dados de alta.
+            </div>
+
+            {importacion.unidos.length > 0 && (
+              <div className="rounded-lg border border-slate-200 px-4 py-3 text-sm">
+                <p className="font-semibold text-slate-700">
+                  Se unieron {importacion.unidos.length} que estaban con otro nombre
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
+                  {importacion.unidos.map((u) => (
+                    <li key={u.ahora}>{u.antes} → {u.ahora}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Antes esto iba a un archivo en el disco que sólo se veía desde una
+                terminal, así que en la práctica no lo miraba nadie. */}
+            {importacion.aRevisar.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">
+                  {importacion.aRevisar.length} no se pudieron reconocer con certeza
+                </p>
+                <p className="mt-0.5 text-xs">
+                  No se tocaron. Se parecen a alguno que ya está, pero decidir por
+                  vos podría partir en dos las compras de un mismo proveedor.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {importacion.aRevisar.map((r) => (
+                    <li key={r.nombre}>
+                      <strong>{r.nombre}</strong> ~ {r.candidatos.join(" / ")}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importacion.fallos.length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <p className="font-semibold">No se pudieron guardar {importacion.fallos.length}</p>
+                <ul className="mt-1 space-y-0.5 text-xs">
+                  {importacion.fallos.map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {errorImportar && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorImportar}
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">

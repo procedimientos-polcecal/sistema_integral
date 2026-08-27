@@ -1,6 +1,11 @@
 /**
  * Los 14 que el importador no se animó a decidir.
  *
+ * Este archivo ya corrió y no hace falta correrlo de nuevo: queda como
+ * registro de quién decidió qué. El importador vive ahora en la app
+ * —Configuración de Compras, "Traer proveedores"— y su lógica está en
+ * lib/compras/importarProveedores.ts.
+ *
  * Son los casos donde el Excel trae el nombre largo y la base el corto
  * —"Papelera Ciuffo" y "CIUFFO"—, que un programa no puede distinguir de un
  * parecido casual: "Frenos Norte" no es "NORTE". Los resolvió una persona que
