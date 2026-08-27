@@ -200,7 +200,56 @@ export default function AvisosClient({
           Todavía no hay avisos. {puedeEditar && "Traelos de la planilla con el botón de arriba."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <>
+        {/* En un teléfono, tarjetas. Esta es la pantalla que se abre parado
+            frente a la máquina, así que el equipo va primero y grande: es el
+            dato con el que la persona reconoce si el aviso es el suyo. */}
+        <div className="space-y-2 md:hidden">
+          {visibles.map((a) => (
+            <article key={a.id} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-sm font-semibold text-slate-900">
+                  {a.equipos?.name ?? a.equipo_raw ?? "Sin equipo"}
+                </span>
+                <span className="font-mono text-[11px] text-slate-400">
+                  {a.oa_number ? `OA ${a.oa_number}` : "sin N°"}
+                </span>
+              </div>
+
+              <p className="text-sm leading-snug text-slate-700">{a.descripcion ?? "—"}</p>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                <span>{a.sectores?.nombre ?? a.sector_raw ?? "Sin sector"}</span>
+                {!a.equipment_id && a.equipo_raw && (
+                  <span className="text-amber-700">· sin enlazar</span>
+                )}
+                {a.urgencia && <span>· {a.urgencia}</span>}
+                <span>· {fecha(a.fecha)}</span>
+                {a.quien_aviso && <span>· avisó {a.quien_aviso}</span>}
+              </div>
+
+              <div className="mt-2.5 border-t border-slate-100 pt-2.5">
+                {tieneOt(a) ? (
+                  <span className="text-xs text-slate-500">
+                    {a.ot_asignada ? `OT #${a.ot_asignada}` : "Ya tiene OT"}
+                  </span>
+                ) : puedeEditar ? (
+                  <button
+                    onClick={() => generarOT(a)}
+                    disabled={generando !== null}
+                    className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                  >
+                    {generando === a.id ? "Generando…" : "Generar OT"}
+                  </button>
+                ) : (
+                  <span className="text-xs text-amber-700">Pendiente de OT</span>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -251,6 +300,7 @@ export default function AvisosClient({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {creando && (

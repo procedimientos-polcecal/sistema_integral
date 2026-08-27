@@ -186,7 +186,56 @@ export default function OrdenesServicioClient({
           {puedeEditar && " Traelas de la planilla con el botón de arriba."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <>
+        {/* En un teléfono, tarjetas. La fila entera abre el detalle, así que la
+            tarjeta también: es el mismo gesto y es lo que hace útil la pantalla
+            en pantalla chica, donde el resto de las columnas no entra. */}
+        <div className="space-y-2 md:hidden">
+          {visibles.map((o) => {
+            const cuantas = o.os_number ? cotizacionesPorOS[o.os_number] ?? 0 : 0;
+            return (
+              <article
+                key={o.id}
+                onClick={() => setAbierta(o)}
+                className="cursor-pointer rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-mono text-[11px] text-slate-400">
+                    {o.os_number ? `OS ${o.os_number}` : "sin N°"}
+                  </span>
+                  {o.estado && (
+                    <span className="text-xs font-semibold text-slate-700">{o.estado}</span>
+                  )}
+                </div>
+
+                <p className="text-sm leading-snug text-slate-900">{o.descripcion ?? "—"}</p>
+
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                  <span>{o.sectores?.nombre ?? o.sector_raw ?? "Sin sector"}</span>
+                  {o.equipo_raw && (
+                    <span>
+                      · {o.equipos?.name ?? o.equipo_raw}
+                      {!o.equipment_id && <span className="text-amber-700"> · sin enlazar</span>}
+                    </span>
+                  )}
+                  <span>· {fecha(o.fecha)}</span>
+                </div>
+
+                <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-[11px]">
+                  <span className="text-slate-500">
+                    {o.proveedor_elegido ?? "Sin proveedor"}
+                    {cuantas > 0 && ` · ${cuantas} cotización${cuantas === 1 ? "" : "es"}`}
+                  </span>
+                  {o.costo !== null && (
+                    <span className="font-mono text-slate-700">{moneda(o.costo)}</span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -242,6 +291,7 @@ export default function OrdenesServicioClient({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {abierta && (
