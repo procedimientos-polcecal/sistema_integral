@@ -60,6 +60,11 @@ export default function RegistrarOTModal({
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
 
+  // La foto del trabajo hecho. Va a Drive y su link a la planilla, que es donde
+  // la busca quien no entra al sistema.
+  const [foto, setFoto] = useState<{ link: string; nombre: string } | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+
   // Las listas de Configuración: se elige de ellas en vez de escribir. Es lo
   // que evita que "Candia" y "CANDIA" terminen siendo dos personas distintas.
   const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
@@ -75,6 +80,24 @@ export default function RegistrarOTModal({
   }, []);
 
   useEffect(() => { traerListas(); }, [traerListas]);
+
+  async function subirFoto(archivo: File) {
+    setSubiendo(true);
+    setError("");
+
+    const fd = new FormData();
+    fd.append("file", archivo);
+    fd.append("ot", String(orden.ot_number ?? ""));
+
+    const res = await fetch("/api/mantenimiento/fotos", { method: "POST", body: fd });
+    const body = await res.json().catch(() => ({}));
+    setSubiendo(false);
+
+    if (!res.ok) { setError(body.error ?? "No se pudo subir la foto."); return; }
+    setFoto({ link: body.link, nombre: archivo.name });
+    // El link sólo se escribe en la planilla si se puede abrir desde afuera.
+    if (body.aviso) setAviso(body.aviso);
+  }
 
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
@@ -118,6 +141,7 @@ export default function RegistrarOTModal({
         operario_2: operario2.trim() || null,
         operario_3: operario3.trim() || null,
         observaciones: observaciones.trim() || null,
+        foto_url: foto?.link ?? undefined,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -243,6 +267,40 @@ export default function RegistrarOTModal({
             placeholder="Se cambió el rodamiento del lado motor; el acople está gastado y va a haber que cambiarlo."
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
+        </Campo>
+
+        <Campo etiqueta="Foto del trabajo">
+          {foto ? (
+            <div className="flex items-center gap-2 text-sm">
+              <a
+                href={foto.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 flex-1 truncate text-blue-600 hover:underline"
+              >
+                {foto.nombre}
+              </a>
+              <button
+                onClick={() => setFoto(null)}
+                className="shrink-0 text-xs text-gray-400 hover:text-red-600"
+                title="Sacar la foto"
+              >×</button>
+            </div>
+          ) : (
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={subiendo}
+              onChange={(e) => {
+                const archivo = e.target.files?.[0];
+                e.target.value = "";
+                if (archivo) subirFoto(archivo);
+              }}
+              className="w-full text-sm text-gray-600 file:mr-2 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-700"
+            />
+          )}
+          {subiendo && <p className="text-xs text-gray-400">Subiendo…</p>}
         </Campo>
 
         <div className="flex gap-2 pt-1">

@@ -57,8 +57,13 @@ function celda(fila: FilaDelLibro, ...nombres: string[]): unknown {
   return undefined;
 }
 
-/** Las columnas de la hoja TIPO_EQUIPO, tal como se llaman en la tabla. */
-const COLUMNAS_TIPO = [
+/**
+ * Las columnas de la hoja TIPO_EQUIPO, tal como se llaman en la tabla.
+ *
+ * Es la lista blanca de lo que se puede escribir en un tipo, tanto al importar
+ * el libro como al editarlo a mano: una sola lista, para que no se corran.
+ */
+export const COLUMNAS_TIPO = [
   "categoria", "nombre_tipo", "descripcion_funcion", "accionamiento",
   "potencia_kw_tipica", "tension_v", "velocidad_rpm_tipica", "tiene_reductor",
   "relacion_reduccion", "tipo_correa", "cant_correas", "rodamiento_lado_motor",

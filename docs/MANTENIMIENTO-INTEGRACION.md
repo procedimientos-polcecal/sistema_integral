@@ -618,8 +618,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 
 | Falta | Qué es | Cuánto pesa |
 |---|---|---|
-| **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
-| **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
 
 ## De un aviso sale una orden
 
@@ -733,6 +731,41 @@ Google que vive en otra planilla y llegan por `IMPORTRANGE`, y eso no dispara
 "Al editar". Las trae el cron. Si hiciera falta que lleguen al toque, el mismo
 script va en la planilla de respuestas del formulario, con el activador "Al
 enviarse el formulario".
+
+## El catálogo de tipos, editable
+
+Dice qué lleva cada clase de máquina —qué rodamiento, qué lubricante, cada
+cuánto— y es lo que se mira antes de abrir una. Se carga importando el libro BD
+Equipos, pero **lo que se aprende reparando no vuelve al libro**: alguien
+descubre que ese reductor lleva otro rodamiento y hasta ahora no tenía dónde
+anotarlo. Ahora se edita desde Configuración.
+
+Los treinta campos van agrupados como se los consulta —antes de abrir una
+máquina uno mira los rodamientos, no las frecuencias— y no en el orden en que
+están en la tabla. La lista blanca de columnas es **la misma** que usa la
+importación: una sola, para que no se corran.
+
+Al crear un tipo, el código tiene que ser el mismo que usa el libro. Si no
+coincide, la próxima importación crea otro al lado.
+
+## La foto del trabajo
+
+Se sube al registrar una OT y queda guardada en **Supabase Storage**, no en
+Drive.
+
+**Por qué no en Drive.** Una cuenta de servicio de Google **no tiene cuota de
+Drive**: subir un archivo falla con *"Service Accounts do not have storage
+quota"* aunque la carpeta esté compartida como editor —probado contra la carpeta
+de verdad, que sí da `canAddChildren: true`—. Sólo funcionaría contra una unidad
+compartida o delegando en un usuario real. Por eso la app vieja necesitaba un
+Apps Script desplegado aparte: corre con la cuota de una persona.
+
+**El link y la planilla.** Dentro del sistema la foto se ve siempre. Para que el
+link también sirva en la planilla —que la mira gente sin sesión— el bucket
+`execution-photos` tiene que ser **público**; hoy es privado, así que se firma un
+link que dura un año y la pantalla avisa que no se puede abrir desde la
+planilla. Hacerlo público es una decisión de quien maneja los datos, no algo que
+convenga cambiar de oficio.
 
 ## En qué orden hacer el trabajo
 

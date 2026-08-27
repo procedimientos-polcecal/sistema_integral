@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
 
 /**
  * Configuración de Mantenimiento: las listas de las que come el módulo.
@@ -71,7 +72,7 @@ export default function ConfiguracionClient({
 
       <ProveedoresSueltos puedeEditar={puedeEditar} />
 
-      <TiposDeEquipo tipos={tipos} />
+      <TiposDeEquipo tipos={tipos} esAdmin={esAdmin} />
 
       <SectoresDePlanta sectores={sectores} />
 
@@ -381,17 +382,41 @@ function ProveedoresSueltos({ puedeEditar }: { puedeEditar: boolean }) {
   );
 }
 
-function TiposDeEquipo({ tipos }: { tipos: Tipo[] }) {
+function TiposDeEquipo({ tipos, esAdmin }: { tipos: Tipo[]; esAdmin: boolean }) {
+  const router = useRouter();
+  const [editando, setEditando] = useState<TipoCompleto | null | undefined>(undefined);
+
+  /** Trae el tipo entero: la lista sólo muestra cinco de sus treinta campos. */
+  async function abrir(tipo_id: string) {
+    const res = await fetch("/api/mantenimiento/tipos");
+    if (!res.ok) return;
+    const todos: TipoCompleto[] = (await res.json()).data ?? [];
+    setEditando(todos.find((t) => t.tipo_id === tipo_id) ?? null);
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-slate-700">
-        Tipos de equipo
-        <span className="ml-2 text-xs font-normal text-slate-400">{tipos.length}</span>
-      </h2>
-      <p className="mb-3 mt-0.5 text-xs text-slate-500">
-        El catálogo del libro BD Equipos: qué lleva cada clase de máquina. Se carga importando el
-        libro, no a mano.
-      </p>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-700">
+            Tipos de equipo
+            <span className="ml-2 text-xs font-normal text-slate-400">{tipos.length}</span>
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Qué lleva cada clase de máquina: rodamientos, lubricante, cada cuánto revisarla. Se
+            carga importando el libro BD Equipos, y lo que se aprende reparando se anota acá.
+          </p>
+        </div>
+
+        {esAdmin && (
+          <button
+            onClick={() => setEditando(null)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Nuevo tipo
+          </button>
+        )}
+      </div>
 
       {tipos.length === 0 ? (
         <p className="py-3 text-sm text-slate-400">
@@ -410,21 +435,40 @@ function TiposDeEquipo({ tipos }: { tipos: Tipo[] }) {
                 <th className="px-2 py-1.5 text-left">Categoría</th>
                 <th className="px-2 py-1.5 text-left">Lubricante</th>
                 <th className="px-2 py-1.5 text-left">Cada cuánto</th>
+                <th className="px-2 py-1.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {tipos.map((t) => (
-                <tr key={t.tipo_id}>
+                <tr key={t.tipo_id} className="hover:bg-slate-50">
                   <td className="px-2 py-1.5 font-mono text-xs text-slate-500">{t.tipo_id}</td>
                   <td className="px-2 py-1.5 text-slate-800">{t.nombre_tipo ?? "—"}</td>
                   <td className="px-2 py-1.5 text-slate-600">{t.categoria ?? "—"}</td>
                   <td className="px-2 py-1.5 text-slate-600">{t.lubricante_tipo ?? "—"}</td>
                   <td className="px-2 py-1.5 text-slate-600">{t.frecuencia_lubricacion ?? "—"}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    {esAdmin && (
+                      <button
+                        onClick={() => abrir(t.tipo_id)}
+                        className="text-xs font-semibold text-blue-600 hover:underline"
+                      >
+                        Editar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {editando !== undefined && (
+        <TipoModal
+          tipo={editando}
+          onCerrar={() => setEditando(undefined)}
+          onGuardado={() => { setEditando(undefined); router.refresh(); }}
+        />
       )}
     </div>
   );
