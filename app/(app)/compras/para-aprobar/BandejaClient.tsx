@@ -8,6 +8,8 @@ import {
 } from "@/lib/compras/constants";
 import type { OrdenTablero } from "@/lib/compras/constants";
 import { repartirBandeja } from "@/lib/compras/bandeja";
+import { totalesEnPesosDe, minimoEnPesos } from "@/lib/compras/comparativa";
+import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
 import AprobarSinComparativa from "../AprobarSinComparativa";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -21,12 +23,14 @@ import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types
  * un presupuesto ES aprobar la compra.
  */
 export default function BandejaClient({
-  requerimientos, cotizaciones, proveedores, usuarioId,
+  requerimientos, cotizaciones, proveedores, usuarioId, dolar,
 }: {
   requerimientos: RequerimientoConRelaciones[];
   cotizaciones: Record<string, Cotizacion[]>;
   proveedores: { id: string; nombre: string }[];
   usuarioId: string;
+  /** Con qué convertir los presupuestos que vinieron en dólares. */
+  dolar: CotizacionDolar | null;
 }) {
   const router = useRouter();
   const confirmar = useConfirm();
@@ -138,8 +142,10 @@ export default function BandejaClient({
 
   function Pedido({ r, mio }: { r: RequerimientoConRelaciones; mio: boolean }) {
     const suyas = cotizaciones[r.id] ?? [];
-    const totales = suyas.map((c) => c.precio_total).filter((t): t is number => t !== null);
-    const minimo = totales.length > 0 ? Math.min(...totales) : null;
+    // En pesos, que es la única forma de comparar peras con peras cuando hay
+    // presupuestos en dólares mezclados.
+    const enPesos = totalesEnPesosDe(suyas, dolar?.venta ?? null);
+    const minimo = minimoEnPesos(enPesos);
     const dias = diasRestantes(r.fecha_necesidad);
     const vencido = dias !== null && dias < 0;
 
@@ -191,6 +197,7 @@ export default function BandejaClient({
             {suyas.length > 0 ? (
               <>
                 <ComparativaDecision
+                  enPesos={enPesos}
                   cotizaciones={suyas}
                   minimo={minimo}
                   onElegir={elegir}

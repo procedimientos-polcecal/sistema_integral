@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
+import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { traerTodo } from "@/lib/core/paginado";
 import BandejaClient from "./BandejaClient";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
@@ -53,8 +54,12 @@ export default async function ParaAprobarPage() {
   const { data: proveedores } = await supabase
     .from("proveedores").select("id, nombre").eq("activo", true).order("nombre");
 
+  // Para convertir los presupuestos que vinieron en dólares.
+  const dolar = await cotizacionDeHoy();
+
   return (
     <BandejaClient
+      dolar={dolar}
       requerimientos={requerimientos}
       cotizaciones={porRequerimiento}
       proveedores={proveedores ?? []}

@@ -10,6 +10,10 @@ const CAMPOS = [
   "proveedor_id", "marca", "unidad_medida", "precio_unitario", "cantidad",
   "costo_envio", "descuento", "iva", "precio_hasta", "plazo_pago_dias",
   "condiciones_pago", "disponibilidad", "comentario", "url",
+  // En qué moneda cotizó el proveedor. La conversión a pesos no se guarda:
+  // se hace al mostrar, con el dólar del día, y recién se congela al elegir
+  // este presupuesto.
+  "moneda",
 ] as const;
 
 /** Estados en los que la comparativa ya es el respaldo de una decisión tomada. */

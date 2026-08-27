@@ -442,11 +442,89 @@ export function costosParaElPedido(c: {
   proveedor_id: string;
   precio_total: number | null;
   costo_envio: number | null;
+  moneda?: string | null;
+  cotizacion?: number | null;
 }): { proveedor_id: string; costo_iva: number; costo_envio: number } {
-  const envio = c.costo_envio ?? 0;
+  // El requerimiento lleva pesos: es lo que se compara en el tablero, lo que
+  // suma el dashboard y lo que va a la planilla. Si el presupuesto vino en
+  // dólares, acá se convierte con la cotización que quedó congelada al
+  // elegirlo.
+  const aPesos = (v: number) =>
+    (c.moneda ?? "ARS") === "USD" && c.cotizacion ? v * c.cotizacion : v;
+
+  const envio = aPesos(c.costo_envio ?? 0);
+  const total = aPesos(c.precio_total ?? 0);
+
   return {
     proveedor_id: c.proveedor_id,
-    costo_iva: Number(((c.precio_total ?? 0) - envio).toFixed(2)),
-    costo_envio: envio,
+    costo_iva: Number((total - envio).toFixed(2)),
+    costo_envio: Number(envio.toFixed(2)),
   };
+}
+
+// ── Presupuestos en dólares ──────────────────────────────────
+
+/**
+ * El total de un presupuesto, en pesos.
+ *
+ * `precio_total` guarda lo que el proveedor cotizó, en su moneda: es una
+ * columna generada en Postgres y no puede depender de un valor que cambia
+ * todos los días. La conversión se hace acá, al mostrar.
+ *
+ * Cuál cotización se usa depende de en qué etapa está el presupuesto:
+ *
+ *   - mientras se compara, la del día. Es lo que permite mirar dos
+ *     presupuestos cargados con semanas de diferencia con la misma vara.
+ *   - una vez elegido, la que quedó grabada. Lo que se pagó no cambia porque
+ *     hoy el dólar esté más caro.
+ *
+ * Devuelve null cuando no hay con qué convertir. Un cero sería peor: se leería
+ * como un presupuesto gratis y ganaría cualquier comparación.
+ */
+export function totalEnPesos(
+  c: { precio_total: number | null; moneda?: string | null; cotizacion?: number | null },
+  dolarDeHoy: number | null
+): number | null {
+  const total = c.precio_total;
+  if (total === null || total === undefined) return null;
+
+  // Sin moneda es un presupuesto de los de antes: pesos.
+  if ((c.moneda ?? "ARS") !== "USD") return total;
+
+  const dolar = c.cotizacion ?? dolarDeHoy;
+  if (!dolar || dolar <= 0) return null;
+
+  return Math.round(total * dolar * 100) / 100;
+}
+
+/** Si este presupuesto necesita una cotización que no tenemos. */
+export function faltaLaCotizacion(
+  c: { moneda?: string | null; cotizacion?: number | null },
+  dolarDeHoy: number | null
+): boolean {
+  if ((c.moneda ?? "ARS") !== "USD") return false;
+  return !(c.cotizacion ?? dolarDeHoy);
+}
+
+/**
+ * Los totales de una comparativa, todos en pesos.
+ *
+ * Se calcula una vez y se reparte, en vez de que cada pantalla convierta por su
+ * cuenta: el orden, el más barato y la diferencia porcentual tienen que salir
+ * todos de los mismos números, o la comparativa dice una cosa y el resaltado
+ * otra.
+ */
+export function totalesEnPesosDe(
+  cotizaciones: { id: string; precio_total: number | null; moneda?: string | null; cotizacion?: number | null }[],
+  dolarDeHoy: number | null
+): Record<string, number | null> {
+  const totales: Record<string, number | null> = {};
+  for (const c of cotizaciones) totales[c.id] = totalEnPesos(c, dolarDeHoy);
+  return totales;
+}
+
+/** El más barato de la comparativa, ya en pesos. Null si no hay ninguno. */
+export function minimoEnPesos(totales: Record<string, number | null>): number | null {
+  const valores = Object.values(totales).filter((v): v is number => v !== null);
+  return valores.length > 0 ? Math.min(...valores) : null;
 }

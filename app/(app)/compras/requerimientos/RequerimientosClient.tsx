@@ -161,7 +161,7 @@ export default function RequerimientosClient({
     const supabase = createClient();
     const { data: cotizaciones } = await supabase
       .from("compras_cotizaciones")
-      .select("requerimiento_id, elegida, proveedor_id, precio_total, costo_envio")
+      .select("requerimiento_id, elegida, proveedor_id, precio_total, costo_envio, moneda, cotizacion")
       .eq("requerimiento_id", r.id);
     setProcesando(null);
 
@@ -170,6 +170,9 @@ export default function RequerimientosClient({
     for (const c of (cotizaciones ?? []) as {
       elegida: boolean; proveedor_id: string;
       precio_total: number | null; costo_envio: number | null;
+      // Sin esto el diálogo propondría el precio en dólares como si fueran
+      // pesos, y el pedido quedaría con un costo mil veces más chico.
+      moneda: string | null; cotizacion: number | null;
     }[]) {
       resumen.cuantos += 1;
       if (c.elegida) {

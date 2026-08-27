@@ -148,8 +148,16 @@ export interface Cotizacion {
   /** Fracciones: 0.10 es 10%. */
   descuento: number | null;
   iva: number | null;
-  /** Lo calcula la base: columna generada (migración 026). */
+  /**
+   * Lo calcula la base: columna generada (migración 026). Queda **en la moneda
+   * del presupuesto**: es generada y no puede depender del dólar del día. La
+   * conversión a pesos la hace `totalEnPesos()` al mostrar.
+   */
   precio_total: number | null;
+  /** `ARS` o `USD`. Vale para el presupuesto entero, envío incluido. */
+  moneda: string | null;
+  /** El dólar con el que se congeló al elegirlo. Nula mientras se compara. */
+  cotizacion: number | null;
   /** Hasta cuándo vale ese precio. */
   precio_hasta: string | null;
   plazo_pago_dias: number | null;

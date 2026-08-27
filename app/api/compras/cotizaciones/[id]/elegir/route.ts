@@ -6,6 +6,7 @@ import { mapearEncabezados } from "@/lib/compras/comparativa";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
+import { cotizacionDeHoy } from "@/lib/compras/dolar";
 
 /**
  * Elegir un presupuesto ES aprobar la compra.
@@ -32,7 +33,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const admin = createAdminClient();
   const { data: cotizacion } = await admin
     .from("compras_cotizaciones")
-    .select("id, requerimiento_id, proveedor_id, drive_fila")
+    .select("id, requerimiento_id, proveedor_id, drive_fila, moneda, cotizacion")
     .eq("id", id)
     .single();
   if (!cotizacion) return NextResponse.json({ error: "El presupuesto no existe" }, { status: 404 });
@@ -60,9 +61,31 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .update({ elegida: false })
     .eq("requerimiento_id", ri.id);
 
+  // Elegir un presupuesto en dólares congela la cotización de este momento.
+  //
+  // Mientras se comparaba se mostraba al dólar del día, que es lo que permite
+  // mirar dos presupuestos cargados con semanas de diferencia con la misma
+  // vara. A partir de acá el número no se mueve más: lo que se pagó no cambia
+  // porque mañana el dólar esté más caro.
+  const congelar: Record<string, unknown> = { elegida: true };
+  if (cotizacion.moneda === "USD" && !cotizacion.cotizacion) {
+    const dolar = await cotizacionDeHoy();
+    if (!dolar) {
+      return NextResponse.json(
+        {
+          error:
+            "Este presupuesto está en dólares y no se pudo obtener la cotización. " +
+            "Sin eso no se puede dejar registrado a cuánto se aprobó.",
+        },
+        { status: 503 }
+      );
+    }
+    congelar.cotizacion = dolar.venta;
+  }
+
   const { error: errorElegir } = await admin
     .from("compras_cotizaciones")
-    .update({ elegida: true })
+    .update(congelar)
     .eq("id", id);
   if (errorElegir) return NextResponse.json({ error: errorElegir.message }, { status: 400 });
 

@@ -6,6 +6,8 @@ import { urlDePlanilla } from "@/lib/compras/vincular";
 import type { Cotizacion, RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorComparativa from "./SelectorComparativa";
 import PresupuestoForm from "./PresupuestoForm";
+import { totalesEnPesosDe, minimoEnPesos } from "@/lib/compras/comparativa";
+import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaTabla from "./ComparativaTabla";
 import ComparativaDecision from "./ComparativaDecision";
 
@@ -28,13 +30,15 @@ import ComparativaDecision from "./ComparativaDecision";
  * eligió ese precio.
  */
 export default function Comparativa({
-  requerimiento: r, cotizaciones, proveedores, puedeEditar, esAsignado,
+  requerimiento: r, cotizaciones, proveedores, puedeEditar, esAsignado, dolar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   cotizaciones: Cotizacion[];
   proveedores: { id: string; nombre: string }[];
   puedeEditar: boolean;
   esAsignado: boolean;
+  /** Con qué convertir los presupuestos que vinieron en dólares. */
+  dolar: CotizacionDolar | null;
 }) {
   const router = useRouter();
   const [selector, setSelector] = useState(false);
@@ -48,15 +52,17 @@ export default function Comparativa({
   const puedeCargar = puedeEditar && !congelada && r.estado_aprobacion === "APROBADA";
   const puedeElegir = esAsignado && r.estado_compra === "PARA_COMPRAR";
 
+  // Todo en pesos, calculado una sola vez. El orden, el más barato y la
+  // diferencia porcentual salen de los mismos números: si cada uno convirtiera
+  // por su cuenta, la comparativa podría decir una cosa y el resaltado otra.
+  const enPesos = totalesEnPesosDe(cotizaciones, dolar?.venta ?? null);
+
   // Ordenadas por total. Es información, no una decisión: el plazo, la
   // disponibilidad y la marca también pesan.
   const ordenadas = [...cotizaciones].sort(
-    (a, b) => (a.precio_total ?? Infinity) - (b.precio_total ?? Infinity)
+    (a, b) => (enPesos[a.id] ?? Infinity) - (enPesos[b.id] ?? Infinity)
   );
-  const totales = ordenadas
-    .map((c) => c.precio_total)
-    .filter((t): t is number => t !== null);
-  const minimo = totales.length > 0 ? Math.min(...totales) : null;
+  const minimo = minimoEnPesos(enPesos);
 
   function refrescar(mensaje: string | null) {
     setAviso(mensaje);
@@ -195,6 +201,7 @@ export default function Comparativa({
 
         {cargando && (
           <PresupuestoForm
+            dolar={dolar}
             requerimientoId={r.id}
             proveedores={proveedores}
             cantidadSugerida={r.cantidad}
@@ -207,6 +214,7 @@ export default function Comparativa({
           <p className="text-sm text-slate-400">Todavía no hay presupuestos cargados.</p>
         ) : puedeElegir ? (
           <ComparativaDecision
+            enPesos={enPesos}
             cotizaciones={ordenadas}
             minimo={minimo}
             onElegir={elegir}
@@ -214,6 +222,7 @@ export default function Comparativa({
           />
         ) : (
           <ComparativaTabla
+            enPesos={enPesos}
             cotizaciones={ordenadas}
             minimo={minimo}
             puedeBorrar={puedeCargar}

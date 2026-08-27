@@ -11,11 +11,12 @@ import type {
   RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
 import Comparativa from "./Comparativa";
+import type { CotizacionDolar } from "@/lib/compras/dolar";
 import SelectorProveedor from "../../SelectorProveedor";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores,
+  esAsignado, aprobadores, dolar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   historial: HistorialItem[];
@@ -26,6 +27,8 @@ export default function RequerimientoDetalle({
   puedeAprobar: boolean;
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
+  /** Con qué convertir los presupuestos que vinieron en dólares. */
+  dolar: CotizacionDolar | null;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -243,6 +246,7 @@ export default function RequerimientoDetalle({
           )}
 
           <Comparativa
+            dolar={dolar}
             requerimiento={r}
             cotizaciones={cotizaciones}
             proveedores={proveedores}

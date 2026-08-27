@@ -20,8 +20,35 @@ import type { Cotizacion } from "@/lib/compras/types";
  *   - teléfono: una tarjeta por proveedor, apiladas. La matriz en 380px obliga a
  *     un scroll horizontal que arruina justamente la comparación.
  */
+/**
+ * Un total, siempre en pesos, con el precio original al lado si el proveedor
+ * cotizó en dólares.
+ *
+ * Comparar es la única razón por la que existe esta pantalla, y para eso los
+ * números tienen que estar en la misma moneda. El original se muestra igual
+ * porque es lo que el proveedor dijo, y es lo que va a figurar en su factura.
+ */
+function Importe({ c, enPesos }: { c: Cotizacion; enPesos: number | null }) {
+  if (c.moneda !== "USD") return <>{monedaExacta(c.precio_total)}</>;
+  if (enPesos === null) {
+    return (
+      <span className="text-amber-700">
+        USD {c.precio_total?.toLocaleString("es-AR") ?? "—"} · sin cotización
+      </span>
+    );
+  }
+  return (
+    <>
+      {monedaExacta(enPesos)}
+      <span className="ml-1 text-xs font-normal text-slate-500">
+        USD {c.precio_total?.toLocaleString("es-AR")}
+      </span>
+    </>
+  );
+}
+
 export default function ComparativaDecision({
-  cotizaciones, minimo, onElegir, eligiendo,
+  cotizaciones, minimo, onElegir, eligiendo, enPesos,
 }: {
   /** Ya ordenadas por total. */
   cotizaciones: Cotizacion[];
@@ -29,6 +56,8 @@ export default function ComparativaDecision({
   minimo: number | null;
   onElegir: (c: Cotizacion) => void;
   eligiendo: string | null;
+  /** Los totales ya convertidos a pesos, por id de presupuesto. */
+  enPesos: Record<string, number | null>;
 }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const vencido = (c: Cotizacion) => c.precio_hasta !== null && c.precio_hasta < hoy;
@@ -44,7 +73,7 @@ export default function ComparativaDecision({
   );
 
   const Diferencia = ({ c }: { c: Cotizacion }) => {
-    const dif = diferenciaPorcentual(c.precio_total, minimo);
+    const dif = diferenciaPorcentual(enPesos[c.id] ?? null, minimo);
     return dif ? (
       <span className="text-slate-500">{dif}</span>
     ) : (
@@ -79,7 +108,7 @@ export default function ComparativaDecision({
               <td className="px-3 py-2 font-semibold text-slate-700">Total</td>
               {cotizaciones.map((c) => (
                 <td key={c.id} className="px-3 py-2 font-mono font-semibold text-slate-900">
-                  {monedaExacta(c.precio_total)}
+                  <Importe c={c} enPesos={enPesos[c.id] ?? null} />
                 </td>
               ))}
             </tr>
@@ -126,7 +155,7 @@ export default function ComparativaDecision({
           <div
             key={c.id}
             className={`rounded-xl border p-4 ${
-              c.precio_total !== null && c.precio_total === minimo
+              enPesos[c.id] !== null && enPesos[c.id] === minimo
                 ? "border-[var(--primary)]"
                 : "border-slate-200"
             }`}
@@ -137,7 +166,9 @@ export default function ComparativaDecision({
                 <p className="text-xs text-slate-500">{detalleCotizacion(c)}</p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="font-mono font-semibold text-slate-900">{monedaExacta(c.precio_total)}</p>
+                <p className="font-mono font-semibold text-slate-900">
+                  <Importe c={c} enPesos={enPesos[c.id] ?? null} />
+                </p>
                 <p className="text-xs">
                   <Diferencia c={c} />
                 </p>

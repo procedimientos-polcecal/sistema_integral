@@ -3,6 +3,7 @@ import {
   COLUMNAS_COMPARATIVA, mapearEncabezados, filasParaEsteRi,
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
+  totalEnPesos, faltaLaCotizacion,
 } from "./comparativa";
 
 const ENCABEZADO = [...COLUMNAS_COMPARATIVA];
@@ -301,5 +302,90 @@ describe("el plazo de pago entra en una columna entera", () => {
     expect(conPlazo("contado")?.plazo_pago_dias).toBeNull();
     expect(conPlazo("")?.plazo_pago_dias).toBeNull();
     expect(conPlazo("-5")?.plazo_pago_dias).toBeNull();
+  });
+});
+
+/**
+ * La conversion a pesos de un presupuesto en dolares.
+ *
+ * Es donde esta la plata: si esto se equivoca, se elige el presupuesto
+ * equivocado y nadie se entera hasta que llega la factura.
+ */
+describe("totalEnPesos", () => {
+  const enPesos = { precio_total: 150000, moneda: "ARS", cotizacion: null };
+  const enDolares = { precio_total: 1000, moneda: "USD", cotizacion: null };
+
+  it("un presupuesto en pesos no se toca, aunque le pasen cotizacion", () => {
+    expect(totalEnPesos(enPesos, 1535)).toBe(150000);
+  });
+
+  it("los presupuestos viejos, sin moneda, son pesos", () => {
+    expect(totalEnPesos({ precio_total: 150000 }, 1535)).toBe(150000);
+  });
+
+  it("en dolares y sin congelar: usa el dolar del dia", () => {
+    expect(totalEnPesos(enDolares, 1535)).toBe(1_535_000);
+  });
+
+  it("congelado: usa SU cotizacion, no la de hoy", () => {
+    // Lo que se pago no cambia porque hoy el dolar este mas caro.
+    const congelado = { precio_total: 1000, moneda: "USD", cotizacion: 1200 };
+    expect(totalEnPesos(congelado, 1535)).toBe(1_200_000);
+  });
+
+  it("sin cotizacion no inventa un numero", () => {
+    // Un cero se leeria como un presupuesto gratis y ganaria la comparacion.
+    expect(totalEnPesos(enDolares, null)).toBeNull();
+    expect(totalEnPesos(enDolares, 0)).toBeNull();
+  });
+
+  it("sin total no hay nada que convertir", () => {
+    expect(totalEnPesos({ precio_total: null, moneda: "USD" }, 1535)).toBeNull();
+  });
+
+  it("redondea a centavos", () => {
+    expect(totalEnPesos({ precio_total: 10.005, moneda: "USD" }, 1000)).toBe(10005);
+  });
+});
+
+describe("faltaLaCotizacion", () => {
+  it("a un presupuesto en pesos nunca le falta", () => {
+    expect(faltaLaCotizacion({ moneda: "ARS" }, null)).toBe(false);
+    expect(faltaLaCotizacion({}, null)).toBe(false);
+  });
+
+  it("en dolares, sin dolar del dia ni congelado, falta", () => {
+    expect(faltaLaCotizacion({ moneda: "USD" }, null)).toBe(true);
+  });
+
+  it("congelado no le falta nada, aunque no haya dolar de hoy", () => {
+    expect(faltaLaCotizacion({ moneda: "USD", cotizacion: 1200 }, null)).toBe(false);
+  });
+});
+
+describe("costosParaElPedido con presupuestos en dolares", () => {
+  it("un presupuesto en pesos no se toca", () => {
+    const r = costosParaElPedido({
+      proveedor_id: "p1", precio_total: 121000, costo_envio: 1000, moneda: "ARS", cotizacion: null,
+    });
+    expect(r).toEqual({ proveedor_id: "p1", costo_iva: 120000, costo_envio: 1000 });
+  });
+
+  it("uno en dolares viaja al pedido ya convertido", () => {
+    // El requerimiento lleva pesos: es lo que suma el dashboard y lo que va a
+    // la planilla.
+    const r = costosParaElPedido({
+      proveedor_id: "p1", precio_total: 1100, costo_envio: 100, moneda: "USD", cotizacion: 1000,
+    });
+    expect(r).toEqual({ proveedor_id: "p1", costo_iva: 1_000_000, costo_envio: 100_000 });
+  });
+
+  it("en dolares sin cotizacion congelada no inventa la conversion", () => {
+    // No deberia pasar —se congela al elegir— pero si pasa, es preferible un
+    // numero en dolares que uno en pesos calculado con una cotizacion inventada.
+    const r = costosParaElPedido({
+      proveedor_id: "p1", precio_total: 1100, costo_envio: 100, moneda: "USD", cotizacion: null,
+    });
+    expect(r.costo_iva).toBe(1000);
   });
 });

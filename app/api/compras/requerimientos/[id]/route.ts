@@ -273,7 +273,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (nuevoEstado === "PEDIDO") {
       const { data: elegida } = await admin
         .from("compras_cotizaciones")
-        .select("proveedor_id, precio_total, costo_envio")
+        .select("proveedor_id, precio_total, costo_envio, moneda, cotizacion")
         .eq("requerimiento_id", id)
         .eq("elegida", true)
         .maybeSingle();

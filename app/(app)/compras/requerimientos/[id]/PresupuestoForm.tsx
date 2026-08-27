@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { moneda } from "@/lib/compras/constants";
+import { moneda, fecha } from "@/lib/compras/constants";
 import { totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 
@@ -15,11 +15,13 @@ import SelectorProveedor from "../../SelectorProveedor";
  * base, para que no haya sorpresa entre lo que se ve y lo que queda guardado.
  */
 export default function PresupuestoForm({
-  requerimientoId, proveedores, cantidadSugerida, onListo, onCancelar,
+  requerimientoId, proveedores, cantidadSugerida, dolar, onListo, onCancelar,
 }: {
   requerimientoId: string;
   proveedores: { id: string; nombre: string }[];
   cantidadSugerida: number | null;
+  /** Con qué convertir si el proveedor cotiza en dólares. */
+  dolar: { venta: number; fecha: string; alDia: boolean } | null;
   onListo: (aviso: string | null) => void;
   onCancelar: () => void;
 }) {
@@ -27,6 +29,9 @@ export default function PresupuestoForm({
   const [marca, setMarca] = useState("");
   const [unidad, setUnidad] = useState("");
   const [unitario, setUnitario] = useState("");
+  // Se llama `divisa` y no `moneda` porque ese nombre ya lo usa el formateador
+  // de importes que este archivo importa.
+  const [divisa, setDivisa] = useState<"ARS" | "USD">("ARS");
   const [cantidad, setCantidad] = useState(cantidadSugerida ? String(cantidadSugerida) : "");
   const [envio, setEnvio] = useState("");
   const [descuento, setDescuento] = useState("0");
@@ -50,6 +55,9 @@ export default function PresupuestoForm({
     costo_envio: num(envio),
   });
 
+  // El equivalente en pesos, para verlo mientras se escribe.
+  const enPesos = divisa === "USD" && dolar ? Math.round(total * dolar.venta * 100) / 100 : null;
+
   async function guardar() {
     setGuardando(true);
     setError("");
@@ -62,6 +70,7 @@ export default function PresupuestoForm({
         marca: marca.trim() || null,
         unidad_medida: unidad.trim() || null,
         precio_unitario: num(unitario),
+        moneda: divisa,
         cantidad: num(cantidad),
         costo_envio: num(envio),
         descuento: (num(descuento) ?? 0) / 100,
@@ -101,7 +110,22 @@ export default function PresupuestoForm({
         </Campo>
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 
-        <Campo label="Precio unitario"><Texto valor={unitario} set={setUnitario} /></Campo>
+        <Campo label="Precio unitario">
+          <div className="flex gap-1.5">
+            <Texto valor={unitario} set={setUnitario} />
+            {/* La moneda es del presupuesto entero: si el proveedor cotiza en
+                dólares, el envío también. */}
+            <select
+              value={divisa}
+              onChange={(e) => setDivisa(e.target.value as "ARS" | "USD")}
+              aria-label="Moneda"
+              className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+            >
+              <option value="ARS">$</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+        </Campo>
         <Campo label="Cantidad"><Texto valor={cantidad} set={setCantidad} /></Campo>
         <Campo label="Unidad de medida"><Texto valor={unidad} set={setUnidad} /></Campo>
 
@@ -147,9 +171,28 @@ export default function PresupuestoForm({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
-        <p className="text-sm text-slate-600">
-          Total con IVA y envío: <strong className="font-mono">{moneda(total)}</strong>
-        </p>
+        <div className="text-sm text-slate-600">
+          Total con IVA y envío:{" "}
+          <strong className="font-mono">
+            {divisa === "USD" ? `USD ${total.toLocaleString("es-AR")}` : moneda(total)}
+          </strong>
+          {/* Nadie tiene que confiar a ciegas en una conversión que no ve. */}
+          {divisa === "USD" && (
+            <span className="ml-2 text-xs text-slate-500">
+              {enPesos === null ? (
+                <span className="text-amber-700">
+                  Sin cotización del dólar: se guarda en USD y se convierte cuando haya.
+                </span>
+              ) : (
+                <>
+                  ≈ <strong className="font-mono text-slate-700">{moneda(enPesos)}</strong>
+                  {" a "}{moneda(dolar!.venta)}
+                  {!dolar!.alDia && ` del ${fecha(dolar!.fecha)}`}
+                </>
+              )}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={onCancelar}

@@ -14,11 +14,13 @@ import type { Cotizacion } from "@/lib/compras/types";
  * lo abre quien tiene que elegir.
  */
 export default function ComparativaTabla({
-  cotizaciones, minimo, puedeBorrar, onBorrar,
+  cotizaciones, minimo, puedeBorrar, onBorrar, enPesos,
 }: {
   /** Ya ordenadas por total. */
   cotizaciones: Cotizacion[];
   minimo: number | null;
+  /** Los totales ya convertidos a pesos, por id de presupuesto. */
+  enPesos: Record<string, number | null>;
   puedeBorrar: boolean;
   onBorrar: (c: Cotizacion) => void;
 }) {
@@ -39,7 +41,7 @@ export default function ComparativaTabla({
         <tbody className="divide-y divide-slate-100">
           {cotizaciones.map((c) => {
             const vencido = c.precio_hasta !== null && c.precio_hasta < hoy;
-            const dif = diferenciaPorcentual(c.precio_total, minimo);
+            const dif = diferenciaPorcentual(enPesos[c.id] ?? null, minimo);
             return (
               <tr key={c.id} className={c.elegida ? "bg-green-50" : ""}>
                 <td className="px-3 py-2">
@@ -53,7 +55,19 @@ export default function ComparativaTabla({
                   <div className="text-xs text-slate-500">{detalleCotizacion(c)}</div>
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <div className="font-mono font-semibold">{monedaExacta(c.precio_total)}</div>
+                  <div className="font-mono font-semibold">
+                    {c.moneda === "USD"
+                      ? enPesos[c.id] === null
+                        ? `USD ${c.precio_total?.toLocaleString("es-AR") ?? "—"}`
+                        : monedaExacta(enPesos[c.id])
+                      : monedaExacta(c.precio_total)}
+                  </div>
+                  {/* El original, porque es lo que va a decir la factura. */}
+                  {c.moneda === "USD" && enPesos[c.id] !== null && (
+                    <div className="text-xs text-slate-500">
+                      USD {c.precio_total?.toLocaleString("es-AR")}
+                    </div>
+                  )}
                   <div className="text-xs">
                     {dif ? (
                       <span className="text-slate-400">{dif}</span>
