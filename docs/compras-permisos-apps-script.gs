@@ -1,27 +1,36 @@
 /**
- * Le da permiso a la cuenta de servicio sobre los rangos protegidos de
- * "PEDIDOS DE COMPRA".
+ * Herramientas para que la app pueda escribir en "PEDIDOS DE COMPRA".
  *
- * POR QUÉ HACE FALTA
+ * EL PROBLEMA
  *
  * La app escribe en la planilla lo que se gestiona desde el sistema: el estado
- * de la compra, el link de la comparativa, el proveedor y los costos. Pero la
- * planilla tiene cientos de rangos protegidos —la columna de aprobación, y una
- * protección por fila que se crea al aprobar cada RI—, y la cuenta de servicio
- * no figura entre quienes pueden editarlos.
+ * de la compra, el link de la comparativa, el proveedor y los costos. Algunas
+ * de esas escrituras vuelven rechazadas, el cambio queda sólo en el sistema, y
+ * los dos lados terminan diciendo cosas distintas. El sistema lo avisa en
+ * Compras -> Configuración, pero no puede resolverlo solo.
  *
- * El resultado es que el cambio queda guardado en el sistema, la planilla lo
- * rechaza, y los dos lados dicen cosas distintas. El sistema lo avisa en
- * Configuración de Compras, pero no puede resolverlo solo.
+ * LO QUE YA SABEMOS (27/08/2026)
  *
- * Agregar la cuenta a mano no es opción: son cientos de protecciones.
+ * La primera sospecha era que a la cuenta de servicio le faltaba permiso sobre
+ * los rangos protegidos. Correr `darPermisoALaCuentaDeServicio` mostró que no:
+ * la cuenta ya figuraba en 946 protecciones y no hubo ninguna que agregar. Las
+ * 8 que no se pudieron tocar son de filas que no son las que fallan.
  *
- * QUÉ HACE
+ * Así que el permiso no es lo que falta, y hay que averiguar qué es. Para eso
+ * está `diagnosticarLosPendientes`.
  *
- * Recorre las protecciones de hoja y de rango de las pestañas que le importan
- * a la app y agrega la cuenta de servicio como editor. No quita a nadie, no
- * cambia qué está protegido, y no toca los datos. Se puede correr las veces
- * que haga falta: agregar a alguien que ya está no hace nada.
+ * LAS DOS FUNCIONES
+ *
+ *   darPermisoALaCuentaDeServicio
+ *     Recorre las protecciones de las pestañas que le importan a la app y
+ *     agrega la cuenta como editor. No quita a nadie, no cambia qué está
+ *     protegido, no toca datos, y correrla de nuevo no hace nada. Sirve para
+ *     descartar el permiso como causa, y para las protecciones nuevas.
+ *
+ *   diagnosticarLosPendientes
+ *     No cambia nada: sólo mira. Para cada fila que falla dice qué
+ *     protecciones la tocan, quién puede editarlas, y si la hoja entera está
+ *     protegida. Es lo que hay que correr ahora.
  *
  * CÓMO SE USA
  *
@@ -30,24 +39,19 @@
  *      "client_email", y termina en ".iam.gserviceaccount.com". También
  *      aparece en la lista de "Compartir" de la planilla.
  *   2. En la planilla: Extensiones -> Apps Script, y pegar este archivo.
- *   3. Arriba, en el selector de funciones, elegir
- *      `darPermisoALaCuentaDeServicio` y recién ahí Ejecutar. Es la única
- *      función que hay que correr.
- *   4. Mirar el registro: dice cuántas protecciones tocó y cuáles no pudo.
- *
- * Después, en el sistema: Compras -> Configuración -> Reintentar. Los
- * pendientes se van a escribir de a cinco por vez.
+ *   3. Arriba, en el selector, elegir la función que se quiere correr y recién
+ *      ahí Ejecutar. Las que empiezan con guión bajo son auxiliares y no
+ *      aparecen: no hay que correrlas.
+ *   4. El resultado va al registro (Ver -> Registros).
  *
  * OJO CON LAS PROTECCIONES NUEVAS
  *
  * Si un script de la planilla crea una protección cada vez que se aprueba un
- * RI, las que se creen de ahora en más van a volver a excluir a la cuenta de
- * servicio y el problema reaparece de a poco. La solución de fondo es que ese
- * script agregue la cuenta al crear la protección:
+ * RI, las que se creen de ahora en más van a excluir a la cuenta de servicio y
+ * el problema reaparece de a poco. La solución de fondo es que ese script
+ * agregue la cuenta al crear la protección:
  *
  *     proteccion.addEditor(CUENTA_DE_SERVICIO);
- *
- * Mientras eso no esté, se puede volver a correr esta función cada tanto.
  */
 
 // ⬇️ El mail de la cuenta de servicio, entre las comillas.
@@ -157,4 +161,126 @@ function darPermisoALaCuentaDeServicio() {
 function _leInteresaALaApp(nombre) {
   if (!nombre) return false;
   return nombre === "Requerimientos internos" || nombre.indexOf("RI ") === 0;
+}
+
+/**
+ * Dice por qué la app no puede escribir en las celdas de un RI.
+ *
+ * Correr `darPermisoALaCuentaDeServicio` mostró que la cuenta ya figuraba en
+ * 946 protecciones y las escrituras seguían fallando. Así que el problema no es
+ * "falta el permiso" sino algo más específico, y esto lo busca: para cada fila
+ * que falla, qué protecciones la tocan, quién puede editarlas, y si la hoja
+ * entera está protegida.
+ *
+ * Los casos vienen de la tabla de pendientes de Compras -> Configuración.
+ * Cambiar la lista de abajo si son otros.
+ *
+ * Elegir `diagnosticarLosPendientes` en el selector y Ejecutar. El resultado
+ * va al registro (Ver -> Registros).
+ */
+var PENDIENTES = [
+  ["RI ALMACÉN", 513],
+  ["RI ALMACÉN", 514],
+  ["RI MANTENIMIENTO", 375],
+  ["RI MANTENIMIENTO", 909],
+  ["RI TALLER VIAL", 162],
+  ["RI PRODUCCIÓN", 3]
+];
+
+function diagnosticarLosPendientes() {
+  if (!CUENTA_DE_SERVICIO) {
+    throw new Error("Falta completar CUENTA_DE_SERVICIO arriba.");
+  }
+
+  var planilla = SpreadsheetApp.getActiveSpreadsheet();
+  var salida = [];
+
+  for (var i = 0; i < PENDIENTES.length; i++) {
+    var nombreHoja = PENDIENTES[i][0];
+    var fila = PENDIENTES[i][1];
+    var hoja = planilla.getSheetByName(nombreHoja);
+
+    salida.push("=====================================");
+    salida.push(nombreHoja + " fila " + fila);
+
+    if (!hoja) {
+      salida.push("  LA HOJA NO EXISTE con ese nombre exacto.");
+      continue;
+    }
+
+    // Qué columna es cada cosa que la app escribe.
+    var encabezado = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+    var buscadas = ["ESTADO", "COMPARATIVA PROVEEDORES", "PROVEEDOR ELEGIDO", "PROVEEDOR"];
+    for (var b = 0; b < buscadas.length; b++) {
+      for (var c = 0; c < encabezado.length; c++) {
+        var texto = String(encabezado[c] || "").toUpperCase().trim();
+        if (texto === buscadas[b]) {
+          salida.push("  columna " + buscadas[b] + " = " + _letra(c + 1));
+        }
+      }
+    }
+
+    // La hoja entera protegida frena todo, aunque las de rango estén bien.
+    var deHoja = hoja.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    for (var s = 0; s < deHoja.length; s++) {
+      salida.push("  HOJA PROTEGIDA: " + _describir(deHoja[s]));
+      var libres = deHoja[s].getUnprotectedRanges();
+      for (var u = 0; u < libres.length; u++) {
+        salida.push("     rango libre: " + libres[u].getA1Notation());
+      }
+    }
+
+    // Las de rango que tocan esta fila.
+    var deRango = hoja.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+    var tocan = 0;
+    for (var r = 0; r < deRango.length; r++) {
+      var rango = deRango[r].getRange();
+      if (!rango) continue;
+      if (fila < rango.getRow() || fila > rango.getLastRow()) continue;
+      tocan++;
+      salida.push("  protege " + rango.getA1Notation() + ": " + _describir(deRango[r]));
+    }
+    if (tocan === 0) {
+      salida.push("  ninguna protección de rango toca esta fila.");
+    }
+  }
+
+  var texto = salida.join(SALTO);
+  Logger.log(texto);
+  return texto;
+}
+
+/** Resume una protección: si la cuenta puede escribir ahí y quién más puede. */
+function _describir(proteccion) {
+  var puedeLaCuenta = false;
+  var editores = [];
+  try {
+    var lista = proteccion.getEditors();
+    for (var e = 0; e < lista.length; e++) {
+      var mail = lista[e].getEmail();
+      editores.push(mail);
+      if (mail === CUENTA_DE_SERVICIO) puedeLaCuenta = true;
+    }
+  } catch (err) {
+    editores.push("(no se pudieron leer: " + err.message + ")");
+  }
+
+  return (
+    '"' + (proteccion.getDescription() || "(sin nombre)") + '"' +
+    " | la cuenta puede: " + (puedeLaCuenta ? "SI" : "NO") +
+    " | yo puedo editar la protección: " + (proteccion.canEdit() ? "si" : "no") +
+    " | sólo aviso: " + (proteccion.isWarningOnly() ? "si" : "no") +
+    " | editores (" + editores.length + "): " + editores.join(", ")
+  );
+}
+
+/** Número de columna a letra: 1 -> A, 27 -> AA. */
+function _letra(n) {
+  var s = "";
+  while (n > 0) {
+    var resto = (n - 1) % 26;
+    s = String.fromCharCode(65 + resto) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }

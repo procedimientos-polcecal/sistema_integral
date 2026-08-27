@@ -906,9 +906,6 @@ async function escribirCelda(token: string, rango: string, valor: string): Promi
     if (res.ok) return null;
 
     const cuerpo = await res.text();
-    // La planilla tiene rangos protegidos: la aprobación sólo la pueden tocar
-    // ciertas cuentas, y un script bloquea el Estado de cada fila al aprobarla.
-    if (cuerpo.includes("protected")) return "celda protegida en la planilla";
 
     if (res.status === 429 && intento < DEMORAS.length) {
       await espera(DEMORAS[intento]);
@@ -919,8 +916,44 @@ async function escribirCelda(token: string, rango: string, valor: string): Promi
       // arregla solo en la próxima corrida, sin tocar la planilla.
       return "la planilla no dio lugar por cuota; se reintenta solo";
     }
-    return `error ${res.status}`;
+
+    // El motivo se guarda con lo que dijo Google, no traducido.
+    //
+    // Antes cualquier error que contuviera "protected" se anotaba como "celda
+    // protegida en la planilla" y el mensaje real se tiraba. Eso mandó a
+    // revisar los permisos de 946 protecciones que ya estaban bien: la cuenta
+    // tenía acceso y la escritura fallaba por otra cosa, pero el cartel decía
+    // lo mismo en los dos casos. Un diagnóstico que no se puede distinguir de
+    // otro no es un diagnóstico.
+    console.error(`Sheets rechazó ${rango}: ${res.status} ${cuerpo}`);
+    return `${etiquetaDeError(res.status, cuerpo)} — Sheets dijo: ${detalleDeGoogle(cuerpo)}`;
   }
+}
+
+/** Cómo se llama este rechazo, en una palabra. */
+function etiquetaDeError(status: number, cuerpo: string): string {
+  if (cuerpo.includes("protected")) return "celda protegida en la planilla";
+  if (status === 403) return "sin permiso sobre esa celda";
+  if (status === 400) return "la planilla rechazó el valor";
+  return `error ${status}`;
+}
+
+/**
+ * El mensaje de Google, corto y en una línea.
+ *
+ * Va al cartel de la app, así que tiene que entrar en una fila de la tabla de
+ * pendientes: se busca el `message` del JSON de error y se recorta.
+ */
+function detalleDeGoogle(cuerpo: string): string {
+  let texto = cuerpo;
+  try {
+    const json = JSON.parse(cuerpo);
+    texto = json?.error?.message ?? cuerpo;
+  } catch {
+    // No era JSON: se usa el cuerpo tal cual.
+  }
+  const limpio = texto.replace(/\s+/g, " ").trim();
+  return limpio.length > 160 ? limpio.slice(0, 157) + "…" : limpio;
 }
 
 /**
