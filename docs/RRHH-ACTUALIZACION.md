@@ -213,3 +213,56 @@ a mano). Ojo que los 11 períodos explícitos de APPRRHH están todos en 2025 �
 vacaciones adeudadas—, así que lo más probable es que esos 8 también vayan a
 2025. Son PS_015 (6 días de julio) y PS_019 (2 días), y se cambian desde la
 pestaña Vacaciones de su ficha, que tiene selector de año.
+
+## Rendimiento y el corte de las 1000 filas (27/08/2026)
+
+Al acelerar la carga de las pantallas apareció un problema de datos más grave
+que el de velocidad, y conviene tenerlo presente para cualquier consulta nueva.
+
+### PostgREST corta en 1000 filas, y no avisa
+
+`db-max-rows` está en 1000. Una consulta que devuelve más recibe las primeras
+1000 **sin error**, así que el código suma sobre datos incompletos y muestra un
+número que parece razonable. En este módulo se cruza el límite enseguida:
+`calculos_diarios` tiene una fila por empleado y por día, así que con ~70
+empleados dos semanas ya son más de 1000 y un año son 14.352.
+
+Lo que estaba mal, medido contra la base:
+
+| Pantalla | Veía | De | Efecto |
+|---|---|---|---|
+| Dashboard, top de tardanzas del mes | 1000 | 1863 | informaba 103 tardanzas y 455 retiros; son 232 y 792 |
+| Analítico del año | 1000 | 14.352 | calculaba sobre el 7% de los datos |
+| Export de fichadas (un mes) | 1000 | 1275 | bajaba el Excel incompleto |
+| Planilla general | 1000 | 1863 | liquidaba sobre la mitad de los días |
+
+**Regla para lo que venga:** cualquier consulta que barra el padrón va con
+`traerPaginado` (`lib/rrhh/paginado.ts`). Necesita un orden estable —se ordena
+por `id`— porque sin eso las páginas se solapan o saltean filas.
+
+### El recálculo, en lote
+
+El recálculo lo dispara casi toda pantalla antes de leer. Recalcular el padrón
+tardaba 11,3 s y hacía 639 consultas para 69 empleados y 27 días; de esas, 276
+eran la misma consulta repetida 69 veces (config, feriados, turnos, la ficha).
+Ahora es una función en lote: **3,9 s y 16 consultas**.
+
+Los tres gráficos del dashboard hacían una consulta por sector (~15 cada uno);
+ahora traen el período completo en una y agrupan en memoria.
+
+### Cómo se validó, y un accidente en el camino
+
+El motor de cálculo es lo más delicado del módulo, así que la equivalencia se
+probó contra datos reales: se guardaron las 1863 filas de agosto escritas por
+el motor viejo, se recalculó con el nuevo y se comparó campo por campo. **0
+diferencias**, francos sin duplicar.
+
+Esa misma prueba atrapó un bug del refactor antes de que quedara: la primera
+versión no paginaba, así que la lectura de `calculos_diarios` existentes se
+cortaba en 1000 y ~930 días con `horas_manual` no se detectaban como manuales
+— el recálculo pisó las correcciones a mano de Karen. Se restauró corriendo el
+import de nuevo (Neon las tiene todas, con `extras_validadas` y
+`validado_por_id`) y se borraron los 7 francos que la corrida mala había
+generado, identificados por su `created_at`. **Moraleja: cualquier cambio al
+motor se valida con una comparación campo por campo contra un snapshot, no con
+los tests unitarios, que son de funciones puras y no ven la capa de base.**
