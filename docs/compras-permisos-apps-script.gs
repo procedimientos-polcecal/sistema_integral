@@ -30,7 +30,9 @@
  *      "client_email", y termina en ".iam.gserviceaccount.com". También
  *      aparece en la lista de "Compartir" de la planilla.
  *   2. En la planilla: Extensiones -> Apps Script, y pegar este archivo.
- *   3. Elegir la función `darPermisoALaCuentaDeServicio` y Ejecutar.
+ *   3. Arriba, en el selector de funciones, elegir
+ *      `darPermisoALaCuentaDeServicio` y recién ahí Ejecutar. Es la única
+ *      función que hay que correr.
  *   4. Mirar el registro: dice cuántas protecciones tocó y cuáles no pudo.
  *
  * Después, en el sistema: Compras -> Configuración -> Reintentar. Los
@@ -50,6 +52,10 @@
 
 // ⬇️ El mail de la cuenta de servicio, entre las comillas.
 var CUENTA_DE_SERVICIO = "";
+
+// El salto de línea, aparte, para armar los textos de varias líneas sin
+// pelearse con los escapes.
+var SALTO = String.fromCharCode(10);
 
 function darPermisoALaCuentaDeServicio() {
   if (!CUENTA_DE_SERVICIO) {
@@ -123,12 +129,20 @@ function darPermisoALaCuentaDeServicio() {
     Logger.log("Las que fallaron:\n" + fallaron.join("\n"));
   }
 
-  // También en pantalla, para no tener que abrir el registro.
-  SpreadsheetApp.getUi().alert(
-    "Permisos de la cuenta de servicio",
-    resumen + (fallaron.length > 0 ? "\n\nVer el registro para el detalle." : ""),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  // También en pantalla, para no tener que abrir el registro. Va en try
+  // porque getUi() no está disponible en todos los contextos, y si falla acá
+  // el trabajo ya está hecho: un error después de haber agregado los permisos
+  // haría pensar que no funcionó.
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.alert(
+      "Permisos de la cuenta de servicio",
+      fallaron.length > 0 ? resumen + SALTO + SALTO + "Ver el registro para el detalle." : resumen,
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    Logger.log("(no se pudo mostrar el cartel: " + err.message + ")");
+  }
 
   return resumen;
 }
