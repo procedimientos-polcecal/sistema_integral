@@ -162,6 +162,28 @@ aproximado.
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.
 
+**`append` de Sheets no escribe después de los datos: escribe después de todo.**
+Busca el final de "la tabla" y salta más allá de cualquier contenido de la hoja,
+incluido el formato, las fórmulas y los desplegables que no son datos. En la
+comparativa "ESPIRA SINFIN" eso mandó dos presupuestos del RI 1865 a las filas
+1003 y 1004: la app decía que los había escrito, y en la planilla no aparecían
+por ningún lado. Corregido el 27/08/2026: la fila se busca por la columna A
+—que es la que dice si una fila tiene datos— y se escribe en un rango explícito.
+Se pierde la atomicidad de `append`, y es un riesgo aceptado: entre averiguar la
+fila y escribirla alguien podría agregar una a mano, pero son segundos y las
+comparativas las edita una persona por vez.
+
+**Una fila de la planilla es una cotización, no importa cómo llegó.** Al releer
+una comparativa se borraban sólo las cotizaciones de origen `drive` antes de
+reinsertar. Pero una cargada a mano también termina en la planilla —la app la
+escribe y le guarda su `drive_fila`—, así que al releer esa misma fila entraba
+de nuevo: el RI 1865 mostraba cuatro presupuestos donde había dos, con el mismo
+precio, el mismo proveedor y la misma fila. Ahora se borran todas las que
+apuntan a una fila de la planilla. Las cargadas sin planilla vinculada tienen
+`drive_fila` nulo y se conservan. En el mismo arreglo: el borrado se llevaba
+**cuál presupuesto estaba elegido**, que es lo que aprueba la compra; ahora se
+guarda por fila y se restaura.
+
 **Clasificar un error antes de reintentarlo lo vuelve permanente.** En
 `escribirCelda` había un atajo: si el cuerpo de la respuesta contenía la palabra
 `protected`, se devolvía "celda protegida en la planilla" y se cortaba ahí. Ese

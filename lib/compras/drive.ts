@@ -106,11 +106,60 @@ export async function leerComparativa(fileId: string): Promise<ComparativaLeida>
 }
 
 /**
+ * La primera fila libre según la columna A.
+ *
+ * Se mira la columna A y no la hoja entera porque es la que dice si una fila
+ * tiene datos: en las comparativas el formato, las fórmulas y los desplegables
+ * llegan mucho más abajo que los presupuestos cargados.
+ */
+async function proximaFilaLibre(token: string, fileId: string, pestana: string): Promise<number> {
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
+    `/values/${encodeURIComponent(pestana + "!A:A")}`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+
+  const columnaA = ((await res.json()).values ?? []) as string[][];
+  return filaSiguienteSegunColumnaA(columnaA);
+}
+
+/**
+ * En qué fila escribir, según la columna A.
+ *
+ * Va aparte de la llamada a Google para poder probarla: es la regla que
+ * reemplazó al `append`, y la que decide si un presupuesto queda donde se lo ve
+ * o mil filas más abajo.
+ *
+ * Una fila vacía en el medio no corta la cuenta: se busca la última con algo,
+ * no la primera sin nada.
+ */
+export function filaSiguienteSegunColumnaA(columnaA: string[][]): number {
+  for (let i = columnaA.length - 1; i >= 0; i--) {
+    if (String(columnaA[i]?.[0] ?? "").trim()) return i + 2;
+  }
+  // Ni encabezado: se empieza en la 2 y la 1 queda para los títulos.
+  return 2;
+}
+
+/**
  * Agrega una fila al final y devuelve qué número de fila quedó.
  *
- * Se usa `append`, que resuelve en una sola llamada dónde va: buscar la primera
- * fila vacía a mano es una carrera con cualquiera que esté editando la planilla
- * en ese momento.
+ * Antes usaba `append` de Google, que en una sola llamada resuelve dónde
+ * escribir. El problema es cómo lo resuelve: busca el final de "la tabla" y
+ * salta después de cualquier contenido de la hoja, incluido el formato y las
+ * fórmulas que no son datos. En la comparativa "ESPIRA SINFIN" eso mandó dos
+ * presupuestos a las filas 1003 y 1004, mil filas más abajo de donde se los
+ * podía ver: la app decía que los había escrito y en la planilla no aparecían.
+ *
+ * Ahora la fila se busca por la columna A, que es la que dice si una fila tiene
+ * datos, y se escribe en un rango explícito.
+ *
+ * Lo que se pierde es la atomicidad: entre averiguar la fila y escribirla,
+ * alguien podría agregar una a mano y quedaría pisada. Es un riesgo real pero
+ * chico —son segundos, y las comparativas las edita una persona por vez— y a
+ * cambio el presupuesto queda donde se lo puede leer, que es el punto de
+ * escribirlo.
  */
 export async function agregarFila(
   fileId: string,
@@ -118,23 +167,23 @@ export async function agregarFila(
   valores: string[]
 ): Promise<number> {
   const token = await obtenerToken([SCOPE_SHEETS]);
+  const fila = await proximaFilaLibre(token, fileId, pestana);
+
+  // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
+  // más chico, Google rechaza la escritura entera.
+  const rango = `${pestana}!A${fila}:${letraColumna(valores.length - 1)}${fila}`;
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
-    `/values/${encodeURIComponent(pestana)}:append` +
-    `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
 
   const res = await fetch(url, {
-    method: "POST",
+    method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [valores] }),
   });
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
-  // updatedRange viene como "Hoja 1!A7:S7".
-  const rango: string = (await res.json()).updates?.updatedRange ?? "";
-  const fila = rango.match(/!([A-Z]+)(\d+)/);
-  if (!fila) throw new Error(`No se pudo leer la fila escrita: ${rango}`);
-  return Number(fila[2]);
+  return fila;
 }
 
 /** Escribe un valor en una celda de una planilla de la carpeta. */
