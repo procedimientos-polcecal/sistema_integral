@@ -366,13 +366,14 @@ export default function RequerimientosClient({
             opciones={PRIORIDADES.map((p) => [p, PRIORIDAD_LABELS[p].label])} />
           <Select value={empresa} onChange={setEmpresa} vacio="Cualquier empresa"
             opciones={[...empresas.map((e) => [e.id, e.nombre] as [string, string]), ["AMBAS", "Ambas"]]} />
-          {/* Este no es un Select como los demás: son 273 proveedores, y una
-              lista de ese largo no se recorre, se busca. */}
+          {/* Busca en vez de desplegar —son 273 proveedores, y una lista de ese
+              largo no se recorre— pero se ve igual que sus ocho vecinos. */}
           <SelectorProveedor
             proveedores={proveedores}
             valor={proveedor}
             onCambio={setProveedor}
             placeholder="Todo proveedor"
+            clase="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
           />
           <Select value={ubicacion} onChange={setUbicacion} vacio="Cualquier ubicación"
             opciones={ubicaciones.map((u) => [u.id, u.nombre])} />

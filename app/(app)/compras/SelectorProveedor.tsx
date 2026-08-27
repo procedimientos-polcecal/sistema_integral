@@ -19,6 +19,7 @@ type Opcion = { id: string; nombre: string };
  */
 export default function SelectorProveedor({
   proveedores, valor, onCambio, autoFocus, placeholder = "Escribí para buscar…",
+  clase = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm",
 }: {
   proveedores: Opcion[];
   /** El id elegido, o "" si no hay ninguno. */
@@ -26,6 +27,11 @@ export default function SelectorProveedor({
   onCambio: (id: string) => void;
   autoFocus?: boolean;
   placeholder?: string;
+  /**
+   * Cómo se ve el campo. Se pasa cuando tiene que parecerse a lo que lo rodea:
+   * en la fila de filtros convive con ocho desplegables y desentonaría.
+   */
+  clase?: string;
 }) {
   const elegido = useMemo(
     () => proveedores.find((p) => p.id === valor) ?? null,
@@ -98,7 +104,7 @@ export default function SelectorProveedor({
         aria-expanded={abierto}
         aria-autocomplete="list"
         autoFocus={autoFocus}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        className={`${clase} pr-7`}
         placeholder={placeholder}
         value={mostrado}
         onChange={(e) => { setTexto(e.target.value); setAbierto(true); }}
@@ -106,7 +112,7 @@ export default function SelectorProveedor({
         onKeyDown={alTeclear}
       />
 
-      {elegido && !abierto && (
+      {elegido && !abierto ? (
         <button
           type="button"
           onClick={() => onCambio("")}
@@ -115,6 +121,17 @@ export default function SelectorProveedor({
         >
           ×
         </button>
+      ) : (
+        // Sin esto se lee como un campo de texto y nadie descubre que hay una
+        // lista atrás. Es el mismo gesto visual que el de un desplegable.
+        <svg
+          aria-hidden
+          width="14" height="14" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2"
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
+        >
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       )}
 
       {abierto && (
