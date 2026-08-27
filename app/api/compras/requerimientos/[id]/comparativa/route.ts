@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import {
   leerComparativa, urlDePlanilla, carpetaConfigurada,
@@ -163,17 +164,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  const avanza = ri.estado_compra === "SIN_INICIAR";
+
   const { error: errorRi } = await admin
     .from("compras_requerimientos")
     .update({
       comparativa_drive_id: driveId,
       comparativa_nombre: nombre || null,
       comparativa_url: urlDePlanilla(driveId),
-      estado_compra: ri.estado_compra === "SIN_INICIAR" ? "EN_COMPARATIVA" : ri.estado_compra,
+      estado_compra: avanza ? "EN_COMPARATIVA" : ri.estado_compra,
     })
     .eq("id", id);
 
   if (errorRi) return NextResponse.json({ error: errorRi.message }, { status: 400 });
+
+  // La planilla tiene que enterarse de que el RI avanzó.
+  //
+  // Esto faltaba, y era una divergencia silenciosa: la app pasaba el RI a
+  // comparativa y la planilla seguía diciendo lo de antes. Nadie se daba
+  // cuenta porque no quedaba nada pendiente —no es que la escritura fallara,
+  // es que no se intentaba—, y el trigger marcaba el RI como editado acá, así
+  // que la importación tampoco lo volvía a mirar. Cinco RI quedaron así.
+  let avisoSheets: string | null = null;
+  if (avanza) {
+    try {
+      const { bloqueadas } = await exportarRequerimiento(id);
+      if (bloqueadas.length > 0) {
+        avisoSheets =
+          "La comparativa se vinculó, pero la planilla no dejó actualizar: " +
+          bloqueadas.join(", ") + ". Hay que corregirlo a mano ahí.";
+      }
+    } catch (e) {
+      avisoSheets = e instanceof Error ? e.message : String(e);
+      console.error(`No se pudo escribir el RI ${id} en la planilla:`, avisoSheets);
+    }
+  }
 
   return NextResponse.json({
     traidas: nuevas.length,
@@ -182,5 +207,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     sin_ri: sinRi,
     proveedores_nuevos: proveedoresNuevos,
     rechazadas,
+    ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}),
   });
 }

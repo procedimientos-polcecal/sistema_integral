@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { leerComparativa, agregarFila } from "@/lib/compras/drive";
 import { mapearEncabezados, filaParaPlanilla } from "@/lib/compras/comparativa";
@@ -82,11 +83,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Cargar el primer presupuesto pone el RI en comparativa: es el trabajo que
   // ese estado describe.
+  let avisoSheets: string | null = null;
   if (ri.estado_compra === "SIN_INICIAR") {
     await admin
       .from("compras_requerimientos")
       .update({ estado_compra: "EN_COMPARATIVA" })
       .eq("id", id);
+
+    // Y la planilla se entera. Faltaba, y dejaba a los dos lados diciendo
+    // cosas distintas sin que nada lo avisara: la escritura no fallaba, no se
+    // intentaba, así que no quedaba ni un pendiente que mirar.
+    try {
+      const { bloqueadas } = await exportarRequerimiento(id);
+      if (bloqueadas.length > 0) {
+        avisoSheets =
+          "El presupuesto se guardó, pero la planilla no dejó actualizar el estado: " +
+          bloqueadas.join(", ") + ". Hay que corregirlo a mano ahí.";
+      }
+    } catch (e) {
+      avisoSheets = e instanceof Error ? e.message : String(e);
+      console.error(`No se pudo escribir el RI ${id} en la planilla:`, avisoSheets);
+    }
   }
 
   let avisoDrive: string | null = null;
@@ -143,7 +160,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   return NextResponse.json(
-    avisoDrive ? { ...cotizacion, aviso_drive: avisoDrive } : cotizacion,
+    {
+      ...cotizacion,
+      ...(avisoDrive ? { aviso_drive: avisoDrive } : {}),
+      ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}),
+    },
     { status: 201 }
   );
 }

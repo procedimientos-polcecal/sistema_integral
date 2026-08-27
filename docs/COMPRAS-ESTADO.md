@@ -161,6 +161,16 @@ aproximado.
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.
 
+**Cambiar un estado sin escribirlo en la planilla es una divergencia que no
+avisa.** Vincular una comparativa de Drive, o cargar el primer presupuesto,
+pasaba el RI a `EN_COMPARATIVA` y no llamaba a `exportarRequerimiento`. Los dos
+lados quedaban diciendo cosas distintas y nada lo señalaba: `sheets_pendiente`
+sólo se llena cuando una escritura **falla**, y acá no fallaba, no se intentaba.
+Encima el trigger marcaba el RI como editado en la app, así que la importación
+tampoco lo volvía a mirar. Cinco RI quedaron así hasta el 27/08/2026. Regla:
+**toda ruta que toque `estado_compra` tiene que exportar**, y si no puede, dejar
+el pendiente anotado.
+
 **En la columna de aprobación la planilla escribe el ALIAS, no el nombre.**
 Dice `NICO`, no `Nicolas Lenzetti`. El respaldo que resuelve quién aprobó
 cuando el RI no tiene `aprobado_por` —que son 1810, o sea el histórico entero—
