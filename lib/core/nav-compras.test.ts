@@ -26,6 +26,7 @@ describe("menu de Compras", () => {
     // el orden del circuito.
     expect(itemsDeCompras().map((i) => i.label)).toEqual([
       "Tablero",
+      "Dashboard",
       "Requerimientos",
       "Aprobaciones",
       "Para aprobar",

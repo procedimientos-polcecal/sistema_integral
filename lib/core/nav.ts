@@ -118,9 +118,10 @@ export const NAV: NavItem[] = [
     modulo: "compras",
     // El tablero va primero: es la pantalla de entrada del módulo, la que dice
     // de un vistazo cuánto trabajo hay en cada etapa. El dashboard de gráficos
-    // sigue en /compras, que es donde apunta el título del grupo.
+    // queda al lado, porque las dos son vistas de resumen y se buscan juntas.
     children: [
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
+      { label: "Dashboard", href: "/compras", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
       { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorCompras: true },
       { label: "Para aprobar", href: "/compras/para-aprobar", modulo: "compras", soloAprobadorCompras: true },
