@@ -592,12 +592,25 @@ function PanelPendientes({
       setResultado(body.error ?? "No se pudo reintentar.");
       return;
     }
-    setResultado(
-      body.resueltos > 0
-        ? `Se escribieron ${body.resueltos} de ${body.intentados}.` +
-          (body.siguenPendientes > 0 ? ` Quedan ${body.siguenPendientes}.` : "")
-        : "La planilla los sigue rechazando por el mismo motivo."
-    );
+    // No se afirma el motivo: antes decía "la planilla los sigue rechazando" y
+    // era falso —lo que frenaba era la cuota de Google, no la planilla—. El
+    // motivo de cada uno está en su fila, que es donde se puede leer de verdad.
+    const partes: string[] = [];
+    if (body.resueltos > 0) {
+      partes.push(`Se escribieron ${body.resueltos} de ${body.intentados}.`);
+    } else {
+      partes.push(`No se pudo escribir ninguno de los ${body.intentados} que se intentaron.`);
+    }
+    if (body.siguenPendientes > 0) {
+      partes.push(`${body.siguenPendientes} sigue${body.siguenPendientes === 1 ? "" : "n"} con el motivo que figura abajo.`);
+    }
+    if (body.sinIntentar > 0) {
+      partes.push(
+        `Otros ${body.sinIntentar} quedaron en la cola: se escriben de a pocos por vez para no ` +
+        `agotar la cuota de Google. Volvé a tocar el botón o esperá la próxima sincronización.`
+      );
+    }
+    setResultado(partes.join(" "));
     router.refresh();
   }
 

@@ -161,6 +161,18 @@ aproximado.
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.
 
+**El reintento en lote se autoinfligía un 429.** Escribir un RI cuesta unas 13
+llamadas a la API de Sheets: hasta 8 escrituras —una por celda, porque un lote
+entero falla si una sola celda está protegida— más 5 lecturas que son idénticas
+para todos los RI de la corrida (las opciones del desplegable, los encabezados
+de cada pestaña, y la columna de N° del master, que son 1885 filas cada vez).
+Con doce pendientes eso daba ~156 llamadas en segundos, Google cortaba con 429 y
+el reintento lo anotaba como si la planilla hubiera rechazado los cambios —el
+cartel llegó a decir "la planilla los sigue rechazando", que era falso—.
+Corregido el 27/08/2026: las lecturas se cachean por corrida, el 429 se
+reintenta con espera y se nombra como cuota, y se escriben 5 RI por vez con un
+segundo de pausa. Lo que sobra espera la próxima corrida y la pantalla lo dice.
+
 **Cambiar un estado sin escribirlo en la planilla es una divergencia que no
 avisa.** Vincular una comparativa de Drive, o cargar el primer presupuesto,
 pasaba el RI a `EN_COMPARATIVA` y no llamaba a `exportarRequerimiento`. Los dos

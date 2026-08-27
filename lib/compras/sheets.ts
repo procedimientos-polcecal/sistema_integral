@@ -37,6 +37,31 @@ const idPlanilla = () => {
   return id;
 };
 
+/**
+ * Lo que no cambia durante una corrida de escrituras.
+ *
+ * Escribir un RI en la planilla cuesta unas 13 llamadas a la API de Sheets, y
+ * cinco de ellas son idénticas para todos los RI de la misma corrida: las
+ * opciones del desplegable de aprobación, los encabezados de cada pestaña y la
+ * columna de N° del master —que además son 1885 filas cada vez—.
+ *
+ * Con doce pendientes eso daban ~156 llamadas en pocos segundos y Google
+ * devolvía 429: el reintento se autoinfligía el límite de cuota y anotaba el
+ * 429 como si la planilla hubiera rechazado los cambios.
+ *
+ * El cache vive lo que dura la corrida, no más. Sin cache la función se
+ * comporta igual que antes: cada llamada suelta arma el suyo.
+ */
+export interface CacheSheets {
+  opciones?: string[];
+  encabezados: Map<string, string[]>;
+  filasDelMaster?: Map<number, number>;
+}
+
+export function nuevoCacheSheets(): CacheSheets {
+  return { encabezados: new Map() };
+}
+
 async function leerPestana(pestana: string): Promise<string[][]> {
   const token = await obtenerToken(false);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}/values/${encodeURIComponent(pestana)}`;
@@ -674,12 +699,32 @@ export interface ResultadoExportacion {
  * algo que no esté acá deja la celda fuera de rango y rompe las fórmulas y
  * filtros que dependen de esos textos exactos.
  */
-export async function opcionesAprobacion(): Promise<string[]> {
-  const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
-  const idx = indexarColumnas(encabezado[0] ?? []);
-  const col = idx[COLUMNA_APROBACION];
-  if (col < 0) return [];
+export async function opcionesAprobacion(cache?: CacheSheets): Promise<string[]> {
+  if (cache?.opciones) return cache.opciones;
 
+  const encabezado = await leerEncabezado(HOJA_MASTER, cache);
+  if (encabezado.length === 0) return [];
+  const idxEnc = indexarColumnas(encabezado);
+  const colEnc = idxEnc[COLUMNA_APROBACION];
+  if (colEnc < 0) return [];
+  const opciones = await leerOpcionesDelDesplegable(colEnc);
+  if (cache) cache.opciones = opciones;
+  return opciones;
+}
+
+/** El encabezado de una pestaña, una sola vez por corrida. */
+async function leerEncabezado(pestana: string, cache?: CacheSheets): Promise<string[]> {
+  const guardado = cache?.encabezados.get(pestana);
+  if (guardado) return guardado;
+
+  const filas = await leerPestana(`${pestana}!A1:R1`);
+  const encabezado = filas[0] ?? [];
+  cache?.encabezados.set(pestana, encabezado);
+  return encabezado;
+}
+
+/** Lee la lista del desplegable de una columna del master. */
+async function leerOpcionesDelDesplegable(col: number): Promise<string[]> {
   const letra = letraColumna(col);
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
@@ -810,34 +855,72 @@ async function aliasDelAprobador(
   );
 }
 
-/** Busca en qué fila del master está un RI. */
-async function filaEnMaster(nroRi: number): Promise<number | null> {
-  const filas = await leerPestana(`${HOJA_MASTER}!A:A`);
-  for (let i = 1; i < filas.length; i++) {
-    const n = Number(String(filas[i]?.[0] ?? "").replace(/[^0-9]/g, ""));
-    if (n === nroRi) return i + 1;
+/**
+ * En qué fila del master está cada RI.
+ *
+ * Se arma una vez y se reusa: son 1885 filas y antes se leían enteras por cada
+ * requerimiento que se escribía.
+ */
+async function filaEnMaster(nroRi: number, cache?: CacheSheets): Promise<number | null> {
+  let mapa = cache?.filasDelMaster;
+
+  if (!mapa) {
+    mapa = new Map<number, number>();
+    const filas = await leerPestana(`${HOJA_MASTER}!A:A`);
+    for (let i = 1; i < filas.length; i++) {
+      const n = Number(String(filas[i]?.[0] ?? "").replace(/[^0-9]/g, ""));
+      if (n) mapa.set(n, i + 1);
+    }
+    if (cache) cache.filasDelMaster = mapa;
   }
-  return null;
+
+  return mapa.get(nroRi) ?? null;
 }
 
-/** Escribe una celda. Devuelve null si salió bien, o el motivo si no. */
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Escribe una celda. Devuelve null si salió bien, o el motivo si no.
+ *
+ * Ante un 429 espera y reintenta, porque un 429 no es un rechazo: es "no
+ * ahora". Tratarlo como rechazo dejaba doce RI anotados con "error 429" y hacía
+ * pensar que la planilla no los quería, cuando en realidad no se había llegado
+ * a intentar.
+ *
+ * La cuota de Sheets se cuenta por minuto, así que las esperas son de segundos
+ * y no de milisegundos: reintentar rápido sólo gasta el intento.
+ */
 async function escribirCelda(token: string, rango: string, valor: string): Promise<string | null> {
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
     `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
 
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values: [[valor]] }),
-  });
-  if (res.ok) return null;
+  const DEMORAS = [2000, 6000];
 
-  const cuerpo = await res.text();
-  // La planilla tiene rangos protegidos: la aprobación sólo la pueden tocar
-  // ciertas cuentas, y un script bloquea el Estado de cada fila al aprobarla.
-  if (cuerpo.includes("protected")) return "celda protegida en la planilla";
-  return `error ${res.status}`;
+  for (let intento = 0; ; intento++) {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: [[valor]] }),
+    });
+    if (res.ok) return null;
+
+    const cuerpo = await res.text();
+    // La planilla tiene rangos protegidos: la aprobación sólo la pueden tocar
+    // ciertas cuentas, y un script bloquea el Estado de cada fila al aprobarla.
+    if (cuerpo.includes("protected")) return "celda protegida en la planilla";
+
+    if (res.status === 429 && intento < DEMORAS.length) {
+      await espera(DEMORAS[intento]);
+      continue;
+    }
+    if (res.status === 429) {
+      // Se dice como lo que es, para que no se confunda con un rechazo: esto se
+      // arregla solo en la próxima corrida, sin tocar la planilla.
+      return "la planilla no dio lugar por cuota; se reintenta solo";
+    }
+    return `error ${res.status}`;
+  }
 }
 
 /**
@@ -852,7 +935,13 @@ async function escribirCelda(token: string, rango: string, valor: string): Promi
  * Lo que no se pudo escribir se devuelve para avisarlo, en vez de dar por
  * hecho que la planilla quedó al día.
  */
-export async function exportarRequerimiento(requerimientoId: string): Promise<ResultadoExportacion> {
+export async function exportarRequerimiento(
+  requerimientoId: string,
+  cacheDeLaCorrida?: CacheSheets
+): Promise<ResultadoExportacion> {
+  // Sin cache se comporta como siempre: una llamada suelta arma el suyo y no
+  // reusa nada. El reintento sí lo comparte entre todos los RI de la corrida.
+  const cache = cacheDeLaCorrida ?? nuevoCacheSheets();
   const vacio: ResultadoExportacion = { escritas: [], bloqueadas: [] };
   if (!process.env.GOOGLE_SHEETS_COMPRAS_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return vacio;
 
@@ -894,7 +983,7 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
     const { valor, motivo } = textoAprobacion(
       r.estado_aprobacion as string,
       alias,
-      await opcionesAprobacion()
+      await opcionesAprobacion(cache)
     );
 
     if (!valor) {
@@ -902,11 +991,11 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
     } else {
       const fila = r.hoja_origen === HOJA_MASTER && r.sheets_fila
         ? (r.sheets_fila as number)
-        : await filaEnMaster(r.nro_ri as number);
+        : await filaEnMaster(r.nro_ri as number, cache);
 
       if (fila) {
-        const encabezado = await leerPestana(`${HOJA_MASTER}!A1:R1`);
-        const idx = indexarColumnas(encabezado[0] ?? []);
+        const encabezado = await leerEncabezado(HOJA_MASTER, cache);
+        const idx = indexarColumnas(encabezado);
 
         if (idx[COLUMNA_APROBACION] >= 0) {
           const fallo = await escribirCelda(
@@ -944,9 +1033,9 @@ export async function exportarRequerimiento(requerimientoId: string): Promise<Re
 
   // ── Columnas de compra, en la hoja del área ──
   if (r.hoja_origen && r.sheets_fila && r.hoja_origen !== HOJA_MASTER) {
-    const encabezado = await leerPestana(`${r.hoja_origen}!A1:R1`);
+    const encabezado = await leerEncabezado(r.hoja_origen as string, cache);
     if (encabezado.length > 0) {
-      const idx = indexarColumnas(encabezado[0]);
+      const idx = indexarColumnas(encabezado);
       // El estado se resuelve aparte porque PARA_COMPRAR necesita el alias de
       // quien tiene que aprobar, y RECIBIDO directamente no se escribe.
       let estadoTexto: string | null = null;
@@ -1001,7 +1090,23 @@ export interface ResultadoReintento {
   intentados: number;
   resueltos: number;
   siguenPendientes: number;
+  /** Los que quedaron en la cola sin intentarse, por el tope de la corrida. */
+  sinIntentar: number;
 }
+
+/**
+ * Cuántos RI se escriben por corrida.
+ *
+ * La cuota de Sheets se cuenta por minuto, y escribir un RI son hasta ocho
+ * celdas —cada una es una llamada, porque un lote entero falla si una sola
+ * celda está protegida—. Con doce pendientes de una, Google devolvía 429 a
+ * mitad de camino y el reintento anotaba el 429 como si la planilla hubiera
+ * rechazado los cambios.
+ *
+ * Cinco por corrida entra cómodo en el límite. Lo que sobra espera la próxima,
+ * que con el cron es en quince minutos.
+ */
+const POR_CORRIDA = 5;
 
 /**
  * Reintenta las escrituras que la planilla había rechazado.
@@ -1011,22 +1116,37 @@ export interface ResultadoReintento {
  * reintento es lo que hace que las dos herramientas vuelvan a coincidir sin
  * tener que tocar el requerimiento de nuevo.
  */
-export async function reintentarPendientes(limite = 50): Promise<ResultadoReintento> {
+export async function reintentarPendientes(limite = POR_CORRIDA): Promise<ResultadoReintento> {
   const admin = createAdminClient();
+
+  // Cuántos hay en la cola, aparte de cuántos se van a intentar: si el tope
+  // deja algunos afuera hay que decirlo, o la pantalla parece mentir cuando
+  // sigue habiendo pendientes después de reintentar.
+  const { count: enLaCola } = await admin
+    .from("compras_requerimientos")
+    .select("id", { count: "exact", head: true })
+    .not("sheets_pendiente", "is", null);
 
   const { data: pendientes } = await admin
     .from("compras_requerimientos")
     .select("id")
+    // Los que hace más que se intentaron van primero, así la cola rota y
+    // ninguno queda esperando para siempre detrás de los mismos cinco.
+    .order("sheets_intentado_en", { ascending: true, nullsFirst: true })
     .not("sheets_pendiente", "is", null)
-    .order("sheets_intentado_en", { ascending: true })
     .limit(limite);
 
+  const cache = nuevoCacheSheets();
   let resueltos = 0;
   let siguenPendientes = 0;
 
-  for (const r of pendientes ?? []) {
+  for (const [i, r] of (pendientes ?? []).entries()) {
+    // Un respiro entre RI: la cuota es por minuto y ocho escrituras seguidas
+    // por cada uno la agotan en ráfaga.
+    if (i > 0) await espera(1000);
+
     try {
-      const { bloqueadas } = await exportarRequerimiento(r.id as string);
+      const { bloqueadas } = await exportarRequerimiento(r.id as string, cache);
       if (bloqueadas.length === 0) resueltos++;
       else siguenPendientes++;
     } catch {
@@ -1035,5 +1155,11 @@ export async function reintentarPendientes(limite = 50): Promise<ResultadoReinte
     }
   }
 
-  return { intentados: pendientes?.length ?? 0, resueltos, siguenPendientes };
+  const intentados = pendientes?.length ?? 0;
+  return {
+    intentados,
+    resueltos,
+    siguenPendientes,
+    sinIntentar: Math.max(0, (enLaCola ?? intentados) - intentados),
+  };
 }
