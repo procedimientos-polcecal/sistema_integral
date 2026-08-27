@@ -162,15 +162,29 @@ aproximado.
 **El activador "Al editar" de Apps Script no se dispara con el formulario.**
 Hacen falta los dos activadores.
 
-**Para diagnosticar la planilla, primero mirar con qué cuenta escribe la app.**
-Los rangos protegidos listan qué cuentas pueden editarlos, y si la que figura
-ahí no es la que escribe, las escrituras vuelven rechazadas y desde la planilla
-todo parece en orden. Perseguir eso costó varias vueltas el 27/08/2026: se
-revisaron 946 protecciones que ya tenían permiso. El mail con el que escribe el
-sistema ahora se muestra en Compras -> Configuración, al lado de la última
-sincronización, justamente para poder compararlo de un vistazo. Y hay dos
-funciones de apoyo en `docs/compras-permisos-apps-script.gs`: una agrega la
-cuenta a las protecciones y la otra sólo diagnostica.
+**Clasificar un error antes de reintentarlo lo vuelve permanente.** En
+`escribirCelda` había un atajo: si el cuerpo de la respuesta contenía la palabra
+`protected`, se devolvía "celda protegida en la planilla" y se cortaba ahí. Ese
+chequeo estaba **antes** del reintento por cuota, así que cualquier rechazo cuyo
+mensaje mencionara esa palabra se abandonaba sin reintentar y quedaba anotado
+como un problema de permisos.
+
+Eso costó una tarde entera el 27/08/2026: se revisaron 946 protecciones que
+estaban bien y se sospechó de la cuenta de servicio, que también estaba bien. El
+error nunca fue de permisos. Con el chequeo de cuota primero y el reintento con
+espera, las doce escrituras pendientes pasaron sin tocar nada de la planilla.
+
+Dos cosas quedaron de eso, y las dos valen para la próxima:
+
+- El motivo que se guarda ahora incluye **lo que dijo Google**, no una
+  traducción, y el cuerpo completo va al log del servidor. Un diagnóstico que no
+  se puede distinguir de otro no es un diagnóstico.
+- El mail con el que el sistema escribe se muestra en Compras -> Configuración,
+  al lado de la última sincronización. Los rangos protegidos listan qué cuentas
+  pueden editarlos, y si no coincide con ésa, desde la planilla todo parece en
+  orden. Hay dos funciones de apoyo en
+  `docs/compras-permisos-apps-script.gs`: una agrega la cuenta a las
+  protecciones y la otra sólo diagnostica, sin cambiar nada.
 
 **El reintento en lote se autoinfligía un 429.** Escribir un RI cuesta unas 13
 llamadas a la API de Sheets: hasta 8 escrituras —una por celda, porque un lote
