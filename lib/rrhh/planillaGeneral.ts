@@ -23,12 +23,12 @@ export interface FilaPlanilla {
   montoTotal: number;
 }
 
-function dia(fecha: string): Date {
+export function dia(fecha: string): Date {
   return new Date(`${fecha.slice(0, 10)}T00:00:00Z`);
 }
 
 /** Días calendario en que [aDesde, aHasta] se superpone con [bDesde, bHasta] (0 si no se superponen). */
-function diasSuperpuestos(aDesde: Date, aHasta: Date, bDesde: Date, bHasta: Date): number {
+export function diasSuperpuestos(aDesde: Date, aHasta: Date, bDesde: Date, bHasta: Date): number {
   const inicio = aDesde > bDesde ? aDesde : bDesde;
   const fin = aHasta < bHasta ? aHasta : bHasta;
   if (fin < inicio) return 0;
@@ -40,7 +40,7 @@ function diasSuperpuestos(aDesde: Date, aHasta: Date, bDesde: Date, bHasta: Date
  * superpone con [bDesde, bHasta]. Se usa para enfermedad (licencia médica):
  * domingos y feriados no suman horas, sin importar cuánto dure la licencia.
  */
-function diasHabilesSuperpuestos(aDesde: Date, aHasta: Date, bDesde: Date, bHasta: Date, feriados: Set<number>): number {
+export function diasHabilesSuperpuestos(aDesde: Date, aHasta: Date, bDesde: Date, bHasta: Date, feriados: Set<number>): number {
   const inicio = aDesde > bDesde ? aDesde : bDesde;
   const fin = aHasta < bHasta ? aHasta : bHasta;
   if (fin < inicio) return 0;
