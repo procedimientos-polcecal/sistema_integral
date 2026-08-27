@@ -618,8 +618,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 
 | Falta | Qué es | Cuánto pesa |
 |---|---|---|
-| **Repuestos de una OT** | Qué repuestos hace falta conseguir. La tabla existe y está vacía. | Medio |
-| **Consultar el inventario** | Ver en vivo, contra la planilla de inventario, si hay stock de un repuesto. | Medio |
 | **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
 | **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
 | **Sincronización automática** | Un cron que trae las planillas solo. Hoy es a mano, con el botón. | Medio |
@@ -653,6 +651,37 @@ Al cargar un aviso, elegir la máquina de la lista completa el sector solo: la
 máquina sabe dónde está. Y las urgencias se escriben **con su emoji** —"🟠 Alta",
 no "ALTA"— porque así están en la planilla, y dos vocabularios para lo mismo es
 cómo la próxima lectura deja de reconocerlas.
+
+## Los repuestos de una orden, y si los hay
+
+La planilla de OT tiene **una sola columna de repuesto**, texto libre. Eso
+alcanza para dejar una nota, no para saber qué hay que conseguir. La lista de
+verdad vive en el sistema: nombre, código y cantidad de cada uno. No se escribe
+en la planilla porque no tiene dónde.
+
+**El stock se consulta en vivo**, contra la planilla del pañol, y no se guarda:
+cambia cada vez que alguien retira algo, y una copia estaría desactualizada
+justo cuando importa —cuando hay que decidir si el trabajo se puede hacer hoy—.
+
+Cuatro distinciones que la pantalla hace y que no son lo mismo:
+
+- **No hay stock** y **no está en el inventario**: una se compra, la otra se
+  busca en otro lado o se pregunta en el pañol.
+- **Cero** y **sin informar**: cero es un dato —no hay—; vacío quiere decir que
+  nadie lo contó, y mostrarlo como cero manda a comprar algo que puede estar.
+- **Hay** y **queda poco**: al mínimo o por debajo alcanza para este trabajo,
+  pero hay que reponer.
+
+Al escribir el nombre se busca en el inventario y se puede elegir de las
+sugerencias, que es lo que hace que el **código** quede bien puesto: con el
+código, la próxima vez se sabe si hay stock sin adivinar por el nombre. La
+búsqueda parcial pide cuatro letras: con dos o tres, "de" o "tor" encuentran
+media planilla.
+
+**El inventario no lo maneja Mantenimiento.** Si su planilla no está configurada
+o no se puede leer, la pantalla lo dice y sigue andando sin disponibilidad:
+anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
+`GOOGLE_SHEETS_INVENTARIO_ID` y `GOOGLE_SHEETS_INVENTARIO_TAB`.
 
 ## Los datos: qué está y qué no
 

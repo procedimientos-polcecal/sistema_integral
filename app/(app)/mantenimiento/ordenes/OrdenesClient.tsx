@@ -8,6 +8,7 @@ import NuevaOTModal from "./NuevaOTModal";
 import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
+import RepuestosOTModal from "./RepuestosOTModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 
@@ -51,6 +52,7 @@ export default function OrdenesClient({
   const [iniciando, setIniciando] = useState<any | null>(null);
   const [registrando, setRegistrando] = useState<any | null>(null);
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
+  const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -334,6 +336,7 @@ export default function OrdenesClient({
                         order={o}
                         canEdit={canEdit}
                         onChangeEstado={changeEstado}
+                        onVerRepuestos={() => setVerRepuestos(o)}
                         onCambiarParada={cambiarParada}
                       />
                     )}
@@ -375,6 +378,14 @@ export default function OrdenesClient({
         />
       )}
 
+      {verRepuestos && (
+        <RepuestosOTModal
+          orden={verRepuestos}
+          puedeEditar={canEdit}
+          onCerrar={() => setVerRepuestos(null)}
+        />
+      )}
+
       {iniciando && (
         <IniciarOTModal
           orden={iniciando}
@@ -394,7 +405,8 @@ export default function OrdenesClient({
   );
 }
 
-function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada }: {
+function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos }: {
+  onVerRepuestos?: () => void;
   order: any;
   canEdit: boolean;
   onChangeEstado: (id: string, estado: string) => void;
@@ -444,6 +456,15 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada }: {
           <p className="text-sm text-gray-800">{o.descripcion}</p>
         </div>
       )}
+      <div>
+        <button
+          onClick={onVerRepuestos}
+          className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          Repuestos que hacen falta
+        </button>
+      </div>
+
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">
           <span className="text-xs text-gray-500 font-medium">Cambiar estado:</span>
