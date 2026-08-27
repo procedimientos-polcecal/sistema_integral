@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — el importador es .mjs y no tiene tipos; lo que se prueba
-// acá es su lógica de decisión, que es pura.
+// El importador es .mjs; lo que se prueba acá es su lógica de decisión, que
+// es pura y no toca la base.
 import { decidir, nucleo, plazoDias } from "./import.mjs";
 
 const fila = (nombre: string) => ({ nombre, cuit: "20-1-1" });

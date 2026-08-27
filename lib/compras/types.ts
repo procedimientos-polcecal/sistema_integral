@@ -48,6 +48,20 @@ export interface Proveedor {
   notas: string | null;
   es_contratista: boolean;
   activo: boolean;
+
+  // Lo que hace falta para pagarle, traído de la base de datos de
+  // administración. Casi todo puede venir vacío: se cargó lo que la planilla
+  // tenía.
+  direccion: string | null;
+  sitio_web: string | null;
+  telefono_alt: string | null;
+  plazo_pago_dias: number | null;
+  forma_pago: string | null;
+  condicion_pago: string | null;
+  cbu: string | null;
+  /** Alias de la cuenta. No confundir con el alias de un aprobador. */
+  alias_bancario: string | null;
+  comentario: string | null;
 }
 
 export interface Requerimiento {

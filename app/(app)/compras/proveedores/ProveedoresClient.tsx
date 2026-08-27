@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { moneda } from "@/lib/compras/constants";
 import type { Proveedor } from "@/lib/compras/types";
@@ -17,6 +17,9 @@ export default function ProveedoresClient({
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState<"monto" | "nombre">("monto");
+  // Qué proveedor tiene desplegados sus datos. Uno por vez: son ocho campos y
+  // varios abiertos a la vez convierten la lista en una pared de texto.
+  const [abierto, setAbierto] = useState<string | null>(null);
   const [editando, setEditando] = useState<Proveedor | null>(null);
   const [creando, setCreando] = useState(false);
 
@@ -98,8 +101,13 @@ export default function ProveedoresClient({
               ) : (
                 filas.map((p) => {
                   const stat = estadisticas[p.id];
+                  const desplegado = abierto === p.id;
                   return (
-                    <tr key={p.id} className={`hover:bg-slate-50 ${p.activo ? "" : "opacity-50"}`}>
+                    <Fragment key={p.id}>
+                    <tr
+                      onClick={() => setAbierto(desplegado ? null : p.id)}
+                      className={`cursor-pointer hover:bg-slate-50 ${p.activo ? "" : "opacity-50"} ${desplegado ? "bg-slate-50" : ""}`}
+                    >
                       <td className="px-3 py-2 font-medium text-slate-900">
                         {p.nombre}
                         {p.es_contratista && (
@@ -118,12 +126,25 @@ export default function ProveedoresClient({
                       </td>
                       {canEdit && (
                         <td className="px-3 py-2">
-                          <button onClick={() => setEditando(p)} className="text-xs text-slate-500 hover:text-slate-900">
+                          <button
+                            // Sin esto, tocar Editar también despliega la fila.
+                            onClick={(e) => { e.stopPropagation(); setEditando(p); }}
+                            className="text-xs text-slate-500 hover:text-slate-900"
+                          >
                             Editar
                           </button>
                         </td>
                       )}
                     </tr>
+
+                    {desplegado && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={canEdit ? 7 : 6} className="px-3 pb-3">
+                          <DatosDelProveedor p={p} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               )}
@@ -138,6 +159,67 @@ export default function ProveedoresClient({
           onClose={() => { setEditando(null); setCreando(false); }}
           onSaved={() => { setEditando(null); setCreando(false); router.refresh(); }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que hace falta para pagarle a un proveedor.
+ *
+ * Vive escondido detrás de un toque y no en la tabla porque son nueve campos
+ * más: en la fila no entran, y en el 90% de las visitas a esta pantalla nadie
+ * los está buscando. Cuando se los busca, se los busca de a uno.
+ *
+ * Los campos vacíos no se dibujan. Una grilla llena de guiones se lee como
+ * "esto está roto"; que falte lo que falta se ve mejor por ausencia.
+ */
+function DatosDelProveedor({ p }: { p: Proveedor }) {
+  const campos: [string, string | null][] = [
+    ["CUIT", p.cuit],
+    ["Plazo de pago", p.plazo_pago_dias === null ? null : `${p.plazo_pago_dias} días`],
+    ["Forma de pago", p.forma_pago],
+    ["Condición", p.condicion_pago],
+    ["CBU", p.cbu],
+    ["Alias", p.alias_bancario],
+    ["Teléfono alternativo", p.telefono_alt],
+    ["Email", p.email],
+    ["Dirección", p.direccion],
+    ["Sitio web", p.sitio_web],
+  ];
+  const cargados = campos.filter(([, v]) => v !== null && v !== "");
+
+  if (cargados.length === 0 && !p.notas && !p.comentario) {
+    return (
+      <p className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-400">
+        De este proveedor no hay más datos cargados. Los trae la base de datos de
+        administración, y ahí todavía no figuran.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <dl className="grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2 lg:grid-cols-3">
+        {cargados.map(([etiqueta, valor]) => (
+          <div key={etiqueta} className="min-w-0">
+            <dt className="text-[11px] uppercase tracking-wide text-slate-400">{etiqueta}</dt>
+            <dd
+              className={`text-slate-800 ${
+                // El CBU y el CUIT se copian y se comparan dígito a dígito.
+                etiqueta === "CBU" || etiqueta === "CUIT" ? "font-mono break-all" : "break-words"
+              }`}
+            >
+              {valor}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {(p.notas || p.comentario) && (
+        <p className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+          {[p.notas, p.comentario].filter(Boolean).join(" · ")}
+        </p>
       )}
     </div>
   );
