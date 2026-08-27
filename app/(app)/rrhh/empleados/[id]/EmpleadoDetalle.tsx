@@ -16,6 +16,17 @@ function firstOfMonth() {
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
+/**
+ * Año al que se le descuentan los días de una ausencia tipo "Vacaciones", que
+ * viene del período de vacaciones vinculado. PostgREST puede devolver el
+ * vínculo como objeto o como array de uno según cómo resuelva la cardinalidad,
+ * así que se acepta cualquiera de las dos formas.
+ */
+function anioDeAusencia(ausencia: any): number | null {
+  const vinculo = Array.isArray(ausencia.vacaciones) ? ausencia.vacaciones[0] : ausencia.vacaciones;
+  return vinculo?.anio_correspondiente ?? null;
+}
+
 function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString("es-AR", {
     hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires",
@@ -40,6 +51,12 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   const [cargandoDias, setCargandoDias] = useState(false);
   const [ausencias, setAusencias] = useState<any[] | null>(null);
   const [vacaciones, setVacaciones] = useState<any | null>(null);
+  const [anioVacaciones, setAnioVacaciones] = useState(new Date().getFullYear());
+  // Todos los períodos de vacaciones del empleado, de cualquier año: se
+  // muestran tanto en Ausencias (para ver los días que estuvo ausente por
+  // vacaciones, aclarando a qué año correspondieron) como en Vacaciones (para
+  // no tener que ir cambiando el año para encontrarlos).
+  const [vacacionesTodas, setVacacionesTodas] = useState<any[] | null>(null);
   const [francos, setFrancos] = useState<any[] | null>(null);
 
   useEffect(() => {
@@ -58,7 +75,12 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
 
   useEffect(() => {
     if (tab !== "vacaciones") return;
-    fetch(`/api/rrhh/vacaciones/${empleado.id}/balance`).then((r) => r.json()).then(setVacaciones);
+    fetch(`/api/rrhh/vacaciones/${empleado.id}/balance?anio=${anioVacaciones}`).then((r) => r.json()).then(setVacaciones);
+  }, [tab, empleado.id, anioVacaciones]);
+
+  useEffect(() => {
+    if (tab !== "vacaciones" && tab !== "ausencias") return;
+    fetch(`/api/rrhh/vacaciones?employeeId=${empleado.id}`).then((r) => r.json()).then(setVacacionesTodas);
   }, [tab, empleado.id]);
 
   useEffect(() => {
@@ -88,6 +110,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
     fechaIngreso: empleado.fecha_ingreso.slice(0, 10),
     valorHoraNormal: String(empleado.valor_hora_normal),
     horasTeoricasDiarias: String(empleado.horas_teoricas_diarias),
+    modalidadPago: empleado.modalidad_pago ?? "JORNAL",
     empresaId: empleado.empresa_id ?? "",
     sectorId: empleado.sector_id ?? "",
   });
@@ -132,19 +155,27 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   }
 
   // --- ausencias ---
+  const anioActual = new Date().getFullYear();
   const [nuevaAusencia, setNuevaAusencia] = useState({
     fechaDesde: "", fechaHasta: "", tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "",
+    anioCorrespondiente: String(anioActual),
   });
   const [editandoAusenciaId, setEditandoAusenciaId] = useState<string | null>(null);
   const [guardandoAusencia, setGuardandoAusencia] = useState(false);
   function cancelarEdicionAusencia() {
     setEditandoAusenciaId(null);
-    setNuevaAusencia({ fechaDesde: "", fechaHasta: "", tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "" });
+    setNuevaAusencia({
+      fechaDesde: "", fechaHasta: "", tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "",
+      anioCorrespondiente: String(anioActual),
+    });
   }
   async function refrescarAusencias() {
     const data = await fetch(`/api/rrhh/ausencias?employeeId=${empleado.id}`).then((r) => r.json());
     setAusencias(data);
     fetch(`/api/rrhh/asistencia/empleado/${empleado.id}?desde=${desde}&hasta=${hasta}`).then((r) => r.json()).then(setDias);
+    // una ausencia de vacaciones crea/actualiza su período, así que el
+    // historial y el balance también quedan viejos
+    fetch(`/api/rrhh/vacaciones?employeeId=${empleado.id}`).then((r) => r.json()).then(setVacacionesTodas);
   }
   async function crearAusencia(e: React.FormEvent) {
     e.preventDefault();
@@ -156,6 +187,8 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       tipo: nuevaAusencia.justificada ? nuevaAusencia.tipo : "INJUSTIFICADA",
       justificada: nuevaAusencia.justificada,
       observaciones: nuevaAusencia.observaciones || undefined,
+      anioCorrespondiente:
+        nuevaAusencia.justificada && nuevaAusencia.tipo === "VACACIONES" ? Number(nuevaAusencia.anioCorrespondiente) : undefined,
     };
     await fetch(editandoAusenciaId ? `/api/rrhh/ausencias/${editandoAusenciaId}` : "/api/rrhh/ausencias", {
       method: editandoAusenciaId ? "PUT" : "POST",
@@ -173,7 +206,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
 
   // --- falta sin clasificar ---
   const [faltaEnEdicion, setFaltaEnEdicion] = useState<string | null>(null);
-  const [claseFalta, setClaseFalta] = useState({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "" });
+  const [claseFalta, setClaseFalta] = useState({
+    tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "", anioCorrespondiente: String(anioActual),
+  });
   const [clasificando, setClasificando] = useState(false);
   async function clasificarFalta() {
     setClasificando(true);
@@ -187,32 +222,37 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
         tipo: claseFalta.justificada ? claseFalta.tipo : "INJUSTIFICADA",
         justificada: claseFalta.justificada,
         observaciones: claseFalta.observaciones || undefined,
+        anioCorrespondiente:
+          claseFalta.justificada && claseFalta.tipo === "VACACIONES" ? Number(claseFalta.anioCorrespondiente) : undefined,
       }),
     });
     setClasificando(false);
     setFaltaEnEdicion(null);
-    setClaseFalta({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "" });
+    setClaseFalta({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "", anioCorrespondiente: String(anioActual) });
     refrescarAusencias();
   }
 
   // --- vacaciones ---
-  const [nuevaVacacion, setNuevaVacacion] = useState({ fechaDesde: "", fechaHasta: "", diasTomados: "" });
+  const [nuevaVacacion, setNuevaVacacion] = useState({
+    fechaDesde: "", fechaHasta: "", diasTomados: "", anioCorrespondiente: String(new Date().getFullYear()),
+  });
   const [editandoVacacionId, setEditandoVacacionId] = useState<string | null>(null);
   const [guardandoVacacion, setGuardandoVacacion] = useState(false);
   function cancelarEdicionVacacion() {
     setEditandoVacacionId(null);
-    setNuevaVacacion({ fechaDesde: "", fechaHasta: "", diasTomados: "" });
+    setNuevaVacacion({ fechaDesde: "", fechaHasta: "", diasTomados: "", anioCorrespondiente: String(anioVacaciones) });
   }
   async function refrescarVacaciones() {
-    const data = await fetch(`/api/rrhh/vacaciones/${empleado.id}/balance`).then((r) => r.json());
+    const data = await fetch(`/api/rrhh/vacaciones/${empleado.id}/balance?anio=${anioVacaciones}`).then((r) => r.json());
     setVacaciones(data);
+    fetch(`/api/rrhh/vacaciones?employeeId=${empleado.id}`).then((r) => r.json()).then(setVacacionesTodas);
   }
   async function guardarVacacion(e: React.FormEvent) {
     e.preventDefault();
     setGuardandoVacacion(true);
     const data = {
       employeeId: empleado.id,
-      anioCorrespondiente: vacaciones?.anio ?? new Date().getFullYear(),
+      anioCorrespondiente: Number(nuevaVacacion.anioCorrespondiente),
       fechaDesde: nuevaVacacion.fechaDesde,
       fechaHasta: nuevaVacacion.fechaHasta,
       diasTomados: Number(nuevaVacacion.diasTomados),
@@ -267,7 +307,8 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       <p className="text-gray-500 mb-4">
         Legajo {empleado.legajo} · {empleado.empresas?.nombre ?? "Sin empresa"} · {empleado.sectores?.nombre ?? "Sin sector"}
         {empleado.rrhh_empleados_datos?.sindicato ? ` · ${empleado.rrhh_empleados_datos.sindicato}` : ""} · $
-        {Number(empleado.valor_hora_normal).toLocaleString("es-AR")}/hora · {empleado.horas_teoricas_diarias}hs teóricas/día
+        {Number(empleado.valor_hora_normal).toLocaleString("es-AR")}/hora · {empleado.horas_teoricas_diarias}hs teóricas/día ·{" "}
+        {empleado.modalidad_pago === "MENSUAL" ? "Mensual" : "Jornal"}
       </p>
       {errorEliminar && <p className="text-sm text-red-600 mb-4">{errorEliminar}</p>}
 
@@ -296,6 +337,13 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           <div>
             <label className="block text-sm text-gray-600 mb-1">Horas teóricas diarias</label>
             <input type="number" step="0.5" required value={form.horasTeoricasDiarias} onChange={(e) => setForm({ ...form, horasTeoricasDiarias: e.target.value })} className="input" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Modalidad de pago</label>
+            <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
+              <option value="JORNAL">Jornal</option>
+              <option value="MENSUAL">Mensual</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Empresa</label>
@@ -441,6 +489,16 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                   </select>
                 </div>
               )}
+              {nuevaAusencia.justificada && nuevaAusencia.tipo === "VACACIONES" && (
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
+                  <input type="number" required value={nuevaAusencia.anioCorrespondiente}
+                    onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, anioCorrespondiente: e.target.value })} className="input" />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Se descuenta del balance de vacaciones de ese año (puede ser un año anterior, ej. vacaciones pendientes) y aparece en el historial de vacaciones.
+                  </p>
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="block text-xs text-gray-500 mb-1">
                   Observaciones {nuevaAusencia.justificada && nuevaAusencia.tipo === "OTRA" ? "(obligatorio: aclarar el motivo)" : ""}
@@ -487,7 +545,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                     </td>
                     <td className="py-2 text-right">
                       {d.justificada === null && (
-                        <button onClick={() => { setFaltaEnEdicion(d.fecha.slice(0, 10)); setClaseFalta({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "" }); }}
+                        <button onClick={() => { setFaltaEnEdicion(d.fecha.slice(0, 10)); setClaseFalta({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "", anioCorrespondiente: String(anioActual) }); }}
                           className="text-gray-700 underline text-xs">
                           Clasificar
                         </button>
@@ -505,6 +563,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Tipo</th>
+                  <th className="pb-2">Año corresp.</th>
                   <th className="pb-2">Justificada</th>
                   <th className="pb-2">Observaciones</th>
                   <th className="pb-2"></th>
@@ -516,6 +575,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                     <td className="py-2">{new Date(a.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                     <td className="py-2">{new Date(a.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                     <td className="py-2">{labelTipoAusencia(a.tipo)}</td>
+                    <td className="py-2">{anioDeAusencia(a) ?? "-"}</td>
                     <td className="py-2">{a.justificada ? "Sí" : "No"}</td>
                     <td className="py-2">{a.observaciones ?? "-"}</td>
                     <td className="py-2 text-right">
@@ -528,6 +588,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                             tipo: a.tipo,
                             justificada: a.justificada,
                             observaciones: a.observaciones ?? "",
+                            anioCorrespondiente: String(anioDeAusencia(a) ?? anioActual),
                           });
                         }}
                         className="text-gray-700 underline text-xs"
@@ -553,11 +614,48 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 ))}
               </tbody>
             </table>
+
+            <h3 className="text-sm font-medium text-gray-700 mb-2 mt-6">Vacaciones tomadas</h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="pb-2">Desde</th>
+                  <th className="pb-2">Hasta</th>
+                  <th className="pb-2">Año correspondiente</th>
+                  <th className="pb-2">Días</th>
+                  <th className="pb-2">Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(vacacionesTodas ?? []).length === 0 && (
+                  <tr><td colSpan={5} className="py-3 text-center text-gray-400">Sin vacaciones tomadas todavía.</td></tr>
+                )}
+                {(vacacionesTodas ?? []).map((p: any) => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="py-2">{new Date(p.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
+                    <td className="py-2">{new Date(p.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
+                    <td className="py-2">{p.anio_correspondiente}</td>
+                    <td className="py-2">{p.dias_tomados}</td>
+                    <td className="py-2">{p.observaciones ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-400 mt-1">Para editar o eliminar un período, andá a la pestaña Vacaciones.</p>
           </div>
         )}
 
         {tab === "vacaciones" && vacaciones && (
           <div>
+            <div className="mb-4">
+              <label className="block text-xs text-gray-500 mb-1">Año</label>
+              <input type="number" value={anioVacaciones} onChange={(e) => setAnioVacaciones(Number(e.target.value))}
+                className="w-28 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              <p className="text-xs text-gray-400 mt-1">
+                Cambiá el año para ver o cargar vacaciones pendientes/adeudadas de años anteriores.
+              </p>
+            </div>
+
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div>
                 <div className="text-sm text-gray-500">Días correspondientes</div>
@@ -589,32 +687,39 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 <label className="block text-xs text-gray-500 mb-1">Días</label>
                 <input type="number" required min={1} value={nuevaVacacion.diasTomados} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, diasTomados: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-20" />
               </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
+                <input type="number" required value={nuevaVacacion.anioCorrespondiente} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, anioCorrespondiente: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-24" />
+              </div>
               <button type="submit" disabled={guardandoVacacion} className="btn-primary disabled:opacity-50">
                 {guardandoVacacion ? "Guardando..." : editandoVacacionId ? "Guardar cambios" : "Guardar"}
               </button>
               {editandoVacacionId && <button type="button" onClick={cancelarEdicionVacacion} className="text-sm text-gray-600 px-2 py-2">Cancelar edición</button>}
             </form>
 
+            <p className="text-xs text-gray-400 mb-2">Todos los períodos de vacaciones cargados, de cualquier año.</p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Días</th>
+                  <th className="pb-2">Año correspondiente</th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {vacaciones.periodos.map((p: any) => (
+                {(vacacionesTodas ?? []).map((p: any) => (
                   <tr key={p.id} className="border-b last:border-0">
                     <td className="py-2">{new Date(p.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                     <td className="py-2">{new Date(p.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                     <td className="py-2">{p.dias_tomados}</td>
+                    <td className="py-2">{p.anio_correspondiente}</td>
                     <td className="py-2 text-right">
                       <button
                         onClick={() => {
                           setEditandoVacacionId(p.id);
-                          setNuevaVacacion({ fechaDesde: p.fecha_desde.slice(0, 10), fechaHasta: p.fecha_hasta.slice(0, 10), diasTomados: String(p.dias_tomados) });
+                          setNuevaVacacion({ fechaDesde: p.fecha_desde.slice(0, 10), fechaHasta: p.fecha_hasta.slice(0, 10), diasTomados: String(p.dias_tomados), anioCorrespondiente: String(p.anio_correspondiente) });
                         }}
                         className="text-gray-700 underline text-xs"
                       >
@@ -703,6 +808,16 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 <select value={claseFalta.tipo} onChange={(e) => setClaseFalta({ ...claseFalta, tipo: e.target.value })} className="input">
                   {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
+              </div>
+            )}
+            {claseFalta.justificada && claseFalta.tipo === "VACACIONES" && (
+              <div className="mb-3">
+                <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
+                <input type="number" required value={claseFalta.anioCorrespondiente}
+                  onChange={(e) => setClaseFalta({ ...claseFalta, anioCorrespondiente: e.target.value })} className="input" />
+                <p className="text-xs text-gray-400 mt-1">
+                  Se descuenta del balance de vacaciones de ese año y aparece en el historial de vacaciones.
+                </p>
               </div>
             )}
             <div className="mb-4">

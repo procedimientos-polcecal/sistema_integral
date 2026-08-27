@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
+import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +22,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { data: ausencia, error } = await supabase.from("ausencias").update(data).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await sincronizarPeriodoVacaciones(supabase, ausencia, body.anioCorrespondiente);
   await recalcularEmpleadoPeriodo(supabase, ausencia.empleado_id, new Date(ausencia.fecha_desde), new Date(ausencia.fecha_hasta));
   return NextResponse.json(ausencia);
 }

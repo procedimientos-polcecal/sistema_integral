@@ -62,6 +62,7 @@ const EMPTY_FORM = {
   fechaIngreso: "",
   valorHoraNormal: "",
   horasTeoricasDiarias: "8",
+  modalidadPago: "JORNAL",
   empresaId: "",
   sectorId: "",
 };
@@ -336,6 +337,13 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
           <div>
             <label className="block text-sm text-gray-600 mb-1">Horas teóricas diarias</label>
             <input type="number" step="0.5" required value={form.horasTeoricasDiarias} onChange={(e) => setForm({ ...form, horasTeoricasDiarias: e.target.value })} className="input" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Modalidad de pago</label>
+            <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
+              <option value="JORNAL">Jornal</option>
+              <option value="MENSUAL">Mensual</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Empresa</label>

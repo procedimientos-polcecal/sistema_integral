@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { legajo, nombre, apellido, sindicato, fechaIngreso, valorHoraNormal, horasTeoricasDiarias, empresaId, sectorId } = body;
+  const { legajo, nombre, apellido, sindicato, fechaIngreso, valorHoraNormal, horasTeoricasDiarias, modalidadPago, empresaId, sectorId } = body;
 
   if (!legajo?.trim() || !nombre?.trim() || !apellido?.trim() || !fechaIngreso || !empresaId) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       fecha_ingreso: fechaIngreso,
       valor_hora_normal: Number(valorHoraNormal),
       horas_teoricas_diarias: horasTeoricasDiarias ? Number(horasTeoricasDiarias) : 8,
+      modalidad_pago: modalidadPago === "MENSUAL" ? "MENSUAL" : "JORNAL",
       empresa_id: empresaId,
       sector_id: sectorId || null,
     })

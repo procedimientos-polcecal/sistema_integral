@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
+import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
 
 const TIPOS = [
   "LICENCIA_ART", "VACACIONES", "LICENCIA_GREMIAL", "PERMISO_PERSONAL",
@@ -23,7 +24,9 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("ausencias")
-    .select("*, empleados(id, legajo, nombre, apellido), usuarios!ausencias_cargado_por_id_fkey(nombre)")
+    .select(
+      "*, empleados(id, legajo, nombre, apellido), usuarios!ausencias_cargado_por_id_fkey(nombre), vacaciones!vacaciones_ausencia_id_fkey(anio_correspondiente)"
+    )
     .order("fecha_desde", { ascending: false });
   if (employeeId) query = query.eq("empleado_id", employeeId);
   if (hasta) query = query.lte("fecha_desde", hasta);
@@ -44,12 +47,15 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const body = await request.json();
-  const { employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones } = body;
+  const { employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones, anioCorrespondiente } = body;
   if (!employeeId || !fechaDesde || !fechaHasta || !TIPOS.includes(tipo) || typeof justificada !== "boolean") {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
   if (tipo === "OTRA" && !(observaciones ?? "").trim()) {
     return NextResponse.json({ error: "Para el tipo 'Otra' hay que aclarar el motivo en observaciones" }, { status: 400 });
+  }
+  if (tipo === "VACACIONES" && justificada && !Number.isInteger(anioCorrespondiente)) {
+    return NextResponse.json({ error: "Para Vacaciones hay que indicar a qué año corresponden los días" }, { status: 400 });
   }
 
   const { data: ausencia, error } = await supabase
@@ -67,6 +73,7 @@ export async function POST(request: Request) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await sincronizarPeriodoVacaciones(supabase, ausencia, anioCorrespondiente);
   await recalcularEmpleadoPeriodo(supabase, employeeId, new Date(fechaDesde), new Date(fechaHasta));
   return NextResponse.json(ausencia, { status: 201 });
 }

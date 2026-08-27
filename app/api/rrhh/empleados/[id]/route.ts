@@ -36,6 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (body.fechaIngreso !== undefined) empleadoData.fecha_ingreso = body.fechaIngreso;
   if (body.valorHoraNormal !== undefined) empleadoData.valor_hora_normal = Number(body.valorHoraNormal);
   if (body.horasTeoricasDiarias !== undefined) empleadoData.horas_teoricas_diarias = Number(body.horasTeoricasDiarias);
+  if (body.modalidadPago !== undefined) empleadoData.modalidad_pago = body.modalidadPago === "MENSUAL" ? "MENSUAL" : "JORNAL";
   if (body.empresaId !== undefined) empleadoData.empresa_id = body.empresaId;
   if (body.sectorId !== undefined) empleadoData.sector_id = body.sectorId || null;
   if (body.activo !== undefined) empleadoData.activo = body.activo;
