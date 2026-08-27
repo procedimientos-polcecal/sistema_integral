@@ -198,13 +198,22 @@ export function fechaISO(v: unknown): string | null {
 /**
  * El total de un presupuesto.
  *
- * Espeja la columna generada `compras_cotizaciones.precio_total` (migración
- * 026). Existe en TypeScript sólo para mostrarlo mientras alguien escribe el
- * formulario: la que se guarda y por la que se ordena es la de la base. Si una
- * cambia, la otra tiene que cambiar igual — los casos de `comparativa.test.ts`
- * están para que no se pueda mover una sola.
+ * El IVA se aplica sobre el neto completo y el descuento se resta después, sin
+ * IVA encima:
  *
- * La fórmula de la planilla dejaba el envío afuera; acá se suma.
+ *     unitario * cantidad * (1 + IVA) - (unitario * cantidad * descuento) + envío
+ *
+ * No es lo mismo que descontar primero y aplicar IVA al resultado, que es lo que
+ * hacía antes: con unitario 290, IVA 21% y 10% de descuento, aquello daba 315,81
+ * y esto da 321,90. Con descuento en cero las dos coinciden, que es por qué la
+ * diferencia no se veía.
+ *
+ * Vive en tres lugares y los tres tienen que decir lo mismo: la columna generada
+ * `compras_cotizaciones.precio_total` (migración 041), que es la que se guarda y
+ * por la que se ordena; esta función, para mostrar el total mientras alguien
+ * escribe el formulario; y la fórmula que `filaParaPlanilla()` escribe en la
+ * planilla de comparativa. Los casos de `comparativa.test.ts` están para que no
+ * se pueda mover una sola.
  */
 export function totalCotizacion(c: {
   precio_unitario: number | null;
@@ -213,13 +222,10 @@ export function totalCotizacion(c: {
   iva: number | null;
   costo_envio: number | null;
 }): number {
-  const bruto =
-    (c.precio_unitario ?? 0) *
-    (c.cantidad ?? 1) *
-    (1 - (c.descuento ?? 0)) *
-    (1 + (c.iva ?? 0));
+  const neto = (c.precio_unitario ?? 0) * (c.cantidad ?? 1);
+  const total = neto * (1 + (c.iva ?? 0)) - neto * (c.descuento ?? 0) + (c.costo_envio ?? 0);
 
-  return Math.round((bruto + (c.costo_envio ?? 0)) * 100) / 100;
+  return Math.round(total * 100) / 100;
 }
 
 // ── La regla de la columna A ─────────────────────────────────
@@ -424,10 +430,14 @@ export function filaParaPlanilla(args: {
     const iva = parte("iva");
     const envio = parte("envio");
 
-    let formula = `=${unitario}`;
-    if (cantidad) formula += `*${cantidad}`;
-    if (descuento) formula += `*(1-${descuento})`;
-    if (iva) formula += `*(1+${iva})`;
+    // El neto se nombra dos veces —una para el IVA y otra para el descuento—
+    // porque el descuento se resta sin IVA encima. Las letras salen del
+    // encabezado de cada planilla, así que en la versión nueva el IVA es L y el
+    // descuento K, y en las viejas son otras: por eso no van fijas.
+    const neto = cantidad ? `${unitario}*${cantidad}` : unitario;
+
+    let formula = iva ? `=${neto}*(1+${iva})` : `=${neto}`;
+    if (descuento) formula += `-(${neto}*${descuento})`;
     if (envio) formula += `+${envio}`;
 
     poner("precio_total", formula);

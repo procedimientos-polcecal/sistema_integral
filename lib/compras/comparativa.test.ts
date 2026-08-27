@@ -16,11 +16,23 @@ describe("total de una cotización", () => {
     })).toBe(292);
   });
 
-  it("aplica el descuento antes del IVA", () => {
-    // 100 × 1 × 0.9 = 90, +21% = 108.9
+  it("el descuento sale del neto, sin IVA encima", () => {
+    // 100 × 1 = 100 de neto. Con IVA: 121. El 10% de descuento son 10 —del
+    // neto, no del total— asi que 121 - 10 = 111.
+    //
+    // Descontar primero y aplicar el IVA al resultado daria 108.9, que es lo
+    // que hacia antes. Compras calcula el otro, y el test fija cual.
     expect(totalCotizacion({
       precio_unitario: 100, cantidad: 1, descuento: 0.1, iva: 0.21, costo_envio: null,
-    })).toBe(108.9);
+    })).toBe(111);
+  });
+
+  it("con descuento en cero las dos formas coinciden", () => {
+    // Por esto la diferencia no se veia: 310 de las 312 cotizaciones cargadas
+    // tienen descuento cero.
+    expect(totalCotizacion({
+      precio_unitario: 290, cantidad: 1, descuento: 0, iva: 0.21, costo_envio: null,
+    })).toBe(350.9);
   });
 
   it("una cantidad vacía vale 1: es una cotización por monto total", () => {
@@ -156,7 +168,10 @@ describe("fila para escribir en la planilla", () => {
     expect(fila[4]).toBe("Repuestos SA");
     expect(fila[10]).toBe("10%");
     expect(fila[11]).toBe("21%");
-    expect(fila[12]).toBe("=H7*I7*(1-K7)*(1+L7)+J7");
+    // El neto se nombra dos veces: el IVA multiplica y el descuento se resta
+    // aparte, sin IVA encima. Las letras salen del encabezado: en esta version
+    // K es DESCUENTO, L es IVA y J es ENVIO.
+    expect(fila[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
     expect(fila[18]).toBe("FALSE");
   });
 });
