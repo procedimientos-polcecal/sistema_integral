@@ -183,12 +183,20 @@ async function main() {
   console.log(`  -> ${periodosMatcheados.length} períodos desde "VacationPeriod" (${absencesConPeriodo.size} vinculados a una ausencia)`);
   console.log(`  -> ${vacacionesHuerfanas.length} ausencias de VACACIONES sin período: se les deriva uno`);
 
+  // El borrado de vacaciones NO puede ir acotado a los empleados con ausencias:
+  // un empleado puede tener período de vacaciones y ninguna ausencia (las
+  // vacaciones cargadas a mano allá), y entonces su fila vieja del SdG sobrevive
+  // y el import le agrega una segunda copia, duplicándole el balance. Pasó con
+  // PC_125 y PS_021 en la corrida del 27/08/2026.
+  const empleadosConVacaciones = [...new Set(periodosMatcheados.map((p) => neonIdToEmpleadoId.get(p.employeeId)).filter(Boolean))] as string[];
+  const empleadosAfectados = [...new Set([...empleadosConAusencias, ...empleadosConVacaciones])];
+
   if (APPLY) {
     // Borrar ausencias primero: el on delete cascade se lleva los períodos
     // vinculados. Después se limpian los períodos sueltos que queden en rango.
     const { error: eDelA } = await sb.from("ausencias").delete().in("empleado_id", empleadosConAusencias).gte("fecha_desde", ausenciaDesde).lte("fecha_hasta", ausenciaHasta);
     if (eDelA) throw new Error("Borrando ausencias viejas: " + eDelA.message);
-    const { error: eDelV } = await sb.from("vacaciones").delete().in("empleado_id", empleadosConAusencias).gte("fecha_desde", ausenciaDesde).lte("fecha_hasta", ausenciaHasta);
+    const { error: eDelV } = await sb.from("vacaciones").delete().in("empleado_id", empleadosAfectados).gte("fecha_desde", ausenciaDesde).lte("fecha_hasta", ausenciaHasta);
     if (eDelV) throw new Error("Borrando vacaciones viejas: " + eDelV.message);
 
     // Se insertan pidiendo el id de vuelta para poder rearmar el vínculo. El

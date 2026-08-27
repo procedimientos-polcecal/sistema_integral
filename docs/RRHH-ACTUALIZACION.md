@@ -182,3 +182,34 @@ aplicar.
 sin acceso al `DATABASE_URL` de Neon. Se pusieron detrás de la detección de
 columnas y del dry-run justamente por eso: el ensayo tiene que mostrar números
 que cierren antes de aplicar.
+
+### Corrida del 27/08/2026
+
+Se importó todo desde Neon. Números finales, verificados contra la base:
+
+| | |
+|---|---|
+| Empleados matcheados por legajo | 70/70, sin faltantes |
+| Modalidad de pago | 12 mensuales, 58 jornal |
+| Fichadas (2026-06-30 → 2026-08-26) | 2877 |
+| Ausencias (2026-07-01 → 2026-09-04) | 105 |
+| Períodos de vacaciones | 19 (11 de `VacationPeriod` + 8 derivados), 12 vinculados a su ausencia |
+| Días corregidos a mano por Karen | 931 |
+| Recálculo | 69 empleados activos |
+
+El SdG estaba bastante atrasado: tenía 1416 fichadas contra 2877, y 426
+correcciones manuales contra 931.
+
+**Un bug que apareció acá y quedó arreglado.** El borrado previo de vacaciones
+estaba acotado a los empleados con ausencias en APPRRHH. Un empleado con período
+de vacaciones y ninguna ausencia (las vacaciones cargadas a mano allá) conservaba
+su fila vieja del SdG y el import le agregaba una segunda: PC_125 y PS_021
+quedaron con 28 días en vez de 14. Ahora el borrado cubre la unión de los dos
+conjuntos, y se volvió a correr el import para limpiarlo. Verificado: 0
+solapamientos entre períodos del mismo empleado.
+
+**Los 8 períodos derivados quedaron en año 2026** (decisión tomada: se corrigen
+a mano). Ojo que los 11 períodos explícitos de APPRRHH están todos en 2025 —son
+vacaciones adeudadas—, así que lo más probable es que esos 8 también vayan a
+2025. Son PS_015 (6 días de julio) y PS_019 (2 días), y se cambian desde la
+pestaña Vacaciones de su ficha, que tiene selector de año.
