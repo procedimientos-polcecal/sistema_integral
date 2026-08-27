@@ -23,7 +23,8 @@ es directo:
 **Ojo:** no alcanza con mirar los commits nuevos de APPRRHH. Varios fixes se
 portaron acá antes de estar en el `main` de origen (ver `3e591a0`), y otros se
 resolvieron distinto. Hay que comparar el código, no el historial. En la pasada
-de agosto 2026, de los 14 commits nuevos de APPRRHH, 5 ya estaban acá.
+de agosto 2026, de los 14 commits nuevos de APPRRHH **7 ya estaban acá** (son 5
+features, porque varios commits de origen tocan la misma).
 
 ## Pasada de agosto 2026
 
@@ -77,17 +78,35 @@ diarias del empleado. Para enfermedad se cuentan solo días hábiles y sábados
 consultas, en vez de repetir varias por empleado. Con ~70 empleados, la versión
 secuencial tardaba minutos. La usan tanto el endpoint JSON como el de Excel.
 
-## Falta para que ande
+## Estado al 27/08/2026: al día
 
-**Aplicar `supabase/migrations/038_rrhh_al_dia_con_apprrhh.sql`** en el SQL
-Editor de Supabase. Hasta que no esté aplicada:
+APPRRHH está en `542ed23` (24/08/2026), sin nada por encima, y una sola rama.
+No hay delta pendiente.
 
-- La ficha del empleado y el listado de Ausencias van a fallar al cargar: la
-  consulta pide el vínculo `vacaciones!vacaciones_ausencia_id_fkey`, que todavía
-  no existe.
-- La planilla general va a fallar: pide `empleados.modalidad_pago`.
+La migración `038_rrhh_al_dia_con_apprrhh.sql` **ya está aplicada** en Supabase
+y verificada contra la base:
 
-Es una sola migración, aditiva (dos `add column` y un `create type`), sin
-backfill: los empleados existentes quedan en `JORNAL` y los períodos de
-vacaciones existentes quedan sin ausencia vinculada, que es lo correcto —
-se cargaron a mano.
+- `empleados.modalidad_pago` responde; el `default 'JORNAL'` alcanzó a los 69
+  empleados activos, ninguno quedó en null. Si alguien tiene que ser mensual,
+  se marca a mano desde la ficha.
+- `vacaciones.ausencia_id` responde, y el embed
+  `ausencias → vacaciones!vacaciones_ausencia_id_fkey` funciona: PostgREST
+  recargó su schema cache y lo resuelve como **uno-a-uno** (devuelve objeto, no
+  array), que es lo que el `unique` tenía que garantizar.
+- Las tres consultas de la planilla (vacaciones superpuestas, ausencias por
+  enfermedad, feriados del período) responden.
+
+Lo que **no** se verificó: las pantallas nuevas renderizando con datos reales.
+Requiere sesión iniciada. Están cubiertas a nivel base, tipos, tests y
+compilación (las seis rutas de RRHH responden 307 al login, sin 500), pero
+nadie las vio andar todavía. Pendiente para la próxima vez que se entre a la
+app: "Ver planilla" en Liquidaciones, el campo de año en Ausencias y el filtro
+de fechas en Francos.
+
+## Deuda que quedó
+
+Al portar, el cálculo de horas de vacaciones y enfermedad de la planilla salió
+sin tests. Se cubrió después (`a40fe5e`, `lib/rrhh/planillaGeneral.test.ts`, 13
+casos sobre `diasSuperpuestos` y `diasHabilesSuperpuestos`). El resto de
+`calcularPlanillaGeneral` —el armado de las filas y los montos— sigue sin
+cobertura: se ejercita solo abriendo la pantalla.
