@@ -96,6 +96,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     (proveedores ?? []).map((p) => [claveProveedor(p.nombre), p.id as string])
   );
 
+  // Qué presupuesto estaba elegido, para no perderlo al reemplazar.
+  //
+  // Elegir un presupuesto ES aprobar la compra, así que borrarlo y volver a
+  // insertarlo sin la marca deja la compra aprobada sin decir sobre qué. La
+  // fila de la planilla es lo que identifica al presupuesto entre una lectura y
+  // la siguiente.
+  const { data: previas } = await admin
+    .from("compras_cotizaciones")
+    .select("drive_fila, elegida")
+    .eq("requerimiento_id", id)
+    .not("drive_fila", "is", null);
+
+  const filasElegidas = new Set(
+    (previas ?? []).filter((p) => p.elegida).map((p) => p.drive_fila as number)
+  );
+
   const nuevas: Record<string, unknown>[] = [];
   const proveedoresNuevos: string[] = [];
   let sinPrecio = 0;
@@ -124,17 +140,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       proveedor_id: proveedorId,
       origen: "drive",
       drive_fila: numeroFila,
+      elegida: filasElegidas.has(numeroFila),
       created_by: user.id,
     });
 
   }
 
   // Sobre las filas de la planilla manda la planilla: se reemplazan.
+  //
+  // Se borran TODAS las que apuntan a una fila de la planilla, no sólo las que
+  // entraron por acá. Una cotización cargada a mano se escribe en la planilla y
+  // queda con su `drive_fila`: al releer, esa misma fila volvía a entrar como
+  // nueva y el presupuesto quedaba duplicado —uno de origen "app" y otro de
+  // origen "drive", con el mismo precio y el mismo proveedor—. Le pasó al RI
+  // 1865. Una fila de la planilla es una cotización, no importa cómo llegó.
+  //
+  // Las cargadas a mano sin planilla vinculada tienen `drive_fila` nulo y se
+  // conservan: ésas no están en ninguna planilla que pueda mandar sobre ellas.
   await admin
     .from("compras_cotizaciones")
     .delete()
     .eq("requerimiento_id", id)
-    .eq("origen", "drive");
+    .not("drive_fila", "is", null);
 
   // Primero de una, que es lo normal y lo rápido. Si algo de una fila no entra
   // —un decimal en una columna entera, un porcentaje escrito como monto— se
