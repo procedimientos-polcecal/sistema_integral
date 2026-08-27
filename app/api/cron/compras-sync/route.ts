@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revisarElSecreto } from "@/lib/core/cron";
 import { importarDesdeSheets, reintentarPendientes } from "@/lib/compras/sheets";
 
 export const maxDuration = 300;
@@ -15,14 +16,8 @@ export const maxDuration = 300;
  * abierto a cualquiera que conozca la URL.
  */
 export async function GET(request: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 503 });
-  }
-
-  if (request.headers.get("authorization") !== `Bearer ${secreto}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const rechazo = revisarElSecreto(request);
+  if (rechazo) return rechazo;
 
   // Sin planilla configurada no hay nada que sincronizar; no es un error.
   if (!process.env.GOOGLE_SHEETS_COMPRAS_ID) {

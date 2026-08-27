@@ -46,11 +46,18 @@ jobs:
           fi
 
       - name: Pedir la sincronización
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
         run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
           codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
             --max-time 300 \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ vars.APP_URL }}/api/cron/compras-sync")
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/compras-sync")
 
           echo "HTTP $codigo"
           cat respuesta.json
