@@ -52,18 +52,26 @@ export function anclaTurno(dia: Date, turno: TurnoLike): { inicio: Date; fin: Da
   return { inicio, fin: finDate };
 }
 
+// Por debajo de este umbral, llegar antes o quedarse de más no cuenta como
+// hora extra: es fijo, independiente del margen de tolerancia de cada turno
+// (ese margen sigue rigiendo tardanza/retiro anticipado sin cambios), para
+// evitar que una diferencia de pocos minutos (imprecisión del reloj o del
+// margen) aparezca como una hora extra que en realidad no existió.
+const UMBRAL_EXTRA_MINUTOS = 15;
+
 /**
  * Ajusta las fichadas de cada día calendario según el turno del catálogo más
  * cercano a la entrada real. El margen (toleranciaMinutos) es una gracia
  * única de hasta esos minutos, para llegar tarde o para irse antes: dentro
  * del margen se redondea a la hora exacta del turno; pasado el margen, se
  * cuenta el horario real (se pierden esos minutos de las horas normales) y
- * además se marca tardanza o retiro anticipado según corresponda. Si se
- * queda trabajando más de toleranciaMinutos después del fin de turno, ese
- * tiempo de más se acredita igual (queda como hora extra sujeta a
- * validación de RRHH). Si no hay ningún turno activo en el catálogo, no se
- * ajusta nada (se sigue usando la marcación real tal cual, como antes de
- * tener turnos).
+ * además se marca tardanza o retiro anticipado según corresponda. Si llegó
+ * antes o se quedó trabajando más allá de UMBRAL_EXTRA_MINUTOS, ese tiempo de
+ * más se acredita igual (queda como hora extra sujeta a validación de RRHH);
+ * por debajo de ese umbral no se acredita nada extra, aunque el margen de
+ * tolerancia del turno sea menor. Si no hay ningún turno activo en el
+ * catálogo, no se ajusta nada (se sigue usando la marcación real tal cual,
+ * como antes de tener turnos).
  */
 export function ajustarFichadasPorTurno(
   fichadas: FichadaLike[],
@@ -103,19 +111,26 @@ export function ajustarFichadasPorTurno(
       const esPrimera = i === 0;
       const esUltima = i === grupo.length - 1;
       // Dentro del margen se acredita desde el horario pactado. Pasado el
-      // margen de tardanza, se pierde ese tiempo real (se acredita desde que
-      // fichó, no desde el horario del turno). Si en cambio llegó mucho antes
-      // (más allá del margen), se acredita el tiempo real de más como con
-      // cualquier otro desvío grande: si no, un turno detectado por su hora
-      // de entrada real (ej. entró a las 4 y matcheó "Oficina" 08-16 por ser
-      // el más cercano) le recortaría silenciosamente todas las horas
-      // trabajadas antes del inicio nominal del turno.
-      const horaEntrada = esPrimera ? (Math.abs(desvioEntrada) > turno.toleranciaMinutos ? f.horaEntrada : anchorInicio) : f.horaEntrada;
+      // margen de tardanza (propio de cada turno), se pierde ese tiempo real
+      // (se acredita desde que fichó, no desde el horario del turno). Si en
+      // cambio llegó antes o se quedó trabajando de más, ese tiempo a favor
+      // del empleado solo se acredita como hora extra si supera los
+      // UMBRAL_EXTRA_MINUTOS: por debajo de eso puede ser una imprecisión del
+      // reloj o del margen de tolerancia, no una hora extra real. Este umbral
+      // es fijo e independiente del margen de tardanza de cada turno. Sin
+      // esto, además, un turno detectado por su hora de entrada real (ej.
+      // entró a las 4 y matcheó "Oficina" 08-16 por ser el más cercano) le
+      // recortaría silenciosamente todas las horas trabajadas antes del
+      // inicio nominal del turno.
+      const llegoMuyTemprano = desvioEntrada < -UMBRAL_EXTRA_MINUTOS;
+      const horaEntrada = esPrimera ? (tarde || llegoMuyTemprano ? f.horaEntrada : anchorInicio) : f.horaEntrada;
       let horaSalida = f.horaSalida;
       if (esUltima && f.horaSalida) {
         const desvioSalida = (f.horaSalida.getTime() - anchorFin.getTime()) / 60_000;
-        horaSalida = Math.abs(desvioSalida) > turno.toleranciaMinutos ? f.horaSalida : anchorFin;
-        retiroAnticipadoPorDia.set(key, desvioSalida < -turno.toleranciaMinutos);
+        const retiroAnticipado = desvioSalida < -turno.toleranciaMinutos;
+        const seQuedoExtra = desvioSalida > UMBRAL_EXTRA_MINUTOS;
+        horaSalida = retiroAnticipado || seQuedoExtra ? f.horaSalida : anchorFin;
+        retiroAnticipadoPorDia.set(key, retiroAnticipado);
       }
       ajustadas.push({ fecha: f.fecha, horaEntrada, horaSalida });
     });
