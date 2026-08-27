@@ -51,11 +51,6 @@
 // ⬇️ El mail de la cuenta de servicio, entre las comillas.
 var CUENTA_DE_SERVICIO = "";
 
-/** Las pestañas donde la app escribe: el master y las de cada área. */
-function leInteresaALaApp(nombre) {
-  return nombre === "Requerimientos internos" || nombre.indexOf("RI ") === 0;
-}
-
 function darPermisoALaCuentaDeServicio() {
   if (!CUENTA_DE_SERVICIO) {
     throw new Error(
@@ -75,7 +70,7 @@ function darPermisoALaCuentaDeServicio() {
   for (var h = 0; h < hojas.length; h++) {
     var hoja = hojas[h];
     var nombre = hoja.getName();
-    if (!leInteresaALaApp(nombre)) continue;
+    if (!_leInteresaALaApp(nombre)) continue;
 
     var protecciones = []
       .concat(hoja.getProtections(SpreadsheetApp.ProtectionType.SHEET))
@@ -136,4 +131,16 @@ function darPermisoALaCuentaDeServicio() {
   );
 
   return resumen;
+}
+
+/**
+ * Las pestañas donde la app escribe: el master y las de cada área.
+ *
+ * Empieza con guión bajo a propósito: Apps Script no ofrece esas funciones en
+ * el selector de "Ejecutar", y así nadie la corre sin argumentos por accidente
+ * —que es lo que pasa si queda como la primera función del archivo—.
+ */
+function _leInteresaALaApp(nombre) {
+  if (!nombre) return false;
+  return nombre === "Requerimientos internos" || nombre.indexOf("RI ") === 0;
 }
