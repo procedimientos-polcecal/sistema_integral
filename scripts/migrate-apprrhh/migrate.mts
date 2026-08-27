@@ -282,8 +282,17 @@ async function main() {
 
   // ── 5. Recalcular calculos_diarios + francos con los inputs frescos ─
   const desdeRecalculo = fichadaDesde < ausenciaDesde ? fichadaDesde : ausenciaDesde;
-  const hastaRecalculo = fichadaHasta > ausenciaHasta ? fichadaHasta : ausenciaHasta;
+  const finDatos = fichadaHasta > ausenciaHasta ? fichadaHasta : ausenciaHasta;
+  // El recálculo NO puede pasar de hoy. El rango sale de los datos, y las
+  // ausencias suelen estar cargadas hacia adelante (una licencia que termina la
+  // semana que viene), así que el fin de los datos cae en el futuro. Para un día
+  // que todavía no pasó no hay fichadas, y el motor lo marca como falta sin
+  // clasificar: en la corrida del 27/08/2026 eso generó 460 faltas fantasma
+  // entre el 28/08 y el 04/09 que hubo que borrar a mano.
+  const hoyStr = fechaStr(new Date());
+  const hastaRecalculo = finDatos > hoyStr ? hoyStr : finDatos;
   console.log(`\nRecálculo del período ${desdeRecalculo} → ${hastaRecalculo} para todos los empleados activos...`);
+  if (finDatos > hoyStr) console.log(`  (los datos llegan hasta ${finDatos}, pero no se recalcula más allá de hoy)`);
   if (APPLY) {
     const n = await recalcularSectorPeriodo(sb, null, new Date(desdeRecalculo), new Date(hastaRecalculo));
     console.log(`  -> ${n} empleados recalculados`);

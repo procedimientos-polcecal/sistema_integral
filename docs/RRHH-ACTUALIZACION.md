@@ -266,3 +266,28 @@ import de nuevo (Neon las tiene todas, con `extras_validadas` y
 generado, identificados por su `created_at`. **Moraleja: cualquier cambio al
 motor se valida con una comparación campo por campo contra un snapshot, no con
 los tests unitarios, que son de funciones puras y no ven la capa de base.**
+
+## Las faltas fantasma del futuro (limpiado el 27/08/2026)
+
+El recálculo del importador tomaba el rango de los datos, y las ausencias
+suelen estar cargadas hacia adelante: había una licencia que terminaba el
+04/09. Para un día que todavía no pasó no hay fichadas, así que el motor lo
+marcaba como falta sin clasificar. Resultado: **460 faltas fantasma** entre el
+28/08 y el 04/09, unas 67 por día, una por empleado activo.
+
+No se veían en pantalla porque el filtro por defecto corta en hoy, pero
+estaban en la base y aparecían solas el 1 de septiembre.
+
+Se borraron las 460, verificando antes que ninguna tuviera horas, franco,
+validación, corrección manual u observaciones (0 las tenían). Se conservaron
+las 10 ausencias futuras ya clasificadas y las 82 filas no ausentes
+(vacaciones, domingos). El total de faltas sin clasificar pasó de 8697 a 8237.
+
+Y se arregló la causa: **el importador ya no recalcula más allá de hoy.** Si
+los datos llegan más lejos, lo avisa y corta igual.
+
+Ojo que el backlog real siguen siendo las **8237 faltas sin clasificar desde
+febrero**, que vienen de la app vieja y nadie clasificó nunca. En el mes en
+curso son 130, que es lo manejable. Mientras eso esté sin clasificar, el
+ausentismo del Analítico (~70%) va a seguir siendo un número sin sentido:
+está contando como ausencia cada día que nadie clasificó.
