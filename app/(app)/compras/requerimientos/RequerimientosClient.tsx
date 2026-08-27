@@ -341,8 +341,37 @@ export default function RequerimientosClient({
         </div>
       )}
 
+      {/* En un teléfono, tarjetas. Trece columnas no entran en 343 px, y con
+          scroll horizontal hay que arrastrar cuatro pantallas para leer una
+          fila. La tarjeta muestra lo que se necesita para decidir y esconde el
+          resto, que está en la ficha a un toque. */}
+      <div className="space-y-2 md:hidden">
+        {cargando ? (
+          <p className="py-10 text-center text-sm text-slate-400">Cargando…</p>
+        ) : filas.length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white py-10 text-center text-sm text-slate-400">
+            {hayFiltros ? "Ningún requerimiento coincide con los filtros." : "Todavía no hay requerimientos cargados."}
+          </p>
+        ) : (
+          filas.map((f) => (
+            <TarjetaRequerimiento
+              key={f.id}
+              f={f}
+              canEdit={canEdit}
+              aprobadores={aprobadores}
+              usuarioId={usuarioId}
+              procesando={procesando === f.id}
+              onAvanzar={() =>
+                ESTADOS_CON_DIALOGO.includes(f.estado_compra) ? abrirDialogo(f) : avanzar(f)
+              }
+              onEspera={(aEspera) => cambiarEspera(f, aEspera)}
+            />
+          ))
+        )}
+      </div>
+
       {/* Tabla */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -427,9 +456,12 @@ export default function RequerimientosClient({
             </tbody>
           </table>
         </div>
+      </div>
 
+      {/* La paginación es de las dos vistas, así que vive afuera de la tabla. */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white md:border-t-0 md:border-transparent">
         {!cargando && total > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-slate-500">
             <div>
               Mostrando {pagina * POR_PAGINA + 1}–{Math.min((pagina + 1) * POR_PAGINA, total)} de {total.toLocaleString("es-AR")}
               {totalPantalla > 0 && <> · en pantalla: <strong className="font-mono">{moneda(totalPantalla)}</strong></>}
@@ -511,6 +543,99 @@ export default function RequerimientosClient({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Un requerimiento en un teléfono.
+ *
+ * La tabla tiene trece columnas y en 343 px de ancho eso son cuatro pantallas
+ * de arrastre para leer una sola fila. Acá quedan las que hacen falta para
+ * decidir —qué es, de qué área, para cuándo, cuánto— y el resto está en la
+ * ficha, a un toque.
+ *
+ * Se renderiza en paralelo a la tabla y cada una se muestra en su tamaño. Es
+ * más marcado en el HTML, pero medir el ancho con JavaScript haría que el
+ * servidor y el navegador dibujen cosas distintas en la primera pasada.
+ */
+function TarjetaRequerimiento({
+  f, canEdit, aprobadores, usuarioId, procesando, onAvanzar, onEspera,
+}: {
+  f: RequerimientoConRelaciones;
+  canEdit: boolean;
+  aprobadores: Persona[];
+  usuarioId: string;
+  procesando: boolean;
+  onAvanzar: () => void;
+  onEspera: (aEspera: boolean) => void;
+}) {
+  const dias = f.estado_compra === "RECIBIDO" ? null : diasRestantes(f.fecha_necesidad);
+  const vencido = dias !== null && dias < 0;
+  const donde = f.compras_ubicaciones?.nombre ?? f.ubicacion_raw;
+
+  return (
+    <article
+      className={`rounded-xl border bg-white p-3 ${
+        vencido ? "border-l-4 border-l-red-500 border-slate-200" : "border-slate-200"
+      }`}
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <Link
+          href={`/compras/requerimientos/${f.id}`}
+          className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline"
+        >
+          RI {f.nro_ri}
+        </Link>
+        <Chip {...etiquetaPrioridad(f.prioridad)} />
+        <Chip {...COMPRA_LABELS[f.estado_compra]} />
+        {/* El estado de aprobación sólo cuando dice algo: casi todo está
+            aprobado, y repetirlo en cada tarjeta sería ruido. */}
+        {f.estado_aprobacion !== "APROBADA" && (
+          <Chip {...APROBACION_LABELS[f.estado_aprobacion]} />
+        )}
+      </div>
+
+      <Link
+        href={`/compras/requerimientos/${f.id}`}
+        className="block text-sm leading-snug text-slate-900 hover:underline"
+      >
+        {f.descripcion}
+      </Link>
+      {f.codigo && <div className="font-mono text-xs text-slate-400">{f.codigo}</div>}
+
+      <div className="mt-1.5 space-y-0.5 text-[11px] text-slate-500">
+        <div>
+          {f.compras_areas?.nombre ?? "Sin área"}
+          {donde ? ` · ${donde}` : ""}
+          {f.cantidad ? ` · ${f.cantidad} u.` : ""}
+        </div>
+        <div>{etiquetaEmpresa(f.empresas?.nombre, f.paga_ambas)}</div>
+        {f.proveedores?.nombre && <div>{f.proveedores.nombre}</div>}
+        {f.costo_iva !== null && (
+          <div className="font-mono text-slate-700">{moneda(f.costo_iva)}</div>
+        )}
+        <div className={vencido ? "font-semibold text-red-600" : ""}>
+          {f.fecha_necesidad
+            ? vencido
+              ? `Vencido hace ${Math.abs(dias!)} d`
+              : `Se necesita el ${fecha(f.fecha_necesidad)}`
+            : `Pedido el ${fecha(f.fecha)}`}
+        </div>
+      </div>
+
+      {canEdit && (
+        <div className="mt-2.5 border-t border-slate-100 pt-2.5">
+          <Accion
+            r={f}
+            aprobadores={aprobadores}
+            usuarioId={usuarioId}
+            procesando={procesando}
+            onAvanzar={onAvanzar}
+            onEspera={onEspera}
+          />
+        </div>
+      )}
+    </article>
   );
 }
 
