@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { claveDeProveedor, indiceDeProveedores, buscarProveedor, nombresParecidos } from "./proveedores";
+import {
+  claveDeProveedor, indiceDeProveedores, buscarProveedor, nombresParecidos,
+  proveedoresQueCoinciden,
+} from "./proveedores";
 
 describe("claveDeProveedor", () => {
   it("une las escrituras del mismo nombre", () => {
@@ -81,5 +84,40 @@ describe("nombresParecidos", () => {
 
   it("ignora las palabras demasiado cortas para decir algo", () => {
     expect(nombresParecidos(["SA", "SA Metalúrgica"])).toHaveLength(0);
+  });
+});
+
+describe("buscar un proveedor mientras se escribe", () => {
+  const lista = [
+    { nombre: "Bolsas Olavarría" },
+    { nombre: "Papelera Ciuffo" },
+    { nombre: "Ancoil S.A." },
+    { nombre: "Ferretería Randazzo" },
+  ];
+
+  it("encuentra por el medio del nombre, no solo por el principio", () => {
+    // Quien escribe "ciuffo" no se acuerda de que esta cargado como
+    // "Papelera Ciuffo".
+    expect(proveedoresQueCoinciden(lista, "ciuffo").map((p) => p.nombre))
+      .toEqual(["Papelera Ciuffo"]);
+  });
+
+  it("no le molestan los acentos ni las mayusculas", () => {
+    expect(proveedoresQueCoinciden(lista, "OLAVARRIA").map((p) => p.nombre))
+      .toEqual(["Bolsas Olavarría"]);
+    expect(proveedoresQueCoinciden(lista, "randazzo")).toHaveLength(1);
+  });
+
+  it("sin texto muestra los primeros, no una lista vacia", () => {
+    expect(proveedoresQueCoinciden(lista, "")).toHaveLength(4);
+  });
+
+  it("recorta a lo que entra en pantalla", () => {
+    const muchos = Array.from({ length: 50 }, (_, i) => ({ nombre: `Proveedor ${i}` }));
+    expect(proveedoresQueCoinciden(muchos, "proveedor")).toHaveLength(8);
+  });
+
+  it("lo que no esta no aparece", () => {
+    expect(proveedoresQueCoinciden(lista, "zzzz")).toHaveLength(0);
   });
 });

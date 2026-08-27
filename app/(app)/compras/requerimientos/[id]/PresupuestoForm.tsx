@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { moneda } from "@/lib/compras/constants";
 import { totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES } from "@/lib/compras/comparativa";
+import SelectorProveedor from "../../SelectorProveedor";
 
 /**
  * Cargar un presupuesto, con los campos de la planilla.
@@ -92,16 +93,11 @@ export default function PresupuestoForm({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Campo label="Proveedor" ancho="sm:col-span-2">
-          <select
-            value={proveedorId}
-            onChange={(e) => setProveedorId(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">Elegir…</option>
-            {proveedores.map((p) => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
+          <SelectorProveedor
+            proveedores={proveedores}
+            valor={proveedorId}
+            onCambio={setProveedorId}
+          />
         </Campo>
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 

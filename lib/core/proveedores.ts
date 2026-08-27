@@ -135,3 +135,26 @@ function unoContieneAlOtro(a: string, b: string): boolean {
   const palabrasDelLargo = new Set(largo.split(" "));
   return propiasDelCorto.every((p) => palabrasDelLargo.has(p));
 }
+
+/**
+ * Los proveedores que coinciden con lo que se está escribiendo.
+ *
+ * Busca en cualquier parte del nombre y no sólo al principio: quien escribe
+ * "ciuffo" no se acuerda de que está cargado como "Papelera Ciuffo". Y usa la
+ * misma normalización que el resto, así que "olavarria" encuentra "Bolsas
+ * Olavarría".
+ *
+ * Sin texto devuelve los primeros, para que abrir el selector muestre algo en
+ * vez de una lista vacía.
+ */
+export function proveedoresQueCoinciden<T extends { nombre: string }>(
+  proveedores: T[],
+  texto: string,
+  cuantos = 8
+): T[] {
+  const q = claveDeProveedor(texto);
+  const lista = q
+    ? proveedores.filter((p) => claveDeProveedor(p.nombre).includes(q))
+    : proveedores;
+  return lista.slice(0, cuantos);
+}
