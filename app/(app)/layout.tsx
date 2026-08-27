@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { NavMovilProvider } from "@/components/NavMovil";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
@@ -65,18 +66,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const esAprobadorCompras = await puedeAprobarCompras(supabase, user.id);
 
   return (
-    <div className="flex h-screen flex-col">
-      <Header usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()} />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar
-          modulos={modulos}
-          modulosAdmin={modulosAdmin}
-          rol={rol}
-          esAprobadorCompras={esAprobadorCompras}
-          esEmpleadoRemises={!!usuario.empleado_id}
-        />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+    <NavMovilProvider>
+      <div className="flex h-screen flex-col">
+        <Header usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()} />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar
+            modulos={modulos}
+            modulosAdmin={modulosAdmin}
+            rol={rol}
+            esAprobadorCompras={esAprobadorCompras}
+            esEmpleadoRemises={!!usuario.empleado_id}
+          />
+          {/* En un teléfono cada píxel de ancho cuenta: 24 de padding por lado
+              eran 48 de los 375 que hay. `min-w-0` es lo que deja que las
+              tablas scrolleen adentro en vez de estirar la página entera. */}
+          <main className="min-w-0 flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </NavMovilProvider>
   );
 }

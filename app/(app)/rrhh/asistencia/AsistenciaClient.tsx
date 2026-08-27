@@ -150,6 +150,7 @@ function AsistenciaPeriodo() {
         <h2 className="font-medium text-gray-700 mb-3">Faltas sin clasificar ({faltas.length})</h2>
         {faltas.length === 0 && <p className="text-sm text-gray-500">No hay faltas pendientes de clasificar en el período.</p>}
         {faltas.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -175,6 +176,7 @@ function AsistenciaPeriodo() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -183,6 +185,7 @@ function AsistenciaPeriodo() {
         {cargando ? (
           <p className="text-gray-500 text-sm">Cargando...</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -211,6 +214,7 @@ function AsistenciaPeriodo() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -250,6 +254,7 @@ function AsistenciaDia() {
         {cargando ? (
           <p className="text-gray-500 text-sm">Cargando...</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -289,6 +294,7 @@ function AsistenciaDia() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

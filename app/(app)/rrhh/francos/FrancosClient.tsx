@@ -94,6 +94,7 @@ export default function FrancosClient() {
         {cargando || !francos ? (
           <p className="text-gray-500 text-sm">Cargando...</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -126,6 +127,7 @@ export default function FrancosClient() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

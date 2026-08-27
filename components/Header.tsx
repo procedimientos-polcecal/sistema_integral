@@ -2,6 +2,7 @@ import Link from "next/link";
 import { logout } from "@/app/login/actions";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationsBell } from "./NotificationsBell";
+import { BotonMenu } from "./NavMovil";
 
 export function Header({ usuarioNombre }: { usuarioNombre: string }) {
   const iniciales =
@@ -14,9 +15,11 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center gap-4 px-4"
+      className="flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-4"
       style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderBottom: "1px solid var(--sidebar-border)" }}
     >
+      <BotonMenu />
+
       <Link href="/" title="Inicio" className="flex shrink-0 items-center">
         <img
           src="/logo.png"
@@ -25,9 +28,9 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
         />
       </Link>
 
-      <div className="flex-1" />
+      <div className="hidden flex-1 md:block" />
 
-      <div className="w-full max-w-[360px]">
+      <div className="w-full min-w-0 max-w-[360px]">
         <GlobalSearch />
       </div>
 

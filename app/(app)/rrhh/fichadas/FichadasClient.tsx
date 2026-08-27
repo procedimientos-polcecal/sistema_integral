@@ -273,6 +273,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
           <h2 className="font-medium text-gray-700">Últimas fichadas</h2>
           <a href="/api/rrhh/fichadas/export" className="text-sm text-blue-600 hover:underline">Exportar</a>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
@@ -297,6 +298,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -135,6 +135,7 @@ export default function DashboardClient({
           <h2 className="font-medium text-gray-700 mb-3">Top 10 ausencias (mes en curso)</h2>
           {topAusencias?.length === 0 && <p className="text-sm text-gray-500">Sin ausencias registradas.</p>}
           {topAusencias && topAusencias.length > 0 && (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Ausencias</th></tr></thead>
               <tbody>
@@ -147,6 +148,7 @@ export default function DashboardClient({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 
@@ -154,6 +156,7 @@ export default function DashboardClient({
           <h2 className="font-medium text-gray-700 mb-3">Top 10 llegadas tarde / salidas tempranas (mes en curso)</h2>
           {topTardanzas?.length === 0 && <p className="text-sm text-gray-500">Sin tardanzas ni retiros anticipados registrados.</p>}
           {topTardanzas && topTardanzas.length > 0 && (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Tarde</th><th className="pb-2">Retiro ant.</th></tr></thead>
               <tbody>
@@ -167,6 +170,7 @@ export default function DashboardClient({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
@@ -260,6 +264,7 @@ function ModalListaEmpleados({ titulo, empleados, onClose }: { titulo: string; e
         ) : empleados.length === 0 ? (
           <p className="text-sm text-gray-500">Sin resultados.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Sector</th></tr></thead>
             <tbody>
@@ -272,6 +277,7 @@ function ModalListaEmpleados({ titulo, empleados, onClose }: { titulo: string; e
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -291,6 +297,7 @@ function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; deta
         ) : detalle.empleados.length === 0 ? (
           <p className="text-sm text-gray-500">Sin datos en el período.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -312,6 +319,7 @@ function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; deta
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

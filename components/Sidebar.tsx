@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { NAV, puedeVerItem, type NavItem } from "@/lib/core/nav";
+import { useNavMovil } from "./NavMovil";
 import type { Modulo, Rol } from "@/lib/core/types";
 
 const COLAPSADO_KEY = "sdg-sidebar-colapsado";
@@ -82,6 +83,9 @@ export function Sidebar({
   const search = useSearchParams().toString();
 
   const items = NAV.filter((i) => puedeVerItem(i, ctx));
+  // El cajón de teléfono. `abierto`, más abajo, es otra cosa: el grupo del menú
+  // que está desplegado.
+  const { abierto: abiertoMovil, cerrar: cerrarMovil } = useNavMovil();
   const [abierto, setAbierto] = useState<string | null>(null);
   const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
@@ -109,23 +113,57 @@ export function Sidebar({
   }, [pathname, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <aside
-      className={`flex flex-col shrink-0 transition-[width] duration-200 ${colapsado ? "w-[68px]" : "w-60"}`}
-      style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderRight: "1px solid var(--sidebar-border)" }}
-    >
-      <div className="relative flex h-14 items-center justify-end border-b px-3" style={{ borderColor: "var(--sidebar-border)" }}>
-        <button
-          type="button"
-          onClick={() => setColapsado((v) => !v)}
-          aria-label={colapsado ? "Mostrar panel lateral" : "Esconder panel lateral"}
-          className={`flex h-6 w-6 items-center justify-center rounded transition hover:bg-white/10 ${colapsado ? "mx-auto" : ""}`}
-          style={{ color: "var(--sidebar-text)" }}
-        >
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: colapsado ? "rotate(180deg)" : "none" }}>
-            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
+    <>
+      {/* El fondo que apaga el contenido mientras el cajón está abierto. Tocarlo
+          cierra, que es lo que espera cualquiera en un teléfono. */}
+      {abiertoMovil && (
+        <div
+          onClick={cerrarMovil}
+          aria-hidden
+          className="fixed inset-0 z-40 bg-slate-900/60 md:hidden"
+        />
+      )}
+
+      <aside
+        className={[
+          "flex flex-col shrink-0 transition-[width] duration-200",
+          // En un teléfono es un cajón: encima del contenido, y sólo cuando se
+          // lo pide. Sin esto se comía 240 de los 375 px de pantalla.
+          "fixed inset-y-0 left-0 z-50 w-72",
+          abiertoMovil ? "flex" : "hidden",
+          // De `md` para arriba vuelve a ser lo de siempre: parte del layout,
+          // colapsable con su botón.
+          "md:static md:z-auto md:flex",
+          colapsado ? "md:w-[68px]" : "md:w-60",
+        ].join(" ")}
+        style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderRight: "1px solid var(--sidebar-border)" }}
+      >
+        <div className="relative flex h-14 items-center justify-between border-b px-3" style={{ borderColor: "var(--sidebar-border)" }}>
+          {/* Cerrar el cajón. En escritorio no hay cajón que cerrar. */}
+          <button
+            type="button"
+            onClick={cerrarMovil}
+            aria-label="Cerrar el menú"
+            className="flex h-11 w-11 items-center justify-center rounded transition hover:bg-white/10 md:hidden"
+            style={{ color: "var(--sidebar-text)" }}
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setColapsado((v) => !v)}
+            aria-label={colapsado ? "Mostrar panel lateral" : "Esconder panel lateral"}
+            className={`hidden h-6 w-6 items-center justify-center rounded transition hover:bg-white/10 md:flex ${colapsado ? "mx-auto" : "ml-auto"}`}
+            style={{ color: "var(--sidebar-text)" }}
+          >
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: colapsado ? "rotate(180deg)" : "none" }}>
+              <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
         {esEmpleadoRemises && (
@@ -232,7 +270,8 @@ export function Sidebar({
           );
         })}
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 }
 

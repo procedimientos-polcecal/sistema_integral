@@ -201,6 +201,7 @@ function ChoferesTab({ choferes, canEdit }: { choferes: any[]; canEdit: boolean 
         {choferes.length === 0 ? (
           <p className="text-sm text-gray-500">Todavía no hay choferes cargados.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -224,6 +225,7 @@ function ChoferesTab({ choferes, canEdit }: { choferes: any[]; canEdit: boolean 
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       {modal && <ChoferModal c={modal.c} onClose={() => setModal(null)} onSaved={() => { setModal(null); router.refresh(); }} />}

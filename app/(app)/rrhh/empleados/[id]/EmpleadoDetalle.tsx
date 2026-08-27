@@ -392,6 +392,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             {cargandoDias ? (
               <p className="text-gray-500 text-sm">Cargando...</p>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 border-b">
@@ -453,6 +454,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                     })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}
@@ -519,6 +521,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             <p className="text-xs text-gray-500 mb-3">
               Días detectados como falta (sin marcación) entre el {new Date(`${desde}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })} y el {new Date(`${hasta}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })} (mismo rango que la pestaña Fichadas), estén o no clasificados todavía.
             </p>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm mb-6">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
@@ -555,8 +558,10 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 ))}
               </tbody>
             </table>
+            </div>
 
             <h3 className="text-sm font-medium text-gray-700 mb-2">Ausencias registradas</h3>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
@@ -614,8 +619,10 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 ))}
               </tbody>
             </table>
+            </div>
 
             <h3 className="text-sm font-medium text-gray-700 mb-2 mt-6">Vacaciones tomadas</h3>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
@@ -641,6 +648,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 ))}
               </tbody>
             </table>
+            </div>
             <p className="text-xs text-gray-400 mt-1">Para editar o eliminar un período, andá a la pestaña Vacaciones.</p>
           </div>
         )}
@@ -698,6 +706,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             </form>
 
             <p className="text-xs text-gray-400 mb-2">Todos los períodos de vacaciones cargados, de cualquier año.</p>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-500 border-b">
@@ -744,10 +753,12 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
         {tab === "francos" && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
@@ -766,6 +777,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

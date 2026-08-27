@@ -369,6 +369,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
       )}
 
       <div className="card p-5">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
@@ -403,6 +404,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
