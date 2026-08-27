@@ -33,7 +33,7 @@ function parseHoraCorte(fecha: Date, horaCorteSabado: string): Date {
   return localDateTime(fecha, h, m);
 }
 
-function determinarTipoDia(fecha: Date, esFeriado: boolean): TipoDia {
+export function determinarTipoDia(fecha: Date, esFeriado: boolean): TipoDia {
   if (esFeriado) return "FERIADO";
   const dow = dayOfWeekUtc(fecha); // 0=domingo, 6=sabado
   if (dow === 0) return "DOMINGO";
