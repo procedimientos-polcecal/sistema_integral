@@ -81,7 +81,7 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
   const types = [...new Set(executions.map(motivoDe).filter((t) => t !== "—"))].sort();
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
+    <div className="md:p-6 max-w-5xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">

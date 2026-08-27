@@ -161,7 +161,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+    <div className="md:p-6 max-w-4xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           Ejecuciones

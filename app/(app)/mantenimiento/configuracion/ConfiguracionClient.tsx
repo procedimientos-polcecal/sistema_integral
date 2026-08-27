@@ -52,7 +52,7 @@ export default function ConfiguracionClient({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-4 md:p-6">
+    <div className="mx-auto max-w-5xl space-y-5 md:p-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">Configuración</h1>
         <p className="text-sm text-slate-500">

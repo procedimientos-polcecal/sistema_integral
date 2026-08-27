@@ -425,7 +425,7 @@ export default function DashboardClient({
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="md:p-6 max-w-6xl mx-auto space-y-5">
 
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
