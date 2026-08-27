@@ -1,0 +1,371 @@
+/**
+ * Traer de las planillas lo que el módulo espeja.
+ *
+ * Vive acá y no dentro de las rutas porque lo llaman dos cosas: el botón "Traer
+ * de la planilla", que exige sesión y permisos, y el reloj, que no tiene
+ * ninguna de las dos. Mientras estuvo en los handlers, el cron no podía usarlo.
+ *
+ * Cada una registra su corrida —salga bien o mal— para que la pantalla pueda
+ * decir cuándo se actualizó por última vez.
+ */
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
+import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
+import { linkDeCelda } from "@/lib/core/links";
+import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
+import { filaDeAviso } from "@/lib/mantenimiento/avisos";
+import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
+import { COMPARATIVA_PESTANAS, filaDeComparativa } from "@/lib/mantenimiento/comparativas";
+import {
+  OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
+} from "@/lib/mantenimiento/os";
+
+type Datos = Record<string, unknown>;
+
+/**
+ * Cómo salió una sincronización.
+ *
+ * El fallo lleva `status` para que la ruta lo devuelva tal cual: el cron lo
+ * ignora, pero quien aprieta el botón merece saber si el problema fue de
+ * configuración (503), de la planilla (502) o de la base (400).
+ */
+export type Resultado =
+  | { ok: true; datos: Datos }
+  | { ok: false; status: number; error: string; datos?: Datos };
+
+const logra = (datos: Datos): Resultado => ({ ok: true, datos });
+const falla = (status: number, error: string, datos?: Datos): Resultado =>
+  ({ ok: false, status, error, datos });
+
+/** El texto que explica por qué no se pudo leer una pestaña. */
+async function porQueNoSeLeyo(
+  planilla: string, pestana: string, e: unknown, variable: string
+): Promise<string> {
+  // El error de Google no dice qué pestañas hay, y adivinar el nombre es la
+  // primera cosa que sale mal. Se lo decimos.
+  let disponibles: string[] = [];
+  try {
+    disponibles = await listarPestanas(planilla);
+  } catch {
+    // Si tampoco se puede listar, el problema es de acceso: vale el de arriba.
+  }
+
+  return (
+    `No se pudo leer la pestaña "${pestana}". ` +
+    (disponibles.length > 0
+      ? `La planilla tiene: ${disponibles.join(", ")}. Configurá ${variable}.`
+      : e instanceof Error ? e.message : String(e))
+  );
+}
+
+/** Trae los avisos de su planilla. */
+export async function sincronizarAvisos(): Promise<Resultado> {
+  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
+  if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_AVISOS_ID");
+
+  let filas: string[][];
+  try {
+    filas = await leerValores(planilla, pestana, { sinFormato: true });
+  } catch (e) {
+    return falla(502, await porQueNoSeLeyo(planilla, pestana, e, "GOOGLE_SHEETS_AVISOS_TAB"));
+  }
+
+  if (filas.length < 2) return logra({ leidas: 0, guardados: 0, sin_equipo: 0 });
+
+  const admin = createAdminClient();
+  const enlaces = await cargarEnlaces(admin);
+
+  const registros: Datos[] = [];
+  let sinEquipo = 0;
+
+  for (let i = 0; i < filas.length - 1; i++) {
+    const aviso = filaDeAviso(filas[i + 1], i + 2);
+    if (!aviso) continue;
+
+    const { equipment_id, sector_id } = resolver(enlaces, aviso);
+    if (!equipment_id) sinEquipo += 1;
+
+    registros.push({ ...aviso, equipment_id, sector_id, synced_at: new Date().toISOString() });
+  }
+
+  let guardados = 0;
+  for (let i = 0; i < registros.length; i += 500) {
+    const lote = registros.slice(i, i + 500);
+    const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
+
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
+      });
+      return falla(400, error.message);
+    }
+    guardados += lote.length;
+  }
+
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
+  });
+  return logra({ leidas: filas.length - 1, guardados, sin_equipo: sinEquipo });
+}
+
+/** Trae las órdenes de trabajo de su planilla. */
+export async function sincronizarOrdenes(): Promise<Resultado> {
+  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
+  if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OT_ID");
+
+  let filas: string[][];
+  try {
+    filas = await leerValores(planilla, pestana, { sinFormato: true });
+  } catch (e) {
+    return falla(502, await porQueNoSeLeyo(planilla, pestana, e, "GOOGLE_SHEETS_OT_TAB"));
+  }
+
+  if (filas.length < 2) return logra({ leidas: 0, guardadas: 0, sin_equipo: 0 });
+
+  const admin = createAdminClient();
+  const enlaces = await cargarEnlaces(admin);
+
+  const registros: Datos[] = [];
+  const sinProveedor = new Set<string>();
+  let sinEquipo = 0;
+
+  for (let i = 0; i < filas.length - 1; i++) {
+    const orden = filaDeOrden(filas[i + 1], i + 2);
+    if (!orden) continue;
+
+    const { equipment_id, sector_id } = resolver(enlaces, orden);
+    if (!equipment_id) sinEquipo += 1;
+
+    // El contratista es un proveedor del SdG: si lo reconocemos, se enlaza.
+    // El nombre crudo se conserva porque es lo que dice la planilla.
+    const proveedor_id = proveedorDe(enlaces, orden.contratista);
+    if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
+
+    registros.push({
+      ...orden, equipment_id, sector_id, proveedor_id,
+      synced_at: new Date().toISOString(),
+    });
+  }
+
+  let guardadas = 0;
+  for (let i = 0; i < registros.length; i += 500) {
+    const lote = registros.slice(i, i + 500);
+    const { error } = await admin
+      .from("ordenes_trabajo")
+      .upsert(lote, { onConflict: "ot_number" });
+
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "ordenes", ok: false, error: error.message,
+      });
+      return falla(400, error.message);
+    }
+    guardadas += lote.length;
+  }
+
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
+  });
+  return logra({
+    leidas: filas.length - 1,
+    guardadas,
+    sin_equipo: sinEquipo,
+    sin_proveedor: [...sinProveedor],
+  });
+}
+
+/** Trae las órdenes de servicio de su planilla, una pestaña por área. */
+export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
+  const planilla = process.env.GOOGLE_SHEETS_OS_ID ?? "";
+  if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OS_ID");
+
+  const admin = createAdminClient();
+  const enlaces = await cargarEnlaces(admin);
+  const cuando = new Date().toISOString();
+
+  // Una OS puede aparecer en la hoja maestra y en la de su área: se queda la
+  // última leída, que es la que trae el seguimiento.
+  const porNumero = new Map<number, Datos>();
+  const sinLeer: string[] = [];
+  const huerfanas: string[] = [];
+  const sinProveedor = new Set<string>();
+  let sinEquipo = 0;
+
+  for (const pestana of OS_PESTANAS) {
+    let filas: string[][];
+    try {
+      filas = await leerValores(planilla, pestana, { sinFormato: true });
+    } catch {
+      sinLeer.push(pestana);
+      continue;
+    }
+    if (filas.length < 2) continue;
+
+    const idx = mapearEncabezados(filas[0]);
+
+    // La comparativa es un `HYPERLINK` y la celda sólo muestra "LINK": la URL
+    // hay que sacarla de la fórmula o se guarda la palabra.
+    const formulas = idx.comparativa >= 0
+      ? await leerFormulas(planilla, pestana).catch(() => [] as string[][])
+      : [];
+
+    for (let i = 1; i < filas.length; i++) {
+      const os = filaDeOS(filas[i], idx, pestana, i + 1);
+
+      if (!os) {
+        // Seguimiento sin orden: el FILTER corrió las filas y lo escrito a
+        // mano quedó colgado de ninguna OS. No se importa, se avisa.
+        if (seguimientoHuerfano(filas[i])) huerfanas.push(`${pestana}!${i + 1}`);
+        continue;
+      }
+
+      const link = linkDeCelda(formulas[i]?.[idx.comparativa], null);
+      const { equipment_id, sector_id } = resolver(enlaces, os);
+      if (!equipment_id) sinEquipo += 1;
+
+      const proveedor_id = proveedorDe(enlaces, os.proveedor_elegido);
+      if (os.proveedor_elegido && !proveedor_id) sinProveedor.add(os.proveedor_elegido);
+
+      porNumero.set(os.os_number, {
+        ...os,
+        comparativa: link ?? os.comparativa,
+        equipment_id,
+        sector_id,
+        proveedor_id,
+        synced_at: cuando,
+      });
+    }
+  }
+
+  const registros = [...porNumero.values()];
+  if (registros.length === 0) {
+    return falla(
+      502,
+      sinLeer.length === OS_PESTANAS.length
+        ? "No se pudo leer ninguna pestaña de la planilla."
+        : "La planilla no tiene ninguna orden de servicio cargada.",
+      { sin_leer: sinLeer, pestanas: await listarPestanas(planilla).catch(() => []) }
+    );
+  }
+
+  let guardadas = 0;
+  for (let i = 0; i < registros.length; i += 500) {
+    const lote = registros.slice(i, i + 500);
+    const { error } = await admin
+      .from("ordenes_servicio")
+      .upsert(lote, { onConflict: "os_number" });
+
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "ordenes-servicio", ok: false, error: error.message,
+      });
+      return falla(400, error.message);
+    }
+    guardadas += lote.length;
+  }
+
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "ordenes-servicio", ok: true, filas: guardadas,
+  });
+  return logra({
+    guardadas,
+    sin_equipo: sinEquipo,
+    sin_leer: sinLeer,
+    huerfanas,
+    sin_proveedor: [...sinProveedor],
+  });
+}
+
+/** Trae las comparativas de proveedores de su planilla. */
+export async function sincronizarComparativas(): Promise<Resultado> {
+  const planilla = process.env.GOOGLE_SHEETS_COMPARATIVAS_ID ?? "";
+  if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_COMPARATIVAS_ID");
+
+  const admin = createAdminClient();
+  const enlaces = await cargarEnlaces(admin);
+
+  const cotizaciones: Datos[] = [];
+  const sinLeer: string[] = [];
+  const sinProveedor = new Set<string>();
+  const cuando = new Date().toISOString();
+
+  for (const pestana of COMPARATIVA_PESTANAS) {
+    let filas: string[][];
+    try {
+      filas = await leerValores(planilla, pestana, { sinFormato: true });
+    } catch {
+      // Una pestaña que se renombró o se borró no puede frenar a las otras
+      // once, pero tiene que verse en el resultado.
+      sinLeer.push(pestana);
+      continue;
+    }
+
+    for (let i = 1; i < filas.length; i++) {
+      const cot = filaDeComparativa(filas[i], i + 1, pestana);
+      if (!cot) continue;
+
+      const proveedor_id = proveedorDe(enlaces, cot.proveedor);
+      if (!proveedor_id) sinProveedor.add(cot.proveedor);
+
+      // La cotización dice de qué máquina es: sirve para ver lo que se cotizó
+      // de un equipo sin pasar por la OS.
+      const { equipment_id } = resolver(enlaces, cot);
+
+      cotizaciones.push({ ...cot, proveedor_id, equipment_id, synced_at: cuando });
+    }
+  }
+
+  // Sin nada leído no se toca el espejo: una planilla inaccesible lo borraría
+  // entero y no habría con qué volver a armarlo.
+  if (cotizaciones.length === 0) {
+    return falla(
+      502,
+      sinLeer.length === COMPARATIVA_PESTANAS.length
+        ? "No se pudo leer ninguna pestaña de la planilla."
+        : "La planilla no tiene ninguna cotización cargada.",
+      { sin_leer: sinLeer }
+    );
+  }
+
+  // Refresco completo: en la planilla se corrigen y se borran filas, y sólo
+  // volviendo a leerla entera queda igual de los dos lados.
+  const { error: errorBorrado } = await admin
+    .from("os_comparativas")
+    .delete()
+    .not("id", "is", null);
+  if (errorBorrado) return falla(400, errorBorrado.message);
+
+  let guardadas = 0;
+  for (let i = 0; i < cotizaciones.length; i += 500) {
+    const lote = cotizaciones.slice(i, i + 500);
+    const { error } = await admin.from("os_comparativas").insert(lote);
+
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "mantenimiento", recurso: "comparativas", ok: false, error: error.message,
+      });
+      return falla(400, error.message);
+    }
+    guardadas += lote.length;
+  }
+
+  const ordenes = new Set(cotizaciones.map((c) => c.os_number)).size;
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "comparativas", ok: true, filas: guardadas,
+  });
+  return logra({ guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor] });
+}
+
+/** Las cuatro, en el orden en que conviene traerlas. */
+export const SINCRONIZACIONES = [
+  // Los equipos y sectores ya están; lo demás cuelga de ellos. Las órdenes de
+  // servicio antes que sus comparativas, para que una cotización nunca quede
+  // apuntando a una OS que todavía no existe.
+  { recurso: "avisos", correr: sincronizarAvisos },
+  { recurso: "ordenes", correr: sincronizarOrdenes },
+  { recurso: "ordenes-servicio", correr: sincronizarOrdenesDeServicio },
+  { recurso: "comparativas", correr: sincronizarComparativas },
+] as const;

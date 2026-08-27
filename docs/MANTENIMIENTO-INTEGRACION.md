@@ -620,7 +620,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 |---|---|---|
 | **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
 | **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
-| **Sincronización automática** | Un cron que trae las planillas solo. Hoy es a mano, con el botón. | Medio |
 | **Webhooks de las planillas** | Que un cambio en el Sheets llegue solo, sin esperar al cron. | Bajo |
 | **Alertas de OT atrasadas** | Un cron que avisa lo que se venció. | Medio |
 | **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
@@ -682,6 +681,36 @@ media planilla.
 o no se puede leer, la pantalla lo dice y sigue andando sin disponibilidad:
 anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 `GOOGLE_SHEETS_INVENTARIO_ID` y `GOOGLE_SHEETS_INVENTARIO_TAB`.
+
+## La sincronización, sola
+
+Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
+sistema era tan viejo como la última vez que alguien lo hizo.
+
+Ahora lo llaman dos relojes, igual que Compras: **GitHub Actions cada quince
+minutos**, que es la frecuencia real, y un **cron diario de Vercel** como red por
+si Actions falla. El cron vive en Actions y no en `vercel.json` porque el plan
+Hobby sólo admite crons diarios: poner una frecuencia mayor no degrada el cron,
+hace fallar el deploy entero.
+
+De paso se arregló un cron muerto: `vercel.json` llamaba todos los días a las 6
+a `/api/cron/sync`, una ruta que nunca existió en este repo —quedó copiada de la
+app vieja— y devolvía 404. Ese horario ahora es el de mantenimiento.
+
+**El trabajo salió de las rutas.** Vive en `lib/mantenimiento/sincronizar.ts`
+porque lo llaman dos cosas con permisos distintos: el botón, que exige sesión, y
+el reloj, que no tiene ninguna. Mientras estuvo dentro de los handlers, el cron
+no podía usarlo. Las cuatro rutas quedaron en veinte líneas: comprobar quién
+pide y devolver lo que la función contestó.
+
+**Una que falla no frena a las otras.** Que no se pueda leer la planilla de OS
+no es razón para dejar los avisos sin actualizar. El cron las corre todas y
+devuelve **207** si alguna falló: un 200 escondería el problema y un 500 haría
+pensar que no se actualizó nada. Cada una registra su corrida —salga bien o
+mal—, así que la pantalla puede decir cuál quedó vieja y por qué.
+
+Verificado corriendo las cuatro: 138 avisos, 1.741 órdenes de trabajo, 221 de
+servicio y 150 cotizaciones, en 21 segundos.
 
 ## Los datos: qué está y qué no
 

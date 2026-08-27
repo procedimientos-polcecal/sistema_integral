@@ -4,10 +4,13 @@
       "path": "/api/cron/remises-notificaciones",
       "schedule": "0 22 * * *"
     },
-	{ "path": "/api/cron/sync", "schedule": "0 6 * * *" },
     {
       "path": "/api/cron/compras-sync",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/mantenimiento-sync",
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -1,0 +1,46 @@
+# Sincroniza Mantenimiento con sus planillas cada 15 minutos.
+#
+# El cron vive acá y no en vercel.json por lo mismo que el de Compras: el plan
+# Hobby de Vercel sólo admite crons diarios, y poner una frecuencia mayor no
+# degrada el cron, hace fallar el deploy entero. En vercel.json queda uno diario
+# como red por si Actions falla.
+#
+# El endpoint se protege solo: exige el mismo CRON_SECRET, y sin él responde 503
+# en vez de quedar abierto.
+
+name: Sincronizar Mantenimiento
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  # Para poder correrlo a mano desde la pestaña Actions cuando haga falta.
+  workflow_dispatch:
+
+concurrency:
+  # Si una corrida se demora, la siguiente espera en vez de pisarla: la
+  # sincronización de comparativas borra el espejo y lo vuelve a escribir, y
+  # dos a la vez lo dejarían a medias.
+  group: mantenimiento-sync
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pedir la sincronización
+        run: |
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.APP_URL }}/api/cron/mantenimiento-sync")
+
+          cat respuesta.json
+
+          # 207 es "algunas salieron y otras no": se registra en el log y en la
+          # pantalla, pero no tira abajo la corrida — lo que sí anduvo, anduvo.
+          if [ "$codigo" = "200" ] || [ "$codigo" = "207" ]; then
+            echo "::notice::Sincronización terminada con $codigo"
+          else
+            echo "::error::La sincronización devolvió $codigo"
+            exit 1
+          fi
