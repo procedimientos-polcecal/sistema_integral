@@ -8,9 +8,11 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total,
+  sincronizaciones, aprobadores, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio
 }: {
   sincronizaciones: Sincronizacion[];
+  /** Con qué cuenta de Google escribe el sistema en la planilla. */
+  cuentaDeServicio: string | null;
   aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
   usuarios: { id: string; nombre: string; apellido: string; email: string }[];
   /** Requerimientos cuyo cambio no se pudo escribir en la planilla. */
@@ -199,6 +201,18 @@ export default function ConfiguracionClient({
                   lo que pasa es peor que no tenerlo. */}
               Además corre sola cada 15 minutos, y la planilla avisa apenas
               alguien la edita.
+              {/* Con qué cuenta escribe. Es el dato que hay que comparar contra
+                  los editores de los rangos protegidos de la planilla: si no
+                  coinciden, las escrituras vuelven rechazadas y desde la
+                  planilla no hay forma de darse cuenta. */}
+              {cuentaDeServicio && (
+                <>
+                  <br />
+                  Escribe en la planilla como{" "}
+                  <strong className="font-mono text-xs break-all">{cuentaDeServicio}</strong>.
+                  Esa cuenta tiene que estar entre los editores de los rangos protegidos.
+                </>
+              )}
             </div>
           </div>
           <button

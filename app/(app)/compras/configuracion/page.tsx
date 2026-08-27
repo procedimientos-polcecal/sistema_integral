@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
+import { cuentaDeServicio } from "@/lib/core/google";
 import ConfiguracionClient from "./ConfiguracionClient";
 import type { Sincronizacion } from "@/lib/compras/types";
 
@@ -73,6 +74,7 @@ export default async function ConfiguracionPage() {
 
   return (
     <ConfiguracionClient
+      cuentaDeServicio={cuentaDeServicio() ?? null}
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}
       usuarios={usuarios ?? []}

@@ -124,7 +124,18 @@ export function mensajeDeGoogle(
   return `Google respondió ${estado}: ${error.message ?? cuerpo.slice(0, 200)}`;
 }
 
-/** El mail de la cuenta de servicio, para poder nombrarlo en los avisos. */
+/**
+ * El mail de la cuenta de servicio, para poder nombrarlo en los avisos.
+ *
+ * Se muestra en Configuración de Compras, y no es un dato de adorno: los rangos
+ * protegidos de la planilla listan qué cuentas pueden editarlos, y si la que
+ * figura ahí no es ésta, las escrituras vuelven rechazadas sin que se pueda
+ * saber por qué mirando la planilla. Pasó: se revisaron 946 protecciones que
+ * daban permiso a una cuenta distinta de la que escribe.
+ *
+ * El `client_email` no es secreto —es justamente el identificador que hay que
+ * compartir para dar permiso—, a diferencia de la clave privada del mismo JSON.
+ */
 export function cuentaDeServicio(): string | undefined {
   try {
     return JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "{}").client_email;
