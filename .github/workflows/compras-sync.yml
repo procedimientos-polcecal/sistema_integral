@@ -31,6 +31,20 @@ jobs:
   sincronizar:
     runs-on: ubuntu-latest
     steps:
+      - name: Comprobar que estén las variables
+        run: |
+          # Sin esto, curl falla con "URL rejected: No host part in the URL" y
+          # hay que leer el log entero para entender que faltaba una variable.
+          # Compras estuvo días fallando así, en silencio.
+          faltan=""
+          [ -n "${{ vars.APP_URL }}" ]        || faltan="$faltan APP_URL(variable)"
+          [ -n "${{ secrets.CRON_SECRET }}" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
       - name: Pedir la sincronización
         run: |
           codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
