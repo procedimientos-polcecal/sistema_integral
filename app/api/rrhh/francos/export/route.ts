@@ -10,6 +10,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const employeeId = url.searchParams.get("employeeId");
   const estado = url.searchParams.get("estado");
+  const desde = url.searchParams.get("desde");
+  const hasta = url.searchParams.get("hasta");
 
   let query = supabase
     .from("francos")
@@ -17,6 +19,8 @@ export async function GET(request: Request) {
     .order("fecha_generado", { ascending: false });
   if (employeeId) query = query.eq("empleado_id", employeeId);
   if (estado) query = query.eq("estado", estado);
+  if (desde) query = query.gte("fecha_generado", desde);
+  if (hasta) query = query.lte("fecha_generado", hasta);
 
   const { data } = await query;
   const rows = [
