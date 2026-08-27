@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { SIGUIENTE_ESTADO, COMPRA_LABELS } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
+import SelectorProveedor from "../SelectorProveedor";
 
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
 
@@ -182,15 +183,12 @@ export default function ModalAvanzar({
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Proveedor elegido
                 </span>
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  value={proveedorId}
-                  onChange={(e) => setProveedorId(e.target.value)}
+                <SelectorProveedor
+                  proveedores={proveedores}
+                  valor={proveedorId}
+                  onCambio={setProveedorId}
                   autoFocus
-                >
-                  <option value="">Elegir…</option>
-                  {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                />
               </label>
 
               <div className="grid grid-cols-2 gap-3">

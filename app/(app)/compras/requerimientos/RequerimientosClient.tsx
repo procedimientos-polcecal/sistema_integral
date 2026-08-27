@@ -10,6 +10,7 @@ import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
 import type { ResumenComparativa } from "./ModalAvanzar";
 import AprobarSinComparativa from "../AprobarSinComparativa";
+import SelectorProveedor from "../SelectorProveedor";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
@@ -365,8 +366,14 @@ export default function RequerimientosClient({
             opciones={PRIORIDADES.map((p) => [p, PRIORIDAD_LABELS[p].label])} />
           <Select value={empresa} onChange={setEmpresa} vacio="Cualquier empresa"
             opciones={[...empresas.map((e) => [e.id, e.nombre] as [string, string]), ["AMBAS", "Ambas"]]} />
-          <Select value={proveedor} onChange={setProveedor} vacio="Todo proveedor"
-            opciones={proveedores.map((p) => [p.id, p.nombre])} />
+          {/* Este no es un Select como los demás: son 273 proveedores, y una
+              lista de ese largo no se recorre, se busca. */}
+          <SelectorProveedor
+            proveedores={proveedores}
+            valor={proveedor}
+            onCambio={setProveedor}
+            placeholder="Todo proveedor"
+          />
           <Select value={ubicacion} onChange={setUbicacion} vacio="Cualquier ubicación"
             opciones={ubicaciones.map((u) => [u.id, u.nombre])} />
         </div>

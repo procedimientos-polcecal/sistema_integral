@@ -11,6 +11,7 @@ import type {
   RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
 import Comparativa from "./Comparativa";
+import SelectorProveedor from "../../SelectorProveedor";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
@@ -178,14 +179,12 @@ export default function RequerimientoDetalle({
                   </select>
                 </Campo>
                 <Campo label="Proveedor elegido">
-                  <select
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={proveedorId}
-                    onChange={(e) => setProveedorId(e.target.value)}
-                  >
-                    <option value="">Sin definir</option>
-                    {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
+                  <SelectorProveedor
+                    proveedores={proveedores}
+                    valor={proveedorId}
+                    onCambio={setProveedorId}
+                    placeholder="Sin definir"
+                  />
                 </Campo>
                 <Campo label="Costo + IVA">
                   <input type="number" step="0.01" min="0"

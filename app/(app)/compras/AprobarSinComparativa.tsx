@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { moneda } from "@/lib/compras/constants";
+import SelectorProveedor from "./SelectorProveedor";
 
 /**
  * Aprobar una compra sin elegir un presupuesto.
@@ -63,14 +64,12 @@ export default function AprobarSinComparativa({
           <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
             Proveedor
           </span>
-          <select
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={proveedorId}
-            onChange={(e) => setProveedorId(e.target.value)}
-          >
-            <option value="">Si ya se sabe…</option>
-            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
+          <SelectorProveedor
+            proveedores={proveedores}
+            valor={proveedorId}
+            onCambio={setProveedorId}
+            placeholder="Si ya se sabe…"
+          />
         </label>
 
         <label className="block">
