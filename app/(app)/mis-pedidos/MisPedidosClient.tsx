@@ -58,7 +58,39 @@ export default function MisPedidosClient({
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <>
+        {/* En un teléfono, tarjetas. Ocho columnas no entran, y acá la pregunta
+            es una sola —¿en qué anda mi pedido?—, así que los dos estados van
+            arriba y grandes en vez de perdidos en la sexta y séptima columna. */}
+        <div className="space-y-2 md:hidden">
+          {pedidos.map((p) => (
+            <article key={p.id} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="font-mono text-xs font-semibold text-slate-500">RI {p.nro_ri}</span>
+                <Chip {...APROBACION_LABELS[p.estado_aprobacion]} />
+                <Chip {...COMPRA_LABELS[p.estado_compra]} />
+              </div>
+
+              <p className="text-sm leading-snug text-slate-900">{p.descripcion}</p>
+
+              {p.motivo_rechazo && (
+                <p className="mt-1 text-xs text-red-600">Rechazado: {p.motivo_rechazo}</p>
+              )}
+              {p.estado_compra === "RECIBIDO" && p.fecha_recepcion && (
+                <p className="mt-1 text-xs text-green-700">Recibido el {fecha(p.fecha_recepcion)}</p>
+              )}
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                <span>Pedido el {fecha(p.fecha)}</span>
+                {p.cantidad && <span>· {p.cantidad} u.</span>}
+                <Chip {...etiquetaPrioridad(p.prioridad)} />
+                {p.proveedores?.nombre && <span>· {p.proveedores.nombre}</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -98,6 +130,7 @@ export default function MisPedidosClient({
             </table>
           </div>
         </div>
+        </>
       )}
 
       {modalAbierto && (
