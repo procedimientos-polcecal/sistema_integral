@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { empleadosPermitidos, idsOrDummy, periodoARango } from "@/lib/rrhh/dashboardHelpers";
 import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
+import { traerPaginado } from "@/lib/rrhh/paginado";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -19,16 +20,21 @@ export async function GET(request: Request) {
 
   await recalcularPeriodoCacheado(supabase, desde, hasta);
 
-  const { data: calculos } = await supabase
-    .from("calculos_diarios")
-    .select("empleado_id")
-    .in("empleado_id", idsOrDummy(empleadoIds))
-    .gte("fecha", desde.toISOString().slice(0, 10))
-    .lte("fecha", hasta.toISOString().slice(0, 10))
-    .eq("ausente", true);
+  const calculos = await traerPaginado<{ empleado_id: string }>(
+    () =>
+      supabase
+        .from("calculos_diarios")
+        .select("empleado_id")
+        .in("empleado_id", idsOrDummy(empleadoIds))
+        .gte("fecha", desde.toISOString().slice(0, 10))
+        .lte("fecha", hasta.toISOString().slice(0, 10))
+        .eq("ausente", true)
+        .order("id"),
+    "top de ausencias"
+  );
 
   const conteoPorEmpleado = new Map<string, number>();
-  for (const c of calculos ?? []) {
+  for (const c of calculos) {
     conteoPorEmpleado.set(c.empleado_id, (conteoPorEmpleado.get(c.empleado_id) ?? 0) + 1);
   }
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
+import { traerPaginado } from "@/lib/rrhh/paginado";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 
@@ -37,16 +38,21 @@ export async function GET() {
   const resultado = [];
   for (const mes of meses) {
     await recalcularPeriodoCacheado(supabase, mes.desde, mes.hasta);
-    const { data: calculos } = await supabase
-      .from("calculos_diarios")
-      .select("empleado_id, tipo_dia, ausente")
-      .in("empleado_id", idsOrDummy(empleadoIds))
-      .gte("fecha", mes.desde.toISOString().slice(0, 10))
-      .lte("fecha", mes.hasta.toISOString().slice(0, 10));
+    const calculos = await traerPaginado<{ empleado_id: string; tipo_dia: string; ausente: boolean }>(
+      () =>
+        supabase
+          .from("calculos_diarios")
+          .select("empleado_id, tipo_dia, ausente")
+          .in("empleado_id", idsOrDummy(empleadoIds))
+          .gte("fecha", mes.desde.toISOString().slice(0, 10))
+          .lte("fecha", mes.hasta.toISOString().slice(0, 10))
+          .order("id"),
+      `ausentismo de ${mes.label}`
+    );
 
     let esperados = 0;
     let ausentes = 0;
-    for (const c of calculos ?? []) {
+    for (const c of calculos) {
       const emp = empleadoById.get(c.empleado_id);
       const sectorNombre = (emp?.sectores as unknown as { nombre: string } | null)?.nombre ?? null;
       const trabajaLunesAViernesNomas = !!sectorNombre && SECTORES_LUNES_A_VIERNES.includes(sectorNombre);

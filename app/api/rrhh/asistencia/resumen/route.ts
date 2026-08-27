@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { recalcularSectorPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
+import { traerPaginado } from "@/lib/rrhh/paginado";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -24,17 +25,36 @@ export async function GET(request: Request) {
   const { data: empleados } = await query;
 
   const empleadoIds = (empleados ?? []).map((e) => e.id);
-  const { data: calculos } = await supabase
-    .from("calculos_diarios")
-    .select("empleado_id, tipo_dia, ausente, justificada")
-    .in("empleado_id", empleadoIds.length > 0 ? empleadoIds : ["00000000-0000-0000-0000-000000000000"])
-    .gte("fecha", fechaDesde.toISOString().slice(0, 10))
-    .lte("fecha", fechaHasta.toISOString().slice(0, 10));
+  const calculos = await traerPaginado<{
+    empleado_id: string;
+    tipo_dia: string;
+    ausente: boolean;
+    justificada: boolean | null;
+  }>(
+    () =>
+      supabase
+        .from("calculos_diarios")
+        .select("empleado_id, tipo_dia, ausente, justificada")
+        .in("empleado_id", empleadoIds.length > 0 ? empleadoIds : ["00000000-0000-0000-0000-000000000000"])
+        .gte("fecha", fechaDesde.toISOString().slice(0, 10))
+        .lte("fecha", fechaHasta.toISOString().slice(0, 10))
+        .order("id"),
+    "resumen de asistencia"
+  );
+
+  // Agrupado una sola vez: filtrar la lista completa por empleado dentro del
+  // map era O(empleados x dias) y con el padron entero se notaba.
+  const diasPorEmpleado = new Map<string, typeof calculos>();
+  for (const c of calculos) {
+    const arr = diasPorEmpleado.get(c.empleado_id);
+    if (arr) arr.push(c);
+    else diasPorEmpleado.set(c.empleado_id, [c]);
+  }
 
   const porEmpleado = (empleados ?? []).map((emp) => {
     const sectorNombre = (emp.sectores as unknown as { nombre: string } | null)?.nombre ?? null;
     const trabajaLunesAViernesNomas = !!sectorNombre && SECTORES_LUNES_A_VIERNES.includes(sectorNombre);
-    const dias = (calculos ?? []).filter((c) => c.empleado_id === emp.id);
+    const dias = diasPorEmpleado.get(emp.id) ?? [];
     const diasEsperados = dias.filter(
       (d) => d.tipo_dia !== "DOMINGO" && !(trabajaLunesAViernesNomas && d.tipo_dia === "SABADO")
     ).length;

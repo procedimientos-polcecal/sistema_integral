@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { xlsxResponse } from "@/lib/core/xlsxExport";
+import { traerPaginado } from "@/lib/rrhh/paginado";
 import { formatHHMM } from "@/lib/rrhh/dates";
 
 export async function GET(request: Request) {
@@ -13,15 +14,19 @@ export async function GET(request: Request) {
   const desde = url.searchParams.get("desde");
   const hasta = url.searchParams.get("hasta");
 
-  let query = supabase
-    .from("fichadas")
-    .select("fecha, hora_entrada, hora_salida, origen, empleados(legajo, nombre, apellido)")
-    .order("fecha", { ascending: false });
-  if (employeeId) query = query.eq("empleado_id", employeeId);
-  if (desde) query = query.gte("fecha", desde);
-  if (hasta) query = query.lte("fecha", hasta);
-
-  const { data } = await query;
+  // Se pagina: un mes del padron entero ya pasa las 1000 filas que devuelve
+  // PostgREST, y un export incompleto no se nota mirando el Excel.
+  const data = await traerPaginado<any>(() => {
+    let query = supabase
+      .from("fichadas")
+      .select("fecha, hora_entrada, hora_salida, origen, empleados(legajo, nombre, apellido)")
+      .order("fecha", { ascending: false })
+      .order("id");
+    if (employeeId) query = query.eq("empleado_id", employeeId);
+    if (desde) query = query.gte("fecha", desde);
+    if (hasta) query = query.lte("fecha", hasta);
+    return query;
+  }, "export de fichadas");
   const rows = [
     ["Legajo", "Empleado", "Fecha", "Hora entrada", "Hora salida", "Origen"],
     ...(data ?? []).map((f: any) => [

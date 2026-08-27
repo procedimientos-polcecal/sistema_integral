@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { recalcularSectorPeriodo, getConfigLiquidacion } from "./engine/recalcular";
 import { determinarTipoDia } from "./engine/calculo";
 import { addUtcDays, utcDateOnlyFrom } from "./dates";
+import { traerPaginado } from "./paginado";
 
 export type ModalidadPago = "JORNAL" | "MENSUAL";
 
@@ -83,45 +84,88 @@ export async function calcularPlanillaGeneral(
   const fechaDesde = dia(desde);
   const fechaHasta = dia(hasta);
 
-  let queryEmpleados = supabase
-    .from("empleados")
-    .select("id, legajo, nombre, apellido, valor_hora_normal, horas_teoricas_diarias, modalidad_pago")
-    .eq("activo", true)
-    .order("apellido")
-    .order("nombre");
-  if (modalidadPago) queryEmpleados = queryEmpleados.eq("modalidad_pago", modalidadPago);
-
-  const { data: empleados } = await queryEmpleados;
+  // Todo se lee paginado: un mes de calculos_diarios del padron entero pasa las
+  // 1000 filas que devuelve PostgREST, y una planilla de sueldos calculada
+  // sobre la mitad de los dias no se nota hasta que alguien reclama el recibo.
+  const empleados = await traerPaginado<{
+    id: string;
+    legajo: string;
+    nombre: string;
+    apellido: string;
+    valor_hora_normal: number;
+    horas_teoricas_diarias: number;
+    modalidad_pago: string | null;
+  }>(() => {
+    let q = supabase
+      .from("empleados")
+      .select("id, legajo, nombre, apellido, valor_hora_normal, horas_teoricas_diarias, modalidad_pago")
+      .eq("activo", true)
+      .order("apellido")
+      .order("nombre")
+      .order("id");
+    if (modalidadPago) q = q.eq("modalidad_pago", modalidadPago);
+    return q;
+  }, "empleados de la planilla");
   const config = await getConfigLiquidacion(supabase);
 
   await recalcularSectorPeriodo(supabase, null, fechaDesde, fechaHasta);
 
-  const [{ data: todosDias }, { data: todosFrancos }, { data: todasVacaciones }, { data: todasEnfermedad }, { data: feriados }] =
-    await Promise.all([
-      supabase
-        .from("calculos_diarios")
-        .select("empleado_id, horas_normales, horas_extra_50, horas_extra_100, extras_validadas")
-        .gte("fecha", desde)
-        .lte("fecha", hasta),
-      supabase.from("francos").select("empleado_id, horas").gte("fecha_generado", desde).lte("fecha_generado", hasta),
-      supabase.from("vacaciones").select("empleado_id, fecha_desde, fecha_hasta").lte("fecha_desde", hasta).gte("fecha_hasta", desde),
-      supabase
-        .from("ausencias")
-        .select("empleado_id, fecha_desde, fecha_hasta")
-        .eq("tipo", "ENFERMEDAD_ACCIDENTE_INCULPABLE")
-        .eq("justificada", true)
-        .lte("fecha_desde", hasta)
-        .gte("fecha_hasta", desde),
-      supabase.from("feriados").select("fecha").gte("fecha", desde).lte("fecha", hasta),
-    ]);
+  const [todosDias, todosFrancos, todasVacaciones, todasEnfermedad, feriados] = await Promise.all([
+    traerPaginado<{
+      empleado_id: string;
+      horas_normales: number;
+      horas_extra_50: number;
+      horas_extra_100: number;
+      extras_validadas: boolean;
+    }>(
+      () =>
+        supabase
+          .from("calculos_diarios")
+          .select("empleado_id, horas_normales, horas_extra_50, horas_extra_100, extras_validadas")
+          .gte("fecha", desde)
+          .lte("fecha", hasta)
+          .order("id"),
+      "calculos diarios de la planilla"
+    ),
+    traerPaginado<{ empleado_id: string; horas: number }>(
+      () => supabase.from("francos").select("empleado_id, horas").gte("fecha_generado", desde).lte("fecha_generado", hasta).order("id"),
+      "francos de la planilla"
+    ),
+    traerPaginado<{ empleado_id: string; fecha_desde: string; fecha_hasta: string }>(
+      () =>
+        supabase
+          .from("vacaciones")
+          .select("empleado_id, fecha_desde, fecha_hasta")
+          .lte("fecha_desde", hasta)
+          .gte("fecha_hasta", desde)
+          .order("id"),
+      "vacaciones de la planilla"
+    ),
+    traerPaginado<{ empleado_id: string; fecha_desde: string; fecha_hasta: string }>(
+      () =>
+        supabase
+          .from("ausencias")
+          .select("empleado_id, fecha_desde, fecha_hasta")
+          .eq("tipo", "ENFERMEDAD_ACCIDENTE_INCULPABLE")
+          .eq("justificada", true)
+          .lte("fecha_desde", hasta)
+          .gte("fecha_hasta", desde)
+          .order("id"),
+      "enfermedad de la planilla"
+    ),
+    traerPaginado<{ fecha: string }>(
+      () => supabase.from("feriados").select("fecha").gte("fecha", desde).lte("fecha", hasta).order("id"),
+      "feriados de la planilla"
+    ),
+  ]);
 
-  const diasPorEmpleado = agruparPorEmpleado(todosDias ?? []);
-  const francosPorEmpleado = agruparPorEmpleado(todosFrancos ?? []);
-  const vacacionesPorEmpleado = agruparPorEmpleado(todasVacaciones ?? []);
-  const enfermedadPorEmpleado = agruparPorEmpleado(todasEnfermedad ?? []);
-  const feriadosSet = new Set((feriados ?? []).map((f) => dia(f.fecha).getTime()));
+  const diasPorEmpleado = agruparPorEmpleado(todosDias);
+  const francosPorEmpleado = agruparPorEmpleado(todosFrancos);
+  const vacacionesPorEmpleado = agruparPorEmpleado(todasVacaciones);
+  const enfermedadPorEmpleado = agruparPorEmpleado(todasEnfermedad);
+  const feriadosSet = new Set(feriados.map((f) => dia(f.fecha).getTime()));
 
-  return (empleados ?? []).map((empleado) => {
+  return empleados.map((empleado) => {
     const dias = diasPorEmpleado.get(empleado.id) ?? [];
     const francos = francosPorEmpleado.get(empleado.id) ?? [];
     const vacaciones = vacacionesPorEmpleado.get(empleado.id) ?? [];

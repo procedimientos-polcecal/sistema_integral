@@ -5,6 +5,7 @@ import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
+import { traerPaginado } from "@/lib/rrhh/paginado";
 
 const MS_POR_ANIO = 365.25 * 86_400_000;
 function edadEnAnios(desde: Date, hasta: Date): number {
@@ -32,29 +33,39 @@ export async function GET() {
 
   await recalcularPeriodoCacheado(supabase, desde, hoy);
 
-  const [{ data: calculos }, { data: tardanzasManuales }] = await Promise.all([
-    supabase
-      .from("calculos_diarios")
-      .select("empleado_id, fecha, tipo_dia, ausente, tarde")
-      .in("empleado_id", idsOrDummy(empleadoIds))
-      .gte("fecha", desde.toISOString().slice(0, 10))
-      .lte("fecha", hoy.toISOString().slice(0, 10)),
-    supabase
-      .from("ausencias")
-      .select("empleado_id, fecha_desde")
-      .in("empleado_id", idsOrDummy(empleadoIds))
-      .eq("tipo", "TARDANZA")
-      .gte("fecha_desde", desde.toISOString().slice(0, 10))
-      .lte("fecha_desde", hoy.toISOString().slice(0, 10)),
+  const [calculos, tardanzasManuales] = await Promise.all([
+    traerPaginado<{ empleado_id: string; fecha: string; tipo_dia: string; ausente: boolean; tarde: boolean }>(
+      () =>
+        supabase
+          .from("calculos_diarios")
+          .select("empleado_id, fecha, tipo_dia, ausente, tarde")
+          .in("empleado_id", idsOrDummy(empleadoIds))
+          .gte("fecha", desde.toISOString().slice(0, 10))
+          .lte("fecha", hoy.toISOString().slice(0, 10))
+          .order("id"),
+      "resumen analitico"
+    ),
+    traerPaginado<{ empleado_id: string; fecha_desde: string }>(
+      () =>
+        supabase
+          .from("ausencias")
+          .select("empleado_id, fecha_desde")
+          .in("empleado_id", idsOrDummy(empleadoIds))
+          .eq("tipo", "TARDANZA")
+          .gte("fecha_desde", desde.toISOString().slice(0, 10))
+          .lte("fecha_desde", hoy.toISOString().slice(0, 10))
+          .order("id"),
+      "tardanzas cargadas a mano"
+    ),
   ]);
 
   const tardeSet = new Set<string>();
-  for (const c of calculos ?? []) if (c.tarde) tardeSet.add(`${c.empleado_id}|${c.fecha}`);
-  for (const a of tardanzasManuales ?? []) tardeSet.add(`${a.empleado_id}|${a.fecha_desde}`);
+  for (const c of calculos) if (c.tarde) tardeSet.add(`${c.empleado_id}|${c.fecha}`);
+  for (const a of tardanzasManuales) tardeSet.add(`${a.empleado_id}|${a.fecha_desde}`);
 
   let diasEsperados = 0;
   let diasAusentes = 0;
-  for (const c of calculos ?? []) {
+  for (const c of calculos) {
     const emp = empleadoById.get(c.empleado_id);
     const sectorNombre = (emp?.sectores as unknown as { nombre: string } | null)?.nombre ?? null;
     const trabajaLunesAViernesNomas = !!sectorNombre && SECTORES_LUNES_A_VIERNES.includes(sectorNombre);
