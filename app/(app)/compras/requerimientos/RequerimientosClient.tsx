@@ -70,6 +70,9 @@ export default function RequerimientosClient({
   // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
   // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
   // qué proveedor y qué costo va a quedar el pedido.
+  // En teléfono el panel arranca cerrado; en escritorio la clase `md:grid` lo
+  // muestra siempre y este estado no lo afecta.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [resumenes, setResumenes] = useState<Record<string, ResumenComparativa>>({});
   const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
@@ -211,6 +214,10 @@ export default function RequerimientosClient({
   useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.
+  const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion]
+    .filter(Boolean).length;
+
   const hayFiltros = !!(
     busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion
   );
@@ -300,9 +307,50 @@ export default function RequerimientosClient({
 
       {/* Filtros */}
       <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-9">
+        {/* En un teléfono los ocho desplegables eran cinco filas antes de la
+            primera tarjeta: media pantalla gastada en algo que casi nunca se
+            toca. El buscador queda afuera porque es lo contrario: buscar un N°
+            de RI es lo más común desde el celular. */}
+        <div className="mb-2 flex items-center gap-2 md:hidden">
+          <button
+            onClick={() => setFiltrosAbiertos((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            aria-expanded={filtrosAbiertos}
+          >
+            Filtros
+            {filtrosPuestos > 0 && (
+              <span className="rounded-full bg-[var(--primary)] px-1.5 text-[11px] font-semibold text-white">
+                {filtrosPuestos}
+              </span>
+            )}
+            <svg
+              width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+              style={{ transform: filtrosAbiertos ? "rotate(180deg)" : "none" }}
+            >
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {/* Cuántos hay puestos tiene que verse con el panel cerrado: si no,
+              una lista filtrada se lee como una lista vacía. */}
+          {filtrosPuestos > 0 && (
+            <button onClick={limpiar} className="text-xs text-slate-500 underline">
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        <input
+          className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm md:hidden"
+          placeholder="Buscar texto o N° de RI…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+
+        <div
+          className={`${filtrosAbiertos ? "grid" : "hidden"} grid-cols-2 gap-2 md:grid md:grid-cols-4 lg:grid-cols-9`}
+        >
           <input
-            className="col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="col-span-2 hidden rounded-lg border border-slate-300 px-3 py-2 text-sm md:block"
             placeholder="Buscar texto o N° de RI…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -323,7 +371,7 @@ export default function RequerimientosClient({
             opciones={ubicaciones.map((u) => [u.id, u.nombre])} />
         </div>
         {hayFiltros && (
-          <button onClick={limpiar} className="mt-2 text-xs text-slate-500 hover:text-slate-800">
+          <button onClick={limpiar} className="mt-2 hidden text-xs text-slate-500 hover:text-slate-800 md:block">
             Limpiar filtros
           </button>
         )}
