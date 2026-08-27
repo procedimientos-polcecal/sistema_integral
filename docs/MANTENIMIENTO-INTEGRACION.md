@@ -621,7 +621,6 @@ Relevado comparando las dos apps ruta por ruta, no de memoria.
 | **Orden manual de las OT** | Arrastrarlas para fijar una prioridad propia. La columna existe. | Bajo |
 | **Editar los tipos de equipo** | Acá son de sólo lectura: se cargan importando el libro. | Bajo |
 | **Webhooks de las planillas** | Que un cambio en el Sheets llegue solo, sin esperar al cron. | Bajo |
-| **Alertas de OT atrasadas** | Un cron que avisa lo que se venció. | Medio |
 | **Foto del registro de OT** | Sube la foto a Drive con un Apps Script y escribe el link en la planilla. | Bajo |
 
 ## De un aviso sale una orden
@@ -711,6 +710,31 @@ mal—, así que la pantalla puede decir cuál quedó vieja y por qué.
 
 Verificado corriendo las cuatro: 138 avisos, 1.741 órdenes de trabajo, 221 de
 servicio y 150 cotizaciones, en 21 segundos.
+
+## Las órdenes atrasadas
+
+Una orden está atrasada de dos maneras y las dos cuentan: que la planilla la
+haya marcado `ATRASADO` a mano —lo decide una persona— o que se le haya pasado
+la fecha en que tenía que hacerse —lo decide el calendario—.
+
+Lo que **no** cuenta: una realizada, aunque se haya hecho tarde, porque ya no
+hay nada que hacer con ella; y una suspendida, que se paró a propósito y
+avisarla todos los días es ruido.
+
+Se muestran **en el tablero**, arriba y sólo cuando hay: un panel que dice "cero
+atrasadas" todos los días enseña a no mirarlo, y el día que diga otra cosa nadie
+lo va a ver. Van agrupadas por sector porque es como se resuelven —las cuatro de
+Calcinación son un problema de Calcinación, no cuatro problemas sueltos— y con
+un link a la lista ya filtrada.
+
+**Hoy son diez, todas marcadas a mano y ninguna con fecha de vencimiento.** Por
+eso el panel dice "sin fecha" en vez de inventar los días: la planilla no dice
+desde cuándo. La parte de "se pasó la fecha" queda lista para los preventivos
+programados, que sí la usan.
+
+El aviso queda **dentro de la app**: no sale por mail ni por push. Lo ve quien
+entra a mirar. Si hiciera falta que llegue solo, la lógica ya está separada en
+`lib/mantenimiento/alertas.ts` y sirve igual para cualquier canal.
 
 ## Los datos: qué está y qué no
 

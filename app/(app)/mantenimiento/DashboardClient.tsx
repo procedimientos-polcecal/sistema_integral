@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
+import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,81 @@ function nombresDeSectores(sectores: any[], ids: string[]): string {
   return nombres.length <= 3
     ? nombres.join(", ")
     : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+}
+
+/**
+ * Las órdenes que se pasaron de fecha.
+ *
+ * Es lo único que avisa que algo quedó colgado, así que va arriba y sólo
+ * aparece cuando hay: un panel que dice "cero atrasadas" todos los días enseña
+ * a no mirarlo, y el día que diga otra cosa nadie lo va a ver.
+ *
+ * Agrupadas por sector porque es como se resuelven: las cuatro de Calcinación
+ * son un problema de Calcinación, no cuatro problemas sueltos.
+ */
+function OrdenesAtrasadas({ resumen, hoy }: {
+  resumen: {
+    total: number;
+    urgentes: number;
+    atrasadas: any[];
+    porSector: { sector: string; cuantas: number }[];
+  };
+  hoy: string;
+}) {
+  if (resumen.total === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-red-200 bg-red-50/60 p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-red-900">
+          {resumen.total} orden{resumen.total === 1 ? "" : "es"} de trabajo atrasada
+          {resumen.total === 1 ? "" : "s"}
+          {resumen.urgentes > 0 && (
+            <span className="ml-2 font-normal text-red-700">
+              · {resumen.urgentes} de prioridad alta
+            </span>
+          )}
+        </h2>
+        <Link
+          href="/mantenimiento/ordenes?estado=ATRASADO"
+          className="text-xs font-semibold text-red-700 hover:underline"
+        >
+          Verlas todas →
+        </Link>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-red-800">
+        {resumen.porSector.map((s) => (
+          <span key={s.sector}>
+            <span className="font-semibold">{s.cuantas}</span> {s.sector}
+          </span>
+        ))}
+      </div>
+
+      <ul className="mt-3 space-y-1">
+        {resumen.atrasadas.slice(0, 5).map((o: any) => {
+          const dias = diasDeAtraso(o, hoy);
+          return (
+            <li key={o.ot_number} className="flex items-baseline gap-2 text-sm">
+              <span className="font-mono text-xs text-red-400">#{o.ot_number}</span>
+              <span className="min-w-0 flex-1 truncate text-red-900">
+                {o.descripcion ?? o.equipo_raw ?? "—"}
+              </span>
+              {/* Sin fecha de vencimiento no se sabe hace cuánto: la marcaron
+                  a mano en la planilla y no dice desde cuándo. */}
+              <span className="shrink-0 text-xs text-red-600">
+                {dias === null ? "sin fecha" : `${dias} día${dias === 1 ? "" : "s"}`}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {resumen.total > 5 && (
+        <p className="mt-1.5 text-xs text-red-600">y {resumen.total - 5} más.</p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -195,7 +271,7 @@ function empresaDe(s: any): string {
 export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
   empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
-  otPorMes, otMes, mesActual, ventanas, semanaQueViene, sectoresParados,
+  otPorMes, otMes, mesActual, ventanas, semanaQueViene, sectoresParados, atrasadas, hoy,
   avisosSinOT, osPendientes, canEdit,
 }: {
   usuario: any;
@@ -212,6 +288,13 @@ export default function DashboardClient({
   otPorMes: { mes: string; cantidad: number }[];
   otMes: number;
   mesActual: string;
+  atrasadas: {
+    total: number;
+    urgentes: number;
+    atrasadas: any[];
+    porSector: { sector: string; cuantas: number }[];
+  };
+  hoy: string;
   ventanas: VentanaDeReparacion[];
   semanaQueViene: string;
   sectoresParados: string[];
@@ -487,6 +570,8 @@ export default function DashboardClient({
           sub={sectoresParados.length > 0 ? nombresDeSectores(sectores, sectoresParados) : undefined}
         />
       </div>
+
+      <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
 
       <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
 

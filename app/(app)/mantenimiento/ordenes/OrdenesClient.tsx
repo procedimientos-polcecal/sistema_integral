@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
@@ -37,7 +38,10 @@ export default function OrdenesClient({
   const [orders, setOrders]     = useState<any[]>([]);
   const [count, setCount]       = useState(0);
   const [loading, setLoading]   = useState(true);
-  const [estadoFilter, setEstadoFilter] = useState("");
+  // El estado puede venir en la URL: así el tablero puede mandar directo a
+  // "las atrasadas" en vez de dejar a alguien filtrando a mano.
+  const params = useSearchParams();
+  const [estadoFilter, setEstadoFilter] = useState(params.get("estado") ?? "");
   const [search, setSearch]     = useState("");
   const [especialidad, setEspecialidad] = useState("");
   const [sincronizando, setSincronizando] = useState(false);

@@ -5,6 +5,7 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
+import { resumirAtrasadas, hoyISO } from "@/lib/mantenimiento/alertas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
 
@@ -17,8 +18,10 @@ export default async function MantenimientoDashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const hoy = new Date().toISOString().split("T")[0];
-  const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+  // Con `toISOString()` el día se corre en un servidor en UTC y los
+  // mantenimientos de hoy aparecen como vencidos.
+  const hoy = hoyISO();
+  const en7dias = hoyISO(new Date(Date.now() + 7 * 86400000));
 
   const [
     { data: usuario },
@@ -152,6 +155,17 @@ export default async function MantenimientoDashboardPage() {
   }));
 
   const ventanas = ventanasDeReparacion(conEmpresa, planes ?? [], pendientes);
+
+  // Las que podrían estar atrasadas: la marca de la planilla o una fecha
+  // vencida. El filtro fino lo hace `resumirAtrasadas`, que sabe que una
+  // realizada tarde ya no está atrasada.
+  const { data: candidatas } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number, estado, proxima_fecha, prioridad, sector_raw, descripcion, equipo_raw, quien")
+    .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}`)
+    .limit(500);
+
+  const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
   const sectoresParados = [...sectoresAParar(pendientes)];
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
@@ -170,6 +184,8 @@ export default async function MantenimientoDashboardPage() {
       otStats={otStats}
       tipoTally={tipoTally}
       quienTally={quienTally}
+      atrasadas={atrasadas}
+      hoy={hoy}
       otPorMes={otPorMes}
       otMes={otMes}
       mesActual={mesActual}
