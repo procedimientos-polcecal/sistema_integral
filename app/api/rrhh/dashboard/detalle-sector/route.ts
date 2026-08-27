@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { idsOrDummy, periodoARango } from "@/lib/rrhh/dashboardHelpers";
+import { idsOrDummy, rangoDesdeHasta } from "@/lib/rrhh/dashboardHelpers";
 import { recalcularSectorPeriodo, getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const sectorId = url.searchParams.get("sectorId");
   const empresaId = url.searchParams.get("empresaId");
   if (!sectorId) return NextResponse.json({ error: "Falta sectorId" }, { status: 400 });
-  const { desde, hasta } = periodoARango(url.searchParams.get("periodo"));
+  const { desde, hasta } = rangoDesdeHasta(url.searchParams);
 
   const { data: sector } = await supabase.from("sectores").select("id, nombre").eq("id", sectorId).single();
   if (!sector) return NextResponse.json({ error: "Sector no encontrado" }, { status: 404 });

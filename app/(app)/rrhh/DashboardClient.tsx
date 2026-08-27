@@ -14,12 +14,13 @@ const TITULOS_CATEGORIA: Record<CategoriaHoy, string> = {
   vacaciones: "Vacaciones hoy",
 };
 
-const PERIODOS = [
-  ["mes", "Mes en curso"],
-  ["7", "Últimos 7 días"],
-  ["15", "Últimos 15 días"],
-  ["30", "Últimos 30 días"],
-] as const;
+function firstOfMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function buildQS(params: Record<string, string | undefined>) {
   const qs = new URLSearchParams();
@@ -47,8 +48,8 @@ export default function DashboardClient({
 }: { nombreUsuario: string; empresas: any[]; sectores: any[] }) {
   const [empresaId, setEmpresaId] = useState("");
   const [sectorId, setSectorId] = useState("");
-  const [periodoHoras, setPeriodoHoras] = useState("mes");
-  const [periodoExtra, setPeriodoExtra] = useState("mes");
+  const [desdeGraficos, setDesdeGraficos] = useState(firstOfMonth());
+  const [hastaGraficos, setHastaGraficos] = useState(today());
 
   const [resumen, setResumen] = useState<any | null>(null);
   const [cargandoResumen, setCargandoResumen] = useState(false);
@@ -59,7 +60,7 @@ export default function DashboardClient({
 
   const [categoriaHoy, setCategoriaHoy] = useState<CategoriaHoy | null>(null);
   const [detalleHoy, setDetalleHoy] = useState<any | null>(null);
-  const [sectorSeleccionado, setSectorSeleccionado] = useState<{ sectorId: string; periodo: string } | null>(null);
+  const [sectorSeleccionado, setSectorSeleccionado] = useState<{ sectorId: string; desde: string; hasta: string } | null>(null);
   const [detalleSector, setDetalleSector] = useState<any | null>(null);
 
   useEffect(() => {
@@ -71,14 +72,12 @@ export default function DashboardClient({
   }, [empresaId, sectorId]);
 
   useEffect(() => {
-    fetch(`/api/rrhh/dashboard/horas-por-sector${buildQS({ empresaId, periodo: periodoHoras })}`).then((r) => r.json()).then(setHorasSector);
+    fetch(`/api/rrhh/dashboard/horas-por-sector${buildQS({ empresaId, desde: desdeGraficos, hasta: hastaGraficos })}`)
+      .then((r) => r.json()).then(setHorasSector);
+    fetch(`/api/rrhh/dashboard/horas-extra-por-sector${buildQS({ empresaId, desde: desdeGraficos, hasta: hastaGraficos })}`)
+      .then((r) => r.json()).then(setHorasExtraSector);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empresaId, periodoHoras]);
-
-  useEffect(() => {
-    fetch(`/api/rrhh/dashboard/horas-extra-por-sector${buildQS({ empresaId, periodo: periodoExtra })}`).then((r) => r.json()).then(setHorasExtraSector);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empresaId, periodoExtra]);
+  }, [empresaId, desdeGraficos, hastaGraficos]);
 
   useEffect(() => {
     if (categoriaHoy === null) return;
@@ -90,7 +89,14 @@ export default function DashboardClient({
   useEffect(() => {
     if (!sectorSeleccionado) return;
     setDetalleSector(null);
-    fetch(`/api/rrhh/dashboard/detalle-sector${buildQS({ sectorId: sectorSeleccionado.sectorId, periodo: sectorSeleccionado.periodo, empresaId })}`)
+    fetch(
+      `/api/rrhh/dashboard/detalle-sector${buildQS({
+        sectorId: sectorSeleccionado.sectorId,
+        desde: sectorSeleccionado.desde,
+        hasta: sectorSeleccionado.hasta,
+        empresaId,
+      })}`
+    )
       .then((r) => r.json()).then(setDetalleSector);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectorSeleccionado]);
@@ -165,14 +171,21 @@ export default function DashboardClient({
         </div>
       </div>
 
+      <div className="flex gap-4 mb-6 card p-4 items-end">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Gráficos desde</label>
+          <input type="date" value={desdeGraficos} onChange={(e) => setDesdeGraficos(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+          <input type="date" value={hastaGraficos} onChange={(e) => setHastaGraficos(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+        </div>
+        <p className="text-xs text-gray-400 pb-2">Aplica a los 3 gráficos de abajo.</p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-medium text-gray-700">Horas trabajadas vs Teóricas por Sector</h2>
-            <select value={periodoHoras} onChange={(e) => setPeriodoHoras(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1 text-xs">
-              {PERIODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
+          <h2 className="font-medium text-gray-700 mb-3">Horas trabajadas vs Teóricas por Sector</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={horasSector ?? []}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -180,19 +193,14 @@ export default function DashboardClient({
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="horasTrabajadas" name="Trabajadas" fill="#0ea5e9" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoHoras })} cursor="pointer" />
-              <Bar dataKey="horasTeoricas" name="Teóricas" fill="#94a3b8" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoHoras })} cursor="pointer" />
+              <Bar dataKey="horasTrabajadas" name="Trabajadas" fill="#0ea5e9" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
+              <Bar dataKey="horasTeoricas" name="Teóricas" fill="#94a3b8" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-medium text-gray-700">Horas extra por Sector</h2>
-            <select value={periodoExtra} onChange={(e) => setPeriodoExtra(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1 text-xs">
-              {PERIODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
+          <h2 className="font-medium text-gray-700 mb-3">Horas extra por Sector</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={horasExtraSector ?? []}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -200,23 +208,18 @@ export default function DashboardClient({
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="horasExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoExtra })} cursor="pointer" />
-              <Bar dataKey="horasExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoExtra })} cursor="pointer" />
+              <Bar dataKey="horasExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
+              <Bar dataKey="horasExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className="card p-5 mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-medium text-gray-700 flex items-center gap-1.5">
-            Costo de horas extra por Sector ($)
-            <InfoTip text="Estimado a partir del valor hora normal de cada empleado y los multiplicadores configurados en Administración." />
-          </h2>
-          <select value={periodoExtra} onChange={(e) => setPeriodoExtra(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1 text-xs">
-            {PERIODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
+        <h2 className="font-medium text-gray-700 flex items-center gap-1.5 mb-3">
+          Costo de horas extra por Sector ($)
+          <InfoTip text="Estimado a partir del valor hora normal de cada empleado y los multiplicadores configurados en Administración." />
+        </h2>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={horasExtraSector ?? []}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -224,8 +227,8 @@ export default function DashboardClient({
             <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${Number(v).toLocaleString("es-AR")}`} />
             <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString("es-AR")}`} />
             <Legend />
-            <Bar dataKey="montoExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoExtra })} cursor="pointer" />
-            <Bar dataKey="montoExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, periodo: periodoExtra })} cursor="pointer" />
+            <Bar dataKey="montoExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
+            <Bar dataKey="montoExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
           </BarChart>
         </ResponsiveContainer>
       </div>

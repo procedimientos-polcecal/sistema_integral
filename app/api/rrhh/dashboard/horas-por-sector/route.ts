@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { empleadosPermitidos, idsOrDummy, periodoARango, agruparPorSector } from "@/lib/rrhh/dashboardHelpers";
+import { empleadosPermitidos, idsOrDummy, rangoDesdeHasta, agruparPorSector } from "@/lib/rrhh/dashboardHelpers";
 import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const empresaId = url.searchParams.get("empresaId");
-  const { desde, hasta } = periodoARango(url.searchParams.get("periodo"));
+  const { desde, hasta } = rangoDesdeHasta(url.searchParams);
 
   const empleados = await empleadosPermitidos(supabase, { empresaId });
   const porSector = agruparPorSector(empleados);
