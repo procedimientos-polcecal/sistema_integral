@@ -1,6 +1,12 @@
 // Migra a Supabase los datos reales que Karen siguió cargando en APPRRHH
-// (Neon/Postgres) después del import inicial de Fase 2: marcaciones,
-// ausencias/licencias, vacaciones, y las horas corregidas a mano.
+// (Neon/Postgres) después del import inicial de Fase 2: modalidad de pago,
+// marcaciones, ausencias/licencias, vacaciones, y las horas corregidas a mano.
+//
+// Se puede correr todas las veces que haga falta: cada paso REEMPLAZA el rango
+// que trae (no acumula), así que volver a correrlo con datos nuevos en APPRRHH
+// deja el SdG al día sin duplicar nada. Lo que se cargó a mano en el SdG dentro
+// de ese rango se pierde: la base vieja es la fuente de verdad mientras las dos
+// convivan.
 //
 // Uso:
 //   DATABASE_URL="postgresql://..." npx tsx migrate.mts            (dry-run)
@@ -61,6 +67,34 @@ async function main() {
     neonIdToUserId.set(u.id, emailToSbUserId.get(u.email) ?? adminSistemaId ?? "");
   }
 
+  // ── 1.5 Modalidad de pago (Employee.modalidadPago → empleados) ──────
+  // La columna existe en APPRRHH desde su migración 20260731_add_modalidad_pago.
+  // Si la base vieja es anterior, no está y se saltea el paso.
+  const { rows: tieneModalidad } = await neon.query(
+    `select 1 from information_schema.columns where table_name = 'Employee' and column_name = 'modalidadPago'`
+  );
+  if (tieneModalidad.length === 0) {
+    console.log("\nModalidad de pago: la base vieja no tiene la columna, se saltea (todos quedan JORNAL)");
+  } else {
+    const { rows: modalidades } = await neon.query('select legajo, "modalidadPago" from "Employee"');
+    const porModalidad = { JORNAL: [] as string[], MENSUAL: [] as string[] };
+    for (const m of modalidades) {
+      if (!legajoToSbId.has(m.legajo)) continue;
+      (m.modalidadPago === "MENSUAL" ? porModalidad.MENSUAL : porModalidad.JORNAL).push(m.legajo);
+    }
+    console.log(
+      `\nModalidad de pago en Neon: ${porModalidad.MENSUAL.length} MENSUAL, ${porModalidad.JORNAL.length} JORNAL`
+    );
+    if (porModalidad.MENSUAL.length) console.log("  mensuales:", porModalidad.MENSUAL.join(", "));
+    if (APPLY) {
+      for (const [modalidad, legajos] of Object.entries(porModalidad)) {
+        if (!legajos.length) continue;
+        const { error } = await sb.from("empleados").update({ modalidad_pago: modalidad }).in("legajo", legajos);
+        if (error) throw new Error(`Actualizando modalidad ${modalidad}: ` + error.message);
+      }
+    }
+  }
+
   // ── 2. Fichadas (TimeRecord → fichadas) ─────────────────────────────
   const { rows: timeRecords } = await neon.query(
     'select id, "employeeId", fecha, "horaEntrada", "horaSalida", origen, observaciones from "TimeRecord" order by fecha'
@@ -102,47 +136,103 @@ async function main() {
   console.log(`\nAusencias/Licencias en Neon: ${absences.length} (${ausenciaDesde} → ${ausenciaHasta})`);
 
   const empleadosConAusencias = [...new Set(absences.map((r) => neonIdToEmpleadoId.get(r.employeeId)).filter(Boolean))] as string[];
-  const ausenciaRows = absences
-    .filter((r) => r.tipo !== "VACACIONES" && neonIdToEmpleadoId.has(r.employeeId))
-    .map((r) => ({
-      empleado_id: neonIdToEmpleadoId.get(r.employeeId),
-      fecha_desde: fechaStr(r.fechaDesde),
-      fecha_hasta: fechaStr(r.fechaHasta),
-      tipo: r.tipo,
-      justificada: r.justificada,
-      observaciones: r.observaciones,
-      cargado_por_id: neonIdToUserId.get(r.cargadoPorId) || adminSistemaId,
-    }));
-  const vacacionRows = absences
-    .filter((r) => r.tipo === "VACACIONES" && neonIdToEmpleadoId.has(r.employeeId))
-    .map((r) => {
-      const desde = new Date(r.fechaDesde);
-      const hasta = new Date(r.fechaHasta);
-      const dias = Math.round((hasta.getTime() - desde.getTime()) / 86400000) + 1;
-      return {
-        empleado_id: neonIdToEmpleadoId.get(r.employeeId),
-        anio_correspondiente: desde.getUTCFullYear(),
-        fecha_desde: fechaStr(desde),
-        fecha_hasta: fechaStr(hasta),
-        dias_tomados: dias,
-        observaciones: r.observaciones,
-      };
-    });
-  console.log(`  -> ${ausenciaRows.length} van a "ausencias", ${vacacionRows.length} van a "vacaciones" (tipo VACACIONES)`);
+
+  // TODAS las ausencias van a "ausencias", incluidas las de tipo VACACIONES.
+  // En el modelo nuevo conviven con su período de vacaciones: el recálculo le da
+  // prioridad a la vacación, así que el día no queda marcado como falta.
+  const absencesMatcheadas = absences.filter((r) => neonIdToEmpleadoId.has(r.employeeId));
+  const ausenciaRows = absencesMatcheadas.map((r) => ({
+    empleado_id: neonIdToEmpleadoId.get(r.employeeId),
+    fecha_desde: fechaStr(r.fechaDesde),
+    fecha_hasta: fechaStr(r.fechaHasta),
+    tipo: r.tipo,
+    justificada: r.justificada,
+    observaciones: r.observaciones,
+    cargado_por_id: neonIdToUserId.get(r.cargadoPorId) || adminSistemaId,
+  }));
+
+  // Los períodos de vacaciones salen de la tabla VacationPeriod, que es la que
+  // tiene el AÑO CORRESPONDIENTE explícito. Derivarlo de la fecha de inicio
+  // (como se hacía antes) manda mal las vacaciones adeudadas de años
+  // anteriores, que es justo el caso que la app de origen arregló.
+  //
+  // `absenceId` lo agregó su migración 20260730_link_vacation_period_to_absence,
+  // distinta de la de modalidad de pago: se chequea por separado.
+  const { rows: tieneAbsenceId } = await neon.query(
+    `select 1 from information_schema.columns where table_name = 'VacationPeriod' and column_name = 'absenceId'`
+  );
+  if (tieneAbsenceId.length === 0) {
+    console.log('  (la base vieja no vincula períodos con ausencias: se derivan todos)');
+  }
+  const { rows: periodos } = await neon.query(
+    `select id, "employeeId", "anioCorrespondiente", "fechaDesde", "fechaHasta", "diasTomados", observaciones,
+            ${tieneAbsenceId.length ? '"absenceId"' : 'null as "absenceId"'}
+     from "VacationPeriod" order by "fechaDesde"`
+  );
+  const periodosMatcheados = periodos.filter((p) => neonIdToEmpleadoId.has(p.employeeId));
+
+  // Una ausencia de VACACIONES sin período que la apunte es de antes de que la
+  // app de origen los vinculara: se le deriva uno, para no perder el descuento
+  // del balance. El año sale de la fecha de inicio, que es lo mejor que hay.
+  const absencesConPeriodo = new Set(periodosMatcheados.map((p) => p.absenceId).filter(Boolean));
+  const vacacionesHuerfanas = absencesMatcheadas.filter(
+    (r) => r.tipo === "VACACIONES" && !absencesConPeriodo.has(r.id)
+  );
+
+  console.log(`  -> ${ausenciaRows.length} van a "ausencias" (todas, incluidas las de VACACIONES)`);
+  console.log(`  -> ${periodosMatcheados.length} períodos desde "VacationPeriod" (${absencesConPeriodo.size} vinculados a una ausencia)`);
+  console.log(`  -> ${vacacionesHuerfanas.length} ausencias de VACACIONES sin período: se les deriva uno`);
 
   if (APPLY) {
+    // Borrar ausencias primero: el on delete cascade se lleva los períodos
+    // vinculados. Después se limpian los períodos sueltos que queden en rango.
     const { error: eDelA } = await sb.from("ausencias").delete().in("empleado_id", empleadosConAusencias).gte("fecha_desde", ausenciaDesde).lte("fecha_hasta", ausenciaHasta);
     if (eDelA) throw new Error("Borrando ausencias viejas: " + eDelA.message);
-    if (ausenciaRows.length) {
-      const { error } = await sb.from("ausencias").insert(ausenciaRows);
-      if (error) throw new Error("Insertando ausencias: " + error.message);
-    }
     const { error: eDelV } = await sb.from("vacaciones").delete().in("empleado_id", empleadosConAusencias).gte("fecha_desde", ausenciaDesde).lte("fecha_hasta", ausenciaHasta);
     if (eDelV) throw new Error("Borrando vacaciones viejas: " + eDelV.message);
+
+    // Se insertan pidiendo el id de vuelta para poder rearmar el vínculo. El
+    // orden de las filas devueltas es el de las enviadas.
+    const neonAbsenceIds: string[] = absencesMatcheadas.map((r) => r.id);
+    const ausenciaIdPorNeonId = new Map<string, string>();
+    if (ausenciaRows.length) {
+      const { data: insertadas, error } = await sb.from("ausencias").insert(ausenciaRows).select("id");
+      if (error) throw new Error("Insertando ausencias: " + error.message);
+      if ((insertadas ?? []).length !== neonAbsenceIds.length) {
+        throw new Error(`Se insertaron ${insertadas?.length} ausencias de ${neonAbsenceIds.length}: no se puede rearmar el vínculo con vacaciones`);
+      }
+      (insertadas ?? []).forEach((fila, i) => ausenciaIdPorNeonId.set(neonAbsenceIds[i], fila.id));
+    }
+
+    const vacacionRows = [
+      ...periodosMatcheados.map((p) => ({
+        empleado_id: neonIdToEmpleadoId.get(p.employeeId),
+        anio_correspondiente: p.anioCorrespondiente,
+        fecha_desde: fechaStr(p.fechaDesde),
+        fecha_hasta: fechaStr(p.fechaHasta),
+        dias_tomados: p.diasTomados,
+        observaciones: p.observaciones,
+        ausencia_id: p.absenceId ? ausenciaIdPorNeonId.get(p.absenceId) ?? null : null,
+      })),
+      ...vacacionesHuerfanas.map((r) => {
+        const desde = new Date(r.fechaDesde);
+        const hasta = new Date(r.fechaHasta);
+        return {
+          empleado_id: neonIdToEmpleadoId.get(r.employeeId),
+          anio_correspondiente: desde.getUTCFullYear(),
+          fecha_desde: fechaStr(desde),
+          fecha_hasta: fechaStr(hasta),
+          dias_tomados: Math.round((hasta.getTime() - desde.getTime()) / 86400000) + 1,
+          observaciones: r.observaciones,
+          ausencia_id: ausenciaIdPorNeonId.get(r.id) ?? null,
+        };
+      }),
+    ];
     if (vacacionRows.length) {
       const { error } = await sb.from("vacaciones").insert(vacacionRows);
       if (error) throw new Error("Insertando vacaciones: " + error.message);
     }
+    console.log(`  -> ${vacacionRows.length} períodos de vacaciones insertados`);
   }
 
   // ── 4. Correcciones manuales de Karen (DailyCalculation.horasManual) ─

@@ -110,3 +110,75 @@ sin tests. Se cubrió después (`a40fe5e`, `lib/rrhh/planillaGeneral.test.ts`, 1
 casos sobre `diasSuperpuestos` y `diasHabilesSuperpuestos`). El resto de
 `calcularPlanillaGeneral` —el armado de las filas y los montos— sigue sin
 cobertura: se ejercita solo abriendo la pantalla.
+
+## Traer los datos que quedaron en APPRRHH
+
+Mientras las dos apps convivan, la base vieja (Neon/Postgres) sigue siendo la
+fuente de verdad. El importador es `scripts/migrate-apprrhh/migrate.mts` y se
+puede correr **todas las veces que haga falta**: cada paso reemplaza el rango
+que trae, no acumula.
+
+Hace falta el `DATABASE_URL` de la base de APPRRHH (el connection string de
+Neon; no está en `.env.local` ni en Vercel a propósito, se pasa por línea de
+comandos). Del SdG toma las credenciales de `.env.local`.
+
+```bash
+cd scripts/migrate-apprrhh && npm install
+```
+
+Primero reconocer qué hay del otro lado:
+
+```bash
+DATABASE_URL="postgresql://..." node scripts/migrate-apprrhh/explorar.mjs
+```
+
+Después el ensayo, que no escribe nada y lista exactamente lo que va a pasar
+—incluidos los empleados que no matchean por legajo y quiénes están marcados
+como mensuales:
+
+```bash
+DATABASE_URL="postgresql://..." npx tsx scripts/migrate-apprrhh/migrate.mts
+```
+
+Y recién cuando el ensayo cierre:
+
+```bash
+DATABASE_URL="postgresql://..." npx tsx scripts/migrate-apprrhh/migrate.mts --apply
+```
+
+### Qué trae, en orden
+
+1. **Modalidad de pago** — `Employee.modalidadPago` → `empleados.modalidad_pago`.
+   Es la forma de marcar los mensuales sin decidirlo a mano: si están
+   clasificados en APPRRHH, vienen de ahí. Si la base vieja no tiene la columna
+   (es anterior a su migración del 31/07), el paso se saltea y quedan todos en
+   jornal.
+2. **Fichadas** — `TimeRecord` → `fichadas`, reemplazando el rango completo de
+   fechas que trae el archivo, por empleado.
+3. **Ausencias y vacaciones** — `Absence` → `ausencias` (**todas**, incluidas
+   las de tipo Vacaciones) y `VacationPeriod` → `vacaciones`, rearmando el
+   vínculo `ausencia_id`. A una ausencia de Vacaciones sin período que la apunte
+   se le deriva uno, para no perder el descuento del balance.
+4. **Correcciones a mano** — los `DailyCalculation` con `horasManual = true`
+   entran como `horas_manual = true`, así el recálculo no los pisa.
+5. **Recálculo** — de todo el padrón activo sobre el rango completo, que es lo
+   que regenera `calculos_diarios` y los francos compensatorios.
+
+Los francos no se copian: se regeneran solos en el paso 5, porque salen de los
+domingos y feriados trabajados.
+
+### Ojo con esto
+
+**Lo cargado a mano en el SdG dentro del rango importado se pierde.** Los pasos
+2 y 3 borran y reinsertan. Mientras Karen siga cargando en la app vieja está
+bien; el día que se corte y se empiece a cargar sólo acá, este script no se
+corre más.
+
+**El match es por legajo.** Un legajo que exista en APPRRHH y no en el SdG queda
+afuera y el dry-run lo lista en `SIN MATCH`. Hay que revisar esa lista antes de
+aplicar.
+
+**Los pasos 1 y 3 no se probaron contra la base real**, porque se escribieron
+sin acceso al `DATABASE_URL` de Neon. Se pusieron detrás de la detección de
+columnas y del dry-run justamente por eso: el ensayo tiene que mostrar números
+que cierren antes de aplicar.
