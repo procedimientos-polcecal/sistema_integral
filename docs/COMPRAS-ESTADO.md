@@ -87,6 +87,7 @@ Tiene un modelo de permisos propio y la cuenta de servicio no lo puede sortear:
   "APROBACIÓN DE GERENCIA", pero la cuenta de servicio pasa: verificado el
   26/08/2026, RI 1048, 1841 y 1860 |
 | Estado de compra de una fila aprobada | Protegida — 841 protecciones automáticas |
+| Comparativa y estado en las hojas por área | Protegidas para la cuenta de servicio. Se destraba corriendo `compras-permisos-apps-script.gs` en la planilla |
 | Prioridad, empresa, proveedor, costos | Se escriben sin problema |
 
 Por eso **cada celda se escribe por separado**: con un lote único, una celda
@@ -202,10 +203,19 @@ un dato": había que mirar qué texto guardó cada origen.
 3. **`Autoelevador HCMG` es un error de tipeo de `XCMG`** (2 RI). Se fusiona
    desde `/compras/ubicaciones`, pero conviene corregirlo también en la planilla
    o la sincronización lo recrea.
-4. **54 rutas de RRHH y Remises no validan sesión por su cuenta** y dependen del
+4. **Darle permiso a la cuenta de servicio sobre los rangos protegidos.** Es lo
+   único que separa a los dos lados de decir lo mismo. Al 27/08/2026 hay 12 RI
+   con escrituras rechazadas: la columna `COMPARATIVA PROVEEDORES` en RI ALMACÉN,
+   RI PRODUCCIÓN y RI TALLER VIAL, y la de `ESTADO` en RI MANTENIMIENTO y RI
+   TALLER VIAL. Se corre `docs/compras-permisos-apps-script.gs` una vez desde la
+   planilla y después Reintentar. Ojo: si un script crea una protección al
+   aprobar cada RI, hay que agregarle `addEditor(cuenta)` ahí o el problema
+   vuelve de a poco.
+
+5. **54 rutas de RRHH y Remises no validan sesión por su cuenta** y dependen del
    middleware. Hoy ninguna usa el cliente admin, así que RLS las cubre, pero
    conviene revisarlo con calma.
-5. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
+6. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
    era quién cargaba la prioridad sino el criterio, y eso se conversa.
 
 ## Dónde está cada cosa
