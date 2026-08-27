@@ -164,10 +164,18 @@ export function filaSiguienteSegunColumnaA(columnaA: string[][]): number {
 export async function agregarFila(
   fileId: string,
   pestana: string,
-  valores: string[]
+  // Recibe la fila para poder armar las fórmulas con el número correcto.
+  //
+  // Antes tomaba los valores ya hechos y el llamador calculaba la fila por su
+  // cuenta con `filas.length + 2`. Las dos cuentas no coincidían: la fórmula
+  // del total del RI 1865 quedó apuntando a la fila 1001 mientras el
+  // presupuesto se escribía en la 1003. Pasando la función, es imposible que
+  // difieran.
+  armarValores: (fila: number) => string[]
 ): Promise<number> {
   const token = await obtenerToken([SCOPE_SHEETS]);
   const fila = await proximaFilaLibre(token, fileId, pestana);
+  const valores = armarValores(fila);
 
   // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
   // más chico, Google rechaza la escritura entera.

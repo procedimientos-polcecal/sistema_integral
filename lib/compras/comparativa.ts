@@ -285,6 +285,39 @@ export interface CotizacionLeida {
   comentario: string | null;
 }
 
+/**
+ * La fecha como la escribe una persona: 24/08/2026.
+ *
+ * Lo que llega es lo que guarda Postgres —"2026-08-24T00:00:00+00:00"— y eso en
+ * la planilla se lee como un dato de sistema, no como una fecha. Se toman los
+ * primeros diez caracteres y se dan vuelta: sin `new Date()`, que interpretaría
+ * la zona horaria y podría correr un día.
+ */
+export function fechaCorta(valor: string | null | undefined): string {
+  if (!valor) return "";
+  const m = String(valor).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(valor);
+}
+
+/**
+ * Con qué multiplicar los montos para que queden en pesos.
+ *
+ * Devuelve null cuando el presupuesto está en dólares y no hay cotización: ahí
+ * el monto no se escribe. Un número en dólares en una planilla que suma pesos
+ * gana cualquier comparación por ser diez veces más chico.
+ */
+export function enPesos(moneda: string | null | undefined, dolar: number | null | undefined): number | null {
+  if ((moneda ?? "ARS") !== "USD") return 1;
+  return dolar && dolar > 0 ? dolar : null;
+}
+
+/** Un monto convertido, listo para la celda. Vacío si no se puede convertir. */
+export function montoParaLaPlanilla(monto: number | null, aPesos: number | null): string {
+  if (monto === null || monto === undefined) return "";
+  if (aPesos === null) return "";
+  return String(Math.round(monto * aPesos * 100) / 100);
+}
+
 /** Una fila de la planilla como presupuesto. `null` si no lo es. */
 export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null {
   const en = (c: ClaveColumna) => (idx[c] >= 0 ? fila[idx[c]] : undefined);
@@ -334,6 +367,16 @@ export function filaParaPlanilla(args: {
   area: string | null;
   descripcion: string | null;
   cotizacion: CotizacionLeida;
+  /**
+   * En qué moneda se cargó el presupuesto y con qué dólar convertirlo.
+   *
+   * La planilla es toda en pesos: si se escribe un unitario en dólares, la
+   * fórmula del total lo suma con los presupuestos en pesos y la comparación
+   * queda sin sentido. Sin cotización el precio no se escribe: un número en la
+   * moneda equivocada es peor que una celda vacía.
+   */
+  moneda?: string | null;
+  dolar?: number | null;
 }): string[] {
   const { idx, numeroFila: n, nroRi, cotizacion: c } = args;
   const fila: string[] = new Array(COLUMNAS_COMPARATIVA.length).fill("");
@@ -345,15 +388,18 @@ export function filaParaPlanilla(args: {
   const col = (clave: ClaveColumna) => letraColumna(idx[clave]);
 
   poner("nro_ri", String(nroRi));
-  poner("fecha", args.fecha ?? "");
+  // La planilla la lee gente, no un parser: "24/08/2026" y no
+  // "2026-08-24T00:00:00+00:00", que es lo que venía guardado.
+  poner("fecha", fechaCorta(args.fecha));
   poner("area", args.area ?? "");
   poner("descripcion", args.descripcion ?? "");
   poner("proveedor", c.proveedor_nombre);
   poner("marca", c.marca ?? "");
   poner("unidad_medida", c.unidad_medida ?? "");
-  poner("precio_unitario", c.precio_unitario === null ? "" : String(c.precio_unitario));
+  const aPesos = enPesos(args.moneda, args.dolar);
+  poner("precio_unitario", montoParaLaPlanilla(c.precio_unitario, aPesos));
   poner("cantidad", c.cantidad === null ? "" : String(c.cantidad));
-  poner("envio", c.costo_envio === null ? "" : String(c.costo_envio));
+  poner("envio", montoParaLaPlanilla(c.costo_envio, aPesos));
   poner("descuento", porcentaje(c.descuento));
   poner("iva", porcentaje(c.iva));
   poner("precio_hasta", c.precio_hasta ?? "");
@@ -364,12 +410,27 @@ export function filaParaPlanilla(args: {
   poner("eleccion", "FALSE");
 
   if (idx.precio_total >= 0 && idx.precio_unitario >= 0) {
-    poner(
-      "precio_total",
-      `=${col("precio_unitario")}${n}*${col("cantidad")}${n}` +
-        `*(1-${col("descuento")}${n})*(1+${col("iva")}${n})` +
-        `+${col("envio")}${n}`
-    );
+    // Sólo se nombran las columnas que esa planilla tiene.
+    //
+    // Antes se armaba con todas y `letraColumna(-1)` devolvía "@" para las que
+    // faltaban: en las comparativas viejas, sin columna de ENVÍO, la fórmula
+    // salía "...+@1001" y Excel la marcaba como error. Una columna que no está
+    // no aporta al total, así que no tiene por qué figurar.
+    const parte = (clave: ClaveColumna) => (idx[clave] >= 0 ? `${col(clave)}${n}` : null);
+
+    const unitario = parte("precio_unitario")!;
+    const cantidad = parte("cantidad");
+    const descuento = parte("descuento");
+    const iva = parte("iva");
+    const envio = parte("envio");
+
+    let formula = `=${unitario}`;
+    if (cantidad) formula += `*${cantidad}`;
+    if (descuento) formula += `*(1-${descuento})`;
+    if (iva) formula += `*(1+${iva})`;
+    if (envio) formula += `+${envio}`;
+
+    poner("precio_total", formula);
   }
 
   return fila;

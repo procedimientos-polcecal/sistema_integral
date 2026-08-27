@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { leerComparativa, agregarFila } from "@/lib/compras/drive";
+import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { mapearEncabezados, filaParaPlanilla } from "@/lib/compras/comparativa";
 
 const CAMPOS = [
@@ -121,18 +122,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           "El presupuesto se guardó, pero la planilla no tiene la forma esperada " +
           `(faltan ${mapeo.faltan.join(", ")}): no se escribió ahí.`;
       } else {
-        // La fórmula del total necesita el número de fila, y ese número se
-        // conoce recién al escribir: se calcula el que va a tocar.
-        const proximaFila = planilla.filas.length + 2;
         const area = ri.compras_areas as unknown as { nombre: string } | null;
 
-        const fila = filaParaPlanilla({
+        // La planilla es toda en pesos: si el presupuesto se cargó en dólares
+        // hay que convertirlo, o la fórmula del total lo suma con los que están
+        // en pesos y el más barato pasa a ser el que está en otra moneda.
+        const dolar =
+          cotizacion.moneda === "USD"
+            ? cotizacion.cotizacion ?? (await cotizacionDeHoy())
+            : null;
+
+        // La fila la decide quien escribe, y la fórmula del total se arma con
+        // ese mismo número: antes se calculaban por separado y no coincidían.
+        const filaEscrita = await agregarFila(
+          ri.comparativa_drive_id,
+          planilla.pestana,
+          (numeroFila) => filaParaPlanilla({
           idx: mapeo.idx,
-          numeroFila: proximaFila,
+          numeroFila,
           nroRi: ri.nro_ri,
           fecha: ri.fecha,
           area: area?.nombre ?? null,
           descripcion: ri.descripcion,
+          moneda: cotizacion.moneda,
+          dolar,
           cotizacion: {
             proveedor_nombre: cotizacion.proveedores?.nombre ?? "",
             marca: cotizacion.marca,
@@ -148,9 +161,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             disponibilidad: cotizacion.disponibilidad,
             comentario: cotizacion.comentario,
           },
-        });
+          })
+        );
 
-        const filaEscrita = await agregarFila(ri.comparativa_drive_id, planilla.pestana, fila);
         await admin
           .from("compras_cotizaciones")
           .update({ drive_fila: filaEscrita })
