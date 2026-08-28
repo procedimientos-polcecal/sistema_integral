@@ -32,6 +32,15 @@
  *      No escribe nada: dice qué haría con cada planilla.
  *   4. Leer el informe (Ver -> Registros). Si está bien, poner SOLO_INFORMAR
  *      en false y volver a ejecutar.
+ *   5. Al aplicar trabaja cuatro minutos por corrida y corta solo, siempre
+ *      ENTRE planillas. Si dice que se cortó, ejecutar de nuevo: sigue donde
+ *      quedó. Repetir hasta que diga "Terminó el recorrido completo".
+ *
+ * LOS RESPALDOS
+ *
+ * Antes de tocar una planilla se saca una copia en una carpeta
+ * "RESPALDO COMPARATIVAS <fecha>", al lado de la carpeta de comparativas. Si la
+ * copia falla, esa planilla no se modifica.
  *
  * LO QUE NO PUEDE ARREGLAR
  *
@@ -84,6 +93,11 @@ var ALIAS = [
   ["ELECCIÓN", "ELECCION", "ELEGIDO"]
 ];
 
+// Cuántos minutos se trabaja por corrida antes de cortar solo. El límite de
+// Apps Script son 6 (30 en Workspace), así que 4 deja margen para terminar la
+// planilla que esté en curso.
+var MINUTOS_POR_CORRIDA = 4;
+
 var SALTO = String.fromCharCode(10);
 
 function ponerLasComparativasAlDia() {
@@ -99,14 +113,36 @@ function ponerLasComparativasAlDia() {
   var tocadas = 0;
   var salteadas = 0;
 
+  // Apps Script corta la ejecución a los 6 minutos (30 en Workspace). Con
+  // setenta planillas, cada una con su copia de respaldo, eso puede pasar —y
+  // cortarse en el medio de una dejaría las columnas a mitad de camino.
+  //
+  // Así que se corta antes, por decisión propia y sólo ENTRE planillas: nunca
+  // dentro de una. Lo hecho queda anotado y la próxima corrida sigue de ahí.
+  var comenzo = new Date().getTime();
+  var yaHechas = _yaHechas();
+  var corto = false;
+
   informe.push(SOLO_INFORMAR
     ? "=== MODO INFORME: no se escribe nada ==="
     : "=== APLICANDO CAMBIOS ===");
+
+  if (!SOLO_INFORMAR && yaHechas.length > 0) {
+    informe.push("Retomando: " + yaHechas.length + " planillas ya hechas en corridas anteriores.");
+  }
 
   while (archivos.hasNext()) {
     var archivo = archivos.next();
     var nombre = archivo.getName();
     cuantas++;
+
+    // Sólo al aplicar: en modo informe se recorre todo, que es el punto.
+    if (!SOLO_INFORMAR && yaHechas.indexOf(nombre) >= 0) continue;
+
+    if (!SOLO_INFORMAR && new Date().getTime() - comenzo > MINUTOS_POR_CORRIDA * 60 * 1000) {
+      corto = true;
+      break;
+    }
 
     informe.push("");
     informe.push("--------------------------------------");
@@ -121,7 +157,12 @@ function ponerLasComparativasAlDia() {
     try {
       var pasos = _ponerAlDia(archivo, informe);
       if (pasos > 0) tocadas++;
-      else informe.push("  ya estaba al día.");
+      else if (pasos === 0) informe.push("  ya estaba al día.");
+      else salteadas++;
+
+      // Se anota recién acá: si algo falló, no queda marcada como hecha y la
+      // próxima corrida la vuelve a intentar.
+      if (!SOLO_INFORMAR) _anotarHecha(nombre);
     } catch (err) {
       informe.push("  ERROR: " + err.message + " — no se modificó.");
       salteadas++;
@@ -136,6 +177,15 @@ function ponerLasComparativasAlDia() {
   if (SOLO_INFORMAR) {
     informe.push("");
     informe.push("Para aplicarlo: poner SOLO_INFORMAR en false y ejecutar de nuevo.");
+  } else if (corto) {
+    informe.push("");
+    informe.push("SE CORTÓ POR TIEMPO, entre planillas y no dentro de una.");
+    informe.push("Ninguna quedó a medio hacer. Ejecutar de nuevo para seguir:");
+    informe.push("arranca donde quedó, no repite lo hecho.");
+  } else {
+    informe.push("");
+    informe.push("Terminó el recorrido completo.");
+    informe.push("Para volver a empezar de cero, ejecutar `olvidarLoHecho`.");
   }
 
   var texto = informe.join(SALTO);
@@ -169,7 +219,9 @@ function _ponerAlDia(archivo, informe) {
   for (var k = 0; k < imprescindibles.length; k++) {
     if (actual.indexOf(imprescindibles[k]) < 0) {
       informe.push("  no parece una comparativa (falta " + MODELO[imprescindibles[k]] + "): no se toca.");
-      return 0;
+      // -1 y no 0: el llamador distingue "no hacía falta" de "no se pudo", que
+      // antes salían las dos como "ya estaba al día".
+      return -1;
     }
   }
 
@@ -194,8 +246,11 @@ function _ponerAlDia(archivo, informe) {
   // El respaldo va antes del primer cambio, y sólo si hay algo que cambiar.
   var necesitaMover = _necesitaMover(actual);
   if ((cambios > 0 || necesitaMover) && !SOLO_INFORMAR) {
-    var copia = archivo.makeCopy("RESPALDO " + _hoy() + " — " + archivo.getName());
-    informe.push("  respaldo: " + copia.getName());
+    // A una carpeta y no a la raíz: son setenta planillas, y setenta copias
+    // sueltas en "Mi unidad" son peor que no tener respaldo, porque nadie las
+    // encuentra cuando las necesita.
+    archivo.makeCopy(archivo.getName(), _carpetaDeRespaldos());
+    informe.push("  respaldo hecho");
   }
 
   // 1) Los nombres.
@@ -292,4 +347,43 @@ function _letra(n) {
 
 function _hoy() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+/**
+ * La carpeta donde van los respaldos, creada una sola vez por día.
+ *
+ * Setenta copias sueltas en "Mi unidad" son peor que no tener respaldo: nadie
+ * las encuentra el día que las necesita.
+ */
+function _carpetaDeRespaldos() {
+  var nombre = "RESPALDO COMPARATIVAS " + _hoy();
+  var padre = DriveApp.getFolderById(CARPETA_COMPARATIVAS).getParents();
+  var donde = padre.hasNext() ? padre.next() : DriveApp.getRootFolder();
+
+  var existentes = donde.getFoldersByName(nombre);
+  return existentes.hasNext() ? existentes.next() : donde.createFolder(nombre);
+}
+
+/** Qué planillas ya se hicieron, para no repetirlas si la corrida se cortó. */
+function _yaHechas() {
+  var guardado = PropertiesService.getScriptProperties().getProperty("comparativas_hechas");
+  return guardado ? JSON.parse(guardado) : [];
+}
+
+function _anotarHecha(nombre) {
+  var hechas = _yaHechas();
+  if (hechas.indexOf(nombre) < 0) hechas.push(nombre);
+  PropertiesService.getScriptProperties()
+    .setProperty("comparativas_hechas", JSON.stringify(hechas));
+}
+
+/**
+ * Borra la memoria de lo hecho, para volver a recorrer todo.
+ *
+ * Hace falta sólo si se quiere reprocesar planillas que ya se pusieron al día.
+ * Ejecutarla no modifica ninguna planilla.
+ */
+function olvidarLoHecho() {
+  PropertiesService.getScriptProperties().deleteProperty("comparativas_hechas");
+  Logger.log("Listo: la próxima corrida vuelve a recorrer todas las planillas.");
 }
