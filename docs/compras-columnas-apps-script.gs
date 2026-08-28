@@ -36,6 +36,14 @@
  *      ENTRE planillas. Si dice que se cortó, ejecutar de nuevo: sigue donde
  *      quedó. Repetir hasta que diga "Terminó el recorrido completo".
  *
+ * SI YA CORRISTE Y EL FORMATO QUEDÓ MAL
+ *
+ * insertColumnBefore hereda el formato de la columna que desplaza, así que
+ * COMENTARIO, insertada donde estaba ELECCIÓN, quedó con sus casillas de
+ * verificación, y ENVÍO pudo quedar con el formato de porcentaje de DESCUENTO.
+ * Para las planillas ya procesadas: ejecutar `arreglarElFormatoDeLoInsertado`,
+ * que sólo toca el formato de esas dos columnas y no mueve nada.
+ *
  * LOS RESPALDOS
  *
  * Antes de tocar una planilla se saca una copia en una carpeta
@@ -120,7 +128,7 @@ function ponerLasComparativasAlDia() {
   // Así que se corta antes, por decisión propia y sólo ENTRE planillas: nunca
   // dentro de una. Lo hecho queda anotado y la próxima corrida sigue de ahí.
   var comenzo = new Date().getTime();
-  var yaHechas = _yaHechas();
+  var yaHechas = _yaHechas("columnas_hechas");
   var corto = false;
 
   informe.push(SOLO_INFORMAR
@@ -162,7 +170,7 @@ function ponerLasComparativasAlDia() {
 
       // Se anota recién acá: si algo falló, no queda marcada como hecha y la
       // próxima corrida la vuelve a intentar.
-      if (!SOLO_INFORMAR) _anotarHecha(nombre);
+      if (!SOLO_INFORMAR) _anotarHecha("columnas_hechas", nombre);
     } catch (err) {
       informe.push("  ERROR: " + err.message + " — no se modificó.");
       salteadas++;
@@ -316,6 +324,7 @@ function _ponerAlDia(archivo, informe) {
       if (!SOLO_INFORMAR) {
         hoja.insertColumnBefore(destino + 1);
         hoja.getRange(1, destino + 1).setValue(MODELO[destino]);
+        _formatoDeColumnaNueva(hoja, destino);
       }
       actual.splice(destino, 0, destino);
       continue;
@@ -405,17 +414,22 @@ function _carpetaDeRespaldos() {
   return existentes.hasNext() ? existentes.next() : donde.createFolder(nombre);
 }
 
-/** Qué planillas ya se hicieron, para no repetirlas si la corrida se cortó. */
-function _yaHechas() {
-  var guardado = PropertiesService.getScriptProperties().getProperty("comparativas_hechas");
+/**
+ * Qué planillas ya se hicieron, para no repetirlas si la corrida se cortó.
+ *
+ * Con clave, porque hay dos tareas —reordenar columnas y corregir formato— y
+ * cada una recuerda lo suyo: terminar una no tiene que hacer creer a la otra
+ * que ya está hecha.
+ */
+function _yaHechas(clave) {
+  var guardado = PropertiesService.getScriptProperties().getProperty(clave);
   return guardado ? JSON.parse(guardado) : [];
 }
 
-function _anotarHecha(nombre) {
-  var hechas = _yaHechas();
+function _anotarHecha(clave, nombre) {
+  var hechas = _yaHechas(clave);
   if (hechas.indexOf(nombre) < 0) hechas.push(nombre);
-  PropertiesService.getScriptProperties()
-    .setProperty("comparativas_hechas", JSON.stringify(hechas));
+  PropertiesService.getScriptProperties().setProperty(clave, JSON.stringify(hechas));
 }
 
 /**
@@ -425,6 +439,144 @@ function _anotarHecha(nombre) {
  * Ejecutarla no modifica ninguna planilla.
  */
 function olvidarLoHecho() {
-  PropertiesService.getScriptProperties().deleteProperty("comparativas_hechas");
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty("columnas_hechas");
+  props.deleteProperty("formato_hechas");
   Logger.log("Listo: la próxima corrida vuelve a recorrer todas las planillas.");
+}
+
+// ── El formato de las columnas que se insertan ───────────────
+//
+// De qué columna copiar el formato de cada una que se inserta. Se elige una
+// hermana del mismo tipo de dato en vez de inventar un formato:
+//
+//   ENVÍO es un monto      -> como PRECIO UNITARIO
+//   COMENTARIO es texto    -> como DESCRIPCION
+//
+// Hace falta porque insertColumnBefore hereda el formato de la columna que
+// desplaza, y eso salió mal: COMENTARIO se insertó donde estaba ELECCIÓN y
+// quedó con sus casillas de verificación. ENVÍO, insertada donde estaba
+// DESCUENTO, podía quedar con formato de porcentaje: un monto mostrado como
+// porcentaje se lee cien veces más chico.
+var HERMANA = {
+  9: 7,    // ENVÍO -> PRECIO UNITARIO
+  17: 3    // COMENTARIO -> DESCRIPCION
+};
+
+/**
+ * Deja la columna recién insertada sin nada heredado, y con el formato de su
+ * hermana si tiene una.
+ *
+ * `destino` es el índice en el modelo, base 0.
+ */
+function _formatoDeColumnaNueva(hoja, destino) {
+  var filas = hoja.getMaxRows();
+  var nueva = hoja.getRange(1, destino + 1, filas, 1);
+
+  // Lo heredado se va: las casillas de verificación son validación de datos, y
+  // el resto —moneda, porcentaje, colores— es formato.
+  nueva.clearDataValidations();
+  nueva.clearFormat();
+  nueva.clearNote();
+
+  var hermana = HERMANA[destino];
+  if (hermana === undefined) return;
+
+  // La hermana, después del reordenamiento, está en su lugar del modelo.
+  hoja.getRange(1, hermana + 1, filas, 1).copyFormatToRange(
+    hoja, destino + 1, destino + 1, 1, filas
+  );
+
+  // El encabezado se reescribe: copiar el formato trae también el texto de la
+  // primera fila en algunas versiones de Sheets.
+  hoja.getRange(1, destino + 1).setValue(MODELO[destino]);
+}
+
+/**
+ * Arregla el formato de las columnas que se insertaron en corridas anteriores.
+ *
+ * Las que ya se pusieron al día quedaron con COMENTARIO heredando las casillas
+ * de ELECCIÓN, y posiblemente ENVÍO heredando el porcentaje de DESCUENTO.
+ * Esto lo corrige sin volver a mover nada: sólo toca el formato de esas dos
+ * columnas, y sólo si el encabezado está donde tiene que estar.
+ *
+ * Se puede correr las veces que haga falta. Respeta SOLO_INFORMAR.
+ */
+function arreglarElFormatoDeLoInsertado() {
+  if (!CARPETA_COMPARATIVAS) {
+    throw new Error("Falta completar CARPETA_COMPARATIVAS con el ID de la carpeta de Drive.");
+  }
+
+  var archivos = DriveApp.getFolderById(CARPETA_COMPARATIVAS)
+    .getFilesByType(MimeType.GOOGLE_SHEETS);
+
+  var informe = [];
+  var comenzo = new Date().getTime();
+  var yaHechas = _yaHechas("formato_hechas");
+  var arregladas = 0;
+  var corto = false;
+
+  informe.push(SOLO_INFORMAR
+    ? "=== FORMATO — MODO INFORME: no se escribe nada ==="
+    : "=== FORMATO — APLICANDO ===");
+
+  while (archivos.hasNext()) {
+    var archivo = archivos.next();
+
+    if (!SOLO_INFORMAR && new Date().getTime() - comenzo > MINUTOS_POR_CORRIDA * 60 * 1000) {
+      corto = true;
+      break;
+    }
+
+    var nombre = archivo.getName();
+    if (EXCLUIDAS.indexOf(nombre) >= 0) continue;
+    // Los informes que este script deja en la carpeta no son comparativas.
+    if (nombre.indexOf("INFORME (") === 0) continue;
+    if (!SOLO_INFORMAR && yaHechas.indexOf(nombre) >= 0) continue;
+
+    try {
+      var hoja = SpreadsheetApp.openById(archivo.getId()).getSheets()[0];
+      var ancho = hoja.getLastColumn();
+      if (ancho < 19) continue;
+
+      var encabezado = hoja.getRange(1, 1, 1, ancho).getValues()[0];
+      var cuales = [];
+
+      // Sólo si la columna está donde el modelo dice: si no, esta planilla no
+      // pasó por el reordenamiento y no es esto lo que le hace falta.
+      for (var clave in HERMANA) {
+        var i = Number(clave);
+        if (_cual(encabezado[i]) === i) cuales.push(i);
+      }
+
+      if (cuales.length === 0) continue;
+
+      informe.push("");
+      informe.push(nombre);
+      for (var c = 0; c < cuales.length; c++) {
+        informe.push("  formato de " + MODELO[cuales[c]] + " (" + _letra(cuales[c] + 1) + ")");
+        if (!SOLO_INFORMAR) _formatoDeColumnaNueva(hoja, cuales[c]);
+      }
+      if (!SOLO_INFORMAR) _anotarHecha("formato_hechas", nombre);
+      arregladas++;
+    } catch (err) {
+      informe.push("");
+      informe.push(archivo.getName());
+      informe.push("  ERROR: " + err.message);
+    }
+  }
+
+  informe.push("");
+  informe.push("======================================");
+  informe.push("planillas con formato corregido: " + arregladas);
+  if (corto) informe.push("SE CORTÓ POR TIEMPO: ejecutar de nuevo para seguir.");
+
+  var texto = informe.join(SALTO);
+  Logger.log(texto);
+  try {
+    Logger.log("Informe completo: " + _guardarInforme(texto));
+  } catch (err) {
+    Logger.log("(no se pudo guardar el informe: " + err.message + ")");
+  }
+  return texto;
 }
