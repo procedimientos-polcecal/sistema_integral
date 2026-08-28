@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import FichaTecnica from "./FichaTecnica";
 import ComponentesYRepuestos from "./ComponentesYRepuestos";
+import ComprasDelEquipo, { type ComprasDelEquipoProps } from "./ComprasDelEquipo";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -45,11 +46,12 @@ function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undef
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
 }
 
-export default function EquipoDetalle({ equipo, sectores, historial, canEdit }: {
+export default function EquipoDetalle({ equipo, sectores, historial, canEdit, compras }: {
   equipo: any;
   sectores: any[];
   historial: any[];
   canEdit: boolean;
+  compras: Omit<ComprasDelEquipoProps, "equipoId">;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -349,6 +351,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit }: 
           </div>
         </section>
       )}
+
+      <ComprasDelEquipo equipoId={equipo.id} {...compras} />
 
       {statusModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

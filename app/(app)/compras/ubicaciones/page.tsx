@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
+import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import UbicacionesClient from "./UbicacionesClient";
 import type { UbicacionCompras } from "@/lib/compras/types";
 
@@ -12,11 +13,24 @@ export default async function UbicacionesPage() {
   const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const [{ data: ubicaciones }, { data: sectores }, { data: equipos }] =
+  const [{ data: ubicaciones }, sectores, { data: equipos }] =
     await Promise.all([
       supabase.from("compras_ubicaciones").select("*").order("orden").order("nombre"),
-      supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre"),
-      supabase.from("equipos").select("id, name, code").eq("is_active", true).order("code"),
+      // Sólo los sectores de planta: acá se elige dónde está una máquina, y
+      // "Calidad" o "Tesorería" no son lugares donde haya una. Es el sexto
+      // lugar donde faltaba el filtro que este helper existe para poner.
+      sectoresDePlanta<{ id: string; nombre: string; codigo: string | null }>(
+        supabase,
+        "id, nombre, codigo"
+      ),
+      // La marca y el modelo viajan porque sin ellos el desplegable es
+      // indecidible: Compras nombra "Doosan 225 n°1" y acá dice
+      // "EM3 — Retroexcavadora 3". Lo que las une está en la ficha técnica.
+      supabase
+        .from("equipos")
+        .select("id, name, code, marca, modelo")
+        .eq("is_active", true)
+        .order("code"),
     ]);
 
   // Cuántos requerimientos usa cada ubicación: decide si se puede borrar y cuál
@@ -41,7 +55,7 @@ export default async function UbicacionesPage() {
     <UbicacionesClient
       ubicaciones={(ubicaciones ?? []) as UbicacionCompras[]}
       conteo={conteo}
-      sectores={sectores ?? []}
+      sectores={sectores}
       equipos={equipos ?? []}
       canEdit={nivel === "edicion" || nivel === "admin"}
     />

@@ -10,6 +10,11 @@ import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
 import type { ResumenComparativa } from "./ModalAvanzar";
 import AprobarSinComparativa from "../AprobarSinComparativa";
+import {
+  ubicacionesDelEquipo,
+  ubicacionesDelSector,
+  type UbicacionEnlazada,
+} from "@/lib/compras/ubicaciones";
 import SelectorProveedor from "../SelectorProveedor";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
@@ -32,13 +37,16 @@ function nombreCorto(p: Persona): string {
 }
 
 export default function RequerimientosClient({
-  areas, proveedores, empresas, ubicaciones, aprobadores, usuarioId, canEdit,
-  filtrosIniciales, sync,
+  areas, proveedores, empresas, ubicaciones, equipos, sectores, aprobadores,
+  usuarioId, canEdit, filtrosIniciales, sync,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
   empresas: Opcion[];
-  ubicaciones: Opcion[];
+  ubicaciones: UbicacionEnlazada[];
+  /** Sólo los que tienen alguna ubicación enlazada. */
+  equipos: { id: string; code: string; name: string; marca?: string | null; modelo?: string | null }[];
+  sectores: { id: string; nombre: string; codigo: string | null }[];
   aprobadores: Persona[];
   usuarioId: string;
   canEdit: boolean;
@@ -67,6 +75,8 @@ export default function RequerimientosClient({
   const [empresa, setEmpresa] = useState(filtrosIniciales.empresa);
   const [proveedor, setProveedor] = useState(filtrosIniciales.proveedor);
   const [ubicacion, setUbicacion] = useState(filtrosIniciales.ubicacion);
+  const [equipo, setEquipo] = useState(filtrosIniciales.equipo);
+  const [sector, setSector] = useState(filtrosIniciales.sector);
 
   // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
   // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
@@ -87,7 +97,7 @@ export default function RequerimientosClient({
 
   useEffect(() => {
     setPagina(0);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion]);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -118,6 +128,11 @@ export default function RequerimientosClient({
     if (empresa) q = empresa === "AMBAS" ? q.is("empresa_id", null) : q.eq("empresa_id", empresa);
     if (proveedor) q = q.eq("proveedor_id", proveedor);
     if (ubicacion) q = q.eq("ubicacion_id", ubicacion);
+    // El equipo y el sector no están en el requerimiento: se resuelven contra
+    // el catálogo. La lista es de una o dos ubicaciones, muy lejos del `.in()`
+    // con mil ids que arma una URL que PostgREST rechaza.
+    if (equipo) q = q.in("ubicacion_id", ubicacionesDelEquipo(ubicaciones, equipo));
+    if (sector) q = q.in("ubicacion_id", ubicacionesDelSector(ubicaciones, sector));
 
     const desde = pagina * POR_PAGINA;
     const { data, error: err, count } = await q
@@ -139,7 +154,7 @@ export default function RequerimientosClient({
     // de menos es preferible a mostrar una comparativa que ya cambió.
     setResumenes({});
 
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, pagina]);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector, ubicaciones, pagina]);
 
   /**
    * Los presupuestos de un requerimiento, recién cuando se los va a mirar.
@@ -219,11 +234,11 @@ export default function RequerimientosClient({
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.
-  const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion]
+  const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector]
     .filter(Boolean).length;
 
   const hayFiltros = !!(
-    busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion
+    busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion || equipo || sector
   );
 
   /**
@@ -380,6 +395,15 @@ export default function RequerimientosClient({
           />
           <Select value={ubicacion} onChange={setUbicacion} vacio="Cualquier ubicación"
             opciones={ubicaciones.map((u) => [u.id, u.nombre])} />
+          <Select value={sector} onChange={setSector} vacio="Cualquier sector de planta"
+            opciones={sectores.map((s) => [s.id, s.codigo ? `${s.codigo} — ${s.nombre}` : s.nombre])} />
+          <Select value={equipo} onChange={setEquipo} vacio="Cualquier máquina"
+            opciones={equipos.map((e) => [
+              e.id,
+              [e.marca, e.modelo].filter(Boolean).length
+                ? `${e.code} — ${e.name} · ${[e.marca, e.modelo].filter(Boolean).join(" ")}`
+                : `${e.code} — ${e.name}`,
+            ])} />
         </div>
         {hayFiltros && (
           <button onClick={limpiar} className="mt-2 hidden text-xs text-slate-500 hover:text-slate-800 md:block">

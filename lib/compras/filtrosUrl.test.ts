@@ -6,6 +6,8 @@ const catalogos = {
   empresas: ["emp-polcecal", "emp-polysan"],
   proveedores: ["prov-1"],
   ubicaciones: ["ubi-1"],
+  equipos: ["eq-em12"],
+  sectores: ["sec-py-b1"],
 };
 
 const leer = (qs: string) => leerFiltrosDeLaUrl(new URLSearchParams(qs), catalogos);
@@ -52,5 +54,27 @@ describe("filtros leidos de la URL", () => {
     expect(f.prioridad).toBe("URGENTE");
     expect(f.area).toBe("area-seg");
     expect(f.proveedor).toBe("");
+  });
+});
+
+/**
+ * La maquina y el sector salen del catalogo de ubicaciones, no del
+ * requerimiento. Se validan igual que los demas: un id que el desplegable no
+ * ofrece dejaria la tabla vacia sin que se pueda quitar el filtro.
+ */
+describe("filtros por maquina y por sector de planta", () => {
+  it("lee el equipo y el sector cuando estan en la lista", () => {
+    expect(leer("equipo=eq-em12").equipo).toBe("eq-em12");
+    expect(leer("sector=sec-py-b1").sector).toBe("sec-py-b1");
+    expect(hayAlgunFiltro(leer("equipo=eq-em12"))).toBe(true);
+  });
+
+  it("descarta un equipo que no tiene ninguna ubicacion enlazada", () => {
+    expect(leer("equipo=eq-em99").equipo).toBe("");
+    expect(hayAlgunFiltro(leer("equipo=eq-em99"))).toBe(false);
+  });
+
+  it("descarta un sector que no esta en la lista", () => {
+    expect(leer("sector=sec-tesoreria").sector).toBe("");
   });
 });

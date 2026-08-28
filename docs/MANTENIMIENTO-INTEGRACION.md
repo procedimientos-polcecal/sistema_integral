@@ -612,6 +612,29 @@ volver a leer las planillas, y la sincronización de comparativas borra y
 reinserta: pasar por ahí para llenar una columna es caro y arriesgado sin
 motivo.
 
+## Lo que Compras gastó en cada máquina
+
+Desde el 28/08/2026 el catálogo de ubicaciones de Compras apunta al núcleo: 15
+ubicaciones son un equipo de este módulo y 13 son un sector de planta. La ficha
+del equipo muestra abajo un bloque **"Compras para este equipo"** con el gasto
+por año.
+
+Dos cosas que la pantalla dice y conviene no perder:
+
+- **El gasto de un sector no se reparte entre sus máquinas.** Atribuirle al
+  `Molino vertical` una fracción de lo que se compró para Filler 2 sería
+  inventar un número; se enlaza a Compras filtrado por sector en vez de
+  simularlo.
+- **"No se le compró nada" y "nadie enlazó su ubicación" no son lo mismo.** Sólo
+  15 de las 239 máquinas tienen una ubicación que las nombre —son todas móviles,
+  que es de lo que la planilla de Compras habla—, y las otras 224 lo dicen en
+  vez de mostrar un cero.
+
+Ver `docs/COMPRAS-ESTADO.md` para el mapeo completo y sus cuatro enlaces por
+convención. El costo total del equipo —sumando OS y mano de obra propia— es el
+paso siguiente y todavía no está: falta la tarifa horaria, porque `operarios`
+guarda `id, slot, nombre` y nada de costo.
+
 ## Lo que la app vieja tiene y el SdG todavía no
 
 Relevado comparando las dos apps ruta por ruta, no de memoria.

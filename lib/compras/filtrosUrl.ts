@@ -21,11 +21,20 @@ export interface FiltrosCompras {
   empresa: string;
   proveedor: string;
   ubicacion: string;
+  /**
+   * La máquina y el sector de planta salen del catálogo de ubicaciones, no del
+   * requerimiento: el enlace vive ahí desde la 019. Son otra forma de recortar
+   * lo mismo —"Doosan 300" es una ubicación y es un equipo—, y conviven porque
+   * una máquina puede tener más de una ubicación y un sector, varias.
+   */
+  equipo: string;
+  sector: string;
 }
 
 export const FILTROS_VACIOS: FiltrosCompras = {
   busqueda: "", area: "", aprobacion: "", compra: "",
   prioridad: "", empresa: "", proveedor: "", ubicacion: "",
+  equipo: "", sector: "",
 };
 
 /** Las listas contra las que se validan los filtros que son referencias. */
@@ -34,6 +43,9 @@ export interface Catalogos {
   empresas: string[];
   proveedores: string[];
   ubicaciones: string[];
+  /** Sólo los que tienen alguna ubicación enlazada: el resto daría vacío. */
+  equipos: string[];
+  sectores: string[];
 }
 
 /**
@@ -62,6 +74,8 @@ export function leerFiltrosDeLaUrl(
     empresa: siEstaEnLaLista(params.get("empresa"), [...catalogos.empresas, "AMBAS"]),
     proveedor: siEstaEnLaLista(params.get("proveedor"), catalogos.proveedores),
     ubicacion: siEstaEnLaLista(params.get("ubicacion"), catalogos.ubicaciones),
+    equipo: siEstaEnLaLista(params.get("equipo"), catalogos.equipos),
+    sector: siEstaEnLaLista(params.get("sector"), catalogos.sectores),
   };
 }
 

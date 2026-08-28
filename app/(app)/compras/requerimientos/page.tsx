@@ -5,6 +5,8 @@ import { aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
+import { opcionesConUbicacion, type UbicacionEnlazada } from "@/lib/compras/ubicaciones";
+import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import RequerimientosClient from "./RequerimientosClient";
 
 export default async function RequerimientosPage({
@@ -21,12 +23,29 @@ export default async function RequerimientosPage({
   // donde alcanza con una.
   const [
     { data: areas }, { data: proveedores }, { data: empresas }, { data: ubicaciones },
+    { data: equipos }, sectoresPlanta,
     { nivel }, aprobadores, sync,
   ] = await Promise.all([
     supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
     supabase.from("empresas").select("id, nombre").order("nombre"),
-    supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
+    // El enlace a la máquina y al sector viene con el catálogo: filtrar por
+    // equipo es filtrar por sus ubicaciones, porque el enlace vive acá desde la
+    // 019 y no en cada requerimiento.
+    supabase
+      .from("compras_ubicaciones")
+      .select("id, nombre, equipo_id, sector_id")
+      .eq("activo", true)
+      .order("orden"),
+    supabase
+      .from("equipos")
+      .select("id, name, code, marca, modelo")
+      .eq("is_active", true)
+      .order("code"),
+    sectoresDePlanta<{ id: string; nombre: string; codigo: string | null }>(
+      supabase,
+      "id, nombre, codigo"
+    ),
     // Ya lo calculó el layout: acá vuelve sin salir a la red.
     permisosComprasActuales(),
     // Quiénes pueden aprobar una compra. Sale de `compras_aprobadores` y no de
@@ -41,6 +60,13 @@ export default async function RequerimientosPage({
   // Los filtros de la URL se validan acá, que es donde están los catálogos: es
   // así como el tablero lleva a cada etapa. Un valor que no corresponde a nada
   // conocido se descarta antes de llegar a la pantalla.
+  // Sólo se ofrecen los que pueden devolver algo. Ofrecer las 239 máquinas
+  // cuando 15 tienen una ubicación enlazada es prometer un filtro que da vacío,
+  // y quien lo usa concluye que no se le compró nada a esa máquina.
+  const catalogo = (ubicaciones ?? []) as UbicacionEnlazada[];
+  const equiposConCompras = opcionesConUbicacion(equipos ?? [], catalogo, "equipo_id");
+  const sectoresConCompras = opcionesConUbicacion(sectoresPlanta, catalogo, "sector_id");
+
   const params = await searchParams;
   const filtrosIniciales = leerFiltrosDeLaUrl(
     new URLSearchParams(
@@ -53,6 +79,8 @@ export default async function RequerimientosPage({
       empresas: (empresas ?? []).map((e) => e.id as string),
       proveedores: (proveedores ?? []).map((p) => p.id as string),
       ubicaciones: (ubicaciones ?? []).map((u) => u.id as string),
+      equipos: equiposConCompras.map((e) => e.id),
+      sectores: sectoresConCompras.map((s) => s.id),
     }
   );
 
@@ -61,7 +89,9 @@ export default async function RequerimientosPage({
       areas={areas ?? []}
       proveedores={proveedores ?? []}
       empresas={empresas ?? []}
-      ubicaciones={ubicaciones ?? []}
+      ubicaciones={catalogo}
+      equipos={equiposConCompras}
+      sectores={sectoresConCompras}
       aprobadores={aprobadores.map((a) => ({
         id: a.id, nombre: a.nombre, apellido: a.apellido, alias: a.alias,
       }))}

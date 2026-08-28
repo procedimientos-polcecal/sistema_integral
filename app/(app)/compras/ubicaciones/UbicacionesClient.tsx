@@ -15,8 +15,23 @@ const TIPO_LABEL: Record<string, { label: string; color: string }> = {
   otra:    { label: "Otra",    color: "bg-gray-100 text-gray-500" },
 };
 
-type Opcion = { id: string; nombre: string };
-type Equipo = { id: string; name: string; code: string };
+type Opcion = { id: string; nombre: string; codigo?: string | null };
+type Equipo = {
+  id: string; name: string; code: string;
+  marca?: string | null; modelo?: string | null;
+};
+
+/**
+ * Cómo se nombra un equipo en un desplegable.
+ *
+ * `EM3 — Retroexcavadora 3` no alcanza para decidir: la planilla de Compras
+ * dice `Doosan 225 n°1` y no comparte una sola palabra con eso. La marca y el
+ * modelo son lo único que las une, así que van en la etiqueta.
+ */
+function etiquetaDeEquipo(e: Equipo): string {
+  const ficha = [e.marca, e.modelo].filter(Boolean).join(" ");
+  return ficha ? `${e.code} — ${e.name} · ${ficha}` : `${e.code} — ${e.name}`;
+}
 
 /** Compara ignorando mayúsculas y acentos, igual que la sincronización. */
 const norm = (s: string) =>
@@ -70,6 +85,12 @@ export default function UbicacionesClient({
 
   const sinUso = ubicaciones.filter((u) => !conteo[u.id]).length;
 
+  // Las que no apuntan a ninguna máquina ni a ningún sector. Se cuentan porque
+  // si no, la próxima que invente la planilla al sincronizar se suma al final
+  // de la lista y no la ve nadie: 16 de las 38 primeras nacieron así.
+  const sinEnlazar = ubicaciones.filter((u) => !u.equipo_id && !u.sector_id);
+  const riSinEnlazar = sinEnlazar.reduce((a, u) => a + (conteo[u.id] ?? 0), 0);
+
   async function borrar(u: UbicacionCompras) {
     const ok = await confirmar({
       title: "Eliminar ubicación",
@@ -94,8 +115,19 @@ export default function UbicacionesClient({
           <h1 className="text-xl font-bold text-slate-900">Ubicaciones</h1>
           <p className="text-sm text-slate-500">
             Dónde se necesita lo que se pide. {ubicaciones.length} en total
-            {sinUso > 0 && `, ${sinUso} sin usar`}.
+            {sinUso > 0 && `, ${sinUso} sin usar`}
+            {sinEnlazar.length > 0 &&
+              `, ${sinEnlazar.length} sin enlazar a una máquina o sector`}
+            .
           </p>
+          {sinEnlazar.length > 0 && riSinEnlazar > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              Son {riSinEnlazar.toLocaleString("es-AR")} requerimientos cuyo gasto
+              no se puede atribuir. Algunas no se enlazan nunca —el Pañol y los
+              talleres no son una máquina—; las que aparecieron solas al
+              sincronizar sí.
+            </p>
+          )}
         </div>
         {canEdit && (
           <button
@@ -184,7 +216,11 @@ export default function UbicacionesClient({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-slate-600">
-                        {enlace ? `${enlace.code} — ${enlace.name}` : sector ? sector.nombre : "—"}
+                        {enlace
+                          ? etiquetaDeEquipo(enlace)
+                          : sector
+                            ? `${sector.codigo ? sector.codigo + " " : ""}${sector.nombre}`
+                            : "—"}
                       </td>
                       <td className="px-3 py-2 text-right text-slate-600">{usos}</td>
                       <td className="px-3 py-2 text-slate-600">{u.activo ? "Sí" : "No"}</td>
@@ -321,10 +357,14 @@ function ModalUbicacion({
             <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
               <option value="">Sin enlazar</option>
-              {equipos.map((e2) => <option key={e2.id} value={e2.id}>{e2.code} — {e2.name}</option>)}
+              {equipos.map((e2) => (
+                <option key={e2.id} value={e2.id}>{etiquetaDeEquipo(e2)}</option>
+              ))}
             </select>
             <p className="mt-1 text-xs text-slate-500">
-              Enlazarla permite ver cuánto se gastó en esa máquina.
+              Enlazarla permite ver cuánto se gastó en esa máquina. Compras la
+              nombra por marca y modelo —«Doosan 225 n°1»— y Mantenimiento por
+              función y número, así que la lista muestra las dos cosas.
             </p>
           </Campo>
 
@@ -333,7 +373,11 @@ function ModalUbicacion({
               <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
                 <option value="">Sin enlazar</option>
-                {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {sectores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.codigo ? `${s.codigo} — ${s.nombre}` : s.nombre}
+                  </option>
+                ))}
               </select>
             </Campo>
           )}

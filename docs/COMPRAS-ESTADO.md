@@ -246,14 +246,41 @@ un dato": había que mirar qué texto guardó cada origen.
    va a dejar de crecer solo, que es lo que hoy lo hace poco informativo.
 2. **La comparativa en sí** — hoy es un enlace y una tabla `compras_cotizaciones`
    sin pantalla. Estaba anotado como "lo trabajamos después".
-3. **`Autoelevador HCMG` es un error de tipeo de `XCMG`** (2 RI). Se fusiona
-   desde `/compras/ubicaciones`, pero conviene corregirlo también en la planilla
-   o la sincronización lo recrea.
+3. ~~**`Autoelevador HCMG` es un error de tipeo de `XCMG`**~~ — resuelto de otra
+   forma el 28/08/2026: las dos ubicaciones apuntan al mismo equipo (`EM12`), así
+   que sus 2 RI caen igual en la máquina correcta y no hace falta fusionarlas.
 4. **54 rutas de RRHH y Remises no validan sesión por su cuenta** y dependen del
    middleware. Hoy ninguna usa el cliente admin, así que RLS las cubre, pero
    conviene revisarlo con calma.
 5. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
    era quién cargaba la prioridad sino el criterio, y eso se conversa.
+
+## Las ubicaciones son equipos y sectores de Mantenimiento
+
+Desde el 28/08/2026 las 38 ubicaciones están mapeadas contra el núcleo: 15 a un
+equipo, 13 a un sector de planta y 10 a nada. Eso hace **atribuible el 52% de
+los requerimientos** y habilita el filtro por máquina y por sector en el
+listado, y el bloque de gasto en la ficha del equipo.
+
+Lo que hay que saber para no romperlo:
+
+- **Compras y Mantenimiento nombran las máquinas distinto.** La planilla dice
+  `Doosan 225 n°1`; la ficha dice `EM3 — Retroexcavadora 3`. Lo único que las
+  une es `marca` y `modelo` de la ficha técnica, y por eso los desplegables las
+  muestran.
+- **Cuatro enlaces son una convención, no un dato.** Las dos Doosan 225 y los
+  dos Autoelevadores Toyota son indistinguibles; se asumió que la n°1 es el
+  código de equipo más bajo. Si están cruzadas, el gasto cae en la gemela y
+  nada avisa.
+- **Casi la mitad del gasto no se atribuye y está bien así.** Pañol (306 RI),
+  los talleres, Oficinas y OTRA no son una máquina ni un sector. Lo que entra al
+  pañol es stock: todavía no es de nadie.
+- **El enlace vive en `compras_ubicaciones`, no en el requerimiento** (lo movió
+  la 019). Filtrar por equipo es filtrar por sus ubicaciones.
+
+El diseño está en
+[specs/2026-08-28-mapeo-ubicaciones-equipos](superpowers/specs/2026-08-28-mapeo-ubicaciones-equipos-design.md);
+la migración es la **042**.
 
 ## Dónde está cada cosa
 
