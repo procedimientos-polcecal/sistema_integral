@@ -40,6 +40,28 @@ function fechaStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * APPRRHH guarda los horarios en columnas `timestamp WITHOUT time zone`, y el
+ * valor que hay ahí es UTC: la app de origen lo convierte a hora de Argentina
+ * recién al mostrarlo (sus commits 171b94b / cd03d92 / b6497ba). node-pg, en
+ * cambio, interpreta esas columnas en el huso del PROCESO, así que corriendo
+ * el script desde Buenos Aires una marcación de las 11:03 se leía como 11:03
+ * ART = 14:03 UTC y entraba al SdG tres horas adelantada.
+ *
+ * Por eso los timestamps se traen como texto y se interpretan explícitamente
+ * como UTC: así el instante que se guarda en `timestamptz` es el real, y la
+ * app lo muestra en hora argentina igual que APPRRHH.
+ */
+function instanteUtc(texto: string | null): Date | null {
+  if (!texto) return null;
+  return new Date(texto.trim().replace(" ", "T") + "Z");
+}
+
+/** El día calendario de una columna de fecha, tal cual, sin pasar por Date. */
+function soloFecha(texto: string): string {
+  return texto.slice(0, 10);
+}
+
 async function main() {
   console.log(`Modo: ${APPLY ? "APPLY (escribe en la base real)" : "DRY-RUN"}`);
   console.log("---------------------------------------------------------------");
@@ -97,11 +119,11 @@ async function main() {
 
   // ── 2. Fichadas (TimeRecord → fichadas) ─────────────────────────────
   const { rows: timeRecords } = await neon.query(
-    'select id, "employeeId", fecha, "horaEntrada", "horaSalida", origen, observaciones from "TimeRecord" order by fecha'
+    'select id, "employeeId", fecha::text fecha, "horaEntrada"::text "horaEntrada", "horaSalida"::text "horaSalida", origen, observaciones from "TimeRecord" order by fecha'
   );
-  const { rows: fRango } = await neon.query('select min(fecha) as min, max(fecha) as max from "TimeRecord"');
-  const fichadaDesde = fechaStr(fRango[0].min);
-  const fichadaHasta = fechaStr(fRango[0].max);
+  const { rows: fRango } = await neon.query('select min(fecha)::text as min, max(fecha)::text as max from "TimeRecord"');
+  const fichadaDesde = soloFecha(fRango[0].min);
+  const fichadaHasta = soloFecha(fRango[0].max);
   console.log(`\nFichadas en Neon: ${timeRecords.length} (${fichadaDesde} → ${fichadaHasta})`);
 
   const empleadosConFichadas = [...new Set(timeRecords.map((r) => neonIdToEmpleadoId.get(r.employeeId)).filter(Boolean))] as string[];
@@ -109,9 +131,9 @@ async function main() {
     .filter((r) => neonIdToEmpleadoId.has(r.employeeId))
     .map((r) => ({
       empleado_id: neonIdToEmpleadoId.get(r.employeeId),
-      fecha: fechaStr(r.fecha),
-      hora_entrada: r.horaEntrada,
-      hora_salida: r.horaSalida,
+      fecha: soloFecha(r.fecha),
+      hora_entrada: instanteUtc(r.horaEntrada),
+      hora_salida: instanteUtc(r.horaSalida),
       origen: r.origen,
       observaciones: r.observaciones,
     }));
@@ -128,11 +150,11 @@ async function main() {
 
   // ── 3. Ausencias / Vacaciones (Absence → ausencias | vacaciones) ────
   const { rows: absences } = await neon.query(
-    'select id, "employeeId", "fechaDesde", "fechaHasta", tipo, justificada, observaciones, "cargadoPorId" from "Absence" order by "fechaDesde"'
+    'select id, "employeeId", "fechaDesde"::text "fechaDesde", "fechaHasta"::text "fechaHasta", tipo, justificada, observaciones, "cargadoPorId" from "Absence" order by "fechaDesde"'
   );
-  const { rows: aRango } = await neon.query('select min("fechaDesde") as min, max("fechaHasta") as max from "Absence"');
-  const ausenciaDesde = fechaStr(aRango[0].min);
-  const ausenciaHasta = fechaStr(aRango[0].max);
+  const { rows: aRango } = await neon.query('select min("fechaDesde")::text as min, max("fechaHasta")::text as max from "Absence"');
+  const ausenciaDesde = soloFecha(aRango[0].min);
+  const ausenciaHasta = soloFecha(aRango[0].max);
   console.log(`\nAusencias/Licencias en Neon: ${absences.length} (${ausenciaDesde} → ${ausenciaHasta})`);
 
   const empleadosConAusencias = [...new Set(absences.map((r) => neonIdToEmpleadoId.get(r.employeeId)).filter(Boolean))] as string[];
@@ -143,8 +165,8 @@ async function main() {
   const absencesMatcheadas = absences.filter((r) => neonIdToEmpleadoId.has(r.employeeId));
   const ausenciaRows = absencesMatcheadas.map((r) => ({
     empleado_id: neonIdToEmpleadoId.get(r.employeeId),
-    fecha_desde: fechaStr(r.fechaDesde),
-    fecha_hasta: fechaStr(r.fechaHasta),
+    fecha_desde: soloFecha(r.fechaDesde),
+    fecha_hasta: soloFecha(r.fechaHasta),
     tipo: r.tipo,
     justificada: r.justificada,
     observaciones: r.observaciones,
@@ -165,7 +187,7 @@ async function main() {
     console.log('  (la base vieja no vincula períodos con ausencias: se derivan todos)');
   }
   const { rows: periodos } = await neon.query(
-    `select id, "employeeId", "anioCorrespondiente", "fechaDesde", "fechaHasta", "diasTomados", observaciones,
+    `select id, "employeeId", "anioCorrespondiente", "fechaDesde"::text "fechaDesde", "fechaHasta"::text "fechaHasta", "diasTomados", observaciones,
             ${tieneAbsenceId.length ? '"absenceId"' : 'null as "absenceId"'}
      from "VacationPeriod" order by "fechaDesde"`
   );
@@ -216,20 +238,20 @@ async function main() {
       ...periodosMatcheados.map((p) => ({
         empleado_id: neonIdToEmpleadoId.get(p.employeeId),
         anio_correspondiente: p.anioCorrespondiente,
-        fecha_desde: fechaStr(p.fechaDesde),
-        fecha_hasta: fechaStr(p.fechaHasta),
+        fecha_desde: soloFecha(p.fechaDesde),
+        fecha_hasta: soloFecha(p.fechaHasta),
         dias_tomados: p.diasTomados,
         observaciones: p.observaciones,
         ausencia_id: p.absenceId ? ausenciaIdPorNeonId.get(p.absenceId) ?? null : null,
       })),
       ...vacacionesHuerfanas.map((r) => {
-        const desde = new Date(r.fechaDesde);
-        const hasta = new Date(r.fechaHasta);
+        const desde = new Date(`${soloFecha(r.fechaDesde)}T00:00:00Z`);
+        const hasta = new Date(`${soloFecha(r.fechaHasta)}T00:00:00Z`);
         return {
           empleado_id: neonIdToEmpleadoId.get(r.employeeId),
           anio_correspondiente: desde.getUTCFullYear(),
-          fecha_desde: fechaStr(desde),
-          fecha_hasta: fechaStr(hasta),
+          fecha_desde: soloFecha(r.fechaDesde),
+          fecha_hasta: soloFecha(r.fechaHasta),
           dias_tomados: Math.round((hasta.getTime() - desde.getTime()) / 86400000) + 1,
           observaciones: r.observaciones,
           ausencia_id: ausenciaIdPorNeonId.get(r.id) ?? null,
@@ -245,9 +267,9 @@ async function main() {
 
   // ── 4. Correcciones manuales de Karen (DailyCalculation.horasManual) ─
   const { rows: manuales } = await neon.query(
-    `select "employeeId", fecha, "tipoDia", "horasNormales", "horasExtra50", "horasExtra100", "francoGenerado",
+    `select "employeeId", fecha::text fecha, "tipoDia", "horasNormales", "horasExtra50", "horasExtra100", "francoGenerado",
             ausente, justificada, "tipoAusencia", observaciones, tarde, "retiroAnticipado",
-            "extrasValidadas", "validadoPorId", "fechaValidacion"
+            "extrasValidadas", "validadoPorId", "fechaValidacion"::text "fechaValidacion"
      from "DailyCalculation" where "horasManual" = true`
   );
   console.log(`\nDías con horas corregidas a mano por Karen: ${manuales.length}`);
@@ -255,7 +277,7 @@ async function main() {
     .filter((r) => neonIdToEmpleadoId.has(r.employeeId))
     .map((r) => ({
       empleado_id: neonIdToEmpleadoId.get(r.employeeId),
-      fecha: fechaStr(r.fecha),
+      fecha: soloFecha(r.fecha),
       tipo_dia: r.tipoDia,
       horas_normales: r.horasNormales,
       horas_extra_50: r.horasExtra50,
@@ -270,7 +292,7 @@ async function main() {
       horas_manual: true,
       extras_validadas: r.extrasValidadas,
       validado_por_id: r.validadoPorId ? neonIdToUserId.get(r.validadoPorId) || null : null,
-      fecha_validacion: r.fechaValidacion,
+      fecha_validacion: instanteUtc(r.fechaValidacion),
     }));
   if (APPLY && manualRows.length) {
     for (let i = 0; i < manualRows.length; i += 500) {

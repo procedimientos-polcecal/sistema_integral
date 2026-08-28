@@ -291,3 +291,60 @@ febrero**, que vienen de la app vieja y nadie clasificó nunca. En el mes en
 curso son 130, que es lo manejable. Mientras eso esté sin clasificar, el
 ausentismo del Analítico (~70%) va a seguir siendo un número sin sentido:
 está contando como ausencia cada día que nadie clasificó.
+
+## El desfasaje de 3 horas en las marcaciones (27/08/2026)
+
+Comparando la ficha de un empleado lado a lado con APPRRHH aparecieron todas
+las marcaciones **+3 horas** en el SdG: donde la app vieja mostraba
+`08:03-15:51`, acá decía `11:03-18:51`. Y no era sólo cosmético: con los
+horarios corridos ningún turno matcheaba, así que salían badges de "Tardanza"
+y "Retiro anticipado" que no correspondían y las horas daban 7,8 u 8,1 en vez
+de 8,0.
+
+**La causa.** APPRRHH guarda los horarios en columnas `timestamp WITHOUT time
+zone`, y lo que hay ahí es **UTC**: la app convierte a hora de Argentina recién
+al mostrar. `node-pg`, en cambio, interpreta esas columnas en el huso del
+proceso, así que corriendo el importador desde Buenos Aires una marca de las
+11:03 se leía como 11:03 ART = 14:03 UTC y entraba tres horas adelantada.
+
+**El arreglo.** El importador trae los timestamps como texto (`::text`) y los
+interpreta explícitamente como UTC. Las fichadas cargadas a mano en el SdG
+nunca tuvieron el problema: su convención ya era la correcta.
+
+### Cómo quedó, verificado contra Neon
+
+| | |
+|---|---|
+| Fichadas comparadas una por una | 2877 vs 2877, **0 diferencias** |
+| Cálculos diarios comparados | 4162 |
+| Iguales | 4141 |
+| Diferencias sólo por redondeo | 456 (el SdG usa `numeric(5,2)`, APPRRHH float) |
+| **Diferencias reales** | **21** |
+
+Las 21 se explican todas:
+
+- **8 días** (PS_015, PS_019): en APPRRHH esos días son `ausente=true` tipo
+  VACACIONES; acá son `ausente=false` porque el import les derivó un período de
+  vacaciones y en este modelo la vacación gana sobre la ausencia. Es la
+  consecuencia esperada de derivar los períodos huérfanos.
+- **3 días** (PS_050, sábados): sector renombrado, ver abajo. **Corregido.**
+- **~10 días** con diferencias de minutos: son días que APPRRHH todavía no
+  recalculó desde su cambio del umbral de hora extra (`542ed23`, 24/08). Al
+  comparar `DailyCalculation` guardados se compara *cuándo recalculó cada
+  lado*, no el algoritmo.
+
+### El sector renombrado
+
+Al unificar el padrón en el núcleo, algunos sectores tomaron el sufijo
+`(RRHH)` para no chocar con los homónimos de Mantenimiento. Pero
+`SECTORES_LUNES_A_VIERNES` matchea por **nombre exacto**, así que `Calidad
+(RRHH)` dejó de aplicar la regla y a sus 2 empleados los sábados les figuraban
+como falta. Se agregó el nombre nuevo a la lista.
+
+Es el único caso: de los sectores con empleados activos, los demás o matchean
+exacto (RRHH, Tesorería, Finanzas, Compras y Pañol, Ventas y Despacho) o
+legítimamente trabajan fines de semana.
+
+**Ojo con esto para adelante:** cualquier sector que se renombre desde
+Administración deja de aplicar la regla sin que nadie se entere. El
+acoplamiento por nombre viene del original y sigue siendo frágil.
