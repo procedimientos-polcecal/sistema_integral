@@ -190,7 +190,48 @@ function ponerLasComparativasAlDia() {
 
   var texto = informe.join(SALTO);
   Logger.log(texto);
+
+  // Y en una planilla, porque el registro de Apps Script trunca: con setenta
+  // comparativas el informe no entra, y al aplicar ese informe ES el registro
+  // de qué se cambió en cada una. Perderlo por un límite de la consola sería
+  // quedarse sin el único papel de la operación.
+  try {
+    var url = _guardarInforme(texto);
+    Logger.log("Informe completo: " + url);
+  } catch (err) {
+    Logger.log("(no se pudo guardar el informe en una planilla: " + err.message + ")");
+  }
+
   return texto;
+}
+
+/**
+ * Guarda el informe en una planilla y devuelve su URL.
+ *
+ * Una fila por línea, en la carpeta de respaldos. Se crea una por corrida con
+ * la hora en el nombre: los informes de "qué se hizo" no se pisan entre sí.
+ */
+function _guardarInforme(texto) {
+  var lineas = texto.split(SALTO);
+  var filas = [];
+  for (var i = 0; i < lineas.length; i++) filas.push([lineas[i]]);
+
+  var cuando = Utilities.formatDate(
+    new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"
+  );
+  var nombre = (SOLO_INFORMAR ? "INFORME (prueba) " : "INFORME (aplicado) ") + cuando;
+
+  var planilla = SpreadsheetApp.create(nombre);
+  planilla.getSheets()[0]
+    .getRange(1, 1, filas.length, 1)
+    .setValues(filas);
+
+  // Se mueve a la carpeta de respaldos, así no queda suelta en Mi unidad.
+  var archivo = DriveApp.getFileById(planilla.getId());
+  _carpetaDeRespaldos().addFile(archivo);
+  DriveApp.getRootFolder().removeFile(archivo);
+
+  return planilla.getUrl();
 }
 
 /** Pone una planilla al día. Devuelve cuántos cambios hicieron falta. */
