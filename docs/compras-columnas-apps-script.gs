@@ -41,8 +41,9 @@
  * insertColumnBefore hereda el formato de la columna que desplaza, así que
  * COMENTARIO, insertada donde estaba ELECCIÓN, quedó con sus casillas de
  * verificación, y ENVÍO pudo quedar con el formato de porcentaje de DESCUENTO.
- * Para las planillas ya procesadas: ejecutar `arreglarElFormatoDeLoInsertado`,
- * que sólo toca el formato de esas dos columnas y no mueve nada.
+ * Para las planillas ya procesadas: ejecutar `arreglarElFormatoDeLoInsertado`.
+ * Esa función corrige SÓLO el formato: no busca columnas faltantes, no inserta,
+ * no mueve y no borra. Las columnas ya están en su lugar.
  *
  * LOS RESPALDOS
  *
@@ -324,7 +325,7 @@ function _ponerAlDia(archivo, informe) {
       if (!SOLO_INFORMAR) {
         hoja.insertColumnBefore(destino + 1);
         hoja.getRange(1, destino + 1).setValue(MODELO[destino]);
-        _formatoDeColumnaNueva(hoja, destino);
+        _dejarFormatoLimpio(hoja, destino);
       }
       actual.splice(destino, 0, destino);
       continue;
@@ -464,12 +465,16 @@ var HERMANA = {
 };
 
 /**
- * Deja la columna recién insertada sin nada heredado, y con el formato de su
- * hermana si tiene una.
+ * Deja una columna sin nada heredado, y con el formato de su hermana.
+ *
+ * NO inserta, NO mueve y NO borra columnas: sólo toca el formato, la validación
+ * de datos y las notas de la columna que se le indica. La usan las dos tareas
+ * —el reordenamiento, justo después de insertar, y la corrección de formato
+ * sobre lo ya hecho— y en ninguna de las dos cambia la estructura.
  *
  * `destino` es el índice en el modelo, base 0.
  */
-function _formatoDeColumnaNueva(hoja, destino) {
+function _dejarFormatoLimpio(hoja, destino) {
   var filas = hoja.getMaxRows();
   var nueva = hoja.getRange(1, destino + 1, filas, 1);
 
@@ -495,10 +500,15 @@ function _formatoDeColumnaNueva(hoja, destino) {
 /**
  * Arregla el formato de las columnas que se insertaron en corridas anteriores.
  *
- * Las que ya se pusieron al día quedaron con COMENTARIO heredando las casillas
- * de ELECCIÓN, y posiblemente ENVÍO heredando el porcentaje de DESCUENTO.
- * Esto lo corrige sin volver a mover nada: sólo toca el formato de esas dos
- * columnas, y sólo si el encabezado está donde tiene que estar.
+ * SÓLO EL FORMATO. No busca columnas faltantes, no inserta ninguna, no mueve
+ * ninguna y no borra ninguna. Las columnas ya están donde tienen que estar: lo
+ * único que quedó mal es lo que heredaron al insertarse —COMENTARIO se llevó
+ * las casillas de verificación de ELECCIÓN, y ENVÍO pudo llevarse el formato de
+ * porcentaje de DESCUENTO—.
+ *
+ * Toca una columna sólo si su encabezado ya está en la posición del modelo. Si
+ * no lo está, esa planilla no pasó por el reordenamiento y no es esto lo que le
+ * hace falta: se la saltea sin tocarla.
  *
  * Se puede correr las veces que haga falta. Respeta SOLO_INFORMAR.
  */
@@ -517,8 +527,9 @@ function arreglarElFormatoDeLoInsertado() {
   var corto = false;
 
   informe.push(SOLO_INFORMAR
-    ? "=== FORMATO — MODO INFORME: no se escribe nada ==="
-    : "=== FORMATO — APLICANDO ===");
+    ? "=== SÓLO FORMATO — MODO INFORME: no se escribe nada ==="
+    : "=== SÓLO FORMATO — APLICANDO ===");
+  informe.push("No se insertan, mueven ni borran columnas: sólo se corrige el formato.");
 
   while (archivos.hasNext()) {
     var archivo = archivos.next();
@@ -555,7 +566,7 @@ function arreglarElFormatoDeLoInsertado() {
       informe.push(nombre);
       for (var c = 0; c < cuales.length; c++) {
         informe.push("  formato de " + MODELO[cuales[c]] + " (" + _letra(cuales[c] + 1) + ")");
-        if (!SOLO_INFORMAR) _formatoDeColumnaNueva(hoja, cuales[c]);
+        if (!SOLO_INFORMAR) _dejarFormatoLimpio(hoja, cuales[c]);
       }
       if (!SOLO_INFORMAR) _anotarHecha("formato_hechas", nombre);
       arregladas++;
