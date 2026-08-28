@@ -56,6 +56,25 @@
 
 * { box-sizing: border-box; }
 
+/* ─── Líneas divisorias de las tablas ───
+   Tailwind v4 cambió el color de borde por defecto de `gray-200` a
+   `currentColor`, así que un `border-b` sin color explícito toma el color del
+   texto: las filas quedaban separadas por una línea casi negra (--text-primary
+   es #0F172A). Se restablece el token del sistema, el mismo gris que ya usan
+   .card, .input y .btn-secondary, para que las tablas separen sin gritar.
+
+   Va acotado a tablas y con selector de elemento a propósito: las clases con
+   color explícito (border-gray-300 y compañía) siguen ganando por
+   especificidad, y los badges de Mantenimiento que fijan `borderColor` por
+   `style` no se tocan, porque ahí el borde del color del texto es deliberado. */
+@layer base {
+  tr, th, td { border-color: var(--border); }
+  /* El encabezado sí separa de la cabecera, así que va un punto más marcado
+     que las filas: sigue siendo gris, pero se distingue. Antes tomaba el
+     `text-gray-500` de la fila de títulos, bastante más duro. */
+  thead tr { border-color: var(--border-dark); }
+}
+
 html, body {
   height: 100%;
   font-family: 'Public Sans', sans-serif;
