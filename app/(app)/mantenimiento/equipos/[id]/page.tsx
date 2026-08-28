@@ -4,8 +4,13 @@ import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import EquipoDetalle from "./EquipoDetalle";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
-import { gastoPorAnio } from "@/lib/compras/gastoPorEquipo";
-import type { RequerimientoDelEquipo } from "./ComprasDelEquipo";
+import {
+  costoDelEquipo,
+  type OrdenDeServicio,
+  type OrdenDeTrabajo,
+  type TarifaHora,
+} from "@/lib/mantenimiento/costoEquipo";
+import type { RequerimientoDelEquipo } from "./CostoDelEquipo";
 
 export default async function EquipoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,7 +41,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";
 
-  const compras = await comprasDelEquipo(supabase, id, equipo.sector_id);
+  const costo = await costoDeLaMaquina(supabase, id, equipo.sector_id);
 
   return (
     <EquipoDetalle
@@ -44,67 +49,80 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       sectores={sectores}
       historial={historial ?? []}
       canEdit={canEdit}
-      compras={compras}
+      costo={costo}
     />
   );
 }
 
 /**
- * Lo que Compras gastó en esta máquina.
+ * Lo que cuesta tener esta máquina: materiales, terceros y trabajo propio.
  *
- * El enlace vive en `compras_ubicaciones` y no en el requerimiento —la 019 lo
- * movió ahí para mapear 38 filas en vez de 1.825—, así que son dos consultas:
+ * Los materiales llegan por el catálogo de ubicaciones y no por el
+ * requerimiento —la 019 movió el enlace ahí—, así que son dos consultas:
  * primero qué ubicaciones son esta máquina, después qué se pidió para ellas.
+ * Las otras dos fuentes apuntan al equipo directamente.
  *
  * `compras_requerimientos` se lee con `select` abierto a cualquier autenticado
  * (policy `compras_req_select`), así que esto anda para alguien que sólo tenga
  * Mantenimiento.
  */
-async function comprasDelEquipo(
+async function costoDeLaMaquina(
   supabase: Awaited<ReturnType<typeof createClient>>,
   equipoId: string,
   sectorId: string | null
 ) {
-  const { data: ubicaciones } = await supabase
-    .from("compras_ubicaciones")
-    .select("id")
-    .eq("equipo_id", equipoId);
+  const [{ data: ubicaciones }, { data: tarifas }, sectorConCompras] = await Promise.all([
+    supabase.from("compras_ubicaciones").select("id").eq("equipo_id", equipoId),
+    supabase
+      .from("mantenimiento_tarifas_hora")
+      .select("valor, vigente_desde")
+      .order("vigente_desde", { ascending: false }),
+    sectorId ? sectorTieneCompras(supabase, sectorId) : Promise.resolve(null),
+  ]);
 
   const ids = (ubicaciones ?? []).map((u) => u.id as string);
 
-  // Del sector se muestra sólo si tiene compras propias, para poder mandar ahí
-  // en vez de repartirlas entre sus máquinas.
-  const sectorConCompras = sectorId ? await sectorTieneCompras(supabase, sectorId) : null;
-
-  if (ids.length === 0) {
-    return {
-      gasto: gastoPorAnio([]),
-      ultimos: [] as RequerimientoDelEquipo[],
-      ubicaciones: ids,
-      sectorConCompras,
-    };
-  }
-
   // Paginado porque PostgREST corta en 1000 sin avisar. Acá son decenas, pero
   // la regla del repo es no confiar en que una tabla es chica.
-  const requerimientos = await traerTodo<RequerimientoDelEquipo>((desde, hasta) =>
+  const requerimientos = ids.length
+    ? await traerTodo<RequerimientoDelEquipo>((desde, hasta) =>
+        supabase
+          .from("compras_requerimientos")
+          .select("id, nro_ri, descripcion, costo_iva, fecha_pedido, fecha")
+          .in("ubicacion_id", ids)
+          .order("nro_ri", { ascending: false })
+          .range(desde, hasta)
+      )
+    : [];
+
+  const [{ data: ordenesServicio }, { data: ordenesTrabajo }] = await Promise.all([
     supabase
-      .from("compras_requerimientos")
-      .select("id, nro_ri, descripcion, costo_iva, fecha_pedido, fecha")
-      .in("ubicacion_id", ids)
-      .order("nro_ri", { ascending: false })
-      .range(desde, hasta)
-  );
+      .from("ordenes_servicio")
+      .select("costo, fecha")
+      .eq("equipment_id", equipoId),
+    supabase
+      .from("ordenes_trabajo")
+      .select("horas, operario_1, operario_2, operario_3, contratista, fecha_ejecucion, fecha_cierre, fecha")
+      .eq("equipment_id", equipoId),
+  ]);
+
+  const tarifasCargadas = (tarifas ?? []) as TarifaHora[];
 
   return {
-    gasto: gastoPorAnio(requerimientos),
+    costo: costoDelEquipo(
+      requerimientos,
+      (ordenesServicio ?? []) as OrdenDeServicio[],
+      (ordenesTrabajo ?? []) as OrdenDeTrabajo[],
+      tarifasCargadas
+    ),
     ultimos: requerimientos.slice(0, 5),
     ubicaciones: ids,
+    hayTarifa: tarifasCargadas.length > 0,
     sectorConCompras,
   };
 }
 
-/** Si el sector tiene alguna ubicación con requerimientos, y cuál es. */
+/** Si el sector tiene alguna ubicación de Compras, y cuál es. */
 async function sectorTieneCompras(
   supabase: Awaited<ReturnType<typeof createClient>>,
   sectorId: string

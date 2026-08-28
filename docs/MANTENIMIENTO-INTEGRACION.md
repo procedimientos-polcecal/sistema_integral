@@ -631,9 +631,38 @@ Dos cosas que la pantalla dice y conviene no perder:
   vez de mostrar un cero.
 
 Ver `docs/COMPRAS-ESTADO.md` para el mapeo completo y sus cuatro enlaces por
-convención. El costo total del equipo —sumando OS y mano de obra propia— es el
-paso siguiente y todavía no está: falta la tarifa horaria, porque `operarios`
-guarda `id, slot, nombre` y nada de costo.
+convención.
+
+## El costo total de una máquina
+
+El bloque de la ficha suma tres fuentes por año: materiales (Compras), terceros
+(`ordenes_servicio.costo`) y mano de obra propia. El diseño está en
+[specs/2026-08-28-costo-total-del-equipo](superpowers/specs/2026-08-28-costo-total-del-equipo-design.md).
+
+**La tarifa de la hora se carga en Configuración** y cada tarifa dice desde
+cuándo rige (migración 043). Una hora trabajada se costea con la que regía ese
+día: con un solo valor mutable, subir la tarifa reescribiría lo que costó una
+reparación de marzo. Sin ninguna cargada, la mano de obra no se muestra.
+
+Cuatro cosas que se descubrieron al leer los datos y que no se deducen del
+código:
+
+- **`ordenes_trabajo.horas` es la duración del trabajo, no horas-hombre.** Las
+  OT con tres operarios tienen la misma mediana que las de uno —3 horas—. Para
+  costear hay que multiplicar por cuántos operarios figuran.
+- **El 76% de las horas son de contratista** (11.222 de 14.808) y no se costean:
+  las hizo un tercero y la OT no guarda cuánto salió. Parte de esa plata está en
+  las OS, y **no hay enlace entre OT y OS** para saber cuánta.
+- **`Ambos` no es una persona.** Aparece como operario en 59 OT (753 horas) y
+  quiere decir "los dos", sin decir cuáles. Se cuenta como uno y subestima.
+- **Ninguna máquina tiene hoy las tres fuentes.** Los móviles tienen materiales
+  y terceros pero cero horas propias; las de planta tienen terceros y horas pero
+  cero materiales, porque sus ubicaciones de Compras enlazan al sector y no a la
+  máquina.
+
+Lo que falta para cerrar el costo de verdad es el de las OT de contratista, y
+eso necesita una columna de costo en `ordenes_trabajo` o un enlace OT ↔ OS: son
+decisiones sobre cómo se registra el trabajo, no sobre cómo se lo suma.
 
 ## Lo que la app vieja tiene y el SdG todavía no
 

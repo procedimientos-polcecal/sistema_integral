@@ -21,8 +21,10 @@ export default async function ConfiguracionMantenimientoPage() {
 
   const esAdmin = await esAdminMantenimiento(supabase, user.id);
 
-  const [{ data: operarios }, { data: contratistas }, { data: tipos }, { data: sectores }] =
-    await Promise.all([
+  const [
+    { data: operarios }, { data: contratistas }, { data: tipos }, { data: sectores },
+    { data: tarifas },
+  ] = await Promise.all([
       supabase.from("operarios").select("id, slot, nombre").order("slot").order("nombre"),
       supabase
         .from("proveedores")
@@ -39,6 +41,12 @@ export default async function ConfiguracionMantenimientoPage() {
         .select("id, codigo, nombre, empresas(nombre)")
         .eq("es_de_planta", true)
         .order("codigo"),
+      // De la más nueva a la más vieja: la primera cuya fecha ya pasó es la que
+      // rige hoy.
+      supabase
+        .from("mantenimiento_tarifas_hora")
+        .select("id, valor, vigente_desde")
+        .order("vigente_desde", { ascending: false }),
     ]);
 
   return (
@@ -48,6 +56,7 @@ export default async function ConfiguracionMantenimientoPage() {
       operarios={operarios ?? []}
       contratistas={contratistas ?? []}
       tipos={tipos ?? []}
+      tarifas={tarifas ?? []}
       sectores={(sectores ?? []).map((s) => ({
         id: s.id as string,
         codigo: s.codigo as string | null,

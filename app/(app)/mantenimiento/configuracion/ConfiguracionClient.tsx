@@ -23,17 +23,19 @@ interface Tipo {
   frecuencia_lubricacion: string | null;
 }
 interface Sector { id: string; codigo: string | null; nombre: string; empresa: string | null }
+interface Tarifa { id: string; valor: number | string; vigente_desde: string }
 
 /** Las tres columnas de operario que tiene la orden de trabajo. */
 const SLOTS = [1, 2, 3];
 
 export default function ConfiguracionClient({
-  operarios, contratistas, tipos, sectores, esAdmin, puedeEditar,
+  operarios, contratistas, tipos, sectores, tarifas, esAdmin, puedeEditar,
 }: {
   operarios: Operario[];
   contratistas: Contratista[];
   tipos: Tipo[];
   sectores: Sector[];
+  tarifas: Tarifa[];
   esAdmin: boolean;
   puedeEditar: boolean;
 }) {
@@ -67,6 +69,8 @@ export default function ConfiguracionClient({
       )}
 
       <Operarios operarios={operarios} esAdmin={esAdmin} llamar={llamar} />
+
+      <TarifaDeLaHora tarifas={tarifas} esAdmin={esAdmin} llamar={llamar} />
 
       <Contratistas contratistas={contratistas} puedeEditar={puedeEditar} llamar={llamar} />
 
@@ -519,5 +523,123 @@ function Acceso({ href, titulo, que }: { href: string; titulo: string; que: stri
       <span className="block text-sm font-semibold text-slate-900">{titulo}</span>
       <span className="block text-xs text-slate-500">{que}</span>
     </Link>
+  );
+}
+
+/**
+ * El precio de una hora de mano de obra propia.
+ *
+ * Se carga con la fecha desde la que rige y no se pisa: una hora trabajada en
+ * marzo se costea con la tarifa de marzo. Actualizar un único valor haría que
+ * el costo de una reparación vieja cambie cada vez que sube la tarifa.
+ */
+function TarifaDeLaHora({
+  tarifas, esAdmin, llamar,
+}: {
+  tarifas: Tarifa[];
+  esAdmin: boolean;
+  llamar: (url: string, opciones: RequestInit) => Promise<boolean>;
+}) {
+  const [valor, setValor] = useState("");
+  const [desde, setDesde] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  // Vienen ordenadas de la más nueva a la más vieja: la primera es la que rige
+  // hoy, salvo que alguien haya cargado una con fecha futura.
+  const hoy = new Date().toISOString().slice(0, 10);
+  const vigente = tarifas.find((t) => t.vigente_desde <= hoy) ?? null;
+
+  const pesos = (v: number | string) =>
+    Number(v).toLocaleString("es-AR", { style: "currency", currency: "ARS" });
+
+  async function agregar() {
+    const n = Number(valor.replace(",", "."));
+    if (!Number.isFinite(n) || n < 0 || !desde) return;
+    setGuardando(true);
+    const ok = await llamar("/api/mantenimiento/tarifa-hora", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ valor: n, vigente_desde: desde }),
+    });
+    setGuardando(false);
+    if (ok) { setValor(""); setDesde(""); }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 className="text-sm font-semibold text-slate-700">
+        Tarifa de la hora
+        {vigente && (
+          <span className="ml-2 text-xs font-normal text-slate-400">
+            {pesos(vigente.valor)} desde el{" "}
+            {new Date(vigente.vigente_desde + "T00:00:00").toLocaleDateString("es-AR")}
+          </span>
+        )}
+      </h2>
+      <p className="mb-3 mt-0.5 text-xs text-slate-500">
+        Cuánto cuesta una hora de trabajo propio. Es lo que convierte las horas de
+        las órdenes en el costo de cada máquina. Cada tarifa dice desde cuándo
+        rige, así que subirla no cambia lo que costó una reparación vieja.
+        {tarifas.length === 0 && (
+          <> Sin ninguna cargada, la ficha del equipo no muestra mano de obra:
+          decir cero sería decir que el trabajo propio es gratis.</>
+        )}
+      </p>
+
+      {tarifas.length > 0 && (
+        <ul className="mb-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {tarifas.map((t) => (
+            <li key={t.id} className="flex items-center justify-between px-3 py-2 text-sm">
+              <span className="text-slate-700">
+                {pesos(t.valor)}
+                <span className="ml-2 text-xs text-slate-400">
+                  desde el {new Date(t.vigente_desde + "T00:00:00").toLocaleDateString("es-AR")}
+                  {t.id === vigente?.id && " · vigente"}
+                </span>
+              </span>
+              {esAdmin && (
+                <button
+                  onClick={() =>
+                    llamar(`/api/mantenimiento/tarifa-hora?id=${t.id}`, { method: "DELETE" })
+                  }
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Quitar
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {esAdmin && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">
+            Valor de la hora
+            <input
+              type="number" min="0" step="0.01" value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              className="mt-0.5 block w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="0,00"
+            />
+          </label>
+          <label className="text-xs text-slate-500">
+            Rige desde
+            <input
+              type="date" value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="mt-0.5 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <button
+            onClick={agregar}
+            disabled={guardando || !valor || !desde}
+            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+          >
+            {guardando ? "Guardando…" : "Agregar"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
