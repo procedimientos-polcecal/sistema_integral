@@ -61,7 +61,7 @@ cierre.
 POLCECAL y POLYSAN conviven en los módulos del SdG. **Odoo las lleva por
 separado**: toda orden de compra, todo asiento, todo diario y todo pago
 pertenece a una `res.company` y sólo a una. No está mal —son dos patrimonios
-distintos— pero cambia dos cosas de la integración.
+distintos— pero cambia tres cosas de la integración.
 
 ### 1. La falla que no se ve
 
@@ -112,15 +112,38 @@ Lo que arrastra la decisión:
   otra en borrador, o una facturada y la otra no. La pantalla de Compras tiene que
   poder mostrar dos estados para un RI, o decidir una regla de agregación
   explícita (el menos avanzado de los dos, por ejemplo).
-- **Hay que definir cómo se parte el monto.** Es lo único que falta para poder
-  escribir el push: 50/50, por líneas, o a mano al aprobar. Debería quedar como
-  dato en el RI (un porcentaje), no como constante en el código.
+- **El reparto es 50/50** (decidido el 31/08/2026). Vive en
+  `lib/compras/repartoAmbas.ts`, con el porcentaje en una constante para que
+  cambiarlo sea una línea. El cálculo va en centavos: redondear las dos mitades
+  por separado hace que $100,01 se convierta en dos órdenes que suman $100,02, y
+  ese centavo es una hora de alguien buscándolo.
 - **La idempotencia se complica**: reintentar un push tiene que ser capaz de
   encontrar la orden ya creada de *cada* empresa, no una sola. Sin eso, un
   reintento duplica en Odoo, que es el peor de los errores posibles ahí.
 
-Hasta que esté definido el reparto, la sincronización de Compras sólo puede
-empujar los requerimientos con **una** empresa definida.
+### 3. El 50/50 y las cantidades enteras no se pueden cumplir juntos
+
+Esto sale del 50/50 y **no tiene una salida limpia**, así que conviene tenerlo a
+la vista antes de escribir el push.
+
+En Odoo el importe de una línea no se pone: sale de `cantidad × precio unitario`.
+Entonces, para un RI de 3 unidades a $1.000:
+
+| Cómo se parte | Empresa A | Empresa B | Problema |
+|---|---|---|---|
+| Por importe (50/50) | 1,5 u — $1.500 | 1,5 u — $1.500 | Nadie recibe media unidad |
+| Por cantidad (2 y 1) | 2 u — $2.000 | 1 u — $1.000 | El reparto real es 67/33, no 50/50 |
+
+`repartoAmbas.ts` privilegia el importe, que es lo acordado, y expone
+`cantidadQuedaFraccionada()` para poder avisarlo en pantalla antes de mandar nada.
+
+El caso peor es **cantidad = 1** —una bomba, un repuesto—, que en compras de
+Mantenimiento es lo más común: media unidad para cada empresa no existe, y con
+cantidades enteras el reparto sería 100/0. Un RI así, en rigor, o lo compra una
+empresa y después se refactura, o no es un RI compartido.
+
+**Pendiente de definición**, pero no bloquea: el push puede arrancar avisando y
+dejando esos RI para revisión manual.
 
 ## Qué hay hoy (spike)
 
@@ -155,6 +178,9 @@ diarios de tesorería, facturas de proveedor, pagos, saldos por empresa y
 diario vía `read_group`, y los campos reales de `purchase.order` (para ver si la
 base tiene campos propios `x_` o de localización `l10n_`).
 
+**`lib/compras/repartoAmbas.ts`** — el 50/50, con 16 tests. Es la única parte de
+todo esto que se puede testear sin red, y la que más caro sale si está mal.
+
 **`lib/odoo/client.test.ts`** — 28 tests con `fetch` mockeado: no salen a la red.
 
 **`supabase/migrations/045_empresas_mapeo_odoo.sql`** — `empresas.odoo_company_id`,
@@ -179,8 +205,8 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 
 1. **Correr el ping** y cerrar los permisos del usuario bot.
 2. **Llenar `empresas.odoo_company_id`** con los ids que devuelva el ping (migración 045).
-3. **Definir el reparto de las AMBAS** (ver arriba): ya se sabe que van dos OCs, falta
-   con qué porcentaje se parte cada una. Bloquea el push de Compras.
+3. **Definir qué se hace con los RI compartidos de cantidad impar** (ver arriba).
+   No bloquea: el push puede avisar y dejarlos para revisión manual.
 4. **Mapeo de ids**, para que la sync sea idempotente y no duplique:
    `odoo_write_date` en las tablas que se sincronizan, y para Compras una tabla de
    vínculo `(requerimiento_id, empresa_id) → odoo_order_id`, porque un RI
@@ -190,6 +216,7 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.
 6. **Push de Compras**: crear la OC en draft al aprobarse en el SdG, con `crearEn`.
+   Para un RI compartido, dos órdenes, con el reparto de `repartoAmbas.ts`.
 7. **Webhook** para lo urgente: Odoo 17 tiene la acción "Send Webhook
    Notification" en las reglas de automatización, con log de llamadas. Mismo
    patrón que el Apps Script de la planilla, protegido con un secreto propio.
