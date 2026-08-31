@@ -58,15 +58,34 @@ número exacto por sobre el segundo que tarda.
 
 ## Lo que queda por hacer
 
-**Fijar la región de las funciones.** `vercel.json` no tiene `regions`, así que
-Vercel usa el default del proyecto. Si no coincide con la región de Supabase,
-cada consulta paga latencia entre regiones — con 16 consultas por recálculo, 50
-ms de más son 800 ms. Hay que mirar la región en Supabase (Project Settings →
-General) y fijar la equivalente de Vercel: `iad1` para us-east-1, `gru1` para
-sa-east-1.
-
 **Aplicar `044_rrhh_indices_de_lectura.sql`** en el SQL Editor. A este tamaño no
 se nota; van porque la tabla crece ~25.000 filas al año.
+
+## La región, y por qué la función va con la base y no con la gente
+
+Supabase está en **ca-central-1 (Montreal)**. Vercel no tiene región en Canadá,
+así que `vercel.json` ahora fija `iad1` (Washington DC): es el salto más corto y
+mejor conectado hasta Montreal, del orden de 15 ms.
+
+Puede que el default del proyecto ya fuera `iad1`, en cuyo caso esto no cambia
+nada — pero queda explícito y deja de depender de un default que puede cambiar.
+
+**Por qué no `gru1` (São Paulo), que está cerca de los usuarios.** Son dos
+tramos distintos y no pesan igual:
+
+| Tramo | Cuántas veces por pantalla |
+|---|---|
+| Navegador (Argentina) → función | una por request |
+| Función → base (Montreal) | **hasta 16 por recálculo** |
+
+Poner la función en São Paulo acorta el tramo que se recorre una vez y alarga el
+que se recorre dieciséis. Con ~130 ms hasta Montreal, serían dos segundos de
+penalidad por recálculo. La función va pegada a la base.
+
+**El arreglo de fondo sería mudar Supabase a sa-east-1 (São Paulo)** y las
+funciones a `gru1`: ahí los dos tramos quedan cortos. No es un cambio de
+configuración, es migrar el proyecto a uno nuevo con backup y restore, con su
+ventana de indisponibilidad. Vale la pena evaluarlo, no improvisarlo.
 
 ## Reglas para lo que venga
 
