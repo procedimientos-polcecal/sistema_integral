@@ -135,6 +135,15 @@ jobs:
             console.log("::notice::Esta cuenta tiene que estar en la unidad compartida como Colaborador o Administrador de contenido.");
           '
 
+      - name: Revisar la cadena de conexión
+        # Antes de intentar el dump: `--db-url` exige la cadena percent-encoded,
+        # y cuando no lo está el error que se ve no menciona el encoding. Este
+        # paso imprime host, puerto, usuario y base —nunca la contraseña— y
+        # nombra el problema si lo hay.
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: npx --yes tsx scripts/backup/revisar-conexion.mts
+
       - name: Hacer el dump
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -146,9 +155,30 @@ jobs:
           # Cuatro dumps: cada uno restaura algo distinto y por separado son mucho
           # más fáciles de leer. El esquema para recrear las tablas, los datos
           # para volver a cargarlas, los roles para los permisos, y los usuarios.
-          supabase db dump --db-url "$DB_URL" -f "${base}-esquema.sql"
-          supabase db dump --db-url "$DB_URL" --data-only -f "${base}-datos.sql"
-          supabase db dump --db-url "$DB_URL" --role-only -f "${base}-roles.sql"
+          # Cada uno anuncia qué está haciendo: con `set -e` el paso muere en el
+          # primero que falle, y sin esto el log no dice cuál fue.
+          echo "::group::Dump del esquema"
+          supabase db dump --db-url "$DB_URL" -f "${base}-esquema.sql" || {
+            echo "::error::Falló el dump del ESQUEMA. Es el primero que corre, así que casi siempre es la conexión: contraseña equivocada, o la cadena sin percent-encoding."
+            exit 1
+          }
+          echo "::endgroup::"
+
+          echo "::group::Dump de los datos"
+          supabase db dump --db-url "$DB_URL" --data-only -f "${base}-datos.sql" || {
+            echo "::error::Falló el dump de los DATOS, aunque el del esquema anduvo. La conexión está bien; el problema es el volumen o un permiso de lectura."
+            exit 1
+          }
+          echo "::endgroup::"
+
+          # Los roles son del cluster y por el pooler puede no haber permiso.
+          # No es fatal: los datos, que es lo que importa, ya están.
+          if supabase db dump --db-url "$DB_URL" --role-only -f "${base}-roles.sql"; then
+            roles="${base}-roles.sql"
+          else
+            echo "::warning::No se pudo dumpear los roles (permisos del cluster). El resto del backup sigue."
+            roles=""
+          fi
 
           # El esquema `auth` NO entra en el dump por defecto: la CLI excluye los
           # esquemas que administra Supabase. Ahí viven los usuarios, así que sin
@@ -164,7 +194,7 @@ jobs:
             usuarios=""
           fi
 
-          tar -czf "${base}.tar.gz" "${base}-esquema.sql" "${base}-datos.sql" "${base}-roles.sql" $usuarios
+          tar -czf "${base}.tar.gz" "${base}-esquema.sql" "${base}-datos.sql" $roles $usuarios
           rm -f "${base}"-*.sql
 
           echo "ARCHIVO=${base}.tar.gz" >> "$GITHUB_ENV"
