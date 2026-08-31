@@ -1,0 +1,73 @@
+# Deja al día los cálculos diarios de RRHH, cada 6 horas.
+#
+# El cron vive acá y no en vercel.json por lo mismo que Compras y Mantenimiento
+# —el plan Hobby de Vercel sólo admite crons diarios— y además porque en
+# vercel.json ya hay tres: el límite de Hobby es también de cantidad, y pasarlo
+# no degrada nada, hace fallar el deploy entero. Desde acá no puede romper el
+# deploy y la frecuencia es libre.
+#
+# Qué cubre. Las pantallas de RRHH ya no recalculan antes de leer: sólo leen.
+# Lo que mantiene los números frescos es cada guardado (una fichada, una
+# ausencia) y los disparadores de administración (un feriado, un turno). Esta
+# corrida cubre lo único que ninguno de los dos ve —que pase el tiempo: los días
+# nuevos necesitan su fila aunque nadie toque nada— y de paso es la red por si
+# algún camino de guardado quedara sin disparar el suyo.
+#
+# Cada 6 horas y no una vez por día justamente por eso: acota a 6 horas lo que
+# podría quedar viejo. Cuesta ~4 segundos por corrida.
+#
+# El endpoint se protege solo: exige el mismo CRON_SECRET, y sin él responde 503
+# en vez de quedar abierto.
+
+name: Recalcular RRHH
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  # Para poder correrlo a mano desde la pestaña Actions: sirve después de tocar
+  # turnos o la configuración de liquidación, que recalculan en segundo plano y
+  # pueden quedar cortados si la función termina antes.
+  workflow_dispatch:
+
+concurrency:
+  # Dos recálculos a la vez escriben las mismas filas de calculos_diarios.
+  group: rrhh-recalculo
+  cancel-in-progress: false
+
+jobs:
+  recalcular:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que estén las variables
+        run: |
+          faltan=""
+          [ -n "${{ vars.APP_URL }}" ]        || faltan="$faltan APP_URL(variable)"
+          [ -n "${{ secrets.CRON_SECRET }}" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir el recálculo
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/rrhh-recalculo")
+
+          cat respuesta.json
+
+          if [ "$codigo" = "200" ]; then
+            echo "::notice::Recálculo terminado"
+          else
+            echo "::error::El recálculo devolvió $codigo"
+            exit 1
+          fi

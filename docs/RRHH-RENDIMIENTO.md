@@ -45,10 +45,17 @@ seguridad:
    padrón (barato y exacto); los turnos y la configuración de liquidación
    recalculan la ventana en segundo plano, para no convertir un "Guardar" de dos
    campos en una espera de varios segundos.
-3. **Un cron nocturno** (`/api/cron/rrhh-recalculo`, 04:00 hora argentina)
-   recalcula una ventana móvil de 45 días. Cubre lo único que las otras dos no
-   ven: que pase el tiempo. Los días nuevos necesitan su fila aunque nadie toque
-   nada.
+3. **Un cron cada 6 horas** (`/api/cron/rrhh-recalculo`) recalcula una ventana
+   móvil de 45 días. Cubre lo único que las otras dos no ven —que pase el
+   tiempo: los días nuevos necesitan su fila aunque nadie toque nada— y de paso
+   es la red por si algún camino de guardado quedara sin disparar el suyo.
+
+   **Vive en GitHub Actions, no en `vercel.json`.** El plan Hobby de Vercel
+   limita los crons en frecuencia *y en cantidad*, y pasarse no degrada el cron:
+   hace fallar el deploy entero. En `vercel.json` ya hay tres. Compras y
+   Mantenimiento dejan uno diario ahí como red por si Actions falla; este no,
+   justamente para no arrimarse al límite. Si algún día pasan a Pro, conviene
+   agregarlo.
 
 **El Analítico pide los seis meses en paralelo**, que son independientes entre sí.
 
