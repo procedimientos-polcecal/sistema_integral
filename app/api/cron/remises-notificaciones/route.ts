@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { revisarElSecreto } from "@/lib/core/cron";
 import { enviarPush } from "@/lib/remises/webpush";
 
 function manana(): string {
@@ -15,10 +16,13 @@ function manana(): string {
  * sesión de usuario en un cron job — RLS no aplica acá.
  */
 export async function GET(request: Request) {
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  // Usa el helper compartido y no una comparación propia: la que había acá
+  // fallaba ABIERTA. Sin CRON_SECRET en el entorno, el template literal daba
+  // "Bearer undefined", así que cualquiera que mandara ese header disparaba las
+  // notificaciones push a todo el personal. El helper devuelve 503 cuando el
+  // secreto no está configurado, y además compara sin espacios ni saltos.
+  const rechazo = revisarElSecreto(request);
+  if (rechazo) return rechazo;
 
   const admin = createAdminClient();
   const fecha = manana();
