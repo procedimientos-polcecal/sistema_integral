@@ -55,7 +55,7 @@ En el repositorio (Settings → Secrets and variables → Actions):
 | | Qué |
 |---|---|
 | `SUPABASE_DB_URL` *(secret)* | Project Settings → Database → Connection string → pestaña **Session pooler**. **No la directa** (ver abajo). Lleva la contraseña de la base: es el secreto más sensible del repo. |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` *(secret)* | El mismo JSON que ya está en Vercel. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` *(secret)* | El mismo JSON que ya está en Vercel — y si no se tiene, se genera una clave nueva (ver abajo). |
 | `BACKUP_PASSPHRASE` *(secret)* | Opcional, muy recomendado. Son datos de sueldos saliendo a un tercero. **Guardala fuera del repo: sin ella el backup no se puede abrir.** |
 | `GOOGLE_DRIVE_BACKUPS_FOLDER_ID` *(variable)* | La carpeta, dentro de una unidad compartida, con la cuenta de servicio como Colaborador o Administrador de contenido. |
 
@@ -76,6 +76,34 @@ El usuario del pooler no es `postgres` sino `postgres.<ref>`, y el prefijo
 `aws-0` o `aws-1` cambia según el proyecto: **copiala del dashboard, no la armes
 a mano.** El workflow corta con un mensaje explícito si detecta la cadena
 equivocada.
+
+### Si no se tiene el JSON de la cuenta de servicio
+
+Se descarga una sola vez al crearla, así que es normal no tenerlo. Dos caminos:
+
+**Leerlo de Vercel.** Project Settings → Environment Variables →
+`GOOGLE_SERVICE_ACCOUNT_JSON` → menú de tres puntos. Si es una variable normal
+se puede ver; si tiene la etiqueta **Sensitive**, no —Vercel las guarda en
+formato no legible a propósito—. Con la CLI: `vercel env pull`, que tampoco trae
+las sensibles.
+
+**Generar una clave nueva, que siempre funciona.** Una cuenta de servicio admite
+varias claves activas a la vez, así que una nueva no afecta a la que está usando
+la app:
+
+1. El mail de la cuenta está en la app: **Compras → Configuración**. Tiene la
+   forma `algo@PROYECTO.iam.gserviceaccount.com`, y ese `PROYECTO` es el
+   proyecto de Google Cloud.
+2. Google Cloud Console → IAM y administración → Cuentas de servicio → esa
+   cuenta → **Claves** → Agregar clave → Crear clave nueva → **JSON**.
+3. El contenido completo del archivo que descarga va como valor del secret.
+
+**No borrar la clave que ya existe:** es la que usa la app en Vercel, y sin ella
+Compras y Mantenimiento dejan de hablar con las planillas. Agregar es seguro,
+borrar no.
+
+El archivo descargado es una clave privada: no va al repo, y conviene borrarlo
+del disco después de pegarlo.
 
 Después, correrlo a mano desde la pestaña Actions (*Run workflow*) y verificar
 que el archivo aparezca en Drive. **Hacelo antes de confiar en él.**

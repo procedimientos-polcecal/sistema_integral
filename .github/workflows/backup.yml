@@ -104,6 +104,37 @@ jobs:
         with:
           node-version: 22
 
+      - name: Comprobar que el JSON de Google sea el que va
+        # Un JSON mal pegado —recortado, con comillas de más, o el archivo
+        # equivocado— falla recién al pedir el token, con un error de OAuth que
+        # no dice que el problema es el secreto. Se valida acá, antes de hacer
+        # el dump, y se imprime el client_email para poder confirmar a ojo que
+        # es la cuenta que tiene acceso a la carpeta. El client_email no es
+        # secreto: es justamente el identificador que hay que compartir.
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          node -e '
+            let c;
+            try { c = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON); }
+            catch (e) {
+              console.log("::error::GOOGLE_SERVICE_ACCOUNT_JSON no es JSON válido: " + e.message + ". Hay que pegar el contenido completo del archivo .json que descarga Google, tal cual.");
+              process.exit(1);
+            }
+            for (const campo of ["client_email", "private_key"]) {
+              if (!c[campo]) {
+                console.log("::error::Al JSON le falta el campo " + campo + ". Puede ser el archivo equivocado: tiene que ser la clave de una cuenta de servicio.");
+                process.exit(1);
+              }
+            }
+            if (!c.private_key.includes("BEGIN PRIVATE KEY")) {
+              console.log("::error::La private_key del JSON está cortada o mal pegada.");
+              process.exit(1);
+            }
+            console.log("Cuenta de servicio: " + c.client_email);
+            console.log("::notice::Esta cuenta tiene que estar en la unidad compartida como Colaborador o Administrador de contenido.");
+          '
+
       - name: Hacer el dump
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
