@@ -21,10 +21,11 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
 
-  const [rrhh, remises, mantenimiento] = await Promise.all([
+  const [rrhh, remises, mantenimiento, compras] = await Promise.all([
     modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
     modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
     modulos.has("mantenimiento") ? resumenMantenimiento(supabase, hoyStr) : Promise.resolve(null),
+    modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
   ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -46,7 +47,16 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, notificaciones });
+  if (compras && compras.esperandoAprobacion > 0) {
+    notificaciones.push({
+      id: "compras-por-aprobar",
+      titulo: "Requerimientos esperando aprobación",
+      cantidad: compras.esperandoAprobacion,
+      href: "/compras/aprobaciones",
+    });
+  }
+
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -88,4 +98,37 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
   const equiposOperativos = (equipos ?? []).filter((e) => e.status === "OPERATIVO").length;
   const otPendientes = otCounts.reduce((acc, r) => acc + (r.count ?? 0), 0);
   return { equiposTotal, equiposOperativos, vencidos: vencidos ?? 0, otPendientes };
+}
+
+/**
+ * El estado del circuito de compras.
+ *
+ * Sale de la misma vista que alimenta el tablero, así que los números del
+ * inicio y los del tablero no pueden decir cosas distintas. Lo que espera
+ * aprobación de gerencia se cuenta aparte: esa cola vive antes del circuito
+ * de compra y no está en la vista.
+ */
+async function resumenCompras(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const [{ data: porEstado }, { count: esperandoAprobacion }] = await Promise.all([
+    supabase.from("compras_resumen_por_estado").select("estado_compra, cantidad"),
+    supabase
+      .from("compras_requerimientos")
+      .select("id", { count: "exact", head: true })
+      .in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"]),
+  ]);
+
+  const cantidad = (estado: string) =>
+    Number((porEstado ?? []).find((f) => f.estado_compra === estado)?.cantidad ?? 0);
+
+  // Lo que de verdad es trabajo por hacer: ni lo ya pedido, ni lo frenado a
+  // propósito.
+  const enCurso =
+    cantidad("SIN_INICIAR") + cantidad("EN_COMPARATIVA") +
+    cantidad("PARA_COMPRAR") + cantidad("APROBADO");
+
+  return {
+    enCurso,
+    esperandoAprobacion: esperandoAprobacion ?? 0,
+    paraComprar: cantidad("PARA_COMPRAR"),
+  };
 }

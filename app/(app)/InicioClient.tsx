@@ -7,6 +7,7 @@ interface Resumen {
   rrhh: { empleadosActivos: number; presentesHoy: number; ausentesHoy: number } | null;
   remises: { vehiculosActivos: number; empleadosConTurnoHoy: number } | null;
   mantenimiento: { equiposTotal: number; equiposOperativos: number; vencidos: number; otPendientes: number } | null;
+  compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
 }
 
 export default function InicioClient({ nombreUsuario }: { nombreUsuario: string }) {
@@ -16,10 +17,11 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
     fetch("/api/home/resumen")
       .then((r) => r.json())
       .then(setResumen)
-      .catch(() => setResumen({ rrhh: null, remises: null, mantenimiento: null }));
+      .catch(() => setResumen({ rrhh: null, remises: null, mantenimiento: null, compras: null }));
   }, []);
 
-  const sinModulos = resumen && !resumen.rrhh && !resumen.remises && !resumen.mantenimiento;
+  const sinModulos =
+    resumen && !resumen.rrhh && !resumen.remises && !resumen.mantenimiento && !resumen.compras;
 
   return (
     <div className="space-y-6">
@@ -79,8 +81,42 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             }
           />
         )}
+
+        {(!resumen || resumen.compras) && (
+          <ModuloCard
+            titulo="Compras"
+            href="/compras"
+            color="#1E7D34"
+            icon={<IconCarrito />}
+            // Lo que hay que hacer, no lo que ya se hizo: el histórico de
+            // pedidos cerrados es enorme y no dice nada acá.
+            hero={
+              resumen?.compras
+                ? { label: "Requerimientos en curso", valor: resumen.compras.enCurso }
+                : null
+            }
+            secundarias={
+              resumen?.compras
+                ? [
+                    { label: "Esperando aprobación", valor: resumen.compras.esperandoAprobacion },
+                    { label: "Para comprar", valor: resumen.compras.paraComprar },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function IconCarrito() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 3h2l2.4 11.4a1 1 0 0 0 1 .8h8.2a1 1 0 0 0 1-.8L20 7H6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="9.5" cy="19" r="1.3" />
+      <circle cx="17" cy="19" r="1.3" />
+    </svg>
   );
 }
 
