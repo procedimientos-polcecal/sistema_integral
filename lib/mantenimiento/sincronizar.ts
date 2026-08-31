@@ -38,6 +38,40 @@ const logra = (datos: Datos): Resultado => ({ ok: true, datos });
 const falla = (status: number, error: string, datos?: Datos): Resultado =>
   ({ ok: false, status, error, datos });
 
+/**
+ * Una sola fila por número, y cuáles venían repetidos.
+ *
+ * Las tres planillas se espejan con un `upsert` sobre su número —`oa_number`,
+ * `ot_number`, `os_number`—. Si el lote trae dos filas con el mismo, Postgres
+ * aborta **el lote entero** con "ON CONFLICT DO UPDATE command cannot affect
+ * row a second time": un número repetido en la planilla dejaba sin sincronizar
+ * las otras 1.760 órdenes, y el mensaje no decía cuál era.
+ *
+ * Gana la última, que en una planilla es la de más abajo: el trabajo nuevo se
+ * agrega al final, así que ante dos filas con el mismo número la de abajo es la
+ * más reciente. No se elige en silencio: los repetidos se devuelven para que la
+ * pantalla los nombre y alguien los corrija en la planilla, que es donde está
+ * el problema de verdad.
+ */
+export function unaPorNumero<T extends Datos>(
+  registros: T[],
+  clave: string
+): { unicos: T[]; repetidos: number[] } {
+  const porNumero = new Map<unknown, T>();
+  const repetidos = new Set<number>();
+
+  for (const r of registros) {
+    const numero = r[clave];
+    if (porNumero.has(numero)) repetidos.add(Number(numero));
+    porNumero.set(numero, r);
+  }
+
+  return {
+    unicos: [...porNumero.values()],
+    repetidos: [...repetidos].sort((a, b) => a - b),
+  };
+}
+
 /** El texto que explica por qué no se pudo leer una pestaña. */
 async function porQueNoSeLeyo(
   planilla: string, pestana: string, e: unknown, variable: string
@@ -91,8 +125,10 @@ export async function sincronizarAvisos(): Promise<Resultado> {
   }
 
   let guardados = 0;
-  for (let i = 0; i < registros.length; i += 500) {
-    const lote = registros.slice(i, i + 500);
+  const { unicos, repetidos } = unaPorNumero(registros, "oa_number");
+
+  for (let i = 0; i < unicos.length; i += 500) {
+    const lote = unicos.slice(i, i + 500);
     const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
 
     if (error) {
@@ -107,7 +143,10 @@ export async function sincronizarAvisos(): Promise<Resultado> {
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
   });
-  return logra({ leidas: filas.length - 1, guardados, sin_equipo: sinEquipo });
+  return logra({
+    leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
+    numeros_repetidos: repetidos,
+  });
 }
 
 /** Trae las órdenes de trabajo de su planilla. */
@@ -151,8 +190,10 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
   }
 
   let guardadas = 0;
-  for (let i = 0; i < registros.length; i += 500) {
-    const lote = registros.slice(i, i + 500);
+  const { unicos, repetidos } = unaPorNumero(registros, "ot_number");
+
+  for (let i = 0; i < unicos.length; i += 500) {
+    const lote = unicos.slice(i, i + 500);
     const { error } = await admin
       .from("ordenes_trabajo")
       .upsert(lote, { onConflict: "ot_number" });
@@ -173,6 +214,7 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     leidas: filas.length - 1,
     guardadas,
     sin_equipo: sinEquipo,
+    numeros_repetidos: repetidos,
     sin_proveedor: [...sinProveedor],
   });
 }

@@ -81,7 +81,14 @@ export default function OrdenesClient({
     setAvisoSync(
       res.ok
         ? `Se leyeron ${body.leidas} filas y se guardaron ${body.guardadas} órdenes.` +
-          (body.sin_equipo > 0 ? ` ${body.sin_equipo} sin equipo enlazado.` : "")
+          (body.sin_equipo > 0 ? ` ${body.sin_equipo} sin equipo enlazado.` : "") +
+          // Dos filas con el mismo N° de OT: se guardó la de más abajo, que es
+          // la más reciente. Hay que arreglarlo en la planilla, que es donde
+          // está el problema: acá sólo se puede elegir una.
+          (body.numeros_repetidos?.length
+            ? ` Ojo: la planilla tiene dos filas con el N° ${body.numeros_repetidos.join(", ")}` +
+              ` — se guardó la de más abajo. Corregilo en la planilla.`
+            : "")
         : (body.error ?? "No se pudo sincronizar.")
     );
     setSinProveedor(res.ok ? body.sin_proveedor ?? [] : []);

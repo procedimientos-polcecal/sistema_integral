@@ -15,6 +15,10 @@ import {
   SCOPE_SHEETS, SCOPE_DRIVE_LECTURA,
 } from "@/lib/core/google";
 import { letraColumna } from "@/lib/compras/comparativa";
+// La regla de en qué fila escribir vive en el núcleo: la usan las cuatro
+// planillas y tenerla dos veces es cómo se corrige en una sola.
+import { filaSiguienteSegunColumnaA } from "@/lib/core/sheets";
+export { filaSiguienteSegunColumnaA };
 export { urlDePlanilla } from "@/lib/compras/vincular";
 
 export interface ArchivoComparativa {
@@ -122,24 +126,6 @@ async function proximaFilaLibre(token: string, fileId: string, pestana: string):
 
   const columnaA = ((await res.json()).values ?? []) as string[][];
   return filaSiguienteSegunColumnaA(columnaA);
-}
-
-/**
- * En qué fila escribir, según la columna A.
- *
- * Va aparte de la llamada a Google para poder probarla: es la regla que
- * reemplazó al `append`, y la que decide si un presupuesto queda donde se lo ve
- * o mil filas más abajo.
- *
- * Una fila vacía en el medio no corta la cuenta: se busca la última con algo,
- * no la primera sin nada.
- */
-export function filaSiguienteSegunColumnaA(columnaA: string[][]): number {
-  for (let i = columnaA.length - 1; i >= 0; i--) {
-    if (String(columnaA[i]?.[0] ?? "").trim()) return i + 2;
-  }
-  // Ni encabezado: se empieza en la 2 y la 1 queda para los títulos.
-  return 2;
 }
 
 /**

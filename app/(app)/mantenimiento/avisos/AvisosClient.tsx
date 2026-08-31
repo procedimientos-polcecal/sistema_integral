@@ -72,6 +72,10 @@ export default function AvisosClient({
       `Se leyeron ${body.leidas} filas y se guardaron ${body.guardados} avisos.` +
       (body.sin_equipo > 0
         ? ` ${body.sin_equipo} no se pudieron enlazar a un equipo del sistema.`
+        : "") +
+      (body.numeros_repetidos?.length
+        ? ` Ojo: la planilla tiene dos filas con el N° ${body.numeros_repetidos.join(", ")}` +
+          ` — se guardó la de más abajo. Corregilo en la planilla.`
         : "")
     );
     router.refresh();
