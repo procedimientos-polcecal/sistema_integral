@@ -4,7 +4,10 @@ import {
   buscarLeer,
   agrupar,
   contar,
+  contarPorEmpresa,
+  crearEn,
   credencialesQueFaltan,
+  empresasPermitidas,
   hayCredencialesOdoo,
   idDeRelacion,
   llamar,
@@ -50,6 +53,26 @@ function urlLlamada(fetchMock: ReturnType<typeof vi.fn>, n: number): string {
   return fetchMock.mock.calls[n][0] as string;
 }
 
+/**
+ * Iniciar sesión son dos viajes: `authenticate` y el `read` de `res.users` que
+ * resuelve qué empresas ve el bot. Este helper los deja encolados, así los tests
+ * que van al ORM no repiten el andamiaje.
+ */
+function encolarSesion(
+  mock: ReturnType<typeof vi.fn>,
+  empresas: number[] = [1, 2],
+  uid = 7
+): void {
+  mock
+    .mockResolvedValueOnce(respuestaOk(uid))
+    .mockResolvedValueOnce(
+      respuestaOk([{ id: uid, company_ids: empresas, company_id: [empresas[0], "POLCECAL"] }])
+    );
+}
+
+/** La primera llamada al ORM: la 0 y la 1 se las lleva iniciar sesión. */
+const PRIMERA_AL_ORM = 2;
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -87,7 +110,7 @@ describe("credenciales", () => {
 
 describe("autenticación", () => {
   it("manda db, usuario y clave al servicio common", async () => {
-    fetchMock.mockResolvedValueOnce(respuestaOk(7));
+    encolarSesion(fetchMock);
 
     await expect(autenticar()).resolves.toBe(7);
 
@@ -111,35 +134,130 @@ describe("autenticación", () => {
     await expect(autenticar()).rejects.toThrow(/ODOO_API_KEY/);
   });
 
-  it("el uid se cachea: dos llamadas al ORM autentican una sola vez", async () => {
+  it("la sesión se cachea: dos llamadas al ORM autentican una sola vez", async () => {
+    encolarSesion(fetchMock);
     fetchMock
-      .mockResolvedValueOnce(respuestaOk(7)) // authenticate
       .mockResolvedValueOnce(respuestaOk(3)) // search_count
       .mockResolvedValueOnce(respuestaOk(5)); // search_count
 
     await contar("res.partner");
     await contar("purchase.order");
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // Dos de sesión + dos de ORM: la sesión no se rearma en cada llamada.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(sobreEnviado(fetchMock, 0).params.method).toBe("authenticate");
-    expect(sobreEnviado(fetchMock, 1).params.method).toBe("execute_kw");
-    expect(sobreEnviado(fetchMock, 2).params.method).toBe("execute_kw");
+    expect(sobreEnviado(fetchMock, 1).params.args[4]).toBe("read");
+    expect(sobreEnviado(fetchMock, 2).params.args[4]).toBe("search_count");
+    expect(sobreEnviado(fetchMock, 3).params.args[4]).toBe("search_count");
   });
 
   it("olvidar la sesión fuerza a autenticar de nuevo (rotación de la API key)", async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(respuestaOk(7)));
+    encolarSesion(fetchMock);
+    encolarSesion(fetchMock);
 
     await autenticar();
     olvidarSesionOdoo();
     await autenticar();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(sobreEnviado(fetchMock, 2).params.method).toBe("authenticate");
+  });
+});
+
+/**
+ * El grupo son dos empresas y Odoo lleva cada registro por separado. Lo que se
+ * verifica acá es la falla que **no se ve**: si no se manda
+ * `allowed_company_ids`, Odoo devuelve sólo la empresa por defecto del usuario,
+ * con HTTP 200 y sin ninguna advertencia.
+ */
+describe("las dos empresas", () => {
+  it("toda llamada al ORM va con las dos empresas en el contexto", async () => {
+    encolarSesion(fetchMock, [1, 2]);
+    fetchMock.mockResolvedValueOnce(respuestaOk(0));
+
+    await contar("purchase.order");
+
+    const [, , , , , , kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
+    expect(kwargs.context.allowed_company_ids).toEqual([1, 2]);
+  });
+
+  it("resuelve las empresas leyendo el propio usuario, no adivinando", async () => {
+    encolarSesion(fetchMock, [1, 2]);
+
+    await expect(empresasPermitidas()).resolves.toEqual([1, 2]);
+
+    const { args } = sobreEnviado(fetchMock, 1).params;
+    expect(args[3]).toBe("res.users");
+    expect(args[6].context).toBeDefined();
+    expect(args[5]).toEqual([[7], ["company_ids", "company_id"]]);
+  });
+
+  it("si el bot ve una sola empresa, no se inventa la otra", async () => {
+    // Que sea visible es justamente el punto: el ping avisa, el cliente no miente.
+    encolarSesion(fetchMock, [2]);
+    fetchMock.mockResolvedValueOnce(respuestaOk(0));
+
+    await contar("account.move");
+
+    const [, , , , , , kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
+    expect(kwargs.context.allowed_company_ids).toEqual([2]);
+  });
+
+  it("sin company_ids, cae en la empresa por defecto del usuario", async () => {
+    fetchMock
+      .mockResolvedValueOnce(respuestaOk(7))
+      .mockResolvedValueOnce(respuestaOk([{ id: 7, company_id: [5, "POLYSAN"] }]));
+
+    await expect(empresasPermitidas()).resolves.toEqual([5]);
+  });
+
+  it("leer una empresa puntual angosta el contexto a esa sola", async () => {
+    encolarSesion(fetchMock, [1, 2]);
+    fetchMock.mockResolvedValueOnce(respuestaOk([]));
+
+    await buscarLeer("purchase.order", [], ["name"], { empresa: 2 });
+
+    const [, , , , , , kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
+    expect(kwargs.context.allowed_company_ids).toEqual([2]);
+  });
+
+  it("crearEn pone la empresa en los valores Y en el contexto", async () => {
+    encolarSesion(fetchMock, [1, 2]);
+    fetchMock.mockResolvedValueOnce(respuestaOk(931));
+
+    await crearEn("purchase.order", 2, { partner_id: 44 });
+
+    const [, , , modelo, metodo, args, kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
+    expect([modelo, metodo]).toEqual(["purchase.order", "create"]);
+    // En los vals, para que el registro quede en la empresa correcta...
+    expect(args[0]).toEqual({ partner_id: 44, company_id: 2 });
+    // ...y en el contexto, porque de ahí saca Odoo el diario y la secuencia.
+    expect(kwargs.context.allowed_company_ids).toEqual([2]);
+  });
+
+  it("contarPorEmpresa devuelve id, nombre y cantidad por empresa", async () => {
+    encolarSesion(fetchMock, [1, 2]);
+    fetchMock.mockResolvedValueOnce(
+      respuestaOk([
+        { company_id: [1, "POLCECAL"], __count: 120 },
+        { company_id: [2, "POLYSAN"], __count: 34 },
+      ])
+    );
+
+    await expect(contarPorEmpresa("purchase.order")).resolves.toEqual([
+      { empresa: 1, nombre: "POLCECAL", cantidad: 120 },
+      { empresa: 2, nombre: "POLYSAN", cantidad: 34 },
+    ]);
+
+    const [, , , modelo, metodo, args] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
+    expect([modelo, metodo]).toEqual(["purchase.order", "read_group"]);
+    expect(args[2]).toEqual(["company_id"]);
   });
 });
 
 describe("llamadas al ORM", () => {
   beforeEach(() => {
-    fetchMock.mockResolvedValueOnce(respuestaOk(7)); // authenticate
+    encolarSesion(fetchMock);
   });
 
   it("execute_kw va con el orden que Odoo espera y el contexto puesto", async () => {
@@ -147,7 +265,7 @@ describe("llamadas al ORM", () => {
 
     await llamar("res.partner", "read", [[1], ["name"]]);
 
-    const { params } = sobreEnviado(fetchMock, 1);
+    const { params } = sobreEnviado(fetchMock, PRIMERA_AL_ORM);
     expect(params.service).toBe("object");
     expect(params.method).toBe("execute_kw");
 
@@ -169,7 +287,7 @@ describe("llamadas al ORM", () => {
       desplazamiento: 10,
     });
 
-    const [, , , modelo, metodo, args, kwargs] = sobreEnviado(fetchMock, 1).params.args;
+    const [, , , modelo, metodo, args, kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
     expect(modelo).toBe("purchase.order");
     expect(metodo).toBe("search_read");
     expect(args).toEqual([[["state", "=", "purchase"]]]);
@@ -187,7 +305,7 @@ describe("llamadas al ORM", () => {
     await buscarLeer("account.move", [], ["name"]);
 
     // Sin `fields`, Odoo devuelve los 200+ campos de account.move.
-    const [, , , , , , kwargs] = sobreEnviado(fetchMock, 1).params.args;
+    const [, , , , , , kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
     expect(kwargs.fields).toEqual(["name"]);
   });
 
@@ -201,7 +319,7 @@ describe("llamadas al ORM", () => {
       ["journal_id"]
     );
 
-    const [, , , modelo, metodo, args, kwargs] = sobreEnviado(fetchMock, 1).params.args;
+    const [, , , modelo, metodo, args, kwargs] = sobreEnviado(fetchMock, PRIMERA_AL_ORM).params.args;
     expect(modelo).toBe("account.move.line");
     expect(metodo).toBe("read_group");
     expect(args).toEqual([[["parent_state", "=", "posted"]], ["balance:sum"], ["journal_id"]]);
@@ -212,7 +330,7 @@ describe("llamadas al ORM", () => {
 describe("transporte", () => {
   it("normaliza la barra final de la URL", async () => {
     process.env.ODOO_URL = "https://polcecal.odoo.com/";
-    fetchMock.mockResolvedValueOnce(respuestaOk(7));
+    encolarSesion(fetchMock);
 
     await autenticar();
 
@@ -221,14 +339,13 @@ describe("transporte", () => {
   });
 
   it("un error de Odoo llega con HTTP 200 y hay que mirarlo igual", async () => {
-    fetchMock
-      .mockResolvedValueOnce(respuestaOk(7))
-      .mockResolvedValueOnce(
-        respuestaConError(
-          "odoo.exceptions.AccessError",
-          "You are not allowed to access 'Journal' (account.journal) records."
-        )
-      );
+    encolarSesion(fetchMock);
+    fetchMock.mockResolvedValueOnce(
+      respuestaConError(
+        "odoo.exceptions.AccessError",
+        "You are not allowed to access 'Journal' (account.journal) records."
+      )
+    );
 
     await expect(contar("account.journal")).rejects.toThrow(/no tiene permiso/);
   });

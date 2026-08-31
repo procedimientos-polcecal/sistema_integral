@@ -3,12 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { es_admin_check } from "@/lib/core/route-utils";
 import {
   agrupar,
-  autenticar,
   buscarLeer,
   camposDe,
   contar,
+  contarPorEmpresa,
   credencialesQueFaltan,
+  empresasDeOdoo,
   hayCredencialesOdoo,
+  iniciarSesion,
   llamar,
   versionDeOdoo,
 } from "@/lib/odoo/client";
@@ -18,12 +20,14 @@ import {
  * como admin: GET /api/odoo/ping
  *
  * No sincroniza nada ni escribe una sola línea en Odoo. Sirve para contestar,
- * antes de diseñar la sincronización, las tres preguntas que hoy no sabemos:
+ * antes de diseñar la sincronización, las cuatro preguntas que hoy no sabemos:
  *
  * 1. ¿Las credenciales del usuario bot funcionan?
- * 2. ¿Qué **permisos** tiene ese usuario? En Odoo un permiso faltante no se ve
- *    en ningún lado hasta que la llamada vuelve rechazada.
- * 3. ¿Los modelos que nos importan tienen los datos que suponemos, con los
+ * 2. ¿Ve **las dos empresas**? Odoo lleva POLCECAL y POLYSAN por separado, y si
+ *    el bot tiene una sola habilitada devuelve medio grupo sin decir nada.
+ * 3. ¿Qué **permisos** tiene? En Odoo un permiso faltante no se ve en ningún
+ *    lado hasta que la llamada vuelve rechazada.
+ * 4. ¿Los modelos que nos importan tienen los datos que suponemos, con los
  *    nombres de campo que suponemos?
  *
  * Cada sonda va en su propio try: el valor de esto es justamente el mapa de qué
@@ -41,11 +45,7 @@ interface Sonda {
   error?: string;
 }
 
-async function sonda(
-  nombre: string,
-  modelo: string,
-  fn: () => Promise<unknown>
-): Promise<Sonda> {
+async function sonda(nombre: string, modelo: string, fn: () => Promise<unknown>): Promise<Sonda> {
   const arranque = Date.now();
   try {
     return { nombre, modelo, ok: true, detalle: await fn() };
@@ -92,49 +92,79 @@ export async function GET() {
   }
 
   const sondas: Sonda[] = [];
+  const alertas: string[] = [];
 
-  // ── Quién soy y dónde estoy ────────────────────────────────
+  // ── Quién soy y qué empresas veo ───────────────────────────
   sondas.push(
     await sonda("usuario de integración", "res.users", async () => {
-      const uid = await autenticar();
-      const [yo] = await llamar<{ id: number; name: string; login: string; company_id: unknown }[]>(
+      const sesion = await iniciarSesion();
+      const [yo] = await llamar<{ id: number; name: string; login: string }[]>(
         "res.users",
         "read",
-        [[uid], ["name", "login", "company_id"]]
+        [[sesion.uid], ["name", "login"]]
       );
-      return { uid, ...yo };
+
+      /*
+       * Dos empresas es el número esperado. Una sola no es un error de Odoo: es
+       * la integración mirando la mitad del grupo, y no se nota en ningún lado.
+       */
+      if (sesion.empresas.length < 2) {
+        alertas.push(
+          `El usuario bot tiene ${sesion.empresas.length} empresa(s) habilitada(s), y el grupo son dos ` +
+            `(POLCECAL y POLYSAN). Así, las lecturas devuelven sólo una parte sin avisar. ` +
+            `Se arregla en Odoo: Ajustes → Usuarios → el usuario → Empresas permitidas.`
+        );
+      }
+
+      return { ...sesion, ...yo };
     })
   );
 
   sondas.push(
-    await sonda("empresas visibles", "res.company", () =>
-      buscarLeer("res.company", [], ["name", "currency_id"], { limite: 20 })
-    )
+    await sonda("empresas de Odoo", "res.company", async () => {
+      const empresas = await empresasDeOdoo();
+      // El mapeo con la tabla `empresas` del núcleo se hace por nombre, así que
+      // lo que importa es cómo están escritas exactamente del lado de Odoo.
+      return empresas.map((e) => ({ id: e.id, nombre: e.name, moneda: e.currency_id }));
+    })
   );
 
   // ── Compras: el módulo que va a ser bidireccional ──────────
   sondas.push(
     await sonda("órdenes de compra", "purchase.order", async () => ({
       total: await contar("purchase.order"),
+      porEmpresa: await contarPorEmpresa("purchase.order"),
       ultimas: await buscarLeer(
         "purchase.order",
         [],
-        ["name", "partner_id", "date_order", "amount_total", "state", "invoice_status"],
+        ["name", "company_id", "partner_id", "date_order", "amount_total", "state", "invoice_status"],
         { limite: 5, orden: "date_order desc" }
       ),
     }))
   );
 
+  /*
+   * Los proveedores son el único dato que puede ser de las dos.
+   *
+   * En Odoo, un `res.partner` con `company_id` vacío es compartido por todas las
+   * empresas; con empresa puesta, es exclusivo de esa. Saber cuántos hay de cada
+   * tipo decide si el padrón de proveedores del SdG se sincroniza una vez o dos.
+   */
   sondas.push(
-    await sonda("proveedores", "res.partner", async () => ({
-      total: await contar("res.partner", [["supplier_rank", ">", 0]]),
-      muestra: await buscarLeer(
-        "res.partner",
-        [["supplier_rank", ">", 0]],
-        ["name", "vat", "email", "phone"],
-        { limite: 5, orden: "name asc" }
-      ),
-    }))
+    await sonda("proveedores", "res.partner", async () => {
+      const esProveedor = [["supplier_rank", ">", 0]];
+      return {
+        total: await contar("res.partner", esProveedor),
+        compartidos: await contar("res.partner", [...esProveedor, ["company_id", "=", false]]),
+        porEmpresa: await contarPorEmpresa("res.partner", esProveedor),
+        muestra: await buscarLeer(
+          "res.partner",
+          esProveedor,
+          ["name", "vat", "email", "phone", "company_id"],
+          { limite: 5, orden: "name asc" }
+        ),
+      };
+    })
   );
 
   // ── Contabilidad y Tesorería: sólo lectura, por decisión ───
@@ -144,7 +174,7 @@ export async function GET() {
         "account.journal",
         [["type", "in", ["bank", "cash"]]],
         ["name", "code", "type", "currency_id", "company_id"],
-        { limite: 20, orden: "type asc, name asc" }
+        { limite: 40, orden: "company_id asc, type asc, name asc" }
       )
     )
   );
@@ -152,10 +182,19 @@ export async function GET() {
   sondas.push(
     await sonda("facturas de proveedor", "account.move", async () => ({
       total: await contar("account.move", [["move_type", "=", "in_invoice"]]),
+      porEmpresa: await contarPorEmpresa("account.move", [["move_type", "=", "in_invoice"]]),
       ultimas: await buscarLeer(
         "account.move",
         [["move_type", "=", "in_invoice"]],
-        ["name", "partner_id", "invoice_date", "amount_total", "state", "payment_state"],
+        [
+          "name",
+          "company_id",
+          "partner_id",
+          "invoice_date",
+          "amount_total",
+          "state",
+          "payment_state",
+        ],
         { limite: 5, orden: "invoice_date desc" }
       ),
     }))
@@ -164,24 +203,37 @@ export async function GET() {
   sondas.push(
     await sonda("pagos", "account.payment", async () => ({
       total: await contar("account.payment"),
+      porEmpresa: await contarPorEmpresa("account.payment"),
       ultimos: await buscarLeer(
         "account.payment",
         [],
-        ["display_name", "date", "amount", "payment_type", "partner_id", "journal_id", "state"],
+        [
+          "display_name",
+          "company_id",
+          "date",
+          "amount",
+          "payment_type",
+          "partner_id",
+          "journal_id",
+          "state",
+        ],
         { limite: 5, orden: "date desc" }
       ),
     }))
   );
 
   /*
-   * La sonda más importante de todas: los saldos por diario, sumados por Odoo.
+   * La sonda más importante de todas: los saldos por empresa y por diario,
+   * sumados por Odoo.
    *
    * Es la prueba de que Tesorería se puede mostrar en el SdG sin traerse los
    * apuntes uno por uno. `parent_state = posted` deja afuera los borradores, que
-   * es exactamente lo que hace la vista de contabilidad de Odoo.
+   * es exactamente lo que hace la vista de contabilidad de Odoo. Y agrupa por
+   * empresa antes que por diario porque un saldo del grupo, sumado de las dos,
+   * no significa nada: son dos patrimonios distintos.
    */
   sondas.push(
-    await sonda("saldos por diario (read_group)", "account.move.line", () =>
+    await sonda("saldos por empresa y diario (read_group)", "account.move.line", () =>
       agrupar(
         "account.move.line",
         [
@@ -189,18 +241,19 @@ export async function GET() {
           ["parent_state", "=", "posted"],
         ],
         ["balance:sum"],
-        ["journal_id"],
-        { limite: 20 }
+        ["company_id", "journal_id"],
+        { limite: 60 }
       )
     )
   );
 
   /*
-   * El esquema real de purchase.order, no el que suponemos.
+   * El esquema real, no el que suponemos.
    *
-   * Sólo los nombres: el detalle completo son cientos de líneas. Alcanza para
-   * saber si esta base tiene campos propios (los `x_`) y si la localización
-   * argentina agregó los suyos, antes de escribir el primer mapeo.
+   * `analytic_distribution` es lo que decide si el reparto de un gasto entre las
+   * dos empresas se puede expresar en Odoo sin duplicar el documento: es un JSON
+   * de porcentajes por cuenta analítica. Si el campo no está, esa opción se cae
+   * y hay que resolverlo con dos órdenes.
    */
   sondas.push(
     await sonda("campos de purchase.order", "purchase.order", async () => {
@@ -211,6 +264,20 @@ export async function GET() {
         propios: nombres.filter((n) => n.startsWith("x_")),
         deLocalizacion: nombres.filter((n) => n.startsWith("l10n_")),
       };
+    })
+  );
+
+  sondas.push(
+    await sonda("reparto entre empresas", "purchase.order.line", async () => {
+      const campos = await camposDe("purchase.order.line");
+      const analiticos = Object.keys(campos).filter((n) => n.includes("analytic"));
+      if (!analiticos.includes("analytic_distribution")) {
+        alertas.push(
+          "purchase.order.line no tiene analytic_distribution: repartir un gasto entre las dos " +
+            "empresas sin duplicar la orden no va a ser posible por esa vía."
+        );
+      }
+      return { camposAnaliticos: analiticos };
     })
   );
 
@@ -226,6 +293,7 @@ export async function GET() {
       // de grupos que hay que revisarle al usuario bot en Odoo.
       revisarPermisosDe: fallaron.map((s) => s.modelo),
     },
+    alertas,
     sondas,
   });
 }

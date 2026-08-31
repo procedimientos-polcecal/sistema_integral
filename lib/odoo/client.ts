@@ -162,17 +162,86 @@ async function jsonrpc<T>(
 // ── Sesión ───────────────────────────────────────────────────
 
 /**
- * El `uid` del usuario bot, cacheado mientras viva la instancia.
+ * Quién es el usuario bot y **qué empresas puede ver**.
  *
- * Autenticar es un viaje de red completo y el uid de un usuario no cambia
- * nunca, así que repetirlo en cada llamada es regalar latencia. No es un caché
- * entre usuarios: acá hay un solo usuario, el de la integración.
+ * Lo segundo es lo importante. El grupo son dos empresas —POLCECAL y POLYSAN— y
+ * Odoo lleva cada registro por separado: toda orden de compra, todo asiento y
+ * todo diario pertenece a una `company_id` y sólo a una.
+ *
+ * Y filtra en silencio. Si el usuario bot tiene una sola empresa habilitada, las
+ * lecturas devuelven **la mitad de los datos con HTTP 200 y sin una advertencia**.
+ * Es la peor falla posible: no se ve. Por eso la sesión resuelve las empresas
+ * del usuario una vez y las manda en `allowed_company_ids` en cada llamada, en
+ * vez de dejar que Odoo aplique la empresa por defecto.
  */
-let uidCacheado: number | null = null;
+export interface SesionOdoo {
+  uid: number;
+  /** Las `res.company` que el usuario bot tiene habilitadas. */
+  empresas: number[];
+  /** La empresa por defecto del usuario, que Odoo usa si no se dice otra cosa. */
+  empresaPorDefecto: number | null;
+}
 
+/**
+ * La sesión, cacheada mientras viva la instancia.
+ *
+ * Autenticar y resolver empresas son dos viajes de red, y nada de eso cambia
+ * durante la vida de una instancia. No es un caché entre usuarios: acá hay un
+ * solo usuario, el de la integración.
+ */
+let sesionCacheada: SesionOdoo | null = null;
+
+export async function iniciarSesion(): Promise<SesionOdoo> {
+  if (sesionCacheada) return sesionCacheada;
+
+  const { db, clave } = credenciales();
+  const uid = await autenticarSinCache();
+
+  /*
+   * Este read va por `jsonrpc` crudo y no por `llamar()` a propósito: `llamar()`
+   * necesita la sesión para armar el contexto, y la sesión necesita este read.
+   * Leer el propio usuario no depende de qué empresas tenga habilitadas.
+   */
+  const [yo] = await jsonrpc<
+    { id: number; company_ids?: number[]; company_id?: Many2One }[]
+  >("object", "execute_kw", [
+    db,
+    uid,
+    clave,
+    "res.users",
+    "read",
+    [[uid], ["company_ids", "company_id"]],
+    { context: CONTEXTO_BASE },
+  ]);
+
+  const porDefecto = idDeRelacion(yo?.company_id);
+  // Si por algún motivo no vinieran las habilitadas, al menos la por defecto.
+  const empresas = yo?.company_ids?.length
+    ? yo.company_ids
+    : porDefecto !== null
+      ? [porDefecto]
+      : [];
+
+  sesionCacheada = { uid, empresas, empresaPorDefecto: porDefecto };
+  return sesionCacheada;
+}
+
+/** El `uid` del usuario bot. */
 export async function autenticar(): Promise<number> {
-  if (uidCacheado !== null) return uidCacheado;
+  return (await iniciarSesion()).uid;
+}
 
+/**
+ * Las empresas que el usuario bot puede ver, por id de Odoo.
+ *
+ * Si esto devuelve una sola, la integración está viendo medio grupo: hay que
+ * habilitarle la otra en Odoo (Ajustes → Usuarios → Empresas permitidas).
+ */
+export async function empresasPermitidas(): Promise<number[]> {
+  return (await iniciarSesion()).empresas;
+}
+
+async function autenticarSinCache(): Promise<number> {
   const { db, usuario, clave } = credenciales();
   const uid = await jsonrpc<number | false>("common", "authenticate", [db, usuario, clave, {}]);
 
@@ -190,13 +259,12 @@ export async function autenticar(): Promise<number> {
     );
   }
 
-  uidCacheado = uid;
   return uid;
 }
 
 /** Tirar la sesión cacheada. Hace falta al rotar la API key, y en los tests. */
 export function olvidarSesionOdoo(): void {
-  uidCacheado = null;
+  sesionCacheada = null;
 }
 
 // ── Llamadas al ORM ──────────────────────────────────────────
@@ -215,11 +283,22 @@ export async function llamar<T>(
   kwargs: Record<string, unknown> = {}
 ): Promise<T> {
   const { db, clave } = credenciales();
-  const uid = await autenticar();
+  const { uid, empresas } = await iniciarSesion();
 
+  /*
+   * `allowed_company_ids` va en **todas** las llamadas, con las dos empresas.
+   *
+   * Sin esto, Odoo aplica la empresa por defecto del usuario y devuelve sólo lo
+   * de esa: la mitad del grupo, sin error y sin aviso. Un `limit` que no alcanza
+   * se nota; esto no.
+   */
   const conContexto = {
     ...kwargs,
-    context: { ...CONTEXTO_BASE, ...((kwargs.context as object) ?? {}) },
+    context: {
+      ...CONTEXTO_BASE,
+      ...(empresas.length ? { allowed_company_ids: empresas } : {}),
+      ...((kwargs.context as object) ?? {}),
+    },
   };
 
   return jsonrpc<T>("object", "execute_kw", [db, uid, clave, modelo, metodo, args, conContexto]);
@@ -230,6 +309,14 @@ export interface OpcionesDeLectura {
   desplazamiento?: number;
   /** Como en Odoo: `"date_order desc"`, `"name asc"`. */
   orden?: string;
+  /**
+   * Leer una sola empresa (id de `res.company`), en vez de las dos.
+   *
+   * Es el caso raro: por defecto se leen las dos y se separa por `company_id`,
+   * que es lo que hacen los módulos del SdG. Sirve para pantallas que ya están
+   * filtradas por empresa.
+   */
+  empresa?: number;
   contexto?: Record<string, unknown>;
 }
 
@@ -250,7 +337,12 @@ export async function buscarLeer<T = Registro>(
   if (opciones.limite !== undefined) kwargs.limit = opciones.limite;
   if (opciones.desplazamiento !== undefined) kwargs.offset = opciones.desplazamiento;
   if (opciones.orden !== undefined) kwargs.order = opciones.orden;
-  if (opciones.contexto) kwargs.context = opciones.contexto;
+  if (opciones.empresa !== undefined || opciones.contexto) {
+    kwargs.context = {
+      ...(opciones.empresa !== undefined ? { allowed_company_ids: [opciones.empresa] } : {}),
+      ...opciones.contexto,
+    };
+  }
 
   return llamar<T[]>(modelo, "search_read", [dominio], kwargs);
 }
@@ -298,6 +390,70 @@ export async function camposDe(
   return llamar(modelo, "fields_get", [[]], {
     attributes: ["string", "type", "required", "relation"],
   });
+}
+
+// ── Las dos empresas ─────────────────────────────────────────
+
+export interface EmpresaDeOdoo {
+  id: number;
+  name: string;
+  /** Muchos modelos exigen la moneda; se trae de una para no volver a preguntar. */
+  currency_id: Many2One;
+}
+
+/** Las empresas de Odoo que el usuario bot ve. Es el otro lado del mapeo. */
+export async function empresasDeOdoo(): Promise<EmpresaDeOdoo[]> {
+  return buscarLeer<EmpresaDeOdoo>("res.company", [], ["name", "currency_id"], {
+    limite: 50,
+    orden: "id asc",
+  });
+}
+
+/**
+ * Cuántos registros hay **por empresa**, contados por Odoo.
+ *
+ * Es la forma de no engañarse: un total global no distingue entre "las dos
+ * empresas tienen datos" y "la integración sólo ve una". Devuelve el id de
+ * empresa, su nombre y la cantidad.
+ */
+export async function contarPorEmpresa(
+  modelo: string,
+  dominio: Dominio = []
+): Promise<{ empresa: number | null; nombre: string | null; cantidad: number }[]> {
+  const grupos = await agrupar(modelo, dominio, ["company_id"], ["company_id"]);
+
+  return grupos.map((g) => ({
+    empresa: idDeRelacion(g.company_id),
+    nombre: nombreDeRelacion(g.company_id),
+    cantidad: Number(g.__count ?? 0),
+  }));
+}
+
+/**
+ * Crear un registro **en una empresa puntual**.
+ *
+ * La empresa va en dos lugares a propósito: en los valores y en el contexto.
+ * No es redundante. Odoo calcula los valores por defecto —diario, secuencia,
+ * posición fiscal, cuentas— a partir de la empresa del **contexto**, no del
+ * `company_id` que mandemos en los vals. Poniendo sólo uno de los dos, el
+ * registro queda en una empresa con los defaults de la otra: numeración y
+ * diario equivocados, y encima difícil de ver.
+ *
+ * Y la empresa es obligatoria por diseño: dejarla implícita significa que Odoo
+ * elige la por defecto del usuario bot, o sea que una OC del grupo se contabiliza
+ * en la empresa que resultó estar primera en la lista.
+ */
+export async function crearEn(
+  modelo: string,
+  empresa: number,
+  valores: Record<string, unknown>
+): Promise<number> {
+  return llamar<number>(
+    modelo,
+    "create",
+    [{ ...valores, company_id: empresa }],
+    { context: { allowed_company_ids: [empresa] } }
+  );
 }
 
 /**
