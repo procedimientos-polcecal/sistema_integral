@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
 const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
@@ -21,6 +21,21 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
+
+  // La lista de Configuración, igual que al registrar el trabajo hecho: se
+  // elige de ella en vez de escribir. Escribir el nombre cada vez es cómo
+  // "Piparo" y "piparo" terminan siendo dos personas, y cómo la orden deja de
+  // sumar horas a nadie.
+  const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
+
+  useEffect(() => {
+    let vigente = true;
+    fetch("/api/mantenimiento/operarios")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((b) => { if (vigente) setOperarios(b.data ?? []); })
+      .catch(() => {});
+    return () => { vigente = false; };
+  }, []);
 
   const [form, setForm] = useState({
     equipment_id:   "",
@@ -179,16 +194,29 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input value={form.contratista} onChange={e => f("contratista", e.target.value)} className="input" />
             </F>
           )}
+          {/* Cada columna de la orden tiene su propia lista de gente: quién
+              puede ir primero no es quién puede ir tercero. Es el mismo `slot`
+              que usa el modal de registrar. */}
           <div className="grid grid-cols-3 gap-4">
-            <F label="Operario 1">
-              <input value={form.operario_1} onChange={e => f("operario_1", e.target.value)} className="input" placeholder="—" />
-            </F>
-            <F label="Operario 2">
-              <input value={form.operario_2} onChange={e => f("operario_2", e.target.value)} className="input" placeholder="—" />
-            </F>
-            <F label="Operario 3">
-              <input value={form.operario_3} onChange={e => f("operario_3", e.target.value)} className="input" placeholder="—" />
-            </F>
+            {([1, 2, 3] as const).map((slot) => {
+              const campo = `operario_${slot}` as "operario_1" | "operario_2" | "operario_3";
+              const elegido = form[campo];
+              const suyos = operarios.filter((o) => o.slot === slot).map((o) => o.nombre);
+              return (
+                <F key={slot} label={`Operario ${slot}`}>
+                  <select
+                    value={elegido}
+                    onChange={(e) => f(campo, e.target.value)}
+                    className="input"
+                  >
+                    <option value="">—</option>
+                    {[...new Set([...suyos, ...(elegido ? [elegido] : [])])].sort().map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </F>
+              );
+            })}
           </div>
 
           {/* Va con el resto del formulario y no escondido entre los campos:
