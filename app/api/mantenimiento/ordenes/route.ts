@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
 import {
-  celdasParaRegistrar, filaParaLaPlanillaDeOT, type RegistroDeOT,
+  celdasParaRegistrar, filaParaLaPlanillaDeOT, repartirRegistroDeOT,
+  type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
@@ -245,29 +246,11 @@ export async function PATCH(request: Request) {
     update.estado = estado;
   }
 
-  // Lo que se anota al registrar el trabajo. Cada uno tiene su columna en la
-  // planilla, así que se guardan acá y se escriben allá.
-  const registro: RegistroDeOT = {};
-  const texto = (v: unknown) => String(v ?? "").trim() || null;
-
-  for (const campo of ["contratista", "operario_1", "operario_2", "operario_3", "observaciones"] as const) {
-    if (body[campo] !== undefined) {
-      update[campo] = texto(body[campo]);
-      registro[campo] = update[campo] as string | null;
-    }
-  }
-  if (body.horas !== undefined) {
-    const n = Number(body.horas);
-    update.horas = body.horas === null || body.horas === "" || isNaN(n) ? null : n;
-    registro.horas = update.horas as number | null;
-  }
-  if (body.fecha_cierre !== undefined) {
-    update.fecha_cierre = body.fecha_cierre || null;
-    registro.fecha_cierre = update.fecha_cierre as string | null;
-  }
-  if (estado !== undefined) registro.estado = estado;
-  // La foto va a la planilla pero no a la tabla: acá vive en la ejecución.
-  if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
+  // Qué va a la tabla y qué a la planilla no es lo mismo: las observaciones y
+  // la foto no tienen columna en `ordenes_trabajo`. El reparto vive en
+  // `repartirRegistroDeOT`, con sus tests.
+  const { update: campos, registro } = repartirRegistroDeOT(body);
+  Object.assign(update, campos);
 
   // Que el trabajo obligue a parar el sector no viene de la planilla: se marca
   // acá. Y se puede marcar en cualquier momento, no sólo al crear la OT: las
@@ -276,7 +259,10 @@ export async function PATCH(request: Request) {
     update.requiere_parada_sector = Boolean(requiere_parada_sector);
   }
 
-  if (Object.keys(update).length === 1) {
+  // `update` arranca con `synced_at`, así que uno solo quiere decir que no hay
+  // nada para la tabla. Igual puede haber algo para la planilla —observaciones
+  // o la foto, que no tienen columna acá—, y eso también es un cambio.
+  if (Object.keys(update).length === 1 && Object.keys(registro).length === 0) {
     return NextResponse.json({ error: "No se envió ningún cambio" }, { status: 400 });
   }
 

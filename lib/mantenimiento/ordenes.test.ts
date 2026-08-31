@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   estadoDeTexto, filaDeOrden, celdasParaRegistrar, filaParaLaPlanillaDeOT,
+  repartirRegistroDeOT,
 } from "./ordenes";
 
 /**
@@ -174,5 +175,76 @@ describe("filaParaLaPlanillaDeOT", () => {
 
   it("llega hasta las observaciones", () => {
     expect(filaParaLaPlanillaDeOT(ot)).toHaveLength(23);
+  });
+});
+
+/**
+ * `ordenes_trabajo` no tiene columna de observaciones ni de foto: en el sistema
+ * viven en la ejecucion, y en la planilla en la W y la V. Meterlas en el update
+ * de la tabla hacia fallar el PATCH entero con "Could not find the
+ * 'observaciones' column" justo despues de guardar la ejecucion, y la OT
+ * quedaba sin cerrar con el trabajo ya registrado.
+ */
+describe("repartir lo que se registra entre la tabla y la planilla", () => {
+  it("las observaciones van solo a la planilla", () => {
+    const { update, registro } = repartirRegistroDeOT({ observaciones: "Se cambio el rodamiento" });
+    expect(update).toEqual({});
+    expect(registro.observaciones).toBe("Se cambio el rodamiento");
+  });
+
+  it("la foto tampoco toca la tabla", () => {
+    const { update, registro } = repartirRegistroDeOT({ foto_url: "https://drive/x" });
+    expect(update).toEqual({});
+    expect(registro.foto_url).toBe("https://drive/x");
+  });
+
+  it("el contratista y los operarios van a los dos lados", () => {
+    const { update, registro } = repartirRegistroDeOT({
+      contratista: " Candia ", operario_1: "Lopez", operario_2: "", operario_3: null,
+    });
+    expect(update).toEqual({
+      contratista: "Candia", operario_1: "Lopez", operario_2: null, operario_3: null,
+    });
+    expect(registro.contratista).toBe("Candia");
+    expect(registro.operario_2).toBeNull();
+  });
+
+  it("las horas se guardan como numero, y lo ilegible como vacio", () => {
+    expect(repartirRegistroDeOT({ horas: "4.5" }).update.horas).toBe(4.5);
+    expect(repartirRegistroDeOT({ horas: "" }).update.horas).toBeNull();
+    expect(repartirRegistroDeOT({ horas: "s/d" }).update.horas).toBeNull();
+  });
+
+  /** No pasar un campo es "no lo toques"; pasarlo en null es "vacialo". */
+  it("lo que no se paso no aparece de ningun lado", () => {
+    const { update, registro } = repartirRegistroDeOT({ estado: "REALIZADO" });
+    expect(update).toEqual({ estado: "REALIZADO" });
+    expect(registro).toEqual({ estado: "REALIZADO" });
+    expect("observaciones" in registro).toBe(false);
+    expect("horas" in update).toBe(false);
+  });
+
+  it("un campo que no esta en la lista blanca no llega a la base", () => {
+    const { update } = repartirRegistroDeOT({ ot_number: 9999, descripcion: "otra cosa" });
+    expect(update).toEqual({});
+  });
+
+  /**
+   * El caso que fallaba: registrar el trabajo manda las dos cosas juntas. Lo de
+   * la tabla tiene que quedar limpio de observaciones.
+   */
+  it("al registrar el trabajo, el update no lleva observaciones", () => {
+    const { update, registro } = repartirRegistroDeOT({
+      estado: "REALIZADO",
+      fecha_cierre: "2026-08-31",
+      horas: 3,
+      operario_1: "Lopez",
+      observaciones: "Rotacion de martillo",
+      foto_url: "https://drive/foto",
+    });
+
+    expect(Object.keys(update).sort()).toEqual(["estado", "fecha_cierre", "horas", "operario_1"]);
+    expect(registro.observaciones).toBe("Rotacion de martillo");
+    expect(registro.foto_url).toBe("https://drive/foto");
   });
 });

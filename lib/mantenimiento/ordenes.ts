@@ -173,6 +173,71 @@ export interface RegistroDeOT {
 }
 
 /**
+ * Repartir lo que llega al registrar el trabajo: qué va a la tabla y qué a la
+ * planilla.
+ *
+ * No es lo mismo. `ordenes_trabajo` tiene columna para el estado, el cierre,
+ * las horas, el contratista y los tres operarios. **Las observaciones y la foto
+ * no**: en el sistema viven en la ejecución —que es donde se registra qué se
+ * hizo y qué se encontró— y en la planilla tienen su columna, la W y la V.
+ *
+ * Estaba escrito en línea en la ruta y las observaciones se colaron en el
+ * update de la tabla: el PATCH fallaba entero con "Could not find the
+ * 'observaciones' column", justo después de que la ejecución ya se había
+ * guardado. El trabajo quedaba registrado y la OT sin cerrar. Vive acá para
+ * poder probarlo.
+ *
+ * Es lista blanca: lo que no está nombrado no llega a la base, así que un body
+ * con campos de más no puede escribir columnas arbitrarias.
+ */
+export const ESTADOS_DE_OT = [
+  "REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "SUSPENDIDA",
+] as const;
+
+/** Los que tienen columna propia en `ordenes_trabajo` y también en la planilla. */
+const EN_LOS_DOS_LADOS = ["contratista", "operario_1", "operario_2", "operario_3"] as const;
+
+export function repartirRegistroDeOT(body: Record<string, unknown>): {
+  update: Record<string, unknown>;
+  registro: RegistroDeOT;
+} {
+  const update: Record<string, unknown> = {};
+  const registro: RegistroDeOT = {};
+  const texto = (v: unknown) => String(v ?? "").trim() || null;
+
+  if (body.estado !== undefined) {
+    update.estado = body.estado;
+    registro.estado = body.estado as string;
+  }
+
+  for (const campo of EN_LOS_DOS_LADOS) {
+    if (body[campo] !== undefined) {
+      update[campo] = texto(body[campo]);
+      registro[campo] = update[campo] as string | null;
+    }
+  }
+
+  if (body.horas !== undefined) {
+    const n = Number(body.horas);
+    const valor =
+      body.horas === null || body.horas === "" || Number.isNaN(n) ? null : n;
+    update.horas = valor;
+    registro.horas = valor;
+  }
+
+  if (body.fecha_cierre !== undefined) {
+    update.fecha_cierre = body.fecha_cierre || null;
+    registro.fecha_cierre = update.fecha_cierre as string | null;
+  }
+
+  // Sólo a la planilla: no tienen columna en la tabla.
+  if (body.observaciones !== undefined) registro.observaciones = texto(body.observaciones);
+  if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
+
+  return { update, registro };
+}
+
+/**
  * Qué celdas hay que escribir en la planilla al registrar el trabajo.
  *
  * Sólo las que se pasaron: la planilla es la fuente y no se toca lo que nadie
