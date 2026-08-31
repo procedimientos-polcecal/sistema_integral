@@ -1,0 +1,145 @@
+# Backup de la base a Google Drive, todas las noches.
+#
+# Por qué existe, si Supabase ya hace backups: los de Supabase sólo existen en
+# el plan Pro, guardan 7 días, viven en su infraestructura y no se pueden
+# descargar cuando son físicos. Éste es una copia independiente, en un lugar
+# nuestro, en SQL plano restaurable en cualquier Postgres, y con la retención
+# que elijamos. Los dos conviven: son un backup del proveedor y un backup propio,
+# y para una base de sueldos conviene tener los dos.
+#
+# El destino tiene que ser una carpeta dentro de una UNIDAD COMPARTIDA. Una
+# cuenta de servicio no tiene cuota de Drive: subir a "Mi unidad" de una persona
+# falla aunque la carpeta esté compartida como editor. Está explicado en
+# lib/core/google.ts.
+#
+# Qué hay que configurar en el repositorio, una vez:
+#
+#   Secrets:
+#     SUPABASE_DB_URL              connection string de Postgres (Project
+#                                  Settings → Database → Connection string, URI).
+#                                  Lleva la contraseña de la base: es el secreto
+#                                  más sensible de todo el repo.
+#     GOOGLE_SERVICE_ACCOUNT_JSON  el mismo JSON que ya está en Vercel.
+#     BACKUP_PASSPHRASE            opcional pero recomendado: si está, el dump
+#                                  se cifra con GPG antes de salir.
+#   Variables:
+#     GOOGLE_DRIVE_BACKUPS_FOLDER_ID  la carpeta, en una unidad compartida.
+
+name: Backup a Drive
+
+on:
+  schedule:
+    # 06:00 UTC = 03:00 en Argentina. Antes del recálculo de RRHH, así el dump
+    # sale de una base quieta.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar que estén las variables
+        # Por env y no interpolados en el script: así el valor no llega a
+        # formar parte del comando, aunque Actions después lo enmascare.
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GOOGLE_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          CARPETA: ${{ vars.GOOGLE_DRIVE_BACKUPS_FOLDER_ID }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          faltan=""
+          [ -n "$DB_URL" ]      || faltan="$faltan SUPABASE_DB_URL(secret)"
+          [ -n "$GOOGLE_JSON" ] || faltan="$faltan GOOGLE_SERVICE_ACCOUNT_JSON(secret)"
+          [ -n "$CARPETA" ]     || faltan="$faltan GOOGLE_DRIVE_BACKUPS_FOLDER_ID(variable)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+          if [ -z "$PASSPHRASE" ]; then
+            echo "::warning::Sin BACKUP_PASSPHRASE el dump sube SIN CIFRAR. Son datos de sueldos: conviene configurarla."
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Hacer el dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          fecha=$(date -u +%Y-%m-%d)
+          base="sdg-backup-${fecha}"
+
+          # Cuatro dumps: cada uno restaura algo distinto y por separado son mucho
+          # más fáciles de leer. El esquema para recrear las tablas, los datos
+          # para volver a cargarlas, los roles para los permisos, y los usuarios.
+          supabase db dump --db-url "$DB_URL" -f "${base}-esquema.sql"
+          supabase db dump --db-url "$DB_URL" --data-only -f "${base}-datos.sql"
+          supabase db dump --db-url "$DB_URL" --role-only -f "${base}-roles.sql"
+
+          # El esquema `auth` NO entra en el dump por defecto: la CLI excluye los
+          # esquemas que administra Supabase. Ahí viven los usuarios, así que sin
+          # esto se restauran todos los datos y nadie puede entrar.
+          #
+          # No es fatal si falla: restaurar `auth` en un proyecto administrado es
+          # delicado y puede que la conexión no tenga permiso de leerlo. El
+          # backup de los datos, que es lo crítico, ya está hecho.
+          if supabase db dump --db-url "$DB_URL" -s auth --data-only -f "${base}-usuarios.sql"; then
+            usuarios="${base}-usuarios.sql"
+          else
+            echo "::warning::No se pudo dumpear el esquema auth (los usuarios). El resto del backup sigue."
+            usuarios=""
+          fi
+
+          tar -czf "${base}.tar.gz" "${base}-esquema.sql" "${base}-datos.sql" "${base}-roles.sql" $usuarios
+          rm -f "${base}"-*.sql
+
+          echo "ARCHIVO=${base}.tar.gz" >> "$GITHUB_ENV"
+          ls -lh "${base}.tar.gz"
+
+      - name: Cifrar, si hay passphrase
+        # La condición va en el shell y no en un `if:` con la expresión
+        # `secrets.X != ''`: si esa expresión no evaluara como se espera, el paso
+        # se saltearía y el backup subiría SIN CIFRAR informando éxito. En shell
+        # no hay ambigüedad posible.
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PASSPHRASE" ]; then
+            echo "::warning::Sin BACKUP_PASSPHRASE: el backup sube SIN CIFRAR."
+            exit 0
+          fi
+
+          # Simétrico con AES256: para restaurar sólo hace falta la passphrase,
+          # sin andar administrando claves. Se descifra con:
+          #   gpg --decrypt --output backup.tar.gz backup.tar.gz.gpg
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$PASSPHRASE" \
+            --output "${ARCHIVO}.gpg" "${ARCHIVO}"
+          rm -f "${ARCHIVO}"
+          echo "ARCHIVO=${ARCHIVO}.gpg" >> "$GITHUB_ENV"
+          ls -lh "${ARCHIVO}.gpg"
+
+      - name: Subir a Drive y limpiar los viejos
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_BACKUPS_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_BACKUPS_FOLDER_ID }}
+        run: npx --yes tsx scripts/backup/subir-a-drive.mts "$ARCHIVO" --retener 30
+
+      - name: Borrar el dump del runner
+        if: always()
+        run: rm -f sdg-backup-*

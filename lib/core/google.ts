@@ -13,13 +13,19 @@ export const SCOPE_SHEETS = "https://www.googleapis.com/auth/spreadsheets";
 export const SCOPE_SHEETS_LECTURA = "https://www.googleapis.com/auth/spreadsheets.readonly";
 export const SCOPE_DRIVE_LECTURA = "https://www.googleapis.com/auth/drive.readonly";
 /*
- * No hay scope de escritura en Drive a propósito.
+ * Escritura en Drive: sólo sirve contra una UNIDAD COMPARTIDA.
  *
  * Una cuenta de servicio **no tiene cuota de Drive**: aunque la carpeta esté
- * compartida como editor, subir un archivo falla con "Service Accounts do not
- * have storage quota". Sólo funcionaría contra una unidad compartida, o
- * delegando en un usuario de verdad. Por eso las fotos van a Supabase Storage.
+ * compartida como editor, subir un archivo a "Mi unidad" de alguien falla con
+ * "Service Accounts do not have storage quota". En una unidad compartida el
+ * dueño de los archivos es la unidad y no quien sube, así que ahí sí funciona
+ * —hay que pasar `supportsAllDrives=true` en la llamada—.
+ *
+ * Por eso las fotos de Mantenimiento van a Supabase Storage y no a Drive. El
+ * único que usa este scope es el backup de la base, que sube a una unidad
+ * compartida a propósito.
  */
+export const SCOPE_DRIVE = "https://www.googleapis.com/auth/drive";
 
 export function hayCredencialesGoogle(): boolean {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
