@@ -57,7 +57,7 @@ En el repositorio (Settings → Secrets and variables → Actions):
 | `SUPABASE_DB_URL` *(secret)* | Project Settings → Database → Connection string → pestaña **Session pooler**. **No la directa** (ver abajo). Lleva la contraseña de la base: es el secreto más sensible del repo. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` *(secret)* | El mismo JSON que ya está en Vercel — y si no se tiene, se genera una clave nueva (ver abajo). |
 | `BACKUP_PASSPHRASE` *(secret)* | Opcional, muy recomendado. Son datos de sueldos saliendo a un tercero. **Guardala fuera del repo: sin ella el backup no se puede abrir.** |
-| `GOOGLE_DRIVE_BACKUPS_FOLDER_ID` *(variable)* | La carpeta, dentro de una unidad compartida, con la cuenta de servicio como Colaborador o Administrador de contenido. |
+| `GOOGLE_DRIVE_BACKUPS_FOLDER_ID` *(variable)* | La carpeta o la unidad compartida misma, con la cuenta de servicio como **Administrador de contenido** (ver abajo por qué no alcanza Colaborador). |
 
 ### Cuál de las tres cadenas de conexión
 
@@ -76,6 +76,23 @@ El usuario del pooler no es `postgres` sino `postgres.<ref>`, y el prefijo
 `aws-0` o `aws-1` cambia según el proyecto: **copiala del dashboard, no la armes
 a mano.** El workflow corta con un mensaje explícito si detecta la cadena
 equivocada.
+
+### El rol tiene que ser Administrador de contenido, no Colaborador
+
+Verificado contra la unidad "Backups SdG" del 31/08/2026, con la cuenta
+`sheets-reader@mantenimientopp.iam.gserviceaccount.com`:
+
+| Capacidad | Colaborador |
+|---|---|
+| `canAddChildren` (subir) | ✅ |
+| `canDeleteChildren` (borrar) | ❌ |
+| `canTrashChildren` (mandar a papelera) | ❌ |
+
+O sea: con **Colaborador** el backup se sube bien, pero **los viejos nunca se
+borran** y la unidad crece para siempre. El script lo avisa con un mensaje
+explícito en vez de dejar un 403 pelado, pero la limpieza no ocurre.
+
+Con **Administrador de contenido** funcionan las dos cosas. Es el rol que va.
 
 ### Si no se tiene el JSON de la cuenta de servicio
 

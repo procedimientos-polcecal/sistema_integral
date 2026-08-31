@@ -132,5 +132,23 @@ for (const f of viejos as { id: string; name: string }[]) {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  console.log(del.ok ? `  borrado ${f.name}` : `  NO se pudo borrar ${f.name}`);
+  if (del.ok) {
+    console.log(`  borrado ${f.name}`);
+    continue;
+  }
+
+  // 403 acá es siempre el mismo motivo, y conviene decirlo una vez y salir en
+  // vez de repetir el intento por cada archivo. En una unidad compartida el rol
+  // "Colaborador" alcanza para SUBIR pero no para borrar (canAddChildren sí,
+  // canDeleteChildren no): el backup queda hecho, pero los viejos se acumulan
+  // para siempre. Hace falta "Administrador de contenido".
+  if (del.status === 403) {
+    console.warn(
+      `  No se puede borrar ${f.name}: la cuenta de servicio está como Colaborador en la ` +
+        "unidad compartida, y ese rol no permite borrar. El backup de hoy quedó subido igual, " +
+        "pero los viejos NO se van a limpiar hasta que se le cambie el rol a Administrador de contenido."
+    );
+    process.exit(0);
+  }
+  console.warn(`  No se pudo borrar ${f.name} (${del.status})`);
 }
