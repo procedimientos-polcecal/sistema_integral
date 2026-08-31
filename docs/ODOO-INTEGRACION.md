@@ -23,8 +23,28 @@ Lo que eso implica:
 - **Nada de módulos propios ni acceso al Postgres de Odoo**: es SaaS. Todo sale
   por los modelos estándar del ORM. Campos propios, si hacen falta, se agregan
   con Studio (viene con Enterprise).
-- `db.list` está bloqueado desde afuera, así que el nombre de la base no se puede
-  descubrir: se confirma autenticando. Es casi seguro `polcecal`.
+- **El nombre de la base no es `polcecal`.** Se probó: Odoo contesta
+  `database "polcecal" does not exist`. Tampoco es ninguna variante obvia del
+  nombre. `db.list` está bloqueado desde afuera (SaaS), así que no se puede
+  listar; hay que ir a buscarlo (ver abajo).
+
+### Cómo se averigua el nombre de la base
+
+El host resuelve la base solo —una petición sin base válida llega igual a la capa
+de datos y contesta "Session Expired"—, pero JSON-RPC exige el nombre explícito en
+cada llamada. Dos formas de conseguirlo:
+
+- **Logueado en Odoo**, en la consola del navegador: `odoo.__session_info__.db`.
+  Es el nombre exacto que usa el propio cliente web.
+- **Desde la cuenta**: en Odoo Online, https://www.odoo.com/my/databases lista las
+  bases por nombre; en Odoo.sh, el build de producción del proyecto lo muestra.
+
+Y para verificar un candidato sin credenciales ni riesgo, `db_exist` contesta un
+booleano:
+
+```bash
+curl -s -X POST 'https://polcecal.odoo.com/jsonrpc' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"call","params":{"service":"db","method":"db_exist","args":["NOMBRE"]},"id":1}'
+```
 
 ## La regla: quién manda en qué
 
