@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { empleadosPermitidos, idsOrDummy, periodoARango } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { traerPaginado } from "@/lib/rrhh/paginado";
 
 export async function GET(request: Request) {
@@ -18,7 +17,6 @@ export async function GET(request: Request) {
   const empleados = await empleadosPermitidos(supabase, { empresaId, sectorId });
   const empleadoIds = empleados.map((e) => e.id);
 
-  await recalcularPeriodoCacheado(supabase, desde, hasta);
 
   const calculos = await traerPaginado<{ empleado_id: string; tarde: boolean; retiro_anticipado: boolean }>(
     () =>

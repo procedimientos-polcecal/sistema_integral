@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { recalcularSectorPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 import { dayOfWeekUtc, utcDateOnlyFrom } from "@/lib/rrhh/dates";
 
@@ -16,7 +15,6 @@ export async function GET(request: Request) {
   const dia = utcDateOnlyFrom(fechaParam ? new Date(fechaParam) : new Date());
   const diaStr = dia.toISOString().slice(0, 10);
 
-  await recalcularSectorPeriodo(supabase, sectorId || null, dia, dia);
 
   let query = supabase
     .from("empleados")

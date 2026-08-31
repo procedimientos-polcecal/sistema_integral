@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { modulosVisibles } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
@@ -54,7 +53,6 @@ async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, h
   const { data: empleados } = await supabase.from("empleados").select("id").eq("activo", true);
   const empleadoIds = (empleados ?? []).map((e) => e.id);
 
-  await recalcularPeriodoCacheado(supabase, hoy, hoy);
   const { data: calculos } = await supabase
     .from("calculos_diarios")
     .select("ausente, justificada")

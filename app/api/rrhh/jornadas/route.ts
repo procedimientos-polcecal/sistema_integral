@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/rrhh/route-utils";
+import { recalcularVentanaEnSegundoPlano } from "@/lib/rrhh/recalculoProgramado";
 
 export async function GET() {
   const supabase = await createClient();
@@ -38,5 +39,10 @@ export async function POST(request: Request) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Cambiar el catálogo de turnos cambia cómo se ajusta CADA fichada, así que
+  // se recalcula la ventana. Va en segundo plano para no convertir un
+  // "Guardar" de dos campos en una espera de varios segundos; si la función
+  // se corta antes de terminar, la corrida de la madrugada lo arregla.
+  recalcularVentanaEnSegundoPlano(supabase);
   return NextResponse.json(data, { status: 201 });
 }

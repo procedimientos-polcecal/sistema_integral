@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 
 function parseRange(url: URL) {
@@ -23,7 +22,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const desdeStr = utcDateOnlyFrom(fechaDesde).toISOString().slice(0, 10);
   const hastaStr = utcDateOnlyFrom(fechaHasta).toISOString().slice(0, 10);
 
-  await recalcularEmpleadoPeriodo(supabase, id, fechaDesde, fechaHasta);
 
   const [{ data: calculos }, { data: fichadas }] = await Promise.all([
     supabase

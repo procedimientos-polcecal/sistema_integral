@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/rrhh/route-utils";
+import { recalcularVentanaEnSegundoPlano } from "@/lib/rrhh/recalculoProgramado";
 
 function toApi(row: Record<string, unknown>) {
   return {
@@ -58,5 +59,9 @@ export async function PUT(request: Request) {
 
   const { data: row, error } = await supabase.from("config_liquidacion").update(data).eq("id", 1).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Los multiplicadores, la hora de corte del sábado y las horas normales por
+  // día entran en el cálculo de todos los días de todos los empleados.
+  recalcularVentanaEnSegundoPlano(supabase);
   return NextResponse.json(toApi(row));
 }

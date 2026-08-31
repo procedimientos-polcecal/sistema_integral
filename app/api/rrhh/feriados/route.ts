@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/rrhh/route-utils";
+import { recalcularDia } from "@/lib/rrhh/recalculoProgramado";
 
 export async function GET() {
   const supabase = await createClient();
@@ -31,5 +32,8 @@ export async function POST(request: Request) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Un feriado cambia el tipo de día de todo el padrón, pero de un día
+  // solo: se recalcula ese, que es barato, en vez de la ventana entera.
+  await recalcularDia(supabase, data.fecha);
   return NextResponse.json(data, { status: 201 });
 }

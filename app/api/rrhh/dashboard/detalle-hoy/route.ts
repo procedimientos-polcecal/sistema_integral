@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { empleadosPermitidos, idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 
 export async function GET(request: Request) {
@@ -19,7 +18,6 @@ export async function GET(request: Request) {
   const empleados = await empleadosPermitidos(supabase, { empresaId, sectorId });
   const empleadoIds = empleados.map((e) => e.id);
 
-  await recalcularPeriodoCacheado(supabase, hoy, hoy);
 
   const [{ data: calculos }, { data: tardanzasManuales }, { data: vacaciones }] = await Promise.all([
     supabase.from("calculos_diarios").select("empleado_id, ausente, tarde").in("empleado_id", idsOrDummy(empleadoIds)).eq("fecha", hoyStr),

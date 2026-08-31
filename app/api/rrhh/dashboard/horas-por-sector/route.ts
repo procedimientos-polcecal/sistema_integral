@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { empleadosPermitidos, idsOrDummy, rangoDesdeHasta, agruparPorSector } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 import { traerPaginado } from "@/lib/rrhh/paginado";
 
@@ -18,7 +17,6 @@ export async function GET(request: Request) {
   const empleados = await empleadosPermitidos(supabase, { empresaId });
   const porSector = agruparPorSector(empleados);
 
-  await recalcularPeriodoCacheado(supabase, desde, hasta);
 
   // Una sola consulta para todos los sectores, agrupada despues en memoria.
   const todosLosIds = empleados.map((e) => e.id);

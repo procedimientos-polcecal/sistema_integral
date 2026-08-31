@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { empleadosPermitidos, idsOrDummy, rangoDesdeHasta, agruparPorSector } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
 import { traerPaginado } from "@/lib/rrhh/paginado";
 
@@ -19,7 +18,6 @@ export async function GET(request: Request) {
   const porSector = agruparPorSector(empleados);
   const config = await getConfigLiquidacion(supabase);
 
-  await recalcularPeriodoCacheado(supabase, desde, hasta);
 
   // Una sola consulta para todos los sectores y despues se agrupa en memoria:
   // una por sector eran ~15 idas y vueltas para pintar un grafico.

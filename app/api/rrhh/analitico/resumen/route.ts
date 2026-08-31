@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularPeriodoCacheado } from "@/lib/rrhh/recalcCache";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 import { traerPaginado } from "@/lib/rrhh/paginado";
@@ -31,7 +30,6 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const desde = utcDateOnlyFrom(new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1)));
 
-  await recalcularPeriodoCacheado(supabase, desde, hoy);
 
   const [calculos, tardanzasManuales] = await Promise.all([
     traerPaginado<{ empleado_id: string; fecha: string; tipo_dia: string; ausente: boolean; tarde: boolean }>(

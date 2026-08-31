@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { recalcularSectorPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 import { traerPaginado } from "@/lib/rrhh/paginado";
 
@@ -18,7 +17,6 @@ export async function GET(request: Request) {
     ? new Date(url.searchParams.get("desde")!)
     : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-  await recalcularSectorPeriodo(supabase, sectorId || null, fechaDesde, fechaHasta);
 
   let query = supabase.from("empleados").select("id, legajo, nombre, apellido, sectores(nombre)").eq("activo", true);
   if (sectorId) query = query.eq("sector_id", sectorId);

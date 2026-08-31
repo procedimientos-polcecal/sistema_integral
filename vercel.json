@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/mantenimiento-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/rrhh-recalculo",
+      "schedule": "0 7 * * *"
     }
   ]
 }

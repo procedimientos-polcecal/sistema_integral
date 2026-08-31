@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { idsOrDummy, rangoDesdeHasta } from "@/lib/rrhh/dashboardHelpers";
-import { recalcularSectorPeriodo, getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
+import { getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 
 export async function GET(request: Request) {
@@ -29,7 +29,6 @@ export async function GET(request: Request) {
   const { data: empleados } = await query;
   const empleadoIds = (empleados ?? []).map((e) => e.id);
 
-  await recalcularSectorPeriodo(supabase, sectorId, desde, hasta);
   const [{ data: calculos }, config] = await Promise.all([
     supabase
       .from("calculos_diarios")
