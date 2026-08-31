@@ -94,19 +94,33 @@ POLYSAN, **AMBAS** (`empresa_id` null + `paga_ambas` true) y sin definir. Odoo
 tiene dos. Un requerimiento que pagan las dos no tiene un `purchase.order` que lo
 represente.
 
-Las salidas posibles, con lo que cuesta cada una:
+**Decidido (31/08/2026): dos órdenes, una por empresa.**
 
-| Opción | Qué pasa en Odoo | Costo |
-|---|---|---|
-| **Dos órdenes**, una por empresa | Cada empresa tiene su OC y su factura | Hay que decidir cómo se parte el monto, y un RI del SdG pasa a tener dos documentos: el estado de "la" compra deja de ser uno |
-| **Una orden + distribución analítica** | Un solo documento, en la empresa que paga; el reparto se expresa en `analytic_distribution` (porcentajes por cuenta analítica) | Requiere cuentas analíticas por empresa; el reparto es de gestión, no cambia de quién es la factura |
-| **No mandarlas** | Las AMBAS quedan sólo en el SdG hasta que alguien les asigne empresa | Simple, pero deja un hueco: son los RI compartidos, que no son pocos |
+El motivo es de hecho, no de diseño: en un RI compartido **el proveedor factura a
+las dos empresas por separado**, un comprobante por CUIT. Cualquier solución de un
+solo documento —por ejemplo una OC con `analytic_distribution`, que reparte el
+gasto en porcentajes sin duplicar la orden— contradiría eso: la factura sería de
+una sola empresa y la otra no tendría comprobante. El reparto analítico queda
+descartado por eso, no por limitación técnica.
 
-El ping sondea si `purchase.order.line` tiene `analytic_distribution` en esta
-base, que es lo que decide si la segunda opción está disponible.
+Lo que arrastra la decisión:
 
-**Pendiente de decisión.** Hasta que se resuelva, la sincronización de Compras
-sólo puede empujar a Odoo los requerimientos con empresa definida.
+- **Un RI del SdG pasa a tener N documentos en Odoo** (hoy N=2). El mapeo no puede
+  ser una columna `odoo_id` en `compras_requerimientos`: necesita una tabla
+  aparte, con clave `(requerimiento_id, empresa_id) → odoo_order_id`.
+- **El estado de "la" compra deja de ser uno.** Una OC puede estar confirmada y la
+  otra en borrador, o una facturada y la otra no. La pantalla de Compras tiene que
+  poder mostrar dos estados para un RI, o decidir una regla de agregación
+  explícita (el menos avanzado de los dos, por ejemplo).
+- **Hay que definir cómo se parte el monto.** Es lo único que falta para poder
+  escribir el push: 50/50, por líneas, o a mano al aprobar. Debería quedar como
+  dato en el RI (un porcentaje), no como constante en el código.
+- **La idempotencia se complica**: reintentar un push tiene que ser capaz de
+  encontrar la orden ya creada de *cada* empresa, no una sola. Sin eso, un
+  reintento duplica en Odoo, que es el peor de los errores posibles ahí.
+
+Hasta que esté definido el reparto, la sincronización de Compras sólo puede
+empujar los requerimientos con **una** empresa definida.
 
 ## Qué hay hoy (spike)
 
@@ -138,8 +152,7 @@ Sondea: usuario de integración **y qué empresas ve**, empresas de Odoo con sus
 ids (que son los que van a `empresas.odoo_company_id`), órdenes de compra,
 proveedores —separando los compartidos de los exclusivos de una empresa—,
 diarios de tesorería, facturas de proveedor, pagos, saldos por empresa y
-diario vía `read_group`, si `purchase.order.line` soporta reparto analítico, y
-los campos reales de `purchase.order` (para ver si la
+diario vía `read_group`, y los campos reales de `purchase.order` (para ver si la
 base tiene campos propios `x_` o de localización `l10n_`).
 
 **`lib/odoo/client.test.ts`** — 28 tests con `fetch` mockeado: no salen a la red.
@@ -166,10 +179,13 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 
 1. **Correr el ping** y cerrar los permisos del usuario bot.
 2. **Llenar `empresas.odoo_company_id`** con los ids que devuelva el ping (migración 045).
-3. **Decidir qué pasa con las AMBAS** (ver arriba). Bloquea el push de Compras.
-4. **Mapeo de ids**: columna `odoo_id` (+ `odoo_write_date`) en las tablas que se
-   sincronizan, para que la sync sea idempotente y no duplique. Del lado de Odoo,
-   un campo `x_sdg_id` con Studio para el camino inverso.
+3. **Definir el reparto de las AMBAS** (ver arriba): ya se sabe que van dos OCs, falta
+   con qué porcentaje se parte cada una. Bloquea el push de Compras.
+4. **Mapeo de ids**, para que la sync sea idempotente y no duplique:
+   `odoo_write_date` en las tablas que se sincronizan, y para Compras una tabla de
+   vínculo `(requerimiento_id, empresa_id) → odoo_order_id`, porque un RI
+   compartido son dos órdenes. Del lado de Odoo, un campo `x_sdg_id` con Studio
+   para el camino inverso.
 5. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.

@@ -267,20 +267,6 @@ export async function GET() {
     })
   );
 
-  sondas.push(
-    await sonda("reparto entre empresas", "purchase.order.line", async () => {
-      const campos = await camposDe("purchase.order.line");
-      const analiticos = Object.keys(campos).filter((n) => n.includes("analytic"));
-      if (!analiticos.includes("analytic_distribution")) {
-        alertas.push(
-          "purchase.order.line no tiene analytic_distribution: repartir un gasto entre las dos " +
-            "empresas sin duplicar la orden no va a ser posible por esa vía."
-        );
-      }
-      return { camposAnaliticos: analiticos };
-    })
-  );
-
   const fallaron = sondas.filter((s) => !s.ok);
 
   return NextResponse.json({
