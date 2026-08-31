@@ -54,10 +54,28 @@ En el repositorio (Settings → Secrets and variables → Actions):
 
 | | Qué |
 |---|---|
-| `SUPABASE_DB_URL` *(secret)* | Project Settings → Database → Connection string (URI). **Lleva la contraseña de la base: es el secreto más sensible del repo.** |
+| `SUPABASE_DB_URL` *(secret)* | Project Settings → Database → Connection string → pestaña **Session pooler**. **No la directa** (ver abajo). Lleva la contraseña de la base: es el secreto más sensible del repo. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` *(secret)* | El mismo JSON que ya está en Vercel. |
 | `BACKUP_PASSPHRASE` *(secret)* | Opcional, muy recomendado. Son datos de sueldos saliendo a un tercero. **Guardala fuera del repo: sin ella el backup no se puede abrir.** |
 | `GOOGLE_DRIVE_BACKUPS_FOLDER_ID` *(variable)* | La carpeta, dentro de una unidad compartida, con la cuenta de servicio como Colaborador o Administrador de contenido. |
+
+### Cuál de las tres cadenas de conexión
+
+El dashboard ofrece tres y sólo una sirve acá:
+
+| | Host | Puerto | ¿Sirve? |
+|---|---|---|---|
+| Directa | `db.<ref>.supabase.co` | 5432 | **No.** Resuelve sólo en IPv6 salvo que se pague el add-on de IPv4, y los runners de GitHub son IPv4 |
+| **Session pooler** | `aws-N-<region>.pooler.supabase.com` | 5432 | **Sí.** IPv4 en todos los planes, y soporta lo que `pg_dump` necesita |
+| Transaction pooler | `aws-N-<region>.pooler.supabase.com` | 6543 | No. No soporta prepared statements, y `pg_dump` los usa |
+
+La doc de Supabase recomienda la directa para `pg_dump`, y tiene razón cuando
+corrés desde una máquina con IPv6. Desde Actions, no.
+
+El usuario del pooler no es `postgres` sino `postgres.<ref>`, y el prefijo
+`aws-0` o `aws-1` cambia según el proyecto: **copiala del dashboard, no la armes
+a mano.** El workflow corta con un mensaje explícito si detecta la cadena
+equivocada.
 
 Después, correrlo a mano desde la pestaña Actions (*Run workflow*) y verificar
 que el archivo aparezca en Drive. **Hacelo antes de confiar en él.**

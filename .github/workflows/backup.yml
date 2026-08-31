@@ -15,8 +15,22 @@
 # Qué hay que configurar en el repositorio, una vez:
 #
 #   Secrets:
-#     SUPABASE_DB_URL              connection string de Postgres (Project
-#                                  Settings → Database → Connection string, URI).
+#     SUPABASE_DB_URL              connection string del SESSION POOLER, no la
+#                                  directa. Project Settings → Database →
+#                                  Connection string → pestaña "Session pooler".
+#                                  Tiene la forma
+#                                    postgresql://postgres.<ref>:<pass>@aws-N-<region>.pooler.supabase.com:5432/postgres
+#
+#                                  La directa (db.<ref>.supabase.co) NO sirve
+#                                  acá: resuelve sólo en IPv6 salvo que el
+#                                  proyecto pague el add-on de IPv4, y los
+#                                  runners de GitHub son IPv4. Falla con un
+#                                  error de red que no dice esto.
+#
+#                                  Tampoco el pooler de TRANSACCIÓN (puerto
+#                                  6543): no soporta prepared statements y
+#                                  pg_dump los usa.
+#
 #                                  Lleva la contraseña de la base: es el secreto
 #                                  más sensible de todo el repo.
 #     GOOGLE_SERVICE_ACCOUNT_JSON  el mismo JSON que ya está en Vercel.
@@ -66,6 +80,21 @@ jobs:
           if [ -z "$PASSPHRASE" ]; then
             echo "::warning::Sin BACKUP_PASSPHRASE el dump sube SIN CIFRAR. Son datos de sueldos: conviene configurarla."
           fi
+
+          # La cadena directa es la que ofrece el dashboard primero, y es la que
+          # NO sirve: resuelve sólo en IPv6 y los runners son IPv4. Se corta acá
+          # con un mensaje que dice qué hacer, en vez de dejar que pg_dump falle
+          # con "could not translate host name" veinte líneas más abajo.
+          case "$DB_URL" in
+            *db.*.supabase.co*)
+              echo "::error::SUPABASE_DB_URL es la conexión DIRECTA (db.<ref>.supabase.co), que resuelve sólo en IPv6 y no funciona desde GitHub Actions. Usá la del Session pooler: Project Settings → Database → Connection string → pestaña Session pooler (aws-N-<region>.pooler.supabase.com, puerto 5432)."
+              exit 1 ;;
+          esac
+          case "$DB_URL" in
+            *pooler.supabase.com:6543*)
+              echo "::error::SUPABASE_DB_URL es el pooler de TRANSACCIÓN (puerto 6543), que no soporta prepared statements y pg_dump los necesita. Usá el Session pooler, puerto 5432."
+              exit 1 ;;
+          esac
 
       - uses: supabase/setup-cli@v1
         with:
