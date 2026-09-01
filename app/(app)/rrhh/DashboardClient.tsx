@@ -1,9 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import InfoTip from "@/components/InfoTip";
+import dynamic from "next/dynamic";
+import type { ResumenHoy } from "@/lib/rrhh/resumenHoy";
+
+/**
+ * Los gráficos se cargan aparte: `recharts` son ~350 KB y bloqueaban el primer
+ * pintado de toda la pantalla. Con esto el encabezado, los filtros y las cuatro
+ * tarjetas —que llegan con datos del servidor— se ven enseguida.
+ *
+ * `ssr: false` porque los gráficos miden el contenedor para dibujarse: en el
+ * servidor no hay ancho y el HTML que saldría no sirve.
+ */
+const GraficosPorSector = dynamic(() => import("./GraficosPorSector"), {
+  ssr: false,
+  loading: () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="card p-5 h-[340px] animate-pulse" />
+      <div className="card p-5 h-[340px] animate-pulse" />
+    </div>
+  ),
+});
 
 type CategoriaHoy = "presentes" | "ausentes" | "tardes" | "vacaciones";
 
@@ -44,14 +62,16 @@ function StatCard({
 }
 
 export default function DashboardClient({
-  nombreUsuario, empresas, sectores,
-}: { nombreUsuario: string; empresas: any[]; sectores: any[] }) {
+  nombreUsuario, empresas, sectores, resumenInicial,
+}: { nombreUsuario: string; empresas: any[]; sectores: any[]; resumenInicial: ResumenHoy }) {
   const [empresaId, setEmpresaId] = useState("");
   const [sectorId, setSectorId] = useState("");
   const [desdeGraficos, setDesdeGraficos] = useState(firstOfMonth());
   const [hastaGraficos, setHastaGraficos] = useState(today());
 
-  const [resumen, setResumen] = useState<any | null>(null);
+  // Arranca con lo que calculó el servidor: las tarjetas se ven en el primer
+  // pintado, sin "…" ni salto de layout.
+  const [resumen, setResumen] = useState<ResumenHoy>(resumenInicial);
   const [cargandoResumen, setCargandoResumen] = useState(false);
   const [topAusencias, setTopAusencias] = useState<any[] | null>(null);
   const [topTardanzas, setTopTardanzas] = useState<any[] | null>(null);
@@ -63,9 +83,19 @@ export default function DashboardClient({
   const [sectorSeleccionado, setSectorSeleccionado] = useState<{ sectorId: string; desde: string; hasta: string } | null>(null);
   const [detalleSector, setDetalleSector] = useState<any | null>(null);
 
+  // El resumen ya vino del servidor sin filtros, así que sólo se vuelve a pedir
+  // cuando alguien elige una empresa o un sector. Los Top 10 sí se piden en el
+  // primer render: son secundarios y están más abajo en la pantalla.
+  const primerRender = useRef(true);
   useEffect(() => {
-    setCargandoResumen(true);
-    fetch(`/api/rrhh/dashboard/resumen-hoy${buildQS({ empresaId, sectorId })}`).then((r) => r.json()).then((d) => { setResumen(d); setCargandoResumen(false); });
+    if (primerRender.current) {
+      primerRender.current = false;
+    } else {
+      setCargandoResumen(true);
+      fetch(`/api/rrhh/dashboard/resumen-hoy${buildQS({ empresaId, sectorId })}`)
+        .then((r) => r.json())
+        .then((d) => { setResumen(d); setCargandoResumen(false); });
+    }
     fetch(`/api/rrhh/dashboard/top-ausencias${buildQS({ empresaId, sectorId })}`).then((r) => r.json()).then(setTopAusencias);
     fetch(`/api/rrhh/dashboard/top-tardanzas${buildQS({ empresaId, sectorId })}`).then((r) => r.json()).then(setTopTardanzas);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,10 +154,10 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard titulo="Presentes" cargando={cargandoResumen} cantidad={resumen?.presentes.cantidad ?? 0} porcentaje={resumen?.presentes.porcentaje ?? 0} bg="bg-emerald-600" onClick={() => setCategoriaHoy("presentes")} />
-        <StatCard titulo="Ausentes" cargando={cargandoResumen} cantidad={resumen?.ausentes.cantidad ?? 0} porcentaje={resumen?.ausentes.porcentaje ?? 0} bg="bg-rose-500" onClick={() => setCategoriaHoy("ausentes")} />
-        <StatCard titulo="Tardes" cargando={cargandoResumen} cantidad={resumen?.tardes.cantidad ?? 0} porcentaje={resumen?.tardes.porcentaje ?? 0} bg="bg-amber-500" onClick={() => setCategoriaHoy("tardes")} />
-        <StatCard titulo="Vacaciones" cargando={cargandoResumen} cantidad={resumen?.vacaciones.cantidad ?? 0} porcentaje={resumen?.vacaciones.porcentaje ?? 0} bg="bg-violet-500" onClick={() => setCategoriaHoy("vacaciones")} />
+        <StatCard titulo="Presentes" cargando={cargandoResumen} cantidad={resumen.presentes.cantidad} porcentaje={resumen.presentes.porcentaje} bg="bg-emerald-600" onClick={() => setCategoriaHoy("presentes")} />
+        <StatCard titulo="Ausentes" cargando={cargandoResumen} cantidad={resumen.ausentes.cantidad} porcentaje={resumen.ausentes.porcentaje} bg="bg-rose-500" onClick={() => setCategoriaHoy("ausentes")} />
+        <StatCard titulo="Tardes" cargando={cargandoResumen} cantidad={resumen.tardes.cantidad} porcentaje={resumen.tardes.porcentaje} bg="bg-amber-500" onClick={() => setCategoriaHoy("tardes")} />
+        <StatCard titulo="Vacaciones" cargando={cargandoResumen} cantidad={resumen.vacaciones.cantidad} porcentaje={resumen.vacaciones.porcentaje} bg="bg-violet-500" onClick={() => setCategoriaHoy("vacaciones")} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -187,55 +217,13 @@ export default function DashboardClient({
         <p className="text-xs text-gray-400 pb-2">Aplica a los 3 gráficos de abajo.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Horas trabajadas vs Teóricas por Sector</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={horasSector ?? []}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="horasTrabajadas" name="Trabajadas" fill="#0ea5e9" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-              <Bar dataKey="horasTeoricas" name="Teóricas" fill="#94a3b8" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Horas extra por Sector</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={horasExtraSector ?? []}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="horasExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-              <Bar dataKey="horasExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="card p-5 mt-6">
-        <h2 className="font-medium text-gray-700 flex items-center gap-1.5 mb-3">
-          Costo de horas extra por Sector ($)
-          <InfoTip text="Estimado a partir del valor hora normal de cada empleado y los multiplicadores configurados en Administración." />
-        </h2>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={horasExtraSector ?? []}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${Number(v).toLocaleString("es-AR")}`} />
-            <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString("es-AR")}`} />
-            <Legend />
-            <Bar dataKey="montoExtra50" name="Extra 50%" fill="#f59e0b" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-            <Bar dataKey="montoExtra100" name="Extra 100%" fill="#ef4444" onClick={(data: any) => setSectorSeleccionado({ sectorId: data.payload.sectorId, desde: desdeGraficos, hasta: hastaGraficos })} cursor="pointer" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <GraficosPorSector
+        horasSector={horasSector}
+        horasExtraSector={horasExtraSector}
+        desdeGraficos={desdeGraficos}
+        hastaGraficos={hastaGraficos}
+        onSectorClick={setSectorSeleccionado}
+      />
 
       {categoriaHoy && (
         <ModalListaEmpleados titulo={TITULOS_CATEGORIA[categoriaHoy]} empleados={detalleHoy?.[categoriaHoy]} onClose={() => setCategoriaHoy(null)} />
