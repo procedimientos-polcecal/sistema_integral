@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import InfoTip from "@/components/InfoTip";
+import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 
 const STATUS_COLORS: Record<string, string> = {
   completado: "bg-green-100 text-green-800",
@@ -158,7 +159,14 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
     router.refresh();
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  // Hoy y el limite de "pronto", una sola vez por render y en hora de Argentina.
+  //
+  // Estaban los dos mal: `toISOString()` convierte a UTC antes de recortar, asi
+  // que desde las 21:00 "hoy" era mañana y un mantenimiento de hoy aparecia
+  // vencido. Y el limite se recalculaba dentro del `.map()`, o sea una vez por
+  // fila, con un `Date.now()` distinto cada vez.
+  const today = hoyEnArgentina();
+  const dentroDeUnaSemana = sumarDias(today, 7);
 
   return (
     <div className="md:p-6 max-w-4xl mx-auto space-y-4">
@@ -194,7 +202,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
           {schedules.map((s: any) => {
             const overdue = s.next_date && s.next_date < today;
             const soon = s.next_date && s.next_date >= today &&
-              s.next_date <= new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+              s.next_date <= dentroDeUnaSemana;
             return (
               <div key={s.id} className={`rounded-xl border bg-white p-4 flex items-start justify-between gap-4 ${overdue ? "border-red-200 bg-red-50" : "border-gray-200"}`}>
                 <div className="space-y-0.5 min-w-0">

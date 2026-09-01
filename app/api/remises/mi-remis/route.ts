@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { hoyEnArgentina, diaEnArgentina } from "@/lib/core/fechas";
 
-function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function manana(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
+// El dia sale de `lib/core/fechas.ts` y no de `toISOString()`: esta ruta corre
+// en Vercel, en UTC, y desde las 21:00 de Argentina daba el dia siguiente. Esta
+// pantalla se mira justo de noche, para ver el remis de mañana.
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -19,7 +15,7 @@ export async function GET(request: Request) {
   if (!usuario?.empleado_id) return NextResponse.json({ error: "Esta cuenta no tiene un empleado vinculado" }, { status: 403 });
 
   const url = new URL(request.url);
-  const dia = url.searchParams.get("dia") === "manana" ? manana() : hoy();
+  const dia = url.searchParams.get("dia") === "manana" ? diaEnArgentina(1) : hoyEnArgentina();
 
   // RLS de asientos/hojas_ruta/vehiculos/choferes deja pasar esto por
   // es_mi_asiento(), sin necesitar tiene_acceso_remises().

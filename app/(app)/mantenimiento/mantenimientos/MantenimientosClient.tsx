@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
+import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 
 const TYPE_OPTIONS = [
   { value: "Lubricacion",       label: "Lubricación" },
@@ -324,7 +325,14 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
     router.refresh();
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  // Hoy y el limite de "pronto", una sola vez por render y en hora de Argentina.
+  //
+  // Estaban los dos mal: `toISOString()` convierte a UTC antes de recortar, asi
+  // que desde las 21:00 "hoy" era mañana y un mantenimiento de hoy aparecia
+  // vencido. Y el limite se recalculaba dentro del `.map()`, o sea una vez por
+  // fila, con un `Date.now()` distinto cada vez.
+  const today = hoyEnArgentina();
+  const dentroDeUnaSemana = sumarDias(today, 7);
 
   const filtered = schedules.filter((s) =>
     filterStatus ? s.status === filterStatus : true
@@ -369,7 +377,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
         {filtered.map((s: any) => {
           const overdue = s.next_date && s.next_date < today && s.status === "active";
           const soon = s.next_date && s.next_date >= today &&
-            s.next_date <= new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0] &&
+            s.next_date <= dentroDeUnaSemana &&
             s.status === "active";
 
           return (

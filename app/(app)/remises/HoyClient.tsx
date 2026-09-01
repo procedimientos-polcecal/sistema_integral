@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import InfoTip from "@/components/InfoTip";
 import RouteCard from "./RouteCard";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const RoutesMap = dynamic(() => import("@/components/remises/RoutesMap"), { ssr: false });
 
-function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// No `toISOString()`: convierte a UTC antes de recortar, asi que desde las
+// 21:00 de Argentina el default era mañana. Ver `lib/core/fechas.ts`.
+const hoy = hoyEnArgentina;
 
 export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: string; turnos: any[] }) {
   const [fecha, setFecha] = useState(hoy());

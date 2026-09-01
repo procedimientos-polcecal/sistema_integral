@@ -6,6 +6,7 @@ import {
   ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
 import { resumirAtrasadas, hoyISO } from "@/lib/mantenimiento/alertas";
+import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
 
@@ -18,10 +19,12 @@ export default async function MantenimientoDashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Con `toISOString()` el día se corre en un servidor en UTC y los
-  // mantenimientos de hoy aparecen como vencidos.
+  // En hora de Argentina, no en la del servidor: en UTC el día se corre y los
+  // mantenimientos de hoy aparecen como vencidos. `hoyISO` ahora sale del
+  // núcleo; los siete días se cuentan sobre la fecha ya resuelta y no sobre el
+  // instante, que es donde se perdía el día.
   const hoy = hoyISO();
-  const en7dias = hoyISO(new Date(Date.now() + 7 * 86400000));
+  const en7dias = sumarDias(hoy, 7);
 
   const [
     { data: usuario },

@@ -2,20 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import InfoTip from "@/components/InfoTip";
+import { hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-function getWeekDates(offset: number): string[] {
-  const today = new Date();
-  const dow = today.getDay();
-  const mon = new Date(today);
-  mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(mon);
-    d.setDate(mon.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
-}
+/**
+ * La semana se armaba con getters locales y se serializaba con `toISOString()`,
+ * que convierte a UTC: desde las 21:00 de Argentina la semana entera salia
+ * corrida un dia. La cuenta ahora es sobre textos "YYYY-MM-DD", que no tienen
+ * huso — ver `lib/core/fechas.ts`.
+ */
+const getWeekDates = (offset: number) => semanaDe(hoyEnArgentina(), offset);
 
 function fmt(d: string): string {
   const [y, m, dd] = d.split("-");
@@ -26,7 +23,7 @@ export default function SemanaClient({ turnos }: { turnos: any[] }) {
   const [turnoId, setTurnoId] = useState(turnos[0]?.id ?? "");
   const [offset, setOffset] = useState(0);
   const dates = useMemo(() => getWeekDates(offset), [offset]);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyEnArgentina();
   const [selectedDate, setSelectedDate] = useState(dates.includes(today) ? today : dates[0]);
 
   useEffect(() => {

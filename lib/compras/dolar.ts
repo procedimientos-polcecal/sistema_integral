@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * La cotización del dólar para convertir presupuestos.
@@ -41,7 +42,10 @@ export function leerRespuesta(json: unknown): { compra: number | null; venta: nu
   return { compra: Number.isFinite(compra) && compra > 0 ? compra : null, venta };
 }
 
-const hoyISO = () => new Date().toISOString().slice(0, 10);
+// La cotizacion se guarda con la fecha como clave, asi que "hoy" tiene que ser
+// el dia de Argentina y no el de UTC: pasadas las 21:00 se guardaba y se buscaba
+// bajo la fecha de mañana, y la del dia en curso quedaba sin usar.
+const hoyISO = hoyEnArgentina;
 
 /**
  * La cotización con la que convertir hoy.

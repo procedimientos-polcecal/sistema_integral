@@ -3,14 +3,10 @@
 import { useEffect, useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { hoyEnArgentina, comoSeLee } from "@/lib/core/fechas";
 
-function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function fmt(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
+const hoy = hoyEnArgentina;
+const fmt = comoSeLee;
 
 export default function HistorialClient({ turnos }: { turnos: any[] }) {
   return (

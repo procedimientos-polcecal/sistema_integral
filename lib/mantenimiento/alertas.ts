@@ -1,3 +1,5 @@
+import { fechaEnArgentina } from "@/lib/core/fechas";
+
 /**
  * Qué órdenes de trabajo están atrasadas.
  *
@@ -19,12 +21,20 @@ export interface Atrasable {
 /** Estados en los que la orden ya no espera nada de nadie. */
 const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
 
-/** El día de hoy como `aaaa-mm-dd`, con las partes locales. */
-export function hoyISO(fecha = new Date()): string {
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${fecha.getFullYear()}-${mes}-${dia}`;
-}
+/**
+ * El día de hoy como `aaaa-mm-dd`, en hora de Argentina.
+ *
+ * Estaba escrito con getters locales —`getFullYear`, `getMonth`, `getDate`—
+ * justamente para escapar de `toISOString()`, que convierte a UTC y corre el
+ * día. Pero **no escapaba de nada**: en Vercel la hora local ES la UTC, así que
+ * en el servidor daba exactamente lo mismo que la versión que quería reemplazar.
+ * Desde las 21:00 de Argentina devolvía mañana, y un mantenimiento de hoy
+ * aparecía vencido.
+ *
+ * Ahora sale del núcleo, que aplica el UTC-3 a mano y da igual en el servidor
+ * que en el navegador de quien mira.
+ */
+export const hoyISO = fechaEnArgentina;
 
 /** Si la orden está atrasada al día de hoy. */
 export function estaAtrasada(orden: Atrasable, hoy: string): boolean {

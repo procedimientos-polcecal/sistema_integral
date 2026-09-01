@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { enviarPush } from "@/lib/remises/webpush";
-
-function manana(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
+import { diaEnArgentina, comoSeLee } from "@/lib/core/fechas";
 
 /**
  * Corre vía Vercel Cron a las 22:00 UTC (19:00 Argentina), igual que la
@@ -25,8 +20,11 @@ export async function GET(request: Request) {
   if (rechazo) return rechazo;
 
   const admin = createAdminClient();
-  const fecha = manana();
-  const fmtFecha = fecha.split("-").reverse().join("/");
+  // Mañana en Argentina. Con `toISOString()` daba bien de casualidad —el cron
+  // corre a las 19:00 de Argentina, antes de cruzar la medianoche UTC— y mover
+  // el horario dos horas habria hecho que notificara el dia equivocado.
+  const fecha = diaEnArgentina(1);
+  const fmtFecha = comoSeLee(fecha);
 
   const { data: hojas } = await admin
     .from("hojas_ruta")
