@@ -90,13 +90,36 @@ export function Sidebar({
   const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
 
+  // Se lee en un efecto y no en el `useState` porque en el servidor no hay
+  // `localStorage`: leerlo durante el render rompe la hidratacion.
   useEffect(() => {
     setColapsado(localStorage.getItem(COLAPSADO_KEY) === "1");
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(COLAPSADO_KEY, colapsado ? "1" : "0");
-  }, [colapsado]);
+  /**
+   * Se guarda al tocar el boton, no en un efecto sobre `colapsado`.
+   *
+   * El efecto que habia corria tambien al montar, en el mismo commit que el de
+   * arriba y con el `colapsado` viejo del cierre: leia "1", escribia "0", y
+   * recien en el re-render volvia a escribir "1". Se resolvia solo, salvo si el
+   * componente se desmontaba en el medio —una navegacion rapida— y ahi la
+   * preferencia quedaba perdida.
+   *
+   * Escribir en un almacen externo es una consecuencia de lo que hizo la
+   * persona, no de que el estado tenga cierto valor: va en el handler.
+   */
+  const alternarColapsado = () => {
+    setColapsado((v) => {
+      const nuevo = !v;
+      try {
+        localStorage.setItem(COLAPSADO_KEY, nuevo ? "1" : "0");
+      } catch {
+        // Modo privado o almacenamiento bloqueado: se pierde la preferencia,
+        // no la navegacion.
+      }
+      return nuevo;
+    });
+  };
 
   // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo despliega solo.
   useEffect(() => {
@@ -154,7 +177,7 @@ export function Sidebar({
 
           <button
             type="button"
-            onClick={() => setColapsado((v) => !v)}
+            onClick={alternarColapsado}
             aria-label={colapsado ? "Mostrar panel lateral" : "Esconder panel lateral"}
             className={`hidden h-6 w-6 items-center justify-center rounded transition hover:bg-white/10 md:flex ${colapsado ? "mx-auto" : "ml-auto"}`}
             style={{ color: "var(--sidebar-text)" }}
