@@ -479,6 +479,32 @@ cae el último del anterior y las órdenes se cuentan en el mes equivocado. Y el
 nombre del mes sale de una lista y no de `toLocaleDateString`: un servidor sin
 locale español diría "OTs generadas en August".
 
+## Despacho filler deja de ser un sector
+
+El libro BD Equipos parte cada filler en dos: `PY-A1 Filler 1` y
+`PY-A2 Despacho filler 1`, `PY-B1 Filler 2` y `PY-B2 Despacho filler 2`. En la
+planta es un solo lugar, y el resto del sistema ya lo trataba así: las 107
+órdenes de trabajo de los dos despachos dicen `sector_raw = "Planta filler 1"`
+y `"Planta filler 2"`, **ninguna dice "Despacho"**. Cayeron en el sector de
+despacho porque el sector se deduce del equipo y la máquina es una `PY-A2-xx`.
+
+La **migración 044** los une: 33 equipos, 107 órdenes de trabajo, 2 avisos y 2
+órdenes de servicio pasan a su filler, y los dos sectores se borran. Quedan 13
+sectores de planta; Filler 1 tiene 45 equipos y Filler 2, 31.
+
+Se borran y no se desactivan porque `sectoresDePlanta()` filtra por
+`es_de_planta` y no por `activo`: un sector inactivo seguiría en todos los
+desplegables.
+
+**Los códigos de los equipos no se tocan.** Siguen siendo `PY-A2-01` y compañía:
+es lo que los identifica contra el libro, y renombrarlos rompería la próxima
+importación sin arreglar nada.
+
+**El libro sigue diciendo PY-A2 y PY-B2**, y su importación reconoce los
+sectores por código y los vuelve a crear. Mientras el libro no se corrija, un
+"Importar BD Equipos" deshace la fusión. Es el mismo patrón que las ubicaciones
+de Compras: si se corrige de un solo lado, la planilla lo recrea.
+
 ## Los sectores de planta, aparte de los organizativos
 
 `sectores` guardaba dos cosas distintas con el mismo nombre: dónde trabaja una
@@ -873,7 +899,7 @@ entra a mirar. Si hiciera falta que llegue solo, la lógica ya está separada en
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
 1.728, órdenes de servicio 220, cotizaciones 147, equipos 239, componentes 398,
-tipos 26, sectores de planta 15.
+tipos 26, sectores de planta 15 —hoy 13, ver "Despacho filler deja de ser un sector".
 
 **Lo que vivía sólo en la base de la app vieja no se migró**, porque no viaja
 por las planillas: los checklists de equipos, los mantenimientos programados,
