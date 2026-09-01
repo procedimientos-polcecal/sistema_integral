@@ -11,6 +11,8 @@
 
 import { norm } from "@/lib/compras/texto";
 import { monedaExacta } from "@/lib/compras/constants";
+import { numeroArgentino } from "@/lib/core/numeroArgentino";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 
 /** Las 19 columnas de la plantilla, en orden. */
 export const COLUMNAS_COMPARATIVA = [
@@ -129,6 +131,12 @@ const texto = (v: unknown): string | null => {
  *
  * Un porcentaje vuelve como fracción (10% → 0.1), que es como lo guarda la
  * planilla y como lo espera la fórmula del total.
+ *
+ * Lo único que se decide acá es qué es basura —el "$", el "%", los espacios— y
+ * qué hacer con el porcentaje. Cuál separador es el decimal lo resuelve
+ * `numeroArgentino`, en el núcleo: la misma duda la tenía el import de
+ * empleados de RRHH, los dos la resolvían mal igual, y con la regla en un solo
+ * lugar no pueden volver a separarse.
  */
 export function numero(v: unknown): number | null {
   const bruto = String(v ?? "").trim();
@@ -136,22 +144,9 @@ export function numero(v: unknown): number | null {
 
   const esPorcentaje = bruto.includes("%");
   const limpio = bruto.replace(/[^\d.,-]/g, "");
-  if (limpio === "") return null;
 
-  // Si tiene los dos separadores, el último es el decimal.
-  const ultimaComa = limpio.lastIndexOf(",");
-  const ultimoPunto = limpio.lastIndexOf(".");
-  let normalizado: string;
-  if (ultimaComa >= 0 && ultimoPunto >= 0) {
-    normalizado = ultimaComa > ultimoPunto
-      ? limpio.replace(/\./g, "").replace(",", ".")
-      : limpio.replace(/,/g, "");
-  } else {
-    normalizado = limpio.replace(",", ".");
-  }
-
-  const n = Number(normalizado);
-  if (!isFinite(n)) return null;
+  const n = numeroArgentino(limpio);
+  if (n === null) return null;
   return esPorcentaje ? n / 100 : n;
 }
 
@@ -354,9 +349,6 @@ export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null
 const porcentaje = (v: number | null | undefined) =>
   v === null || v === undefined ? "" : `${Math.round(v * 10000) / 100}%`;
 
-/** Letra de columna de Sheets a partir del índice (0 → A). */
-export const letraColumna = (i: number) => String.fromCharCode(65 + i);
-
 /**
  * Arma la fila para escribirla en la planilla.
  *
@@ -391,7 +383,7 @@ export function filaParaPlanilla(args: {
     if (idx[clave] >= 0) fila[idx[clave]] = valor;
   };
 
-  const col = (clave: ClaveColumna) => letraColumna(idx[clave]);
+  const col = (clave: ClaveColumna) => letraDeColumna(idx[clave]);
 
   poner("nro_ri", String(nroRi));
   // La planilla la lee gente, no un parser: "24/08/2026" y no
@@ -427,7 +419,7 @@ export function filaParaPlanilla(args: {
   if (idx.precio_total >= 0 && idx.precio_unitario >= 0 && unitarioEnLaCelda !== "") {
     // Sólo se nombran las columnas que esa planilla tiene.
     //
-    // Antes se armaba con todas y `letraColumna(-1)` devolvía "@" para las que
+    // Antes se armaba con todas y `letraDeColumna(-1)` devolvía "@" para las que
     // faltaban: en las comparativas viejas, sin columna de ENVÍO, la fórmula
     // salía "...+@1001" y Excel la marcaba como error. Una columna que no está
     // no aporta al total, así que no tiene por qué figurar.

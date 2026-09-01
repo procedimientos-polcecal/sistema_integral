@@ -238,6 +238,30 @@ sincronización informaba que faltaba un alias que estaba cargado. Corregido:
 ahora prueba primero contra el alias. Ojo con la conclusión fácil de que "falta
 un dato": había que mirar qué texto guardó cada origen.
 
+**Una celda vacía en la fórmula del total no es neutra si multiplica.** La
+fórmula que se escribe en la planilla nombra columnas, no valores, y nombraba
+la cantidad con sólo existir la columna. Un presupuesto sin cantidad —que es
+una cotización por monto total, y en la app vale `cantidad ?? 1`— dejaba
+`=H7*I7*...` con la I vacía: cero. La app mostraba 1210 y la planilla escribía
+0, y en una comparativa donde gana el más barato, un cero gana todas. Lo mismo
+pasaba con un presupuesto en dólares sin cotización: `montoParaLaPlanilla`
+vacía el unitario a propósito para no mezclar monedas, y la fórmula lo
+multiplicaba igual. Ahora la cantidad se nombra sólo si tiene valor, y sin
+unitario no se escribe fórmula. El IVA, el descuento y el envío sí se dejan
+nombrados aunque estén vacíos: no multiplican —son ×(1+0), −0 y +0— y así la
+planilla recalcula sola si después alguien los completa.
+
+**El punto de miles se leía como decimal.** `numero()` resolvía "1.500,50"
+bien —con los dos separadores, el último es el decimal— pero sin coma elegía
+siempre decimal, así que **"1.500" entraba como 1,5**. En una comparativa eso
+convierte al presupuesto más caro en el más barato. La planilla se lee con
+valores formateados (`leerComparativa` no pide `UNFORMATTED_VALUE`, porque
+necesita el texto de las celdas), así que depende del formato de miles que
+tenga cada columna: puede haber cotizaciones viejas guardadas mil veces más
+baratas. La regla ahora vive en `lib/core/numeroArgentino.ts`, una sola vez
+para Compras y para el import de empleados de RRHH, que tenían el mismo error
+por separado.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
@@ -296,6 +320,7 @@ la migración es la **042**.
 | Análisis de la planilla | [COMPRAS-ANALISIS-PLANILLA.md](COMPRAS-ANALISIS-PLANILLA.md) |
 | Login y correos | [AUTENTICACION.md](AUTENTICACION.md) |
 | Variables de entorno | [VARIABLES-VERCEL.md](VARIABLES-VERCEL.md) |
+| Reglas compartidas con otros módulos | [NUCLEO-COMPARTIDO.md](NUCLEO-COMPARTIDO.md) — fechas, números, letras de columna |
 
 Hay una segunda copia del repo en `C:\Users\Usuario\sistema_integral`, creada
 por error y desactualizada. Trabajar sobre la del Desktop, que es la que tiene

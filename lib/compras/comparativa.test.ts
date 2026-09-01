@@ -4,7 +4,7 @@ import {
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
   datosDePagoDe, alCambiarDeProveedor,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
-  totalEnPesos, faltaLaCotizacion,
+  totalEnPesos, faltaLaCotizacion, numero, diasDePlazo,
 } from "./comparativa";
 import type { CotizacionLeida } from "./comparativa";
 
@@ -48,6 +48,52 @@ describe("total de una cotización", () => {
     expect(totalCotizacion({
       precio_unitario: 33.33, cantidad: 3, descuento: 0, iva: 0.21, costo_envio: null,
     })).toBe(120.99);
+  });
+});
+
+describe("numeros de la planilla", () => {
+  it("saca el simbolo de moneda y los espacios", () => {
+    expect(numero("$ 1500")).toBe(1500);
+    expect(numero("  1500  ")).toBe(1500);
+  });
+
+  it("un porcentaje vuelve como fraccion", () => {
+    expect(numero("10%")).toBeCloseTo(0.1);
+    expect(numero("21%")).toBeCloseTo(0.21);
+    expect(numero("21,5%")).toBeCloseTo(0.215);
+  });
+
+  /**
+   * El punto de miles. "1.500" es mil quinientos y entraba como 1,5: en una
+   * comparativa eso convierte al presupuesto mas caro en el mas barato.
+   * La regla vive en `lib/core/numeroArgentino.ts` y esta probada alla; aca se
+   * fija que `numero()` la use de verdad.
+   */
+  it("el punto de miles no se lee como decimal", () => {
+    expect(numero("1.500")).toBe(1500);
+    expect(numero("$ 1.234.567")).toBe(1234567);
+    expect(numero("1.500,50")).toBeCloseTo(1500.5);
+    // Y los decimales de verdad siguen siendo decimales.
+    expect(numero("1500,50")).toBeCloseTo(1500.5);
+    expect(numero("1.5")).toBeCloseTo(1.5);
+  });
+
+  it("el IVA guardado como fraccion no se convierte en miles", () => {
+    expect(numero("0.210")).toBeCloseTo(0.21);
+  });
+
+  it("lo que no es un numero queda sin definir", () => {
+    expect(numero("")).toBeNull();
+    expect(numero("s/d")).toBeNull();
+    expect(numero(null)).toBeNull();
+  });
+
+  it("un plazo con punto de miles ya no pasa por dos dias", () => {
+    // Antes "1.500" daba 1,5, redondeaba a 2 y se guardaba como dos dias de
+    // plazo. Ahora son 1500, que supera el tope de un año: sin definir.
+    expect(diasDePlazo("1.500")).toBeNull();
+    expect(diasDePlazo("30")).toBe(30);
+    expect(diasDePlazo("30/60")).toBeNull();
   });
 });
 
