@@ -5,10 +5,12 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
 import {
   celdasParaRegistrar, filaParaLaPlanillaDeOT, repartirRegistroDeOT,
-  type RegistroDeOT,
+  esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
+import { paginaPedida } from "@/lib/core/paginado";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
   const equipment_id = searchParams.get("equipment_id");
   const especialidad = searchParams.get("especialidad");
   const search       = searchParams.get("q");
-  const page         = Number(searchParams.get("page") ?? 1);
+  const page         = paginaPedida(searchParams.get("page"));
   const limit        = 50;
 
   // Las que todavía esperan algo, todas juntas y sin paginar: son unas treinta
@@ -53,6 +55,11 @@ export async function GET(request: Request) {
   return NextResponse.json({ data, count });
 }
 
+/** Qué estados valen, dicho en el error: adivinarlos es la parte lenta. */
+function mensajeDeEstadoInvalido(recibido: unknown): string {
+  return `"${String(recibido)}" no es un estado de OT. Los que valen son: ${ESTADOS_DE_OT.join(", ")}.`;
+}
+
 // ── POST: crear OT manualmente desde la app ─────────────────────────────────
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const {
     equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
     especialidad, tipo, quien, descripcion, repuesto,
@@ -74,6 +81,13 @@ export async function POST(request: Request) {
 
   if (!descripcion?.trim()) {
     return NextResponse.json({ error: "La descripción es requerida" }, { status: 400 });
+  }
+
+  // El POST no validaba el estado y el PATCH sí: cualquier texto entraba a la
+  // base y de ahí a la planilla, donde `EN_LA_PLANILLA[v] ?? v` lo escribía tal
+  // cual. Sin estado la OT nace por hacer, que es de donde se parte.
+  if (estado !== undefined && estado !== null && estado !== "" && !esEstadoDeOT(estado)) {
+    return NextResponse.json({ error: mensajeDeEstadoInvalido(estado) }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -220,8 +234,6 @@ async function marcarElAviso(
 }
 
 // ── PATCH: actualizar estado de una OT desde la app ─────────────────────────
-const VALID_ESTADOS = ["REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "SUSPENDIDA"];
-
 export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -231,7 +243,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { id, estado, requiere_parada_sector } = body ?? {};
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
 
@@ -240,8 +252,8 @@ export async function PATCH(request: Request) {
   const update: Record<string, unknown> = { synced_at: new Date().toISOString() };
 
   if (estado !== undefined) {
-    if (!VALID_ESTADOS.includes(estado)) {
-      return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+    if (!esEstadoDeOT(estado)) {
+      return NextResponse.json({ error: mensajeDeEstadoInvalido(estado) }, { status: 400 });
     }
     update.estado = estado;
   }

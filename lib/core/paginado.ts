@@ -30,3 +30,21 @@ export async function traerTodo<T>(
     if (lote.length < tamano) return todo;
   }
 }
+
+/**
+ * El número de página que pidió el navegador, siempre usable.
+ *
+ * `Number(searchParams.get("page") ?? 1)` parece inofensivo y no lo es:
+ * `?page=abc` da `NaN`, `?page=0` da 0, y los dos terminan en un `.range()`
+ * inválido —`Range: NaN-NaN`, o `-50` a `-1`— que PostgREST rechaza. El handler
+ * no lo atrapa, así que el navegador recibe un 500 con stack en vez de la
+ * primera página.
+ *
+ * No devuelve error: una URL con la página mal escrita quiere ver el listado,
+ * no un cartel. Se cae a la 1, que es lo que esperaría cualquiera.
+ */
+export function paginaPedida(valor: string | null | undefined): number {
+  const n = Number(valor ?? 1);
+  if (!isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
+}

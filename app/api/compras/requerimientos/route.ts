@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
+import { paginaPedida } from "@/lib/core/paginado";
 
 /**
  * Alta de un requerimiento interno.
@@ -101,7 +102,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const page = Number(searchParams.get("page") ?? 1);
+  const page = paginaPedida(searchParams.get("page"));
   const limit = 50;
 
   let query = supabase

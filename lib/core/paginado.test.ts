@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { traerTodo } from "./paginado";
+import { traerTodo, paginaPedida } from "./paginado";
 
 /** Simula PostgREST: nunca devuelve más de `tope` filas por pedido. */
 function tablaFalsa(total: number, tope = 1000) {
@@ -45,5 +45,31 @@ describe("traerTodo", () => {
     await expect(
       traerTodo(async () => ({ data: null, error: { message: "se cayó" } }))
     ).rejects.toThrow("se cayó");
+  });
+});
+
+describe("paginaPedida", () => {
+  it("la pagina normal pasa tal cual", () => {
+    expect(paginaPedida("1")).toBe(1);
+    expect(paginaPedida("7")).toBe(7);
+  });
+
+  /**
+   * `Number(searchParams.get("page") ?? 1)` daba NaN o 0 y el `.range()` que
+   * salia de ahi —`Range: NaN-NaN`, o -50 a -1— lo rechaza PostgREST. El
+   * handler no lo atrapaba: 500 con stack en vez del listado.
+   */
+  it("lo que no es una pagina cae a la primera, no a un 500", () => {
+    expect(paginaPedida("abc")).toBe(1);
+    expect(paginaPedida("0")).toBe(1);
+    expect(paginaPedida("-5")).toBe(1);
+    expect(paginaPedida("")).toBe(1);
+    expect(paginaPedida(null)).toBe(1);
+    expect(paginaPedida(undefined)).toBe(1);
+    expect(paginaPedida("Infinity")).toBe(1);
+  });
+
+  it("un decimal se trunca: no hay media pagina", () => {
+    expect(paginaPedida("2.9")).toBe(2);
   });
 });

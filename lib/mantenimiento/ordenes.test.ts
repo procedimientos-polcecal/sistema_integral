@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   estadoDeTexto, filaDeOrden, celdasParaRegistrar, filaParaLaPlanillaDeOT,
   repartirRegistroDeOT,
+  esEstadoDeOT,
+  ESTADOS_DE_OT,
 } from "./ordenes";
 
 /**
@@ -246,5 +248,25 @@ describe("repartir lo que se registra entre la tabla y la planilla", () => {
     expect(Object.keys(update).sort()).toEqual(["estado", "fecha_cierre", "horas", "operario_1"]);
     expect(registro.observaciones).toBe("Rotacion de martillo");
     expect(registro.foto_url).toBe("https://drive/foto");
+  });
+});
+
+describe("esEstadoDeOT", () => {
+  it("acepta los cinco del vocabulario", () => {
+    for (const e of ESTADOS_DE_OT) expect(esEstadoDeOT(e)).toBe(true);
+  });
+
+  /**
+   * La lista estaba exportada y no la usaba nadie: la ruta tenia su propia
+   * copia y solo el PATCH validaba. El POST escribia el texto crudo a la base
+   * y de ahi a la planilla.
+   */
+  it("rechaza cualquier otra cosa", () => {
+    expect(esEstadoDeOT("realizado")).toBe(false);   // distingue mayusculas
+    expect(esEstadoDeOT("TERMINADO")).toBe(false);
+    expect(esEstadoDeOT("")).toBe(false);
+    expect(esEstadoDeOT(null)).toBe(false);
+    expect(esEstadoDeOT(undefined)).toBe(false);
+    expect(esEstadoDeOT(1)).toBe(false);
   });
 });
