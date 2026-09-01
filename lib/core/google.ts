@@ -31,12 +31,47 @@ export function hayCredencialesGoogle(): boolean {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
 }
 
+/**
+ * Los tokens que ya se pidieron, por juego de scopes.
+ *
+ * POR QUÉ HACE FALTA
+ *
+ * Pedir un token no es gratis: se firma un JWT con RSA y se hace un viaje a
+ * `oauth2.googleapis.com`. Y se pedía **uno por llamada**: hay 21 lugares que
+ * llaman a `obtenerToken`, y `lib/core/sheets.ts` y `lib/compras/drive.ts` lo
+ * hacían en cada función, así que escribir cinco celdas eran cinco autentica-
+ * ciones antes de las cinco escrituras. Con ~13 escrituras por RI, eso es la
+ * mitad de la latencia de la sincronización y una buena parte de los 429.
+ *
+ * `lib/compras/sheets.ts` ya hacía lo correcto —lo pide una vez y lo pasa hacia
+ * abajo—; esto lleva ese comportamiento a todos los demás sin tocarlos.
+ *
+ * QUÉ TIENE DE SEGURO
+ *
+ * El caché vive en memoria del proceso, o sea de una instancia de función de
+ * Vercel: no cruza usuarios —el token es de la cuenta de servicio, el mismo
+ * para todos— ni sobrevive a un redeploy. Se guarda por juego de scopes,
+ * porque un token de `spreadsheets.readonly` no sirve para escribir.
+ *
+ * Se descarta un minuto antes de que Google lo venza: si se apurara justo en el
+ * borde, la llamada volvería con un 401 que nadie sabría leer.
+ */
+const MARGEN_SEGUNDOS = 60;
+const tokensEnMemoria = new Map<string, { token: string; vence: number }>();
+
 export async function obtenerToken(scopes: string[]): Promise<string> {
   const crudo = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
   if (!crudo) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON no configurado");
 
-  const cuenta = JSON.parse(crudo);
   const ahora = Math.floor(Date.now() / 1000);
+
+  // Ordenados: pedir [SHEETS, DRIVE] y [DRIVE, SHEETS] es lo mismo y tiene que
+  // dar en la misma entrada.
+  const claveDeCache = [...scopes].sort().join(" ");
+  const guardado = tokensEnMemoria.get(claveDeCache);
+  if (guardado && guardado.vence > ahora + MARGEN_SEGUNDOS) return guardado.token;
+
+  const cuenta = JSON.parse(crudo);
   const carga = {
     iss: cuenta.client_email,
     scope: scopes.join(" "),
@@ -69,7 +104,24 @@ export async function obtenerToken(scopes: string[]): Promise<string> {
   });
   const datos = await res.json();
   if (!datos.access_token) throw new Error(`Google OAuth: ${JSON.stringify(datos)}`);
+
+  // `expires_in` viene en segundos y son 3600, pero se usa lo que diga Google
+  // en vez de dar por sentado el número. Si no lo manda, se asume una hora.
+  const dura = Number(datos.expires_in);
+  tokensEnMemoria.set(claveDeCache, {
+    token: datos.access_token,
+    vence: ahora + (isFinite(dura) && dura > 0 ? dura : 3600),
+  });
+
   return datos.access_token;
+}
+
+/**
+ * Vacía el caché de tokens. Sólo para los tests: en producción no hace falta
+ * —un token vencido se descarta solo— y llamarla no rompe nada.
+ */
+export function olvidarLosTokens(): void {
+  tokensEnMemoria.clear();
 }
 
 // ── Errores ──────────────────────────────────────────────────
