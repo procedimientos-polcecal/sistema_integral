@@ -39,10 +39,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comprobar que estén las variables
+        # Por `env:` y no interpolados en el comando, igual que en backup.yml:
+        # Interpolar un secreto con la sintaxis de expresiones de Actions mete
+        # su VALOR dentro del script que corre el shell, así que un secreto con
+        # una comilla o un backtick rompe el test — o se ejecuta. Actions
+        # enmascara el valor en el log, no en la línea de comando.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           faltan=""
-          [ -n "${{ vars.APP_URL }}" ]        || faltan="$faltan APP_URL(variable)"
-          [ -n "${{ secrets.CRON_SECRET }}" ] || faltan="$faltan CRON_SECRET(secret)"
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
 
           if [ -n "$faltan" ]; then
             echo "::error::Falta configurar en el repositorio:$faltan"
