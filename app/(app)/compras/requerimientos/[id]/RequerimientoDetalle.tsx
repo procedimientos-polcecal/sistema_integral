@@ -12,6 +12,7 @@ import type {
 } from "@/lib/compras/types";
 import Comparativa from "./Comparativa";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
+import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 
 export default function RequerimientoDetalle({
@@ -21,7 +22,7 @@ export default function RequerimientoDetalle({
   requerimiento: RequerimientoConRelaciones;
   historial: HistorialItem[];
   cotizaciones: Cotizacion[];
-  proveedores: { id: string; nombre: string }[];
+  proveedores: ProveedorElegible[];
   empresas: { id: string; nombre: string }[];
   puedeEditar: boolean;
   puedeAprobar: boolean;

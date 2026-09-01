@@ -403,7 +403,8 @@ export function filaParaPlanilla(args: {
   poner("marca", c.marca ?? "");
   poner("unidad_medida", c.unidad_medida ?? "");
   const aPesos = enPesos(args.moneda, args.dolar);
-  poner("precio_unitario", montoParaLaPlanilla(c.precio_unitario, aPesos));
+  const unitarioEnLaCelda = montoParaLaPlanilla(c.precio_unitario, aPesos);
+  poner("precio_unitario", unitarioEnLaCelda);
   poner("cantidad", c.cantidad === null ? "" : String(c.cantidad));
   poner("envio", montoParaLaPlanilla(c.costo_envio, aPesos));
   poner("descuento", porcentaje(c.descuento));
@@ -415,7 +416,15 @@ export function filaParaPlanilla(args: {
   poner("comentario", c.comentario ?? "");
   poner("eleccion", "FALSE");
 
-  if (idx.precio_total >= 0 && idx.precio_unitario >= 0) {
+  // Sin unitario en la celda no se escribe fórmula ninguna.
+  //
+  // Pasa cuando el presupuesto está en dólares y no hay cotización:
+  // `montoParaLaPlanilla` deja la celda vacía a propósito, para no mezclar
+  // monedas. Pero la fórmula la multiplicaba igual, y una celda vacía vale
+  // cero: el total daba 0 y en una comparativa donde gana el más barato, un
+  // cero gana todas. Un total en blanco dice lo que pasa —no se pudo
+  // calcular—; un cero miente.
+  if (idx.precio_total >= 0 && idx.precio_unitario >= 0 && unitarioEnLaCelda !== "") {
     // Sólo se nombran las columnas que esa planilla tiene.
     //
     // Antes se armaba con todas y `letraColumna(-1)` devolvía "@" para las que
@@ -425,10 +434,23 @@ export function filaParaPlanilla(args: {
     const parte = (clave: ClaveColumna) => (idx[clave] >= 0 ? `${col(clave)}${n}` : null);
 
     const unitario = parte("precio_unitario")!;
-    const cantidad = parte("cantidad");
     const descuento = parte("descuento");
     const iva = parte("iva");
     const envio = parte("envio");
+
+    // La cantidad se nombra sólo si además TIENE valor, y no sólo si la
+    // columna existe. Es la única que multiplica: una celda vacía vale cero y
+    // `H7*I7` dejaba el total entero en cero, mientras la app mostraba el
+    // número correcto. `totalCotizacion` usa `cantidad ?? 1`; sin cantidad la
+    // fórmula tiene que ser el unitario solo, que es lo mismo.
+    //
+    // Las otras tres se dejan referenciadas aunque estén vacías, porque no
+    // multiplican: IVA vacío es ×(1+0), descuento vacío es −0 y envío vacío es
+    // +0, todo consistente con `totalCotizacion`. Y así, si alguien las
+    // completa en la planilla, el total se recalcula solo — que es el punto de
+    // escribir una fórmula y no un número.
+    const cantidad =
+      c.cantidad === null || c.cantidad === undefined ? null : parte("cantidad");
 
     // El neto se nombra dos veces —una para el IVA y otra para el descuento—
     // porque el descuento se resta sin IVA encima. Las letras salen del
@@ -599,3 +621,60 @@ export function minimoEnPesos(totales: Record<string, number | null>): number | 
   const valores = Object.values(totales).filter((v): v is number => v !== null);
   return valores.length > 0 ? Math.min(...valores) : null;
 }
+
+/** Los datos de pago que la base guarda del proveedor. */
+export interface PagoDelProveedor {
+  plazo_pago_dias: number | null;
+  forma_pago: string | null;
+  condicion_pago: string | null;
+}
+
+/**
+ * Lo que el formulario de presupuesto puede completar solo al elegir proveedor.
+ *
+ * Son datos que administración ya lleva en la base de proveedores: en cuántos
+ * días se le paga y cómo. Escribirlos de nuevo en cada presupuesto es trabajo
+ * repetido y una oportunidad de equivocarse.
+ *
+ * Se completa lo que se sabe y nada más. Hoy 60 de 284 proveedores tienen el
+ * plazo cargado y 109 la forma de pago, así que lo habitual es que traiga poco:
+ * un campo vacío es correcto, inventarlo no.
+ *
+ * La forma y la condición van juntas al único campo de condiciones que tiene la
+ * planilla —"ECHEQ · FF"—, que es donde una persona las escribiría.
+ */
+export function datosDePagoDe(p: PagoDelProveedor | null | undefined): {
+  plazo: string;
+  condiciones: string;
+} {
+  if (!p) return { plazo: "", condiciones: "" };
+
+  // Un plazo que el desplegable no ofrece dejaría el select en blanco mostrando
+  // un valor que no existe: mejor no completarlo y que la persona elija.
+  const plazo =
+    p.plazo_pago_dias != null && (PLAZOS_PAGO as readonly number[]).includes(p.plazo_pago_dias)
+      ? String(p.plazo_pago_dias)
+      : "";
+
+  const condiciones = [p.forma_pago, p.condicion_pago]
+    .map((v) => (v ?? "").trim())
+    .filter(Boolean)
+    .join(" · ");
+
+  return { plazo, condiciones };
+}
+
+/**
+ * Qué queda en un campo autocompletable cuando se cambia de proveedor.
+ *
+ * Lo que escribió una persona manda: si para esta compra se acordaron
+ * condiciones distintas a las habituales del proveedor, cambiar de proveedor no
+ * puede borrarlas. Lo que había puesto el autocompletado sí se reemplaza, y un
+ * campo vacío se vuelve a completar.
+ */
+export function alCambiarDeProveedor(actual: string, puestoAntes: string, nuevo: string): string {
+  return actual.trim() === "" || actual === puestoAntes ? nuevo : actual;
+}
+
+/** Un proveedor en el selector del formulario, con lo que se autocompleta de él. */
+export type ProveedorElegible = { id: string; nombre: string } & PagoDelProveedor;

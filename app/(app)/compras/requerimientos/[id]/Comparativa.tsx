@@ -6,7 +6,7 @@ import { urlDePlanilla } from "@/lib/compras/vincular";
 import type { Cotizacion, RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorComparativa from "./SelectorComparativa";
 import PresupuestoForm from "./PresupuestoForm";
-import { totalesEnPesosDe, minimoEnPesos } from "@/lib/compras/comparativa";
+import { totalesEnPesosDe, minimoEnPesos, type ProveedorElegible } from "@/lib/compras/comparativa";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaTabla from "./ComparativaTabla";
 import ComparativaDecision from "./ComparativaDecision";
@@ -34,7 +34,7 @@ export default function Comparativa({
 }: {
   requerimiento: RequerimientoConRelaciones;
   cotizaciones: Cotizacion[];
-  proveedores: { id: string; nombre: string }[];
+  proveedores: ProveedorElegible[];
   puedeEditar: boolean;
   esAsignado: boolean;
   /** Con qué convertir los presupuestos que vinieron en dólares. */

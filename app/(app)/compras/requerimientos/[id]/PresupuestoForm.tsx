@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { moneda, fecha } from "@/lib/compras/constants";
-import { totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES } from "@/lib/compras/comparativa";
+import {
+  totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES,
+  datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
+} from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 
 /**
@@ -13,12 +16,16 @@ import SelectorProveedor from "../../SelectorProveedor";
  *
  * El total se muestra mientras se escribe con la misma fórmula que calcula la
  * base, para que no haya sorpresa entre lo que se ve y lo que queda guardado.
+ *
+ * Al elegir el proveedor se completan solos el plazo y las condiciones de pago,
+ * que administración ya lleva en la base de proveedores. La disponibilidad no:
+ * depende de qué se esté comprando, no de a quién.
  */
 export default function PresupuestoForm({
   requerimientoId, proveedores, cantidadSugerida, dolar, onListo, onCancelar,
 }: {
   requerimientoId: string;
-  proveedores: { id: string; nombre: string }[];
+  proveedores: ProveedorElegible[];
   cantidadSugerida: number | null;
   /** Con qué convertir si el proveedor cotiza en dólares. */
   dolar: { venta: number; fecha: string; alDia: boolean } | null;
@@ -44,6 +51,22 @@ export default function PresupuestoForm({
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+
+  // Lo último que puso el autocompletado. Sirve para dos cosas: saber qué se
+  // puede reemplazar al cambiar de proveedor sin pisar lo que escribió una
+  // persona, y avisar en pantalla de dónde salió cada valor.
+  const [traido, setTraido] = useState({ plazo: "", condiciones: "" });
+
+  function elegirProveedor(id: string) {
+    setProveedorId(id);
+    const datos = datosDePagoDe(proveedores.find((p) => p.id === id));
+    setPlazo((actual) => alCambiarDeProveedor(actual, traido.plazo, datos.plazo));
+    setCondiciones((actual) => alCambiarDeProveedor(actual, traido.condiciones, datos.condiciones));
+    setTraido(datos);
+  }
+
+  /** Si el campo sigue mostrando lo que trajo la ficha del proveedor. */
+  const delProveedor = (valor: string, puesto: string) => puesto !== "" && valor === puesto;
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
 
@@ -105,7 +128,7 @@ export default function PresupuestoForm({
           <SelectorProveedor
             proveedores={proveedores}
             valor={proveedorId}
-            onCambio={setProveedorId}
+            onCambio={elegirProveedor}
           />
         </Campo>
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
@@ -141,7 +164,7 @@ export default function PresupuestoForm({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
-        <Campo label="Plazo de pago (días)">
+        <Campo label="Plazo de pago (días)" nota={delProveedor(plazo, traido.plazo) ? "del proveedor" : undefined}>
           <select
             value={plazo}
             onChange={(e) => setPlazo(e.target.value)}
@@ -162,7 +185,11 @@ export default function PresupuestoForm({
           </select>
         </Campo>
 
-        <Campo label="Condiciones de pago" ancho="sm:col-span-3">
+        <Campo
+          label="Condiciones de pago"
+          ancho="sm:col-span-3"
+          nota={delProveedor(condiciones, traido.condiciones) ? "del proveedor" : undefined}
+        >
           <Texto valor={condiciones} set={setCondiciones} />
         </Campo>
         <Campo label="Comentario" ancho="sm:col-span-3">
@@ -213,13 +240,18 @@ export default function PresupuestoForm({
   );
 }
 
-function Campo({ label, ancho = "", children }: {
-  label: string; ancho?: string; children: React.ReactNode;
+function Campo({ label, ancho = "", nota, children }: {
+  label: string;
+  ancho?: string;
+  /** De dónde salió el valor, cuando no lo escribió quien está mirando. */
+  nota?: string;
+  children: React.ReactNode;
 }) {
   return (
     <label className={`block ${ancho}`}>
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
+        {nota && <span className="ml-1.5 font-normal normal-case text-slate-400">{nota}</span>}
       </span>
       {children}
     </label>

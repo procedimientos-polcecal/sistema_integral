@@ -33,7 +33,13 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
       .select("*, proveedores(nombre)")
       .eq("requerimiento_id", id)
       .order("precio_total", { ascending: true }),
-    supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
+    // Con los datos de pago: el formulario de presupuesto los completa solo
+    // al elegir el proveedor.
+    supabase
+      .from("proveedores")
+      .select("id, nombre, plazo_pago_dias, forma_pago, condicion_pago")
+      .eq("activo", true)
+      .order("nombre"),
   ]);
 
   const { data: empresas } = await supabase.from("empresas").select("id, nombre").order("nombre");

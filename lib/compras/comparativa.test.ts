@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   COLUMNAS_COMPARATIVA, mapearEncabezados, filasParaEsteRi,
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
+  datosDePagoDe, alCambiarDeProveedor,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
   totalEnPesos, faltaLaCotizacion,
 } from "./comparativa";
+import type { CotizacionLeida } from "./comparativa";
 
 const ENCABEZADO = [...COLUMNAS_COMPARATIVA];
 
@@ -173,6 +175,78 @@ describe("fila para escribir en la planilla", () => {
     // K es DESCUENTO, L es IVA y J es ENVIO.
     expect(fila[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
     expect(fila[18]).toBe("FALSE");
+  });
+
+  /** Los mismos datos de arriba, para variar de a un campo por caso. */
+  const cotizacionBase: CotizacionLeida = {
+    proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
+    precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
+    descuento: 0.1, iva: 0.21, precio_hasta: "2026-08-31",
+    plazo_pago_dias: 30, condiciones_pago: "Transferencia",
+    disponibilidad: "4-7 días", comentario: "",
+  };
+
+  const armar = (
+    cotizacion: CotizacionLeida,
+    extra: { moneda?: string | null; dolar?: number | null } = {}
+  ) => {
+    const r = mapearEncabezados(ENCABEZADO);
+    if (!r.ok) throw new Error("encabezado inválido");
+    return filaParaPlanilla({
+      idx: r.idx, numeroFila: 7, nroRi: 1850, fecha: "2026-08-21",
+      area: "Mantenimiento", descripcion: "Filtro de aceite", cotizacion, ...extra,
+    });
+  };
+
+  /**
+   * La cantidad multiplica, así que una celda vacía no es neutra: vale cero y
+   * anula el total entero. `totalCotizacion` trata la cantidad ausente como 1
+   * —es una cotizacion por monto total— y la formula tiene que decir lo mismo.
+   *
+   * Pasaba al reves: la app mostraba 1210 y la planilla escribia 0.
+   */
+  it("sin cantidad, la fórmula es el unitario solo y no lo multiplica por vacío", () => {
+    const fila = armar({ ...cotizacionBase, precio_unitario: 1000, cantidad: null, costo_envio: null, descuento: null, iva: 0.21 });
+
+    expect(fila[8]).toBe("");
+    // El neto es H7 solo. El descuento y el envio siguen nombrados —no
+    // multiplican— pero la I ya no aparece en ningun lado.
+    expect(fila[12]).toBe("=H7*(1+L7)-(H7*K7)+J7");
+    expect(fila[12]).not.toContain("I7");
+
+    // Y da lo mismo que muestra la app: con K7 y J7 vacias, 1000*1,21 = 1210.
+    expect(totalCotizacion({ precio_unitario: 1000, cantidad: null, descuento: null, iva: 0.21, costo_envio: null })).toBe(1210);
+  });
+
+  /**
+   * El IVA, el descuento y el envio si se dejan referenciados aunque esten
+   * vacios: no multiplican —son ×(1+0), −0 y +0— y asi la planilla recalcula
+   * sola si despues alguien los completa.
+   */
+  it("el IVA, el descuento y el envío vacíos siguen nombrados: no anulan nada", () => {
+    const fila = armar({ ...cotizacionBase, cantidad: 4, descuento: null, iva: null, costo_envio: null });
+    expect(fila[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
+  });
+
+  /**
+   * En dolares y sin cotizacion, `montoParaLaPlanilla` deja el unitario vacio
+   * a proposito. La formula lo multiplicaba igual y daba 0 — que en una
+   * comparativa donde gana el mas barato, gana siempre.
+   */
+  it("en dólares y sin cotización no escribe fórmula: un total en cero ganaría la comparativa", () => {
+    const fila = armar(cotizacionBase, { moneda: "USD", dolar: null });
+
+    expect(fila[7]).toBe("");
+    expect(fila[9]).toBe("");
+    expect(fila[12]).toBe("");
+  });
+
+  it("en dólares con cotización escribe todo, ya convertido a pesos", () => {
+    const fila = armar({ ...cotizacionBase, precio_unitario: 100, cantidad: 2, costo_envio: 10 }, { moneda: "USD", dolar: 1500 });
+
+    expect(fila[7]).toBe("150000");
+    expect(fila[9]).toBe("15000");
+    expect(fila[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
   });
 });
 
@@ -402,5 +476,81 @@ describe("costosParaElPedido con presupuestos en dolares", () => {
       proveedor_id: "p1", precio_total: 1100, costo_envio: 100, moneda: "USD", cotizacion: null,
     });
     expect(r.costo_iva).toBe(1000);
+  });
+});
+
+/**
+ * Al elegir el proveedor, el formulario completa solo lo que la base ya sabe de
+ * el: en cuantos dias se le paga y como. Hoy 60 de 284 proveedores tienen el
+ * plazo cargado y 109 la forma, asi que lo normal es que traiga poco o nada:
+ * eso tiene que quedar vacio, no roto.
+ */
+describe("datosDePagoDe", () => {
+  it("sin proveedor no completa nada", () => {
+    expect(datosDePagoDe(null)).toEqual({ plazo: "", condiciones: "" });
+  });
+
+  it("un proveedor sin datos de pago no completa nada", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: null, condicion_pago: null }))
+      .toEqual({ plazo: "", condiciones: "" });
+  });
+
+  it("trae el plazo como lo espera el desplegable", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: 30, forma_pago: null, condicion_pago: null }).plazo).toBe("30");
+  });
+
+  it("el contado son 0 dias, y 0 es un plazo de verdad", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: 0, forma_pago: null, condicion_pago: null }).plazo).toBe("0");
+  });
+
+  it("un plazo que el desplegable no ofrece se deja vacio", () => {
+    // Elegirlo igual dejaria el select en blanco mostrando un valor que no
+    // existe: se prefiere no completar y que la persona elija.
+    expect(datosDePagoDe({ plazo_pago_dias: 40, forma_pago: null, condicion_pago: null }).plazo).toBe("");
+  });
+
+  it("junta la forma y la condicion", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: "ECHEQ", condicion_pago: "FF" }).condiciones)
+      .toBe("ECHEQ · FF");
+  });
+
+  it("con una sola de las dos no deja el separador colgado", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: "CTA CTE", condicion_pago: null }).condiciones)
+      .toBe("CTA CTE");
+    expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: null, condicion_pago: "ANTICIPADO" }).condiciones)
+      .toBe("ANTICIPADO");
+  });
+
+  it("un campo con espacios nada mas cuenta como vacio", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: "  ", condicion_pago: "FF" }).condiciones).toBe("FF");
+  });
+});
+
+/**
+ * Cambiar de proveedor recompleta los campos, pero lo que escribio una persona
+ * no se pisa: si alguien acordo condiciones distintas para esta compra, esas
+ * mandan.
+ */
+describe("alCambiarDeProveedor", () => {
+  it("un campo vacio se completa", () => {
+    expect(alCambiarDeProveedor("", "", "30")).toBe("30");
+  });
+
+  it("lo que puso el autocompletado anterior se reemplaza", () => {
+    expect(alCambiarDeProveedor("30", "30", "60")).toBe("60");
+  });
+
+  it("lo que escribio una persona se respeta", () => {
+    expect(alCambiarDeProveedor("45", "30", "60")).toBe("45");
+  });
+
+  it("si el proveedor nuevo no tiene el dato, el campo se vacia igual", () => {
+    // Dejar el plazo del proveedor anterior seria peor: diria que este cobra a
+    // 30 dias cuando no lo sabemos.
+    expect(alCambiarDeProveedor("30", "30", "")).toBe("");
+  });
+
+  it("un campo que alguien vacio a proposito se vuelve a completar", () => {
+    expect(alCambiarDeProveedor("", "30", "60")).toBe("60");
   });
 });
