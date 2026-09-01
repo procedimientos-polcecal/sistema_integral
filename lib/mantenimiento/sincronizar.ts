@@ -374,12 +374,24 @@ export async function sincronizarComparativas(): Promise<Resultado> {
 
   // Refresco completo: en la planilla se corrigen y se borran filas, y sólo
   // volviendo a leerla entera queda igual de los dos lados.
-  const { error: errorBorrado } = await admin
-    .from("os_comparativas")
-    .delete()
-    .not("id", "is", null);
-  if (errorBorrado) return falla(400, errorBorrado.message);
-
+  //
+  // PRIMERO SE INSERTA, DESPUÉS SE BORRA. Al revés —que es como estaba— el
+  // borrado no está en la misma transacción que los `insert`, así que:
+  //
+  //   - entre el DELETE y el primer INSERT la tabla queda VACÍA, y esto corre
+  //     cada 15 minutos: cualquier pantalla que lea justo ahí no ve ninguna
+  //     cotización.
+  //   - si falla el lote 3 de 5, el espejo queda BORRADO A MEDIAS y la función
+  //     devuelve 400. Lo viejo ya no está y lo nuevo está incompleto.
+  //
+  // Insertando primero, la ventana mala pasa a ser "por unos segundos hay
+  // cotizaciones repetidas" —lo viejo más lo nuevo— y si un lote falla se sale
+  // antes de borrar, con el espejo anterior intacto y completo. Un rato con
+  // duplicados se nota y se arregla en la corrida siguiente; una tabla vacía
+  // parece que no hay nada cotizado.
+  //
+  // No hace falta migración ni clave única: lo nuevo se distingue de lo viejo
+  // por `synced_at`, que es el mismo instante para toda la corrida.
   let guardadas = 0;
   for (let i = 0; i < cotizaciones.length; i += 500) {
     const lote = cotizaciones.slice(i, i + 500);
@@ -389,16 +401,33 @@ export async function sincronizarComparativas(): Promise<Resultado> {
       await registrarSincronizacion({
         modulo: "mantenimiento", recurso: "comparativas", ok: false, error: error.message,
       });
-      return falla(400, error.message);
+      return falla(400, `No se insertó nada nuevo y el espejo anterior quedó intacto. ${error.message}`);
     }
     guardadas += lote.length;
   }
 
+  // Recién ahora se van las de la corrida anterior. Si esto falla, quedan
+  // duplicados: molesta, pero no falta nada, así que no tira abajo la corrida
+  // —se avisa y la próxima limpia—.
+  const { error: errorBorrado } = await admin
+    .from("os_comparativas")
+    .delete()
+    .neq("synced_at", cuando);
+
+  const sobrantes = errorBorrado
+    ? `Quedaron las cotizaciones de la corrida anterior sin borrar (${errorBorrado.message}). ` +
+      "Se van a ver repetidas hasta la próxima sincronización."
+    : null;
+
   const ordenes = new Set(cotizaciones.map((c) => c.os_number)).size;
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "comparativas", ok: true, filas: guardadas,
+    error: sobrantes ?? undefined,
   });
-  return logra({ guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor] });
+  return logra({
+    guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
+    ...(sobrantes ? { sobrantes } : {}),
+  });
 }
 
 /** Las cuatro, en el orden en que conviene traerlas. */
