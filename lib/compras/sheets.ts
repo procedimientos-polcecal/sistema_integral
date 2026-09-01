@@ -13,6 +13,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda } from "@/lib/compras/vincular";
@@ -683,8 +684,6 @@ export function textoParaComprar(alias: string | null): { valor: string | null; 
   return { valor: `PARA COMPRAR (${alias.trim().toUpperCase()})` };
 }
 
-const letraColumna = (i: number) => String.fromCharCode(65 + i);
-
 export interface ResultadoExportacion {
   escritas: string[];
   /** Celdas que la planilla no dejó tocar, con el motivo en lenguaje llano. */
@@ -725,7 +724,7 @@ async function leerEncabezado(pestana: string, cache?: CacheSheets): Promise<str
 
 /** Lee la lista del desplegable de una columna del master. */
 async function leerOpcionesDelDesplegable(col: number): Promise<string[]> {
-  const letra = letraColumna(col);
+  const letra = letraDeColumna(col);
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
     `?ranges=${encodeURIComponent(`${HOJA_MASTER}!${letra}2:${letra}2`)}` +
@@ -1033,7 +1032,7 @@ export async function exportarRequerimiento(
         if (idx[COLUMNA_APROBACION] >= 0) {
           const fallo = await escribirCelda(
             token,
-            `${HOJA_MASTER}!${letraColumna(idx[COLUMNA_APROBACION])}${fila}`,
+            `${HOJA_MASTER}!${letraDeColumna(idx[COLUMNA_APROBACION])}${fila}`,
             valor
           );
           if (fallo) bloqueadas.push(`aprobación (${fallo})`);
@@ -1054,7 +1053,7 @@ export async function exportarRequerimiento(
           if (idx[clave] < 0) continue;
           const fallo = await escribirCelda(
             token,
-            `${HOJA_MASTER}!${letraColumna(idx[clave])}${fila}`,
+            `${HOJA_MASTER}!${letraDeColumna(idx[clave])}${fila}`,
             valoresAprobador[clave]
           );
           if (fallo) bloqueadas.push(`${clave} (${fallo})`);
@@ -1095,7 +1094,7 @@ export async function exportarRequerimiento(
         if (valor === null) continue;   // no corresponde escribir esta celda
         const motivo = await escribirCelda(
           token,
-          `${r.hoja_origen}!${letraColumna(idx[clave])}${r.sheets_fila}`,
+          `${r.hoja_origen}!${letraDeColumna(idx[clave])}${r.sheets_fila}`,
           valor
         );
         if (motivo) bloqueadas.push(`${clave} (${motivo})`);

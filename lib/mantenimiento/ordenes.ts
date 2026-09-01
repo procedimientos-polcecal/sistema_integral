@@ -16,6 +16,7 @@
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 
 /**
  * Las especialidades que usa la planilla, verificadas contra ella.
@@ -157,8 +158,12 @@ const EN_LA_PLANILLA: Record<string, string> = {
   SUSPENDIDA: "Suspendida",
 };
 
-/** La letra de una columna: 0 → A. La planilla llega hasta la W. */
-const letra = (i: number) => String.fromCharCode(65 + i);
+/**
+ * La letra de una columna: 0 → A. Esta planilla llega hasta la W, así que la
+ * cuenta simple alcanzaría; se usa la del núcleo igual, para que quede una sola
+ * en todo el sistema y no haya que acordarse de cuál es el tope de cada una.
+ */
+const letra = letraDeColumna;
 
 export interface RegistroDeOT {
   estado?: string | null;
@@ -193,6 +198,22 @@ export interface RegistroDeOT {
 export const ESTADOS_DE_OT = [
   "REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "SUSPENDIDA",
 ] as const;
+
+export type EstadoDeOT = (typeof ESTADOS_DE_OT)[number];
+
+/**
+ * Si un texto es uno de los estados que el sistema conoce.
+ *
+ * Existe porque la lista de arriba era **código muerto**: estaba exportada y no
+ * la importaba nadie, y la ruta de órdenes tenía su propia copia —`VALID_ESTADOS`—
+ * que sólo usaba el PATCH. El POST no validaba nada: escribía `estado || "POR_HACER"`
+ * tal cual, así que cualquier texto entraba a la base y de ahí a la planilla vía
+ * `EN_LA_PLANILLA[v] ?? v`. Dos listas del mismo vocabulario y una sola en uso es
+ * exactamente cómo se separan.
+ */
+export function esEstadoDeOT(valor: unknown): valor is EstadoDeOT {
+  return typeof valor === "string" && (ESTADOS_DE_OT as readonly string[]).includes(valor);
+}
 
 /** Los que tienen columna propia en `ordenes_trabajo` y también en la planilla. */
 const EN_LOS_DOS_LADOS = ["contratista", "operario_1", "operario_2", "operario_3"] as const;

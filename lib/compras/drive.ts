@@ -14,7 +14,7 @@ import {
   obtenerToken, hayCredencialesGoogle, mensajeDeGoogle, cuentaDeServicio,
   SCOPE_SHEETS, SCOPE_DRIVE_LECTURA,
 } from "@/lib/core/google";
-import { letraColumna } from "@/lib/compras/comparativa";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 // La regla de en qué fila escribir vive en el núcleo: la usan las cuatro
 // planillas y tenerla dos veces es cómo se corrige en una sola.
 import { filaSiguienteSegunColumnaA } from "@/lib/core/sheets";
@@ -165,7 +165,7 @@ export async function agregarFila(
 
   // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
   // más chico, Google rechaza la escritura entera.
-  const rango = `${pestana}!A${fila}:${letraColumna(valores.length - 1)}${fila}`;
+  const rango = `${pestana}!A${fila}:${letraDeColumna(valores.length - 1)}${fila}`;
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
     `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
@@ -189,7 +189,7 @@ export async function escribirCelda(
   valor: string
 ): Promise<void> {
   const token = await obtenerToken([SCOPE_SHEETS]);
-  const rango = `${pestana}!${letraColumna(columna)}${numeroFila}`;
+  const rango = `${pestana}!${letraDeColumna(columna)}${numeroFila}`;
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
     `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
@@ -216,7 +216,7 @@ export async function vaciarFila(
 ): Promise<void> {
   const token = await obtenerToken([SCOPE_SHEETS]);
   const rango =
-    `${pestana}!A${numeroFila}:${letraColumna(anchoColumnas - 1)}${numeroFila}`;
+    `${pestana}!A${numeroFila}:${letraDeColumna(anchoColumnas - 1)}${numeroFila}`;
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
     `/values/${encodeURIComponent(rango)}:clear`;

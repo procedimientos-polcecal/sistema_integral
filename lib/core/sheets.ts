@@ -10,6 +10,10 @@
 import {
   obtenerToken, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA, mensajeDeGoogle, cuentaDeServicio,
 } from "@/lib/core/google";
+// Las planillas de mantenimiento pasan de veintiseis columnas: la letra no se
+// saca sumandole el indice a la "A". La cuenta vive en el nucleo, una sola vez.
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+export { letraDeColumna };
 
 /**
  * Los valores de una pestaña, incluida la fila de encabezados.
@@ -50,20 +54,6 @@ export async function listarPestanas(planillaId: string): Promise<string[]> {
 
   const json = await res.json();
   return (json.sheets ?? []).map((s: { properties: { title: string } }) => s.properties.title);
-}
-
-/**
- * La letra de una columna: 0 → A, 25 → Z, 26 → AA.
- *
- * Las planillas de mantenimiento pasan de veintiséis columnas, así que no
- * alcanza con sumarle el índice a la "A".
- */
-export function letraDeColumna(indice: number): string {
-  let s = "";
-  for (let i = indice + 1; i > 0; i = Math.floor((i - 1) / 26)) {
-    s = String.fromCharCode(65 + ((i - 1) % 26)) + s;
-  }
-  return s;
 }
 
 /**
