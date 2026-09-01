@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AnaliticoClient from "./AnaliticoClient";
+import { calcularResumenAnalitico } from "@/lib/rrhh/analiticoResumen";
 
 export default async function AnaliticoPage() {
   const supabase = await createClient();
@@ -9,5 +10,8 @@ export default async function AnaliticoPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  return <AnaliticoClient />;
+  // Las cinco tarjetas se calculan acá y viajan en el HTML.
+  const resumenInicial = await calcularResumenAnalitico(supabase);
+
+  return <AnaliticoClient resumenInicial={resumenInicial} />;
 }
