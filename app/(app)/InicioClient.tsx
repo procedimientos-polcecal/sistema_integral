@@ -6,7 +6,7 @@ import Link from "next/link";
 interface Resumen {
   rrhh: { empleadosActivos: number; presentesHoy: number; ausentesHoy: number } | null;
   remises: { vehiculosActivos: number; empleadosConTurnoHoy: number } | null;
-  mantenimiento: { equiposTotal: number; equiposOperativos: number; vencidos: number; otPendientes: number } | null;
+  mantenimiento: { atrasadas: number; otPendientes: number; avisosSinOrden: number } | null;
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
 }
 
@@ -70,12 +70,15 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             href="/mantenimiento"
             color="#D97706"
             icon={<IconWrench />}
-            hero={resumen?.mantenimiento ? { label: "Mantenimientos vencidos", valor: resumen.mantenimiento.vencidos } : null}
+            // Lo que falta hacer, no lo que está bien. "Equipos operativos"
+            // decía 237/239 y se movía una vez por mes; el titular anterior
+            // salía de una tabla con una sola fila cargada.
+            hero={resumen?.mantenimiento ? { label: "Órdenes atrasadas", valor: resumen.mantenimiento.atrasadas } : null}
             secundarias={
               resumen?.mantenimiento
                 ? [
-                    { label: "Equipos operativos", valor: `${resumen.mantenimiento.equiposOperativos} / ${resumen.mantenimiento.equiposTotal}` },
                     { label: "Órdenes pendientes", valor: resumen.mantenimiento.otPendientes },
+                    { label: "Avisos sin orden", valor: resumen.mantenimiento.avisosSinOrden },
                   ]
                 : null
             }

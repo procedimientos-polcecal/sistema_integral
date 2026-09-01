@@ -4,6 +4,7 @@ import { modulosVisibles } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { traerTodo } from "@/lib/core/paginado";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -24,7 +25,7 @@ export async function GET() {
   const [rrhh, remises, mantenimiento, compras] = await Promise.all([
     modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
     modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
-    modulos.has("mantenimiento") ? resumenMantenimiento(supabase, hoyStr) : Promise.resolve(null),
+    modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
     modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
   ]);
 
@@ -38,12 +39,15 @@ export async function GET() {
       href: "/rrhh/asistencia?tab=dia",
     });
   }
-  if (mantenimiento && mantenimiento.vencidos > 0) {
+  // Decía "mantenimientos vencidos" y salía de la misma tabla de una fila que
+  // el titular. Dejarla ahí mostraría el número inútil en la misma pantalla de
+  // la que se lo sacó.
+  if (mantenimiento && mantenimiento.atrasadas > 0) {
     notificaciones.push({
-      id: "mant-vencidos",
-      titulo: "Mantenimientos vencidos",
-      cantidad: mantenimiento.vencidos,
-      href: "/mantenimiento",
+      id: "mant-atrasadas",
+      titulo: "Órdenes de trabajo atrasadas",
+      cantidad: mantenimiento.atrasadas,
+      href: "/mantenimiento/ordenes?estado=ATRASADO",
     });
   }
 
@@ -84,20 +88,45 @@ async function resumenRemises(supabase: Awaited<ReturnType<typeof createClient>>
   return { vehiculosActivos: vehiculosActivos ?? 0, empleadosConTurnoHoy };
 }
 
-async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
-  const [{ data: equipos }, { count: vencidos }, otCounts] = await Promise.all([
-    supabase.from("equipos").select("status").eq("is_active", true),
-    supabase.from("mantenimientos_programados").select("id", { count: "exact", head: true }).eq("status", "active").lt("next_date", hoyStr),
+/**
+ * Lo que Mantenimiento tiene sin hacer.
+ *
+ * El titular era "mantenimientos vencidos" y medía una tabla con **una sola
+ * fila**: hay un único mantenimiento programado cargado en todo el sistema, así
+ * que ese número sólo podía decir 0 o 1. No es que no hubiera trabajo atrasado
+ * —hay 12 órdenes en ATRASADO—, es que el indicador miraba donde no había nada.
+ * Vuelve cuando la programación se use de verdad.
+ *
+ * Los tres de ahora se mueven todas las semanas y los tres piden hacer algo,
+ * que es lo único que justifica ocupar la tarjeta del inicio.
+ */
+async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const [otCounts, avisos] = await Promise.all([
     Promise.all(
       ["POR_HACER", "EN_PROCESO", "ATRASADO"].map((estado) =>
         supabase.from("ordenes_trabajo").select("id", { count: "exact", head: true }).eq("estado", estado)
       )
     ),
+    // Los avisos se cuentan en memoria porque "sin orden" son dos columnas: la
+    // sincronización guarda el número de la planilla como texto en
+    // `ot_asignada` y sólo los generados desde la app llenan `work_order_id`.
+    // Mirando una sola, los 141 avisos parecerían estar todos sin atender.
+    traerTodo<{ work_order_id: string | null; ot_asignada: string | null }>((desde, hasta) =>
+      supabase.from("avisos").select("work_order_id, ot_asignada").range(desde, hasta)
+    ),
   ]);
-  const equiposTotal = (equipos ?? []).length;
-  const equiposOperativos = (equipos ?? []).filter((e) => e.status === "OPERATIVO").length;
-  const otPendientes = otCounts.reduce((acc, r) => acc + (r.count ?? 0), 0);
-  return { equiposTotal, equiposOperativos, vencidos: vencidos ?? 0, otPendientes };
+
+  const [porHacer, enProceso, atrasadas] = otCounts.map((r) => r.count ?? 0);
+
+  // Un guión suelto es cómo se escribe "acá no va nada" en la planilla.
+  const tieneOrden = (a: { work_order_id: string | null; ot_asignada: string | null }) =>
+    Boolean(a.work_order_id) || !["", "-"].includes(String(a.ot_asignada ?? "").trim());
+
+  return {
+    atrasadas,
+    otPendientes: porHacer + enProceso + atrasadas,
+    avisosSinOrden: avisos.filter((a) => !tieneOrden(a)).length,
+  };
 }
 
 /**
