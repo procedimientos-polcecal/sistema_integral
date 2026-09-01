@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { useCargar } from "@/lib/core/useCargar";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
@@ -59,13 +60,17 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   const [vacacionesTodas, setVacacionesTodas] = useState<any[] | null>(null);
   const [francos, setFrancos] = useState<any[] | null>(null);
 
-  useEffect(() => {
+  useCargar(async (vigente) => {
     if (tab !== "fichadas" && tab !== "ausencias") return;
     setCargandoDias(true);
-    fetch(`/api/rrhh/asistencia/empleado/${empleado.id}?desde=${desde}&hasta=${hasta}`)
-      .then((r) => r.json())
-      .then((d) => setDias(d))
-      .finally(() => setCargandoDias(false));
+    try {
+      const d = await fetch(`/api/rrhh/asistencia/empleado/${empleado.id}?desde=${desde}&hasta=${hasta}`)
+        .then((r) => r.json());
+      if (!vigente()) return;
+      setDias(d);
+    } finally {
+      if (vigente()) setCargandoDias(false);
+    }
   }, [tab, desde, hasta, empleado.id]);
 
   useEffect(() => {

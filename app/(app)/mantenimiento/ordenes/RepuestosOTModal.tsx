@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Los repuestos que hacen falta para hacer la orden.
@@ -32,7 +33,7 @@ export default function RepuestosOTModal({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const traer = useCallback(async () => {
+  const traer = useCargar(async (vigente) => {
     setCargando(true);
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`);
     setCargando(false);
@@ -52,6 +53,7 @@ export default function RepuestosOTModal({
     if (!stock.ok) return;
 
     const body = await stock.json();
+    if (!vigente()) return;
     setInventarioConectado(body.configurado);
 
     const porClave: Record<string, Disponibilidad> = {};
@@ -60,8 +62,6 @@ export default function RepuestosOTModal({
     });
     setDisponibilidad(porClave);
   }, [orden.id]);
-
-  useEffect(() => { traer(); }, [traer]);
 
   async function sacar(id: string) {
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos?repuesto=${id}`, {
@@ -170,17 +170,17 @@ function Agregar({
 
   // Se busca mientras se escribe, pero recién cuando hay letras suficientes:
   // con dos, el inventario entero es una sugerencia.
-  useEffect(() => {
+  useCargar(async (vigente) => {
     if (nombre.trim().length < 3) { setSugerencias([]); return; }
 
-    const t = setTimeout(async () => {
-      const res = await fetch(`/api/mantenimiento/inventario?q=${encodeURIComponent(nombre.trim())}`);
-      if (!res.ok) return;
-      const body = await res.json();
-      setSugerencias(body.data ?? []);
-    }, 300);
+    await new Promise((r) => setTimeout(r, 300));
+    if (!vigente()) return;
 
-    return () => clearTimeout(t);
+    const res = await fetch(`/api/mantenimiento/inventario?q=${encodeURIComponent(nombre.trim())}`);
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!vigente()) return;
+    setSugerencias(body.data ?? []);
   }, [nombre]);
 
   async function agregar() {

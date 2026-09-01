@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
+import { useCargar } from "@/lib/core/useCargar";
 
 export default function VacacionesClient({ empleados }: { empleados: any[] }) {
   const searchParams = useSearchParams();
@@ -42,12 +43,12 @@ function Balance({ empleados }: { empleados: any[] }) {
   const [form, setForm] = useState({ fechaDesde: "", fechaHasta: "", diasTomados: "" });
   const [guardando, setGuardando] = useState(false);
 
-  async function cargarBalance() {
+  const cargarBalance = useCargar(async (vigente) => {
     if (!employeeId) { setBalance(null); return; }
     const data = await fetch(`/api/rrhh/vacaciones/${employeeId}/balance?anio=${anio}`).then((r) => r.json());
+    if (!vigente()) return;
     setBalance(data);
-  }
-  useEffect(() => { cargarBalance(); }, [employeeId, anio]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [employeeId, anio]);
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();

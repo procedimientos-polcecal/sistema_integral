@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * De qué está hecho el equipo y qué repuestos conviene tener.
@@ -39,16 +40,17 @@ export default function ComponentesYRepuestos({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const traer = useCallback(async () => {
+  const traer = useCargar(async (vigente) => {
     setCargando(true);
     const [c, r] = await Promise.all([
       fetch(`/api/mantenimiento/equipos/${equipoId}/componentes`),
       fetch(`/api/mantenimiento/equipos/${equipoId}/repuestos`),
     ]);
-    setCargando(false);
-
     const cBody = await c.json().catch(() => ({}));
     const rBody = await r.json().catch(() => ({}));
+    if (!vigente()) return;
+    setCargando(false);
+
     if (!c.ok || !r.ok) {
       setError(cBody.error ?? rBody.error ?? "No se pudo traer la lista.");
       return;
@@ -56,8 +58,6 @@ export default function ComponentesYRepuestos({
     setComponentes(cBody.data ?? []);
     setRepuestos(rBody.data ?? []);
   }, [equipoId]);
-
-  useEffect(() => { traer(); }, [traer]);
 
   async function agregarComponente(nombre: string, categoria: string, especificacion: string) {
     const res = await fetch(`/api/mantenimiento/equipos/${equipoId}/componentes`, {

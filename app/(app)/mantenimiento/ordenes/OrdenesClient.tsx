@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
@@ -13,6 +13,7 @@ import RepuestosOTModal from "./RepuestosOTModal";
 import OrdenarTrabajo from "./OrdenarTrabajo";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
+import { useCargar } from "@/lib/core/useCargar";
 
 const ESTADOS = [
   { value: "",           label: "Todos",      color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" },
@@ -96,26 +97,29 @@ export default function OrdenesClient({
   }
 
   const KANBAN_ESTADOS = ["ATRASADO", "EN_PROCESO", "POR_HACER", "REALIZADO"];
-  const loadKanban = useCallback(async () => {
+  const loadKanban = useCargar(async (vigente) => {
+    if (view !== "kanban") return;
     setKanbanLoading(true);
     const results = await Promise.all(
       KANBAN_ESTADOS.map((e) =>
         fetch(`/api/mantenimiento/ordenes?estado=${e}&page=1`).then((r) => r.json())
       )
     );
+    if (!vigente()) return;
     const data: Record<string, { items: any[]; count: number }> = {};
     KANBAN_ESTADOS.forEach((e, i) => {
       data[e] = { items: results[i].data ?? [], count: results[i].count ?? 0 };
     });
     setKanbanData(data);
     setKanbanLoading(false);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
-  useEffect(() => {
-    if (view === "kanban") loadKanban();
-    else if (view === "list") load();
-    // El modo "qué hacer primero" trae lo suyo: son las pendientes sin paginar.
-  }, [view, load, loadKanban]);
+  // El modo "qué hacer primero" trae lo suyo: son las pendientes sin paginar.
+  useCargar(async () => {
+    if (view === "list") load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, load]);
 
   /**
    * Marcar o desmarcar que el trabajo obliga a parar el sector.

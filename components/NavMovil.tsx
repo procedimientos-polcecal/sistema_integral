@@ -30,9 +30,14 @@ export function NavMovilProvider({ children }: { children: React.ReactNode }) {
   // Al navegar se cierra solo. En un teléfono el cajón tapa el contenido, así
   // que dejarlo abierto después de elegir una página esconde justo lo que la
   // persona fue a buscar.
-  useEffect(() => {
+  //
+  // Se ajusta durante el render y no en un efecto: con el efecto quedaba un
+  // commit con la página nueva ya pintada y el cajón todavía encima.
+  const [rutaPrevia, setRutaPrevia] = useState(pathname);
+  if (pathname !== rutaPrevia) {
+    setRutaPrevia(pathname);
     setAbierto(false);
-  }, [pathname]);
+  }
 
   // Con el cajón abierto, el fondo no se mueve: si no, al arrastrar sobre el
   // menú se scrollea la página de atrás y se pierde el lugar.

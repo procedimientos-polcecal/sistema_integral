@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { monto } from "@/lib/mantenimiento/planilla";
 import { monedaExacta } from "@/lib/compras/constants";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Cargar una cotización a la comparativa de una OS.
@@ -40,11 +41,13 @@ export default function CotizacionForm({
 
   const set = (clave: string, valor: string) => setCampos((c) => ({ ...c, [clave]: valor }));
 
-  const traer = useCallback(async () => {
+  const traer = useCargar(async (vigente) => {
     const res = await fetch("/api/mantenimiento/proveedores");
-    if (res.ok) setContratistas((await res.json()).data ?? []);
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!vigente()) return;
+    setContratistas(body.data ?? []);
   }, []);
-  useEffect(() => { traer(); }, [traer]);
 
   // El total sugerido, que es lo que hace la planilla con su fórmula. Se puede
   // pisar: a veces el proveedor cotiza un total que no sale de esa cuenta.

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Registrar el trabajo de una orden.
@@ -70,16 +71,17 @@ export default function RegistrarOTModal({
   const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
   const [contratistas, setContratistas] = useState<{ id: string; nombre: string }[]>([]);
 
-  const traerListas = useCallback(async () => {
+  const traerListas = useCargar(async (vigente) => {
     const [o, c] = await Promise.all([
       fetch("/api/mantenimiento/operarios"),
       fetch("/api/mantenimiento/proveedores"),
     ]);
-    if (o.ok) setOperarios((await o.json()).data ?? []);
-    if (c.ok) setContratistas((await c.json()).data ?? []);
+    const operariosBody = o.ok ? await o.json() : null;
+    const contratistasBody = c.ok ? await c.json() : null;
+    if (!vigente()) return;
+    if (operariosBody) setOperarios(operariosBody.data ?? []);
+    if (contratistasBody) setContratistas(contratistasBody.data ?? []);
   }, []);
-
-  useEffect(() => { traerListas(); }, [traerListas]);
 
   async function subirFoto(archivo: File) {
     setSubiendo(true);

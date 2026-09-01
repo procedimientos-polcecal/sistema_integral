@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
+import { useCargar } from "@/lib/core/useCargar";
 
 function firstOfMonth() {
   const d = new Date();
@@ -117,17 +118,17 @@ function AsistenciaPeriodo() {
   const [cargando, setCargando] = useState(false);
   const [seleccion, setSeleccion] = useState<{ employeeId: string; fecha: string; nombre: string } | null>(null);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     const [r, f] = await Promise.all([
       fetch(`/api/rrhh/asistencia/resumen?desde=${desde}&hasta=${hasta}`).then((r) => r.json()),
       fetch(`/api/rrhh/asistencia/faltas-sin-clasificar?desde=${desde}&hasta=${hasta}`).then((r) => r.json()),
     ]);
+    if (!vigente()) return;
     setResumen(r);
     setFaltas(f);
     setCargando(false);
-  }
-  useEffect(() => { cargar(); }, [desde, hasta]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [desde, hasta]);
 
   return (
     <div>
@@ -230,13 +231,13 @@ function AsistenciaDia() {
   const [seleccion, setSeleccion] = useState<{ employeeId: string; fecha: string; nombre: string } | null>(null);
   const [empleadoEnEdicion, setEmpleadoEnEdicion] = useState<any | null>(null);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     const data = await fetch(`/api/rrhh/asistencia/dia?fecha=${dia}`).then((r) => r.json());
+    if (!vigente()) return;
     setRoster(data);
     setCargando(false);
-  }
-  useEffect(() => { cargar(); }, [dia]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dia]);
 
   return (
     <div>

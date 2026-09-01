@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
+import { useCargar } from "@/lib/core/useCargar";
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -26,10 +27,14 @@ export default function SemanaClient({ turnos }: { turnos: any[] }) {
   const today = hoyEnArgentina();
   const [selectedDate, setSelectedDate] = useState(dates.includes(today) ? today : dates[0]);
 
-  useEffect(() => {
-    setSelectedDate((d) => (dates.includes(d) ? d : dates.includes(today) ? today : dates[0]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dates]);
+  // Al moverse de semana, el dia elegido tiene que caer dentro de la nueva. Se
+  // ajusta durante el render: con un efecto quedaba un commit mostrando la
+  // semana nueva con un dia de la anterior seleccionado.
+  const [semanaPrevia, setSemanaPrevia] = useState(dates[0]);
+  if (dates[0] !== semanaPrevia) {
+    setSemanaPrevia(dates[0]);
+    if (!dates.includes(selectedDate)) setSelectedDate(dates.includes(today) ? today : dates[0]);
+  }
 
   const [empleados, setEmpleados] = useState<any[] | null>(null);
   useEffect(() => { fetch("/api/remises/empleados").then((r) => r.json()).then(setEmpleados); }, []);
@@ -91,15 +96,17 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
   const [generando, setGenerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
-  function cargar() {
+  const cargar = useCargar(async (vigente) => {
     if (!fecha || !turnoId) return;
     setPlan(null);
-    fetch(`/api/remises/plan-semana?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`)
-      .then((r) => r.json()).then((ids) => setPlan(new Set(ids)));
-    fetch(`/api/remises/hojas-ruta?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`)
-      .then((r) => r.json()).then((hojas) => setGenerado(hojas.length > 0));
-  }
-  useEffect(cargar, [fecha, turnoId, tipo]); // eslint-disable-line react-hooks/exhaustive-deps
+    const [ids, hojas] = await Promise.all([
+      fetch(`/api/remises/plan-semana?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`).then((r) => r.json()),
+      fetch(`/api/remises/hojas-ruta?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`).then((r) => r.json()),
+    ]);
+    if (!vigente()) return;
+    setPlan(new Set(ids));
+    setGenerado(hojas.length > 0);
+  }, [fecha, turnoId, tipo]);
 
   async function toggle(empleadoId: string) {
     const res = await fetch("/api/remises/plan-semana", {

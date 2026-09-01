@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   aplicarOrdenManual, moverEnLista, asignarOrden, type Ordenable,
 } from "@/lib/mantenimiento/prioridad";
 import { hoyISO, estaAtrasada } from "@/lib/mantenimiento/alertas";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * En qué orden hay que hacer el trabajo pendiente.
@@ -34,17 +35,17 @@ export default function OrdenarTrabajo({ puedeEditar }: { puedeEditar: boolean }
 
   const hoy = hoyISO();
 
-  const traer = useCallback(async () => {
+  const traer = useCargar(async (vigente) => {
     setCargando(true);
     const res = await fetch("/api/mantenimiento/ordenes?pendientes=1");
+    if (!vigente()) return;
     setCargando(false);
 
     if (!res.ok) { setError("No se pudieron traer las órdenes."); return; }
     const body = await res.json();
+    if (!vigente()) return;
     setOrdenes(aplicarOrdenManual<OT>(body.data ?? [], hoy));
   }, [hoy]);
-
-  useEffect(() => { traer(); }, [traer]);
 
   /** Guarda la lista tal como quedó. */
   async function guardar(lista: OT[]) {

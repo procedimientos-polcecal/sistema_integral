@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { useCargar } from "@/lib/core/useCargar";
 
 export default function FeriadosClient() {
   const confirmar = useConfirm();
@@ -10,11 +11,11 @@ export default function FeriadosClient() {
   const [nuevo, setNuevo] = useState({ fecha: "", nombre: "" });
   const [guardando, setGuardando] = useState(false);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     const data = await fetch("/api/rrhh/feriados").then((r) => r.json());
+    if (!vigente()) return;
     setFeriados(data);
-  }
-  useEffect(() => { cargar(); }, []);
+  }, []);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Configuración de Mantenimiento: las listas de las que come el módulo.
@@ -288,18 +289,18 @@ function ProveedoresSueltos({ puedeEditar }: { puedeEditar: boolean }) {
   const [hecho, setHecho] = useState("");
   const [error, setError] = useState("");
 
-  const traer = useCallback(async () => {
+  const traer = useCargar(async (vigente) => {
     setCargando(true);
     const res = await fetch("/api/mantenimiento/proveedores/sueltos");
+    if (!vigente()) return;
     setCargando(false);
     if (!res.ok) { setError("No se pudo consultar."); return; }
 
     const body = await res.json();
+    if (!vigente()) return;
     setNombres(body.nombres ?? []);
     setParecidos(body.parecidos ?? []);
   }, []);
-
-  useEffect(() => { traer(); }, [traer]);
 
   async function resolver(sumar: boolean) {
     setTrabajando(true);

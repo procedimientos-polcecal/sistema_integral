@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -14,16 +15,25 @@ export default function MiRemisClient({ nombre }: { nombre: string }) {
   const [asignaciones, setAsignaciones] = useState<any[] | null>(null);
   const [notifEstado, setNotifEstado] = useState<"desconocido" | "activando" | "activo" | "no-soportado" | "denegado">("desconocido");
 
-  useEffect(() => {
+  useCargar(async (vigente) => {
     setAsignaciones(null);
-    fetch(`/api/remises/mi-remis?dia=${dia}`).then((r) => r.json()).then((d) => setAsignaciones(d.asignaciones ?? []));
+    const d = await fetch(`/api/remises/mi-remis?dia=${dia}`).then((r) => r.json());
+    if (!vigente()) return;
+    setAsignaciones(d.asignaciones ?? []);
   }, [dia]);
 
-  useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) { setNotifEstado("no-soportado"); return; }
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      reg?.pushManager.getSubscription().then((sub) => { if (sub) setNotifEstado("activo"); });
-    });
+  // Que el navegador soporte push no es un dato del render: se pregunta una vez
+  // al montar. Va por `useCargar` para que la respuesta no se pinte si el
+  // componente ya se fue.
+  useCargar(async (vigente) => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setNotifEstado("no-soportado");
+      return;
+    }
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (!vigente() || !sub) return;
+    setNotifEstado("activo");
   }, []);
 
   async function activarNotificaciones() {

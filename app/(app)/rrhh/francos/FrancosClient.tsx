@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { useCargar } from "@/lib/core/useCargar";
 
 const ESTADOS = ["PENDIENTE", "TOMADO"] as const;
 
@@ -30,13 +31,13 @@ export default function FrancosClient() {
     return params.toString();
   }
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     const data = await fetch(`/api/rrhh/francos?${queryParams()}`).then((r) => r.json());
+    if (!vigente()) return;
     setFrancos(data);
     setCargando(false);
-  }
-  useEffect(() => { cargar(); }, [estado, desde, hasta]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [estado, desde, hasta]);
 
   async function marcarTomado(id: string) {
     await fetch(`/api/rrhh/francos/${id}`, {

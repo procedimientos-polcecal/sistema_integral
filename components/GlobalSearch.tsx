@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCargar } from "@/lib/core/useCargar";
 
 interface Resultado {
   tipo: "empleado" | "equipo" | "vehiculo" | "chofer";
@@ -26,19 +27,24 @@ export function GlobalSearch() {
   const [cargando, setCargando] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Espera 250 ms desde la ultima tecla, y descarta la respuesta si para
+  // cuando llega ya se escribio otra cosa. Antes no habia guarda: con dos
+  // busquedas en vuelo ganaba la que contestaba ultimo, que no es la que la
+  // persona esta viendo escrita.
+  useCargar(async (vigente) => {
     if (q.trim().length < 2) {
       setResultados([]);
       return;
     }
     setCargando(true);
-    const timeout = setTimeout(async () => {
-      const res = await fetch(`/api/buscar?q=${encodeURIComponent(q.trim())}`);
-      const data = await res.json().catch(() => ({ resultados: [] }));
-      setResultados(data.resultados ?? []);
-      setCargando(false);
-    }, 250);
-    return () => clearTimeout(timeout);
+    await new Promise((r) => setTimeout(r, 250));
+    if (!vigente()) return;
+
+    const res = await fetch(`/api/buscar?q=${encodeURIComponent(q.trim())}`);
+    const data = await res.json().catch(() => ({ resultados: [] }));
+    if (!vigente()) return;
+    setResultados(data.resultados ?? []);
+    setCargando(false);
   }, [q]);
 
   useEffect(() => {

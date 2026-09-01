@@ -55,7 +55,15 @@ export default function SelectorProveedor({
     [proveedores, texto]
   );
 
-  useEffect(() => { setResaltado(0); }, [texto]);
+  // Ajuste durante el render y no en un efecto: es lo que recomienda la doc de
+  // React para "cuando cambia esta entrada, volve este estado al principio".
+  // Con un efecto habia un commit intermedio en el que la lista ya era la nueva
+  // y el resaltado seguia en la fila de la busqueda anterior.
+  const [textoPrevio, setTextoPrevio] = useState(texto);
+  if (texto !== textoPrevio) {
+    setTextoPrevio(texto);
+    setResaltado(0);
+  }
 
   // Tocar fuera cierra sin elegir.
   useEffect(() => {

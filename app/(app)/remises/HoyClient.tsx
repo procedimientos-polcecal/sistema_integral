@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import InfoTip from "@/components/InfoTip";
 import RouteCard from "./RouteCard";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { useCargar } from "@/lib/core/useCargar";
 
 const RoutesMap = dynamic(() => import("@/components/remises/RoutesMap"), { ssr: false });
 
@@ -32,25 +33,35 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
     fetch("/api/remises/vehiculos").then((r) => r.json()).then((vs) => setVehiculos(vs.filter((v: any) => v.activo)));
   }, []);
 
-  const cargarAsistencia = useCallback(() => {
+  const cargarAsistencia = useCargar(async (vigente) => {
     if (!fecha || !turnoId) return;
-    fetch(`/api/remises/asistencia?fecha=${fecha}&turnoId=${turnoId}`).then((r) => r.json()).then(setPresentIds);
+    setPresentIds(null);
+    const ids = await fetch(`/api/remises/asistencia?fecha=${fecha}&turnoId=${turnoId}`).then((r) => r.json());
+    if (!vigente()) return;
+    setPresentIds(ids);
   }, [fecha, turnoId]);
 
-  const cargarHojas = useCallback(
-    (tipo: "ida" | "vuelta") => {
-      if (!fecha || !turnoId) return;
-      fetch(`/api/remises/hojas-ruta?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`)
-        .then((r) => r.json())
-        .then(tipo === "ida" ? setHojasIda : setHojasVuelta);
-    },
-    [fecha, turnoId]
-  );
+  // Las hojas de las dos pestañas se limpian juntas al cambiar fecha o turno, y
+  // cada pestaña trae la suya cuando se la mira. Si se cambia de fecha mientras
+  // una respuesta viene en camino, `vigente()` la descarta: antes pintaba las
+  // hojas de la fecha anterior sobre la nueva.
+  // `vigente` es opcional porque tambien se la llama a mano despues de generar
+  // o editar una hoja, y ahi no hay carrera que descartar: la respuesta que
+  // llega es la unica que se pidio.
+  const cargarHojas = (tipo: "ida" | "vuelta", vigente: () => boolean = () => true) =>
+    fetch(`/api/remises/hojas-ruta?fecha=${fecha}&turnoId=${turnoId}&tipo=${tipo}`)
+      .then((r) => r.json())
+      .then((hojas) => {
+        if (!vigente()) return;
+        (tipo === "ida" ? setHojasIda : setHojasVuelta)(hojas);
+      });
 
-  useEffect(() => { setPresentIds(null); cargarAsistencia(); }, [cargarAsistencia]);
-  useEffect(() => { setHojasIda(null); setHojasVuelta(null); }, [fecha, turnoId]);
-  useEffect(() => { if (tab === "ida") cargarHojas("ida"); }, [tab, cargarHojas]);
-  useEffect(() => { if (tab === "vuelta") cargarHojas("vuelta"); }, [tab, cargarHojas]);
+  useCargar(async (vigente) => {
+    setHojasIda(null);
+    setHojasVuelta(null);
+    if (!fecha || !turnoId) return;
+    if (tab === "ida" || tab === "vuelta") await cargarHojas(tab, vigente);
+  }, [fecha, turnoId, tab]);
 
   const empleadosActivos = empleados ?? [];
   const presentSet = useMemo(() => new Set(presentIds ?? []), [presentIds]);

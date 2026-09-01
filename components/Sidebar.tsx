@@ -90,10 +90,24 @@ export function Sidebar({
   const [abiertoSub, setAbiertoSub] = useState<string | null>(null);
   const [colapsado, setColapsado] = useState(false);
 
-  // Se lee en un efecto y no en el `useState` porque en el servidor no hay
-  // `localStorage`: leerlo durante el render rompe la hidratacion.
+  /**
+   * Se lee en un efecto y no en el `useState` porque en el servidor no hay
+   * `localStorage`: leerlo durante el render daria un HTML distinto al del
+   * cliente y rompe la hidratacion.
+   *
+   * Es el unico `set-state-in-effect` que queda en el repo y no tiene otra
+   * forma: no es estado derivable de nada que el render conozca, ni se puede
+   * ajustar durante el render, ni sale de un evento. Es sincronizar con un
+   * almacen externo que sólo existe en el navegador, que es justamente el caso
+   * para el que el efecto sigue siendo la herramienta correcta.
+   */
   useEffect(() => {
-    setColapsado(localStorage.getItem(COLAPSADO_KEY) === "1");
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setColapsado(localStorage.getItem(COLAPSADO_KEY) === "1");
+    } catch {
+      // Modo privado: queda desplegado, que es el default.
+    }
   }, []);
 
   /**
@@ -121,8 +135,21 @@ export function Sidebar({
     });
   };
 
-  // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo despliega solo.
-  useEffect(() => {
+  // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo
+  // despliega solo.
+  //
+  // Se ajusta durante el render y no en un efecto. Con el efecto habia un commit
+  // en el que la pagina nueva ya estaba pintada y el menu todavia mostraba el
+  // grupo anterior desplegado: un parpadeo en cada navegacion entre modulos.
+  //
+  // Sigue siendo estado y no un valor derivado porque la persona puede abrir y
+  // cerrar grupos a mano, y esa eleccion tiene que sobrevivir hasta que cambie
+  // la ruta. Por eso el ajuste se dispara con `pathname + search` y no en cada
+  // render.
+  const rutaAhora = `${pathname}?${search}`;
+  const [rutaDelMenu, setRutaDelMenu] = useState(rutaAhora);
+  if (rutaAhora !== rutaDelMenu) {
+    setRutaDelMenu(rutaAhora);
     for (const item of items) {
       if (!item.children) continue;
       const hijoDirectoActivo = item.children.some((c) => !c.children && esRutaActiva(c.href, pathname, search));
@@ -130,10 +157,10 @@ export function Sidebar({
       if (hijoDirectoActivo || subgrupoActivo) {
         setAbierto(item.label);
         if (subgrupoActivo) setAbiertoSub(subgrupoActivo.label);
-        return;
+        break;
       }
     }
-  }, [pathname, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   return (
     <>

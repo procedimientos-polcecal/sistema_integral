@@ -25,6 +25,7 @@ import {
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import type { FiltrosCompras } from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
+import { useCargar } from "@/lib/core/useCargar";
 
 const POR_PAGINA = 50;
 
@@ -95,9 +96,18 @@ export default function RequerimientosClient({
     return () => clearTimeout(t);
   }, [busqueda]);
 
-  useEffect(() => {
+  // Cambiar un filtro vuelve a la primera pagina. Se ajusta durante el render
+  // —lo que recomienda React— y no en un efecto: asi no hay un commit en el que
+  // los filtros ya son los nuevos y la pagina sigue siendo la vieja, que era lo
+  // que disparaba una consulta de mas por cada cambio de filtro.
+  const filtrosAhora = JSON.stringify([
+    busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
+  ]);
+  const [filtrosPrevios, setFiltrosPrevios] = useState(filtrosAhora);
+  if (filtrosAhora !== filtrosPrevios) {
+    setFiltrosPrevios(filtrosAhora);
     setPagina(0);
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector]);
+  }
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -230,7 +240,7 @@ export default function RequerimientosClient({
     return true;
   }
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useCargar(async () => { await cargar(); }, [cargar]);
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.

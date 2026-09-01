@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 
 interface Sector {
   id: string;
@@ -20,11 +21,13 @@ export default function EmpresasSectoresManager() {
   const [nuevoSector, setNuevoSector] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     const res = await fetch("/api/administracion/empresas");
-    if (res.ok) setEmpresas(await res.json());
-  }
-  useEffect(() => { cargar(); }, []);
+    if (!res.ok) return;
+    const datos = await res.json();
+    if (!vigente()) return;
+    setEmpresas(datos);
+  }, []);
 
   async function toggleEmpresa(e: Empresa) {
     const res = await fetch(`/api/administracion/empresas/${e.id}`, {

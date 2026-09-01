@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { useCargar } from "@/lib/core/useCargar";
 
 export default function TurnosClient() {
   const confirmar = useConfirm();
@@ -11,11 +12,11 @@ export default function TurnosClient() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     const data = await fetch("/api/rrhh/jornadas").then((r) => r.json());
+    if (!vigente()) return;
     setJornadas(data);
-  }
-  useEffect(() => { cargar(); }, []);
+  }, []);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();

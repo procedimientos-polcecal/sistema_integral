@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
+import { useCargar } from "@/lib/core/useCargar";
 
 export default function AusenciasClient() {
   const searchParams = useSearchParams();
@@ -30,10 +31,12 @@ export default function AusenciasClient() {
     return qs.toString();
   }
 
-  useEffect(() => {
+  useCargar(async (vigente) => {
     setCargando(true);
-    fetch(`/api/rrhh/ausencias?${buildQS()}`).then((r) => r.json()).then((d) => { setAusencias(d); setCargando(false); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const d = await fetch(`/api/rrhh/ausencias?${buildQS()}`).then((r) => r.json());
+    if (!vigente()) return;
+    setAusencias(d);
+    setCargando(false);
   }, [tab, desde, hasta]);
 
   return (

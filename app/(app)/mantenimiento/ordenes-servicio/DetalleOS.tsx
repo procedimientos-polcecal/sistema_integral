@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { fecha, monedaExacta } from "@/lib/compras/constants";
 import { monto } from "@/lib/mantenimiento/planilla";
 import { resumenDeCotizaciones } from "@/lib/mantenimiento/comparativas";
 import { ESTADOS_OS } from "@/lib/mantenimiento/os";
 import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 import CotizacionForm from "./CotizacionForm";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Una orden de servicio abierta: cómo viene y qué se cotizó.
@@ -34,19 +35,18 @@ export default function DetalleOS({
   const [fechaRealizacion, setFechaRealizacion] = useState(orden.fecha_realizacion ?? "");
   const [observaciones, setObservaciones] = useState(orden.observaciones ?? "");
 
-  const traerComparativa = useCallback(async () => {
+  const traerComparativa = useCargar(async (vigente) => {
     if (!orden.os_number) { setCargandoComparativa(false); return; }
     setCargandoComparativa(true);
 
     const res = await fetch(`/api/mantenimiento/comparativas?os=${orden.os_number}`);
     const body = await res.json().catch(() => ({}));
+    if (!vigente()) return;
     setCargandoComparativa(false);
 
     if (!res.ok) { setError(body.error ?? "No se pudo traer la comparativa."); return; }
     setCotizaciones(body.data ?? []);
   }, [orden.os_number]);
-
-  useEffect(() => { traerComparativa(); }, [traerComparativa]);
 
   async function guardarSeguimiento() {
     setGuardando(true);

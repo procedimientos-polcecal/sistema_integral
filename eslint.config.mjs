@@ -31,38 +31,27 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
 
       /**
-       * Aviso y no error, con los 35 casos revisados de a uno.
+       * Vuelve a `error`: los 35 que habia estan convertidos y queda uno solo,
+       * con su disable y el motivo escrito al lado.
        *
-       * La regla es de la época del React Compiler y su ideal es que el estado
-       * se derive o venga de Suspense, no que se setee dentro de un efecto. El
-       * reparto real en este repo, mirado caso por caso:
+       * Lo que se hizo, por si vuelve a aparecer alguno:
        *
-       *   - ~30 son `useEffect(() => cargar(), [filtros])`, donde `cargar` pone
-       *     "cargando", pide a la API y guarda. Es el patrón normal de traer
-       *     datos con `fetch` y no hay nada roto en él.
-       *   - 5 son limpiar lo viejo al cambiar la entrada —`setPagina(0)`,
-       *     `setDetalleHoy(null)`— para no mostrar los resultados del filtro
-       *     anterior mientras llega el nuevo. Es deliberado y es lo correcto.
-       *   - 2 sincronizan con algo de afuera que en el servidor no existe: el
-       *     `localStorage` del panel lateral y la detección de push. Ahí el
-       *     efecto es la única fase posible.
-       *   - 2 (`Sidebar` y `SemanaClient`) sí se podrían derivar en el render,
-       *     pero necesitan además un estado de "la persona eligió otra cosa"
-       *     para que su elección no se pierda al re-renderizar. Vale hacerlo;
-       *     no vale hacerlo de apuro.
-       *
-       * De los 36 que había, uno era un bug de verdad —el panel lateral
-       * escribía la preferencia en `localStorage` desde un efecto y en el primer
-       * commit pisaba con el valor viejo lo que acababa de leer— y está
-       * corregido: ahora se guarda en el handler del botón, que es donde pasa la
-       * intención de la persona.
-       *
-       * Queda en `warn` porque en `error` el lint nunca puede pasar, y un lint
-       * que siempre falla es un lint que se ignora: es exactamente cómo este
-       * repo llegó a no tener configuración de ESLint. Los 34 restantes siguen
-       * saliendo en la salida y en el conteo.
+       *   - Traer datos -> `useCargar` de `lib/core/useCargar.ts`. Ademas de
+       *     dejar conforme a la regla, arregla un bug que estaba en las 27
+       *     pantallas: ninguna descartaba la respuesta vieja, asi que cambiar
+       *     un filtro dos veces seguidas podia pintar el resultado del filtro
+       *     anterior.
+       *   - "Cuando cambia esta entrada, volve este estado al principio"
+       *     —`setPagina(0)`, cerrar el cajon al navegar— se ajusta DURANTE el
+       *     render comparando contra el valor previo, que es lo que recomienda
+       *     la doc de React. Encima saca un commit intermedio en el que la
+       *     pantalla ya era la nueva y el estado todavia el viejo.
+       *   - Sincronizar con un almacen externo que en el servidor no existe
+       *     —el `localStorage` del panel lateral— se queda en un efecto, que es
+       *     el caso para el que el efecto sigue siendo lo correcto. Ese es el
+       *     unico disable.
        */
-      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/set-state-in-effect": "error",
     },
   },
 ];

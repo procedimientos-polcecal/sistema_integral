@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { ResumenHoy } from "@/lib/rrhh/resumenHoy";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Los gráficos se cargan aparte: `recharts` son ~350 KB y bloqueaban el primer
@@ -109,26 +110,27 @@ export default function DashboardClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId, desdeGraficos, hastaGraficos]);
 
-  useEffect(() => {
+  useCargar(async (vigente) => {
     if (categoriaHoy === null) return;
     setDetalleHoy(null);
-    fetch(`/api/rrhh/dashboard/detalle-hoy${buildQS({ empresaId, sectorId })}`).then((r) => r.json()).then(setDetalleHoy);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const d = await fetch(`/api/rrhh/dashboard/detalle-hoy${buildQS({ empresaId, sectorId })}`).then((r) => r.json());
+    if (!vigente()) return;
+    setDetalleHoy(d);
   }, [categoriaHoy]);
 
-  useEffect(() => {
+  useCargar(async (vigente) => {
     if (!sectorSeleccionado) return;
     setDetalleSector(null);
-    fetch(
+    const d = await fetch(
       `/api/rrhh/dashboard/detalle-sector${buildQS({
         sectorId: sectorSeleccionado.sectorId,
         desde: sectorSeleccionado.desde,
         hasta: sectorSeleccionado.hasta,
         empresaId,
       })}`
-    )
-      .then((r) => r.json()).then(setDetalleSector);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ).then((r) => r.json());
+    if (!vigente()) return;
+    setDetalleSector(d);
   }, [sectorSeleccionado]);
 
   return (

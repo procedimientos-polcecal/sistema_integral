@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   DIAS, ESTADOS_PRODUCCION, ESTADO_LABELS, TURNOS,
   lunesDe, diasDeLaSemana, normalizarSemana, normalizarTextos,
   type EstadoProduccion,
 } from "@/lib/mantenimiento/produccion";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * La grilla de producción: sectores por los siete días de una semana.
@@ -100,7 +101,7 @@ export default function ProduccionClient({
     return s;
   }, [pendientesOT]);
 
-  const cargar = useCallback(async () => {
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     setError("");
 
@@ -125,8 +126,6 @@ export default function ProduccionClient({
     }
     setPlanes(mapa);
   }, [semana]);
-
-  useEffect(() => { cargar(); }, [cargar]);
 
   const planDe = useCallback(
     (sectorId: string): Plan => planes[sectorId] ?? planVacio(),

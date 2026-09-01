@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { useCargar } from "@/lib/core/useCargar";
 
 interface FilaPlanilla {
   empleadoId: string;
@@ -49,11 +50,11 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
   const confirmar = useConfirm();
   const [liquidaciones, setLiquidaciones] = useState<any[] | null>(null);
 
-  async function cargar() {
+  const cargar = useCargar(async (vigente) => {
     const data = await fetch("/api/rrhh/liquidaciones").then((r) => r.json());
+    if (!vigente()) return;
     setLiquidaciones(data);
-  }
-  useEffect(() => { cargar(); }, []);
+  }, []);
 
   const [form, setForm] = useState({
     employeeId: "",
