@@ -20,6 +20,12 @@ export default async function ConfiguracionPage() {
   // responde mirando por dónde entran los pedidos NUEVOS, no qué porcentaje del
   // histórico se tocó: los 1800 RI viejos ya están cerrados y nadie los va a
   // volver a gestionar acá, así que ese porcentaje nunca sube.
+  // `react-hooks/purity` marca el `Date.now()` porque no distingue un
+  // componente de servidor de uno de cliente. Acá es de servidor —lo delata el
+  // `createClient` de `@/lib/supabase/server`— y se renderiza una vez por
+  // request: no hay re-render que pueda dar un resultado distinto. La regla se
+  // deja prendida porque en los de cliente sí encontró dos bugs de verdad.
+  // eslint-disable-next-line react-hooks/purity
   const hace30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const cuenta = (f: (q: ReturnType<typeof base>) => ReturnType<typeof base>) => f(base());
   function base() {
