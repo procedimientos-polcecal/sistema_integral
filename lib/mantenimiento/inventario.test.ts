@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   estadoDelLibro, filaDePlanta, filaDeSector, filaDeEquipo, buscarCodigo,
+  sectoresQueElLibroCrearia,
 } from "./inventario";
 
 describe("estadoDelLibro", () => {
@@ -156,5 +157,59 @@ describe("buscarCodigo con códigos de sector", () => {
     // "PO-A1" está dentro de "PO-A1-01", pero son cosas distintas y el equipo
     // ya se resolvió antes.
     expect(buscarCodigo("PO-A1-01 Acarreador", sectores)).toBeNull();
+  });
+});
+
+/**
+ * La importacion crea los sectores que no encuentra. Es lo correcto la primera
+ * vez y una trampa despues: los despachos de filler se unieron a mano y un
+ * libro sin corregir los vuelve a crear con sus equipos.
+ */
+describe("sectoresQueElLibroCrearia", () => {
+  const sec = (sector_id: string, nombre_sector: string) => ({ sector_id, nombre_sector });
+  const eq = (sector_id: string) => ({ sector_id });
+
+  it("si el libro no trae nada nuevo, no hay nada que avisar", () => {
+    expect(
+      sectoresQueElLibroCrearia([sec("PY-A1", "Filler 1")], [], ["PY-A1", "PY-B1"])
+    ).toEqual([]);
+  });
+
+  it("avisa el sector que el sistema no tiene, con cuantos equipos se lleva", () => {
+    const r = sectoresQueElLibroCrearia(
+      [sec("PY-A1", "Filler 1"), sec("PY-A2", "Despacho filler 1")],
+      [eq("PY-A1"), eq("PY-A2"), eq("PY-A2"), eq("PY-A2")],
+      ["PY-A1"]
+    );
+    expect(r).toEqual([{ codigo: "PY-A2", nombre: "Despacho filler 1", equipos: 3 }]);
+  });
+
+  /** La importacion compara en mayusculas: aca igual, o se avisaria de mas. */
+  it("no avisa por diferencia de mayusculas", () => {
+    expect(sectoresQueElLibroCrearia([sec("py-a1", "Filler 1")], [], ["PY-A1"])).toEqual([]);
+    expect(sectoresQueElLibroCrearia([sec(" PY-A1 ", "Filler 1")], [], ["py-a1"])).toEqual([]);
+  });
+
+  it("un sector nuevo sin equipos igual se avisa, con cero", () => {
+    const r = sectoresQueElLibroCrearia([sec("PY-Z9", "Sector nuevo")], [], ["PY-A1"]);
+    expect(r).toEqual([{ codigo: "PY-Z9", nombre: "Sector nuevo", equipos: 0 }]);
+  });
+
+  it("no repite un sector que el libro trae dos veces", () => {
+    const r = sectoresQueElLibroCrearia(
+      [sec("PY-A2", "Despacho filler 1"), sec("PY-A2", "Despacho filler 1")],
+      [eq("PY-A2")],
+      []
+    );
+    expect(r).toHaveLength(1);
+  });
+
+  it("una fila sin codigo o sin nombre no es un sector", () => {
+    expect(sectoresQueElLibroCrearia([sec("", "Sin codigo"), sec("PY-X1", "")], [], [])).toEqual([]);
+  });
+
+  it("los codigos conocidos vacios o nulos no rompen la comparacion", () => {
+    const r = sectoresQueElLibroCrearia([sec("PY-A2", "Despacho")], [], [null, undefined, ""]);
+    expect(r).toHaveLength(1);
   });
 });

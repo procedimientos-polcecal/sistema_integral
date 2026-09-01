@@ -83,6 +83,70 @@ export function filaDeSector(fila: FilaDelLibro): SectorLeido | null {
 }
 
 /**
+ * Qué sectores crearía este libro que hoy no existen.
+ *
+ * La importación reconoce los sectores por su código y los da de alta si no
+ * están. Eso es lo correcto la primera vez y es una trampa después: el
+ * 31/08/2026 se unieron `PY-A2 Despacho filler 1` a `Filler 1` y
+ * `PY-B2 Despacho filler 2` a `Filler 2` —en la planta son un solo lugar y
+ * ninguna orden de trabajo los distinguía—, y un libro sin corregir los vuelve
+ * a crear y se lleva sus equipos de vuelta.
+ *
+ * No se nombran esos dos códigos acá a propósito. La regla es general: un
+ * sector del libro que el sistema no tiene se va a crear, y quien importa
+ * merece saberlo antes, no descubrirlo después. Si alguna vez se une otro par,
+ * esto avisa igual sin que nadie se acuerde de tocarlo.
+ *
+ * Se cuentan los equipos que el libro le asigna a cada uno porque es el tamaño
+ * real del cambio: dos sectores nuevos importan poco, 33 máquinas cambiando de
+ * lugar importan bastante.
+ */
+export interface SectorQueSeCrearia {
+  codigo: string;
+  nombre: string;
+  /** Cuántos equipos del libro caen en ese sector. */
+  equipos: number;
+}
+
+export function sectoresQueElLibroCrearia(
+  sectoresDelLibro: FilaDelLibro[],
+  equiposDelLibro: FilaDelLibro[],
+  codigosConocidos: (string | null | undefined)[]
+): SectorQueSeCrearia[] {
+  // La importación compara en mayúsculas; acá se hace igual para no avisar de
+  // un sector que en realidad sí existe y sólo está escrito distinto.
+  const conocidos = new Set(
+    codigosConocidos.filter(Boolean).map((c) => String(c).trim().toUpperCase())
+  );
+
+  const equiposPorSector = new Map<string, number>();
+  for (const fila of equiposDelLibro) {
+    const cod = texto(fila.sector_id)?.toUpperCase();
+    if (cod) equiposPorSector.set(cod, (equiposPorSector.get(cod) ?? 0) + 1);
+  }
+
+  const nuevos: SectorQueSeCrearia[] = [];
+  const vistos = new Set<string>();
+
+  for (const fila of sectoresDelLibro) {
+    const sector = filaDeSector(fila);
+    if (!sector) continue;
+
+    const cod = sector.codigo.toUpperCase();
+    if (conocidos.has(cod) || vistos.has(cod)) continue;
+    vistos.add(cod);
+
+    nuevos.push({
+      codigo: sector.codigo,
+      nombre: sector.nombre,
+      equipos: equiposPorSector.get(cod) ?? 0,
+    });
+  }
+
+  return nuevos;
+}
+
+/**
  * Las columnas del libro que son del equipo, no de su ficha.
  *
  * `lee` dice cómo convertir el valor.

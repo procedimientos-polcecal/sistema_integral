@@ -63,7 +63,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 <h3 className="text-base font-bold text-gray-900">
                   {opts.title ?? "¿Confirmás la acción?"}
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">{opts.message}</p>
+                {/* `whitespace-pre-line` para que un mensaje que enumera cosas
+                    —una por línea— no quede todo en un renglón. Los de una
+                    sola línea se ven igual que antes. */}
+                <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{opts.message}</p>
               </div>
             </div>
 

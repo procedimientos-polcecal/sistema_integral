@@ -4,6 +4,8 @@ import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import InfoTip from "@/components/InfoTip";
+import { useConfirm } from "@/components/ConfirmProvider";
+import { sectoresQueElLibroCrearia } from "@/lib/mantenimiento/inventario";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   OPERATIVO:          { label: "Operativo",        color: "bg-green-100 text-green-800" },
@@ -30,6 +32,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   const [filterEmpresa, setFilterEmpresa] = useState("");
   const [filterSector, setFilterSector] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const confirmar = useConfirm();
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<
     { updated: number; created: number; errors: string[]; extra?: string } | null
@@ -94,10 +97,66 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   }
 
   // ─── Import ───────────────────────────────────────────────────────────────
+  /**
+   * Qué sectores traería este libro que hoy no existen.
+   *
+   * Se mira el archivo antes de subirlo porque la importación los crea sin
+   * preguntar: reconoce los sectores por código y da de alta los que no
+   * encuentra. Eso deshizo una fusión hecha a mano —los despachos de filler— y
+   * nadie se enteró hasta ver los equipos en otro lado.
+   *
+   * Si el archivo no se puede leer acá, no se bloquea la importación: el
+   * servidor la va a rechazar con un mensaje mejor que el que se puede dar
+   * desde el navegador.
+   */
+  async function sectoresNuevosDelArchivo(file: File) {
+    try {
+      const libro = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const hoja = (nombre: string) =>
+        libro.Sheets[nombre]
+          ? (XLSX.utils.sheet_to_json(libro.Sheets[nombre]) as Record<string, unknown>[])
+          : [];
+
+      // Sólo el libro BD Equipos trae sectores. La planilla plana no puede
+      // crear ninguno, así que no hay de qué avisar.
+      const sectores_ = hoja("SECTORES");
+      if (sectores_.length === 0) return [];
+
+      return sectoresQueElLibroCrearia(
+        sectores_,
+        hoja("EQUIPOS"),
+        sectores.map((s: any) => s.codigo)
+      );
+    } catch {
+      return [];
+    }
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+
+    const nuevos = await sectoresNuevosDelArchivo(file);
+    if (nuevos.length > 0) {
+      const lista = nuevos
+        .map((s) => `• ${s.codigo} «${s.nombre}»` + (s.equipos ? ` — se lleva ${s.equipos} equipos` : ""))
+        .join("\n");
+
+      const seguir = await confirmar({
+        title:
+          nuevos.length === 1
+            ? "El libro trae un sector que no existe"
+            : `El libro trae ${nuevos.length} sectores que no existen`,
+        message:
+          `Importar este archivo los va a crear:\n\n${lista}\n\n` +
+          "Si alguno lo uniste a otro a propósito, corregilo en el libro antes " +
+          "de importar: si no, vuelve a aparecer y se lleva sus equipos con él.",
+        confirmText: "Importar igual",
+        danger: true,
+      });
+      if (!seguir) return;
+    }
 
     setImporting(true);
     setImportResult(null);
