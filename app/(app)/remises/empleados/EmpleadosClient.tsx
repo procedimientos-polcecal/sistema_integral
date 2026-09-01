@@ -238,7 +238,7 @@ function EmpleadoModal({
 
         <div className="border-t border-gray-100 mt-4 pt-4">
           <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-            Acceso "Mi remis"
+            Acceso “Mi remis”
             <InfoTip text="Da acceso al empleado para que vea desde su celular en qué remis viaja y active notificaciones. Se le manda un email para que defina su propia contraseña." />
           </h4>
           {cuentaEmail === undefined ? (

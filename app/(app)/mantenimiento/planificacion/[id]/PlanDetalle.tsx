@@ -154,7 +154,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                     <p className="text-sm font-semibold text-gray-900 mt-0.5 leading-snug">{item.descripcion}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{item.sector_raw}{item.equipo_raw ? ` · ${item.equipo_raw}` : ""}</p>
                     {item.repuesto && <p className="text-xs text-gray-500 mt-0.5">Repuesto: {item.repuesto}</p>}
-                    {item.notas_item && <p className="text-xs text-blue-600 mt-0.5 italic">"{item.notas_item}"</p>}
+                    {item.notas_item && <p className="text-xs text-blue-600 mt-0.5 italic">“{item.notas_item}”</p>}
                   </div>
                   <div className="shrink-0 text-right space-y-1.5">
                     {assignee ? (

@@ -207,7 +207,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
           </svg>
           <div className="text-sm">
             <span className="font-medium" style={{ color: meta.color }}>Motivo: </span>
-            <span className="text-gray-700 italic">"{lastNonOp.reason}"</span>
+            <span className="text-gray-700 italic">“{lastNonOp.reason}”</span>
             <span className="text-gray-400 text-xs ml-2">
               — {nombreCompleto(lastNonOp.changed_by_user)} · {new Date(lastNonOp.changed_at).toLocaleDateString("es-AR")}
             </span>
@@ -308,7 +308,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
                     </div>
                   </div>
                   {h.reason && (
-                    <p className="mt-1 text-xs text-gray-500 italic">"{h.reason}"</p>
+                    <p className="mt-1 text-xs text-gray-500 italic">“{h.reason}”</p>
                   )}
                 </div>
               );

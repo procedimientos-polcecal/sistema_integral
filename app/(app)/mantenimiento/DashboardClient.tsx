@@ -478,7 +478,7 @@ export default function DashboardClient({
                         <p className="text-xs text-gray-500 mt-1.5 leading-snug">
                           <span className="font-medium">{nombreCompleto(lastChange.changed_by_user)}</span>
                           {" · "}{new Date(lastChange.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit" })}
-                          {lastChange.reason && <> · <span className="italic">"{lastChange.reason}"</span></>}
+                          {lastChange.reason && <> · <span className="italic">“{lastChange.reason}”</span></>}
                         </p>
                       )}
                     </div>
@@ -519,7 +519,7 @@ export default function DashboardClient({
                               {nombreCompleto(log.changed_by_user)} · {new Date(log.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
                             </span>
                           </div>
-                          {log.reason && <p className="text-xs text-gray-500 mt-0.5 italic">"{log.reason}"</p>}
+                          {log.reason && <p className="text-xs text-gray-500 mt-0.5 italic">“{log.reason}”</p>}
                         </div>
                       );
                     })}
