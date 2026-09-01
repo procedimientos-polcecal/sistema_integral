@@ -14,3 +14,13 @@ scripts/export-firestore-org/orgs_*.json
 # Grafo de conocimiento (se regenera con /graphify)
 graphify-out/
 scripts/import-proveedores/a-revisar.json
+
+# Claves de cuentas de servicio de Google.
+#
+# El JSON que descarga Google trae la private_key completa: es la credencial
+# con la que la app escribe en Sheets, lee Drive y hace el backup de la base.
+# En produccion va en GOOGLE_SERVICE_ACCOUNT_JSON (Vercel) y en el secret del
+# mismo nombre en Actions; en el repo no va nunca.
+*.iam.gserviceaccount.com.json
+*-service-account*.json
+mantenimientopp-*.json
