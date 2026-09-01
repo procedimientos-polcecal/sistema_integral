@@ -39,7 +39,13 @@ export function vecinoMasCercanoMatriz(
     let mejorI = 0;
     let mejorD = Infinity;
     restantes.forEach((empIdx, i) => {
-      const d = matrizDuraciones[actualIdx][empIdx];
+      // OSRM devuelve `null` en la matriz para un punto al que no puede llegar
+      // manejando, y en JS `null < Infinity` es **true** —el null se convierte
+      // en 0—: un domicilio inalcanzable ganaba siempre y quedaba de primera
+      // parada, con el resto de la ruta armado desde ahí. Un valor que no es un
+      // número se descarta y ese tramo cae al orden que salga.
+      const d = matrizDuraciones[actualIdx]?.[empIdx];
+      if (typeof d !== "number" || !isFinite(d)) return;
       if (d < mejorD) {
         mejorD = d;
         mejorI = i;
