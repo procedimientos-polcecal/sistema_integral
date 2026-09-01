@@ -2,11 +2,8 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import Indicador from "@/components/Indicador";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  PieChart, Pie, Cell, Legend,
-} from "recharts";
 import {
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, moneda, fecha, etiquetaEmpresa,
 } from "@/lib/compras/constants";
@@ -41,10 +38,15 @@ interface Reciente {
   compras_areas: { nombre: string } | null;
 }
 
-const COLORES = ["#1E7D34", "#E8A020", "#2563EB", "#DC2626", "#7E22CE", "#0891B2"];
-
-const abreviar = (v: number) =>
-  v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${Math.round(v / 1000)}k`;
+/**
+ * Los gráficos se cargan aparte: `recharts` son ~350 KB y su JS bloqueaba el
+ * primer pintado de todo el tablero, indicadores y tablas incluidos.
+ * `ssr: false` porque miden el contenedor para dibujarse.
+ */
+const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />;
+const GastoPorMes = dynamic(() => import("./GraficosCompras").then((m) => m.GastoPorMes), { ssr: false, loading: esqueleto });
+const GastoPorEmpresa = dynamic(() => import("./GraficosCompras").then((m) => m.GastoPorEmpresa), { ssr: false, loading: esqueleto });
+const GastoPorArea = dynamic(() => import("./GraficosCompras").then((m) => m.GastoPorArea), { ssr: false, loading: esqueleto });
 
 export default function DashboardClient({
   contadores, conCosto, recientes,
@@ -133,16 +135,7 @@ export default function DashboardClient({
             Costo + IVA y envío de los requerimientos con costo cargado, últimos 12 meses.
           </p>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={porMes} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false}
-                  tickFormatter={(v: number) => abreviar(v)} />
-                <Tooltip formatter={(v) => moneda(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="total" fill="#1E7D34" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <GastoPorMes datos={porMes} />
           </div>
         </section>
 
@@ -152,15 +145,7 @@ export default function DashboardClient({
             Total acumulado: <strong className="font-mono">{moneda(gastoTotal)}</strong>
           </p>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={porEmpresa} dataKey="valor" nameKey="nombre" innerRadius={50} outerRadius={85} paddingAngle={2}>
-                  {porEmpresa.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v) => moneda(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <GastoPorEmpresa datos={porEmpresa} />
           </div>
         </section>
       </div>
@@ -169,17 +154,7 @@ export default function DashboardClient({
         <section className="rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Gasto por área</h2>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={porArea} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false}
-                  tickFormatter={(v: number) => abreviar(v)} />
-                <YAxis type="category" dataKey="nombre" width={110}
-                  tick={{ fontSize: 11, fill: "#475569" }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => moneda(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="valor" fill="#E8A020" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <GastoPorArea datos={porArea} />
           </div>
         </section>
 
