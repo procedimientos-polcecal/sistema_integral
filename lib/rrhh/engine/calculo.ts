@@ -21,6 +21,22 @@ export interface DailyCalcResult {
   francoGenerado: boolean;
 }
 
+/**
+ * Si dos cantidades de horas son la misma.
+ *
+ * Las horas salen de dividir milisegundos: una jornada de 8h05 da
+ * 0.08333… horas extra. `calculos_diarios` guarda `numeric(5,2)`, así que en la
+ * base eso queda en 0.08. Comparar con `===` lo recién calculado contra lo
+ * guardado da distinto siempre que la cuenta no dé redondo, aunque sean el
+ * mismo dato — y eso borraba la validación de esos días en cada recálculo.
+ *
+ * Se comparan a la precisión que la base puede guardar. Medio centésimo de hora
+ * son 18 segundos: nada que alguien haya querido decir con una marcación.
+ */
+export function mismasHoras(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.005;
+}
+
 function sumHoras(intervals: TimeInterval[]): number {
   return intervals.reduce((acc, i) => {
     const ms = i.end.getTime() - i.start.getTime();

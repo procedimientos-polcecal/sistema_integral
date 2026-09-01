@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcularDia, type PayrollConfigLike } from "./calculo";
+import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
 
 const config: PayrollConfigLike = {
   horasNormalesPorDia: 8,
@@ -116,5 +116,38 @@ describe("calcularDia", () => {
     // 4h + 6h = 10h -> 8 normales + 2 extra50
     expect(r.horasNormales).toBe(8);
     expect(r.horasExtra50).toBe(2);
+  });
+});
+
+/**
+ * Las horas salen de dividir milisegundos y se guardan en numeric(5,2). Lo que
+ * vuelve de la base no es el mismo float que salio del motor, y hay que poder
+ * reconocer que son el mismo dato.
+ */
+describe("mismasHoras", () => {
+  it("un numero identico es el mismo", () => {
+    expect(mismasHoras(8, 8)).toBe(true);
+  });
+
+  it("0.08 guardado y 0.08333... calculado son las mismas horas", () => {
+    // 8h05 de jornada: 0.08333... de extra, que la base guarda como 0.08.
+    expect(mismasHoras(0.08, 5 / 60)).toBe(true);
+  });
+
+  it("0.38 guardado y 0.38333... calculado tambien", () => {
+    expect(mismasHoras(0.38, 23 / 60)).toBe(true);
+  });
+
+  it("un minuto de diferencia ya es otra cantidad de horas", () => {
+    expect(mismasHoras(0.08, 6 / 60)).toBe(false);
+  });
+
+  it("dos horas contra cinco minutos no son lo mismo", () => {
+    expect(mismasHoras(2, 5 / 60)).toBe(false);
+  });
+
+  it("el limite son 18 segundos: menos es lo mismo, mas no", () => {
+    expect(mismasHoras(1, 1.004)).toBe(true);
+    expect(mismasHoras(1, 1.006)).toBe(false);
   });
 });

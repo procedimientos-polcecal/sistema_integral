@@ -127,3 +127,68 @@ describe("recálculo de un período con días ya validados", () => {
     expect(nuevo).toMatchObject({ extras_validadas: false });
   });
 });
+
+/**
+ * El caso que dejaba la validacion sin efecto.
+ *
+ * Una jornada de 8h05 da 0.08333... horas extra. `calculos_diarios` guarda
+ * numeric(5,2), asi que en la base queda 0.08. Al recalcular, el motor volvia a
+ * calcular 0.08333... y lo comparaba con === contra el 0.08 guardado: nunca
+ * eran iguales, la validacion se borraba, y la planilla general volvia a avisar
+ * que faltaban validar las mismas horas. Validar y correr la planilla era un
+ * circulo cerrado.
+ *
+ * Los dias que dan un numero redondo —8 hs, 4 hs— no lo mostraban: esos si
+ * comparaban iguales.
+ */
+describe("dias validados con horas extra que no dan un numero redondo", () => {
+  // Hora de pared en Argentina (UTC-3 fijo), igual que en recalcular-puro.test.
+  const hora = (dia: number, h: number, min = 0) => new Date(Date.UTC(2026, 5, dia, h + 3, min));
+  const desde = new Date("2026-06-02T00:00:00Z"); // martes
+  const hasta = desde;
+
+  /** 8h05 de trabajo: 8 normales y 0.08333... de extra al 50%. */
+  const datos = (guardado: { horas_extra_50: number; extras_validadas: boolean }) => ({
+    empleados: [{ id: "e1", sector_id: null, sectores: null }],
+    config_liquidacion: [CONFIG],
+    feriados: [],
+    jornadas: [],
+    fichadas: [
+      {
+        empleado_id: "e1",
+        fecha: "2026-06-02",
+        hora_entrada: hora(2, 8).toISOString(),
+        hora_salida: hora(2, 16, 5).toISOString(),
+      },
+    ],
+    ausencias: [],
+    vacaciones: [],
+    francos: [],
+    calculos_diarios: [
+      {
+        empleado_id: "e1",
+        fecha: "2026-06-02",
+        horas_manual: false,
+        horas_extra_100: 0,
+        ...guardado,
+      },
+    ],
+  });
+
+  it("conserva la validacion: 0.08 guardado es la misma hora que 0.08333 calculado", async () => {
+    // Es lo que la base pudo guardar de ese numero, no un valor distinto.
+    const { cliente, upserts } = clienteFalso(datos({ horas_extra_50: 0.08, extras_validadas: true }));
+    await recalcularSectorPeriodo(cliente, null, desde, hasta);
+    const fila = upserts.flat().find((f) => f.fecha === "2026-06-02");
+    expect(fila).not.toHaveProperty("extras_validadas");
+  });
+
+  it("si las horas cambiaron de verdad, la validacion se cae", async () => {
+    // Se habian validado 2 hs y ahora la cuenta da 5 minutos: esa validacion ya
+    // no dice nada sobre este numero.
+    const { cliente, upserts } = clienteFalso(datos({ horas_extra_50: 2, extras_validadas: true }));
+    await recalcularSectorPeriodo(cliente, null, desde, hasta);
+    const fila = upserts.flat().find((f) => f.fecha === "2026-06-02");
+    expect(fila).toMatchObject({ extras_validadas: false, validado_por_id: null, fecha_validacion: null });
+  });
+});

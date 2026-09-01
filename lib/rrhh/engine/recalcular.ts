@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcularDia, type PayrollConfigLike } from "./calculo";
+import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
 import { ajustarFichadasPorTurno, intervalsParaDia, type FichadaLike, type TurnoLike } from "./recalcular-puro";
 import { addUtcDays, dayOfWeekUtc, utcDateOnlyFrom } from "../dates";
 import { SECTORES_LUNES_A_VIERNES } from "../constants";
@@ -259,10 +259,12 @@ async function recalcularLote(
           observaciones = "Fichada sin marcación de salida: revisar y completar manualmente";
         }
 
+        // Se comparan con `mismasHoras` y no con `===` porque lo guardado pasó
+        // por numeric(5,2): 0.08 en la base y 0.08333… acá son el mismo dato.
         const preservarValidacion =
           existente?.extras_validadas &&
-          Number(existente.horas_extra_50) === calc.horasExtra50 &&
-          Number(existente.horas_extra_100) === calc.horasExtra100;
+          mismasHoras(Number(existente.horas_extra_50), calc.horasExtra50) &&
+          mismasHoras(Number(existente.horas_extra_100), calc.horasExtra100);
 
         if (calc.francoGenerado) francosAGenerar.push({ empleado_id: empleadoId, fecha: fechaStr(dia) });
 
