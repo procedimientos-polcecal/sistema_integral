@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { puedeEditarMantenimiento, puedeVerMantenimiento } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import {
   claveDeProveedor, indiceDeProveedores, buscarProveedor, nombresParecidos,
@@ -30,6 +30,18 @@ export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  // Este GET lee con el cliente admin, o sea SIN RLS: alcanzaba con tener
+  // sesión —un chofer de remis, alguien de RRHH— para listar todos los
+  // contratistas de la planta. El POST de abajo ya exigía el módulo; el GET era
+  // el único de los 47 handlers con cliente admin que no comprobaba nada más
+  // que estar logueado. Leer alcanza con ver el módulo, no hace falta edición.
+  if (!(await puedeVerMantenimiento(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Sin acceso al módulo Mantenimiento" },
+      { status: 403 }
+    );
+  }
 
   const admin = createAdminClient();
   const { indice, sueltos } = await juntarSueltos(admin);

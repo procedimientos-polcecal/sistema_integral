@@ -38,6 +38,21 @@ export async function nivelMantenimientoDe(
   return nivelEnModulo(usuario.rol as Rol, (grants ?? []) as UsuarioModulo[], "mantenimiento");
 }
 
+/**
+ * Ver el módulo, con cualquier nivel.
+ *
+ * Es el espejo de `mant_puede_ver()` en la base, y hace falta en las rutas que
+ * leen con el cliente admin: ahí RLS no corre, así que la política de la base no
+ * las cubre y el permiso hay que comprobarlo en el código. Las que leen con el
+ * cliente de sesión no la necesitan — RLS ya las filtra.
+ */
+export async function puedeVerMantenimiento(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  return (await nivelMantenimientoDe(supabase, userId)) !== null;
+}
+
 export async function puedeEditarMantenimiento(
   supabase: SupabaseClient,
   userId: string
