@@ -93,4 +93,33 @@ describe("parseNumeroAR", () => {
     expect(parseNumeroAR("3500")).toBe(3500);
     expect(parseNumeroAR(3500)).toBe(3500);
   });
+
+  /**
+   * Sin coma, el punto seguido de tres digitos es separador de miles. Es como
+   * se escribe aca, y esto lee el valor hora del import de empleados: "3.500"
+   * entraba como 3,5 pesos la hora, sin error y sin aviso.
+   */
+  it("un punto con tres dígitos detrás son miles, no decimales", () => {
+    expect(parseNumeroAR("3.500")).toBe(3500);
+    expect(parseNumeroAR("1.234.567")).toBe(1234567);
+    expect(parseNumeroAR("-3.500")).toBe(-3500);
+  });
+
+  it("cualquier otro punto sigue siendo decimal", () => {
+    expect(parseNumeroAR("3500.5")).toBeCloseTo(3500.5);
+    expect(parseNumeroAR("3.5")).toBeCloseTo(3.5);
+    expect(parseNumeroAR("3.50")).toBeCloseTo(3.5);
+    // Cuatro digitos delante: unos miles bien escritos serian "3.500.500".
+    expect(parseNumeroAR("3500.500")).toBeCloseTo(3500.5);
+  });
+
+  it("el cero adelante desarma la regla de los miles", () => {
+    expect(parseNumeroAR("0.500")).toBeCloseTo(0.5);
+  });
+
+  it("lo que no es un número no inventa uno", () => {
+    expect(parseNumeroAR("s/d")).toBeNull();
+    expect(parseNumeroAR("")).toBeNull();
+    expect(parseNumeroAR(null)).toBeNull();
+  });
 });

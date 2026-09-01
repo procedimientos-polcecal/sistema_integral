@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { localDateTime, toUtcDateOnly } from "./dates";
+import { numeroArgentino } from "@/lib/core/numeroArgentino";
 
 export function parseWorkbook(buffer: Buffer) {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -111,19 +112,27 @@ export function toDateOnlyFromCell(value: unknown): Date | null {
   return null;
 }
 
-/** Interpreta números con formato argentino ("3.500,50" o "3500,50") o plano ("3500.5" / "3500"). */
+/**
+ * Interpreta números con formato argentino: "3.500,50", "3500,50", "3.500",
+ * "3500.5", "3500".
+ *
+ * La regla de qué separador es el decimal vive en `lib/core/numeroArgentino.ts`
+ * y está explicada allá. Acá interesa por qué importa: esto lee el valor hora
+ * del import de empleados, y mientras el punto se tomó siempre como decimal, un
+ * legajo con el hora escrito "3.500" —que es como se escribe tres mil
+ * quinientos acá— quedaba cargado a tres pesos con cincuenta, sin error, sin
+ * aviso, y visible recién en la liquidación.
+ *
+ * Una celda que ya viene numérica del Excel se devuelve tal cual: ahí no hay
+ * texto que interpretar y SheetJS ya hizo el trabajo.
+ */
 export function parseNumeroAR(value: unknown): number | null {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (trimmed.includes(",")) {
-    const normalized = trimmed.replace(/\./g, "").replace(",", ".");
-    const n = Number(normalized);
-    return isNaN(n) ? null : n;
-  }
-  const n = Number(trimmed);
-  return isNaN(n) ? null : n;
+
+  return numeroArgentino(trimmed);
 }
 
 export interface Marcacion {
