@@ -99,3 +99,70 @@ function comoUtc(iso: string): Date {
   const [a, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(a, (m ?? 1) - 1, d ?? 1));
 }
+
+/**
+ * Una fecha escrita a mano, a `"YYYY-MM-DD"`. `null` si no es una fecha.
+ *
+ * Acepta `d/m/aaaa` —como la escriben las planillas—, con separador `/` o `-`,
+ * día y mes de uno o dos dígitos, año de dos o cuatro, y con hora de más
+ * detrás. Y acepta la forma ISO por si alguna celda viene así.
+ *
+ * NO ADIVINA EL ORDEN. `05/13/2026` es día 5 de un mes 13, o sea imposible, y
+ * devuelve `null` — no se da vuelta a m/d. Eso ya costó caro: el parser de
+ * Compras suponía M/D y dio vuelta el día y el mes en el 39% de los
+ * requerimientos, en todos los que tenían día 12 o menos. Lo delató la
+ * secuencia de RI, que es correlativa: los 1795 a 1811, del 11 y 12 de agosto,
+ * quedaron guardados como noviembre y diciembre, y el 1812 —del 13— quedó bien
+ * porque 13 no puede ser un mes y ahí acertaba por descarte. Una planilla tiene
+ * un solo locale para todas sus celdas: no hay mezcla que resolver.
+ *
+ * UNA FECHA IMPOSIBLE SE DESCARTA, NO SE CORRIGE. El 31 de febrero no se
+ * convierte en 3 de marzo: `new Date` lo haría rodar solo y eso esconde el
+ * problema en vez de mostrarlo. La comprobación es de ida y vuelta, en UTC para
+ * que no dependa del huso del runtime.
+ *
+ * Había dos implementaciones de esto. La de `compras/sheets.ts` validaba los
+ * rangos y tenía tests; la de `compras/comparativa.ts` no validaba nada, así
+ * que `05/13/2026` salía como `"2026-13-05"` y hacía fallar el INSERT de la
+ * comparativa entera por una celda.
+ */
+export function fechaDeTexto(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  if (s === "") return null;
+
+  // ISO primero. No hay ambigüedad con d/m: un año de cuatro dígitos no entra
+  // en el `\d{1,2}` del día.
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return armar(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  // Sin anclar el final: la celda suele traer la hora detrás.
+  //
+  // El año de cuatro dígitos va PRIMERO en la alternancia. La regex prueba de
+  // izquierda a derecha y se queda con lo primero que entra, así que con
+  // `(\d{2}|\d{4})` el "2026" matcheaba como año de dos dígitos —"20"— y
+  // 12/08/2026 salía 2020-08-12.
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2})/);
+  if (dmy) {
+    const anio = dmy[3].length === 2 ? 2000 + Number(dmy[3]) : Number(dmy[3]);
+    return armar(anio, Number(dmy[2]), Number(dmy[1]));
+  }
+
+  return null;
+}
+
+/** Arma la fecha sólo si existe de verdad en el calendario. */
+function armar(anio: number, mes: number, dia: number): string | null {
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  // De ida y vuelta: el 31 de febrero rueda al 3 de marzo y acá se nota.
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  if (
+    d.getUTCFullYear() !== anio ||
+    d.getUTCMonth() !== mes - 1 ||
+    d.getUTCDate() !== dia
+  ) {
+    return null;
+  }
+
+  return `${String(anio).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}

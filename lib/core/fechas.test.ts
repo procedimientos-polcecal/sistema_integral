@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   fechaEnArgentina, hoyEnArgentina, diaEnArgentina,
-  sumarDias, diaDeLaSemana, semanaDe, comoSeLee,
+  sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
 } from "./fechas";
 
 /**
@@ -114,5 +114,69 @@ describe("semanaDe", () => {
 describe("comoSeLee", () => {
   it("da vuelta la fecha para mostrarla", () => {
     expect(comoSeLee("2026-08-24")).toBe("24/08/2026");
+  });
+});
+
+/**
+ * Habia dos implementaciones de esto. La de `compras/sheets.ts` validaba los
+ * rangos y tenia tests; la de `compras/comparativa.ts` no validaba nada, asi
+ * que "05/13/2026" salia como "2026-13-05" y hacia fallar el INSERT de la
+ * comparativa entera por una celda.
+ */
+describe("fechaDeTexto", () => {
+  it("lee d/m/aaaa, que es como lo escriben las planillas", () => {
+    expect(fechaDeTexto("12/08/2026")).toBe("2026-08-12");
+    expect(fechaDeTexto("01/09/2026")).toBe("2026-09-01");
+    expect(fechaDeTexto("31/12/2025")).toBe("2025-12-31");
+  });
+
+  it("acepta un solo digito, el año de dos y el guion como separador", () => {
+    expect(fechaDeTexto("5/3/26")).toBe("2026-03-05");
+    expect(fechaDeTexto("5-3-2026")).toBe("2026-03-05");
+  });
+
+  /** El año de cuatro digitos va primero en la alternancia de la regex. */
+  it("un año de cuatro digitos no se lee como uno de dos", () => {
+    expect(fechaDeTexto("12/08/2026")).not.toBe("2020-08-12");
+  });
+
+  it("tolera que la celda traiga tambien la hora", () => {
+    expect(fechaDeTexto("12/08/2026 14:30:05")).toBe("2026-08-12");
+  });
+
+  it("acepta la forma ISO sin confundirla con d/m", () => {
+    expect(fechaDeTexto("2026-08-12")).toBe("2026-08-12");
+    expect(fechaDeTexto("2026-08-12T00:00:00+00:00")).toBe("2026-08-12");
+  });
+
+  /** Este es el que hacia fallar el insert. */
+  it("un mes fuera de rango es null, no '2026-13-05'", () => {
+    expect(fechaDeTexto("05/13/2026")).toBeNull();
+    expect(fechaDeTexto("2026-13-05")).toBeNull();
+  });
+
+  it("un dia fuera de rango tampoco pasa", () => {
+    expect(fechaDeTexto("32/08/2026")).toBeNull();
+    expect(fechaDeTexto("00/08/2026")).toBeNull();
+    expect(fechaDeTexto("2026-08-45")).toBeNull();
+  });
+
+  /**
+   * `new Date` haria rodar el 31 de febrero al 3 de marzo. Eso esconde el
+   * problema: la comprobacion es de ida y vuelta.
+   */
+  it("un dia que no existe en ese mes se descarta, no rueda al siguiente", () => {
+    expect(fechaDeTexto("31/02/2026")).toBeNull();
+    expect(fechaDeTexto("29/02/2026")).toBeNull();   // 2026 no es bisiesto
+    expect(fechaDeTexto("29/02/2028")).toBe("2028-02-29"); // 2028 si
+    expect(fechaDeTexto("31/04/2026")).toBeNull();
+  });
+
+  it("lo que no es una fecha no inventa una", () => {
+    expect(fechaDeTexto("")).toBeNull();
+    expect(fechaDeTexto(null)).toBeNull();
+    expect(fechaDeTexto(undefined)).toBeNull();
+    expect(fechaDeTexto("s/d")).toBeNull();
+    expect(fechaDeTexto("12/2026")).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import { norm } from "@/lib/compras/texto";
 import { monedaExacta } from "@/lib/compras/constants";
 import { numeroArgentino } from "@/lib/core/numeroArgentino";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { fechaDeTexto } from "@/lib/core/fechas";
 
 /** Las 19 columnas de la plantilla, en orden. */
 export const COLUMNAS_COMPARATIVA = [
@@ -173,20 +174,15 @@ export function diasDePlazo(v: unknown): number | null {
   return dias < 0 || dias > 365 ? null : dias;
 }
 
-/** Fechas de la planilla (d/m/yyyy) a ISO. */
-export function fechaISO(v: unknown): string | null {
-  const s = String(v ?? "").trim();
-  if (s === "") return null;
-
-  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (dmy) {
-    const [, d, m, y] = dmy;
-    const anio = y.length === 2 ? `20${y}` : y;
-    return `${anio}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  const iso = s.match(/^\d{4}-\d{2}-\d{2}/);
-  return iso ? iso[0] : null;
-}
+/**
+ * Fechas de la planilla (d/m/aaaa) a ISO.
+ *
+ * No validaba nada: `05/13/2026` salía como `"2026-13-05"` y hacía fallar el
+ * INSERT de la comparativa entera por una celda. La regla —incluido por qué no
+ * se adivina el orden de día y mes— vive en `lib/core/fechas.ts`, una sola vez
+ * para las dos planillas.
+ */
+export const fechaISO = fechaDeTexto;
 
 // ── El total ─────────────────────────────────────────────────
 
