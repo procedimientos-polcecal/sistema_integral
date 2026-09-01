@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { sectoresQueElLibroCrearia } from "@/lib/mantenimiento/inventario";
@@ -58,42 +57,44 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   }, [equipos, filterEmpresa, filterSector, filterStatus, search]);
 
   // ─── Export ───────────────────────────────────────────────────────────────
-  function exportExcel() {
-    const rows = filtered.map((e: any) => ({
-      "Código":       e.code,
-      "Nombre":       e.name,
-      "Empresa":      e.sectores?.empresas?.nombre ?? "",
-      "Sector":       e.sectores?.nombre ?? "",
-      "kW":           e.power_kw ?? "",
-      "Estado":       e.status,
-      "Criticidad":   e.criticality,
-      "Descripción":  e.description ?? "",
-      "Notas":        e.notes ?? "",
-    }));
+  // El Excel lo arma el servidor. Antes se armaba acá, y eso obligaba a traer
+  // `xlsx` al navegador —unos 400 KB— para todo el que abriera esta pantalla,
+  // exportara o no. Se le mandan las filas ya filtradas: los filtros son de la
+  // UI y duplicarlos del otro lado sería asegurar que alguna vez diverjan.
+  const [exportando, setExportando] = useState(false);
+  async function exportExcel() {
+    setExportando(true);
+    try {
+      const filas = filtered.map((e: any) => ({
+        codigo: e.code,
+        nombre: e.name,
+        empresa: e.sectores?.empresas?.nombre ?? "",
+        sector: e.sectores?.nombre ?? "",
+        kw: e.power_kw ?? "",
+        estado: e.status,
+        criticidad: e.criticality,
+        descripcion: e.description ?? "",
+        notas: e.notes ?? "",
+      }));
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+      const res = await fetch("/api/mantenimiento/equipos/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filas }),
+      });
+      if (!res.ok) throw new Error(`El servidor devolvió ${res.status}`);
 
-    ws["!cols"] = [
-      { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 },
-      { wch: 8 },  { wch: 20 }, { wch: 12 }, { wch: 35 }, { wch: 35 },
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Equipos");
-
-    const legend = XLSX.utils.aoa_to_sheet([
-      ["Estado (valores válidos)","","Criticidad (valores válidos)"],
-      ["OPERATIVO","","ALTA"],
-      ["EN_MANTENIMIENTO","","MEDIA"],
-      ["EN_REPARACION","","BAJA"],
-      ["STANDBY","",""],
-      ["FUERA_DE_SERVICIO","",""],
-      ["DADO_DE_BAJA","",""],
-    ]);
-    XLSX.utils.book_append_sheet(wb, legend, "Referencia");
-
-    const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `equipos_${date}.xlsx`);
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `equipos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`No se pudo exportar: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setExportando(false);
+    }
   }
 
   // ─── Import ───────────────────────────────────────────────────────────────
@@ -111,6 +112,10 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
    */
   async function sectoresNuevosDelArchivo(file: File) {
     try {
+      // `xlsx` se carga acá y no arriba: son ~400 KB que sólo hacen falta
+      // cuando alguien realmente elige un archivo para importar. Importado de
+      // forma estática lo pagaba todo el que abría la pantalla.
+      const XLSX = await import("xlsx");
       const libro = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const hoja = (nombre: string) =>
         libro.Sheets[nombre]
@@ -216,13 +221,14 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
 
           <button
             onClick={exportExcel}
-            className="flex items-center gap-1.5 rounded-lg border border-green-600 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 transition-colors"
+            disabled={exportando}
+            className="flex items-center gap-1.5 rounded-lg border border-green-600 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Exportar Excel
+            {exportando ? "Generando..." : "Exportar Excel"}
           </button>
 
           {canEdit && (

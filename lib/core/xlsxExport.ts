@@ -18,11 +18,22 @@ export function xlsxResponse(filename: string, sheetName: string, rows: unknown[
   return xlsxBufferResponse(filename, wb);
 }
 
-/** Igual que `xlsxResponse` pero con una hoja por entrada de `sheets` (ej. una por día de la semana). */
-export function xlsxMultiSheetResponse(filename: string, sheets: { name: string; rows: unknown[][] }[]): Response {
+/**
+ * Igual que `xlsxResponse` pero con una hoja por entrada de `sheets` (ej. una
+ * por día de la semana).
+ *
+ * `anchos` es opcional y va en caracteres, una entrada por columna: sin eso una
+ * descripción larga se ve como `#####` hasta que quien abre el archivo arrastra
+ * la columna a mano.
+ */
+export function xlsxMultiSheetResponse(
+  filename: string,
+  sheets: { name: string; rows: unknown[][]; anchos?: number[] }[]
+): Response {
   const wb = XLSX.utils.book_new();
-  for (const { name, rows } of sheets) {
+  for (const { name, rows, anchos } of sheets) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    if (anchos?.length) ws["!cols"] = anchos.map((wch) => ({ wch }));
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); // Excel limita el nombre de hoja a 31 caracteres
   }
   return xlsxBufferResponse(filename, wb);
