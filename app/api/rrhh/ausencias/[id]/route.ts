@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,7 +11,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
   if (body.employeeId !== undefined) data.empleado_id = body.employeeId;
   if (body.fechaDesde !== undefined) data.fecha_desde = body.fechaDesde;

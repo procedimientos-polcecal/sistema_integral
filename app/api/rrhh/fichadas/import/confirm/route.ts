@@ -8,6 +8,7 @@ import {
 } from "@/lib/rrhh/excelImport";
 import { localDateTime } from "@/lib/rrhh/dates";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 interface Mapping {
   legajo: string;
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   if (check) return check;
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { token, sheet, mapping } = (await request.json()) as { token: string; sheet: string; mapping: Mapping };
+  const { token, sheet, mapping } = (await cuerpoJson(request)) as { token: string; sheet: string; mapping: Mapping };
   if (!token || !sheet || !mapping?.legajo || !mapping?.fecha) {
     return NextResponse.json({ error: "Faltan datos de la importación" }, { status: 400 });
   }

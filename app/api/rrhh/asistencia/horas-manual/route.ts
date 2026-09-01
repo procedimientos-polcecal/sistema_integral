@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 // horasNormales: null pide restablecer al cálculo automático (se ignoran
 // horasExtra50/100 en ese caso). Si no es null, las tres reemplazan al
@@ -12,7 +13,7 @@ export async function PUT(request: Request) {
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const { employeeId, fecha, horasNormales, horasExtra50, horasExtra100 } = await request.json();
+  const { employeeId, fecha, horasNormales, horasExtra50, horasExtra100 } = await cuerpoJson(request);
   if (!employeeId || !fecha) return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
 
   const admin = createAdminClient();

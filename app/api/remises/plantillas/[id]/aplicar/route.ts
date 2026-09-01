@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 import { aplicarGrupos } from "@/lib/remises/generarRutas";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,7 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { fecha, turnoId } = body;
   if (!fecha || !turnoId) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
 

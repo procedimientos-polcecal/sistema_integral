@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/core/route-utils";
 import { MODULOS_ORDEN } from "@/lib/core/access";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 // Misma fuente que la navegación y el panel: una lista propia acá ya dejó
 // afuera a Compras una vez.
@@ -20,7 +21,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const grants = Array.isArray(body.grants) ? body.grants : [];
   for (const g of grants) {
     if (!MODULOS.includes(g.modulo) || !NIVELES.includes(g.nivel)) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function GET() {
   const publicKey = process.env.NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY;
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const endpoint = body.endpoint;
   const p256dh = body.keys?.p256dh;
   const auth = body.keys?.auth;

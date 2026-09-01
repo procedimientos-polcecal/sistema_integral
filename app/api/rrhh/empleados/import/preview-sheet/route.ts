@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
 import { leerStaging } from "@/lib/rrhh/staging";
 import type { ParsedSheet } from "@/lib/rrhh/excelImport";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { token, sheet } = await request.json();
+  const { token, sheet } = await cuerpoJson(request);
   if (!token || !sheet) return NextResponse.json({ error: "Falta token o nombre de hoja" }, { status: 400 });
 
   const entry = await leerStaging<{ sheetNames: string[]; sheets: Record<string, ParsedSheet> }>(supabase, token, "empleados");

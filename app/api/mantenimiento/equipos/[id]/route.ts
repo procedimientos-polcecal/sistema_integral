@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { fichaDesdeFormulario } from "@/lib/mantenimiento/ficha";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 const REQUIRES_REASON = ["EN_MANTENIMIENTO", "EN_REPARACION", "STANDBY", "FUERA_DE_SERVICIO", "DADO_DE_BAJA"];
 
@@ -16,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const admin = createAdminClient();
 
   // ── Status-only change ───────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 /**
  * Cambia la contraseña del usuario logueado. Supabase no tiene un "verificar
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user?.email) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const currentPassword = String(body.currentPassword ?? "");
   const newPassword = String(body.newPassword ?? "");
   if (newPassword.length < 6) {

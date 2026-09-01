@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 // GET — listar planes
 export async function GET(request: Request) {
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { fecha, titulo, notas } = await request.json();
+  const { fecha, titulo, notas } = await cuerpoJson(request);
   if (!fecha) return NextResponse.json({ error: "Fecha requerida" }, { status: 400 });
 
   const { data, error } = await supabase

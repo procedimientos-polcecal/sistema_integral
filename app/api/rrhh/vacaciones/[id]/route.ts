@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,7 +13,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { data: anterior } = await supabase.from("vacaciones").select("*").eq("id", id).single();
   if (!anterior) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
   if (body.employeeId !== undefined) data.empleado_id = body.employeeId;
   if (body.anioCorrespondiente !== undefined) data.anio_correspondiente = body.anioCorrespondiente;

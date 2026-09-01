@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
 
   // Una ejecución cuelga de un mantenimiento programado **o** de una orden de
   // trabajo: la mayor parte del trabajo de la planta entra por una OT.

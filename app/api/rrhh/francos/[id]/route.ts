@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,7 +9,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const { estado, fechaTomado } = await request.json();
+  const { estado, fechaTomado } = await cuerpoJson(request);
   if (estado !== "PENDIENTE" && estado !== "TOMADO") {
     return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
   }

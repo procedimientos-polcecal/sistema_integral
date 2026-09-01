@@ -3,13 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { leerStaging } from "@/lib/rrhh/staging";
 import type { ParsedSheet } from "@/lib/rrhh/excelImport";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const { token, sheet } = await request.json();
+  const { token, sheet } = await cuerpoJson(request);
   if (!token || !sheet) return NextResponse.json({ error: "Falta token o nombre de hoja" }, { status: 400 });
 
   const entry = await leerStaging<{ nombreArchivo: string; sheetNames: string[]; sheets: Record<string, ParsedSheet> }>(supabase, token, "fichadas");

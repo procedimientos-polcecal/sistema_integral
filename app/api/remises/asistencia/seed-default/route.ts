@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 /**
  * Marca presentes a todos los empleados activos cuyo turno default coincide
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { fecha, turnoId } = body;
   if (!fecha || !turnoId) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
 

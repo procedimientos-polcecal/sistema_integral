@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/rrhh/route-utils";
 import { recalcularVentanaEnSegundoPlano } from "@/lib/rrhh/recalculoProgramado";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 function toApi(row: Record<string, unknown>) {
   return {
@@ -32,7 +33,7 @@ export async function PUT(request: Request) {
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
   if (body.horasNormalesPorDia !== undefined) {
     if (!(Number(body.horasNormalesPorDia) > 0)) return NextResponse.json({ error: "horasNormalesPorDia inválido" }, { status: 400 });

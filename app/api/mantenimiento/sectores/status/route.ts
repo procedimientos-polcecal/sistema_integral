@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 const VALID_STATUSES = ["ACTIVA", "PARADA", "EN_REPARACION"];
 const REQUIRES_REASON = ["PARADA", "EN_REPARACION"];
@@ -15,7 +16,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { sector_id, new_status, reason } = await request.json();
+  const { sector_id, new_status, reason } = await cuerpoJson(request);
 
   if (!sector_id || !new_status) {
     return NextResponse.json({ error: "Sector y nuevo estado son requeridos" }, { status: 400 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 import { refrescarGeometriaHoja } from "@/lib/remises/refrescarGeometria";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 /** Agrega un empleado al final de esta hoja de ruta. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const empleadoId = body.empleadoId;
   if (!empleadoId) return NextResponse.json({ error: "Falta empleadoId" }, { status: 400 });
 
@@ -29,7 +30,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const orden: string[] = body.empleadoIds ?? [];
   if (!Array.isArray(orden) || !orden.length) return NextResponse.json({ error: "Falta empleadoIds" }, { status: 400 });
 

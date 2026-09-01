@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/rrhh/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function PUT(request: Request) {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export async function PUT(request: Request) {
   if (check) return check;
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { employeeId, fecha } = await request.json();
+  const { employeeId, fecha } = await cuerpoJson(request);
   if (!employeeId || !fecha) return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
 
   const admin = createAdminClient();

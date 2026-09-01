@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 import { generarRutasParaTurno } from "@/lib/remises/generarRutas";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 /** "▶ Generar rutas" desde Semana: copia el plan de ese día a la asistencia real y genera. */
 export async function POST(request: Request) {
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { fecha, turnoId, tipo } = body;
   if (!fecha || !turnoId || (tipo !== "ida" && tipo !== "vuelta")) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });

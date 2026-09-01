@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { es_admin_check } from "@/lib/core/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const nombre = String(body.nombre ?? "").trim();
   const empresaId = body.empresaId;
   if (!nombre || !empresaId) {

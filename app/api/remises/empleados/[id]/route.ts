@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,7 +9,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = { empleado_id: id };
   if (body.direccion !== undefined) data.direccion = body.direccion?.trim() || null;
   if (body.lat !== undefined) data.lat = body.lat;

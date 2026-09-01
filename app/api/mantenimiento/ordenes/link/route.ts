@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 // POST /api/mantenimiento/ordenes/link
 // Vincula (o desvincula, si schedule_id es null) una OT existente a un mantenimiento.
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { work_order_id, schedule_id } = await request.json();
+  const { work_order_id, schedule_id } = await cuerpoJson(request);
   if (!work_order_id) {
     return NextResponse.json({ error: "OT requerida" }, { status: 400 });
   }

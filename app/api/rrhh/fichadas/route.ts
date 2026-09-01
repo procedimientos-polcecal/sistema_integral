@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 // El frontend manda la hora como "YYYY-MM-DDTHH:MM:SS" sin zona horaria (hora
 // de pared en Argentina) — se parsea a mano con localDateTime(), que siempre
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { employeeId, fecha, horaEntrada, horaSalida, observaciones } = body;
   const entrada = parseHoraDePared(horaEntrada);
   if (!employeeId || !fecha || !entrada) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });

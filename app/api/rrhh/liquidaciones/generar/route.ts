@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { es_admin_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo, getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
   if (check) return check;
 
   const { data: { user } } = await supabase.auth.getUser();
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { employeeId, tipo, fechaDesde, fechaHasta } = body;
   if (!employeeId || (tipo !== "QUINCENAL" && tipo !== "MENSUAL") || !fechaDesde || !fechaHasta) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });

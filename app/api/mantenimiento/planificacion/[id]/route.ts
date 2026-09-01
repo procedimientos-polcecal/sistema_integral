@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const { error: authErr, supabase } = await requireEditor();
   if (authErr) return authErr;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
 
   if (body.action === "add_item") {
     const { work_order_id, ot_number, especialidad, sector_raw, equipo_raw,

@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 import { geocode } from "@/lib/remises/engine/geocode";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const direccion = String(body.direccion ?? "").trim();
   if (!direccion) return NextResponse.json({ error: "Ingresá una dirección" }, { status: 400 });
 

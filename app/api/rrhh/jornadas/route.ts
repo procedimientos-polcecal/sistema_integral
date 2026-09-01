@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/rrhh/route-utils";
 import { recalcularVentanaEnSegundoPlano } from "@/lib/rrhh/recalculoProgramado";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function GET() {
   const supabase = await createClient();
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { nombre, horaInicio, horaFin, toleranciaMinutos } = body;
   if (
     !nombre?.trim() ||

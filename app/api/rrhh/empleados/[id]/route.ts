@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,7 +28,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const admin = createAdminClient();
 
   const empleadoData: Record<string, unknown> = {};

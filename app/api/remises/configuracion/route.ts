@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, es_admin_check } from "@/lib/remises/route-utils";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 function toApi(row: Record<string, unknown>) {
   return {
@@ -28,7 +29,7 @@ export async function PUT(request: Request) {
   const check = await es_admin_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
   if (body.fabricaNombre !== undefined) data.fabrica_nombre = String(body.fabricaNombre).trim() || "Fábrica";
   if (body.fabricaDireccion !== undefined) data.fabrica_direccion = body.fabricaDireccion?.trim() || null;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { legajo, nombre, apellido, sindicato, fechaIngreso, valorHoraNormal, horasTeoricasDiarias, modalidadPago, empresaId, sectorId } = body;
 
   if (!legajo?.trim() || !nombre?.trim() || !apellido?.trim() || !fechaIngreso || !empresaId) {

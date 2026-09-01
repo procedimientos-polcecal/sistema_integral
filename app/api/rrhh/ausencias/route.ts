@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 const TIPOS = [
   "LICENCIA_ART", "VACACIONES", "LICENCIA_GREMIAL", "PERMISO_PERSONAL",
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
   if (check) return check;
   const { data: { user } } = await supabase.auth.getUser();
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const { employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones, anioCorrespondiente } = body;
   if (!employeeId || !fechaDesde || !fechaHasta || !TIPOS.includes(tipo) || typeof justificada !== "boolean") {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });

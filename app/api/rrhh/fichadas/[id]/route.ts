@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 function parseHoraDePared(value: string): Date | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
@@ -18,7 +19,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await request.json();
+  const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
   if (body.employeeId !== undefined) data.empleado_id = body.employeeId;
   if (body.fecha !== undefined) data.fecha = body.fecha;
