@@ -42,8 +42,16 @@ export default function PinMap({
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  // El ref existe para que el `map.on("click")` de abajo llame siempre al
+  // `onChange` mas reciente sin volver a montar el mapa. Actualizarlo estaba
+  // hecho **durante el render**, que en React 19 es una mutacion en una fase que
+  // puede correrse o descartarse: el handler podia quedar apuntando a un
+  // callback de un render que nunca se llego a mostrar. Va en un efecto, que es
+  // la fase donde escribir un ref es valido.
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;

@@ -5,6 +5,7 @@ import { esAdminRrhh } from "@/lib/rrhh/auth";
 import { leerStaging, borrarStaging } from "@/lib/rrhh/staging";
 import { parseNumeroAR, toDateOnlyFromCell, type ParsedSheet } from "@/lib/rrhh/excelImport";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { cuerpoJson } from "@/lib/core/cuerpo";
 
 interface Mapping {
   legajo: string;
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const { token, sheet, mapping } = (await request.json()) as { token: string; sheet: string; mapping: Mapping };
+  const { token, sheet, mapping } = (await cuerpoJson(request)) as { token: string; sheet: string; mapping: Mapping };
   if (!token || !sheet || !mapping?.legajo || !mapping?.nombre || !mapping?.apellido || !mapping?.valorHoraNormal) {
     return NextResponse.json({ error: "Faltan datos de la importación" }, { status: 400 });
   }
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    let fechaIngreso = mapping.fechaIngreso ? toDateOnlyFromCell(row[mapping.fechaIngreso]) : null;
+    const fechaIngreso = mapping.fechaIngreso ? toDateOnlyFromCell(row[mapping.fechaIngreso]) : null;
     let fechaIngresoStr = fechaIngreso ? fechaIngreso.toISOString().slice(0, 10) : null;
     if (!fechaIngresoStr) {
       fechaIngresoStr = hoy;

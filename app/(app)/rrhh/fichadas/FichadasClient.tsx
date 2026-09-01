@@ -271,7 +271,9 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-medium text-gray-700">Últimas fichadas</h2>
-          <a href="/api/rrhh/fichadas/export" className="text-sm text-blue-600 hover:underline">Exportar</a>
+          {/* Descarga, no pagina: ver el comentario en VehiculosClient. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/rrhh/fichadas/export" download className="text-sm text-blue-600 hover:underline">Exportar</a>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full text-sm">

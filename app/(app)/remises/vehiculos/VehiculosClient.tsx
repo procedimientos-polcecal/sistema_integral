@@ -74,7 +74,11 @@ function VehiculosTab({ vehiculos, choferes, canEdit }: { vehiculos: any[]; chof
       {canEdit && (
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <button onClick={() => setModal({ v: null })} className="btn-primary">+ Agregar vehículo</button>
-          <a href="/api/remises/vehiculos/template" className="text-sm text-blue-600 hover:underline">Descargar plantilla</a>
+          {/* Una descarga, no una pagina: `<Link>` haria navegacion del lado
+              del cliente y el archivo nunca bajaria. La regla no distingue
+              /api/ de una ruta de pagina. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/remises/vehiculos/template" download className="text-sm text-blue-600 hover:underline">Descargar plantilla</a>
           <button onClick={() => fileRef.current?.click()} disabled={importando}
             className="text-sm text-blue-600 hover:underline disabled:opacity-50">
             {importando ? "Importando..." : "Importar Excel"}
