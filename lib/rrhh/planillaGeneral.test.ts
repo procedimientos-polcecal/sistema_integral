@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dia, diasSuperpuestos, diasHabilesSuperpuestos } from "./planillaGeneral";
+import { dia, diasSuperpuestos, diasHabilesSuperpuestos, extrasSinValidar } from "./planillaGeneral";
 
 // Julio 2026: el 1 cae miércoles. Domingos: 5, 12, 19, 26. Sábados: 4, 11, 18, 25.
 const sinFeriados = new Set<number>();
@@ -66,5 +66,47 @@ describe("diasHabilesSuperpuestos (enfermedad: no suman domingos ni feriados)", 
 
   it("licencia fuera del rango liquidado no suma nada", () => {
     expect(diasHabilesSuperpuestos(dia("2026-05-04"), dia("2026-05-08"), dia("2026-07-01"), dia("2026-07-31"), sinFeriados)).toBe(0);
+  });
+});
+
+/**
+ * La planilla suma las extra solo de los dias validados. Mostrar 0 sin mas se
+ * lee igual que "no hizo extras", asi que ademas hay que poder decir cuanto
+ * quedo afuera.
+ */
+describe("extrasSinValidar", () => {
+  const dia = (horas50: number, horas100: number, validadas: boolean) => ({
+    empleado_id: "e1",
+    horas_normales: 8,
+    horas_extra_50: horas50,
+    horas_extra_100: horas100,
+    extras_validadas: validadas,
+  });
+
+  it("sin dias no hay nada pendiente", () => {
+    expect(extrasSinValidar([])).toEqual({ dias: 0, horas50: 0, horas100: 0 });
+  });
+
+  it("un dia validado no queda pendiente por mas horas que tenga", () => {
+    expect(extrasSinValidar([dia(8, 4, true)])).toEqual({ dias: 0, horas50: 0, horas100: 0 });
+  });
+
+  it("un dia sin validar con extras queda pendiente", () => {
+    expect(extrasSinValidar([dia(4, 0, false)])).toEqual({ dias: 1, horas50: 4, horas100: 0 });
+  });
+
+  it("un dia sin validar y sin extras no cuenta como pendiente", () => {
+    // Es el caso normal: casi todos los dias no tienen extras y nadie los valida.
+    expect(extrasSinValidar([dia(0, 0, false)])).toEqual({ dias: 0, horas50: 0, horas100: 0 });
+  });
+
+  it("suma las dos clases de extra y cuenta el dia una sola vez", () => {
+    expect(extrasSinValidar([dia(4, 8.5, false)])).toEqual({ dias: 1, horas50: 4, horas100: 8.5 });
+  });
+
+  it("mezcla de dias: solo suma los que faltan validar", () => {
+    expect(
+      extrasSinValidar([dia(8, 0, true), dia(4, 0, false), dia(0, 0, false), dia(0, 7.5, false)])
+    ).toEqual({ dias: 2, horas50: 4, horas100: 7.5 });
   });
 });

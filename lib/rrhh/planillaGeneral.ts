@@ -22,6 +22,48 @@ export interface FilaPlanilla {
   montoExtra100: number;
   montoFranco: number;
   montoTotal: number;
+  /**
+   * Lo que el motor calculó como extra y todavía nadie validó. No está sumado
+   * en las columnas de arriba: va aparte, para poder avisarlo.
+   */
+  diasSinValidar: number;
+  horasExtra50SinValidar: number;
+  horasExtra100SinValidar: number;
+}
+
+/** Un día del motor de cálculo, de lo que la planilla necesita leer. */
+export interface DiaCalculado {
+  empleado_id: string;
+  horas_normales: number;
+  horas_extra_50: number;
+  horas_extra_100: number;
+  extras_validadas: boolean;
+}
+
+/**
+ * Las horas extra que el motor calculó y todavía nadie validó.
+ *
+ * La planilla suma las extra sólo de los días validados: una hora extra se paga
+ * cuando alguien la aprobó, no porque el reloj la haya registrado. Pero mostrar
+ * 0 y nada más se lee igual que "no hizo extras", y son cosas distintas. Esto
+ * es lo que quedó afuera, para poder decirlo.
+ *
+ * Un día sin validar y sin extras no cuenta: es el caso normal —casi ningún día
+ * tiene extras y nadie los valida—, y contarlo convertiría el aviso en ruido.
+ */
+export function extrasSinValidar(dias: DiaCalculado[]): {
+  dias: number;
+  horas50: number;
+  horas100: number;
+} {
+  const pendientes = dias.filter(
+    (d) => !d.extras_validadas && (Number(d.horas_extra_50) > 0 || Number(d.horas_extra_100) > 0)
+  );
+  return {
+    dias: pendientes.length,
+    horas50: pendientes.reduce((a, d) => a + Number(d.horas_extra_50), 0),
+    horas100: pendientes.reduce((a, d) => a + Number(d.horas_extra_100), 0),
+  };
 }
 
 export function dia(fecha: string): Date {
@@ -111,13 +153,7 @@ export async function calcularPlanillaGeneral(
   await recalcularSectorPeriodo(supabase, null, fechaDesde, fechaHasta);
 
   const [todosDias, todosFrancos, todasVacaciones, todasEnfermedad, feriados] = await Promise.all([
-    traerPaginado<{
-      empleado_id: string;
-      horas_normales: number;
-      horas_extra_50: number;
-      horas_extra_100: number;
-      extras_validadas: boolean;
-    }>(
+    traerPaginado<DiaCalculado>(
       () =>
         supabase
           .from("calculos_diarios")
@@ -175,6 +211,7 @@ export async function calcularPlanillaGeneral(
     const diasValidados = dias.filter((d) => d.extras_validadas);
     const horasExtra50 = diasValidados.reduce((a, d) => a + Number(d.horas_extra_50), 0);
     const horasExtra100 = diasValidados.reduce((a, d) => a + Number(d.horas_extra_100), 0);
+    const pendientes = extrasSinValidar(dias);
     const horasFranco = francos.reduce((a, f) => a + Number(f.horas), 0);
 
     const horasTeoricas = Number(empleado.horas_teoricas_diarias);
@@ -210,6 +247,9 @@ export async function calcularPlanillaGeneral(
       montoExtra100: Math.round(montoExtra100),
       montoFranco: Math.round(montoFranco),
       montoTotal: Math.round(montoNormal + montoExtra50 + montoExtra100 + montoFranco),
+      diasSinValidar: pendientes.dias,
+      horasExtra50SinValidar: un(pendientes.horas50),
+      horasExtra100SinValidar: un(pendientes.horas100),
     };
   });
 }

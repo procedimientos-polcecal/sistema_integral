@@ -20,6 +20,21 @@ interface FilaPlanilla {
   montoExtra100: number;
   montoFranco: number;
   montoTotal: number;
+  diasSinValidar: number;
+  horasExtra50SinValidar: number;
+  horasExtra100SinValidar: number;
+}
+
+/** Lo que quedó afuera de la planilla por falta de validación, sumado. */
+function pendientesDe(filas: FilaPlanilla[]) {
+  return filas.reduce(
+    (a, f) => ({
+      dias: a.dias + f.diasSinValidar,
+      horas50: a.horas50 + f.horasExtra50SinValidar,
+      horas100: a.horas100 + f.horasExtra100SinValidar,
+    }),
+    { dias: 0, horas50: 0, horas100: 0 }
+  );
 }
 
 function firstOfMonth() {
@@ -116,6 +131,7 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
   const [filasPlanilla, setFilasPlanilla] = useState<FilaPlanilla[] | null>(null);
   const [calculandoPlanilla, setCalculandoPlanilla] = useState(false);
   const [errorPlanilla, setErrorPlanilla] = useState(false);
+  const pendientes = pendientesDe(filasPlanilla ?? []);
 
   function qsPlanilla() {
     const qs = new URLSearchParams({ desde: planilla.fechaDesde, hasta: planilla.fechaHasta });
@@ -219,6 +235,16 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
 
         {errorPlanilla && <p className="text-red-600 text-sm mt-2">No se pudo calcular la planilla</p>}
 
+        {/* La planilla suma las extra solo de los días validados. Sin este
+            aviso, un 0 en esas columnas se lee como "no hizo extras". */}
+        {filasPlanilla && pendientes.dias > 0 && (
+          <p className="text-amber-600 text-sm mt-2">
+            Ojo: quedaron {pendientes.horas50.toFixed(1)}hs extra al 50% y {pendientes.horas100.toFixed(1)}hs extra al
+            100% sin validar en {pendientes.dias} día(s) — no están incluidas en esta planilla. Validalas desde la ficha
+            del empleado y volvé a calcularla.
+          </p>
+        )}
+
         {filasPlanilla && (
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-sm">
@@ -246,8 +272,22 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                     <td className="py-2 pr-3">{f.legajo}</td>
                     <td className="py-2 pr-3">{f.modalidadPago === "MENSUAL" ? "Mensual" : "Jornal"}</td>
                     <td className="py-2 pr-3">{f.horasNormales.toFixed(1)}</td>
-                    <td className="py-2 pr-3">{f.horasExtra50.toFixed(1)}</td>
-                    <td className="py-2 pr-3">{f.horasExtra100.toFixed(1)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {f.horasExtra50.toFixed(1)}
+                      {f.horasExtra50SinValidar > 0 && (
+                        <span className="text-amber-600 text-xs ml-1">
+                          +{f.horasExtra50SinValidar.toFixed(1)} sin validar
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {f.horasExtra100.toFixed(1)}
+                      {f.horasExtra100SinValidar > 0 && (
+                        <span className="text-amber-600 text-xs ml-1">
+                          +{f.horasExtra100SinValidar.toFixed(1)} sin validar
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3">{f.horasFranco.toFixed(1)}</td>
                     <td className="py-2 pr-3">{f.horasVacaciones.toFixed(1)}</td>
                     <td className="py-2 pr-3">{f.horasEnfermedad.toFixed(1)}</td>
