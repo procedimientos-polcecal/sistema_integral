@@ -43,6 +43,31 @@ function agrupar<T>(items: T[], clave: (item: T) => string): Map<string, T[]> {
   return map;
 }
 
+/**
+ * Separa las filas según qué columnas traigan, para mandarlas en upserts
+ * distintos.
+ *
+ * Los días cuyas extras ya se validaron viajan sin las tres columnas de
+ * validación, justamente para no pisarlas. Eso deja dos formas de fila
+ * conviviendo, y PostgREST arma UNA sola lista de columnas para todo el lote:
+ * la fila que no trae `extras_validadas` sale como null contra una columna NOT
+ * NULL y la base rechaza el lote entero. Así, cualquier período que incluyera
+ * un día ya validado no se podía recalcular.
+ *
+ * No alcanza con mandar la columna siempre: al haber conflicto, el upsert pisa
+ * todas las columnas de la lista, que es lo que hay que evitar.
+ */
+function porJuegoDeColumnas(filas: Record<string, unknown>[]): Record<string, unknown>[][] {
+  const grupos = new Map<string, Record<string, unknown>[]>();
+  for (const fila of filas) {
+    const clave = Object.keys(fila).sort().join("|");
+    const grupo = grupos.get(clave);
+    if (grupo) grupo.push(fila);
+    else grupos.set(clave, [fila]);
+  }
+  return [...grupos.values()];
+}
+
 export type ConfigLiquidacion = PayrollConfigLike & {
   horasFrancoCompensatorio: number;
   multiplicadorExtra50: number;
@@ -260,11 +285,13 @@ async function recalcularLote(
       }
     }
 
-    for (let j = 0; j < rows.length; j += LOTE_UPSERT) {
-      const { error } = await supabase
-        .from("calculos_diarios")
-        .upsert(rows.slice(j, j + LOTE_UPSERT), { onConflict: "empleado_id,fecha" });
-      if (error) throw new Error(`Recalculando calculos_diarios: ${error.message}`);
+    for (const mismasColumnas of porJuegoDeColumnas(rows)) {
+      for (let j = 0; j < mismasColumnas.length; j += LOTE_UPSERT) {
+        const { error } = await supabase
+          .from("calculos_diarios")
+          .upsert(mismasColumnas.slice(j, j + LOTE_UPSERT), { onConflict: "empleado_id,fecha" });
+        if (error) throw new Error(`Recalculando calculos_diarios: ${error.message}`);
+      }
     }
     filasEscritas += rows.length;
 
