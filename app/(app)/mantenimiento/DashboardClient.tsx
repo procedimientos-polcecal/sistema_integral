@@ -2,14 +2,22 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
-} from "recharts";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
+
+/**
+ * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
+ * pintado de todo el tablero —indicadores, avisos, listas de atrasos—, que no
+ * lo necesitan. `ssr: false` porque miden el contenedor para dibujarse.
+ */
+const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-gray-100" />;
+const OtsPorMes = dynamic(() => import("./GraficosMantenimiento").then((m) => m.OtsPorMes), { ssr: false, loading: esqueleto });
+const EstadoDeEquipos = dynamic(() => import("./GraficosMantenimiento").then((m) => m.EstadoDeEquipos), { ssr: false, loading: esqueleto });
+const Criticidad = dynamic(() => import("./GraficosMantenimiento").then((m) => m.Criticidad), { ssr: false, loading: esqueleto });
+const EjecucionesPorSemana = dynamic(() => import("./GraficosMantenimiento").then((m) => m.EjecucionesPorSemana), { ssr: false, loading: esqueleto });
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -220,37 +228,7 @@ function OrdenesPorMes({ datos, delMes, mes }: {
           <p className="mb-2 text-xs font-medium text-gray-400">
             OTs generadas por mes (últimos 12)
           </p>
-          <ResponsiveContainer width="100%" height={170}>
-            <BarChart data={datos} barSize={16}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-              <XAxis
-                dataKey="mes"
-                tick={{ fontSize: 10, fill: "#94A3B8" }}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "#94A3B8" }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" }}
-                formatter={(v) => [`${v ?? 0} OTs`, ""]}
-                cursor={{ fill: "#F8FAFC" }}
-              />
-              <Bar dataKey="cantidad" radius={[4, 4, 0, 0]} name="OTs">
-                {/* El mes en curso, destacado: es el único que todavía puede
-                    cambiar, y compararlo con los cerrados sin verlo distinto
-                    hace creer que la actividad cayó. */}
-                {datos.map((_, i) => (
-                  <Cell key={i} fill={i === datos.length - 1 ? "#1D4ED8" : "#93C5FD"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <OtsPorMes datos={datos} />
         </div>
       </div>
     </div>
@@ -588,15 +566,7 @@ export default function DashboardClient({
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-44 h-44 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={44} outerRadius={70} paddingAngle={2} dataKey="value" strokeWidth={0}>
-                      {statusData.map((d) => <Cell key={d.key} fill={d.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(val: any, name: any) => [`${val} equipos`, name]}
-                      contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <EstadoDeEquipos datos={statusData} />
               </div>
               <div className="space-y-2 flex-1 min-w-0">
                 {statusData.map((d) => (
@@ -617,16 +587,7 @@ export default function DashboardClient({
           <h2 className="text-sm font-semibold text-gray-700 mb-4">
             {sectorFilter !== "TODOS" ? `Criticidad — ${sectorFilter}` : plantFilter !== "TODAS" ? `Criticidad por sector — ${plantFilter}` : "Criticidad por empresa"}
           </h2>
-          <ResponsiveContainer width="100%" height={176}>
-            <BarChart data={criticalityData} barSize={18} barCategoryGap="35%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-              <XAxis dataKey="criticidad" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" }} cursor={{ fill: "#F8FAFC" }} />
-              {criticalityKeys.length > 1 && <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />}
-              {criticalityKeys.map((key) => <Bar key={key} dataKey={key} fill={criticalityColors[key] ?? "#94A3B8"} radius={[4,4,0,0]} />)}
-            </BarChart>
-          </ResponsiveContainer>
+          <Criticidad datos={criticalityData} claves={criticalityKeys} colores={criticalityColors} />
         </div>
       </div>
 
@@ -670,15 +631,7 @@ export default function DashboardClient({
           <h2 className="text-sm font-semibold text-gray-700 mb-4">
             Ejecuciones por semana (últimas 8 semanas)
           </h2>
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={executionTrend} barSize={28}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-              <XAxis dataKey="semana" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" }} formatter={(v: any) => [`${v} ejecuciones`]} cursor={{ fill: "#F8FAFC" }} />
-              <Bar dataKey="cantidad" fill="#3B82F6" radius={[4,4,0,0]} name="Ejecuciones" />
-            </BarChart>
-          </ResponsiveContainer>
+          <EjecucionesPorSemana datos={executionTrend} />
         </div>
       )}
 
