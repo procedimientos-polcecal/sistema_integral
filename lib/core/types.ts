@@ -1,5 +1,5 @@
 export type Rol = "admin_sistema" | "admin" | "encargado" | "operario";
-export type Modulo = "rrhh" | "mantenimiento" | "remises" | "compras";
+export type Modulo = "rrhh" | "mantenimiento" | "remises" | "compras" | "inventario";
 export type NivelAcceso = "lectura" | "edicion" | "admin";
 
 export interface Empresa {

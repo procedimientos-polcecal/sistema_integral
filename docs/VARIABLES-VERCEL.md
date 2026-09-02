@@ -57,6 +57,9 @@ funcionando y se puede importar a mano.
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
+| `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
+| `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
+| `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
