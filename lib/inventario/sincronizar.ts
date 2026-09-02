@@ -202,7 +202,11 @@ export async function sincronizarInventario(): Promise<Resultado> {
       // El pedido que trajo este material, cuando el RI existe. Null si la
       // planilla nombró un número que no está: no se enlaza al que se parece.
       requerimiento_id: m.ri !== null ? requerimientos.get(m.ri) ?? null : null,
-      origen: "planilla",
+      // `origen` NO viaja, a propósito. En un upsert las columnas que no se
+      // mandan no entran en el `SET`, así que un movimiento que se cargó en la
+      // app y después se espejó al kardex conserva su 'app' cuando la
+      // sincronización vuelve a leer esa fila. Las filas nuevas toman el
+      // default, que es 'planilla'.
       sheets_fila: m.sheets_fila,
     }];
   });
