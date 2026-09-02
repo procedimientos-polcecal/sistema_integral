@@ -117,6 +117,15 @@ export interface ArticuloLeido {
   stock_inicial: number;
   stock_actual: number;
   stock_seguridad: number;
+  /**
+   * Lo que decía la celda, sin interpretar. **Null cuando estaba vacía.**
+   *
+   * `stock_actual` cae a cero para poder operar con él, pero cero y "nadie lo
+   * contó" no son lo mismo: la pantalla de repuestos de Mantenimiento los
+   * distingue, y mostrar un vacío como cero manda a comprar algo que puede
+   * estar.
+   */
+  stock_planilla: number | null;
   sheets_fila: number;
 }
 
@@ -146,11 +155,13 @@ export function filaDeArticulo(
     ubicacion: campo(celda("ubicacion")),
     proveedores_ref: campo(celda("proveedoresRef")),
     marcas: campo(celda("marcas")),
-    // Acá sí se cae a cero: son columnas de la fila de un artículo que existe, y
-    // un artículo sin stock cargado tiene cero de stock.
+    // `stock_actual` cae a cero porque el RPC hace aritmética con él, pero lo
+    // que decía la celda se conserva al lado: es la única forma de volver a
+    // distinguir "no hay" de "nadie lo contó".
     stock_inicial: cantidad(celda("stockInicial")) ?? 0,
     stock_actual: cantidad(celda("stockActual")) ?? 0,
     stock_seguridad: cantidad(celda("stockSeguridad")) ?? 0,
+    stock_planilla: cantidad(celda("stockActual")),
     sheets_fila: numeroFila,
   };
 }

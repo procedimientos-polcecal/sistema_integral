@@ -89,6 +89,7 @@ describe("una fila del listado", () => {
       stock_inicial: 100,
       stock_actual: 42,
       stock_seguridad: 10,
+      stock_planilla: 42,
       sheets_fila: 5,
     });
   });
@@ -103,10 +104,21 @@ describe("una fila del listado", () => {
     expect(filaDeArticulo(["00470", ""], idxListado, 3)).toBeNull();
   });
 
-  /** En una fila que ya es un articulo, un stock vacio si es cero. */
-  it("un articulo sin stock cargado tiene cero", () => {
+  /**
+   * `stock_actual` cae a cero para poder operar, pero `stock_planilla` guarda
+   * null: cero es "no hay" y vacio es "nadie lo conto", y la pantalla de
+   * repuestos de Mantenimiento los distingue.
+   */
+  it("un stock vacio es cero para operar y null para saber si lo contaron", () => {
     const a = filaDeArticulo(["00471", "ARANDELA", "", "", "", "", "", ""], idxListado, 9);
     expect(a).toMatchObject({ stock_inicial: 0, stock_actual: 0, stock_seguridad: 0 });
+    expect(a?.stock_planilla).toBeNull();
+  });
+
+  it("un cero escrito en la planilla si queda como cero, no como null", () => {
+    const a = filaDeArticulo(["00472", "BULON", "", "", "", "", 0, 5], idxListado, 10);
+    expect(a?.stock_actual).toBe(0);
+    expect(a?.stock_planilla).toBe(0);
   });
 });
 

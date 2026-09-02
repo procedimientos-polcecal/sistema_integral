@@ -58,6 +58,16 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
   // ofrece elegir solo a esa persona.
   const esAsignado = requerimiento.compra_asignada_a === user.id;
 
+  // Lo que el pañol registró contra este RI. Se consulta siempre: si Inventario
+  // todavía no está en marcha la lista viene vacía y la sección no se muestra,
+  // que es lo mismo que no haber preguntado.
+  const { data: entradasAlPanol } = await supabase
+    .from("inventario_movimientos")
+    .select("id, codigo, cantidad, fecha, inventario_articulos(descripcion)")
+    .eq("requerimiento_id", id)
+    .eq("tipo", "entrada")
+    .order("fecha", { ascending: false });
+
   return (
     <RequerimientoDetalle
       dolar={dolar}
@@ -70,6 +80,21 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
       aprobadores={aprobadores}
+      entradasAlPanol={(entradasAlPanol ?? []).map((e) => ({
+        id: e.id as string,
+        codigo: e.codigo as string | null,
+        // El embed llega como objeto o como arreglo según cómo esté declarada
+        // la relación, igual que en `empresaDelSector`. Se aceptan las dos.
+        descripcion: descripcionDelArticulo(e.inventario_articulos),
+        cantidad: Number(e.cantidad),
+        fecha: e.fecha as string | null,
+      }))}
     />
   );
+}
+
+/** La descripción del artículo, venga el embed como objeto o como arreglo. */
+function descripcionDelArticulo(embed: unknown): string | null {
+  const uno = Array.isArray(embed) ? embed[0] : embed;
+  return (uno as { descripcion?: string } | null)?.descripcion ?? null;
 }

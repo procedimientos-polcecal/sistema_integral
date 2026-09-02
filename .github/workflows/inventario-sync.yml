@@ -1,0 +1,78 @@
+# Sincroniza Inventario con la planilla del almacén cada 15 minutos.
+#
+# El cron vive acá y no en vercel.json por lo mismo que el de Compras: el plan
+# Hobby de Vercel sólo admite crons diarios, y poner una frecuencia mayor no
+# degrada el cron, hace fallar el deploy entero. En vercel.json queda uno diario
+# como red por si Actions falla.
+#
+# El endpoint se protege solo: exige el mismo CRON_SECRET, y sin él responde 503
+# en vez de quedar abierto.
+#
+# Acá el reloj pesa más que en los otros módulos: Mantenimiento consulta el stock
+# de un repuesto contra la base y no contra la planilla en vivo, así que sin esto
+# ese número queda tan viejo como el último botón apretado.
+
+name: Sincronizar Inventario
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  # Para poder correrlo a mano desde la pestaña Actions cuando haga falta.
+  workflow_dispatch:
+
+concurrency:
+  # Si una corrida se demora, la siguiente espera en vez de pisarla: son ~6.900
+  # filas de upsert y dos corridas simultáneas se estorban sin ganar nada.
+  group: inventario-sync
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que estén las variables
+        # Por `env:` y no interpolados en el comando, igual que en backup.yml:
+        # Interpolar un secreto con la sintaxis de expresiones de Actions mete
+        # su VALOR dentro del script que corre el shell, así que un secreto con
+        # una comilla o un backtick rompe el test — o se ejecuta. Actions
+        # enmascara el valor en el log, no en la línea de comando.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # Sin esto, curl falla con "URL rejected: No host part in the URL" y
+          # hay que leer el log entero para entender que faltaba una variable.
+          # Compras estuvo días fallando así, en silencio.
+          faltan=""
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir la sincronización
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/inventario-sync")
+
+          cat respuesta.json
+
+          # 207 es "algunas salieron y otras no": se registra en el log y en la
+          # pantalla, pero no tira abajo la corrida — lo que sí anduvo, anduvo.
+          if [ "$codigo" = "200" ] || [ "$codigo" = "207" ]; then
+            echo "::notice::Sincronización terminada con $codigo"
+          else
+            echo "::error::La sincronización devolvió $codigo"
+            exit 1
+          fi

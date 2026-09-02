@@ -98,8 +98,8 @@ export default function RepuestosOTModal({
 
         {inventarioConectado === false && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            El inventario del pañol no está conectado, así que no se puede decir si hay stock. Los
-            repuestos se cargan igual.
+            El inventario del pañol todavía no se importó, así que no se puede decir
+            si hay stock. Los repuestos se cargan igual.
           </p>
         )}
 
@@ -166,6 +166,7 @@ function Agregar({
   const [codigo, setCodigo] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [sugerencias, setSugerencias] = useState<Insumo[]>([]);
+  const [avisoBusqueda, setAvisoBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   // Se busca mientras se escribe, pero recién cuando hay letras suficientes:
@@ -177,9 +178,18 @@ function Agregar({
     if (!vigente()) return;
 
     const res = await fetch(`/api/mantenimiento/inventario?q=${encodeURIComponent(nombre.trim())}`);
-    if (!res.ok) return;
-    const body = await res.json();
+    const body = await res.json().catch(() => ({}));
     if (!vigente()) return;
+
+    // Antes acá había un `if (!res.ok) return;` y después `setSugerencias`: si
+    // el inventario no estaba disponible, escribías y no aparecía nada, sin
+    // forma de distinguir "no hay ningún repuesto así" de "no se pudo
+    // consultar". Un buscador que calla las dos cosas igual no se puede usar.
+    if (!res.ok) { setAvisoBusqueda("No se pudo buscar en el inventario."); return; }
+
+    setAvisoBusqueda(
+      body.error ?? (body.cargado === false ? "El inventario todavía no se importó." : "")
+    );
     setSugerencias(body.data ?? []);
   }, [nombre]);
 
@@ -211,6 +221,9 @@ function Agregar({
           placeholder="Rodamiento 6206, correa B-75…"
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
+        {avisoBusqueda && (
+          <p className="mt-1 text-xs text-amber-700">{avisoBusqueda}</p>
+        )}
         {sugerencias.length > 0 && (
           <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
             {sugerencias.map((s, i) => (

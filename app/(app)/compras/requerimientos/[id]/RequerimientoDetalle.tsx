@@ -14,12 +14,15 @@ import Comparativa from "./Comparativa";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
+import type { EntradaAlPanol } from "@/lib/inventario/types";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar,
+  esAsignado, aprobadores, dolar, entradasAlPanol = [],
 }: {
   requerimiento: RequerimientoConRelaciones;
+  /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
+  entradasAlPanol?: EntradaAlPanol[];
   historial: HistorialItem[];
   cotizaciones: Cotizacion[];
   proveedores: ProveedorElegible[];
@@ -401,6 +404,57 @@ export default function RequerimientoDetalle({
               )}
             </dl>
           </section>
+
+          {/* ── Lo que entró al pañol ─────────────────────────
+              Una entrada al pañol con este N° de RI es la recepción de este
+              pedido. El sistema lo informa y ofrece marcarlo; **no lo decide
+              solo**: una entrega parcial cerraría un pedido entero, y si esto
+              está completo lo sabe quien lo recibió. Mismo criterio que los
+              proveedores sin reconocer y las ubicaciones sin enlazar. */}
+          {entradasAlPanol.length > 0 && (
+            <section className="rounded-xl border border-slate-200 bg-white p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Entró al pañol
+              </h2>
+              <ul className="space-y-2">
+                {entradasAlPanol.map((e) => (
+                  <li key={e.id} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="text-slate-700">
+                      <span className="font-mono text-xs text-slate-500">{e.codigo}</span>{" "}
+                      {e.descripcion ?? ""}
+                    </span>
+                    <span className="shrink-0 text-slate-500">
+                      {e.cantidad} · {e.fecha ? fecha(e.fecha) : "sin fecha"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {r.estado_compra !== "RECIBIDO" ? (
+                puedeEditar && (
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <p className="text-xs text-slate-500">
+                      El pañol registró la entrada de este material. Si el pedido
+                      está completo, marcalo como recibido — puede haber venido
+                      sólo una parte, así que lo decidís vos.
+                    </p>
+                    <button
+                      onClick={() => guardar({ estado_compra: "RECIBIDO" })}
+                      disabled={guardando}
+                      className="mt-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                    >
+                      {guardando ? "Guardando…" : "Marcar como recibido"}
+                    </button>
+                  </div>
+                )
+              ) : (
+                <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-green-700">
+                  Marcado como recibido
+                  {r.fecha_recepcion ? ` el ${fecha(r.fecha_recepcion)}` : ""}.
+                </p>
+              )}
+            </section>
+          )}
 
           {/* Historial */}
           <section className="rounded-xl border border-slate-200 bg-white p-5">

@@ -128,6 +128,22 @@ export async function sincronizarInventario(): Promise<Resultado> {
     if (mov) movimientos.push(mov);
   }
 
+  // Los RI que existen, para enlazar la entrada con el pedido que la trajo. Se
+  // filtra por los que la planilla nombró: son decenas, no los 1.900.
+  const riDeLaPlanilla = [...new Set(movimientos.map((m) => m.ri).filter((r): r is number => r !== null))];
+  const requerimientos = new Map<number, string>();
+  if (riDeLaPlanilla.length > 0) {
+    // De a 200 por vez: un `.in()` con mil valores arma una URL que PostgREST
+    // rechaza con un 400 sin decir por qué.
+    for (let i = 0; i < riDeLaPlanilla.length; i += 200) {
+      const { data } = await admin
+        .from("compras_requerimientos")
+        .select("id, nro_ri")
+        .in("nro_ri", riDeLaPlanilla.slice(i, i + 200));
+      for (const r of data ?? []) requerimientos.set(r.nro_ri as number, r.id as string);
+    }
+  }
+
   // Los catálogos del núcleo, sólo para leer.
   const [porCodigo, sectores, empleados, proveedores] = await Promise.all([
     articulosPorCodigo(admin),
@@ -183,6 +199,9 @@ export async function sincronizarInventario(): Promise<Resultado> {
       proveedor_raw: m.proveedor_raw,
       proveedor_id,
       ri: m.ri,
+      // El pedido que trajo este material, cuando el RI existe. Null si la
+      // planilla nombró un número que no está: no se enlaza al que se parece.
+      requerimiento_id: m.ri !== null ? requerimientos.get(m.ri) ?? null : null,
       origen: "planilla",
       sheets_fila: m.sheets_fila,
     }];
@@ -211,11 +230,14 @@ export async function sincronizarInventario(): Promise<Resultado> {
     modulo: "inventario", recurso: "movimientos", ok: true, filas: guardadosMovimientos,
   });
 
+  const riSinRequerimiento = riDeLaPlanilla.filter((r) => !requerimientos.has(r));
+
   return logra({
     articulos: guardadosArticulos,
     articulos_repetidos: listadoRepetidos,
     movimientos: guardadosMovimientos,
     movimientos_sin_articulo: sinArticulo,
+    ri_sin_requerimiento: riSinRequerimiento.length,
     sin_reconocer: sinReconocer.resumen(),
   });
 }
