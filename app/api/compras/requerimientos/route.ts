@@ -57,6 +57,10 @@ export async function POST(request: Request) {
     paga_ambas: body.paga_ambas === true,
     solicitante_id: user.id,
     solicitante_nombre: `${usuario.nombre} ${usuario.apellido}`.trim(),
+    // El mail de la sesión, guardado como texto. `solicitante_id` es
+    // `on delete set null`: si mañana se da de baja a esta persona, el pedido
+    // queda sin autor. Esta copia sobrevive a eso.
+    solicitante_email: user.email ?? null,
     estado_aprobacion: "PENDIENTE" as const,
     estado_compra: "SIN_INICIAR" as const,
     origen: "app",
@@ -81,7 +85,27 @@ export async function POST(request: Request) {
       .select("id, nro_ri")
       .single();
 
-    if (!error) return NextResponse.json(data, { status: 201 });
+    if (!error) {
+      // La creación queda en el historial, que es donde se mira cuando hay que
+      // reconstruir qué pasó con un pedido. Va con el cliente admin porque
+      // insertar en `compras_historial` pide acceso al módulo, y cargar un
+      // pedido no lo pide: son nueve áreas las que piden materiales.
+      //
+      // Si esto falla no se voltea el alta: el registro de quién pidió ya
+      // quedó en el requerimiento, y perder el alta por no poder escribir el
+      // renglón del historial sería peor que perder el renglón.
+      const { error: errorHistorial } = await admin.from("compras_historial").insert({
+        requerimiento_id: data.id,
+        campo: "creacion",
+        usuario_id: user.id,
+        usuario_nombre: registro.solicitante_nombre || null,
+        nota: registro.solicitante_email,
+      });
+      if (errorHistorial) {
+        console.error(`RI ${data.nro_ri}: no se pudo asentar la creación en el historial`, errorHistorial);
+      }
+      return NextResponse.json(data, { status: 201 });
+    }
 
     // 23505 = otro usuario tomó ese número justo antes; se reintenta.
     if (error.code !== "23505") {

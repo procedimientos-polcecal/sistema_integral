@@ -88,6 +88,11 @@ export interface Requerimiento {
 
   solicitante_id: string | null;
   solicitante_nombre: string | null;
+  /**
+   * Mail de quien lo cargó, copiado al crearlo. Nulo en los que vinieron de la
+   * planilla: quién pidió vive en las respuestas del formulario, no ahí.
+   */
+  solicitante_email: string | null;
 
   estado_aprobacion: EstadoAprobacion;
   aprobador: string | null;

@@ -412,9 +412,15 @@ export default function RequerimientoDetalle({
                 {historial.map((h) => (
                   <li key={h.id} className="border-l-2 border-slate-200 pl-3 text-sm">
                     <div className="text-slate-900">
-                      {h.campo === "estado_aprobacion" ? "Aprobación" : h.campo === "estado_compra" ? "Compra" : h.campo}
-                      {": "}
-                      <strong>{h.valor_nuevo}</strong>
+                      {h.campo === "estado_aprobacion"
+                        ? "Aprobación"
+                        : h.campo === "estado_compra"
+                          ? "Compra"
+                          : h.campo === "creacion"
+                            ? "Creado"
+                            : h.campo}
+                      {/* La creación no cambia un valor: pasa a existir. */}
+                      {h.valor_nuevo && <>{": "}<strong>{h.valor_nuevo}</strong></>}
                     </div>
                     <div className="text-xs text-slate-400">
                       {fechaHora(h.created_at)}{h.usuario_nombre ? ` · ${h.usuario_nombre}` : ""}
