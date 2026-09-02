@@ -39,12 +39,29 @@ cada llamada. Dos formas de conseguirlo:
 - **Desde la cuenta**: en Odoo Online, https://www.odoo.com/my/databases lista las
   bases por nombre; en Odoo.sh, el build de producción del proyecto lo muestra.
 
-Y para verificar un candidato sin credenciales ni riesgo, `db_exist` contesta un
-booleano:
+Para **verificar** un candidato, el que sirve es `authenticate`, no `db_exist`.
+
+`db_exist` parece la herramienta obvia y no lo es: en esta instancia `db.list`
+está bloqueado (`list_db` apagado) y en ese estado `db_exist` contesta `false`
+para cualquier nombre, incluido el correcto. Diez nombres dieron `false` sin que
+eso probara nada.
+
+`authenticate` en cambio distingue tres estados, y el primero lo contesta
+PostgreSQL, así que no se puede confundir:
+
+| Respuesta | Qué significa |
+|---|---|
+| `database "X" does not exist` | La base no es ésa |
+| `"result": false` | **La base existe**, las credenciales están mal |
+| `"result": <número>` | Base y credenciales bien; ese número es el `uid` |
 
 ```bash
-curl -s -X POST 'https://polcecal.odoo.com/jsonrpc' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"call","params":{"service":"db","method":"db_exist","args":["NOMBRE"]},"id":1}'
+curl -s -X POST 'https://polcecal.odoo.com/jsonrpc' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"call","params":{"service":"common","method":"authenticate","args":["NOMBRE","EMAIL","API_KEY",{}]},"id":1}'
 ```
+
+Ya se descartaron, a nivel PostgreSQL: `polcecal`, `polysan`, `polcecalsa`,
+`polcecal-sa`, `polcecalpolysan`, `polcecal-main`, `polcecal-master`, `polysansa`,
+`grupopolcecal`, `polcecal-prod`.
 
 ## La regla: quién manda en qué
 
