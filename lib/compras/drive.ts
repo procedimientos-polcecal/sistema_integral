@@ -17,8 +17,8 @@ import {
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 // La regla de en qué fila escribir vive en el núcleo: la usan las cuatro
 // planillas y tenerla dos veces es cómo se corrige en una sola.
-import { filaSiguienteSegunColumnaA } from "@/lib/core/sheets";
-export { filaSiguienteSegunColumnaA };
+import { filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+export { filaSiguienteSegunLaColumna };
 export { urlDePlanilla } from "@/lib/compras/vincular";
 
 export interface ArchivoComparativa {
@@ -125,7 +125,7 @@ async function proximaFilaLibre(token: string, fileId: string, pestana: string):
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const columnaA = ((await res.json()).values ?? []) as string[][];
-  return filaSiguienteSegunColumnaA(columnaA);
+  return filaSiguienteSegunLaColumna(columnaA);
 }
 
 /**

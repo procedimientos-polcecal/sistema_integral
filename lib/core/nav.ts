@@ -130,6 +130,19 @@ export const NAV: NavItem[] = [
       { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },
     ],
   },
+  {
+    label: "Inventario",
+    href: "/inventario",
+    modulo: "inventario",
+    // El stock primero: es la pantalla que se abre en el celular parado en el
+    // pañol, y la que reemplaza abrir el Sheets para ver si hay algo.
+    children: [
+      { label: "Stock", href: "/inventario", modulo: "inventario" },
+      { label: "Cargar movimiento", href: "/inventario/movimientos/nuevo", modulo: "inventario" },
+      { label: "Movimientos", href: "/inventario/movimientos", modulo: "inventario" },
+      { label: "Artículos", href: "/inventario/articulos", modulo: "inventario", soloAdmin: true },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.

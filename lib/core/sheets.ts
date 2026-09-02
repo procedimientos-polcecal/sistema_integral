@@ -90,18 +90,23 @@ export async function escribirCeldas(
 
 /** Agrega una fila al final de una pestaña y devuelve en qué fila quedó. */
 /**
- * En qué fila escribir, según la columna A.
+ * En qué fila escribir, según la columna que dice si una fila tiene datos.
  *
- * Va aparte de la llamada a Google para poder probarla. Se mira la columna A y
- * no la hoja entera porque es la que dice si una fila tiene datos: el formato,
- * las fórmulas y los desplegables llegan mucho más abajo que lo cargado.
+ * Va aparte de la llamada a Google para poder probarla. Se mira **una** columna
+ * y no la hoja entera porque el formato, las fórmulas y los desplegables llegan
+ * mucho más abajo que lo cargado.
+ *
+ * Cuál es esa columna depende de la planilla, y no siempre es la A: en el kardex
+ * del almacén la A es el N° de requerimiento y viene vacía en la mayoría de las
+ * filas, así que ahí la que manda es la B, el código del artículo. Elegir mal
+ * deja la fila nueva en medio de los datos.
  *
  * Una fila vacía en el medio no corta la cuenta: se busca la última con algo,
  * no la primera sin nada.
  */
-export function filaSiguienteSegunColumnaA(columnaA: string[][]): number {
-  for (let i = columnaA.length - 1; i >= 0; i--) {
-    if (String(columnaA[i]?.[0] ?? "").trim()) return i + 2;
+export function filaSiguienteSegunLaColumna(columna: string[][]): number {
+  for (let i = columna.length - 1; i >= 0; i--) {
+    if (String(columna[i]?.[0] ?? "").trim()) return i + 2;
   }
   // Ni encabezado: se empieza en la 2 y la 1 queda para los títulos.
   return 2;
@@ -142,7 +147,7 @@ export async function agregarFila(
   if (!lectura.ok) {
     throw new Error(mensajeDeGoogle(lectura.status, await lectura.text(), cuentaDeServicio()));
   }
-  const fila = filaSiguienteSegunColumnaA(((await lectura.json()).values ?? []) as string[][]);
+  const fila = filaSiguienteSegunLaColumna(((await lectura.json()).values ?? []) as string[][]);
 
   // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
   // más chico, Google rechaza la escritura entera.
