@@ -128,12 +128,21 @@ on conflict (nombre) do nothing;
 -- pondría el consumo en el sector equivocado la mitad de las veces. Los otros
 -- 14 no son sectores. Todos se pueden enlazar a mano desde la pantalla de la
 -- lista, que es donde alguien que los conoce puede decidirlo.
+--
+-- `(array_agg(s.id))[1]` y no `min(s.id)`: **Postgres no tiene `min()` para
+-- uuid**. El tipo sabe ordenarse —un índice btree funciona— pero no hay
+-- agregado min/max definido para él, así que `min(id)` falla con "function
+-- min(uuid) does not exist". Y como el editor de Supabase corre el script
+-- entero en una transacción, ese error revierte TODO: la primera vez que se
+-- intentó correr esta migración no quedó ni una tabla, y desde afuera se veía
+-- igual que si nunca se hubiera ejecutado. El `having count(*) = 1` garantiza
+-- que el array tiene un solo elemento, así que tomar el primero no elige nada.
 update inventario_destinos d
    set sector_id = u.id
   from (
-    select lower(nombre) as clave, min(id) as id
-      from sectores
-     group by lower(nombre)
+    select lower(s.nombre) as clave, (array_agg(s.id))[1] as id
+      from sectores s
+     group by lower(s.nombre)
     having count(*) = 1
   ) u
  where u.clave = lower(d.nombre)

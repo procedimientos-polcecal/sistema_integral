@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Cuatro trampas que esta base ya pisó, dos de ellas **dos veces**:
+Cinco trampas que esta base ya pisó, dos de ellas **dos veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -64,6 +64,20 @@ lo mismo sin el problema: en Postgres los nulos no chocan entre sí. Pasó en la
 `empleados`, `proveedores` y `usuarios` no son de nadie en particular. Una
 migración de un módulo no los borra ni los rehace: los lee. Ver
 `032_mantenimiento_proveedores.sql`.
+
+**Un error en cualquier línea revierte el archivo entero.** El editor de
+Supabase corre cada script dentro de una transacción, así que una migración que
+falla en la línea 130 no deja ni las tablas que creó en la 40. Desde afuera se
+ve **exactamente igual que si nunca se hubiera ejecutado** — la app dice "no
+existe la tabla" y uno busca el problema en el lugar equivocado. Dos
+consecuencias prácticas: escribir las migraciones para poder correrlas de nuevo
+(`if not exists` en todo, y `drop trigger if exists` antes de `create trigger`,
+que no acepta `if not exists`), y leer el mensaje rojo del editor antes de dar
+por hecho que corrió. Pasó con la `20260903090920`: `min(id)` sobre una columna
+uuid, y **Postgres no tiene `min()` para uuid** —el tipo sabe ordenarse pero no
+hay agregado definido—, así que las dos tablas y los 85 registros del sembrado
+se revirtieron sin dejar rastro. Para elegir un valor de un grupo de uno,
+`(array_agg(id))[1]`.
 
 **Enlazar al que se le parece es peor que dejar en null.** Cuando una planilla
 nombra algo en texto libre y no se lo puede reconocer con certeza, el enlace

@@ -71,5 +71,5 @@ fs.writeFileSync(
 );
 
 console.log(destino);
-console.log("\nAntes de escribirla, mirá las cuatro trampas de");
+console.log("\nAntes de escribirla, mirá las cinco trampas de");
 console.log("supabase/migrations/README.md — dos de ellas ya pasaron dos veces.");

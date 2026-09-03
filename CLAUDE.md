@@ -55,7 +55,7 @@ tabla de control. Un agente puede escribir la migración y, si es sólo DML,
 aplicar el equivalente por PostgREST — pero **no puede correr DDL**. Cuando una
 tarea depende de una tabla o columna nueva, hay que decirlo y quedar a la espera.
 
-Antes de escribir una, leer las cuatro trampas del
+Antes de escribir una, leer las cinco trampas del
 [README de migraciones](supabase/migrations/README.md). Dos de ellas ya pasaron
 **dos veces**:
 
