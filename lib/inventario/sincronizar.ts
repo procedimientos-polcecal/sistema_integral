@@ -54,7 +54,34 @@ const PLANILLA = () => process.env.GOOGLE_SHEETS_INVENTARIO_ID ?? "";
 const TAB_LISTADO = () => process.env.GOOGLE_SHEETS_INVENTARIO_TAB ?? "Listado articulos GRAL";
 const TAB_KARDEX = () => process.env.GOOGLE_SHEETS_INVENTARIO_TAB_MOV ?? "Entradas  Salidas";
 
+/**
+ * Traer de la planilla, y que un fallo diga qué pasó.
+ *
+ * Adentro casi todo devuelve `falla(...)` con un motivo, pero no todo: los
+ * `traerTodo` **lanzan**, y una excepción que sube hasta la ruta se convierte
+ * en un 500 sin cuerpo. La pantalla no encuentra `error` y muestra su texto de
+ * reserva, "No se pudo sincronizar", que no distingue una tabla que falta de
+ * Google caído de un permiso mal dado.
+ *
+ * Pasó de verdad: con la migración de la lista del pañol sin correr, la
+ * sincronización moría al leer `inventario_solicitantes` y lo único que se veía
+ * era esa frase. Un diagnóstico que no se distingue de otro no es un
+ * diagnóstico — la misma regla que ya aplica al espejo cuando Google rechaza
+ * una escritura.
+ */
 export async function sincronizarInventario(): Promise<Resultado> {
+  try {
+    return await traerDeLaPlanilla();
+  } catch (e) {
+    const detalle = mensaje(e);
+    await registrarSincronizacion({
+      modulo: "inventario", recurso: "movimientos", ok: false, error: detalle,
+    });
+    return falla(500, detalle);
+  }
+}
+
+async function traerDeLaPlanilla(): Promise<Resultado> {
   const planilla = PLANILLA();
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_INVENTARIO_ID");
 
