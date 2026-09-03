@@ -19,18 +19,18 @@ export default async function NuevoMovimientoPage({
   if (!nivel) redirect("/");
   if (nivel === "lectura") redirect("/inventario");
 
-  // Los catálogos son del núcleo: se eligen de la lista en vez de escribirse.
-  // Escribirlos cada vez es cómo "Candia" y "CANDIA" terminan siendo dos.
-  const [sectores, empleados, proveedores] = await Promise.all([
-    traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
-      supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre").range(desde, hasta)
+  // Quién retira y a dónde va salen de la lista del pañol y no de `empleados` y
+  // `sectores`: es la validación que la planilla tiene puesta en las columnas F
+  // y J, e incluye contratistas y oficios que los catálogos del núcleo no
+  // tienen ni deberían tener. Ver `lib/inventario/catalogos.ts`.
+  const [solicitantes, destinos, proveedores] = await Promise.all([
+    traerTodo<{ id: string; nombre: string; destino_id: string | null }>((desde, hasta) =>
+      supabase.from("inventario_solicitantes").select("id, nombre, destino_id")
+        .eq("activo", true).order("nombre").range(desde, hasta)
     ),
-    // El `sector_id` del empleado es de donde sale "para qué sector": quien
-    // retira ya está asignado a uno y no hay por qué preguntarlo dos veces.
-    traerTodo<{ id: string; nombre: string; apellido: string | null; sector_id: string | null }>(
-      (desde, hasta) =>
-        supabase.from("empleados").select("id, nombre, apellido, sector_id")
-          .eq("activo", true).order("apellido").range(desde, hasta)
+    traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
+      supabase.from("inventario_destinos").select("id, nombre")
+        .eq("activo", true).order("nombre").range(desde, hasta)
     ),
     traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
       supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre").range(desde, hasta)
@@ -53,15 +53,12 @@ export default async function NuevoMovimientoPage({
   return (
     <NuevoMovimientoClient
       articuloInicial={articulo}
-      sectores={sectores}
-      empleados={empleados.map((e) => ({
-        id: e.id,
-        // "APELLIDO, Nombre" es como escribe la planilla, y es lo que va a la
-        // columna F. Escribirlo de otra forma haría que la sincronización no
-        // reconozca al empleado que la app sí conocía.
-        nombre: [e.apellido, e.nombre].filter(Boolean).join(", "),
-        sectorId: e.sector_id,
+      solicitantes={solicitantes.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        destinoId: s.destino_id,
       }))}
+      destinos={destinos}
       proveedores={proveedores}
     />
   );

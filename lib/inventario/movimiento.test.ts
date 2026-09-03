@@ -5,7 +5,7 @@ const completo = {
   articuloId: "a-1",
   tipo: "salida" as const,
   cantidad: "3",
-  empleadoId: "e-1",
+  solicitanteId: "e-1",
 };
 
 describe("que le falta a un movimiento para poder registrarse", () => {
@@ -23,14 +23,14 @@ describe("que le falta a un movimiento para poder registrarse", () => {
    * desde la app seria empeorar un documento que hoy esta completo.
    */
   it("una entrada y una salida piden quien lo pidio", () => {
-    expect(loQueFalta({ ...completo, empleadoId: "" })).toContain("Falta quién lo pidió.");
-    expect(loQueFalta({ ...completo, tipo: "entrada", empleadoId: null }))
+    expect(loQueFalta({ ...completo, solicitanteId: "" })).toContain("Falta quién lo pidió.");
+    expect(loQueFalta({ ...completo, tipo: "entrada", solicitanteId: null }))
       .toContain("Falta quién lo pidió.");
   });
 
   /** Un ajuste no lo pide nadie: es alguien contando de nuevo. */
   it("un ajuste no pide quien lo pidio", () => {
-    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", empleadoId: "" })).toEqual([]);
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", solicitanteId: "" })).toEqual([]);
   });
 
   /** Vacio no es cero: "no puso nada" y "no hay" son cosas distintas. */
@@ -39,7 +39,7 @@ describe("que le falta a un movimiento para poder registrarse", () => {
     expect(loQueFalta({ ...completo, cantidad: null })).toContain("Poné la cantidad.");
     expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "" }))
       .toContain("Poné cuánto hay en realidad.");
-    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "0", empleadoId: "" })).toEqual([]);
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "0", solicitanteId: "" })).toEqual([]);
   });
 
   it("una salida de cero o negativa no es una salida", () => {
@@ -59,30 +59,30 @@ describe("que le falta a un movimiento para poder registrarse", () => {
   });
 
   it("junta todo lo que falta, no lo primero", () => {
-    expect(loQueFalta({ articuloId: "", tipo: "salida", cantidad: "", empleadoId: "" }))
+    expect(loQueFalta({ articuloId: "", tipo: "salida", cantidad: "", solicitanteId: "" }))
       .toHaveLength(3);
   });
 });
 
-describe("de donde sale el sector", () => {
-  it("sin elegir nada, el del empleado", () => {
+describe("de donde sale el destino", () => {
+  it("sin elegir nada, el de quien retira", () => {
     expect(sectorDelMovimiento("", "s-mant")).toBe("s-mant");
     expect(sectorDelMovimiento(null, "s-mant")).toBe("s-mant");
   });
 
-  /** Todo el punto de poder elegirlo: el material lo retira Mantenimiento
-   * para una maquina de Filler 2, y eso solo lo sabe quien esta ahi. */
-  it("lo elegido a mano pisa al del empleado", () => {
+  /** Todo el punto de poder elegirlo: el material lo retira el mecanico para
+   * una maquina de Filler 2, y eso solo lo sabe quien esta ahi. */
+  it("lo elegido a mano pisa al de quien retira", () => {
     expect(sectorDelMovimiento("s-filler2", "s-mant")).toBe("s-filler2");
   });
 
-  it("sin empleado y sin eleccion queda en null, no en un parecido", () => {
+  it("sin quien retira y sin eleccion queda en null, no en un parecido", () => {
     expect(sectorDelMovimiento("", null)).toBeNull();
     expect(sectorDelMovimiento(null, undefined)).toBeNull();
     expect(sectorDelMovimiento("  ", "  ")).toBeNull();
   });
 
-  it("un empleado sin sector no impide elegirlo a mano", () => {
+  it("alguien sin destino en la lista no impide elegirlo a mano", () => {
     expect(sectorDelMovimiento("s-panol", null)).toBe("s-panol");
   });
 });

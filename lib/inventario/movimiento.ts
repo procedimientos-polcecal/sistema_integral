@@ -17,8 +17,8 @@ export interface MovimientoEnCurso {
   tipo: TipoMovimiento;
   /** Como lo escribió la persona: "" es "no puso nada", que no es cero. */
   cantidad: number | string | null | undefined;
-  /** Quién lo pidió, del padrón. */
-  empleadoId: string | null | undefined;
+  /** Quién lo pidió, de la lista del pañol. */
+  solicitanteId: string | null | undefined;
 }
 
 /**
@@ -48,7 +48,7 @@ export function loQueFalta(m: MovimientoEnCurso): string[] {
     faltan.push("La cantidad tiene que ser mayor a cero.");
   }
 
-  if (m.tipo !== "ajuste" && !String(m.empleadoId ?? "").trim()) {
+  if (m.tipo !== "ajuste" && !String(m.solicitanteId ?? "").trim()) {
     faltan.push("Falta quién lo pidió.");
   }
 
@@ -56,24 +56,24 @@ export function loQueFalta(m: MovimientoEnCurso): string[] {
 }
 
 /**
- * Qué sector queda: el que se eligió a mano, y si no, el del empleado.
+ * Qué destino queda: el que se eligió a mano, y si no, el de quien retira.
  *
- * El sector no se pregunta dos veces. Quien retira ya está asignado a uno en el
- * padrón, así que el formulario lo completa solo y lo muestra; elegir uno en el
- * desplegable lo pisa, porque a veces el material lo retira alguien de
- * Mantenimiento para una máquina de Filler 2 y eso sólo lo sabe quien está ahí.
+ * No se pregunta dos veces. Cada persona de la lista del pañol ya tiene el
+ * suyo, así que el formulario lo completa solo y lo muestra; elegir uno en el
+ * desplegable lo pisa, porque a veces el material lo retira el mecánico para
+ * una máquina de Filler 2 y eso sólo lo sabe quien está parado ahí.
  *
- * Lo elegido gana **incluso cuando el empleado tiene sector**, que es todo el
+ * Lo elegido gana **incluso cuando quien retira tiene destino**, que es todo el
  * punto de poder elegirlo. Y `""` no es una elección: es el desplegable en su
  * opción de arriba, que dice "según quién lo pidió".
  */
 export function sectorDelMovimiento(
-  sectorElegido: string | null | undefined,
-  sectorDelEmpleado: string | null | undefined
+  destinoElegido: string | null | undefined,
+  destinoDeQuienRetira: string | null | undefined
 ): string | null {
-  const elegido = String(sectorElegido ?? "").trim();
+  const elegido = String(destinoElegido ?? "").trim();
   if (elegido) return elegido;
 
-  const heredado = String(sectorDelEmpleado ?? "").trim();
+  const heredado = String(destinoDeQuienRetira ?? "").trim();
   return heredado || null;
 }

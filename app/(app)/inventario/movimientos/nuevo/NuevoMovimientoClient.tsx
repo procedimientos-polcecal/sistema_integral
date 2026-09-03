@@ -14,8 +14,8 @@ interface Articulo {
   faltante: number;
 }
 type Opcion = { id: string; nombre: string };
-/** Un empleado trae además el sector al que está asignado en el padrón. */
-type Empleado = Opcion & { sectorId: string | null };
+/** Cada persona de la lista del pañol trae su destino habitual. */
+type Solicitante = Opcion & { destinoId: string | null };
 type Tipo = "entrada" | "salida" | "ajuste";
 
 /**
@@ -30,13 +30,17 @@ type Tipo = "entrada" | "salida" | "ajuste";
  * que no entra al sistema. Por eso el formulario exige artículo, cantidad y
  * quién lo pidió: una fila a medias allá no la arregla nadie. Ver
  * `lib/inventario/movimiento.ts`, que tiene la regla y la comparte con la ruta.
+ *
+ * Quién retira y a dónde va son la lista del pañol —la validación de las
+ * columnas F y J— y no los catálogos del núcleo: así lo que la app escribe usa
+ * las mismas palabras que escribe la gente. Ver `lib/inventario/catalogos.ts`.
  */
 export default function NuevoMovimientoClient({
-  articuloInicial, sectores, empleados, proveedores,
+  articuloInicial, destinos, solicitantes, proveedores,
 }: {
   articuloInicial: Articulo | null;
-  sectores: Opcion[];
-  empleados: Empleado[];
+  destinos: Opcion[];
+  solicitantes: Solicitante[];
   proveedores: Opcion[];
 }) {
   const [articulo, setArticulo] = useState<Articulo | null>(articuloInicial);
@@ -45,11 +49,11 @@ export default function NuevoMovimientoClient({
 
   const [tipo, setTipo] = useState<Tipo>("salida");
   const [cantidad, setCantidad] = useState("");
-  const [empleadoId, setEmpleadoId] = useState("");
-  // Vacío no es "sin sector": es "el que diga el empleado". Sólo se guarda acá
-  // lo que alguien eligió a mano, para que cambiar de empleado siga arrastrando
-  // su sector mientras nadie lo haya pisado.
-  const [sectorElegido, setSectorElegido] = useState("");
+  const [solicitanteId, setSolicitanteId] = useState("");
+  // Vacío no es "sin destino": es "el que diga quien retira". Sólo se guarda
+  // acá lo que alguien eligió a mano, para que cambiar de persona siga
+  // arrastrando su destino mientras nadie lo haya pisado.
+  const [destinoElegido, setDestinoElegido] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [ri, setRi] = useState("");
 
@@ -71,11 +75,11 @@ export default function NuevoMovimientoClient({
     return () => clearTimeout(t);
   }, [busqueda, articulo]);
 
-  const empleado = empleados.find((e) => e.id === empleadoId) ?? null;
-  const sectorId = sectorDelMovimiento(sectorElegido, empleado?.sectorId) ?? "";
-  const sector = sectores.find((s) => s.id === sectorId) ?? null;
+  const solicitante = solicitantes.find((s) => s.id === solicitanteId) ?? null;
+  const destinoId = sectorDelMovimiento(destinoElegido, solicitante?.destinoId) ?? "";
+  const destino = destinos.find((d) => d.id === destinoId) ?? null;
 
-  const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, empleadoId });
+  const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId });
 
   /**
    * En cuánto va a quedar. Un ajuste no suma ni resta: fija el número, que es
@@ -104,12 +108,12 @@ export default function NuevoMovimientoClient({
         articulo_id: articulo.id,
         tipo,
         cantidad: Number(cantidad),
-        empleado_id: empleadoId || null,
-        solicitante: empleado?.nombre ?? null,
-        sector_id: sectorId || null,
-        sector_nombre: sector?.nombre ?? null,
+        // Van los ids y no los nombres: el texto que termina en la planilla lo
+        // resuelve la ruta contra la lista, así un cliente viejo o retocado no
+        // puede escribir ahí una palabra que la validación no acepta.
+        solicitante_id: solicitanteId || null,
+        destino_id: destinoId || null,
         proveedor_id: proveedorId || null,
-        proveedor_nombre: proveedores.find((x) => x.id === proveedorId)?.nombre ?? null,
         ri: ri ? Number(ri) : null,
       }),
     });
@@ -229,38 +233,44 @@ export default function NuevoMovimientoClient({
               {tipo !== "ajuste" && <span className="text-red-500"> *</span>}
             </span>
             <select
-              value={empleadoId}
-              onChange={(e) => setEmpleadoId(e.target.value)}
+              value={solicitanteId}
+              onChange={(e) => setSolicitanteId(e.target.value)}
               required={tipo !== "ajuste"}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
             >
               <option value="">—</option>
-              {empleados.map((e2) => <option key={e2.id} value={e2.id}>{e2.nombre}</option>)}
+              {solicitantes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
+            <span className="mt-1 block text-xs text-slate-400">
+              Es la lista del pañol, la misma que la planilla.{" "}
+              <Link href="/inventario/lista" className="underline hover:text-slate-600">
+                Falta alguien
+              </Link>
+            </span>
           </label>
 
-          {/* El sector no se pregunta dos veces: quien retira ya está asignado
-              a uno en el padrón. Elegir uno acá lo pisa, porque el material lo
-              puede retirar alguien de Mantenimiento para una máquina de Filler
-              2 y eso sólo lo sabe quien está parado ahí. */}
+          {/* El destino no se pregunta dos veces: quien retira ya tiene el suyo
+              en la lista. Elegir uno acá lo pisa, porque el material lo puede
+              retirar el mecánico para una máquina de Filler 2 y eso sólo lo
+              sabe quien está parado ahí. */}
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Para qué sector</span>
             <select
-              value={sectorElegido}
-              onChange={(e) => setSectorElegido(e.target.value)}
+              value={destinoElegido}
+              onChange={(e) => setDestinoElegido(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
             >
               <option value="">
-                {empleado ? "Según quién lo pidió" : "Según quién lo pidió — elegilo arriba"}
+                {solicitante ? "Según quién lo pidió" : "Según quién lo pidió — elegilo arriba"}
               </option>
-              {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              {destinos.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
             </select>
-            {!sectorElegido && empleado && (
+            {!destinoElegido && solicitante && (
               <span className="mt-1 block text-xs text-slate-500">
-                {sector
-                  ? <>Va a quedar en <strong>{sector.nombre}</strong>.</>
-                  : <>{empleado.nombre} no tiene sector en el padrón: va a quedar sin sector
-                     salvo que elijas uno.</>}
+                {destino
+                  ? <>Va a quedar en <strong>{destino.nombre}</strong>.</>
+                  : <>{solicitante.nombre} no tiene un destino en la lista: va a quedar sin
+                     sector salvo que elijas uno.</>}
               </span>
             )}
           </label>

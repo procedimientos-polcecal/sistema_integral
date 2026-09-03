@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarInventario } from "@/lib/inventario/auth";
 import { espejarMovimiento } from "@/lib/inventario/espejo";
-import { loQueFalta, type TipoMovimiento } from "@/lib/inventario/movimiento";
+import { loQueFalta, sectorDelMovimiento, type TipoMovimiento } from "@/lib/inventario/movimiento";
 
 /**
  * Registrar una entrada, una salida o un ajuste.
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     articuloId: articulo_id,
     tipo: tipo as TipoMovimiento,
     cantidad: b?.cantidad,
-    empleadoId: b?.empleado_id,
+    solicitanteId: b?.solicitante_id,
   });
   if (faltan.length > 0) {
     return NextResponse.json({ error: faltan.join(" ") }, { status: 400 });
@@ -61,6 +61,41 @@ export async function POST(request: Request) {
 
   const texto = (v: unknown) => String(v ?? "").trim() || null;
   const admin = createAdminClient();
+
+  // Quién retira y a dónde va se resuelven **acá contra la lista**, no se toman
+  // del cuerpo del pedido. Lo que se escriba en las columnas F y J de la
+  // planilla tiene que ser una palabra que su validación acepte, y el cliente
+  // no es quien puede garantizarlo: alcanza con una pestaña vieja abierta.
+  const solicitanteId = texto(b?.solicitante_id);
+  const { data: solicitante } = solicitanteId
+    ? await admin
+        .from("inventario_solicitantes")
+        .select("id, nombre, destino_id, empleado_id")
+        .eq("id", solicitanteId)
+        .maybeSingle()
+    : { data: null };
+
+  if (solicitanteId && !solicitante) {
+    return NextResponse.json(
+      { error: "Quien lo pidió no está en la lista del pañol" },
+      { status: 400 }
+    );
+  }
+
+  // El elegido a mano gana; si no, el de quien retira. Misma regla que la
+  // pantalla, y por eso sale de la misma función.
+  const destinoId = sectorDelMovimiento(b?.destino_id, solicitante?.destino_id);
+  const { data: destino } = destinoId
+    ? await admin
+        .from("inventario_destinos")
+        .select("id, nombre, sector_id")
+        .eq("id", destinoId)
+        .maybeSingle()
+    : { data: null };
+
+  if (destinoId && !destino) {
+    return NextResponse.json({ error: "Ese destino no está en la lista" }, { status: 400 });
+  }
 
   // El RPC va con el cliente de la sesión y NO con el admin. Adentro comprueba
   // `puede_editar_inventario()`, que se resuelve con `auth.uid()`, y el cliente
@@ -79,11 +114,14 @@ export async function POST(request: Request) {
     p_tipo: tipo,
     p_cantidad: cantidad,
     p_creado_por: user.id,
-    p_solicitante: texto(b?.solicitante),
-    p_sector_id: texto(b?.sector_id),
+    p_solicitante: solicitante?.nombre ?? null,
+    // El sector del núcleo sale del destino, y la mayoría de los destinos no
+    // son sectores: MECÁNICO y TALLER VIAL no están en `sectores` y ahí queda
+    // en null a propósito. El destino de verdad viaja en `destino_id`.
+    p_sector_id: destino?.sector_id ?? null,
     p_equipment_id: texto(b?.equipment_id),
     p_proveedor_id: texto(b?.proveedor_id),
-    p_empleado_id: texto(b?.empleado_id),
+    p_empleado_id: solicitante?.empleado_id ?? null,
     p_ri: Number.isInteger(Number(b?.ri)) && Number(b?.ri) > 0 ? Number(b?.ri) : null,
   });
 
@@ -100,8 +138,16 @@ export async function POST(request: Request) {
   // también en las columnas `_raw`, que es de donde el kardex de la app lee el
   // sector y el proveedor: sin esto, un movimiento cargado acá se muestra sin
   // sector hasta que la sincronización vuelva a leer su propia fila.
-  const sector_raw = texto(b?.sector_nombre);
-  const proveedor_raw = texto(b?.proveedor_nombre);
+  const sector_raw = destino?.nombre ?? null;
+
+  const { data: proveedor } = texto(b?.proveedor_id)
+    ? await admin
+        .from("proveedores")
+        .select("nombre")
+        .eq("id", texto(b?.proveedor_id) as string)
+        .maybeSingle()
+    : { data: null };
+  const proveedor_raw = proveedor?.nombre ?? null;
 
   const espejo = await espejarMovimiento({
     ri: mov.ri,
@@ -123,6 +169,8 @@ export async function POST(request: Request) {
     .update({
       sector_raw,
       proveedor_raw,
+      solicitante_id: solicitante?.id ?? null,
+      destino_id: destino?.id ?? null,
       ...(espejo.ok
         ? { sheets_fila: espejo.fila, sheets_pendiente: null, sheets_pendiente_en: null }
         : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }),

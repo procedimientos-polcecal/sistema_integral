@@ -141,6 +141,10 @@ export const NAV: NavItem[] = [
       { label: "Cargar movimiento", href: "/inventario/movimientos/nuevo", modulo: "inventario" },
       { label: "Movimientos", href: "/inventario/movimientos", modulo: "inventario" },
       { label: "Artículos", href: "/inventario/articulos", modulo: "inventario", soloAdmin: true },
+      // La lista del pañol no es soloAdmin: quien nota que falta un nombre es
+      // quien está cargando el movimiento, y hacerlo esperar termina en que lo
+      // carga con otro nombre parecido.
+      { label: "La lista del pañol", href: "/inventario/lista", modulo: "inventario" },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

@@ -28,6 +28,7 @@ import {
 import {
   indicePorNombre, indiceDeEmpleados, reconocer, SinReconocer,
 } from "@/lib/inventario/enlaces";
+import { reconciliarSolicitantes, type Destino, type Solicitante } from "@/lib/inventario/catalogos";
 
 type Datos = Record<string, unknown>;
 
@@ -146,6 +147,11 @@ export async function sincronizarInventario(): Promise<Resultado> {
     }
   }
 
+  // La lista del pañol se engancha con el padrón antes de resolver nada, así un
+  // nombre que ayer no estaba en `empleados` y hoy sí queda enlazado en esta
+  // misma corrida en vez de en la próxima.
+  const catalogo = await reconciliarSolicitantes(admin);
+
   // Los catálogos del núcleo, sólo para leer.
   const [porCodigo, sectores, empleados, proveedores] = await Promise.all([
     articulosPorCodigo(admin),
@@ -172,6 +178,21 @@ export async function sincronizarInventario(): Promise<Resultado> {
     ),
   ]);
 
+  // Y la lista propia del pañol, que es contra la que de verdad se escribe el
+  // kardex. `MECÁNICO` y `Omar Piparo` no están en `sectores` ni en `empleados`
+  // y sí acá, así que esto es lo que hace que un movimiento se pueda atribuir.
+  const [destinos, solicitantes] = await Promise.all([
+    traerTodo<Destino>((desde, hasta) =>
+      admin.from("inventario_destinos").select("id, nombre, sector_id").range(desde, hasta)
+    ),
+    traerTodo<Solicitante>((desde, hasta) =>
+      admin.from("inventario_solicitantes")
+        .select("id, nombre, destino_id, empleado_id").range(desde, hasta)
+    ),
+  ]);
+  const porDestino = indicePorNombre(destinos);
+  const porSolicitante = indicePorNombre(solicitantes);
+
   const sinReconocer = new SinReconocer();
   let sinArticulo = 0;
 
@@ -182,12 +203,23 @@ export async function sincronizarInventario(): Promise<Resultado> {
     // códigos viejos que ya no existen.
     if (!articulo_id) { sinArticulo++; return []; }
 
-    const sector_id = reconocer(sectores, m.sector_raw);
+    const destino_id = reconocer(porDestino, m.sector_raw);
+    const solicitante_id = reconocer(porSolicitante, m.solicitante);
     const empleado_id = reconocer(empleados, m.solicitante);
     const proveedor_id = reconocer(proveedores, m.proveedor_raw);
 
-    if (m.sector_raw && !sector_id) sinReconocer.anotar("sectores", m.sector_raw);
-    if (m.solicitante && !empleado_id) sinReconocer.anotar("empleados", m.solicitante);
+    // El sector del núcleo sale del destino cuando el destino es uno, y si no,
+    // del texto: la mayoría de los destinos —MECÁNICO, TALLER VIAL— no son
+    // sectores y ahí queda en null, que es lo correcto.
+    const sector_id =
+      (destino_id ? destinos.find((d) => d.id === destino_id)?.sector_id : null) ??
+      reconocer(sectores, m.sector_raw);
+
+    // Lo que no está en la lista del pañol es lo que hay que agregarle, y por
+    // eso se informa aparte de lo que no está en los catálogos del núcleo: son
+    // dos problemas distintos con dos arreglos distintos.
+    if (m.sector_raw && !destino_id) sinReconocer.anotar("destinos", m.sector_raw);
+    if (m.solicitante && !solicitante_id) sinReconocer.anotar("solicitantes", m.solicitante);
     if (m.proveedor_raw && !proveedor_id) sinReconocer.anotar("proveedores", m.proveedor_raw);
 
     return [{
@@ -198,8 +230,10 @@ export async function sincronizarInventario(): Promise<Resultado> {
       cantidad: m.cantidad,
       stock_resultante: m.stock_resultante,
       solicitante: m.solicitante,
+      solicitante_id,
       empleado_id,
       sector_raw: m.sector_raw,
+      destino_id,
       sector_id,
       proveedor_raw: m.proveedor_raw,
       proveedor_id,
@@ -247,6 +281,8 @@ export async function sincronizarInventario(): Promise<Resultado> {
     movimientos: guardadosMovimientos,
     movimientos_sin_articulo: sinArticulo,
     ri_sin_requerimiento: riSinRequerimiento.length,
+    solicitantes_enganchados: catalogo.enganchados,
+    solicitantes_sin_empleado: catalogo.sueltos,
     sin_reconocer: sinReconocer.resumen(),
   });
 }
