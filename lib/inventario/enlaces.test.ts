@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { indicePorNombre, reconocer, SinReconocer } from "./enlaces";
+import { indicePorNombre, indiceDeEmpleados, reconocer, SinReconocer } from "./enlaces";
 
 const sectores = indicePorNombre([
   { id: "s-mant", nombre: "Mantenimiento" },
@@ -51,6 +51,52 @@ describe("armar el indice de un catalogo", () => {
   it("una fila sin nombre util no entra al indice", () => {
     const i = indicePorNombre([{ id: "x", nombre: "-" }, { id: "y", nombre: "" }]);
     expect(i.size).toBe(0);
+  });
+});
+
+/**
+ * El caso que no funcionaba: cero de 3.794 movimientos con solicitante tenian
+ * empleado_id, porque el indice se armaba con la columna `nombre` sola.
+ */
+describe("el indice de empleados", () => {
+  const empleados = indiceDeEmpleados([
+    { id: "e-varela", nombre: "Francisco Enrique", apellido: "VARELA" },
+    { id: "e-candia", nombre: "Augusto", apellido: "Candia" },
+    { id: "e-lopez", nombre: "Raul Argentino", apellido: "LOPEZ" },
+  ]);
+
+  it("reconoce como escribe la planilla: apellido, nombre", () => {
+    expect(reconocer(empleados, "VARELA, Francisco Enrique")).toBe("e-varela");
+  });
+
+  /** En la misma columna conviven las dos formas. */
+  it("reconoce tambien nombre y apellido al derecho", () => {
+    expect(reconocer(empleados, "Augusto Candia")).toBe("e-candia");
+    expect(reconocer(empleados, "Francisco Enrique Varela")).toBe("e-varela");
+  });
+
+  it("la coma no cambia nada", () => {
+    expect(reconocer(empleados, "Candia, Augusto")).toBe("e-candia");
+    expect(reconocer(empleados, "candia augusto")).toBe("e-candia");
+  });
+
+  /**
+   * "Lopez Raul" podria ser LOPEZ, Raul Argentino — o cualquier otro Lopez.
+   * Acertar requiere saber que no hay dos, y eso no se deduce del texto.
+   */
+  it("un nombre incompleto no se completa solo", () => {
+    expect(reconocer(empleados, "Lopez Raul")).toBeNull();
+    expect(reconocer(empleados, "Sebastian")).toBeNull();
+  });
+
+  it("lo que no es una persona no reconoce nada", () => {
+    expect(reconocer(empleados, "REGULADOR")).toBeNull();
+    expect(reconocer(empleados, "OFICINAS")).toBeNull();
+  });
+
+  it("un empleado sin apellido entra igual, con su nombre solo", () => {
+    const i = indiceDeEmpleados([{ id: "e-x", nombre: "Nerina", apellido: null }]);
+    expect(reconocer(i, "Nerina")).toBe("e-x");
   });
 });
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarInventario } from "@/lib/inventario/auth";
 import { espejarMovimiento } from "@/lib/inventario/espejo";
+import { loQueFalta, type TipoMovimiento } from "@/lib/inventario/movimiento";
 
 /**
  * Registrar una entrada, una salida o un ajuste.
@@ -38,12 +39,21 @@ export async function POST(request: Request) {
   const tipo = String(b?.tipo ?? "").trim();
   const cantidad = Number(b?.cantidad);
 
-  if (!articulo_id) return NextResponse.json({ error: "Falta el artículo" }, { status: 400 });
   if (!["entrada", "salida", "ajuste"].includes(tipo)) {
     return NextResponse.json({ error: "Tipo de movimiento inválido" }, { status: 400 });
   }
-  if (!Number.isFinite(cantidad)) {
-    return NextResponse.json({ error: "La cantidad tiene que ser un número" }, { status: 400 });
+
+  // La misma regla que el formulario, aplicada de nuevo acá: nada obliga a
+  // pasar por el formulario, y una fila incompleta en la planilla la lee gente
+  // que no entra al sistema y no la puede arreglar.
+  const faltan = loQueFalta({
+    articuloId: articulo_id,
+    tipo: tipo as TipoMovimiento,
+    cantidad: b?.cantidad,
+    empleadoId: b?.empleado_id,
+  });
+  if (faltan.length > 0) {
+    return NextResponse.json({ error: faltan.join(" ") }, { status: 400 });
   }
 
   const texto = (v: unknown) => String(v ?? "").trim() || null;
@@ -72,28 +82,37 @@ export async function POST(request: Request) {
     .eq("id", articulo_id)
     .single();
 
+  // Los nombres tal como van a quedar escritos en la planilla. Se guardan
+  // también en las columnas `_raw`, que es de donde el kardex de la app lee el
+  // sector y el proveedor: sin esto, un movimiento cargado acá se muestra sin
+  // sector hasta que la sincronización vuelva a leer su propia fila.
+  const sector_raw = texto(b?.sector_nombre);
+  const proveedor_raw = texto(b?.proveedor_nombre);
+
   const espejo = await espejarMovimiento({
     ri: mov.ri,
     codigo: mov.codigo,
     descripcion: articulo?.descripcion ?? null,
-    tipo: tipo as "entrada" | "salida" | "ajuste",
+    tipo: tipo as TipoMovimiento,
     cantidad,
     stock_anterior: mov.stock_anterior,
     stock_resultante: mov.stock_resultante,
     solicitante: mov.solicitante,
-    proveedor: texto(b?.proveedor_nombre),
-    sector: texto(b?.sector_nombre),
+    proveedor: proveedor_raw,
+    sector: sector_raw,
     fecha: mov.fecha,
   });
 
   // El pendiente se anota o se limpia; nunca queda a medias.
   await admin
     .from("inventario_movimientos")
-    .update(
-      espejo.ok
+    .update({
+      sector_raw,
+      proveedor_raw,
+      ...(espejo.ok
         ? { sheets_fila: espejo.fila, sheets_pendiente: null, sheets_pendiente_en: null }
-        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }
-    )
+        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }),
+    })
     .eq("id", mov.id);
 
   return NextResponse.json({

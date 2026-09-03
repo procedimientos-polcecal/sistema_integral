@@ -25,7 +25,9 @@ import {
   mapearListado, mapearKardex, filaDeArticulo, filaDeMovimiento,
   type ArticuloLeido, type MovimientoLeido,
 } from "@/lib/inventario/planilla";
-import { indicePorNombre, reconocer, SinReconocer } from "@/lib/inventario/enlaces";
+import {
+  indicePorNombre, indiceDeEmpleados, reconocer, SinReconocer,
+} from "@/lib/inventario/enlaces";
 
 type Datos = Record<string, unknown>;
 
@@ -155,9 +157,12 @@ export async function sincronizarInventario(): Promise<Resultado> {
         admin.from("sectores").select("id, nombre").range(desde, hasta)
       )
     ),
-    indicePorNombre(
-      await traerTodo<Nombrado>((desde, hasta) =>
-        admin.from("empleados").select("id, nombre").range(desde, hasta)
+    // Los empleados van por su propio índice: el nombre y el apellido están en
+    // columnas separadas y la planilla escribe los dos juntos, en los dos
+    // órdenes. Con `indicePorNombre` no reconocía ni uno.
+    indiceDeEmpleados(
+      await traerTodo<Nombrado & { apellido: string | null }>((desde, hasta) =>
+        admin.from("empleados").select("id, nombre, apellido").range(desde, hasta)
       )
     ),
     indicePorNombre(

@@ -38,6 +38,45 @@ export function indicePorNombre(filas: { id: string; nombre: string }[]): Indice
   return indice;
 }
 
+/**
+ * El índice de empleados, que necesita las dos formas de escribir un nombre.
+ *
+ * `indicePorNombre` sobre `empleados` no reconocía **ninguno** de los 3.794
+ * movimientos con solicitante, y la razón es tonta: la tabla guarda el nombre y
+ * el apellido en columnas separadas, así que el índice quedaba armado con
+ * "Fabricio" mientras la planilla escribe "GALLASTEGUI, Fabricio". Cero de
+ * 3.794.
+ *
+ * Y no alcanza con una sola forma, porque en la planilla conviven las dos:
+ * "VARELA, Francisco Enrique" y "Augusto Candia". Cada empleado entra con las
+ * dos —la coma la borra la normalización, así que "apellido, nombre" y
+ * "apellido nombre" son la misma clave—. Con eso se reconocen 2.835 de 3.794.
+ *
+ * Los 959 restantes **quedan en null a propósito**. Son "Omar Piparo" y
+ * "Sebastian" —que no están en el padrón—, "REGULADOR" y "OFICINAS" —que no son
+ * personas—, y "Lopez Raul" contra "LOPEZ, Raul Argentino", donde acertar
+ * requiere saber que no hay otro López. Enlazar al que se le parece es peor que
+ * dejar vacío: el dato aparece en el legajo de otro y nadie lo nota.
+ */
+export function indiceDeEmpleados(
+  filas: { id: string; nombre: string; apellido?: string | null }[]
+): Indice {
+  const indice: Indice = new Map();
+  for (const f of filas) {
+    const nombre = String(f.nombre ?? "").trim();
+    const apellido = String(f.apellido ?? "").trim();
+    const formas = apellido
+      ? [`${apellido} ${nombre}`, `${nombre} ${apellido}`]
+      : [nombre];
+
+    for (const forma of formas) {
+      const k = claveDeProveedor(forma);
+      if (k && !indice.has(k)) indice.set(k, f.id);
+    }
+  }
+  return indice;
+}
+
 /** El id del catálogo para ese nombre, o null si no se lo reconoce. */
 export function reconocer(indice: Indice, nombre: string | null | undefined): string | null {
   const k = claveDeProveedor(nombre);

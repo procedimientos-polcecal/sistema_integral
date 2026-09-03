@@ -25,8 +25,12 @@ export default async function NuevoMovimientoPage({
     traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
       supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre").range(desde, hasta)
     ),
-    traerTodo<{ id: string; nombre: string; apellido: string | null }>((desde, hasta) =>
-      supabase.from("empleados").select("id, nombre, apellido").eq("activo", true).order("apellido").range(desde, hasta)
+    // El `sector_id` del empleado es de donde sale "para qué sector": quien
+    // retira ya está asignado a uno y no hay por qué preguntarlo dos veces.
+    traerTodo<{ id: string; nombre: string; apellido: string | null; sector_id: string | null }>(
+      (desde, hasta) =>
+        supabase.from("empleados").select("id, nombre, apellido, sector_id")
+          .eq("activo", true).order("apellido").range(desde, hasta)
     ),
     traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
       supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre").range(desde, hasta)
@@ -52,7 +56,11 @@ export default async function NuevoMovimientoPage({
       sectores={sectores}
       empleados={empleados.map((e) => ({
         id: e.id,
+        // "APELLIDO, Nombre" es como escribe la planilla, y es lo que va a la
+        // columna F. Escribirlo de otra forma haría que la sincronización no
+        // reconozca al empleado que la app sí conocía.
         nombre: [e.apellido, e.nombre].filter(Boolean).join(", "),
+        sectorId: e.sector_id,
       }))}
       proveedores={proveedores}
     />

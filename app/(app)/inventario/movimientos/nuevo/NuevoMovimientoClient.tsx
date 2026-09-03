@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { loQueFalta, sectorDelMovimiento } from "@/lib/inventario/movimiento";
 
 interface Articulo {
   id: string;
@@ -13,6 +14,8 @@ interface Articulo {
   faltante: number;
 }
 type Opcion = { id: string; nombre: string };
+/** Un empleado trae además el sector al que está asignado en el padrón. */
+type Empleado = Opcion & { sectorId: string | null };
 type Tipo = "entrada" | "salida" | "ajuste";
 
 /**
@@ -22,13 +25,18 @@ type Tipo = "entrada" | "salida" | "ajuste";
  * artículo, después qué pasó con él. Antes de confirmar se muestra **en cuánto
  * va a quedar el stock**, que es la comprobación que hace cualquiera antes de
  * apretar.
+ *
+ * Lo que se carga acá se escribe en la planilla del almacén, que la lee gente
+ * que no entra al sistema. Por eso el formulario exige artículo, cantidad y
+ * quién lo pidió: una fila a medias allá no la arregla nadie. Ver
+ * `lib/inventario/movimiento.ts`, que tiene la regla y la comparte con la ruta.
  */
 export default function NuevoMovimientoClient({
   articuloInicial, sectores, empleados, proveedores,
 }: {
   articuloInicial: Articulo | null;
   sectores: Opcion[];
-  empleados: Opcion[];
+  empleados: Empleado[];
   proveedores: Opcion[];
 }) {
   const [articulo, setArticulo] = useState<Articulo | null>(articuloInicial);
@@ -38,7 +46,10 @@ export default function NuevoMovimientoClient({
   const [tipo, setTipo] = useState<Tipo>("salida");
   const [cantidad, setCantidad] = useState("");
   const [empleadoId, setEmpleadoId] = useState("");
-  const [sectorId, setSectorId] = useState("");
+  // Vacío no es "sin sector": es "el que diga el empleado". Sólo se guarda acá
+  // lo que alguien eligió a mano, para que cambiar de empleado siga arrastrando
+  // su sector mientras nadie lo haya pisado.
+  const [sectorElegido, setSectorElegido] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [ri, setRi] = useState("");
 
@@ -60,6 +71,12 @@ export default function NuevoMovimientoClient({
     return () => clearTimeout(t);
   }, [busqueda, articulo]);
 
+  const empleado = empleados.find((e) => e.id === empleadoId) ?? null;
+  const sectorId = sectorDelMovimiento(sectorElegido, empleado?.sectorId) ?? "";
+  const sector = sectores.find((s) => s.id === sectorId) ?? null;
+
+  const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, empleadoId });
+
   /**
    * En cuánto va a quedar. Un ajuste no suma ni resta: fija el número, que es
    * lo que lo distingue de una entrada o una salida.
@@ -75,7 +92,7 @@ export default function NuevoMovimientoClient({
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
-    if (!articulo) return;
+    if (!articulo || faltan.length > 0) return;
     setGuardando(true);
     setError("");
     setHecho(null);
@@ -88,9 +105,9 @@ export default function NuevoMovimientoClient({
         tipo,
         cantidad: Number(cantidad),
         empleado_id: empleadoId || null,
-        solicitante: empleados.find((x) => x.id === empleadoId)?.nombre ?? null,
+        solicitante: empleado?.nombre ?? null,
         sector_id: sectorId || null,
-        sector_nombre: sectores.find((x) => x.id === sectorId)?.nombre ?? null,
+        sector_nombre: sector?.nombre ?? null,
         proveedor_id: proveedorId || null,
         proveedor_nombre: proveedores.find((x) => x.id === proveedorId)?.nombre ?? null,
         ri: ri ? Number(ri) : null,
@@ -207,10 +224,14 @@ export default function NuevoMovimientoClient({
           )}
 
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Quién lo pidió</span>
+            <span className="text-xs font-medium text-slate-600">
+              {tipo === "ajuste" ? "Quién lo contó" : "Quién lo pidió"}
+              {tipo !== "ajuste" && <span className="text-red-500"> *</span>}
+            </span>
             <select
               value={empleadoId}
               onChange={(e) => setEmpleadoId(e.target.value)}
+              required={tipo !== "ajuste"}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
             >
               <option value="">—</option>
@@ -218,16 +239,30 @@ export default function NuevoMovimientoClient({
             </select>
           </label>
 
+          {/* El sector no se pregunta dos veces: quien retira ya está asignado
+              a uno en el padrón. Elegir uno acá lo pisa, porque el material lo
+              puede retirar alguien de Mantenimiento para una máquina de Filler
+              2 y eso sólo lo sabe quien está parado ahí. */}
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Para qué sector</span>
             <select
-              value={sectorId}
-              onChange={(e) => setSectorId(e.target.value)}
+              value={sectorElegido}
+              onChange={(e) => setSectorElegido(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
             >
-              <option value="">—</option>
+              <option value="">
+                {empleado ? "Según quién lo pidió" : "Según quién lo pidió — elegilo arriba"}
+              </option>
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
+            {!sectorElegido && empleado && (
+              <span className="mt-1 block text-xs text-slate-500">
+                {sector
+                  ? <>Va a quedar en <strong>{sector.nombre}</strong>.</>
+                  : <>{empleado.nombre} no tiene sector en el padrón: va a quedar sin sector
+                     salvo que elijas uno.</>}
+              </span>
+            )}
           </label>
 
           {tipo === "entrada" && (
@@ -275,10 +310,16 @@ export default function NuevoMovimientoClient({
             </div>
           )}
 
+          {/* Qué falta, dicho antes de apretar y no después: el botón está
+              apagado y esto explica por qué. */}
+          {faltan.length > 0 && (
+            <p className="text-xs text-slate-500">{faltan.join(" ")}</p>
+          )}
+
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={guardando || cantidad === ""}
+              disabled={guardando || faltan.length > 0}
               className="flex-1 rounded-xl bg-[var(--primary)] px-4 py-3 text-base font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
             >
               {guardando ? "Registrando…" : "Registrar"}

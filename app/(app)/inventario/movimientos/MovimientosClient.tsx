@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { comoSeLee } from "@/lib/core/fechas";
 
 interface Movimiento {
   id: string;
@@ -81,10 +82,11 @@ export default function MovimientosClient({
     if (tipo) q = q.eq("tipo", tipo);
     if (origen) q = q.eq("origen", origen);
     if (sector) q = q.eq("sector_id", sector);
+    // `fecha` es una columna `date`, así que los dos extremos son inclusivos y
+    // no hace falta el truco de la medianoche. Con `timestamptz` había que
+    // pedir hasta las 23:59:59.999Z, que además cortaba en el huso equivocado.
     if (desde) q = q.gte("fecha", desde);
-    // `hasta` incluye el día entero: sin esto, filtrar "hasta hoy" deja afuera
-    // todo lo de hoy.
-    if (hasta) q = q.lt("fecha", `${hasta}T23:59:59.999Z`);
+    if (hasta) q = q.lte("fecha", hasta);
     if (busqueda.trim()) q = q.ilike("codigo", `${busqueda.trim()}%`);
 
     const inicio = pagina * POR_PAGINA;
@@ -184,7 +186,11 @@ export default function MovimientosClient({
                 filas.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50">
                     <td className="whitespace-nowrap px-3 py-2 text-slate-500">
-                      {m.fecha ? new Date(m.fecha).toLocaleDateString("es-AR") : "—"}
+                      {/* Sin pasar por `new Date`: "2026-09-02" se parsea como
+                          medianoche UTC y desde Argentina se lee 1/9. Era por
+                          qué el último día que se veía era siempre el anterior
+                          al último que había entrado. */}
+                      {m.fecha ? comoSeLee(m.fecha.slice(0, 10)) : "—"}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{m.codigo ?? "—"}</td>
                     <td className="px-3 py-2">
