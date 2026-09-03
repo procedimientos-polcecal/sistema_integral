@@ -503,6 +503,22 @@ export function mensajeDeOdoo(error: ErrorDeOdoo): string {
     return `Odoo rechazó las credenciales (revisar ODOO_USER y ODOO_API_KEY). ${corto}`;
   }
 
+  /*
+   * "database X does not exist" lo contesta PostgreSQL, no Odoo, y llega envuelto
+   * en cuarenta líneas de traceback que hablan de psycopg2 y de un pool de
+   * conexiones. La causa real es siempre la misma, y en Odoo.sh hay una segunda
+   * que no es evidente: el nombre de la base incluye el id del build
+   * (`...-main-16308531`), así que un redeploy puede cambiarlo y dejar la
+   * integración hablándole a una base que ya no está.
+   */
+  if (/database .* does not exist/i.test(detalle)) {
+    return (
+      `La base de datos configurada en ODOO_DB no existe en el servidor. ` +
+      `En Odoo.sh el nombre lleva el id del build, así que puede haber cambiado en un redeploy: ` +
+      `se saca de nuevo con odoo.__session_info__.db en la consola del navegador, logueado en Odoo. ${corto}`
+    );
+  }
+
   if (nombre.includes("AccessError")) {
     return (
       `El usuario de integración no tiene permiso para eso: ${corto} ` +

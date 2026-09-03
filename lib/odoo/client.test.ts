@@ -380,6 +380,21 @@ describe("errores de Odoo, traducidos", () => {
     expect(m).not.toContain("Traceback");
   });
 
+  it("una base inexistente no habla de psycopg2: habla de ODOO_DB", () => {
+    const m = mensajeDeOdoo({
+      data: {
+        name: "psycopg2.OperationalError",
+        message:
+          'connection to server at "192.168.1.1", port 5432 failed: FATAL: database "polcecal" does not exist',
+      },
+    });
+
+    expect(m).toContain("ODOO_DB");
+    // En Odoo.sh el nombre lleva el id del build y un redeploy puede cambiarlo.
+    expect(m).toContain("Odoo.sh");
+    expect(m).not.toMatch(/^Odoo respondió con un error/);
+  });
+
   it("un modelo inexistente apunta a la app sin instalar", () => {
     const m = mensajeDeOdoo({
       data: { name: "KeyError", message: "Object hr.payslip doesn't exist" },

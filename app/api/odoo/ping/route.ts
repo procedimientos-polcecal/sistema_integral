@@ -10,6 +10,7 @@ import {
   credencialesQueFaltan,
   empresasDeOdoo,
   hayCredencialesOdoo,
+  idDeRelacion,
   iniciarSesion,
   llamar,
   versionDeOdoo,
@@ -223,28 +224,48 @@ export async function GET() {
   );
 
   /*
-   * La sonda más importante de todas: los saldos por empresa y por diario,
-   * sumados por Odoo.
+   * La sonda más importante de todas: los saldos de tesorería, sumados por Odoo.
    *
    * Es la prueba de que Tesorería se puede mostrar en el SdG sin traerse los
    * apuntes uno por uno. `parent_state = posted` deja afuera los borradores, que
-   * es exactamente lo que hace la vista de contabilidad de Odoo. Y agrupa por
-   * empresa antes que por diario porque un saldo del grupo, sumado de las dos,
-   * no significa nada: son dos patrimonios distintos.
+   * es exactamente lo que hace la vista de contabilidad de Odoo.
+   *
+   * Ojo con lo que parece obvio y está mal: agrupar por **diario** da cero en
+   * todos. Un asiento incluye su contrapartida, así que la suma de todos los
+   * apuntes de un diario es cero por partida doble. El saldo son los apuntes de
+   * la **cuenta** del diario (`default_account_id`), no los del diario. Se probó
+   * contra la base real: por diario daba 0,00 en los 16, y por cuenta da los
+   * saldos de verdad.
+   *
+   * Y agrupa por empresa porque un saldo del grupo, sumado de las dos, no
+   * significa nada: son dos patrimonios distintos.
    */
   sondas.push(
-    await sonda("saldos por empresa y diario (read_group)", "account.move.line", () =>
-      agrupar(
+    await sonda("saldos de tesorería (read_group)", "account.move.line", async () => {
+      const diarios = await buscarLeer<{ id: number; default_account_id: unknown }>(
+        "account.journal",
+        [["type", "in", ["bank", "cash"]]],
+        ["name", "default_account_id", "company_id"],
+        { limite: 40 }
+      );
+
+      const cuentas = diarios
+        .map((d) => idDeRelacion(d.default_account_id))
+        .filter((id): id is number => id !== null);
+
+      if (!cuentas.length) return { sinCuentas: true, diarios: diarios.length };
+
+      return agrupar(
         "account.move.line",
         [
-          ["journal_id.type", "in", ["bank", "cash"]],
+          ["account_id", "in", cuentas],
           ["parent_state", "=", "posted"],
         ],
         ["balance:sum"],
-        ["company_id", "journal_id"],
+        ["company_id", "account_id"],
         { limite: 60 }
-      )
-    )
+      );
+    })
   );
 
   /*

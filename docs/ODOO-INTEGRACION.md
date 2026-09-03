@@ -5,39 +5,59 @@ Acá está el terreno, la regla de quién manda en qué, y qué hay construido h
 
 ## El terreno
 
-`https://polcecal.odoo.com` → **Odoo 17.0 Enterprise, en Odoo Online (SaaS)**.
-Se verifica sin credenciales, y conviene rehacerlo después de cada actualización
-que Odoo aplique sola:
+`https://polcecal.odoo.com` → **Odoo 17.0 Enterprise, en Odoo.sh**. La versión se
+verifica sin credenciales, y conviene rehacerlo después de cada actualización:
 
 ```bash
 curl -s -X POST 'https://polcecal.odoo.com/jsonrpc' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"call","params":{"service":"common","method":"version","args":[]},"id":1}'
 ```
 
+Que sea **Odoo.sh y no Odoo Online** se descubrió por el nombre de la base:
+`blueorangegroup-polcecal-main-16308531`, que es el patrón
+`<proyecto>-<rama>-<build>` de Odoo.sh. El proyecto está a nombre de un partner
+("blueorangegroup"), o sea que hay un tercero administrando la instancia.
+
 Lo que eso implica:
 
 - **JSON-RPC** (`/jsonrpc`, `execute_kw`). La API nueva con `Authorization:
   Bearer` (la JSON-2, `/json/2/<modelo>/<metodo>`) es de la 19: acá no existe.
-  Si Odoo actualiza la base a 19, conviene migrar, pero JSON-RPC sigue andando.
+  Si la base se actualiza a 19, conviene migrar, pero JSON-RPC sigue andando.
 - **API key**, no contraseña. La genera el usuario en su perfil de Odoo →
   Seguridad de la cuenta → API Keys.
-- **Nada de módulos propios ni acceso al Postgres de Odoo**: es SaaS. Todo sale
-  por los modelos estándar del ORM. Campos propios, si hacen falta, se agregan
-  con Studio (viene con Enterprise).
-- **El nombre de la base no es `polcecal`.** Se probó: Odoo contesta
-  `database "polcecal" does not exist`. Tampoco es ninguna variante obvia del
-  nombre. `db.list` está bloqueado desde afuera (SaaS), así que no se puede
-  listar; hay que ir a buscarlo (ver abajo).
+- **El nombre de la base lleva el id del build**, así que un redeploy puede
+  cambiarlo y dejar la integración hablándole a una base que ya no está. El error
+  que devuelve Odoo en ese caso lo contesta PostgreSQL y habla de psycopg2 y de
+  un pool de conexiones; `mensajeDeOdoo()` lo traduce a "revisá ODOO_DB". Si un
+  día la sincronización empieza a fallar entera y de golpe, esto es lo primero a
+  mirar.
+- **Módulos propios: técnicamente sí, en la práctica no solos.** Odoo.sh permite
+  código propio, pero se despliega desde el repositorio del proyecto, que es del
+  partner. Todo lo que hagamos sale por los modelos estándar del ORM; los campos
+  extra se agregan con Studio (Enterprise lo incluye), como ya hizo alguien: hay
+  un `x_studio_...` en `purchase.order`.
+- **Sin acceso al Postgres de Odoo** y `db.list` bloqueado desde afuera.
 
 ### Cómo se averigua el nombre de la base
 
 El host resuelve la base solo —una petición sin base válida llega igual a la capa
 de datos y contesta "Session Expired"—, pero JSON-RPC exige el nombre explícito en
-cada llamada. Dos formas de conseguirlo:
+cada llamada, y no hay forma de leerlo desde afuera: se probaron `/web/health`,
+`/website/info`, el `session_info` de la página de login y el manifest del PWA.
+Ninguno lo trae.
 
-- **Logueado en Odoo**, en la consola del navegador: `odoo.__session_info__.db`.
-  Es el nombre exacto que usa el propio cliente web.
-- **Desde la cuenta**: en Odoo Online, https://www.odoo.com/my/databases lista las
-  bases por nombre; en Odoo.sh, el build de producción del proyecto lo muestra.
+Sale de la sesión del navegador. Logueado en Odoo, en la consola (F12):
+
+```js
+fetch('/web/session/get_session_info',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"jsonrpc":"2.0","method":"call","params":{}}'}).then(r=>r.json()).then(d=>console.log('LA BASE ES:', d.result && d.result.db))
+```
+
+Este anda desde cualquier página del dominio. `odoo.__session_info__.db`, que es
+lo primero que uno prueba, **no sirve en las páginas públicas**: ahí el objeto no
+trae `db` y a veces no existe. Y Chrome no deja pegar en la consola hasta que se
+escriba a mano `allow pasting`.
+
+En Odoo.sh el nombre también está en el build de producción del proyecto
+(https://www.odoo.sh/project), que es donde lo vería el partner.
 
 Para **verificar** un candidato, el que sirve es `authenticate`, no `db_exist`.
 
@@ -59,9 +79,53 @@ PostgreSQL, así que no se puede confundir:
 curl -s -X POST 'https://polcecal.odoo.com/jsonrpc' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"call","params":{"service":"common","method":"authenticate","args":["NOMBRE","EMAIL","API_KEY",{}]},"id":1}'
 ```
 
-Ya se descartaron, a nivel PostgreSQL: `polcecal`, `polysan`, `polcecalsa`,
-`polcecal-sa`, `polcecalpolysan`, `polcecal-main`, `polcecal-master`, `polysansa`,
-`grupopolcecal`, `polcecal-prod`.
+Y no: **el nombre no se puede adivinar**. Se probaron diez variantes razonables
+del nombre de la empresa antes de encontrar que el real lleva el nombre del
+partner y el id del build.
+
+## Lo que dijo el diagnóstico (03/09/2026)
+
+Corrió entero contra la base real. **Las once sondas pasaron**: el usuario bot
+(uid 17) lee compras, proveedores, contabilidad y tesorería de las dos empresas
+sin que falte un permiso.
+
+| Empresa de Odoo | id | Órdenes de compra | Facturas de proveedor | Pagos |
+|---|---|---|---|---|
+| Polcecal S.A | **1** | 2.133 | 3.780 | 3.470 |
+| Polysan S.A | **2** | 162 | 2.488 | 2.767 |
+| | | 2.295 | 6.268 | 6.237 |
+
+Las dos operan en ARS. Los ids 1 y 2 son los que van a `empresas.odoo_company_id`.
+
+Dos cosas que no se sabían y cambian el diseño:
+
+**1. Compras está muy desbalanceado.** Polcecal tiene 2.133 órdenes y Polysan
+162, pero en facturas de proveedor están casi a la par (3.780 y 2.488). O sea que
+en Polysan se factura sin pasar por una orden de compra. Antes de sincronizar
+conviene entender por qué, porque el módulo Compras del SdG asume que el
+requerimiento precede a la compra.
+
+**2. El padrón de proveedores está duplicado por empresa.** De 610 registros de
+proveedor hay sólo **422 CUITs distintos**, y **147 CUITs existen en las dos
+empresas** —el mismo proveedor, dos registros, mismo nombre—. Además 111
+registros no tienen empresa (compartidos) y 24 no tienen CUIT.
+
+Eso significa que `proveedores` del SdG mapea a **1 o 2 partners de Odoo**, igual
+que un RI compartido mapea a dos órdenes: mismo patrón, misma solución (tabla de
+vínculo por empresa). Y el cruce tiene que ser **por CUIT (`vat`), no por
+nombre**: el nombre está escrito igual en los duplicados, pero eso es suerte, no
+garantía. Los 24 sin CUIT hay que enlazarlos a mano o dejarlos sin enlazar —
+nunca "al que se le parece" (README de migraciones, trampa nº4).
+
+Del resto de las sondas: 16 diarios de tesorería, 8 por empresa (Provincia,
+Credicoop, BBVA, Efectivo, Cheques propios, Cheques de terceros, Retenciones,
+Cobros y pagos), cada uno con su cuenta contable propia. `purchase.order` tiene
+80 campos, uno agregado con Studio (`x_studio_related_field_1go_1j4st60r9`) y
+ninguno de localización. `purchase.order.line` **sí** tiene
+`analytic_distribution`: la vía analítica para las AMBAS existía técnicamente, y
+se descartó por el hecho de la doble factura, no por límite de Odoo.
+
+Los saldos de tesorería salen bien y no se anotan acá: cambian todos los días.
 
 ## La regla: quién manda en qué
 
@@ -240,28 +304,43 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 
 ## Próximos pasos
 
-1. **Correr el ping** y cerrar los permisos del usuario bot.
-2. **Llenar `empresas.odoo_company_id`** con los ids que devuelva el ping (migración 045).
-3. **Definir qué se hace con los RI compartidos de cantidad impar** (ver arriba).
-   No bloquea: el push puede avisar y dejarlos para revisión manual.
+1. ~~Correr el ping~~ **hecho**: las once sondas pasan, los permisos del usuario
+   bot están completos.
+2. **Aplicar `20260903082202_empresas_el_mapeo_con_odoo.sql`** en el editor SQL de
+   Supabase: llena `odoo_company_id` con 1 y 2. Hasta que se corra, las dos
+   empresas están en null y nada puede mapearse.
+3. **Entender el desbalance de Compras** (2.133 órdenes en Polcecal contra 162 en
+   Polysan, con las facturas casi a la par). Es una pregunta para administración,
+   no para el código, y conviene contestarla antes de sincronizar.
 4. **Mapeo de ids**, para que la sync sea idempotente y no duplique:
-   `odoo_write_date` en las tablas que se sincronizan, y para Compras una tabla de
-   vínculo `(requerimiento_id, empresa_id) → odoo_order_id`, porque un RI
-   compartido son dos órdenes. Del lado de Odoo, un campo `x_sdg_id` con Studio
-   para el camino inverso.
-5. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
+   `odoo_write_date` en las tablas que se sincronizan, y **dos** tablas de
+   vínculo por empresa, porque las dos entidades mapean a 1..2 registros de Odoo:
+   `(requerimiento_id, empresa_id) → odoo_order_id` y
+   `(proveedor_id, empresa_id) → odoo_partner_id`, esta última cruzada por CUIT.
+   Del lado de Odoo, un campo `x_sdg_id` con Studio para el camino inverso.
+5. **Definir qué se hace con los RI compartidos de cantidad impar** (ver arriba).
+   No bloquea: el push puede avisar y dejarlos para revisión manual.
+6. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.
-6. **Push de Compras**: crear la OC en draft al aprobarse en el SdG, con `crearEn`.
+7. **Push de Compras**: crear la OC en draft al aprobarse en el SdG, con `crearEn`.
    Para un RI compartido, dos órdenes, con el reparto de `repartoAmbas.ts`.
-7. **Webhook** para lo urgente: Odoo 17 tiene la acción "Send Webhook
+8. **Webhook** para lo urgente: Odoo 17 tiene la acción "Send Webhook
    Notification" en las reglas de automatización, con log de llamadas. Mismo
    patrón que el Apps Script de la planilla, protegido con un secreto propio.
 
 ## Cuidados
 
-- **Throttling de Odoo Online**: siempre `fields` explícitos y `limit`. Sin
-  `fields`, Odoo devuelve los 200+ campos de `account.move`.
+- **Throttling**: siempre `fields` explícitos y `limit`. Sin `fields`, Odoo
+  devuelve los 200+ campos de `account.move`.
+- **El saldo de un diario no se saca del diario.** Sumar todos los apuntes de un
+  `account.journal` da **cero**: el asiento incluye su contrapartida, así que la
+  suma es cero por partida doble. El saldo son los apuntes de la **cuenta** del
+  diario (`default_account_id`). Se pisó: la primera versión de la sonda devolvió
+  0,00 en los 16 diarios, con permisos correctos y sin ningún error. Es el tipo de
+  número equivocado que nadie cuestiona porque la llamada "funcionó".
+- **El nombre de la base puede cambiar en un redeploy** (lleva el id del build de
+  Odoo.sh). Ver "El terreno".
 - **Las dos empresas**: tiene su sección arriba, y es el cuidado principal. En
   resumen: `allowed_company_ids` en toda llamada, `company_id` en toda lectura,
   y nunca sumar las dos empresas en un mismo número.
