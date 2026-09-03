@@ -246,6 +246,50 @@ empresa y después se refactura, o no es un RI compartido.
 **Pendiente de definición**, pero no bloquea: el push puede arrancar avisando y
 dejando esos RI para revisión manual.
 
+## El cruce de proveedores
+
+Es el cimiento del resto: una orden de compra en Odoo necesita un `partner_id`.
+
+**Va por CUIT normalizado, nunca por nombre.** Los dos padrones escriben el CUIT
+distinto —Odoo sin guiones (`30708699574`), el SdG con guiones
+(`20-36215654-9`)—, así que un cruce literal devuelve **cero coincidencias y
+ningún error**. Y el nombre no sirve: en Odoo está la razón social y en el SdG el
+nombre de fantasía.
+
+| En el SdG | En Odoo | Mismo CUIT |
+|---|---|---|
+| Casa Camino | PEDRO H. CAMINO S.R.L. | 30710976356 |
+| Distribuidora Pueyrredon | GIACOMASSO MIGUEL ANGEL | 20241639887 |
+
+Por nombre no se habrían encontrado nunca. Peor: se habrían encontrado otros, y
+un enlace equivocado no se nota — la orden de compra simplemente sale a nombre de
+otro proveedor.
+
+El ensayo con los datos del 03/09/2026 (287 proveedores en el SdG, 610 registros
+en Odoo):
+
+| | |
+|---|---|
+| **Enlazan** | **122** (76 de ellos a las dos empresas) |
+| Sin CUIT en el SdG | 143 — no se pueden cruzar |
+| Con CUIT que no está en Odoo | 15 |
+| CUIT repetido en el padrón del SdG | 3 CUITs, 7 proveedores |
+| CUITs de Odoo que el SdG no tiene | 298 |
+
+Cuatro cosas que salen de ahí:
+
+- **Los 143 sin CUIT quedan sin enlazar, y así se informan.** No se resuelven por
+  nombre parecido (README de migraciones, trampa nº4). El camino barato para
+  arreglarlos es el inverso: traerles el CUIT desde Odoo.
+- **Ninguno de los 145 CUITs del SdG tiene el dígito verificador mal.** El padrón
+  está mejor cargado de lo que uno esperaría de 145 CUITs tipeados a mano.
+- **Los 3 CUITs repetidos son datos a corregir en el SdG**, no un problema de
+  Odoo: hay tres Priola (David, Gustavo, Marcelo) con un solo CUIT, y dos casos
+  de nombre de fantasía + nombre de la persona cargados como proveedores
+  distintos. No se enlazan hasta que se decida cuál es cuál.
+- **Odoo tiene 298 CUITs que el SdG no tiene.** El padrón de Odoo es bastante más
+  grande, así que traer proveedores desde Odoo es una oportunidad concreta.
+
 ## Qué hay hoy (spike)
 
 **`lib/odoo/client.ts`** — cliente JSON-RPC con `fetch` a mano, sin dependencias
@@ -279,13 +323,26 @@ diarios de tesorería, facturas de proveedor, pagos, saldos por empresa y
 diario vía `read_group`, y los campos reales de `purchase.order` (para ver si la
 base tiene campos propios `x_` o de localización `l10n_`).
 
+**`lib/odoo/proveedores.ts`** — el cruce por CUIT (`normalizarCuit`,
+`cuitEsValido`, `cruzarProveedores`), función pura y con 15 tests. Devuelve los
+enlaces y, con el mismo peso, los que **no** enlazan y por qué motivo: sin CUIT,
+CUIT inválido, o no está en Odoo. Cada motivo se arregla en un lugar distinto.
+
+**`app/api/odoo/proveedores/preview/route.ts`** — `GET`, sólo admin. Ensaya el
+cruce contra los datos reales y **no escribe nada**, ni en Odoo ni en Supabase.
+Está antes de la escritura a propósito: con el 51% del padrón sin CUIT, la
+decisión de qué se enlaza y qué no tiene que ser visible antes de ejecutarse.
+
 **`lib/compras/repartoAmbas.ts`** — el 50/50, con 16 tests. Es la única parte de
 todo esto que se puede testear sin red, y la que más caro sale si está mal.
 
 **`lib/odoo/client.test.ts`** — 28 tests con `fetch` mockeado: no salen a la red.
 
-**`supabase/migrations/045_empresas_mapeo_odoo.sql`** — `empresas.odoo_company_id`,
-el mapeo de las dos empresas con las de Odoo. Queda NULL hasta correr el ping.
+**Migraciones** — `045_empresas_mapeo_odoo.sql` creó
+`empresas.odoo_company_id` y `20260903082202_empresas_el_mapeo_con_odoo.sql` lo
+llenó (POLCECAL→1, POLYSAN→2). `20260903091434_proveedores_el_vinculo_con_odoo_por_empresa.sql`
+crea `proveedores_odoo`, la tabla de enlace: una fila **por empresa**, porque un
+proveedor del SdG es hasta dos partners de Odoo.
 
 ## Cómo probarlo
 
@@ -312,12 +369,12 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 3. **Entender el desbalance de Compras** (2.133 órdenes en Polcecal contra 162 en
    Polysan, con las facturas casi a la par). Es una pregunta para administración,
    no para el código, y conviene contestarla antes de sincronizar.
-4. **Mapeo de ids**, para que la sync sea idempotente y no duplique:
-   `odoo_write_date` en las tablas que se sincronizan, y **dos** tablas de
-   vínculo por empresa, porque las dos entidades mapean a 1..2 registros de Odoo:
-   `(requerimiento_id, empresa_id) → odoo_order_id` y
-   `(proveedor_id, empresa_id) → odoo_partner_id`, esta última cruzada por CUIT.
-   Del lado de Odoo, un campo `x_sdg_id` con Studio para el camino inverso.
+4. ~~Tabla de vínculo de proveedores~~ **hecha** (`proveedores_odoo`), falta
+   **aplicar la migración** y después escribir los 122 enlaces que el preview ya
+   calcula. Queda pendiente la de Compras:
+   `(requerimiento_id, empresa_id) → odoo_order_id`, porque un RI compartido son
+   dos órdenes. Del lado de Odoo, un campo `x_sdg_id` con Studio para el camino
+   inverso.
 5. **Definir qué se hace con los RI compartidos de cantidad impar** (ver arriba).
    No bloquea: el push puede avisar y dejarlos para revisión manual.
 6. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
