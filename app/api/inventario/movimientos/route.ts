@@ -27,9 +27,12 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // El texto no repite al del RPC a propósito. Los dos decían exactamente lo
+  // mismo, así que el error que llegaba a la pantalla no permitía saber cuál de
+  // las dos comprobaciones había fallado — y era siempre la otra.
   if (!(await puedeEditarInventario(supabase, user.id))) {
     return NextResponse.json(
-      { error: "Registrar movimientos requiere nivel de edición en Inventario" },
+      { error: "Tu usuario no tiene nivel de edición en Inventario" },
       { status: 403 }
     );
   }
@@ -59,8 +62,19 @@ export async function POST(request: Request) {
   const texto = (v: unknown) => String(v ?? "").trim() || null;
   const admin = createAdminClient();
 
-  // El RPC valida el permiso él mismo y hace el bloqueo de fila.
-  const { data: mov, error } = await admin.rpc("inventario_registrar_movimiento", {
+  // El RPC va con el cliente de la sesión y NO con el admin. Adentro comprueba
+  // `puede_editar_inventario()`, que se resuelve con `auth.uid()`, y el cliente
+  // admin usa la service role: no lleva JWT, así que ahí `auth.uid()` es null y
+  // la función devuelve false **siempre**. Con el admin, todo movimiento moría
+  // con "Registrar movimientos requiere nivel de edición en Inventario" aunque
+  // quien lo cargara fuera admin_sistema. Y la comprobación de arriba devolvía
+  // ese mismo texto, así que el error no decía cuál de las dos había fallado:
+  // por eso ahora dicen cosas distintas.
+  //
+  // Es `security definer`, así que con la sesión de la persona igual puede
+  // bloquear la fila y bajar el stock; lo único que cambia es que ahora sabe
+  // quién es.
+  const { data: mov, error } = await supabase.rpc("inventario_registrar_movimiento", {
     p_articulo_id: articulo_id,
     p_tipo: tipo,
     p_cantidad: cantidad,
