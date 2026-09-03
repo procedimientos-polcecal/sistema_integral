@@ -52,6 +52,12 @@ create table if not exists inventario_destinos (
   updated_at timestamptz not null default now()
 );
 
+-- `drop` antes de `create`: Postgres no tiene `create trigger if not exists`, y
+-- sin esto correr la migración dos veces falla con "trigger already exists" —y
+-- como el editor de Supabase envuelve el script en una transacción, ese error
+-- revierte TODO, incluidas las tablas y el sembrado. Se ve igual que si la
+-- migración nunca hubiera corrido, que es la peor forma de fallar.
+drop trigger if exists inventario_destinos_updated_at on inventario_destinos;
 create trigger inventario_destinos_updated_at
   before update on inventario_destinos
   for each row execute function set_updated_at();
@@ -81,6 +87,7 @@ create table if not exists inventario_solicitantes (
 create index if not exists inventario_solicitantes_destino_idx
   on inventario_solicitantes (destino_id);
 
+drop trigger if exists inventario_solicitantes_updated_at on inventario_solicitantes;
 create trigger inventario_solicitantes_updated_at
   before update on inventario_solicitantes
   for each row execute function set_updated_at();
@@ -243,3 +250,12 @@ create policy inventario_solicitantes_write on inventario_solicitantes
   for all to authenticated
   using (puede_editar_inventario())
   with check (puede_editar_inventario());
+
+-- ── Que PostgREST vea las tablas nuevas ──────────────────────
+--
+-- La app no habla con Postgres sino con PostgREST, que guarda el esquema en
+-- caché. Normalmente Supabase se lo recarga solo al terminar un DDL, pero no
+-- siempre: hasta que lo haga, cada consulta a estas tablas responde
+-- "Could not find the table 'public.inventario_destinos' in the schema cache",
+-- que se lee como si la migración no hubiera corrido.
+notify pgrst, 'reload schema';

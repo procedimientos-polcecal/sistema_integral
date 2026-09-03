@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { traerTodo } from "@/lib/core/paginado";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import NuevoMovimientoClient from "./NuevoMovimientoClient";
 
 export default async function NuevoMovimientoPage({
@@ -50,8 +51,13 @@ export default async function NuevoMovimientoPage({
         .maybeSingle()
     : { data: null };
 
+  // De cuándo es lo que se está mirando. Va en todas las pantallas del
+  // módulo porque el botón de traer también.
+  const sync = await ultimaSincronizacionDe(supabase, "inventario", "articulos");
+
   return (
     <NuevoMovimientoClient
+      sync={sync}
       articuloInicial={articulo}
       solicitantes={solicitantes.map((s) => ({
         id: s.id,

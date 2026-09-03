@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { comoSeLee } from "@/lib/core/fechas";
+import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Movimiento {
   id: string;
@@ -47,10 +49,11 @@ const COLOR: Record<string, string> = {
  * trabajo ni si la app se está usando.
  */
 export default function MovimientosClient({
-  sectores, pendientes,
+  sectores, pendientes, sync,
 }: {
   sectores: Opcion[];
   pendientes: Pendiente[];
+  sync: UltimaSync | null;
 }) {
   const [tipo, setTipo] = useState("");
   const [origen, setOrigen] = useState("");
@@ -112,6 +115,11 @@ export default function MovimientosClient({
           El kardex del almacén: lo que se cargó acá y lo que vino de la planilla.
         </p>
       </div>
+
+      {/* La tabla se arma en el cliente, así que además de refrescar la página
+          hay que volver a consultarla: si no, se traen 200 movimientos nuevos y
+          la pantalla sigue mostrando los de antes. */}
+      <TraerDeLaPlanilla sync={sync} onListo={cargar} />
 
       {pendientes.length > 0 && (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">

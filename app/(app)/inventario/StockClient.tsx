@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {
@@ -41,9 +41,6 @@ export default function StockClient({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const [sincronizando, setSincronizando] = useState(false);
-  const [avisoSync, setAvisoSync] = useState<string | null>(null);
-
   const buscar = useCallback(async (termino: string, faltantes: boolean) => {
     setCargando(true);
     setError("");
@@ -65,55 +62,18 @@ export default function StockClient({
     return () => clearTimeout(t);
   }, [q, soloFaltantes, buscar]);
 
-  async function sincronizar() {
-    setSincronizando(true);
-    setAvisoSync(null);
-    const res = await fetch("/api/inventario/sync", { method: "POST" });
-    const body = await res.json().catch(() => ({}));
-    setSincronizando(false);
-
-    if (!res.ok) { setAvisoSync(body.error ?? "No se pudo sincronizar."); return; }
-
-    const sinReconocer = Object.entries(body.sin_reconocer ?? {})
-      .map(([catalogo, nombres]) => `${(nombres as string[]).length} ${catalogo}`)
-      .join(", ");
-
-    setAvisoSync(
-      `${body.articulos} artículos y ${body.movimientos} movimientos.` +
-      (body.movimientos_sin_articulo > 0
-        ? ` ${body.movimientos_sin_articulo} movimientos son de un código que no está en el listado.`
-        : "") +
-      (sinReconocer ? ` Sin reconocer contra el sistema: ${sinReconocer}.` : "")
-    );
-    buscar(q.trim(), soloFaltantes);
-  }
-
   return (
     <div className="mx-auto max-w-3xl space-y-4 md:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Stock</h1>
-          <p className="text-sm text-slate-500">
-            Lo que hay en el pañol, según la última lectura de la planilla.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <UltimaSincronizacion cuando={sync?.created_at} ok={sync?.ok ?? true} error={sync?.error} />
-          <button
-            onClick={sincronizar}
-            disabled={sincronizando}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {sincronizando ? "Trayendo…" : "Traer de la planilla"}
-          </button>
-        </div>
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Stock</h1>
+        <p className="text-sm text-slate-500">
+          Lo que hay en el pañol, según la última lectura de la planilla.
+        </p>
       </div>
 
-      {avisoSync && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          {avisoSync}
-        </div>
-      )}
+      {/* Después de traer, la lista se vuelve a pedir: el stock que muestra es
+          justamente lo que la sincronización acaba de cambiar. */}
+      <TraerDeLaPlanilla sync={sync} onListo={() => buscar(q.trim(), soloFaltantes)} />
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}

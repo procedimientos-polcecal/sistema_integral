@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Solicitante {
   id: string;
@@ -32,12 +34,13 @@ type Opcion = { id: string; nombre: string };
  * deja vacío y se ve, porque enlazarlo al que se le parece es peor.
  */
 export default function ListaClient({
-  solicitantes, destinos, sectores, puedeEditar,
+  solicitantes, destinos, sectores, puedeEditar, sync,
 }: {
   solicitantes: Solicitante[];
   destinos: Destino[];
   sectores: Opcion[];
   puedeEditar: boolean;
+  sync: UltimaSync | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -87,6 +90,12 @@ export default function ListaClient({
           columnas <strong>QUIEN</strong> y <strong>SECTOR</strong> del kardex.
         </p>
       </div>
+
+      {/* Acá el botón sirve para lo suyo: la sincronización engancha con el
+          padrón los nombres que todavía están sueltos, y esta es la pantalla
+          donde eso se ve. La lista la arma el servidor, así que alcanza con el
+          refresh que el botón ya hace. */}
+      <TraerDeLaPlanilla sync={sync} />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

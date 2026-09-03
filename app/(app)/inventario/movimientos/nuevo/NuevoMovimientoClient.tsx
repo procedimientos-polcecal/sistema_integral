@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { loQueFalta, sectorDelMovimiento } from "@/lib/inventario/movimiento";
+import TraerDeLaPlanilla from "../../TraerDeLaPlanilla";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {
   id: string;
@@ -36,12 +38,13 @@ type Tipo = "entrada" | "salida" | "ajuste";
  * las mismas palabras que escribe la gente. Ver `lib/inventario/catalogos.ts`.
  */
 export default function NuevoMovimientoClient({
-  articuloInicial, destinos, solicitantes, proveedores,
+  articuloInicial, destinos, solicitantes, proveedores, sync,
 }: {
   articuloInicial: Articulo | null;
   destinos: Opcion[];
   solicitantes: Solicitante[];
   proveedores: Opcion[];
+  sync: UltimaSync | null;
 }) {
   const [articulo, setArticulo] = useState<Articulo | null>(articuloInicial);
   const [busqueda, setBusqueda] = useState("");
@@ -94,6 +97,19 @@ export default function NuevoMovimientoClient({
     return c;
   }, [articulo, cantidad, tipo]);
 
+  /**
+   * Después de traer de la planilla, el stock del artículo elegido cambió.
+   * Se lo vuelve a pedir por su código: dejarlo con el número viejo es cómo
+   * alguien confirma una salida mirando un stock que ya no existe.
+   */
+  async function releerArticulo() {
+    if (!articulo) return;
+    const res = await fetch(`/api/inventario/articulos?q=${encodeURIComponent(articulo.codigo)}`);
+    const body = await res.json().catch(() => ({}));
+    const fresco = (body.data ?? []).find((a: Articulo) => a.id === articulo.id);
+    if (fresco) setArticulo(fresco);
+  }
+
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     if (!articulo || faltan.length > 0) return;
@@ -135,6 +151,8 @@ export default function NuevoMovimientoClient({
           Se registra acá y se escribe en la planilla del almacén en el momento.
         </p>
       </div>
+
+      <TraerDeLaPlanilla sync={sync} onListo={releerArticulo} />
 
       {/* ── Qué artículo ─────────────────────────────────────── */}
       {!articulo ? (

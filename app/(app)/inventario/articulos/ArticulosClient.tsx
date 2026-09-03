@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {
   id: string;
@@ -24,7 +26,12 @@ interface Articulo {
  * Los artículos nuevos tampoco se dan de alta acá: nacen en la planilla, que es
  * de donde salen los códigos.
  */
-export default function ArticulosClient({ esAdmin }: { esAdmin: boolean }) {
+export default function ArticulosClient({
+  esAdmin, sync,
+}: {
+  esAdmin: boolean;
+  sync: UltimaSync | null;
+}) {
   const [q, setQ] = useState("");
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -69,6 +76,10 @@ export default function ArticulosClient({ esAdmin }: { esAdmin: boolean }) {
           acá se edita lo que decide una persona.
         </p>
       </div>
+
+      {/* Los artículos nuevos nacen en la planilla, así que este es el botón
+          que los hace aparecer acá. */}
+      <TraerDeLaPlanilla sync={sync} onListo={() => buscar(q.trim())} />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>

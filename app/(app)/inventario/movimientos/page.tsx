@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { traerTodo } from "@/lib/core/paginado";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import MovimientosClient from "./MovimientosClient";
 
 export default async function MovimientosPage() {
@@ -27,8 +28,13 @@ export default async function MovimientosPage() {
     .order("sheets_pendiente_en", { ascending: false })
     .limit(50);
 
+  // De cuándo es lo que se está mirando. Va en todas las pantallas del
+  // módulo porque el botón de traer también.
+  const sync = await ultimaSincronizacionDe(supabase, "inventario", "articulos");
+
   return (
     <MovimientosClient
+      sync={sync}
       sectores={sectores}
       pendientes={pendientes ?? []}
     />

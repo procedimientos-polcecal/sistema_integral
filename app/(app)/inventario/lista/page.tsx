@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { traerTodo } from "@/lib/core/paginado";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import ListaClient from "./ListaClient";
 
 /**
@@ -40,8 +41,13 @@ export default async function ListaPage() {
     ),
   ]);
 
+  // De cuándo es lo que se está mirando. Va en todas las pantallas del
+  // módulo porque el botón de traer también.
+  const sync = await ultimaSincronizacionDe(supabase, "inventario", "articulos");
+
   return (
     <ListaClient
+      sync={sync}
       solicitantes={solicitantes}
       destinos={destinos}
       sectores={sectores}
