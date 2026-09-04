@@ -67,13 +67,19 @@ export default async function RequerimientosPage({
   const equiposConCompras = opcionesConUbicacion(equipos ?? [], catalogo, "equipo_id");
   const sectoresConCompras = opcionesConUbicacion(sectoresPlanta, catalogo, "sector_id");
 
+  // Un parámetro repetido —`?prioridad=ALTA&prioridad=URGENTE`— llega acá como
+  // arreglo, y hasta ahora se quedaba con el primero. Ahora los filtros son
+  // listas, así que se pasan todos: descartar el resto era perder justamente el
+  // filtro múltiple que la URL estaba pidiendo.
   const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined) continue;
+    for (const valor of Array.isArray(v) ? v : [v]) query.append(k, valor);
+  }
+
   const filtrosIniciales = leerFiltrosDeLaUrl(
-    new URLSearchParams(
-      Object.entries(params).flatMap(([k, v]) =>
-        v === undefined ? [] : [[k, Array.isArray(v) ? (v[0] ?? "") : v] as [string, string]]
-      )
-    ),
+    query,
     {
       areas: (areas ?? []).map((a) => a.id as string),
       empresas: (empresas ?? []).map((e) => e.id as string),

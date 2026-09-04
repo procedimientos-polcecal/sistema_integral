@@ -15,7 +15,7 @@ import {
   ubicacionesDelSector,
   type UbicacionEnlazada,
 } from "@/lib/compras/ubicaciones";
-import SelectorProveedor from "../SelectorProveedor";
+import MultiSelect from "../MultiSelect";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
@@ -69,6 +69,8 @@ export default function RequerimientosClient({
   // tocar un desplegable, es el punto de entrada y no un espejo del estado.
   const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda);
   const [busquedaAplicada, setBusquedaAplicada] = useState(filtrosIniciales.busqueda);
+  // Cada uno es una lista: dentro de un filtro los valores suman —«Cotizando o
+  // Para comprar»— y entre filtros se recortan. Vacío es "no filtrar por esto".
   const [area, setArea] = useState(filtrosIniciales.area);
   const [aprobacion, setAprobacion] = useState(filtrosIniciales.aprobacion);
   const [compra, setCompra] = useState(filtrosIniciales.compra);
@@ -131,18 +133,38 @@ export default function RequerimientosClient({
         q = q.or(`descripcion.ilike.${p},codigo.ilike.${p},detalle_extra.ilike.${p}`);
       }
     }
-    if (area) q = q.eq("area_id", area);
-    if (aprobacion) q = q.eq("estado_aprobacion", aprobacion);
-    if (compra) q = q.eq("estado_compra", compra);
-    if (prioridad) q = q.eq("prioridad", prioridad);
-    if (empresa) q = empresa === "AMBAS" ? q.is("empresa_id", null) : q.eq("empresa_id", empresa);
-    if (proveedor) q = q.eq("proveedor_id", proveedor);
-    if (ubicacion) q = q.eq("ubicacion_id", ubicacion);
+    // Un `.in()` por filtro: los valores de un mismo desplegable suman, y los
+    // de distintos desplegables se recortan entre sí, que es como se lee la
+    // fila de filtros de izquierda a derecha.
+    if (area.length) q = q.in("area_id", area);
+    if (aprobacion.length) q = q.in("estado_aprobacion", aprobacion);
+    if (compra.length) q = q.in("estado_compra", compra);
+    if (prioridad.length) q = q.in("prioridad", prioridad);
+    if (empresa.length) {
+      // "AMBAS" no es una empresa sino la ausencia de una —las pagan las dos—,
+      // así que no entra en el `.in()`: cuando está tildada junto con alguna
+      // empresa hay que pedir las dos cosas con un `or`.
+      const ids = empresa.filter((e) => e !== "AMBAS");
+      const ambas = empresa.length !== ids.length;
+      if (ambas && ids.length) {
+        q = q.or(`empresa_id.is.null,empresa_id.in.(${ids.join(",")})`);
+      } else if (ambas) {
+        q = q.is("empresa_id", null);
+      } else {
+        q = q.in("empresa_id", ids);
+      }
+    }
+    if (proveedor.length) q = q.in("proveedor_id", proveedor);
+    if (ubicacion.length) q = q.in("ubicacion_id", ubicacion);
     // El equipo y el sector no están en el requerimiento: se resuelven contra
-    // el catálogo. La lista es de una o dos ubicaciones, muy lejos del `.in()`
-    // con mil ids que arma una URL que PostgREST rechaza.
-    if (equipo) q = q.in("ubicacion_id", ubicacionesDelEquipo(ubicaciones, equipo));
-    if (sector) q = q.in("ubicacion_id", ubicacionesDelSector(ubicaciones, sector));
+    // el catálogo. La lista es de una o dos ubicaciones por máquina, muy lejos
+    // del `.in()` con mil ids que arma una URL que PostgREST rechaza.
+    if (equipo.length) {
+      q = q.in("ubicacion_id", equipo.flatMap((e) => ubicacionesDelEquipo(ubicaciones, e)));
+    }
+    if (sector.length) {
+      q = q.in("ubicacion_id", sector.flatMap((s) => ubicacionesDelSector(ubicaciones, s)));
+    }
 
     const desde = pagina * POR_PAGINA;
     const { data, error: err, count } = await q
@@ -244,12 +266,12 @@ export default function RequerimientosClient({
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.
+  // Cuenta desplegables con algo puesto y no valores: lo que dice el globito es
+  // cuántas preguntas se están haciendo, no cuántas casillas hay tildadas.
   const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector]
-    .filter(Boolean).length;
+    .filter((f) => f.length > 0).length;
 
-  const hayFiltros = !!(
-    busquedaAplicada || area || aprobacion || compra || prioridad || empresa || proveedor || ubicacion || equipo || sector
-  );
+  const hayFiltros = !!busquedaAplicada || filtrosPuestos > 0;
 
   /**
    * Frenar un pedido sin cerrarlo, y devolverlo a donde estaba.
@@ -304,9 +326,12 @@ export default function RequerimientosClient({
     [filas]
   );
 
+  // La máquina y el sector también: quedaban puestos después de "Limpiar
+  // filtros", invisibles en el resumen y dejando la tabla recortada sin motivo.
   function limpiar() {
-    setBusqueda(""); setArea(""); setAprobacion(""); setCompra("");
-    setPrioridad(""); setEmpresa(""); setProveedor(""); setUbicacion("");
+    setBusqueda(""); setArea([]); setAprobacion([]); setCompra([]);
+    setPrioridad([]); setEmpresa([]); setProveedor([]); setUbicacion([]);
+    setEquipo([]); setSector([]);
   }
 
   return (
@@ -384,30 +409,36 @@ export default function RequerimientosClient({
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
-          <Select value={area} onChange={setArea} vacio="Todas las áreas"
+          {/* Los nueve aceptan varios valores: la pregunta que se le hace a
+              esta tabla casi nunca es por un solo estado ni por una sola área.
+              Los que tienen lista larga —proveedores, ubicaciones, máquinas—
+              traen buscador solos; los cinco estados no lo necesitan. */}
+          <MultiSelect valores={area} onCambio={setArea}
+            vacio="Todas las áreas" plural="áreas"
             opciones={areas.map((a) => [a.id, a.nombre])} />
-          <Select value={aprobacion} onChange={setAprobacion} vacio="Toda aprobación"
+          <MultiSelect valores={aprobacion} onCambio={setAprobacion}
+            vacio="Toda aprobación" plural="aprobaciones"
             opciones={ESTADOS_APROBACION.map((e) => [e, APROBACION_LABELS[e].label])} />
-          <Select value={compra} onChange={setCompra} vacio="Toda compra"
+          <MultiSelect valores={compra} onCambio={setCompra}
+            vacio="Toda compra" plural="estados"
             opciones={ESTADOS_COMPRA.map((e) => [e, COMPRA_LABELS[e].label])} />
-          <Select value={prioridad} onChange={setPrioridad} vacio="Toda prioridad"
+          <MultiSelect valores={prioridad} onCambio={setPrioridad}
+            vacio="Toda prioridad" plural="prioridades"
             opciones={PRIORIDADES.map((p) => [p, PRIORIDAD_LABELS[p].label])} />
-          <Select value={empresa} onChange={setEmpresa} vacio="Cualquier empresa"
+          <MultiSelect valores={empresa} onCambio={setEmpresa}
+            vacio="Cualquier empresa" plural="empresas"
             opciones={[...empresas.map((e) => [e.id, e.nombre] as [string, string]), ["AMBAS", "Ambas"]]} />
-          {/* Busca en vez de desplegar —son 273 proveedores, y una lista de ese
-              largo no se recorre— pero se ve igual que sus ocho vecinos. */}
-          <SelectorProveedor
-            proveedores={proveedores}
-            valor={proveedor}
-            onCambio={setProveedor}
-            placeholder="Todo proveedor"
-            clase="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
-          />
-          <Select value={ubicacion} onChange={setUbicacion} vacio="Cualquier ubicación"
+          <MultiSelect valores={proveedor} onCambio={setProveedor}
+            vacio="Todo proveedor" plural="proveedores"
+            opciones={proveedores.map((p) => [p.id, p.nombre])} />
+          <MultiSelect valores={ubicacion} onCambio={setUbicacion}
+            vacio="Cualquier ubicación" plural="ubicaciones"
             opciones={ubicaciones.map((u) => [u.id, u.nombre])} />
-          <Select value={sector} onChange={setSector} vacio="Cualquier sector de planta"
+          <MultiSelect valores={sector} onCambio={setSector}
+            vacio="Cualquier sector de planta" plural="sectores"
             opciones={sectores.map((s) => [s.id, s.codigo ? `${s.codigo} — ${s.nombre}` : s.nombre])} />
-          <Select value={equipo} onChange={setEquipo} vacio="Cualquier máquina"
+          <MultiSelect valores={equipo} onCambio={setEquipo}
+            vacio="Cualquier máquina" plural="máquinas"
             opciones={equipos.map((e) => [
               e.id,
               [e.marca, e.modelo].filter(Boolean).length
@@ -810,25 +841,5 @@ function Chip({ label, color }: { label: string; color: string }) {
     <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
       {label}
     </span>
-  );
-}
-
-function Select({
-  value, onChange, vacio, opciones,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  vacio: string;
-  opciones: [string, string][];
-}) {
-  return (
-    <select
-      className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{vacio}</option>
-      {opciones.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-    </select>
   );
 }
