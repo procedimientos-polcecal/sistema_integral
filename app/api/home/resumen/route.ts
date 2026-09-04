@@ -22,11 +22,12 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
 
-  const [rrhh, remises, mantenimiento, compras] = await Promise.all([
+  const [rrhh, remises, mantenimiento, compras, inventario] = await Promise.all([
     modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
     modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
     modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
     modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
+    modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
   ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -60,7 +61,19 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, notificaciones });
+  // Un movimiento que no llegó a la planilla no es un aviso decorativo: el
+  // stock sale de las fórmulas de allá, así que la próxima sincronización lo
+  // revierte. Hay que anotarlo a mano o resolver por qué no se pudo escribir.
+  if (inventario && inventario.sinLlegarALaPlanilla > 0) {
+    notificaciones.push({
+      id: "inv-sin-planilla",
+      titulo: "Movimientos que no llegaron a la planilla",
+      cantidad: inventario.sinLlegarALaPlanilla,
+      href: "/inventario/movimientos",
+    });
+  }
+
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -159,5 +172,39 @@ async function resumenCompras(supabase: Awaited<ReturnType<typeof createClient>>
     enCurso,
     esperandoAprobacion: esperandoAprobacion ?? 0,
     paraComprar: cantidad("PARA_COMPRAR"),
+  };
+}
+
+/**
+ * Lo que el pañol tiene sin resolver.
+ *
+ * El titular es lo que está por debajo del stock de seguridad, que es la
+ * consulta que más se hace y la que ordena el trabajo: son las compras que hay
+ * que pedir. `faltante` es una columna generada —`stock_seguridad -
+ * stock_actual`, acotada a cero—, así que se cuenta con un filtro y no
+ * trayendo los 1.147 artículos.
+ *
+ * Los movimientos que no llegaron a la planilla van al lado y también son una
+ * notificación: el stock sale de las fórmulas de allá, así que la próxima
+ * sincronización los revierte. Normalmente es cero, y cuando no lo es hay que
+ * hacer algo hoy.
+ */
+async function resumenInventario(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  hoyStr: string
+) {
+  const [{ count: faltantes }, { count: movimientosHoy }, { count: sinLlegar }] = await Promise.all([
+    supabase.from("inventario_articulos")
+      .select("id", { count: "exact", head: true }).eq("activo", true).gt("faltante", 0),
+    supabase.from("inventario_movimientos")
+      .select("id", { count: "exact", head: true }).eq("fecha", hoyStr),
+    supabase.from("inventario_movimientos")
+      .select("id", { count: "exact", head: true }).not("sheets_pendiente", "is", null),
+  ]);
+
+  return {
+    faltantes: faltantes ?? 0,
+    movimientosHoy: movimientosHoy ?? 0,
+    sinLlegarALaPlanilla: sinLlegar ?? 0,
   };
 }

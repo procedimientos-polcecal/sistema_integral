@@ -2,26 +2,46 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { Modulo } from "@/lib/core/types";
 
 interface Resumen {
   rrhh: { empleadosActivos: number; presentesHoy: number; ausentesHoy: number } | null;
   remises: { vehiculosActivos: number; empleadosConTurnoHoy: number } | null;
   mantenimiento: { atrasadas: number; otPendientes: number; avisosSinOrden: number } | null;
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
+  inventario: { faltantes: number; movimientosHoy: number; sinLlegarALaPlanilla: number } | null;
 }
 
-export default function InicioClient({ nombreUsuario }: { nombreUsuario: string }) {
+const VACIO: Resumen = {
+  rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null,
+};
+
+/**
+ * El inicio: qué está pasando hoy en cada módulo **al que se tiene acceso**.
+ *
+ * Qué tarjetas van lo decide `modulos`, que viene resuelto del servidor, y no
+ * el resumen: los números llegan por fetch y hasta que contestaban se mostraban
+ * las cuatro tarjetas a todo el mundo. Ahora aparecen las que corresponden
+ * desde el primer pintado y los números se completan cuando llegan.
+ */
+export default function InicioClient({
+  nombreUsuario, modulos,
+}: {
+  nombreUsuario: string;
+  /** Los mismos que filtran el menú. Vacío es una cuenta sin habilitar. */
+  modulos: Modulo[];
+}) {
   const [resumen, setResumen] = useState<Resumen | null>(null);
 
   useEffect(() => {
     fetch("/api/home/resumen")
       .then((r) => r.json())
       .then(setResumen)
-      .catch(() => setResumen({ rrhh: null, remises: null, mantenimiento: null, compras: null }));
+      .catch(() => setResumen(VACIO));
   }, []);
 
-  const sinModulos =
-    resumen && !resumen.rrhh && !resumen.remises && !resumen.mantenimiento && !resumen.compras;
+  const tiene = (m: Modulo) => modulos.includes(m);
+  const sinModulos = modulos.length === 0;
 
   return (
     <div className="space-y-6">
@@ -35,7 +55,7 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {(!resumen || resumen.rrhh) && (
+        {tiene("rrhh") && (
           <ModuloCard
             titulo="RRHH"
             href="/rrhh"
@@ -53,7 +73,7 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
           />
         )}
 
-        {(!resumen || resumen.remises) && (
+        {tiene("remises") && (
           <ModuloCard
             titulo="Remises"
             href="/remises"
@@ -64,7 +84,7 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
           />
         )}
 
-        {(!resumen || resumen.mantenimiento) && (
+        {tiene("mantenimiento") && (
           <ModuloCard
             titulo="Mantenimiento"
             href="/mantenimiento"
@@ -85,7 +105,7 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
           />
         )}
 
-        {(!resumen || resumen.compras) && (
+        {tiene("compras") && (
           <ModuloCard
             titulo="Compras"
             href="/compras"
@@ -108,8 +128,45 @@ export default function InicioClient({ nombreUsuario }: { nombreUsuario: string 
             }
           />
         )}
+
+        {/* Inventario no tenía tarjeta: quien sólo tiene ese módulo entraba al
+            inicio y leía "no tenés acceso a ningún módulo". Lo que pide hacer
+            algo es lo que está bajo el stock de seguridad; los movimientos que
+            no llegaron a la planilla son la alarma, porque la próxima
+            sincronización los revierte. */}
+        {tiene("inventario") && (
+          <ModuloCard
+            titulo="Inventario"
+            href="/inventario"
+            color="#7C3AED"
+            icon={<IconCajas />}
+            hero={
+              resumen?.inventario
+                ? { label: "Artículos bajo el mínimo", valor: resumen.inventario.faltantes }
+                : null
+            }
+            secundarias={
+              resumen?.inventario
+                ? [
+                    { label: "Movimientos hoy", valor: resumen.inventario.movimientosHoy },
+                    { label: "Sin llegar a la planilla", valor: resumen.inventario.sinLlegarALaPlanilla },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function IconCajas() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 8.5V16l9 4.5V13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 8.5V16l-9 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
