@@ -13,6 +13,7 @@ const ctx = (over: Partial<ContextoNav> = {}): ContextoNav => ({
   adminModulos: new Set<Modulo>(),
   esAdminGlobal: false,
   esAprobadorCompras: false,
+  esAprobadorOS: false,
   ...over,
 });
 
@@ -62,6 +63,24 @@ describe("menu de Compras", () => {
     expect(v).toContain("Aprobaciones");
     expect(v).toContain("Para aprobar");
     expect(v).not.toContain("Configuración");
+  });
+
+  /**
+   * Las OS entraron a Aprobaciones y tienen su propia lista: aprobar un servicio
+   * y aprobar un material los decide gente distinta. Asi que la pantalla es de
+   * quien este en cualquiera de las dos.
+   *
+   * "Para aprobar" no: es la segunda aprobacion —a quien comprarle, con la
+   * comparativa a la vista— y ahi solo hay requerimientos.
+   */
+  it("quien solo aprueba OS ve Aprobaciones, pero no la bandeja de compras", () => {
+    const v = visibles(ctx({ esAprobadorOS: true }));
+    expect(v).toContain("Aprobaciones");
+    expect(v).not.toContain("Para aprobar");
+  });
+
+  it("quien no esta en ninguna de las dos listas no ve Aprobaciones", () => {
+    expect(visibles(ctx())).not.toContain("Aprobaciones");
   });
 
   it("quien no tiene el modulo no ve nada de Compras", () => {

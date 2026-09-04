@@ -64,6 +64,7 @@ export function Sidebar({
   modulosAdmin,
   rol,
   esAprobadorCompras,
+  esAprobadorOS = false,
   esEmpleadoRemises = false,
 }: {
   modulos: Modulo[];
@@ -72,13 +73,17 @@ export function Sidebar({
   rol: Rol;
   /** Aprobar no depende del nivel: sale de la lista de Compras. */
   esAprobadorCompras: boolean;
+  /** La otra lista: quién decide sobre las órdenes de servicio. */
+  esAprobadorOS?: boolean;
   /** Cuenta vinculada a un empleado (auto-servicio "Mi remis") — no depende del nivel de módulo. */
   esEmpleadoRemises?: boolean;
 }) {
   const set = new Set(modulos);
   const adminSet = new Set(modulosAdmin);
   const esAdminGlobal = rol === "admin_sistema" || rol === "admin";
-  const ctx = { modulos: set, adminModulos: adminSet, esAdminGlobal, esAprobadorCompras };
+  const ctx = {
+    modulos: set, adminModulos: adminSet, esAdminGlobal, esAprobadorCompras, esAprobadorOS,
+  };
   const pathname = usePathname();
   const search = useSearchParams().toString();
 

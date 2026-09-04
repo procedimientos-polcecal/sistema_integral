@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
-import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
+import { permisosComprasDe, aprobadoresDeCompras, aprobadoresDeOS } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cuentaDeServicio } from "@/lib/core/google";
 import ConfiguracionClient from "./ConfiguracionClient";
@@ -62,6 +62,10 @@ export default async function ConfiguracionPage() {
 
   const aprobadores = await aprobadoresDeCompras(supabase);
 
+  // La otra lista: quién decide sobre las órdenes de servicio. Va acá al lado y
+  // no en otra pantalla justamente para que se vea que son dos y no una.
+  const aprobadoresOS = await aprobadoresDeOS(supabase);
+
   // Con qué alias figura cada uno en el desplegable de la planilla.
   const { data: alias } = await supabase
     .from("compras_aprobadores")
@@ -83,6 +87,7 @@ export default async function ConfiguracionPage() {
       cuentaDeServicio={cuentaDeServicio() ?? null}
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}
+      aprobadoresOS={aprobadoresOS}
       usuarios={usuarios ?? []}
       pendientes={pendientes ?? []}
       nuevosApp={nuevosApp ?? 0}

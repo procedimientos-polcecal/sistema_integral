@@ -74,10 +74,20 @@ export const POR_QUE_HACE_FALTA =
  * seguimiento escrito a mano no se corre con ellas: quedan un proveedor y un
  * costo colgados de otra OS. Es el mismo daño que detecta `seguimientoHuerfano`.
  *
- * Denegar es justamente el caso seguro: la OS ya estaba afuera de la pestaña y
- * sigue afuera, así que no mueve nada. Aprobar desde la app se sigue haciendo a
- * mano en la planilla, que es como se hacía hasta ahora.
+ * Denegar es el caso seguro siempre: la OS ya estaba afuera de la pestaña y
+ * sigue afuera, así que no mueve nada.
+ *
+ * Aprobar dejó de ser un no absoluto. Se midió sobre las 228 filas de la base,
+ * comparando `sheets_row` con `os_number`: el `FILTER` conserva el orden
+ * ascendente —cero desórdenes en las siete pestañas—, así que una OS con número
+ * mayor que todas las de la suya entra al final y no corre nada.
+ *
+ * `correriaFilas` es esa cuenta, la de `aprobarCorreriaFilas()` en
+ * `aprobacion.ts`, y **no tiene valor por omisión a propósito**: quien escriba
+ * en el maestro tiene que haberla hecho. Un default acá decidiría por silencio
+ * lo único que este archivo existe para no dejar librado al azar.
  */
-export function seguroParaElMaestro(estado: unknown): boolean {
-  return String(estado ?? "").trim().toUpperCase() !== "APROBADO";
+export function seguroParaElMaestro(estado: unknown, correriaFilas: boolean): boolean {
+  if (String(estado ?? "").trim().toUpperCase() !== "APROBADO") return true;
+  return !correriaFilas;
 }

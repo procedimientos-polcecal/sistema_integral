@@ -16,6 +16,18 @@ export interface NavItem {
    * cosas distintas y las hacen personas distintas.
    */
   soloAprobadorCompras?: boolean;
+  /**
+   * Para quien esté en **alguna** de las dos listas de aprobación.
+   *
+   * Aprobaciones muestra dos cosas que no las decide la misma gente: los
+   * requerimientos, que aprueba `compras_aprobadores`, y las órdenes de
+   * servicio, que aprueba `os_aprobadores`. Una pantalla que se ve sólo con la
+   * primera dejaría afuera a quien fue puesto justamente para la segunda.
+   *
+   * Adentro, cada sección habilita sus botones según la lista que le toca:
+   * entrar y poder decidir no son lo mismo.
+   */
+  soloAprobadorDeAlgo?: boolean;
   // Restringe a admin_sistema/admin global, sin importar el módulo (ej.
   // Usuarios: gestiona permisos de todos los módulos, no es RRHH-específico).
   soloAdminGlobal?: boolean;
@@ -144,7 +156,7 @@ export const NAV: NavItem[] = [
         href: "/mantenimiento/ordenes-servicio",
         modulo: "mantenimiento",
       },
-      { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorCompras: true },
+      { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorDeAlgo: true },
       { label: "Para aprobar", href: "/compras/para-aprobar", modulo: "compras", soloAprobadorCompras: true },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
       { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
@@ -191,6 +203,8 @@ export interface ContextoNav {
   adminModulos: Set<Modulo>;
   esAdminGlobal: boolean;
   esAprobadorCompras: boolean;
+  /** Está en `os_aprobadores`: puede aprobar o denegar una orden de servicio. */
+  esAprobadorOS: boolean;
 }
 
 /**
@@ -206,6 +220,7 @@ export interface ContextoNav {
 export function puedeVerItem(item: NavItem, ctx: ContextoNav): boolean {
   if (item.modulo && !ctx.modulos.has(item.modulo)) return false;
   if (item.soloAdminGlobal) return ctx.esAdminGlobal;
+  if (item.soloAprobadorDeAlgo) return ctx.esAprobadorCompras || ctx.esAprobadorOS;
   if (item.soloAprobadorCompras) return ctx.esAprobadorCompras;
   if (item.soloAdmin) return item.modulo ? ctx.adminModulos.has(item.modulo) : ctx.esAdminGlobal;
   return true;

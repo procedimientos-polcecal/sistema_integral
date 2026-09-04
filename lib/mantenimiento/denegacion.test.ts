@@ -72,26 +72,41 @@ describe("donde se escribe el estado", () => {
 /**
  * Escribir el estado maestro no es gratis para cualquier valor. Las pestañas de
  * area son un FILTER por estado="APROBADO": poner ese valor mete la fila en la
- * pestaña y corre todas las de abajo, y el seguimiento escrito a mano NO se
- * corre con ellas —queda un proveedor o un costo colgado de otra OS—.
+ * pestaña, y si entra en el medio corre todas las de abajo mientras el
+ * seguimiento escrito a mano NO se corre con ellas —queda un proveedor o un
+ * costo colgado de otra OS—.
  *
- * Denegar es el caso seguro: la OS ya estaba fuera de la pestaña y sigue
+ * Denegar es el caso seguro siempre: la OS ya estaba fuera de la pestaña y sigue
  * afuera, asi que no mueve ninguna fila.
+ *
+ * Aprobar dejo de ser un no absoluto. Se midio: el FILTER conserva el orden por
+ * numero de OS —cero desordenes en las siete pestañas, sobre las 228 filas— asi
+ * que una OS con numero mayor que todas las de su pestaña entra al final y no
+ * corre nada. Quien llama tiene que haber hecho esa cuenta, con
+ * `aprobarCorreriaFilas()`, y pasar el resultado: el segundo parametro no tiene
+ * default a proposito, para que ningun lugar decida esto por omision.
  */
 describe("que estados se pueden escribir en el maestro", () => {
-  it("denegar es seguro: no mete la fila en ninguna pestaña", () => {
-    expect(seguroParaElMaestro("DENEGADO")).toBe(true);
+  it("denegar es seguro aunque la cuenta diga que correria filas", () => {
+    // No la mueve: la fila no entra a ninguna pestaña.
+    expect(seguroParaElMaestro("DENEGADO", true)).toBe(true);
   });
 
   it("los que dejan la OS afuera de las pestañas tambien", () => {
-    expect(seguroParaElMaestro("POR APROBAR")).toBe(true);
-    expect(seguroParaElMaestro("EN REVISIÓN")).toBe(true);
-    expect(seguroParaElMaestro("")).toBe(true);
+    expect(seguroParaElMaestro("POR APROBAR", true)).toBe(true);
+    expect(seguroParaElMaestro("EN REVISIÓN", true)).toBe(true);
+    expect(seguroParaElMaestro("", true)).toBe(true);
   });
 
-  it("aprobar no: es el unico valor que el FILTER levanta", () => {
-    expect(seguroParaElMaestro("APROBADO")).toBe(false);
-    expect(seguroParaElMaestro("aprobado")).toBe(false);
-    expect(seguroParaElMaestro("  APROBADO  ")).toBe(false);
+  it("aprobar es seguro cuando la fila entra al final", () => {
+    expect(seguroParaElMaestro("APROBADO", false)).toBe(true);
+    expect(seguroParaElMaestro("aprobado", false)).toBe(true);
+    expect(seguroParaElMaestro("  APROBADO  ", false)).toBe(true);
+  });
+
+  it("aprobar no es seguro cuando la fila entraria en el medio", () => {
+    expect(seguroParaElMaestro("APROBADO", true)).toBe(false);
+    expect(seguroParaElMaestro("aprobado", true)).toBe(false);
+    expect(seguroParaElMaestro("  APROBADO  ", true)).toBe(false);
   });
 });

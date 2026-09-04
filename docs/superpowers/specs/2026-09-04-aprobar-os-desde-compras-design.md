@@ -238,7 +238,16 @@ El PATCH de `app/api/mantenimiento/ordenes-servicio/route.ts` hoy exige
 `os_aprobadores`, para el subconjunto de cambios que es aprobar o denegar. Sin
 eso, un aprobador de OS que no tenga el módulo Mantenimiento se come un 403 —hoy
 no se nota porque Nico es `admin_sistema`, pero es lo que rompe en cuanto la
-lista sume a alguien más—.
+lista sume a alguien más—. Y al revés: quien está en la lista pero no edita
+Mantenimiento sólo puede tocar `estado` y `motivo_rechazo`. Sumar a alguien para
+que apruebe no puede darle de yapa el seguimiento entero, que es de otro.
+
+**La lista gatea la decisión, no la palabra.** Se ajustó al implementar: exigir
+la lista para cualquier `APROBADO` le sacaba a Mantenimiento algo que hoy hace.
+Una OS que sigue en `SERVICIOS` no se aprobó, y ponerle `APROBADO` es decidir;
+una que ya está en la pestaña de su área fue aprobada hace rato —el `FILTER` la
+levantó por eso— y ahí el estado es seguimiento como cualquier otro campo. La
+lista se exige sólo en el primer caso.
 
 ### 7. El menú
 

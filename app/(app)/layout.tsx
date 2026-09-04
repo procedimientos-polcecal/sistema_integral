@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
-import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { puedeAprobarCompras, puedeAprobarOS } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -62,8 +62,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const modulos = modulosVisibles(rol, grantsList);
   const modulosAdmin = MODULOS_ORDEN.filter((m) => nivelEnModulo(rol, grantsList, m) === "admin");
 
-  // Aprobar en Compras no depende del nivel: sale de la lista.
-  const esAprobadorCompras = await puedeAprobarCompras(supabase, user.id);
+  // Aprobar no depende del nivel: sale de una lista. Son dos, y en paralelo
+  // porque no dependen entre sí: los requerimientos los aprueba una y las
+  // órdenes de servicio la otra.
+  const [esAprobadorCompras, esAprobadorOS] = await Promise.all([
+    puedeAprobarCompras(supabase, user.id),
+    puedeAprobarOS(supabase, user.id),
+  ]);
 
   return (
     <NavMovilProvider>
@@ -75,6 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             modulosAdmin={modulosAdmin}
             rol={rol}
             esAprobadorCompras={esAprobadorCompras}
+            esAprobadorOS={esAprobadorOS}
             esEmpleadoRemises={!!usuario.empleado_id}
           />
           {/* En un teléfono cada píxel de ancho cuenta: 24 de padding por lado

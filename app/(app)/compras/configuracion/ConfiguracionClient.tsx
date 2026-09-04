@@ -18,12 +18,14 @@ interface Importacion {
 }
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio
+  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio
 }: {
   sincronizaciones: Sincronizacion[];
   /** Con qué cuenta de Google escribe el sistema en la planilla. */
   cuentaDeServicio: string | null;
   aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
+  /** Quiénes deciden sobre las órdenes de servicio. Sin alias: esa planilla no firma. */
+  aprobadoresOS: { id: string; nombre: string; apellido: string; email: string }[];
   usuarios: { id: string; nombre: string; apellido: string; email: string }[];
   /** Requerimientos cuyo cambio no se pudo escribir en la planilla. */
   pendientes: {
@@ -206,6 +208,45 @@ export default function ConfiguracionClient({
           requerimientos como las compras. No depende del nivel de acceso: ser
           administrador —del módulo o del sistema— no alcanza. Administrar es
           configurar; aprobar es autorizar plata, y las hacen personas distintas.
+        </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Quiénes pueden aprobar órdenes de servicio
+        </h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Lista aparte de la de arriba: aprobar un servicio y aprobar un material
+          los decide gente distinta. Es la que habilita los botones de la sección
+          «Órdenes de servicio» en Aprobaciones.
+        </p>
+
+        {aprobadoresOS.length === 0 ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Nadie puede aprobar órdenes de servicio todavía: ninguna va a pasar a
+            comparativa hasta que sumes a alguien acá.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {aprobadoresOS.map((a) => (
+              <FilaAprobadorOS key={a.id} aprobador={a} soloQueda={aprobadoresOS.length === 1} />
+            ))}
+          </ul>
+        )}
+
+        <SumarAprobadorOS
+          usuarios={usuarios.filter((u) => !aprobadoresOS.some((a) => a.id === u.id))}
+        />
+
+        <p className="mt-3 text-xs text-slate-500">
+          Sin alias, a diferencia de la lista de arriba: la planilla de OS no firma la
+          aprobación —su columna de estado dice <strong>APROBADO</strong> y nada más—.
+        </p>
+
+        <p className="mt-2 text-xs text-slate-500">
+          <strong>Ojo:</strong> estar en esta lista no alcanza para llegar a la pantalla.
+          Aprobaciones vive dentro de Compras, así que quien no tenga acceso al módulo no
+          va a poder entrar aunque figure acá.
         </p>
       </section>
 
@@ -783,5 +824,113 @@ function PanelPendientes({
         motivo se resuelve afuera se acomodan sin que nadie haga nada.
       </p>
     </section>
+  );
+}
+
+/**
+ * Sumar a alguien a la lista de aprobadores de órdenes de servicio.
+ *
+ * Igual que `SumarAprobador` pero contra la otra lista y sin alias: la planilla
+ * de OS no firma la aprobación. Se dejan las dos separadas y no un componente
+ * con un `endpoint` por parámetro porque lo único que compartirían es el
+ * `<select>`, y el parecido sería justamente lo que después haga que alguien
+ * cambie una lista creyendo que toca la otra.
+ */
+function SumarAprobadorOS({
+  usuarios,
+}: {
+  usuarios: { id: string; nombre: string; apellido: string; email: string }[];
+}) {
+  const router = useRouter();
+  const [elegido, setElegido] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function sumar() {
+    setGuardando(true);
+    setError("");
+    const res = await fetch("/api/compras/aprobadores-os", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario_id: elegido }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo sumar.");
+      return;
+    }
+    setElegido("");
+    router.refresh();
+  }
+
+  if (usuarios.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Sumar a alguien…</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
+          ))}
+        </select>
+        <button
+          onClick={sumar}
+          disabled={!elegido || guardando}
+          className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        >
+          {guardando ? "Sumando…" : "Sumar a la lista"}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/** Una persona que puede aprobar órdenes de servicio. */
+function FilaAprobadorOS({
+  aprobador, soloQueda,
+}: {
+  aprobador: { id: string; nombre: string; apellido: string; email: string };
+  /** Si es el último, quitarlo dejaría las OS sin nadie que las apruebe. */
+  soloQueda: boolean;
+}) {
+  const router = useRouter();
+  const [quitando, setQuitando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function quitar() {
+    if (!confirm(`¿Sacar a ${aprobador.nombre} de la lista? Deja de poder aprobar órdenes de servicio.`)) return;
+    setQuitando(true);
+    setError("");
+    const res = await fetch(`/api/compras/aprobadores-os?usuario_id=${aprobador.id}`, {
+      method: "DELETE",
+    });
+    setQuitando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo quitar.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+      <span className="text-slate-900">{aprobador.nombre} {aprobador.apellido}</span>
+      <span className="font-mono text-xs text-slate-500">{aprobador.email}</span>
+      <button
+        onClick={quitar}
+        disabled={quitando || soloQueda}
+        title={soloQueda ? "Es el último: sin nadie en la lista ninguna OS pasa a comparativa" : undefined}
+        className="ml-auto text-xs text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline"
+      >
+        {quitando ? "Quitando…" : "Quitar"}
+      </button>
+      {error && <p className="w-full text-xs text-red-600">{error}</p>}
+    </li>
   );
 }
