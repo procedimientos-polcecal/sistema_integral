@@ -88,6 +88,20 @@ export default function OrdenesServicioClient({
     ])]);
 
     const huerfanas: string[] = osBody.huerfanas ?? [];
+
+    // Lo que la sincronización ya informaba y esta pantalla no mostraba.
+    //
+    // Se veían sólo `guardadas` y `ordenes`, así que "159 cotizaciones" no se
+    // distinguía de "la planilla tiene 159": si nueve filas no entraban, quien
+    // apretó el botón se iba convencido de que estaba todo. Un aviso que sólo
+    // vive en la respuesta HTTP no le llega a nadie.
+    const sinParsear: string[] = compBody.sin_parsear ?? [];
+    const celdasRepetidas: string[] = compBody.celdas_repetidas ?? [];
+    const faltan =
+      typeof compBody.leidas === "number" && typeof compBody.guardadas === "number"
+        ? compBody.leidas - compBody.guardadas
+        : 0;
+
     setAviso(
       [
         hechos.length > 0 && `Se trajeron ${hechos.join(" y ")}.`,
@@ -96,6 +110,18 @@ export default function OrdenesServicioClient({
           `tiene${huerfanas.length === 1 ? "" : "n"} seguimiento cargado pero ninguna OS al lado ` +
           `(${huerfanas.slice(0, 5).join(", ")}${huerfanas.length > 5 ? "…" : ""}). ` +
           "Hay que acomodarlas a mano en la planilla.",
+        faltan > 0 &&
+          `Ojo: la planilla de comparativas tiene ${compBody.leidas} filas cargadas y entraron ` +
+          `${compBody.guardadas}. ${faltan === 1 ? "Quedó" : "Quedaron"} afuera ` +
+          (sinParsear.length > 0
+            ? `${sinParsear.slice(0, 8).join(", ")}${sinParsear.length > 8 ? "…" : ""}: ` +
+              "esas filas no se pudieron leer como cotización."
+            : `${faltan}, sin poder decir cuál${faltan === 1 ? "" : "es"}.`),
+        celdasRepetidas.length > 0 &&
+          `Ojo: ${celdasRepetidas.length} celda${celdasRepetidas.length === 1 ? "" : "s"} de la ` +
+          `planilla se leyó más de una vez (${celdasRepetidas.slice(0, 5).join(", ")}). ` +
+          "Quedó la última de cada una.",
+        compBody.sobrantes,
       ].filter(Boolean).join(" ")
     );
 
