@@ -24,7 +24,8 @@ import {
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import {
-  escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, type FiltrosCompras,
+  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl,
+  type FiltrosCompras,
 } from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import { useCargar } from "@/lib/core/useCargar";
@@ -170,6 +171,11 @@ export default function RequerimientosClient({
     // y pisarlo con null le rompe la navegación hacia atrás.
     window.history.replaceState(window.history.state, "", destino);
   }, [query]);
+
+  // Cada fila se lleva a la ficha con qué tabla volver. El botón de atrás del
+  // navegador ya alcanza, pero el «← Volver a requerimientos» de la ficha es un
+  // enlace hacia adelante y sin esto navegaba al listado sin filtrar.
+  const ficha = (id: string) => enlaceAlRequerimiento(id, query);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -541,6 +547,7 @@ export default function RequerimientosClient({
             <TarjetaRequerimiento
               key={f.id}
               f={f}
+              href={ficha(f.id)}
               canEdit={canEdit}
               aprobadores={aprobadores}
               usuarioId={usuarioId}
@@ -590,13 +597,13 @@ export default function RequerimientosClient({
                   return (
                     <tr key={f.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 font-mono">
-                        <Link href={`/compras/requerimientos/${f.id}`} className="font-semibold text-[var(--primary)] hover:underline">
+                        <Link href={ficha(f.id)} className="font-semibold text-[var(--primary)] hover:underline">
                           {f.nro_ri}
                         </Link>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-600">{fecha(f.fecha)}</td>
                       <td className="max-w-xs px-3 py-2">
-                        <Link href={`/compras/requerimientos/${f.id}`} className="text-slate-900 hover:underline">
+                        <Link href={ficha(f.id)} className="text-slate-900 hover:underline">
                           {f.descripcion}
                         </Link>
                         {f.codigo && <div className="font-mono text-xs text-slate-400">{f.codigo}</div>}
@@ -709,6 +716,7 @@ export default function RequerimientosClient({
       {avanzando && avanzando.estado_compra !== "PARA_COMPRAR" && (
         <ModalAvanzar
           requerimiento={avanzando}
+          ficha={ficha(avanzando.id)}
           aprobadores={aprobadores}
           proveedores={proveedores}
           comparativa={resumenes[avanzando.id] ?? { cuantos: 0, elegida: null }}
@@ -743,9 +751,11 @@ export default function RequerimientosClient({
  * servidor y el navegador dibujen cosas distintas en la primera pasada.
  */
 function TarjetaRequerimiento({
-  f, canEdit, aprobadores, usuarioId, procesando, onAvanzar, onEspera,
+  f, href, canEdit, aprobadores, usuarioId, procesando, onAvanzar, onEspera,
 }: {
   f: RequerimientoConRelaciones;
+  /** La ficha del RI, con el listado al que volver. */
+  href: string;
   canEdit: boolean;
   aprobadores: Persona[];
   usuarioId: string;
@@ -765,7 +775,7 @@ function TarjetaRequerimiento({
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
         <Link
-          href={`/compras/requerimientos/${f.id}`}
+          href={href}
           className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline"
         >
           RI {f.nro_ri}
@@ -780,7 +790,7 @@ function TarjetaRequerimiento({
       </div>
 
       <Link
-        href={`/compras/requerimientos/${f.id}`}
+        href={href}
         className="block text-sm leading-snug text-slate-900 hover:underline"
       >
         {f.descripcion}

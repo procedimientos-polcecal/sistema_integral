@@ -148,3 +148,35 @@ export function escribirFiltrosEnLaUrl(f: FiltrosCompras): string {
   }
   return params.toString();
 }
+
+/**
+ * El enlace a la ficha de un RI desde el listado, cargando de dónde se salió.
+ *
+ * El botón de atrás del navegador ya devuelve la tabla filtrada, porque la URL
+ * del listado sigue a los filtros. Pero el «← Volver a requerimientos» de la
+ * ficha es un enlace hacia adelante, no un retroceso: sin esto navega a la URL
+ * pelada y deja la tabla entera, que era el mismo problema por otra puerta.
+ *
+ * Se manda el query string del listado y no un "volvé atrás" a secas: a la
+ * ficha se llega también desde el tablero, la bandeja o el panel, y desde ahí
+ * lo correcto es el listado limpio. Si no se sabe de dónde vino, no se inventa.
+ */
+export function enlaceAlRequerimiento(id: string, query: string): string {
+  const ficha = `/compras/requerimientos/${id}`;
+  return query ? `${ficha}?volver=${encodeURIComponent(query)}` : ficha;
+}
+
+/**
+ * A dónde lleva el «← Volver a requerimientos» de la ficha.
+ *
+ * Lo que trae el parámetro es texto que llega por la URL, así que no se pega
+ * tal cual: se lo parsea y se lo vuelve a serializar. Lo que salga de acá es
+ * siempre la misma ruta con un query string bien formado —nada puede correr el
+ * enlace a otra parte—, y un filtro que no exista lo descarta el listado al
+ * leerlo, que es donde están los catálogos para saberlo.
+ */
+export function volverAlListado(volver: string | string[] | undefined): string {
+  const crudo = Array.isArray(volver) ? volver[0] : volver;
+  const query = new URLSearchParams(crudo ?? "").toString();
+  return query ? `/compras/requerimientos?${query}` : "/compras/requerimientos";
+}

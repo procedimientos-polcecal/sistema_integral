@@ -18,7 +18,7 @@ import type { EntradaAlPanol } from "@/lib/inventario/types";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, entradasAlPanol = [],
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [],
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -33,6 +33,11 @@ export default function RequerimientoDetalle({
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
   dolar: CotizacionDolar | null;
+  /**
+   * A dónde vuelve el enlace de arriba: al listado con los filtros que tenía
+   * cuando se salió de él, o al listado pelado si no se llegó desde ahí.
+   */
+  volverA: string;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -85,7 +90,7 @@ export default function RequerimientoDetalle({
 
   return (
     <div className="space-y-4">
-      <Link href="/compras/requerimientos" className="text-sm text-slate-500 hover:text-slate-900">
+      <Link href={volverA} className="text-sm text-slate-500 hover:text-slate-900">
         ← Volver a requerimientos
       </Link>
 

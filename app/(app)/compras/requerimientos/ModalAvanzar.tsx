@@ -36,9 +36,11 @@ export interface ResumenComparativa {
  * exige cada paso no cambió.
  */
 export default function ModalAvanzar({
-  requerimiento: r, aprobadores, proveedores, comparativa, onClose, onConfirmar,
+  requerimiento: r, ficha, aprobadores, proveedores, comparativa, onClose, onConfirmar,
 }: {
   requerimiento: RequerimientoConRelaciones;
+  /** La ficha del RI, con el listado al que volver desde ahí. */
+  ficha: string;
   aprobadores: Persona[];
   proveedores: { id: string; nombre: string }[];
   comparativa: ResumenComparativa;
@@ -117,7 +119,7 @@ export default function ModalAvanzar({
                     {comparativa.cuantos === 1 ? "" : "s"}.
                   </p>
                   <Link
-                    href={`/compras/requerimientos/${r.id}`}
+                    href={ficha}
                     className="text-xs text-[var(--primary)] hover:underline"
                   >
                     Ver la comparativa o cargar otro →
@@ -128,7 +130,7 @@ export default function ModalAvanzar({
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
                     <p>Todavía no hay presupuestos cargados.</p>
                     <Link
-                      href={`/compras/requerimientos/${r.id}`}
+                      href={ficha}
                       className="text-xs font-semibold hover:underline"
                     >
                       Cargarlos en la ficha del pedido →

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, FILTROS_VACIOS,
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, enlaceAlRequerimiento, volverAlListado,
+  hayAlgunFiltro, FILTROS_VACIOS,
 } from "./filtrosUrl";
 
 const catalogos = {
@@ -126,8 +127,8 @@ describe("filtros escritos de vuelta en la URL", () => {
   });
 
   it("los valores de un filtro van juntos, separados por comas", () => {
-    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["ALTA", "URGENTE"] }))
-      .toBe("prioridad=ALTA%2CURGENTE");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["URGENTE", "LEVE"] }))
+      .toBe("prioridad=URGENTE%2CLEVE");
   });
 
   it("lo que se escribe se vuelve a leer igual", () => {
@@ -144,13 +145,48 @@ describe("filtros escritos de vuelta en la URL", () => {
   });
 
   it("el orden no depende de en que orden se tocaron los desplegables", () => {
-    const a = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, area: ["area-seg"], prioridad: ["ALTA"] });
-    const b = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["ALTA"], area: ["area-seg"] });
+    const a = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, area: ["area-seg"], prioridad: ["LEVE"] });
+    const b = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["LEVE"], area: ["area-seg"] });
     expect(a).toBe(b);
   });
 
   it("una busqueda con espacios de sobra se guarda recortada", () => {
     expect(leer(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, busqueda: "  bomba  " })).busqueda)
       .toBe("bomba");
+  });
+});
+
+/**
+ * El boton de atras del navegador alcanza cuando se entra a la ficha desde el
+ * listado, pero el «Volver a requerimientos» de la ficha es un enlace hacia
+ * adelante: tiene que saber a que tabla volver.
+ */
+describe("ida y vuelta entre el listado y la ficha", () => {
+  it("sin filtros la ficha se enlaza pelada", () => {
+    expect(enlaceAlRequerimiento("ri-1", "")).toBe("/compras/requerimientos/ri-1");
+  });
+
+  it("con filtros puestos, la ficha se lleva con que volver", () => {
+    const query = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] });
+    expect(enlaceAlRequerimiento("ri-1", query))
+      .toBe("/compras/requerimientos/ri-1?volver=estado_compra%3DPEDIDO");
+  });
+
+  it("los filtros llegan enteros al volver", () => {
+    const puestos = { ...FILTROS_VACIOS, busqueda: "bomba", prioridad: ["URGENTE", "LEVE"] };
+    const ficha = enlaceAlRequerimiento("ri-1", escribirFiltrosEnLaUrl(puestos));
+    const volver = new URL(ficha, "https://x").searchParams.get("volver");
+    expect(leer(new URL(volverAlListado(volver ?? undefined), "https://x").search)).toEqual(puestos);
+  });
+
+  it("sin de donde volver, se vuelve al listado limpio", () => {
+    expect(volverAlListado(undefined)).toBe("/compras/requerimientos");
+    expect(volverAlListado("")).toBe("/compras/requerimientos");
+  });
+
+  // Es texto que llega por la URL: no puede terminar apuntando a otro lado.
+  it("un parametro armado a mano no corre el enlace fuera del listado", () => {
+    expect(volverAlListado("//evil.example/x")).toBe("/compras/requerimientos?%2F%2Fevil.example%2Fx=");
+    expect(volverAlListado("q=a#/otra/ruta")).toBe("/compras/requerimientos?q=a%23%2Fotra%2Fruta");
   });
 });

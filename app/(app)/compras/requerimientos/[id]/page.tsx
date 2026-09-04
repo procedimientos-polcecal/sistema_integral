@@ -4,11 +4,19 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
+import { volverAlListado } from "@/lib/compras/filtrosUrl";
 import RequerimientoDetalle from "./RequerimientoDetalle";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
 
-export default async function RequerimientoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RequerimientoPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  /** Sólo `volver`: el query string con el que quedó el listado del que se salió. */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const volverA = volverAlListado((await searchParams).volver);
   const supabase = await createClient();
 
   const user = await usuarioActual();
@@ -71,6 +79,7 @@ export default async function RequerimientoPage({ params }: { params: Promise<{ 
   return (
     <RequerimientoDetalle
       dolar={dolar}
+      volverA={volverA}
       requerimiento={requerimiento as RequerimientoConRelaciones}
       historial={(historial ?? []) as HistorialItem[]}
       cotizaciones={(cotizaciones ?? []) as Cotizacion[]}
