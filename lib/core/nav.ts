@@ -123,6 +123,27 @@ export const NAV: NavItem[] = [
       { label: "Dashboard", href: "/compras", modulo: "compras" },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
+      /**
+       * Atajo a la sección de Mantenimiento, no una copia.
+       *
+       * La gestión de las órdenes de servicio va a pasar a Compras: es el mismo
+       * trabajo que un requerimiento —se piden presupuestos y se baja una
+       * comparativa— sólo que se pide un servicio en vez de un material. Por
+       * ahora las gestionan los dos, así que el atajo apunta a la pantalla que
+       * ya existe. Duplicarla dejaría dos copias diciendo cosas distintas de la
+       * misma OS.
+       *
+       * Va gateado por `mantenimiento` y no por `compras` aunque viva en este
+       * menú: el destino es una ruta de Mantenimiento y su layout manda a `/` a
+       * quien no tenga el módulo. Mostrar un ítem que rebota es peor que no
+       * mostrarlo. Y como el grupo Compras ya se filtra por su propio módulo,
+       * el atajo pide las dos cosas: entrar a Compras y poder abrir la OS.
+       */
+      {
+        label: "Órdenes de servicio",
+        href: "/mantenimiento/ordenes-servicio",
+        modulo: "mantenimiento",
+      },
       { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorCompras: true },
       { label: "Para aprobar", href: "/compras/para-aprobar", modulo: "compras", soloAprobadorCompras: true },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
