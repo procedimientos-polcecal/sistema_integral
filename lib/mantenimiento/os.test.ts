@@ -121,10 +121,16 @@ describe("filaDeOS", () => {
 
 describe("el vocabulario de la planilla", () => {
   it("tiene los estados que la planilla usa de verdad", () => {
-    // Verificado sobre las 220 OS cargadas.
+    // Los cinco primeros, verificados sobre las 220 OS cargadas.
+    //
+    // DENEGADO no sale de los datos —no hay ninguna denegada en la base— sino
+    // del vocabulario: es la palabra que ya se escribe a mano en la columna de
+    // estado cuando se decide no hacer el trabajo. Se agrego para que denegar
+    // exista en el sistema, y va ultimo porque no es un paso del circuito sino
+    // su salida. Lo que exige al denegar vive en `denegacion.ts`.
     expect(ESTADOS_OS).toEqual([
       "POR APROBAR", "EN REVISIÓN", "APROBADO",
-      "EN PROCESO (COMPARATIVA)", "ACEPTADO",
+      "EN PROCESO (COMPARATIVA)", "ACEPTADO", "DENEGADO",
     ]);
   });
 
