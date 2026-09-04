@@ -100,7 +100,16 @@ const ALIAS: Record<string, string[]> = {
   imagen: ["IMAGEN COMPLEMENTARIA", "IMAGEN"],
   prioridad: ["PRIORIDAD"],
   empresa: ["EMPRESA", "PAGA"],
-  solicita: ["SOLICITA"],
+  // El encabezado se compara **entero**, no por contenido: "QUIEN SOLICITA" no
+  // entra por "SOLICITA". Con ese único alias, los 1.947 requerimientos
+  // importados quedaron sin solicitante —ni uno—, y sin solicitante la pantalla
+  // de Mis pedidos no le puede mostrar a nadie lo que pidió. Van las formas en
+  // que suele estar escrita esa columna; la que exista gana y el resto no
+  // molesta.
+  solicita: [
+    "SOLICITA", "SOLICITANTE", "QUIEN SOLICITA", "QUIEN LO SOLICITA",
+    "SOLICITADO POR", "PEDIDO POR", "QUIEN PIDE",
+  ],
   comparativa: ["COMPARATIVA PROVEEDORES"],
   proveedor: ["PROVEEDOR ELEGIDO", "PROVEEDOR"],
   estado: ["ESTADO"],
@@ -366,10 +375,11 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       estado_aprobacion: string;
       estado_compra: string;
       compra_asignada_a: string | null;
+      solicitante_nombre: string | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -408,7 +418,14 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
           ? porEmpresa.get((d.paga as { empresa: string }).empresa) ?? null
           : null,
         paga_ambas: (d.paga as { ambas: boolean })?.ambas ?? false,
-        solicitante_nombre: d.solicitante_nombre ?? null,
+        // Se conserva lo que hubiera si la planilla no lo trae, igual que el
+        // estado y la asignación de compra. Sin esto, un RI cargado en la app
+        // —que sí sabe quién lo pidió— perdía el nombre en la primera
+        // sincronización que releyera su fila, y su autor dejaba de verlo entre
+        // los suyos. `solicitante_id` no viaja en este upsert, así que ese no
+        // se toca.
+        solicitante_nombre:
+          d.solicitante_nombre ?? previo.get(registro.nro_ri)?.solicitante_nombre ?? null,
         // Que la planilla no diga nada no significa "sin aprobar" ni "sin
         // iniciar": significa que no se pudo leer. Pisar con el valor por
         // defecto revertia compras ya hechas —15 pasaron de PEDIDO a
