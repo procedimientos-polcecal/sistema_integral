@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
+import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
+import {
+  leerFiltrosDeArticulos, escribirFiltrosDeArticulos,
+} from "@/lib/inventario/filtrosUrl";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {
@@ -32,7 +36,11 @@ export default function ArticulosClient({
   esAdmin: boolean;
   sync: UltimaSync | null;
 }) {
-  const [q, setQ] = useState("");
+  // El buscador también va en la URL: acá se viene a buscar un artículo
+  // puntual, y `?q=rodamiento` es lo que se recarga o se pasa por chat.
+  const arranque = useArranqueDeLaUrl(leerFiltrosDeArticulos);
+  const [q, setQ] = useState(arranque.busqueda);
+  useEspejoEnLaUrl(escribirFiltrosDeArticulos({ busqueda: q }));
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");

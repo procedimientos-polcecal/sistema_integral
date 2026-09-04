@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
+import {
+  leerFiltrosDeStock, escribirFiltrosDeStock,
+} from "@/lib/inventario/filtrosUrl";
 import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
@@ -35,8 +39,14 @@ export default function StockClient({
   puedeOperar: boolean;
   sync: UltimaSync | null;
 }) {
-  const [q, setQ] = useState("");
-  const [soloFaltantes, setSoloFaltantes] = useState(false);
+  // La búsqueda y el filtro de faltantes arrancan de la URL y vuelven a ella:
+  // desde acá se sale a cargar un movimiento, y al volver la lista tiene que
+  // estar como estaba. De paso, "los faltantes de rodamientos" se puede mandar
+  // por chat como un enlace en vez de explicarse.
+  const arranque = useArranqueDeLaUrl(leerFiltrosDeStock);
+  const [q, setQ] = useState(arranque.busqueda);
+  const [soloFaltantes, setSoloFaltantes] = useState(arranque.soloFaltantes);
+  useEspejoEnLaUrl(escribirFiltrosDeStock({ busqueda: q, soloFaltantes }));
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");

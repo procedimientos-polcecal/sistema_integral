@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { comoSeLee } from "@/lib/core/fechas";
+import { paginaDeArranque } from "@/lib/core/filtrosUrl";
+import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
+import {
+  leerFiltrosDeMovimientos, escribirFiltrosDeMovimientos,
+} from "@/lib/inventario/filtrosUrl";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
@@ -55,20 +60,45 @@ export default function MovimientosClient({
   pendientes: Pendiente[];
   sync: UltimaSync | null;
 }) {
-  const [tipo, setTipo] = useState("");
-  const [origen, setOrigen] = useState("");
-  const [sector, setSector] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [busqueda, setBusqueda] = useState("");
+  // Con qué arranca la pantalla: lo que diga la URL. De ahí en más la maneja
+  // ella y la URL la sigue, así que acotar el kardex, entrar a cargar un
+  // movimiento y volver con el botón de atrás devuelve la tabla como estaba.
+  const arranque = useArranqueDeLaUrl((params) => ({
+    filtros: leerFiltrosDeMovimientos(params, sectores.map((s) => s.id)),
+    pagina: paginaDeArranque(params),
+  }));
+
+  const [tipo, setTipo] = useState(arranque.filtros.tipo);
+  const [origen, setOrigen] = useState(arranque.filtros.origen);
+  const [sector, setSector] = useState(arranque.filtros.sector);
+  const [desde, setDesde] = useState(arranque.filtros.desde);
+  const [hasta, setHasta] = useState(arranque.filtros.hasta);
+  const [busqueda, setBusqueda] = useState(arranque.filtros.busqueda);
 
   const [filas, setFilas] = useState<Movimiento[]>([]);
   const [total, setTotal] = useState(0);
-  const [pagina, setPagina] = useState(0);
+  const [pagina, setPagina] = useState(arranque.pagina);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => { setPagina(0); }, [tipo, origen, sector, desde, hasta, busqueda]);
+  const filtros = { busqueda, tipo, origen, sector, desde, hasta };
+
+  // Cambiar un filtro vuelve a la primera página. Se ajusta durante el render y
+  // no en un efecto: así no hay un commit en el que los filtros ya son los
+  // nuevos y la página sigue siendo la vieja, que dispara una consulta de más.
+  // Y comparando contra lo anterior en vez de con un efecto sobre las seis
+  // dependencias, la página que trajo la URL sobrevive al montaje.
+  const soloFiltros = escribirFiltrosDeMovimientos(filtros);
+  const [filtrosPrevios, setFiltrosPrevios] = useState(soloFiltros);
+  if (soloFiltros !== filtrosPrevios) {
+    setFiltrosPrevios(soloFiltros);
+    setPagina(0);
+  }
+
+  // Y lo que va a la barra de direcciones lleva además la página. `soloFiltros`
+  // se queda sin ella a propósito: con la página adentro se resetearía sola en
+  // cuanto alguien pasa de página.
+  useEspejoEnLaUrl(escribirFiltrosDeMovimientos(filtros, pagina + 1));
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -106,6 +136,13 @@ export default function MovimientosClient({
   useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
+  // Una `?pagina=40` escrita a mano —o guardada en un enlace de cuando el
+  // kardex era más corto— muestra una tabla vacía, y una tabla vacía se lee
+  // como "no hay nada". Con el total ya cargado se cae a la última que exista,
+  // y sin resultados a la primera: la paginación no se dibuja con una sola
+  // página, así que si no quedaría parada ahí sin botones con los que salir.
+  const ultimaPagina = Math.max(1, paginas);
+  if (!cargando && pagina + 1 > ultimaPagina) setPagina(ultimaPagina - 1);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">

@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
+import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
+import {
+  leerFiltrosDeLista, escribirFiltrosDeLista,
+} from "@/lib/inventario/filtrosUrl";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Solicitante {
@@ -45,7 +49,11 @@ export default function ListaClient({
   const router = useRouter();
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
-  const [verInactivos, setVerInactivos] = useState(false);
+  // Ver los dados de baja también va en la URL: es lo que decide qué filas se
+  // ven, así que un enlace a esta pantalla sin eso muestra otra cosa.
+  const arranque = useArranqueDeLaUrl(leerFiltrosDeLista);
+  const [verInactivos, setVerInactivos] = useState(arranque.verInactivos);
+  useEspejoEnLaUrl(escribirFiltrosDeLista({ verInactivos }));
 
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoDestino, setNuevoDestino] = useState("");
