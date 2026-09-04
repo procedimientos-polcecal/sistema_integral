@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
+import MultiSelect from "@/components/MultiSelect";
+import {
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
+  FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT,
+  type FiltrosOt,
+} from "@/lib/mantenimiento/filtrosOt";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
@@ -28,11 +34,13 @@ export function estadoMeta(v: string) {
 }
 
 export default function OrdenesClient({
-  canEdit, sectores, equipos, sync
+  canEdit, sectores, equipos, contratistas, sync
 }: {
   canEdit: boolean;
   sectores: any[];
   equipos: any[];
+  /** Los proveedores marcados como contratistas: es por quién se filtra. */
+  contratistas: { id: string; nombre: string }[];
   /** Cuándo se trajo por última vez lo de la planilla. */
   sync: UltimaSync | null;
 }) {
@@ -40,12 +48,48 @@ export default function OrdenesClient({
   const [orders, setOrders]     = useState<any[]>([]);
   const [count, setCount]       = useState(0);
   const [loading, setLoading]   = useState(true);
-  // El estado puede venir en la URL: así el tablero puede mandar directo a
-  // "las atrasadas" en vez de dejar a alguien filtrando a mano.
+  // Los filtros vienen en la URL: así el tablero manda directo a "las
+  // atrasadas" en vez de dejar a alguien filtrando a mano, y así se puede pasar
+  // por chat una vista concreta.
   const params = useSearchParams();
-  const [estadoFilter, setEstadoFilter] = useState(params.get("estado") ?? "");
-  const [search, setSearch]     = useState("");
-  const [especialidad, setEspecialidad] = useState("");
+
+  const catalogos = useMemo(() => ({
+    sectores: sectores.map((x: any) => x.id),
+    equipos: equipos.map((x: any) => x.id),
+    proveedores: contratistas.map((x) => x.id),
+  }), [sectores, equipos, contratistas]);
+
+  /**
+   * Con qué filtros arranca la pantalla.
+   *
+   * Al volver con el botón de atrás desde una orden, el árbol que restaura Next
+   * es el que se renderizó al entrar —con la URL vieja—, así que `params`
+   * llegaría sin filtros aunque la barra de direcciones los tenga. Por eso,
+   * cuando hay navegador, la fuente es la URL de verdad. Es la misma nota que
+   * dejó el listado de requerimientos.
+   */
+  const [arranque] = useState<FiltrosOt>(() =>
+    leerFiltrosDeLaUrl(
+      typeof window === "undefined"
+        ? new URLSearchParams(params.toString())
+        : new URLSearchParams(window.location.search),
+      catalogos
+    )
+  );
+
+  const [search, setSearch]     = useState(arranque.busqueda);
+  const [busquedaAplicada, setBusquedaAplicada] = useState(arranque.busqueda);
+  // Cada uno es una lista: dentro de un filtro los valores suman —«atrasado o
+  // en proceso»— y entre filtros se recortan. Vacío es "no filtrar por esto".
+  const [estado, setEstado] = useState(arranque.estado);
+  const [especialidad, setEspecialidad] = useState(arranque.especialidad);
+  const [tipo, setTipo] = useState(arranque.tipo);
+  const [quien, setQuien] = useState(arranque.quien);
+  const [prioridad, setPrioridad] = useState(arranque.prioridad);
+  const [proveedor, setProveedor] = useState(arranque.proveedor);
+  const [sector, setSector] = useState(arranque.sector);
+  const [equipo, setEquipo] = useState(arranque.equipo);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [avisoSync, setAvisoSync] = useState<string | null>(null);
   const [page, setPage]         = useState(1);
@@ -60,18 +104,61 @@ export default function OrdenesClient({
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
+  const filtros: FiltrosOt = useMemo(() => ({
+    busqueda: busquedaAplicada,
+    estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+  }), [busquedaAplicada, estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
+
+  const hayFiltros = hayAlgunFiltro(filtros);
+
+  function limpiarFiltros() {
+    setSearch("");
+    setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
+    setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
+  }
+
+  // La búsqueda espera un momento para no consultar en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaAplicada(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Cambiar un filtro vuelve a la primera página. Se ajusta durante el render
+  // y no en un efecto: así no hay un commit en el que los filtros ya son los
+  // nuevos y la página sigue siendo la vieja, que dispara una consulta de más.
+  const filtrosAhora = escribirFiltrosEnLaUrl(filtros);
+  const [filtrosPrevios, setFiltrosPrevios] = useState(filtrosAhora);
+  if (filtrosAhora !== filtrosPrevios) {
+    setFiltrosPrevios(filtrosAhora);
+    setPage(1);
+  }
+
+  /**
+   * La URL va detrás de los filtros.
+   *
+   * Con `replace` y no `push`: salir de la pantalla con el botón de atrás no
+   * tiene por qué obligar a deshacer antes cada casilla tildada, una por una.
+   * Y con `history` y no `router.replace`, que le pediría la página entera al
+   * servidor —los sectores, los equipos, los contratistas, la sincronización—
+   * para cambiar un query string que la pantalla ya tiene resuelto en memoria.
+   */
+  useEffect(() => {
+    const destino = filtrosAhora
+      ? `${window.location.pathname}?${filtrosAhora}`
+      : window.location.pathname;
+    if (destino === window.location.pathname + window.location.search) return;
+    // El estado que va es el que ya estaba: ahí guarda Next su árbol de rutas.
+    window.history.replaceState(window.history.state, "", destino);
+  }, [filtrosAhora]);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page) });
-    if (estadoFilter) params.set("estado", estadoFilter);
-    if (search)       params.set("q", search);
-    if (especialidad) params.set("especialidad", especialidad);
-    const res = await fetch(`/api/mantenimiento/ordenes?${params}`);
+    const res = await fetch(`/api/mantenimiento/ordenes?${consultaDeLaRuta(filtros, page)}`);
     const json = await res.json();
     setOrders(json.data ?? []);
     setCount(json.count ?? 0);
     setLoading(false);
-  }, [page, estadoFilter, search, especialidad]);
+  }, [page, filtros]);
 
   async function sincronizar() {
     setSincronizando(true);
@@ -249,30 +336,85 @@ export default function OrdenesClient({
       {view === "orden" && <OrdenarTrabajo puedeEditar={canEdit} />}
 
       {view === "list" && (
-        <div className="flex gap-2 flex-wrap">
-          {ESTADOS.map((e) => (
-            <button key={e.value} onClick={() => { setEstadoFilter(e.value); setPage(1); }}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all"
-              style={{
-                color:       estadoFilter === e.value ? e.color   : "#64748B",
-                background:  estadoFilter === e.value ? e.bg      : "#fff",
-                borderColor: estadoFilter === e.value ? e.color   : "#E2E8F0",
-              }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: estadoFilter === e.value ? e.dot : "#CBD5E1" }} />
-              {e.label}
+        <div className="space-y-2">
+          {/* Los estados siguen siendo botones y no un desplegable: son cuatro,
+              tienen color, y es el filtro que se usa siempre. Lo que cambia es
+              que ahora se pueden tildar varios — "qué hay abierto" son tres
+              estados, y de a uno eran tres pasadas para contar 36 órdenes sobre
+              1.819. "Todos" no es un estado sino la forma de sacarlos. */}
+          <div className="flex gap-2 flex-wrap items-center">
+            {ESTADOS.map((e) => {
+              const puesto = e.value === "" ? estado.length === 0 : estado.includes(e.value);
+              return (
+                <button
+                  key={e.value}
+                  onClick={() =>
+                    setEstado(
+                      e.value === ""
+                        ? []
+                        : estado.includes(e.value)
+                          ? estado.filter((v) => v !== e.value)
+                          : [...estado, e.value]
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all"
+                  style={{
+                    color:       puesto ? e.color : "#64748B",
+                    background:  puesto ? e.bg    : "#fff",
+                    borderColor: puesto ? e.color : "#E2E8F0",
+                  }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: puesto ? e.dot : "#CBD5E1" }} />
+                  {e.label}
+                </button>
+              );
+            })}
+
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar equipo, sector, descripción..."
+              className="w-full sm:w-60 sm:ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+
+            {/* En teléfono el resto arranca cerrado: siete desplegables más
+                empujarían la tabla fuera de la pantalla. */}
+            <button
+              onClick={() => setFiltrosAbiertos((v) => !v)}
+              className="sm:hidden rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600"
+            >
+              {filtrosAbiertos ? "Menos filtros" : "Más filtros"}
             </button>
-          ))}
-          <select
-            value={especialidad}
-            onChange={(e) => { setEspecialidad(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
-          >
-            <option value="">Toda especialidad</option>
-            {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
-          </select>
-          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Buscar equipo, sector, descripción..."
-            className="w-full sm:w-60 sm:ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+          </div>
+
+          <div className={`${filtrosAbiertos ? "grid" : "hidden"} sm:flex grid-cols-2 gap-2 sm:flex-wrap`}>
+            <MultiSelect valores={especialidad} onCambio={setEspecialidad}
+              vacio="Toda especialidad" plural="especialidades"
+              opciones={ESPECIALIDADES.map((e) => [e, e])} />
+            <MultiSelect valores={tipo} onCambio={setTipo}
+              vacio="Programado y correctivo" plural="tipos"
+              opciones={TIPOS_DE_OT.map((t) => [t, t === "PROGRAMADO" ? "Programado" : "Correctivo"])} />
+            <MultiSelect valores={quien} onCambio={setQuien}
+              vacio="Interno y contratado" plural="formas"
+              opciones={QUIENES_DE_OT.map((q) => [q, q === "INTERNO" ? "Interno" : "Contratado"])} />
+            <MultiSelect valores={prioridad} onCambio={setPrioridad}
+              vacio="Toda prioridad" plural="prioridades"
+              opciones={PRIORIDADES_DE_OT.map((x) => [x, x])} />
+            <MultiSelect valores={proveedor} onCambio={setProveedor}
+              vacio="Todo contratista" plural="contratistas"
+              opciones={contratistas.map((c) => [c.id, c.nombre])} />
+            <MultiSelect valores={sector} onCambio={setSector}
+              vacio="Todo sector" plural="sectores"
+              opciones={sectores.map((x: any) => [x.id, x.nombre])} />
+            <MultiSelect valores={equipo} onCambio={setEquipo}
+              vacio="Todo equipo" plural="equipos"
+              opciones={equipos.map((x: any) => [x.id, x.code ? `${x.code} · ${x.name}` : x.name])} />
+
+            {hayFiltros && (
+              <button
+                onClick={limpiarFiltros}
+                className="rounded-lg px-3 py-1.5 text-sm text-gray-500 underline hover:text-gray-900"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -313,10 +455,25 @@ export default function OrdenesClient({
         <>
           <p className="text-xs text-gray-400">{count} órdenes</p>
           {orders.length === 0 ? (
+            /* Decía "con esos filtros" incluso sin ninguno puesto, que es la
+               forma más rápida de convencer a alguien de que la tabla está
+               vacía cuando lo que pasa es que él la filtró — o al revés. Con
+               1.819 órdenes cargadas, la diferencia entre "no coincide" y "no
+               hay" importa, y el botón de sacarlos es lo que hace que no haya
+               que buscar cuál era. */
             <div className="rounded-xl border border-dashed border-gray-200 py-16 text-center">
               <p className="text-gray-400 text-sm">
-                {canEdit ? "No hay órdenes con esos filtros. Creá la primera con \"Nueva OT\"." : "No hay órdenes con esos filtros."}
+                {hayFiltros
+                  ? "Ninguna orden coincide con los filtros."
+                  : canEdit
+                    ? "Todavía no hay órdenes cargadas. Creá la primera con \"Nueva OT\"."
+                    : "Todavía no hay órdenes cargadas."}
               </p>
+              {hayFiltros && (
+                <button onClick={limpiarFiltros} className="mt-2 text-sm text-gray-500 underline hover:text-gray-900">
+                  Sacar los filtros
+                </button>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">

@@ -18,8 +18,27 @@ export const ESTA_PENDIENTE = ["ATRASADO", "EN_PROCESO", "POR_HACER"] as const;
 
 /** Cuánto pesa cada prioridad. Lo que no se reconoce queda en el medio. */
 const PESO_PRIORIDAD: Record<string, number> = { ALTA: 3, MEDIA: 2, BAJA: 1 };
+
+/**
+ * La prioridad, reducida a la palabra.
+ *
+ * La planilla la escribe con un emoji adelante —"🟠 Alta", "🟡 Media"— y así se
+ * guarda, porque es lo que dice la celda. Comparar eso contra "ALTA" no
+ * coincidía nunca, así que **las 120 órdenes con prioridad pesaban todas 2** y
+ * el orden sugerido las trataba igual que a las 1.699 que no tienen ninguna. La
+ * función existía y no hacía nada; no se notaba porque el resultado seguía
+ * pareciendo un orden.
+ *
+ * Se descarta todo lo que no sea una letra: el emoji, el espacio y los acentos.
+ * Así entra "🟠 Alta", "ALTA", "alta" y lo que venga mañana con otro adorno.
+ */
+const soloLaPalabra = (v: unknown): string =>
+  String(v ?? "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toUpperCase().replace(/[^A-Z]/g, "");
+
 const peso = (prioridad: string | null | undefined): number =>
-  PESO_PRIORIDAD[String(prioridad ?? "").toUpperCase()] ?? 2;
+  PESO_PRIORIDAD[soloLaPalabra(prioridad)] ?? 2;
 
 export interface Ordenable extends Atrasable {
   id: string;

@@ -34,6 +34,32 @@ describe("ordenSugerido", () => {
     expect(ordenSugerido(ordenes, HOY).at(-1)!.id).toBe("a");
   });
 
+  /**
+   * EL CASO REAL, y el que los tests de arriba no cubrian: la planilla no
+   * escribe "ALTA" sino "🟠 Alta". Comparar eso contra la tabla de pesos no
+   * coincidia nunca, asi que las 120 ordenes con prioridad pesaban todas 2 y
+   * este orden las trataba igual que a las 1.699 que no tienen ninguna. No se
+   * notaba porque el resultado seguia pareciendo un orden.
+   */
+  it("entiende la prioridad como la escribe la planilla, con el emoji", () => {
+    const comoVienen = [
+      { id: "baja",  ot_number: 1, estado: "POR_HACER", prioridad: "🟢 Baja",  fecha: "2026-08-01", proxima_fecha: null },
+      { id: "alta",  ot_number: 2, estado: "POR_HACER", prioridad: "🟠 Alta",  fecha: "2026-08-01", proxima_fecha: null },
+      { id: "media", ot_number: 3, estado: "POR_HACER", prioridad: "🟡 Media", fecha: "2026-08-01", proxima_fecha: null },
+    ];
+    expect(ordenSugerido(comoVienen, HOY).map((o) => o.id)).toEqual(["alta", "media", "baja"]);
+  });
+
+  it("le da lo mismo el emoji, los acentos y las mayusculas", () => {
+    const mismas = ["ALTA", "Alta", "🟠 Alta", "  alta  "].map((prioridad, i) => ({
+      id: String(i), ot_number: i, estado: "POR_HACER", prioridad,
+      fecha: "2026-08-01", proxima_fecha: null,
+    }));
+    const baja = { id: "z", ot_number: 9, estado: "POR_HACER", prioridad: "🟢 Baja", fecha: "2026-08-01", proxima_fecha: null };
+    // Las cuatro formas de "alta" van antes que la baja, ninguna se queda atras.
+    expect(ordenSugerido([baja, ...mismas], HOY).at(-1)!.id).toBe("z");
+  });
+
   it("no rompe con prioridad desconocida o vacía", () => {
     const raras = [
       { id: "x", ot_number: 1, estado: "POR_HACER", prioridad: null, fecha: "2026-08-01" },

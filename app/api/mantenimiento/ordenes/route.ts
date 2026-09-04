@@ -18,15 +18,45 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const estado       = searchParams.get("estado");
-  const equipment_id = searchParams.get("equipment_id");
-  const especialidad = searchParams.get("especialidad");
   const search       = searchParams.get("q");
   const page         = paginaPedida(searchParams.get("page"));
   const limit        = 50;
 
+  /**
+   * Un filtro con varios valores, como los manda el listado.
+   *
+   * Se aceptan las dos formas —`?estado=A,B` y `?estado=A&estado=B`— porque son
+   * las dos que la URL de la pantalla puede tener, y la ruta entiende el mismo
+   * query string que la barra de direcciones a propósito: así reproducir lo que
+   * alguien está viendo es pegar su enlace.
+   *
+   * Acá no se valida contra una lista de valores permitidos. En el listado sí
+   * —`lib/mantenimiento/filtrosOt.ts`— porque un filtro que la persona no ve
+   * deja una tabla vacía que se lee mal; acá, un valor inventado simplemente no
+   * coincide con ninguna fila, que es la respuesta correcta.
+   */
+  const varios = (nombre: string): string[] => {
+    const vistos = new Set<string>();
+    for (const crudo of searchParams.getAll(nombre)) {
+      for (const v of crudo.split(",")) if (v.trim()) vistos.add(v.trim());
+    }
+    return [...vistos];
+  };
+
+  const estado       = varios("estado");
+  const especialidad = varios("especialidad");
+  const tipo         = varios("tipo");
+  const quien        = varios("quien");
+  const prioridad    = varios("prioridad");
+  const proveedor    = varios("proveedor");
+  const sector       = varios("sector");
+  const equipo       = varios("equipo");
+  // `equipment_id` es el nombre viejo, con un solo valor. Lo usa la ficha del
+  // equipo para traer sus órdenes; se conserva para no romperla.
+  const equipment_id = searchParams.get("equipment_id");
+
   // Las que todavía esperan algo, todas juntas y sin paginar: son unas treinta
-  // sobre mil setecientas, y ordenarlas a mano no se puede hacer de a páginas.
+  // sobre mil ochocientas, y ordenarlas a mano no se puede hacer de a páginas.
   const pendientes = searchParams.get("pendientes") === "1";
 
   let query = supabase
@@ -38,9 +68,17 @@ export async function GET(request: Request) {
     ? query.in("estado", ESTA_PENDIENTE).limit(300)
     : query.range((page - 1) * limit, page * limit - 1);
 
-  if (estado)       query = query.eq("estado", estado);
-  if (equipment_id) query = query.eq("equipment_id", equipment_id);
-  if (especialidad) query = query.eq("especialidad", especialidad);
+  // Un `.in()` por filtro: los valores de un mismo desplegable suman —«atrasado
+  // o en proceso»— y los de distintos desplegables se recortan entre sí.
+  if (estado.length)       query = query.in("estado", estado);
+  if (especialidad.length) query = query.in("especialidad", especialidad);
+  if (tipo.length)         query = query.in("tipo", tipo);
+  if (quien.length)        query = query.in("quien", quien);
+  if (prioridad.length)    query = query.in("prioridad", prioridad);
+  if (proveedor.length)    query = query.in("proveedor_id", proveedor);
+  if (sector.length)       query = query.in("sector_id", sector);
+  if (equipo.length)       query = query.in("equipment_id", equipo);
+  if (equipment_id)        query = query.eq("equipment_id", equipment_id);
   if (search) {
     // Sanitizar: quitar caracteres que rompen el filtro PostgREST (,()*\)
     const safe = search.replace(/[,()*\\%]/g, "").trim();
