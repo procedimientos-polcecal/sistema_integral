@@ -6,7 +6,9 @@ import { leerStaging, borrarStaging } from "@/lib/rrhh/staging";
 import { parseNumeroAR, toDateOnlyFromCell, type ParsedSheet } from "@/lib/rrhh/excelImport";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { indiceDeSectores, sectorQueNombra } from "@/lib/core/sectores";
+import { indiceDeCatalogo, elQueNombra } from "@/lib/core/catalogo";
+
+interface Sin { filas: number; motivo: string }
 
 interface Mapping {
   legajo: string;
@@ -42,23 +44,47 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  const { data: empresas } = await admin.from("empresas").select("id, nombre");
-  const empresaByNombre = new Map((empresas ?? []).map((e) => [e.nombre.trim().toLowerCase(), e.id]));
+  const { data: empresas } = await admin
+    .from("empresas").select("id, nombre").eq("activo", true);
+  const indiceEmpresas = indiceDeCatalogo(empresas ?? []);
   // Sólo los activos: un nombre repetido por una fila dada de baja —quedaron
   // diez en la 20260904112044— haría ambiguo un sector que en realidad es uno
   // solo, y dejaría sin enlazar a todo el mundo.
   const { data: sectores } = await admin
     .from("sectores").select("id, nombre").eq("activo", true);
-  const indiceSectores = indiceDeSectores(sectores ?? []);
+  const indiceSectores = indiceDeCatalogo(sectores ?? []);
 
-  async function resolverEmpresaId(nombre: string): Promise<string> {
-    const key = nombre.toLowerCase();
-    const existente = empresaByNombre.get(key);
-    if (existente) return existente;
-    const { data, error } = await admin.from("empresas").insert({ nombre }).select("id").single();
-    if (error) throw new Error(error.message);
-    empresaByNombre.set(key, data.id);
-    return data.id;
+  /**
+   * Lo que la planilla nombra y el catálogo no reconoce, junto y contado.
+   *
+   * Agrupado por nombre porque una lista con el mismo nombre repetido treinta
+   * veces no se lee, y con el texto tal cual lo escribió el Excel: es lo que
+   * hay que buscar allá para corregirlo.
+   */
+  const sinReconocer = { empresa: new Map<string, Sin>(), sector: new Map<string, Sin>() };
+  function anotar(que: "empresa" | "sector", nombre: string, motivo: string) {
+    const previo = sinReconocer[que].get(nombre);
+    sinReconocer[que].set(nombre, { filas: (previo?.filas ?? 0) + 1, motivo });
+  }
+
+  /**
+   * La empresa que nombra la planilla. Si no se la reconoce, queda vacía.
+   *
+   * Creaba la que no encontraba, igual que los sectores. Es peor: la empresa es
+   * obligatoria para dar de alta a alguien, así que un "POLISAN" en el Excel no
+   * sólo agregaba una empresa al catálogo del núcleo —que comparten los cinco
+   * módulos— sino que además metía al empleado adentro, y desde ahí queda
+   * contado aparte en todo lo que corta por empresa.
+   *
+   * Ahora la fila de un empleado nuevo no se importa y se dice por qué. Es más
+   * ruidoso y es lo correcto: no importarla se ve y se arregla; importarla mal
+   * no se ve nunca. A uno que ya existía no se le toca la empresa que tenía.
+   */
+  function resolverEmpresaId(nombre: string): string | null {
+    const hallado = elQueNombra(indiceEmpresas, nombre);
+    if (hallado.id) return hallado.id;
+    anotar("empresa", nombre, hallado.motivo ?? "no existe");
+    return null;
   }
 
   /**
@@ -77,18 +103,11 @@ export async function POST(request: Request) {
    * dar de alta el sector en Administración, donde además se chequea que no
    * duplique uno que ya existe.
    *
-   * Se cuenta cuántas filas quedaron sin enlazar con cada nombre: una lista con
-   * el mismo nombre repetido treinta veces no se lee.
    */
-  const sinReconocer = new Map<string, { filas: number; motivo: string }>();
   function resolverSectorId(nombre: string): string | null {
-    const hallado = sectorQueNombra(indiceSectores, nombre);
+    const hallado = elQueNombra(indiceSectores, nombre);
     if (hallado.id) return hallado.id;
-    const previo = sinReconocer.get(nombre);
-    sinReconocer.set(nombre, {
-      filas: (previo?.filas ?? 0) + 1,
-      motivo: hallado.motivo ?? "no existe",
-    });
+    anotar("sector", nombre, hallado.motivo ?? "no existe");
     return null;
   }
 
@@ -127,7 +146,7 @@ export async function POST(request: Request) {
     let sectorId: string | null = null;
     const empresaNombre = mapping.empresa ? String(row[mapping.empresa] ?? "").trim() : "";
     const sectorNombre = mapping.sector ? String(row[mapping.sector] ?? "").trim() : "";
-    const empresaId = empresaNombre ? await resolverEmpresaId(empresaNombre) : null;
+    const empresaId = empresaNombre ? resolverEmpresaId(empresaNombre) : null;
     if (sectorNombre) sectorId = resolverSectorId(sectorNombre);
 
     let horasTeoricasDiarias: number | undefined;
@@ -184,10 +203,13 @@ export async function POST(request: Request) {
   //
   // A un empleado que ya existía no se le borra el sector que tenía: `data`
   // omite `sector_id` cuando es null en vez de escribirlo vacío.
-  const sectoresSinReconocer = [...sinReconocer.entries()]
-    .map(([nombre, d]) => ({ nombre, filas: d.filas, motivo: d.motivo }))
-    .sort((a, b) => b.filas - a.filas);
+  const enLista = (m: Map<string, Sin>) =>
+    [...m.entries()]
+      .map(([nombre, d]) => ({ nombre, filas: d.filas, motivo: d.motivo }))
+      .sort((a, b) => b.filas - a.filas);
+  const sectoresSinReconocer = enLista(sinReconocer.sector);
+  const empresasSinReconocer = enLista(sinReconocer.empresa);
 
   await borrarStaging(supabase, token);
-  return NextResponse.json({ creados, actualizados, errores, sectoresSinReconocer });
+  return NextResponse.json({ creados, actualizados, errores, sectoresSinReconocer, empresasSinReconocer });
 }

@@ -128,6 +128,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
     errores: string[];
     /** Los que la planilla nombra y el catálogo no reconoce. Ver más abajo. */
     sectoresSinReconocer?: { nombre: string; filas: number; motivo: string }[];
+    empresasSinReconocer?: { nombre: string; filas: number; motivo: string }[];
   } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
@@ -308,6 +309,32 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
                     {importResult.errores.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </details>
+              )}
+
+              {/* Una empresa que no está es más grave que un sector: sin
+                  empresa no se puede dar de alta a alguien, así que esas filas
+                  no entraron. Va primero y en rojo por eso. */}
+              {importResult.empresasSinReconocer && importResult.empresasSinReconocer.length > 0 && (
+                <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                  <p className="text-red-800">
+                    {importResult.empresasSinReconocer.length === 1
+                      ? "Una empresa de la planilla no está en el sistema"
+                      : `${importResult.empresasSinReconocer.length} empresas de la planilla no están en el sistema`}
+                    . Los empleados nuevos de esas filas no se importaron; a los que ya existían
+                    no se les cambió la empresa.
+                  </p>
+                  <ul className="mt-1 text-red-900">
+                    {importResult.empresasSinReconocer.map((e) => (
+                      <li key={e.nombre}>
+                        «{e.nombre}» — {e.filas} {e.filas === 1 ? "fila" : "filas"}
+                        {e.motivo === "ambiguo" && " (hay más de una empresa con ese nombre)"}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-red-700">
+                    Casi siempre es un error de tipeo en el Excel. Corregilo y volvé a importar.
+                  </p>
+                </div>
               )}
 
               {/* Antes esto no se veía porque no pasaba: el sector que no
