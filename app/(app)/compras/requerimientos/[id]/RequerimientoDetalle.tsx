@@ -15,6 +15,7 @@ import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
+import { justificacionQueExplica } from "@/lib/core/justificacion";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
@@ -349,13 +350,22 @@ export default function RequerimientoDetalle({
                   </button>
                 ) : (
                   <div className="space-y-2">
+                    {/* El motivo es obligatorio y el servidor lo exige igual:
+                        la regla vive en `lib/compras/denegacion.ts`. Acá se
+                        dice qué se espera, para no dejar a nadie tocando un
+                        botón apagado sin entender por qué. */}
                     <textarea
                       rows={2}
+                      autoFocus
                       className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      placeholder="Motivo del rechazo"
+                      placeholder="¿Por qué se deniega? Ej.: duplicado del RI 1820"
                       value={motivoRechazo}
                       onChange={(e) => setMotivoRechazo(e.target.value)}
                     />
+                    <p className="text-xs text-slate-500">
+                      Quien lo pidió va a leer esto en «Mis pedidos». Un guión o un «no»
+                      no alcanzan.
+                    </p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => setMostrarRechazo(false)}
@@ -371,7 +381,12 @@ export default function RequerimientoDetalle({
                           });
                           if (ok) setMostrarRechazo(false);
                         }}
-                        disabled={guardando || !motivoRechazo.trim()}
+                        disabled={guardando || !justificacionQueExplica(motivoRechazo)}
+                        title={
+                          justificacionQueExplica(motivoRechazo)
+                            ? undefined
+                            : "Escribí por qué se deniega"
+                        }
                         className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                       >
                         Confirmar
