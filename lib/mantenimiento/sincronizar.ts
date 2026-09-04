@@ -366,6 +366,14 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   const sinProveedor = new Set<string>();
   const cuando = new Date().toISOString();
 
+  // Cuántas filas tenía la planilla y cuántas no se pudieron leer como una
+  // cotización. Era la única de las cuatro sincronizaciones que no lo decía: una
+  // fila que no parsea salía por el `continue` y desaparecía sin rastro, así que
+  // "entraron 159" no se distinguía de "la planilla tiene 159". La diferencia
+  // entre los dos números es lo que hay que ir a mirar a la planilla.
+  let leidas = 0;
+  const sinParsear: string[] = [];
+
   for (const pestana of COMPARATIVA_PESTANAS) {
     let filas: string[][];
     try {
@@ -378,8 +386,16 @@ export async function sincronizarComparativas(): Promise<Resultado> {
     }
 
     for (let i = 1; i < filas.length; i++) {
+      // Las vacías del final de la hoja no cuentan: son el relleno de la
+      // planilla, no filas que alguien escribió.
+      if (filas[i].every((c) => String(c ?? "").trim() === "")) continue;
+      leidas += 1;
+
       const cot = filaDeComparativa(filas[i], i + 1, pestana);
-      if (!cot) continue;
+      if (!cot) {
+        sinParsear.push(`${pestana}!${i + 1}`);
+        continue;
+      }
 
       const proveedor_id = proveedorDe(enlaces, cot.proveedor);
       if (!proveedor_id) sinProveedor.add(cot.proveedor);
@@ -481,7 +497,15 @@ export async function sincronizarComparativas(): Promise<Resultado> {
       "Quedó la última de cada una."
     : null;
 
-  const aviso = [sobrantes, celdasRepetidas].filter(Boolean).join(" ") || null;
+  // Las filas que la planilla tiene y no se pudieron leer van al registro, no
+  // sólo a la respuesta: la respuesta la ve quien apretó el botón, el registro
+  // queda para el día que alguien pregunte por qué falta una cotización.
+  const noEntraron = sinParsear.length > 0
+    ? `${sinParsear.length} fila(s) de la planilla no se pudieron leer como cotización: ` +
+      `${sinParsear.slice(0, 20).join(", ")}${sinParsear.length > 20 ? "…" : ""}.`
+    : null;
+
+  const aviso = [sobrantes, celdasRepetidas, noEntraron].filter(Boolean).join(" ") || null;
 
   const ordenes = new Set(unicos.map((c) => c.os_number)).size;
   await registrarSincronizacion({
@@ -489,7 +513,9 @@ export async function sincronizarComparativas(): Promise<Resultado> {
     error: aviso ?? undefined,
   });
   return logra({
-    guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
+    leidas, guardadas, ordenes,
+    sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
+    ...(sinParsear.length > 0 ? { sin_parsear: sinParsear } : {}),
     ...(sobrantes ? { sobrantes } : {}),
     ...(celdasRepetidas ? { celdas_repetidas: repetidos } : {}),
   });
