@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Cinco trampas que esta base ya pisó, dos de ellas **dos veces**:
+Seis trampas que esta base ya pisó, dos de ellas **dos veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -78,6 +78,18 @@ uuid, y **Postgres no tiene `min()` para uuid** —el tipo sabe ordenarse pero n
 hay agregado definido—, así que las dos tablas y los 85 registros del sembrado
 se revirtieron sin dejar rastro. Para elegir un valor de un grupo de uno,
 `(array_agg(id))[1]`.
+
+**Una tabla puente rompe embeds que andaban.** Una tabla con exactamente dos
+claves foráneas —el caso normal de una relación de muchos a muchos— hace que
+PostgREST vea un segundo camino entre esas dos tablas, y a partir de ahí todo
+`select` que las embeba sin aclarar cuál falla con `PGRST201`. La migración se
+aplica sin un error y lo que se rompe es una pantalla que nadie tocó, en otro
+módulo, minutos después. Pasó con la `20260904084145`: `compras_odoo_ordenes`
+enlaza un requerimiento con una empresa, y el listado de requerimientos —que
+venía trayendo `empresas(nombre)` desde la `017`— dejó de cargar entero. Se
+arregla del lado del `select`, nombrando por dónde ir:
+`empresas!empresa_id(nombre)`. Al agregar una tabla puente, buscar los embeds
+de las dos puntas antes de darla por terminada.
 
 **Enlazar al que se le parece es peor que dejar en null.** Cuando una planilla
 nombra algo en texto libre y no se lo puede reconocer con certeza, el enlace

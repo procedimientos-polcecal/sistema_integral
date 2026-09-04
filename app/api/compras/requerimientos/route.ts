@@ -131,7 +131,8 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre)", { count: "exact" })
+    // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
+    .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre)", { count: "exact" })
     .order("nro_ri", { ascending: false })
     .range((page - 1) * limit, page * limit - 1);
 

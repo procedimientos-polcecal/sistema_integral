@@ -47,7 +47,8 @@ export default async function ComprasDashboardPage() {
   const conCosto = await traerTodo<Record<string, unknown>>((desde, hasta) =>
     supabase
       .from("compras_requerimientos")
-      .select("fecha, costo_iva, costo_envio, empresas(nombre), compras_areas(nombre), proveedores(nombre)")
+      // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
+      .select("fecha, costo_iva, costo_envio, empresas!empresa_id(nombre), compras_areas(nombre), proveedores(nombre)")
       .not("costo_iva", "is", null)
       .order("fecha", { ascending: false })
       .range(desde, hasta)

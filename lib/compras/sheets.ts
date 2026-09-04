@@ -973,7 +973,8 @@ export async function exportarRequerimiento(
   const admin = createAdminClient();
   const { data: r } = await admin
     .from("compras_requerimientos")
-    .select("*, proveedores(nombre), empresas(nombre)")
+    // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
+    .select("*, proveedores(nombre), empresas!empresa_id(nombre)")
     .eq("id", requerimientoId)
     .single();
 

@@ -70,8 +70,9 @@ export default function MisPedidosClient({
 
     let q = supabase
       .from("compras_requerimientos")
+      // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
       .select(
-        "*, compras_areas(nombre), empresas(nombre), proveedores(nombre)",
+        "*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre)",
         { count: "exact" }
       );
 

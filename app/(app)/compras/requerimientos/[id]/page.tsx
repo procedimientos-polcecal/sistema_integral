@@ -24,7 +24,8 @@ export default async function RequerimientoPage({
 
   const { data: requerimiento } = await supabase
     .from("compras_requerimientos")
-    .select("*, compras_areas(nombre), empresas(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+    // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
+    .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
     .eq("id", id)
     .single();
 
