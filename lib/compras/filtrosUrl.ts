@@ -135,8 +135,14 @@ const NOMBRES: [keyof FiltrosCompras, string][] = [
  * —`?prioridad=ALTA,URGENTE`— y no repetido: es la forma que deja la URL
  * legible y la que se puede pasar por chat. El orden es fijo para que tocar
  * dos veces el mismo desplegable no cambie la URL.
+ *
+ * La página va última y sólo si no es la primera, que es el caso de siempre:
+ * un `?pagina=1` en cada enlace sería ruido. Adentro se cuenta desde cero
+ * porque así se calcula el `range()`, pero en la URL se escribe como la lee
+ * quien la mira —`?pagina=2` es la segunda—, que es también lo que dicen los
+ * botones de abajo de la tabla.
  */
-export function escribirFiltrosEnLaUrl(f: FiltrosCompras): string {
+export function escribirFiltrosEnLaUrl(f: FiltrosCompras, pagina = 0): string {
   const params = new URLSearchParams();
   for (const [clave, nombre] of NOMBRES) {
     const valor = f[clave];
@@ -146,7 +152,27 @@ export function escribirFiltrosEnLaUrl(f: FiltrosCompras): string {
       params.set(nombre, valor.trim());
     }
   }
+  if (pagina > 0) params.set("pagina", String(pagina + 1));
   return params.toString();
+}
+
+/**
+ * En qué página arranca el listado. Cero es la primera.
+ *
+ * Sin esto, entrar a un RI desde la página 3 y volver dejaba la tabla en la 1,
+ * con los filtros puestos pero doscientas filas más arriba de donde se estaba.
+ *
+ * Cualquier cosa que no sea un entero de una página en adelante es la primera.
+ * No se valida contra cuántas hay —eso no se sabe hasta consultar—, así que un
+ * número de más lo acomoda el listado cuando ve el total: una tabla vacía se
+ * lee como "no hay nada" y acá no habría nada que lo desmienta.
+ */
+export function leerPaginaDeLaUrl(params: URLSearchParams): number {
+  const crudo = params.get("pagina");
+  if (!crudo) return 0;
+  const numero = Number(crudo);
+  if (!Number.isInteger(numero) || numero < 1) return 0;
+  return numero - 1;
 }
 
 /**

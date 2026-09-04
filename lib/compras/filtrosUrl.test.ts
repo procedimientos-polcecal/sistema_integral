@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, enlaceAlRequerimiento, volverAlListado,
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, leerPaginaDeLaUrl,
+  enlaceAlRequerimiento, volverAlListado,
   hayAlgunFiltro, FILTROS_VACIOS,
 } from "./filtrosUrl";
 
@@ -188,5 +189,51 @@ describe("ida y vuelta entre el listado y la ficha", () => {
   it("un parametro armado a mano no corre el enlace fuera del listado", () => {
     expect(volverAlListado("//evil.example/x")).toBe("/compras/requerimientos?%2F%2Fevil.example%2Fx=");
     expect(volverAlListado("q=a#/otra/ruta")).toBe("/compras/requerimientos?q=a%23%2Fotra%2Fruta");
+  });
+});
+
+/**
+ * La pagina tambien viaja en la URL: volver a la tabla filtrada pero en la
+ * primera pagina es media solucion cuando se estaba en la tercera.
+ */
+describe("la pagina en la URL", () => {
+  const leerPagina = (qs: string) => leerPaginaDeLaUrl(new URLSearchParams(qs));
+
+  it("sin parametro, la primera", () => {
+    expect(leerPagina("")).toBe(0);
+    expect(leerPagina("estado_compra=PEDIDO")).toBe(0);
+  });
+
+  // En la URL se cuenta desde uno, como en los botones; adentro desde cero.
+  it("se cuenta desde uno en la URL y desde cero adentro", () => {
+    expect(leerPagina("pagina=1")).toBe(0);
+    expect(leerPagina("pagina=3")).toBe(2);
+  });
+
+  it("un numero que no es una pagina es la primera", () => {
+    for (const qs of ["pagina=0", "pagina=-2", "pagina=abc", "pagina=2.5", "pagina="]) {
+      expect(leerPagina(qs)).toBe(0);
+    }
+  });
+
+  it("la primera pagina no ensucia la URL", () => {
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 0)).toBe("");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 0))
+      .toBe("estado_compra=PEDIDO");
+  });
+
+  it("la pagina va al final, despues de los filtros", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 2))
+      .toBe("estado_compra=PEDIDO&pagina=3");
+  });
+
+  it("filtros y pagina vuelven juntos, tambien pasando por la ficha", () => {
+    const puestos = { ...FILTROS_VACIOS, area: ["area-mant"], prioridad: ["URGENTE"] };
+    const query = escribirFiltrosEnLaUrl(puestos, 4);
+    const volver = new URL(enlaceAlRequerimiento("ri-1", query), "https://x")
+      .searchParams.get("volver");
+    const listado = new URL(volverAlListado(volver ?? undefined), "https://x");
+    expect(leer(listado.search)).toEqual(puestos);
+    expect(leerPaginaDeLaUrl(listado.searchParams)).toBe(4);
   });
 });

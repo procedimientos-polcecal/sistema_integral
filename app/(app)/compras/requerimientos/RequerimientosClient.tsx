@@ -24,7 +24,7 @@ import {
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import {
-  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl,
+  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, leerPaginaDeLaUrl,
   type FiltrosCompras,
 } from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
@@ -42,7 +42,7 @@ function nombreCorto(p: Persona): string {
 
 export default function RequerimientosClient({
   areas, proveedores, empresas, ubicaciones, equipos, sectores, aprobadores,
-  usuarioId, canEdit, filtrosIniciales, sync,
+  usuarioId, canEdit, filtrosIniciales, paginaInicial, sync,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
@@ -56,13 +56,14 @@ export default function RequerimientosClient({
   canEdit: boolean;
   /** Lo que venía en la URL, ya validado por la página. */
   filtrosIniciales: FiltrosCompras;
+  /** En qué página venía. Cero es la primera. */
+  paginaInicial: number;
   /** Cuándo se trajo por última vez lo de la planilla. */
   sync: UltimaSync | null;
 }) {
   const confirmar = useConfirm();
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
-  const [pagina, setPagina] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -93,28 +94,34 @@ export default function RequerimientosClient({
    * verdad y no la prop. En el servidor `window` no existe y no hay diferencia:
    * los dos leen el mismo query string, así que la hidratación coincide.
    */
-  const [arranque] = useState<FiltrosCompras>(() =>
-    typeof window === "undefined"
-      ? filtrosIniciales
-      : leerFiltrosDeLaUrl(new URLSearchParams(window.location.search), catalogos)
-  );
+  const [arranque] = useState<{ filtros: FiltrosCompras; pagina: number }>(() => {
+    if (typeof window === "undefined") {
+      return { filtros: filtrosIniciales, pagina: paginaInicial };
+    }
+    const params = new URLSearchParams(window.location.search);
+    return { filtros: leerFiltrosDeLaUrl(params, catalogos), pagina: leerPaginaDeLaUrl(params) };
+  });
+
+  // La página también sale de la URL: volver a la tabla filtrada pero en la
+  // primera es media solución cuando se estaba en la tercera.
+  const [pagina, setPagina] = useState(arranque.pagina);
 
   // Los filtros arrancan con lo que trajo la URL: es como el tablero lleva a
   // cada etapa. Y la URL se reescribe con cada cambio, así que también es como
   // se vuelve a la tabla tal como estaba después de entrar a un RI.
-  const [busqueda, setBusqueda] = useState(arranque.busqueda);
-  const [busquedaAplicada, setBusquedaAplicada] = useState(arranque.busqueda);
+  const [busqueda, setBusqueda] = useState(arranque.filtros.busqueda);
+  const [busquedaAplicada, setBusquedaAplicada] = useState(arranque.filtros.busqueda);
   // Cada uno es una lista: dentro de un filtro los valores suman —«Cotizando o
   // Para comprar»— y entre filtros se recortan. Vacío es "no filtrar por esto".
-  const [area, setArea] = useState(arranque.area);
-  const [aprobacion, setAprobacion] = useState(arranque.aprobacion);
-  const [compra, setCompra] = useState(arranque.compra);
-  const [prioridad, setPrioridad] = useState(arranque.prioridad);
-  const [empresa, setEmpresa] = useState(arranque.empresa);
-  const [proveedor, setProveedor] = useState(arranque.proveedor);
-  const [ubicacion, setUbicacion] = useState(arranque.ubicacion);
-  const [equipo, setEquipo] = useState(arranque.equipo);
-  const [sector, setSector] = useState(arranque.sector);
+  const [area, setArea] = useState(arranque.filtros.area);
+  const [aprobacion, setAprobacion] = useState(arranque.filtros.aprobacion);
+  const [compra, setCompra] = useState(arranque.filtros.compra);
+  const [prioridad, setPrioridad] = useState(arranque.filtros.prioridad);
+  const [empresa, setEmpresa] = useState(arranque.filtros.empresa);
+  const [proveedor, setProveedor] = useState(arranque.filtros.proveedor);
+  const [ubicacion, setUbicacion] = useState(arranque.filtros.ubicacion);
+  const [equipo, setEquipo] = useState(arranque.filtros.equipo);
+  const [sector, setSector] = useState(arranque.filtros.sector);
 
   // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
   // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
@@ -161,7 +168,7 @@ export default function RequerimientosClient({
   const query = escribirFiltrosEnLaUrl({
     busqueda: busquedaAplicada,
     area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
-  });
+  }, pagina);
   useEffect(() => {
     const destino = query
       ? `${window.location.pathname}?${query}`
@@ -331,6 +338,13 @@ export default function RequerimientosClient({
   useCargar(async () => { await cargar(); }, [cargar]);
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  // Una `?pagina=40` escrita a mano —o guardada en un enlace de cuando la tabla
+  // era más larga— muestra una tabla vacía, y una tabla vacía se lee como "no
+  // hay nada". Cuando el total dice que esa página no existe, se cae a la
+  // última que sí. Se ajusta durante el render, igual que el salto a la primera
+  // página al cambiar un filtro, y con el total ya cargado: mientras se
+  // consulta, `total` es el de la consulta anterior.
+  if (!cargando && pagina >= paginas) setPagina(paginas - 1);
   // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.
   // Cuenta desplegables con algo puesto y no valores: lo que dice el globito es
   // cuántas preguntas se están haciendo, no cuántas casillas hay tildadas.

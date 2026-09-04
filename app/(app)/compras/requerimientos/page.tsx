@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
-import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
+import { leerFiltrosDeLaUrl, leerPaginaDeLaUrl } from "@/lib/compras/filtrosUrl";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { opcionesConUbicacion, type UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
@@ -104,6 +104,7 @@ export default async function RequerimientosPage({
       usuarioId={user.id}
       canEdit={nivel === "edicion" || nivel === "admin"}
       filtrosIniciales={filtrosIniciales}
+      paginaInicial={leerPaginaDeLaUrl(query)}
       sync={sync}
     />
   );
