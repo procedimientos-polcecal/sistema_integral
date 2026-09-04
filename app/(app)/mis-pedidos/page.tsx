@@ -4,7 +4,13 @@ import MisPedidosClient from "./MisPedidosClient";
 
 /**
  * Fuera del módulo Compras a propósito: cualquier usuario del sistema puede
- * pedir un material, seguir sus propios pedidos y **mirar los de los demás**.
+ * pedir un material, seguir los pedidos **de su área** y mirar los de los
+ * demás.
+ *
+ * De su área y no los suyos: acá los requerimientos se piden por área, así que
+ * los 950 RI de Mantenimiento los tienen que ver todos los de Mantenimiento.
+ * Filtrar por quién los cargó dejaba la pantalla vacía —los 1.947 vinieron de
+ * la planilla y ninguno trae solicitante— y además contestaba otra pregunta.
  *
  * Lo último no es un permiso nuevo: la 018 ya dejó `compras_requerimientos` con
  * lectura abierta a todo usuario autenticado, y lo dejó escrito con su razón —
@@ -23,15 +29,21 @@ export default async function MisPedidosPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: areas }, { data: empresas }, { data: ubicaciones }] = await Promise.all([
-    supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
-    supabase.from("empresas").select("id, nombre").order("nombre"),
-    supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
-  ]);
+  const [{ data: areas }, { data: empresas }, { data: ubicaciones }, { data: mias }] =
+    await Promise.all([
+      supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
+      supabase.from("empresas").select("id, nombre").order("nombre"),
+      supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
+      // De qué áreas es esta persona. Acá se piden por área y no por nombre:
+      // los RI de Mantenimiento los mira todo Mantenimiento, los haya cargado
+      // quien los haya cargado.
+      supabase.from("usuario_areas_compras").select("area_id").eq("usuario_id", user.id),
+    ]);
 
   return (
     <MisPedidosClient
       usuarioId={user.id}
+      misAreas={(mias ?? []).map((a) => a.area_id as string)}
       areas={areas ?? []}
       empresas={empresas ?? []}
       ubicaciones={ubicaciones ?? []}

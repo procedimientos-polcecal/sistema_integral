@@ -14,10 +14,17 @@ type Opcion = { id: string; nombre: string };
 const POR_PAGINA = 50;
 
 /**
- * Mis pedidos, y los de todos.
+ * Los pedidos de mi área, y los de todos.
  *
  * Fuera del módulo Compras a propósito: cualquier usuario puede pedir un
- * material y seguir su pedido aunque no trabaje en Compras.
+ * material y seguir el pedido aunque no trabaje en Compras.
+ *
+ * **De mi área, no míos.** Acá los requerimientos se piden por área: los 950 de
+ * Mantenimiento los miran todos los de Mantenimiento, los haya cargado quien
+ * los haya cargado. Filtrar por quién lo cargó dejaba esto vacío para todo el
+ * mundo —los 1.947 vinieron de la planilla y ninguno trae solicitante— y
+ * además contestaba otra pregunta. De qué área es cada uno se carga en
+ * Administración → Usuarios.
  *
  * **Y puede ver los de los demás.** No es un agregado suelto: es para lo que
  * sirve la pestaña "Requerimientos Internos" de la planilla, donde caen los RI
@@ -34,9 +41,11 @@ const POR_PAGINA = 50;
  * pantalla tarde tres segundos en abrir.
  */
 export default function MisPedidosClient({
-  usuarioId, areas, empresas, ubicaciones,
+  usuarioId, misAreas, areas, empresas, ubicaciones,
 }: {
   usuarioId: string;
+  /** Los ids de las áreas de esta persona. Vacío = todavía no se le asignó. */
+  misAreas: string[];
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
@@ -44,8 +53,12 @@ export default function MisPedidosClient({
   const router = useRouter();
   const [modalAbierto, setModalAbierto] = useState(false);
 
-  /** "mios" arranca puesto: la pantalla se llama Mis pedidos. */
-  const [alcance, setAlcance] = useState<"mios" | "todos">("mios");
+  // Arranca en el área propia, que es a lo que se entra. Salvo que no tenga
+  // ninguna asignada: ahí mostrar una lista vacía sería un callejón, así que
+  // se abre en todos y el cartel explica qué falta.
+  const [alcance, setAlcance] = useState<"mios" | "todos">(
+    misAreas.length > 0 ? "mios" : "todos"
+  );
   const [busqueda, setBusqueda] = useState("");
   const [busquedaAplicada, setBusquedaAplicada] = useState("");
   const [pagina, setPagina] = useState(0);
@@ -76,7 +89,9 @@ export default function MisPedidosClient({
         { count: "exact" }
       );
 
-    if (alcance === "mios") q = q.eq("solicitante_id", usuarioId);
+    // Un `.in()` de nueve áreas como mucho: no es el `.in()` de mil ids que
+    // arma una URL que PostgREST rechaza.
+    if (alcance === "mios") q = q.in("area_id", misAreas);
 
     if (busquedaAplicada) {
       // Un número suelto se busca como N° de RI, que es como lo pide la gente.
@@ -98,23 +113,32 @@ export default function MisPedidosClient({
     if (err) { setError(err.message); setPedidos([]); return; }
     setPedidos((data ?? []) as RequerimientoConRelaciones[]);
     setTotal(count ?? 0);
-  }, [alcance, busquedaAplicada, pagina, usuarioId]);
+  }, [alcance, busquedaAplicada, pagina, misAreas]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
-  const esMio = (p: RequerimientoConRelaciones) => p.solicitante_id === usuarioId;
+  /** De mi área. Es lo que se marca al mirar todos. */
+  const esMio = (p: RequerimientoConRelaciones) =>
+    p.area_id !== null && misAreas.includes(p.area_id);
+  /** Y este lo cargué yo, que es otra cosa y también se dice. */
+  const loCargueYo = (p: RequerimientoConRelaciones) => p.solicitante_id === usuarioId;
+
+  const nombreDeMisAreas = areas
+    .filter((a) => misAreas.includes(a.id))
+    .map((a) => a.nombre)
+    .join(" y ");
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            {alcance === "mios" ? "Mis pedidos" : "Todos los pedidos"}
+            {alcance === "mios" ? "Pedidos de mi área" : "Todos los pedidos"}
           </h1>
           <p className="text-sm text-slate-500">
             {alcance === "mios"
-              ? "Lo que pediste y en qué anda."
+              ? `Lo que pidió ${nombreDeMisAreas || "tu área"} y en qué anda.`
               : "Todos los requerimientos, de todas las áreas. Buscá acá antes de pedir."}
           </p>
         </div>
@@ -128,7 +152,7 @@ export default function MisPedidosClient({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex overflow-hidden rounded-lg border border-slate-300">
-          {(["mios", "todos"] as const).map((v) => (
+          {(misAreas.length > 0 ? (["mios", "todos"] as const) : (["todos"] as const)).map((v) => (
             <button
               key={v}
               onClick={() => setAlcance(v)}
@@ -136,7 +160,7 @@ export default function MisPedidosClient({
                 alcance === v ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
-              {v === "mios" ? "Míos" : "Todos"}
+              {v === "mios" ? "Mi área" : "Todos"}
             </button>
           ))}
         </div>
@@ -168,6 +192,7 @@ export default function MisPedidosClient({
         <Vacio
           alcance={alcance}
           buscando={Boolean(busquedaAplicada)}
+          sinArea={misAreas.length === 0}
           onVerTodos={() => setAlcance("todos")}
           onPedir={() => setModalAbierto(true)}
         />
@@ -182,7 +207,14 @@ export default function MisPedidosClient({
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-xs font-semibold text-slate-500">RI {p.nro_ri}</span>
                 {alcance === "todos" && esMio(p) && (
-                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">Mío</span>
+                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                    Mi área
+                  </span>
+                )}
+                {loCargueYo(p) && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    Lo pediste vos
+                  </span>
                 )}
                 <Chip {...APROBACION_LABELS[p.estado_aprobacion]} />
                 <Chip {...COMPRA_LABELS[p.estado_compra]} />
@@ -231,7 +263,15 @@ export default function MisPedidosClient({
                       {p.nro_ri}
                       {alcance === "todos" && esMio(p) && (
                         <span className="ml-1.5 rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                          Mío
+                          Mi área
+                        </span>
+                      )}
+                      {/* Que sea de mi área y que lo haya pedido yo son cosas
+                          distintas, y las dos importan: la primera para saber
+                          si me toca, la segunda para seguir lo mío. */}
+                      {loCargueYo(p) && (
+                        <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                          Vos
                         </span>
                       )}
                     </td>
@@ -298,13 +338,14 @@ export default function MisPedidosClient({
 }
 
 /**
- * Quién lo pidió.
+ * Quién lo pidió, cuando se sabe.
  *
  * Los 1.947 requerimientos que vinieron de la planilla **no traen solicitante**:
  * la columna "SOLICITA" que el importador busca no existe con ese nombre en la
- * hoja, o está vacía. Se dice "no figura" en vez de dejar el lugar en blanco,
- * porque un blanco se lee como "nadie lo pidió" y no como "la planilla no lo
- * dice".
+ * hoja, o está vacía. Por eso el filtro de arriba va por área y no por persona
+ * —el área sí está en las 1.947—, y por eso acá se dice "sin solicitante" en
+ * vez de dejar el lugar en blanco: un blanco se lee como "nadie lo pidió" y no
+ * como "la planilla no lo dice".
  */
 function Solicitante({
   pedido, mostrar,
@@ -319,10 +360,12 @@ function Solicitante({
 }
 
 function Vacio({
-  alcance, buscando, onVerTodos, onPedir,
+  alcance, buscando, sinArea, onVerTodos, onPedir,
 }: {
   alcance: "mios" | "todos";
   buscando: boolean;
+  /** Nadie le asignó un área todavía: sin eso no hay "mi área" que mostrar. */
+  sinArea: boolean;
   onVerTodos: () => void;
   onPedir: () => void;
 }) {
@@ -331,7 +374,7 @@ function Vacio({
       <div className="rounded-xl border border-dashed border-slate-300 px-6 py-14 text-center">
         <p className="text-sm text-slate-500">
           Nada coincide con lo que buscaste
-          {alcance === "mios" && " entre tus pedidos"}.
+          {alcance === "mios" && " entre los pedidos de tu área"}.
         </p>
         {alcance === "mios" && (
           <button onClick={onVerTodos} className="mt-2 text-sm text-slate-600 underline">
@@ -345,35 +388,36 @@ function Vacio({
   return (
     <div className="rounded-xl border border-dashed border-slate-300 px-6 py-14 text-center">
       <p className="text-sm text-slate-500">
-        {alcance === "mios"
-          ? "Todavía no figurás como solicitante de ningún pedido."
-          : "Todavía no hay requerimientos cargados."}
+        {alcance === "todos"
+          ? "Todavía no hay requerimientos cargados."
+          : sinArea
+            ? "Todavía no tenés un área asignada."
+            : "Tu área todavía no pidió nada."}
       </p>
+      {alcance === "mios" && sinArea && (
+        // Se dice qué falta y quién lo puede hacer. Un cartel que sólo dice
+        // "no hay nada" manda a buscar el problema al lugar equivocado.
+        <p className="mx-auto mt-2 max-w-md text-xs text-slate-400">
+          Los pedidos se agrupan por área. Pedile a un administrador que te
+          asigne la tuya en Administración → Usuarios y vas a ver acá todo lo
+          que pidió tu área.
+        </p>
+      )}
       {alcance === "mios" && (
-        <>
-          {/* Hoy le pasa a todo el mundo, y conviene decir por qué en vez de
-              dejar que se lea como un error: los requerimientos que vinieron de
-              la planilla no traen quién los pidió. Los que se carguen desde
-              acá sí. */}
-          <p className="mx-auto mt-2 max-w-md text-xs text-slate-400">
-            Los requerimientos que vinieron de la planilla no traen quién los
-            pidió, así que acá vas a ver los que cargues desde el sistema.
-          </p>
-          <div className="mt-4 flex justify-center gap-2">
-            <button
-              onClick={onPedir}
-              className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
-            >
-              Pedir un material
-            </button>
-            <button
-              onClick={onVerTodos}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Ver todos los pedidos
-            </button>
-          </div>
-        </>
+        <div className="mt-4 flex justify-center gap-2">
+          <button
+            onClick={onPedir}
+            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
+          >
+            Pedir un material
+          </button>
+          <button
+            onClick={onVerTodos}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Ver todos los pedidos
+          </button>
+        </div>
       )}
     </div>
   );

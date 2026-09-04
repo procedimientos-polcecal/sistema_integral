@@ -14,6 +14,9 @@ interface UsuarioModulo {
   nivel: Nivel;
 }
 
+/** Las áreas de Compras del usuario, como las devuelve la relación. */
+interface AreaDelUsuario { area_id: string }
+
 interface Usuario {
   id: string;
   email: string;
@@ -22,7 +25,10 @@ interface Usuario {
   rol: Rol;
   activo: boolean;
   usuario_modulos: UsuarioModulo[];
+  usuario_areas_compras: AreaDelUsuario[];
 }
+
+type Area = { id: string; nombre: string };
 
 const ROL_LABEL: Record<Rol, string> = {
   admin_sistema: "Admin sistema",
@@ -43,7 +49,12 @@ const MODULO_LABEL: Record<Modulo, string> = {
 };
 const NIVEL_LABEL: Record<Nivel, string> = { lectura: "Lectura", edicion: "Edición", admin: "Admin" };
 
-export default function UsuariosClient({ usuariosIniciales }: { usuariosIniciales: Usuario[] }) {
+export default function UsuariosClient({
+  usuariosIniciales, areas,
+}: {
+  usuariosIniciales: Usuario[];
+  areas: Area[];
+}) {
   const confirmar = useConfirm();
   const [usuarios, setUsuarios] = useState<Usuario[]>(usuariosIniciales);
   const [modalNuevo, setModalNuevo] = useState(false);
@@ -139,6 +150,7 @@ export default function UsuariosClient({ usuariosIniciales }: { usuariosIniciale
       {editando && (
         <EditarUsuarioModal
           usuario={editando}
+          areas={areas}
           onClose={() => setEditando(null)}
           onSaved={() => { setEditando(null); recargar(); }}
         />
@@ -252,13 +264,23 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   );
 }
 
-function EditarUsuarioModal({ usuario, onClose, onSaved }: { usuario: Usuario; onClose: () => void; onSaved: () => void }) {
+function EditarUsuarioModal({
+  usuario, areas, onClose, onSaved,
+}: {
+  usuario: Usuario;
+  areas: Area[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [form, setForm] = useState({ nombre: usuario.nombre, apellido: usuario.apellido, rol: usuario.rol, activo: usuario.activo });
   const [grants, setGrants] = useState<Record<Modulo, Nivel | "">>(() => {
     const base = Object.fromEntries(MODULOS.map((m) => [m, ""])) as Record<Modulo, Nivel | "">;
     for (const m of usuario.usuario_modulos) base[m.modulo] = m.nivel;
     return base;
   });
+  const [areasElegidas, setAreasElegidas] = useState<string[]>(
+    () => (usuario.usuario_areas_compras ?? []).map((a) => a.area_id)
+  );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -285,11 +307,23 @@ function EditarUsuarioModal({ usuario, onClose, onSaved }: { usuario: Usuario; o
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ grants: grantsList }),
     });
-    setGuardando(false);
-    if (resModulos.ok) onSaved();
-    else {
+    if (!resModulos.ok) {
+      setGuardando(false);
       const data = await resModulos.json().catch(() => ({}));
       setError(data.error ?? "No se pudieron actualizar los permisos");
+      return;
+    }
+
+    const resAreas = await fetch(`/api/administracion/usuarios/${usuario.id}/areas`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ areas: areasElegidas }),
+    });
+    setGuardando(false);
+    if (resAreas.ok) onSaved();
+    else {
+      const data = await resAreas.json().catch(() => ({}));
+      setError(data.error ?? "No se pudieron actualizar las áreas");
     }
   }
 
@@ -339,6 +373,34 @@ function EditarUsuarioModal({ usuario, onClose, onSaved }: { usuario: Usuario; o
                     ))}
                   </select>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          {/* No es un permiso y conviene que se lea así: decide qué
+              requerimientos ve primero en Mis pedidos, y esa pantalla tiene un
+              botón para ver todos igual. Son varias porque una persona puede
+              cubrir dos áreas —Mantenimiento y Taller Vial las mira la misma
+              gente— y obligar a elegir una perdería la otra en silencio. */}
+          <div className="pt-2 border-t">
+            <h3 className="text-sm font-medium text-gray-700">Áreas de Compras</h3>
+            <p className="mb-2 text-xs text-gray-500">
+              Qué requerimientos ve en Mis pedidos. No le da ni le quita acceso a nada.
+            </p>
+            <div className="grid grid-cols-2 gap-1">
+              {areas.map((a) => (
+                <label key={a.id} className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={areasElegidas.includes(a.id)}
+                    onChange={(e) =>
+                      setAreasElegidas((prev) =>
+                        e.target.checked ? [...prev, a.id] : prev.filter((x) => x !== a.id)
+                      )
+                    }
+                  />
+                  {a.nombre}
+                </label>
               ))}
             </div>
           </div>
