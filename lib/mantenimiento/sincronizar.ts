@@ -72,6 +72,38 @@ export function unaPorNumero<T extends Datos>(
   };
 }
 
+/**
+ * Una sola fila por celda de la planilla, y cuáles venían repetidas.
+ *
+ * Las comparativas no se espejan por número: varias filas comparten el N° de OS
+ * —son las ofertas que se comparan entre sí— así que lo que identifica a cada
+ * cotización es la celda de la que salió, `(sheets_tab, sheets_row)`. Ésa es la
+ * clave única que la tabla trae del esquema original de la app de
+ * Mantenimiento.
+ *
+ * La dedupe hace falta por lo mismo que `unaPorNumero`: un `upsert` cuyo lote
+ * trae dos veces la misma clave aborta **el lote entero**, y ahí se caen las 152
+ * cotizaciones por una celda leída dos veces.
+ *
+ * Gana la última por la misma razón que allá, y los repetidos se devuelven con
+ * el nombre de la celda —`Compresores!14`— para que se puedan buscar en la
+ * planilla, que es donde está el problema de verdad.
+ */
+export function unaPorCelda<T extends Datos>(
+  registros: T[]
+): { unicos: T[]; repetidos: string[] } {
+  const porCelda = new Map<string, T>();
+  const repetidos = new Set<string>();
+
+  for (const r of registros) {
+    const celda = `${r.sheets_tab}!${r.sheets_row}`;
+    if (porCelda.has(celda)) repetidos.add(celda);
+    porCelda.set(celda, r);
+  }
+
+  return { unicos: [...porCelda.values()], repetidos: [...repetidos].sort() };
+}
+
 /** El texto que explica por qué no se pudo leer una pestaña. */
 async function porQueNoSeLeyo(
   planilla: string, pestana: string, e: unknown, variable: string
@@ -375,58 +407,91 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   // Refresco completo: en la planilla se corrigen y se borran filas, y sólo
   // volviendo a leerla entera queda igual de los dos lados.
   //
-  // PRIMERO SE INSERTA, DESPUÉS SE BORRA. Al revés —que es como estaba— el
-  // borrado no está en la misma transacción que los `insert`, así que:
+  // SE ESCRIBE CADA FILA SOBRE LA SUYA, DESPUÉS SE BORRA LO QUE SOBRÓ. Las dos
+  // formas anteriores estaban mal, cada una a su manera:
   //
-  //   - entre el DELETE y el primer INSERT la tabla queda VACÍA, y esto corre
-  //     cada 15 minutos: cualquier pantalla que lea justo ahí no ve ninguna
-  //     cotización.
-  //   - si falla el lote 3 de 5, el espejo queda BORRADO A MEDIAS y la función
-  //     devuelve 400. Lo viejo ya no está y lo nuevo está incompleto.
+  //   - Borrar y después insertar deja la tabla VACÍA entre el DELETE y el
+  //     primer INSERT, y esto corre cada 15 minutos: una pantalla que lea justo
+  //     ahí no ve ninguna cotización. Y si falla el lote 3 de 5, el espejo
+  //     queda borrado a medias: lo viejo ya no está y lo nuevo está incompleto.
   //
-  // Insertando primero, la ventana mala pasa a ser "por unos segundos hay
-  // cotizaciones repetidas" —lo viejo más lo nuevo— y si un lote falla se sale
-  // antes de borrar, con el espejo anterior intacto y completo. Un rato con
-  // duplicados se nota y se arregla en la corrida siguiente; una tabla vacía
-  // parece que no hay nada cotizado.
+  //   - Insertar y después borrar —que es como estaba— apostaba a que por unos
+  //     segundos hubiera filas repetidas, distinguidas por `synced_at`. Con un
+  //     comentario que decía "no hace falta clave única". La clave única existe
+  //     desde el esquema original de la app de Mantenimiento —
+  //     `os_comparativas_sheets_tab_sheets_row_key`, sobre (sheets_tab,
+  //     sheets_row)— y no está en ninguna migración de este repo, así que no se
+  //     la vio. La copia nueva de cada fila chocaba con la vieja y el primer
+  //     lote se caía entero: el espejo quedó congelado tres días con 152
+  //     cotizaciones del 1 de septiembre, y cada corrida repitiendo el mismo
+  //     error.
   //
-  // No hace falta migración ni clave única: lo nuevo se distingue de lo viejo
-  // por `synced_at`, que es el mismo instante para toda la corrida.
+  // El `upsert` sobre esa clave no tiene ninguna de las dos ventanas: cada
+  // cotización se escribe encima de la suya, la tabla nunca queda vacía ni con
+  // duplicados, y si falla un lote lo anterior sigue completo. De paso el `id`
+  // de cada cotización deja de cambiar en cada corrida —antes se borraba y se
+  // insertaba de nuevo—, así que la pantalla que tenía una lista cargada puede
+  // elegir una sin que el id ya no exista.
+  //
+  // La dedupe es la trampa de siempre: un lote con la misma clave dos veces
+  // aborta el lote entero.
+  const { unicos, repetidos } = unaPorCelda(cotizaciones);
+
   let guardadas = 0;
-  for (let i = 0; i < cotizaciones.length; i += 500) {
-    const lote = cotizaciones.slice(i, i + 500);
-    const { error } = await admin.from("os_comparativas").insert(lote);
+  for (let i = 0; i < unicos.length; i += 500) {
+    const lote = unicos.slice(i, i + 500);
+    const { error } = await admin
+      .from("os_comparativas")
+      .upsert(lote, { onConflict: "sheets_tab,sheets_row" });
 
     if (error) {
       await registrarSincronizacion({
         modulo: "mantenimiento", recurso: "comparativas", ok: false, error: error.message,
       });
-      return falla(400, `No se insertó nada nuevo y el espejo anterior quedó intacto. ${error.message}`);
+      return falla(400, `No se guardó nada nuevo y el espejo anterior quedó intacto. ${error.message}`);
     }
     guardadas += lote.length;
   }
 
-  // Recién ahora se van las de la corrida anterior. Si esto falla, quedan
-  // duplicados: molesta, pero no falta nada, así que no tira abajo la corrida
-  // —se avisa y la próxima limpia—.
+  // Lo que sobró son las cotizaciones cuya celda ya no está en la planilla:
+  // filas que alguien borró, o que el orden movió. El `upsert` no las puede
+  // alcanzar —nadie escribió encima de ellas— así que se van por `synced_at`.
+  //
+  // Que esto falle no tira abajo la corrida: lo nuevo ya está guardado y no
+  // falta nada, sólo quedan de más unas cotizaciones que la planilla ya no
+  // tiene. Se avisa y la próxima limpia.
+  //
+  // Las cargadas desde la app no corren riesgo acá aunque su celda sea nueva:
+  // el POST escribe primero la fila en la planilla y guarda esa celda, así que
+  // la corrida siguiente la lee y la pisa.
   const { error: errorBorrado } = await admin
     .from("os_comparativas")
     .delete()
     .neq("synced_at", cuando);
 
   const sobrantes = errorBorrado
-    ? `Quedaron las cotizaciones de la corrida anterior sin borrar (${errorBorrado.message}). ` +
-      "Se van a ver repetidas hasta la próxima sincronización."
+    ? `Quedaron cotizaciones que la planilla ya no tiene, sin borrar (${errorBorrado.message}). ` +
+      "Se van a ver de más hasta la próxima sincronización."
     : null;
 
-  const ordenes = new Set(cotizaciones.map((c) => c.os_number)).size;
+  // Una celda leída dos veces no se resuelve en silencio: se dice cuál, porque
+  // el problema está en la planilla y ahí hay que ir a mirarlo.
+  const celdasRepetidas = repetidos.length > 0
+    ? `Se leyeron ${repetidos.length} celda(s) más de una vez: ${repetidos.join(", ")}. ` +
+      "Quedó la última de cada una."
+    : null;
+
+  const aviso = [sobrantes, celdasRepetidas].filter(Boolean).join(" ") || null;
+
+  const ordenes = new Set(unicos.map((c) => c.os_number)).size;
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "comparativas", ok: true, filas: guardadas,
-    error: sobrantes ?? undefined,
+    error: aviso ?? undefined,
   });
   return logra({
     guardadas, ordenes, sin_leer: sinLeer, sin_proveedor: [...sinProveedor],
     ...(sobrantes ? { sobrantes } : {}),
+    ...(celdasRepetidas ? { celdas_repetidas: repetidos } : {}),
   });
 }
 

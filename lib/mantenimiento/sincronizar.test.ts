@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SINCRONIZACIONES, unaPorNumero } from "./sincronizar";
+import { SINCRONIZACIONES, unaPorNumero, unaPorCelda } from "./sincronizar";
 
 /**
  * Los nombres de recurso son un contrato con afuera: van escritos en la
@@ -77,5 +77,55 @@ describe("una sola fila por numero antes del upsert", () => {
 
   it("con la lista vacia no inventa nada", () => {
     expect(unaPorNumero([], "ot_number")).toEqual({ unicos: [], repetidos: [] });
+  });
+});
+
+/**
+ * Las comparativas no se espejan por numero sino por la celda de la planilla de
+ * la que salieron: `(sheets_tab, sheets_row)`, que es la clave unica que la
+ * tabla trae del esquema original. Varias filas pueden tener el mismo N° de OS
+ * —son las ofertas que se comparan— asi que el numero no identifica nada.
+ *
+ * La dedupe hace falta por lo mismo que en las otras tres: un upsert cuyo lote
+ * trae dos veces la misma clave aborta EL LOTE ENTERO con "ON CONFLICT DO
+ * UPDATE command cannot affect row a second time", y ahi se pierden las 152
+ * cotizaciones por una celda leida dos veces.
+ */
+describe("una sola fila por celda antes del upsert", () => {
+  const cot = (sheets_tab: string, sheets_row: number, proveedor: string) =>
+    ({ sheets_tab, sheets_row, proveedor });
+
+  it("sin repetidos no toca nada", () => {
+    const r = unaPorCelda([cot("Compresores", 4, "a"), cot("Compresores", 5, "b")]);
+    expect(r.unicos).toHaveLength(2);
+    expect(r.repetidos).toEqual([]);
+  });
+
+  it("la misma celda dos veces deja una sola, y gana la ultima", () => {
+    const r = unaPorCelda([cot("Molienda de cal", 9, "vieja"), cot("Molienda de cal", 9, "nueva")]);
+    expect(r.unicos).toEqual([cot("Molienda de cal", 9, "nueva")]);
+    expect(r.repetidos).toEqual(["Molienda de cal!9"]);
+  });
+
+  it("la misma fila en dos pestañas distintas no es la misma celda", () => {
+    // Cada pestaña tiene su propia numeracion de filas: confundirlas seria
+    // tirar una cotizacion de otro sector.
+    const r = unaPorCelda([cot("Compresores", 7, "a"), cot("Hidratacion", 7, "b")]);
+    expect(r.unicos).toHaveLength(2);
+    expect(r.repetidos).toEqual([]);
+  });
+
+  it("no se elige en silencio: dice que celdas estaban repetidas", () => {
+    const r = unaPorCelda([
+      cot("Calcinación", 3, "a"), cot("Compresores", 8, "b"),
+      cot("Calcinación", 3, "c"), cot("Compresores", 8, "d"),
+    ]);
+    expect(r.unicos).toHaveLength(2);
+    expect(r.repetidos).toEqual(["Calcinación!3", "Compresores!8"]);
+  });
+
+  it("conserva el orden de aparicion de las que quedan", () => {
+    const r = unaPorCelda([cot("Otros", 2, "a"), cot("Otros", 1, "b"), cot("Otros", 2, "c")]);
+    expect(r.unicos.map((c) => c.sheets_row)).toEqual([2, 1]);
   });
 });
