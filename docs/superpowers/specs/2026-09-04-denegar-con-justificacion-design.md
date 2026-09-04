@@ -224,7 +224,36 @@ deploy.
 Escribir en `SERVICIOS` es lo único que toca terreno nuevo de la planilla. La
 hoja es casi toda fórmula y una escritura en la celda equivocada no rompe una
 fila: rompe la pestaña. Por eso la columna se busca por encabezado, se escribe
-una sola celda, y se verifica antes que la fila siga siendo de esa OS. Y como las
-credenciales de Google no están en local, **eso sólo se puede comprobar en el
-deploy**: la primera denegación de una OS que viva en `SERVICIOS` hay que mirarla
-contra la planilla.
+una sola celda, y se verifica antes que la fila siga siendo de esa OS.
+
+Apareció un riesgo que este diseño no había previsto y que la implementación
+tuvo que cerrar: **`APROBADO` es el único valor que el `FILTER` de las pestañas
+levanta**, y levantar una fila corre las de abajo mientras el seguimiento escrito
+a mano no se corre con ellas —el mismo daño que detecta `seguimientoHuerfano`—.
+Así que la escritura en el maestro quedó limitada a los valores que dejan la OS
+afuera de las pestañas. Denegar es seguro: ya estaba afuera y sigue afuera.
+Aprobar sigue siendo a mano en la planilla, como hasta ahora.
+
+### Lo que quedó confirmado del lado de la planilla
+
+- La **validación de la columna ya ofrece `DENEGADO`**, así que la escritura no
+  la va a rechazar por un valor fuera de lista —que es lo que sí le pasa a
+  Compras con «DENEGADA»—.
+- La **cuenta de servicio tiene permiso de edición** sobre la columna L de
+  `SERVICIOS`.
+- El **encabezado de esa columna coincide con el alias `ESTADO`**. No hace falta
+  abrir la planilla para saberlo: la OS 26, que vive en la fila 27 de
+  `SERVICIOS`, tiene `estado = "EN REVISIÓN"` y `empresa = "Polysan"` en la base,
+  y las dos las leyó la sincronización por encabezado. Si `L1` no coincidiera,
+  esos dos campos estarían en null como en las otras diez filas de la hoja —que
+  están vacías porque nadie las completó todavía, no porque no se lean—.
+- Lectura y escritura usan la **misma convención**: el sync toma `filas[0]` como
+  encabezado y guarda `sheets_row = i + 1`; la escritura lee `SERVICIOS!1:1` y
+  escribe en ese `sheets_row`, con los mismos `ALIAS_OS`.
+
+### Lo que sigue sin comprobarse
+
+**Nunca se escribió una celda de `SERVICIOS` desde la app.** Las credenciales de
+Google no están en local, así que todo lo de arriba es inferencia sobre el camino
+de lectura, no una escritura hecha. La primera denegación de una OS que viva en
+`SERVICIOS` hay que mirarla contra la planilla.

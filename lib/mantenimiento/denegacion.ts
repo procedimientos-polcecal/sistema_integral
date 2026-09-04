@@ -30,9 +30,15 @@ export function faltaLaJustificacion(estado: unknown, motivo: unknown): boolean 
  *
  * La planilla de OS tiene dos y no uno:
  *
- * - **`SERVICIOS`**, columna de estado escrita a mano, es el maestro. Es el que
- *   lee el `FILTER` de cada pestaña de área (`estado="APROBADO"`), así que
- *   decide si la OS llega a la pestaña de su área o no.
+ * - **`SERVICIOS`**, columna de estado escrita a mano —la L—, es el maestro. Es
+ *   el que lee el `FILTER` de cada pestaña de área (`estado="APROBADO"`), así
+ *   que decide si la OS llega a la pestaña de su área o no. Su validación ya
+ *   ofrece `DENEGADO` y la cuenta de servicio puede editarla.
+ *
+ *   La columna igual se busca por encabezado y no por la letra: `L1` coincide
+ *   con el alias `ESTADO` —lo prueba la OS 26, cuyo estado y empresa los leyó
+ *   la sincronización de esa hoja— y una hoja que se reordena rompería una
+ *   letra fija sin avisar.
  * - **Cada pestaña de área** tiene además su propio estado de seguimiento,
  *   después de la columna K, para una OS ya aprobada y en curso.
  *
