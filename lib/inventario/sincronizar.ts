@@ -26,7 +26,7 @@ import {
   type ArticuloLeido, type MovimientoLeido,
 } from "@/lib/inventario/planilla";
 import {
-  indicePorNombre, indiceDeEmpleados, reconocer, SinReconocer,
+  indicePorNombre, indiceDeEmpleados, reconocer, esAmbiguo, SinReconocer, type Indice,
 } from "@/lib/inventario/enlaces";
 import { reconciliarSolicitantes, type Destino, type Solicitante } from "@/lib/inventario/catalogos";
 
@@ -248,9 +248,21 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     // Lo que no está en la lista del pañol es lo que hay que agregarle, y por
     // eso se informa aparte de lo que no está en los catálogos del núcleo: son
     // dos problemas distintos con dos arreglos distintos.
-    if (m.sector_raw && !destino_id) sinReconocer.anotar("destinos", m.sector_raw);
-    if (m.solicitante && !solicitante_id) sinReconocer.anotar("solicitantes", m.solicitante);
-    if (m.proveedor_raw && !proveedor_id) sinReconocer.anotar("proveedores", m.proveedor_raw);
+    //
+    // Y un nombre que empata con otro del catálogo se informa aparte: no está
+    // sin cargar, está cargado dos veces, y el arreglo es sacar el duplicado.
+    const donde = (catalogo: string, indice: Indice, nombre: string) =>
+      esAmbiguo(indice, nombre) ? `${catalogo} con nombre repetido` : catalogo;
+
+    if (m.sector_raw && !destino_id) {
+      sinReconocer.anotar(donde("destinos", porDestino, m.sector_raw), m.sector_raw);
+    }
+    if (m.solicitante && !solicitante_id) {
+      sinReconocer.anotar(donde("solicitantes", porSolicitante, m.solicitante), m.solicitante);
+    }
+    if (m.proveedor_raw && !proveedor_id) {
+      sinReconocer.anotar(donde("proveedores", proveedores, m.proveedor_raw), m.proveedor_raw);
+    }
 
     return [{
       articulo_id,

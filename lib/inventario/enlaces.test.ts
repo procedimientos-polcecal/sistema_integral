@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { indicePorNombre, indiceDeEmpleados, reconocer, SinReconocer } from "./enlaces";
+import {
+  indicePorNombre, indiceDeEmpleados, reconocer, esAmbiguo, SinReconocer,
+} from "./enlaces";
 
 const sectores = indicePorNombre([
   { id: "s-mant", nombre: "Mantenimiento" },
@@ -38,12 +40,34 @@ describe("reconocer un nombre de la planilla contra el nucleo", () => {
 });
 
 describe("armar el indice de un catalogo", () => {
-  /** Si dos filas normalizan igual, elegir la segunda haria que el resultado
-   * dependa del orden en que vinieron. */
-  it("con dos filas que normalizan igual gana la primera", () => {
+  /**
+   * Antes ganaba la primera, para que el resultado no dependiera del orden en
+   * que vinieron. Elegir la primera depende igual —PostgREST no promete un
+   * orden— y ademas contradice la regla del modulo: enlazar al que se le parece
+   * es peor que dejar en null. Un empate es no reconocerlo con certeza.
+   */
+  it("con dos filas que normalizan igual no gana ninguna", () => {
     const i = indicePorNombre([
       { id: "a", nombre: "Candia" },
       { id: "b", nombre: "CANDIA" },
+    ]);
+    expect(reconocer(i, "candia")).toBeNull();
+    expect(esAmbiguo(i, "candia")).toBe(true);
+  });
+
+  // Se informa aparte de "no existe" porque no se arregla igual: uno se resuelve
+  // dando de alta la fila, el otro sacando el duplicado del catalogo.
+  it("un nombre que no esta no es lo mismo que uno repetido", () => {
+    const i = indicePorNombre([{ id: "a", nombre: "Candia" }]);
+    expect(reconocer(i, "Piparo")).toBeNull();
+    expect(esAmbiguo(i, "Piparo")).toBe(false);
+    expect(esAmbiguo(i, "")).toBe(false);
+  });
+
+  it("la misma fila nombrada dos veces no es un empate", () => {
+    const i = indicePorNombre([
+      { id: "a", nombre: "Candia" },
+      { id: "a", nombre: "CANDIA." },
     ]);
     expect(reconocer(i, "candia")).toBe("a");
   });
@@ -104,6 +128,24 @@ describe("el indice de empleados", () => {
  * Un enlace que falta y nadie ve es un reporte que miente sin avisar: se junta
  * para poder decirlo en pantalla.
  */
+describe("dos empleados que se escriben igual", () => {
+  // "Lopez Raul" contra otro "Lopez Raul": acertar requiere saber que no hay
+  // dos, y no lo sabemos. Las dos formas de uno solo si resuelven, porque el id
+  // es el mismo.
+  it("no resuelven a ninguno, pero las dos formas de uno solo si", () => {
+    const i = indiceDeEmpleados([
+      { id: "e1", nombre: "Raul", apellido: "Lopez" },
+      { id: "e2", nombre: "Raul", apellido: "Lopez" },
+    ]);
+    expect(reconocer(i, "LOPEZ, Raul")).toBeNull();
+    expect(esAmbiguo(i, "Lopez Raul")).toBe(true);
+
+    const uno = indiceDeEmpleados([{ id: "e1", nombre: "Raul", apellido: "Lopez" }]);
+    expect(reconocer(uno, "LOPEZ, Raul")).toBe("e1");
+    expect(reconocer(uno, "Raul Lopez")).toBe("e1");
+  });
+});
+
 describe("lo que la planilla nombro y el nucleo no tiene", () => {
   it("junta los nombres por catalogo, sin repetir y ordenados", () => {
     const sin = new SinReconocer();

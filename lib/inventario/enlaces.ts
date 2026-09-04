@@ -16,8 +16,12 @@
 
 import { claveDeProveedor } from "@/lib/core/proveedores";
 
-/** Un catálogo del núcleo, indexado por su nombre normalizado. */
-export type Indice = Map<string, string>;
+/**
+ * Un catálogo del núcleo, indexado por su nombre normalizado.
+ *
+ * `null` marca la clave que empata: dos filas se llaman igual y ninguna gana.
+ */
+export type Indice = Map<string, string | null>;
 
 /**
  * Arma el índice de un catálogo.
@@ -26,14 +30,27 @@ export type Indice = Map<string, string>;
  * acentos, sin mayúsculas, sin puntos, espacios colapsados— porque el problema
  * es el mismo en los tres: "Candia" y "CANDIA" son uno solo.
  *
- * El primero gana: si dos filas normalizan igual, la segunda es un duplicado y
- * elegirla cambiaría el resultado según el orden en que vinieron.
+ * Si dos filas normalizan igual, la clave no resuelve a ninguna.
+ *
+ * Antes ganaba la primera, con este argumento: elegir la segunda dependería del
+ * orden en que vinieron. El argumento no se sostiene —elegir la primera depende
+ * igual, y PostgREST no promete un orden—, y sobre todo contradice la regla que
+ * este mismo archivo aplica en todo lo demás: enlazar al que se le parece es
+ * peor que dejar en null, porque el dato aparece en el lugar que no es y no se
+ * nota nunca. Un empate es justamente no reconocerlo con certeza.
+ *
+ * Hoy no cambia nada: los cuatro catálogos que se indexan acá —29 sectores, 289
+ * proveedores, 21 destinos, 64 solicitantes— no tienen un solo empate. Cambia
+ * el día que alguien cargue el duplicado, que es cuando importa.
  */
 export function indicePorNombre(filas: { id: string; nombre: string }[]): Indice {
   const indice: Indice = new Map();
   for (const f of filas) {
     const k = claveDeProveedor(f.nombre);
-    if (k && !indice.has(k)) indice.set(k, f.id);
+    if (!k) continue;
+    // Se compara contra el id y no contra la clave: la misma fila entrando dos
+    // veces no es un empate, son dos formas de nombrarla.
+    indice.set(k, indice.has(k) && indice.get(k) !== f.id ? null : f.id);
   }
   return indice;
 }
@@ -71,7 +88,12 @@ export function indiceDeEmpleados(
 
     for (const forma of formas) {
       const k = claveDeProveedor(forma);
-      if (k && !indice.has(k)) indice.set(k, f.id);
+      if (!k) continue;
+      // Dos empleados que se escriben igual no resuelven a ninguno. Las dos
+      // formas de un mismo empleado sí, porque el id es el mismo: "LOPEZ, Raul"
+      // y "Raul LOPEZ" son la misma persona, "Raul Lopez" y otro "Raul Lopez"
+      // no, y ahí acertar requiere saber que no hay dos.
+      indice.set(k, indice.has(k) && indice.get(k) !== f.id ? null : f.id);
     }
   }
   return indice;
@@ -81,6 +103,20 @@ export function indiceDeEmpleados(
 export function reconocer(indice: Indice, nombre: string | null | undefined): string | null {
   const k = claveDeProveedor(nombre);
   return k ? indice.get(k) ?? null : null;
+}
+
+/**
+ * Si el nombre no se reconoció porque hay más de uno que se llama así.
+ *
+ * Sirve para decirlo aparte de "no existe": no se arreglan igual. Un nombre que
+ * no está se resuelve dándolo de alta o corrigiendo la planilla; uno repetido
+ * se resuelve en el catálogo, y hasta que se resuelva ninguna de las dos filas
+ * va a enganchar nada. Un diagnóstico que no se distingue de otro no es un
+ * diagnóstico.
+ */
+export function esAmbiguo(indice: Indice, nombre: string | null | undefined): boolean {
+  const k = claveDeProveedor(nombre);
+  return Boolean(k) && indice.get(k) === null;
 }
 
 /**
