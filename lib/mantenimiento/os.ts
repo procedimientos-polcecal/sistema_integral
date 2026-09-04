@@ -194,6 +194,11 @@ export function filaDeOS(
  *
  * En orden del circuito: se pide, se revisa, se aprueba, se comparan
  * proveedores y se acepta uno. No son los de las OT ni los de Compras.
+ *
+ * DENEGADO va al final porque no es un paso del circuito sino su salida, igual
+ * que EN_ESPERA en Compras. Es la palabra que ya se escribe a mano en la
+ * planilla: usar otra dejaría los dos lados diciendo cosas distintas del mismo
+ * pedido. Lo que exige al denegar —el motivo— vive en `denegacion.ts`.
  */
 export const ESTADOS_OS = [
   "POR APROBAR",
@@ -201,6 +206,7 @@ export const ESTADOS_OS = [
   "APROBADO",
   "EN PROCESO (COMPARATIVA)",
   "ACEPTADO",
+  "DENEGADO",
 ] as const;
 
 /** Con qué estado nace una OS. */

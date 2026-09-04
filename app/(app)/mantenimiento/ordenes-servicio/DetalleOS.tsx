@@ -5,6 +5,8 @@ import { fecha, monedaExacta } from "@/lib/compras/constants";
 import { monto } from "@/lib/mantenimiento/planilla";
 import { resumenDeCotizaciones } from "@/lib/mantenimiento/comparativas";
 import { ESTADOS_OS } from "@/lib/mantenimiento/os";
+import { esDenegacionDeOS } from "@/lib/mantenimiento/denegacion";
+import { justificacionQueExplica } from "@/lib/core/justificacion";
 import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 import CotizacionForm from "./CotizacionForm";
 import { useCargar } from "@/lib/core/useCargar";
@@ -34,6 +36,14 @@ export default function DetalleOS({
   const [fechaPedido, setFechaPedido] = useState(orden.fecha_pedido ?? "");
   const [fechaRealizacion, setFechaRealizacion] = useState(orden.fecha_realizacion ?? "");
   const [observaciones, setObservaciones] = useState(orden.observaciones ?? "");
+  const [motivoRechazo, setMotivoRechazo] = useState(orden.motivo_rechazo ?? "");
+
+  // Denegar le cierra la puerta a quien pidió el trabajo, así que pide el
+  // motivo. El servidor lo exige igual —la regla vive en
+  // `lib/mantenimiento/denegacion.ts`—; acá se dice qué se espera para no
+  // dejar a nadie tocando un botón apagado sin entender por qué.
+  const denegando = esDenegacionDeOS(estado);
+  const faltaElMotivo = denegando && !justificacionQueExplica(motivoRechazo);
 
   const traerComparativa = useCargar(async (vigente) => {
     if (!orden.os_number) { setCargandoComparativa(false); return; }
@@ -61,6 +71,7 @@ export default function DetalleOS({
         fecha_pedido: fechaPedido || null,
         fecha_realizacion: fechaRealizacion || null,
         observaciones,
+        motivo_rechazo: motivoRechazo,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -207,10 +218,31 @@ export default function DetalleOS({
             />
           </Campo>
 
+          {/* Aparece sólo al denegar: es el único estado que le debe una
+              explicación a alguien. Va aparte de Observaciones, que es de uso
+              general y tiene notas cargadas que no son motivos. */}
+          {denegando && (
+            <Campo etiqueta="Por qué se deniega">
+              <textarea
+                value={motivoRechazo}
+                onChange={(e) => setMotivoRechazo(e.target.value)}
+                disabled={!puedeEditar}
+                rows={2}
+                autoFocus
+                placeholder="Ej.: lo hace el taller propio"
+                className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm disabled:bg-slate-50"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Obligatorio. Queda en el sistema: la planilla no tiene esta columna.
+              </p>
+            </Campo>
+          )}
+
           {puedeEditar && (
             <button
               onClick={guardarSeguimiento}
-              disabled={guardando}
+              disabled={guardando || faltaElMotivo}
+              title={faltaElMotivo ? "Escribí por qué se deniega" : undefined}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
             >
               {guardando ? "Guardando…" : "Guardar"}

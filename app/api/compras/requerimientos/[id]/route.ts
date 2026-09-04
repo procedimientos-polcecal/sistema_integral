@@ -8,6 +8,7 @@ import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
+import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 
 /**
  * Modificación de un requerimiento.
@@ -311,6 +312,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (nuevoEstado === "RECIBIDO" && !actual.fecha_recepcion && !("fecha_recepcion" in cambios)) {
       cambios.fecha_recepcion = new Date().toISOString().slice(0, 10);
     }
+  }
+
+  // Denegar no puede ser mudo, y se revisa acá —después de las dos ramas—
+  // porque el denegado puede llegar por cualquiera de las dos: la de aprobación
+  // pone DENEGADA, y ésa a su vez pone la compra en DENEGADO. Una regla que se
+  // esquiva cambiando de campo no es una regla.
+  //
+  // El motivo que cuenta es el que queda: si ya había uno cargado, volver a
+  // denegar no exige repetirlo. Es el mismo criterio que usa la validación de
+  // requisitos de más arriba.
+  if (
+    faltaLaJustificacion({
+      ...cambios,
+      motivo_rechazo: "motivo_rechazo" in cambios ? cambios.motivo_rechazo : actual.motivo_rechazo,
+    })
+  ) {
+    return NextResponse.json({ error: POR_QUE_HACE_FALTA }, { status: 400 });
   }
 
   if (Object.keys(cambios).length === 0) {

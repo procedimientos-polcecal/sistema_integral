@@ -298,6 +298,11 @@ export interface OrdenServicio {
   fecha_pedido: string | null;
   fecha_realizacion: string | null;
   observaciones: string | null;
+  /**
+   * Por qué se denegó. Sólo lo carga la app: la planilla de OS no tiene esta
+   * columna, y su único texto libre —OBSERVACIONES— es de uso general.
+   */
+  motivo_rechazo: string | null;
   app_created: boolean;
   sheets_tab: string | null;
   sheets_row: number | null;
