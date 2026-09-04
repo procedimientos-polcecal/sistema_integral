@@ -3,14 +3,24 @@
 import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
+import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 
 /**
  * Los repuestos que hacen falta para hacer la orden.
  *
- * Y si los hay: la disponibilidad se consulta en vivo contra la planilla del
- * pañol, porque el stock cambia cada vez que alguien retira algo. La lista se
- * carga igual aunque el inventario no esté conectado —saber qué hace falta no
- * depende de saber si lo hay—.
+ * Y si los hay. La disponibilidad sale de **`inventario_articulos`**, la tabla
+ * del módulo Inventario, y no de la planilla del pañol: eso cambió al importar
+ * ese módulo, porque leer el Sheets en vivo era lento, dependía de que Google
+ * contestara, y cuando la planilla no estaba configurada el autocompletado
+ * devolvía una lista vacía sin explicar nada.
+ *
+ * El precio es que el número es el de la última sincronización y no el de este
+ * segundo, así que la pantalla dice de cuándo es. Un stock sin fecha se lee
+ * como si fuera de ahora, y en un pañol eso alcanza para ir a buscar algo que
+ * ya no está.
+ *
+ * La lista se carga igual aunque el inventario todavía no se haya importado
+ * —saber qué hace falta no depende de saber si lo hay—.
  */
 
 interface Repuesto {
@@ -30,6 +40,7 @@ export default function RepuestosOTModal({
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
   const [disponibilidad, setDisponibilidad] = useState<Record<string, Disponibilidad>>({});
   const [inventarioConectado, setInventarioConectado] = useState<boolean | null>(null);
+  const [sincronizadoEn, setSincronizadoEn] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
@@ -44,7 +55,7 @@ export default function RepuestosOTModal({
 
     if (lista.length === 0) { setDisponibilidad({}); return; }
 
-    // Y qué hay de cada uno, si el pañol está conectado.
+    // Y qué hay de cada uno, contra el catálogo del módulo Inventario.
     const stock = await fetch("/api/mantenimiento/inventario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,6 +66,7 @@ export default function RepuestosOTModal({
     const body = await stock.json();
     if (!vigente()) return;
     setInventarioConectado(body.configurado);
+    setSincronizadoEn(body.sincronizado_en ?? null);
 
     const porClave: Record<string, Disponibilidad> = {};
     (body.disponibilidad ?? []).forEach((d: Disponibilidad, i: number) => {
@@ -100,6 +112,16 @@ export default function RepuestosOTModal({
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
             El inventario del pañol todavía no se importó, así que no se puede decir
             si hay stock. Los repuestos se cargan igual.
+          </p>
+        )}
+
+        {/* De cuándo es el stock que se está mostrando. La ruta lo venía
+            mandando desde que el número dejó de salir del Sheets en vivo y la
+            pantalla lo tiraba: un stock sin fecha se lee como si fuera de
+            ahora, y eso alcanza para ir a buscar algo que ya no está. */}
+        {inventarioConectado && sincronizadoEn && (
+          <p className="text-right">
+            <UltimaSincronizacion cuando={sincronizadoEn} que="Stock de" />
           </p>
         )}
 
