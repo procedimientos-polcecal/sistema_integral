@@ -20,7 +20,9 @@ export default async function EmpleadoPage({ params }: { params: Promise<{ id: s
       .eq("id", id)
       .single(),
     supabase.from("empresas").select("id, nombre").order("nombre"),
-    supabase.from("sectores").select("id, nombre").order("nombre"),
+    // Sólo los activos, como en el listado: acá el desplegable los mostraba
+    // todos, y son los que se le pueden asignar a alguien hoy.
+    supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
   if (!empleado) notFound();

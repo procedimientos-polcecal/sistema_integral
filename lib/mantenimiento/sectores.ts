@@ -2,7 +2,7 @@
  * Los sectores que le importan a Mantenimiento.
  *
  * `sectores` guarda dos cosas distintas con el mismo nombre: **dónde trabaja
- * una persona** —"Administración", "Tesorería", "Producción (RRHH)"— y **dónde
+ * una persona** —"Administración", "Tesorería", "Compras y Pañol"— y **dónde
  * está una máquina** —"Calcinación", "Filler 2", "Compresores"—. Los primeros
  * los usan RRHH y Remises; los segundos vienen del libro BD Equipos y son los
  * únicos que este módulo tiene que mostrar.

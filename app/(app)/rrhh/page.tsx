@@ -16,7 +16,9 @@ export default async function RrhhDashboardPage() {
   const [{ data: usuario }, { data: empresas }, { data: sectores }, resumenInicial] = await Promise.all([
     supabase.from("usuarios").select("nombre").eq("id", user.id).single(),
     supabase.from("empresas").select("id, nombre").order("nombre"),
-    supabase.from("sectores").select("id, nombre").order("nombre"),
+    // Los dados de baja no van al desplegable: filtran a nada y, con los
+    // nombres repetidos de la 20260904112044, no se distinguen del que sirve.
+    supabase.from("sectores").select("id, nombre").eq("activo", true).order("nombre"),
     calcularResumenHoy(supabase),
   ]);
 

@@ -43,7 +43,12 @@ export async function POST(request: Request) {
 
   const { data: empresas } = await admin.from("empresas").select("id, nombre");
   const empresaByNombre = new Map((empresas ?? []).map((e) => [e.nombre.trim().toLowerCase(), e.id]));
-  const { data: sectores } = await admin.from("sectores").select("id, nombre");
+  // Sólo los activos. El índice es por nombre y se queda con uno solo por
+  // clave, así que con los diez organizativos dados de baja en la
+  // 20260904112044 —que repiten nombre con los que quedaron— podía enganchar
+  // la fila inactiva y volver a partir en dos lo que se acababa de unificar.
+  const { data: sectores } = await admin
+    .from("sectores").select("id, nombre").eq("activo", true);
   const sectorByNombre = new Map((sectores ?? []).map((s) => [s.nombre.trim().toLowerCase(), s.id]));
 
   async function resolverEmpresaId(nombre: string): Promise<string> {

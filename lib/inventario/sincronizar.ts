@@ -187,7 +187,10 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     // como error de string. Es la misma nota que dejó `sectoresDePlanta`.
     indicePorNombre(
       await traerTodo<Nombrado>((desde, hasta) =>
-        admin.from("sectores").select("id, nombre").range(desde, hasta)
+        // Sólo los activos: `indicePorNombre` se queda con el primero que
+        // aparece y no avisa del empate, así que un nombre repetido por una
+        // fila dada de baja mandaría los movimientos nuevos al sector viejo.
+        admin.from("sectores").select("id, nombre").eq("activo", true).range(desde, hasta)
       )
     ),
     // Los empleados van por su propio índice: el nombre y el apellido están en

@@ -13,6 +13,12 @@ export const SECTORES_LUNES_A_VIERNES = [
   // la regla matchea por nombre exacto, el sector renombrado dejaba de
   // aplicarla: a los 2 empleados de Calidad los sábados les figuraban como
   // falta, cosa que en APPRRHH no pasa. Van los dos nombres.
+  //
+  // La 20260904112044 le sacó el sufijo —ya no hay homónimos de los que
+  // distinguirse—, así que hoy los 2 empleados entran por "Calidad" y este
+  // nombre no existe en la base. Se deja igual: sacarlo no gana nada y, si la
+  // migración todavía no corrió donde se lea esto, es lo único que sostiene
+  // la regla.
   "Calidad (RRHH)",
   "Compras y Pañol",
   "Finanzas",
