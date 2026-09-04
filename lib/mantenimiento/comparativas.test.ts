@@ -3,6 +3,7 @@ import { monto, porcentaje, siNo } from "./planilla";
 import {
   COMPARATIVA_PESTANAS, pestanaDeSector, filaDeComparativa,
   filaParaComparativa, coincideLaFila, porOrdenDeServicio, resumenDeCotizaciones,
+  pareceCotizacion,
 } from "./comparativas";
 
 describe("pestanaDeSector", () => {
@@ -236,5 +237,57 @@ describe("coincideLaFila", () => {
     expect(coincideLaFila(fila, { os_number: 16, proveedor: "CN Mecanizados" })).toBe(false);
     expect(coincideLaFila(fila, { os_number: 18, proveedor: "Met. Don Alfredo" })).toBe(false);
     expect(coincideLaFila([], { os_number: 16, proveedor: "Met. Don Alfredo" })).toBe(false);
+  });
+});
+
+/**
+ * Las pestañas de la comparativa traen miles de filas de plantilla: formato,
+ * formulas y textos fijos que no son cotizaciones de nadie. Es la misma trampa
+ * que la columna COMPARATIVA de las OS, que dice "LINK" en las mil filas de la
+ * pestaña vengan o no con una orden.
+ *
+ * Por eso contar "filas no vacias" no sirve para nada: da 11.725 cuando las
+ * cotizaciones cargadas son 159. Lo que identifica a una cotizacion es tener N°
+ * de OS y proveedor —es lo que exige filaDeComparativa—, asi que la fila que
+ * vale la pena mirar es la que trae uno de los dos y no el otro: alguien empezo
+ * a cargarla y quedo a medias.
+ */
+describe("que fila de la planilla es una cotizacion a medias", () => {
+  const fila = (osNumber: unknown, proveedor: unknown): unknown[] => {
+    const f = new Array(15).fill("");
+    f[0] = osNumber;
+    f[6] = proveedor;
+    return f;
+  };
+
+  it("con los dos datos parece una cotizacion", () => {
+    expect(pareceCotizacion(fila(142, "Candia"))).toBe(true);
+  });
+
+  it("con el numero solo tambien: alguien la empezo", () => {
+    expect(pareceCotizacion(fila(142, ""))).toBe(true);
+  });
+
+  it("con el proveedor solo tambien", () => {
+    expect(pareceCotizacion(fila("", "Candia"))).toBe(true);
+  });
+
+  it("sin ninguno de los dos es relleno de la planilla, no una fila cargada", () => {
+    expect(pareceCotizacion(fila("", ""))).toBe(false);
+    expect(pareceCotizacion(new Array(15).fill(""))).toBe(false);
+    expect(pareceCotizacion([])).toBe(false);
+  });
+
+  it("una fila con otras columnas escritas pero sin OS ni proveedor no cuenta", () => {
+    // Es exactamente el caso de las 11.566: traen algo en alguna celda
+    // —una formula, un texto fijo— y ninguna es una cotizacion.
+    const f = new Array(15).fill("");
+    f[8] = "21%";
+    f[14] = "LINK";
+    expect(pareceCotizacion(f)).toBe(false);
+  });
+
+  it("el guion suelto es como se escribe 'aca no va nada'", () => {
+    expect(pareceCotizacion(fila("-", "-"))).toBe(false);
   });
 });

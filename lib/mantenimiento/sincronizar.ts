@@ -16,7 +16,9 @@ import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
-import { COMPARATIVA_PESTANAS, filaDeComparativa } from "@/lib/mantenimiento/comparativas";
+import {
+  COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion,
+} from "@/lib/mantenimiento/comparativas";
 import {
   OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
 } from "@/lib/mantenimiento/os";
@@ -366,11 +368,16 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   const sinProveedor = new Set<string>();
   const cuando = new Date().toISOString();
 
-  // Cuántas filas tenía la planilla y cuántas no se pudieron leer como una
-  // cotización. Era la única de las cuatro sincronizaciones que no lo decía: una
-  // fila que no parsea salía por el `continue` y desaparecía sin rastro, así que
-  // "entraron 159" no se distinguía de "la planilla tiene 159". La diferencia
-  // entre los dos números es lo que hay que ir a mirar a la planilla.
+  // Cuántas cotizaciones tenía la planilla y cuáles quedaron a medias.
+  //
+  // No se cuentan "filas no vacías": las pestañas traen miles de filas de
+  // plantilla —formato, fórmulas, textos fijos— y contarlas daba 11.725 contra
+  // 159 cargadas, un aviso que decía que faltaban 11.566 cotizaciones que no
+  // existen. Se cuenta lo que `pareceCotizacion` reconoce: la fila que trae N°
+  // de OS o proveedor, o sea la que alguien escribió.
+  //
+  // La diferencia con `guardadas` son las que tienen uno de los dos datos y no
+  // el otro: quedaron a medias y hay que ir a mirarlas a la planilla.
   let leidas = 0;
   const sinParsear: string[] = [];
 
@@ -386,9 +393,7 @@ export async function sincronizarComparativas(): Promise<Resultado> {
     }
 
     for (let i = 1; i < filas.length; i++) {
-      // Las vacías del final de la hoja no cuentan: son el relleno de la
-      // planilla, no filas que alguien escribió.
-      if (filas[i].every((c) => String(c ?? "").trim() === "")) continue;
+      if (!pareceCotizacion(filas[i])) continue;
       leidas += 1;
 
       const cot = filaDeComparativa(filas[i], i + 1, pestana);
@@ -501,7 +506,7 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   // sólo a la respuesta: la respuesta la ve quien apretó el botón, el registro
   // queda para el día que alguien pregunte por qué falta una cotización.
   const noEntraron = sinParsear.length > 0
-    ? `${sinParsear.length} fila(s) de la planilla no se pudieron leer como cotización: ` +
+    ? `${sinParsear.length} fila(s) quedaron a medias —tienen N° de OS o proveedor, no los dos—: ` +
       `${sinParsear.slice(0, 20).join(", ")}${sinParsear.length > 20 ? "…" : ""}.`
     : null;
 

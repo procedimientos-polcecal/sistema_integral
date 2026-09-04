@@ -111,12 +111,12 @@ export default function OrdenesServicioClient({
           `(${huerfanas.slice(0, 5).join(", ")}${huerfanas.length > 5 ? "…" : ""}). ` +
           "Hay que acomodarlas a mano en la planilla.",
         faltan > 0 &&
-          `Ojo: la planilla de comparativas tiene ${compBody.leidas} filas cargadas y entraron ` +
-          `${compBody.guardadas}. ${faltan === 1 ? "Quedó" : "Quedaron"} afuera ` +
+          `Ojo: ${faltan} cotización${faltan === 1 ? "" : "es"} de la planilla de comparativas ` +
+          `quedó${faltan === 1 ? "" : "aron"} a medias —tiene${faltan === 1 ? "" : "n"} N° de OS ` +
+          "o proveedor, no los dos— así que no entró" + (faltan === 1 ? "" : "aron") + ". " +
           (sinParsear.length > 0
-            ? `${sinParsear.slice(0, 8).join(", ")}${sinParsear.length > 8 ? "…" : ""}: ` +
-              "esas filas no se pudieron leer como cotización."
-            : `${faltan}, sin poder decir cuál${faltan === 1 ? "" : "es"}.`),
+            ? `${sinParsear.slice(0, 8).join(", ")}${sinParsear.length > 8 ? "…" : ""}.`
+            : "La versión desplegada no dice cuáles."),
         celdasRepetidas.length > 0 &&
           `Ojo: ${celdasRepetidas.length} celda${celdasRepetidas.length === 1 ? "" : "s"} de la ` +
           `planilla se leyó más de una vez (${celdasRepetidas.slice(0, 5).join(", ")}). ` +

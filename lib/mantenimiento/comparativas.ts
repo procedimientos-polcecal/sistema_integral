@@ -127,6 +127,31 @@ export function filaDeComparativa(
   };
 }
 
+/**
+ * Si esa fila es —o intenta ser— una cotización.
+ *
+ * Las pestañas traen **miles de filas de plantilla**: formato, fórmulas y
+ * textos fijos que no son la cotización de nadie. Es la misma trampa que la
+ * columna COMPARATIVA de las OS, que dice "LINK" en las mil filas de la pestaña
+ * vengan o no con una orden. Por eso contar "filas no vacías" no sirve: da
+ * 11.725 cuando las cotizaciones cargadas son 159.
+ *
+ * Lo que identifica a una cotización es tener N° de OS y proveedor —es lo que
+ * exige `filaDeComparativa`—. Así que la fila que vale la pena mirar es la que
+ * trae **uno de los dos y no el otro**: alguien la empezó a cargar y quedó a
+ * medias. Sin ninguno de los dos es relleno, y nombrarla sería ruido.
+ */
+export function pareceCotizacion(fila: unknown[]): boolean {
+  const osNumber = Number(fila[COL.osNumber]);
+  if (osNumber && !isNaN(osNumber)) return true;
+
+  // El guión suelto es como se escribe "acá no va nada" en estas planillas.
+  // `texto()` no lo descarta —sólo el vacío y los errores de fórmula— así que
+  // se descarta acá, igual que hace el helper `campo()` de las OS.
+  const proveedor = texto(fila[COL.proveedor]);
+  return proveedor !== null && proveedor !== "-";
+}
+
 /** Las cotizaciones agrupadas por el N° de OS que comparan. */
 export function porOrdenDeServicio<T extends { os_number: number }>(
   cotizaciones: T[]
