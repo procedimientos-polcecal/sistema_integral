@@ -141,18 +141,31 @@ costo todavía —la comparativa viene después de aprobar—, así que la decis
 
 ### 2. Quién aprueba: `os_aprobadores`
 
-Migración nueva, con marca de tiempo:
+Migración `20260904140041_os_aprobadores.sql`, ya escrita:
 
 ```sql
-create table os_aprobadores (
+create table if not exists os_aprobadores (
   usuario_id uuid primary key references usuarios(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 ```
 
 RLS: lectura para cualquier autenticado —el menú y la pantalla necesitan saber
-si sos aprobador—, escritura sólo para admin global. Sembrada con Nico en la
-misma migración.
+si sos aprobador—, y escritura para `es_admin()` o admin del módulo Compras, que
+es la misma regla que la 028 le puso a `compras_aprobadores`. Van a quedar una
+al lado de la otra en la pantalla de configuración: que se editen con reglas
+distintas es de las cosas que nadie descubre hasta que a alguien le falta un
+botón. Estar en la lista no alcanza para administrarla, o cualquier aprobador
+podría sacar a los demás.
+
+Del lado de la base queda `puede_aprobar_os()`, espejo de
+`puede_aprobar_compras()`. Sembrada con Nico en la misma migración, por id y con
+un `select` desde `usuarios` para que un id que no exista no revierta el archivo
+entero.
+
+Sin alias de planilla, que es la única diferencia con la lista hermana: la
+planilla de Compras firma la aprobación con un nombre corto entre paréntesis, la
+de OS no firma —su columna de estado dice `APROBADO` y nada más—.
 
 Se administra desde **Configuración de Compras**, al lado de la lista de
 aprobadores de requerimientos. Una lista que sólo se puede tocar por SQL es una
@@ -273,7 +286,7 @@ guarda sale de la ruta a `lib/`.
 
 | Falta | Quién |
 |---|---|
-| Correr la migración de `os_aprobadores` en el editor SQL de Supabase | el usuario |
+| Correr `20260904140041_os_aprobadores.sql` en el editor SQL de Supabase | el usuario |
 | `GOOGLE_SHEETS_OS_ID` configurada en Vercel | ya lo estaba |
 | La planilla de OS compartida como **editor** | ya lo estaba, se usa para denegar |
 
