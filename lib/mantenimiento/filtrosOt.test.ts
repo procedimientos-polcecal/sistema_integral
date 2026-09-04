@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, consultaDeLaRuta,
-  FILTROS_VACIOS, type FiltrosOt,
+  columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
 } from "./filtrosOt";
 
 const catalogos = {
@@ -81,6 +81,9 @@ describe("escribir los filtros en la URL", () => {
   it("lo que escribe se vuelve a leer igual", () => {
     const filtros: FiltrosOt = {
       busqueda: "rodamiento",
+      campoFecha: "fecha_ejecucion",
+      desde: "2026-08-01",
+      hasta: "2026-08-31",
       estado: ["ATRASADO", "EN_PROCESO"],
       especialidad: ["MECÁNICO"],
       tipo: ["CORRECTIVO"],
@@ -106,6 +109,61 @@ describe("escribir los filtros en la URL", () => {
 
   it("una busqueda de solo espacios no ensucia la URL", () => {
     expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, busqueda: "   " })).toBe("");
+  });
+});
+
+describe("el rango de fechas", () => {
+  it("sin nada, las dos vacias y la columna de siempre", () => {
+    expect(leer("")).toMatchObject({ campoFecha: "", desde: "", hasta: "" });
+    expect(columnaDeFecha("")).toBe("fecha");
+  });
+
+  it("lee las dos puntas y sobre que fecha corren", () => {
+    expect(leer("campo_fecha=fecha_cierre&desde=2026-08-01&hasta=2026-08-31"))
+      .toMatchObject({ campoFecha: "fecha_cierre", desde: "2026-08-01", hasta: "2026-08-31" });
+    expect(columnaDeFecha("fecha_cierre")).toBe("fecha_cierre");
+  });
+
+  it("una punta sola vale: es un rango abierto de ese lado", () => {
+    expect(leer("desde=2026-08-01")).toMatchObject({ desde: "2026-08-01", hasta: "" });
+    expect(leer("hasta=2026-08-31")).toMatchObject({ desde: "", hasta: "2026-08-31" });
+  });
+
+  /**
+   * Una fecha imposible en la URL dejaria la tabla vacia sin que se vea por
+   * que. Se descarta, igual que un estado que no existe.
+   */
+  it("descarta lo que no es una fecha de verdad", () => {
+    expect(leer("desde=2026-02-31").desde).toBe("");
+    expect(leer("desde=ayer").desde).toBe("");
+    expect(leer("hasta=2026-13-01").hasta).toBe("");
+  });
+
+  /**
+   * Es un nombre de columna que viene de la URL: la lista blanca esta en
+   * `columnaDeFecha` y no en quien arma la consulta, para que sea segura sola.
+   */
+  it("una columna inventada no puede llegar a la consulta", () => {
+    expect(leer("campo_fecha=synced_at&desde=2026-08-01").campoFecha).toBe("");
+    expect(columnaDeFecha("synced_at")).toBe("fecha");
+    expect(columnaDeFecha("id; drop table ordenes_trabajo")).toBe("fecha");
+    expect(columnaDeFecha(null)).toBe("fecha");
+  });
+
+  /**
+   * Elegir "fecha de cierre" sin poner ningun dia no filtra nada: no cuenta
+   * como filtro y no ensucia el enlace que alguien copia.
+   */
+  it("sin fechas, el campo elegido no viaja ni cuenta", () => {
+    const soloElCampo = { ...FILTROS_VACIOS, campoFecha: "fecha_cierre" };
+    expect(escribirFiltrosEnLaUrl(soloElCampo)).toBe("");
+    expect(hayAlgunFiltro(soloElCampo)).toBe(false);
+  });
+
+  it("con fechas si viaja", () => {
+    const conFecha = { ...FILTROS_VACIOS, campoFecha: "fecha_cierre", desde: "2026-08-01" };
+    expect(escribirFiltrosEnLaUrl(conFecha)).toBe("campo_fecha=fecha_cierre&desde=2026-08-01");
+    expect(hayAlgunFiltro(conFecha)).toBe(true);
   });
 });
 

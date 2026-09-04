@@ -6,7 +6,7 @@ import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import MultiSelect from "@/components/MultiSelect";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
-  FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT,
+  FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
@@ -79,6 +79,9 @@ export default function OrdenesClient({
 
   const [search, setSearch]     = useState(arranque.busqueda);
   const [busquedaAplicada, setBusquedaAplicada] = useState(arranque.busqueda);
+  const [campoFecha, setCampoFecha] = useState(arranque.campoFecha);
+  const [desde, setDesde] = useState(arranque.desde);
+  const [hasta, setHasta] = useState(arranque.hasta);
   // Cada uno es una lista: dentro de un filtro los valores suman —«atrasado o
   // en proceso»— y entre filtros se recortan. Vacío es "no filtrar por esto".
   const [estado, setEstado] = useState(arranque.estado);
@@ -105,14 +108,18 @@ export default function OrdenesClient({
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
   const filtros: FiltrosOt = useMemo(() => ({
-    busqueda: busquedaAplicada,
+    busqueda: busquedaAplicada, campoFecha, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
-  }), [busquedaAplicada, estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
+  }), [busquedaAplicada, campoFecha, desde, hasta,
+       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
 
   function limpiarFiltros() {
     setSearch("");
+    // `campoFecha` también vuelve a lo de siempre: dejarlo en "fecha de cierre"
+    // después de limpiar es un filtro invisible esperando a la próxima fecha.
+    setCampoFecha(""); setDesde(""); setHasta("");
     setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
     setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
   }
@@ -412,6 +419,44 @@ export default function OrdenesClient({
                 className="rounded-lg px-3 py-1.5 text-sm text-gray-500 underline hover:text-gray-900"
               >
                 Limpiar
+              </button>
+            )}
+          </div>
+
+          {/* El rango va en su propia fila: son tres controles que se leen
+              juntos como una frase —"fecha de ejecución, del 1 al 31"— y
+              mezclados entre los desplegables se pierden.
+
+              Cuál de las tres fechas se pregunta primero, porque cambia la
+              respuesta: "las de agosto" da 180 por emisión y 195 por ejecución.
+              El `max` y el `min` cruzados son lo que evita el rango al revés,
+              que devuelve cero y no dice por qué. */}
+          <div className={`${filtrosAbiertos ? "flex" : "hidden"} sm:flex flex-wrap items-center gap-2`}>
+            <select
+              value={campoFecha}
+              onChange={(e) => setCampoFecha(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+            >
+              {CAMPOS_DE_FECHA.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </select>
+            <span className="text-sm text-gray-400">del</span>
+            <input
+              type="date" value={desde} max={hasta || undefined}
+              onChange={(e) => setDesde(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+            />
+            <span className="text-sm text-gray-400">al</span>
+            <input
+              type="date" value={hasta} min={desde || undefined}
+              onChange={(e) => setHasta(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+            />
+            {(desde || hasta) && (
+              <button
+                onClick={() => { setDesde(""); setHasta(""); }}
+                className="text-sm text-gray-500 underline hover:text-gray-900"
+              >
+                Sin fechas
               </button>
             )}
           </div>

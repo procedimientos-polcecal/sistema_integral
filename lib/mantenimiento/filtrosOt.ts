@@ -19,6 +19,7 @@
 import {
   losQueEstanEnLaLista, escribirEnLaUrl, hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
+import { fechaDeTexto } from "@/lib/core/fechas";
 import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
 
 /**
@@ -40,8 +41,55 @@ export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO"] as const;
  */
 export const PRIORIDADES_DE_OT = ["🟠 Alta", "🟡 Media", "🟢 Baja"] as const;
 
+/**
+ * Sobre qué fecha corre el rango.
+ *
+ * Una orden tiene tres y no son la misma pregunta: **cuándo se emitió**
+ * (`fecha`), **cuándo se hizo o se va a hacer** (`fecha_ejecucion`) y **cuándo
+ * se cerró** (`fecha_cierre`). Las tres están cargadas —1.818, 1.818 y 1.566 de
+ * 1.819— y elegir una por nosotros sería contestar otra cosa: "las de agosto"
+ * da 180 por emisión y 195 por ejecución, y quien pregunta sabe cuál quiere.
+ *
+ * El default es `fecha`, que es la que la tabla muestra y la más completa.
+ */
+export const CAMPOS_DE_FECHA = [
+  ["", "Fecha de la orden"],
+  ["fecha_ejecucion", "Fecha de ejecución"],
+  ["fecha_cierre", "Fecha de cierre"],
+] as const;
+
+const CAMPOS_VALIDOS: readonly string[] = CAMPOS_DE_FECHA.map(([v]) => v);
+
+/**
+ * La columna que hay que filtrar. Lo que no está en la lista cae en `fecha`.
+ *
+ * La lista blanca vive **acá y no en la ruta**, aunque sea la ruta la que
+ * arma la consulta: es un nombre de columna que viene de la URL, y dejar que
+ * quien lo use se acuerde de validarlo es cómo alguna vez no se acuerda. Así
+ * la función es segura sola y se puede probar.
+ */
+export function columnaDeFecha(campo: string | null | undefined): string {
+  const elegido = String(campo ?? "");
+  return elegido && CAMPOS_VALIDOS.includes(elegido) ? elegido : "fecha";
+}
+
+/**
+ * Una fecha de la URL, o `""`.
+ *
+ * Se valida con el mismo parser que el resto del sistema, que descarta el 31 de
+ * febrero en vez de convertirlo en 3 de marzo. Una fecha imposible en la URL
+ * dejaría la tabla vacía sin que se vea por qué.
+ */
+const laFecha = (params: URLSearchParams, nombre: string): string =>
+  fechaDeTexto(params.get(nombre)) ?? "";
+
 export interface FiltrosOt {
   busqueda: string;
+  /** Sobre cuál de las tres fechas corre el rango. `""` es `fecha`. */
+  campoFecha: string;
+  /** "YYYY-MM-DD", los dos inclusive. `""` es sin límite de ese lado. */
+  desde: string;
+  hasta: string;
   estado: string[];
   especialidad: string[];
   tipo: string[];
@@ -58,7 +106,8 @@ export interface FiltrosOt {
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
-  busqueda: "", estado: [], especialidad: [], tipo: [], quien: [],
+  busqueda: "", campoFecha: "", desde: "", hasta: "",
+  estado: [], especialidad: [], tipo: [], quien: [],
   prioridad: [], proveedor: [], sector: [], equipo: [],
 };
 
@@ -75,6 +124,13 @@ export function leerFiltrosDeLaUrl(
 ): FiltrosOt {
   return {
     busqueda: params.get("q")?.trim() ?? "",
+    // Se guarda "" cuando es la de siempre: así el desplegable arranca en su
+    // primera opción y el parámetro no viaja de más.
+    campoFecha: CAMPOS_VALIDOS.includes(params.get("campo_fecha") ?? "")
+      ? params.get("campo_fecha") ?? ""
+      : "",
+    desde: laFecha(params, "desde"),
+    hasta: laFecha(params, "hasta"),
     estado: losQueEstanEnLaLista(params, "estado", ESTADOS_DE_OT),
     especialidad: losQueEstanEnLaLista(params, "especialidad", ESPECIALIDADES),
     tipo: losQueEstanEnLaLista(params, "tipo", TIPOS_DE_OT),
@@ -86,12 +142,22 @@ export function leerFiltrosDeLaUrl(
   };
 }
 
-/** Si hay algo puesto. Sirve para saber si la tabla vacía es por los filtros. */
-export const hayAlgunFiltro = (f: FiltrosOt): boolean => hayAlguno(f);
+/**
+ * Si hay algo puesto. Sirve para saber si la tabla vacía es por los filtros.
+ *
+ * `campoFecha` no cuenta: elegir "fecha de cierre" sin poner ningún día no
+ * filtra nada, y hacerlo contar dejaría el cartel diciendo que hay filtros
+ * cuando no los hay.
+ */
+export const hayAlgunFiltro = (f: FiltrosOt): boolean =>
+  hayAlguno({ ...f, campoFecha: "" });
 
 /** El orden en que van los filtros en la URL, y con qué nombre. */
 const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["busqueda", "q"],
+  ["campoFecha", "campo_fecha"],
+  ["desde", "desde"],
+  ["hasta", "hasta"],
   ["estado", "estado"],
   ["especialidad", "especialidad"],
   ["tipo", "tipo"],
@@ -102,8 +168,12 @@ const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["equipo", "equipo"],
 ];
 
+/**
+ * Sin fechas puestas, `campoFecha` no viaja: no filtra nada y ensuciaría el
+ * enlace que alguien copia con un parámetro que no hace nada.
+ */
 export const escribirFiltrosEnLaUrl = (f: FiltrosOt): string =>
-  escribirEnLaUrl(f, NOMBRES);
+  escribirEnLaUrl(f.desde || f.hasta ? f : { ...f, campoFecha: "" }, NOMBRES);
 
 /**
  * Los filtros como los espera la ruta.

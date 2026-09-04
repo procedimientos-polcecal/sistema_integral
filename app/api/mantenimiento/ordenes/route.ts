@@ -10,6 +10,7 @@ import {
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
 import { paginaPedida } from "@/lib/core/paginado";
+import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 
 export async function GET(request: Request) {
@@ -55,6 +56,10 @@ export async function GET(request: Request) {
   // equipo para traer sus órdenes; se conserva para no romperla.
   const equipment_id = searchParams.get("equipment_id");
 
+  const campoFecha = searchParams.get("campo_fecha") ?? "";
+  const desde      = searchParams.get("desde") ?? "";
+  const hasta      = searchParams.get("hasta") ?? "";
+
   // Las que todavía esperan algo, todas juntas y sin paginar: son unas treinta
   // sobre mil ochocientas, y ordenarlas a mano no se puede hacer de a páginas.
   const pendientes = searchParams.get("pendientes") === "1";
@@ -79,6 +84,14 @@ export async function GET(request: Request) {
   if (sector.length)       query = query.in("sector_id", sector);
   if (equipo.length)       query = query.in("equipment_id", equipo);
   if (equipment_id)        query = query.eq("equipment_id", equipment_id);
+
+  // El rango corre sobre la fecha que se haya elegido, y los dos extremos
+  // entran: quien pone "hasta el 31" espera que el 31 cuente. `columnaDeFecha`
+  // trae la lista blanca puesta, así que un `?campo_fecha=` inventado cae en
+  // `fecha` en vez de llegar como nombre de columna a la consulta.
+  const columna = columnaDeFecha(campoFecha);
+  if (desde) query = query.gte(columna, desde);
+  if (hasta) query = query.lte(columna, hasta);
   if (search) {
     // Sanitizar: quitar caracteres que rompen el filtro PostgREST (,()*\)
     const safe = search.replace(/[,()*\\%]/g, "").trim();
