@@ -17,7 +17,7 @@
  */
 
 import {
-  losQueEstanEnLaLista, escribirEnLaUrl, hayAlgunFiltro as hayAlguno,
+  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
@@ -172,17 +172,33 @@ const NOMBRES: readonly [keyof FiltrosOt, string][] = [
  * Sin fechas puestas, `campoFecha` no viaja: no filtra nada y ensuciaría el
  * enlace que alguien copia con un parámetro que no hace nada.
  */
-export const escribirFiltrosEnLaUrl = (f: FiltrosOt): string =>
-  escribirEnLaUrl(f.desde || f.hasta ? f : { ...f, campoFecha: "" }, NOMBRES);
+/**
+ * Los filtros, y en qué página está parado el listado, como query string.
+ *
+ * La página se cuenta desde uno, igual que en la URL y que en los botones de
+ * abajo de la tabla; acá adentro también, así que no hay nada que convertir, y
+ * la primera no se escribe. Sin ella, entrar a una orden desde la página 3 y
+ * volver dejaba la tabla filtrada pero cien filas más arriba de donde se
+ * estaba.
+ */
+export const escribirFiltrosEnLaUrl = (f: FiltrosOt, pagina = 1): string =>
+  conLaPagina(
+    escribirEnLaUrl(f.desde || f.hasta ? f : { ...f, campoFecha: "" }, NOMBRES),
+    pagina
+  );
 
 /**
  * Los filtros como los espera la ruta.
  *
  * Es el mismo query string que la barra de direcciones, y a propósito: lo que
  * se puede pegar en el navegador es lo que la API entiende, así que reproducir
- * lo que alguien ve no requiere traducir nada. La paginación se agrega aparte
- * porque no es un filtro — no se comparte en un enlace, se descarta al cambiar
- * cualquier otra cosa.
+ * lo que alguien ve no requiere traducir nada.
+ *
+ * La página se agrega aparte, con el nombre que espera la ruta y siempre,
+ * aunque sea la primera. En la barra de direcciones va como `pagina` y sólo
+ * cuando no es la primera: son dos cosas parecidas con reglas distintas, una
+ * para pedirle datos al servidor y otra para que un enlace se pueda leer y
+ * compartir. Por eso acá se piden los filtros sin página y se pega la propia.
  */
 export function consultaDeLaRuta(f: FiltrosOt, pagina: number): string {
   const query = escribirFiltrosEnLaUrl(f);

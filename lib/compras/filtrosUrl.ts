@@ -1,5 +1,6 @@
 import {
-  losQueEstanEnLaLista, escribirEnLaUrl, hayAlgunFiltro as hayAlguno,
+  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, leerPaginaDeLaUrl,
+  hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
 import { ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES } from "./constants";
 
@@ -103,42 +104,26 @@ const NOMBRES: readonly [keyof FiltrosCompras, string][] = [
  * tabla como estaba. Cómo se escribe cada filtro lo decide el núcleo; acá se
  * agrega lo único que no es un filtro, la página.
  *
- * La página va última y sólo si no es la primera, que es el caso de siempre:
- * un `?pagina=1` en cada enlace sería ruido. Adentro se cuenta desde cero
- * porque así se calcula el `range()`, pero en la URL se escribe como la lee
- * quien la mira —`?pagina=2` es la segunda—, que es también lo que dicen los
- * botones de abajo de la tabla.
- *
- * La paginación no subió al núcleo con el resto: Mantenimiento todavía no la
- * pone en la barra de direcciones —el `page=` de `consultaDeLaRuta` es de la
- * API, no de la URL que se comparte—, y una regla común la escribe el segundo
- * que la necesita, no el primero. Cuando pase, esto se sube y se unifica.
+ * La página se cuenta desde uno, como en la URL y como en los botones de abajo
+ * de la tabla. Adentro el listado la cuenta desde cero —así se calcula el
+ * `range()`— y convierte en el borde; ver `paginaDeArranque`.
  */
-export function escribirFiltrosEnLaUrl(f: FiltrosCompras, pagina = 0): string {
-  const query = escribirEnLaUrl(f, NOMBRES);
-  if (pagina <= 0) return query;
-  const cual = `pagina=${pagina + 1}`;
-  return query ? `${query}&${cual}` : cual;
+export function escribirFiltrosEnLaUrl(f: FiltrosCompras, pagina = 1): string {
+  return conLaPagina(escribirEnLaUrl(f, NOMBRES), pagina);
 }
 
 /**
- * En qué página arranca el listado. Cero es la primera.
+ * Con qué página arranca el listado, contada desde cero.
  *
- * Sin esto, entrar a un RI desde la página 3 y volver dejaba la tabla en la 1,
- * con los filtros puestos pero doscientas filas más arriba de donde se estaba.
- *
- * Cualquier cosa que no sea un entero de una página en adelante es la primera.
- * No se valida contra cuántas hay —eso no se sabe hasta consultar—, así que un
- * número de más lo acomoda el listado cuando ve el total: una tabla vacía se
- * lee como "no hay nada" y acá no habría nada que lo desmienta.
+ * Es el único lugar donde se convierte: la URL y los botones cuentan desde
+ * uno, y el `range()` de PostgREST desde cero. Tenerlo en una función con
+ * nombre evita el `- 1` suelto en la página y en la pantalla, que es donde se
+ * cuela un corrimiento de cincuenta filas que nadie ve.
  */
-export function leerPaginaDeLaUrl(params: URLSearchParams): number {
-  const crudo = params.get("pagina");
-  if (!crudo) return 0;
-  const numero = Number(crudo);
-  if (!Number.isInteger(numero) || numero < 1) return 0;
-  return numero - 1;
+export function paginaDeArranque(params: URLSearchParams): number {
+  return leerPaginaDeLaUrl(params) - 1;
 }
+
 
 /**
  * El enlace a la ficha de un RI desde el listado, cargando de dónde se salió.

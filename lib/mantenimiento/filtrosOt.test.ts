@@ -3,6 +3,7 @@ import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, consultaDeLaRuta,
   columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
 } from "./filtrosOt";
+import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 
 const catalogos = {
   sectores: ["s-filler1", "s-filler2"],
@@ -190,5 +191,55 @@ describe("la consulta que se le manda a la ruta", () => {
   it("con filtros, los filtros y la pagina", () => {
     expect(consultaDeLaRuta({ ...FILTROS_VACIOS, estado: ["ATRASADO"] }, 3))
       .toBe("estado=ATRASADO&page=3");
+  });
+});
+
+/**
+ * La pagina viaja en la URL igual que en requerimientos, y con la misma regla:
+ * se cuenta desde uno y la primera no se escribe. Es lo que hace que entrar a
+ * una orden desde la pagina 3 y volver no devuelva la tabla cien filas arriba.
+ */
+describe("la pagina en la barra de direcciones", () => {
+  const leerPagina = (query: string) => leerPaginaDeLaUrl(new URLSearchParams(query));
+
+  it("sin parametro, la primera", () => {
+    expect(leerPagina("")).toBe(1);
+    expect(leerPagina("estado=ATRASADO")).toBe(1);
+  });
+
+  it("un numero que no es una pagina es la primera", () => {
+    for (const query of ["pagina=0", "pagina=-2", "pagina=abc", "pagina=2.5", "pagina="]) {
+      expect(leerPagina(query)).toBe(1);
+    }
+  });
+
+  it("la primera no ensucia la URL", () => {
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 1)).toBe("");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, estado: ["ATRASADO"] }, 1))
+      .toBe("estado=ATRASADO");
+  });
+
+  it("la pagina va al final, despues de los filtros", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, estado: ["ATRASADO"] }, 3))
+      .toBe("estado=ATRASADO&pagina=3");
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 3)).toBe("pagina=3");
+  });
+
+  it("lo que se escribe se vuelve a leer igual, filtros y pagina", () => {
+    const puestos = {
+      ...FILTROS_VACIOS,
+      estado: ["ATRASADO", "EN_PROCESO"],
+      sector: ["s-filler1"],
+      busqueda: "bomba",
+    };
+    const query = escribirFiltrosEnLaUrl(puestos, 4);
+    expect(leer(query)).toEqual(puestos);
+    expect(leerPagina(query)).toBe(4);
+  });
+
+  // La de la ruta es otra: siempre va, y con otro nombre.
+  it("la de la API no se mezcla con la de la URL", () => {
+    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("page=1");
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 1)).toBe("");
   });
 });

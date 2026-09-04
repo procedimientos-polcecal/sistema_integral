@@ -9,6 +9,7 @@ import {
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
+import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
@@ -68,13 +69,12 @@ export default function OrdenesClient({
    * cuando hay navegador, la fuente es la URL de verdad. Es la misma nota que
    * dejó el listado de requerimientos.
    */
+  const laUrlDeVerdad = () =>
+    new URLSearchParams(
+      typeof window === "undefined" ? params.toString() : window.location.search
+    );
   const [arranque] = useState<FiltrosOt>(() =>
-    leerFiltrosDeLaUrl(
-      typeof window === "undefined"
-        ? new URLSearchParams(params.toString())
-        : new URLSearchParams(window.location.search),
-      catalogos
-    )
+    leerFiltrosDeLaUrl(laUrlDeVerdad(), catalogos)
   );
 
   const [search, setSearch]     = useState(arranque.busqueda);
@@ -95,7 +95,10 @@ export default function OrdenesClient({
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [avisoSync, setAvisoSync] = useState<string | null>(null);
-  const [page, setPage]         = useState(1);
+  // La página también sale de la URL, por lo mismo que los filtros: volver a la
+  // tabla filtrada pero en la primera es media solución cuando se estaba en la
+  // tercera. Se cuenta desde uno acá y en la URL, así que no hay conversión.
+  const [page, setPage]         = useState(() => leerPaginaDeLaUrl(laUrlDeVerdad()));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showNew, setShowNew]   = useState(false);
   const [view, setView]         = useState<"list" | "kanban" | "orden">("list");
@@ -140,8 +143,14 @@ export default function OrdenesClient({
     setPage(1);
   }
 
+  // Lo que va a la barra de direcciones lleva además la página. `filtrosAhora`
+  // se queda sin ella a propósito: es lo que detecta el cambio de filtro que
+  // vuelve a la primera, y con la página adentro se resetearía sola en cuanto
+  // alguien pasa de página.
+  const query = escribirFiltrosEnLaUrl(filtros, page);
+
   /**
-   * La URL va detrás de los filtros.
+   * La URL va detrás de los filtros y de la página.
    *
    * Con `replace` y no `push`: salir de la pantalla con el botón de atrás no
    * tiene por qué obligar a deshacer antes cada casilla tildada, una por una.
@@ -150,13 +159,13 @@ export default function OrdenesClient({
    * para cambiar un query string que la pantalla ya tiene resuelto en memoria.
    */
   useEffect(() => {
-    const destino = filtrosAhora
-      ? `${window.location.pathname}?${filtrosAhora}`
+    const destino = query
+      ? `${window.location.pathname}?${query}`
       : window.location.pathname;
     if (destino === window.location.pathname + window.location.search) return;
     // El estado que va es el que ya estaba: ahí guarda Next su árbol de rutas.
     window.history.replaceState(window.history.state, "", destino);
-  }, [filtrosAhora]);
+  }, [query]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -273,6 +282,15 @@ export default function OrdenesClient({
   }
 
   const totalPages = Math.ceil(count / 50);
+  // Una `?pagina=40` escrita a mano —o guardada en un enlace de cuando la tabla
+  // era más larga— muestra una tabla vacía, y una tabla vacía se lee como "no
+  // hay nada". Cuando el total dice que esa página no existe, se cae a la
+  // última que sí, y sin resultados la última es la primera: si no, quedaría
+  // parada en la 5 sin botones con los que salir de ahí. Se ajusta durante el
+  // render, igual que el salto a la primera al cambiar un filtro, y con el
+  // total ya cargado: mientras se consulta, `count` es el de la anterior.
+  const ultimaPagina = Math.max(1, totalPages);
+  if (!loading && page > ultimaPagina) setPage(ultimaPagina);
 
   const kanbanGroups = ESTADOS.slice(1).map(e => ({
     ...e,

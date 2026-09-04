@@ -24,7 +24,7 @@ import {
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import {
-  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, leerPaginaDeLaUrl,
+  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, paginaDeArranque,
   type FiltrosCompras,
 } from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
@@ -99,7 +99,7 @@ export default function RequerimientosClient({
       return { filtros: filtrosIniciales, pagina: paginaInicial };
     }
     const params = new URLSearchParams(window.location.search);
-    return { filtros: leerFiltrosDeLaUrl(params, catalogos), pagina: leerPaginaDeLaUrl(params) };
+    return { filtros: leerFiltrosDeLaUrl(params, catalogos), pagina: paginaDeArranque(params) };
   });
 
   // La página también sale de la URL: volver a la tabla filtrada pero en la
@@ -168,7 +168,8 @@ export default function RequerimientosClient({
   const query = escribirFiltrosEnLaUrl({
     busqueda: busquedaAplicada,
     area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
-  }, pagina);
+    // Acá se cuenta desde cero y en la URL desde uno.
+  }, pagina + 1);
   useEffect(() => {
     const destino = query
       ? `${window.location.pathname}?${query}`

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, leerPaginaDeLaUrl,
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, paginaDeArranque,
   enlaceAlRequerimiento, volverAlListado,
   hayAlgunFiltro, FILTROS_VACIOS,
 } from "./filtrosUrl";
@@ -197,7 +197,8 @@ describe("ida y vuelta entre el listado y la ficha", () => {
  * primera pagina es media solucion cuando se estaba en la tercera.
  */
 describe("la pagina en la URL", () => {
-  const leerPagina = (qs: string) => leerPaginaDeLaUrl(new URLSearchParams(qs));
+  // La que devuelve el modulo es la del `range()`: cero es la primera.
+  const leerPagina = (qs: string) => paginaDeArranque(new URLSearchParams(qs));
 
   it("sin parametro, la primera", () => {
     expect(leerPagina("")).toBe(0);
@@ -217,23 +218,23 @@ describe("la pagina en la URL", () => {
   });
 
   it("la primera pagina no ensucia la URL", () => {
-    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 0)).toBe("");
-    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 0))
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 1)).toBe("");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 1))
       .toBe("estado_compra=PEDIDO");
   });
 
   it("la pagina va al final, despues de los filtros", () => {
-    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 2))
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, compra: ["PEDIDO"] }, 3))
       .toBe("estado_compra=PEDIDO&pagina=3");
   });
 
   it("filtros y pagina vuelven juntos, tambien pasando por la ficha", () => {
     const puestos = { ...FILTROS_VACIOS, area: ["area-mant"], prioridad: ["URGENTE"] };
-    const query = escribirFiltrosEnLaUrl(puestos, 4);
+    const query = escribirFiltrosEnLaUrl(puestos, 5);
     const volver = new URL(enlaceAlRequerimiento("ri-1", query), "https://x")
       .searchParams.get("volver");
     const listado = new URL(volverAlListado(volver ?? undefined), "https://x");
     expect(leer(listado.search)).toEqual(puestos);
-    expect(leerPaginaDeLaUrl(listado.searchParams)).toBe(4);
+    expect(paginaDeArranque(listado.searchParams)).toBe(4);
   });
 });
