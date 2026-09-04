@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { leerFiltrosDeLaUrl, hayAlgunFiltro, FILTROS_VACIOS } from "./filtrosUrl";
+import {
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, FILTROS_VACIOS,
+} from "./filtrosUrl";
 
 const catalogos = {
   areas: ["area-mant", "area-seg"],
@@ -110,5 +112,45 @@ describe("filtros por maquina y por sector de planta", () => {
 
   it("descarta un sector que no esta en la lista", () => {
     expect(leer("sector=sec-tesoreria").sector).toEqual([]);
+  });
+});
+
+/**
+ * El listado reescribe la URL con cada cambio de filtro. Lo que importa no es
+ * la forma exacta del query string sino que vuelva a leerse igual: es lo que
+ * hace que entrar a un RI y volver con el boton de atras no pierda los filtros.
+ */
+describe("filtros escritos de vuelta en la URL", () => {
+  it("sin filtros no deja query string", () => {
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS)).toBe("");
+  });
+
+  it("los valores de un filtro van juntos, separados por comas", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["ALTA", "URGENTE"] }))
+      .toBe("prioridad=ALTA%2CURGENTE");
+  });
+
+  it("lo que se escribe se vuelve a leer igual", () => {
+    const puestos = {
+      ...FILTROS_VACIOS,
+      busqueda: "bomba",
+      area: ["area-mant"],
+      compra: ["PEDIDO", "PARA_COMPRAR"],
+      empresa: ["emp-polysan", "AMBAS"],
+      equipo: ["eq-em12"],
+      sector: ["sec-py-b1"],
+    };
+    expect(leer(escribirFiltrosEnLaUrl(puestos))).toEqual(puestos);
+  });
+
+  it("el orden no depende de en que orden se tocaron los desplegables", () => {
+    const a = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, area: ["area-seg"], prioridad: ["ALTA"] });
+    const b = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, prioridad: ["ALTA"], area: ["area-seg"] });
+    expect(a).toBe(b);
+  });
+
+  it("una busqueda con espacios de sobra se guarda recortada", () => {
+    expect(leer(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, busqueda: "  bomba  " })).busqueda)
+      .toBe("bomba");
   });
 });

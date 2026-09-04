@@ -23,7 +23,9 @@ import {
   SIGUIENTE_ESTADO, ACCION_SIGUIENTE, ESTADOS_CON_DIALOGO,
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
-import type { FiltrosCompras } from "@/lib/compras/filtrosUrl";
+import {
+  escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, type FiltrosCompras,
+} from "@/lib/compras/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import { useCargar } from "@/lib/core/useCargar";
 
@@ -64,22 +66,54 @@ export default function RequerimientosClient({
   const [error, setError] = useState<string | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
 
+  // Las listas contra las que se validan los filtros que vienen de la URL. Son
+  // las mismas que usó el servidor; acá hacen falta porque la pantalla vuelve a
+  // leer la URL por su cuenta al montar (ver `arranque`).
+  const catalogos = useMemo(
+    () => ({
+      areas: areas.map((a) => a.id),
+      empresas: empresas.map((e) => e.id),
+      proveedores: proveedores.map((p) => p.id),
+      ubicaciones: ubicaciones.map((u) => u.id),
+      equipos: equipos.map((e) => e.id),
+      sectores: sectores.map((s) => s.id),
+    }),
+    [areas, empresas, proveedores, ubicaciones, equipos, sectores]
+  );
+
+  /**
+   * Con qué filtros arranca la pantalla.
+   *
+   * En la primera carga es lo que validó el servidor. Pero al volver con el
+   * botón de atrás desde un requerimiento, el árbol que restaura Next es el que
+   * se renderizó al entrar —con la URL vieja, sin filtros—, así que
+   * `filtrosIniciales` llegaría vacío aunque la barra de direcciones tenga los
+   * filtros puestos. Por eso, cuando hay navegador, la fuente es la URL de
+   * verdad y no la prop. En el servidor `window` no existe y no hay diferencia:
+   * los dos leen el mismo query string, así que la hidratación coincide.
+   */
+  const [arranque] = useState<FiltrosCompras>(() =>
+    typeof window === "undefined"
+      ? filtrosIniciales
+      : leerFiltrosDeLaUrl(new URLSearchParams(window.location.search), catalogos)
+  );
+
   // Los filtros arrancan con lo que trajo la URL: es como el tablero lleva a
-  // cada etapa. De ahí en más los maneja la pantalla; la URL no se reescribe al
-  // tocar un desplegable, es el punto de entrada y no un espejo del estado.
-  const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda);
-  const [busquedaAplicada, setBusquedaAplicada] = useState(filtrosIniciales.busqueda);
+  // cada etapa. Y la URL se reescribe con cada cambio, así que también es como
+  // se vuelve a la tabla tal como estaba después de entrar a un RI.
+  const [busqueda, setBusqueda] = useState(arranque.busqueda);
+  const [busquedaAplicada, setBusquedaAplicada] = useState(arranque.busqueda);
   // Cada uno es una lista: dentro de un filtro los valores suman —«Cotizando o
   // Para comprar»— y entre filtros se recortan. Vacío es "no filtrar por esto".
-  const [area, setArea] = useState(filtrosIniciales.area);
-  const [aprobacion, setAprobacion] = useState(filtrosIniciales.aprobacion);
-  const [compra, setCompra] = useState(filtrosIniciales.compra);
-  const [prioridad, setPrioridad] = useState(filtrosIniciales.prioridad);
-  const [empresa, setEmpresa] = useState(filtrosIniciales.empresa);
-  const [proveedor, setProveedor] = useState(filtrosIniciales.proveedor);
-  const [ubicacion, setUbicacion] = useState(filtrosIniciales.ubicacion);
-  const [equipo, setEquipo] = useState(filtrosIniciales.equipo);
-  const [sector, setSector] = useState(filtrosIniciales.sector);
+  const [area, setArea] = useState(arranque.area);
+  const [aprobacion, setAprobacion] = useState(arranque.aprobacion);
+  const [compra, setCompra] = useState(arranque.compra);
+  const [prioridad, setPrioridad] = useState(arranque.prioridad);
+  const [empresa, setEmpresa] = useState(arranque.empresa);
+  const [proveedor, setProveedor] = useState(arranque.proveedor);
+  const [ubicacion, setUbicacion] = useState(arranque.ubicacion);
+  const [equipo, setEquipo] = useState(arranque.equipo);
+  const [sector, setSector] = useState(arranque.sector);
 
   // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
   // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
@@ -110,6 +144,32 @@ export default function RequerimientosClient({
     setFiltrosPrevios(filtrosAhora);
     setPagina(0);
   }
+
+  /**
+   * La URL va detrás de los filtros.
+   *
+   * Se reemplaza la entrada del historial en vez de agregar una: con `push`,
+   * salir de la pantalla con el botón de atrás obligaría a deshacer antes cada
+   * casilla tildada, una por una. Con `replace` hay una sola entrada, la de la
+   * tabla como está ahora, y volver desde un RI la devuelve filtrada.
+   *
+   * Es `history` y no `router.replace`: el segundo vuelve a pedirle la página
+   * al servidor —los seis catálogos, los permisos, la sincronización— para
+   * cambiar un query string que la pantalla ya tiene resuelto en memoria.
+   */
+  const query = escribirFiltrosEnLaUrl({
+    busqueda: busquedaAplicada,
+    area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
+  });
+  useEffect(() => {
+    const destino = query
+      ? `${window.location.pathname}?${query}`
+      : window.location.pathname;
+    if (destino === window.location.pathname + window.location.search) return;
+    // El estado que va es el que ya estaba: ahí guarda Next su árbol de rutas,
+    // y pisarlo con null le rompe la navegación hacia atrás.
+    window.history.replaceState(window.history.state, "", destino);
+  }, [query]);
 
   const cargar = useCallback(async () => {
     setCargando(true);

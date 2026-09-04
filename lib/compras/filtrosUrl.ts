@@ -8,9 +8,11 @@ import { ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES } from "./constants";
  * enlazaba así desde el cartel de pedidos viejos: la promesa estaba hecha y no
  * se cumplía.
  *
- * Se leen una sola vez, al montar. La página no reescribe la URL a medida que
- * se tocan los desplegables: el query string es el punto de entrada, no un
- * espejo del estado.
+ * Se leen al montar y se vuelven a escribir con cada cambio, con
+ * `escribirFiltrosEnLaUrl`: el query string es el estado de la pantalla y no
+ * sólo su punto de entrada. Mientras fue nada más que la entrada, entrar a un
+ * requerimiento y volver con el botón de atrás devolvía la tabla sin filtrar,
+ * y había que rearmar los desplegables cada vez.
  *
  * Cada filtro es una lista y no un valor: un solo estado por vez obligaba a
  * mirar «Cotizando» y «Para comprar» en dos pasadas, cuando lo que se quiere
@@ -106,4 +108,43 @@ export function leerFiltrosDeLaUrl(
 /** Si la URL trajo algo utilizable. Sirve para saber si arrancar filtrado. */
 export function hayAlgunFiltro(f: FiltrosCompras): boolean {
   return Object.values(f).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
+}
+
+/** El orden en que van los filtros en la URL, y con qué nombre. */
+const NOMBRES: [keyof FiltrosCompras, string][] = [
+  ["busqueda", "q"],
+  ["area", "area"],
+  ["aprobacion", "estado_aprobacion"],
+  ["compra", "estado_compra"],
+  ["prioridad", "prioridad"],
+  ["empresa", "empresa"],
+  ["proveedor", "proveedor"],
+  ["ubicacion", "ubicacion"],
+  ["equipo", "equipo"],
+  ["sector", "sector"],
+];
+
+/**
+ * Los filtros de vuelta como query string, sin el `?`. Vacío si no hay ninguno.
+ *
+ * Es la inversa de `leerFiltrosDeLaUrl`: lo que sale de acá tiene que volver
+ * igual al leerse, porque de eso depende que el botón de atrás devuelva la
+ * tabla como estaba.
+ *
+ * Cada filtro va en un solo parámetro con los valores separados por comas
+ * —`?prioridad=ALTA,URGENTE`— y no repetido: es la forma que deja la URL
+ * legible y la que se puede pasar por chat. El orden es fijo para que tocar
+ * dos veces el mismo desplegable no cambie la URL.
+ */
+export function escribirFiltrosEnLaUrl(f: FiltrosCompras): string {
+  const params = new URLSearchParams();
+  for (const [clave, nombre] of NOMBRES) {
+    const valor = f[clave];
+    if (Array.isArray(valor)) {
+      if (valor.length) params.set(nombre, valor.join(","));
+    } else if (valor.trim()) {
+      params.set(nombre, valor.trim());
+    }
+  }
+  return params.toString();
 }
