@@ -122,7 +122,13 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
     legajo: "", nombre: "", apellido: "", sindicato: "", valorHoraNormal: "",
     fechaIngreso: "", empresa: "", sector: "", horasTeoricasDiarias: "", fechaNacimiento: "", genero: "",
   });
-  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; errores: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    creados: number;
+    actualizados: number;
+    errores: string[];
+    /** Los que la planilla nombra y el catálogo no reconoce. Ver más abajo. */
+    sectoresSinReconocer?: { nombre: string; filas: number; motivo: string }[];
+  } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
 
@@ -302,6 +308,33 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
                     {importResult.errores.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </details>
+              )}
+
+              {/* Antes esto no se veía porque no pasaba: el sector que no
+                  existía se creaba solo. Ahora el empleado se importa sin
+                  sector y hay que decir cuáles, con el nombre tal como lo
+                  escribió la planilla — si no, el dato falta y nadie sabe. */}
+              {importResult.sectoresSinReconocer && importResult.sectoresSinReconocer.length > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-amber-800">
+                    {importResult.sectoresSinReconocer.length === 1
+                      ? "Un sector de la planilla no está en el sistema"
+                      : `${importResult.sectoresSinReconocer.length} sectores de la planilla no están en el sistema`}
+                    . Esos empleados quedaron sin sector; los demás datos se importaron.
+                  </p>
+                  <ul className="mt-1 text-amber-900">
+                    {importResult.sectoresSinReconocer.map((s) => (
+                      <li key={s.nombre}>
+                        «{s.nombre}» — {s.filas} {s.filas === 1 ? "empleado" : "empleados"}
+                        {s.motivo === "ambiguo" && " (hay más de un sector con ese nombre)"}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-amber-700">
+                    Corregí el nombre en el Excel y volvé a importar, o dalo de alta en
+                    Administración → Empresas y sectores y asigná el sector desde la ficha.
+                  </p>
+                </div>
               )}
             </div>
           )}

@@ -124,3 +124,47 @@ export function agruparSectores(
 
   return grupos;
 }
+
+/**
+ * El índice de sectores por nombre, para reconocer lo que nombra una planilla.
+ *
+ * Un nombre que comparten dos sectores queda como ambiguo y no resuelve a
+ * ninguno. Es la diferencia con `indicePorNombre` de Inventario, que se queda
+ * con el primero que aparece y no avisa del empate: elegir uno de dos es
+ * enlazar al que se le parece, y un empleado que aparece en el sector que no es
+ * no se nota nunca.
+ *
+ * La clave es la misma que usa la pantalla de administración para no dejar
+ * crear duplicados, así que las dos coinciden en qué nombres son el mismo.
+ */
+export function indiceDeSectores(
+  sectores: readonly { id: string; nombre: string }[]
+): Map<string, string | null> {
+  const indice = new Map<string, string | null>();
+  for (const s of sectores) {
+    const k = claveDeSector(s.nombre);
+    if (!k) continue;
+    // El segundo que llega no gana ni pierde: apaga la clave para los dos.
+    indice.set(k, indice.has(k) ? null : s.id);
+  }
+  return indice;
+}
+
+/**
+ * El sector que nombra una planilla, o `null` si no se lo reconoce con certeza.
+ *
+ * Devuelve por qué no se lo reconoció, porque no son lo mismo: un nombre que no
+ * existe se arregla creando el sector o corrigiendo la planilla, y uno ambiguo
+ * se arregla en el catálogo. Decir "no se pudo" a secas deja a alguien
+ * buscando cuál de las dos cosas pasó.
+ */
+export function sectorQueNombra(
+  indice: ReadonlyMap<string, string | null>,
+  nombre: string
+): { id: string | null; motivo?: "no existe" | "ambiguo" } {
+  const k = claveDeSector(nombre);
+  if (!k) return { id: null, motivo: "no existe" };
+  if (!indice.has(k)) return { id: null, motivo: "no existe" };
+  const id = indice.get(k) ?? null;
+  return id ? { id } : { id: null, motivo: "ambiguo" };
+}

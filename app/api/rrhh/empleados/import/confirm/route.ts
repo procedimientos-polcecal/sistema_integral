@@ -6,6 +6,7 @@ import { leerStaging, borrarStaging } from "@/lib/rrhh/staging";
 import { parseNumeroAR, toDateOnlyFromCell, type ParsedSheet } from "@/lib/rrhh/excelImport";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { indiceDeSectores, sectorQueNombra } from "@/lib/core/sectores";
 
 interface Mapping {
   legajo: string;
@@ -43,13 +44,12 @@ export async function POST(request: Request) {
 
   const { data: empresas } = await admin.from("empresas").select("id, nombre");
   const empresaByNombre = new Map((empresas ?? []).map((e) => [e.nombre.trim().toLowerCase(), e.id]));
-  // Sólo los activos. El índice es por nombre y se queda con uno solo por
-  // clave, así que con los diez organizativos dados de baja en la
-  // 20260904112044 —que repiten nombre con los que quedaron— podía enganchar
-  // la fila inactiva y volver a partir en dos lo que se acababa de unificar.
+  // Sólo los activos: un nombre repetido por una fila dada de baja —quedaron
+  // diez en la 20260904112044— haría ambiguo un sector que en realidad es uno
+  // solo, y dejaría sin enlazar a todo el mundo.
   const { data: sectores } = await admin
     .from("sectores").select("id, nombre").eq("activo", true);
-  const sectorByNombre = new Map((sectores ?? []).map((s) => [s.nombre.trim().toLowerCase(), s.id]));
+  const indiceSectores = indiceDeSectores(sectores ?? []);
 
   async function resolverEmpresaId(nombre: string): Promise<string> {
     const key = nombre.toLowerCase();
@@ -61,16 +61,35 @@ export async function POST(request: Request) {
     return data.id;
   }
 
-  // Sector es transversal a las empresas: se resuelve solo por nombre, igual
-  // que en el original.
-  async function resolverSectorId(nombre: string): Promise<string> {
-    const key = nombre.toLowerCase();
-    const existente = sectorByNombre.get(key);
-    if (existente) return existente;
-    const { data, error } = await admin.from("sectores").insert({ nombre, transversal: true }).select("id").single();
-    if (error) throw new Error(error.message);
-    sectorByNombre.set(key, data.id);
-    return data.id;
+  /**
+   * El sector que nombra la planilla. Si no se lo reconoce, queda vacío.
+   *
+   * Antes creaba el que no encontraba, como transversal y en silencio. Así
+   * nacieron "Administración (RRHH)", "Calidad (RRHH)" y compañía: cuatro áreas
+   * que terminaron existiendo tres veces cada una —una por empresa y una acá—,
+   * que no sumaban juntas en ningún tablero y que costaron una migración
+   * (20260904112044) y el repunte de 189 filas.
+   *
+   * Un typo en el Excel creaba un sector nuevo del catálogo del núcleo, que
+   * comparten los cinco módulos, sin que nadie lo decidiera ni se enterara.
+   * Ahora no se crea nada: el enlace queda vacío, se informa con el nombre tal
+   * como lo escribió la planilla, y quien mira decide si corregir el Excel o
+   * dar de alta el sector en Administración, donde además se chequea que no
+   * duplique uno que ya existe.
+   *
+   * Se cuenta cuántas filas quedaron sin enlazar con cada nombre: una lista con
+   * el mismo nombre repetido treinta veces no se lee.
+   */
+  const sinReconocer = new Map<string, { filas: number; motivo: string }>();
+  function resolverSectorId(nombre: string): string | null {
+    const hallado = sectorQueNombra(indiceSectores, nombre);
+    if (hallado.id) return hallado.id;
+    const previo = sinReconocer.get(nombre);
+    sinReconocer.set(nombre, {
+      filas: (previo?.filas ?? 0) + 1,
+      motivo: hallado.motivo ?? "no existe",
+    });
+    return null;
   }
 
   const hoy = utcDateOnlyFrom(new Date()).toISOString().slice(0, 10);
@@ -109,7 +128,7 @@ export async function POST(request: Request) {
     const empresaNombre = mapping.empresa ? String(row[mapping.empresa] ?? "").trim() : "";
     const sectorNombre = mapping.sector ? String(row[mapping.sector] ?? "").trim() : "";
     const empresaId = empresaNombre ? await resolverEmpresaId(empresaNombre) : null;
-    if (sectorNombre) sectorId = await resolverSectorId(sectorNombre);
+    if (sectorNombre) sectorId = resolverSectorId(sectorNombre);
 
     let horasTeoricasDiarias: number | undefined;
     if (mapping.horasTeoricasDiarias) {
@@ -158,6 +177,17 @@ export async function POST(request: Request) {
     }
   }
 
+  // Los sectores que la planilla nombra y el sistema no reconoce no son un
+  // error de la fila: el empleado se importa igual, sólo que sin sector. Van
+  // aparte para que se lean como lo que son, una lista corta de nombres para
+  // decidir, y no mezclados con las filas que sí fallaron.
+  //
+  // A un empleado que ya existía no se le borra el sector que tenía: `data`
+  // omite `sector_id` cuando es null en vez de escribirlo vacío.
+  const sectoresSinReconocer = [...sinReconocer.entries()]
+    .map(([nombre, d]) => ({ nombre, filas: d.filas, motivo: d.motivo }))
+    .sort((a, b) => b.filas - a.filas);
+
   await borrarStaging(supabase, token);
-  return NextResponse.json({ creados, actualizados, errores });
+  return NextResponse.json({ creados, actualizados, errores, sectoresSinReconocer });
 }

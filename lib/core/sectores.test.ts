@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   claveDeSector, yaExisteElNombre, loMantieneLaImportacion, agruparSectores,
+  indiceDeSectores, sectorQueNombra,
   type SectorAdmin,
 } from "./sectores";
 
@@ -99,5 +100,40 @@ describe("como se agrupa el catalogo", () => {
     const grupos = agruparSectores(conEmpresa, EMPRESAS);
     expect(grupos.find((g) => g.clave === "e-polcecal")?.sectores).toEqual([]);
     expect(grupos.find((g) => g.clave === "planta")?.sectores.length).toBe(1);
+  });
+});
+
+/**
+ * La importación de RRHH nombra los sectores en texto libre. Reconocer mal es
+ * peor que no reconocer: un empleado en el sector que no es no se nota nunca.
+ */
+describe("reconocer el sector que nombra una planilla", () => {
+  const indice = indiceDeSectores([
+    { id: "s1", nombre: "Tesorería" },
+    { id: "s2", nombre: "Compras y Pañol" },
+  ]);
+
+  it("lo encuentra aunque la planilla escriba sin tildes", () => {
+    expect(sectorQueNombra(indice, "tesoreria")).toEqual({ id: "s1" });
+    expect(sectorQueNombra(indice, "  COMPRAS Y PAñOL ")).toEqual({ id: "s2" });
+  });
+
+  it("uno que no está queda vacio y dice por que", () => {
+    expect(sectorQueNombra(indice, "Pañol")).toEqual({ id: null, motivo: "no existe" });
+    expect(sectorQueNombra(indice, "")).toEqual({ id: null, motivo: "no existe" });
+  });
+
+  // `indicePorNombre` de Inventario se queda con el primero y no avisa. Acá no:
+  // elegir uno de dos es enlazar al que se le parece.
+  it("un nombre repetido no resuelve a ninguno", () => {
+    const conEmpate = indiceDeSectores([
+      { id: "a", nombre: "Producción" },
+      { id: "b", nombre: "produccion" },
+    ]);
+    expect(sectorQueNombra(conEmpate, "Producción")).toEqual({ id: null, motivo: "ambiguo" });
+  });
+
+  it("un sector sin nombre no ensucia el indice", () => {
+    expect(indiceDeSectores([{ id: "x", nombre: "   " }]).size).toBe(0);
   });
 });
