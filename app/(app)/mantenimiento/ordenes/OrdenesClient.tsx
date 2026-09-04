@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import MultiSelect from "@/components/MultiSelect";
+import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
@@ -35,13 +36,17 @@ export function estadoMeta(v: string) {
 }
 
 export default function OrdenesClient({
-  canEdit, sectores, equipos, contratistas, sync
+  canEdit, sectores, equipos, contratistas, areas, empresas, ubicaciones, sync
 }: {
   canEdit: boolean;
   sectores: any[];
   equipos: any[];
   /** Los proveedores marcados como contratistas: es por quién se filtra. */
   contratistas: { id: string; nombre: string }[];
+  /** Los catálogos de Compras, para poder pedir un repuesto desde la orden. */
+  areas: { id: string; nombre: string }[];
+  empresas: { id: string; nombre: string }[];
+  ubicaciones: UbicacionEnlazada[];
   /** Cuándo se trajo por última vez lo de la planilla. */
   sync: UltimaSync | null;
 }) {
@@ -626,6 +631,9 @@ export default function OrdenesClient({
         <RepuestosOTModal
           orden={verRepuestos}
           puedeEditar={canEdit}
+          areas={areas}
+          empresas={empresas}
+          ubicaciones={ubicaciones}
           onCerrar={() => setVerRepuestos(null)}
         />
       )}

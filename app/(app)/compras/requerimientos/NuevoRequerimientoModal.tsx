@@ -6,30 +6,51 @@ import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 type Opcion = { id: string; nombre: string };
 
 /**
+ * Con qué campos abre el formulario.
+ *
+ * Lo usa la orden de trabajo cuando el pañol no tiene un repuesto: el nombre,
+ * el código y la cantidad ya están del otro lado, y volver a escribirlos es
+ * donde el código se pierde y el RI termina diciendo "rodamiento" a secas.
+ *
+ * **El área y quién paga no se pueden precargar y es a propósito.** Son
+ * decisiones de quien pide, y elegirlas por él es cómo un pedido de
+ * Mantenimiento entra como si fuera de Producción.
+ */
+export interface ValoresIniciales {
+  descripcion?: string;
+  codigo?: string;
+  cantidad?: string;
+  detalle?: string;
+  ubicacionId?: string;
+}
+
+/**
  * Alta de un requerimiento. Es el formulario que hoy vive en Google Forms, así
  * que se mantiene igual de corto: sólo descripción y área son obligatorias.
  */
 export default function NuevoRequerimientoModal({
-  areas, empresas, ubicaciones, onClose, onSaved,
+  areas, empresas, ubicaciones, inicial, onClose, onSaved,
 }: {
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
+  /** Precargado desde otra pantalla. Se puede editar todo antes de enviar. */
+  inicial?: ValoresIniciales;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [descripcion, setDescripcion] = useState("");
+  const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? "");
   const [areaId, setAreaId] = useState("");
-  const [cantidad, setCantidad] = useState("");
-  const [codigo, setCodigo] = useState("");
+  const [cantidad, setCantidad] = useState(inicial?.cantidad ?? "");
+  const [codigo, setCodigo] = useState(inicial?.codigo ?? "");
   const [fechaNecesidad, setFechaNecesidad] = useState("");
   // Sin valor por defecto: las define quien aprueba. Se pueden sugerir.
   const [prioridad, setPrioridad] = useState("");
   const [paga, setPaga] = useState("");
-  const [detalle, setDetalle] = useState("");
+  const [detalle, setDetalle] = useState(inicial?.detalle ?? "");
   const [imagenUrl, setImagenUrl] = useState("");
 
-  const [ubicacionId, setUbicacionId] = useState("");
+  const [ubicacionId, setUbicacionId] = useState(inicial?.ubicacionId ?? "");
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");

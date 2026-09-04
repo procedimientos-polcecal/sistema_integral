@@ -4,6 +4,9 @@ import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
+import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
+import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 
 /**
  * Los repuestos que hacen falta para hacer la orden.
@@ -21,6 +24,11 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
  *
  * La lista se carga igual aunque el inventario todavía no se haya importado
  * —saber qué hace falta no depende de saber si lo hay—.
+ *
+ * Y cuando no hay, ofrece pedirlo. Un requerimiento lo puede generar cualquier
+ * usuario del SdG, así que ese botón **no depende del permiso de edición de
+ * Mantenimiento**: quien mira la orden y ve que falta algo es justamente quien
+ * tiene que poder pedirlo, trabaje o no en Compras.
  */
 
 interface Repuesto {
@@ -30,17 +38,29 @@ interface Repuesto {
   cantidad: string | null;
 }
 
+type Opcion = { id: string; nombre: string };
+
 export default function RepuestosOTModal({
-  orden, puedeEditar, onCerrar,
+  orden, puedeEditar, areas, empresas, ubicaciones, onCerrar,
 }: {
-  orden: { id: string; ot_number: number | null; descripcion: string | null; repuesto: string | null };
+  orden: {
+    id: string; ot_number: number | null; descripcion: string | null;
+    repuesto: string | null; equipment_id: string | null; equipo_raw: string | null;
+  };
   puedeEditar: boolean;
+  /** Los catálogos del formulario de requerimiento, para poder pedir de acá. */
+  areas: Opcion[];
+  empresas: Opcion[];
+  ubicaciones: UbicacionEnlazada[];
   onCerrar: () => void;
 }) {
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
   const [disponibilidad, setDisponibilidad] = useState<Record<string, Disponibilidad>>({});
   const [inventarioConectado, setInventarioConectado] = useState<boolean | null>(null);
   const [sincronizadoEn, setSincronizadoEn] = useState<string | null>(null);
+  /** El repuesto que se está pidiendo, con el formulario ya completo. */
+  const [pidiendo, setPidiendo] = useState<PedidoSugerido | null>(null);
+  const [pedido, setPedido] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
@@ -151,6 +171,22 @@ export default function RepuestosOTModal({
                         {d.insumo?.ubicacion && ` · ${d.insumo.ubicacion}`}
                       </div>
                     )}
+
+                    {/* Cuando no hay, lo que sigue es pedirlo. El formulario
+                        abre con el nombre, el código y la cantidad que ya están
+                        acá: volver a escribirlos es donde el código se pierde y
+                        el RI termina diciendo "rodamiento" a secas. */}
+                    {d && convienePedir(d.estado) && (
+                      <button
+                        onClick={() => setPidiendo(pedidoSugerido(
+                          { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                          d, orden, ubicaciones
+                        ))}
+                        className="mt-1 text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                      >
+                        Pedir a Compras
+                      </button>
+                    )}
                   </div>
                   {puedeEditar && (
                     <button
@@ -165,8 +201,30 @@ export default function RepuestosOTModal({
           </ul>
         )}
 
+        {pedido && (
+          <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
+            {pedido} Lo vas a ver en <a href="/mis-pedidos" className="underline">Mis pedidos</a>.
+          </p>
+        )}
+
         {puedeEditar && <Agregar ordenId={orden.id} onAgregado={traer} onError={setError} />}
       </div>
+
+      {/* El formulario de Compras, tal cual: uno solo para los dos lados, así
+          un campo que se agregue allá aparece acá sin que nadie se acuerde. */}
+      {pidiendo && (
+        <NuevoRequerimientoModal
+          areas={areas}
+          empresas={empresas}
+          ubicaciones={ubicaciones}
+          inicial={pidiendo}
+          onClose={() => setPidiendo(null)}
+          onSaved={() => {
+            setPidiendo(null);
+            setPedido(`Pedido cargado: ${pidiendo.descripcion}.`);
+          }}
+        />
+      )}
     </div>
   );
 }
