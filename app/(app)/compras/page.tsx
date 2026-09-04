@@ -19,7 +19,26 @@ export default async function ComprasDashboardPage() {
     base().eq("estado_aprobacion", "APROBADA").eq("estado_compra", "PARA_COMPRAR"),
     base().eq("estado_aprobacion", "APROBADA").eq("estado_compra", "EN_COMPARATIVA"),
     base().eq("estado_compra", "PEDIDO"),
-    base().eq("prioridad", "URGENTE").in("estado_compra", ["PARA_COMPRAR", "EN_COMPARATIVA", "PEDIDO"]),
+    // Todo lo urgente que todavía no se pidió: el circuito completo desde que
+    // entra hasta que se registra el pedido.
+    //
+    // Sin los pedidos, que eran 1.171 de los 1.185 que mostraba antes. Eso no es
+    // trabajo urgente pendiente sino el arrastre de pedidos que se marcaron como
+    // pedidos y nunca como recibidos —lo mismo de lo que avisa el cartel de
+    // pedidos viejos del tablero—, y con ese número adentro la cifra no servía
+    // para decidir nada.
+    //
+    // Los cuatro estados van enteros y no los dos del medio: la lista original
+    // salteaba SIN_INICIAR y APROBADO, así que un urgente que nadie había
+    // empezado no figuraba, y otro desaparecía del contador justo cuando le
+    // aprobaban la compra para reaparecer al registrarse el pedido. Un hueco en
+    // el medio de un circuito no se nota nunca desde el dashboard.
+    //
+    // EN_ESPERA queda afuera a propósito: es un pedido frenado por decisión de
+    // alguien, no algo que esté esperando que Compras lo mueva.
+    base()
+      .eq("prioridad", "URGENTE")
+      .in("estado_compra", ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO"]),
   ]);
 
   // Para los gráficos sólo se traen las columnas necesarias de lo que tiene costo.
