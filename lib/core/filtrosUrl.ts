@@ -12,11 +12,13 @@
  * enlace copiado de una pantalla a la otra dejaría de funcionar sin que nada lo
  * diga.
  *
- * PENDIENTE: `lib/compras/filtrosUrl.ts` todavía tiene su propia copia de estas
- * tres funciones, de donde salieron. No se la sacó al escribir esto porque ese
- * archivo estaba a medio refactorizar en otra sesión y pisarlo es cómo se
- * pierde trabajo ajeno. Cuando eso termine, que Compras importe de acá: son
- * idénticas y el riesgo es tenerlas separadas.
+ * Salieron de Compras, que las tuvo duplicadas unas horas mientras el archivo
+ * estaba a medio refactorizar en otra sesión. Ya no: los dos importan de acá.
+ *
+ * Lo que no está es la paginación. Compras la pone en la barra de direcciones
+ * —`?pagina=2`, que es la segunda— y Mantenimiento todavía no; su `page=` es
+ * de la llamada a la API y no de la URL que se comparte. La regla la escribe
+ * el segundo que la necesita: hasta entonces vive en `lib/compras/filtrosUrl.ts`.
  */
 
 /**

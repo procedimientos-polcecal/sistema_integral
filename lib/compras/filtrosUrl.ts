@@ -1,3 +1,6 @@
+import {
+  losQueEstanEnLaLista, escribirEnLaUrl, hayAlgunFiltro as hayAlguno,
+} from "@/lib/core/filtrosUrl";
 import { ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES } from "./constants";
 
 /**
@@ -55,36 +58,6 @@ export interface Catalogos {
   sectores: string[];
 }
 
-/**
- * Los valores que trajo la URL para un filtro, ya validados.
- *
- * Se aceptan las dos formas: repetido (`?prioridad=ALTA&prioridad=URGENTE`),
- * que es lo que arma un formulario, y separado por comas
- * (`?prioridad=ALTA,URGENTE`), que es lo que se manda por chat sin que la URL
- * se vuelva ilegible. Ningún id ni ningún estado tiene comas, así que partir
- * por coma no rompe nada.
- *
- * Un valor que no está en la lista se descarta en silencio. Es preferible a
- * dejarlo puesto: un filtro que la persona no ve —porque el desplegable no
- * tiene esa opción— y no puede quitar deja una tabla vacía que se lee como "no
- * hay nada".
- */
-function losQueEstanEnLaLista(
-  params: URLSearchParams,
-  nombre: string,
-  permitidos: readonly string[]
-): string[] {
-  const vistos = new Set<string>();
-  for (const crudo of params.getAll(nombre)) {
-    for (const valor of crudo.split(",")) {
-      const v = valor.trim();
-      // Repetir un valor en la URL no tendría por qué duplicarlo en el `.in()`.
-      if (v && permitidos.includes(v)) vistos.add(v);
-    }
-  }
-  return [...vistos];
-}
-
 export function leerFiltrosDeLaUrl(
   params: URLSearchParams,
   catalogos: Catalogos
@@ -106,12 +79,10 @@ export function leerFiltrosDeLaUrl(
 }
 
 /** Si la URL trajo algo utilizable. Sirve para saber si arrancar filtrado. */
-export function hayAlgunFiltro(f: FiltrosCompras): boolean {
-  return Object.values(f).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
-}
+export const hayAlgunFiltro = (f: FiltrosCompras): boolean => hayAlguno(f);
 
 /** El orden en que van los filtros en la URL, y con qué nombre. */
-const NOMBRES: [keyof FiltrosCompras, string][] = [
+const NOMBRES: readonly [keyof FiltrosCompras, string][] = [
   ["busqueda", "q"],
   ["area", "area"],
   ["aprobacion", "estado_aprobacion"],
@@ -129,31 +100,25 @@ const NOMBRES: [keyof FiltrosCompras, string][] = [
  *
  * Es la inversa de `leerFiltrosDeLaUrl`: lo que sale de acá tiene que volver
  * igual al leerse, porque de eso depende que el botón de atrás devuelva la
- * tabla como estaba.
- *
- * Cada filtro va en un solo parámetro con los valores separados por comas
- * —`?prioridad=ALTA,URGENTE`— y no repetido: es la forma que deja la URL
- * legible y la que se puede pasar por chat. El orden es fijo para que tocar
- * dos veces el mismo desplegable no cambie la URL.
+ * tabla como estaba. Cómo se escribe cada filtro lo decide el núcleo; acá se
+ * agrega lo único que no es un filtro, la página.
  *
  * La página va última y sólo si no es la primera, que es el caso de siempre:
  * un `?pagina=1` en cada enlace sería ruido. Adentro se cuenta desde cero
  * porque así se calcula el `range()`, pero en la URL se escribe como la lee
  * quien la mira —`?pagina=2` es la segunda—, que es también lo que dicen los
  * botones de abajo de la tabla.
+ *
+ * La paginación no subió al núcleo con el resto: Mantenimiento todavía no la
+ * pone en la barra de direcciones —el `page=` de `consultaDeLaRuta` es de la
+ * API, no de la URL que se comparte—, y una regla común la escribe el segundo
+ * que la necesita, no el primero. Cuando pase, esto se sube y se unifica.
  */
 export function escribirFiltrosEnLaUrl(f: FiltrosCompras, pagina = 0): string {
-  const params = new URLSearchParams();
-  for (const [clave, nombre] of NOMBRES) {
-    const valor = f[clave];
-    if (Array.isArray(valor)) {
-      if (valor.length) params.set(nombre, valor.join(","));
-    } else if (valor.trim()) {
-      params.set(nombre, valor.trim());
-    }
-  }
-  if (pagina > 0) params.set("pagina", String(pagina + 1));
-  return params.toString();
+  const query = escribirEnLaUrl(f, NOMBRES);
+  if (pagina <= 0) return query;
+  const cual = `pagina=${pagina + 1}`;
+  return query ? `${query}&${cual}` : cual;
 }
 
 /**
