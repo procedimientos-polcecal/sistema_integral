@@ -24,9 +24,10 @@ import {
 } from "@/lib/compras/constants";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import {
-  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl, paginaDeArranque,
+  enlaceAlRequerimiento, escribirFiltrosEnLaUrl, leerFiltrosDeLaUrl,
   type FiltrosCompras,
 } from "@/lib/compras/filtrosUrl";
+import { paginaDeArranque } from "@/lib/core/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import { useCargar } from "@/lib/core/useCargar";
 

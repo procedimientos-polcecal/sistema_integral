@@ -1,5 +1,5 @@
 import {
-  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, leerPaginaDeLaUrl,
+  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina,
   hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
 import { ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES } from "./constants";
@@ -106,23 +106,12 @@ const NOMBRES: readonly [keyof FiltrosCompras, string][] = [
  *
  * La página se cuenta desde uno, como en la URL y como en los botones de abajo
  * de la tabla. Adentro el listado la cuenta desde cero —así se calcula el
- * `range()`— y convierte en el borde; ver `paginaDeArranque`.
+ * `range()`— y convierte en el borde con `paginaDeArranque`, del núcleo.
  */
 export function escribirFiltrosEnLaUrl(f: FiltrosCompras, pagina = 1): string {
   return conLaPagina(escribirEnLaUrl(f, NOMBRES), pagina);
 }
 
-/**
- * Con qué página arranca el listado, contada desde cero.
- *
- * Es el único lugar donde se convierte: la URL y los botones cuentan desde
- * uno, y el `range()` de PostgREST desde cero. Tenerlo en una función con
- * nombre evita el `- 1` suelto en la página y en la pantalla, que es donde se
- * cuela un corrimiento de cincuenta filas que nadie ve.
- */
-export function paginaDeArranque(params: URLSearchParams): number {
-  return leerPaginaDeLaUrl(params) - 1;
-}
 
 
 /**

@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, paginaDeArranque,
+  leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl,
   enlaceAlRequerimiento, volverAlListado,
   hayAlgunFiltro, FILTROS_VACIOS,
 } from "./filtrosUrl";
+import { paginaDeArranque } from "@/lib/core/filtrosUrl";
 
 const catalogos = {
   areas: ["area-mant", "area-seg"],

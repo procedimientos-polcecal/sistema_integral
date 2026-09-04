@@ -81,6 +81,11 @@ export function escribirEnLaUrl<T>(
       if (valor.length) params.set(nombre, valor.join(","));
     } else if (typeof valor === "string" && valor.trim()) {
       params.set(nombre, valor.trim());
+    } else if (valor === true) {
+      // Un filtro que es un sí o un no viaja como `=1` y sólo cuando está
+      // puesto. `=0` y `=false` no: dos formas de escribir "sin filtrar" son
+      // dos URL distintas para la misma pantalla, y alguna se lee mal.
+      params.set(nombre, "1");
     }
   }
   return params.toString();
@@ -123,4 +128,22 @@ export function conLaPagina(query: string, pagina: number): string {
   if (pagina <= 1) return query;
   const cual = `pagina=${pagina}`;
   return query ? `${query}&${cual}` : cual;
+}
+
+/** Un filtro de sí o no, como lo escribe `escribirEnLaUrl`. */
+export function elSiONo(params: URLSearchParams, nombre: string): boolean {
+  return params.get(nombre) === "1";
+}
+
+/**
+ * La página con la que arranca un listado que cuenta desde cero.
+ *
+ * Es el único lugar donde se convierte. La URL y los botones cuentan desde uno
+ * y el `range()` de PostgREST desde cero; tenerlo en una función con nombre
+ * evita el `- 1` suelto en cada pantalla, que es donde se cuela un corrimiento
+ * de cincuenta filas que nadie ve. Los listados que ya cuentan desde uno
+ * —las OT— usan `leerPaginaDeLaUrl` directamente.
+ */
+export function paginaDeArranque(params: URLSearchParams): number {
+  return leerPaginaDeLaUrl(params) - 1;
 }
