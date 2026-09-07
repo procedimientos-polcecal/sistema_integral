@@ -1704,7 +1704,14 @@ export interface DiaArmado {
  * en la planilla sería poner allá el mismo dato falso que el módulo vino a sacar.
  */
 export async function armarElDia(db: SupabaseClient, fecha: string): Promise<DiaArmado> {
-  const productos = await traerProductos(db);
+  // El catálogo **completo**, activos y no activos. Exportar no es cargar: el
+  // formulario sólo ofrece los activos —nadie tiene que poder cargar un producto
+  // discontinuado— pero la exportación tiene que poder escribir cualquier
+  // producto que tenga datos ese día, incluido uno que se desactivó después. Su
+  // columna sigue en la planilla, y quién se exporta lo decide `nombre_planilla`,
+  // no `activo`. Con el filtro puesto, el valor de un producto desactivado a
+  // mitad de mes no se escribe y nada lo dice.
+  const productos = await traerProductos(db, { soloActivos: false });
 
   const ids: string[] = [];
   // Un turno que no está cargado entra como `null`, no se saltea: es la única
