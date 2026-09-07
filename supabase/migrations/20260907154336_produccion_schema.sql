@@ -107,7 +107,9 @@ create table if not exists produccion_partes (
   -- enlace al empleado sólo cuando se lo reconoce con certeza. Enlazar al que se
   -- le parece es peor que dejar en null: el dato aparece en el lugar que no es.
   capataz_raw         text,
-  capataz_id          uuid references empleados(id),
+  -- set null y no restrict: el parte es un documento histórico y perder quién
+  -- lo firmó es preferible a impedir dar de baja a un empleado que ya no está.
+  capataz_id          uuid references empleados(id) on delete set null,
 
   observaciones       text,
   tareas_limpieza     text,
@@ -221,3 +223,14 @@ create policy produccion_despachos_write on produccion_despachos
 
 comment on table produccion_partes is
   'Un parte por turno, que es un papel 040/2. La producción no está acá: se despeja contra el depósito del parte anterior.';
+
+comment on column produccion_deposito.cantidad is
+  'Lo que muestra el depósito al cerrar ese turno: una foto, no un acumulado ni un movimiento.';
+comment on column produccion_partes.capataz_raw is
+  'Lo que dice el papel, siempre. capataz_id sólo se llena cuando el nombre identifica a un empleado con certeza.';
+comment on column produccion_partes.sheets_pendiente is
+  'Por qué no se pudo escribir en la planilla, con lo que dijo Google sin traducir. Null = está escrito.';
+comment on column produccion_productos.nombre_planilla is
+  'Cómo se llama la columna del producto en los resúmenes de la planilla. Null significa que no se exporta, una decisión y no un dato faltante.';
+comment on column produccion_despachos.producto_id is
+  'Puede ser null con producto_raw al lado: el papel tiene un renglón "Otros" y nombres escritos a mano. Enlazar al que se le parece pone la producción de un producto en la columna de otro y no se nota nunca.';
