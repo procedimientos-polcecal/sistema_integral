@@ -326,7 +326,10 @@ De calidad:
    parece" significa sumar la producción de un producto en la columna de otro, y
    eso no se nota nunca.
 2. **Los kilos por unidad.** La bolsa son 25 kg; falta el bolsón, y si es igual
-   para todos los productos.
+   para todos los productos. Y con eso, **la tolerancia** de la comprobación
+   kilos ↔ bultos, que arranca en 5%: el caso real del papel —1.200 bolsas
+   contra 29.280 kg, cuando 1.200 × 25 son 30.000— da 2,4% y no dispara aviso.
+   Puede estar bien o pueden faltar 29 bolsas, y eso no lo decide el código.
 3. **Qué va en cada columna de "Material despachado".** Hay dos —*Productos y
    kilos* y *Cantidad bolsa/bolsón*— y en los renglones relevados el número a
    veces parece kilos y a veces bultos (*Cal en bolsas — 1.200* junto a *Cal en

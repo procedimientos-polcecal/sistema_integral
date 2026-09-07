@@ -990,10 +990,20 @@ describe("los kilos contra los bultos", () => {
     expect(desajustesDeKilos([base], kg)).toEqual([]);
   });
 
+  /**
+   * Caso real relevado del papel: 1.200 bolsas / 29.280 kg, 2,4% de diferencia.
+   * Con la tolerancia del 5% **no** dispara aviso, y eso está testeado a
+   * propósito: el número lo decide calidad, no este archivo, y hasta que lo
+   * decida conviene que esté escrito qué deja pasar.
+   */
+  it("el caso real de 29.280 kg contra 1200 bolsas no llega al 5% y no desajusta", () => {
+    expect(desajustesDeKilos([{ ...base, id: "d-8", kilos: 29280 }], kg)).toEqual([]);
+  });
+
   it("un renglon que no cierra sale listado con lo que se esperaba", () => {
-    const malo = { ...base, id: "d-9", kilos: 29280 };
+    const malo = { ...base, id: "d-9", kilos: 25000 };
     expect(desajustesDeKilos([malo], kg)).toEqual([
-      { despachoId: "d-9", bultos: 1200, kilos: 29280, kilosEsperados: 30000 },
+      { despachoId: "d-9", bultos: 1200, kilos: 25000, kilosEsperados: 30000 },
     ]);
   });
 
@@ -1006,6 +1016,16 @@ describe("los kilos contra los bultos", () => {
   it("un renglon sin kilos o sin bultos no se comprueba", () => {
     expect(desajustesDeKilos([{ ...base, kilos: null }], kg)).toEqual([]);
     expect(desajustesDeKilos([{ ...base, bultos: null }], kg)).toEqual([]);
+  });
+
+  /**
+   * `kg_por_unidad` en 0 no debería estar en el catálogo, pero si pasara no
+   * tiene que confundirse con "sin confirmar": son dos motivos distintos para no
+   * poder comparar. Por eso el chequeo es `kg == null` y no `!kg`.
+   */
+  it("un producto con kg por unidad en 0 tampoco se comprueba", () => {
+    const kgCero = new Map<string, number | null>([["p-cal-bolsa", 0]]);
+    expect(desajustesDeKilos([{ ...base, kilos: 1 }], kgCero)).toEqual([]);
   });
 });
 ```
@@ -1104,8 +1124,10 @@ export function desajustesDeKilos(
 
     const kg = kgPorUnidad.get(r.producto_id);
     // Sin kg por unidad no hay contra qué comparar, y no se inventa un número:
-    // el del bolsón está sin confirmar.
-    if (!kg) continue;
+    // el del bolsón está sin confirmar. `== null` y no `!kg`: un producto con
+    // kg en 0 no es lo mismo que uno sin confirmar, aunque hoy los dos terminen
+    // salteados.
+    if (kg == null) continue;
 
     const esperados = r.bultos * kg;
     if (esperados === 0) continue;
@@ -2709,6 +2731,7 @@ Esto lo hace una persona, no el agente. Anotarlo y quedar a la espera.
 
 - [ ] **El catálogo.** Calidad tiene que resolver, renglón por renglón, la correspondencia entre los ~15 renglones del papel, las 17 columnas del Excel y los productos reales. Recién con eso se carga `produccion_productos` — por PostgREST, que es DML. **No se inventa**: un producto enlazado al que se le parece suma su producción en la columna de otro y no se nota nunca.
 - [ ] **Los kilos por unidad.** 25 la bolsa. El bolsón, a confirmar, y si es igual para todos.
+- [ ] **La tolerancia de la comprobación kilos ↔ bultos**, hoy en 5%. El caso real relevado del papel —1.200 bolsas contra 29.280 kg, cuando 1.200 × 25 son 30.000— da 2,4% y **no** dispara aviso. Puede estar bien (bolsas que pesan algo menos, báscula) o puede ser que falten 29 bolsas. Lo decide calidad; hasta entonces hay un test que documenta qué deja pasar.
 - [ ] **Las dos columnas del despacho.** Confirmar con calidad qué va en *Productos y kilos* y qué en *Cantidad bolsa/bolsón*: en la foto relevada un número parece kilos y otro bultos.
 - [ ] **La planilla.** Cargar `GOOGLE_SHEETS_PRODUCCION_ID` en Vercel, compartirla como **editor** con la cuenta de servicio, y ampliar los resúmenes a 31 filas — hoy llegan a 30 y cualquier día 31 va a quedar pendiente.
 - [ ] **La primera escritura real, mirándola.** Verificar en la planilla que un decimal del bloque de % —por ejemplo `0.0189`— entra como número y no como texto. `escribirCeldas` usa `valueInputOption: USER_ENTERED`, que interpreta según el locale de la planilla; si la planilla es es-AR y el punto no se toma como decimal, cambiar `porcentajeDeRotura` para que devuelva coma y agregar el test.
