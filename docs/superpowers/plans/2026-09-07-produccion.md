@@ -457,8 +457,8 @@ Producción es el **tercer** módulo que la necesita, y la regla de `docs/NUCLEO
 - Crear: `lib/core/fechaDeSheets.ts`
 - Crear: `lib/core/fechaDeSheets.test.ts`
 - Modificar: `lib/mantenimiento/planilla.ts:29-45`
-- Modificar: `lib/inventario/planilla.ts:22`
-- Modificar: `lib/mantenimiento/avisos.ts:19`
+
+Los importadores **no se tocan**: son cinco archivos más un test, y todos traen `fechaDeSheets` en el mismo `import` que `texto`, `normalizar`, `monto` o `codigoDeEquipo`, que no se mudan. Partir ese import en dos por una función es más ruido que la indirección que evita. Por eso el paso 5 deja una reexportación.
 
 - [ ] **Paso 1: Escribir el test que falla**
 
