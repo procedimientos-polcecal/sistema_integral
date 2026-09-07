@@ -2052,7 +2052,27 @@ export async function POST(request: Request) {
   const texto = (v: unknown) => String(v ?? "").trim() || null;
   const numero = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
 
-  // ── 0. El capataz ──────────────────────────────────────────
+  // ── 0. Validar los producto_id antes de escribir nada ──────
+  //
+  // Un id que no existe en `produccion_productos` lo rechaza la FK con un error
+  // de Postgres crudo, y recién **después** de haber borrado el depósito y los
+  // despachos del parte, que se reemplazan enteros. Comprobar acá corta el
+  // pedido antes de tocar nada y devuelve un mensaje que se entiende. Es el
+  // mismo patrón que `solicitante_id` en la ruta de movimientos de Inventario.
+  //
+  // Se busca contra la lista **completa** y no contra el catálogo activo: un
+  // parte puede citar un producto que después se dio de baja.
+  //
+  // El `.in()` acá es seguro: los ids son a lo sumo los del catálogo (~17) más
+  // los de los renglones del turno. No es el caso que la regla del repo prohíbe,
+  // que es un `.in()` con cientos de ids armando una URL que PostgREST rechaza.
+  //
+  // El código completo está en `app/api/produccion/partes/route.ts`: junta los
+  // `producto_id` del depósito y de los despachos, exige que los del depósito no
+  // sean null —la tabla lo pide `not null`—, y devuelve 400 listando los que no
+  // existen.
+
+  // ── 0 bis. El capataz ──────────────────────────────────────
   // Lo que dice el papel se guarda siempre. El enlace al empleado se resuelve
   // sólo si el nombre lo identifica **con certeza**: `elQueNombra` devuelve null
   // cuando no existe y también cuando dos empleados comparten nombre, y un
@@ -2066,27 +2086,44 @@ export async function POST(request: Request) {
   }
 
   // ── 1. El parte ────────────────────────────────────────────
-  // El upsert va sobre la constraint (fecha, turno), que es completa: un índice
-  // parcial no sirve como destino de ON CONFLICT.
-  const { data: parte, error: errParte } = await admin
+  //
+  // **No es un upsert único, a propósito.** El esquema separa `cargado_por/en`
+  // de `actualizado_por/en` justamente para poder corregir un parte sin perder
+  // quién lo cargó la primera vez. Un `upsert` arma la lista de columnas del
+  // `INSERT` y la del `ON CONFLICT DO UPDATE SET` con el mismo payload, así que
+  // mandar `cargado_por: user.id` pisa esa columna en cada corrección y las
+  // cuatro terminan diciendo lo mismo: el rastro de quién corrigió se pierde.
+  // Por eso se busca primero y se elige la rama.
+  const { data: existente, error: errExistente } = await admin
     .from("produccion_partes")
-    .upsert(
-      {
-        fecha,
-        turno,
-        capataz_raw: capatazRaw,
-        capataz_id: capatazId,
-        observaciones: texto(b?.observaciones),
-        tareas_limpieza: texto(b?.tareas_limpieza),
-        recuento_bolsones: texto(b?.recuento_bolsones),
-        cargado_por: user.id,
-        actualizado_por: user.id,
-        actualizado_en: new Date().toISOString(),
-      },
-      { onConflict: "fecha,turno" }
-    )
     .select("id")
-    .single();
+    .eq("fecha", fecha)
+    .eq("turno", turno)
+    .maybeSingle();
+  if (errExistente) {
+    return NextResponse.json({ error: errExistente.message }, { status: 500 });
+  }
+
+  const camposComunes = {
+    capataz_raw: capatazRaw,
+    capataz_id: capatazId,
+    observaciones: texto(b?.observaciones),
+    tareas_limpieza: texto(b?.tareas_limpieza),
+    recuento_bolsones: texto(b?.recuento_bolsones),
+  };
+
+  const { data: parte, error: errParte } = existente
+    ? await admin
+        .from("produccion_partes")
+        .update({ ...camposComunes, actualizado_por: user.id, actualizado_en: new Date().toISOString() })
+        .eq("id", existente.id)
+        .select("id")
+        .single()
+    : await admin
+        .from("produccion_partes")
+        .insert({ fecha, turno, ...camposComunes, cargado_por: user.id })
+        .select("id")
+        .single();
 
   if (errParte || !parte) {
     return NextResponse.json(
