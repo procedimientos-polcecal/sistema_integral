@@ -132,6 +132,25 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   // quien decide si un producto se exporta es `nombre_planilla`, no `activo`.
   const productos = await traerProductos(db, { soloActivos: false });
 
+  // Caché de depósitos ya traídos, sólo durante esta llamada (no entre pedidos
+  // HTTP distintos). El depósito del parte anterior al turno `12_20` es el del
+  // `4_12` del mismo día, que el bucle ya trajo entero unas líneas antes: sin
+  // esto se pedía dos veces a la base dentro de la misma exportación, y las dos
+  // lecturas podían no coincidir si alguien guardaba el parte de la mañana justo
+  // en el medio — la mañana y la resta de la tarde saldrían de dos fotos
+  // distintas. Guardamos también el `null` de "el parte no existe": es un
+  // resultado válido, no "todavía no lo busqué".
+  const depositosPorClave = new Map<string, Record<string, number> | null>();
+  const claveDe = (c: ClaveDeParte) => `${c.fecha}|${c.turno}`;
+
+  async function depositoCacheado(clave: ClaveDeParte): Promise<Record<string, number> | null> {
+    const k = claveDe(clave);
+    if (depositosPorClave.has(k)) return depositosPorClave.get(k)!;
+    const deposito = await traerDepositoDe(db, clave);
+    depositosPorClave.set(k, deposito);
+    return deposito;
+  }
+
   const ids: string[] = [];
   // Un turno que no está cargado entra como `null`, no se saltea: es la única
   // forma de que `produccionDelDia` distinga "el turno produjo cero" de "el
@@ -148,6 +167,9 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
       continue;
     }
     ids.push(completo.parte.id);
+    // Este parte ya está completo en mano: dejarlo en la caché evita volver a
+    // pedirlo cuando el turno siguiente lo necesite como "parte anterior".
+    depositosPorClave.set(claveDe({ fecha, turno }), completo.deposito);
 
     const totales = totalesDeDespacho(completo.despachos);
     const roturas = roturaTotal(totales);
@@ -162,7 +184,7 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
     porTurno.push(
       produccionDelTurno({
         deposito: completo.deposito,
-        depositoAnterior: await traerDepositoDe(db, parteAnterior({ fecha, turno })),
+        depositoAnterior: await depositoCacheado(parteAnterior({ fecha, turno })),
         despachado: totales.despachado,
         rotura: roturas,
       })
