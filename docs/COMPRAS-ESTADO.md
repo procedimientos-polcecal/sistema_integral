@@ -36,6 +36,39 @@ Un área pide (formulario de Google o /mis-pedidos)
 Dos estados independientes, `estado_aprobacion` y `estado_compra`, porque son
 decisiones de personas distintas en momentos distintos.
 
+### Y hay un segundo circuito: las órdenes de servicio
+
+Un requerimiento pide **materiales**; una orden de servicio pide **trabajo a un
+tercero** —una reparación, una fabricación, un servicio—. Desde el 4/09/2026 su
+aprobación también se hace acá:
+
+```
+Un área pide (formulario de Google, no /mis-pedidos)
+  → vive en la pestaña SERVICIOS de su planilla     [POR APROBAR / vacío]
+  → Compras → Aprobaciones: se decide               [APROBADO]
+  → el FILTER la lleva a la pestaña de su área
+  → se piden presupuestos                           [EN PROCESO (COMPARATIVA)]
+  → se elige proveedor                              [ACEPTADO]
+```
+
+Tres cosas que hay que saber para no equivocarse:
+
+- **Las tablas son de Mantenimiento**, no de Compras: `ordenes_servicio` y
+  `os_comparativas`, con su propio vocabulario de estados. No son
+  `compras_requerimientos` con otro nombre.
+- **La lista de aprobadores es otra.** `os_aprobadores`, separada de
+  `compras_aprobadores`: aprobar un servicio y aprobar un material los decide
+  gente distinta. Hoy tiene sólo a Nico, y se administra en Configuración de
+  Compras, al lado de la otra.
+- **El seguimiento sigue siendo de Mantenimiento**, en
+  `/mantenimiento/ordenes-servicio`. Acá se decide si se hace; allá se anota
+  proveedor, costo y fechas.
+
+Todo el detalle —incluida la razón por la que aprobar puede correr filas de la
+planilla y cuándo el sistema se niega— está en
+[MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md) y en
+[el spec](superpowers/specs/2026-09-04-aprobar-os-desde-compras-design.md).
+
 ## Decisiones que no se deducen del código
 
 **La planilla manda en el alta, el sistema en lo que gestiona.** Un trigger
@@ -278,6 +311,23 @@ por separado.
    conviene revisarlo con calma.
 5. **Revisar en un mes si bajó el 68% de `URGENTE`.** Si no bajó, el problema no
    era quién cargaba la prioridad sino el criterio, y eso se conversa.
+6. **Aprobar una OS nunca se ejercitó de verdad.** Está desplegado desde el
+   4/09/2026 y al 7/09 las once que esperan siguen siendo las mismas once: la
+   escritura de `APROBADO` en la planilla es código que compila y nunca corrió.
+   Las credenciales de Google no están en local, así que la única prueba posible
+   es en el deploy: aprobar una de las **220–228** —tiene que aparecer al final
+   de la pestaña `MANTENIMIENTO`— e intentar con la **26**, que tiene que
+   negarse.
+7. **La gestión de las OS desde Compras.** Hoy Compras las aprueba pero el
+   listado sigue siendo de Mantenimiento, y el ítem del menú está gateado por
+   `modulo: "mantenimiento"`: quien trabaja en Compras y no tiene ese módulo
+   aprueba pero no puede hacer el seguimiento. Lo conversado es una ruta propia
+   afuera de los dos módulos, alcanzable con Compras **o** con Mantenimiento,
+   como ya vive `/mis-pedidos`; está esbozado al final del spec.
+8. **`os_aprobadores` tiene una sola persona.** La regla impide vaciar la lista,
+   pero no cubre que Nico se tome vacaciones: ahí ninguna OS avanza y nadie
+   puede destrabarlo, porque aprobar no depende del nivel. Con sumar a Maxi
+   alcanza.
 
 ## Las ubicaciones son equipos y sectores de Mantenimiento
 
@@ -313,7 +363,8 @@ la migración es la **042**.
 | Copia de trabajo | `C:\Users\Usuario\Desktop\SdG PP` |
 | Módulo | `app/(app)/compras`, `lib/compras`, `app/api/compras` |
 | El tablero | Cinco indicadores; el detalle vive en Requerimientos y en la bandeja: [el diseño](superpowers/specs/2026-08-25-tablero-compras-indicadores-design.md) |
-| Migraciones | `supabase/migrations/015` a `025` |
+| Órdenes de servicio | Se aprueban en `app/(app)/compras/aprobaciones`; la regla vive en `lib/mantenimiento/aprobacion.ts` y las tablas son de Mantenimiento |
+| Migraciones | `supabase/migrations/015` a `025`, y `20260904140041_os_aprobadores.sql` |
 | Importador | `scripts/import-compras/import.mjs` (idempotente, tiene `--dry-run`) |
 | Cómo funciona | [COMPRAS.md](COMPRAS.md) |
 | Sincronización | [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md) |

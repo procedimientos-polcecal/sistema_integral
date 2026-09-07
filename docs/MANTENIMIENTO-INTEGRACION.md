@@ -15,31 +15,50 @@ existen, `ordenes_trabajo` y `equipos` tienen sus columnas, y los helpers
 `mant_nivel()` / `mant_puede_ver()` / `mant_puede_editar()` / `mant_es_admin()`
 responden.
 
-Las siete features están portadas. Lo que falta para que anden es
-configuración, no código:
+Las siete features están portadas. **La integración está andando**: verificado
+contra la base el 7/09/2026, las cuatro sincronizaciones corren y traen datos.
 
-| Falta | Para qué |
+| Sincronización | Trae | Última corrida |
+|---|---|---|
+| Órdenes de trabajo | 1.821 | 7/09/2026 |
+| Órdenes de servicio | 228 | 7/09/2026 |
+| Comparativas | 159 | 7/09/2026 |
+| Avisos | 147 | 7/09/2026 |
+
+Los cuatro `GOOGLE_SHEETS_*_ID` están configurados en Vercel —si no lo
+estuvieran, la sincronización devolvería un 503 y no 228 filas— y las
+migraciones 031 a 035 están aplicadas: `mantenimientos_ejecuciones.work_order_id`,
+`ordenes_servicio.proveedor_id`, `sectores.codigo`/`es_de_planta` y
+`os_comparativas.equipment_id` responden todas.
+
+El libro "BD Equipos" también se importó: hay 26 tipos de equipo y 398
+componentes.
+
+### Lo que sigue faltando
+
+| Falta | Qué se sabe |
 |---|---|
-| `GOOGLE_SHEETS_COMPARATIVAS_ID` | `1I2m7K2eUelBXjTp3uoRI0CjWd52gkIdSlmC2mjId1io` |
-| `GOOGLE_SHEETS_AVISOS_ID` | `1Iyfy3AzEASPpYU3zNBKr3rg5BkAM_DC1X9E8RJo6ZX4` |
-| `GOOGLE_SHEETS_OT_ID` | `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo` |
-| Migración 031 | Ejecuciones que cuelgan de una OT. |
-| Migración 032 | Los contratistas pasan a `proveedores`. |
-| Migración 033 | `sectores.codigo` y `es_de_planta`. |
-| Migración 034 | El código de sector, único de verdad. |
-| Migración 035 | `os_comparativas` guarda de qué equipo es. |
-| Importar el libro | "Importar BD Equipos" en el listado de equipos, y después volver a sincronizar OT y avisos para que enlacen. |
-| Compartir como **editor** | Las planillas de OT, OS y comparativas. Con lectura alcanza para sincronizar, no para escribir de vuelta. |
-| El libro "BD Equipos" | La ficha técnica, los tipos y los componentes. |
+| `equipos_repuestos` está **vacía** | La tabla existe y la pantalla la muestra; nunca se cargó ningún repuesto. Puede ser que no haya libro para importar, o que quedó afuera del relevamiento. |
+| La ficha técnica está en **15 de 239 equipos** | Es trabajo de relevamiento y no de configuración: se completa recorriendo la planta, y por eso todos sus campos son opcionales. |
+| Que las planillas estén compartidas como **editor** | Sin verificar, y **no se puede verificar desde el código**: leer funciona con permiso de lectura. La primera escritura que falle lo va a decir. |
 
 Cada escritura en una planilla es best-effort y avisa qué no se pudo escribir,
-así que la app sirve igual mientras eso se resuelve.
+así que la app sirve igual mientras eso se resuelve. La excepción es **aprobar
+una orden de servicio**, que se rechaza entera si la planilla no la acepta: ver
+más abajo.
 
 ## Decisiones
 
 **Las OS van aparte de Compras.** Decidido antes de empezar. El delta crea
 `ordenes_servicio` y `os_comparativas` propias del módulo, aunque solapen con
 `compras_requerimientos` y `compras_cotizaciones`.
+
+Eso sigue valiendo para las **tablas**, pero no para el circuito: desde el
+4/09/2026 la **aprobación** de una OS se hace desde Compras → Aprobaciones, que
+es quien decide sobre el gasto. Las tablas no se movieron ni se fusionaron con
+las de Compras; lo que cambió es desde dónde se decide. El seguimiento —proveedor,
+costo, fechas— sigue siendo de Mantenimiento y sigue en su pantalla. Ver
+"Aprobar una OS" más abajo.
 
 **Los permisos no se duplican.** La guía propone un helper `mantNivel`; ya
 existe como `nivelMantenimientoDe()` en `lib/mantenimiento/auth.ts`, desde antes
@@ -104,7 +123,7 @@ Son proyectos independientes. Cada uno lleva su spec y su plan.
 | 2 | Avisos | **hecho** — sincronización y listado |
 | 3 | Órdenes de trabajo | **hecho** (la foto a Drive quedó afuera) |
 | 4 | Producción semanal | **hecho** |
-| 5 | Órdenes de servicio y comparativas | **hecho** (falta el ID de la planilla de OS) |
+| 5 | Órdenes de servicio y comparativas | **hecho** — y la aprobación pasó a Compras, ver abajo |
 | 6 | Equipos: ficha técnica, tipos, componentes, repuestos | **hecho** |
 | 7 | Dashboard: KPIs y gráficos | **hecho** |
 
@@ -387,6 +406,67 @@ De las 437 filas leídas salen **220 órdenes distintas**: las pestañas de áre
 repiten las de SERVICIOS. Gana la de área, que es la que trae el seguimiento —a
 costa de su columna `ESTADO`, que significa otra cosa que la de SERVICIOS: allá
 es el estado de aprobación, acá el del servicio—.
+
+### Aprobar una OS: lo hace Compras, y por qué se puede
+
+Desde el 4/09/2026 la aprobación de una OS vive en **Compras → Aprobaciones**,
+en una segunda sección debajo de los requerimientos. Es el mismo momento del
+circuito en los dos casos: lo que espera un sí antes de que se le pidan
+presupuestos. El diseño está en
+[el spec](superpowers/specs/2026-09-04-aprobar-os-desde-compras-design.md).
+
+**Hasta entonces aprobar desde la app era imposible a propósito.** `APROBADO` es
+el único valor que el `FILTER` de una pestaña levanta, y levantar una fila corre
+las de abajo mientras el seguimiento escrito a mano no se corre con ellas. Por
+eso `seguroParaElMaestro()` lo bloqueaba en seco y sólo se podía denegar —una OS
+denegada ya estaba afuera de la pestaña y sigue afuera, así que no mueve nada—.
+
+**Lo que lo destrabó fue medir la trampa.** Comparando `sheets_row` contra
+`os_number` dentro de cada pestaña, sobre las 228 filas de la base:
+
+| Pestaña | Filas | Fuera de orden | Última |
+|---|---|---|---|
+| MANTENIMIENTO | 167 | **0** | 218 @168 |
+| TALLER VIAL | 31 | **0** | 208 @32 |
+| PRODUCCIÓN | 11 | **0** | 177 @12 |
+| ALMACÉN | 4 | **0** | 171 @5 |
+| LABORATORIO | 2 | **0** | 174 @3 |
+| CANTERA | 1 | **0** | 190 @2 |
+| OTRA | 1 | **0** | 91 @2 |
+
+Cero desórdenes en las siete: **el `FILTER` conserva el orden ascendente por
+número**. Entonces la fila entra en el medio sólo si su número es menor que el
+de alguna que ya está ahí, y de ahí la regla que gobierna
+`lib/mantenimiento/aprobacion.ts`:
+
+> Aprobar no corre ninguna fila si el número de la OS supera al máximo que ya
+> está en la pestaña de su área.
+
+De las once que esperan decisión, diez la cumplen; la **26** no —entraría cerca
+de la fila 21 y correría 147 filas de seguimiento— y el sistema se niega
+diciendo qué pasaría y que hay que aprobarla a mano. Las que entren de acá en
+adelante siempre la van a cumplir, porque llegan con el número más alto.
+
+**Estar en `SERVICIOS` es no estar aprobada**, y por eso la bandeja se arma
+filtrando por la pestaña y no por el estado. Eso separa dos grupos que en el
+listado se ven iguales, los dos con el estado vacío: **11 esperan decisión** y
+**23 ya fueron aprobadas** y lo que les falta es el seguimiento. Pedirle a quien
+aprueba que decida sobre las 23 sería hacerle perder el tiempo.
+
+**Aprobar va al revés del resto de las escrituras.** Primero la planilla y
+después la base, y si la planilla no acepta no se guarda nada. Una OS aprobada
+sólo en el sistema no llega nunca a la pestaña de su área: nadie del área la ve,
+la comparativa no aparece, y el sistema dice que sí mientras la planilla la
+sigue mostrando por aprobar. Es la única excepción al best-effort.
+
+**Quién aprueba: `os_aprobadores`**, lista propia y separada de
+`compras_aprobadores`, porque aprobar un servicio y aprobar un material los
+decide gente distinta. Hoy tiene sólo a Nico. Se administra en Configuración de
+Compras.
+
+Y la lista gatea **la decisión, no la palabra**: una OS que ya está en la
+pestaña de su área puede recibir `APROBADO` de cualquier editor de
+Mantenimiento, porque ahí el estado es seguimiento como cualquier otro campo.
 
 ## La ficha técnica de los equipos
 
