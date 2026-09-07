@@ -1714,6 +1714,14 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   const productos = await traerProductos(db, { soloActivos: false });
 
   const ids: string[] = [];
+  // Los partes ya traídos, **sólo durante esta llamada**. No es un caché entre
+  // pedidos: es para que los dos turnos del día se despejen contra la misma foto
+  // de la base. El parte anterior al turno 12→20 es el 4_12 del mismo día, que
+  // el bucle ya trajo; volver a pedirlo son tres consultas de más y abre la
+  // puerta a que alguien guarde la mañana en el medio y los dos números salgan
+  // de lecturas distintas. Un parte que no existe también se cachea, como "no
+  // está" y no como "no lo busqué".
+  const depositosPorClave = new Map<string, Record<string, number> | null>();
   // Un turno que no está cargado entra como `null`, no se saltea: es la única
   // forma de que `produccionDelDia` distinga "el turno produjo cero" de "el
   // turno no existe". Sin eso, un día con sólo la mañana cargada se exporta
@@ -1936,9 +1944,15 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
       }
     }
 
+    // Se escribe lo que se pudo armar, y recién después se informa lo que no.
+    // Las tres pestañas no cruzan datos entre sí, así que frenar una que está
+    // bien por otra que está mal deja más planilla sin actualizar, no menos. Y
+    // no hay riesgo de dejarla a medias de forma peligrosa: lo que no se pudo
+    // armar simplemente no se toca —queda como estaba, que es "no se sabe", no
+    // un cero— y el reintento manda el día entero de nuevo, sobrescribiendo.
+    if (celdas.length > 0) await escribirCeldas(planilla, celdas);
     if (problemas.length > 0) return { ok: false, error: problemas.join("; ") };
 
-    await escribirCeldas(planilla, celdas);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
