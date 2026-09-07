@@ -14,6 +14,15 @@ import type { PorProducto } from "./types";
  */
 
 export interface EntradaDelTurno {
+  /**
+   * Precondición que no se puede chequear acá: el depósito tiene que venir
+   * completo, con una fila por cada producto activo aunque sea 0. Si un
+   * producto está en `depositoAnterior` y falta en `deposito`, el `?? 0` de
+   * abajo lo lee como "se contó cero" en lugar de "no se contó", y la
+   * producción sale como el negativo del stock anterior. Es defendible —
+   * sale en rojo y alguien lo corrige — pero la garantía la tiene que dar
+   * quien arma la carga, no esta función.
+   */
   deposito: PorProducto;
   /** El depósito del parte anterior. `null` = ese parte no existe todavía. */
   depositoAnterior: PorProducto | null;
@@ -23,7 +32,9 @@ export interface EntradaDelTurno {
 
 export type ProduccionDelProducto =
   | { estado: "calculada"; cantidad: number }
-  | { estado: "sin_parte_anterior" };
+  | { estado: "sin_parte_anterior" }
+  /** Sólo la devuelve `produccionDelDia`: le falta el parte de un turno entero. */
+  | { estado: "dia_incompleto" };
 
 export type ProduccionPorProducto = Record<string, ProduccionDelProducto>;
 
@@ -57,23 +68,47 @@ export function produccionDelTurno(e: EntradaDelTurno): ProduccionPorProducto {
   return salida;
 }
 
-/** El día es la suma de sus turnos. Si a uno le falta el anterior, el día tampoco se puede. */
+/**
+ * El día es la suma de sus turnos. Si a uno le falta el anterior, el día
+ * tampoco se puede — eso ya lo manejaba `sin_parte_anterior`. Pero un turno
+ * que no se cargó y un turno cargado sin productos son los dos `{}`, y sin
+ * distinguirlos un día al que le falta un turno entero se calculaba con lo
+ * poco que había y mentía como si fuera el día completo. Por eso un turno
+ * faltante se pasa como `null`, no como `{}`.
+ */
 export function produccionDelDia(
-  turnos: readonly ProduccionPorProducto[]
+  turnos: readonly (ProduccionPorProducto | null)[]
 ): ProduccionPorProducto {
   const salida: ProduccionPorProducto = {};
 
-  for (const turno of turnos) {
+  if (turnos.some((t) => t === null)) {
+    // El día no cierra. Todo producto que aparezca en algún turno sí cargado
+    // queda "dia_incompleto" — sin importar si ese turno en particular se
+    // pudo calcular o le faltaba a su vez el parte anterior. Se prefiere
+    // "dia_incompleto" por sobre "sin_parte_anterior" porque describe la
+    // causa real acá: no es que falte un dato para restar, es que falta un
+    // turno entero del día.
+    for (const turno of turnos) {
+      if (turno === null) continue;
+      for (const id of Object.keys(turno)) {
+        salida[id] = { estado: "dia_incompleto" };
+      }
+    }
+    return salida;
+  }
+
+  for (const turno of turnos as readonly ProduccionPorProducto[]) {
     for (const [id, p] of Object.entries(turno)) {
       const acumulado = salida[id];
       if (p.estado === "sin_parte_anterior" || acumulado?.estado === "sin_parte_anterior") {
         salida[id] = { estado: "sin_parte_anterior" };
         continue;
       }
-      salida[id] = {
-        estado: "calculada",
-        cantidad: (acumulado?.cantidad ?? 0) + p.cantidad,
-      };
+      // produccionDelTurno nunca devuelve "dia_incompleto"; si llegara,
+      // no hay nada que sumar.
+      if (p.estado !== "calculada") continue;
+      const cantidadAcumulada = acumulado?.estado === "calculada" ? acumulado.cantidad : 0;
+      salida[id] = { estado: "calculada", cantidad: cantidadAcumulada + p.cantidad };
     }
   }
   return salida;

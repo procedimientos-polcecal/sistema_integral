@@ -118,6 +118,39 @@ describe("la produccion del dia", () => {
   it("sin turnos cargados el dia no tiene productos", () => {
     expect(produccionDelDia([])).toEqual({});
   });
+
+  /**
+   * El caso que motivó el arreglo: 03/09, sólo el turno 4→12 cargado
+   * (29 - 17 = 12). Sin distinguir "no cargado" de "cargado sin productos",
+   * esto se devolvía como { estado: "calculada", cantidad: 12 } y la grilla
+   * mostraba 12 como si fuera la producción del día completo.
+   */
+  it("un turno no cargado (null) deja el producto en dia_incompleto, no en su cantidad parcial", () => {
+    const t1 = produccionDelTurno({
+      deposito: { [calcio01]: 29 },
+      depositoAnterior: { [calcio01]: 17 },
+      despachado: {}, rotura: {},
+    });
+    expect(produccionDelDia([t1, null])[calcio01]).toEqual({ estado: "dia_incompleto" });
+  });
+
+  it("los dos turnos null: el dia no tiene productos de los que hablar", () => {
+    expect(produccionDelDia([null, null])).toEqual({});
+  });
+
+  /**
+   * Turno no cargado + turno cargado pero sin su propio parte anterior. El
+   * producto podría marcarse "sin_parte_anterior" o "dia_incompleto" — lo
+   * importante es que no sea un número. Se eligió "dia_incompleto" (ver
+   * comentario en produccionDelDia): la causa que se quiere comunicar acá es
+   * que falta un turno entero, no que falte un dato para restar.
+   */
+  it("un turno null y el otro sin parte anterior: no es un numero", () => {
+    const t2 = produccionDelTurno({
+      deposito: { [calcio01]: 17 }, depositoAnterior: null, despachado: {}, rotura: {},
+    });
+    expect(produccionDelDia([null, t2])[calcio01]).toEqual({ estado: "dia_incompleto" });
+  });
 });
 
 describe("solo lo calculado, para exportar a la planilla", () => {
@@ -145,5 +178,20 @@ describe("solo lo calculado, para exportar a la planilla", () => {
       despachado: {}, rotura: {},
     });
     expect(soloLoCalculado(dia)).toEqual({ [calcio01]: -10 });
+  });
+
+  /**
+   * Se congela acá porque es la razón de ser del arreglo: un día incompleto
+   * no tiene que aparecer en la planilla como si tuviera un valor, ni
+   * siquiera 0.
+   */
+  it("un producto en dia_incompleto no aparece", () => {
+    const t1 = produccionDelTurno({
+      deposito: { [calcio01]: 29 },
+      depositoAnterior: { [calcio01]: 17 },
+      despachado: {}, rotura: {},
+    });
+    const dia = produccionDelDia([t1, null]);
+    expect(soloLoCalculado(dia)).toEqual({});
   });
 });
