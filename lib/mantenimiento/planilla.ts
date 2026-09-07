@@ -19,30 +19,9 @@ export const texto = (v: unknown): string | null => {
   return /^#(REF|N\/A|VALUE|NAME|DIV\/0|NULL|NUM)/i.test(s) ? null : s;
 };
 
-/**
- * Una fecha de la planilla, que se lee sin formato.
- *
- * Llega como serial de Sheets —los días desde el 30/12/1899—. El respaldo en
- * texto lee d/m/aaaa, que es como escribe la gente acá: leerlo al revés fue lo
- * que dio vuelta 885 fechas en Compras.
- */
-export function fechaDeSheets(valor: unknown): string | null {
-  if (valor === null || valor === undefined || valor === "") return null;
-
-  const n = Number(valor);
-  if (!isNaN(n) && n >= 1) {
-    const ms = (Math.floor(n) - 25569) * 86400 * 1000;
-    return new Date(ms).toISOString().slice(0, 10);
-  }
-
-  const s = String(valor).trim();
-
-  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
-
-  const iso = s.match(/^\d{4}-\d{2}-\d{2}/);
-  return iso ? iso[0] : null;
-}
+// La regla de qué fecha devuelve una planilla vive en el núcleo desde que la
+// necesitó el tercer módulo. Se reexporta para no cambiar los importadores.
+export { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 
 /**
  * El código del equipo dentro del texto que escribió quien avisó.
