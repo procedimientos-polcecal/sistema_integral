@@ -32,6 +32,13 @@ export interface Parte {
   recuento_bolsones: string | null;
   sheets_pendiente: string | null;
   sheets_pendiente_en: string | null;
+  // Quién cargó el parte y quién lo corrigió después, con cuándo: transcribir
+  // se equivoca, y a diferencia del kardex de Inventario acá no se versiona el
+  // parte entero, así que esto es el único rastro de una corrección.
+  cargado_por: string;
+  cargado_en: string;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
 }
 
 export interface Despacho {
@@ -51,5 +58,13 @@ export interface Despacho {
   rotura_bolson: number;
 }
 
-/** Cantidad por producto. La clave es el id del producto. */
+/**
+ * Cantidad por producto. La clave es el id del producto.
+ *
+ * `produccion_deposito` (parte_id, producto_id, cantidad) no tiene una
+ * interfaz propia porque nadie la lee ni la escribe fila por fila: el depósito
+ * siempre se maneja acotado a un parte —de a un turno entero, nunca una fila
+ * suelta—, así que la forma útil de acá para afuera es este mapa por
+ * producto. Si algún día hace falta la fila individual, se agrega acá.
+ */
 export type PorProducto = Readonly<Record<string, number>>;
