@@ -228,8 +228,7 @@ nada lo notara.
 | `turnos.ts` | Cuál es el parte anterior a `(fecha, turno)` |
 | `produccion.ts` | El despeje, con `"sin_parte_anterior"` cuando falta el anterior, y los totales del día |
 | `despachos.ts` | Sumar los renglones a totales por producto, separar rotura bolsa y bolsón, y comparar kilos con bultos × `kg_por_unidad` |
-| `planilla.ts` | Armar las celdas de cada fila de resumen y del histórico |
-| `catalogo.ts` | Reconocer el producto escrito a mano; `null` sin certeza |
+| `planilla.ts` | Armar las celdas de cada fila de resumen |
 | `auth.ts` | Los niveles, espejando las funciones de la base |
 | `espejo.ts` | La escritura a Google. Fino a propósito: arma celdas con `planilla.ts` y llama a `escribirCeldas` del núcleo |
 
@@ -240,9 +239,16 @@ de todo esto.
 La comprobación de kilos ↔ bultos **avisa, no bloquea**. El papel es el papel: si
 los dos números no cierran se muestra la diferencia y se guarda igual.
 
-Del núcleo se usan `traerTodo()` de `lib/core/paginado.ts`, `lib/core/fechas.ts`
-para qué día es hoy, `lib/core/columnaDeSheets.ts` y `lib/core/cuerpo.ts`. Nada
-de esto se reescribe.
+**Reconocer el producto escrito a mano no lleva archivo nuevo.**
+`lib/core/catalogo.ts` ya lo resuelve con `indiceDeCatalogo()` y `elQueNombra()`,
+y ya trae la decisión que importa: un nombre que empata **no resuelve a
+ninguno**, devuelve `null` diciendo si fue "no existe" o "ambiguo". Escribir un
+`catalogo.ts` propio sería la cuarta copia de una regla que el núcleo tiene
+justamente para que no haya cuartas copias.
+
+Del núcleo se usan también `traerTodo()` de `lib/core/paginado.ts`,
+`lib/core/fechas.ts` para qué día es hoy y para sumar días,
+`lib/core/columnaDeSheets.ts` y `lib/core/cuerpo.ts`. Nada de esto se reescribe.
 
 ### 4. El espejo a la planilla
 
@@ -301,7 +307,8 @@ Vitest sobre las funciones puras:
 - **`planilla.ts`** — con un catálogo de juguete: el orden de las columnas, un
   producto con `nombre_planilla` en `null` que no se exporta, y el % de rotura
   con producción cero, que **muestra la rotura** en vez del 0 que muestra hoy.
-- **`catalogo.ts`** — el nombre que se reconoce, y el que no y devuelve `null`.
+
+`lib/core/catalogo.ts` ya tiene los suyos y no se duplican.
 
 Las rutas y las pantallas no llevan tests, como en el resto del repo.
 
