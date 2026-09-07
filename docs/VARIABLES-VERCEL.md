@@ -60,6 +60,10 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
 | `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
 | `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
+| `GOOGLE_SHEETS_PRODUCCION_ID` | La planilla de Producción. Acá la dirección es al revés que en Compras: manda el sistema, y esto es un espejo de una sola vía — sin esta variable el espejo no escribe y el día queda pendiente | El tramo entre `/d/` y `/edit` de la URL |
+| `GOOGLE_SHEETS_PRODUCCION_TAB_PROD` | Pestaña del resumen de producción | Por defecto `Resumen Producción` |
+| `GOOGLE_SHEETS_PRODUCCION_TAB_DESP` | Pestaña del resumen de despacho | Por defecto `Resumen Despacho` |
+| `GOOGLE_SHEETS_PRODUCCION_TAB_ROT` | Pestaña del resumen de rotura | Por defecto `Resumen Rotura` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
@@ -68,10 +72,12 @@ API** en el proyecto de Google Cloud: es un servicio aparte del de Sheets. Sin
 eso Google contesta 403 y el selector de comparativas queda vacío.
 
 Además hay que **compartir con el `client_email` de esa cuenta de servicio,
-como Editor** — no como lector — dos cosas: la planilla PEDIDOS DE COMPRA, y la
-**carpeta de comparativas**. En los dos casos la app escribe de vuelta: el
-estado de las compras en la planilla, y en la carpeta los presupuestos que se
-cargan, el N° de RI en la columna A y la casilla de elección.
+como Editor** — no como lector —, igual que las de OT, OS, comparativas y
+almacén, tres cosas: la planilla PEDIDOS DE COMPRA, la **carpeta de
+comparativas**, y la planilla de **Producción**. En los tres casos la app
+escribe de vuelta: el estado de las compras en la planilla, en la carpeta los
+presupuestos que se cargan, el N° de RI en la columna A y la casilla de
+elección, y en Producción los tres resúmenes del día que se acaba de cargar.
 
 ### Si Google bloquea la creación de claves
 
