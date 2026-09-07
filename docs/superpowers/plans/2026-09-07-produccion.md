@@ -1151,7 +1151,7 @@ export function desajustesDeKilos(
 npx vitest run lib/produccion/despachos.test.ts
 ```
 
-Esperado: PASS, 8 tests.
+Esperado: PASS, 10 tests.
 
 - [ ] **Paso 5: Commit**
 
@@ -2731,6 +2731,7 @@ Esto lo hace una persona, no el agente. Anotarlo y quedar a la espera.
 
 - [ ] **El catálogo.** Calidad tiene que resolver, renglón por renglón, la correspondencia entre los ~15 renglones del papel, las 17 columnas del Excel y los productos reales. Recién con eso se carga `produccion_productos` — por PostgREST, que es DML. **No se inventa**: un producto enlazado al que se le parece suma su producción en la columna de otro y no se nota nunca.
 - [ ] **Los kilos por unidad.** 25 la bolsa. El bolsón, a confirmar, y si es igual para todos.
+- [ ] **Un renglón con kilos anotados y bultos en cero.** Hoy pasa sin aviso: `desajustesDeKilos` corta cuando los kilos esperados dan 0, así que un camión con 29.000 kg y 0 bultos no desajusta. En el papel eso es alguien que anotó el peso y se olvidó la cantidad. ¿Vale la pena avisar, o pasa seguido y sería ruido? Ojo que no es lo mismo que dejar la celda vacía, que sí está contemplado.
 - [ ] **La tolerancia de la comprobación kilos ↔ bultos**, hoy en 5%. El caso real relevado del papel —1.200 bolsas contra 29.280 kg, cuando 1.200 × 25 son 30.000— da 2,4% y **no** dispara aviso. Puede estar bien (bolsas que pesan algo menos, báscula) o puede ser que falten 29 bolsas. Lo decide calidad; hasta entonces hay un test que documenta qué deja pasar.
 - [ ] **Las dos columnas del despacho.** Confirmar con calidad qué va en *Productos y kilos* y qué en *Cantidad bolsa/bolsón*: en la foto relevada un número parece kilos y otro bultos.
 - [ ] **La planilla.** Cargar `GOOGLE_SHEETS_PRODUCCION_ID` en Vercel, compartirla como **editor** con la cuenta de servicio, y ampliar los resúmenes a 31 filas — hoy llegan a 30 y cualquier día 31 va a quedar pendiente.
