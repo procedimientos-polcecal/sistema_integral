@@ -1316,6 +1316,7 @@ Crear `lib/produccion/planilla.ts`:
 
 ```ts
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
+import { claveDeNombre } from "@/lib/core/catalogo";
 import type { Producto } from "./types";
 
 /**
@@ -1366,9 +1367,17 @@ export function filaDeLaFecha(
  *
  * Busca el texto del marcador y no un `%` suelto: una nota con "50%" en una
  * celda anterior apuntaría al bloque equivocado sin avisar.
+ *
+ * Y lo busca **normalizado**, con la misma `claveDeNombre` del núcleo que decide
+ * si dos nombres son el mismo: un doble espacio, una tilde tipeada distinto o
+ * una forma Unicode diferente en lo que devuelve Sheets bastarían para no
+ * encontrarlo. El costo de un falso positivo es casi nulo —el texto es largo y
+ * específico— y el de no encontrarlo es alto y callado.
  */
+const MARCADOR_PORCENTAJE = claveDeNombre("ROTURA / PRODUCCIÓN");
+
 export function comienzoDelBloqueDePorcentaje(fila3: readonly string[]): number | null {
-  const i = fila3.findIndex((c) => String(c ?? "").toUpperCase().includes("ROTURA / PRODUCCIÓN"));
+  const i = fila3.findIndex((c) => claveDeNombre(String(c ?? "")).includes(MARCADOR_PORCENTAJE));
   return i === -1 ? null : i;
 }
 
@@ -1816,6 +1825,14 @@ const FILA_ENCABEZADOS = 4;
 const PRIMERA_FILA = 5;
 const ULTIMA_FILA = 34;
 
+/**
+ * El marcador del segundo bloque de `Resumen Rotura` vive en la **fila 3**, no
+ * en la de encabezados. Es una fila aparte y hay que leerla aparte: los nombres
+ * de producto de la fila 4 se repiten idénticos en los dos bloques y no dicen
+ * dónde empieza el segundo.
+ */
+const FILA_MARCADOR = 3;
+
 export interface DiaAEspejar {
   /** "YYYY-MM-DD" */
   fecha: string;
@@ -1869,8 +1886,27 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
         continue;
       }
 
+      // El marcador se busca en la fila 3, que se lee aparte. Pasarle la fila de
+      // encabezados no lo encontraría nunca, y el efecto sería silencioso: el
+      // bloque de unidades se trataría como si ocupara toda la fila, los nombres
+      // repetidos volverían a caer siempre en el primer bloque, y los
+      // porcentajes no se escribirían jamás sin que nada lo diga.
+      const esRotura = pestana === TAB_ROTURA();
+      const fila3 = esRotura
+        ? (await leerValores(planilla, `${pestana}!A${FILA_MARCADOR}:BZ${FILA_MARCADOR}`))[0] ?? []
+        : [];
+      const comienzoPct = esRotura ? comienzoDelBloqueDePorcentaje(fila3) : null;
+
+      // En Rotura el marcador tiene que estar, y si no está no se adivina la
+      // columna: sin él los porcentajes caerían encima de las unidades.
+      if (esRotura && comienzoPct === null) {
+        problemas.push(
+          `La pestaña "${pestana}" no tiene el marcador "% ROTURA / PRODUCCIÓN" en la fila ${FILA_MARCADOR}`
+        );
+        continue;
+      }
+
       // El bloque de unidades termina donde arranca el de porcentajes, si lo hay.
-      const comienzoPct = comienzoDelBloqueDePorcentaje(encabezados);
       const hasta = comienzoPct ?? encabezados.length;
 
       const r = celdasDeResumen(encabezados, dia.productos, valores, { desde: 1, hasta, siFalta });
@@ -1880,7 +1916,7 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
       }
 
       // El segundo bloque de Resumen Rotura: el % de cada producto.
-      if (pestana === TAB_ROTURA() && comienzoPct !== null) {
+      if (esRotura && comienzoPct !== null) {
         const pct: Record<string, string> = {};
         for (const p of dia.productos) {
           pct[p.id] = porcentajeDeRotura(dia.rotura[p.id] ?? 0, dia.produccion[p.id] ?? 0);
