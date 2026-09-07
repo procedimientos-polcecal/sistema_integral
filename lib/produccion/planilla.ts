@@ -1,4 +1,5 @@
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
+import { claveDeNombre } from "@/lib/core/catalogo";
 import type { Producto } from "./types";
 
 /**
@@ -51,9 +52,20 @@ export function filaDeLaFecha(
  * Busca el texto del marcador y no cualquier "%": un signo suelto en una nota
  * de otra celda, antes de la S, apuntaría al bloque equivocado sin avisar —lo
  * mismo que enlazar al que se parece— y sería peor que no encontrar nada.
+ *
+ * La comparación se hace por `claveDeNombre` (la misma regla del núcleo con la
+ * que se decide que "Producción - Hidratacion" e "Hidratación" son el mismo
+ * nombre): sin tildes, en minúsculas y con los espacios colapsados. Un doble
+ * espacio tipeado a mano o una tilde puesta distinta en Sheets no pueden dejar
+ * este bloque sin escribirse en silencio. El "%" queda afuera del marcador a
+ * propósito —buscarlo fue lo que hacía frágil la versión anterior—, así que un
+ * falso positivo pediría que otra celda contenga el texto largo y específico
+ * "rotura / produccion", algo casi imposible; no encontrarlo, en cambio, deja
+ * de escribir el bloque entero sin que nadie se entere.
  */
 export function comienzoDelBloqueDePorcentaje(fila3: readonly string[]): number | null {
-  const i = fila3.findIndex((c) => String(c ?? "").toUpperCase().includes("ROTURA / PRODUCCIÓN"));
+  const marcador = claveDeNombre("ROTURA / PRODUCCIÓN");
+  const i = fila3.findIndex((c) => claveDeNombre(String(c ?? "")).includes(marcador));
   return i === -1 ? null : i;
 }
 

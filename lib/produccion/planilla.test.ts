@@ -68,6 +68,30 @@ describe("donde arranca el bloque de porcentajes", () => {
                    "", "", "", "", "", "", "", "% ROTURA / PRODUCCIÓN"];
     expect(comienzoDelBloqueDePorcentaje(fila3)).toBe(18);
   });
+
+  /**
+   * La comparación se normaliza con `claveDeNombre` (la misma regla del
+   * núcleo): un doble espacio tipeado a mano en Sheets no puede dejar de
+   * matchear el marcador y hacer que el bloque de porcentajes deje de
+   * escribirse sin que nadie se entere.
+   */
+  it("un doble espacio en el marcador se encuentra igual", () => {
+    const fila3 = ["UNIDADES ROTAS", "", "", "", "", "", "", "", "", "", "",
+                   "", "", "", "", "", "", "", "% ROTURA /  PRODUCCIÓN"];
+    expect(comienzoDelBloqueDePorcentaje(fila3)).toBe(18);
+  });
+
+  it("el marcador sin tilde se encuentra igual", () => {
+    const fila3 = ["UNIDADES ROTAS", "", "", "", "", "", "", "", "", "", "",
+                   "", "", "", "", "", "", "", "% ROTURA / PRODUCCION"];
+    expect(comienzoDelBloqueDePorcentaje(fila3)).toBe(18);
+  });
+
+  it("el marcador en minusculas se encuentra igual", () => {
+    const fila3 = ["UNIDADES ROTAS", "", "", "", "", "", "", "", "", "", "",
+                   "", "", "", "", "", "", "", "% rotura / producción"];
+    expect(comienzoDelBloqueDePorcentaje(fila3)).toBe(18);
+  });
 });
 
 describe("las celdas de una fila de resumen", () => {
