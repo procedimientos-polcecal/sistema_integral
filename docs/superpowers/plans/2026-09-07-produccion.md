@@ -1347,15 +1347,28 @@ export function filaDeLaFecha(
   fecha: string,
   primeraFila: number
 ): number | null {
+  let encontrada: number | null = null;
   for (let i = 0; i < columnaA.length; i++) {
-    if (fechaDeSheets(columnaA[i]?.[0]) === fecha) return primeraFila + i;
+    if (fechaDeSheets(columnaA[i]?.[0]) === fecha) {
+      // Una fecha que aparece dos veces no resuelve a ninguna fila. Es la misma
+      // regla que `elQueNombra` del núcleo aplica a un nombre repetido: elegir
+      // una de dos es escribir la producción del día en la fila equivocada, y
+      // eso no se nota nunca.
+      if (encontrada !== null) return null;
+      encontrada = primeraFila + i;
+    }
   }
-  return null;
+  return encontrada;
 }
 
-/** Dónde arranca el bloque de porcentajes, según el marcador de la fila 3. */
+/**
+ * Dónde arranca el bloque de porcentajes, según el marcador de la fila 3.
+ *
+ * Busca el texto del marcador y no un `%` suelto: una nota con "50%" en una
+ * celda anterior apuntaría al bloque equivocado sin avisar.
+ */
 export function comienzoDelBloqueDePorcentaje(fila3: readonly string[]): number | null {
-  const i = fila3.findIndex((c) => String(c ?? "").includes("%"));
+  const i = fila3.findIndex((c) => String(c ?? "").toUpperCase().includes("ROTURA / PRODUCCIÓN"));
   return i === -1 ? null : i;
 }
 
@@ -1848,7 +1861,11 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
       // No se adivina la fila: los resúmenes llegan hasta el día 30, así que
       // cualquier 31 cae acá, y escribir "la que parece" pisa otro día.
       if (fila === null) {
-        problemas.push(`La pestaña "${pestana}" no tiene fila para el ${dia.fecha}`);
+        // "una sola fila" y no "una fila": `filaDeLaFecha` devuelve null tanto
+        // cuando la fecha no está —los resúmenes llegan al día 30— como cuando
+        // aparece dos veces. Los dos se arreglan mirando la planilla, y el
+        // mensaje tiene que servir para los dos.
+        problemas.push(`La pestaña "${pestana}" no tiene una sola fila para el ${dia.fecha}`);
         continue;
       }
 
