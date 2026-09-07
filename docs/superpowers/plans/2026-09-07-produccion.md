@@ -31,7 +31,7 @@ npx tsc --noEmit
 | `supabase/migrations/<ts>_produccion_schema.sql` | Tipos, tablas, índices, funciones de permiso y RLS |
 | `lib/core/types.ts` | Sumar `"produccion"` al tipo `Modulo` |
 | `lib/core/access.ts` | Sumar `"produccion"` a `MODULOS_ORDEN` |
-| `lib/core/nav.ts` | El grupo de navegación del módulo |
+| `lib/core/nav.ts` | El grupo de navegación del módulo. **Se toca en la tarea 17**, no antes: un `admin_sistema` ve el menú apenas se agrega, y hasta entonces sus rutas son 404 |
 | `lib/core/fechaDeSheets.ts` | Mudanza al núcleo: la lee un tercer módulo |
 | `lib/produccion/types.ts` | Los tipos del módulo. Sin lógica |
 | `lib/produccion/turnos.ts` | Cuál es el parte anterior a `(fecha, turno)` |
@@ -359,24 +359,11 @@ En `lib/core/access.ts`, línea 4:
 export const MODULOS_ORDEN: Modulo[] = ["rrhh", "mantenimiento", "remises", "compras", "inventario", "produccion"];
 ```
 
-- [ ] **Paso 3: El grupo del menú**
+- [ ] **Paso 3: El menú NO se toca todavía**
 
-En `lib/core/nav.ts`, inmediatamente después del objeto del grupo `Inventario` y antes de `{ label: "Mis pedidos", ... }`:
+`lib/core/nav.ts` se modifica recién en la **tarea 17**, cuando existan las tres pantallas.
 
-```ts
-  {
-    label: "Producción",
-    href: "/produccion",
-    modulo: "produccion",
-    // El día primero: es la pantalla que se abre para cargar el parte del turno
-    // que acaba de terminar, que es el 95% de lo que se hace acá.
-    children: [
-      { label: "El día", href: "/produccion", modulo: "produccion" },
-      { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
-      { label: "Productos", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
-    ],
-  },
-```
+El motivo salió de la revisión de esta tarea: `modulosVisibles()` (`lib/core/access.ts:11`) le devuelve **todos** los módulos a un `admin_sistema` sin mirar `usuario_modulos`, y `nivelEnModulo()` le da nivel `admin` en todos. Así que el grupo del menú no queda oculto esperando que alguien reciba el permiso: se ve desde el momento en que se agrega, y sus rutas dan 404 hasta la parte 5. Como acá se pushea a producción al terminar cada tarea, eso serían quince tareas con un menú roto en la app real.
 
 - [ ] **Paso 4: Los tipos del módulo**
 
@@ -447,12 +434,12 @@ npx tsc --noEmit
 npm test
 ```
 
-Esperado: sin errores. Si `tsc` se queja de un `switch` sobre `Modulo` que ahora no cubre `"produccion"`, arreglar ese `switch`; si se queja de un archivo que no tiene nada que ver con esto, mirar `git status` antes de tocarlo — puede ser el refactor de otra sesión.
+Esperado: sin errores. Si `tsc` se queja de un `Record<Modulo, …>` que ahora no cubre `"produccion"` —hay uno de etiquetas en `app/(app)/administracion/usuarios/UsuariosClient.tsx`, y el test de `lib/core/access.test.ts` espera la lista de módulos completa— arreglarlos: son consecuencia directa de este cambio. Si se queja de un archivo que no tiene nada que ver, mirar `git status` antes de tocarlo — puede ser el refactor de otra sesión.
 
 - [ ] **Paso 6: Commit**
 
 ```bash
-git add lib/core/types.ts lib/core/access.ts lib/core/nav.ts lib/produccion/types.ts
+git add lib/core/types.ts lib/core/access.ts lib/produccion/types.ts "app/(app)/administracion/usuarios/UsuariosClient.tsx" lib/core/access.test.ts
 git commit -m "feat(produccion): el modulo en el nucleo y sus tipos"
 ```
 
@@ -2510,6 +2497,7 @@ git commit -m "feat(produccion): los resumenes del mes, calculados con las misma
 **Archivos:**
 - Crear: `app/(app)/produccion/productos/page.tsx`
 - Crear: `app/(app)/produccion/productos/ProductosClient.tsx`
+- Modificar: `lib/core/nav.ts` (después del grupo de Inventario)
 
 - [ ] **Paso 1: Las dos piezas**
 
@@ -2522,12 +2510,34 @@ Dos cosas que la pantalla tiene que decir, porque son las que se olvidan:
 - `nombre_planilla` vacío significa **no se exporta**, y hay que escribirlo al lado del campo, no dejarlo como un vacío ambiguo.
 - Un producto no se borra: se desactiva. Los partes viejos lo referencian.
 
-- [ ] **Paso 2: Comprobar y commitear**
+- [ ] **Paso 2: Recién ahora, el menú**
+
+Con esta pantalla ya existen las tres rutas del módulo, así que el grupo del menú deja de apuntar a 404. En `lib/core/nav.ts`, inmediatamente después del objeto del grupo `Inventario` y antes de `{ label: "Mis pedidos", ... }`:
+
+```ts
+  {
+    label: "Producción",
+    href: "/produccion",
+    modulo: "produccion",
+    // El día primero: es la pantalla que se abre para cargar el parte del turno
+    // que acaba de terminar, que es el 95% de lo que se hace acá.
+    children: [
+      { label: "El día", href: "/produccion", modulo: "produccion" },
+      { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
+      { label: "Productos", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
+    ],
+  },
+```
+
+Antes de commitear, comprobar que las tres rutas existen de verdad: `ls "app/(app)/produccion" "app/(app)/produccion/resumenes" "app/(app)/produccion/productos"`. Un `admin_sistema` va a ver este menú apenas se despliegue, sin que nadie le conceda el módulo.
+
+- [ ] **Paso 3: Comprobar y commitear**
 
 ```bash
 npx tsc --noEmit
-git add "app/(app)/produccion/productos"
-git commit -m "feat(produccion): el catalogo de productos, editable y con baja logica"
+npm test
+git add "app/(app)/produccion/productos" lib/core/nav.ts
+git commit -m "feat(produccion): el catalogo de productos, y el modulo entra al menu"
 ```
 
 ---
