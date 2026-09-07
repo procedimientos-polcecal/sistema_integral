@@ -1214,8 +1214,25 @@ describe("las celdas de una fila de resumen", () => {
     expect(r.sinColumna).toEqual([]);
   });
 
-  it("un producto sin valor va en cero, como hace el script hoy", () => {
-    const r = celdasDeResumen(ENCABEZADOS, [CAL, FILLER], { "p-cal": 18 });
+  it("sin valor va en cero cuando cero es verdad", () => {
+    // Despacho y rotura: un producto sin renglón despachó cero, y eso es un dato.
+    const r = celdasDeResumen(ENCABEZADOS, [CAL, FILLER], { "p-cal": 18 }, { siFalta: "cero" });
+    expect(r.celdas).toContainEqual({ columna: 2, valor: "0" });
+  });
+
+  /**
+   * Producción: un producto que no está en el mapa es uno que `soloLoCalculado`
+   * dejó afuera porque no se pudo calcular. Un 0 ahí devuelve por la ventana el
+   * mismo dato falso que el módulo vino a sacar — quien mira la planilla no
+   * distingue "no produjo" de "no se sabe".
+   */
+  it("sin valor queda vacio cuando el cero seria mentira", () => {
+    const r = celdasDeResumen(ENCABEZADOS, [CAL, FILLER], { "p-cal": 18 }, { siFalta: "vacio" });
+    expect(r.celdas).toContainEqual({ columna: 2, valor: "" });
+  });
+
+  it("un cero explicito se escribe cero aunque siFalta sea vacio", () => {
+    const r = celdasDeResumen(ENCABEZADOS, [CAL, FILLER], { "p-cal": 18, "p-filler": 0 }, { siFalta: "vacio" });
     expect(r.celdas).toContainEqual({ columna: 2, valor: "0" });
   });
 
@@ -1332,21 +1349,38 @@ export interface FilaDeResumen {
   sinColumna: string[];
 }
 
-export interface Ventana {
+export interface OpcionesDeResumen {
   /** Primera columna del bloque, en base 0. Por defecto 1 (la B). */
   desde?: number;
   /** Primera columna ya fuera del bloque. Por defecto, el largo de los encabezados. */
   hasta?: number;
+  /**
+   * Qué escribir cuando el producto no tiene valor en el mapa. Por defecto `"cero"`.
+   *
+   * `"cero"` para **despacho y rotura**: un producto sin renglón de despacho
+   * despachó cero, y eso es cierto.
+   *
+   * `"vacio"` para **producción**: un producto que no está en el mapa es uno que
+   * `soloLoCalculado` dejó afuera porque no se pudo calcular —falta el parte
+   * anterior, o falta un turno del día—. Un 0 ahí devuelve por la ventana
+   * exactamente el dato falso que el módulo vino a sacar: quien mira la planilla
+   * no distingue "no produjo" de "no se sabe".
+   *
+   * Ojo con la diferencia: esto es para el producto **ausente** del mapa. Un
+   * cero explícito se escribe cero siempre, porque es una medición.
+   */
+  siFalta?: "cero" | "vacio";
 }
 
 export function celdasDeResumen(
   encabezados: readonly string[],
   productos: readonly Producto[],
   valores: Readonly<Record<string, number | string>>,
-  ventana: Ventana = {}
+  opciones: OpcionesDeResumen = {}
 ): FilaDeResumen {
-  const desde = ventana.desde ?? 1;
-  const hasta = ventana.hasta ?? encabezados.length;
+  const desde = opciones.desde ?? 1;
+  const hasta = opciones.hasta ?? encabezados.length;
+  const siFalta = opciones.siFalta ?? "cero";
 
   const celdas: CeldaDeResumen[] = [];
   const sinColumna: string[] = [];
@@ -1369,7 +1403,10 @@ export function celdasDeResumen(
     }
 
     const v = valores[p.id];
-    celdas.push({ columna, valor: v === undefined ? "0" : String(v) });
+    celdas.push({
+      columna,
+      valor: v === undefined ? (siFalta === "vacio" ? "" : "0") : String(v),
+    });
   }
 
   return { celdas, sinColumna };
@@ -1626,13 +1663,20 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   const productos = await traerProductos(db);
 
   const ids: string[] = [];
-  const porTurno: ProduccionPorProducto[] = [];
+  // Un turno que no está cargado entra como `null`, no se saltea: es la única
+  // forma de que `produccionDelDia` distinga "el turno produjo cero" de "el
+  // turno no existe". Sin eso, un día con sólo la mañana cargada se exporta
+  // como si fuera el día entero.
+  const porTurno: (ProduccionPorProducto | null)[] = [];
   const despacho: Record<string, number> = {};
   const rotura: Record<string, number> = {};
 
   for (const turno of TURNOS) {
     const completo = await traerParte(db, { fecha, turno });
-    if (!completo) continue;
+    if (!completo) {
+      porTurno.push(null);
+      continue;
+    }
     ids.push(completo.parte.id);
 
     const totales = totalesDeDespacho(completo.despachos);
@@ -1762,10 +1806,14 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
     const celdas: { pestana: string; columna: number; fila: number; valor: string }[] = [];
     const problemas: string[] = [];
 
-    for (const [pestana, valores] of [
-      [TAB_PRODUCCION(), dia.produccion],
-      [TAB_DESPACHO(), dia.despacho],
-      [TAB_ROTURA(), dia.rotura],
+    // El tercer elemento es lo que va cuando el producto no está en el mapa.
+    // Producción va vacío: ausente ahí significa "no se pudo calcular", y un 0
+    // en la planilla sería el dato falso que este módulo vino a sacar. Despacho
+    // y rotura van en cero, porque ahí ausente sí significa cero.
+    for (const [pestana, valores, siFalta] of [
+      [TAB_PRODUCCION(), dia.produccion, "vacio"],
+      [TAB_DESPACHO(), dia.despacho, "cero"],
+      [TAB_ROTURA(), dia.rotura, "cero"],
     ] as const) {
       const encabezados = (await leerValores(planilla, `${pestana}!A${FILA_ENCABEZADOS}:BZ${FILA_ENCABEZADOS}`))[0] ?? [];
       const columnaA = await leerValores(
@@ -1786,7 +1834,7 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
       const comienzoPct = comienzoDelBloqueDePorcentaje(encabezados);
       const hasta = comienzoPct ?? encabezados.length;
 
-      const r = celdasDeResumen(encabezados, dia.productos, valores, { desde: 1, hasta });
+      const r = celdasDeResumen(encabezados, dia.productos, valores, { desde: 1, hasta, siFalta });
       for (const c of r.celdas) celdas.push({ pestana, columna: c.columna, fila, valor: c.valor });
       for (const n of r.sinColumna) {
         problemas.push(`La pestaña "${pestana}" no tiene columna para "${n}"`);
@@ -1953,6 +2001,12 @@ export async function POST(request: Request) {
 
   // ── 2. El depósito ─────────────────────────────────────────
   // Se reemplaza entero: el parte es la foto del papel, no un incremental.
+  //
+  // Se espera **una fila por producto activo**, aunque valga 0. El despeje lee
+  // un producto ausente como cero, así que un producto que está en el depósito
+  // del turno anterior y falta en éste da una producción negativa sin motivo
+  // aparente. Quien garantiza eso es el formulario; acá no se completa lo que
+  // falte, porque inventar filas sería inventar mediciones.
   await admin.from("produccion_deposito").delete().eq("parte_id", parte.id);
 
   const deposito = Array.isArray(b?.deposito) ? b.deposito : [];
@@ -2314,7 +2368,11 @@ const guardar = async () => {
       fecha, turno,
       capataz_raw: capatazRaw, capataz_id: capatazId || null,
       observaciones, tareas_limpieza: limpieza, recuento_bolsones: recuento,
-      deposito: Object.entries(deposito).map(([producto_id, cantidad]) => ({ producto_id, cantidad })),
+      // Una entrada por **cada producto activo**, aunque el input esté vacío —
+      // no sólo los que el usuario tocó. Si un producto falta, el despeje lee su
+      // ausencia como cero y la producción sale como el negativo del stock
+      // anterior, en rojo y sin motivo aparente.
+      deposito: productos.map((p) => ({ producto_id: p.id, cantidad: deposito[p.id] ?? "0" })),
       despachos: renglones,
     }),
   });
@@ -2379,7 +2437,8 @@ export interface TurnoDelDia {
   despachos: Despacho[];
   totales: TotalesDeDespacho | null;
   faltaAnterior: boolean;
-  produccion: ProduccionPorProducto;
+  /** `null` = el turno no está cargado. No es lo mismo que un turno sin productos. */
+  produccion: ProduccionPorProducto | null;
 }
 
 export default async function ProduccionPage({
@@ -2409,7 +2468,7 @@ export default async function ProduccionPage({
     if (!completo) {
       turnos.push({
         turno, cargado: false, parte: null, despachos: [],
-        totales: null, faltaAnterior: false, produccion: {},
+        totales: null, faltaAnterior: false, produccion: null,
       });
       continue;
     }
@@ -2454,7 +2513,17 @@ Un selector de fecha con flechas de día anterior y siguiente. Debajo, tres avis
 - **Falta el parte anterior** — *"La producción del turno 4 a 12 no se puede calcular: falta el parte del 02/09 turno 12 a 20"*, con enlace a ese parte.
 - **No llegó a la planilla** — el texto de `sheets_pendiente` tal cual, con botón "Reintentar" que hace `POST /api/produccion/planilla/reintentar` con la fecha.
 
-Y la tabla del día: una fila por producto, agrupada por familia, con columnas *Producción T1*, *Producción T2*, *Producción del día*, *Despachado*, *Rotura bolsa*, *Rotura bolsón*. Una celda cuyo estado es `sin_parte_anterior` muestra `—` y no un número; una producción negativa se muestra en rojo.
+Y la tabla del día: una fila por producto, agrupada por familia, con columnas *Producción T1*, *Producción T2*, *Producción del día*, *Despachado*, *Rotura bolsa*, *Rotura bolsón*.
+
+Las tres formas de que una celda **no** tenga número, y cada una dice otra cosa:
+
+| Estado | Qué muestra | Qué significa |
+|---|---|---|
+| `sin_parte_anterior` | `—` con el motivo al pasar el mouse | Falta el parte del turno previo: no hay contra qué restar |
+| `dia_incompleto` | `—` en la columna del día | Falta un turno de este día. Los turnos que sí están muestran su número |
+| turno sin cargar | la celda del turno vacía | Ese parte todavía no se transcribió |
+
+Una producción **negativa** se muestra en rojo con la cuenta desglosada al pasar el mouse. No se recorta a cero: es un error de carga y hay que verlo.
 
 - [ ] **Paso 3: Comprobar y commitear**
 
