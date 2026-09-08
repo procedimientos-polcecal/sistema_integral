@@ -4,27 +4,30 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { leerLinksDeComparativa, claveProveedor } from "@/lib/compras/sheets";
-import { idDePlanilla } from "@/lib/compras/vincular";
+import { archivosPorHacer, idDePlanilla } from "@/lib/compras/vincular";
 import { leerComparativa } from "@/lib/compras/drive";
 import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
 
 export const maxDuration = 300;
 
 /**
- * Vincula cada requerimiento con la planilla de comparativa que la planilla de
- * PEDIDOS DE COMPRA ya tenía anotada, y trae sus presupuestos.
+ * Trae los presupuestos de las planillas de comparativa que la planilla de
+ * PEDIDOS DE COMPRA tenía anotadas.
  *
- * El link vivía escondido detrás del texto "LINK" de la celda, así que nunca
- * había llegado al sistema. Esto lo rescata en tanda en vez de obligar a
- * pegarlo de nuevo uno por uno.
+ * El vínculo en sí —qué archivo es la comparativa de cada RI— ya lo trae cada
+ * sincronización, que lee el hipervínculo escondido detrás del texto "LINK".
+ * Lo que queda para acá es lo que no entra en una sincronización: abrir cada
+ * planilla y leer sus filas. Son 219 archivos, y leerlos es una llamada a
+ * Google por archivo.
  *
  * Se agrupa por ARCHIVO y no por requerimiento: muchos pedidos apuntan a la
  * misma planilla —son por artículo—, y leerla una vez por pedido serían cientos
  * de lecturas a Google que no entran en el tiempo de una request.
  *
  * NO se toca `comparativa_url`: esa columna dispara el trigger que marca el RI
- * como editado en la app, y escribirla en tanda sacaría a todos de la
- * sincronización. El vínculo bueno es el id; la URL se deriva de él.
+ * como editado en la app —esta ruta no actualiza `sheets_sincronizado_en`, que
+ * es lo que exime a la sincronización—, y además se exporta a la celda de la
+ * planilla. El vínculo bueno es el id; la URL se deriva de él.
  */
 
 /** Cuántos archivos distintos se procesan por llamada, para no pasarse del tiempo. */
@@ -71,10 +74,12 @@ export async function POST(request: Request) {
     id: string;
     nro_ri: number;
     comparativa_drive_id: string | null;
+    comparativa_nombre: string | null;
   }>((desde, hasta) =>
     admin
       .from("compras_requerimientos")
-      .select("id, nro_ri, comparativa_drive_id")
+      // El nombre dice si la planilla ya se abrió: sale de adentro del archivo.
+      .select("id, nro_ri, comparativa_drive_id, comparativa_nombre")
       .eq("estado_aprobacion", "APROBADA")
       .in("estado_compra", ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO", "PEDIDO"])
       .range(desde, hasta)
@@ -104,7 +109,10 @@ export async function POST(request: Request) {
   };
 
   // Qué requerimientos reclama cada archivo.
-  const porArchivo = new Map<string, { id: string; nro_ri: number; yaVinculado: boolean }[]>();
+  const porArchivo = new Map<
+    string,
+    { id: string; nro_ri: number; yaVinculado: boolean; yaLeido: boolean }[]
+  >();
 
   for (const r of requerimientos) {
     const link = links.get(r.nro_ri);
@@ -115,17 +123,21 @@ export async function POST(request: Request) {
     if (!driveId) { res.link_no_es_planilla += 1; continue; }
 
     const lista = porArchivo.get(driveId) ?? [];
-    lista.push({ id: r.id, nro_ri: r.nro_ri, yaVinculado: r.comparativa_drive_id === driveId });
+    lista.push({
+      id: r.id,
+      nro_ri: r.nro_ri,
+      yaVinculado: r.comparativa_drive_id === driveId,
+      yaLeido: r.comparativa_drive_id === driveId && r.comparativa_nombre !== null,
+    });
     porArchivo.set(driveId, lista);
   }
 
   res.archivos_distintos = porArchivo.size;
 
-  // Los que ya están vinculados y sin filas que traer no dan trabajo: se saltean
-  // para que cada tanda avance sobre lo que falta.
-  const pendientes = [...porArchivo.entries()].filter(
-    ([, ris]) => traerFilas || ris.some((r) => !r.yaVinculado)
-  );
+  // Los que ya están vinculados y ya se abrieron no dan trabajo: se saltean para
+  // que cada tanda avance sobre lo que falta. La regla vive en
+  // `archivosPorHacer`, que es donde se prueba.
+  const pendientes = archivosPorHacer(porArchivo, traerFilas);
   const tanda = pendientes.slice(0, ARCHIVOS_POR_TANDA);
   res.archivos_restantes = Math.max(pendientes.length - tanda.length, 0);
 

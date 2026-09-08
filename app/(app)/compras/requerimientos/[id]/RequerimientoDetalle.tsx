@@ -18,6 +18,7 @@ import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
+import { linkDeLaComparativa } from "@/lib/compras/vincular";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
@@ -415,11 +416,15 @@ export default function RequerimientoDetalle({
               <Dato label="N° de orden de compra" valor={r.oc_numero} mono />
               <Dato label="Fecha de pedido" valor={r.fecha_pedido ? fecha(r.fecha_pedido) : null} />
               <Dato label="Fecha de recepción" valor={r.fecha_recepcion ? fecha(r.fecha_recepcion) : null} />
-              {r.comparativa_url && (
+              {/* El link sale del id del archivo y no de `comparativa_url`:
+                  esa columna guardó durante meses el texto visible de la celda
+                  de la planilla, que dice "LINK", y este `href` llevaba a
+                  /compras/requerimientos/LINK. */}
+              {linkDeLaComparativa(r) && (
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Comparativa</dt>
                   <dd>
-                    <a href={r.comparativa_url} target="_blank" rel="noopener noreferrer"
+                    <a href={linkDeLaComparativa(r)!} target="_blank" rel="noopener noreferrer"
                        className="text-sm text-[var(--primary)] hover:underline">
                       Ver comparativa
                     </a>

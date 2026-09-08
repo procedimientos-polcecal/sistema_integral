@@ -29,6 +29,8 @@ normalidad.
 - Lee la hoja master y todas las pestañas `RI *`, y las fusiona por N° de RI.
 - Da de alta áreas y proveedores nuevos que aparezcan.
 - Resuelve "dónde se necesita" contra sectores y equipos del núcleo.
+- **Enlaza la planilla de comparativa** que anote la columna de cada hoja de
+  área. Ver "La comparativa entra por acá", más abajo.
 - Omite los RI ya gestionados en el sistema.
 - Se dispara por: el webhook del Apps Script cuando alguien edita la planilla,
   el botón de `/compras/configuracion`, y un cron diario a las 9 UTC (6 de la
@@ -46,6 +48,10 @@ normalidad.
   proveedor, estado, costo + IVA y costo de envío.
 - Si Sheets falla, el cambio ya quedó guardado: se avisa en pantalla pero la
   operación no se rompe.
+- **La celda de comparativa se escribe sólo si la app tiene una dirección que
+  poner.** Cuando no tiene, no se escribe: escribir vacío borraba el link que la
+  planilla sí tenía —la celda muestra "LINK" y esconde el hipervínculo—, y con
+  eso el dato no quedaba en ninguno de los dos lados.
 
 ### El alias de cada aprobador
 
@@ -120,6 +126,35 @@ comparativas no muestra nada.
 Se habilita una sola vez, en la consola de Google Cloud del proyecto al que
 pertenece la cuenta de servicio, y tarda unos minutos en propagar. La app
 traduce ese error y muestra el link directo para habilitarla.
+
+### La comparativa entra por la sincronización
+
+La columna de comparativa de cada hoja de área **muestra "LINK" y esconde el
+hipervínculo detrás**. Leerla con la API de valores devuelve el texto visible,
+así que durante meses lo que llegó al sistema fue la palabra `LINK`.
+
+Ahora cada sincronización pide la grilla con el hipervínculo de cada celda
+—`leerLinksDeComparativa`, una sola llamada para todas las pestañas, unos dos
+segundos— y guarda el archivo en **`comparativa_drive_id`**. De ahí sale el link
+que muestra la ficha; `comparativa_url` **no se escribe desde la
+sincronización** y no es un detalle: esa columna se exporta a la celda de la
+planilla, así que llenarla con el link que la planilla ya tiene haría que la
+próxima exportación reemplace el "LINK" de la celda por una URL larguísima, en
+1.473 filas, sin que nadie lo pidiera. La columna guarda lo que decidió la app.
+
+Un link que no es una planilla —hay doce que llevan a una publicación de
+MercadoLibre o a un PDF— no se enlaza: se cuenta y se informa al sincronizar. De
+ahí no sale un archivo de comparativa, y enlazar al que se le parece es peor que
+dejar en null.
+
+Lo que **no** entra en una sincronización es abrir cada planilla para leer sus
+filas: son 219 archivos y es una llamada a Google por archivo. Eso sigue siendo
+el botón **Comparativas de la planilla** de `/compras/configuracion`, que
+procesa 20 archivos por vez y hay que apretar hasta que queden 0 — once veces
+para el histórico. Un archivo que ya se abrió no vuelve a leerse —se sabe por
+`comparativa_nombre`, que sale de adentro del archivo—, así que el número baja
+de verdad. (Antes no: con las filas pedidas el filtro dejaba pasar todos los
+archivos y cada tanda releía los mismos veinte.)
 
 ### La columna A es el vínculo
 

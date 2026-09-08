@@ -131,11 +131,15 @@ export default function Comparativa({
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Comparativa de proveedores
           </h2>
-          {r.comparativa_nombre && (
+          {/* Alcanza con el id del archivo: el nombre puede no saberse
+              todavía. La sincronización enlaza la planilla que anotó la hoja de
+              área —el link escondido detrás del "LINK" de la celda— y para eso
+              no abre el archivo, así que no sabe cómo se llama. Antes esto
+              colgaba del nombre y una comparativa recién sincronizada no se
+              veía en ninguna parte de la ficha. */}
+          {(r.comparativa_drive_id || r.comparativa_nombre) && (
             <p className="mt-0.5 text-sm text-slate-600">
               Planilla:{" "}
-              {/* El link sale del id, no de comparativa_url: esa columna guarda
-                  el texto visible de la celda de la planilla, que dice "LINK". */}
               {r.comparativa_drive_id ? (
                 <a
                   href={urlDePlanilla(r.comparativa_drive_id)}
@@ -143,7 +147,7 @@ export default function Comparativa({
                   rel="noreferrer"
                   className="underline"
                 >
-                  {r.comparativa_nombre}
+                  {r.comparativa_nombre ?? "la que enlaza la planilla"}
                 </a>
               ) : (
                 r.comparativa_nombre

@@ -197,7 +197,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .from("compras_requerimientos")
     .update({
       comparativa_drive_id: driveId,
-      comparativa_nombre: nombre || null,
+      // El nombre del archivo si no vino en el pedido: al releer una planilla
+      // que enlazó la sincronización no hay nombre que mandar —esa enlaza por
+      // el link de la celda, sin abrir el archivo—, y sin esto la ficha se
+      // quedaba sin poder nombrar la planilla que acababa de leer.
+      comparativa_nombre: nombre || planilla.nombre || null,
       comparativa_url: urlDePlanilla(driveId),
       estado_compra: avanza ? "EN_COMPARATIVA" : ri.estado_compra,
     })

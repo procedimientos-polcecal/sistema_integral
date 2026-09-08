@@ -295,6 +295,32 @@ baratas. La regla ahora vive en `lib/core/numeroArgentino.ts`, una sola vez
 para Compras y para el import de empleados de RRHH, que tenían el mismo error
 por separado.
 
+**La celda de comparativa dice "LINK" y el link está escondido detrás.** La API
+de valores devuelve el texto visible, así que lo que la sincronización guardó
+como dirección de la comparativa fue la palabra `LINK`: 1.905 requerimientos de
+1.948. Dos efectos que se veían y que nadie relacionó con eso: la ficha ofrecía
+"Ver comparativa" apuntando a `/compras/requerimientos/LINK`, y la exportación
+—que escribe `comparativa_url` en la celda— borraba el link de la planilla en
+los 36 RI que tenían la columna vacía, porque escribía `""`.
+
+Corregido el 08/09/2026: la sincronización pide la grilla con el hipervínculo de
+cada celda y guarda el archivo en `comparativa_drive_id`, que es de donde sale el
+link. `comparativa_url` no se escribe nunca desde la sincronización —dispara el
+trigger de `editado_en_app` y sacaría de la planilla a todos los RI que tienen
+comparativa— y la exportación no toca la celda cuando la app no tiene nada mejor
+que poner. La limpieza de los `LINK` viejos es la migración
+`20260908104241`, que apaga ese trigger para poder correr el update.
+
+**Una tanda que no descuenta lo hecho no avanza.** La vinculación en tanda de
+`/compras/configuracion` procesaba 20 archivos por vez, y con `filas=1` —que es
+lo que manda el botón— el filtro de pendientes dejaba pasar **todos**: cada
+apretón releía los mismos veinte primeros y "quedan N planillas" no bajaba
+nunca. Los 219 archivos de comparativa se terminan en once tandas; así, en
+ninguna cantidad. Se veía como que la sincronización de comparativas no
+funcionaba: 1.473 RI con comparativa en la planilla y 684 enlazados en el
+sistema. Ahora un archivo cuyos RI están todos traídos no vuelve a leerse, y la
+regla vive en `archivosPorHacer` con tests.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

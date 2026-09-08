@@ -87,7 +87,15 @@ export default function ConfiguracionClient({
     }
     setResultado(
       `Se leyeron ${body.filas_leidas} filas: ${body.filas_nuevas} nuevas, ` +
-      `${body.filas_actualizadas} actualizadas y ${body.filas_omitidas} omitidas por estar ya gestionadas acá.`
+      `${body.filas_actualizadas} actualizadas y ${body.filas_omitidas} omitidas por estar ya gestionadas acá. ` +
+      // La comparativa entra por acá desde que dejó de ser un botón aparte: si
+      // no se pudo leer, hay que decirlo, porque la importación no falla por eso.
+      (body.comparativas_error
+        ? `No se pudieron leer los links de comparativa: ${body.comparativas_error}`
+        : `${body.comparativas} con su comparativa enlazada` +
+          (body.comparativas_sin_planilla > 0
+            ? `, y ${body.comparativas_sin_planilla} link(s) de comparativa que no son una planilla.`
+            : "."))
     );
     router.refresh();
   }
@@ -470,11 +478,13 @@ function Leyenda({ color, texto }: { color: string; texto: string }) {
 }
 
 /**
- * Rescatar los links de comparativa que la planilla tenía escondidos.
+ * Traer los presupuestos de las comparativas que la planilla tenía anotadas.
  *
- * La celda muestra "LINK" y guarda el hipervínculo detrás, así que al sistema
- * había llegado el texto y no la URL. Esto los trae en tanda, agrupando por
- * archivo: muchos pedidos apuntan a la misma planilla.
+ * El vínculo —qué archivo es la comparativa de cada RI— lo trae ya cada
+ * sincronización. Lo que queda para acá es abrir cada planilla y leer sus
+ * filas, que es una llamada a Google por archivo y no entra en el tiempo de una
+ * sincronización: se agrupa por archivo, porque muchos pedidos apuntan a la
+ * misma planilla, y se procesa en tandas.
  *
  * Va con dry-run primero, como el resto de las operaciones masivas del módulo.
  */
@@ -523,10 +533,10 @@ function VincularComparativas() {
         Comparativas de la planilla
       </h2>
       <p className="mb-3 text-sm text-slate-600">
-        La columna de comparativa de cada hoja muestra “LINK” y esconde el
-        hipervínculo detrás, así que al sistema llegó el texto y no la dirección.
-        Esto va a buscarla y enlaza cada pedido con su planilla, trayendo los
-        presupuestos que tengan su N° de RI.
+        Cada sincronización ya enlaza cada pedido con la planilla que la
+        columna de comparativa tenga anotada. Esto abre esas planillas y trae
+        los presupuestos que lleven su N° de RI, que es lo que no entra en el
+        tiempo de una sincronización.
       </p>
 
       <div className="flex flex-wrap gap-2">

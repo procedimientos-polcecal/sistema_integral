@@ -17,7 +17,7 @@ import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
-import { linkDeCelda } from "@/lib/compras/vincular";
+import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
@@ -264,6 +264,22 @@ export interface ResultadoSync {
   filas_omitidas: number;
 }
 
+/**
+ * Lo mismo, más lo que se pudo hacer con la columna de comparativa.
+ *
+ * Va aparte porque `ResultadoSync` es exactamente lo que entra en
+ * `compras_sincronizaciones`, y esa tabla no tiene estas columnas. Esto es lo
+ * que ve quien aprieta el botón.
+ */
+export interface ResultadoSyncCompleto extends ResultadoSync {
+  /** Requerimientos a los que la planilla les enlazó una planilla de comparativa. */
+  comparativas: number;
+  /** Links de comparativa que no son una planilla: no se pueden abrir como tal. */
+  comparativas_sin_planilla: number;
+  /** Si no se pudieron leer los links, por qué. La importación siguió igual. */
+  comparativas_error?: string;
+}
+
 interface FilaPlanilla {
   nro_ri: number;
   hoja: string;
@@ -271,7 +287,7 @@ interface FilaPlanilla {
   datos: Record<string, unknown>;
 }
 
-export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSync> {
+export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyncCompleto> {
   const comenzo = Date.now();
   const admin = createAdminClient();
 
@@ -333,7 +349,10 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
           const compra = estadoCompraDe(val(fila, "estado"));
           Object.assign(datos, {
             estado_compra: compra.estado,
-            comparativa_url: texto(val(fila, "comparativa")),
+            // La celda de comparativa NO se lee por acá: la API de valores
+            // devuelve el texto visible, que dice "LINK", y eso es lo que
+            // durante meses quedó guardado como si fuera la dirección. El link
+            // de verdad lo trae `leerLinksDeComparativa`, más abajo.
             proveedor: texto(val(fila, "proveedor")),
             costo_iva: numero(val(fila, "costo_iva")),
             costo_envio: numero(val(fila, "costo_envio")),
@@ -357,6 +376,40 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
 
     const registros = [...porRi.values()];
 
+    // ── La comparativa que anotó la planilla ──
+    //
+    // Entra por la sincronización y no sólo por el botón de Configuración: es
+    // un dato de la planilla como el proveedor o el costo, y mientras fue una
+    // operación aparte se quedó a mitad de camino —1.473 requerimientos con
+    // comparativa en la planilla y 684 enlazados en el sistema—. El que carga
+    // la comparativa allá no tiene por qué venir a apretar un botón acá.
+    //
+    // Lo que se guarda es el `comparativa_drive_id` y NUNCA `comparativa_url`,
+    // porque esa columna **se exporta a la celda de la planilla**: llenarla con
+    // el link que la planilla ya tiene haría que la próxima exportación
+    // reemplace el "LINK" de la celda por una URL de cien caracteres, en 1.473
+    // filas, sin que nadie lo haya pedido. La columna es lo que decidió la app;
+    // el vínculo que trajo la planilla es el id, y el link se deriva de él.
+    //
+    // (El trigger de `editado_en_app` no es problema acá: desde la 027 no marca
+    // cuando la escritura actualiza `sheets_sincronizado_en`, que es lo que hace
+    // este upsert. Sí lo es para la vinculación en tanda, que no lo toca.)
+    //
+    // Si Google falla, la importación sigue: el alta de los RI nuevos es lo que
+    // no puede quedarse esperando. Queda dicho en el resultado, no en un
+    // console.warn.
+    let planillas = new Map<number, string>();
+    let sinPlanilla: number[] = [];
+    let errorDeLinks: string | undefined;
+    try {
+      const links = await leerLinksDeComparativa();
+      const resuelto = planillasPorRi(links);
+      planillas = resuelto.ids;
+      sinPlanilla = resuelto.sinPlanilla;
+    } catch (e) {
+      errorDeLinks = e instanceof Error ? e.message : String(e);
+    }
+
     // Catálogos y referencias
     const idArea = await asegurarAreas(admin, registros.map((r) => r.datos.area));
     const idProveedor = await asegurarProveedores(admin, registros.map((r) => r.datos.proveedor));
@@ -376,10 +429,11 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       estado_compra: string;
       compra_asignada_a: string | null;
       solicitante_nombre: string | null;
+      comparativa_drive_id: string | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -436,7 +490,15 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         aprobador: d.aprobador ?? null,
         estado_compra:
           d.estado_compra ?? previo.get(registro.nro_ri)?.estado_compra ?? "SIN_INICIAR",
-        comparativa_url: d.comparativa_url ?? null,
+        // La planilla de la comparativa. Se conserva la que hubiera si esta vez
+        // no se pudo leer el link: perder el vínculo por una falla de Google
+        // dejaría la comparativa sin manera de volver a encontrarla.
+        // `comparativa_url` no viaja en este upsert a propósito: se exporta a la
+        // celda de la planilla (ver arriba).
+        comparativa_drive_id:
+          planillas.get(registro.nro_ri) ??
+          previo.get(registro.nro_ri)?.comparativa_drive_id ??
+          null,
         proveedor_id: d.proveedor
           ? idProveedor.get(claveProveedor(String(d.proveedor))) ?? null
           : null,
@@ -478,7 +540,13 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       direccion: "importar", origen, ...resultado, duracion_ms: Date.now() - comenzo,
     });
 
-    return resultado;
+    return {
+      ...resultado,
+      // Cuántos de los que se escribieron quedaron con su planilla enlazada.
+      comparativas: aEscribir.filter((f) => f.comparativa_drive_id).length,
+      comparativas_sin_planilla: sinPlanilla.length,
+      ...(errorDeLinks ? { comparativas_error: errorDeLinks } : {}),
+    };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);
     await admin.from("compras_sincronizaciones").insert({
@@ -1075,7 +1143,13 @@ export async function exportarRequerimiento(
       }
 
       const valores: Record<string, string | null> = {
-        comparativa: (r.comparativa_url as string) ?? "",
+        // Sin comparativa cargada acá NO se escribe la celda —null es "no
+        // corresponde"—, y no se escribe vacío. La celda de la planilla dice
+        // "LINK" con el hipervínculo escondido detrás, así que pisarla con ""
+        // borraba el link de la comparativa: el sistema no lo tenía, y la
+        // planilla dejaba de tenerlo también. La planilla manda sobre esa celda
+        // mientras la app no tenga nada mejor que poner.
+        comparativa: (r.comparativa_url as string) ?? null,
         proveedor: (r.proveedores as { nombre: string } | null)?.nombre ?? "",
         estado: estadoTexto,
         costo_iva: r.costo_iva !== null ? String(r.costo_iva) : "",

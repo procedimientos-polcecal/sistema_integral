@@ -8,6 +8,7 @@ import {
 } from "@/lib/compras/constants";
 import type { OrdenTablero } from "@/lib/compras/constants";
 import { repartirBandeja } from "@/lib/compras/bandeja";
+import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import { totalesEnPesosDe, minimoEnPesos } from "@/lib/compras/comparativa";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
@@ -229,8 +230,8 @@ export default function BandejaClient({
               <>
                 <p className="text-sm text-slate-500">
                   No hay presupuestos cargados en el sistema.{" "}
-                  {r.comparativa_url && (
-                    <a href={r.comparativa_url} target="_blank" rel="noreferrer" className="underline">
+                  {linkDeLaComparativa(r) && (
+                    <a href={linkDeLaComparativa(r)!} target="_blank" rel="noreferrer" className="underline">
                       Ver la comparativa en la planilla
                     </a>
                   )}
