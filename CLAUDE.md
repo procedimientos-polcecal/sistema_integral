@@ -84,7 +84,16 @@ Antes de escribir una, leer las cinco trampas del
 **Compras, Mantenimiento e Inventario** espejan planillas de Sheets, y en
 general **la planilla manda**: es de donde lee quien no entra al sistema. (RRHH
 importa archivos de Excel, que es otra cosa: una carga puntual, no un espejo. Y
-Remises no tiene planilla.) Tres reglas que costaron caro:
+Remises no tiene planilla.)
+
+**Producción es la excepción, y conviene saberlo antes de tocarlo:** también
+escribe una planilla, pero ahí **manda el sistema**. Calidad carga en el SdG y la
+planilla quedó como el lugar donde miran los que no entran — una exportación de
+una sola dirección, que el SdG nunca vuelve a leer. El riesgo asumido está
+escrito en [docs/PRODUCCION.md](docs/PRODUCCION.md): si alguien la edita a mano,
+el SdG no se entera y la pisa.
+
+Tres reglas que costaron caro, y que valen para las cuatro:
 
 - **Toda ruta que toque un campo que se exporta tiene que exportar**, y si no
   puede, dejar el pendiente anotado (`sheets_pendiente`). Cambiar un estado sin
@@ -94,7 +103,8 @@ Remises no tiene planilla.) Tres reglas que costaron caro:
   diagnóstico que no se distingue de otro no es un diagnóstico: eso costó una
   tarde entera.
 - **Las fechas van en d/m, no en m/d.** Leerlo al revés dio vuelta 885 fechas en
-  Compras. Usar `fechaDeSheets()`.
+  Compras. Usar `fechaDeSheets()`, que vive en `lib/core/fechaDeSheets.ts` desde
+  que la necesitó el tercer módulo.
 
 Y una de diseño que se repite en todo el sistema: **enlazar al que se le parece
 es peor que dejar en null.** Cuando una planilla nombra algo en texto libre y no
