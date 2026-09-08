@@ -4,9 +4,9 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://sistema-integral-one.vercel.app
 
-Cinco módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
-**Compras** e **Inventario**. Cada uno vive en `app/(app)/<modulo>`,
-`lib/<modulo>` y `app/api/<modulo>`.
+Seis módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+**Compras**, **Inventario** y **Producción**. Cada uno vive en
+`app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
 
 Todo se escribe en **castellano**: nombres, comentarios, mensajes de pantalla y
 de commit.
@@ -22,6 +22,7 @@ código.
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
+| Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
@@ -72,7 +73,7 @@ Antes de escribir una, leer las cinco trampas del
   decir por qué. Filtrar por una condición, o de a lotes de 200.
 - **Un `select()` armado en una variable** pierde la inferencia de tipos de
   Supabase. La cadena va literal.
-- **Los catálogos del núcleo los comparten los cinco módulos**: `usuarios`,
+- **Los catálogos del núcleo los comparten los seis módulos**: `usuarios`,
   `sectores`, `equipos`, `empleados`, `proveedores`. Se leen; no se borran ni se
   rehacen desde un módulo.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
