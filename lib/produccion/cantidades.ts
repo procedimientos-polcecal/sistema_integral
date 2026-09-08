@@ -56,6 +56,12 @@ export function interpretarCantidadDeDeposito(v: unknown): ResultadoCantidad<num
  * espacios es un `null` legítimo — el papel no siempre trae ese dato—, pero un
  * texto que no se puede leer como número es un error, no un `null` que se
  * confunda con "no se anotó nada".
+ *
+ * Tampoco existe un negativo, mismo criterio que
+ * `interpretarCantidadDeDeposito` y `interpretarRotura`: kilos, bultos o
+ * pallets despachados son una cantidad, no un movimiento con signo. Sin este
+ * chequeo, un negativo pasaba derecho a `totalesDeDespacho` y de ahí a
+ * `desajustesDeKilos`, restando en vez de sumar sin que nada lo avisara.
  */
 export function interpretarCantidadOpcional(v: unknown): ResultadoCantidad<number | null> {
   const texto = limpio(v);
@@ -63,6 +69,7 @@ export function interpretarCantidadOpcional(v: unknown): ResultadoCantidad<numbe
 
   const n = numeroArgentino(texto);
   if (n === null) return { ok: false, error: `"${texto}" no es un número.` };
+  if (n < 0) return { ok: false, error: "No puede ser negativo." };
 
   return { ok: true, valor: n };
 }

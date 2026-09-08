@@ -7,7 +7,7 @@ import { indiceDeEmpleados, reconocer } from "@/lib/inventario/enlaces";
 import { puedeEditarProduccion } from "@/lib/produccion/auth";
 import { esTurno } from "@/lib/produccion/turnos";
 import { armarElDia } from "@/lib/produccion/consultas";
-import { espejarDia } from "@/lib/produccion/espejo";
+import { espejarDia, type ResultadoEspejo } from "@/lib/produccion/espejo";
 import {
   interpretarCantidadDeDeposito,
   interpretarCantidadOpcional,
@@ -354,8 +354,14 @@ export async function POST(request: Request) {
    */
   async function fallaConParteYaEscrito(status: number, motivo: string) {
     if (parteEsNuevo) {
-      await admin.from("produccion_partes").delete().eq("id", parteId);
-      return NextResponse.json({ error: motivo }, { status });
+      const { error: errBorrar } = await admin.from("produccion_partes").delete().eq("id", parteId);
+      // Si el mismo corte que hizo fallar el depósito o los despachos también
+      // tira abajo este `delete`, la fila sigue viva con datos a medio
+      // escribir. Asumir que desapareció —sin comprobar el error— es lo que
+      // dejaba esa fila sin `sheets_pendiente`: indistinguible de un parte que
+      // se exportó bien. Si el borrado falla, se cae al otro camino y queda
+      // anotada.
+      if (!errBorrar) return NextResponse.json({ error: motivo }, { status });
     }
     await admin
       .from("produccion_partes")
@@ -446,17 +452,42 @@ export async function POST(request: Request) {
   // ── 5. Exportar el día ─────────────────────────────────────
   // El día entero y no el turno: los resúmenes son diarios, y el turno recién
   // cargado cambia el total del día.
-  const { ids, productos, produccion, despacho, rotura } = await armarElDia(admin, fecha);
-  const resultado = await espejarDia({ fecha, productos, produccion, despacho, rotura });
+  //
+  // `armarElDia` lee con `traerProductos`/`traerParte`
+  // (lib/produccion/consultas.ts), y esas dos **lanzan** ante cualquier error
+  // de lectura (un corte de red, un timeout) en vez de devolver un
+  // `{ ok: false }`. Sin este `try/catch`, esa excepción salía de la ruta
+  // después de que el parte, el depósito y los despachos ya estaban escritos
+  // bien: nunca se llegaba al `update` de acá abajo, y `sheets_pendiente`
+  // quedaba en null — indistinguible de un parte que sí se exportó. El parte
+  // ya está completo en este punto (lo único que falló fue exportar), así que
+  // acá **no** se borra aunque se haya creado en esta misma request: se anota
+  // pendiente igual que un fallo de `espejarDia`.
+  let ids: string[];
+  let resultado: ResultadoEspejo;
+  try {
+    const dia = await armarElDia(admin, fecha);
+    ids = dia.ids;
+    resultado = await espejarDia({
+      fecha,
+      productos: dia.productos,
+      produccion: dia.produccion,
+      despacho: dia.despacho,
+      rotura: dia.rotura,
+    });
+  } catch (e) {
+    ids = [];
+    resultado = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 
   // El pendiente se anota (o se limpia) en **todos** los partes del día, no
   // sólo en el que se acaba de guardar: si el turno de la mañana había
   // quedado pendiente por un fallo anterior y ahora, al guardar el de la
   // tarde, la exportación sale bien, el de la mañana tiene que dejar de
   // aparecer en el tablero y en el panel de reintentos. `armarElDia` devuelve
-  // `ids` justamente para esto. Si viniera vacío —no debería, porque este
-  // mismo parte ya está guardado— se usa el propio id para no dejar de anotar
-  // nada.
+  // `ids` justamente para esto. Si viniera vacío —porque no se pudo armar el
+  // día, o porque este mismo parte ya está guardado— se usa el propio id para
+  // no dejar de anotar nada.
   const idsDelDia = ids.length > 0 ? ids : [parteId];
   await admin
     .from("produccion_partes")

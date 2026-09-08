@@ -75,6 +75,19 @@ describe("una cantidad opcional: kilos, bultos, pallets", () => {
   it("acepta miles con punto y decimal con coma", () => {
     expect(interpretarCantidadOpcional("1.500")).toEqual({ ok: true, valor: 1500 });
   });
+
+  /**
+   * Kilos, bultos o pallets despachados son una cantidad, no un movimiento
+   * con signo. Un negativo sin rechazar entraba derecho a
+   * `totalesDeDespacho` y de ahí a `desajustesDeKilos`, restando en vez de
+   * sumar sin que nada lo avisara.
+   */
+  it("un negativo no existe", () => {
+    expect(interpretarCantidadOpcional("-3")).toEqual({
+      ok: false,
+      error: "No puede ser negativo.",
+    });
+  });
 });
 
 describe("una rotura: not null default 0 en la base", () => {
