@@ -314,16 +314,21 @@ function CeldaDeTurno({ turno, productoId }: { turno: TurnoDelDia; productoId: s
   if (p.estado !== "calculada") return null;
 
   if (p.cantidad < 0) {
-    // El desglose usa lo que ya trajo el servidor (despachado y rotura del
-    // propio turno): no se reimplementa la resta, sólo se despeja el término
-    // del depósito a partir del resultado ya calculado.
+    // Los cuatro números tal como los trajo el servidor — no se reimplementa
+    // la resta despejando el depósito a partir de `p.cantidad`. Esa cuenta
+    // despejada al revés daba un "depósito" que no es el depósito (es la
+    // variación) y que además podía salir negativo, algo que
+    // `interpretarCantidadDeDeposito` prohíbe por definición: el tooltip
+    // existe para cotejar contra el papel, y un número que no está en el
+    // papel lo vuelve inútil.
     const despachado = turno.totales?.despachado[productoId] ?? 0;
     const rotura = turno.totales ? (roturaTotal(turno.totales)[productoId] ?? 0) : 0;
-    const deposito = p.cantidad - despachado - rotura;
+    const deposito = turno.deposito?.[productoId] ?? 0;
+    const depositoAnterior = turno.depositoAnterior?.[productoId] ?? 0;
     return (
       <span
         className="font-semibold text-red-600"
-        title={`Depósito ${deposito} + despachado ${despachado} + rotura ${rotura} = ${p.cantidad}`}
+        title={`Depósito ${deposito} − anterior ${depositoAnterior} + despachado ${despachado} + rotura ${rotura} = ${p.cantidad}`}
       >
         {p.cantidad}
       </span>

@@ -19,6 +19,19 @@ export interface TurnoDelDia {
   faltaAnterior: boolean;
   /** `null` = el turno no está cargado. No es lo mismo que un turno sin productos. */
   produccion: ProduccionPorProducto | null;
+  /**
+   * El depósito de este turno y el del turno anterior, tal como se contaron.
+   * `null` = el turno no está cargado (`deposito`) o no existe el parte
+   * anterior (`depositoAnterior`, mismo dato que `faltaAnterior`).
+   *
+   * Se llevan hasta el cliente para que el desglose de una producción
+   * negativa muestre los números reales del papel, en vez de despejar la
+   * fórmula al revés a partir de `produccion` — eso es lo que hacía
+   * `DiaClient` y lo que un día terminó mostrando un "depósito" que no salía
+   * de ningún renglón, porque en realidad era la variación del depósito.
+   */
+  deposito: Record<string, number> | null;
+  depositoAnterior: Record<string, number> | null;
 }
 
 export default async function ProduccionPage({
@@ -49,6 +62,7 @@ export default async function ProduccionPage({
       turnos.push({
         turno, cargado: false, parte: null, despachos: [],
         totales: null, faltaAnterior: false, produccion: null,
+        deposito: null, depositoAnterior: null,
       });
       continue;
     }
@@ -70,6 +84,8 @@ export default async function ProduccionPage({
         despachado: totales.despachado,
         rotura: roturaTotal(totales),
       }),
+      deposito: completo.deposito,
+      depositoAnterior: anterior,
     });
   }
 

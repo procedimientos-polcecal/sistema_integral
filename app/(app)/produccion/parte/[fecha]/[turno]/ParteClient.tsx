@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ClaveDeParte } from "@/lib/produccion/turnos";
 import { comoSeLeeElTurno } from "@/lib/produccion/turnos";
 import type { Turno, Producto, Familia, Parte, Despacho } from "@/lib/produccion/types";
@@ -25,6 +26,7 @@ interface Props {
   turno: Turno;
   turnoLegible: string;
   puedeEditar: boolean;
+  /** El catálogo completo (activos e inactivos): cargar y conservar no son lo mismo, ver más abajo. */
   productos: Producto[];
   parte: Parte | null;
   deposito: Record<string, number>;
@@ -114,17 +116,38 @@ export default function ParteClient({
   fecha, turno, turnoLegible, puedeEditar, productos, parte, deposito, despachos,
   depositoAnterior, parteAnterior, empleados,
 }: Props) {
+  const router = useRouter();
+
+  // Los activos son las filas editables de siempre — incluida la lista que
+  // ofrece el desplegable "Reconocido como" de cada despacho: nadie tiene que
+  // poder cargar un producto discontinuado (mismo criterio que el comentario
+  // de `armarElDia` en lib/produccion/consultas.ts).
+  const productosActivos = useMemo(() => productos.filter((p) => p.activo), [productos]);
+
+  // Un producto inactivo que ya tiene un valor en este parte no puede
+  // desaparecer del depósito: si el catálogo sólo trajera los activos, el
+  // renglón de este producto nunca se muestra ni se reenvía, y el POST borra
+  // esa fila del depósito al reemplazarlo entero — la próxima corrección de
+  // este mismo parte perdería ese valor, y el turno siguiente calcularía la
+  // producción contra un depósito que le falta un producto (se lee como cero).
+  // Uno inactivo *sin* valor acá no tiene nada que perder, y no se muestra.
+  const productosEnUso = useMemo(
+    () => productos.filter((p) => p.activo || deposito[p.id] !== undefined),
+    [productos, deposito]
+  );
+
   const [capatazRaw, setCapatazRaw] = useState(parte?.capataz_raw ?? "");
   const [capatazId, setCapatazId] = useState(parte?.capataz_id ?? "");
   const [observaciones, setObservaciones] = useState(parte?.observaciones ?? "");
   const [limpieza, setLimpieza] = useState(parte?.tareas_limpieza ?? "");
   const [recuento, setRecuento] = useState(parte?.recuento_bolsones ?? "");
 
-  // Una entrada por cada producto activo, aunque el usuario nunca la haya
-  // tocado: el input queda en blanco y en blanco vale cero, no "no sé".
+  // Una entrada por cada producto en uso (activo, o inactivo con valor),
+  // aunque el usuario nunca la haya tocado: el input queda en blanco y en
+  // blanco vale cero, no "no sé".
   const [depositoTexto, setDepositoTexto] = useState<Record<string, string>>(() => {
     const inicial: Record<string, string> = {};
-    for (const p of productos) {
+    for (const p of productosEnUso) {
       inicial[p.id] = deposito[p.id] !== undefined ? String(deposito[p.id]) : "";
     }
     return inicial;
@@ -156,14 +179,14 @@ export default function ParteClient({
   // se junta más abajo, en `erroresDeValidacion`, y frena el guardado.
   const depositoNumerico = useMemo(() => {
     const salida: Record<string, number> = {};
-    for (const p of productos) {
+    for (const p of productosEnUso) {
       const texto = (depositoTexto[p.id] ?? "").trim();
       if (texto === "") { salida[p.id] = 0; continue; }
       const r = interpretarCantidadDeDeposito(texto);
       salida[p.id] = r.ok ? r.valor : 0;
     }
     return salida;
-  }, [productos, depositoTexto]);
+  }, [productosEnUso, depositoTexto]);
 
   const despachosDePreview: Despacho[] = useMemo(
     () =>
@@ -199,6 +222,37 @@ export default function ParteClient({
     [depositoNumerico, depositoAnterior, totales, rotura]
   );
 
+  // ── Lo que la vista previa no puede mostrar como un número ──
+  // `depositoNumerico`, y las dos funciones de preview de arriba, convierten
+  // un texto que no se pudo leer en 0 (o en null) para no romper la cuenta en
+  // vivo — pero ese 0 no es un dato, es "no se sabe", y mostrarlo como una
+  // producción calculada es exactamente el error que este módulo vino a
+  // corregir: una fila con un tipeo se vería igual que una fila con un
+  // problema real de stock. Acá se guarda, aparte, qué productos tienen algo
+  // sin poder leerse (depósito, o la rotura/los bultos de algún despacho que
+  // los referencia), para que esa fila diga "no calculable" en vez de un
+  // número inventado. El guardado ya está frenado por `erroresDeValidacion`
+  // más abajo; esto es sólo la vista previa.
+  const productosNoCalculables = useMemo(() => {
+    const no = new Set<string>();
+
+    for (const p of productosEnUso) {
+      const texto = (depositoTexto[p.id] ?? "").trim();
+      if (texto !== "" && !interpretarCantidadDeDeposito(texto).ok) no.add(p.id);
+    }
+
+    for (const r of renglones) {
+      if (!r.producto_id) continue;
+      const invalido =
+        !interpretarCantidadOpcional(r.bultos).ok ||
+        !interpretarRotura(r.rotura_bolsa).ok ||
+        !interpretarRotura(r.rotura_bolson).ok;
+      if (invalido) no.add(r.producto_id);
+    }
+
+    return no;
+  }, [productosEnUso, depositoTexto, renglones]);
+
   const kgPorUnidad = useMemo(
     () => new Map(productos.map((p) => [p.id, p.kg_por_unidad] as const)),
     [productos]
@@ -217,7 +271,7 @@ export default function ParteClient({
   const erroresDeValidacion = useMemo(() => {
     const errores: string[] = [];
 
-    for (const p of productos) {
+    for (const p of productosEnUso) {
       const texto = (depositoTexto[p.id] ?? "").trim();
       if (texto === "") continue;
       const r = interpretarCantidadDeDeposito(texto);
@@ -238,7 +292,7 @@ export default function ParteClient({
     });
 
     return errores;
-  }, [productos, depositoTexto, renglones]);
+  }, [productosEnUso, depositoTexto, renglones]);
 
   async function guardar() {
     if (!puedeEditar || guardando || erroresDeValidacion.length > 0) return;
@@ -253,12 +307,15 @@ export default function ParteClient({
         fecha, turno,
         capataz_raw: capatazRaw, capataz_id: capatazId || null,
         observaciones, tareas_limpieza: limpieza, recuento_bolsones: recuento,
-        // Una entrada por **cada producto activo**, aunque el input haya
-        // quedado en blanco — no sólo los que se tocaron. Un producto ausente
-        // se lee como cero al despejar, y eso vale para el turno siguiente
-        // también: si falta acá, ese turno sale con una producción negativa
-        // sin motivo aparente.
-        deposito: productos.map((p) => {
+        // Una entrada por **cada producto en uso** (activo, o inactivo con un
+        // valor en este parte), aunque el input haya quedado en blanco — no
+        // sólo los que se tocaron. Un producto ausente se lee como cero al
+        // despejar, y eso vale para el turno siguiente también: si falta acá,
+        // ese turno sale con una producción negativa sin motivo aparente. Un
+        // inactivo con valor se reenvía igual, sin editar (el input queda
+        // deshabilitado): por eso desaparecía del depósito al corregir un
+        // parte después de desactivar el producto.
+        deposito: productosEnUso.map((p) => {
           const texto = (depositoTexto[p.id] ?? "").trim();
           return { producto_id: p.id, cantidad: texto === "" ? "0" : texto };
         }),
@@ -287,6 +344,12 @@ export default function ParteClient({
     // lo único que permite distinguir "falta la fila del 31" de "falta el
     // permiso".
     setResultado({ planilla: json.planilla, error_planilla: json.error_planilla ?? null });
+    // La fuente de verdad es el servidor: refresca `parte`, `depositoAnterior`
+    // y `deposito` para que un "no calculable" que ya se puede calcular (por
+    // ejemplo, porque mientras tanto se cargó el parte anterior) deje de
+    // mostrarse. `DiaClient` y `ProductosClient` ya hacen lo mismo después de
+    // guardar.
+    router.refresh();
   }
 
   async function reintentarPlanilla() {
@@ -301,9 +364,10 @@ export default function ParteClient({
     if (!res.ok) { setError(json.error ?? "No se pudo reintentar."); return; }
     setPendienteAlCargar(null);
     setResultado({ planilla: json.planilla, error_planilla: json.error_planilla ?? null });
+    router.refresh();
   }
 
-  const productosPorFamilia = (familia: Familia) => productos.filter((p) => p.familia === familia);
+  const productosPorFamilia = (familia: Familia) => productosEnUso.filter((p) => p.familia === familia);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 md:p-6">
@@ -390,7 +454,7 @@ export default function ParteClient({
           </p>
         </div>
 
-        {productos.length === 0 ? (
+        {productosEnUso.length === 0 ? (
           <p className="rounded-lg bg-slate-50 px-3 py-4 text-sm text-slate-500">
             Todavía no hay productos en el catálogo, así que no hay nada que
             cargar acá. El resto del parte —capataz, despachos y los textos— se
@@ -409,21 +473,39 @@ export default function ParteClient({
                   {deEstaFamilia.map((p) => {
                     const prod = produccion[p.id];
                     const texto = depositoTexto[p.id] ?? "";
+                    const noCalculable = productosNoCalculables.has(p.id);
                     return (
                       <div key={p.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
-                        <span className="min-w-0 flex-1 truncate text-sm text-slate-900">{p.nombre}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-slate-900">
+                          {p.nombre}
+                          {!p.activo && (
+                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                              Desactivado
+                            </span>
+                          )}
+                        </span>
                         <input
                           value={texto}
                           onChange={(e) =>
                             setDepositoTexto((d) => ({ ...d, [p.id]: e.target.value }))
                           }
-                          disabled={!puedeEditar}
+                          // Un producto inactivo se conserva, no se edita: ya
+                          // no se puede volver a cargar (mismo criterio que el
+                          // resto del sistema), así que el valor que trajo el
+                          // parte queda fijo y se reenvía tal cual.
+                          disabled={!puedeEditar || !p.activo}
                           inputMode="decimal"
                           placeholder="0"
                           className="w-24 shrink-0 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm disabled:bg-slate-50"
                         />
                         <span className="w-44 shrink-0 text-right text-xs">
-                          {!prod ? (
+                          {noCalculable ? (
+                            // Hay un texto acá (o en algún despacho de este
+                            // producto) que no se pudo leer como número: no es
+                            // un vacío legítimo, así que no se muestra una
+                            // producción calculada sobre un 0 inventado.
+                            <span className="text-slate-400">no calculable</span>
+                          ) : !prod ? (
                             <span className="text-slate-300">—</span>
                           ) : prod.estado === "calculada" ? (
                             <span className={prod.cantidad < 0 ? "font-semibold text-red-600" : "text-slate-500"}>
@@ -477,7 +559,7 @@ export default function ParteClient({
                 key={r.key}
                 indice={i}
                 renglon={r}
-                productos={productos}
+                productos={productosActivos}
                 puedeEditar={puedeEditar}
                 onCambiar={(cambios) => actualizarRenglon(r.key, cambios)}
                 onQuitar={() => quitarRenglon(r.key)}

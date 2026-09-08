@@ -26,7 +26,12 @@ export default async function PartePage({
   if (!nivel) redirect("/");
 
   const [productos, completo, depositoAnterior, empleados] = await Promise.all([
-    traerProductos(supabase),
+    // Catálogo completo, no sólo activos: un producto que se desactiva entre
+    // dos correcciones del mismo parte no puede perder su fila de depósito acá
+    // — es lo que borraba el POST cuando el cliente sólo recorría los activos.
+    // `ParteClient` decide qué mostrar (los activos, más un inactivo que ya
+    // tiene un valor en este parte) y qué reenviar.
+    traerProductos(supabase, { soloActivos: false }),
     traerParte(supabase, { fecha, turno }),
     traerDepositoDe(supabase, parteAnterior({ fecha, turno })),
     // Apellido y nombre, y sólo activos: el capataz elige de una lista de
