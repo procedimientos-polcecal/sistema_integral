@@ -226,6 +226,32 @@ elegida, en cambio, tiene `precio_unitario` neto, que es lo que una línea de or
 necesita. Por eso el push exige la cotización y no acepta el costo del RI: no es
 rigidez, es que el otro número no sirve para esto.
 
+## Lo que se vio en producción el 08/09/2026
+
+El ping corrió en el deploy y las nueve sondas pasaron. Dos cosas nuevas, y la
+segunda toca la premisa de esta etapa.
+
+**El ritmo de carga, medido.** En cinco días (03→08/09) entraron **96 facturas de
+proveedor** y **56 pagos**, y se crearon **10 órdenes de compra** —las diez de
+Polcecal, ninguna de Polysan—. Unas 19 facturas por día cargadas a mano: eso es
+el problema que este módulo viene a atacar, con número.
+
+**Más de la mitad de las órdenes de compra no tienen precio real.** De 2.877
+líneas de orden, **1.687 (59%) tienen `price_unit` ≤ $2** — el patrón es
+`CARBONILLA, 16,52 unidades a $2,00`, y hasta el flete va a $2. Sólo 1.024 (36%)
+pasan de $1.000, como `BOLSAS CAL GÜEMES 25KG, 30.000 a $373,01`.
+
+O sea que en esta instancia la orden de compra se usa, la mayoría de las veces,
+como **documento de recepción de material a granel** y no como documento de
+compra con precios. Eso no rompe nada de lo construido —las órdenes que crea el
+SdG llevan el precio real de la cotización elegida—, pero **cambia de qué depende
+el ahorro**: no alcanza con que la orden exista, hace falta que administración
+empiece a facturar *desde* ella. Con las órdenes actuales no podría: generar una
+factura desde una orden de $33,04 obliga a repreciar todo a mano.
+
+Conviene confirmarlo con administración antes de esperar el ahorro. Es la misma
+conversación que la pregunta abierta sobre por qué Polysan factura sin órdenes.
+
 ## Las etapas
 
 **Etapa 1 — El push de la orden de compra.** Sin buzón. Al aprobarse un

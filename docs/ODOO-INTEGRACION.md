@@ -85,7 +85,7 @@ partner y el id del build.
 
 ## Lo que dijo el diagnóstico (03/09/2026)
 
-Corrió entero contra la base real. **Las once sondas pasaron**: el usuario bot
+Corrió entero contra la base real. **Las nueve sondas pasaron**: el usuario bot
 (uid 17) lee compras, proveedores, contabilidad y tesorería de las dos empresas
 sin que falte un permiso.
 
@@ -361,7 +361,7 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 
 ## Próximos pasos
 
-1. ~~Correr el ping~~ **hecho**: las once sondas pasan, los permisos del usuario
+1. ~~Correr el ping~~ **hecho**: las nueve sondas pasan, los permisos del usuario
    bot están completos.
 2. **Aplicar `20260903082202_empresas_el_mapeo_con_odoo.sql`** en el editor SQL de
    Supabase: llena `odoo_company_id` con 1 y 2. Hasta que se corra, las dos

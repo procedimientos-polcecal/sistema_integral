@@ -196,7 +196,13 @@ export async function GET() {
           "state",
           "payment_state",
         ],
-        { limite: 5, orden: "invoice_date desc" }
+        /*
+         * Por `id desc` y no por `invoice_date desc`: en Postgres los NULL van
+         * primero en un DESC, así que ordenar por fecha mostraba los borradores
+         * sin fecha —con importe 0 y nombre "/"— en vez de las últimas facturas.
+         * Se vio en la corrida del 08/09 y parecía que no había facturas nuevas.
+         */
+        { limite: 5, orden: "id desc" }
       ),
     }))
   );
