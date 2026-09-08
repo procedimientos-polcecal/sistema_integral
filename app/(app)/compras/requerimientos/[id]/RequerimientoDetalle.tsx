@@ -11,6 +11,8 @@ import type {
   RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
 import Comparativa from "./Comparativa";
+import OrdenEnOdoo from "./OrdenEnOdoo";
+import type { OrdenDeOdoo } from "./OrdenEnOdoo";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
@@ -19,7 +21,7 @@ import { justificacionQueExplica } from "@/lib/core/justificacion";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [],
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [],
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -30,6 +32,8 @@ export default function RequerimientoDetalle({
   empresas: { id: string; nombre: string }[];
   puedeEditar: boolean;
   puedeAprobar: boolean;
+  /** Las órdenes que este RI ya tiene en Odoo. Una, o dos si la pagan las dos. */
+  ordenesOdoo?: OrdenDeOdoo[];
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -424,6 +428,13 @@ export default function RequerimientoDetalle({
               )}
             </dl>
           </section>
+
+          <OrdenEnOdoo
+            requerimientoId={r.id}
+            ordenes={ordenesOdoo}
+            pendiente={r.odoo_pendiente ?? null}
+            puedeEditar={puedeEditar}
+          />
 
           {/* ── Lo que entró al pañol ─────────────────────────
               Una entrada al pañol con este N° de RI es la recepción de este

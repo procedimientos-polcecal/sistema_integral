@@ -118,6 +118,12 @@ export interface Requerimiento {
   fecha_pedido: string | null;
   fecha_recepcion: string | null;
 
+  /**
+   * Por qué no se pudo crear la orden de compra en Odoo, con el mensaje real.
+   * Null = nada pendiente. Mismo patrón que `sheets_pendiente`.
+   */
+  odoo_pendiente: string | null;
+
   origen: string;
   hoja_origen: string | null;
   sheets_fila: number | null;

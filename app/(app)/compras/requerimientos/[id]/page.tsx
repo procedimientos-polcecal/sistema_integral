@@ -77,6 +77,15 @@ export default async function RequerimientoPage({
     .eq("tipo", "entrada")
     .order("fecha", { ascending: false });
 
+  // Las órdenes de compra que este RI ya tiene en Odoo. Son una o dos: un
+  // requerimiento que pagan las dos empresas son dos órdenes, porque el
+  // proveedor factura a cada CUIT por separado.
+  const { data: ordenesOdoo } = await supabase
+    .from("compras_odoo_ordenes")
+    .select("odoo_order_id, odoo_nombre, porcentaje, empresas(nombre)")
+    .eq("requerimiento_id", id)
+    .order("porcentaje", { ascending: false });
+
   return (
     <RequerimientoDetalle
       dolar={dolar}
@@ -90,6 +99,14 @@ export default async function RequerimientoPage({
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
       aprobadores={aprobadores}
+      ordenesOdoo={(ordenesOdoo ?? []).map((o) => ({
+        odooOrderId: o.odoo_order_id as number,
+        odooNombre: (o.odoo_nombre ?? null) as string | null,
+        porcentaje: o.porcentaje as number,
+        // El embed llega como objeto o como arreglo según la relación, igual
+        // que en `descripcionDelArticulo`.
+        empresa: nombreDeEmpresa(o.empresas) ?? "—",
+      }))}
       entradasAlPanol={(entradasAlPanol ?? []).map((e) => ({
         id: e.id as string,
         codigo: e.codigo as string | null,
@@ -107,4 +124,10 @@ export default async function RequerimientoPage({
 function descripcionDelArticulo(embed: unknown): string | null {
   const uno = Array.isArray(embed) ? embed[0] : embed;
   return (uno as { descripcion?: string } | null)?.descripcion ?? null;
+}
+
+/** El nombre de la empresa, venga el embed como objeto o como arreglo. */
+function nombreDeEmpresa(embed: unknown): string | null {
+  const uno = Array.isArray(embed) ? embed[0] : embed;
+  return (uno as { nombre?: string } | null)?.nombre ?? null;
 }

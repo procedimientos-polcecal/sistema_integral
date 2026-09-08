@@ -398,6 +398,16 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
   número equivocado que nadie cuestiona porque la llamada "funcionó".
 - **El nombre de la base puede cambiar en un redeploy** (lleva el id del build de
   Odoo.sh). Ver "El terreno".
+- **Una tabla puente nueva rompe los embeds de PostgREST.** `compras_odoo_ordenes`
+  tiene FK a `compras_requerimientos` y a `empresas`, y con eso abrió un **segundo
+  camino** de requerimientos a empresas: todo
+  `.select("*, empresas(nombre)")` sobre `compras_requerimientos` empezó a fallar
+  con `PGRST201`, y el listado de Compras dejó de cargar hasta que se
+  desambiguó a `empresas!empresa_id(nombre)` en las siete consultas que lo usaban
+  (commit `04d78b6`). No lo avisa nada: la tabla se crea y las pantallas se caen.
+  **La etapa 2 lo va a repetir**, porque `facturas_proveedor` va a tener FK a
+  `empresas`, `proveedores` y `compras_requerimientos` a la vez. Al crearla, hay
+  que revisar los embeds de esas tres tablas antes de dar la migración por buena.
 - **Las dos empresas**: tiene su sección arriba, y es el cuidado principal. En
   resumen: `allowed_company_ids` en toda llamada, `company_id` en toda lectura,
   y nunca sumar las dos empresas en un mismo número.
