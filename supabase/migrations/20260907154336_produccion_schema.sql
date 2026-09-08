@@ -125,8 +125,13 @@ create table if not exists produccion_partes (
   sheets_pendiente    text,
   sheets_pendiente_en timestamptz,
 
-  -- Constraint completa y no índice parcial: es el destino del ON CONFLICT del
-  -- upsert. Un índice parcial no sirve para eso — trampa #2 del README.
+  -- Constraint completa y no índice parcial: un índice parcial no sirve como
+  -- destino de un `ON CONFLICT` — trampa #2 del README —, y aunque la ruta ya
+  -- no hace upsert (busca primero y elige entre update e insert, para no
+  -- pisar `cargado_por` al corregir un parte), esta constraint sigue
+  -- haciendo falta por otro motivo: impide dos partes para el mismo turno, y
+  -- la ruta atrapa su violación por el código `23505` cuando dos altas
+  -- simultáneas del mismo turno corren la misma carrera.
   unique (fecha, turno)
 );
 
