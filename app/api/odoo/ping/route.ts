@@ -7,7 +7,7 @@ import {
   camposDe,
   contar,
   contarPorEmpresa,
-  credencialesQueFaltan,
+  avisoDeCredencialesFaltantes,
   empresasDeOdoo,
   hayCredencialesOdoo,
   idDeRelacion,
@@ -69,10 +69,10 @@ export async function GET() {
   if (!hayCredencialesOdoo()) {
     return NextResponse.json(
       {
-        error: `Faltan variables de entorno de Odoo: ${credencialesQueFaltan().join(", ")}`,
+        error: avisoDeCredencialesFaltantes(),
         comoSeArregla:
-          "Cargarlas en .env.local (y en Vercel, cuando pase de spike). La API key se genera en Odoo: " +
-          "perfil del usuario → Seguridad de la cuenta → API Keys.",
+          "La API key se genera en Odoo: perfil del usuario → Seguridad de la cuenta → API Keys. " +
+          "Qué valor va en cada variable está en docs/VARIABLES-VERCEL.md.",
       },
       { status: 503 }
     );

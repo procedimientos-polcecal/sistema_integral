@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { es_admin_check } from "@/lib/core/route-utils";
 import { traerTodo } from "@/lib/core/paginado";
-import { buscarLeer, credencialesQueFaltan, hayCredencialesOdoo } from "@/lib/odoo/client";
+import { buscarLeer, avisoDeCredencialesFaltantes, hayCredencialesOdoo } from "@/lib/odoo/client";
 import { cruzarProveedores, filasParaGuardar } from "@/lib/odoo/proveedores";
 import type { PartnerDeOdoo, ProveedorSdG } from "@/lib/odoo/proveedores";
 
@@ -30,7 +30,7 @@ export async function POST() {
 
   if (!hayCredencialesOdoo()) {
     return NextResponse.json(
-      { error: `Faltan variables de entorno de Odoo: ${credencialesQueFaltan().join(", ")}` },
+      { error: avisoDeCredencialesFaltantes() },
       { status: 503 }
     );
   }

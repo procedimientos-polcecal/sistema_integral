@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
-import { credencialesQueFaltan, hayCredencialesOdoo } from "@/lib/odoo/client";
+import { avisoDeCredencialesFaltantes, hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento, ensayarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 
 /**
@@ -40,7 +40,7 @@ async function permiso(): Promise<{ error: NextResponse } | { ok: true }> {
   if (!hayCredencialesOdoo()) {
     return {
       error: NextResponse.json(
-        { error: `Faltan variables de entorno de Odoo: ${credencialesQueFaltan().join(", ")}` },
+        { error: avisoDeCredencialesFaltantes() },
         { status: 503 }
       ),
     };

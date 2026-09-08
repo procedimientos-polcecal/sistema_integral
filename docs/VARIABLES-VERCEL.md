@@ -128,6 +128,29 @@ Las tres salen del mismo comando y **van juntas o no van**: si falta una,
 `lib/remises/webpush.ts` tira `Faltan variables de entorno de Web Push (VAPID)`
 al intentar notificar. Si Remises no usa push todavía, se pueden omitir las tres.
 
+## Odoo (Contabilidad, Tesorería y la orden de compra)
+
+Si faltan, las rutas de Odoo contestan **503 diciendo cuáles faltan** y el resto
+de la app sigue igual. El detalle de la integración está en
+[ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+
+| Variable | Para qué | De dónde sale |
+|---|---|---|
+| `ODOO_URL` | A qué instancia hablarle, sin barra final | `https://polcecal.odoo.com` para producción; la del build de staging para probar |
+| `ODOO_DB` | Nombre de la base. **No es el subdominio** | Es Odoo.sh: tiene la forma `<partner>-<proyecto>-<rama>-<build>`. Se saca de la sesión del navegador — el `fetch` a `get_session_info` que está en ODOO-INTEGRACION.md |
+| `ODOO_USER` | El email del usuario de integración | El que se creó en Odoo para esto |
+| `ODOO_API_KEY` | Su API key, **no su contraseña** | Odoo → perfil del usuario → Seguridad de la cuenta → API Keys |
+
+Dos cosas que muerden:
+
+**`ODOO_DB` lleva el id del build de Odoo.sh**, así que un redeploy de la
+instancia puede cambiarlo y dejar la integración hablándole a una base que ya no
+existe. El síntoma es que todo falla junto y de golpe; el mensaje del SdG lo dice.
+
+**Se puede apuntar a staging** cambiando `ODOO_URL` y `ODOO_DB`, sin tocar código.
+Conviene para validar las primeras órdenes sin escribir en la contabilidad de
+verdad. Es la misma API key: la base de staging es una copia.
+
 ## Que NO va en Vercel
 
 `DATABASE_URL` aparece en el código, pero sólo en

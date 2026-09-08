@@ -65,6 +65,24 @@ export function credencialesQueFaltan(): string[] {
 }
 
 /**
+ * El aviso completo cuando faltan credenciales.
+ *
+ * Dice **dónde** ponerlas, y no sólo cuáles faltan, porque "faltan las cuatro"
+ * con las cuatro cargadas en `.env.local` es exactamente lo que pasa cuando el
+ * dev server arrancó antes de que existieran: Next lee los `.env` al arrancar.
+ * Es un minuto perdido revisando el archivo, y ya pasó una vez.
+ */
+export function avisoDeCredencialesFaltantes(): string {
+  const faltan = credencialesQueFaltan();
+
+  return (
+    `Faltan variables de entorno de Odoo: ${faltan.join(", ")}. ` +
+    `En el deploy van en Vercel (ver docs/VARIABLES-VERCEL.md) y hay que redesplegar para que tomen. ` +
+    `En local van en .env.local, y Next las lee al arrancar: si las acabás de cargar, hay que reiniciar el dev server.`
+  );
+}
+
+/**
  * La URL base, sin barra final.
  *
  * Se normaliza porque pegar `https://polcecal.odoo.com/` con la barra deja
