@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { cruzarProveedores, cuitEsValido, normalizarCuit } from "./proveedores";
+import {
+  cruzarProveedores,
+  cuitEsValido,
+  filasParaGuardar,
+  normalizarCuit,
+} from "./proveedores";
 import type { PartnerDeOdoo, ProveedorSdG } from "./proveedores";
 
 /**
@@ -181,5 +186,103 @@ describe("cruzar los dos padrones", () => {
       cuitRepetidoEnSdG: [],
       partnersHuerfanos: 0,
     });
+  });
+});
+
+describe("las filas que se guardan", () => {
+  const EMPRESAS = new Map([
+    [1, "uuid-polcecal"],
+    [2, "uuid-polysan"],
+  ]);
+
+  it("un partner por empresa da una fila por empresa", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "Casa Camino", "30-71097635-6")],
+      [
+        partner(977, "PEDRO H. CAMINO S.R.L.", "30710976356", 1),
+        partner(2190, "PEDRO CAMINO SRL", "30710976356", 2),
+      ]
+    );
+
+    const { filas } = filasParaGuardar(cruce, EMPRESAS);
+    expect(filas).toEqual([
+      { proveedor_id: "p1", empresa_id: "uuid-polcecal", odoo_partner_id: 977, cuit: "30710976356" },
+      { proveedor_id: "p1", empresa_id: "uuid-polysan", odoo_partner_id: 2190, cuit: "30710976356" },
+    ]);
+  });
+
+  it("un partner compartido se expande a las dos empresas", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "AFIP", "33-69345023-9")],
+      [partner(9, "ARCA", "33693450239", false)]
+    );
+
+    const { filas } = filasParaGuardar(cruce, EMPRESAS);
+    expect(filas.map((f) => [f.empresa_id, f.odoo_partner_id])).toEqual([
+      ["uuid-polcecal", 9],
+      ["uuid-polysan", 9],
+    ]);
+  });
+
+  /*
+   * Este es el caso que hizo caer el upsert entero la primera vez que se corrió
+   * contra los datos reales: el mismo CUIT con un partner compartido y otro
+   * propio de una empresa generaba dos filas para el mismo (proveedor, empresa).
+   */
+  it("el partner propio de la empresa le gana al compartido", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "Doble", "30-70869957-4")],
+      [
+        partner(500, "COMPARTIDO", "30708699574", false),
+        partner(600, "PROPIO DE POLCECAL", "30708699574", 1),
+      ]
+    );
+
+    const { filas, compartidoPisado } = filasParaGuardar(cruce, EMPRESAS);
+    const polcecal = filas.find((f) => f.empresa_id === "uuid-polcecal");
+    expect(polcecal?.odoo_partner_id).toBe(600);
+    expect(compartidoPisado).toBe(1);
+
+    // Polysan se queda con el compartido, que es el único que tiene.
+    expect(filas.find((f) => f.empresa_id === "uuid-polysan")?.odoo_partner_id).toBe(500);
+  });
+
+  it("gana el propio aunque Odoo lo devuelva después", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "Doble", "30-70869957-4")],
+      [
+        partner(600, "PROPIO DE POLCECAL", "30708699574", 1),
+        partner(500, "COMPARTIDO", "30708699574", false),
+      ]
+    );
+
+    const { filas } = filasParaGuardar(cruce, EMPRESAS);
+    expect(filas.find((f) => f.empresa_id === "uuid-polcecal")?.odoo_partner_id).toBe(600);
+  });
+
+  it("nunca devuelve dos filas para el mismo proveedor y empresa", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "Doble", "30-70869957-4")],
+      [
+        partner(500, "COMPARTIDO", "30708699574", false),
+        partner(600, "PROPIO 1", "30708699574", 1),
+        partner(700, "PROPIO 2", "30708699574", 2),
+      ]
+    );
+
+    const { filas } = filasParaGuardar(cruce, EMPRESAS);
+    const claves = filas.map((f) => `${f.proveedor_id}|${f.empresa_id}`);
+    expect(new Set(claves).size).toBe(claves.length);
+  });
+
+  it("una empresa de Odoo que el SdG no conoce se cuenta, no se adivina", () => {
+    const cruce = cruzarProveedores(
+      [proveedor("p1", "De otra empresa", "30-70869957-4")],
+      [partner(800, "PARTNER DE LA EMPRESA 3", "30708699574", 3)]
+    );
+
+    const { filas, empresaDesconocida } = filasParaGuardar(cruce, EMPRESAS);
+    expect(filas).toHaveLength(0);
+    expect(empresaDesconocida).toBe(1);
   });
 });

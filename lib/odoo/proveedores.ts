@@ -73,6 +73,85 @@ export interface ResultadoDelCruce {
   partnersHuerfanos: number;
 }
 
+export interface FilaDeEnlace {
+  proveedor_id: string;
+  empresa_id: string;
+  odoo_partner_id: number;
+  cuit: string;
+}
+
+/**
+ * Las filas que van a `proveedores_odoo`, una por proveedor y empresa.
+ *
+ * Dos cosas que no son obvias y que decide esta función:
+ *
+ * **Un partner sin empresa en Odoo se guarda dos veces**, una por empresa. En
+ * Odoo un `res.partner` sin `company_id` lo usan todas; en el SdG la tabla lleva
+ * `empresa_id` NOT NULL para que la clave primaria no necesite nulos. Así que lo
+ * compartido se expande.
+ *
+ * **Si un CUIT tiene partner compartido *y* partner propio de una empresa, gana
+ * el propio.** No es un empate a resolver por gusto: el partner de la empresa es
+ * el que tiene sus datos fiscales y su cuenta contable, y es el que Odoo usaría
+ * si alguien cargara la factura a mano ahí. Sin esta regla, las dos filas chocan
+ * y el upsert entero se cae con "ON CONFLICT DO UPDATE command cannot affect row
+ * a second time" —que es exactamente lo que pasó la primera vez que se corrió—.
+ */
+export function filasParaGuardar(
+  cruce: ResultadoDelCruce,
+  /** id de `res.company` de Odoo → uuid de `empresas` del SdG. */
+  empresaPorOdoo: Map<number, string>
+): { filas: FilaDeEnlace[]; empresaDesconocida: number; compartidoPisado: number } {
+  const porClave = new Map<string, { fila: FilaDeEnlace; esCompartido: boolean }>();
+  let empresaDesconocida = 0;
+  let compartidoPisado = 0;
+
+  for (const enlace of cruce.enlaces) {
+    for (const partner of enlace.partners) {
+      const esCompartido = partner.empresa === null;
+      const empresas = esCompartido
+        ? [...empresaPorOdoo.values()]
+        : empresaPorOdoo.has(partner.empresa!)
+          ? [empresaPorOdoo.get(partner.empresa!)!]
+          : [];
+
+      if (!empresas.length) {
+        // Una empresa de Odoo que el SdG no conoce: se cuenta, no se adivina.
+        empresaDesconocida++;
+        continue;
+      }
+
+      for (const empresaId of empresas) {
+        const clave = `${enlace.proveedorId}|${empresaId}`;
+        const previo = porClave.get(clave);
+        if (previo) {
+          // El propio de la empresa le gana al compartido, sin importar el orden
+          // en que Odoo los devolvió. Cualquier otro empate lo gana el primero.
+          const loReemplaza = previo.esCompartido && !esCompartido;
+          if (!loReemplaza) continue;
+          compartidoPisado++;
+        }
+
+        porClave.set(clave, {
+          esCompartido,
+          fila: {
+            proveedor_id: enlace.proveedorId,
+            empresa_id: empresaId,
+            odoo_partner_id: partner.odooId,
+            cuit: enlace.cuit,
+          },
+        });
+      }
+    }
+  }
+
+  return {
+    filas: [...porClave.values()].map((v) => v.fila),
+    empresaDesconocida,
+    compartidoPisado,
+  };
+}
+
 /**
  * Deja un CUIT en sus once dígitos, o `null` si no es un CUIT.
  *

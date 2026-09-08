@@ -200,6 +200,32 @@ de flete generó **P02424 en Polcecal por $1.850,01 neto y P02425 en Polysan por
 $1.850**, que suman exactamente **$3.700,01**. El centavo impar cayó en una sola
 de las dos, que es todo el punto de `repartirAmbas`. Las dos se borraron.
 
+## Con qué datos cuenta la etapa 1 hoy (medido el 04/09/2026)
+
+Esto se midió después de escribir el código, y cambia la expectativa: **el push
+no tiene nada sobre lo que disparar todavía.**
+
+| | |
+|---|---|
+| Cotizaciones cargadas | 312 |
+| Cotizaciones **elegidas** | **0** |
+| RIs con `estado_compra = APROBADO` | 35 |
+| De ésos, con costo cargado | **0** |
+| RIs con costo cargado (histórico de la planilla) | 1.675 |
+
+O sea que la orden de compra se va a empezar a crear **para los requerimientos
+nuevos que pasen por la comparativa**, no para lo que ya está. Los 1.675
+históricos vinieron importados de la planilla con el costo ya puesto y sin
+cotización, y son compras cerradas: no necesitan orden.
+
+Y hay una razón para **no** usar el costo del requerimiento como precio: el campo
+se llama `costo_iva` y es literalmente eso, el total **con IVA** (ver
+`costosParaElPedido` en `lib/compras/comparativa.ts`). Ponerlo como `price_unit`
+de una línea con impuesto del 21% cobraría el IVA dos veces. La cotización
+elegida, en cambio, tiene `precio_unitario` neto, que es lo que una línea de orden
+necesita. Por eso el push exige la cotización y no acepta el costo del RI: no es
+rigidez, es que el otro número no sirve para esto.
+
 ## Las etapas
 
 **Etapa 1 — El push de la orden de compra.** Sin buzón. Al aprobarse un
