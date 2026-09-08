@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
-import { sumarDias } from "@/lib/core/fechas";
 import { TURNOS, parteAnterior } from "./turnos";
 import { totalesDeDespacho, roturaTotal } from "./despachos";
 import {
@@ -9,8 +8,11 @@ import {
   soloLoCalculado,
   type ProduccionPorProducto,
 } from "./produccion";
+import { armarLosDias, type DiaDelMes } from "./mes";
 import type { ClaveDeParte } from "./turnos";
 import type { Despacho, Parte, Producto } from "./types";
+
+export type { DiaDelMes } from "./mes";
 
 /**
  * Traer de la base lo que las pantallas y las rutas necesitan.
@@ -201,32 +203,6 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   };
 }
 
-export interface DiaDelMes {
-  /** "YYYY-MM-DD" */
-  fecha: string;
-  /** Los tres estados, igual que en la pantalla del día: no se reduce acá. */
-  produccion: ProduccionPorProducto;
-  /**
-   * La misma reducción que exporta la planilla (`soloLoCalculado`). Es contra
-   * esto, y no contra `produccion`, que se calcula el % de rotura del día: es
-   * lo que hace `espejarDia`, y calcular el % contra otra cosa sería un
-   * segundo criterio de "sin producción" que puede divergir del primero.
-   */
-  produccionCalculada: Record<string, number>;
-  despacho: Record<string, number>;
-  rotura: Record<string, number>;
-  /**
-   * Cuántos de los dos turnos del día tienen parte cargado (0, 1 o 2).
-   *
-   * `despacho` y `rotura` son sumas planas: un día sin ningún parte y un día
-   * con parte y cero despachos dan exactamente el mismo `{}`/0, y sin esto la
-   * pantalla no tiene forma de distinguirlos aunque quisiera. `produccion` no
-   * lo necesita para eso — ya tiene sus propios estados —, pero `despacho` y
-   * `rotura` no.
-   */
-  turnosCargados: number;
-}
-
 export interface MesArmado {
   primerDia: string;
   ultimoDia: string;
@@ -316,35 +292,6 @@ export async function armarElMes(
             .range(desde, hasta)
         );
 
-  const depositoPorParte = new Map<string, Record<string, number>>();
-  for (const f of filasDeposito) {
-    const d = depositoPorParte.get(f.parte_id) ?? {};
-    d[f.producto_id] = Number(f.cantidad);
-    depositoPorParte.set(f.parte_id, d);
-  }
-
-  const despachosPorParte = new Map<string, Despacho[]>();
-  for (const d of despachosPlanos) {
-    const arr = despachosPorParte.get(d.parte_id) ?? [];
-    arr.push(d);
-    despachosPorParte.set(d.parte_id, arr);
-  }
-
-  // La constraint `unique (fecha, turno)` garantiza a lo sumo un parte por
-  // clave: el mapa nunca pisa un id con otro.
-  const claveDe = (c: ClaveDeParte) => `${c.fecha}|${c.turno}`;
-  const parteIdPorClave = new Map<string, string>();
-  for (const p of partes) parteIdPorClave.set(claveDe({ fecha: p.fecha, turno: p.turno }), p.id);
-
-  /** El depósito de un parte del mes, o `null` si ese turno no está cargado. */
-  function depositoDentroDelMes(clave: ClaveDeParte): Record<string, number> | null {
-    const parteId = parteIdPorClave.get(claveDe(clave));
-    // `?? {}` y no "no existe": un parte cargado sin renglones de depósito
-    // (no debería pasar, pero si pasara) es un depósito vacío, no un turno
-    // sin cargar.
-    return parteId ? depositoPorParte.get(parteId) ?? {} : null;
-  }
-
   // El único dato que el rango de arriba no trae: el depósito del turno
   // anterior al primer turno del mes, que es el `12_20` del último día del
   // mes previo. Sin esto el turno `4_12` del día 1 sale siempre
@@ -353,58 +300,17 @@ export async function armarElMes(
   // problema en la pantalla del día.
   const anteriorAlMes = await traerDepositoDe(db, parteAnterior({ fecha: primerDia, turno: "4_12" }));
 
-  const dias: DiaDelMes[] = [];
-  for (let fecha = primerDia; fecha <= ultimoDia; fecha = sumarDias(fecha, 1)) {
-    const despacho: Record<string, number> = {};
-    const rotura: Record<string, number> = {};
-    const porTurno: (ProduccionPorProducto | null)[] = [];
-    let turnosCargados = 0;
-
-    for (const turno of TURNOS) {
-      const clave: ClaveDeParte = { fecha, turno };
-      const parteId = parteIdPorClave.get(claveDe(clave));
-      if (!parteId) {
-        porTurno.push(null);
-        continue;
-      }
-      turnosCargados++;
-
-      const totales = totalesDeDespacho(despachosPorParte.get(parteId) ?? []);
-      const roturas = roturaTotal(totales);
-
-      for (const [id, v] of Object.entries(totales.despachado)) {
-        despacho[id] = (despacho[id] ?? 0) + v;
-      }
-      for (const [id, v] of Object.entries(roturas)) {
-        rotura[id] = (rotura[id] ?? 0) + v;
-      }
-
-      const anterior = parteAnterior(clave);
-      // Sólo el turno 4_12 del día 1 del mes mira para atrás del rango
-      // traído: para cualquier otro turno el anterior ya está en `partes`.
-      const depositoAnterior =
-        anterior.fecha < primerDia ? anteriorAlMes : depositoDentroDelMes(anterior);
-
-      porTurno.push(
-        produccionDelTurno({
-          deposito: depositoPorParte.get(parteId) ?? {},
-          depositoAnterior,
-          despachado: totales.despachado,
-          rotura: roturas,
-        })
-      );
-    }
-
-    const produccion = produccionDelDia(porTurno);
-    dias.push({
-      fecha,
-      produccion,
-      produccionCalculada: soloLoCalculado(produccion),
-      despacho,
-      rotura,
-      turnosCargados,
-    });
-  }
+  // De acá para abajo no hay más red: `armarLosDias` (en `mes.ts`) es la
+  // función pura que arma el día por día, y la que tiene los tests — esta
+  // función sólo trae y le pasa lo que ya bajó.
+  const dias = armarLosDias({
+    primerDia,
+    ultimoDia,
+    partes,
+    filasDeposito,
+    despachos: despachosPlanos,
+    depositoAnteriorAlMes: anteriorAlMes,
+  });
 
   return { primerDia, ultimoDia, productos, dias };
 }
