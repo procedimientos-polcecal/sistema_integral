@@ -12,6 +12,7 @@
  */
 
 import { texto, normalizar, monto } from "@/lib/mantenimiento/planilla";
+import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 
 /** Un entero, redondeado. `null` si la celda no tiene un número. */
 export function entero(valor: unknown): number | null {
@@ -25,19 +26,16 @@ export const numero = (valor: unknown): number | null => monto(valor);
 /**
  * Una fecha del libro.
  *
- * Excel la manda como serial; a mano se escribe d/m/aaaa.
+ * Excel la manda como serial; a mano se escribe d/m/aaaa. Es la misma regla
+ * que `fechaDeSheets` del núcleo —el origen del serial y el bug del año 1900
+ * son los mismos en Excel y en Google Sheets—, así que se delega ahí en vez de
+ * mantenerla otra vez. Antes era una copia con dos diferencias sin documentar:
+ * excluía el serial 1 (`n > 1` en vez de `n >= 1`, que sólo cambia el resultado
+ * para 1900-01-01, algo que no aparece en un relevamiento de equipos) y no
+ * reconocía una fecha ya escrita en ISO. Ninguna de las dos correspondía a algo
+ * propio del libro de Excel — se sacaron.
  */
-export function fechaDeExcel(valor: unknown): string | null {
-  if (valor === null || valor === undefined || valor === "") return null;
-
-  const n = Number(valor);
-  if (!isNaN(n) && n > 1) {
-    return new Date((Math.floor(n) - 25569) * 86400 * 1000).toISOString().slice(0, 10);
-  }
-
-  const dmy = String(valor).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  return dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : null;
-}
+export const fechaDeExcel = fechaDeSheets;
 
 /** Una fila del libro, tal como la devuelve la lectura del xlsx. */
 export type FilaDelLibro = Record<string, unknown>;

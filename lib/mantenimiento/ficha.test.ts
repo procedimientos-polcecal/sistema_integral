@@ -3,6 +3,7 @@ import {
   entero, fechaDeExcel, filaDeTipo, filaDeFicha, filaDeComponente,
   fichaDesdeFormulario,
 } from "./ficha";
+import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 
 describe("entero", () => {
   it("lee un número entero", () => {
@@ -39,6 +40,16 @@ describe("fechaDeExcel", () => {
   it("devuelve null si no hay fecha", () => {
     expect(fechaDeExcel("")).toBeNull();
     expect(fechaDeExcel("nunca")).toBeNull();
+  });
+
+  // Es la misma regla que `fechaDeSheets` del núcleo: Excel y Google Sheets
+  // comparten el mismo origen de serial y el mismo bug del año 1900.
+  it("lee una fecha ya en ISO, igual que fechaDeSheets", () => {
+    expect(fechaDeExcel("2025-12-03")).toBe("2025-12-03");
+  });
+
+  it("el serial 1 es una fecha, igual que fechaDeSheets (antes quedaba afuera por el n > 1)", () => {
+    expect(fechaDeExcel(1)).toBe(fechaDeSheets(1));
   });
 });
 
