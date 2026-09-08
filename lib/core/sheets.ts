@@ -36,7 +36,9 @@ export async function leerValores(
     (opciones.sinFormato ? "?valueRenderOption=UNFORMATTED_VALUE" : "");
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
 
   return ((await res.json()).values ?? []) as string[][];
 }
@@ -50,7 +52,9 @@ export async function listarPestanas(planillaId: string): Promise<string[]> {
     `?fields=sheets.properties.title`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
 
   const json = await res.json();
   return (json.sheets ?? []).map((s: { properties: { title: string } }) => s.properties.title);
@@ -185,7 +189,9 @@ export async function leerFormulas(
     `/values/${encodeURIComponent(pestana)}?valueRenderOption=FORMULA`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
 
   return ((await res.json()).values ?? []) as string[][];
 }

@@ -142,11 +142,20 @@ interface ErrorDeGoogle {
  * La API contesta con un JSON de treinta líneas que en pantalla no dice nada:
  * quien lo lee necesita saber qué ir a tocar, y casi siempre es una de tres
  * cosas —habilitar la API, compartir la carpeta, o corregir el ID—.
+ *
+ * `operacion` distingue qué hacía falta cuando Google devolvió el 403: para
+ * escribir hace falta EDITOR, pero una planilla compartida sólo como LECTOR ya
+ * alcanza para `leerValores` o `listarPestanas`. Decir "compartila como
+ * editor" frente a un 403 de lectura manda a dar más permiso del que hace
+ * falta — no es incorrecto, pero no es el diagnóstico correcto. Por defecto es
+ * "escribir": es el uso original de esta función y el de la mayoría de las
+ * llamadas (`escribirCeldas`, `agregarFila`, todo `lib/compras/drive.ts`).
  */
 export function mensajeDeGoogle(
   estado: number,
   cuerpo: string,
-  cuentaDeServicio?: string
+  cuentaDeServicio?: string,
+  operacion: "leer" | "escribir" = "escribir"
 ): string {
   let error: ErrorDeGoogle = {};
   try {
@@ -172,7 +181,8 @@ export function mensajeDeGoogle(
 
   if (estado === 403) {
     const quien = cuentaDeServicio ? `la cuenta de servicio ${cuentaDeServicio}` : "la cuenta de servicio";
-    return `Google no dio acceso: lo más probable es que la carpeta no esté compartida con ${quien} como editor. (${error.message ?? estado})`;
+    const comoQue = operacion === "leer" ? "como lector" : "como editor";
+    return `Google no dio acceso: lo más probable es que la carpeta no esté compartida con ${quien} ${comoQue}. (${error.message ?? estado})`;
   }
 
   if (estado === 404) {

@@ -47,6 +47,18 @@ describe("errores de Google, traducidos", () => {
     expect(m).toContain("editor");
   });
 
+  it("un 403 al leer no pide más permiso del que hace falta: lector alcanza", () => {
+    const m = mensajeDeGoogle(
+      403,
+      JSON.stringify({ error: { message: "Insufficient permission" } }),
+      undefined,
+      "leer"
+    );
+    expect(m).toContain("compartida");
+    expect(m).toContain("lector");
+    expect(m).not.toContain("editor");
+  });
+
   it("nombra la cuenta de servicio cuando se la pasan", () => {
     const m = mensajeDeGoogle(403, JSON.stringify({ error: { message: "x" } }), "bot@proyecto.iam.gserviceaccount.com");
     expect(m).toContain("bot@proyecto.iam.gserviceaccount.com");
