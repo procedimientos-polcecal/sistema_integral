@@ -192,6 +192,19 @@ export const NAV: NavItem[] = [
       { label: "Productos", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
+  {
+    label: "Despacho",
+    href: "/despacho",
+    modulo: "despacho",
+    // La cola del día primero, y por lejos: es la pantalla que queda abierta
+    // todo el día en la PC de la balanza y desde donde se marcan los horarios
+    // con el camión en el predio. El histórico se mira después, no durante.
+    children: [
+      { label: "La cola del día", href: "/despacho", modulo: "despacho" },
+      { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
+      { label: "Productos", href: "/despacho/productos", modulo: "despacho", soloAdmin: true },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.

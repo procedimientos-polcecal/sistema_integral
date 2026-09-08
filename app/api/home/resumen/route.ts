@@ -23,13 +23,14 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
 
-  const [rrhh, remises, mantenimiento, compras, inventario, produccion] = await Promise.all([
+  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho] = await Promise.all([
     modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
     modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
     modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
     modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
     modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
     modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
+    modulos.has("despacho") ? resumenDespacho(supabase, hoyStr) : Promise.resolve(null),
   ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -75,7 +76,32 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, notificaciones });
+  /*
+   * Una orden sin cerrar es un camión que se fue sin que nadie marcara la
+   * salida. No es sólo un dato faltante: el espejo escribe **al cerrar**, así
+   * que esa orden todavía no está en la planilla, y la planilla es de donde lee
+   * quien no entra al sistema. Se avisa de las de días anteriores y no de las de
+   * hoy, que están abiertas porque el camión está ahí.
+   */
+  if (despacho && despacho.abiertasDeDiasAnteriores > 0) {
+    notificaciones.push({
+      id: "despacho-sin-cerrar",
+      titulo: "Órdenes de carga sin cerrar de días anteriores",
+      cantidad: despacho.abiertasDeDiasAnteriores,
+      href: "/despacho",
+    });
+  }
+
+  if (despacho && despacho.sinLlegarALaPlanilla > 0) {
+    notificaciones.push({
+      id: "despacho-sin-planilla",
+      titulo: "Órdenes de carga que no llegaron a la planilla",
+      cantidad: despacho.sinLlegarALaPlanilla,
+      href: "/despacho/ordenes",
+    });
+  }
+
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -255,6 +281,36 @@ async function resumenProduccion(supabase: Awaited<ReturnType<typeof createClien
 
   return {
     partesFaltantes: Math.max(0, 14 - (partes ?? []).length),
+    sinLlegarALaPlanilla: sinLlegar ?? 0,
+  };
+}
+
+/**
+ * Lo que Despacho tiene abierto.
+ *
+ * `ordenesDeHoy` es el volumen del día —unas 25 en el relevamiento, con picos de
+ * 49— y sirve para saber de un vistazo si la balanza está cargando o si nadie
+ * abrió la pantalla.
+ *
+ * Los otros dos son alarmas, y las dos son sobre la planilla. Una orden abierta
+ * de un día anterior no llegó a la planilla porque el espejo escribe al cerrar;
+ * una con `sheets_pendiente` no llegó porque Google rechazó la escritura.
+ * Ninguna de las dos se resuelve sola, y en las dos la planilla está mostrando
+ * un camión de menos.
+ */
+async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
+  const [{ count: ordenesDeHoy }, { count: abiertas }, { count: sinLlegar }] = await Promise.all([
+    supabase.from("despacho_ordenes_carga")
+      .select("id", { count: "exact", head: true }).eq("fecha", hoyStr),
+    supabase.from("despacho_ordenes_carga")
+      .select("id", { count: "exact", head: true }).lt("fecha", hoyStr).is("salida_predio", null),
+    supabase.from("despacho_ordenes_carga")
+      .select("id", { count: "exact", head: true }).not("sheets_pendiente", "is", null),
+  ]);
+
+  return {
+    ordenesDeHoy: ordenesDeHoy ?? 0,
+    abiertasDeDiasAnteriores: abiertas ?? 0,
     sinLlegarALaPlanilla: sinLlegar ?? 0,
   };
 }

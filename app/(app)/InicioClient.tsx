@@ -11,10 +11,16 @@ interface Resumen {
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
   inventario: { faltantes: number; movimientosHoy: number; sinLlegarALaPlanilla: number } | null;
   produccion: { partesFaltantes: number; sinLlegarALaPlanilla: number } | null;
+  despacho: {
+    ordenesDeHoy: number;
+    abiertasDeDiasAnteriores: number;
+    sinLlegarALaPlanilla: number;
+  } | null;
 }
 
 const VACIO: Resumen = {
   rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
+  despacho: null,
 };
 
 /**
@@ -178,8 +184,45 @@ export default function InicioClient({
             }
           />
         )}
+
+        {/* El titular es el volumen del día, que es lo que se mira de reojo. La
+            alarma son las órdenes abiertas de días anteriores: el espejo escribe
+            al cerrar, así que una orden que quedó abierta no está en la planilla
+            y nadie la va a corregir si no aparece acá. */}
+        {tiene("despacho") && (
+          <ModuloCard
+            titulo="Despacho"
+            href="/despacho"
+            color="#B45309"
+            icon={<IconCamion />}
+            hero={
+              resumen?.despacho
+                ? { label: "Órdenes de carga hoy", valor: resumen.despacho.ordenesDeHoy }
+                : null
+            }
+            secundarias={
+              resumen?.despacho
+                ? [
+                    { label: "Sin cerrar de días anteriores", valor: resumen.despacho.abiertasDeDiasAnteriores },
+                    { label: "Sin llegar a la planilla", valor: resumen.despacho.sinLlegarALaPlanilla },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function IconCamion() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 6h10v9H3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 9h4l3 3v3h-7z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7" cy="17.5" r="1.8" />
+      <circle cx="17" cy="17.5" r="1.8" />
+    </svg>
   );
 }
 
