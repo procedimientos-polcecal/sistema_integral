@@ -71,6 +71,38 @@ export function sumarDias(iso: string, dias: number): string {
   return t.toISOString().slice(0, 10);
 }
 
+/**
+ * El primer y el último día de un mes "YYYY-MM", como "YYYY-MM-DD".
+ *
+ * El truco de `Date.UTC(anio, mes, 0)` es estándar: el día 0 de un mes es el
+ * último del mes anterior, así que pedir el mes siguiente (`mes`, no `mes-1`,
+ * porque acá `mes` ya viene en base 1) y quedarse con el día 0 da el último día
+ * del mes pedido sin tabla de "30 días tiene noviembre". Sirve para los meses
+ * de 31 días, que la planilla de Google no soporta pero el sistema sí.
+ */
+export function rangoDelMes(mes: string): { primerDia: string; ultimoDia: string } {
+  const [anio, m] = mes.split("-").map(Number);
+  const ultimoDiaDelMes = new Date(Date.UTC(anio, m, 0)).getUTCDate();
+  return {
+    primerDia: `${mes}-01`,
+    ultimoDia: `${mes}-${String(ultimoDiaDelMes).padStart(2, "0")}`,
+  };
+}
+
+/** El mes "YYYY-MM" que queda `delta` meses antes o después. Para las flechas del selector. */
+export function mesRelativo(mes: string, delta: number): string {
+  const [anio, m] = mes.split("-").map(Number);
+  const d = new Date(Date.UTC(anio, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Si el texto es un mes "YYYY-MM" válido. Para validar lo que llega por la URL. */
+export function esMesValido(valor: unknown): valor is string {
+  if (typeof valor !== "string" || !/^\d{4}-\d{2}$/.test(valor)) return false;
+  const mes = Number(valor.slice(5, 7));
+  return mes >= 1 && mes <= 12;
+}
+
 /** El día de la semana de una fecha "YYYY-MM-DD". 0 = domingo, 6 = sábado. */
 export function diaDeLaSemana(iso: string): number {
   return comoUtc(iso).getUTCDay();

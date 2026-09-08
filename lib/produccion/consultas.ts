@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import { sumarDias } from "@/lib/core/fechas";
 import { TURNOS, parteAnterior } from "./turnos";
 import { totalesDeDespacho, roturaTotal } from "./despachos";
 import {
@@ -198,4 +199,187 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
     despacho,
     rotura,
   };
+}
+
+export interface DiaDelMes {
+  /** "YYYY-MM-DD" */
+  fecha: string;
+  /** Los tres estados, igual que en la pantalla del día: no se reduce acá. */
+  produccion: ProduccionPorProducto;
+  /**
+   * La misma reducción que exporta la planilla (`soloLoCalculado`). Es contra
+   * esto, y no contra `produccion`, que se calcula el % de rotura del día: es
+   * lo que hace `espejarDia`, y calcular el % contra otra cosa sería un
+   * segundo criterio de "sin producción" que puede divergir del primero.
+   */
+  produccionCalculada: Record<string, number>;
+  despacho: Record<string, number>;
+  rotura: Record<string, number>;
+}
+
+export interface MesArmado {
+  primerDia: string;
+  ultimoDia: string;
+  productos: Producto[];
+  dias: DiaDelMes[];
+}
+
+/**
+ * El mes entero, día por día, para `/produccion/resumenes`.
+ *
+ * Reusa exactamente las mismas funciones que `armarElDia` y que la
+ * exportación a la planilla — `totalesDeDespacho`, `roturaTotal`,
+ * `produccionDelTurno`, `produccionDelDia`, `soloLoCalculado`—: si la pantalla
+ * y la planilla alguna vez muestran números distintos para el mismo día, es
+ * porque los datos cambiaron en el medio, no porque haya dos cuentas.
+ *
+ * La diferencia con `armarElDia` es sólo de acceso a datos, no de aritmética.
+ * Llamar a `armarElDia` una vez por día de un mes de 31 días dispararía del
+ * orden de 300 consultas (productos + dos `traerParte` por día, cada uno con
+ * su parte, su depósito y sus despachos, más el parte anterior recalculado
+ * cada vez sin acordarse del día previo). Acá se trae **todo el rango de una
+ * sola vez** —partes por fecha, con `.gte`/`.lte` y nunca por un `.in()` de
+ * muchos ids— y con los ids de esos partes (a lo sumo 62 en un mes, muy por
+ * debajo del límite de 200 de la regla del repo) se trae depósito y despachos
+ * en un solo `.in()` cada uno. Todo el día se arma después en memoria.
+ */
+export async function armarElMes(
+  db: SupabaseClient,
+  primerDia: string,
+  ultimoDia: string
+): Promise<MesArmado> {
+  // Ver el comentario de armarElDia: acá también hace falta el catálogo
+  // completo, no sólo activos, porque un parte viejo puede referenciar un
+  // producto ya desactivado.
+  const productos = await traerProductos(db, { soloActivos: false });
+
+  const partes = await traerTodo<{ id: string; fecha: string; turno: ClaveDeParte["turno"] }>(
+    (desde, hasta) =>
+      db
+        .from("produccion_partes")
+        .select("id, fecha, turno")
+        .gte("fecha", primerDia)
+        .lte("fecha", ultimoDia)
+        .range(desde, hasta)
+  );
+
+  const ids = partes.map((p) => p.id);
+
+  // Sin partes este mes (catálogo recién arrancado, o un mes sin cargar
+  // todavía) no hay nada que pedirle a `produccion_deposito` ni a
+  // `produccion_despachos`: un `.in("parte_id", [])` es una consulta de más
+  // que siempre vuelve vacía.
+  const filasDeposito =
+    ids.length === 0
+      ? []
+      : await traerTodo<{ parte_id: string; producto_id: string; cantidad: number }>(
+          (desde, hasta) =>
+            db
+              .from("produccion_deposito")
+              .select("parte_id, producto_id, cantidad")
+              .in("parte_id", ids)
+              .range(desde, hasta)
+        );
+
+  const despachosPlanos =
+    ids.length === 0
+      ? []
+      : await traerTodo<Despacho>((desde, hasta) =>
+          db
+            .from("produccion_despachos")
+            .select(
+              "id, parte_id, orden, equipo_raw, cliente_raw, producto_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
+            )
+            .in("parte_id", ids)
+            .range(desde, hasta)
+        );
+
+  const depositoPorParte = new Map<string, Record<string, number>>();
+  for (const f of filasDeposito) {
+    const d = depositoPorParte.get(f.parte_id) ?? {};
+    d[f.producto_id] = Number(f.cantidad);
+    depositoPorParte.set(f.parte_id, d);
+  }
+
+  const despachosPorParte = new Map<string, Despacho[]>();
+  for (const d of despachosPlanos) {
+    const arr = despachosPorParte.get(d.parte_id) ?? [];
+    arr.push(d);
+    despachosPorParte.set(d.parte_id, arr);
+  }
+
+  // La constraint `unique (fecha, turno)` garantiza a lo sumo un parte por
+  // clave: el mapa nunca pisa un id con otro.
+  const claveDe = (c: ClaveDeParte) => `${c.fecha}|${c.turno}`;
+  const parteIdPorClave = new Map<string, string>();
+  for (const p of partes) parteIdPorClave.set(claveDe({ fecha: p.fecha, turno: p.turno }), p.id);
+
+  /** El depósito de un parte del mes, o `null` si ese turno no está cargado. */
+  function depositoDentroDelMes(clave: ClaveDeParte): Record<string, number> | null {
+    const parteId = parteIdPorClave.get(claveDe(clave));
+    // `?? {}` y no "no existe": un parte cargado sin renglones de depósito
+    // (no debería pasar, pero si pasara) es un depósito vacío, no un turno
+    // sin cargar.
+    return parteId ? depositoPorParte.get(parteId) ?? {} : null;
+  }
+
+  // El único dato que el rango de arriba no trae: el depósito del turno
+  // anterior al primer turno del mes, que es el `12_20` del último día del
+  // mes previo. Sin esto el turno `4_12` del día 1 sale siempre
+  // "sin_parte_anterior" — un agujero fijo en cada mes, no un dato real que
+  // falte. Es la misma cuenta de `parteAnterior` que resuelve este mismo
+  // problema en la pantalla del día.
+  const anteriorAlMes = await traerDepositoDe(db, parteAnterior({ fecha: primerDia, turno: "4_12" }));
+
+  const dias: DiaDelMes[] = [];
+  for (let fecha = primerDia; fecha <= ultimoDia; fecha = sumarDias(fecha, 1)) {
+    const despacho: Record<string, number> = {};
+    const rotura: Record<string, number> = {};
+    const porTurno: (ProduccionPorProducto | null)[] = [];
+
+    for (const turno of TURNOS) {
+      const clave: ClaveDeParte = { fecha, turno };
+      const parteId = parteIdPorClave.get(claveDe(clave));
+      if (!parteId) {
+        porTurno.push(null);
+        continue;
+      }
+
+      const totales = totalesDeDespacho(despachosPorParte.get(parteId) ?? []);
+      const roturas = roturaTotal(totales);
+
+      for (const [id, v] of Object.entries(totales.despachado)) {
+        despacho[id] = (despacho[id] ?? 0) + v;
+      }
+      for (const [id, v] of Object.entries(roturas)) {
+        rotura[id] = (rotura[id] ?? 0) + v;
+      }
+
+      const anterior = parteAnterior(clave);
+      // Sólo el turno 4_12 del día 1 del mes mira para atrás del rango
+      // traído: para cualquier otro turno el anterior ya está en `partes`.
+      const depositoAnterior =
+        anterior.fecha < primerDia ? anteriorAlMes : depositoDentroDelMes(anterior);
+
+      porTurno.push(
+        produccionDelTurno({
+          deposito: depositoPorParte.get(parteId) ?? {},
+          depositoAnterior,
+          despachado: totales.despachado,
+          rotura: roturas,
+        })
+      );
+    }
+
+    const produccion = produccionDelDia(porTurno);
+    dias.push({
+      fecha,
+      produccion,
+      produccionCalculada: soloLoCalculado(produccion),
+      despacho,
+      rotura,
+    });
+  }
+
+  return { primerDia, ultimoDia, productos, dias };
 }

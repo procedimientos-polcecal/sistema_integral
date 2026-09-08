@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   fechaEnArgentina, hoyEnArgentina, diaEnArgentina,
   sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
+  rangoDelMes, mesRelativo, esMesValido,
 } from "./fechas";
 
 /**
@@ -178,5 +179,51 @@ describe("fechaDeTexto", () => {
     expect(fechaDeTexto(undefined)).toBeNull();
     expect(fechaDeTexto("s/d")).toBeNull();
     expect(fechaDeTexto("12/2026")).toBeNull();
+  });
+});
+
+describe("rangoDelMes", () => {
+  it("un mes de 30 dias", () => {
+    expect(rangoDelMes("2026-09")).toEqual({ primerDia: "2026-09-01", ultimoDia: "2026-09-30" });
+  });
+
+  /** El caso que la planilla de Google no soporta: los resúmenes llegan a 30. */
+  it("un mes de 31 dias, que la pantalla si tiene que mostrar entero", () => {
+    expect(rangoDelMes("2026-08")).toEqual({ primerDia: "2026-08-01", ultimoDia: "2026-08-31" });
+  });
+
+  it("febrero, bisiesto y no bisiesto", () => {
+    expect(rangoDelMes("2028-02").ultimoDia).toBe("2028-02-29");
+    expect(rangoDelMes("2026-02").ultimoDia).toBe("2026-02-28");
+  });
+});
+
+describe("mesRelativo", () => {
+  it("el mes siguiente y el anterior dentro del mismo año", () => {
+    expect(mesRelativo("2026-09", 1)).toBe("2026-10");
+    expect(mesRelativo("2026-09", -1)).toBe("2026-08");
+  });
+
+  it("cruza el año en los dos sentidos", () => {
+    expect(mesRelativo("2026-12", 1)).toBe("2027-01");
+    expect(mesRelativo("2026-01", -1)).toBe("2025-12");
+  });
+});
+
+describe("esMesValido", () => {
+  it("acepta YYYY-MM con un mes real", () => {
+    expect(esMesValido("2026-09")).toBe(true);
+    expect(esMesValido("2026-01")).toBe(true);
+    expect(esMesValido("2026-12")).toBe(true);
+  });
+
+  it("rechaza lo que no es un mes, incluido lo que llega mal formado por la URL", () => {
+    expect(esMesValido("2026-13")).toBe(false);
+    expect(esMesValido("2026-00")).toBe(false);
+    expect(esMesValido("2026-9")).toBe(false);
+    expect(esMesValido("2026-09-01")).toBe(false);
+    expect(esMesValido("")).toBe(false);
+    expect(esMesValido(null)).toBe(false);
+    expect(esMesValido(undefined)).toBe(false);
   });
 });
