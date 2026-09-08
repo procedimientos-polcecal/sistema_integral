@@ -180,6 +180,18 @@ export const NAV: NavItem[] = [
       { label: "La lista del pañol", href: "/inventario/lista", modulo: "inventario" },
     ],
   },
+  {
+    label: "Producción",
+    href: "/produccion",
+    modulo: "produccion",
+    // El día primero: es la pantalla que se abre para cargar el parte del turno
+    // que acaba de terminar, que es el 95% de lo que se hace acá.
+    children: [
+      { label: "El día", href: "/produccion", modulo: "produccion" },
+      { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
+      { label: "Productos", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
