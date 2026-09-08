@@ -134,12 +134,36 @@ async function guardar(request: Request, modo: "alta" | "edicion") {
   const id = String(b?.id ?? "").trim();
   if (!id) return NextResponse.json({ error: "Falta el id del producto" }, { status: 400 });
 
-  const { error } = await admin.from("produccion_productos").update(campos).eq("id", id);
+  // Sin esto, un id inventado (o de un producto ya borrado — no pasa hoy,
+  // pero nada lo impide en la base) hacía que `update().eq("id", id)` tocara
+  // cero filas y devolviera éxito igual: un 200 con el mismo `id` de vuelta,
+  // como si se hubiera editado algo. Mismo patrón que
+  // `app/api/mantenimiento/tipos/route.ts`: pedir la fila de vuelta con
+  // `.select().single()` para que un id que no matchea ninguna fila salga
+  // como el error que es.
+  if (Object.keys(campos).length === 0) {
+    return NextResponse.json({ error: "No hay nada para cambiar" }, { status: 400 });
+  }
+
+  const { error } = await admin
+    .from("produccion_productos")
+    .update(campos)
+    .eq("id", id)
+    .select("id")
+    .single();
   if (error) {
     const yaExiste = error.code === "23505";
+    // PGRST116: la fila que pedía `.single()` no está — el id no existe.
+    const noExiste = error.code === "PGRST116";
     return NextResponse.json(
-      { error: yaExiste ? `Ya existe un producto llamado "${nombre}"` : error.message },
-      { status: yaExiste ? 409 : 400 }
+      {
+        error: yaExiste
+          ? `Ya existe un producto llamado "${nombre}"`
+          : noExiste
+            ? "Ese producto no existe"
+            : error.message,
+      },
+      { status: yaExiste ? 409 : noExiste ? 404 : 400 }
     );
   }
   return NextResponse.json({ id });
