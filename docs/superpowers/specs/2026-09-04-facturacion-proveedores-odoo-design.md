@@ -167,21 +167,38 @@ QR con payloads reales, el armado de los `vals` de la orden desde un
 requerimiento, la detección de duplicados. El 50/50 ya está hecho y probado.
 
 Hay algo que ningún test contesta: **si Odoo acepta la orden con los campos que
-le mandamos.** Los obligatorios de `purchase.order` son `company_id`,
-`currency_id`, `date_order`, `name`, `partner_id` y `picking_type_id`, y todavía
-no se sabe si los dos últimos se resuelven por defecto o hay que calcularlos. Se
-sabe intentando crear una.
+le mandamos.** Se probó en la base de **staging**
+(`polcecal-staging-37495859`, en `polcecal-staging-37495859.dev.odoo.com`, con la
+misma API key), creando órdenes de verdad y borrándolas. Tres cosas que sólo se
+supieron así:
 
-Lo bueno: **`product_id` no es obligatorio en `purchase.order.line`.** Los
-exigidos son `name` (descripción libre), `product_qty` y `price_unit`, que es
-justo lo que tiene un requerimiento. No hace falta mapear el catálogo de
-productos de Odoo, que habría sido un proyecto aparte.
+**`product_id` sí es obligatorio, aunque `fields_get` diga que no.** El campo no
+está marcado como requerido, pero hay una **restricción SQL** del modelo
+—`accountable_required_fields`— que exige `product_id`, `product_uom` y
+`date_planned` en toda línea facturable. El primer intento murió con "Missing
+required fields on accountable purchase order line". La API mintió y el ORM no.
 
-**Dónde probar el primer write es una decisión pendiente.** Lo correcto es pedir
-al partner una base de **staging** —Odoo.sh las tiene, son copia de producción—.
-Lo rápido es crear una orden en borrador en producción y borrarla: una orden en
-borrador no genera asiento ni número fiscal, así que el riesgo es bajo, pero es
-contabilidad de otros y no se hace sin que lo pidan.
+No hace falta mapear el catálogo igual: la descripción del requerimiento va en el
+`name` de la línea —que es lo que se ve e imprime— y el producto sólo aporta
+cuenta y unidad. **El grupo ya tiene el producto genérico hecho**: `ART. VARIOS`
+(id 6835), sin empresa, o sea compartido por las dos.
+
+**El impuesto es por empresa.** El mismo "IVA Compras 21%" es el id **4** en
+Polcecal y el **73** en Polysan, porque en Odoo los impuestos pertenecen a una
+empresa. Usar el de la otra no da un error prolijo: da un asiento en la
+contabilidad equivocada. Es el 21% porque es lo que usan —343 de las últimas 400
+líneas de orden—; las excepciones (0%, exento, no gravado) las corrige
+contabilidad en el borrador, que es para lo que el borrador existe.
+
+**Borrar una orden requiere cancelarla primero.** `unlink` sola falla con
+"Primero debe cancelar la orden de compra para poder eliminarla". Importa para
+limpiar pruebas, y para cualquier corrección futura.
+
+La prueba de punta a punta pasó la salida de `armarOrdenes` por un `create` real:
+un requerimiento compartido de 4 unidades a $1.000 con 10% de descuento y $100,01
+de flete generó **P02424 en Polcecal por $1.850,01 neto y P02425 en Polysan por
+$1.850**, que suman exactamente **$3.700,01**. El centavo impar cayó en una sola
+de las dos, que es todo el punto de `repartirAmbas`. Las dos se borraron.
 
 ## Las etapas
 
@@ -205,14 +222,16 @@ cerrarle el estado.
 
 ## Lo que queda abierto
 
-1. **El impuesto de las líneas de la orden.** Con descripción libre y sin
-   producto, Odoo no le pone IVA solo, y una factura generada desde una orden sin
-   impuesto sale sin IVA. Las cotizaciones del SdG guardan `costo_iva`, así que el
-   dato existe de este lado; falta confirmar qué `account.tax` de Odoo usar. Es el
-   primer paso verificable de la etapa 1, no un supuesto.
-2. **Dónde se prueba el primer write**: staging del partner o producción.
-3. **Tres facturas reales en PDF** para confirmar el formato del QR.
+1. ~~El impuesto de las líneas~~ **resuelto**: IVA Compras 21%, id 4 en Polcecal
+   y 73 en Polysan, leído de lo que ya usan.
+2. ~~Dónde se prueba el primer write~~ **resuelto**: staging
+   (`polcecal-staging-37495859`), y ya se probó ahí.
+3. **Tres facturas reales en PDF** para confirmar el formato del QR. Bloquea la
+   etapa 2, no la 1.
 4. **Por qué Polysan factura sin órdenes de compra.** Es una pregunta para
    administración. Si la respuesta es "porque casi nada pasa por un
    requerimiento", la etapa 1 rinde mucho menos de lo que parece y conviene
    saberlo antes.
+5. **Si el push corre contra producción o staging.** El código toma la base de
+   `ODOO_DB`, así que es configuración, no código: se puede dejar apuntando a
+   staging hasta que administración valide un par de órdenes de verdad.

@@ -54,30 +54,53 @@ export interface EmpresaParaOrden {
   odooPartnerId: number | null;
   /** `stock.picking.type` de recepción de esta empresa. */
   pickingTypeId: number;
+  /**
+   * El `account.tax` de IVA Compras 21% **de esta empresa**.
+   *
+   * Va por empresa porque en Odoo los impuestos pertenecen a una: el mismo "IVA
+   * Compras 21%" es el id 4 en Polcecal y el 73 en Polysan. Usar el de la otra
+   * empresa no da un error prolijo, da un asiento en la contabilidad equivocada.
+   *
+   * Es 21% porque es lo que usan: 343 de las últimas 400 líneas de orden. Las
+   * excepciones (0%, exento, no gravado) las corrige contabilidad en el
+   * borrador, que es exactamente para lo que el borrador existe.
+   */
+  impuestoId: number | null;
 }
 
 export interface ContextoDeOdoo {
   /** Nombre de moneda → id de `res.currency`. Ej: `{ ARS: 19, USD: 1 }`. */
   monedas: Record<string, number>;
   /**
-   * `account.tax` a poner en las líneas, si se decidió cuál.
+   * El producto genérico que llevan las líneas, y su unidad de medida.
    *
-   * Queda opcional porque es un punto abierto del spec: con descripción libre y
-   * sin producto, Odoo no le pone IVA solo, y una factura generada desde una
-   * orden sin impuesto sale sin IVA. Mientras no esté resuelto, la orden se crea
-   * sin impuesto y eso es visible, no silencioso.
+   * Hace falta aunque parezca que no. `fields_get` dice que `product_id` no es
+   * obligatorio en `purchase.order.line`, y **es mentira**: hay una restricción
+   * SQL del modelo —`accountable_required_fields`— que exige `product_id`,
+   * `product_uom` y `date_planned` en toda línea facturable. Se descubrió
+   * intentando crear una orden en staging: "Missing required fields on
+   * accountable purchase order line".
+   *
+   * No hace falta mapear el catálogo igual: la descripción del requerimiento va
+   * en el `name` de la línea, que es lo que se ve e imprime, y el producto sólo
+   * aporta cuenta y unidad. El grupo ya tiene uno hecho para esto —`ART. VARIOS`,
+   * sin empresa, o sea compartido por las dos—, así que no se inventa nada.
    */
-  impuestoId?: number;
+  productoGenericoId: number;
+  uomId: number;
   /** Momento de la orden. Se inyecta para que los tests no dependan del reloj. */
   ahora: Date;
 }
 
 export interface LineaDeOrden {
+  product_id: number;
+  product_uom: number;
+  date_planned: string;
   name: string;
   product_qty: number;
   price_unit: number;
+  taxes_id: [[6, 0, number[]]];
   discount?: number;
-  taxes_id?: [[6, 0, number[]]];
 }
 
 export interface OrdenParaOdoo {
@@ -92,6 +115,7 @@ export interface OrdenParaOdoo {
 
 export type Problema =
   | { tipo: "sin proveedor enlazado"; empresa: string; detalle: string }
+  | { tipo: "sin impuesto"; empresa: string; detalle: string }
   | { tipo: "sin precio"; detalle: string }
   | { tipo: "sin cantidad"; detalle: string }
   | { tipo: "moneda desconocida"; detalle: string }
@@ -174,6 +198,21 @@ export function armarOrdenes(
           `Hay que darlo de alta ahí, o revisar su CUIT en el padrón del SdG.`,
       });
     }
+
+    /*
+     * Sin impuesto no se crea la orden, y es a propósito: una orden sin IVA
+     * genera una factura sin IVA, y eso es peor que no tener la orden. El punto
+     * de todo esto es que la factura salga completa desde la orden.
+     */
+    if (empresa.impuestoId === null) {
+      problemas.push({
+        tipo: "sin impuesto",
+        empresa: empresa.nombre,
+        detalle:
+          `No se pudo resolver el IVA Compras 21% de ${empresa.nombre} en Odoo. ` +
+          `Sin impuesto, la factura que se genere desde la orden saldría sin IVA.`,
+      });
+    }
   }
 
   if (problemas.length) return { ok: false, problemas };
@@ -229,12 +268,24 @@ function armarUna(
    * exactamente el total. Puede dar media unidad, y eso es sabido y está
    * documentado en el spec.
    */
-  const impuesto: Pick<LineaDeOrden, "taxes_id"> = contexto.impuestoId
-    ? { taxes_id: [[6, 0, [contexto.impuestoId]]] }
-    : {};
+  /**
+   * Los tres campos que la restricción SQL de Odoo exige en toda línea, más el
+   * impuesto de esta empresa. Van en las dos líneas igual.
+   */
+  const obligatorios = {
+    product_id: contexto.productoGenericoId,
+    product_uom: contexto.uomId,
+    // La línea también exige `date_planned`. Si el RI no tiene fecha de
+    // necesidad, la de la orden: no hay razón para prometer una fecha inventada.
+    date_planned: ri.fechaNecesidad
+      ? `${ri.fechaNecesidad} 00:00:00`
+      : fechaParaOdoo(contexto.ahora),
+    taxes_id: [[6, 0, [empresa.impuestoId!]]] as [[6, 0, number[]]],
+  };
 
   const lineas: LineaDeOrden[] = [
     {
+      ...obligatorios,
       // El código del SdG va adelante cuando existe: es lo que permite reconocer
       // el ítem sin abrir el requerimiento.
       name: ri.codigo ? `[${ri.codigo}] ${ri.descripcion}` : ri.descripcion,
@@ -244,16 +295,15 @@ function armarUna(
         ? // El SdG lo guarda como fracción (0.10) y Odoo lo quiere en porcentaje.
           { discount: redondear(cotizacion.descuento * 100, 2) }
         : {}),
-      ...impuesto,
     },
   ];
 
   if (parte.importe > 0) {
     lineas.push({
+      ...obligatorios,
       name: "Flete",
       product_qty: 1,
       price_unit: parte.importe,
-      ...impuesto,
     });
   }
 
@@ -273,10 +323,12 @@ function armarUna(
     order_line: lineas.map((linea) => [0, 0, linea] as const),
   };
 
-  if (ri.fechaNecesidad) {
-    // Odoo lo espera como datetime; la fecha de necesidad es un día.
-    vals.date_planned = `${ri.fechaNecesidad} 00:00:00`;
-  }
+  /*
+   * La orden **no** lleva `date_planned`: en Odoo 17 el de la cabecera se
+   * calcula a partir de las líneas. La fecha de necesidad va en cada línea, que
+   * además la exige. Mandar un campo calculado es pedirle a Odoo que lo ignore,
+   * o que se queje; lo que se probó en staging fue esto.
+   */
 
   return {
     empresaId: empresa.id,

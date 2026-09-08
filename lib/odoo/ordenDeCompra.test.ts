@@ -15,6 +15,9 @@ import type {
 
 const CONTEXTO: ContextoDeOdoo = {
   monedas: { ARS: 19, USD: 1 },
+  // ART. VARIOS, el genérico que el grupo ya tiene, y "Unidades".
+  productoGenericoId: 6835,
+  uomId: 1,
   ahora: new Date("2026-09-04T12:30:00.000Z"),
 };
 
@@ -24,6 +27,7 @@ const POLCECAL: EmpresaParaOrden = {
   odooCompanyId: 1,
   odooPartnerId: 977,
   pickingTypeId: 1,
+  impuestoId: 4,
 };
 
 const POLYSAN: EmpresaParaOrden = {
@@ -32,6 +36,7 @@ const POLYSAN: EmpresaParaOrden = {
   odooCompanyId: 2,
   odooPartnerId: 2190,
   pickingTypeId: 8,
+  impuestoId: 73,
 };
 
 function ri(extra: Partial<RequerimientoParaOrden> = {}): RequerimientoParaOrden {
@@ -93,7 +98,16 @@ describe("una orden, una empresa", () => {
     if (!r.ok) throw new Error("no armó");
 
     expect(lineas(r.ordenes[0].vals)).toEqual([
-      { name: "Rulemán 6205 2RS", product_qty: 4, price_unit: 1000 },
+      {
+        // Los tres que exige la restricción SQL de Odoo, más el impuesto.
+        product_id: 6835,
+        product_uom: 1,
+        date_planned: "2026-09-04 12:30:00",
+        taxes_id: [[6, 0, [4]]],
+        name: "Rulemán 6205 2RS",
+        product_qty: 4,
+        price_unit: 1000,
+      },
     ]);
   });
 
@@ -125,7 +139,9 @@ describe("una orden, una empresa", () => {
 
     const l = lineas(r.ordenes[0].vals);
     expect(l).toHaveLength(2);
-    expect(l[1]).toEqual({ name: "Flete", product_qty: 1, price_unit: 5000 });
+    expect(l[1]).toMatchObject({ name: "Flete", product_qty: 1, price_unit: 5000 });
+    // El flete también necesita los obligatorios, o la orden entera se rechaza.
+    expect(l[1]).toMatchObject({ product_id: 6835, product_uom: 1, taxes_id: [[6, 0, [4]]] });
   });
 
   it("una cotización en dólares usa la moneda de Odoo, no la de la empresa", () => {
@@ -136,7 +152,7 @@ describe("una orden, una empresa", () => {
     expect(r.ordenes[0].vals.currency_id).toBe(1);
   });
 
-  it("la fecha de necesidad viaja como datetime", () => {
+  it("la fecha de necesidad va en la línea, que es la que la exige", () => {
     const r = armarOrdenes(
       ri({ fechaNecesidad: "2026-09-20" }),
       cotizacion(),
@@ -145,17 +161,30 @@ describe("una orden, una empresa", () => {
     );
     if (!r.ok) throw new Error("no armó");
 
-    expect(r.ordenes[0].vals.date_planned).toBe("2026-09-20 00:00:00");
+    expect(lineas(r.ordenes[0].vals)[0].date_planned).toBe("2026-09-20 00:00:00");
+    // La cabecera NO la lleva: en Odoo 17 se calcula desde las líneas.
+    expect(r.ordenes[0].vals).not.toHaveProperty("date_planned");
   });
 
-  it("el impuesto se manda sólo si se decidió cuál", () => {
-    const sin = armarOrdenes(ri(), cotizacion(), [POLCECAL], CONTEXTO);
-    if (!sin.ok) throw new Error("no armó");
-    expect(lineas(sin.ordenes[0].vals)[0]).not.toHaveProperty("taxes_id");
+  it("cada empresa lleva SU impuesto, no el de la otra", () => {
+    // El mismo "IVA Compras 21%" es el id 4 en Polcecal y el 73 en Polysan.
+    const r = armarOrdenes(
+      ri({ empresaId: null, pagaAmbas: true }),
+      cotizacion(),
+      [POLCECAL, POLYSAN],
+      CONTEXTO
+    );
+    if (!r.ok) throw new Error("no armó");
 
-    const con = armarOrdenes(ri(), cotizacion(), [POLCECAL], { ...CONTEXTO, impuestoId: 42 });
-    if (!con.ok) throw new Error("no armó");
-    expect(lineas(con.ordenes[0].vals)[0].taxes_id).toEqual([[6, 0, [42]]]);
+    expect(lineas(r.ordenes[0].vals)[0].taxes_id).toEqual([[6, 0, [4]]]);
+    expect(lineas(r.ordenes[1].vals)[0].taxes_id).toEqual([[6, 0, [73]]]);
+  });
+
+  it("sin impuesto resuelto no se arma: la factura saldría sin IVA", () => {
+    const r = armarOrdenes(ri(), cotizacion(), [{ ...POLCECAL, impuestoId: null }], CONTEXTO);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.problemas[0].tipo).toBe("sin impuesto");
   });
 });
 
@@ -298,13 +327,13 @@ describe("cuando no se puede armar", () => {
     const r = armarOrdenes(
       ri({ cantidad: null }),
       cotizacion({ precioUnitario: null, cantidad: null, moneda: "EUR" }),
-      [{ ...POLCECAL, odooPartnerId: null }],
+      [{ ...POLCECAL, odooPartnerId: null, impuestoId: null }],
       CONTEXTO
     );
     expect(r.ok).toBe(false);
     if (r.ok) return;
 
-    // Quien lo lee arregla las cuatro cosas de una, no una por intento.
-    expect(r.problemas).toHaveLength(4);
+    // Quien lo lee arregla las cinco cosas de una, no una por intento.
+    expect(r.problemas).toHaveLength(5);
   });
 });
