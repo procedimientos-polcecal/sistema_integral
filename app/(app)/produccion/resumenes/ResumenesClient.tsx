@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { hoyEnArgentina, mesRelativo } from "@/lib/core/fechas";
 import { porcentajeDeRotura } from "@/lib/produccion/planilla";
+import { TURNOS } from "@/lib/produccion/turnos";
 import type { DiaDelMes } from "@/lib/produccion/consultas";
 import type { ProduccionDelProducto } from "@/lib/produccion/produccion";
 import type { Producto } from "@/lib/produccion/types";
@@ -38,6 +39,11 @@ function diaCorto(fecha: string): string {
  * `produccionDelDia`): acá sólo se despliega. La única cuenta que se hace en
  * esta pantalla es `porcentajeDeRotura`, y es la misma función que usa
  * `espejarDia` para escribir la planilla — no una copia.
+ *
+ * Despacho y Rotura son sumas planas, sin los estados que sí tiene Producción:
+ * un día sin ningún parte y un día con parte y cero movimiento dan el mismo
+ * `0`. `d.turnosCargados` es lo único que permite distinguirlos, y por eso
+ * `CeldaDeSuma` y `CeldaDePorcentaje` lo reciben en vez de recalcular nada acá.
  */
 export default function ResumenesClient({ mes, productos, dias }: Props) {
   const mesActual = hoyEnArgentina().slice(0, 7);
@@ -108,10 +114,12 @@ function nombreDeColumna(p: Producto): string {
 }
 
 function Envoltorio({
-  titulo, leyenda, children,
+  titulo, leyenda, nota, children,
 }: {
   titulo: string;
   leyenda?: string;
+  /** Un aviso visible sin pasar el mouse — para cuando el total de abajo no cuenta con todo el mes. */
+  nota?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -119,12 +127,33 @@ function Envoltorio({
       <div>
         <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>
         {leyenda && <p className="text-xs text-slate-500">{leyenda}</p>}
+        {nota && <p className="text-xs font-medium text-amber-700">{nota}</p>}
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">{children}</div>
       </div>
     </div>
   );
+}
+
+/**
+ * Cuántos días del mes no cierran del todo: les falta un turno, o algún
+ * producto quedó `sin_parte_anterior` aunque los dos turnos estén cargados
+ * (la cadena de despeje se corta más atrás). Esos días no entran en
+ * `produccionCalculada`, así que el total del mes los pierde sin dejar
+ * rastro si no se avisa acá.
+ */
+function diasSinCalcular(dias: DiaDelMes[]): number {
+  return dias.filter((d) => {
+    if (d.turnosCargados < TURNOS.length) return true;
+    return Object.values(d.produccion).some((v) => v.estado !== "calculada");
+  }).length;
+}
+
+function fraseDiasFuera(n: number): string {
+  return n === 1
+    ? "1 día de este mes no se pudo calcular (falta un turno o el parte anterior) y no entra en el total."
+    : `${n} días de este mes no se pudieron calcular (falta un turno o el parte anterior) y no entran en el total.`;
 }
 
 function EncabezadoDeProductos({ productos }: { productos: Producto[] }) {
@@ -148,11 +177,13 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
       totales[id] = (totales[id] ?? 0) + v;
     }
   }
+  const excluidos = diasSinCalcular(dias);
 
   return (
     <Envoltorio
       titulo="Producción"
       leyenda="Depósito − depósito anterior + despachado + rotura, por turno. Donde falta el parte anterior o un turno del día, no se inventa un número."
+      nota={excluidos > 0 ? fraseDiasFuera(excluidos) : undefined}
     >
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -174,7 +205,14 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
         </tbody>
         <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
           <tr>
-            <td className="sticky left-0 z-10 bg-slate-50 px-3 py-2">Total del mes</td>
+            <td className="sticky left-0 z-10 bg-slate-50 px-3 py-2">
+              Total del mes
+              {excluidos > 0 && (
+                <span className="ml-1 align-top text-[10px] font-normal text-amber-600" title={fraseDiasFuera(excluidos)}>
+                  *
+                </span>
+              )}
+            </td>
             {productos.map((p) => (
               <td key={p.id} className="px-3 py-2 text-right">
                 {totales[p.id] ?? 0}
@@ -214,6 +252,33 @@ function CeldaProduccion({ estado }: { estado: ProduccionDelProducto | undefined
   return <span className="text-slate-700">{estado.cantidad}</span>;
 }
 
+/**
+ * Una celda de Despacho o Rotura: la suma es plana, sin los estados de
+ * Producción, así que sin `turnosCargados` un día sin ningún parte y un día
+ * con parte y cero movimiento se ven exactamente igual — los dos son "0".
+ */
+function CeldaDeSuma({ valor, turnosCargados }: { valor: number; turnosCargados: number }) {
+  if (turnosCargados === 0) {
+    return (
+      <span className="text-slate-300" title="Este día no tiene ningún parte cargado">
+        —
+      </span>
+    );
+  }
+  if (turnosCargados < TURNOS.length) {
+    return (
+      <span
+        className="inline-flex flex-col items-end leading-tight"
+        title="Falta cargar un turno de este día: la suma es sólo de los que están"
+      >
+        <span className="font-medium text-amber-700">{valor}</span>
+        <span className="text-[10px] text-amber-600">parcial</span>
+      </span>
+    );
+  }
+  return <span className="text-slate-700">{valor}</span>;
+}
+
 /** Despacho: una simple suma por producto, sin estados que desglosar. */
 function TablaDeSumas({
   titulo, leyenda, productos, dias, campo,
@@ -244,8 +309,8 @@ function TablaDeSumas({
                 {diaCorto(d.fecha)}
               </td>
               {productos.map((p) => (
-                <td key={p.id} className="px-3 py-2 text-right text-slate-700">
-                  {campo(d)[p.id] ?? 0}
+                <td key={p.id} className="px-3 py-2 text-right">
+                  <CeldaDeSuma valor={campo(d)[p.id] ?? 0} turnosCargados={d.turnosCargados} />
                 </td>
               ))}
             </tr>
@@ -287,6 +352,18 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
       totalProduccion[id] = (totalProduccion[id] ?? 0) + v;
     }
   }
+  // El denominador del % del mes es `produccionCalculada` sumada día por día,
+  // que ya deja afuera los días que no cerraron — pero el numerador (la
+  // rotura) no distingue eso y suma todo. Un mes con varios días sin calcular
+  // puede mostrar un % inflado sólo porque el denominador perdió días, no
+  // porque haya roto más: se avisa en vez de dejar el número pelado.
+  const excluidos = diasSinCalcular(dias);
+  const notaPorcentaje =
+    excluidos > 0
+      ? excluidos === 1
+        ? "1 día de este mes no entra en la producción del total: el % puede salir más alto que el real."
+        : `${excluidos} días de este mes no entran en la producción del total: el % puede salir más alto que el real.`
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -301,6 +378,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
       <Envoltorio
         titulo="% de rotura"
         leyenda='Rotura sobre producción del día. Cuando hubo rotura y la producción dio cero (o no se pudo calcular), no se muestra "0%": se muestran las unidades rotas.'
+        nota={notaPorcentaje}
       >
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -317,6 +395,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
                     <CeldaDePorcentaje
                       rotura={d.rotura[p.id] ?? 0}
                       produccion={d.produccionCalculada[p.id] ?? 0}
+                      turnosCargados={d.turnosCargados}
                     />
                   </td>
                 ))}
@@ -325,7 +404,14 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
           </tbody>
           <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
             <tr>
-              <td className="sticky left-0 z-10 bg-slate-50 px-3 py-2">Total del mes</td>
+              <td className="sticky left-0 z-10 bg-slate-50 px-3 py-2">
+                Total del mes
+                {excluidos > 0 && (
+                  <span className="ml-1 align-top text-[10px] font-normal text-amber-600" title={notaPorcentaje}>
+                    *
+                  </span>
+                )}
+              </td>
               {productos.map((p) => (
                 <td key={p.id} className="px-3 py-2 text-right">
                   <CeldaDePorcentaje
@@ -342,7 +428,26 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
   );
 }
 
-function CeldaDePorcentaje({ rotura, produccion }: { rotura: number; produccion: number }) {
+/**
+ * `turnosCargados` sólo lo pasan las filas de día: la fila de total del mes
+ * ya tiene su propio aviso (la nota y el `*` de arriba) y no necesita este,
+ * que hablaría de un solo día.
+ */
+function CeldaDePorcentaje({
+  rotura, produccion, turnosCargados,
+}: {
+  rotura: number;
+  produccion: number;
+  turnosCargados?: number;
+}) {
+  if (turnosCargados === 0) {
+    return (
+      <span className="text-slate-300" title="Este día no tiene ningún parte cargado">
+        —
+      </span>
+    );
+  }
+
   const pct = porcentajeDeRotura(rotura, produccion);
 
   if (pct === "") {

@@ -234,10 +234,24 @@ async function resumenInventario(
  */
 async function resumenProduccion(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
   const desde = sumarDias(hoyStr, -6);
-  const [{ data: partes }, { count: sinLlegar }] = await Promise.all([
+  const [{ data: partes, error }, { count: sinLlegar }] = await Promise.all([
     supabase.from("produccion_partes").select("id").gte("fecha", desde).lte("fecha", hoyStr),
     supabase.from("produccion_partes").select("id", { count: "exact", head: true }).not("sheets_pendiente", "is", null),
   ]);
+  // Sin chequear el error, una consulta fallida deja `partes` en null, `(partes
+  // ?? []).length` en 0, y `partesFaltantes` sale en 14 — el peor caso posible
+  // informado como si fuera un dato real. No se puede lanzar acá: esta función
+  // corre adentro del mismo `Promise.all` que junta los seis resúmenes del
+  // Inicio, y el `.catch` de `InicioClient` limpia la pantalla entera ante
+  // cualquier rechazo — un error de Producción apagaría también RRHH,
+  // Mantenimiento, Compras e Inventario, que sí contestaron bien. Se devuelve
+  // `null`: la tarjeta de Producción queda sin datos, el mismo trato que ya
+  // tiene un módulo al que el usuario no tiene acceso, y el resto del Inicio
+  // no se entera.
+  if (error) {
+    console.error("resumenProduccion: no se pudo traer produccion_partes:", error.message);
+    return null;
+  }
 
   return {
     partesFaltantes: Math.max(0, 14 - (partes ?? []).length),

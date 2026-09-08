@@ -41,6 +41,12 @@ function fechaLegible(fecha: string): string {
  *   - sin_parte_anterior      → "—" con el motivo al lado, no oculto
  *   - dia_incompleto          → "—" sólo en la columna del día
  *
+ * Despachado y las dos roturas del día son la suma de los dos turnos, y esa
+ * suma es real aunque falte uno: el turno ocurrió, sólo falta transcribirlo.
+ * Por eso, cuando falta un turno, esas tres columnas se marcan "parcial" en
+ * vez de mostrar el total como si fuera el día entero — el mismo motivo por
+ * el que "Producción del día" ya usa `dia_incompleto`.
+ *
  * Y una producción negativa se muestra en rojo con la cuenta desglosada: es
  * un error de carga y no se recorta a cero, porque recortarlo lo esconde.
  *
@@ -57,6 +63,9 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
   const hoy = hoyEnArgentina();
 
   const faltantes = turnos.filter((t) => !t.cargado);
+  // Con algún turno sin cargar, despachado y rotura del día son la suma de lo
+  // que ya está, no el día entero: se marcan como parciales en la tabla.
+  const diaIncompleto = faltantes.length > 0;
   const sinAnterior = turnos.filter((t) => t.cargado && t.faltaAnterior);
   // Los dos partes de un día se anotan o se limpian juntos (la ruta de
   // reintentar hace un solo `update` con los dos ids), así que alcanza con
@@ -212,6 +221,7 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
                       t1={t1}
                       t2={t2}
                       delDia={delDia}
+                      diaIncompleto={diaIncompleto}
                     />
                   );
                 })}
@@ -225,13 +235,14 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
 }
 
 function FamilyGroup({
-  etiqueta, productos, t1, t2, delDia,
+  etiqueta, productos, t1, t2, delDia, diaIncompleto,
 }: {
   etiqueta: string;
   productos: Producto[];
   t1: TurnoDelDia;
   t2: TurnoDelDia;
   delDia: ProduccionPorProducto;
+  diaIncompleto: boolean;
 }) {
   return (
     <>
@@ -241,19 +252,20 @@ function FamilyGroup({
         </td>
       </tr>
       {productos.map((p) => (
-        <FilaDeProducto key={p.id} producto={p} t1={t1} t2={t2} delDia={delDia} />
+        <FilaDeProducto key={p.id} producto={p} t1={t1} t2={t2} delDia={delDia} diaIncompleto={diaIncompleto} />
       ))}
     </>
   );
 }
 
 function FilaDeProducto({
-  producto, t1, t2, delDia,
+  producto, t1, t2, delDia, diaIncompleto,
 }: {
   producto: Producto;
   t1: TurnoDelDia;
   t2: TurnoDelDia;
   delDia: ProduccionPorProducto;
+  diaIncompleto: boolean;
 }) {
   return (
     <tr className="hover:bg-slate-50">
@@ -267,20 +279,36 @@ function FilaDeProducto({
       <td className="px-3 py-2 text-right">
         <CeldaDelDia productoId={producto.id} delDia={delDia} t1={t1} t2={t2} />
       </td>
-      <td className="px-3 py-2 text-right text-slate-600">
-        {sumaDelDia(t1, t2, (t) => t.despachado, producto.id)}
+      <td className="px-3 py-2 text-right">
+        <CeldaSumaDelDia
+          valor={sumaDelDia(t1, t2, (t) => t.despachado, producto.id)}
+          incompleto={diaIncompleto}
+        />
       </td>
-      <td className="px-3 py-2 text-right text-slate-600">
-        {sumaDelDia(t1, t2, (t) => t.roturaBolsa, producto.id)}
+      <td className="px-3 py-2 text-right">
+        <CeldaSumaDelDia
+          valor={sumaDelDia(t1, t2, (t) => t.roturaBolsa, producto.id)}
+          incompleto={diaIncompleto}
+        />
       </td>
-      <td className="px-3 py-2 text-right text-slate-600">
-        {sumaDelDia(t1, t2, (t) => t.roturaBolson, producto.id)}
+      <td className="px-3 py-2 text-right">
+        <CeldaSumaDelDia
+          valor={sumaDelDia(t1, t2, (t) => t.roturaBolson, producto.id)}
+          incompleto={diaIncompleto}
+        />
       </td>
     </tr>
   );
 }
 
-/** Suma un campo de los totales de despacho de los dos turnos. Un turno sin cargar no aporta nada, no es "desconocido": todavía no salió ningún camión de ahí. */
+/**
+ * Suma un campo de los totales de despacho de los dos turnos.
+ *
+ * Un turno sin cargar no aporta a la suma, pero eso no la vuelve el total del
+ * día: el turno ocurrió, lo que falta es la transcripción. La cuenta en sí
+ * sigue siendo la de lo que ya está cargado — es `CeldaSumaDelDia` la que la
+ * marca como parcial cuando corresponde, no esta función.
+ */
 function sumaDelDia(
   t1: TurnoDelDia,
   t2: TurnoDelDia,
@@ -289,6 +317,25 @@ function sumaDelDia(
 ): number {
   const de = (t: TurnoDelDia) => (t.totales ? (campo(t.totales)[productoId] ?? 0) : 0);
   return de(t1) + de(t2);
+}
+
+/**
+ * Despachado o rotura del día. Cuando falta un turno, el número sigue siendo
+ * real —es lo que ya se cargó— pero no es el día entero, y se marca "parcial"
+ * con el mismo criterio de color que usa "sin producción" en Resúmenes: no
+ * hace falta pasar el mouse para notarlo.
+ */
+function CeldaSumaDelDia({ valor, incompleto }: { valor: number; incompleto: boolean }) {
+  if (!incompleto) return <span className="text-slate-600">{valor}</span>;
+  return (
+    <span
+      className="inline-flex flex-col items-end leading-tight"
+      title="Falta cargar un turno de este día: esta suma es sólo de los turnos ya cargados"
+    >
+      <span className="font-medium text-amber-700">{valor}</span>
+      <span className="text-[10px] text-amber-600">parcial</span>
+    </span>
+  );
 }
 
 /**

@@ -215,6 +215,16 @@ export interface DiaDelMes {
   produccionCalculada: Record<string, number>;
   despacho: Record<string, number>;
   rotura: Record<string, number>;
+  /**
+   * Cuántos de los dos turnos del día tienen parte cargado (0, 1 o 2).
+   *
+   * `despacho` y `rotura` son sumas planas: un día sin ningún parte y un día
+   * con parte y cero despachos dan exactamente el mismo `{}`/0, y sin esto la
+   * pantalla no tiene forma de distinguirlos aunque quisiera. `produccion` no
+   * lo necesita para eso — ya tiene sus propios estados —, pero `despacho` y
+   * `rotura` no.
+   */
+  turnosCargados: number;
 }
 
 export interface MesArmado {
@@ -253,6 +263,14 @@ export async function armarElMes(
   // producto ya desactivado.
   const productos = await traerProductos(db, { soloActivos: false });
 
+  // Las tres consultas de acá abajo son el primer lugar del módulo que cruza
+  // de verdad el corte de 1000 de PostgREST (un mes completo son ~1.054 filas
+  // de depósito y hasta ~1.900 de despachos), así que van por `range()` en
+  // tandas — y paginar con `range()` sin un `.order()` estable puede repetir o
+  // saltear filas entre tandas si el motor no devuelve siempre el mismo orden.
+  // El síntoma sería un despachado del mes distinto al del día, sin ningún
+  // error. Ordenar por la clave primaria alcanza: no importa en qué orden
+  // vuelvan las filas, sólo que sea el mismo en cada tanda.
   const partes = await traerTodo<{ id: string; fecha: string; turno: ClaveDeParte["turno"] }>(
     (desde, hasta) =>
       db
@@ -260,6 +278,7 @@ export async function armarElMes(
         .select("id, fecha, turno")
         .gte("fecha", primerDia)
         .lte("fecha", ultimoDia)
+        .order("id")
         .range(desde, hasta)
   );
 
@@ -278,6 +297,8 @@ export async function armarElMes(
               .from("produccion_deposito")
               .select("parte_id, producto_id, cantidad")
               .in("parte_id", ids)
+              .order("parte_id")
+              .order("producto_id")
               .range(desde, hasta)
         );
 
@@ -291,6 +312,7 @@ export async function armarElMes(
               "id, parte_id, orden, equipo_raw, cliente_raw, producto_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
             )
             .in("parte_id", ids)
+            .order("id")
             .range(desde, hasta)
         );
 
@@ -336,6 +358,7 @@ export async function armarElMes(
     const despacho: Record<string, number> = {};
     const rotura: Record<string, number> = {};
     const porTurno: (ProduccionPorProducto | null)[] = [];
+    let turnosCargados = 0;
 
     for (const turno of TURNOS) {
       const clave: ClaveDeParte = { fecha, turno };
@@ -344,6 +367,7 @@ export async function armarElMes(
         porTurno.push(null);
         continue;
       }
+      turnosCargados++;
 
       const totales = totalesDeDespacho(despachosPorParte.get(parteId) ?? []);
       const roturas = roturaTotal(totales);
@@ -378,6 +402,7 @@ export async function armarElMes(
       produccionCalculada: soloLoCalculado(produccion),
       despacho,
       rotura,
+      turnosCargados,
     });
   }
 
