@@ -64,6 +64,8 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_PRODUCCION_TAB_PROD` | Pestaña del resumen de producción | Por defecto `Resumen Producción` |
 | `GOOGLE_SHEETS_PRODUCCION_TAB_DESP` | Pestaña del resumen de despacho | Por defecto `Resumen Despacho` |
 | `GOOGLE_SHEETS_PRODUCCION_TAB_ROT` | Pestaña del resumen de rotura | Por defecto `Resumen Rotura` |
+| `GOOGLE_SHEETS_DESPACHO_ID` | La planilla de Despacho, `Órdenes de Carga`: `1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`. Como en Producción, acá **manda el sistema** y esto es un espejo de una sola vía — sin la variable el espejo no escribe y cada orden queda con `sheets_pendiente` | El tramo entre `/d/` y `/edit` de la URL |
+| `GOOGLE_SHEETS_DESPACHO_TAB` | La pestaña de las órdenes de carga | Por defecto `Órdenes de Carga` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 

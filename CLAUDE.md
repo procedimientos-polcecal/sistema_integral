@@ -4,8 +4,8 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://sistema-integral-one.vercel.app
 
-Seis módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
-**Compras**, **Inventario** y **Producción**. Cada uno vive en
+Siete módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+**Compras**, **Inventario**, **Producción** y **Despacho**. Cada uno vive en
 `app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
 
 Todo se escribe en **castellano**: nombres, comentarios, mensajes de pantalla y
@@ -23,6 +23,7 @@ código.
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
+| Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
