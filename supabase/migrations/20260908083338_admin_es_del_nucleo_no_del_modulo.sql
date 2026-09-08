@@ -36,13 +36,44 @@
 -- las policies que ya son del núcleo por diseño propio (ver sus comentarios):
 --   - 002_nucleo_rls.sql: empresas, sectores, usuarios, usuario_modulos,
 --     empleados — la misma pantalla de administración.
---   - proveedores (20260903091434): catálogo del núcleo, igual que empleados.
+--   - proveedores_odoo (20260903091434): el vínculo con Odoo por empresa,
+--     catálogo del núcleo, igual que empleados.
 --   - compras_odoo_ordenes (20260904084145): dice "admin del núcleo" en su
 --     propio comentario.
 --   - usuario_areas_compras (20260904103615): dice "el administrador del
 --     sistema, en la misma pantalla donde ya carga los permisos de módulo".
 -- Esas tablas son configuración transversal, no datos de un módulo — ahí
 -- `admin` sí debe poder escribir sin necesitar un grant.
+--
+-- `proveedores` (a secas, no `proveedores_odoo`) NO está en esa lista: su
+-- policy de escritura (016_nucleo_ajustes_compras.sql, `proveedores_write`)
+-- usa `puede_editar_compras()`, y esa función **sí** la redefine esta
+-- migración. Después de correrla, escribir `proveedores` por RLS exige un
+-- grant `edicion`/`admin` en compras — un `admin` sin ese grant deja de poder.
+-- Hoy no tiene impacto de hecho: todas las escrituras de `proveedores` en el
+-- código pasan por `createAdminClient()` (comparativas/vincular, compras/
+-- proveedores, compras/proveedores/importar, requerimientos/.../comparativa,
+-- inventario/movimientos, mantenimiento/proveedores, lib/compras/sheets.ts),
+-- que no pasa por RLS. Pero `proveedores` es un catálogo que comparten los
+-- cinco módulos, así que vale decirlo: no es de las tablas que quedan
+-- intactas.
+--
+-- Quedan además, a propósito, tres usos de `es_admin()` que esta migración no
+-- toca y que no entran en la lista de arriba porque no son del núcleo — son
+-- casos de módulo donde ya se había decidido que "admin de sistema" tampoco
+-- alcanza:
+--   - 018_compras_rls.sql:68 (`compras_req_delete`): sigue permitiendo borrar
+--     un requerimiento a cualquier `es_admin()`. Queda una asimetría a
+--     sabiendas: un `admin` sin acceso a compras va a poder borrar un
+--     requerimiento pero no editarlo (`puede_editar_compras()`, que esta
+--     migración sí cambia).
+--   - 028_compras_aprobar_por_lista.sql (`compras_aprobadores_write`): a
+--     propósito no incluye a `es_admin()` como bypass del nivel de
+--     módulo — administrar la lista de aprobadores es distinto de aprobar, y
+--     la 028 ya lo dejó así explícitamente.
+--   - 20260904140041_os_aprobadores.sql (`os_aprobadores_write`): la misma
+--     idea que la anterior, pero en Mantenimiento — se nombra acá porque, al
+--     vivir en otro módulo, es fácil pasarla por alto al leer esta lista.
 --
 -- QUÉ CAMBIA. Las funciones de acceso **de módulo** —tiene_acceso_<modulo>(),
 -- puede_editar_<modulo>(), es_admin_<modulo>()— pasan de `es_admin()` a un
