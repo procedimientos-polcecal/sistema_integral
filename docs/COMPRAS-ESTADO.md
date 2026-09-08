@@ -339,6 +339,23 @@ vez del lado del servidor—. Ahora la fuente es `useSearchParams`, que lee el
 restaurado al volver con el botón de atrás, que era el caso por el que se
 miraba `window`.
 
+**La cuota de lectura de Sheets es por minuto y por USUARIO, no por proyecto.**
+Son 60 pedidos, y abrir una comparativa son dos —la cabecera y los valores—, o
+sea 25 archivos por minuto y nada más. Traer las 167 comparativas pendientes con
+medio segundo de pausa hizo que Google cortara 62 de ellas con 429, y el mensaje
+que quedaba anotado era "no se pudo leer la planilla": otra vez un problema de
+cuota disfrazado de problema de permisos. Con 2,4s por archivo y reintento con
+espera pasan todas. El 503 —"the service is currently unavailable"— también se
+arregla esperando; el 403 y un encabezado que no corresponde, no: reintentarlos
+es gastar cuota para volver a fallar.
+
+**El borrado y reinserción de una comparativa se llevaba cuál estaba elegido**,
+y elegir un presupuesto ES aprobar la compra. La ruta de un RI lo aprendió el
+27/08/2026 y guarda la elección por fila antes de reemplazar; la vinculación en
+tanda había quedado sin eso, así que un pedido aprobado podía terminar con la
+comparativa entera y ninguna marca de sobre qué se aprobó. Corregido el
+08/09/2026 en la ruta y en el script.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

@@ -332,8 +332,23 @@ export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null
     precio_unitario: unitario,
     cantidad: numero(en("cantidad")),
     costo_envio: numero(en("envio")),
-    descuento: numero(en("descuento")),
-    iva: numero(en("iva")),
+    // El IVA y el descuento vacíos son CERO, no null.
+    //
+    // Dos razones, y las dos importan. La primera es que las columnas son `not
+    // null`: mandar null hace fallar el insert de la fila entera —le pasó al RI
+    // 250 al traer el histórico— y el error habla de una constraint, no de una
+    // celda vacía. La segunda es cuánto vale la celda vacía: la fórmula de la
+    // planilla nombra esas columnas aunque estén vacías justamente porque no
+    // multiplican, o sea que el total que la planilla MUESTRA para esa fila no
+    // tiene IVA. Guardar el 21% por defecto —que es lo correcto en el
+    // formulario de la app, donde vacío significa "no lo escribí"— haría que el
+    // sistema calcule un total 21% más alto que el que se ve en la planilla, y
+    // en una comparativa donde gana el más barato eso cambia quién gana.
+    //
+    // Vale sólo para las filas que se LEEN de la planilla: el default 0.21 de la
+    // base sigue siendo el de las que se cargan acá.
+    descuento: numero(en("descuento")) ?? 0,
+    iva: numero(en("iva")) ?? 0,
     precio_hasta: fechaISO(en("precio_hasta")),
     plazo_pago_dias: diasDePlazo(en("plazos")),
     condiciones_pago: texto(en("condiciones_pago")),

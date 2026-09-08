@@ -188,6 +188,31 @@ describe("parsear una fila de la planilla", () => {
     if (!r.ok) throw new Error("encabezado inválido");
     expect(parsearFila(["1850", "", "", "", "", ""], r.idx)).toBeNull();
   });
+
+  it("el IVA y el descuento vacios son cero, no null", () => {
+    // Las columnas son not null: con null se cae el insert de la fila entera y
+    // el error habla de una constraint, no de una celda vacia. Le paso al RI
+    // 250 al traer el historico.
+    //
+    // Y cero es lo que vale la celda vacia en la planilla: su formula nombra
+    // esas columnas aunque esten vacias porque no multiplican, asi que el total
+    // que la planilla muestra no tiene IVA. Guardar 0.21 —correcto en el
+    // formulario de la app, donde vacio es "no lo escribi"— daria un total 21%
+    // mas alto que el que se ve alla, y en una comparativa donde gana el mas
+    // barato eso cambia quien gana.
+    const r = mapearEncabezados(ENCABEZADO);
+    if (!r.ok) throw new Error("encabezado inválido");
+    const fila = [
+      "1850", "1/8/2026", "Mantenimiento", "Filtro", "Repuestos SA",
+      "", "", "1000", "1", "", "", "", "", "", "", "", "", "", "",
+    ];
+    const c = parsearFila(fila, r.idx);
+    expect(c).not.toBeNull();
+    expect(c?.iva).toBe(0);
+    expect(c?.descuento).toBe(0);
+    // Y el total sale el del precio, sin sumarle un IVA que la planilla no sumó.
+    expect(totalCotizacion(c!)).toBe(1000);
+  });
 });
 
 describe("fila para escribir en la planilla", () => {

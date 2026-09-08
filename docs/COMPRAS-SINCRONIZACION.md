@@ -156,6 +156,15 @@ para el histórico. Un archivo que ya se abrió no vuelve a leerse —se sabe po
 de verdad. (Antes no: con las filas pedidas el filtro dejaba pasar todos los
 archivos y cada tanda releía los mismos veinte.)
 
+Para drenar el histórico de una vez, sin apretar once veces, está
+`scripts/traer-comparativas.mts`: hace lo mismo que el botón pero sin límite de
+request, y va con dry-run como el resto de las operaciones masivas del módulo.
+Llama a las mismas funciones de `lib/` que la ruta —el parseo y la elección de
+filas no se reimplementan— y **pide de a un archivo cada 2,4 segundos**: la
+cuota de lectura de Sheets es de 60 pedidos por minuto **y por usuario**, cada
+archivo son dos pedidos, y con medio segundo de pausa Google cortó 62 de 167
+archivos con un 429 que en pantalla se lee como "no se pudo leer la planilla".
+
 ### La columna A es el vínculo
 
 Los nombres de los archivos son genéricos y a veces no corresponden a lo que

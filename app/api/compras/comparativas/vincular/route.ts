@@ -196,13 +196,32 @@ export async function POST(request: Request) {
       res.presupuestos += nuevas.length;
 
       if (!dryRun) {
+        // Qué presupuesto estaba elegido, para no perderlo al reemplazar.
+        //
+        // Elegir uno ES aprobar la compra, así que borrarlos y reinsertarlos sin
+        // la marca deja la compra aprobada sin decir sobre qué. La fila de la
+        // planilla es lo que identifica al presupuesto entre una lectura y la
+        // siguiente. Esto ya se había aprendido en la ruta de un RI —está en
+        // COMPRAS-ESTADO— y acá había quedado sin hacer.
+        const { data: previas } = await admin
+          .from("compras_cotizaciones")
+          .select("drive_fila, elegida")
+          .eq("requerimiento_id", ri.id)
+          .eq("origen", "drive");
+
+        const elegidas = new Set(
+          (previas ?? []).filter((p) => p.elegida).map((p) => p.drive_fila as number)
+        );
+
         await admin
           .from("compras_cotizaciones")
           .delete()
           .eq("requerimiento_id", ri.id)
           .eq("origen", "drive");
 
-        const { error } = await admin.from("compras_cotizaciones").insert(nuevas);
+        const { error } = await admin.from("compras_cotizaciones").insert(
+          nuevas.map((n) => ({ ...n, elegida: elegidas.has(n.drive_fila as number) }))
+        );
         if (error) res.problemas.push(`RI ${ri.nro_ri}: ${error.message}`);
       }
     }
