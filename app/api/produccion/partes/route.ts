@@ -8,6 +8,12 @@ import { puedeEditarProduccion } from "@/lib/produccion/auth";
 import { esTurno } from "@/lib/produccion/turnos";
 import { armarElDia } from "@/lib/produccion/consultas";
 import { espejarDia } from "@/lib/produccion/espejo";
+import {
+  interpretarCantidadDeDeposito,
+  interpretarCantidadOpcional,
+  interpretarRotura,
+  type ResultadoCantidad,
+} from "@/lib/produccion/cantidades";
 
 /**
  * Guardar el parte de un turno, y exportar el día a la planilla.
@@ -74,7 +80,6 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const texto = (v: unknown) => String(v ?? "").trim() || null;
-  const numero = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
 
   const deposito = Array.isArray(b?.deposito) ? b.deposito : [];
   const renglones = Array.isArray(b?.despachos) ? b.despachos : [];
@@ -137,6 +142,59 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+  }
+
+  // ── 0b. Interpretar las cantidades antes de escribir nada ──
+  // Mismo motivo que el paso 0: si una cantidad no se puede leer, la base no
+  // se tiene que haber tocado. `lib/produccion/cantidades.ts` decide qué es
+  // un error y qué es un vacío legítimo — acá sólo se junta el resultado.
+  //
+  // Se acumulan **todos** los errores en vez de cortar en el primero: quien
+  // transcribe tiene 17 productos y hasta 20 renglones de despacho enfrente,
+  // y corregir de a uno sería un ida y vuelta por renglón. El valor puesto en
+  // el arreglo cuando hay error (0 o null) no se usa nunca: en cuanto
+  // `erroresDeCantidades` tiene algo, la función devuelve antes de llegar al
+  // `insert`.
+  const erroresDeCantidades: string[] = [];
+
+  function leer<T>(
+    etiqueta: string,
+    renglon: number,
+    campo: string,
+    r: ResultadoCantidad<T>,
+    porDefecto: T
+  ): T {
+    if (r.ok) return r.valor;
+    erroresDeCantidades.push(`${etiqueta}, renglón ${renglon + 1}, ${campo}: ${r.error}`);
+    return porDefecto;
+  }
+
+  const cantidadesDeDeposito: number[] = deposito.map((d: { cantidad?: unknown }, i: number) =>
+    leer("Depósito", i, "cantidad", interpretarCantidadDeDeposito(d?.cantidad), 0)
+  );
+
+  const kilosDeDespacho: (number | null)[] = [];
+  const bultosDeDespacho: (number | null)[] = [];
+  const palletsDeDespacho: (number | null)[] = [];
+  const roturaBolsaDeDespacho: number[] = [];
+  const roturaBolsonDeDespacho: number[] = [];
+
+  renglones.forEach((d: Record<string, unknown>, i: number) => {
+    kilosDeDespacho.push(leer("Despacho", i, "kilos", interpretarCantidadOpcional(d?.kilos), null));
+    bultosDeDespacho.push(leer("Despacho", i, "bultos", interpretarCantidadOpcional(d?.bultos), null));
+    palletsDeDespacho.push(
+      leer("Despacho", i, "cantidad de pallets", interpretarCantidadOpcional(d?.pallets_cantidad), null)
+    );
+    roturaBolsaDeDespacho.push(
+      leer("Despacho", i, "rotura de bolsa", interpretarRotura(d?.rotura_bolsa), 0)
+    );
+    roturaBolsonDeDespacho.push(
+      leer("Despacho", i, "rotura de bolsón", interpretarRotura(d?.rotura_bolson), 0)
+    );
+  });
+
+  if (erroresDeCantidades.length > 0) {
+    return NextResponse.json({ error: erroresDeCantidades.join(" — ") }, { status: 400 });
   }
 
   // ── 1. El capataz ──────────────────────────────────────────
@@ -330,13 +388,15 @@ export async function POST(request: Request) {
 
   if (deposito.length > 0) {
     const { error } = await admin.from("produccion_deposito").insert(
-      deposito.map((d: { cantidad: unknown }, i: number) => ({
+      deposito.map((_d: unknown, i: number) => ({
         parte_id: parteId,
         // El id ya validado y normalizado del paso 0, no el crudo del cuerpo:
         // son el mismo valor salvo espacios, pero mantener dos copias del
-        // mismo dato es la clase de cosa que un día deja de serlo.
+        // mismo dato es la clase de cosa que un día deja de serlo. La
+        // cantidad, igual: la ya interpretada del paso 0b, no un `Number()`
+        // recalculado acá que vuelva a coercer en silencio.
         producto_id: idsDeDeposito[i] as string,
-        cantidad: Number(d.cantidad) || 0,
+        cantidad: cantidadesDeDeposito[i],
       }))
     );
     if (error) return await fallaConParteYaEscrito(400, error.message);
@@ -368,13 +428,16 @@ export async function POST(request: Request) {
         // `texto(d.producto_id)` recalculado acá.
         producto_id: idsDeDespacho[i],
         producto_raw: texto(d.producto_raw),
-        kilos: numero(d.kilos),
-        bultos: numero(d.bultos),
+        // Las cinco, ya interpretadas en el paso 0b: nada de esto se
+        // recalcula acá con un `Number()` que vuelva a convertir un error de
+        // tipeo en un cero o en un null en silencio.
+        kilos: kilosDeDespacho[i],
+        bultos: bultosDeDespacho[i],
         envase_raw: texto(d.envase_raw),
-        pallets_cantidad: numero(d.pallets_cantidad),
+        pallets_cantidad: palletsDeDespacho[i],
         pallets_tipo: texto(d.pallets_tipo),
-        rotura_bolsa: Number(d.rotura_bolsa) || 0,
-        rotura_bolson: Number(d.rotura_bolson) || 0,
+        rotura_bolsa: roturaBolsaDeDespacho[i],
+        rotura_bolson: roturaBolsonDeDespacho[i],
       }))
     );
     if (error) return await fallaConParteYaEscrito(400, error.message);
