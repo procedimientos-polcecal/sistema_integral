@@ -68,16 +68,16 @@ export default function OrdenesClient({
   /**
    * Con qué filtros arranca la pantalla.
    *
-   * Al volver con el botón de atrás desde una orden, el árbol que restaura Next
-   * es el que se renderizó al entrar —con la URL vieja—, así que `params`
-   * llegaría sin filtros aunque la barra de direcciones los tenga. Por eso,
-   * cuando hay navegador, la fuente es la URL de verdad. Es la misma nota que
-   * dejó el listado de requerimientos.
+   * Sale de `useSearchParams` y no de `window.location.search`: al llegar desde
+   * un enlace —el tablero mandando a "las atrasadas"— Next escribe la barra de
+   * direcciones en un `useInsertionEffect`, después de que esta pantalla se
+   * renderizó, así que ahí `window` todavía tiene la URL de donde se venía y los
+   * filtros arrancaban vacíos. `useSearchParams` lee el `canonicalUrl` del
+   * router, que ya es el nuevo, y al volver con el botón de atrás es el
+   * restaurado: sirve para los dos. Es la misma nota que dejó el listado de
+   * requerimientos.
    */
-  const laUrlDeVerdad = () =>
-    new URLSearchParams(
-      typeof window === "undefined" ? params.toString() : window.location.search
-    );
+  const laUrlDeVerdad = () => new URLSearchParams(params.toString());
   const [arranque] = useState<FiltrosOt>(() =>
     leerFiltrosDeLaUrl(laUrlDeVerdad(), catalogos)
   );

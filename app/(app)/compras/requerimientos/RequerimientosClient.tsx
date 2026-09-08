@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmProvider";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
@@ -87,20 +88,30 @@ export default function RequerimientosClient({
   /**
    * Con qué filtros arranca la pantalla.
    *
-   * En la primera carga es lo que validó el servidor. Pero al volver con el
-   * botón de atrás desde un requerimiento, el árbol que restaura Next es el que
-   * se renderizó al entrar —con la URL vieja, sin filtros—, así que
-   * `filtrosIniciales` llegaría vacío aunque la barra de direcciones tenga los
-   * filtros puestos. Por eso, cuando hay navegador, la fuente es la URL de
-   * verdad y no la prop. En el servidor `window` no existe y no hay diferencia:
-   * los dos leen el mismo query string, así que la hidratación coincide.
+   * La fuente es `useSearchParams` y NO `window.location.search`, aunque el
+   * segundo parezca "la URL de verdad". Al llegar desde un enlace —el indicador
+   * del tablero, que es todo el punto de `?estado_compra=…`— Next actualiza la
+   * barra de direcciones en un `useInsertionEffect`, o sea DESPUÉS de que esta
+   * pantalla se renderizó: mientras corre este inicializador, `window.location`
+   * todavía es la del tablero. Los filtros arrancaban vacíos y, peor, el efecto
+   * de más abajo reescribía la URL sin ellos: el enlace del tablero llegaba
+   * limpio y la tabla salía entera.
+   *
+   * `useSearchParams` lee el `canonicalUrl` del router, que en ese momento ya es
+   * el nuevo, y al volver con el botón de atrás también es el restaurado —el
+   * caso por el que esto miraba `window`: ahí la prop del servidor es la del
+   * árbol viejo—. Sirve para los dos, que es lo que ninguna de las otras dos
+   * fuentes hacía sola.
    */
+  const params = useSearchParams();
   const [arranque] = useState<{ filtros: FiltrosCompras; pagina: number }>(() => {
-    if (typeof window === "undefined") {
+    const query = new URLSearchParams(params.toString());
+    // Sin filtros en la URL vale lo que validó el servidor: es el mismo query
+    // string, y así la hidratación coincide.
+    if ([...query.keys()].length === 0) {
       return { filtros: filtrosIniciales, pagina: paginaInicial };
     }
-    const params = new URLSearchParams(window.location.search);
-    return { filtros: leerFiltrosDeLaUrl(params, catalogos), pagina: paginaDeArranque(params) };
+    return { filtros: leerFiltrosDeLaUrl(query, catalogos), pagina: paginaDeArranque(query) };
   });
 
   // La página también sale de la URL: volver a la tabla filtrada pero en la

@@ -321,6 +321,24 @@ funcionaba: 1.473 RI con comparativa en la planilla y 684 enlazados en el
 sistema. Ahora un archivo cuyos RI están todos traídos no vuelve a leerse, y la
 regla vive en `archivosPorHacer` con tests.
 
+**El indicador del tablero contaba una cosa y el listado mostraba otra.**
+`compras_resumen_por_estado` sólo cuenta lo aprobado por gerencia, y el enlace
+del indicador filtraba nada más que por `estado_compra`: tocar un 19 abría una
+tabla de 34 sin que nada explicara la diferencia. Ahora el enlace lleva los dos
+filtros, en el mismo orden en que el listado los reescribe.
+
+**`window.location` todavía no cambió cuando la pantalla nueva se renderiza.**
+Los dos listados leían sus filtros de `window.location.search` en el
+inicializador del estado, y al llegar desde un enlace eso es la URL de **donde
+se venía**: Next actualiza la barra de direcciones en un `useInsertionEffect`,
+después del render. Los filtros arrancaban vacíos y el efecto que sigue a los
+filtros reescribía la URL sin ellos, así que el enlace del tablero llegaba
+limpio y la tabla salía entera —el mismo síntoma que ya se había arreglado una
+vez del lado del servidor—. Ahora la fuente es `useSearchParams`, que lee el
+`canonicalUrl` del router: ése ya es el nuevo al llegar por un enlace y es el
+restaurado al volver con el botón de atrás, que era el caso por el que se
+miraba `window`.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

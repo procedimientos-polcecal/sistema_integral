@@ -43,10 +43,20 @@ export const ETAPAS_DEL_TABLERO: EstadoCompra[] = [...COLUMNAS_TABLERO, "EN_ESPE
  * Pero la bandeja es sólo de quienes aprueban —a los demás los rebota a
  * /compras—, así que para el resto el indicador lleva al listado filtrado. Un
  * botón que devuelve al lugar de donde saliste se lee como que está roto.
+ *
+ * El filtro lleva también la aprobación, porque la cifra la cuenta así: la
+ * vista `compras_resumen_por_estado` sólo toma lo aprobado por gerencia. Sin
+ * eso, tocar un indicador de 19 abría una tabla de 34, y la diferencia —los que
+ * están en esa etapa sin haber pasado por aprobación— no se explicaba en
+ * ninguna parte.
+ *
+ * El orden de los parámetros no es libre: es el de `escribirFiltrosEnLaUrl`,
+ * que es lo que el listado vuelve a escribir en la barra de direcciones. Si acá
+ * fueran al revés, entrar cambiaría la URL sin que nadie tocara un filtro.
  */
 export function destinoDeLaEtapa(estado: EstadoCompra, puedeAprobar: boolean): string {
   if (estado === "PARA_COMPRAR" && puedeAprobar) return "/compras/para-aprobar";
-  return `/compras/requerimientos?estado_compra=${estado}`;
+  return `/compras/requerimientos?estado_aprobacion=APROBADA&estado_compra=${estado}`;
 }
 
 export interface Indicador {
