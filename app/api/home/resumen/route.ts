@@ -5,6 +5,7 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { traerTodo } from "@/lib/core/paginado";
+import { sumarDias } from "@/lib/core/fechas";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -22,12 +23,13 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
 
-  const [rrhh, remises, mantenimiento, compras, inventario] = await Promise.all([
+  const [rrhh, remises, mantenimiento, compras, inventario, produccion] = await Promise.all([
     modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
     modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
     modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
     modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
     modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
+    modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
   ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -73,7 +75,7 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, notificaciones });
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -205,6 +207,40 @@ async function resumenInventario(
   return {
     faltantes: faltantes ?? 0,
     movimientosHoy: movimientosHoy ?? 0,
+    sinLlegarALaPlanilla: sinLlegar ?? 0,
+  };
+}
+
+/**
+ * Lo que Producción tiene sin cargar.
+ *
+ * Un parte que falta no es sólo un dato ausente: la producción del turno
+ * siguiente se despeja contra el depósito del parte anterior, así que no se
+ * puede calcular hasta que esté. Son 2 turnos por día — `TURNOS` en
+ * `lib/produccion/turnos.ts` — y se mira una semana hacia atrás: 14 partes
+ * posibles, y `partesFaltantes` es cuántos de esos no están.
+ *
+ * La planta no tiene un calendario de días sin producción — el diseño del
+ * módulo (`lib/produccion/turnos.ts`) trata cada `(fecha, turno)` como un
+ * valor más, sin excepción de fin de semana — así que un domingo cuenta igual
+ * que cualquier otro día. Adivinar acá qué días "no cuentan" escondería el
+ * caso real: si alguna vez sí hay producción un domingo y nadie carga el
+ * parte, es exactamente el hueco que esta alarma tiene que mostrar.
+ *
+ * `sinLlegarALaPlanilla` no se acota a la semana: es historia completa, igual
+ * que el mismo número en Inventario — mientras un parte tenga
+ * `sheets_pendiente` sin resolver, la planilla que mira gerencia está mostrando
+ * ese día en blanco.
+ */
+async function resumenProduccion(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
+  const desde = sumarDias(hoyStr, -6);
+  const [{ data: partes }, { count: sinLlegar }] = await Promise.all([
+    supabase.from("produccion_partes").select("id").gte("fecha", desde).lte("fecha", hoyStr),
+    supabase.from("produccion_partes").select("id", { count: "exact", head: true }).not("sheets_pendiente", "is", null),
+  ]);
+
+  return {
+    partesFaltantes: Math.max(0, 14 - (partes ?? []).length),
     sinLlegarALaPlanilla: sinLlegar ?? 0,
   };
 }

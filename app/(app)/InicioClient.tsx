@@ -10,10 +10,11 @@ interface Resumen {
   mantenimiento: { atrasadas: number; otPendientes: number; avisosSinOrden: number } | null;
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
   inventario: { faltantes: number; movimientosHoy: number; sinLlegarALaPlanilla: number } | null;
+  produccion: { partesFaltantes: number; sinLlegarALaPlanilla: number } | null;
 }
 
 const VACIO: Resumen = {
-  rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null,
+  rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
 };
 
 /**
@@ -155,6 +156,28 @@ export default function InicioClient({
             }
           />
         )}
+
+        {/* Lo que pide hacer algo es un parte que falta: la producción del turno
+            siguiente no se puede calcular hasta que esté. Los que no llegaron a la
+            planilla son la otra alarma: quien mira la planilla ve un día en blanco. */}
+        {tiene("produccion") && (
+          <ModuloCard
+            titulo="Producción"
+            href="/produccion"
+            color="#0E7490"
+            icon={<IconFabrica />}
+            hero={
+              resumen?.produccion
+                ? { label: "Partes sin cargar (7 días)", valor: resumen.produccion.partesFaltantes }
+                : null
+            }
+            secundarias={
+              resumen?.produccion
+                ? [{ label: "Sin llegar a la planilla", valor: resumen.produccion.sinLlegarALaPlanilla }]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
   );
@@ -258,6 +281,15 @@ function IconWrench() {
   return (
     <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
       <path d="M14.7 6.3a4 4 0 10-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.83 2.83a2 2 0 01-2.83-2.83L14.7 6.3z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconFabrica() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 21V11l5 3.5V11l5 3.5V11l5 3.5V21H3Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M17 11V6l2 2V6l2 2v3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 21h18" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
