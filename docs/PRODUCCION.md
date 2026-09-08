@@ -67,6 +67,30 @@ sólo cuando el turno faltante es, además, el que no tiene anterior; si lo que
 falta es un turno entero, gana `dia_incompleto` porque describe la causa real
 — no es que falte un dato para restar, es que falta cargar.
 
+## El primer día no va a mostrar producción, y está bien
+
+Es la primera pregunta que va a llegar, así que conviene saber la respuesta
+antes: **el primer parte que se cargue es una línea de base, no un día
+productivo.**
+
+Su turno 4→12 no tiene parte anterior contra el cual restar, así que sale
+`sin_parte_anterior` para todos los productos. Y como ese estado es absorbente
+—si un turno no se puede calcular, el día tampoco— **el día entero queda sin
+producción y no se exporta nada a la planilla**. Recién el turno 12→20 de ese
+mismo día tiene contra qué restar.
+
+No es un error: es la consecuencia directa de que la producción se despeje en
+vez de medirse. Comprobado contra la base real el 8/09/2026, con partes de
+prueba.
+
+Si molesta empezar con un día en blanco, la salida es cargar **un parte de
+arranque**: el turno 12→20 del día anterior al primero real, con el depósito
+contado y sin renglones de despacho. Sirve de stock inicial y desde el día
+siguiente todo se calcula. Lo que **no** hay que hacer es cargar el primer día
+con el depósito en cero para "empezar de cero": eso da una producción igual al
+stock entero de cada producto, en positivo, y se exporta a la planilla como
+buena.
+
 ## La planilla: acá manda el sistema, no ella
 
 Es la diferencia con Compras, donde manda la planilla. Calidad carga en el SdG
