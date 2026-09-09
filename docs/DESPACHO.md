@@ -132,59 +132,123 @@ Cuatro cosas que conviene no volver a averiguar:
 | Histórico e indicadores | `app/(app)/despacho/ordenes` |
 | Mapeo de productos | `app/(app)/despacho/productos` |
 | Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
-| Migraciones | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql` |
+| Migraciones | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql` |
+
+## Lo que se relevó de la planilla (09/09/2026)
+
+El spec se escribió sin poder abrir el libro y dejó dos supuestos declarados.
+**Los dos eran falsos.** Se leyó con la cuenta de servicio desde local —las
+credenciales de Google sí están en `.env.local`— y esto es lo que hay:
+
+| | |
+|---|---|
+| Pestañas | **seis, una por mes**: `ABRIL 2026` … `SEPTIEMBRE 2026` |
+| Órdenes | **1.714**, todas con Nº de orden |
+| Textos distintos en `Material` | **201** |
+| Nº de orden repetidos | **12** |
+| Renglones cuya fecha no es del mes de su pestaña | **5** |
+
+### No es una hoja: es una pestaña por mes
+
+La pestaña **se despeja del mes de la orden** (`pestanaDelMes`), no se guarda ni
+se configura: `GOOGLE_SHEETS_DESPACHO_TAB` quedó sin uso. Y eso obligó a la
+migración `20260909090003`: el índice único sobre `sheets_fila` estaba mal,
+porque la fila 45 de abril y la de mayo son dos órdenes distintas. Ahora el único
+es por `(mes de la orden, fila)`.
+
+El 1º de cada mes la pestaña nueva **no existe todavía**, así que el espejo la
+crea copiando los encabezados de la anterior. Sin eso, el módulo dejaría de
+escribir el primer día del mes y nadie se enteraría hasta fin de mes.
+
+### `Tiempo de Carga` y `Tiempo en Predio` sí son fórmulas — a veces
+
+Son `=F2-E2` y `=H2-G2` en abril, mayo, junio y julio, y **están vacías en agosto
+y septiembre**: alguien no las arrastró. Así que hace dos meses la planilla no
+muestra los tiempos que promete.
+
+El espejo sigue escribiendo sólo `A:I` y no las toca: pisar una fórmula la
+convierte en dato muerto. Devolverlas es arrastrarlas en la planilla, una vez.
+De paso, esas fórmulas confirmaron el mapeo de columnas que el spec había
+deducido del orden de los encabezados.
+
+### La columna `Material`: 201 textos para quince cosas
+
+`Filler a granel` aparece como `Filler a granel`, `filler a granel`,
+`filller a granel`, `filer a granel` y `filler agranel` — **620 órdenes en cinco
+ortografías**. Lo mismo `Cal en Bolsones` / `cal en bolson` / `cal en bolsones`.
+Las granulometrías van como `02`, `0-2`, `01`, `0-1`, `200`, `1/2` y `1-2`.
+
+Dos consecuencias. Una: **mapear en vez de parsear era la decisión correcta, y
+por más margen del que suponía el spec** — ninguna expresión regular sobrevive a
+esto. La otra: el módulo entrega algo que no estaba escrito, que es que la
+columna pase a ser un dato clasificado y filtrable.
+
+**De acá en más el sistema escribe la forma del libro con una sola ortografía**
+(`textoParaLaPlanilla`): `Filler a granel`, `Cal en Bolsones`,
+`Calcio 0-2 en Bolsones`, `Filler en Tolva`. Se eligió la del libro y no la del
+sistema porque la planilla la sigue leyendo gente que tiene cinco meses de
+historia arriba. Y apareció **Dolomita**, que el talonario no tiene: entró a la
+lista de materiales.
+
+### Hay celdas con el dato escondido por el formato
+
+Varios renglones tienen la fecha cargada —el serial `46273`— y un formato de
+número que la muestra **vacía**. Eso decide dos cosas:
+
+- **El importador lee `sinFormato`**, o esas órdenes se perderían por "no tienen
+  fecha". Medido: así entran las 1.714, con 0 salteadas.
+- **`agregarFila` busca la última fila por la columna `B`, no la `A`.** Esa
+  lectura pide el texto formateado, así que por la `A` la hoja parecería terminar
+  antes y la escritura pisaría renglones cargados. Por eso `agregarFila` del
+  núcleo ahora acepta qué columna manda.
+
+### Los encabezados no se llaman igual en todas las pestañas
+
+La columna de fecha es `Fecha`, `Fecha Orden` o `Fecha Orden de carga` según el
+mes, y varias tienen espacios de más (`Hora Salida  de carga ` con dos). El
+importador las busca **normalizadas y con alternativas**, y las columnas que no
+son imprescindibles pueden faltar: exigir las nueve perdía las doscientas órdenes
+de una pestaña a la que le faltara `Observaciones`.
 
 ## Lo que falta
 
-### Bloqueante: las migraciones no están corridas
+### Correr la migración de la pestaña por mes
 
-**Las corre una persona, a mano, en el editor SQL de Supabase**, en este orden y
-en dos pasos separados (el valor del enum tiene que estar commiteado antes de
-que el schema lo mencione, o falla con `55P04`):
+`20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`. Las dos
+primeras **ya están corridas** (verificado: las tablas contestan). Esta reemplaza
+el índice único de `sheets_fila`, y hasta que corra, dos órdenes del mismo número
+de fila en meses distintos van a chocar al escribirse en la planilla.
 
-1. `20260908104728_despacho_enum_del_modulo.sql`
-2. `20260908104729_despacho_schema.sql`
+### Cargar `GOOGLE_SHEETS_DESPACHO_ID`
 
-Hasta que corran, el módulo compila y no funciona: no existen las tablas.
-Después hay que darle el módulo `despacho` a alguien desde
-**Administración → Usuarios**, con nivel `edicion` para la balanza y `admin`
-para el mapeo.
+`1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`, en `.env.local` y en Vercel. El
+libro **ya está compartido** con `sheets-reader@mantenimientopp.iam.gserviceaccount.com`.
+Sin la variable el espejo no escribe y cada orden queda con `sheets_pendiente`,
+que es el comportamiento buscado y se ve en el Inicio y en la cola.
 
-### Bloqueante: la planilla no está compartida
+### Dar el módulo a alguien
 
-Falta darle lectura y escritura a
-`sheets-reader@mantenimientopp.iam.gserviceaccount.com` en el libro
-`1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`, y cargar
-`GOOGLE_SHEETS_DESPACHO_ID` (y `GOOGLE_SHEETS_DESPACHO_TAB` si la pestaña no se
-llama `Órdenes de Carga`).
+**Administración → Usuarios**, módulo `despacho`: `edicion` para la balanza,
+`admin` para el mapeo de productos y el importador.
 
-Mientras no esté, el espejo no escribe y cada orden queda con
-`sheets_pendiente` — que es el comportamiento buscado, no una falla: se ve en el
-Inicio y en la cola del día.
+### Importar el histórico
 
-Y hay **dos supuestos declarados** en `lib/despacho/planilla.ts` que sólo se
-pueden confirmar leyendo el libro:
-
-1. La columna `Material` se escribe como los tres campos separados por un
-   espacio (`Filler A granel`).
-2. `Tiempo de Carga` y `Tiempo en Predio` son fórmulas, así que **no se
-   escriben**: el espejo toca `A:I` y deja `J:K`.
-
-Si alguno no es cierto, se corrige `filaDeLaPlanilla` y sus tests, que están
-escritos justamente para eso.
-
-### El importador del histórico
-
-`POST /api/despacho/importar` con `{"ensayo": true}` lee y cuenta sin escribir
-nada — **es lo primero que conviene correr**: dice si los encabezados se
-reconocieron antes de insertar miles de filas. Sin `ensayo`, inserta.
+`POST /api/despacho/importar` con `{"ensayo": true}` lee las seis pestañas y
+cuenta sin escribir nada — **correr eso primero**. Informa pestaña por pestaña
+cuántas leyó, cuántas salteó y cuántas tienen la fecha de otro mes.
 
 Es idempotente: `ignoreDuplicates` por `numero`, así que lo que ya está en el
 sistema gana y volver a correrlo sólo agrega lo que falta.
 
-Las filas viejas entran **sin remito y sin empresa** (`empresa_id` es nullable
-justamente por esto: la planilla no tiene columna de empresa, y poner una al azar
-metería el camión en el patrimonio que no es).
+Dos cosas a mirar en el resultado:
+
+- **12 números repetidos.** El Nº del talonario tiene que ser único y en la
+  planilla hay doce que aparecen dos veces. El importador se queda con el primero
+  y los cuenta, pero son doce filas que alguien debería revisar en el libro.
+- **5 renglones con la fecha de otro mes que su pestaña.** Esos entran con
+  `sheets_fila` en null a propósito: si se guardara la fila, una corrección
+  reescribiría la fila 45 de la pestaña equivocada y pisaría una orden ajena. Con
+  la fila vacía, la corrección agrega un renglón — molesto pero visible.
 
 ### Lo que queda para specs propios
 
@@ -192,11 +256,17 @@ metería el camión en el patrimonio que no es).
   más de 3.000 `res.partner` en dos empresas y el cruce va **por CUIT (`vat`),
   no por nombre**: la lección de los 147 CUITs duplicados de
   [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+- **Los otros cuatro frentes del área**: recepción de material, programación del
+  día, stock de producto terminado y pedidos de clientes.
 - **Cruzar con `produccion_despachos`** para ver los desajustes entre lo que
   fábrica dice que cargó y lo que salió con remito.
 - **El pesaje.** El puesto es la balanza y el peso no está en el papel, ni en la
-  planilla, ni en el remito más allá de la cantidad pedida. Si el camión se pesa
-  y ese número queda en algún lado, es un dato que el módulo debería capturar.
+  planilla, ni en el remito más allá de la cantidad pedida.
 - **Que la orden nazca en administración** y el sistema imprima el papel,
   jubilando el talonario. Es el destino natural, pero toca el hábito de otra
   área.
+- **Limpiar el histórico de la columna `Material`.** Las 1.714 órdenes
+  importadas entran con su texto crudo, y por eso quedan "sin clasificar" en el
+  sistema. Clasificarlas a mano no tiene sentido; lo que sí lo tendría es
+  mapearlas por texto **con una tabla de equivalencias revisada por alguien**,
+  no por parecido.

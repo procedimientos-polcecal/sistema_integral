@@ -376,3 +376,38 @@ Google no están en local: sólo funcionan en el deploy. Falta:
 - Cuántas filas arrastra, para el importador del histórico.
 
 **El pesaje**, si existe en algún lado.
+
+---
+
+# Apéndice — lo que el libro desmintió (09/09/2026)
+
+El día siguiente se compartió la planilla y se pudo leer. **Los dos supuestos
+declarados arriba eran falsos**, y las correcciones están en
+[docs/DESPACHO.md](../../DESPACHO.md), sección "Lo que se relevó de la planilla".
+En resumen:
+
+| Lo que decía el spec | Lo que es |
+|---|---|
+| Una sola pestaña, en `GOOGLE_SHEETS_DESPACHO_TAB` | **Seis, una por mes.** La pestaña se despeja del mes de la orden y la variable quedó sin uso |
+| La columna `Material` se escribe con los tres campos separados por un espacio | Se escribe con **la forma del libro** (`Filler a granel`, `Calcio 0-2 en Bolsones`), con una sola ortografía. El libro tiene **201 textos distintos** para unas quince combinaciones |
+| `Tiempo de Carga` y `Tiempo en Predio` son fórmulas | **Lo son en cuatro pestañas y están vacías en dos.** Se sigue sin escribirlas |
+
+Y tres cosas que el spec no podía anticipar:
+
+- **Los encabezados no se llaman igual en todas las pestañas** (`Fecha`,
+  `Fecha Orden`, `Fecha Orden de carga`), así que se buscan normalizados y con
+  alternativas, y las columnas que no son imprescindibles pueden faltar.
+- **Hay celdas con el dato escondido por el formato de número.** El importador
+  lee `sinFormato`, y `agregarFila` busca la última fila por la columna `B` y no
+  por la `A`, que se lee vacía.
+- **El Nº del talonario no es tan único como se confirmó:** hay 12 repetidos en
+  1.714 órdenes. El importador se queda con el primero y los cuenta.
+
+Lo que el relevamiento **confirmó**, y por más margen del que suponía el spec, es
+la decisión de mapear los productos en vez de parsear el nombre: con 201
+variantes de texto libre, ninguna expresión regular sirve. Y las fórmulas
+`=F2-E2` y `=H2-G2` confirmaron el mapeo de columnas que se había deducido del
+orden de los encabezados.
+
+Migración que salió de esto:
+`20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`.

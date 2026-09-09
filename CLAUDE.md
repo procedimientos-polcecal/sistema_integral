@@ -127,8 +127,13 @@ npm run build
   navegador. Se verifica con tests sobre las funciones puras y, cuando hace falta
   ver datos reales, consultando la base con el `SUPABASE_SERVICE_ROLE_KEY` de
   `.env.local`.
-- Las credenciales de Google **no están en local**: leer o escribir una planilla
-  sólo funciona en el deploy.
+- Las credenciales de Google **sí están en local** (`GOOGLE_SERVICE_ACCOUNT_JSON`
+  en `.env.local`), así que leer una planilla real desde acá funciona y conviene
+  usarlo: es la diferencia entre razonar sobre lo que la planilla "debería" tener
+  y medirlo. Despacho se diseñó con dos supuestos sobre su libro y los dos eran
+  falsos. Lo que falta por planilla es su id — los que hay están en
+  [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md). **Leer sí; escribir es la
+  planilla de producción.**
 
 ## Qué se testea
 
