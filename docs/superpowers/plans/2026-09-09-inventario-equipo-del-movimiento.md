@@ -1158,9 +1158,12 @@ export async function sincronizarEquipos(
   pestana: string
 ): Promise<{
   nuevos: number; actualizados: number; desactivados: number;
-  sinDestino: string[]; error?: string;
+  sinDestino: string[]; enDosSectores: string[]; error?: string;
 }> {
-  const vacio = { nuevos: 0, actualizados: 0, desactivados: 0, sinDestino: [] as string[] };
+  const vacio = {
+    nuevos: 0, actualizados: 0, desactivados: 0,
+    sinDestino: [] as string[], enDosSectores: [] as string[],
+  };
 
   let filas: string[][];
   try {
@@ -1197,14 +1200,26 @@ export async function sincronizarEquipos(
 
   if (cambios.nuevos.length > 0) {
     const { error } = await admin.from("inventario_equipos").insert(cambios.nuevos);
-    if (error) return { ...vacio, sinDestino: cambios.sinDestino, error: error.message };
+    if (error) {
+      return {
+        ...vacio,
+        sinDestino: cambios.sinDestino,
+        enDosSectores: cambios.enDosSectores,
+        error: error.message,
+      };
+    }
   }
 
   // De a uno: son unos pocos por corrida, y un upsert obligaría a mandar el
   // resto de las columnas — que es cómo se pisa sin querer lo que otro editó.
+  //
+  // `nombre` viaja acá y no sólo en los nuevos: si la pestaña reescribe el
+  // literal sin cambiar su clave —mayúsculas, un espacio de más—, la base tiene
+  // que quedarse con el nuevo. Es lo que la app escribe en la columna K, y el
+  // desplegable acepta ese texto y no otro parecido.
   for (const c of cambios.actualizados) {
     await admin.from("inventario_equipos")
-      .update({ destino_id: c.destino_id, equipment_id: c.equipment_id, activo: true })
+      .update({ nombre: c.nombre, destino_id: c.destino_id, equipment_id: c.equipment_id, activo: true })
       .eq("id", c.id);
   }
 
@@ -1221,6 +1236,7 @@ export async function sincronizarEquipos(
     actualizados: cambios.actualizados.length,
     desactivados: cambios.desactivados.length,
     sinDestino: cambios.sinDestino,
+    enDosSectores: cambios.enDosSectores,
   };
 }
 ```
@@ -1373,6 +1389,10 @@ y como último elemento del array, después del `indicePorNombre` de proveedores
     // Sectores que la pestaña nombra y la lista de destinos no tiene: sus
     // equipos no entraron y hay que agregar el destino.
     equipos_sin_destino: equipos.sinDestino,
+    // Equipos que la pestaña pone bajo más de un sector. No se tocaron: cuál es
+    // el bueno no se puede saber acá, y elegir el primero sería elegir por el
+    // orden en que Google devolvió las filas. Se arregla en la pestaña.
+    equipos_en_dos_sectores: equipos.enDosSectores,
     // Con lo que dijo Google, sin traducir. Un fallo de lectura no es un warn.
     equipos_error: equipos.error ?? null,
     sin_reconocer: sinReconocer.resumen(),
