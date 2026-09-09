@@ -96,4 +96,93 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     const r = celdasDelAlta(otro, DATOS, 1957);
     expect(r.ok).toBe(true);
   });
+
+  it("devuelve la fila que uso, para que quien escribe no use otra por error", () => {
+    // `fila` queda horneada en la formula del numero de RI (A{fila-1}+1). Si
+    // quien escribe usara su propia fila en vez de esta, la formula apuntaria
+    // a otro lugar sin que nada lo note.
+    const r = celdasDelAlta(ENCABEZADO, DATOS, 1957);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fila).toBe(1957);
+  });
+
+  it("el motivo de que falte el area no repite un alias que norm() ya colapsa", () => {
+    // "ÁREA" y "AREA" son el mismo texto para clave() una vez sin acento: tener
+    // los dos en ALIAS no cambia que columna se encuentra, solo ensucia el
+    // mensaje que ve quien tiene que corregir la planilla.
+    const sinArea = ENCABEZADO.filter((h) => h !== "ÁREA");
+    const r = celdasDelAlta(sinArea, DATOS, 1957);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.faltan.join(" ")).toBe("area (ÁREA)");
+  });
+
+  describe("una pregunta nueva en el formulario no pierde columnas en silencio", () => {
+    // Reproduce lo que midio la revision: el formulario de Google no tiene un
+    // ancho fijo, y una pregunta nueva corre todo lo que viene despues. El
+    // borde de lo que un alta puede llenar tiene que correr con ella.
+
+    it("una pregunta antes del archivo complementario no pierde la imagen", () => {
+      const conPreguntaNueva = [
+        ...ENCABEZADO.slice(0, 11), // hasta DETALLES EXTRA inclusive
+        "OBSERVACIONES INTERNAS",
+        ...ENCABEZADO.slice(11), // ARCHIVO COMPLEMENTARIO en adelante
+      ];
+      const r = celdasDelAlta(
+        conPreguntaNueva,
+        { ...DATOS, imagen_url: "https://ejemplo.com/foto.jpg" },
+        1957
+      );
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      const c = porColumna(r.celdas);
+      // ARCHIVO COMPLEMENTARIO corrio de la 11 (L) a la 12 (M).
+      expect(c.get(12)).toBe("https://ejemplo.com/foto.jpg");
+      // El borde corrio con ella: nada se escribe mas alla.
+      expect(Math.max(...r.celdas.map((x) => x.columna))).toBe(12);
+    });
+
+    it("cuatro preguntas antes de la descripcion no pierden fecha, ubicacion, detalle ni imagen", () => {
+      const conPreguntas = [
+        ...ENCABEZADO.slice(0, 5), // hasta ÁREA inclusive
+        "P1", "P2", "P3", "P4",
+        ...ENCABEZADO.slice(5), // DESCRIPCIÓN DEL PEDIDO en adelante
+      ];
+      const r = celdasDelAlta(
+        conPreguntas,
+        { ...DATOS, imagen_url: "https://ejemplo.com/foto.jpg" },
+        1957
+      );
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      const c = porColumna(r.celdas);
+      expect(c.get(12)).toBe("Taller eléctrico");   // PARA DONDE SE NECESITA, corrida 4
+      expect(c.get(13)).toBe("46275");               // PARA CUANDO SE NECESITA
+      expect(c.get(14)).toBe("Repo Stock");           // DETALLES EXTRA
+      expect(c.get(15)).toBe("https://ejemplo.com/foto.jpg"); // ARCHIVO COMPLEMENTARIO
+    });
+  });
+
+  it("si no esta la columna que marca el limite del alta, no escribe y dice el motivo", () => {
+    // Sin "DIRECCIÓN EMAIL ENVIADA" tal cual esta escrita, no hay de donde sacar
+    // el borde: negarse es mejor que adivinar un ancho.
+    const sinBorde = ENCABEZADO.map((h) =>
+      h === "DIRECCIÓN EMAIL ENVIADA" ? "DIRECCION EMAIL ENVIADA" : h
+    );
+    const r = celdasDelAlta(sinBorde, DATOS, 1957);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.faltan.join(" ")).toContain("DIRECCIÓN EMAIL ENVIADA");
+  });
+
+  it("una fecha de creacion invalida no escribe 'NaN' en la marca temporal", () => {
+    // El docstring de serialDelInstante le pasa la responsabilidad de validar a
+    // quien llama. La formula del RI es =IF(B<>"",...), asi que un "NaN" no
+    // vacio numeraria un pedido con una marca basura.
+    const r = celdasDelAlta(ENCABEZADO, { ...DATOS, creado: new Date("basura") }, 1957);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.faltan.join(" ")).toMatch(/marca temporal/i);
+  });
 });

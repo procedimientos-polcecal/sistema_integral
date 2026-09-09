@@ -475,6 +475,40 @@ La parte que decide: dado el encabezado real de la hoja y los datos del pedido, 
 - Create: `lib/compras/formulario.ts`
 - Create: `lib/compras/formulario.test.ts`
 
+> **Nota post-revisión (09/09/2026):** la primera versión de este paso —la que
+> queda documentada más abajo como Step 1/Step 3 originales— tenía un defecto
+> que una revisión posterior encontró y que **venía de este mismo plan**: la
+> ventana de columnas donde buscar un alias salía de `Object.keys(ALIAS).length`
+> (`COLUMNAS_DEL_ALTA`, "las 12 de ALIAS"), un conteo con dos dueños que no se
+> hablaban entre sí. Si el formulario de Google agrega una pregunta, las
+> columnas reales se corren pero ese conteo no, así que lo que quedaba después
+> de la pregunta nueva se omitía **en silencio, con `ok: true`** — medido: una
+> pregunta antes de `ARCHIVO COMPLEMENTARIO` pierde la imagen; cuatro antes de
+> `DESCRIPCIÓN DEL PEDIDO` pierden ubicación, fecha de necesidad, detalle e
+> imagen. Es la misma divergencia que no avisa que el CLAUDE.md del repo
+> prohíbe para las planillas.
+>
+> El arreglo, ya aplicado en `lib/compras/formulario.ts`, saca el borde del
+> encabezado mismo en vez de contarlo: `DIRECCIÓN EMAIL ENVIADA` es la primera
+> columna ajena al `QUERY` del master, y esa comparación es **sensible a
+> acentos y mayúsculas** (no pasa por `norm()`/`clave()`) — es la misma razón
+> por la que existía el problema original de `ÁREA`/`Area` que motivó acotar la
+> búsqueda. Si ese borde no aparece en el encabezado, `celdasDelAlta` devuelve
+> `{ok: false}` con el motivo en vez de adivinar un ancho. De paso se corrigieron
+> tres cosas más que la revisión encontró en el mismo archivo: un `creado`
+> inválido ya no escribe `"NaN"` en la marca temporal (se niega con motivo, como
+> pide el docstring de `serialDelInstante`); se sacaron cuatro alias de `ALIAS`
+> que `clave()` ya volvía inalcanzables (`"N° RI"`, `"AREA"`, `"CÓDIGO"` y una de
+> `"DESCRIPCIÓN"`/`"DESCRIPCION"`) y que sólo ensuciaban el mensaje de `faltan`;
+> y `ResultadoCeldas` devuelve `fila` en el caso `ok: true`, porque queda
+> horneada en la fórmula del N° de RI y quien escribe tiene que usar esa fila y
+> no la suya.
+>
+> El código de abajo queda como registro de la primera pasada (por eso el plan
+> original y su razonamiento se conservan); **la implementación real es la que
+> está en `lib/compras/formulario.ts` y `lib/compras/formulario.test.ts`**, con
+> 13 tests en vez de 8.
+
 - [ ] **Step 1: Escribir el test que falla**
 
 Crear `lib/compras/formulario.test.ts`:
@@ -752,6 +786,11 @@ Expected: PASS — 8 tests
 git add lib/compras/formulario.ts lib/compras/formulario.test.ts
 git commit -m "feat(compras): que celdas escribe un alta en la hoja del formulario"
 ```
+
+> **Este Step 3 quedó superado por la nota post-revisión de arriba.** La
+> implementación final —borde sacado del encabezado, `creado` inválido
+> rechazado, alias muertos afuera, `fila` devuelta en `ok: true`— está en
+> `lib/compras/formulario.ts`; usarla como referencia y no este bloque.
 
 ---
 

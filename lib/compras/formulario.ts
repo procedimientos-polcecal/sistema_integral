@@ -21,15 +21,25 @@ import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 
-/** Cómo se llama cada columna en la hoja. La primera que exista gana. */
+/**
+ * Cómo se llama cada columna en la hoja. La primera que exista gana.
+ *
+ * Sólo entran alias que `clave()` distingue entre sí. `"N° RI"` (grado),
+ * `"AREA"` sin tilde, `"CÓDIGO"` con tilde y `"DESCRIPCION"` sin tilde no
+ * están: `clave()` ya les saca el acento y el `°`/`º`, así que quedan idénticas
+ * a la anterior de su misma lista y nunca se pueden alcanzar. Tenerlas no
+ * cambiaba qué columna se encuentra — sólo ensuciaba `faltan` con un alias que
+ * la comparación real ya había descartado (`"area (ÁREA o AREA)"`, que se
+ * contradice solo).
+ */
 const ALIAS = {
-  nro_ri: ["Nº RI", "N° RI", "NRO RI"],
+  nro_ri: ["Nº RI", "NRO RI"],
   marca: ["Marca temporal", "Timestamp"],
   nombre: ["Nombre"],
   apellido: ["Apellido"],
-  area: ["ÁREA", "AREA"],
-  descripcion: ["DESCRIPCIÓN DEL PEDIDO", "DESCRIPCIÓN", "DESCRIPCION"],
-  codigo: ["CODIGO", "CÓDIGO"],
+  area: ["ÁREA"],
+  descripcion: ["DESCRIPCIÓN DEL PEDIDO", "DESCRIPCIÓN"],
+  codigo: ["CODIGO"],
   cantidad: ["CANTIDAD A PEDIR", "CANTIDAD", "CAN"],
   ubicacion: ["PARA DONDE SE NECESITA", "DONDE SE NECESITA"],
   fecha_necesidad: ["PARA CUANDO SE NECESITA", "FECHA DE REQUERIMIENTO"],
@@ -73,7 +83,7 @@ export interface Celda {
 }
 
 export type ResultadoCeldas =
-  | { ok: true; celdas: Celda[] }
+  | { ok: true; fila: number; celdas: Celda[] }
   | { ok: false; faltan: string[] };
 
 /**
@@ -85,25 +95,45 @@ export type ResultadoCeldas =
 const clave = (s: string) => norm(s).replace(/[^A-Z0-9 ]/g, "");
 
 /**
- * Cuántas columnas puede llenar un alta: las 12 de `ALIAS`, A a L.
+ * La primera columna que un alta no puede tocar: donde empieza lo que el
+ * `QUERY` del master ignora.
  *
- * La búsqueda no mira más allá de esa ventana, y no es sólo por prolijidad: la
- * hoja real tiene una columna `O` que se llama literalmente `Area`, la misma
- * palabra que `E` (`ÁREA`) una vez que `clave()` les saca el acento a las dos.
- * Si el alta llega con un encabezado al que le falta la `E` —el caso que
- * prueba "si falta una columna no escribe nada"—, buscar en toda la fila
- * encuentra la `O` y escribe ahí: el área queda enlazada a una columna que el
- * `QUERY` del master ignora, así que el pedido sale sin área en la pestaña de
- * nadie y no hay ningún error que lo avise. Es el mismo riesgo que el CLAUDE.md
- * del repo nombra para las planillas: "enlazar al que se le parece es peor que
- * dejar en null". Acá el "que se le parece" es toda una columna real, no un
- * texto parecido.
+ * No es un conteo (`Object.keys(ALIAS).length`, "las 12 de ALIAS"): eso tenía
+ * dos dueños que no se hablaban entre sí. Agregar una pregunta al formulario
+ * corre las columnas reales pero no ese número, así que lo que quedaba después
+ * de la pregunta nueva caía fuera de la ventana y se omitía sin aviso —medido:
+ * una pregunta antes de `ARCHIVO COMPLEMENTARIO` pierde la imagen; cuatro
+ * antes de `DESCRIPCIÓN DEL PEDIDO` pierden ubicación, fecha, detalle e
+ * imagen, con `ok: true` los dos casos—. Y al revés, agregar un campo a
+ * `ALIAS` por una razón sin relación con el ancho de la hoja ensanchaba la
+ * ventana y metía en alcance la `M`, que es de Google y no se toca.
+ *
+ * El borde real es el encabezado mismo: `DIRECCIÓN EMAIL ENVIADA` es la
+ * primera columna ajena al `QUERY`, se llame donde se llame. Con un formulario
+ * que sólo agrega preguntas, esa columna se corre pero sigue estando, así que
+ * el borde se corre con ella y nada de lo anterior se pierde.
+ *
+ * La comparación es sensible a acentos y mayúsculas —a propósito, sin pasar
+ * por `clave()`—: es la misma razón por la que el bug original existía. Si se
+ * comparara sin acento, `ÁREA` (columna `E`, la que hay que llenar) y `Area`
+ * (columna `O`, la que hay que ignorar) serían el mismo texto, que es
+ * exactamente el "enlazar al que se le parece" que el repo prohíbe.
+ *
+ * Riesgo asumido: si el día de mañana renombran esa columna (o la borran),
+ * este borde no aparece y `celdasDelAlta` se niega a escribir en vez de
+ * adivinar un ancho. Es la respuesta correcta —negarse deja el problema a la
+ * vista—, pero significa que un alta se cae hasta que alguien actualice esta
+ * constante o la hoja vuelva a tener la columna con este nombre exacto.
  */
-const COLUMNAS_DEL_ALTA = Object.keys(ALIAS).length;
+const COLUMNA_BORDE = "DIRECCIÓN EMAIL ENVIADA";
+
+function indiceBorde(encabezado: string[]): number {
+  return encabezado.findIndex((h) => h.trim() === COLUMNA_BORDE);
+}
 
 /** En qué columna está cada cosa, por nombre y no por posición. */
-function indexar(encabezado: string[]): Record<Clave, number> {
-  const normalizado = encabezado.slice(0, COLUMNAS_DEL_ALTA).map(clave);
+function indexar(encabezado: string[], borde: number): Record<Clave, number> {
+  const normalizado = encabezado.slice(0, borde).map(clave);
   const idx = {} as Record<Clave, number>;
 
   for (const [c, alias] of Object.entries(ALIAS) as [Clave, readonly string[]][]) {
@@ -123,6 +153,9 @@ function indexar(encabezado: string[]): Record<Clave, number> {
  * no como número. Dos razones: el que numera sigue siendo uno solo —la
  * planilla—, y la fila que Google agrega en la próxima respuesta copia la
  * fórmula de la de arriba; si arriba encuentra un literal, la serie se corta.
+ * Por eso `fila` también vuelve en el resultado cuando `ok: true`: queda
+ * horneada en esa fórmula, y si quien escribe usara otra fila por error la
+ * fórmula apuntaría al lugar equivocado sin que nada lo note.
  *
  * Las columnas que el `QUERY` del master ignora no se tocan: `DIRECCIÓN EMAIL
  * ENVIADA` la escribe el Apps Script de los avisos, y ponerle algo sería decir
@@ -133,12 +166,35 @@ export function celdasDelAlta(
   datos: DatosDelAlta,
   fila: number
 ): ResultadoCeldas {
-  const idx = indexar(encabezado);
+  const borde = indiceBorde(encabezado);
+  if (borde < 0) {
+    return {
+      ok: false,
+      faltan: [
+        `el borde del alta ("${COLUMNA_BORDE}", que separa lo que un alta puede ` +
+          `llenar de lo que escribe Google) no está en el encabezado`,
+      ],
+    };
+  }
+
+  const idx = indexar(encabezado, borde);
 
   const faltan = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map(
     (c) => `${c} (${ALIAS[c].join(" o ")})`
   );
   if (faltan.length > 0) return { ok: false, faltan };
+
+  // `serialDelInstante` no valida —lo dice su propio docstring, la
+  // responsabilidad es de quien llama—: un `creado` inválido da `NaN`, que
+  // como texto es "NaN", no vacío para la fórmula del RI (`=IF(B<>"",...)`) y
+  // numeraría un pedido con una marca basura, escrita para siempre.
+  const serialMarca = serialDelInstante(datos.creado);
+  if (!Number.isFinite(serialMarca)) {
+    return {
+      ok: false,
+      faltan: [`marca temporal (datos.creado no es una fecha válida: ${String(datos.creado)})`],
+    };
+  }
 
   const marca = letraDeColumna(idx.marca);
   const nro = letraDeColumna(idx.nro_ri);
@@ -146,7 +202,7 @@ export function celdasDelAlta(
 
   const valores: Partial<Record<Clave, string>> = {
     nro_ri: `=IF(${marca}${fila}:${marca}<>"",${nro}${fila - 1}+1,"")`,
-    marca: String(serialDelInstante(datos.creado)),
+    marca: String(serialMarca),
     nombre: datos.nombre,
     apellido: datos.apellido,
     area: datos.area,
@@ -167,5 +223,5 @@ export function celdasDelAlta(
     if (columna < 0) continue;
     celdas.push({ columna, valor });
   }
-  return { ok: true, celdas };
+  return { ok: true, fila, celdas };
 }
