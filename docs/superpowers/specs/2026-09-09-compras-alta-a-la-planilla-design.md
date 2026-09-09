@@ -179,10 +179,58 @@ Reusa el notificador **fabricándole el evento**, en vez de duplicar el armado
 del mensaje. Queda en `docs/` como los otros `.gs` del repo, para instalar a
 mano.
 
-**Pendiente para escribirlo:** hace falta ver `HojaPedidos` —qué lee de
-`this.evento`: `e.range`, `e.values` o `e.namedValues`—, `obtenerEmailArea` y el
-método que manda el mail. Adivinar la forma del evento es mandarle el mail
-equivocado a alguien.
+### Cómo está hecho el aviso, y qué evento hay que fabricarle
+
+Ya no hace falta adivinar. El que avisa del pedido nuevo es
+`NotificadorSolicitud`, con `HojaFormulario`, y lo dispara:
+
+```js
+function triggerSolicitudForm(e) {
+  if (!e || !e.values) return;            // <- activador de envío de formulario
+  const tr = new NotificadorSolicitud(e);
+  tr.notificarArea();
+}
+```
+
+Manda un mail al área **y a Compras** con asunto `Solicitud de compra: N°RI
+<ri>`, y antes de mandarlo escribe la dirección del área en la **columna 13**
+(`M`) de la fila del evento. O sea que `M` no es sólo el marcador: es lo que
+hace este notificador, y está atado a la hoja de respuestas.
+
+`Biblioteca.Hoja` lee cada campo así: primero `e.namedValues[<nombre>][0]`, y si
+no está, va a la hoja —`e.range.getSheet()`— y busca la columna por su
+encabezado con `createTextFinder`. Y `getFila()` devuelve `e.range`.
+
+Entonces el evento a fabricar es exactamente:
+
+```js
+const rango = hoja.getRange(fila, 1, 1, hoja.getLastColumn());
+const e = { values: rango.getValues()[0], range: rango };
+```
+
+Sin `namedValues`, para que caiga en la lectura por encabezado, que es la que
+funciona con una fila que ya está escrita. Con `values` para pasar la guarda de
+`triggerSolicitudForm`, y con `range` para que `getHoja()` y `getFila()`
+resuelvan la fila correcta.
+
+**La función tiene que estar acotada por fecha, y esto es lo importante.** Hoy
+hay **tres** filas con `M` vacía de 1.954: la 4 (RI 1, del arranque), la 330 (RI
+327) y la 1957 (RI 1954, la que se escribió ahora). Un barrido de "M vacía" sin
+límite le mandaría a Mantenimiento un aviso de dos pedidos de hace meses. Se
+procesan sólo las filas cuya marca temporal sea de los últimos dos días.
+
+Dos precauciones más:
+
+- **Cada fila en su propio `try/catch`.** `mailPorArea` **lanza** si el área no
+  está en la planilla de mails (`1jHB1uIHfz…`), así que un área sin dirección
+  cargada cortaría la corrida y ninguna de las siguientes se avisaría.
+- **El que falla no puede reintentarse para siempre.** Si el motivo es que falta
+  la dirección, se escribe `M` con el motivo —`SIN EMAIL PARA EL ÁREA:
+  Inversiones`— para que quede visible y deje de reintentarse. Es la misma forma
+  que `sheets_pendiente` de este lado.
+
+Queda por ver `notificarArea()` y `obtenerEmailArea()` de la biblioteca, que es
+donde se manda el mail: hasta ahí no llegué a leer.
 
 ## Qué se prueba
 
