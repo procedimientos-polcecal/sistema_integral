@@ -119,12 +119,22 @@ describe("lo que se conserva cuando la planilla vuelve a traer un RI", () => {
     expect(fusionarConLoQueYaHabia(NADA, conComparativa).comparativa_drive_id).toBe("drive-1");
   });
 
+  it("una celda vacia conserva la empresa que ya estaba, no solo el 'ambas'", () => {
+    // El fixture DEL_SISTEMA tiene empresa_id en null y paga_ambas en true, asi
+    // que sin este caso la conservacion de empresa_id no la muerde ningun test:
+    // cambiarla por `: null` dejaba la suite entera en verde.
+    const conEmpresa = { ...DEL_SISTEMA, empresa_id: "e-polysan", paga_ambas: false };
+    const r = fusionarConLoQueYaHabia(NADA, conEmpresa);
+    expect(r.empresa_id).toBe("e-polysan");
+    expect(r.paga_ambas).toBe(false);
+  });
+
   it("una decision explicita de 'ninguna de las dos' SI limpia la empresa que habia", () => {
     // `{empresa_id: null, ambas: false}` no es lo mismo que no traer `paga`:
     // es un objeto, y sigue siendo una decision. Este es el unico caso donde
     // "ninguna de las dos" sigue siendo posible, y depende de que la fusion
-    // chequee el objeto completo (`de.paga ? ... : ...`) y no cada campo con
-    // `??`: un `??` tomaria el `null` de adentro como "no vino nada" y
+    // chequee el objeto completo (`dePlanilla.paga ? ... : ...`) y no cada campo
+    // con `??`: un `??` tomaria el `null` de adentro como "no vino nada" y
     // conservaria la empresa vieja en vez de borrarla.
     const conEmpresa = { ...DEL_SISTEMA, empresa_id: "e-polcecal", paga_ambas: false };
     const r = fusionarConLoQueYaHabia(

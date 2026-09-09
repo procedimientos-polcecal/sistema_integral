@@ -89,6 +89,11 @@ export function fusionarConLoQueYaHabia(
     // hubiera: no saber quién es no es razón para dejar la compra sin nadie
     // que pueda aprobarla.
     compra_asignada_a: dePlanilla.compra_asignada_a ?? previo?.compra_asignada_a ?? null,
+    // Se conserva la planilla enlazada si esta vez no se pudo leer el link de
+    // la celda: perder el vínculo por una falla de Google dejaría la
+    // comparativa sin manera de volver a encontrarla. `comparativa_url` no
+    // viaja en este upsert a propósito —se exporta a la celda de la planilla—,
+    // así que ésa no se toca.
     comparativa_drive_id: dePlanilla.comparativa_drive_id ?? previo?.comparativa_drive_id ?? null,
     // Los dos salen de la misma celda, así que se deciden juntos: o manda la
     // planilla o manda lo que había.
