@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Seis trampas que esta base ya pisó, dos de ellas **dos veces**:
+Siete trampas que esta base ya pisó, dos de ellas **dos veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -96,6 +96,17 @@ nombra algo en texto libre y no se lo puede reconocer con certeza, el enlace
 queda vacío y se informa. Un enlace equivocado no se nota nunca: el dato
 simplemente aparece en el lugar que no es. Ver
 `032_mantenimiento_proveedores.sql` y `042_compras_ubicaciones_a_equipos.sql`.
+
+**Una función en un índice necesita el cast explícito.** `date_trunc('month',
+fecha)` sobre una columna `date` falla con `42P17: functions in index expression
+must be marked IMMUTABLE`, y el motivo no está a la vista: `date` tiene cast
+implícito **a los dos**, `timestamp` y `timestamptz`, y ante el empate Postgres
+elige el tipo preferido de la categoría, que es `timestamptz`. Esa variante de
+`date_trunc` es `STABLE` —depende del `TimeZone` de la sesión—, y un índice no
+puede depender de eso: la misma fila daría claves distintas según quién
+consulte. El arreglo es elegir la variante buena a mano: `fecha::timestamp`.
+Vale igual para `to_char` y `extract`, que tienen el mismo par de sobrecargas.
+Pasó en `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`.
 
 ## Y una que no es de las migraciones pero muerde igual
 
