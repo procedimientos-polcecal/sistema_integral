@@ -128,6 +128,19 @@ npm run build
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
 - `npm run lint` **falla**: el repo no tiene config de ESLint. No es tu cambio.
+- **Los worktrees de Claude Code viven adentro del repo** (`.claude/worktrees/`),
+  así que vitest los recorría como código del proyecto y recogía cada
+  `*.test.ts` una vez por worktree abierto — con dos abiertos, la suite corría
+  tres veces lo mismo. Nada rompía, pero el número dejaba de significar algo y
+  esas copias corrían contra el código del worktree, así que un verde podía
+  estar tapando que el árbol principal estaba rojo. Ya está excluido en
+  `vitest.config.ts` (el comentario de ahí tiene los números); lo que hay que
+  saber es que **si tocás ese `exclude`, `configDefaults.exclude` va sí o sí**:
+  definirlo pisa el default de vitest en vez de sumarse, y sin él se cuelan dos
+  archivos de test que vienen en `node_modules` — medido, no teórico. `tsc` no
+  tiene el problema: TypeScript ignora los directorios que empiezan con punto,
+  así que `--listFilesOnly` en el árbol principal no trae ni un archivo de
+  `.claude/worktrees/`. No hay nada que arreglar en `tsconfig.json`.
 - **Casi todo está detrás del login**, así que no se puede comprobar en el
   navegador. Se verifica con tests sobre las funciones puras y, cuando hace falta
   ver datos reales, consultando la base con el `SUPABASE_SERVICE_ROLE_KEY` de
