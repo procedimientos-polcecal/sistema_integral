@@ -18,6 +18,8 @@ interface Articulo {
 type Opcion = { id: string; nombre: string };
 /** Cada persona de la lista del pañol trae su destino habitual. */
 type Solicitante = Opcion & { destinoId: string | null };
+/** Cada equipo pertenece a un solo destino: es el filtro del select. */
+type Equipo = Opcion & { destinoId: string };
 type Tipo = "entrada" | "salida" | "ajuste";
 
 /**
@@ -38,11 +40,12 @@ type Tipo = "entrada" | "salida" | "ajuste";
  * las mismas palabras que escribe la gente. Ver `lib/inventario/catalogos.ts`.
  */
 export default function NuevoMovimientoClient({
-  articuloInicial, destinos, solicitantes, proveedores, sync,
+  articuloInicial, destinos, solicitantes, equipos, proveedores, sync,
 }: {
   articuloInicial: Articulo | null;
   destinos: Opcion[];
   solicitantes: Solicitante[];
+  equipos: Equipo[];
   proveedores: Opcion[];
   sync: UltimaSync | null;
 }) {
@@ -57,6 +60,9 @@ export default function NuevoMovimientoClient({
   // acá lo que alguien eligió a mano, para que cambiar de persona siga
   // arrastrando su destino mientras nadie lo haya pisado.
   const [destinoElegido, setDestinoElegido] = useState("");
+  // Mismo patrón que `destinoElegido`/`destinoId`: acá se guarda lo elegido a
+  // mano, y más abajo se resuelve si sigue valiendo para el destino actual.
+  const [equipoElegido, setEquipoElegido] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [ri, setRi] = useState("");
 
@@ -81,6 +87,22 @@ export default function NuevoMovimientoClient({
   const solicitante = solicitantes.find((s) => s.id === solicitanteId) ?? null;
   const destinoId = sectorDelMovimiento(destinoElegido, solicitante?.destinoId) ?? "";
   const destino = destinos.find((d) => d.id === destinoId) ?? null;
+
+  // Los equipos de ese destino, que es exactamente lo que ofrece el desplegable
+  // de la columna K en la planilla: el `onEdit` lo arma con los equipos del
+  // sector de la J.
+  const equiposDelDestino = useMemo(
+    () => equipos.filter((e) => e.destinoId === destinoId),
+    [equipos, destinoId]
+  );
+
+  // Cambiar de sector con un equipo ya elegido lo deja apuntando a otro sector,
+  // que la ruta rechazaría con un 400 recién al apretar Registrar. En vez de un
+  // `useEffect` que lo "limpie" un instante después de que ya se mostró elegido
+  // —el parpadeo de ver marcado un equipo que ya no corresponde—, se deriva acá
+  // igual que `destinoElegido`/`destinoId`: si lo elegido no está en la lista
+  // del destino actual, para el render y para lo que se manda no cuenta.
+  const equipoId = equiposDelDestino.some((e) => e.id === equipoElegido) ? equipoElegido : "";
 
   const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId });
 
@@ -129,6 +151,7 @@ export default function NuevoMovimientoClient({
         // puede escribir ahí una palabra que la validación no acepta.
         solicitante_id: solicitanteId || null,
         destino_id: destinoId || null,
+        equipo_id: equipoId || null,
         proveedor_id: proveedorId || null,
         ri: ri ? Number(ri) : null,
       }),
@@ -141,6 +164,9 @@ export default function NuevoMovimientoClient({
     setHecho({ stock: body.stock_resultante, aviso: body.planilla_error ?? null });
     setArticulo({ ...articulo, stock_actual: body.stock_resultante });
     setCantidad("");
+    // El equipo no se arrastra al movimiento siguiente: el artículo y la persona
+    // suelen repetirse en una tanda, la máquina no.
+    setEquipoElegido("");
   }
 
   return (
@@ -291,6 +317,41 @@ export default function NuevoMovimientoClient({
                      sector salvo que elijas uno.</>}
               </span>
             )}
+          </label>
+
+          {/* Para qué máquina. Es la columna K, que en la planilla es un
+              desplegable dependiente del sector de la J: acá se filtra igual,
+              porque escribir ahí un equipo de otro sector deja una celda que el
+              desplegable no puede volver a ofrecer. Opcional: hoy sólo el 14% de
+              las filas del kardex lo trae, y exigirlo sería pedir un dato que el
+              pañol muchas veces no tiene.
+
+              No se deshabilita cuando no hay opciones: mismo criterio que
+              "Para qué sector" arriba, que nunca se apaga y en cambio explica
+              con el texto de abajo — acá con el mismo texto en un select que
+              queda vacío es más claro, parado con una mano, que un control
+              gris que no se sabe si está cargando o no aplica. */}
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Para qué equipo</span>
+            <select
+              value={equipoId}
+              onChange={(e) => setEquipoElegido(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+            >
+              <option value="">—</option>
+              {equiposDelDestino.map((e) => (
+                <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+            {!destinoId ? (
+              <span className="mt-1 block text-xs text-slate-400">
+                Elegí primero para qué sector: los equipos son los de ese sector.
+              </span>
+            ) : equiposDelDestino.length === 0 ? (
+              <span className="mt-1 block text-xs text-slate-500">
+                {destino?.nombre ?? "Ese sector"} no tiene equipos en la planilla.
+              </span>
+            ) : null}
           </label>
 
           {tipo === "entrada" && (

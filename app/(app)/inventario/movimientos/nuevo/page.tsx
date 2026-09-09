@@ -24,7 +24,7 @@ export default async function NuevoMovimientoPage({
   // `sectores`: es la validación que la planilla tiene puesta en las columnas F
   // y J, e incluye contratistas y oficios que los catálogos del núcleo no
   // tienen ni deberían tener. Ver `lib/inventario/catalogos.ts`.
-  const [solicitantes, destinos, proveedores] = await Promise.all([
+  const [solicitantes, destinos, proveedores, equipos] = await Promise.all([
     traerTodo<{ id: string; nombre: string; destino_id: string | null }>((desde, hasta) =>
       supabase.from("inventario_solicitantes").select("id, nombre, destino_id")
         .eq("activo", true).order("nombre").range(desde, hasta)
@@ -35,6 +35,13 @@ export default async function NuevoMovimientoPage({
     ),
     traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
       supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre").range(desde, hasta)
+    ),
+    // La lista de equipos, con su destino: es lo que hace que el select se
+    // filtre igual que el desplegable de la planilla. Se ordena por nombre, que
+    // empieza con el código, así que agrupa por planta solo.
+    traerTodo<{ id: string; nombre: string; destino_id: string }>((desde, hasta) =>
+      supabase.from("inventario_equipos").select("id, nombre, destino_id")
+        .eq("activo", true).order("nombre").range(desde, hasta)
     ),
   ]);
 
@@ -65,6 +72,7 @@ export default async function NuevoMovimientoPage({
         destinoId: s.destino_id,
       }))}
       destinos={destinos}
+      equipos={equipos.map((e) => ({ id: e.id, nombre: e.nombre, destinoId: e.destino_id }))}
       proveedores={proveedores}
     />
   );
