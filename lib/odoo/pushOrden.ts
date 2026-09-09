@@ -187,7 +187,19 @@ export async function empujarOrdenesDeRequerimiento(
 
   for (const orden of armado.ordenes) {
     const previa = existentes.get(orden.empresaId);
-    if (previa) {
+
+    /*
+     * El vínculo dice que la orden existe. Hay que **preguntarle a Odoo** si es
+     * verdad, y no es paranoia: pasó el 09/09/2026. Se crearon dos órdenes en
+     * producción por error, alguien las borró en Odoo, y el SdG se quedó con los
+     * vínculos apuntando a órdenes inexistentes. Con eso el requerimiento quedó
+     * trabado para siempre —"ya existe", decía— sin forma de volver a crearlas.
+     *
+     * Una orden borrada del otro lado no es un caso raro: borrar un borrador es
+     * lo primero que hace cualquiera que ve una orden que no va. Si ya no está,
+     * el vínculo se descarta y se crea de nuevo.
+     */
+    if (previa && (await existeEnOdoo(previa.odooOrderId))) {
       creadas.push({
         empresa: orden.empresaNombre,
         odooOrderId: previa.odooOrderId,
@@ -277,6 +289,23 @@ export async function empujarOrdenesDeRequerimiento(
     .eq("id", ri.id);
 
   return { ok: true, ordenes: creadas };
+}
+
+/**
+ * ¿La orden sigue existiendo en Odoo?
+ *
+ * Ante la duda contesta que **sí**: si Odoo no responde, lo peor que puede pasar
+ * es que el requerimiento espere a un reintento. Contestar que no crearía una
+ * segunda orden, y el proveedor recibiría el mismo pedido dos veces — que es el
+ * error más caro de todos los posibles acá.
+ */
+async function existeEnOdoo(odooOrderId: number): Promise<boolean> {
+  try {
+    const filas = await buscarLeer("purchase.order", [["id", "=", odooOrderId]], ["name"]);
+    return filas.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 function textoDelProblema(p: Problema): string {

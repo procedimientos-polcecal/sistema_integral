@@ -85,15 +85,34 @@ export default function OrdenEnOdoo({
       </h2>
 
       {/*
-        A cuál Odoo se le va a escribir. Sólo se muestra cuando NO es producción:
-        un cartel permanente se vuelve invisible a la semana, y lo que hay que
-        notar es la excepción. Una orden creada en staging no existe para
-        contabilidad, y sin esto no habría forma de saberlo desde la pantalla.
+        A cuál Odoo se le va a escribir, **siempre**.
+        
+        La primera versión sólo avisaba en staging, con el argumento de que un
+        cartel permanente se vuelve invisible. El 09/09/2026 quedó claro que el
+        argumento era malo: se crearon dos órdenes en la contabilidad real
+        creyendo que iban a la de prueba, porque la ausencia de cartel no dice
+        nada. Es la producción la que hay que poder ver antes de apretar.
       */}
-      {odoo?.esStaging && (
-        <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
-          <strong>Apuntando a STAGING</strong> (<span className="font-mono">{odoo.base}</span>).
-          Lo que se cree acá no llega a la contabilidad real.
+      {odoo && (
+        <p
+          className={`mb-3 rounded-lg border px-3 py-2 text-xs ${
+            odoo.esStaging
+              ? "border-violet-200 bg-violet-50 text-violet-900"
+              : "border-slate-300 bg-slate-100 text-slate-800"
+          }`}
+        >
+          {odoo.esStaging ? (
+            <>
+              <strong>Apuntando a STAGING</strong> — lo que se cree acá no llega a la
+              contabilidad real.
+            </>
+          ) : (
+            <>
+              <strong>Apuntando a PRODUCCIÓN</strong> — lo que se cree acá es la
+              contabilidad real del grupo.
+            </>
+          )}{" "}
+          <span className="font-mono">{odoo.base}</span>
         </p>
       )}
 
