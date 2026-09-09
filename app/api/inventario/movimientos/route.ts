@@ -97,6 +97,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ese destino no está en la lista" }, { status: 400 });
   }
 
+  // El equipo se resuelve **contra la lista**, igual que quien retira y el
+  // destino. En la planilla la K es un desplegable que un `onEdit` arma con los
+  // equipos del sector: escribir ahí un texto que ese desplegable no ofrece deja
+  // una celda que nadie puede volver a elegir, y el cliente no es quien puede
+  // garantizarlo — alcanza con una pestaña vieja abierta.
+  const equipoId = texto(b?.equipo_id);
+  const { data: equipo } = equipoId
+    ? await admin
+        .from("inventario_equipos")
+        .select("id, nombre, destino_id, equipment_id")
+        .eq("id", equipoId)
+        .eq("activo", true)
+        .maybeSingle()
+    : { data: null };
+
+  if (equipoId && !equipo) {
+    return NextResponse.json(
+      { error: "Ese equipo no está en la lista del pañol" },
+      { status: 400 }
+    );
+  }
+
+  // Y tiene que ser un equipo **de ese sector**: es la comprobación que hace el
+  // desplegable de la planilla. Sin esto, una lista desactualizada en el cliente
+  // —o cambiar el sector después de elegir el equipo— mete en la K un equipo que
+  // el sector de la J no ofrece, y ahí el dato aparece en el lugar que no es.
+  // `destino_id` en `inventario_equipos` es `not null`, así que si acá no hay
+  // destino resuelto (nadie eligió sector y quien retira tampoco tiene), ningún
+  // equipo puede coincidir: la comparación rechaza, que es lo correcto, porque
+  // sin sector el desplegable de la K de la planilla ni siquiera tendría de
+  // dónde armarse.
+  if (equipo && equipo.destino_id !== destinoId) {
+    return NextResponse.json(
+      { error: `${equipo.nombre} no es un equipo de ese sector` },
+      { status: 400 }
+    );
+  }
+
   // El RPC va con el cliente de la sesión y NO con el admin. Adentro comprueba
   // `puede_editar_inventario()`, que se resuelve con `auth.uid()`, y el cliente
   // admin usa la service role: no lleva JWT, así que ahí `auth.uid()` es null y
@@ -119,7 +157,10 @@ export async function POST(request: Request) {
     // son sectores: MECÁNICO y TALLER VIAL no están en `sectores` y ahí queda
     // en null a propósito. El destino de verdad viaja en `destino_id`.
     p_sector_id: destino?.sector_id ?? null,
-    p_equipment_id: texto(b?.equipment_id),
+    // Del equipo de la lista y NO del cuerpo del pedido. Antes venía de `b`,
+    // donde nadie lo mandaba: siempre era null, y era una puerta para colgar el
+    // movimiento de cualquier máquina del núcleo.
+    p_equipment_id: equipo?.equipment_id ?? null,
     p_proveedor_id: texto(b?.proveedor_id),
     p_empleado_id: solicitante?.empleado_id ?? null,
     p_ri: Number.isInteger(Number(b?.ri)) && Number(b?.ri) > 0 ? Number(b?.ri) : null,
@@ -139,6 +180,12 @@ export async function POST(request: Request) {
   // sector y el proveedor: sin esto, un movimiento cargado acá se muestra sin
   // sector hasta que la sincronización vuelva a leer su propia fila.
   const sector_raw = destino?.nombre ?? null;
+
+  // El nombre tal como va a quedar escrito en la K. Se guarda también en
+  // `equipo_raw`, que es de donde el kardex de la app lee el equipo: sin esto,
+  // un movimiento cargado acá se muestra sin equipo hasta que la sincronización
+  // vuelva a leer su propia fila.
+  const equipo_raw = equipo?.nombre ?? null;
 
   const { data: proveedor } = texto(b?.proveedor_id)
     ? await admin
@@ -160,7 +207,7 @@ export async function POST(request: Request) {
     solicitante: mov.solicitante,
     proveedor: proveedor_raw,
     sector: sector_raw,
-    equipo: null, // La Tarea 8 resuelve el nombre a partir de `p_equipment_id` y lo pasa acá.
+    equipo: equipo_raw,
     fecha: mov.fecha,
   });
 
@@ -169,6 +216,8 @@ export async function POST(request: Request) {
     .from("inventario_movimientos")
     .update({
       sector_raw,
+      equipo_raw,
+      equipo_id: equipo?.id ?? null,
       proveedor_raw,
       solicitante_id: solicitante?.id ?? null,
       destino_id: destino?.id ?? null,
