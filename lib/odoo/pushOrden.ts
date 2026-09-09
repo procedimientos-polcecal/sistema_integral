@@ -71,12 +71,6 @@ export async function empujarOrdenesDeRequerimiento(
   if (errorRi) return { ok: false, motivos: [errorRi.message] };
   if (!ri) return { ok: false, motivos: ["No existe ese requerimiento."] };
 
-  if (!ri.proveedor_id) {
-    return await anotarPendiente(admin, ri.id, [
-      `El RI ${ri.nro_ri} no tiene proveedor elegido: sin proveedor no hay orden de compra posible.`,
-    ]);
-  }
-
   // La cotización elegida es de donde sale el precio: es la que ganó la
   // comparativa, no el costo estimado del requerimiento.
   const { data: cotizacion } = await admin
@@ -86,11 +80,13 @@ export async function empujarOrdenesDeRequerimiento(
     .eq("elegida", true)
     .maybeSingle();
 
-  if (!cotizacion) {
-    return await anotarPendiente(admin, ri.id, [
-      `El RI ${ri.nro_ri} no tiene cotización elegida en la comparativa.`,
-    ]);
-  }
+  const previos = problemasPrevios(ri, cotizacion);
+  if (previos.length) return await anotarPendiente(admin, ri.id, previos);
+
+  // A esta altura hay cotización y hay proveedor: `problemasPrevios` no dejó
+  // pasar lo contrario. TypeScript no puede deducirlo de una función que
+  // devuelve una lista de textos, así que se afirma acá.
+  const elegida = cotizacion!;
 
   // Qué empresas: la del RI, o las dos si lo pagan las dos.
   const { data: todasLasEmpresas } = await admin
@@ -171,11 +167,11 @@ export async function empujarOrdenesDeRequerimiento(
       fechaNecesidad: ri.fecha_necesidad,
     },
     {
-      precioUnitario: cotizacion.precio_unitario,
-      cantidad: cotizacion.cantidad,
-      descuento: cotizacion.descuento,
-      costoEnvio: cotizacion.costo_envio,
-      moneda: cotizacion.moneda,
+      precioUnitario: elegida.precio_unitario,
+      cantidad: elegida.cantidad,
+      descuento: elegida.descuento,
+      costoEnvio: elegida.costo_envio,
+      moneda: elegida.moneda,
     },
     paraOrden,
     {
@@ -291,6 +287,39 @@ function textoDelProblema(p: Problema): string {
 }
 
 /**
+ * Lo que hay que tener **antes** de mirar Odoo: proveedor elegido y cotización.
+ *
+ * Vive aparte porque el push y el ensayo tienen que dar el **mismo**
+ * diagnóstico, y no lo daban. El ensayo del RI 1933 dijo "el proveedor no existe
+ * en POLCECAL, hay que darlo de alta ahí" cuando la verdad era que el
+ * requerimiento no tenía proveedor: el presupuesto de Casa Camino estaba
+ * cargado pero nunca se eligió. Mandar a alguien a dar de alta un proveedor que
+ * ya está enlazado es peor que no decir nada.
+ */
+function problemasPrevios(
+  ri: Pick<FilaRequerimiento, "nro_ri" | "proveedor_id">,
+  cotizacion: unknown
+): string[] {
+  const problemas: string[] = [];
+
+  if (!ri.proveedor_id) {
+    problemas.push(
+      `El RI ${ri.nro_ri} no tiene proveedor elegido. Si ya hay presupuestos cargados, ` +
+        `falta elegir uno en la comparativa: eso es lo que le pone el proveedor y el costo al requerimiento.`
+    );
+  }
+
+  if (!cotizacion) {
+    problemas.push(
+      `El RI ${ri.nro_ri} no tiene cotización elegida en la comparativa. ` +
+        `De ahí sale el precio unitario, que es lo que necesita la línea de la orden.`
+    );
+  }
+
+  return problemas;
+}
+
+/**
  * Guarda el pendiente en el requerimiento y devuelve el fallo.
  *
  * El pendiente no es decoración: un requerimiento aprobado cuya orden no llegó a
@@ -325,24 +354,34 @@ export async function ensayarOrdenesDeRequerimiento(
 
   if (!ri) return { error: "No existe ese requerimiento." };
 
-  const [{ data: cotizacion }, { data: empresas }, { data: enlaces }, { data: yaCreadas }] =
-    await Promise.all([
-      admin
-        .from("compras_cotizaciones")
-        .select("precio_unitario, cantidad, descuento, costo_envio, moneda")
-        .eq("requerimiento_id", ri.id)
-        .eq("elegida", true)
-        .maybeSingle(),
-      admin.from("empresas").select("id, nombre, odoo_company_id").order("nombre"),
-      admin
-        .from("proveedores_odoo")
-        .select("empresa_id, odoo_partner_id")
-        .eq("proveedor_id", ri.proveedor_id ?? ""),
-      admin
-        .from("compras_odoo_ordenes")
-        .select("empresa_id, odoo_order_id, odoo_nombre")
-        .eq("requerimiento_id", ri.id),
-    ]);
+  const [{ data: cotizacion }, { data: empresas }, { data: yaCreadas }] = await Promise.all([
+    admin
+      .from("compras_cotizaciones")
+      .select("precio_unitario, cantidad, descuento, costo_envio, moneda")
+      .eq("requerimiento_id", ri.id)
+      .eq("elegida", true)
+      .maybeSingle(),
+    admin.from("empresas").select("id, nombre, odoo_company_id").order("nombre"),
+    admin
+      .from("compras_odoo_ordenes")
+      .select("empresa_id, odoo_order_id, odoo_nombre")
+      .eq("requerimiento_id", ri.id),
+  ]);
+
+  /*
+   * El mismo diagnóstico que el push, y antes de mirar Odoo. Sin esto el ensayo
+   * decía "el proveedor no existe en POLCECAL" cuando el requerimiento no tenía
+   * proveedor ninguno, y encima consultaba `proveedores_odoo` con un uuid vacío.
+   */
+  const previos = problemasPrevios(ri, cotizacion);
+  if (previos.length) {
+    return { requerimiento: { nroRi: ri.nro_ri, descripcion: ri.descripcion }, yaCreadas, problemas: previos };
+  }
+
+  const { data: enlaces } = await admin
+    .from("proveedores_odoo")
+    .select("empresa_id, odoo_partner_id")
+    .eq("proveedor_id", ri.proveedor_id!);
 
   const empresasDelRi = ((empresas ?? []) as FilaEmpresa[]).filter((e) =>
     ri.paga_ambas ? true : e.id === ri.empresa_id
