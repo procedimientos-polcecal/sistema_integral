@@ -182,9 +182,9 @@ const prioridadDe = (v: unknown) => {
 /**
  * Qué dice la planilla sobre quién paga. `null` cuando la celda vino vacía:
  * es la ausencia de una decisión, no una decisión ("ninguna de las dos").
- * Antes `pagaDe("")` devolvía `{empresa: null, ambas: false}`, el mismo
- * objeto que "AMBAS" era falso y ninguna empresa reconocida, así que vacío y
- * decisión explícita se confundían.
+ * Antes `pagaDe("")` devolvía `{empresa: null, ambas: false}` —el mismo
+ * objeto que un valor no reconocido o que "ninguna de las dos" explícita—,
+ * así que vacío y decisión se confundían.
  */
 export const pagaDe = (v: unknown): { empresa: string | null; ambas: boolean } | null => {
   const s = norm(v);
