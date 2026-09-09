@@ -215,15 +215,28 @@ de una pestaña a la que le faltara `Observaciones`.
 
 ## Lo que falta
 
-### Cargar `GOOGLE_SHEETS_DESPACHO_ID`
+### `GOOGLE_SHEETS_DESPACHO_ID` ya está cargada (09/09/2026)
 
-Es lo único que bloquea al módulo. `1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`,
-en `.env.local` y en Vercel. El libro ya está compartido con
+`1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`, en `.env.local` y en Vercel
+(Production, proyecto `sistema-integral`). El libro ya está compartido con
 `sheets-reader@mantenimientopp.iam.gserviceaccount.com`.
 
 Sin la variable **el espejo no escribe** y cada orden que se cierre queda con
 `sheets_pendiente`, que es el comportamiento buscado y se ve en el Inicio y en la
-cola del día — pero la planilla se queda sin esas órdenes.
+cola del día — pero la planilla se queda sin esas órdenes. Por eso conviene saber
+las dos cosas que aparecieron al cargarla:
+
+- **`vercel env ls` dice que la variable existe y no dice qué tiene adentro.**
+  Las de este proyecto están guardadas como *sensitive*, así que `vercel env pull`
+  las devuelve **todas en `""`** —incluida `NEXT_PUBLIC_SUPABASE_URL`, que en
+  producción evidentemente no está vacía—. O sea que "está en el listado" no es
+  prueba de que esté cargada. Ésta se volvió a escribir con `--force
+  --no-sensitive`, que es lo correcto acá porque el id del libro no es un secreto
+  (está en este documento), y ahora se puede verificar leyéndola de vuelta.
+- **Un cambio de variable no lo toma el deploy que ya está corriendo.** Vercel
+  las fija al construir, así que hay que redeployar producción para que el espejo
+  empiece a escribir. Mientras no se redeploye, el síntoma es exactamente el de
+  la variable faltante: órdenes con `sheets_pendiente`.
 
 ### Dar el módulo a alguien
 
