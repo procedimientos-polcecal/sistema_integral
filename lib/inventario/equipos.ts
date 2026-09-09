@@ -22,6 +22,8 @@
  * elegir. El núcleo se usa para enganchar por código y nada más.
  */
 
+import { indicePorNombre, reconocer, reconocerEquipo, type Indice } from "@/lib/inventario/enlaces";
+
 /** Un par de la pestaña, ya recortado. */
 export interface ParDeLaPestana {
   sector: string;
@@ -47,4 +49,95 @@ export function filaDeSectorYEquipo(fila: unknown[]): ParDeLaPestana | null {
   if (!sector || !equipo) return null;
 
   return { sector, equipo };
+}
+
+/** Una fila de la lista, como está guardada. */
+export interface EquipoDeLaLista {
+  id: string;
+  nombre: string;
+  destino_id: string;
+  equipment_id: string | null;
+  activo: boolean;
+}
+
+export interface CambiosDeEquipos {
+  nuevos: { nombre: string; destino_id: string; equipment_id: string | null }[];
+  actualizados: { id: string; destino_id: string; equipment_id: string | null; activo: true }[];
+  /** Ids de los que ya no están en la pestaña. Se desactivan; no se borran. */
+  desactivados: string[];
+  /** Sectores que la pestaña nombra y `inventario_destinos` no tiene. */
+  sinDestino: string[];
+}
+
+/**
+ * Qué hay que hacerle a la lista para que refleje la pestaña.
+ *
+ * Va aparte de la escritura para poder probarla: es la parte que decide, y una
+ * decisión equivocada acá deja el select ofreciendo un equipo del sector que no
+ * es —o no ofreciendo ninguno—.
+ *
+ * **La clave es el nombre.** La pestaña no tiene ids, así que es lo único que
+ * identifica una fila entre dos corridas. Se compara con la misma normalización
+ * que el resto del módulo —sin acentos, sin mayúsculas, espacios colapsados—
+ * para que un espacio de más en la planilla no inserte un duplicado; lo que se
+ * **guarda** es el texto literal, que es lo que va a la columna K.
+ *
+ * **No borra nunca.** Lo que desaparece de la pestaña queda `activo = false`:
+ * los movimientos históricos le apuntan, y si un día la pestaña se lee mal, una
+ * lista vaciada sería un select vacío que nadie relaciona con la sincronización.
+ *
+ * **Un sector que no es un destino se informa y su equipo no entra.** No se le
+ * inventa un destino ni se lo cuelga del que se le parece: enlazar al que se le
+ * parece es peor que dejar en null, y acá además dejaría el equipo colgado del
+ * sector equivocado en el select de otra persona.
+ *
+ * La normalización es local y no `claveDeProveedor` porque acá la clave la usan
+ * dos lados que no se hablan —la pestaña y la lista— y conviene que no dependa
+ * de una función pensada para nombres de proveedor. Es la misma regla, escrita
+ * para lo que compara.
+ */
+export function equiposQueCambian(
+  pestana: ParDeLaPestana[],
+  lista: EquipoDeLaLista[],
+  destinos: { id: string; nombre: string }[],
+  nucleo: Indice
+): CambiosDeEquipos {
+  const porDestino = indicePorNombre(destinos);
+  const clave = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+  const actual = new Map(lista.map((e) => [clave(e.nombre), e]));
+  const cambios: CambiosDeEquipos = {
+    nuevos: [], actualizados: [], desactivados: [], sinDestino: [],
+  };
+
+  const vistos = new Set<string>();
+  const sinDestino = new Set<string>();
+
+  for (const par of pestana) {
+    const destino_id = reconocer(porDestino, par.sector);
+    if (!destino_id) { sinDestino.add(par.sector); continue; }
+
+    const k = clave(par.equipo);
+    if (!k || vistos.has(k)) continue;
+    vistos.add(k);
+
+    const equipment_id = reconocerEquipo(nucleo, par.equipo);
+    const ya = actual.get(k);
+
+    if (!ya) {
+      cambios.nuevos.push({ nombre: par.equipo, destino_id, equipment_id });
+      continue;
+    }
+    if (ya.destino_id !== destino_id || ya.equipment_id !== equipment_id || !ya.activo) {
+      cambios.actualizados.push({ id: ya.id, destino_id, equipment_id, activo: true });
+    }
+  }
+
+  for (const e of lista) {
+    if (e.activo && !vistos.has(clave(e.nombre))) cambios.desactivados.push(e.id);
+  }
+
+  cambios.sinDestino = [...sinDestino].sort();
+  return cambios;
 }
