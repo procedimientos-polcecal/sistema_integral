@@ -18,6 +18,7 @@ import { fechaDeTexto } from "@/lib/core/fechas";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
+import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
@@ -337,7 +338,9 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             detalle_extra: texto(val(fila, "detalle_extra")),
             imagen_url: texto(val(fila, "imagen")),
             prioridad: prioridadDe(val(fila, "prioridad")),
-            paga: pagaDe(val(fila, "empresa")),
+            // `null` cuando la celda está vacía: vacío no es "ninguna de las
+            // dos", y confundirlos borra la empresa que eligió quien pidió.
+            paga: texto(val(fila, "empresa")) ? pagaDe(val(fila, "empresa")) : null,
             solicitante_nombre: texto(val(fila, "solicita")),
             estado_aprobacion: apro.estado,
             aprobador: apro.aprobador,
@@ -430,10 +433,14 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       compra_asignada_a: string | null;
       solicitante_nombre: string | null;
       comparativa_drive_id: string | null;
+      prioridad: string | null;
+      empresa_id: string | null;
+      paga_ambas: boolean;
+      origen: string;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -453,6 +460,28 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       const d = registro.datos;
       const ubicacion = d.ubicacion ? String(d.ubicacion) : null;
       const clave = ubicacion ? norm(ubicacion) : null;
+      const yaHabia = previo.get(registro.nro_ri);
+      const fusion = fusionarConLoQueYaHabia(
+        {
+          prioridad: (d.prioridad as string | null) ?? null,
+          estado_aprobacion: (d.estado_aprobacion as string | null) ?? null,
+          estado_compra: (d.estado_compra as string | null) ?? null,
+          solicitante_nombre: (d.solicitante_nombre as string | null) ?? null,
+          compra_asignada_a: d.asignado_alias
+            ? porAlias.get(norm(d.asignado_alias as string)) ?? null
+            : null,
+          comparativa_drive_id: planillas.get(registro.nro_ri) ?? null,
+          paga: d.paga
+            ? {
+                empresa_id: (d.paga as { empresa: string | null }).empresa
+                  ? porEmpresa.get((d.paga as { empresa: string }).empresa) ?? null
+                  : null,
+                ambas: (d.paga as { ambas: boolean }).ambas,
+              }
+            : null,
+        },
+        yaHabia
+      );
 
       aEscribir.push({
         nro_ri: registro.nro_ri,
@@ -467,57 +496,18 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         fecha_necesidad: d.fecha_necesidad ?? null,
         detalle_extra: d.detalle_extra ?? null,
         imagen_url: d.imagen_url ?? null,
-        prioridad: d.prioridad ?? null,
-        empresa_id: (d.paga as { empresa: string | null })?.empresa
-          ? porEmpresa.get((d.paga as { empresa: string }).empresa) ?? null
-          : null,
-        paga_ambas: (d.paga as { ambas: boolean })?.ambas ?? false,
-        // Se conserva lo que hubiera si la planilla no lo trae, igual que el
-        // estado y la asignación de compra. Sin esto, un RI cargado en la app
-        // —que sí sabe quién lo pidió— perdía el nombre en la primera
-        // sincronización que releyera su fila, y su autor dejaba de verlo entre
-        // los suyos. `solicitante_id` no viaja en este upsert, así que ese no
-        // se toca.
-        solicitante_nombre:
-          d.solicitante_nombre ?? previo.get(registro.nro_ri)?.solicitante_nombre ?? null,
-        // Que la planilla no diga nada no significa "sin aprobar" ni "sin
-        // iniciar": significa que no se pudo leer. Pisar con el valor por
-        // defecto revertia compras ya hechas —15 pasaron de PEDIDO a
-        // SIN_INICIAR en una sola corrida—, asi que se conserva lo que habia y
-        // el default queda solo para un RI que no existia.
-        estado_aprobacion:
-          d.estado_aprobacion ?? previo.get(registro.nro_ri)?.estado_aprobacion ?? "PENDIENTE",
         aprobador: d.aprobador ?? null,
-        estado_compra:
-          d.estado_compra ?? previo.get(registro.nro_ri)?.estado_compra ?? "SIN_INICIAR",
-        // La planilla de la comparativa. Se conserva la que hubiera si esta vez
-        // no se pudo leer el link: perder el vínculo por una falla de Google
-        // dejaría la comparativa sin manera de volver a encontrarla.
-        // `comparativa_url` no viaja en este upsert a propósito: se exporta a la
-        // celda de la planilla (ver arriba).
-        comparativa_drive_id:
-          planillas.get(registro.nro_ri) ??
-          previo.get(registro.nro_ri)?.comparativa_drive_id ??
-          null,
         proveedor_id: d.proveedor
           ? idProveedor.get(claveProveedor(String(d.proveedor))) ?? null
           : null,
-        // Sin esto, un RI que la planilla marca "PARA COMPRAR (NICO)" llegaba a
-        // la app sin asignar, y como aprobar la compra es de quien la tiene
-        // asignada, no lo podía aprobar nadie.
-        // Si el alias no está registrado en /compras/configuracion no se puede
-        // resolver, y ahí se conserva lo que hubiera: no saber quién es no es
-        // razon para dejar la compra sin nadie que pueda aprobarla.
-        compra_asignada_a:
-          (d.asignado_alias ? porAlias.get(norm(d.asignado_alias)) : null) ??
-          previo.get(registro.nro_ri)?.compra_asignada_a ??
-          null,
         costo_iva: d.costo_iva ?? null,
         costo_envio: d.costo_envio ?? null,
-        origen: "sheets",
         hoja_origen: registro.hoja,
         sheets_fila: registro.fila,
         sheets_sincronizado_en: new Date().toISOString(),
+        // Las nueve columnas que la planilla puede no traer. La regla —y por
+        // qué cada una está en la lista— vive en `fusionarConLoQueYaHabia`.
+        ...fusion,
       });
     }
 
