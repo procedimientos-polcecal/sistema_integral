@@ -164,9 +164,9 @@ funciones puras y una que escribe:
 
 **`lib/inventario/enlaces.ts`** — `indiceDeEquipos(equipos)` y
 `reconocerEquipo(indice, texto)`. Matchea por el **código**, que es lo que está
-antes del primer `" - "`: así los 26 nombres divergentes y los dos huérfanos del
-kardex (`PO-D1-10 - SEPARADOR DINÁMICO 3` y `4`, que están en la K y no en la
-pestaña) se enganchan igual. Si no hay código, prueba el nombre completo
+antes del primer `" - "`: así los 26 nombres divergentes se enganchan igual, y
+también cualquier valor que la K traiga y la pestaña ya no ofrezca. Si no hay
+código, prueba el nombre completo
 normalizado. Lo que no reconoce queda en `null` y se informa — la regla de la
 032, la misma que ya aplica `reconocer()` para empleados.
 
@@ -260,6 +260,12 @@ Tres cosas que se midieron haciendo esto y que no se tocan en este cambio:
    cambia el sector.
 3. **Dos valores del kardex no están en la pestaña**:
    `PO-D1-10 - SEPARADOR DINÁMICO 3` y `4`, contra un `PO-D1-10 - SEPARADOR
-   DINÁMICO 2` en el núcleo. Son filas históricas. Se reconocen por código, así
-   que no molestan, pero alguien tiene que decidir cuál de los tres nombres es
-   el bueno.
+   DINÁMICO 2` en la pestaña y en el núcleo. Alguien tiene que decidir cuál de
+   los tres nombres es el bueno.
+
+   Y una aclaración que costó una revisión entera: **esas dos filas no llegan a
+   la base**. Las dos tienen entrada y salida cargadas al mismo tiempo, y
+   `filaDeMovimiento` descarta esas filas desde siempre porque nadie mueve un
+   artículo para los dos lados a la vez. Así que no sirven para comprobar el
+   enganche por código —buscarlas en `inventario_movimientos` no las encuentra—
+   y tampoco son un problema abierto del enlace: son dos filas mal cargadas.

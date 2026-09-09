@@ -265,14 +265,23 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
 
     // El equipo se resuelve en dos pasos, y los dos importan:
     //
-    // `equipo_id` es la fila de la lista, por nombre. Es null cuando el texto no
-    // está en la pestaña — pasa con `PO-D1-10 - SEPARADOR DINÁMICO 3` y `4`, dos
-    // filas históricas contra un `SEPARADOR DINÁMICO 2` en el núcleo.
+    // `equipo_id` es la fila de la lista, por nombre. Queda en null cuando la K
+    // dice algo que la pestaña no tiene, que es lo que pasa cuando alguien la
+    // edita con la validación desactivada o cuando la pestaña cambia después.
     //
     // `equipment_id` es la máquina del núcleo, y se saca de la lista cuando la
-    // lista lo tiene; si no, se reconoce **por código** sobre el texto crudo. Es
-    // lo que hace que esos dos huérfanos igual queden colgados de la máquina
-    // correcta aunque no tengan `equipo_id`.
+    // lista lo tiene; si no, se reconoce **por código** sobre el texto crudo.
+    // Eso es lo que hace que un valor que la pestaña ya no ofrece igual quede
+    // colgado de la máquina correcta: el código es lo único que la planilla y el
+    // núcleo escriben igual, y sin este segundo paso ese gasto no se le podría
+    // atribuir a ninguna máquina.
+    //
+    // El kardex tiene hoy dos valores así —`PO-D1-10 - SEPARADOR DINÁMICO 3` y
+    // `4`, contra el `2` que dicen la pestaña y el núcleo—, pero **no llegan
+    // hasta acá**: sus dos filas tienen entrada y salida cargadas al mismo
+    // tiempo y `filaDeMovimiento` las descarta antes. Se dice porque es fácil
+    // buscarlos en la base para comprobar este camino y no encontrarlos, y
+    // concluir que el fallback no sirve.
     const equipo_id = reconocer(porEquipo, m.equipo_raw);
     const equipment_id =
       (equipo_id ? listaEquipos.find((e) => e.id === equipo_id)?.equipment_id : null) ??
