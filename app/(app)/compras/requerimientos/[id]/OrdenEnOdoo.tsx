@@ -23,6 +23,8 @@ export interface OrdenDeOdoo {
   odooOrderId: number;
   odooNombre: string | null;
   porcentaje: number;
+  /** A la orden, en la instancia a la que apunta el sistema. */
+  enlace: string | null;
 }
 
 export default function OrdenEnOdoo({
@@ -120,9 +122,26 @@ export default function OrdenEnOdoo({
         <ul className="space-y-2">
           {ordenes.map((o) => (
             <li key={o.odooOrderId} className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="font-mono font-semibold text-slate-900">
-                {o.odooNombre ?? `#${o.odooOrderId}`}
-              </span>
+              {/*
+                El número va enlazado porque solo no identifica nada: staging es
+                una copia y su secuencia quedó atrás, así que P02428 existe en
+                las dos bases y son órdenes distintas. El enlace lleva a la que
+                de verdad creó el sistema.
+              */}
+              {o.enlace ? (
+                <a
+                  href={o.enlace}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono font-semibold text-[var(--primary)] hover:underline"
+                >
+                  {o.odooNombre ?? `#${o.odooOrderId}`}
+                </a>
+              ) : (
+                <span className="font-mono font-semibold text-slate-900">
+                  {o.odooNombre ?? `#${o.odooOrderId}`}
+                </span>
+              )}
               <span className="text-xs text-slate-500">
                 {o.empresa}
                 {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}

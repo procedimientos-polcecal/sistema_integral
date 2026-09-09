@@ -120,14 +120,31 @@ function credenciales(): CredencialesOdoo {
  * se usa para **avisar**, nunca para decidir. Si algún día no acierta, lo peor
  * que pasa es que falte un cartel; nunca que se escriba donde no va.
  */
-export function dondeApuntaOdoo(): { base: string; esStaging: boolean } {
+export function dondeApuntaOdoo(): { base: string; url: string; esStaging: boolean } {
   const base = process.env.ODOO_DB ?? "";
-  const url = process.env.ODOO_URL ?? "";
+  const url = (process.env.ODOO_URL ?? "").trim().replace(/\/+$/, "");
 
   return {
     base,
+    url,
     esStaging: /staging/i.test(base) || /\.dev\.odoo\.com/i.test(url),
   };
+}
+
+/**
+ * El enlace a un registro de Odoo, en la instancia a la que apuntamos.
+ *
+ * Hace falta porque **el número de orden no identifica nada por sí solo**:
+ * staging es una copia del 03/09 y su secuencia quedó atrás, así que P02428
+ * existe en las dos bases y son órdenes distintas —en staging, la del RI 1933
+ * por $19.511,25; en producción, una de Bruzzone por $49,76—. Decirle a
+ * contabilidad "facturá la P02428" es ambiguo; un enlace no lo es.
+ */
+export function enlaceAOdoo(modelo: string, id: number): string | null {
+  const { url } = dondeApuntaOdoo();
+  if (!url) return null;
+
+  return `${url}/web#id=${id}&model=${modelo}&view_type=form`;
 }
 
 // ── El transporte ────────────────────────────────────────────

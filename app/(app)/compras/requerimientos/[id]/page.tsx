@@ -6,7 +6,7 @@ import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { volverAlListado } from "@/lib/compras/filtrosUrl";
 import RequerimientoDetalle from "./RequerimientoDetalle";
-import { dondeApuntaOdoo } from "@/lib/odoo/client";
+import { dondeApuntaOdoo, enlaceAOdoo } from "@/lib/odoo/client";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
 
 export default async function RequerimientoPage({
@@ -108,6 +108,8 @@ export default async function RequerimientoPage({
         // El embed llega como objeto o como arreglo según la relación, igual
         // que en `descripcionDelArticulo`.
         empresa: nombreDeEmpresa(o.empresas) ?? "—",
+        // El número solo no alcanza: se repite entre instancias.
+        enlace: enlaceAOdoo("purchase.order", o.odoo_order_id as number),
       }))}
       entradasAlPanol={(entradasAlPanol ?? []).map((e) => ({
         id: e.id as string,
