@@ -80,6 +80,20 @@ export default function Comparativa({
    */
   const enLaPlanilla = eleccionDeLaPlanilla(cotizaciones);
 
+  /*
+   * ¿La compra está decidida de verdad?
+   *
+   * No es lo mismo que `congelada`. `congelada` mira el estado, y hay **35
+   * requerimientos** cuyo estado dice APROBADO sin proveedor ni presupuesto
+   * elegido: el estado vino de la columna de la planilla, no de que alguien
+   * eligiera acá. En ésos la pantalla se congelaba y escondía todo lo que
+   * permitía resolverlo, incluido este aviso — justo donde más sirve, porque 33
+   * de los 35 tienen comparativa adjunta y la planilla probablemente ya tiene
+   * la respuesta.
+   */
+  const decidida = cotizaciones.some((c) => c.elegida) || r.proveedor_id !== null;
+  const trabada = congelada && !decidida;
+
   function refrescar(mensaje: string | null) {
     setAviso(mensaje);
     setSelector(false);
@@ -213,7 +227,7 @@ export default function Comparativa({
           </div>
         )}
 
-        {!congelada && enLaPlanilla.tipo === "una" && (
+        {!decidida && enLaPlanilla.tipo === "una" && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-900">
             <p>
               <strong>En la planilla eligieron a{" "}
@@ -230,6 +244,13 @@ export default function Comparativa({
               >
                 {eligiendo ? "Confirmando…" : "Confirmar esta elección"}
               </button>
+            ) : trabada ? (
+              <p className="mt-1 text-xs text-sky-800">
+                El estado dice <strong>compra aprobada</strong> pero no hay ningún
+                presupuesto elegido, así que el sistema no deja confirmar. Para
+                resolverlo, pasá el estado de la compra a <strong>Para comprar</strong> y
+                volvé acá.
+              </p>
             ) : (
               <p className="mt-1 text-xs text-sky-800">
                 La confirma quien tenga la compra asignada: marcarla en la planilla no
@@ -239,7 +260,7 @@ export default function Comparativa({
           </div>
         )}
 
-        {!congelada && enLaPlanilla.tipo === "varias" && (
+        {!decidida && enLaPlanilla.tipo === "varias" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
             <p>
               <strong>La planilla tiene {enLaPlanilla.cotizaciones.length} elecciones
@@ -299,7 +320,7 @@ export default function Comparativa({
           />
         )}
 
-        {congelada && cotizaciones.length > 0 && (
+        {congelada && decidida && cotizaciones.length > 0 && (
           <p className="text-xs text-slate-400">
             La comparativa quedó congelada al aprobarse la compra.
           </p>
