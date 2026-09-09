@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fechaDeSheets } from "./fechaDeSheets";
+import { fechaDeSheets, serialDelDia, serialDelInstante } from "./fechaDeSheets";
 
 describe("la fecha que devuelve una planilla", () => {
   it("un serial de Sheets es el dia que representa", () => {
@@ -25,5 +25,32 @@ describe("la fecha que devuelve una planilla", () => {
     expect(fechaDeSheets(null)).toBeNull();
     expect(fechaDeSheets(undefined)).toBeNull();
     expect(fechaDeSheets("sin fecha")).toBeNull();
+  });
+});
+
+describe("la fecha como la guarda Sheets", () => {
+  it("un dia es un serial entero", () => {
+    // Verificado contra la planilla real: la fila del RI 1954 tiene 46275 en
+    // "PARA CUANDO SE NECESITA" y se ve como 10/9/2026.
+    expect(serialDelDia("2026-09-10")).toBe(46275);
+  });
+
+  it("y vuelve igual: es la inversa de fechaDeSheets", () => {
+    for (const iso of ["2026-09-10", "2026-01-01", "2025-12-31", "1970-01-01"]) {
+      expect(fechaDeSheets(serialDelDia(iso))).toBe(iso);
+    }
+  });
+
+  it("un instante lleva la fraccion del dia, en la zona de la planilla", () => {
+    // La planilla esta en America/Araguaina (UTC-3), como Argentina y sin
+    // horario de verano. 12:36:57 UTC son las 09:36:57 alla.
+    const serial = serialDelInstante(new Date("2026-09-09T12:36:57.702Z"));
+    expect(Math.floor(serial)).toBe(46274);
+    expect(serial).toBeCloseTo(46274.40066, 4);
+  });
+
+  it("una fecha que no se entiende no inventa un numero", () => {
+    expect(serialDelDia("")).toBeNull();
+    expect(serialDelDia("10/9/2026")).toBeNull();
   });
 });
