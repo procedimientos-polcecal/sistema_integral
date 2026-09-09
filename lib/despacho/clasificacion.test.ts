@@ -5,6 +5,7 @@ import {
   ENVASES,
   clasificacionDe,
   textoDeClasificacion,
+  textoParaLaPlanilla,
   separarCodigoYNombre,
 } from "./clasificacion";
 import type { ProductoDeDespacho } from "./types";
@@ -123,6 +124,8 @@ describe("las listas", () => {
   it("cubren lo que el papel no", () => {
     expect(MATERIALES).toContain("Cal");
     expect(MATERIALES).toContain("Pedregullo");
+    // 30 órdenes del histórico son de dolomita, que el talonario no tiene.
+    expect(MATERIALES).toContain("Dolomita");
     expect(ENVASES).toContain("A granel");
     expect(ENVASES).toContain("Tolva");
     expect(GRANULOMETRIAS).toContain("#200");
@@ -133,5 +136,42 @@ describe("las listas", () => {
     for (const lista of [MATERIALES, GRANULOMETRIAS, ENVASES]) {
       expect(new Set(lista).size).toBe(lista.length);
     }
+  });
+});
+
+describe("textoParaLaPlanilla", () => {
+  /**
+   * La celda se escribe con la forma del libro, no con la del sistema: hay
+   * 1.714 renglones de historia y quien los lee no tiene por qué ver otra
+   * forma de golpe. Lo que cambia es que de acá en más se escribe siempre
+   * igual — hoy hay 201 textos distintos para unas quince combinaciones.
+   */
+  it("usa la preposición de cada envase, como el libro", () => {
+    expect(textoParaLaPlanilla({ material: "Filler", granulometria: null, envase: "A granel" }))
+      .toBe("Filler a granel");
+    expect(textoParaLaPlanilla({ material: "Cal", granulometria: null, envase: "Bolsón" }))
+      .toBe("Cal en Bolsones");
+    expect(textoParaLaPlanilla({ material: "Cal", granulometria: null, envase: "Bolsa" }))
+      .toBe("Cal en Bolsa");
+    expect(textoParaLaPlanilla({ material: "Filler", granulometria: null, envase: "Tolva" }))
+      .toBe("Filler en Tolva");
+  });
+
+  it("el #200 va sin el numeral, que es como lo escribe el libro", () => {
+    expect(textoParaLaPlanilla({ material: "Calcio", granulometria: "#200", envase: "Bolsa" }))
+      .toBe("Calcio 200 en Bolsa");
+    expect(textoParaLaPlanilla({ material: "Calcio", granulometria: "0-2", envase: "Bolsón" }))
+      .toBe("Calcio 0-2 en Bolsones");
+  });
+
+  it("sin clasificación no inventa un texto", () => {
+    expect(textoParaLaPlanilla(null)).toBe("");
+  });
+
+  /** Para pantalla se sigue usando el texto sin preposiciones. */
+  it("no es lo mismo que el texto de pantalla", () => {
+    const c = { material: "Cal", granulometria: null, envase: "Bolsón" };
+    expect(textoDeClasificacion(c)).toBe("Cal Bolsón");
+    expect(textoParaLaPlanilla(c)).toBe("Cal en Bolsones");
   });
 });

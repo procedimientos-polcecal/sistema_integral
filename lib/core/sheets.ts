@@ -139,13 +139,27 @@ export function filaSiguienteSegunLaColumna(columna: string[][]): number {
 export async function agregarFila(
   planillaId: string,
   pestana: string,
-  valores: (string | number)[]
+  valores: (string | number)[],
+  /*
+   * Qué columna decide dónde termina lo cargado. Por defecto la `A`, que es lo
+   * que necesitan las tres planillas de Mantenimiento.
+   *
+   * Se puede cambiar porque **no siempre la A se ve**, y elegir mal pisa datos.
+   * Esta lectura no pide `valueRenderOption`, así que Google devuelve el texto
+   * formateado — y en el libro de Despacho hay renglones cuya celda de fecha
+   * tiene el dato (el serial `46273`) pero un formato de número que la muestra
+   * vacía. Por la A, la última fila con algo resulta ser la anterior a ésas, y
+   * la escritura las sobreescribe. Ahí la que nunca falta es la B, el Nº de
+   * orden. Es el mismo problema que `filaSiguienteSegunLaColumna` ya explica
+   * para el kardex del almacén, sólo que esta función tenía la A clavada.
+   */
+  columnaQueManda = "A"
 ): Promise<number> {
   const token = await obtenerToken([SCOPE_SHEETS]);
 
   const lectura = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
-      `/values/${encodeURIComponent(pestana + "!A:A")}`,
+      `/values/${encodeURIComponent(`${pestana}!${columnaQueManda}:${columnaQueManda}`)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!lectura.ok) {
@@ -194,4 +208,62 @@ export async function leerFormulas(
   }
 
   return ((await res.json()).values ?? []) as string[][];
+}
+
+/**
+ * Crea una pestaña y le escribe los encabezados. Devuelve si la creó.
+ *
+ * Existe para los libros que llevan **una hoja por mes**, como el de Despacho:
+ * el 1º de octubre la pestaña de octubre no existe todavía, y sin esto el espejo
+ * dejaría de escribir justo el día que empieza el mes — un mes entero de órdenes
+ * anotadas como pendientes antes de que alguien se diera cuenta.
+ *
+ * Los encabezados se pasan desde afuera, copiados de la pestaña anterior, para
+ * no clavar acá los títulos de una planilla en particular.
+ *
+ * Si la pestaña ya existe **no es un error**: devuelve `false` y no toca nada.
+ * Google contesta 400 con "already exists" y eso se distingue del resto de los
+ * fallos, que sí se lanzan.
+ */
+export async function crearPestana(
+  planillaId: string,
+  titulo: string,
+  encabezados: string[] = []
+): Promise<boolean> {
+  const token = await obtenerToken([SCOPE_SHEETS]);
+
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: titulo, index: 0 } } }],
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const cuerpo = await res.text();
+    if (res.status === 400 && /already exists/i.test(cuerpo)) return false;
+    throw new Error(mensajeDeGoogle(res.status, cuerpo, cuentaDeServicio(), "escribir"));
+  }
+
+  if (encabezados.length > 0) {
+    const rango = `${titulo}!A1:${letraDeColumna(encabezados.length - 1)}1`;
+    const esc = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+        `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [encabezados] }),
+      }
+    );
+    if (!esc.ok) {
+      throw new Error(mensajeDeGoogle(esc.status, await esc.text(), cuentaDeServicio()));
+    }
+  }
+
+  return true;
 }

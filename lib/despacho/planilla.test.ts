@@ -6,6 +6,7 @@ import {
   parsearHoraDePlanilla,
   horaComoSeEscribe,
   fechaComoSeEscribe,
+  pestanaDelMes,
 } from "./planilla";
 import type { OrdenDeCarga } from "./types";
 
@@ -62,6 +63,26 @@ describe("las columnas de la planilla", () => {
   });
 });
 
+describe("pestanaDelMes", () => {
+  /**
+   * El libro tiene una hoja por mes y la pestaña es el mes de la orden. Escribir
+   * en la pestaña equivocada no falla: deja el renglón en el mes que no es.
+   */
+  it("es el mes de la orden, como lo escribe el libro", () => {
+    expect(pestanaDelMes("2026-09-08")).toBe("SEPTIEMBRE 2026");
+    expect(pestanaDelMes("2026-04-15")).toBe("ABRIL 2026");
+    expect(pestanaDelMes("2026-01-01")).toBe("ENERO 2026");
+    expect(pestanaDelMes("2026-12-31")).toBe("DICIEMBRE 2026");
+    expect(pestanaDelMes("2027-10-02")).toBe("OCTUBRE 2027");
+  });
+
+  it("una fecha que no es una fecha no da una pestaña inventada", () => {
+    expect(pestanaDelMes("")).toBeNull();
+    expect(pestanaDelMes("8/9/2026")).toBeNull();
+    expect(pestanaDelMes("2026-13-01")).toBeNull();
+  });
+});
+
 describe("filaDeLaPlanilla", () => {
   it("pone cada horario en su columna, que no es la del orden en que ocurren", () => {
     const fila = filaDeLaPlanilla(ORDEN, {
@@ -74,13 +95,40 @@ describe("filaDeLaPlanilla", () => {
       "8/9/2026",
       "13801",
       "GT CONSTRUCCIONES S.A.",
-      "Filler A granel",
+      "Filler a granel",
       "10:20", // Hora comienzo de Carga → inicio_carga
       "11:00", // Hora Salida de carga   → fin_carga
       "10:00", // Hora Ingreso al predio → entrada_predio
       "11:15", // Hora Salida del Predio → salida_predio
       "portón 2",
     ]);
+  });
+
+  /**
+   * La celda se escribe con la forma del libro y no con la del sistema: 1.714
+   * renglones de historia dicen "Filler a granel" y "Calcio 0-2 en Bolsones".
+   */
+  it("escribe la columna Material con la ortografía del libro", () => {
+    const conBolsones = filaDeLaPlanilla(ORDEN, {
+      material: "Calcio",
+      granulometria: "0-2",
+      envase: "Bolsón",
+    });
+    expect(conBolsones[3]).toBe("Calcio 0-2 en Bolsones");
+
+    const doscientos = filaDeLaPlanilla(ORDEN, {
+      material: "Calcio",
+      granulometria: "#200",
+      envase: "Bolsa",
+    });
+    expect(doscientos[3]).toBe("Calcio 200 en Bolsa");
+
+    const tolva = filaDeLaPlanilla(ORDEN, {
+      material: "Cal",
+      granulometria: null,
+      envase: "Tolva",
+    });
+    expect(tolva[3]).toBe("Cal en Tolva");
   });
 
   it("sin clasificación cae al nombre crudo del producto, no a una celda vacía", () => {

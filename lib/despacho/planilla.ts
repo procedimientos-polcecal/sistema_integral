@@ -1,5 +1,5 @@
 import type { Clasificacion, OrdenDeCarga } from "./types";
-import { textoDeClasificacion } from "./clasificacion";
+import { textoParaLaPlanilla } from "./clasificacion";
 
 /**
  * La planilla `Órdenes de Carga`: cómo se lee y cómo se escribe.
@@ -8,19 +8,20 @@ import { textoDeClasificacion } from "./clasificacion";
  * y al revés que Compras e Inventario: la planilla queda como el lugar donde
  * miran los que no entran al sistema.
  *
- * TODAVÍA NO SE PUDO LEER EL LIBRO. No está compartido con la cuenta de
- * servicio y las credenciales de Google sólo existen en el deploy, así que dos
- * cosas de acá son **supuestos declarados** y no relevamiento:
+ * EL LIBRO SE LEYÓ EL 09/09/2026, y desmintió los dos supuestos del spec:
  *
- *   1. La columna `Material` se escribe como los tres campos separados por un
- *      espacio ("Filler A granel"). Es lo que el papel pide tildado y lo que
- *      alguien transcribiría; si el libro usa otra convención, se cambia
- *      `textoDeClasificacion` y estos tests.
- *   2. `Tiempo de Carga` y `Tiempo en Predio` son fórmulas, así que no se
- *      escriben. Si resultaran datos escritos a mano, hay que agregarlos al
- *      rango — y en ese caso conviene igual dejarlos como fórmula, por el mismo
- *      motivo por el que Inventario lee la columna de stock en vez de
- *      recalcularla.
+ *   1. **No es una hoja: es una pestaña por mes** (`ABRIL 2026` …
+ *      `SEPTIEMBRE 2026`), con 1.714 órdenes entre todas. La pestaña se despeja
+ *      del mes de la orden con `pestanaDelMes`, no se guarda.
+ *   2. **`Tiempo de Carga` y `Tiempo en Predio` sí son fórmulas** —`=F2-E2` y
+ *      `=H2-G2`— en abril, mayo, junio y julio; en agosto y septiembre están
+ *      vacías porque alguien no las arrastró. Se sigue sin escribirlas: pisar
+ *      una fórmula la convierte en dato muerto, y es el mismo motivo por el que
+ *      Inventario lee la columna de stock en vez de recalcularla.
+ *
+ * Y esas fórmulas confirmaron el mapeo de columnas que el spec había deducido
+ * del orden de los encabezados: `E` inicio de carga, `F` fin de carga, `G`
+ * entrada al predio, `H` salida del predio.
  */
 
 /** Los once encabezados, en el orden real del libro. */
@@ -75,7 +76,7 @@ export function fechaComoSeEscribe(fecha: string): string {
  */
 export function filaDeLaPlanilla(orden: OrdenDeCarga, clasificacion: Clasificacion | null): string[] {
   const material = clasificacion
-    ? textoDeClasificacion(clasificacion)
+    ? textoParaLaPlanilla(clasificacion)
     : (orden.producto_raw ?? "");
 
   return [
@@ -155,4 +156,32 @@ function minutosDelDia(valor: unknown): number | null {
   }
 
   return null;
+}
+
+/**
+ * Los meses como los escribe el libro: en mayúsculas y sin acento.
+ *
+ * Se escriben a mano y no con `toLocaleString`: el nombre del mes de
+ * `Intl` depende de los datos de locale del runtime —en Vercel puede venir
+ * recortado— y acá tiene que coincidir **carácter por carácter** con el nombre
+ * de una pestaña, o se escribe en la hoja equivocada.
+ */
+const MESES = [
+  "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
+] as const;
+
+/**
+ * En qué pestaña va una orden: `"SEPTIEMBRE 2026"`.
+ *
+ * El libro tiene una hoja por mes, así que la pestaña **es** el mes de la orden
+ * y no hace falta guardarla — la misma decisión que con el estado y los tiempos.
+ * Y por eso la fila sola no identifica una celda: la 45 existe en las seis
+ * pestañas, que es lo que arregla la migración 20260909090003.
+ */
+export function pestanaDelMes(fecha: string): string | null {
+  const m = fecha.match(/^(\d{4})-(\d{2})-\d{2}/);
+  if (!m) return null;
+  const mes = MESES[Number(m[2]) - 1];
+  return mes ? `${mes} ${m[1]}` : null;
 }

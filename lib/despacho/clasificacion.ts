@@ -26,6 +26,7 @@ export const MATERIALES = [
   "Calcio",
   "Magnesio",
   "Filler",
+  "Dolomita",
   "Pedregullo",
   "Chocolata",
   "Minerales ecológicos",
@@ -73,6 +74,48 @@ export function clasificacionDe(
 export function textoDeClasificacion(c: Clasificacion | null): string {
   if (!c) return "";
   return [c.material, c.granulometria, c.envase].filter(Boolean).join(" ");
+}
+
+/**
+ * Cómo se escribe cada envase **en la planilla**, con su preposición.
+ *
+ * Sale de contar los 1.714 renglones del libro: la forma dominante es
+ * "<material> <granulometría> en <envase>", salvo el granel, que va "a granel".
+ * Y el bolsón va en plural —"en Bolsones" 208 veces contra "en Bolson" 9—
+ * porque el camión lleva varios; la bolsa va en singular.
+ */
+const ENVASE_EN_LA_PLANILLA: Record<string, string> = {
+  "A granel": "a granel",
+  Tolva: "en Tolva",
+  Bolsa: "en Bolsa",
+  "Bolsón": "en Bolsones",
+  Unidad: "en Unidades",
+};
+
+/** El libro escribe el #200 sin el numeral. El resto va igual. */
+const GRANULOMETRIA_EN_LA_PLANILLA: Record<string, string> = { "#200": "200" };
+
+/**
+ * El texto de la columna `Material` de la planilla: `Calcio 0-2 en Bolsones`.
+ *
+ * **Se escribe con la forma del libro, no con la del sistema**, y eso fue una
+ * decisión: la planilla la sigue leyendo gente que tiene cinco meses de historia
+ * arriba, y cambiarles la forma de la celda por una más prolija de parsear no le
+ * sirve a nadie. Lo que sí cambia es que de acá en más se escribe **siempre
+ * igual**: hoy el libro tiene 201 textos distintos para unas quince
+ * combinaciones —"Filler a granel" aparece con cinco ortografías, 620 veces
+ * entre todas—, y eso deja de crecer.
+ *
+ * Para mostrar en pantalla se usa `textoDeClasificacion`, que no lleva
+ * preposiciones.
+ */
+export function textoParaLaPlanilla(c: Clasificacion | null): string {
+  if (!c) return "";
+  const gran = c.granulometria
+    ? (GRANULOMETRIA_EN_LA_PLANILLA[c.granulometria] ?? c.granulometria)
+    : null;
+  const env = ENVASE_EN_LA_PLANILLA[c.envase] ?? `en ${c.envase}`;
+  return [c.material, gran, env].filter(Boolean).join(" ");
 }
 
 /**

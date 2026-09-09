@@ -8,21 +8,32 @@ import { parsearHoraDePlanilla } from "./planilla";
  * remitos por nombre de cliente es exactamente lo que no se hace en este repo.
  * Cliente y producto quedan como texto, y `odoo_picking_id` en null.
  *
- * El parseo va acá y no en la ruta porque es donde están las dos trampas, y las
- * dos fallan sin ruido:
+ * El parseo va acá y no en la ruta porque es donde están las trampas, y todas
+ * fallan sin ruido:
  *
- * 1. **Las columnas se buscan por nombre normalizado**, no por posición ni por
- *    igualdad exacta. Los encabezados reales tienen espacios de más
- *    ("Material ", "Hora Salida de carga ") y una columna insertada a mano
- *    corre todas las posiciones.
+ * 1. **Las columnas se buscan por nombre normalizado y con alternativas**, no
+ *    por posición ni por igualdad exacta. Los encabezados reales tienen espacios
+ *    de más ("Material ", "Hora Salida  de carga " con dos) y —lo que sorprendió
+ *    al leer el libro— **no se llaman igual en todas las pestañas**: la columna
+ *    de fecha es `Fecha`, `Fecha Orden` o `Fecha Orden de carga` según el mes.
+ *    Con un solo nombre esperado, dos de las seis pestañas no se importaban.
  * 2. **Las horas no traen fecha y hay que encadenarlas en el orden en que
  *    ocurren**, que no es el orden de las columnas: la planilla pone las dos de
  *    carga antes que las dos de predio.
+ * 3. **Las pestañas arrastran filas de relleno.** `ABRIL 2026` devuelve 1.000
+ *    filas y las últimas están vacías salvo el `0` que dejan las fórmulas de
+ *    J/K. Contarlas como "no se pudo leer" ahogaría el aviso de una fila que sí
+ *    tenga datos y no se haya podido importar.
+ * 4. **Se lee sin formato, y no es un detalle.** Hay celdas de fecha con el dato
+ *    adentro y un formato de número que las muestra vacías: leyendo el texto
+ *    formateado, esas órdenes se perderían por "no tienen fecha". Con
+ *    `sinFormato` llega el serial. Medido contra el libro: así entran las 1.714.
  */
 
 export interface IndicesDeColumnas {
   fecha: number;
   numero: number;
+  /** `-1` = esa columna no está en esta pestaña. */
   cliente: number;
   material: number;
   inicioCarga: number;
@@ -42,37 +53,64 @@ function normalizar(valor: unknown): string {
     .toLowerCase();
 }
 
-/** Qué encabezado corresponde a cada campo, ya normalizado. */
-const ENCABEZADOS: Record<keyof IndicesDeColumnas, string> = {
-  fecha: "fecha orden",
-  numero: "nro de orden",
-  cliente: "cliente",
-  material: "material",
-  inicioCarga: "hora comienzo de carga",
-  finCarga: "hora salida de carga",
-  entradaPredio: "hora ingreso al predio",
-  salidaPredio: "hora salida del predio",
-  observaciones: "observaciones",
+/**
+ * Cómo se puede llamar cada columna, ya normalizado. La primera que aparezca
+ * gana.
+ *
+ * `fecha` tiene tres nombres porque el libro los tiene: se leyeron los seis
+ * encabezados y hay `Fecha`, `Fecha Orden` y `Fecha Orden de carga`.
+ */
+const ENCABEZADOS: Record<keyof IndicesDeColumnas, string[]> = {
+  fecha: ["fecha orden", "fecha orden de carga", "fecha"],
+  numero: ["nro de orden", "nro orden"],
+  cliente: ["cliente"],
+  material: ["material"],
+  inicioCarga: ["hora comienzo de carga", "hora inicio de carga"],
+  finCarga: ["hora salida de carga", "hora fin de carga"],
+  entradaPredio: ["hora ingreso al predio", "hora entrada al predio"],
+  salidaPredio: ["hora salida del predio"],
+  observaciones: ["observaciones", "notas"],
 };
+
+/**
+ * Sin estas dos no hay orden que importar: el número es la clave y la fecha es
+ * lo que le da sentido a las cuatro horas, que vienen sin día.
+ *
+ * Las demás pueden faltar y la importación sigue: quedan en `-1` y su valor en
+ * null. Es lo contrario de lo que hacía antes —exigir las nueve— y el motivo es
+ * concreto: una pestaña a la que le falte `Observaciones` tiene igual sus
+ * doscientas órdenes, y devolver null por eso las perdía todas.
+ */
+const IMPRESCINDIBLES: (keyof IndicesDeColumnas)[] = ["numero", "fecha"];
 
 /**
  * En qué columna está cada campo, o null si esa fila no es la de encabezados.
  *
- * Devolver null en vez de índices a medias es a propósito: con una columna
- * imprescindible faltando, importar "lo que se pueda" cargaría miles de filas
- * sin número de orden —la clave— y habría que borrarlas a mano.
+ * Devolver null en vez de índices a medias es a propósito cuando falta una
+ * imprescindible: importar "lo que se pueda" cargaría miles de filas sin número
+ * de orden —la clave— y habría que borrarlas a mano.
  */
 export function indicesDeColumnas(fila: unknown[]): IndicesDeColumnas | null {
   const normalizados = fila.map(normalizar);
   const indices: Partial<IndicesDeColumnas> = {};
 
-  for (const [campo, encabezado] of Object.entries(ENCABEZADOS)) {
-    const i = normalizados.indexOf(encabezado);
-    if (i < 0) return null;
-    indices[campo as keyof IndicesDeColumnas] = i;
+  for (const [campo, alternativas] of Object.entries(ENCABEZADOS)) {
+    const clave = campo as keyof IndicesDeColumnas;
+    let i = -1;
+    for (const nombre of alternativas) {
+      i = normalizados.indexOf(nombre);
+      if (i >= 0) break;
+    }
+    if (i < 0 && IMPRESCINDIBLES.includes(clave)) return null;
+    indices[clave] = i;
   }
 
   return indices as IndicesDeColumnas;
+}
+
+/** La celda de una columna que puede no existir en esta pestaña. */
+function celda(fila: unknown[], i: number): unknown {
+  return i >= 0 ? fila[i] : undefined;
 }
 
 export interface OrdenImportada {
@@ -97,10 +135,10 @@ export function ordenDeFilaDePlanilla(
   fila: unknown[],
   idx: IndicesDeColumnas
 ): OrdenImportada | null {
-  const numero = String(fila[idx.numero] ?? "").trim();
+  const numero = String(celda(fila, idx.numero) ?? "").trim();
   if (!numero) return null;
 
-  const fecha = fechaDeSheets(fila[idx.fecha]);
+  const fecha = fechaDeSheets(celda(fila, idx.fecha));
   if (!fecha) return null;
 
   /*
@@ -109,21 +147,25 @@ export function ordenDeFilaDePlanilla(
    * planilla pone las dos horas de carga antes que las dos de predio, así que
    * encadenarlas en el orden en que están daría vuelta el turno de noche.
    */
-  const entrada = parsearHoraDePlanilla(fila[idx.entradaPredio], fecha);
-  const inicio = parsearHoraDePlanilla(fila[idx.inicioCarga], fecha, entrada);
-  const fin = parsearHoraDePlanilla(fila[idx.finCarga], fecha, inicio ?? entrada);
-  const salida = parsearHoraDePlanilla(fila[idx.salidaPredio], fecha, fin ?? inicio ?? entrada);
+  const entrada = parsearHoraDePlanilla(celda(fila, idx.entradaPredio), fecha);
+  const inicio = parsearHoraDePlanilla(celda(fila, idx.inicioCarga), fecha, entrada);
+  const fin = parsearHoraDePlanilla(celda(fila, idx.finCarga), fecha, inicio ?? entrada);
+  const salida = parsearHoraDePlanilla(
+    celda(fila, idx.salidaPredio),
+    fecha,
+    fin ?? inicio ?? entrada
+  );
 
   return {
     numero,
     fecha,
-    cliente_raw: textoONull(fila[idx.cliente]),
-    producto_raw: textoONull(fila[idx.material]),
+    cliente_raw: textoONull(celda(fila, idx.cliente)),
+    producto_raw: textoONull(celda(fila, idx.material)),
     entrada_predio: entrada,
     inicio_carga: inicio,
     fin_carga: fin,
     salida_predio: salida,
-    notas: textoONull(fila[idx.observaciones]),
+    notas: textoONull(celda(fila, idx.observaciones)),
   };
 }
 
@@ -169,9 +211,13 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
      * `i + 1` porque Google cuenta las filas desde uno y el arreglo desde cero.
      */
     if (orden) ordenes.push({ ...orden, fila: i + 1 });
-    // Una fila vacía al final de la hoja no es un problema: sólo se cuentan las
-    // que tienen algo escrito y no se pudieron leer.
-    else if ((valores[i] ?? []).some((c) => String(c ?? "").trim() !== "")) salteadas++;
+    /*
+     * Sólo cuenta como salteada la que tiene algo **en las columnas que
+     * importan**. `ABRIL 2026` devuelve mil filas vacías salvo el `0` que dejan
+     * las fórmulas de J/K: mirando la fila entera, esas mil se contarían como
+     * "no se pudieron leer" y ahogarían el aviso de una que sí tenga datos.
+     */
+    else if (tieneAlgoQueImporta(valores[i] ?? [], idx)) salteadas++;
   }
 
   return { ordenes, filaDeEncabezados, salteadas };
@@ -180,4 +226,11 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
 function textoONull(valor: unknown): string | null {
   const s = String(valor ?? "").trim();
   return s === "" ? null : s;
+}
+
+/** Si la fila tiene algo en las columnas de datos (no en las calculadas). */
+function tieneAlgoQueImporta(fila: unknown[], idx: IndicesDeColumnas): boolean {
+  return (Object.values(idx) as number[])
+    .filter((i) => i >= 0)
+    .some((i) => String(fila[i] ?? "").trim() !== "");
 }
