@@ -252,6 +252,47 @@ factura desde una orden de $33,04 obliga a repreciar todo a mano.
 Conviene confirmarlo con administración antes de esperar el ahorro. Es la misma
 conversación que la pregunta abierta sobre por qué Polysan factura sin órdenes.
 
+## El circuito real, y de dónde sale el precio (09/09/2026)
+
+El diseño asumía que la orden nacía de un **presupuesto elegido** en la
+comparativa. El circuito del grupo es otro, y con el que estaba la orden **no se
+hubiera generado nunca**:
+
+1. **Maxi o Nico aprueban la compra** y le informan al encargado de compras cuál
+   fue su elección — hoy, marcando la casilla de la columna ELECCIÓN.
+2. El **encargado de compras** pasa el pedido de *para comprar* a *pedido*, y
+   carga el proveedor y el precio en Gestión de compra.
+
+O sea que quien registra el dato no es quien decide, y **no queda un presupuesto
+elegido**: queda el campo "Costo + IVA" del requerimiento.
+
+**Qué es ese campo, medido:** el total de toda la cantidad, **con IVA**, sin el
+envío. El RI 1912 lo prueba — `costo_iva` 7.734,32 con un presupuesto de 6.392 ×
+1 al 21%, que es exactamente 6.392 × 1,21.
+
+Por eso el precio de la orden sale de dos lugares, en este orden:
+
+1. el **presupuesto elegido**, si hay: trae el unitario neto tal como se cotizó;
+2. el **"Costo + IVA" del requerimiento**, del que `precioDesdeElRequerimiento`
+   saca el neto dividiendo por 1,21. Mandarlo tal cual cobraría el IVA dos veces.
+
+Dos cosas que salieron de hacerlo:
+
+- **El flete no lleva IVA.** La fórmula de la comparativa es
+  `neto × (1 + IVA) − descuento + envío`: suma el envío **después** del
+  impuesto. Gravarlo en Odoo haría que la orden totalice más que la compra
+  aprobada.
+- **`price_unit` en Odoo tiene dos decimales** (`digits: [16, 2]`), así que hay
+  totales que no se reconstruyen exactos. No se esconde: el ensayo muestra el
+  total que va a tener la orden junto al costo aprobado.
+
+**La orden se genera sola** al pasar el pedido a *pedido*, con el mismo criterio
+que la planilla: el guardado ya está hecho, así que un fallo de Odoo se avisa y
+queda en `odoo_pendiente`, con el botón para reintentar.
+
+Verificado contra Odoo con los números del RI 1933 (Casa Camino, $39.022,50, 10
+unidades, AMBAS): dos órdenes de $19.511,25 que suman **$39.022,50 exacto**.
+
 ## Las etapas
 
 **Etapa 1 — El push de la orden de compra.** Sin buzón. Al aprobarse un

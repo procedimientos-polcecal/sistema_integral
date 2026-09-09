@@ -7,6 +7,8 @@ import type { EstadoCompra } from "@/lib/compras/types";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import { puedeAprobarLaCompra, esAprobacionNueva } from "@/lib/compras/aprobarCompra";
+import { hayCredencialesOdoo } from "@/lib/odoo/client";
+import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 
@@ -159,6 +161,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // ── Compra ─────────────────────────────────────────────────
+  /*
+   * Pasar el pedido a *pedido* es el momento en que el encargado de compras ya
+   * cargó el proveedor y el precio: es cuando hay con qué armar la orden de
+   * compra en Odoo. Se anota acá y se dispara después de guardar.
+   */
+  let generaOrdenEnOdoo = false;
+
   if (CAMPOS_COMPRA.some((c) => c in body)) {
     if (!permisos.puedeEditar) {
       return NextResponse.json({ error: "No tenés permiso para gestionar la compra" }, { status: 403 });
@@ -305,6 +314,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
+    generaOrdenEnOdoo = nuevoEstado === "PEDIDO" && actual.estado_compra !== "PEDIDO";
+
     // Fechas automáticas al avanzar de etapa, si no vinieron explícitas.
     if (nuevoEstado === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {
       cambios.fecha_pedido = new Date().toISOString().slice(0, 10);
@@ -377,7 +388,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  return NextResponse.json(avisoSheets ? { ...data, aviso_sheets: avisoSheets } : data);
+  /*
+   * La orden de compra en Odoo, al pasar a *pedido*.
+   *
+   * Mismo criterio que la planilla: **el guardado ya está hecho**, así que un
+   * fallo de Odoo se avisa y no rompe la operación. Y no se pierde: el pendiente
+   * queda anotado en `odoo_pendiente` del requerimiento, visible en su ficha,
+   * con el botón para reintentar. Un estado que cambió acá y no llegó al otro
+   * lado es una divergencia que no avisa sola.
+   */
+  let avisoOdoo: string | null = null;
+  let ordenOdoo: string[] | null = null;
+
+  if (generaOrdenEnOdoo && hayCredencialesOdoo()) {
+    try {
+      const resultado = await empujarOrdenesDeRequerimiento(admin, id);
+      if (resultado.ok) {
+        ordenOdoo = resultado.ordenes.map((o) => o.odooNombre ?? `#${o.odooOrderId}`);
+      } else {
+        avisoOdoo =
+          "El pedido se guardó, pero la orden de compra en Odoo no se creó: " +
+          resultado.motivos.join(" | ");
+      }
+    } catch (e) {
+      avisoOdoo =
+        "El pedido se guardó, pero la orden de compra en Odoo no se creó: " +
+        (e instanceof Error ? e.message : String(e));
+      console.error(`No se pudo crear la orden del RI ${id} en Odoo:`, avisoOdoo);
+    }
+  }
+
+  return NextResponse.json({
+    ...data,
+    ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}),
+    ...(avisoOdoo ? { aviso_odoo: avisoOdoo } : {}),
+    ...(ordenOdoo ? { orden_odoo: ordenOdoo } : {}),
+  });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

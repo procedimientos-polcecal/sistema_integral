@@ -83,9 +83,21 @@ export default function RequerimientoDetalle({
       setError(body.error ?? "No se pudo guardar el cambio.");
       return false;
     }
-    // El cambio quedó guardado, pero la planilla puede haber rechazado alguna
-    // celda protegida. Hay que decirlo: si no, se asume que quedó sincronizada.
-    setAviso(body.aviso_sheets ?? null);
+    /*
+     * El cambio quedó guardado, pero la planilla puede haber rechazado alguna
+     * celda protegida, y la orden de compra en Odoo puede no haberse creado. Hay
+     * que decirlo: si no, se asume que quedó todo sincronizado.
+     *
+     * Cuando sale bien y se creó la orden, también se dice: es el número que hay
+     * que pasarle a contabilidad para que facture desde ahí.
+     */
+    setAviso(
+      body.aviso_sheets ??
+        body.aviso_odoo ??
+        (body.orden_odoo?.length
+          ? `Orden de compra creada en Odoo: ${body.orden_odoo.join(", ")}.`
+          : null)
+    );
     router.refresh();
     return true;
   }

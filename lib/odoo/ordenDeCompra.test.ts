@@ -141,7 +141,13 @@ describe("una orden, una empresa", () => {
     expect(l).toHaveLength(2);
     expect(l[1]).toMatchObject({ name: "Flete", product_qty: 1, price_unit: 5000 });
     // El flete también necesita los obligatorios, o la orden entera se rechaza.
-    expect(l[1]).toMatchObject({ product_id: 6835, product_uom: 1, taxes_id: [[6, 0, [4]]] });
+    expect(l[1]).toMatchObject({ product_id: 6835, product_uom: 1 });
+    /*
+     * Y va SIN IVA: la fórmula de la comparativa suma el envío después del
+     * impuesto, así que gravarlo haría que la orden totalice más que lo
+     * aprobado.
+     */
+    expect(l[1].taxes_id).toEqual([[6, 0, []]]);
   });
 
   it("una cotización en dólares usa la moneda de Odoo, no la de la empresa", () => {

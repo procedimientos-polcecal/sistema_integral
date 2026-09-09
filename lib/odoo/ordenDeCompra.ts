@@ -32,7 +32,19 @@ export interface RequerimientoParaOrden {
   fechaNecesidad: string | null;
 }
 
-/** La cotización elegida en la comparativa. Es de donde sale el precio. */
+/**
+ * De dónde sale el precio de la orden.
+ *
+ * Hay **dos caminos** y los dos son válidos, porque así trabaja el grupo:
+ *
+ *  - el **presupuesto elegido** en la comparativa, que trae el unitario neto; o
+ *  - el **costo que carga el encargado de compras** en Gestión de compra, del
+ *    que `precioDesdeElRequerimiento` saca el neto (ese campo es el total con
+ *    IVA). Es el camino habitual: Maxi o Nico aprueban y le informan la
+ *    elección, y el encargado la registra al pasar el pedido a *pedido*.
+ *
+ * Exigir el presupuesto elegido dejaba la orden sin generarse nunca.
+ */
 export interface CotizacionParaOrden {
   precioUnitario: number | null;
   cantidad: number | null;
@@ -156,7 +168,7 @@ export function armarOrdenes(
   if (precio === null || precio <= 0) {
     problemas.push({
       tipo: "sin precio",
-      detalle: `El RI ${ri.nroRi} no tiene precio unitario en la cotización elegida.`,
+      detalle: `El RI ${ri.nroRi} no tiene precio: falta el presupuesto elegido o el costo + IVA.`,
     });
   }
 
@@ -166,7 +178,7 @@ export function armarOrdenes(
   if (cantidad === null || cantidad <= 0) {
     problemas.push({
       tipo: "sin cantidad",
-      detalle: `El RI ${ri.nroRi} no tiene cantidad ni en la cotización ni en el requerimiento.`,
+      detalle: `El RI ${ri.nroRi} no tiene cantidad ni en el presupuesto ni en el requerimiento.`,
     });
   }
 
@@ -304,6 +316,13 @@ function armarUna(
       name: "Flete",
       product_qty: 1,
       price_unit: parte.importe,
+      /*
+       * El flete va **sin IVA**, y no es un olvido: la fórmula de la comparativa
+       * es `neto * (1 + IVA) − descuento + envío`, o sea que suma el envío
+       * después del impuesto. Gravarlo acá haría que la orden totalice un 21%
+       * del flete más que la compra que se aprobó.
+       */
+      taxes_id: [[6, 0, []]],
     });
   }
 

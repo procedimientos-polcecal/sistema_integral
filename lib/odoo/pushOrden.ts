@@ -14,7 +14,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer, crearEn, mensajeDeOdoo } from "./client";
 import { resolverContextoDeOdoo } from "./contexto";
 import { armarOrdenes } from "./ordenDeCompra";
-import type { EmpresaParaOrden, Problema } from "./ordenDeCompra";
+import { precioDesdeElRequerimiento } from "@/lib/compras/costoDelRequerimiento";
+import type { CotizacionParaOrden, EmpresaParaOrden, Problema } from "./ordenDeCompra";
 
 export interface OrdenCreada {
   empresa: string;
@@ -39,6 +40,10 @@ interface FilaRequerimiento {
   paga_ambas: boolean;
   fecha_necesidad: string | null;
   proveedor_id: string | null;
+  /** El "Costo + IVA" que carga el encargado: total con IVA, sin el envío. */
+  costo_iva: number | null;
+  costo_envio: number | null;
+  moneda: string | null;
 }
 
 interface FilaEmpresa {
@@ -63,7 +68,7 @@ export async function empujarOrdenesDeRequerimiento(
   const { data: ri, error: errorRi } = await admin
     .from("compras_requerimientos")
     .select(
-      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id"
+      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda"
     )
     .eq("id", requerimientoId)
     .maybeSingle<FilaRequerimiento>();
@@ -80,13 +85,11 @@ export async function empujarOrdenesDeRequerimiento(
     .eq("elegida", true)
     .maybeSingle();
 
-  const previos = problemasPrevios(ri, cotizacion);
+  const previos = problemasPrevios(ri);
   if (previos.length) return await anotarPendiente(admin, ri.id, previos);
 
-  // A esta altura hay cotización y hay proveedor: `problemasPrevios` no dejó
-  // pasar lo contrario. TypeScript no puede deducirlo de una función que
-  // devuelve una lista de textos, así que se afirma acá.
-  const elegida = cotizacion!;
+  const fuente = precioParaLaOrden(ri, cotizacion);
+  if (!fuente.ok) return await anotarPendiente(admin, ri.id, [fuente.motivo]);
 
   // Qué empresas: la del RI, o las dos si lo pagan las dos.
   const { data: todasLasEmpresas } = await admin
@@ -166,13 +169,7 @@ export async function empujarOrdenesDeRequerimiento(
       pagaAmbas: ri.paga_ambas,
       fechaNecesidad: ri.fecha_necesidad,
     },
-    {
-      precioUnitario: elegida.precio_unitario,
-      cantidad: elegida.cantidad,
-      descuento: elegida.descuento,
-      costoEnvio: elegida.costo_envio,
-      moneda: elegida.moneda,
-    },
+    fuente.precio,
     paraOrden,
     {
       monedas: contexto.contexto.monedas,
@@ -296,27 +293,78 @@ function textoDelProblema(p: Problema): string {
  * cargado pero nunca se eligió. Mandar a alguien a dar de alta un proveedor que
  * ya está enlazado es peor que no decir nada.
  */
-function problemasPrevios(
-  ri: Pick<FilaRequerimiento, "nro_ri" | "proveedor_id">,
-  cotizacion: unknown
-): string[] {
-  const problemas: string[] = [];
-
+function problemasPrevios(ri: Pick<FilaRequerimiento, "nro_ri" | "proveedor_id">): string[] {
   if (!ri.proveedor_id) {
-    problemas.push(
-      `El RI ${ri.nro_ri} no tiene proveedor elegido. Si ya hay presupuestos cargados, ` +
-        `falta elegir uno en la comparativa: eso es lo que le pone el proveedor y el costo al requerimiento.`
-    );
+    return [
+      `El RI ${ri.nro_ri} no tiene proveedor. Lo carga el encargado de compras en ` +
+        `Gestión de compra, o sale de confirmar la elección en la comparativa.`,
+    ];
   }
 
-  if (!cotizacion) {
-    problemas.push(
-      `El RI ${ri.nro_ri} no tiene cotización elegida en la comparativa. ` +
-        `De ahí sale el precio unitario, que es lo que necesita la línea de la orden.`
-    );
+  return [];
+}
+
+/**
+ * De dónde sale el precio de la orden.
+ *
+ * Los dos caminos del grupo, en orden de preferencia:
+ *
+ *  1. **El presupuesto elegido**, si hay: trae el unitario neto tal como lo
+ *     cotizó el proveedor, con su descuento y su moneda.
+ *  2. **El "Costo + IVA" del requerimiento**, que es el camino habitual: Maxi o
+ *     Nico aprueban, le informan la elección al encargado de compras, y él la
+ *     registra al pasar el pedido a *pedido*. Ese campo es el total **con** IVA,
+ *     así que hay que sacarle el neto — mandarlo tal cual cobraría el IVA dos
+ *     veces.
+ *
+ * Antes sólo existía el camino 1, y como el circuito real no produce
+ * presupuestos elegidos, la orden no se generaba nunca.
+ */
+function precioParaLaOrden(
+  ri: FilaRequerimiento,
+  elegida: {
+    precio_unitario: number | null;
+    cantidad: number | null;
+    descuento: number | null;
+    costo_envio: number | null;
+    moneda: string | null;
+  } | null
+): { ok: true; precio: CotizacionParaOrden; origen: string } | { ok: false; motivo: string } {
+  if (elegida) {
+    return {
+      ok: true,
+      origen: "presupuesto elegido en la comparativa",
+      precio: {
+        precioUnitario: elegida.precio_unitario,
+        cantidad: elegida.cantidad,
+        descuento: elegida.descuento,
+        costoEnvio: elegida.costo_envio,
+        moneda: elegida.moneda,
+      },
+    };
   }
 
-  return problemas;
+  const desdeElRi = precioDesdeElRequerimiento({
+    costoIva: ri.costo_iva,
+    costoEnvio: ri.costo_envio,
+    cantidad: ri.cantidad,
+  });
+
+  if (!desdeElRi.ok) return { ok: false, motivo: desdeElRi.motivo };
+
+  return {
+    ok: true,
+    origen: `costo + IVA cargado en el requerimiento (neto sacado con IVA ${Math.round(desdeElRi.precio.iva * 100)}%)`,
+    precio: {
+      precioUnitario: desdeElRi.precio.precioUnitario,
+      cantidad: desdeElRi.precio.cantidad,
+      // El descuento ya está dentro del costo que cargó el encargado.
+      descuento: null,
+      costoEnvio: desdeElRi.precio.costoEnvio,
+      // `costo_iva` lo escribe `costosParaElPedido` siempre en pesos.
+      moneda: "ARS",
+    },
+  };
 }
 
 /**
@@ -347,7 +395,7 @@ export async function ensayarOrdenesDeRequerimiento(
   const { data: ri } = await admin
     .from("compras_requerimientos")
     .select(
-      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id"
+      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda"
     )
     .eq("id", requerimientoId)
     .maybeSingle<FilaRequerimiento>();
@@ -373,9 +421,18 @@ export async function ensayarOrdenesDeRequerimiento(
    * decía "el proveedor no existe en POLCECAL" cuando el requerimiento no tenía
    * proveedor ninguno, y encima consultaba `proveedores_odoo` con un uuid vacío.
    */
-  const previos = problemasPrevios(ri, cotizacion);
+  const previos = problemasPrevios(ri);
   if (previos.length) {
     return { requerimiento: { nroRi: ri.nro_ri, descripcion: ri.descripcion }, yaCreadas, problemas: previos };
+  }
+
+  const fuente = precioParaLaOrden(ri, cotizacion);
+  if (!fuente.ok) {
+    return {
+      requerimiento: { nroRi: ri.nro_ri, descripcion: ri.descripcion },
+      yaCreadas,
+      problemas: [fuente.motivo],
+    };
   }
 
   const { data: enlaces } = await admin
@@ -409,13 +466,7 @@ export async function ensayarOrdenesDeRequerimiento(
       pagaAmbas: ri.paga_ambas,
       fechaNecesidad: ri.fecha_necesidad,
     },
-    {
-      precioUnitario: cotizacion?.precio_unitario ?? null,
-      cantidad: cotizacion?.cantidad ?? null,
-      descuento: cotizacion?.descuento ?? null,
-      costoEnvio: cotizacion?.costo_envio ?? null,
-      moneda: cotizacion?.moneda ?? null,
-    },
+    fuente.precio,
     empresasDelRi.map((e) => ({
       id: e.id,
       nombre: e.nombre,
@@ -432,8 +483,19 @@ export async function ensayarOrdenesDeRequerimiento(
     }
   );
 
+  /*
+   * El ensayo dice **de dónde sale el precio** y qué va a totalizar la orden,
+   * además de los vals. Con el costo cargado a mano el neto se calcula sacándole
+   * el IVA, y el redondeo a los dos decimales de Odoo puede correr unos
+   * centavos: eso se ve acá antes de mandar nada, no en Odoo tres semanas
+   * después.
+   */
+  const aprobado =
+    ri.costo_iva !== null ? Math.round(((ri.costo_iva ?? 0) + (ri.costo_envio ?? 0)) * 100) / 100 : null;
+
   return {
     requerimiento: { nroRi: ri.nro_ri, descripcion: ri.descripcion, pagaAmbas: ri.paga_ambas },
+    precio: { origen: fuente.origen, ...fuente.precio, costoAprobadoEnElRi: aprobado },
     cotizacion,
     yaCreadas,
     contexto: contexto.contexto,
