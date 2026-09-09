@@ -19,6 +19,7 @@ import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
+import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/types";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
@@ -179,14 +180,15 @@ const prioridadDe = (v: unknown) => {
 };
 
 /**
- * Qué dice la planilla sobre quién paga.
- *
- * La celda vacía ya no se toma como "Ambas": son cosas distintas —una es una
- * decisión y la otra su ausencia— y hasta ahora se confundían. "Ambas" sólo
- * cuando la planilla lo dice.
+ * Qué dice la planilla sobre quién paga. `null` cuando la celda vino vacía:
+ * es la ausencia de una decisión, no una decisión ("ninguna de las dos").
+ * Antes `pagaDe("")` devolvía `{empresa: null, ambas: false}`, el mismo
+ * objeto que "AMBAS" era falso y ninguna empresa reconocida, así que vacío y
+ * decisión explícita se confundían.
  */
-const pagaDe = (v: unknown): { empresa: string | null; ambas: boolean } => {
+export const pagaDe = (v: unknown): { empresa: string | null; ambas: boolean } | null => {
   const s = norm(v);
+  if (!s) return null;
   if (s === "AMBAS") return { empresa: null, ambas: true };
   if (s === "POLCECAL" || s === "POLYSAN") return { empresa: s, ambas: false };
   return { empresa: null, ambas: false };
@@ -338,9 +340,10 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             detalle_extra: texto(val(fila, "detalle_extra")),
             imagen_url: texto(val(fila, "imagen")),
             prioridad: prioridadDe(val(fila, "prioridad")),
-            // `null` cuando la celda está vacía: vacío no es "ninguna de las
-            // dos", y confundirlos borra la empresa que eligió quien pidió.
-            paga: texto(val(fila, "empresa")) ? pagaDe(val(fila, "empresa")) : null,
+            // `pagaDe` ya distingue la celda vacía (`null`) de una decisión
+            // explícita: confundirlas borraba la empresa que eligió quien
+            // pidió.
+            paga: pagaDe(val(fila, "empresa")),
             solicitante_nombre: texto(val(fila, "solicita")),
             estado_aprobacion: apro.estado,
             aprobador: apro.aprobador,
@@ -428,12 +431,12 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     const existentes = await traerTodo<{
       nro_ri: number;
       editado_en_app: boolean;
-      estado_aprobacion: string;
-      estado_compra: string;
+      estado_aprobacion: EstadoAprobacion;
+      estado_compra: EstadoCompra;
       compra_asignada_a: string | null;
       solicitante_nombre: string | null;
       comparativa_drive_id: string | null;
-      prioridad: string | null;
+      prioridad: Prioridad | null;
       empresa_id: string | null;
       paga_ambas: boolean;
       origen: string;
@@ -461,24 +464,31 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       const ubicacion = d.ubicacion ? String(d.ubicacion) : null;
       const clave = ubicacion ? norm(ubicacion) : null;
       const yaHabia = previo.get(registro.nro_ri);
+      const paga = d.paga as { empresa: string | null; ambas: boolean } | null;
+      // `null` cuando la celda vino vacía o cuando nombró una empresa que el
+      // catálogo no tiene. Igual que el alias sin registrar en
+      // /compras/configuracion: si el nombre se reconoció pero no se pudo
+      // resolver, no es que "no paga ninguna" — es que no se pudo resolver.
+      // Tratarlo como decisión borraría en silencio la empresa que había si
+      // alguna vez se renombra el catálogo.
+      const pagaResuelta = !paga
+        ? null
+        : !paga.empresa
+          ? { empresa_id: null, ambas: paga.ambas }
+          : porEmpresa.has(paga.empresa)
+            ? { empresa_id: porEmpresa.get(paga.empresa)!, ambas: false }
+            : null;
       const fusion = fusionarConLoQueYaHabia(
         {
-          prioridad: (d.prioridad as string | null) ?? null,
-          estado_aprobacion: (d.estado_aprobacion as string | null) ?? null,
-          estado_compra: (d.estado_compra as string | null) ?? null,
+          prioridad: (d.prioridad as Prioridad | null) ?? null,
+          estado_aprobacion: (d.estado_aprobacion as EstadoAprobacion | null) ?? null,
+          estado_compra: (d.estado_compra as EstadoCompra | null) ?? null,
           solicitante_nombre: (d.solicitante_nombre as string | null) ?? null,
           compra_asignada_a: d.asignado_alias
             ? porAlias.get(norm(d.asignado_alias as string)) ?? null
             : null,
           comparativa_drive_id: planillas.get(registro.nro_ri) ?? null,
-          paga: d.paga
-            ? {
-                empresa_id: (d.paga as { empresa: string | null }).empresa
-                  ? porEmpresa.get((d.paga as { empresa: string }).empresa) ?? null
-                  : null,
-                ambas: (d.paga as { ambas: boolean }).ambas,
-              }
-            : null,
+          paga: pagaResuelta,
         },
         yaHabia
       );
