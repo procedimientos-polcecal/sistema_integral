@@ -297,13 +297,19 @@ async function resumenProduccion(supabase: Awaited<ReturnType<typeof createClien
  * una con `sheets_pendiente` no llegó porque Google rechazó la escritura.
  * Ninguna de las dos se resuelve sola, y en las dos la planilla está mostrando
  * un camión de menos.
+ *
+ * `abiertasDeDiasAnteriores` cuenta **sólo las que nacieron en el sistema**
+ * (`cargado_por` no nulo). Del histórico importado hay 345 de 1.702 sin salida
+ * del predio, y ésas no son un olvido accionable: la planilla nunca tuvo esa
+ * hora. Contarlas haría que el Inicio abriera con un 345 que nadie puede bajar.
  */
 async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
   const [{ count: ordenesDeHoy }, { count: abiertas }, { count: sinLlegar }] = await Promise.all([
     supabase.from("despacho_ordenes_carga")
       .select("id", { count: "exact", head: true }).eq("fecha", hoyStr),
     supabase.from("despacho_ordenes_carga")
-      .select("id", { count: "exact", head: true }).lt("fecha", hoyStr).is("salida_predio", null),
+      .select("id", { count: "exact", head: true })
+      .lt("fecha", hoyStr).is("salida_predio", null).not("cargado_por", "is", null),
     supabase.from("despacho_ordenes_carga")
       .select("id", { count: "exact", head: true }).not("sheets_pendiente", "is", null),
   ]);

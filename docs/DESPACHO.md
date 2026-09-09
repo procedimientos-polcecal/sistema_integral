@@ -132,7 +132,8 @@ Cuatro cosas que conviene no volver a averiguar:
 | Histórico e indicadores | `app/(app)/despacho/ordenes` |
 | Mapeo de productos | `app/(app)/despacho/productos` |
 | Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
-| Migraciones | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql` |
+| Importador del histórico (script) | `scripts/importar-despacho.mts` |
+| Migraciones (las cuatro **corridas**) | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`, `20260909095546_despacho_la_planilla_no_dice_de_que_empresa_es.sql` |
 
 ## Lo que se relevó de la planilla (09/09/2026)
 
@@ -212,45 +213,79 @@ de una pestaña a la que le faltara `Observaciones`.
 
 ## Lo que falta
 
-### Correr la migración de la pestaña por mes
-
-`20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`. Las dos
-primeras **ya están corridas** (verificado: las tablas contestan). Esta reemplaza
-el índice único de `sheets_fila`, y hasta que corra, dos órdenes del mismo número
-de fila en meses distintos van a chocar al escribirse en la planilla.
-
 ### Cargar `GOOGLE_SHEETS_DESPACHO_ID`
 
-`1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`, en `.env.local` y en Vercel. El
-libro **ya está compartido** con `sheets-reader@mantenimientopp.iam.gserviceaccount.com`.
-Sin la variable el espejo no escribe y cada orden queda con `sheets_pendiente`,
-que es el comportamiento buscado y se ve en el Inicio y en la cola.
+Es lo único que bloquea al módulo. `1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`,
+en `.env.local` y en Vercel. El libro ya está compartido con
+`sheets-reader@mantenimientopp.iam.gserviceaccount.com`.
+
+Sin la variable **el espejo no escribe** y cada orden que se cierre queda con
+`sheets_pendiente`, que es el comportamiento buscado y se ve en el Inicio y en la
+cola del día — pero la planilla se queda sin esas órdenes.
 
 ### Dar el módulo a alguien
 
 **Administración → Usuarios**, módulo `despacho`: `edicion` para la balanza,
 `admin` para el mapeo de productos y el importador.
 
-### Importar el histórico
+### Clasificar los productos
 
-`POST /api/despacho/importar` con `{"ensayo": true}` lee las seis pestañas y
-cuenta sin escribir nada — **correr eso primero**. Informa pestaña por pestaña
-cuántas leyó, cuántas salteó y cuántas tienen la fecha de otro mes.
+Las 1.702 órdenes importadas entran con el texto crudo de la planilla, así que
+arrancan **todas "sin clasificar"**. Las que se carguen desde la balanza traen el
+producto del remito de Odoo, y ésas se clasifican mapeando el producto una vez en
+`/despacho/productos`, que ordena la lista por cuántas órdenes lo usaron.
 
-Es idempotente: `ignoreDuplicates` por `numero`, así que lo que ya está en el
-sistema gana y volver a correrlo sólo agrega lo que falta.
+## El histórico ya está importado (09/09/2026)
 
-Dos cosas a mirar en el resultado:
+**1.702 órdenes**, de abril a septiembre de 2026. Se corrió
+`npx tsx scripts/importar-despacho.mts --escribir`, que hace lo mismo que
+`POST /api/despacho/importar` y con las mismas funciones — la ruta pide una sesión
+de admin en el navegador, el script se resuelve con el service role. Los dos son
+idempotentes (`ignoreDuplicates` por `numero`), así que volver a correrlos sólo
+agrega lo que falte.
 
-- **12 números repetidos.** El Nº del talonario tiene que ser único y en la
-  planilla hay doce que aparecen dos veces. El importador se queda con el primero
-  y los cuenta, pero son doce filas que alguien debería revisar en el libro.
-- **5 renglones con la fecha de otro mes que su pestaña.** Esos entran con
-  `sheets_fila` en null a propósito: si se guardara la fila, una corrección
+Cómo quedó, medido contra la base:
+
+| | |
+|---|---|
+| Órdenes | **1.702** (de 1.714 filas leídas, 0 salteadas) |
+| Con los cuatro horarios | 971 |
+| Sin salida del predio | 345 |
+| Sin ningún horario | 52 |
+| Con `sheets_fila` | 1.697 |
+| Con `empresa_id` | 0 — la planilla no la tiene |
+| Con `cargado_por` | 0 — nadie las cargó en el sistema |
+
+### Las 345 sin salida del predio no son una alarma
+
+Y eso hubo que resolverlo: la cola del día muestra arriba las órdenes abiertas de
+días anteriores, así que sin filtro habría abierto con **345 filas rojas** y el
+Inicio habría avisado 345. Ninguna de ésas es un olvido accionable — la planilla
+nunca tuvo esa hora.
+
+Por eso las dos consultas cuentan **sólo las que nacieron en el sistema**
+(`cargado_por` no nulo): `traerOrdenesAbiertasAnteriores` y `resumenDespacho` en
+`app/api/home/resumen/route.ts`. Verificado contra la base: 345 sin el filtro, 0
+con él. `cargado_por` es exactamente lo que distingue una fila importada de una
+cargada en la balanza, y por eso el importador lo deja en null a propósito.
+
+### Tres cosas del libro para revisar a mano
+
+El importador no las toca, porque corregirlas sería inventar un dato:
+
+- **Dos años mal tipeados**: Nº 13094 con fecha `2006-07-15` (desler) y Nº 13223
+  con `2023-07-23` (visani). Casi seguro son julio de 2026, y no es cosmético: la
+  pestaña de una orden se despeja de su fecha, así que corregir una de ésas haría
+  que el espejo cree una pestaña `JULIO 2006` en el libro.
+- **12 Nº de orden repetidos**: 12034, 12201, 12238, 12375, 12507, 12502, 12512,
+  12928, 13040, 13280, 13644, 13706. El Nº del talonario tiene que ser único; el
+  importador se queda con el primero y los cuenta.
+- **5 renglones con la fecha de otro mes que su pestaña.** Entraron con
+  `sheets_fila` en null a propósito: con la fila guardada, una corrección
   reescribiría la fila 45 de la pestaña equivocada y pisaría una orden ajena. Con
   la fila vacía, la corrección agrega un renglón — molesto pero visible.
 
-### Lo que queda para specs propios
+## Lo que queda para specs propios
 
 - **El catálogo de `clientes` en el núcleo.** Producción lo está esperando. Son
   más de 3.000 `res.partner` en dos empresas y el cruce va **por CUIT (`vat`),
