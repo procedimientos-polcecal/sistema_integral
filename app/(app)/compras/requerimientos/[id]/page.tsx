@@ -6,6 +6,7 @@ import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { volverAlListado } from "@/lib/compras/filtrosUrl";
 import RequerimientoDetalle from "./RequerimientoDetalle";
+import { dondeApuntaOdoo } from "@/lib/odoo/client";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
 
 export default async function RequerimientoPage({
@@ -99,6 +100,7 @@ export default async function RequerimientoPage({
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
       aprobadores={aprobadores}
+      odoo={dondeApuntaOdoo()}
       ordenesOdoo={(ordenesOdoo ?? []).map((o) => ({
         odooOrderId: o.odoo_order_id as number,
         odooNombre: (o.odoo_nombre ?? null) as string | null,

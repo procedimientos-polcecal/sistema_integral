@@ -22,7 +22,7 @@ import { linkDeLaComparativa } from "@/lib/compras/vincular";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [],
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo,
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -35,6 +35,8 @@ export default function RequerimientoDetalle({
   puedeAprobar: boolean;
   /** Las órdenes que este RI ya tiene en Odoo. Una, o dos si la pagan las dos. */
   ordenesOdoo?: OrdenDeOdoo[];
+  /** A qué instancia de Odoo se le va a escribir. Producción o staging. */
+  odoo?: { base: string; esStaging: boolean };
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -451,6 +453,7 @@ export default function RequerimientoDetalle({
             ordenes={ordenesOdoo}
             pendiente={r.odoo_pendiente ?? null}
             puedeEditar={puedeEditar}
+            odoo={odoo}
           />
 
           {/* ── Lo que entró al pañol ─────────────────────────

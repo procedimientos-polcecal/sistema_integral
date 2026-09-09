@@ -107,6 +107,29 @@ function credenciales(): CredencialesOdoo {
   };
 }
 
+/**
+ * A qué Odoo le estamos hablando.
+ *
+ * Producción y staging se distinguen **sólo por dos variables de entorno**, y lo
+ * que se escribe de un lado es la contabilidad real del grupo. Que eso dependa
+ * de mirar un `.env` es demasiado frágil para una pantalla que crea órdenes de
+ * compra: la ficha lo muestra antes del botón.
+ *
+ * `esStaging` es una heurística sobre el nombre —los builds de Odoo.sh que no
+ * son producción viven en `*.dev.odoo.com` y su base lleva `staging`—, así que
+ * se usa para **avisar**, nunca para decidir. Si algún día no acierta, lo peor
+ * que pasa es que falte un cartel; nunca que se escriba donde no va.
+ */
+export function dondeApuntaOdoo(): { base: string; esStaging: boolean } {
+  const base = process.env.ODOO_DB ?? "";
+  const url = process.env.ODOO_URL ?? "";
+
+  return {
+    base,
+    esStaging: /staging/i.test(base) || /\.dev\.odoo\.com/i.test(url),
+  };
+}
+
 // ── El transporte ────────────────────────────────────────────
 
 interface ErrorDeOdoo {

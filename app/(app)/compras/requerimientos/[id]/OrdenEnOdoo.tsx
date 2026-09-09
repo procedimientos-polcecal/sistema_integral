@@ -30,12 +30,15 @@ export default function OrdenEnOdoo({
   ordenes,
   pendiente,
   puedeEditar,
+  odoo,
 }: {
   requerimientoId: string;
   ordenes: OrdenDeOdoo[];
   /** Por qué no se pudo crear la última vez. Null si no hay nada pendiente. */
   pendiente: string | null;
   puedeEditar: boolean;
+  /** A qué instancia se le escribe: producción y staging difieren en dos variables. */
+  odoo?: { base: string; esStaging: boolean };
 }) {
   const router = useRouter();
   const [trabajando, setTrabajando] = useState(false);
@@ -80,6 +83,19 @@ export default function OrdenEnOdoo({
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Orden de compra en Odoo
       </h2>
+
+      {/*
+        A cuál Odoo se le va a escribir. Sólo se muestra cuando NO es producción:
+        un cartel permanente se vuelve invisible a la semana, y lo que hay que
+        notar es la excepción. Una orden creada en staging no existe para
+        contabilidad, y sin esto no habría forma de saberlo desde la pantalla.
+      */}
+      {odoo?.esStaging && (
+        <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+          <strong>Apuntando a STAGING</strong> (<span className="font-mono">{odoo.base}</span>).
+          Lo que se cree acá no llega a la contabilidad real.
+        </p>
+      )}
 
       {yaEstan ? (
         <ul className="space-y-2">

@@ -8,6 +8,7 @@ import {
   contar,
   contarPorEmpresa,
   avisoDeCredencialesFaltantes,
+  dondeApuntaOdoo,
   empresasDeOdoo,
   hayCredencialesOdoo,
   idDeRelacion,
@@ -298,6 +299,9 @@ export async function GET() {
 
   return NextResponse.json({
     version,
+    // A qué instancia se le habló: producción y staging se distinguen sólo por
+    // dos variables, y conviene que el diagnóstico lo diga.
+    apuntaA: dondeApuntaOdoo(),
     resumen: {
       sondas: sondas.length,
       ok: sondas.length - fallaron.length,
