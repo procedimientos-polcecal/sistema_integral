@@ -11,13 +11,15 @@ const CAMPOS = [
   "disponibilidad", "comentario", "url",
 ] as const;
 
-const CONGELADOS = ["APROBADO", "PEDIDO", "RECIBIDO"];
+import { comparativaCongelada, tienePresupuestoElegido } from "@/lib/compras/congelada";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 interface RequerimientoDeLaCotizacion {
   id: string;
   estado_compra: string;
+  /** Para saber si hay una decisión que proteger. Ver `comparativaCongelada`. */
+  proveedor_id: string | null;
   comparativa_drive_id: string | null;
 }
 
@@ -25,7 +27,7 @@ interface RequerimientoDeLaCotizacion {
 async function contexto(admin: Admin, id: string) {
   const { data } = await admin
     .from("compras_cotizaciones")
-    .select("*, compras_requerimientos(id, estado_compra, comparativa_drive_id)")
+    .select("*, compras_requerimientos(id, estado_compra, comparativa_drive_id, proveedor_id)")
     .eq("id", id)
     .single();
   return data;
@@ -46,7 +48,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!cotizacion) return NextResponse.json({ error: "El presupuesto no existe" }, { status: 404 });
 
   const ri = cotizacion.compras_requerimientos as unknown as RequerimientoDeLaCotizacion;
-  if (CONGELADOS.includes(ri.estado_compra)) {
+  if (
+    comparativaCongelada({
+      estadoCompra: ri.estado_compra as string,
+      proveedorId: (ri.proveedor_id ?? null) as string | null,
+      hayPresupuestoElegido: await tienePresupuestoElegido(admin, ri.id as string),
+    })
+  ) {
     return NextResponse.json(
       { error: "La comparativa quedó congelada al aprobarse la compra" },
       { status: 409 }
@@ -97,7 +105,13 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!cotizacion) return NextResponse.json({ error: "El presupuesto no existe" }, { status: 404 });
 
   const ri = cotizacion.compras_requerimientos as unknown as RequerimientoDeLaCotizacion;
-  if (CONGELADOS.includes(ri.estado_compra)) {
+  if (
+    comparativaCongelada({
+      estadoCompra: ri.estado_compra as string,
+      proveedorId: (ri.proveedor_id ?? null) as string | null,
+      hayPresupuestoElegido: await tienePresupuestoElegido(admin, ri.id as string),
+    })
+  ) {
     return NextResponse.json(
       { error: "La comparativa quedó congelada al aprobarse la compra" },
       { status: 409 }

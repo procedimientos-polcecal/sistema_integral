@@ -18,7 +18,7 @@ const CAMPOS = [
 ] as const;
 
 /** Estados en los que la comparativa ya es el respaldo de una decisión tomada. */
-const CONGELADOS = ["APROBADO", "PEDIDO", "RECIBIDO"];
+import { comparativaCongelada, tienePresupuestoElegido } from "@/lib/compras/congelada";
 
 /**
  * Carga un presupuesto en el sistema y lo escribe en la planilla adjunta.
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .from("compras_requerimientos")
     // El select va en un solo literal: partido en dos, Supabase no lo puede
     // analizar y el tipo del resultado se cae a GenericStringError.
-    .select("id, nro_ri, fecha, descripcion, estado_compra, estado_aprobacion, comparativa_drive_id, compras_areas(nombre)")
+    .select("id, nro_ri, fecha, descripcion, estado_compra, estado_aprobacion, comparativa_drive_id, proveedor_id, compras_areas(nombre)")
     .eq("id", id)
     .single();
 
@@ -62,7 +62,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { status: 409 }
     );
   }
-  if (CONGELADOS.includes(ri.estado_compra)) {
+  if (
+    comparativaCongelada({
+      estadoCompra: ri.estado_compra as string,
+      proveedorId: (ri.proveedor_id ?? null) as string | null,
+      hayPresupuestoElegido: await tienePresupuestoElegido(admin, ri.id as string),
+    })
+  ) {
     return NextResponse.json(
       { error: "La comparativa quedó congelada al aprobarse la compra" },
       { status: 409 }

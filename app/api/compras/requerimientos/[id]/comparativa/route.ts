@@ -10,7 +10,7 @@ import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/c
 import { claveProveedor } from "@/lib/compras/sheets";
 
 /** Estados en los que la comparativa ya es el respaldo de una decisión tomada. */
-const CONGELADOS = ["APROBADO", "PEDIDO", "RECIBIDO"];
+import { comparativaCongelada, tienePresupuestoElegido } from "@/lib/compras/congelada";
 
 /**
  * Adjunta una planilla de la carpeta a un requerimiento y trae sus filas.
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const admin = createAdminClient();
   const { data: ri } = await admin
     .from("compras_requerimientos")
-    .select("id, nro_ri, estado_compra, estado_aprobacion")
+    .select("id, nro_ri, estado_compra, estado_aprobacion, proveedor_id")
     .eq("id", id)
     .single();
 
@@ -54,9 +54,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { status: 409 }
     );
   }
-  // Una vez aprobada la compra la comparativa es el respaldo de por qué se
-  // eligió ese precio: no se toca más.
-  if (CONGELADOS.includes(ri.estado_compra)) {
+  // Una vez decidida la compra la comparativa es el respaldo de por qué se
+  // eligió ese precio: no se toca más. "Decidida" no es lo mismo que el estado:
+  // ver `comparativaCongelada`.
+  if (
+    comparativaCongelada({
+      estadoCompra: ri.estado_compra as string,
+      proveedorId: (ri.proveedor_id ?? null) as string | null,
+      hayPresupuestoElegido: await tienePresupuestoElegido(admin, ri.id as string),
+    })
+  ) {
     return NextResponse.json(
       { error: "La comparativa quedó congelada al aprobarse la compra" },
       { status: 409 }

@@ -15,8 +15,7 @@
  * escrita en cada ruta, una de las dos se olvidó de la lista.
  */
 
-/** Estados que el sistema toma como "la compra ya se decidió". */
-const ESTADOS_DECIDIDOS = ["APROBADO", "PEDIDO", "RECIBIDO"];
+import { ESTADOS_DECIDIDOS } from "./congelada";
 export interface VeredictoAprobacion {
   ok: boolean;
   error?: string;

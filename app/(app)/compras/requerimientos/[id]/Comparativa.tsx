@@ -10,6 +10,7 @@ import {
   totalesEnPesosDe, minimoEnPesos, eleccionDeLaPlanilla, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
 import { moneda } from "@/lib/compras/constants";
+import { comparativaCongelada, ESTADOS_DECIDIDOS } from "@/lib/compras/congelada";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaTabla from "./ComparativaTabla";
 import ComparativaDecision from "./ComparativaDecision";
@@ -51,7 +52,20 @@ export default function Comparativa({
   const [eligiendo, setEligiendo] = useState<string | null>(null);
   const [trayendo, setTrayendo] = useState(false);
 
-  const congelada = ["APROBADO", "PEDIDO", "RECIBIDO"].includes(r.estado_compra);
+  /*
+   * Congelada = hay una decisión que proteger, no que el estado diga que sí. La
+   * regla vive en `lib/compras/congelada.ts` y la usan también las tres rutas
+   * que tocan la comparativa: cuando estaba copiada en cada lado, la pantalla
+   * mostró un botón que la ruta rechazaba.
+   */
+  const congelada = comparativaCongelada({
+    estadoCompra: r.estado_compra,
+    proveedorId: r.proveedor_id,
+    hayPresupuestoElegido: cotizaciones.some((c) => c.elegida),
+  });
+
+  /** El estado dice que se decidió y no hay nada decidido: son 35 así. */
+  const trabada = ESTADOS_DECIDIDOS.includes(r.estado_compra) && !congelada;
 
   // Todo en pesos, calculado una sola vez. El orden, el más barato y la
   // diferencia porcentual salen de los mismos números: si cada uno convirtiera
@@ -89,16 +103,7 @@ export default function Comparativa({
    * de los 35 tienen comparativa adjunta y la planilla probablemente ya tiene
    * la respuesta.
    */
-  const decidida = cotizaciones.some((c) => c.elegida) || r.proveedor_id !== null;
-  const trabada = congelada && !decidida;
-
-  /*
-   * Cargar y elegir dependen de que **no haya decisión**, no de que el estado
-   * diga que sí. En los 35 trabados el estado congelaba la pantalla y escondía
-   * lo único que permitía resolverlos: el botón de volver a traer la planilla y
-   * la posibilidad de elegir. El guard del servidor hace la misma excepción.
-   */
-  const puedeCargar = puedeEditar && !decidida && r.estado_aprobacion === "APROBADA";
+  const puedeCargar = puedeEditar && !congelada && r.estado_aprobacion === "APROBADA";
   const puedeElegir = esAsignado && (r.estado_compra === "PARA_COMPRAR" || trabada);
 
   function refrescar(mensaje: string | null) {
@@ -234,7 +239,7 @@ export default function Comparativa({
           </div>
         )}
 
-        {!decidida && enLaPlanilla.tipo === "una" && (
+        {!congelada && enLaPlanilla.tipo === "una" && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-900">
             <p>
               <strong>En la planilla eligieron a{" "}
@@ -267,7 +272,7 @@ export default function Comparativa({
           </div>
         )}
 
-        {!decidida && enLaPlanilla.tipo === "varias" && (
+        {!congelada && enLaPlanilla.tipo === "varias" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
             <p>
               <strong>La planilla tiene {enLaPlanilla.cotizaciones.length} elecciones
@@ -327,7 +332,7 @@ export default function Comparativa({
           />
         )}
 
-        {congelada && decidida && cotizaciones.length > 0 && (
+        {congelada && cotizaciones.length > 0 && (
           <p className="text-xs text-slate-400">
             La comparativa quedó congelada al aprobarse la compra.
           </p>
