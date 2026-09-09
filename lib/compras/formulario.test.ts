@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { celdasDelAlta, filaDelMaster, type DatosDelAlta } from "./formulario";
+import {
+  celdasDelAlta,
+  celdasDePrioridadYEmpresa,
+  filaDelMaster,
+  type DatosDelAlta,
+} from "./formulario";
 
 /** El encabezado real de "Respuestas de formulario 1", leido el 09/09/2026. */
 const ENCABEZADO = [
@@ -198,5 +203,54 @@ describe("la fila del master que le corresponde a una fila de respuestas", () =>
   it("una fila que el QUERY no alcanza no tiene fila en el master", () => {
     expect(filaDelMaster(3)).toBeNull();
     expect(filaDelMaster(1)).toBeNull();
+  });
+});
+
+describe("prioridad y empresa, en las dos columnas a mano del master", () => {
+  it("escribe las dos cuando estan las dos columnas y hay los dos valores", () => {
+    const r = celdasDePrioridadYEmpresa(
+      { prioridad: 10, empresa: 11 },
+      { prioridad: "ALTA", empresa: "Polcecal" }
+    );
+    expect(r.celdas).toEqual([
+      { columna: 10, valor: "ALTA" },
+      { columna: 11, valor: "Polcecal" },
+    ]);
+    expect(r.bloqueadas).toEqual([]);
+  });
+
+  it("si falta UNA de las dos columnas, escribe la otra y avisa por la que falta", () => {
+    // Lo que midio la revision: el chequeo anterior solo se quejaba si faltaban
+    // las dos, asi que con una sola columna escribia la que podia y devolvia
+    // exito. Eso va contra la regla del modulo: si una ruta toca un campo que se
+    // exporta y no puede exportarlo, el pendiente queda anotado.
+    const r = celdasDePrioridadYEmpresa(
+      { prioridad: 10, empresa: -1 },
+      { prioridad: "ALTA", empresa: "Polcecal" }
+    );
+    expect(r.celdas).toEqual([{ columna: 10, valor: "ALTA" }]);
+    expect(r.bloqueadas.join(" ")).toMatch(/empresa/i);
+    expect(r.bloqueadas).toHaveLength(1);
+  });
+
+  it("una celda que no tenemos con que llenar no se pisa con vacio ni se anota", () => {
+    // Mismo criterio que la celda de comparativa, que borraba el link de la
+    // planilla: sin valor no hay nada que exportar, asi que tampoco hay
+    // pendiente que anotar aunque la columna no exista.
+    const r = celdasDePrioridadYEmpresa(
+      { prioridad: -1, empresa: 11 },
+      { prioridad: "", empresa: "" }
+    );
+    expect(r.celdas).toEqual([]);
+    expect(r.bloqueadas).toEqual([]);
+  });
+
+  it("sin ninguna de las dos columnas no escribe nada y anota las dos", () => {
+    const r = celdasDePrioridadYEmpresa(
+      { prioridad: -1, empresa: -1 },
+      { prioridad: "ALTA", empresa: "Ambas" }
+    );
+    expect(r.celdas).toEqual([]);
+    expect(r.bloqueadas).toHaveLength(2);
   });
 });

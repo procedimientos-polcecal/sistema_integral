@@ -22,7 +22,7 @@ import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
-import { empresaParaPlanilla } from "@/lib/compras/sheets";
+import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
 
 /**
  * Cómo se llama cada columna en la hoja. La primera que exista gana.
@@ -250,16 +250,148 @@ export function filaDelMaster(filaDeRespuestas: number): number | null {
   return fila >= 2 ? fila : null;
 }
 
+/**
+ * Qué escribir de prioridad y empresa según lo que el master tenga.
+ *
+ * Aparte y pura porque acá vivía el defecto: el chequeo devolvía motivo sólo si
+ * faltaban **las dos** columnas, así que con una sola —hay empresa para
+ * escribir y el master no tiene esa columna— se escribía la otra y la función
+ * informaba que todo había salido bien. Eso va contra la regla del módulo: toda
+ * ruta que toque un campo que se exporta tiene que exportar, y si no puede,
+ * dejar el pendiente anotado.
+ *
+ * Los faltantes se acumulan, como hace `exportarRequerimiento` con sus
+ * `bloqueadas`, en vez de cortar en el primero.
+ *
+ * Una celda sin valor no se toca **ni se anota**: no se pisa con vacío —el
+ * mismo criterio que la celda de comparativa, que borraba el link de la
+ * planilla— y si no hay nada que exportar tampoco hay nada pendiente.
+ */
+export function celdasDePrioridadYEmpresa(
+  columnas: { prioridad: number; empresa: number },
+  valores: { prioridad: string; empresa: string }
+): { celdas: Celda[]; bloqueadas: string[] } {
+  const celdas: Celda[] = [];
+  const bloqueadas: string[] = [];
+
+  const cuales = [
+    ["prioridad", columnas.prioridad, valores.prioridad, "PRIORIDAD"],
+    ["empresa", columnas.empresa, valores.empresa, "EMPRESA o PAGA"],
+  ] as const;
+
+  for (const [que, columna, valor, comoSeLlama] of cuales) {
+    if (!valor) continue;
+    if (columna < 0) {
+      bloqueadas.push(
+        `hay ${que} para escribir y el master no tiene esa columna (${comoSeLlama})`
+      );
+      continue;
+    }
+    celdas.push({ columna, valor });
+  }
+
+  return { celdas, bloqueadas };
+}
+
 const HOJA_RESPUESTAS = "Respuestas de formulario 1";
 const HOJA_MASTER = "Requerimientos internos";
 
 const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? "";
 
+/**
+ * Desde qué fila hay respuestas en la hoja del formulario.
+ *
+ * La 1 es el encabezado y la 2 y la 3 no son datos: la primera respuesta está
+ * en la 4. `filaSiguienteSegunLaColumna` no lo sabe, y si la columna de la
+ * marca temporal vuelve vacía o truncada devuelve 2 — ahí la fórmula del N° de
+ * RI, que lleva `A{fila-1}+1` horneada adentro, se hornearía contra `A1`, el
+ * encabezado. Con 1.955 respuestas cargadas eso no puede pasar por los datos:
+ * pasa cuando se leyó la hoja equivocada o la lectura volvió corta, que es
+ * justo cuando conviene negarse en vez de escribir.
+ */
+const PRIMERA_FILA_DE_DATOS = 4;
+
+/**
+ * Cómo se nombra cada planilla en un motivo, con el id que hay que ir a mirar.
+ *
+ * El mensaje de Google no alcanza solo: un 404 dice "conviene revisar el ID
+ * configurado" sin decir cuál de los dos, y un 403 no dice a qué planilla hay
+ * que darle permiso de editor. Son dos archivos distintos y esto es lo que se
+ * muestra en `/compras/configuracion`, así que el paso y la variable van
+ * adelante de lo que dijo Google, que se deja sin traducir.
+ */
+const PLANILLA = {
+  respuestas: "la hoja de respuestas (GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID)",
+  master: "el master (GOOGLE_SHEETS_COMPRAS_ID)",
+} as const;
+
+/**
+ * Corre un paso contra Google diciendo cuál era.
+ *
+ * Un solo `catch` para cinco operaciones sobre dos planillas distintas dejaba
+ * motivos que no se podían accionar. Ver `PLANILLA`.
+ */
+async function paso<T>(cual: string, hacer: () => Promise<T>): Promise<T> {
+  try {
+    return await hacer();
+  } catch (e) {
+    throw new Error(`${cual}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export interface ResultadoAlta {
   /** En qué fila de la hoja de respuestas quedó. */
   fila: number | null;
-  /** Qué anotar en `sheets_pendiente`, o null si salió todo bien. */
+  /**
+   * Qué anotar en `sheets_pendiente`. Es la cola del reintento de cada
+   * sincronización, así que lo esperable también va acá: es lo que hace que
+   * prioridad y empresa se acomoden solas.
+   */
   pendiente: string | null;
+  /**
+   * Qué decirle a quien cargó el pedido, o `null` si no hay nada que le
+   * importe. Que la planilla tarde en refrescar no es noticia para él: un
+   * cartel que aparece siempre y se arregla solo enseña a ignorar los carteles.
+   */
+  avisar: string | null;
+}
+
+/** Lo que dejó una escritura: qué encolar y qué mostrar. Ver `ResultadoAlta`. */
+type Aviso = Omit<ResultadoAlta, "fila">;
+
+/** Nada que encolar y nada que decir. */
+const listo: Aviso = { pendiente: null, avisar: null };
+
+/**
+ * Un fallo de verdad: se encola para el reintento y se le dice a quien hizo la
+ * acción, que es la regla del módulo para cualquier fallo de escritura.
+ */
+const falla = (motivo: string): Aviso => ({ pendiente: motivo, avisar: motivo });
+
+/**
+ * Lo esperable: se encola —el reintento es lo que lo va a resolver— y no se
+ * muestra.
+ */
+const enLaCola = (motivo: string): Aviso => ({ pendiente: motivo, avisar: null });
+
+/**
+ * Lo que dice una celda de control, y qué N° de RI es.
+ *
+ * Se lee con `sinFormato` y no el texto que se ve. Limpiar el texto formateado
+ * con `replace(/[^0-9]/g, "")` andaba de casualidad con separador de miles
+ * (`"1.954"` → `1954`) y mentía con un formato de decimales (`"1.954,00"` →
+ * `195400`): el pendiente decía "la planilla numeró esa fila como 195400" y
+ * mandaba a revisar a mano una numeración que estaba perfecta. El valor crudo
+ * es lo que el módulo ya decidió para cualquier comparación de valores.
+ *
+ * Vuelve también el texto tal cual porque **vacío y raro no son lo mismo**: una
+ * celda vacía es que la fórmula todavía no bajó, y cualquier otra cosa que no
+ * sea este RI es un problema que alguien tiene que mirar.
+ */
+function nroDeControl(valores: string[][]): { texto: string; nro: number } {
+  const texto = String(valores[0]?.[0] ?? "").trim();
+  const nro = Number(texto);
+  return { texto, nro: Number.isFinite(nro) ? nro : 0 };
 }
 
 /**
@@ -270,52 +402,95 @@ export interface ResultadoAlta {
  * esté configurada, el sistema funciona solo.
  *
  * Lo que puede fallar queda en `pendiente` en vez de lanzar: el pedido ya está
- * guardado y perderlo por no poder escribir la planilla sería peor.
+ * guardado y perderlo por no poder escribir la planilla sería peor. Por eso las
+ * consultas a la base van **adentro** del `try` y no antes: `supabase-js` no
+ * lanza por un error de consulta, pero sí rechaza por un fallo de red, y con el
+ * `try` empezando más abajo esta función sí podía lanzar aunque el docstring
+ * prometiera que no.
+ *
+ * RIESGO ASUMIDO
+ *
+ * Prioridad y empresa son las dos columnas del master que no salen de la
+ * fórmula, y el master está una planilla más abajo de la que se escribe acá:
+ * entre las dos hay un `IMPORTRANGE` que Google refresca por su cuenta y que no
+ * se puede forzar desde la API. Así que en el alta casi siempre **no se
+ * escriben**: las escribe el reintento de la próxima sincronización, hasta 15
+ * minutos después —que es cada cuánto pega el workflow de GitHub Actions—. En
+ * esa ventana, quien mire la planilla ve el pedido sin prioridad y sin empresa.
  */
 export async function exportarAltaAlFormulario(
   requerimientoId: string
 ): Promise<ResultadoAlta> {
   if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return { fila: null, pendiente: null };
+    return { fila: null, ...listo };
   }
 
-  const admin = createAdminClient();
-  const { data: r } = await admin
-    .from("compras_requerimientos")
-    .select("id, nro_ri, descripcion, codigo, cantidad, fecha_necesidad, detalle_extra, imagen_url, created_at, solicitante_id, solicitante_nombre, compras_areas(nombre), compras_ubicaciones(nombre)")
-    .eq("id", requerimientoId)
-    .single();
-
-  if (!r) return { fila: null, pendiente: null };
-
-  const area = (r.compras_areas as unknown as { nombre: string } | null)?.nombre;
-  if (!area) {
-    // El área es con lo que el FILTER de cada pestaña compara: sin ella el
-    // pedido aparecería en el master y en ninguna pestaña.
-    return { fila: null, pendiente: "el pedido no tiene área, y la planilla la necesita" };
-  }
-
-  // El nombre y el apellido van en columnas separadas. `solicitante_nombre` los
-  // trae pegados, así que se prefiere el usuario.
-  let nombre = "";
-  let apellido = "";
-  if (r.solicitante_id) {
-    const { data: u } = await admin
-      .from("usuarios")
-      .select("nombre, apellido")
-      .eq("id", r.solicitante_id as string)
-      .single();
-    nombre = (u?.nombre as string) ?? "";
-    apellido = (u?.apellido as string) ?? "";
-  }
-  if (!nombre && r.solicitante_nombre) {
-    const partes = String(r.solicitante_nombre).trim().split(/\s+/);
-    nombre = partes[0] ?? "";
-    apellido = partes.slice(1).join(" ");
-  }
+  // Fuera del `try` para que el `catch` la pueda devolver. Si falla la lectura
+  // de vuelta, el alta YA está en la planilla: contestar `fila: null` haría
+  // pensar que no se escribió, y como el `update` de `sheets_fila` ya corrió, un
+  // reintento podría escribir una segunda fila para el mismo pedido — la doble
+  // numeración que la verificación quiere justamente evitar.
+  let filaEscrita: number | null = null;
 
   try {
-    const encabezado = (await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!1:1`))[0] ?? [];
+    const admin = createAdminClient();
+
+    // `maybeSingle` y no `single`: con `single`, "no existe" también viene como
+    // error, y acá los dos casos se contestan distinto.
+    const { data: r, error } = await admin
+      .from("compras_requerimientos")
+      .select("id, nro_ri, descripcion, codigo, cantidad, fecha_necesidad, detalle_extra, imagen_url, created_at, solicitante_id, solicitante_nombre, compras_areas(nombre), compras_ubicaciones(nombre)")
+      .eq("id", requerimientoId)
+      .maybeSingle();
+
+    // Un error de consulta NO es "todo bien, se omitió". Antes se descartaba, y
+    // con eso el día que se renombre una columna del `select` o falle el
+    // service-role, PostgREST contesta 400 con `data: null` y **cada alta se
+    // saltearía la planilla en silencio**: sin pendiente, sin log y sin nada
+    // que mirar. Sólo el pedido que de verdad no existe se omite sin pendiente.
+    if (error) {
+      return {
+        fila: null,
+        ...falla(`no se pudo leer el pedido para exportarlo: ${error.message}`),
+      };
+    }
+    if (!r) return { fila: null, ...listo };
+
+    const area = (r.compras_areas as unknown as { nombre: string } | null)?.nombre;
+    if (!area) {
+      // El área es con lo que el FILTER de cada pestaña compara: sin ella el
+      // pedido aparecería en el master y en ninguna pestaña.
+      return {
+        fila: null,
+        ...falla("el pedido no tiene área, y la planilla la necesita"),
+      };
+    }
+
+    // El nombre y el apellido van en columnas separadas. `solicitante_nombre`
+    // los trae pegados, así que se prefiere el usuario.
+    let nombre = "";
+    let apellido = "";
+    if (r.solicitante_id) {
+      const { data: u } = await admin
+        .from("usuarios")
+        .select("nombre, apellido")
+        .eq("id", r.solicitante_id as string)
+        .maybeSingle();
+      nombre = (u?.nombre as string) ?? "";
+      apellido = (u?.apellido as string) ?? "";
+    }
+    if (!nombre && r.solicitante_nombre) {
+      const partes = String(r.solicitante_nombre).trim().split(/\s+/);
+      nombre = partes[0] ?? "";
+      apellido = partes.slice(1).join(" ");
+    }
+
+    const encabezado =
+      (
+        await paso(`al leer el encabezado de ${PLANILLA.respuestas}`, () =>
+          leerValores(idFormulario(), `${HOJA_RESPUESTAS}!1:1`)
+        )
+      )[0] ?? [];
 
     // La fila libre se busca por la marca temporal y NO por la columna del N°
     // de RI: esa columna tiene una fórmula en todas las filas de la grilla, y
@@ -328,8 +503,21 @@ export async function exportarAltaAlFormulario(
     // un formato particular puede mostrar vacía una celda que sí tiene serial, y
     // ahí la cuenta de la fila libre se corre y una respuesta nueva pisa a otra. El
     // valor crudo no tiene ese problema y no cuesta nada pedirlo así.
-    const marcas = await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!B:B`, { sinFormato: true });
+    const marcas = await paso(`al buscar la fila libre en ${PLANILLA.respuestas}`, () =>
+      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!B:B`, { sinFormato: true })
+    );
     const fila = filaSiguienteSegunLaColumna(marcas);
+    if (fila < PRIMERA_FILA_DE_DATOS) {
+      return {
+        fila: null,
+        ...falla(
+          `la columna de la marca temporal volvió con muy poco y la fila libre daría la ` +
+            `${fila}, cuando los datos empiezan en la ${PRIMERA_FILA_DE_DATOS}: no se ` +
+            `escribió nada, hay que revisar que se esté leyendo la hoja ` +
+            `"${HOJA_RESPUESTAS}" y que la lectura no haya vuelto corta`
+        ),
+      };
+    }
 
     const armado = celdasDelAlta(
       encabezado,
@@ -353,33 +541,41 @@ export async function exportarAltaAlFormulario(
     if (!armado.ok) {
       return {
         fila: null,
-        pendiente: "no se pudo armar la fila del alta: " + armado.motivos.join("; "),
+        ...falla("no se pudo armar la fila del alta: " + armado.motivos.join("; ")),
       };
     }
 
     // Se escribe en la fila que devolvió `celdasDelAlta`, no en la de acá: la
     // fórmula del N° de RI la lleva horneada adentro.
-    await escribirCeldas(
-      idFormulario(),
-      armado.celdas.map((c) => ({
-        pestana: HOJA_RESPUESTAS,
-        columna: c.columna,
-        fila: armado.fila,
-        valor: c.valor,
-      }))
+    await paso(`al escribir ${PLANILLA.respuestas}`, () =>
+      escribirCeldas(
+        idFormulario(),
+        armado.celdas.map((c) => ({
+          pestana: HOJA_RESPUESTAS,
+          columna: c.columna,
+          fila: armado.fila,
+          valor: c.valor,
+        }))
+      )
     );
+    filaEscrita = armado.fila;
 
     // Qué número calculó la planilla. Si no es el que asignó el sistema, hay un
     // hueco o una fila de más: se dice, en vez de dejar dos números para el
     // mismo pedido.
-    const escrito = await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${armado.fila}`);
-    const numeroDeLaPlanilla = Number(String(escrito[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
-    if (numeroDeLaPlanilla !== r.nro_ri) {
+    const escrito = await paso(
+      `al leer de vuelta el número que calculó ${PLANILLA.respuestas}`,
+      () =>
+        leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${armado.fila}`, { sinFormato: true })
+    );
+    const numerada = nroDeControl(escrito);
+    if (numerada.nro !== r.nro_ri) {
       return {
         fila: armado.fila,
-        pendiente:
-          `la planilla numeró esa fila como ${numeroDeLaPlanilla || "(vacío)"} y el sistema ` +
-          `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`,
+        ...falla(
+          `la planilla numeró esa fila como ${numerada.texto || "(vacío)"} y el sistema ` +
+            `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`
+        ),
       };
     }
 
@@ -394,10 +590,10 @@ export async function exportarAltaAlFormulario(
 
     return {
       fila: armado.fila,
-      pendiente: await escribirPrioridadYEmpresa(admin, r.id as string, armado.fila),
+      ...(await escribirPrioridadYEmpresa(admin, r.id as string, armado.fila)),
     };
   } catch (e) {
-    return { fila: null, pendiente: e instanceof Error ? e.message : String(e) };
+    return { fila: filaEscrita, ...falla(e instanceof Error ? e.message : String(e)) };
   }
 }
 
@@ -407,62 +603,97 @@ export async function exportarAltaAlFormulario(
  * Las elige quien pide, en el alta, y en la planilla son dos columnas que no
  * salen de ninguna fórmula. Si no se escriben, quien mira la planilla no las ve.
  *
- * **Se verifica la fila antes de escribir.** La cuenta `fila − 2` vale mientras
- * el `QUERY` conserve el orden, y además `IMPORTRANGE` tarda en refrescar: si la
- * fila del master todavía no dice este N° de RI, no se escribe nada y queda
- * pendiente. Escribir a ciegas sería ponerle la prioridad de este pedido a otro.
+ * **Se verifica la fila antes de escribir**, y casi siempre la verificación
+ * dice que todavía no: la cuenta `fila − 2` vale mientras el `QUERY` conserve
+ * el orden, pero entre las dos planillas hay un `IMPORTRANGE` que Google
+ * refresca por su cuenta y puede tardar minutos —no se puede forzar desde la
+ * API—, y esto corre milisegundos después de escribir la hoja de respuestas.
+ * Escribir a ciegas sería ponerle la prioridad de este pedido a otro.
+ *
+ * Por eso los dos resultados de la verificación se cuentan distinto:
+ *
+ *   - **la fila del master vacía es lo normal** —la planilla no refrescó
+ *     todavía—, así que queda en la cola del reintento y no se le muestra a
+ *     quien cargó el pedido: un cartel que aparece siempre y se arregla solo
+ *     enseña a ignorar los carteles;
+ *   - **que diga otro RI** es un problema de verdad —el `QUERY` no conservó el
+ *     orden, o hay una fila de más— y se avisa.
+ *
+ * Las dos dejan pendiente, porque el pendiente **es** la cola del reintento:
+ * quien termina escribiéndolas es `exportarRequerimiento` en la próxima
+ * sincronización, cuando `IMPORTRANGE` ya refrescó.
  */
 async function escribirPrioridadYEmpresa(
   admin: ReturnType<typeof createAdminClient>,
   requerimientoId: string,
   filaDeRespuestas: number
-): Promise<string | null> {
+): Promise<Aviso> {
   const idMaster = process.env.GOOGLE_SHEETS_COMPRAS_ID;
   const fila = filaDelMaster(filaDeRespuestas);
-  if (!idMaster || fila === null) return null;
+  if (!idMaster || fila === null) return listo;
 
-  const { data: r } = await admin
+  const { data: r, error } = await admin
     .from("compras_requerimientos")
     .select("nro_ri, prioridad, paga_ambas, empresas!empresa_id(nombre)")
     .eq("id", requerimientoId)
-    .single();
-  if (!r) return null;
+    .maybeSingle();
 
-  const prioridad = (r.prioridad as string | null) ?? "";
-  const empresa = empresaParaPlanilla(
-    (r.empresas as unknown as { nombre: string } | null)?.nombre,
-    r.paga_ambas === true
-  );
-  // Una celda que no tenemos con qué llenar no se pisa con vacío. Es el mismo
-  // criterio que la celda de comparativa, que borraba el link de la planilla.
-  if (!prioridad && !empresa) return null;
-
-  const encabezado = (await leerValores(idMaster, `${HOJA_MASTER}!1:1`))[0] ?? [];
-  const columna = (nombres: string[]) => encabezado.findIndex((h) => nombres.includes(norm(h)));
-
-  const colPrioridad = columna(["PRIORIDAD"]);
-  const colEmpresa = columna(["EMPRESA", "PAGA"]);
-  if (colPrioridad < 0 && colEmpresa < 0) {
-    return "el master no tiene columnas de prioridad ni de empresa";
+  // Igual que arriba: un error de consulta no se puede contestar como "no había
+  // nada que escribir".
+  if (error) {
+    return falla(`no se pudo leer prioridad y empresa del pedido: ${error.message}`);
   }
+  if (!r) return listo;
 
-  const enElMaster = await leerValores(idMaster, `${HOJA_MASTER}!A${fila}`);
-  const nroEnLaFila = Number(String(enElMaster[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
-  if (nroEnLaFila !== r.nro_ri) {
-    return (
-      `la fila ${fila} del master todavía no dice el RI ${r.nro_ri} (dice ` +
-      `${nroEnLaFila || "vacío"}): no se escribieron prioridad ni empresa`
+  const valores = {
+    prioridad: (r.prioridad as string | null) ?? "",
+    empresa: empresaParaPlanilla(
+      (r.empresas as unknown as { nombre: string } | null)?.nombre,
+      r.paga_ambas === true
+    ),
+  };
+  if (!valores.prioridad && !valores.empresa) return listo;
+
+  const encabezado =
+    (
+      await paso(`al leer el encabezado de ${PLANILLA.master}`, () =>
+        leerValores(idMaster, `${HOJA_MASTER}!1:1`)
+      )
+    )[0] ?? [];
+  // El indexador es el de `sheets.ts` y no una tabla de alias propia: son las
+  // mismas dos columnas de la misma hoja, y tenerla duplicada acá significaba
+  // que el día que alguien sume un alias allá, esto no se entera.
+  const idx = indexarColumnas(encabezado);
+
+  const { celdas, bloqueadas } = celdasDePrioridadYEmpresa(
+    { prioridad: idx.prioridad, empresa: idx.empresa },
+    valores
+  );
+  if (celdas.length === 0) return falla(bloqueadas.join("; "));
+
+  const enElMaster = await paso(`al verificar la fila del RI en ${PLANILLA.master}`, () =>
+    leerValores(idMaster, `${HOJA_MASTER}!A${fila}`, { sinFormato: true })
+  );
+  const enLaFila = nroDeControl(enElMaster);
+  if (enLaFila.texto === "") {
+    return enLaCola(
+      `la fila ${fila} del master todavía no dice el RI ${r.nro_ri}: el IMPORTRANGE no ` +
+        `refrescó, así que prioridad y empresa las escribe el próximo reintento`
+    );
+  }
+  if (enLaFila.nro !== r.nro_ri) {
+    return falla(
+      `la fila ${fila} del master dice ${enLaFila.texto} y no el RI ${r.nro_ri}: no se ` +
+        `escribieron prioridad ni empresa, y hay que revisar el orden del master a mano`
     );
   }
 
-  const celdas = [
-    ...(colPrioridad >= 0 && prioridad
-      ? [{ pestana: HOJA_MASTER, columna: colPrioridad, fila, valor: prioridad }]
-      : []),
-    ...(colEmpresa >= 0 && empresa
-      ? [{ pestana: HOJA_MASTER, columna: colEmpresa, fila, valor: empresa }]
-      : []),
-  ];
-  await escribirCeldas(idMaster, celdas);
-  return null;
+  await paso(`al escribir prioridad y empresa en ${PLANILLA.master}`, () =>
+    escribirCeldas(
+      idMaster,
+      celdas.map((c) => ({ pestana: HOJA_MASTER, columna: c.columna, fila, valor: c.valor }))
+    )
+  );
+
+  return bloqueadas.length > 0 ? falla(bloqueadas.join("; ")) : listo;
 }
