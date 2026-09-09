@@ -133,6 +133,8 @@ Cuatro cosas que conviene no volver a averiguar:
 | Mapeo de productos | `app/(app)/despacho/productos` |
 | Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
 | Importador del histórico (script) | `scripts/importar-despacho.mts` |
+| Comparar planilla contra base | `scripts/comparar-despacho.mts` |
+| Diagnóstico de punta a punta | `scripts/probar-despacho.mts` |
 | Migraciones (las cuatro **corridas**) | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`, `20260909095546_despacho_la_planilla_no_dice_de_que_empresa_es.sql` |
 
 ## Lo que se relevó de la planilla (09/09/2026)
@@ -248,7 +250,7 @@ Cómo quedó, medido contra la base:
 
 | | |
 |---|---|
-| Órdenes | **1.702** (de 1.714 filas leídas, 0 salteadas) |
+| Órdenes | **1.703** (1.714 filas leídas, 0 salteadas, 12 Nº repetidos, más `12034-2`) |
 | Con los cuatro horarios | 971 |
 | Sin salida del predio | 345 |
 | Sin ningún horario | 52 |
@@ -269,21 +271,95 @@ Por eso las dos consultas cuentan **sólo las que nacieron en el sistema**
 con él. `cargado_por` es exactamente lo que distingue una fila importada de una
 cargada en la balanza, y por eso el importador lo deja en null a propósito.
 
-### Tres cosas del libro para revisar a mano
+### Dos renglones del libro para revisar a mano
 
-El importador no las toca, porque corregirlas sería inventar un dato:
+El importador no los toca, porque corregirlos sería inventar un dato. Están en la
+salida del script, con pestaña y fila:
 
-- **Dos años mal tipeados**: Nº 13094 con fecha `2006-07-15` (desler) y Nº 13223
-  con `2023-07-23` (visani). Casi seguro son julio de 2026, y no es cosmético: la
-  pestaña de una orden se despeja de su fecha, así que corregir una de ésas haría
-  que el espejo cree una pestaña `JULIO 2006` en el libro.
-- **12 Nº de orden repetidos**: 12034, 12201, 12238, 12375, 12507, 12502, 12512,
-  12928, 13040, 13280, 13644, 13706. El Nº del talonario tiene que ser único; el
-  importador se queda con el primero y los cuenta.
-- **5 renglones con la fecha de otro mes que su pestaña.** Entraron con
-  `sheets_fila` en null a propósito: con la fila guardada, una corrección
-  reescribiría la fila 45 de la pestaña equivocada y pisaría una orden ajena. Con
-  la fila vacía, la corrección agrega un renglón — molesto pero visible.
+| Pestaña | Fila | Nº | Dice | Debería estar en | Cliente |
+|---|---|---|---|---|---|
+| `JUNIO 2026` | 5 | 12507 | 2026-05-30 | `MAYO 2026` | arrimati |
+| `JULIO 2026` | 36 | 12857 | 2026-06-26 | `JUNIO 2026` | jefesa |
+
+Entraron con `sheets_fila` en null a propósito: con la fila guardada, una
+corrección reescribiría la fila 5 de la pestaña equivocada y pisaría una orden
+ajena. Con la fila vacía, la corrección agrega un renglón — molesto pero visible.
+
+También hay **12 Nº de orden repetidos** en la planilla —12034, 12201, 12238,
+12375, 12507, 12502, 12512, 12928, 13040, 13280, 13644, 13706—; el Nº del
+talonario tiene que ser único, y el importador se queda con el primero y los
+cuenta. Uno ya se resolvió en el libro renombrándolo `12034-2`, y entró como una
+orden más.
+
+(Los dos años mal tipeados que tenía el libro —Nº 13094 en 2006 y Nº 13223 en
+2023— ya se corrigieron en la planilla el 09/09 y se bajaron a la base.)
+
+### Si la planilla se corrige después de importar
+
+`ignoreDuplicates` por `numero` significa que una fila corregida **en la planilla
+después** de importarla no vuelve a entrar: la base se queda con el valor viejo
+y nada avisa. Ya pasó el mismo día del import, con esos dos años.
+
+Para eso está `scripts/comparar-despacho.mts`, que dice en qué difieren y con
+`--corregir` pisa la base con la planilla. Corrige también `sheets_fila`, que
+cambia cuando una fila se mueve o cuando su fecha pasa a coincidir con la
+pestaña.
+
+No es una sincronización y no debe volverse una: de acá en más **manda el
+sistema**. Es la herramienta del rato en que todavía se está acomodando el
+histórico.
+
+## Lo que encontró probar el módulo (09/09/2026)
+
+Se probó de punta a punta con `scripts/probar-despacho.mts` (lectura) y una
+escritura de prueba en la fila vacía del final, verificada y borrada. Anduvo
+todo: la pestaña del mes, la fila que elige la columna `B`, y **los cuatro
+horarios en su columna** —`E`/`F` la carga, `G`/`H` el predio—, que es la trampa
+que más fácil pasa desapercibida. `J` y `K` no se tocaron.
+
+Y salieron dos defectos, los dos medidos contra la base:
+
+### La lista de remitos era de un día y tenía que ser una ventana
+
+`remitosDelDia` filtraba por `scheduled_date` del día. Pero **131 de 1.383
+remitos tienen `scheduled_date` de un día distinto al de su creación** (105 de
+Polysan, 26 de Polcecal): uno de cada diez camiones no habría encontrado su
+remito en la lista, y el encargado lo habría cargado "sin remito" teniendo el
+papel en la mano.
+
+Ahora es `remitosParaElAlta`, con una ventana de **siete días más el siguiente**
+—ese último para el remito que administración emite por adelantado—, los más
+nuevos primero. Son ~84 remitos, así que la pantalla del alta ganó un buscador
+que **filtra en memoria**: Odoo tarda y el camión está esperando.
+
+El rango se calcula en `rangoDeLaVentana`, que es pura y tiene tests, porque ahí
+viven dos corrimientos que no fallan cuando están mal — devuelven la lista de
+otro día.
+
+### La regla del cruce de medianoche convertía errores en permanencias de 25 h
+
+`parsearHoraDePlanilla` sumaba un día ante **cualquier** horario que cayera antes
+del anterior. Con eso, una salida anotada cinco minutos antes del fin de carga
+—un error de tipeo— pasaba a ser una permanencia de 23 h 55. **250 de las 1.702
+órdenes importadas quedaron con tiempos absurdos**, y los absurdos positivos se
+promedian sin que nada avise, al revés de un negativo, que se muestra en rojo.
+
+La regla nueva: **gana la interpretación que da la duración más corta**, o sea
+que se suma un día sólo cuando el salto hacia atrás pasa las 12 horas. No es un
+umbral a dedo — se midieron los 394 saltos hacia atrás del libro y están
+partidos en dos grupos con el valle justo ahí: 234 de menos de dos horas (tipeo)
+y 106 de más de doce (cruces reales).
+
+Después de corregir, contra la base: **de 250 tiempos absurdos a 29**, y las 41
+órdenes que quedan en negativo se ven en rojo, que es lo que hay que ver.
+Medianas: 60 minutos de carga, 84 en predio.
+
+### Y una advertencia de operación
+
+La API de Sheets corta a los ~60 pedidos de lectura por minuto y por usuario.
+`importar-despacho` y `comparar-despacho` leen las seis pestañas cada vez, así
+que correrlos varios veces seguidos devuelve un `429`. No es un error del
+módulo: hay que esperar el minuto.
 
 ## Lo que queda para specs propios
 

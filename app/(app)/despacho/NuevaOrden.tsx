@@ -15,6 +15,12 @@ import type { RemitoDeOdoo } from "@/lib/despacho/types";
  * puede ser porque ya se cargó o porque Odoo no lo devolvió, y son dos problemas
  * distintos.
  *
+ * **La lista es una ventana de días, no el día**, y trae ~84 remitos: 131 de
+ * 1.383 tienen `scheduled_date` de un día distinto al de su creación, así que
+ * filtrar por hoy le escondería al encargado uno de cada diez. Con esa cantidad
+ * hace falta el buscador, y **filtra en memoria**: Odoo tarda y el camión está
+ * esperando.
+ *
  * **El camino "sin remito" es explícito y no un accidente.** Polysan deja
  * remitos en `draft` y `confirmed` —39 en 90 días— y el camión llega igual.
  * Cuando se toma ese camino, cliente y producto se escriben a mano, la orden
@@ -52,6 +58,7 @@ export default function NuevaOrden({
   onCreada: (avisoDePlanilla: string) => void;
 }) {
   const [numero, setNumero] = useState("");
+  const [buscar, setBuscar] = useState("");
   const [pickingId, setPickingId] = useState<number | null>(null);
   const [sinRemito, setSinRemito] = useState(false);
   const [cliente, setCliente] = useState("");
@@ -62,6 +69,18 @@ export default function NuevaOrden({
   const [errorAlta, setErrorAlta] = useState("");
 
   const elegido = remitos?.find((r) => r.picking_id === pickingId) ?? null;
+
+  // El encargado tiene el remito en la mano, así que busca por su número; el
+  // cliente y el material están para cuando el papel se lee mal.
+  const q = buscar.trim().toLowerCase();
+  const visibles = (remitos ?? []).filter(
+    (r) =>
+      q === "" ||
+      r.nombre.toLowerCase().includes(q) ||
+      r.cliente.toLowerCase().includes(q) ||
+      (r.producto ?? "").toLowerCase().includes(q) ||
+      (r.pedido ?? "").toLowerCase().includes(q)
+  );
 
   async function guardar() {
     setErrorAlta("");
@@ -151,7 +170,14 @@ export default function NuevaOrden({
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">Remito de Odoo</label>
+          <label className="block text-sm font-medium text-slate-700">
+            Remito de Odoo
+            {remitos !== null && (
+              <span className="ml-2 font-normal text-slate-400">
+                {remitos.length} de los últimos días
+              </span>
+            )}
+          </label>
           <button
             onClick={onRefrescar}
             disabled={trayendo}
@@ -173,13 +199,27 @@ export default function NuevaOrden({
 
         {remitos !== null && remitos.length === 0 && !trayendo && (
           <p className="text-sm text-slate-400">
-            Odoo no devolvió remitos de salida para este día.
+            Odoo no devolvió remitos de salida para estos días.
           </p>
         )}
 
         {remitos !== null && remitos.length > 0 && (
+          <input
+            value={buscar}
+            onChange={(e) => setBuscar(e.target.value)}
+            placeholder="Buscar por Nº de remito, cliente o material"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        )}
+
+        {remitos !== null && remitos.length > 0 && (
           <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-            {remitos.map((r) => (
+            {visibles.length === 0 && (
+              <p className="px-3 py-4 text-sm text-slate-400">
+                Ninguno de los {remitos.length} remitos coincide con “{buscar}”.
+              </p>
+            )}
+            {visibles.map((r) => (
               <label
                 key={r.picking_id}
                 className={`flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-slate-50 ${

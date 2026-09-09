@@ -198,3 +198,38 @@ describe("cómo se escribe cada cosa", () => {
     expect(fechaComoSeEscribe("2026-12-25")).toBe("25/12/2026");
   });
 });
+
+describe("el cruce de medianoche contra el error de tipeo", () => {
+  /**
+   * Los dos casos que un salto hacia atrás puede significar, y que la primera
+   * versión confundía: sumaba un día siempre, y así 250 de las 1.702 órdenes
+   * importadas quedaron con permanencias de 25 horas.
+   *
+   * Gana la interpretación que da la duración más corta: se suma un día sólo
+   * cuando el salto hacia atrás pasa las 12 h.
+   */
+  it("un salto grande es un cruce de medianoche y suma un día", () => {
+    const entrada = parsearHoraDePlanilla("23:40", "2026-09-08");
+    const salida = parsearHoraDePlanilla("00:30", "2026-09-08", entrada);
+    expect(salida).toBe("2026-09-09T03:30:00.000Z");
+    expect((Date.parse(salida!) - Date.parse(entrada!)) / 60000).toBe(50);
+  });
+
+  it("un salto chico es un error de tipeo y queda negativo", () => {
+    // Nº 13094 del libro: entrada 11:45 e inicio de carga 11:12. Sumar un día
+    // daba una carga de 23 h 27; dejarlo negativo lo muestra en rojo.
+    const entrada = parsearHoraDePlanilla("11:45", "2026-07-15");
+    const inicio = parsearHoraDePlanilla("11:12", "2026-07-15", entrada);
+    expect(inicio).toBe("2026-07-15T14:12:00.000Z");
+    expect((Date.parse(inicio!) - Date.parse(entrada!)) / 60000).toBe(-33);
+  });
+
+  it("justo en el empate de doce horas no suma", () => {
+    const antes = parsearHoraDePlanilla("18:00", "2026-09-08");
+    // 06:00 es exactamente 12 h antes: las dos lecturas dan 720 min y no se
+    // corrige, que es lo mismo que hacía el `>` estricto.
+    expect(parsearHoraDePlanilla("06:00", "2026-09-08", antes)).toBe("2026-09-08T09:00:00.000Z");
+    // Un minuto más de salto ya se va al día siguiente.
+    expect(parsearHoraDePlanilla("05:59", "2026-09-08", antes)).toBe("2026-09-09T08:59:00.000Z");
+  });
+});

@@ -52,6 +52,15 @@ export const RANGO_QUE_SE_ESCRIBE = { primera: "A", ultima: "I" } as const;
 /** Hora de Argentina = UTC−3, sin horario de verano. Igual que `lib/core/fechas.ts`. */
 const OFFSET_ARGENTINA_MS = 3 * 60 * 60 * 1000;
 
+/**
+ * El corte entre "se anotó al revés" y "cruzó la medianoche".
+ *
+ * Doce horas no es un número elegido: es donde las dos interpretaciones de un
+ * salto hacia atrás empatan (`1440 − salto` contra `salto`), y es también donde
+ * cae el valle entre los dos grupos de saltos que tiene el libro.
+ */
+const MEDIO_DIA_MS = 12 * 60 * 60 * 1000;
+
 /** "10:20" en hora de Argentina. Vacío si el horario no está marcado. */
 export function horaComoSeEscribe(iso: string | null): string {
   if (!iso) return "";
@@ -98,8 +107,23 @@ export function filaDeLaPlanilla(orden: OrdenDeCarga, clasificacion: Clasificaci
  * Las columnas de hora **no traen fecha**: hay que pegarles la de la orden. Y de
  * ahí sale la trampa que resuelve `anterior`: un camión que entra 23:40 y sale
  * 00:30 daría, con la misma fecha para los dos, un tiempo en predio de menos
- * catorce horas. La regla es que **si un horario es menor que el que lo
- * precede, es del día siguiente**.
+ * catorce horas.
+ *
+ * LA REGLA: cuando un horario cae antes del que lo precede, **gana la
+ * interpretación que da la duración más corta**. Sumar un día da `1440 − salto`
+ * y no sumarlo da `−salto`, así que se suma sólo cuando el salto hacia atrás
+ * pasa las 12 horas.
+ *
+ * No es un umbral elegido a dedo: se midieron los 394 saltos hacia atrás del
+ * libro y están partidos en dos grupos, con el valle justo ahí. 234 son de menos
+ * de dos horas —una salida anotada unos minutos antes del fin de carga, o sea un
+ * error de tipeo— y 106 pasan las 12 horas, que son los cruces de medianoche
+ * reales.
+ *
+ * La primera versión sumaba un día ante cualquier salto, y eso convertía un
+ * error de 5 minutos en una permanencia de 23 h 55: **250 de las 1.702 órdenes
+ * importadas quedaron con tiempos absurdos**. Un negativo se muestra en rojo y
+ * alguien lo corrige; un positivo absurdo se promedia con los demás.
  *
  * Acepta texto ("7:35", "07:35:00") y el serial de Sheets, que para una celda
  * de hora es una fracción del día (0.5 = mediodía) y para una de fecha y hora
@@ -120,9 +144,12 @@ export function parsearHoraDePlanilla(
 
   if (anterior) {
     const previo = new Date(anterior).getTime();
-    // Estrictamente menor: dos horarios iguales son un camión que entró y salió
-    // en el mismo minuto, no uno que se quedó veinticuatro horas.
-    if (!isNaN(previo) && instante < previo) instante += 24 * 60 * 60 * 1000;
+    // Sólo cuando el salto hacia atrás pasa las 12 h: ahí sumar un día da una
+    // duración más corta que dejarlo negativo. Por debajo de eso es un error de
+    // tipeo y tiene que quedar negativo, para que se vea en rojo y se corrija.
+    if (!isNaN(previo) && previo - instante > MEDIO_DIA_MS) {
+      instante += 2 * MEDIO_DIA_MS;
+    }
   }
 
   return new Date(instante).toISOString();

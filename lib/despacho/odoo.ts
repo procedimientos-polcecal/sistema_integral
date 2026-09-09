@@ -13,7 +13,7 @@ import type { RemitoDeOdoo } from "./types";
  * único campo de Studio y es de otra cosa; la instancia es de un partner y no
  * admite módulos propios).
  *
- * DOS COSAS QUE NO SE NEGOCIAN
+ * TRES COSAS QUE NO SE NEGOCIAN
  *
  * 1. **No se filtra por estado.** Polcecal valida casi todo (552 `done` y 1
  *    `draft` en 90 días) pero Polysan deja colgado (19 `confirmed`, 20 `draft`),
@@ -21,6 +21,13 @@ import type { RemitoDeOdoo } from "./types";
  *    remito que tiene en la mano. Los cancelados sí se sacan: ése no viaja.
  * 2. **El estado viaja hasta la pantalla.** Que un remito esté en draft es algo
  *    que quien da de alta la orden tiene que ver, no algo que se le esconda.
+ * 3. **No se pide un día: se pide una ventana.** El primer diseño filtraba por
+ *    `scheduled_date` del día, y eso deja afuera un remito de cada diez: se
+ *    midió contra la base y **131 de 1.383 remitos tienen `scheduled_date` de un
+ *    día distinto al de su creación** (105 de Polysan). Un camión cuyo remito
+ *    quedó fechado otro día obligaría al encargado a cargarlo "sin remito",
+ *    perdiendo el enlace justo cuando existe. Con siete días la lista son ~84
+ *    remitos, que entran de una y se filtran en la pantalla.
  */
 
 /** Sin `picking_type_code = outgoing` entran las recepciones y los traslados internos. */
@@ -37,21 +44,49 @@ const CAMPOS = [
   "move_ids",
 ];
 
+/** Cuántos días para atrás mira la lista del alta, por defecto. */
+export const DIAS_DE_LA_VENTANA = 7;
+
 /**
- * Los remitos de salida de un día, con el producto y la cantidad de su primera
- * línea.
+ * El rango de `scheduled_date` que se le pide a Odoo, en UTC.
+ *
+ * Va aparte y es pura para poder probarla: acá viven dos corrimientos que si se
+ * equivocan no fallan, sólo devuelven la lista de otro día.
+ *
+ * - **Las tres horas de Argentina.** Odoo guarda los `datetime` en UTC, así que
+ *   un día de calendario argentino va de las 03:00 UTC de ese día a las 02:59
+ *   del siguiente. Pedirlo en hora local traería los de la noche anterior.
+ * - **Un día para adelante.** Administración a veces emite el remito el día
+ *   antes, y ese camión llega mañana: si la ventana termina hoy, su remito no
+ *   está en la lista.
+ */
+export function rangoDeLaVentana(
+  fecha: string,
+  dias = DIAS_DE_LA_VENTANA
+): { desde: string; hasta: string } {
+  return {
+    desde: `${sumarDias(fecha, -(dias - 1))} 03:00:00`,
+    hasta: `${sumarDias(fecha, 2)} 02:59:59`,
+  };
+}
+
+/**
+ * Los remitos de salida de la ventana, con el producto y la cantidad de su
+ * primera línea.
  *
  * `fecha` es un día de calendario de Argentina ("YYYY-MM-DD"). Se busca por
- * `scheduled_date`, que es la fecha con la que el remito se programó y la que
- * coincide con el día en que el camión aparece; `date_done` no sirve porque los
- * de Polysan que quedan en `confirmed` no la tienen.
+ * `scheduled_date`, que es la fecha con la que el remito se programó;
+ * `date_done` no sirve porque los de Polysan que quedan en `confirmed` no la
+ * tienen.
  *
- * El rango va en UTC porque así lo guarda Odoo, corrido las tres horas de
- * Argentina: pedirlo en hora local devolvería los de la noche del día anterior.
+ * Vienen **los más nuevos primero**: el camión que está en la puerta es casi
+ * siempre de los últimos, y así el encargado no scrollea.
  */
-export async function remitosDelDia(fecha: string): Promise<RemitoDeOdoo[]> {
-  const desde = `${fecha} 03:00:00`;
-  const hasta = `${sumarUnDia(fecha)} 02:59:59`;
+export async function remitosParaElAlta(
+  fecha: string,
+  dias = DIAS_DE_LA_VENTANA
+): Promise<RemitoDeOdoo[]> {
+  const { desde, hasta } = rangoDeLaVentana(fecha, dias);
 
   const pickings = await buscarLeer<Registro>(
     "stock.picking",
@@ -62,7 +97,7 @@ export async function remitosDelDia(fecha: string): Promise<RemitoDeOdoo[]> {
       ["scheduled_date", "<=", hasta],
     ],
     CAMPOS,
-    { orden: "scheduled_date asc", limite: 200 }
+    { orden: "scheduled_date desc", limite: 400 }
   );
 
   const lineas = await primeraLineaDeCadaRemito(pickings);
@@ -147,9 +182,9 @@ function numeroDeOdoo(valor: unknown): number | null {
   return typeof valor === "number" ? valor : null;
 }
 
-/** "2026-09-08" → "2026-09-09". Sobre el texto, para no arrastrar husos. */
-function sumarUnDia(fecha: string): string {
+/** Días sobre el texto de la fecha, para no arrastrar husos. */
+function sumarDias(fecha: string, dias: number): string {
   const d = new Date(`${fecha}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
 }

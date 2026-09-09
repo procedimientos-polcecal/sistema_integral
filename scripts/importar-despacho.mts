@@ -56,6 +56,8 @@ const pestanas = await listarPestanas(LIBRO);
 console.log(`Libro con ${pestanas.length} pestañas.\n`);
 
 const todas: Leida[] = [];
+/** Renglones cuya fecha no es del mes de la pestaña en la que están. */
+const desalineados: string[] = [];
 
 for (const pestana of pestanas) {
   // `sinFormato`: hay celdas de fecha con el dato adentro y un formato de
@@ -75,7 +77,15 @@ for (const pestana of pestanas) {
     // una corrección reescribiría la fila de la hoja equivocada y pisaría una
     // orden ajena. Con la fila en null, agrega un renglón — visible.
     const coincide = pestanaDelMes(o.fecha) === pestana;
-    if (!coincide) fueraDeMes++;
+    if (!coincide) {
+      fueraDeMes++;
+      // Se listan uno por uno y no sólo se cuentan: son los renglones que hay
+      // que ir a mirar al libro, y sin la fila y la pestaña no se encuentran.
+      desalineados.push(
+        `  ${pestana} fila ${o.fila}: Nº ${o.numero}  fecha=${o.fecha}` +
+          `  → deberia estar en "${pestanaDelMes(o.fecha)}"  cliente=${o.cliente_raw}`
+      );
+    }
     todas.push({
       numero: o.numero,
       fecha: o.fecha,
@@ -114,6 +124,11 @@ if (repetidos.length) {
   console.log(`Nº repetidos en la planilla (${repetidos.length}): ${repetidos.join(", ")}`);
 }
 console.log(`Sin fila de planilla (fecha de otro mes): ${ordenes.filter((o) => o.sheets_fila === null).length}`);
+if (desalineados.length) {
+  console.log(`
+Renglones en la pestaña equivocada (${desalineados.length}):`);
+  for (const d of desalineados) console.log(d);
+}
 const fechas = ordenes.map((o) => o.fecha).sort();
 console.log(`Rango de fechas: ${fechas[0]} … ${fechas.at(-1)}`);
 
