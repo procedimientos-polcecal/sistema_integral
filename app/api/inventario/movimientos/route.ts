@@ -160,6 +160,7 @@ export async function POST(request: Request) {
     solicitante: mov.solicitante,
     proveedor: proveedor_raw,
     sector: sector_raw,
+    equipo: null, // La Tarea 8 resuelve el nombre a partir de `p_equipment_id` y lo pasa acá.
     fecha: mov.fecha,
   });
 

@@ -34,6 +34,8 @@ export const COL = {
   fecha: 7,       // H
   proveedor: 8,   // I
   sector: 9,      // J
+  equipo: 10,     // K
+  // L = "¿STOCK ACTUAL<=S.S.?", fórmula. No se toca.
 } as const;
 
 export interface MovimientoAEspejar {
@@ -47,6 +49,15 @@ export interface MovimientoAEspejar {
   solicitante: string | null;
   proveedor: string | null;
   sector: string | null;
+  /**
+   * El nombre del equipo, tal como está en `inventario_equipos`.
+   *
+   * Sale de la lista y nunca del cliente: en la planilla la K es un desplegable
+   * que un `onEdit` arma con los equipos del sector de la J, y aunque las
+   * escrituras por API no pasan por esa validación, escribir ahí un texto que
+   * el desplegable no ofrece deja una celda que nadie puede volver a elegir.
+   */
+  equipo: string | null;
   /** ISO. Se escribe como d/m/aaaa, que es como la lee la planilla. */
   fecha: string | null;
 }
@@ -109,6 +120,7 @@ export function celdasDelMovimiento(
     celda(COL.fecha, fechaParaLaPlanilla(m.fecha)),
     celda(COL.proveedor, m.proveedor ?? ""),
     celda(COL.sector, m.sector ?? ""),
+    celda(COL.equipo, m.equipo ?? ""),
   ];
 }
 

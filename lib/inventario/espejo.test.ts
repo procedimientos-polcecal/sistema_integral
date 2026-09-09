@@ -15,6 +15,7 @@ const mov = (p: Partial<MovimientoAEspejar>): MovimientoAEspejar => ({
   solicitante: "Lopez",
   proveedor: null,
   sector: "MANTENIMIENTO",
+  equipo: null,
   fecha: "2026-09-02",
   ...p,
 });
@@ -77,10 +78,10 @@ describe("que celdas se escriben", () => {
     expect(celdas.some((c) => c.columna === 6)).toBe(false);
   });
 
-  it("escribe las nueve columnas de entrada y ninguna mas", () => {
-    expect(celdas).toHaveLength(9);
+  it("escribe las diez columnas de entrada y ninguna mas", () => {
+    expect(celdas).toHaveLength(10);
     expect([...porColumna.keys()].sort((a, b) => a - b))
-      .toEqual([0, 1, 2, 3, 4, 5, 7, 8, 9]);
+      .toEqual([0, 1, 2, 3, 4, 5, 7, 8, 9, 10]);
   });
 
   it("cada dato en su columna", () => {
@@ -105,14 +106,49 @@ describe("que celdas se escriben", () => {
    */
   it("lo que no tiene valor se escribe vacio, no se omite", () => {
     const sinNada = celdasDelMovimiento(
-      mov({ ri: null, descripcion: null, solicitante: null, proveedor: null, sector: null, fecha: null }),
+      mov({ ri: null, descripcion: null, solicitante: null, proveedor: null, sector: null, equipo: null, fecha: null }),
       100,
       "Entradas  Salidas"
     );
-    expect(sinNada).toHaveLength(9);
+    expect(sinNada).toHaveLength(10);
     const m = new Map(sinNada.map((c) => [c.columna, c.valor]));
     expect(m.get(COL.ri)).toBe("");
     expect(m.get(COL.proveedor)).toBe("");
     expect(m.get(COL.fecha)).toBe("");
+  });
+});
+
+describe("el equipo va a la columna K", () => {
+  it("K es la columna 10", () => {
+    expect(COL.equipo).toBe(10);
+  });
+
+  it("se escribe el nombre tal como esta en la lista", () => {
+    const celdas = celdasDelMovimiento(
+      mov({ equipo: "PY-B1-05 - CINTA TRANSPORTADORA 3" }),
+      4210,
+      "Entradas  Salidas"
+    );
+    const k = celdas.find((c) => c.columna === COL.equipo);
+    expect(k?.valor).toBe("PY-B1-05 - CINTA TRANSPORTADORA 3");
+    expect(k?.fila).toBe(4210);
+    expect(k?.pestana).toBe("Entradas  Salidas");
+  });
+
+  it("sin equipo se escribe vacio y no se omite la celda", () => {
+    const celdas = celdasDelMovimiento(mov({ equipo: null }), 4210, "Entradas  Salidas");
+    expect(celdas.find((c) => c.columna === COL.equipo)?.valor).toBe("");
+  });
+
+  /**
+   * Prueba de regresion, no redundancia. La G es el saldo corriente y es una
+   * formula: escribirla rompe el stock de todo lo que viene abajo. La L es
+   * "¿STOCK ACTUAL<=S.S.?" y tambien es formula.
+   */
+  it("sigue sin tocar la G ni la L", () => {
+    const columnas = celdasDelMovimiento(mov({ equipo: "PAÑOL" }), 4210, "Entradas  Salidas")
+      .map((c) => c.columna);
+    expect(columnas).not.toContain(6);
+    expect(columnas).not.toContain(11);
   });
 });
