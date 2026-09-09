@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { puedeAprobarLaCompra } from "./aprobarCompra";
+import { puedeAprobarLaCompra, esAprobacionNueva } from "./aprobarCompra";
 
 const YO = "u-nico";
 const OTRO = "u-maxi";
@@ -100,5 +100,33 @@ describe("el estado que dice decidida sin nada decidido", () => {
     const fuera = puedeAprobarLaCompra({ ...base, estaEnLaLista: false, estadoCompra: "APROBADO", yaDecidida: false });
     expect(fuera.ok).toBe(false);
     expect(fuera.estado).toBe(403);
+  });
+});
+
+describe("aprobar es pasar a aprobado, no volver a guardar", () => {
+  it("pasar de para comprar a aprobado es una aprobación", () => {
+    expect(esAprobacionNueva("PARA_COMPRAR", "APROBADO")).toBe(true);
+  });
+
+  /*
+   * El caso que rompía el guardado: el formulario manda `estado_compra` siempre,
+   * así que tocar el proveedor de una compra ya aprobada se leía como aprobarla
+   * de nuevo. Resultado: 403 para quien no la tenía asignada, y el cambio
+   * perdido. Además re-estampaba quién aprobó y cuándo.
+   */
+  it("guardar una compra que YA estaba aprobada no lo es", () => {
+    expect(esAprobacionNueva("APROBADO", "APROBADO")).toBe(false);
+  });
+
+  it("los otros estados no aprueban nada", () => {
+    expect(esAprobacionNueva("APROBADO", "PEDIDO")).toBe(false);
+    expect(esAprobacionNueva("PARA_COMPRAR", "EN_ESPERA")).toBe(false);
+    expect(esAprobacionNueva("APROBADO", undefined)).toBe(false);
+  });
+
+  it("volver a aprobar después de retroceder sí lo es", () => {
+    // Si alguien devolvió la compra a comparativa, aprobarla otra vez es una
+    // decisión nueva y tiene que pasar por el permiso.
+    expect(esAprobacionNueva("EN_COMPARATIVA", "APROBADO")).toBe(true);
   });
 });

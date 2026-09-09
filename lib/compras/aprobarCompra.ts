@@ -78,3 +78,27 @@ export function puedeAprobarLaCompra({
   }
   return { ok: true };
 }
+
+/**
+ * ¿Este guardado **aprueba** la compra, o sólo edita una ya aprobada?
+ *
+ * El formulario de gestión de compra manda `estado_compra` siempre, con o sin
+ * cambio. Sin esta distinción, tocar el proveedor, el costo o el N° de orden de
+ * una compra ya aprobada se leía como aprobarla de nuevo, y eso tenía dos
+ * consecuencias:
+ *
+ *  - **No se podía guardar nada** salvo que quien editaba fuera la persona
+ *    asignada y estuviera en la lista de aprobadores. El resto recibía un 403
+ *    —"la tiene que aprobar la persona a la que se le asignó"— y el cambio se
+ *    perdía. Editar una compra aprobada es tarea de Compras; aprobarla no.
+ *  - **Se reescribía quién aprobó y cuándo** en cada guardado, borrando el
+ *    registro real de la decisión.
+ *
+ * Aprobar es *pasar a* aprobado. Guardar una compra que ya lo estaba, no.
+ */
+export function esAprobacionNueva(
+  estadoActual: string,
+  estadoNuevo: string | undefined
+): boolean {
+  return estadoNuevo === "APROBADO" && estadoActual !== "APROBADO";
+}

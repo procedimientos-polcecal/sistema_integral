@@ -6,7 +6,7 @@ import { PRIORIDADES } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
-import { puedeAprobarLaCompra } from "@/lib/compras/aprobarCompra";
+import { puedeAprobarLaCompra, esAprobacionNueva } from "@/lib/compras/aprobarCompra";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 
@@ -216,7 +216,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Aprobar la compra es de quien la tiene asignada, no de Compras. En la
     // planilla el estado dice a quién le toca; que apruebe otro dejaría los dos
     // lados diciendo cosas distintas.
-    if (nuevoEstado === "APROBADO") {
+    if (esAprobacionNueva(actual.estado_compra as string, nuevoEstado)) {
       const veredicto = puedeAprobarLaCompra({
         asignadaA: actual.compra_asignada_a as string | null,
         usuarioId: user.id,
