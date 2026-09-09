@@ -1,7 +1,10 @@
 # Inventario — el equipo del movimiento
 
 **Fecha:** 2026-09-09
-**Estado:** acordado, sin implementar
+**Estado:** implementado el 9/9/2026 — migración `20260909111616` aplicada, plan
+en `docs/superpowers/plans/2026-09-09-inventario-equipo-del-movimiento.md`.
+Cuatro decisiones de este documento cambiaron durante la implementación y están
+corregidas acá; el plan tiene el detalle de por qué.
 **Módulo:** Inventario (`app/(app)/inventario`, `lib/inventario`, `app/api/inventario`)
 
 ## El problema
