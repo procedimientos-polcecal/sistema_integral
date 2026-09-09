@@ -54,6 +54,14 @@ export default function TraerDeLaPlanilla({
       .map(([catalogo, nombres]) => `${(nombres as string[]).length} ${catalogo}`)
       .join(", ");
 
+    const sinDestino = (body.equipos_sin_destino ?? []) as string[];
+    const enDosSectores = (body.equipos_en_dos_sectores ?? []) as string[];
+
+    // El error de la pestaña de equipos no es un aviso más: la lista quedó como
+    // estaba y el kardex entró igual, así que se marca como fallo aunque el resto
+    // de la sincronización haya salido bien.
+    if (body.equipos_error) setFallo(true);
+
     setAviso(
       `${body.articulos} artículos y ${body.movimientos} movimientos.` +
       (body.movimientos_sin_articulo > 0
@@ -62,7 +70,16 @@ export default function TraerDeLaPlanilla({
       (body.solicitantes_enganchados > 0
         ? ` ${body.solicitantes_enganchados} nombres de la lista se engancharon al padrón.`
         : "") +
-      (sinReconocer ? ` Sin reconocer contra el sistema: ${sinReconocer}.` : "")
+      (sinReconocer ? ` Sin reconocer contra el sistema: ${sinReconocer}.` : "") +
+      (sinDestino.length > 0
+        ? ` ${sinDestino.length} sectores de la pestaña de equipos no tienen destino cargado (agregarlo en Destinos): ${sinDestino.join(", ")}.`
+        : "") +
+      (enDosSectores.length > 0
+        ? ` ${enDosSectores.length} equipos están en más de un sector en la pestaña (corregir ahí, no se eligió ninguno): ${enDosSectores.join(", ")}.`
+        : "") +
+      (body.equipos_error
+        ? ` La pestaña de equipos no se pudo leer, la lista de sectores/equipos quedó como estaba: ${body.equipos_error}`
+        : "")
     );
 
     // La fecha de "actualizado hace…" vive en el servidor, así que la página se
