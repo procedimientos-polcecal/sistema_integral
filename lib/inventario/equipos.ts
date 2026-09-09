@@ -23,6 +23,7 @@
  */
 
 import { indicePorNombre, reconocer, reconocerEquipo, type Indice } from "@/lib/inventario/enlaces";
+import { claveDeProveedor } from "@/lib/core/proveedores";
 
 /** Un par de la pestaña, ya recortado. */
 export interface ParDeLaPestana {
@@ -67,6 +68,13 @@ export interface CambiosDeEquipos {
   desactivados: string[];
   /** Sectores que la pestaña nombra y `inventario_destinos` no tiene. */
   sinDestino: string[];
+  /**
+   * Equipos que la pestaña pone bajo más de un sector. No se insertan ni se
+   * actualizan: cuál es el sector bueno no se puede saber acá, y elegir el
+   * primero sería elegir por el orden en que Google devolvió las filas. Se
+   * informan para que alguien lo arregle en la pestaña.
+   */
+  enDosSectores: string[];
 }
 
 /**
@@ -77,14 +85,25 @@ export interface CambiosDeEquipos {
  * es —o no ofreciendo ninguno—.
  *
  * **La clave es el nombre.** La pestaña no tiene ids, así que es lo único que
- * identifica una fila entre dos corridas. Se compara con la misma normalización
- * que el resto del módulo —sin acentos, sin mayúsculas, espacios colapsados—
- * para que un espacio de más en la planilla no inserte un duplicado; lo que se
- * **guarda** es el texto literal, que es lo que va a la columna K. Por eso,
- * cuando la pestaña reescribe el mismo equipo con otra capitalización o
- * espaciado —la clave no cambia, pero el literal sí—, `actualizados` lo lleva
- * igual: si se guardara el literal viejo, la app terminaría escribiendo en la K
- * un texto que el desplegable de esa fila ya no ofrece.
+ * identifica una fila entre dos corridas. Se compara con `claveDeProveedor`
+ * —sin acentos, sin mayúsculas, espacios colapsados— para que un espacio de más
+ * en la planilla no inserte un duplicado; lo que se **guarda** es el texto
+ * literal, que es lo que va a la columna K. Por eso, cuando la pestaña reescribe
+ * el mismo equipo con otra capitalización o espaciado —la clave no cambia, pero
+ * el literal sí—, `actualizados` lo lleva igual: si se guardara el literal
+ * viejo, la app terminaría escribiendo en la K un texto que el desplegable de
+ * esa fila ya no ofrece.
+ *
+ * Es `claveDeProveedor` y no una normalización propia porque la misma función
+ * enlaza esta comparación pestaña↔lista y el enganche al núcleo (vía
+ * `reconocerEquipo`, que también usa `claveDeProveedor` puertas adentro): si las
+ * dos respondieran distinto sobre el mismo texto, la misma fila se identificaría
+ * de dos formas dentro de una sola corrida.
+ *
+ * **Un equipo bajo dos sectores distintos de la pestaña no se resuelve solo.**
+ * Elegir el primero que trajo Google sería resolver la ambigüedad por orden de
+ * llegada, y este módulo no adivina: se informa por `enDosSectores` y ese equipo
+ * no se toca —ni se inserta, ni se actualiza, ni se desactiva—.
  *
  * **Estar en la pestaña es lo único que hace falta para contar como "visto".**
  * Eso se marca antes de resolver el sector, así un destino que falta en
@@ -100,11 +119,6 @@ export interface CambiosDeEquipos {
  * inventa un destino ni se lo cuelga del que se le parece: enlazar al que se le
  * parece es peor que dejar en null, y acá además dejaría el equipo colgado del
  * sector equivocado en el select de otra persona.
- *
- * La normalización es local y no `claveDeProveedor` porque acá la clave la usan
- * dos lados que no se hablan —la pestaña y la lista— y conviene que no dependa
- * de una función pensada para nombres de proveedor. Es la misma regla, escrita
- * para lo que compara.
  */
 export function equiposQueCambian(
   pestana: ParDeLaPestana[],
@@ -113,52 +127,77 @@ export function equiposQueCambian(
   nucleo: Indice
 ): CambiosDeEquipos {
   const porDestino = indicePorNombre(destinos);
-  const clave = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-  const actual = new Map(lista.map((e) => [clave(e.nombre), e]));
+  const actual = new Map(lista.map((e) => [claveDeProveedor(e.nombre), e]));
   const cambios: CambiosDeEquipos = {
-    nuevos: [], actualizados: [], desactivados: [], sinDestino: [],
+    nuevos: [], actualizados: [], desactivados: [], sinDestino: [], enDosSectores: [],
   };
 
   const vistos = new Set<string>();
   const sinDestino = new Set<string>();
+  const enDosSectores = new Set<string>();
+
+  // Primera pasada: agrupar la pestaña por equipo. Hace falta antes de decidir
+  // nada, porque un equipo bajo dos sectores no se puede resolver eligiendo el
+  // primero —eso sería elegir por el orden en que Google devolvió las filas— y
+  // acá la ambigüedad se informa, no se resuelve sola.
+  const agrupado = new Map<string, { nombre: string; destinos: Set<string>; sinResolver: string[] }>();
 
   for (const par of pestana) {
-    const k = clave(par.equipo);
-    if (!k || vistos.has(k)) continue;
-    // Visto es "está en la pestaña", y eso ya se sabe acá. Marcarlo antes de
-    // resolver el sector es lo que evita que un destino que falta en el
-    // catálogo apague un equipo que la planilla sigue ofreciendo: eso sería
-    // traducir un problema de catálogo —recuperable agregando el destino que
-    // falta— en apagar un dato que existe. El sector que no se reconoce se
-    // informa por `sinDestino` y nada más.
-    vistos.add(k);
+    const k = claveDeProveedor(par.equipo);
+    if (!k) continue;
+
+    if (!agrupado.has(k)) {
+      agrupado.set(k, { nombre: par.equipo, destinos: new Set(), sinResolver: [] });
+    }
+    const grupo = agrupado.get(k)!;
 
     const destino_id = reconocer(porDestino, par.sector);
-    if (!destino_id) { sinDestino.add(par.sector); continue; }
+    if (destino_id) grupo.destinos.add(destino_id);
+    else grupo.sinResolver.push(par.sector);
+  }
 
-    const equipment_id = reconocerEquipo(nucleo, par.equipo);
+  // Segunda pasada: decidir.
+  for (const [k, grupo] of agrupado) {
+    // Visto es "está en la pestaña", y eso ya se sabe. Marcarlo antes de
+    // cualquier otra cosa es lo que evita que un destino que falta en el
+    // catálogo, o un sector ambiguo, apaguen un equipo que la planilla sigue
+    // ofreciendo: sería traducir un problema de catálogo —recuperable— en
+    // apagar un dato que existe.
+    vistos.add(k);
+
+    for (const s of grupo.sinResolver) sinDestino.add(s);
+
+    if (grupo.destinos.size > 1) { enDosSectores.add(grupo.nombre); continue; }
+
+    const destino_id = [...grupo.destinos][0];
+    // Ningún sector de este equipo resolvió: ya se informó por `sinDestino`.
+    if (!destino_id) continue;
+
+    const equipment_id = reconocerEquipo(nucleo, grupo.nombre);
     const ya = actual.get(k);
 
     if (!ya) {
-      cambios.nuevos.push({ nombre: par.equipo, destino_id, equipment_id });
+      cambios.nuevos.push({ nombre: grupo.nombre, destino_id, equipment_id });
       continue;
     }
     if (
-      ya.nombre !== par.equipo ||
+      ya.nombre !== grupo.nombre ||
       ya.destino_id !== destino_id ||
       ya.equipment_id !== equipment_id ||
       !ya.activo
     ) {
-      cambios.actualizados.push({ id: ya.id, nombre: par.equipo, destino_id, equipment_id, activo: true });
+      cambios.actualizados.push({
+        id: ya.id, nombre: grupo.nombre, destino_id, equipment_id, activo: true,
+      });
     }
   }
 
   for (const e of lista) {
-    if (e.activo && !vistos.has(clave(e.nombre))) cambios.desactivados.push(e.id);
+    if (e.activo && !vistos.has(claveDeProveedor(e.nombre))) cambios.desactivados.push(e.id);
   }
 
   cambios.sinDestino = [...sinDestino].sort();
+  cambios.enDosSectores = [...enDosSectores].sort();
   return cambios;
 }

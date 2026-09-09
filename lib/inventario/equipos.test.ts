@@ -66,7 +66,9 @@ describe("que cambia en la lista de equipos", () => {
       DESTINOS,
       NUCLEO
     );
-    expect(cambios).toEqual({ nuevos: [], actualizados: [], desactivados: [], sinDestino: [] });
+    expect(cambios).toEqual({
+      nuevos: [], actualizados: [], desactivados: [], sinDestino: [], enDosSectores: [],
+    });
   });
 
   it("actualiza el que cambio de sector en la pestana", () => {
@@ -222,6 +224,50 @@ describe("que cambia en la lista de equipos", () => {
       DESTINOS,
       NUCLEO
     );
+    expect(cambios.nuevos).toHaveLength(1);
+  });
+
+  it("informa el equipo que la pestana pone bajo dos sectores, y no lo toca", () => {
+    const cambios = equiposQueCambian(
+      [
+        { sector: "PLANTA TRITURACIÓN 1", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+        { sector: "FILLER 2", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+      ],
+      [],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.enDosSectores).toEqual(["PO-A1-01 - ACARREADOR DE PLACAS"]);
+    expect(cambios.nuevos).toEqual([]);
+  });
+
+  it("un equipo ambiguo que ya estaba en la lista no se apaga ni se actualiza", () => {
+    const cambios = equiposQueCambian(
+      [
+        { sector: "PLANTA TRITURACIÓN 1", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+        { sector: "FILLER 2", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+      ],
+      [{ id: "x1", nombre: "PO-A1-01 - ACARREADOR DE PLACAS", destino_id: "d1", equipment_id: "e1", activo: true }],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.enDosSectores).toEqual(["PO-A1-01 - ACARREADOR DE PLACAS"]);
+    expect(cambios.desactivados).toEqual([]);
+    expect(cambios.actualizados).toEqual([]);
+  });
+
+  /** El mismo sector escrito de dos formas no es una ambiguedad: es un sector. */
+  it("el mismo sector escrito distinto no cuenta como dos sectores", () => {
+    const cambios = equiposQueCambian(
+      [
+        { sector: "PLANTA TRITURACIÓN 1", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+        { sector: "planta trituracion 1", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" },
+      ],
+      [],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.enDosSectores).toEqual([]);
     expect(cambios.nuevos).toHaveLength(1);
   });
 });
