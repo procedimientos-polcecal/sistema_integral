@@ -138,6 +138,7 @@ describe("una fila del kardex", () => {
       fecha: "2026-08-12",
       proveedor_raw: null,
       sector_raw: "MANTENIMIENTO",
+      equipo_raw: null,
       sheets_fila: 402,
     });
   });
@@ -209,5 +210,52 @@ describe("una fila del kardex", () => {
       410
     );
     expect(m?.ri).toBeNull();
+  });
+});
+
+describe("el equipo del kardex", () => {
+  const ENCABEZADO = [
+    "N°RI", "CODIGO", "DESCRIPCION", "ENTRADAS", "SALIDAS", "QUIEN LO PIDIÓ",
+    "STOCK", "FECHA", "PROVEEDOR", "SECTOR", "EQUIPO", "¿STOCK ACTUAL<=S.S.?",
+  ];
+
+  it("encuentra la columna EQUIPO", () => {
+    expect(mapearKardex(ENCABEZADO).equipo).toBe(10);
+  });
+
+  it("la encuentra igual si la planilla la llama MAQUINA", () => {
+    const otro = [...ENCABEZADO];
+    otro[10] = "MAQUINA";
+    expect(mapearKardex(otro).equipo).toBe(10);
+  });
+
+  it("es -1 cuando la planilla no la trae", () => {
+    expect(mapearKardex(ENCABEZADO.slice(0, 10)).equipo).toBe(-1);
+  });
+
+  it("lee el equipo tal como esta escrito, sin normalizar", () => {
+    const fila = [
+      "", "00782", "RODAMIENTO 6308 SKF", "", "1", "FERNANDEZ, Rocco",
+      "5", "7/9/2026", "", "FILLER 2", "PY-B1-05 - CINTA TRANSPORTADORA 3", "FALSE",
+    ];
+    const mov = filaDeMovimiento(fila, mapearKardex(ENCABEZADO), 4160);
+    expect(mov?.equipo_raw).toBe("PY-B1-05 - CINTA TRANSPORTADORA 3");
+  });
+
+  /** El guion es como estas planillas escriben el vacio: lo trata `campo()`. */
+  it("un guion suelto es null y no la cadena '-'", () => {
+    const fila = [
+      "", "00782", "RODAMIENTO 6308 SKF", "", "1", "FERNANDEZ, Rocco",
+      "5", "7/9/2026", "", "FILLER 2", "-", "FALSE",
+    ];
+    expect(filaDeMovimiento(fila, mapearKardex(ENCABEZADO), 4160)?.equipo_raw).toBeNull();
+  });
+
+  it("una celda vacia es null", () => {
+    const fila = [
+      "", "00782", "RODAMIENTO 6308 SKF", "", "1", "FERNANDEZ, Rocco",
+      "5", "7/9/2026", "", "FILLER 2", "", "FALSE",
+    ];
+    expect(filaDeMovimiento(fila, mapearKardex(ENCABEZADO), 4160)?.equipo_raw).toBeNull();
   });
 });

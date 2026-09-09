@@ -58,6 +58,7 @@ const ALIAS_KARDEX: Record<string, string[]> = {
   fecha: ["FECHA", "DIA"],
   proveedor: ["PROVEEDOR", "PROVEEDORES"],
   sector: ["SECTOR", "AREA", "DESTINO"],
+  equipo: ["EQUIPO", "MAQUINA", "EQUIPO/MAQUINA", "MAQUINA/EQUIPO"],
 };
 
 /**
@@ -177,6 +178,12 @@ export interface MovimientoLeido {
   fecha: string | null;
   proveedor_raw: string | null;
   sector_raw: string | null;
+  /**
+   * La columna K, tal como está escrita. No se normaliza: es lo que la app va a
+   * volver a escribir ahí, y la validación de la planilla acepta ese texto y no
+   * otro parecido.
+   */
+  equipo_raw: string | null;
   sheets_fila: number;
 }
 
@@ -229,6 +236,7 @@ export function filaDeMovimiento(
     fecha: fechaDeSheets(celda("fecha")),
     proveedor_raw: campo(celda("proveedor")),
     sector_raw: campo(celda("sector")),
+    equipo_raw: campo(celda("equipo")),
     sheets_fila: numeroFila,
   };
 }
