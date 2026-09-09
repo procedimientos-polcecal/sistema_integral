@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { empleadosDeLosSolicitantes } from "./catalogos";
+import { empleadosDeLosSolicitantes, sueltosDespuesDeEnganchar } from "./catalogos";
 
 const padron = [
   { id: "e-varela", nombre: "Francisco Enrique", apellido: "VARELA" },
@@ -76,5 +76,50 @@ describe("enganchar la lista del panol con el padron", () => {
       padron
     );
     expect(cambios).toEqual([{ id: "s-7", empleado_id: "e-ortiz" }]);
+  });
+});
+
+/**
+ * Los nombres y no el conteo: son cinco contra 64 en la base, y cuales son es
+ * lo que decide si hay algo que arreglar. Estos son los cinco de verdad.
+ */
+describe("los que quedan sin empleado del padron", () => {
+  const lista = [
+    { id: "s-1", nombre: "REGULADOR", empleado_id: null, activo: true },
+    { id: "s-2", nombre: "Omar Piparo", empleado_id: null, activo: true },
+    { id: "s-3", nombre: "MENGUILLO, Marcelo Daniel", empleado_id: null, activo: true },
+    { id: "s-4", nombre: "VARELA, Francisco Enrique", empleado_id: "e-varela", activo: true },
+  ];
+
+  it("devuelve los nombres de los que siguen en null", () => {
+    expect(sueltosDespuesDeEnganchar(lista, [])).toEqual([
+      "MENGUILLO, Marcelo Daniel", "Omar Piparo", "REGULADOR",
+    ]);
+  });
+
+  /**
+   * El que se acaba de enganchar todavia tiene el null que se leyo de la base:
+   * el update ya salio pero la fila en memoria no se volvio a pedir. Si no se
+   * lo descuenta, el aviso lo nombra como pendiente en la misma corrida en que
+   * se resolvio.
+   */
+  it("el que se acaba de enganchar no se nombra", () => {
+    expect(
+      sueltosDespuesDeEnganchar(lista, [{ id: "s-3", empleado_id: "e-menguillo" }])
+    ).toEqual(["Omar Piparo", "REGULADOR"]);
+  });
+
+  /** Alguien lo dio de baja a proposito: mandar a arreglarlo es ruido. */
+  it("uno dado de baja no es un pendiente", () => {
+    expect(
+      sueltosDespuesDeEnganchar(
+        [{ id: "s-5", nombre: "Mariano Const", empleado_id: null, activo: false }],
+        []
+      )
+    ).toEqual([]);
+  });
+
+  it("con todos enganchados no dice nada, que es lo que apaga el aviso", () => {
+    expect(sueltosDespuesDeEnganchar([lista[3]], [])).toEqual([]);
   });
 });

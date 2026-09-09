@@ -65,15 +65,15 @@ export function empleadosDeLosSolicitantes(
  * verdad no están —los contratistas, "REGULADOR"— y los que están escritos de
  * dos formas distintas, que hay que arreglar a mano en un lado o en el otro.
  *
- * Devuelve cuántos enganchó y cuántos siguen sueltos, para poder decirlo.
+ * Devuelve cuántos enganchó y los nombres que siguen sueltos, para poder decirlo.
  */
 export async function reconciliarSolicitantes(
   admin: SupabaseClient
-): Promise<{ enganchados: number; sueltos: number }> {
+): Promise<{ enganchados: number; sueltos: string[] }> {
   const [solicitantes, empleados] = await Promise.all([
-    traerTodo<Solicitante>((desde, hasta) =>
+    traerTodo<Solicitante & { activo: boolean }>((desde, hasta) =>
       admin.from("inventario_solicitantes")
-        .select("id, nombre, destino_id, empleado_id").range(desde, hasta)
+        .select("id, nombre, destino_id, empleado_id, activo").range(desde, hasta)
     ),
     traerTodo<{ id: string; nombre: string; apellido: string | null }>((desde, hasta) =>
       admin.from("empleados").select("id, nombre, apellido").range(desde, hasta)
@@ -89,8 +89,33 @@ export async function reconciliarSolicitantes(
       .update({ empleado_id: c.empleado_id }).eq("id", c.id);
   }
 
-  const sueltos =
-    solicitantes.filter((s) => !s.empleado_id).length - cambios.length;
+  return {
+    enganchados: cambios.length,
+    sueltos: sueltosDespuesDeEnganchar(solicitantes, cambios),
+  };
+}
 
-  return { enganchados: cambios.length, sueltos };
+/**
+ * Los nombres que siguen sin empleado después de enganchar.
+ *
+ * Devuelve los nombres y no el conteo porque son cinco contra 64: el aviso los
+ * puede decir enteros, y "5 sin enganchar" obliga a ir a buscar cuáles. Va
+ * aparte de la escritura por lo mismo que `empleadosDeLosSolicitantes`: para
+ * poder probarla.
+ *
+ * Sólo los activos. Uno dado de baja no es un pendiente —alguien lo dio de baja
+ * a propósito— y nombrarlo sería mandar a arreglar lo que ya está resuelto. Es
+ * además el mismo recorte que hace el conteo de la pantalla de la lista, así que
+ * los dos números coinciden.
+ */
+export function sueltosDespuesDeEnganchar(
+  solicitantes: { id: string; nombre: string; empleado_id: string | null; activo: boolean }[],
+  cambios: { id: string; empleado_id: string }[]
+): string[] {
+  const recienEnganchados = new Set(cambios.map((c) => c.id));
+
+  return solicitantes
+    .filter((s) => s.activo && !s.empleado_id && !recienEnganchados.has(s.id))
+    .map((s) => s.nombre)
+    .sort((a, b) => a.localeCompare(b, "es"));
 }
