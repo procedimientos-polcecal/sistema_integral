@@ -381,6 +381,9 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     movimientos_sin_articulo: sinArticulo,
     ri_sin_requerimiento: riSinRequerimiento.length,
     solicitantes_enganchados: catalogo.enganchados,
+    // Los nombres y no el conteo: son cinco contra 64, y cuáles son es lo que
+    // decide si hay algo que arreglar —un contratista no, un nombre escrito de
+    // dos formas sí—. Con un número hay que ir a buscarlos.
     solicitantes_sin_empleado: catalogo.sueltos,
     equipos_nuevos: equipos.nuevos,
     equipos_actualizados: equipos.actualizados,

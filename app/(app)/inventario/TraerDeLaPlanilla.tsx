@@ -18,7 +18,7 @@ import type { UltimaSync } from "@/lib/core/sincronizaciones";
  * filas.
  *
  * Lo que devuelve se muestra entero, incluido lo que no reconoció. Un resumen
- * que sólo dice "listo" esconde los 900 nombres que quedaron sin enganchar.
+ * que sólo dice "listo" esconde los nombres que quedaron sin enganchar.
  */
 export default function TraerDeLaPlanilla({
   sync, onListo,
@@ -54,6 +54,7 @@ export default function TraerDeLaPlanilla({
       .map(([catalogo, nombres]) => `${(nombres as string[]).length} ${catalogo}`)
       .join(", ");
 
+    const sinEmpleado = (body.solicitantes_sin_empleado ?? []) as string[];
     const sinDestino = (body.equipos_sin_destino ?? []) as string[];
     const enDosSectores = (body.equipos_en_dos_sectores ?? []) as string[];
 
@@ -69,6 +70,15 @@ export default function TraerDeLaPlanilla({
         : "") +
       (body.solicitantes_enganchados > 0
         ? ` ${body.solicitantes_enganchados} nombres de la lista se engancharon al padrón.`
+        : "") +
+      // El otro lado de ese número, que es el que dice si hay algo que hacer.
+      // Va en dos oraciones y no sonando a error: un contratista o "REGULADOR"
+      // sin empleado está bien, y sólo el que sí es del padrón se arregla.
+      // Separados con " · " y no con coma: los nombres del padrón se escriben
+      // "APELLIDO, Nombre", y con comas no se ve dónde termina cada uno.
+      (sinEmpleado.length > 0
+        ? ` Sin empleado del padrón, así que su consumo no se cruza con RRHH: ${sinEmpleado.join(" · ")}.` +
+          ` Un contratista o «REGULADOR» no tienen que tener uno; si es alguien del padrón, el nombre está escrito distinto en la planilla y en el sistema.`
         : "") +
       (sinReconocer ? ` Sin reconocer contra el sistema: ${sinReconocer}.` : "") +
       // Sin el conteo adelante: los nombres van al lado, así que el número no
