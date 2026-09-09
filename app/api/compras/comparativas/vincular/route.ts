@@ -43,6 +43,14 @@ interface Resultado {
   presupuestos: number;
   sin_link: number;
   link_no_es_planilla: number;
+  /**
+   * Planillas que se abrieron y no se pudieron leer como comparativa.
+   *
+   * Va aparte del recuento de problemas porque no se arregla apretando de
+   * nuevo: alguien tiene que ponerle la columna de N° de RI a esa planilla. Sin
+   * un número visible quedaba escondido en una lista que la pantalla recorta.
+   */
+  sin_forma_de_comparativa: number;
   problemas: string[];
 }
 
@@ -105,6 +113,7 @@ export async function POST(request: Request) {
     presupuestos: 0,
     sin_link: 0,
     link_no_es_planilla: 0,
+    sin_forma_de_comparativa: 0,
     problemas: [],
   };
 
@@ -157,13 +166,32 @@ export async function POST(request: Request) {
 
     const mapeo = mapearEncabezados(planilla.encabezado);
 
+    if (!mapeo.ok) {
+      res.problemas.push(
+        `RI ${ris.map((r) => r.nro_ri).join(", ")}: "${planilla.nombre}" no tiene la forma ` +
+        `de una comparativa. Falta: ${mapeo.faltan.join("; ")}`
+      );
+      res.sin_forma_de_comparativa += 1;
+    }
+
     for (const ri of ris) {
       if (!dryRun) {
-        // Sólo el id y el nombre: `comparativa_url` dispara el trigger de
-        // editado_en_app y los sacaría a todos de la sincronización.
+        // El nombre se guarda cuando la planilla se pudo LEER como comparativa,
+        // no cuando se pudo abrir. Es lo que marca el archivo como hecho —así lo
+        // lee `archivosPorHacer`—, y estamparlo antes de saberlo dejó 31
+        // requerimientos "leídos" con cero presupuestos: sus planillas no tienen
+        // columna de N° de RI, así que no se pudo traer una sola fila, y como ya
+        // figuraban hechas no volvían a la cola. Nadie iba a enterarse nunca.
+        //
+        // El id sí va siempre: el vínculo con el archivo es correcto igual, y es
+        // de donde sale el link que muestra la ficha. `comparativa_url` no, que
+        // dispara el trigger de editado_en_app y se exporta a la celda.
         await admin
           .from("compras_requerimientos")
-          .update({ comparativa_drive_id: driveId, comparativa_nombre: planilla.nombre })
+          .update({
+            comparativa_drive_id: driveId,
+            ...(mapeo.ok ? { comparativa_nombre: planilla.nombre } : {}),
+          })
           .eq("id", ri.id);
       }
       res.vinculados += 1;

@@ -356,6 +356,19 @@ tanda había quedado sin eso, así que un pedido aprobado podía terminar con la
 comparativa entera y ninguna marca de sobre qué se aprobó. Corregido el
 08/09/2026 en la ruta y en el script.
 
+**Marcar el trabajo como hecho antes de saber si salió bien lo pierde para
+siempre.** La vinculación en tanda guardaba `comparativa_nombre` —que es lo que
+marca la planilla como hecha— apenas abría el archivo, y recién después miraba
+si tenía la forma de una comparativa. Las que no tienen columna de N° de RI se
+abren bien y no dan una sola fila, así que 31 requerimientos quedaron "leídos"
+con cero presupuestos y fuera de la cola: el problema se informaba en pantalla,
+se cerraba el aviso y no quedaba en ninguna parte. Se vio porque los archivos
+pendientes bajaron de 25 a 14 sin que los presupuestos subieran. Ahora el nombre
+se guarda sólo si la planilla se pudo leer, el vínculo con el archivo se guarda
+igual —es correcto y de ahí sale el link—, y la respuesta trae
+`sin_forma_de_comparativa` como número aparte, porque eso no se arregla
+apretando de nuevo: alguien tiene que ponerle la columna a esa planilla.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

@@ -68,12 +68,17 @@ export interface RiDeUnArchivo {
   /** Si ya tiene guardado ESTE archivo como su comparativa. */
   yaVinculado: boolean;
   /**
-   * Si ese archivo ya se abrió para este requerimiento.
+   * Si ese archivo ya se pudo LEER como comparativa para este requerimiento.
    *
-   * Se sabe por `comparativa_nombre`: el nombre sale de adentro del archivo, así
-   * que tenerlo es la prueba de que se leyó. La sincronización enlaza por el
-   * link de la celda y no abre nada, así que deja el nombre en null: eso es
-   * justo lo que queda por hacer acá.
+   * Se sabe por `comparativa_nombre`. La sincronización enlaza por el link de la
+   * celda y no abre nada, así que deja el nombre en null: eso es justo lo que
+   * queda por hacer acá.
+   *
+   * "Leer" y no "abrir", y la diferencia costó 31 requerimientos: una planilla
+   * sin columna de N° de RI se abre bien y no se le puede traer una sola fila
+   * —no hay manera de saber qué fila es de qué pedido—. Mientras el nombre se
+   * guardó al abrirla, esas quedaban hechas con cero presupuestos y no volvían
+   * a la cola. Quien escriba este marcador tiene que haber podido leer.
    */
   yaLeido: boolean;
 }
