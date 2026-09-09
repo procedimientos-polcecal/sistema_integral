@@ -24,6 +24,10 @@ interface Renglon {
   material: string | null;
   pestana: string;
   fila: number;
+  entrada: string | null;
+  inicio: string | null;
+  fin: string | null;
+  salida: string | null;
   carga: number | null;
   predio: number | null;
 }
@@ -41,7 +45,9 @@ for (const pestana of await listarPestanas(LIBRO)) {
     const t = tiemposDeLaOrden(o);
     todos.push({
       numero: o.numero, fecha: o.fecha, cliente: o.cliente_raw, material: o.producto_raw,
-      pestana, fila: i + 1, carga: t.carga, predio: t.predio,
+      pestana, fila: i + 1,
+      entrada: o.entrada_predio, inicio: o.inicio_carga, fin: o.fin_carga, salida: o.salida_predio,
+      carga: t.carga, predio: t.predio,
     });
   }
 }
@@ -81,15 +87,51 @@ for (const r of desalineados) {
 }
 
 // ── 3. Tiempos que no pueden ser ─────────────────────────────
-const raros = todos
-  .filter((r) => (r.carga !== null && (r.carga < 0 || r.carga > 360)) || (r.predio !== null && (r.predio < 0 || r.predio > 720)))
+//
+// Se parten en dos porque el arreglo es distinto: un negativo son dos horarios
+// escritos al revés, y uno larguísimo es un horario en la columna equivocada o
+// con la hora cambiada. Van con los cuatro horarios a la vista: sin verlos no
+// se puede saber cuál está mal.
+
+/** "10:20", en hora de Argentina. */
+const hhmm = (iso: string | null) => {
+  if (!iso) return "  —  ";
+  const t = new Date(iso).getTime() - 3 * 60 * 60 * 1000;
+  return new Date(t).toISOString().slice(11, 16);
+};
+const min = (n: number | null) => (n === null ? "    —" : String(Math.round(n)).padStart(5));
+
+function tabla(titulo: string, filas: Renglon[], porque: string) {
+  console.log(`\n═══ ${titulo} (${filas.length}) ═══`);
+  console.log(porque);
+  console.log("\n  pestaña        fila   Nº        entra  inicio    fin  salida    carga   predio  cliente");
+  for (const r of filas) {
+    console.log(
+      `  ${r.pestana.replace(" 2026", "").padEnd(11)} ${String(r.fila).padStart(5)}  ${r.numero.padEnd(8)}` +
+        ` ${hhmm(r.entrada)} ${hhmm(r.inicio)} ${hhmm(r.fin)} ${hhmm(r.salida)}  ${min(r.carga)}min ${min(r.predio)}min  ${r.cliente}`
+    );
+  }
+}
+
+const negativos = todos
+  .filter((r) => (r.carga !== null && r.carga < 0) || (r.predio !== null && r.predio < 0))
+  .sort((a, b) => Math.min(a.carga ?? 0, a.predio ?? 0) - Math.min(b.carga ?? 0, b.predio ?? 0));
+
+const largos = todos
+  .filter((r) => !negativos.includes(r))
+  .filter((r) => (r.carga !== null && r.carga > 360) || (r.predio !== null && r.predio > 720))
   .sort((a, b) => (b.predio ?? b.carga ?? 0) - (a.predio ?? a.carga ?? 0));
 
-console.log(`\n═══ Horarios que no cierran (${raros.length}) ═══`);
-console.log("Negativo = anotados al revés. Más de 6 h de carga o 12 h en predio =");
-console.log("algún horario está mal. El sistema los muestra igual, en rojo.\n");
-for (const r of raros.slice(0, 20)) {
-  const f = (n: number | null) => (n === null ? "    —" : `${String(Math.round(n)).padStart(5)}`);
-  console.log(`  ${r.pestana.padEnd(17)} fila ${String(r.fila).padStart(4)}  Nº ${r.numero.padEnd(8)} carga=${f(r.carga)} min  predio=${f(r.predio)} min  ${r.cliente}`);
-}
-if (raros.length > 20) console.log(`  … y ${raros.length - 20} más`);
+tabla(
+  "Horarios anotados al revés",
+  negativos,
+  "Un horario cae antes del que lo precede por menos de 12 h, así que es un\nerror de tipeo y no un cruce de medianoche. El sistema los muestra en rojo."
+);
+
+tabla(
+  "Tiempos que no pueden ser",
+  largos,
+  "Más de 6 h de carga o 12 h en predio. Casi siempre es un horario puesto en\nla columna de al lado, o con la hora cambiada."
+);
+
+console.log(`\nTotal a revisar: ${negativos.length + largos.length} renglones de ${todos.length}.`);
