@@ -20,12 +20,22 @@
 
 drop index if exists despacho_ordenes_sheets_fila_uniq;
 
--- `date_trunc('month', <date>)` es inmutable —la variante que no lo es toma
--- `timestamptz`—, así que sirve como expresión de índice.
+-- EL CAST A `timestamp` NO ES DECORATIVO: sin él esto falla con
+-- `42P17: functions in index expression must be marked IMMUTABLE`.
+--
+-- `fecha` es un `date`, y `date` tiene cast implícito **a los dos**, `timestamp`
+-- y `timestamptz`. Ante el empate Postgres elige el tipo preferido de la
+-- categoría, que es `timestamptz` — y `date_trunc(text, timestamptz)` es
+-- `STABLE`, no `IMMUTABLE`, porque su resultado depende del `TimeZone` de la
+-- sesión. Un índice no puede depender de eso: la misma fila daría claves
+-- distintas según quién consulte.
+--
+-- `date_trunc(text, timestamp)` sí es `IMMUTABLE`, y el `::timestamp` es lo que
+-- la elige. (Ya se intentó sin el cast, el 09/09/2026, y el editor lo rechazó.)
 --
 -- Es un índice de expresión, o sea que **no puede ser destino de un
 -- `ON CONFLICT`** (pariente de la trampa nº2 del README). No hace falta que lo
 -- sea: el importador resuelve los choques por `numero`, que sigue siendo una
 -- constraint completa.
 create unique index if not exists despacho_ordenes_sheets_fila_uniq
-  on despacho_ordenes_carga (date_trunc('month', fecha), sheets_fila);
+  on despacho_ordenes_carga (date_trunc('month', fecha::timestamp), sheets_fila);
