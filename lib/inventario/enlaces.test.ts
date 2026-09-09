@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   indicePorNombre, indiceDeEmpleados, reconocer, esAmbiguo, SinReconocer,
+  indiceDeEquipos, reconocerEquipo,
 } from "./enlaces";
 
 const sectores = indicePorNombre([
@@ -171,5 +172,73 @@ describe("lo que la planilla nombro y el nucleo no tiene", () => {
 
   it("sin nada anotado el resumen viene vacio", () => {
     expect(new SinReconocer().resumen()).toEqual({});
+  });
+});
+
+describe("reconocer un equipo del nucleo", () => {
+  const equipos = [
+    { id: "e1", code: "PO-A1-11", name: "Cinta transportadora 6" },
+    { id: "e2", code: "PO-D1-10", name: "Separador dinámico 2" },
+    { id: "e3", code: "EM8", name: "Camión volcador 1" },
+    { id: "e4", code: "C1", name: "Compresor 1" },
+    { id: "e5", code: "PY-B1-05", name: "Cinta transportadora 3" },
+  ];
+  const indice = indiceDeEquipos(equipos);
+
+  it("engancha por el codigo cuando el nombre coincide", () => {
+    expect(reconocerEquipo(indice, "PO-A1-11 - CINTA TRANSPORTADORA 6")).toBe("e1");
+  });
+
+  /**
+   * Los 26 casos que costaron el diseño: la planilla y el nucleo le dicen
+   * distinto a la misma maquina. El codigo manda.
+   */
+  it("engancha por el codigo aunque el nombre no coincida", () => {
+    expect(reconocerEquipo(indice, "EM8 - SCANIA 420 4x4")).toBe("e3");
+  });
+
+  /** Los dos huerfanos del kardex, que no estan en la pestana. */
+  it("engancha los separadores dinamicos 3 y 4 con el PO-D1-10", () => {
+    expect(reconocerEquipo(indice, "PO-D1-10 - SEPARADOR DINÁMICO 3")).toBe("e2");
+    expect(reconocerEquipo(indice, "PO-D1-10 - SEPARADOR DINÁMICO 4")).toBe("e2");
+  });
+
+  it("engancha un codigo escrito solo, sin nombre", () => {
+    expect(reconocerEquipo(indice, "C1")).toBe("e4");
+  });
+
+  it("engancha por el nombre completo cuando no hay codigo adelante", () => {
+    expect(reconocerEquipo(indice, "PY-B1-05 - Cinta Transportadora 3")).toBe("e5");
+  });
+
+  /**
+   * Los oficios y los lugares que la pestana usa como relleno NO son equipos
+   * del nucleo. Quedan en null a proposito: enlazar al que se le parece es peor
+   * que dejar vacio.
+   */
+  it("lo que no es un equipo queda en null", () => {
+    expect(reconocerEquipo(indice, "PAÑOL")).toBeNull();
+    expect(reconocerEquipo(indice, "GALPON 5")).toBeNull();
+    expect(reconocerEquipo(indice, "TALLER ELÉCTRICO")).toBeNull();
+    expect(reconocerEquipo(indice, "PO-C1-11 - EDIFICIO")).toBeNull();
+  });
+
+  it("vacio, null y un guion suelto quedan en null", () => {
+    expect(reconocerEquipo(indice, "")).toBeNull();
+    expect(reconocerEquipo(indice, null)).toBeNull();
+    expect(reconocerEquipo(indice, "-")).toBeNull();
+  });
+
+  it("dos equipos con el mismo codigo no resuelven a ninguno", () => {
+    const ambiguo = indiceDeEquipos([
+      { id: "a", code: "X1", name: "Uno" },
+      { id: "b", code: "X1", name: "Otro" },
+    ]);
+    expect(reconocerEquipo(ambiguo, "X1 - UNO")).toBeNull();
+  });
+
+  it("un equipo sin codigo entra igual, por su nombre", () => {
+    const sinCode = indiceDeEquipos([{ id: "z", code: null, name: "Molino viejo" }]);
+    expect(reconocerEquipo(sinCode, "MOLINO VIEJO")).toBe("z");
   });
 });

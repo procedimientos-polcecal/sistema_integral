@@ -99,6 +99,74 @@ export function indiceDeEmpleados(
   return indice;
 }
 
+/**
+ * El índice de equipos del núcleo, armado por **código**.
+ *
+ * La planilla escribe `"PO-A1-11 - CINTA TRANSPORTADORA 6"`: el código y el
+ * nombre pegados con un guión. Y en 26 de los 255 equipos de la pestaña el
+ * nombre **no** es el del núcleo —`EM8` es "SCANIA 420 4x4" en la planilla y
+ * "CAMIÓN VOLCADOR 1" en `equipos`—, así que matchear por nombre perdería esos
+ * 26. El código es lo único que las dos puntas escriben igual.
+ *
+ * Se indexa por tres formas: el código solo, el `código - nombre` del núcleo, y
+ * el nombre solo. Las tres van al mismo id, así que no compiten entre sí; un
+ * empate real —dos equipos con el mismo código, o dos con el mismo nombre en
+ * plantas distintas— resuelve a null, igual que en `indicePorNombre`.
+ *
+ * `equipos` es la única tabla del núcleo con las columnas en inglés (`code`,
+ * `name`), de cuando la trajo Mantenimiento. Por eso la firma no dice `codigo`
+ * ni `nombre`.
+ */
+export function indiceDeEquipos(
+  filas: { id: string; code?: string | null; name: string }[]
+): Indice {
+  const indice: Indice = new Map();
+
+  for (const f of filas) {
+    const code = String(f.code ?? "").trim();
+    const name = String(f.name ?? "").trim();
+    const formas = code ? [code, `${code} - ${name}`, name] : [name];
+
+    for (const forma of formas) {
+      const k = claveDeProveedor(forma);
+      if (!k) continue;
+      // Contra el id y no contra la clave: las tres formas del mismo equipo son
+      // el mismo equipo. Dos equipos distintos con la misma clave sí empatan.
+      indice.set(k, indice.has(k) && indice.get(k) !== f.id ? null : f.id);
+    }
+  }
+  return indice;
+}
+
+/**
+ * El equipo del núcleo que nombra ese texto, o null.
+ *
+ * Primero prueba el **código**, que es lo que está antes del primer `" - "`. Si
+ * esa clave está en el índice —resuelva a un id o quede ambigua— la respuesta
+ * es esa y ahí termina: cuando dos equipos comparten código (`indiceDeEquipos`
+ * los dejó en null), no hay que dejar que el texto completo desempate por
+ * casualidad con el nombre de uno de los dos, porque volvería a ser "enlazar
+ * al que se le parece". Sólo si el código ni siquiera está en el índice —no era
+ * un código, era todo el texto— se prueba el texto entero. En ese orden porque
+ * el código es lo confiable: los nombres divergen.
+ *
+ * Devuelve null para `PAÑOL`, `GALPON 5` y `PO-C1-11 - EDIFICIO`, que la
+ * pestaña usa como relleno para que el desplegable de un sector sin máquinas no
+ * quede vacío. No son equipos y no tienen por qué serlo.
+ */
+export function reconocerEquipo(
+  indice: Indice,
+  texto: string | null | undefined
+): string | null {
+  const s = String(texto ?? "").trim();
+  if (!s || s === "-") return null;
+
+  const claveCodigo = claveDeProveedor(s.split(" - ")[0]);
+  if (claveCodigo && indice.has(claveCodigo)) return indice.get(claveCodigo) ?? null;
+
+  return reconocer(indice, s);
+}
+
 /** El id del catálogo para ese nombre, o null si no se lo reconoce. */
 export function reconocer(indice: Indice, nombre: string | null | undefined): string | null {
   const k = claveDeProveedor(nombre);
