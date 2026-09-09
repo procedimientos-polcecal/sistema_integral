@@ -71,11 +71,14 @@ export default function TraerDeLaPlanilla({
         ? ` ${body.solicitantes_enganchados} nombres de la lista se engancharon al padrón.`
         : "") +
       (sinReconocer ? ` Sin reconocer contra el sistema: ${sinReconocer}.` : "") +
+      // Sin el conteo adelante: los nombres van al lado, así que el número no
+      // agrega nada y obliga a concordar en singular y en plural — "1 sectores".
+      // Es además cómo escribe "Sin reconocer contra el sistema".
       (sinDestino.length > 0
-        ? ` ${sinDestino.length} sectores de la pestaña de equipos no tienen destino cargado (agregarlo en Destinos): ${sinDestino.join(", ")}.`
+        ? ` Sectores de la pestaña de equipos que no están en la lista del pañol, así que sus equipos no entraron: ${sinDestino.join(", ")}.`
         : "") +
       (enDosSectores.length > 0
-        ? ` ${enDosSectores.length} equipos están en más de un sector en la pestaña (corregir ahí, no se eligió ninguno): ${enDosSectores.join(", ")}.`
+        ? ` La pestaña pone estos equipos en más de un sector, así que no se tocaron —hay que corregirla—: ${enDosSectores.join(", ")}.`
         : "") +
       (body.equipos_error
         ? ` La pestaña de equipos no se pudo leer, la lista de sectores/equipos quedó como estaba: ${body.equipos_error}`
