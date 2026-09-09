@@ -119,15 +119,25 @@ export async function POST(request: Request) {
     );
   }
 
+  // Sin sector no hay equipo posible, y eso se dice aparte. `destino_id` en
+  // `inventario_equipos` es `not null`, así que si acá no hay destino resuelto
+  // —nadie eligió sector y quien retira tampoco tiene— la comparación de abajo
+  // rechaza igual, pero diciendo "no es un equipo de ese sector", que manda a
+  // revisar el sector del equipo cuando el problema es que no hay ninguno. Es
+  // el mismo error que esta ruta ya se tomó el trabajo de arreglar con los dos
+  // mensajes de permisos: un diagnóstico que no se distingue de otro no es un
+  // diagnóstico.
+  if (equipo && !destinoId) {
+    return NextResponse.json(
+      { error: "Este movimiento no tiene sector: elegí uno para poder cargar el equipo" },
+      { status: 400 }
+    );
+  }
+
   // Y tiene que ser un equipo **de ese sector**: es la comprobación que hace el
   // desplegable de la planilla. Sin esto, una lista desactualizada en el cliente
   // —o cambiar el sector después de elegir el equipo— mete en la K un equipo que
   // el sector de la J no ofrece, y ahí el dato aparece en el lugar que no es.
-  // `destino_id` en `inventario_equipos` es `not null`, así que si acá no hay
-  // destino resuelto (nadie eligió sector y quien retira tampoco tiene), ningún
-  // equipo puede coincidir: la comparación rechaza, que es lo correcto, porque
-  // sin sector el desplegable de la K de la planilla ni siquiera tendría de
-  // dónde armarse.
   if (equipo && equipo.destino_id !== destinoId) {
     return NextResponse.json(
       { error: `${equipo.nombre} no es un equipo de ese sector` },
