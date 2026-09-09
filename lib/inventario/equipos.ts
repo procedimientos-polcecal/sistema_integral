@@ -62,7 +62,7 @@ export interface EquipoDeLaLista {
 
 export interface CambiosDeEquipos {
   nuevos: { nombre: string; destino_id: string; equipment_id: string | null }[];
-  actualizados: { id: string; destino_id: string; equipment_id: string | null; activo: true }[];
+  actualizados: { id: string; nombre: string; destino_id: string; equipment_id: string | null; activo: true }[];
   /** Ids de los que ya no están en la pestaña. Se desactivan; no se borran. */
   desactivados: string[];
   /** Sectores que la pestaña nombra y `inventario_destinos` no tiene. */
@@ -80,7 +80,17 @@ export interface CambiosDeEquipos {
  * identifica una fila entre dos corridas. Se compara con la misma normalización
  * que el resto del módulo —sin acentos, sin mayúsculas, espacios colapsados—
  * para que un espacio de más en la planilla no inserte un duplicado; lo que se
- * **guarda** es el texto literal, que es lo que va a la columna K.
+ * **guarda** es el texto literal, que es lo que va a la columna K. Por eso,
+ * cuando la pestaña reescribe el mismo equipo con otra capitalización o
+ * espaciado —la clave no cambia, pero el literal sí—, `actualizados` lo lleva
+ * igual: si se guardara el literal viejo, la app terminaría escribiendo en la K
+ * un texto que el desplegable de esa fila ya no ofrece.
+ *
+ * **Estar en la pestaña es lo único que hace falta para contar como "visto".**
+ * Eso se marca antes de resolver el sector, así un destino que falta en
+ * `inventario_destinos` —problema de catálogo, recuperable agregándolo— no
+ * apaga un equipo que la planilla sigue ofreciendo. El sector sin resolver se
+ * informa por `sinDestino`; no se traduce en un movimiento sobre el equipo.
  *
  * **No borra nunca.** Lo que desaparece de la pestaña queda `activo = false`:
  * los movimientos históricos le apuntan, y si un día la pestaña se lee mal, una
@@ -115,12 +125,18 @@ export function equiposQueCambian(
   const sinDestino = new Set<string>();
 
   for (const par of pestana) {
-    const destino_id = reconocer(porDestino, par.sector);
-    if (!destino_id) { sinDestino.add(par.sector); continue; }
-
     const k = clave(par.equipo);
     if (!k || vistos.has(k)) continue;
+    // Visto es "está en la pestaña", y eso ya se sabe acá. Marcarlo antes de
+    // resolver el sector es lo que evita que un destino que falta en el
+    // catálogo apague un equipo que la planilla sigue ofreciendo: eso sería
+    // traducir un problema de catálogo —recuperable agregando el destino que
+    // falta— en apagar un dato que existe. El sector que no se reconoce se
+    // informa por `sinDestino` y nada más.
     vistos.add(k);
+
+    const destino_id = reconocer(porDestino, par.sector);
+    if (!destino_id) { sinDestino.add(par.sector); continue; }
 
     const equipment_id = reconocerEquipo(nucleo, par.equipo);
     const ya = actual.get(k);
@@ -129,8 +145,13 @@ export function equiposQueCambian(
       cambios.nuevos.push({ nombre: par.equipo, destino_id, equipment_id });
       continue;
     }
-    if (ya.destino_id !== destino_id || ya.equipment_id !== equipment_id || !ya.activo) {
-      cambios.actualizados.push({ id: ya.id, destino_id, equipment_id, activo: true });
+    if (
+      ya.nombre !== par.equipo ||
+      ya.destino_id !== destino_id ||
+      ya.equipment_id !== equipment_id ||
+      !ya.activo
+    ) {
+      cambios.actualizados.push({ id: ya.id, nombre: par.equipo, destino_id, equipment_id, activo: true });
     }
   }
 

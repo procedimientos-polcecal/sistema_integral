@@ -77,7 +77,7 @@ describe("que cambia en la lista de equipos", () => {
       NUCLEO
     );
     expect(cambios.actualizados).toEqual([
-      { id: "x1", destino_id: "d2", equipment_id: "e1", activo: true },
+      { id: "x1", nombre: "PO-A1-01 - ACARREADOR DE PLACAS", destino_id: "d2", equipment_id: "e1", activo: true },
     ]);
     expect(cambios.nuevos).toEqual([]);
   });
@@ -90,7 +90,7 @@ describe("que cambia en la lista de equipos", () => {
       NUCLEO
     );
     expect(cambios.actualizados).toEqual([
-      { id: "x1", destino_id: "d1", equipment_id: "e1", activo: true },
+      { id: "x1", nombre: "PO-A1-01 - ACARREADOR DE PLACAS", destino_id: "d1", equipment_id: "e1", activo: true },
     ]);
   });
 
@@ -173,6 +173,43 @@ describe("que cambia en la lista de equipos", () => {
       NUCLEO
     );
     expect(cambios.nuevos[0]?.destino_id).toBe("d1");
+  });
+
+  it("un sector que no resuelve NO apaga al equipo que ya estaba en la lista", () => {
+    const cambios = equiposQueCambian(
+      [{ sector: "SECTOR QUE NADIE CARGO", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" }],
+      [{ id: "x1", nombre: "PO-A1-01 - ACARREADOR DE PLACAS", destino_id: "d1", equipment_id: "e1", activo: true }],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.desactivados).toEqual([]);
+    expect(cambios.actualizados).toEqual([]);
+    expect(cambios.sinDestino).toEqual(["SECTOR QUE NADIE CARGO"]);
+  });
+
+  it("y tampoco lo inserta si no estaba", () => {
+    const cambios = equiposQueCambian(
+      [{ sector: "SECTOR QUE NADIE CARGO", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" }],
+      [],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.nuevos).toEqual([]);
+    expect(cambios.sinDestino).toEqual(["SECTOR QUE NADIE CARGO"]);
+  });
+
+  it("refresca el literal guardado cuando la pestana lo reescribe sin cambiar la clave", () => {
+    const cambios = equiposQueCambian(
+      [{ sector: "PLANTA TRITURACIÓN 1", equipo: "PO-A1-01 - ACARREADOR DE PLACAS" }],
+      [{ id: "x1", nombre: "PO-A1-01 -  Acarreador De Placas", destino_id: "d1", equipment_id: "e1", activo: true }],
+      DESTINOS,
+      NUCLEO
+    );
+    expect(cambios.actualizados).toEqual([
+      { id: "x1", nombre: "PO-A1-01 - ACARREADOR DE PLACAS", destino_id: "d1", equipment_id: "e1", activo: true },
+    ]);
+    expect(cambios.nuevos).toEqual([]);
+    expect(cambios.desactivados).toEqual([]);
   });
 
   it("la pestana repetida no inserta dos veces el mismo equipo", () => {
