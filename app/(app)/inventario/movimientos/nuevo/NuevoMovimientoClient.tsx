@@ -99,9 +99,14 @@ export default function NuevoMovimientoClient({
   // Cambiar de sector con un equipo ya elegido lo deja apuntando a otro sector,
   // que la ruta rechazaría con un 400 recién al apretar Registrar. En vez de un
   // `useEffect` que lo "limpie" un instante después de que ya se mostró elegido
-  // —el parpadeo de ver marcado un equipo que ya no corresponde—, se deriva acá
-  // igual que `destinoElegido`/`destinoId`: si lo elegido no está en la lista
-  // del destino actual, para el render y para lo que se manda no cuenta.
+  // —el parpadeo de ver marcado un equipo que ya no corresponde—, lo que vale se
+  // deriva en el render: si lo elegido no está en la lista del destino actual,
+  // para la pantalla y para lo que se manda no cuenta.
+  //
+  // Es el mismo reparto que arriba —un estado con lo que la persona tocó y un
+  // valor derivado con lo que de verdad rige—, aunque la regla sea otra: la del
+  // destino es "lo elegido gana sobre lo heredado" y la del equipo es "sólo vale
+  // si pertenece al destino vigente".
   const equipoId = equiposDelDestino.some((e) => e.id === equipoElegido) ? equipoElegido : "";
 
   const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId });

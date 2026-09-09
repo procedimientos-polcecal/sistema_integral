@@ -60,6 +60,7 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
 | `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
 | `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
+| `GOOGLE_SHEETS_INVENTARIO_TAB_EQUIPOS` | La pestaña de la que sale el vocabulario de la columna K del kardex, para qué máquina salió el material | `Sectores/Equipos` — columna A el sector, columna B el equipo. Es de donde el `onEdit` de la planilla arma el desplegable dependiente del sector, y de donde el SdG espeja `inventario_equipos` en cada sincronización. Hoy son 255 pares |
 | `GOOGLE_SHEETS_PRODUCCION_ID` | La planilla de Producción. Acá la dirección es al revés que en Compras: manda el sistema, y esto es un espejo de una sola vía — sin esta variable el espejo no escribe y el día queda pendiente | El tramo entre `/d/` y `/edit` de la URL |
 | `GOOGLE_SHEETS_PRODUCCION_TAB_PROD` | Pestaña del resumen de producción | Por defecto `Resumen Producción` |
 | `GOOGLE_SHEETS_PRODUCCION_TAB_DESP` | Pestaña del resumen de despacho | Por defecto `Resumen Despacho` |
