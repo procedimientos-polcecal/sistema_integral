@@ -22,7 +22,12 @@
  * elegir. El núcleo se usa para enganchar por código y nada más.
  */
 
-import { indicePorNombre, reconocer, reconocerEquipo, type Indice } from "@/lib/inventario/enlaces";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { leerValores } from "@/lib/core/sheets";
+import { traerTodo } from "@/lib/core/paginado";
+import {
+  indicePorNombre, indiceDeEquipos, reconocer, reconocerEquipo, type Indice,
+} from "@/lib/inventario/enlaces";
 import { claveDeProveedor } from "@/lib/core/proveedores";
 
 /** Un par de la pestaña, ya recortado. */
@@ -200,4 +205,101 @@ export function equiposQueCambian(
   cambios.sinDestino = [...sinDestino].sort();
   cambios.enDosSectores = [...enDosSectores].sort();
   return cambios;
+}
+
+/**
+ * Deja la lista igual a la pestaña, y dice qué encontró.
+ *
+ * Lo que decide es `equiposQueCambian`; acá vive nada más que el orden en que
+ * se llama y cómo se aplica. Si la pestaña no se puede leer, **no falla la
+ * sincronización entera**: devuelve el error con lo que dijo Google, sin
+ * traducir, y la lista queda como estaba. El kardex y los artículos entran
+ * igual — perder las tres cosas porque una pestaña no se pudo leer es peor.
+ */
+export async function sincronizarEquipos(
+  admin: SupabaseClient,
+  planillaId: string,
+  pestana: string
+): Promise<{
+  nuevos: number; actualizados: number; desactivados: number;
+  sinDestino: string[]; enDosSectores: string[]; error?: string;
+}> {
+  const vacio = {
+    nuevos: 0, actualizados: 0, desactivados: 0,
+    sinDestino: [] as string[], enDosSectores: [] as string[],
+  };
+
+  let filas: string[][];
+  try {
+    filas = await leerValores(planillaId, pestana);
+  } catch (e) {
+    return { ...vacio, error: `No se pudo leer «${pestana}»: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  const pares = filas
+    .slice(1)
+    .map((f) => filaDeSectorYEquipo(f))
+    .filter((p): p is ParDeLaPestana => p !== null);
+
+  // Una pestaña vacía no se aplica: desactivaría los 255 de una. Es más
+  // probable que sea un rango mal leído que un pañol que borró la lista.
+  if (pares.length === 0) {
+    return { ...vacio, error: `La pestaña «${pestana}» vino sin pares sector/equipo. No se toca la lista.` };
+  }
+
+  const [lista, destinos, nucleo] = await Promise.all([
+    traerTodo<EquipoDeLaLista>((desde, hasta) =>
+      admin.from("inventario_equipos")
+        .select("id, nombre, destino_id, equipment_id, activo").range(desde, hasta)
+    ),
+    traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
+      admin.from("inventario_destinos").select("id, nombre").eq("activo", true).range(desde, hasta)
+    ),
+    traerTodo<{ id: string; code: string | null; name: string }>((desde, hasta) =>
+      admin.from("equipos").select("id, code, name").eq("is_active", true).range(desde, hasta)
+    ).then(indiceDeEquipos),
+  ]);
+
+  const cambios = equiposQueCambian(pares, lista, destinos, nucleo);
+
+  if (cambios.nuevos.length > 0) {
+    const { error } = await admin.from("inventario_equipos").insert(cambios.nuevos);
+    if (error) {
+      return {
+        ...vacio,
+        sinDestino: cambios.sinDestino,
+        enDosSectores: cambios.enDosSectores,
+        error: error.message,
+      };
+    }
+  }
+
+  // De a uno: son unos pocos por corrida, y un upsert obligaría a mandar el
+  // resto de las columnas — que es cómo se pisa sin querer lo que otro editó.
+  //
+  // `nombre` viaja acá y no sólo en los nuevos: si la pestaña reescribe el
+  // literal sin cambiar su clave —mayúsculas, un espacio de más—, la base tiene
+  // que quedarse con el nuevo. Es lo que la app escribe en la columna K, y el
+  // desplegable acepta ese texto y no otro parecido.
+  for (const c of cambios.actualizados) {
+    await admin.from("inventario_equipos")
+      .update({ nombre: c.nombre, destino_id: c.destino_id, equipment_id: c.equipment_id, activo: true })
+      .eq("id", c.id);
+  }
+
+  // De a lotes de 200: un `.in()` con muchos ids arma una URL que PostgREST
+  // rechaza con un 400 sin decir por qué.
+  for (let i = 0; i < cambios.desactivados.length; i += 200) {
+    await admin.from("inventario_equipos")
+      .update({ activo: false })
+      .in("id", cambios.desactivados.slice(i, i + 200));
+  }
+
+  return {
+    nuevos: cambios.nuevos.length,
+    actualizados: cambios.actualizados.length,
+    desactivados: cambios.desactivados.length,
+    sinDestino: cambios.sinDestino,
+    enDosSectores: cambios.enDosSectores,
+  };
 }

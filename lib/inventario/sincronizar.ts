@@ -26,9 +26,11 @@ import {
   type ArticuloLeido, type MovimientoLeido,
 } from "@/lib/inventario/planilla";
 import {
-  indicePorNombre, indiceDeEmpleados, reconocer, esAmbiguo, SinReconocer, type Indice,
+  indicePorNombre, indiceDeEmpleados, indiceDeEquipos, reconocer, reconocerEquipo,
+  esAmbiguo, SinReconocer, type Indice,
 } from "@/lib/inventario/enlaces";
 import { reconciliarSolicitantes, type Destino, type Solicitante } from "@/lib/inventario/catalogos";
+import { sincronizarEquipos } from "@/lib/inventario/equipos";
 
 type Datos = Record<string, unknown>;
 
@@ -53,6 +55,12 @@ const falla = (status: number, error: string): Resultado => ({ ok: false, status
 const PLANILLA = () => process.env.GOOGLE_SHEETS_INVENTARIO_ID ?? "";
 const TAB_LISTADO = () => process.env.GOOGLE_SHEETS_INVENTARIO_TAB ?? "Listado articulos GRAL";
 const TAB_KARDEX = () => process.env.GOOGLE_SHEETS_INVENTARIO_TAB_MOV ?? "Entradas  Salidas";
+/**
+ * La pestaña de la que sale el desplegable de la columna K. El nombre lleva
+ * barra —"Sectores/Equipos"—, que en un rango de Sheets no molesta porque
+ * `leerValores` lo pasa por `encodeURIComponent`.
+ */
+const TAB_EQUIPOS = () => process.env.GOOGLE_SHEETS_INVENTARIO_TAB_EQUIPOS ?? "Sectores/Equipos";
 
 /**
  * Traer de la planilla, y que un fallo diga qué pasó.
@@ -179,8 +187,14 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   // misma corrida en vez de en la próxima.
   const catalogo = await reconciliarSolicitantes(admin);
 
+  // La lista de equipos se espeja antes de resolver el kardex: si un equipo
+  // nuevo apareció en la pestaña, esta misma corrida lo puede enganchar en vez
+  // de la próxima. Un fallo acá no corta la sincronización — se informa y el
+  // kardex entra igual.
+  const equipos = await sincronizarEquipos(admin, planilla, TAB_EQUIPOS());
+
   // Los catálogos del núcleo, sólo para leer.
-  const [porCodigo, sectores, empleados, proveedores] = await Promise.all([
+  const [porCodigo, sectores, empleados, proveedores, nucleoEquipos] = await Promise.all([
     articulosPorCodigo(admin),
     // Los tres `select` van con la cadena literal y no armada en una variable:
     // con una variable, Supabase pierde la inferencia y todo lo que sale queda
@@ -206,12 +220,19 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
         admin.from("proveedores").select("id, nombre").range(desde, hasta)
       )
     ),
+    // Los equipos del núcleo, para reconocer por código lo que la K nombra y la
+    // pestaña no tiene. Sólo los activos, por lo mismo que los sectores.
+    indiceDeEquipos(
+      await traerTodo<{ id: string; code: string | null; name: string }>((desde, hasta) =>
+        admin.from("equipos").select("id, code, name").eq("is_active", true).range(desde, hasta)
+      )
+    ),
   ]);
 
   // Y la lista propia del pañol, que es contra la que de verdad se escribe el
   // kardex. `MECÁNICO` y `Omar Piparo` no están en `sectores` ni en `empleados`
   // y sí acá, así que esto es lo que hace que un movimiento se pueda atribuir.
-  const [destinos, solicitantes] = await Promise.all([
+  const [destinos, solicitantes, listaEquipos] = await Promise.all([
     traerTodo<Destino>((desde, hasta) =>
       admin.from("inventario_destinos").select("id, nombre, sector_id").range(desde, hasta)
     ),
@@ -219,9 +240,13 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
       admin.from("inventario_solicitantes")
         .select("id, nombre, destino_id, empleado_id").range(desde, hasta)
     ),
+    traerTodo<{ id: string; nombre: string; equipment_id: string | null }>((desde, hasta) =>
+      admin.from("inventario_equipos").select("id, nombre, equipment_id").range(desde, hasta)
+    ),
   ]);
   const porDestino = indicePorNombre(destinos);
   const porSolicitante = indicePorNombre(solicitantes);
+  const porEquipo = indicePorNombre(listaEquipos);
 
   const sinReconocer = new SinReconocer();
   let sinArticulo = 0;
@@ -237,6 +262,21 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     const solicitante_id = reconocer(porSolicitante, m.solicitante);
     const empleado_id = reconocer(empleados, m.solicitante);
     const proveedor_id = reconocer(proveedores, m.proveedor_raw);
+
+    // El equipo se resuelve en dos pasos, y los dos importan:
+    //
+    // `equipo_id` es la fila de la lista, por nombre. Es null cuando el texto no
+    // está en la pestaña — pasa con `PO-D1-10 - SEPARADOR DINÁMICO 3` y `4`, dos
+    // filas históricas contra un `SEPARADOR DINÁMICO 2` en el núcleo.
+    //
+    // `equipment_id` es la máquina del núcleo, y se saca de la lista cuando la
+    // lista lo tiene; si no, se reconoce **por código** sobre el texto crudo. Es
+    // lo que hace que esos dos huérfanos igual queden colgados de la máquina
+    // correcta aunque no tengan `equipo_id`.
+    const equipo_id = reconocer(porEquipo, m.equipo_raw);
+    const equipment_id =
+      (equipo_id ? listaEquipos.find((e) => e.id === equipo_id)?.equipment_id : null) ??
+      reconocerEquipo(nucleoEquipos, m.equipo_raw);
 
     // El sector del núcleo sale del destino cuando el destino es uno, y si no,
     // del texto: la mayoría de los destinos —MECÁNICO, TALLER VIAL— no son
@@ -263,6 +303,11 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     if (m.proveedor_raw && !proveedor_id) {
       sinReconocer.anotar(donde("proveedores", proveedores, m.proveedor_raw), m.proveedor_raw);
     }
+    // Un equipo que la K nombra y la pestaña no tiene es un dato que el
+    // desplegable no puede volver a elegir: hay que arreglarlo en la pestaña.
+    if (m.equipo_raw && !equipo_id) {
+      sinReconocer.anotar(donde("equipos", porEquipo, m.equipo_raw), m.equipo_raw);
+    }
 
     return [{
       articulo_id,
@@ -279,6 +324,9 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
       sector_id,
       proveedor_raw: m.proveedor_raw,
       proveedor_id,
+      equipo_raw: m.equipo_raw,
+      equipo_id,
+      equipment_id,
       ri: m.ri,
       // El pedido que trajo este material, cuando el RI existe. Null si la
       // planilla nombró un número que no está: no se enlaza al que se parece.
@@ -325,6 +373,18 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     ri_sin_requerimiento: riSinRequerimiento.length,
     solicitantes_enganchados: catalogo.enganchados,
     solicitantes_sin_empleado: catalogo.sueltos,
+    equipos_nuevos: equipos.nuevos,
+    equipos_actualizados: equipos.actualizados,
+    equipos_desactivados: equipos.desactivados,
+    // Sectores que la pestaña nombra y la lista de destinos no tiene: sus
+    // equipos no entraron y hay que agregar el destino.
+    equipos_sin_destino: equipos.sinDestino,
+    // Equipos que la pestaña pone bajo más de un sector. No se tocaron: cuál es
+    // el bueno no se puede saber acá, y elegir el primero sería elegir por el
+    // orden en que Google devolvió las filas. Se arregla en la pestaña.
+    equipos_en_dos_sectores: equipos.enDosSectores,
+    // Con lo que dijo Google, sin traducir. Un fallo de lectura no es un warn.
+    equipos_error: equipos.error ?? null,
     sin_reconocer: sinReconocer.resumen(),
   });
 }
