@@ -177,10 +177,12 @@ guarda tres cosas por fila del kardex, que se resuelven distinto y conviene no
 confundir:
 
 - **`equipo_raw`**: el texto de la K, sin interpretar.
-- **`equipo_id`**: la fila de `inventario_equipos` cuyo `nombre` es
-  **exactamente** ese texto. Coincidencia literal y nada más: la lista se acaba
-  de espejar de la misma pestaña, así que si no está es porque el valor no está
-  en la pestaña, y ahí queda en null. Son los dos huérfanos `PO-D1-10`.
+- **`equipo_id`**: la fila de `inventario_equipos` que se llama así, con la
+  misma normalización que ya usan destinos y solicitantes (`indicePorNombre`:
+  sin acentos, sin mayúsculas, espacios colapsados). No matchea por código: la
+  lista se acaba de espejar de la misma pestaña, así que si el nombre no está es
+  porque el valor no está en la pestaña, y ahí queda en null. Son los dos
+  huérfanos `PO-D1-10`.
 - **`equipment_id`**: el equipo del núcleo, por `reconocerEquipo`. Es el único
   de los tres que matchea por código, y por eso los dos huérfanos igual quedan
   colgados de la máquina correcta aunque no tengan `equipo_id`.
