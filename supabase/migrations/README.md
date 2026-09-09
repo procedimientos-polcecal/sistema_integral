@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Siete trampas que esta base ya pisó, dos de ellas **dos veces**:
+Ocho trampas que esta base ya pisó, dos de ellas **dos veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -96,6 +96,20 @@ nombra algo en texto libre y no se lo puede reconocer con certeza, el enlace
 queda vacío y se informa. Un enlace equivocado no se nota nunca: el dato
 simplemente aparece en el lugar que no es. Ver
 `032_mantenimiento_proveedores.sql` y `042_compras_ubicaciones_a_equipos.sql`.
+
+**Una migración aplicada no se edita: se corrige con otra.** No hay tabla de
+control, así que nada avisa si un archivo ya corrió — y editarlo deja el archivo
+y la base diciendo cosas distintas, sin señal hasta que algo falla lejos. Pasó
+con `20260908104729_despacho_schema.sql`: se la editó para que `empresa_id`
+fuera nullable creyendo que todavía no se había aplicado, y el síntoma apareció
+un día después al importar el histórico, con un `null value in column
+"empresa_id" violates not-null constraint` **contra un archivo que decía
+nullable**. Peor que el rato perdido: una base armada de cero desde los archivos
+no habría quedado igual que producción. El arreglo fue devolverle a la
+`20260908104729` lo que realmente creó y relajar la columna en
+`20260909095546`. Si hay dudas de si corrió, mirar la base (el esquema que
+publica PostgREST en `/rest/v1/` dice qué columnas son `required`), no el
+archivo.
 
 **Una función en un índice necesita el cast explícito.** `date_trunc('month',
 fecha)` sobre una columna `date` falla con `42P17: functions in index expression

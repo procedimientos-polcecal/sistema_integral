@@ -147,12 +147,11 @@ create table if not exists despacho_ordenes_carga (
   -- Polysan Polys/OUT/05776) y trabajan distinto, así que la orden tiene que
   -- decir de cuál es. restrict: una empresa con órdenes no se borra.
   --
-  -- NULLABLE, y no por comodidad: **la planilla no tiene columna de empresa**.
-  -- Las órdenes que se dan de alta en el sistema siempre la saben —la trae el
-  -- remito, o se elige a mano— y la ruta la exige. Las que entran por el
-  -- importador del histórico no la saben, y poner una al azar metería el camión
-  -- en el patrimonio que no es. Null dice "no se sabe", que es la verdad.
-  empresa_id          uuid references empresas(id) on delete restrict,
+  -- OJO: **hoy es nullable.** Lo relajó `20260909095546`, porque la planilla no
+  -- tiene columna de empresa y las 1.702 órdenes del histórico no la saben. Acá
+  -- queda `not null` porque es lo que esta migración realmente creó y ya corrió:
+  -- corregirla en el lugar dejaría una base nueva distinta de producción.
+  empresa_id          uuid not null references empresas(id) on delete restrict,
 
   -- El remito de Odoo y el pedido del que salió (el `origin`, S08526).
   -- LOS TRES NULLABLES, y es la decisión más importante de esta tabla: Polysan

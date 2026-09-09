@@ -57,7 +57,7 @@ tabla de control. Un agente puede escribir la migración y, si es sólo DML,
 aplicar el equivalente por PostgREST — pero **no puede correr DDL**. Cuando una
 tarea depende de una tabla o columna nueva, hay que decirlo y quedar a la espera.
 
-Antes de escribir una, leer las siete trampas del
+Antes de escribir una, leer las ocho trampas del
 [README de migraciones](supabase/migrations/README.md). Dos de ellas ya pasaron
 **dos veces**:
 
@@ -66,6 +66,8 @@ Antes de escribir una, leer las siete trampas del
 - Una **función en un índice necesita el cast explícito** (`42P17`):
   `date_trunc('month', fecha)` sobre un `date` resuelve a la variante
   `timestamptz`, que es `STABLE`. Va `fecha::timestamp`.
+- Una **migración aplicada no se edita**: se corrige con otra. Nada avisa si ya
+  corrió, y el archivo editado miente sobre lo que hay en la base.
 
 ## Reglas de la base que muerden
 
