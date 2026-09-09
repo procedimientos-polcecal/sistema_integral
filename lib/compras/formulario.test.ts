@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { celdasDelAlta, type DatosDelAlta } from "./formulario";
+import { celdasDelAlta, filaDelMaster, type DatosDelAlta } from "./formulario";
 
 /** El encabezado real de "Respuestas de formulario 1", leido el 09/09/2026. */
 const ENCABEZADO = [
@@ -184,5 +184,19 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.motivos.join(" ")).toMatch(/marca temporal/i);
+  });
+});
+
+describe("la fila del master que le corresponde a una fila de respuestas", () => {
+  it("son dos menos: el QUERY lee desde A4 y sale en A2", () => {
+    // Verificado el 09/09/2026: la fila 1957 de respuestas es la 1955 del
+    // master, y ahi aparecio el RI 1954.
+    expect(filaDelMaster(1957)).toBe(1955);
+    expect(filaDelMaster(4)).toBe(2);
+  });
+
+  it("una fila que el QUERY no alcanza no tiene fila en el master", () => {
+    expect(filaDelMaster(3)).toBeNull();
+    expect(filaDelMaster(1)).toBeNull();
   });
 });

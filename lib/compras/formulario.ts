@@ -20,6 +20,9 @@
 import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { empresaParaPlanilla } from "@/lib/compras/sheets";
 
 /**
  * Cómo se llama cada columna en la hoja. La primera que exista gana.
@@ -231,4 +234,235 @@ export function celdasDelAlta(
     celdas.push({ columna, valor });
   }
   return { ok: true, fila, celdas };
+}
+
+/**
+ * A qué fila del master corresponde una fila de la hoja de respuestas.
+ *
+ * El `QUERY` del master lee `A4:L10000` y su salida arranca en la fila 2, así
+ * que son dos menos. Es una cuenta y no una búsqueda porque la fórmula conserva
+ * el orden de las respuestas y sólo agrega al final; pero la fila del master
+ * puede no existir todavía —`IMPORTRANGE` tarda en refrescar—, y por eso quien
+ * escribe **verifica antes de escribir** en vez de confiar en la cuenta.
+ */
+export function filaDelMaster(filaDeRespuestas: number): number | null {
+  const fila = filaDeRespuestas - 2;
+  return fila >= 2 ? fila : null;
+}
+
+const HOJA_RESPUESTAS = "Respuestas de formulario 1";
+const HOJA_MASTER = "Requerimientos internos";
+
+const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? "";
+
+export interface ResultadoAlta {
+  /** En qué fila de la hoja de respuestas quedó. */
+  fila: number | null;
+  /** Qué anotar en `sheets_pendiente`, o null si salió todo bien. */
+  pendiente: string | null;
+}
+
+/**
+ * Escribe el alta de un requerimiento en la hoja de respuestas del formulario.
+ *
+ * Sin la variable de entorno no hace nada y **no es un error**: se omite, igual
+ * que la sincronización sin `GOOGLE_SHEETS_COMPRAS_ID`. Mientras la planilla no
+ * esté configurada, el sistema funciona solo.
+ *
+ * Lo que puede fallar queda en `pendiente` en vez de lanzar: el pedido ya está
+ * guardado y perderlo por no poder escribir la planilla sería peor.
+ */
+export async function exportarAltaAlFormulario(
+  requerimientoId: string
+): Promise<ResultadoAlta> {
+  if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    return { fila: null, pendiente: null };
+  }
+
+  const admin = createAdminClient();
+  const { data: r } = await admin
+    .from("compras_requerimientos")
+    .select("id, nro_ri, descripcion, codigo, cantidad, fecha_necesidad, detalle_extra, imagen_url, created_at, solicitante_id, solicitante_nombre, compras_areas(nombre), compras_ubicaciones(nombre)")
+    .eq("id", requerimientoId)
+    .single();
+
+  if (!r) return { fila: null, pendiente: null };
+
+  const area = (r.compras_areas as unknown as { nombre: string } | null)?.nombre;
+  if (!area) {
+    // El área es con lo que el FILTER de cada pestaña compara: sin ella el
+    // pedido aparecería en el master y en ninguna pestaña.
+    return { fila: null, pendiente: "el pedido no tiene área, y la planilla la necesita" };
+  }
+
+  // El nombre y el apellido van en columnas separadas. `solicitante_nombre` los
+  // trae pegados, así que se prefiere el usuario.
+  let nombre = "";
+  let apellido = "";
+  if (r.solicitante_id) {
+    const { data: u } = await admin
+      .from("usuarios")
+      .select("nombre, apellido")
+      .eq("id", r.solicitante_id as string)
+      .single();
+    nombre = (u?.nombre as string) ?? "";
+    apellido = (u?.apellido as string) ?? "";
+  }
+  if (!nombre && r.solicitante_nombre) {
+    const partes = String(r.solicitante_nombre).trim().split(/\s+/);
+    nombre = partes[0] ?? "";
+    apellido = partes.slice(1).join(" ");
+  }
+
+  try {
+    const encabezado = (await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!1:1`))[0] ?? [];
+
+    // La fila libre se busca por la marca temporal y NO por la columna del N°
+    // de RI: esa columna tiene una fórmula en todas las filas de la grilla, y
+    // aunque hoy devuelva vacío para las filas sin marca, depender de eso es
+    // depender de que la fórmula siga escrita igual.
+    //
+    // `sinFormato: true` acá y no en el encabezado: a `filaSiguienteSegunLaColumna`
+    // sólo le importa si la celda tiene algo, no qué dice. Con el texto formateado
+    // se corre el mismo riesgo que ya pasó en Despacho con una columna de fecha:
+    // un formato particular puede mostrar vacía una celda que sí tiene serial, y
+    // ahí la cuenta de la fila libre se corre y una respuesta nueva pisa a otra. El
+    // valor crudo no tiene ese problema y no cuesta nada pedirlo así.
+    const marcas = await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!B:B`, { sinFormato: true });
+    const fila = filaSiguienteSegunLaColumna(marcas);
+
+    const armado = celdasDelAlta(
+      encabezado,
+      {
+        nro_ri: r.nro_ri as number,
+        nombre,
+        apellido,
+        area,
+        descripcion: r.descripcion as string,
+        codigo: (r.codigo as string | null) ?? null,
+        cantidad: (r.cantidad as number | null) ?? null,
+        ubicacion: (r.compras_ubicaciones as unknown as { nombre: string } | null)?.nombre ?? null,
+        fecha_necesidad: (r.fecha_necesidad as string | null) ?? null,
+        detalle_extra: (r.detalle_extra as string | null) ?? null,
+        imagen_url: (r.imagen_url as string | null) ?? null,
+        creado: new Date((r.created_at as string) ?? Date.now()),
+      },
+      fila
+    );
+
+    if (!armado.ok) {
+      return {
+        fila: null,
+        pendiente: "no se pudo armar la fila del alta: " + armado.motivos.join("; "),
+      };
+    }
+
+    // Se escribe en la fila que devolvió `celdasDelAlta`, no en la de acá: la
+    // fórmula del N° de RI la lleva horneada adentro.
+    await escribirCeldas(
+      idFormulario(),
+      armado.celdas.map((c) => ({
+        pestana: HOJA_RESPUESTAS,
+        columna: c.columna,
+        fila: armado.fila,
+        valor: c.valor,
+      }))
+    );
+
+    // Qué número calculó la planilla. Si no es el que asignó el sistema, hay un
+    // hueco o una fila de más: se dice, en vez de dejar dos números para el
+    // mismo pedido.
+    const escrito = await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${armado.fila}`);
+    const numeroDeLaPlanilla = Number(String(escrito[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
+    if (numeroDeLaPlanilla !== r.nro_ri) {
+      return {
+        fila: armado.fila,
+        pendiente:
+          `la planilla numeró esa fila como ${numeroDeLaPlanilla || "(vacío)"} y el sistema ` +
+          `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`,
+      };
+    }
+
+    await admin
+      .from("compras_requerimientos")
+      .update({
+        hoja_origen: HOJA_MASTER,
+        sheets_fila: filaDelMaster(armado.fila),
+        sheets_sincronizado_en: new Date().toISOString(),
+      })
+      .eq("id", requerimientoId);
+
+    return {
+      fila: armado.fila,
+      pendiente: await escribirPrioridadYEmpresa(admin, r.id as string, armado.fila),
+    };
+  } catch (e) {
+    return { fila: null, pendiente: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Prioridad y empresa, en las columnas a mano del master.
+ *
+ * Las elige quien pide, en el alta, y en la planilla son dos columnas que no
+ * salen de ninguna fórmula. Si no se escriben, quien mira la planilla no las ve.
+ *
+ * **Se verifica la fila antes de escribir.** La cuenta `fila − 2` vale mientras
+ * el `QUERY` conserve el orden, y además `IMPORTRANGE` tarda en refrescar: si la
+ * fila del master todavía no dice este N° de RI, no se escribe nada y queda
+ * pendiente. Escribir a ciegas sería ponerle la prioridad de este pedido a otro.
+ */
+async function escribirPrioridadYEmpresa(
+  admin: ReturnType<typeof createAdminClient>,
+  requerimientoId: string,
+  filaDeRespuestas: number
+): Promise<string | null> {
+  const idMaster = process.env.GOOGLE_SHEETS_COMPRAS_ID;
+  const fila = filaDelMaster(filaDeRespuestas);
+  if (!idMaster || fila === null) return null;
+
+  const { data: r } = await admin
+    .from("compras_requerimientos")
+    .select("nro_ri, prioridad, paga_ambas, empresas!empresa_id(nombre)")
+    .eq("id", requerimientoId)
+    .single();
+  if (!r) return null;
+
+  const prioridad = (r.prioridad as string | null) ?? "";
+  const empresa = empresaParaPlanilla(
+    (r.empresas as unknown as { nombre: string } | null)?.nombre,
+    r.paga_ambas === true
+  );
+  // Una celda que no tenemos con qué llenar no se pisa con vacío. Es el mismo
+  // criterio que la celda de comparativa, que borraba el link de la planilla.
+  if (!prioridad && !empresa) return null;
+
+  const encabezado = (await leerValores(idMaster, `${HOJA_MASTER}!1:1`))[0] ?? [];
+  const columna = (nombres: string[]) => encabezado.findIndex((h) => nombres.includes(norm(h)));
+
+  const colPrioridad = columna(["PRIORIDAD"]);
+  const colEmpresa = columna(["EMPRESA", "PAGA"]);
+  if (colPrioridad < 0 && colEmpresa < 0) {
+    return "el master no tiene columnas de prioridad ni de empresa";
+  }
+
+  const enElMaster = await leerValores(idMaster, `${HOJA_MASTER}!A${fila}`);
+  const nroEnLaFila = Number(String(enElMaster[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
+  if (nroEnLaFila !== r.nro_ri) {
+    return (
+      `la fila ${fila} del master todavía no dice el RI ${r.nro_ri} (dice ` +
+      `${nroEnLaFila || "vacío"}): no se escribieron prioridad ni empresa`
+    );
+  }
+
+  const celdas = [
+    ...(colPrioridad >= 0 && prioridad
+      ? [{ pestana: HOJA_MASTER, columna: colPrioridad, fila, valor: prioridad }]
+      : []),
+    ...(colEmpresa >= 0 && empresa
+      ? [{ pestana: HOJA_MASTER, columna: colEmpresa, fila, valor: empresa }]
+      : []),
+  ];
+  await escribirCeldas(idMaster, celdas);
+  return null;
 }
