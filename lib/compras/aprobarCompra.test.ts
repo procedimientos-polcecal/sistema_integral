@@ -58,3 +58,47 @@ describe("quien puede aprobar una compra", () => {
     expect(v.ok).toBe(true);
   });
 });
+
+describe("el estado que dice decidida sin nada decidido", () => {
+  const base = { asignadaA: "u1", usuarioId: "u1", estaEnLaLista: true };
+
+  /*
+   * 35 requerimientos están en APROBADO sin proveedor ni presupuesto elegido:
+   * el estado vino de la columna de la planilla. Exigir el estado exacto los
+   * dejaba sin salida, porque la pantalla congelada esconde lo que permitiría
+   * resolverlo.
+   */
+  it("se puede aprobar: es la primera vez, por más que el estado diga otra cosa", () => {
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "APROBADO", yaDecidida: false }).ok).toBe(true);
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "PEDIDO", yaDecidida: false }).ok).toBe(true);
+  });
+
+  it("con algo ya decidido NO se puede: eso es aprobar dos veces", () => {
+    const v = puedeAprobarLaCompra({ ...base, estadoCompra: "APROBADO", yaDecidida: true });
+    expect(v.ok).toBe(false);
+    expect(v.estado).toBe(409);
+  });
+
+  it("sin saber si está decidida, se mantiene la regla estricta", () => {
+    // La ruta que no pasa el dato no puede abrir la excepción por omisión.
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "APROBADO" }).ok).toBe(false);
+  });
+
+  it("la excepción no alcanza a los estados que no son de decisión", () => {
+    // EN_COMPARATIVA o SIN_INICIAR no dicen "ya se decidió": son etapas previas,
+    // y aprobar desde ahí saltearía el circuito.
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "EN_COMPARATIVA", yaDecidida: false }).ok).toBe(false);
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "SIN_INICIAR", yaDecidida: false }).ok).toBe(false);
+    expect(puedeAprobarLaCompra({ ...base, estadoCompra: "EN_ESPERA", yaDecidida: false }).ok).toBe(false);
+  });
+
+  it("la excepción no saltea los otros dos permisos", () => {
+    const ajeno = puedeAprobarLaCompra({ ...base, asignadaA: "otro", estadoCompra: "APROBADO", yaDecidida: false });
+    expect(ajeno.ok).toBe(false);
+    expect(ajeno.estado).toBe(403);
+
+    const fuera = puedeAprobarLaCompra({ ...base, estaEnLaLista: false, estadoCompra: "APROBADO", yaDecidida: false });
+    expect(fuera.ok).toBe(false);
+    expect(fuera.estado).toBe(403);
+  });
+});

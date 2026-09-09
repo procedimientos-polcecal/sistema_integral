@@ -52,8 +52,6 @@ export default function Comparativa({
   const [trayendo, setTrayendo] = useState(false);
 
   const congelada = ["APROBADO", "PEDIDO", "RECIBIDO"].includes(r.estado_compra);
-  const puedeCargar = puedeEditar && !congelada && r.estado_aprobacion === "APROBADA";
-  const puedeElegir = esAsignado && r.estado_compra === "PARA_COMPRAR";
 
   // Todo en pesos, calculado una sola vez. El orden, el más barato y la
   // diferencia porcentual salen de los mismos números: si cada uno convirtiera
@@ -93,6 +91,15 @@ export default function Comparativa({
    */
   const decidida = cotizaciones.some((c) => c.elegida) || r.proveedor_id !== null;
   const trabada = congelada && !decidida;
+
+  /*
+   * Cargar y elegir dependen de que **no haya decisión**, no de que el estado
+   * diga que sí. En los 35 trabados el estado congelaba la pantalla y escondía
+   * lo único que permitía resolverlos: el botón de volver a traer la planilla y
+   * la posibilidad de elegir. El guard del servidor hace la misma excepción.
+   */
+  const puedeCargar = puedeEditar && !decidida && r.estado_aprobacion === "APROBADA";
+  const puedeElegir = esAsignado && (r.estado_compra === "PARA_COMPRAR" || trabada);
 
   function refrescar(mensaje: string | null) {
     setAviso(mensaje);

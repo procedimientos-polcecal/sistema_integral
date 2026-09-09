@@ -40,16 +40,30 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: ri } = await admin
     .from("compras_requerimientos")
-    .select("id, estado_compra, compra_asignada_a, comparativa_drive_id")
+    .select("id, estado_compra, compra_asignada_a, comparativa_drive_id, proveedor_id")
     .eq("id", cotizacion.requerimiento_id)
     .single();
   if (!ri) return NextResponse.json({ error: "El requerimiento no existe" }, { status: 404 });
+
+  /*
+   * ¿Ya se decidió algo? Es lo que distingue "aprobar dos veces" —que no se
+   * puede— de un estado que dice APROBADO sin que nadie haya elegido nada, que
+   * es el caso de 35 requerimientos cuyo estado vino de la planilla.
+   */
+  const { count: yaElegidas } = await admin
+    .from("compras_cotizaciones")
+    .select("id", { count: "exact", head: true })
+    .eq("requerimiento_id", ri.id)
+    .eq("elegida", true);
+
+  const yaDecidida = (yaElegidas ?? 0) > 0 || ri.proveedor_id !== null;
 
   const veredicto = puedeAprobarLaCompra({
     asignadaA: ri.compra_asignada_a as string | null,
     usuarioId: user.id,
     estaEnLaLista: await puedeAprobarCompras(supabase, user.id),
     estadoCompra: ri.estado_compra as string,
+    yaDecidida,
   });
   if (!veredicto.ok) {
     return NextResponse.json({ error: veredicto.error }, { status: veredicto.estado });
