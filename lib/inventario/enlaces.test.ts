@@ -207,8 +207,12 @@ describe("reconocer un equipo del nucleo", () => {
     expect(reconocerEquipo(indice, "C1")).toBe("e4");
   });
 
-  it("engancha por el nombre completo cuando no hay codigo adelante", () => {
+  it("el match es insensible a mayusculas y acentos", () => {
     expect(reconocerEquipo(indice, "PY-B1-05 - Cinta Transportadora 3")).toBe("e5");
+  });
+
+  it("engancha por el nombre solo, sin el codigo adelante, aunque el equipo tenga codigo", () => {
+    expect(reconocerEquipo(indice, "Cinta transportadora 6")).toBe("e1");
   });
 
   /**

@@ -153,6 +153,16 @@ export function indiceDeEquipos(
  * Devuelve null para `PAÑOL`, `GALPON 5` y `PO-C1-11 - EDIFICIO`, que la
  * pestaña usa como relleno para que el desplegable de un sector sin máquinas no
  * quede vacío. No son equipos y no tienen por qué serlo.
+ *
+ * `esAmbiguo` no sirve para explicar un null de esta función: hace
+ * `claveDeProveedor(nombre)` sobre el texto completo y no repite el split por
+ * código de acá arriba, así que sobre un índice de `indiceDeEquipos` puede
+ * contradecir a `reconocerEquipo` (un código ambiguo que esta función corta en
+ * seco, `esAmbiguo` lo mira por el texto completo y a veces sí desempata). Hoy
+ * no molesta porque nadie llama a las dos juntas sobre un índice de equipos
+ * —`sincronizar.ts` usa `esAmbiguo` sólo con índices de `indicePorNombre`—, pero
+ * el día que alguien quiera reportar el empate de un equipo aparte, como se
+ * hace para destinos y solicitantes, necesita su propia versión con el split.
  */
 export function reconocerEquipo(
   indice: Indice,
