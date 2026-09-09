@@ -315,6 +315,55 @@ export function montoParaLaPlanilla(monto: number | null, aPesos: number | null)
   return String(Math.round(monto * aPesos * 100) / 100);
 }
 
+/**
+ * ¿La casilla de la columna ELECCIÓN está marcada?
+ *
+ * `leerComparativa` no pide valores crudos, así que una casilla llega como el
+ * texto que se ve: en la comparativa MANGUERAS es `"TRUE"` / `"FALSE"`, medido
+ * el 09/09/2026. Igual se aceptan las otras formas —el booleano que devuelve
+ * Sheets con `UNFORMATTED_VALUE`, y el `VERDADERO` de una planilla en español—
+ * porque ser generoso al leer no cuesta nada y perderse una elección sí: el
+ * presupuesto ganador quedaría invisible para el sistema.
+ *
+ * Lo que **no** se acepta es cualquier texto no vacío. Una celda con "ver mail"
+ * o "?" no es una elección, y tratarla como tal aprobaría la compra equivocada.
+ */
+/**
+ * Qué elección expresa la planilla para un requerimiento.
+ *
+ * No devuelve "la elegida" sino qué caso es, porque hay tres y se tratan
+ * distinto. El que importa es `varias`: en MANGUERAS el RI 378 tiene **dos**
+ * filas marcadas —manguera de 3M y de 4,2M, las dos de CASA CAMINO—, o sea una
+ * compra de dos ítems. El modelo del SdG guarda una sola elegida por
+ * requerimiento, así que ahí no se puede confirmar con un click sin perder
+ * plata: se informan las dos y lo resuelve una persona.
+ *
+ * Quedarse con la primera sería lo fácil y lo peor: la manguera de 4,2M
+ * desaparecería del costo sin que nadie se entere.
+ */
+export type EleccionDeLaPlanilla<T> =
+  | { tipo: "ninguna" }
+  | { tipo: "una"; cotizacion: T }
+  | { tipo: "varias"; cotizaciones: T[] };
+
+export function eleccionDeLaPlanilla<T extends { elegida_en_planilla?: boolean | null }>(
+  cotizaciones: T[]
+): EleccionDeLaPlanilla<T> {
+  const marcadas = cotizaciones.filter((c) => c.elegida_en_planilla === true);
+
+  if (!marcadas.length) return { tipo: "ninguna" };
+  if (marcadas.length === 1) return { tipo: "una", cotizacion: marcadas[0] };
+  return { tipo: "varias", cotizaciones: marcadas };
+}
+
+export function casillaMarcada(valor: unknown): boolean {
+  if (valor === true) return true;
+  if (typeof valor === "number") return valor === 1;
+  if (typeof valor !== "string") return false;
+
+  return ["TRUE", "VERDADERO", "SI", "SÍ", "X", "1"].includes(valor.trim().toUpperCase());
+}
+
 /** Una fila de la planilla como presupuesto. `null` si no lo es. */
 export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null {
   const en = (c: ClaveColumna) => (idx[c] >= 0 ? fila[idx[c]] : undefined);

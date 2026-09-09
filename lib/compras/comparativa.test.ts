@@ -5,6 +5,7 @@ import {
   datosDePagoDe, alCambiarDeProveedor,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
   totalEnPesos, faltaLaCotizacion, numero, diasDePlazo,
+  casillaMarcada, eleccionDeLaPlanilla,
 } from "./comparativa";
 import type { CotizacionLeida } from "./comparativa";
 
@@ -623,5 +624,76 @@ describe("alCambiarDeProveedor", () => {
 
   it("un campo que alguien vacio a proposito se vuelve a completar", () => {
     expect(alCambiarDeProveedor("", "30", "60")).toBe("60");
+  });
+});
+
+describe("la casilla de elección de la planilla", () => {
+  /*
+   * Los valores son los que devuelve Google de verdad. `leerComparativa` no pide
+   * valores crudos, así que la casilla llega como el texto que se ve: en la
+   * comparativa MANGUERAS es "TRUE"/"FALSE", leído el 09/09/2026.
+   */
+  it("acepta el TRUE que devuelve la planilla real", () => {
+    expect(casillaMarcada("TRUE")).toBe(true);
+    expect(casillaMarcada("FALSE")).toBe(false);
+  });
+
+  it("acepta el booleano de los valores crudos y el VERDADERO en español", () => {
+    expect(casillaMarcada(true)).toBe(true);
+    expect(casillaMarcada(false)).toBe(false);
+    expect(casillaMarcada("VERDADERO")).toBe(true);
+    expect(casillaMarcada("verdadero")).toBe(true);
+  });
+
+  it("aguanta espacios y minúsculas", () => {
+    expect(casillaMarcada("  true  ")).toBe(true);
+    expect(casillaMarcada(" Sí ")).toBe(true);
+  });
+
+  it("una celda vacía no es una elección", () => {
+    expect(casillaMarcada("")).toBe(false);
+    expect(casillaMarcada(null)).toBe(false);
+    expect(casillaMarcada(undefined)).toBe(false);
+  });
+
+  it("un texto cualquiera NO es una elección", () => {
+    // Tratar "ver mail" como marcada aprobaría la compra equivocada.
+    expect(casillaMarcada("ver mail")).toBe(false);
+    expect(casillaMarcada("?")).toBe(false);
+    expect(casillaMarcada("0")).toBe(false);
+    expect(casillaMarcada(0)).toBe(false);
+  });
+});
+
+describe("qué elección expresa la planilla", () => {
+  const cot = (id: string, marcada: boolean) => ({ id, elegida_en_planilla: marcada });
+
+  it("sin ninguna marcada", () => {
+    expect(eleccionDeLaPlanilla([cot("a", false), cot("b", false)])).toEqual({ tipo: "ninguna" });
+  });
+
+  it("con una, se puede ofrecer confirmarla", () => {
+    const r = eleccionDeLaPlanilla([cot("a", false), cot("b", true)]);
+    expect(r).toEqual({ tipo: "una", cotizacion: cot("b", true) });
+  });
+
+  /*
+   * El caso del RI 378: dos filas marcadas, las dos de CASA CAMINO. Es una
+   * compra de dos ítems y el modelo guarda una sola elegida, así que no se
+   * confirma con un click: se informan las dos.
+   */
+  it("con varias, las devuelve todas en vez de quedarse con la primera", () => {
+    const r = eleccionDeLaPlanilla([cot("a", true), cot("b", false), cot("c", true)]);
+    expect(r).toEqual({ tipo: "varias", cotizaciones: [cot("a", true), cot("c", true)] });
+  });
+
+  it("la lista vacía no es un caso especial", () => {
+    expect(eleccionDeLaPlanilla([])).toEqual({ tipo: "ninguna" });
+  });
+
+  it("el campo ausente o null cuenta como no marcada", () => {
+    expect(eleccionDeLaPlanilla([{ id: "a" }, { id: "b", elegida_en_planilla: null }])).toEqual({
+      tipo: "ninguna",
+    });
   });
 });
