@@ -6,7 +6,10 @@ import { urlDePlanilla } from "@/lib/compras/vincular";
 import type { Cotizacion, RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorComparativa from "./SelectorComparativa";
 import PresupuestoForm from "./PresupuestoForm";
-import { totalesEnPesosDe, minimoEnPesos, type ProveedorElegible } from "@/lib/compras/comparativa";
+import {
+  totalesEnPesosDe, minimoEnPesos, eleccionDeLaPlanilla, type ProveedorElegible,
+} from "@/lib/compras/comparativa";
+import { moneda } from "@/lib/compras/constants";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaTabla from "./ComparativaTabla";
 import ComparativaDecision from "./ComparativaDecision";
@@ -63,6 +66,19 @@ export default function Comparativa({
     (a, b) => (enPesos[a.id] ?? Infinity) - (enPesos[b.id] ?? Infinity)
   );
   const minimo = minimoEnPesos(enPesos);
+
+  /*
+   * Qué dice la casilla de la columna ELECCIÓN de la planilla.
+   *
+   * Se muestra pero no se aplica: marcar la casilla no aprueba la compra, y no
+   * es una limitación técnica sino la decisión que se tomó. Aprobar exige estar
+   * en `compras_aprobadores` y tener el RI asignado, y una planilla de Drive no
+   * puede saltear eso. Así que la planilla propone y una persona confirma.
+   *
+   * Sólo tiene sentido mostrarlo mientras la compra no esté decidida: después
+   * la comparativa queda congelada y el aviso sería ruido.
+   */
+  const enLaPlanilla = eleccionDeLaPlanilla(cotizaciones);
 
   function refrescar(mensaje: string | null) {
     setAviso(mensaje);
@@ -194,6 +210,55 @@ export default function Comparativa({
         {aviso && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {aviso}
+          </div>
+        )}
+
+        {!congelada && enLaPlanilla.tipo === "una" && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-900">
+            <p>
+              <strong>En la planilla eligieron a{" "}
+              {enLaPlanilla.cotizacion.proveedores?.nombre ?? "un proveedor"}</strong>
+              {enLaPlanilla.cotizacion.precio_total !== null &&
+                ` — ${moneda(enLaPlanilla.cotizacion.precio_total)}`}
+              .
+            </p>
+            {puedeElegir ? (
+              <button
+                onClick={() => elegir(enLaPlanilla.cotizacion)}
+                disabled={eligiendo !== null}
+                className="mt-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+              >
+                {eligiendo ? "Confirmando…" : "Confirmar esta elección"}
+              </button>
+            ) : (
+              <p className="mt-1 text-xs text-sky-800">
+                La confirma quien tenga la compra asignada: marcarla en la planilla no
+                aprueba el gasto.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!congelada && enLaPlanilla.tipo === "varias" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+            <p>
+              <strong>La planilla tiene {enLaPlanilla.cotizaciones.length} elecciones
+              marcadas para este requerimiento:</strong>{" "}
+              {enLaPlanilla.cotizaciones
+                .map((c) => c.proveedores?.nombre ?? "sin proveedor")
+                .join(", ")}
+              .
+            </p>
+            {/*
+              No se ofrece confirmar con un click: el requerimiento guarda un
+              presupuesto elegido, así que quedarse con uno haría desaparecer el
+              costo del otro sin que nadie se entere. Lo resuelve una persona,
+              eligiendo abajo o corrigiendo la planilla.
+            */}
+            <p className="mt-1 text-xs text-amber-800">
+              El sistema guarda un presupuesto elegido por requerimiento. Hay que elegir
+              uno acá abajo, o dejar una sola casilla marcada en la planilla.
+            </p>
           </div>
         )}
 

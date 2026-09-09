@@ -697,3 +697,52 @@ describe("qué elección expresa la planilla", () => {
     });
   });
 });
+
+describe("parsearFila y la casilla de elección", () => {
+  /*
+   * Éste es el guardián del bug original: la columna se escribía y no se leía,
+   * así que marcar la elección en la planilla no tenía ningún efecto. Diez
+   * requerimientos de una sola comparativa estaban elegidos y el sistema no
+   * veía ninguno.
+   */
+  function filaCon(eleccion: string): string[] {
+    const f = new Array(ENCABEZADO.length).fill("");
+    const idx = mapearEncabezados(ENCABEZADO);
+    if (!idx.ok) throw new Error("el encabezado de referencia tiene que mapear");
+    f[idx.idx.proveedor] = "CASA CAMINO";
+    f[idx.idx.precio_unitario] = "3225";
+    f[idx.idx.cantidad] = "10";
+    f[idx.idx.eleccion] = eleccion;
+    return f;
+  }
+
+  const idxDe = () => {
+    const r = mapearEncabezados(ENCABEZADO);
+    if (!r.ok) throw new Error("no mapeó");
+    return r.idx;
+  };
+
+  it("una fila marcada llega con la elección puesta", () => {
+    // Los valores de la fila 27 de la comparativa MANGUERAS, RI 1933.
+    const leida = parsearFila(filaCon("TRUE"), idxDe());
+    expect(leida?.elegida_en_planilla).toBe(true);
+    expect(leida?.precio_unitario).toBe(3225);
+  });
+
+  it("una fila sin marcar, no", () => {
+    expect(parsearFila(filaCon("FALSE"), idxDe())?.elegida_en_planilla).toBe(false);
+    expect(parsearFila(filaCon(""), idxDe())?.elegida_en_planilla).toBe(false);
+  });
+
+  it("una planilla sin columna de elección no rompe: queda sin marcar", () => {
+    const sinColumna = ENCABEZADO.filter((c) => c !== "ELECCIÓN");
+    const mapeo = mapearEncabezados([...sinColumna]);
+    if (!mapeo.ok) throw new Error("las imprescindibles siguen estando");
+
+    const fila = new Array(sinColumna.length).fill("");
+    fila[mapeo.idx.proveedor] = "CASA CAMINO";
+    fila[mapeo.idx.precio_unitario] = "3225";
+
+    expect(parsearFila(fila, mapeo.idx)?.elegida_en_planilla).toBe(false);
+  });
+});

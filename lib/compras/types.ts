@@ -177,6 +177,13 @@ export interface Cotizacion {
   comentario: string | null;
   url: string | null;
   elegida: boolean;
+  /**
+   * La casilla de la columna ELECCIÓN de la planilla de comparativa.
+   *
+   * Es un hecho leído, no una aprobación: `elegida` es que alguien con permiso
+   * aprobó la compra en el SdG. La pantalla muestra esto y ofrece confirmarlo.
+   */
+  elegida_en_planilla: boolean;
   /** `app` = cargada en el sistema; `drive` = leída de la planilla. */
   origen: string;
   drive_fila: number | null;

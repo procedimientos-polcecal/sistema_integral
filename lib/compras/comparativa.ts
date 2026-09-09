@@ -280,6 +280,21 @@ export interface CotizacionLeida {
   condiciones_pago: string | null;
   disponibilidad: string | null;
   comentario: string | null;
+  /**
+   * La casilla de la columna ELECCIÓN. Es un hecho leído de la planilla, **no**
+   * una aprobación: la aprobación es `elegida`, y la pone una persona.
+   *
+   * Va acá dentro y no en cada importador a propósito: los tres —la ruta de un
+   * RI, la de tanda y el script— insertan con `...campos`, así que viajando en
+   * el tipo no puede quedar uno sin guardarla.
+   *
+   * Opcional porque este tipo se usa en las **dos** direcciones: `parsearFila`
+   * la completa siempre al leer, y `filaParaPlanilla` —que arma una fila para
+   * escribirla— recibe un objeto donde la casilla no significa nada (esa fila
+   * se escribe con la elección en FALSE, más abajo). Exigirla obligaría a
+   * inventar un valor en el lado que la ignora.
+   */
+  elegida_en_planilla?: boolean;
 }
 
 /**
@@ -381,6 +396,9 @@ export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null
     precio_unitario: unitario,
     cantidad: numero(en("cantidad")),
     costo_envio: numero(en("envio")),
+    // Si la planilla no tiene columna de elección, `en` devuelve undefined y
+    // esto queda en false: no marcada, que es lo correcto.
+    elegida_en_planilla: casillaMarcada(en("eleccion")),
     // El IVA y el descuento vacíos son CERO, no null.
     //
     // Dos razones, y las dos importan. La primera es que las columnas son `not
