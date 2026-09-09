@@ -28,7 +28,7 @@ import { letraDeColumna } from "@/lib/core/columnaDeSheets";
  * `"AREA"` sin tilde, `"CÓDIGO"` con tilde y `"DESCRIPCION"` sin tilde no
  * están: `clave()` ya les saca el acento y el `°`/`º`, así que quedan idénticas
  * a la anterior de su misma lista y nunca se pueden alcanzar. Tenerlas no
- * cambiaba qué columna se encuentra — sólo ensuciaba `faltan` con un alias que
+ * cambiaba qué columna se encuentra — sólo ensuciaba los motivos con un alias que
  * la comparación real ya había descartado (`"area (ÁREA o AREA)"`, que se
  * contradice solo).
  */
@@ -84,7 +84,14 @@ export interface Celda {
 
 export type ResultadoCeldas =
   | { ok: true; fila: number; celdas: Celda[] }
-  | { ok: false; faltan: string[] };
+  /**
+   * `motivos` y no `faltan`: casi siempre es una columna que no está, pero
+   * también puede ser una fecha de creación inválida. Un campo con ese nombre
+   * obliga a quien lo muestra a mentir —"falta la columna: la marca temporal no
+   * es una fecha válida"—, y ese texto va a parar a `sheets_pendiente`, que es
+   * lo que alguien lee para saber qué ir a arreglar.
+   */
+  | { ok: false; motivos: string[] };
 
 /**
  * Compara nombres de columna sin distinguir acentos, mayúsculas ni el signo de
@@ -170,7 +177,7 @@ export function celdasDelAlta(
   if (borde < 0) {
     return {
       ok: false,
-      faltan: [
+      motivos: [
         `el borde del alta ("${COLUMNA_BORDE}", que separa lo que un alta puede ` +
           `llenar de lo que escribe Google) no está en el encabezado`,
       ],
@@ -179,10 +186,10 @@ export function celdasDelAlta(
 
   const idx = indexar(encabezado, borde);
 
-  const faltan = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map(
+  const sinColumna = IMPRESCINDIBLES.filter((c) => idx[c] < 0).map(
     (c) => `${c} (${ALIAS[c].join(" o ")})`
   );
-  if (faltan.length > 0) return { ok: false, faltan };
+  if (sinColumna.length > 0) return { ok: false, motivos: sinColumna };
 
   // `serialDelInstante` no valida —lo dice su propio docstring, la
   // responsabilidad es de quien llama—: un `creado` inválido da `NaN`, que
@@ -192,7 +199,7 @@ export function celdasDelAlta(
   if (!Number.isFinite(serialMarca)) {
     return {
       ok: false,
-      faltan: [`marca temporal (datos.creado no es una fecha válida: ${String(datos.creado)})`],
+      motivos: [`marca temporal (datos.creado no es una fecha válida: ${String(datos.creado)})`],
     };
   }
 

@@ -84,7 +84,7 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     const r = celdasDelAlta(sinArea, DATOS, 1957);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.faltan.join(" ")).toContain("ÁREA");
+    expect(r.motivos.join(" ")).toContain("ÁREA");
   });
 
   it("tolera como esta escrito el encabezado: acentos, mayusculas y el ordinal", () => {
@@ -115,7 +115,7 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     const r = celdasDelAlta(sinArea, DATOS, 1957);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.faltan.join(" ")).toBe("area (ÁREA)");
+    expect(r.motivos.join(" ")).toBe("area (ÁREA)");
   });
 
   describe("una pregunta nueva en el formulario no pierde columnas en silencio", () => {
@@ -173,7 +173,7 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     const r = celdasDelAlta(sinBorde, DATOS, 1957);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.faltan.join(" ")).toContain("DIRECCIÓN EMAIL ENVIADA");
+    expect(r.motivos.join(" ")).toContain("DIRECCIÓN EMAIL ENVIADA");
   });
 
   it("una fecha de creacion invalida no escribe 'NaN' en la marca temporal", () => {
@@ -183,6 +183,6 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     const r = celdasDelAlta(ENCABEZADO, { ...DATOS, creado: new Date("basura") }, 1957);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.faltan.join(" ")).toMatch(/marca temporal/i);
+    expect(r.motivos.join(" ")).toMatch(/marca temporal/i);
   });
 });
