@@ -378,6 +378,14 @@ describe("la fecha como la guarda Sheets", () => {
     expect(serialDelDia("")).toBeNull();
     expect(serialDelDia("10/9/2026")).toBeNull();
   });
+
+  it("una fecha imposible se descarta, no se corrige", () => {
+    expect(serialDelDia("2026-02-30")).toBeNull();
+    expect(serialDelDia("2025-02-29")).toBeNull();  // 2025 no es bisiesto
+    expect(serialDelDia("2026-04-31")).toBeNull();
+    expect(serialDelDia("2026-13-01")).toBeNull();
+    expect(serialDelDia("2024-02-29")).toBe(45351);  // 2024 si es bisiesto
+  });
 });
 ```
 
@@ -411,11 +419,24 @@ Agregar al final de `lib/core/fechaDeSheets.ts`:
 const DIAS_HASTA_1970 = 25569;
 const MS_POR_DIA = 86_400_000;
 
-/** Un día (`2026-09-10`) como serial entero. `null` si no es una fecha ISO. */
+/**
+ * Un día (`2026-09-10`) como serial entero, o `null` si esa fecha no existe.
+ *
+ * **Una fecha imposible se descarta, no se corrige**: es la regla que
+ * `fechaDeTexto` de `lib/core/fechas.ts` dejó escrita en mayúsculas después del
+ * incidente de las 885 fechas. `Date.parse` rueda el 30 de febrero al 2 de
+ * marzo y devuelve un serial plausible pero corrido, así que la comprobación es
+ * de ida y vuelta. Y se normaliza el texto UNA vez: validar el valor trimeado y
+ * calcular con el original deja los dos guardias mirando entradas distintas.
+ */
 export function serialDelDia(iso: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso ?? "").trim())) return null;
-  const ms = Date.parse(`${iso}T00:00:00Z`);
+  const s = String(iso ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+
+  const ms = Date.parse(`${s}T00:00:00Z`);
   if (isNaN(ms)) return null;
+  if (new Date(ms).toISOString().slice(0, 10) !== s) return null;
+
   return ms / MS_POR_DIA + DIAS_HASTA_1970;
 }
 

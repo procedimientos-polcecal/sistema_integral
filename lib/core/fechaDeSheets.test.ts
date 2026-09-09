@@ -53,4 +53,18 @@ describe("la fecha como la guarda Sheets", () => {
     expect(serialDelDia("")).toBeNull();
     expect(serialDelDia("10/9/2026")).toBeNull();
   });
+
+  it("una fecha imposible se descarta, no se corrige", () => {
+    // Es la regla que fechaDeTexto dejo escrita en mayusculas en fechas.ts
+    // despues del incidente de las 885 fechas. Date.parse rueda el 30 de
+    // febrero al 2 de marzo y devuelve un serial plausible pero corrido: el
+    // modo de falla que no se nota. Sin la comprobacion de ida y vuelta,
+    // fechaDeSheets y fechas.ts contestaban distinto la misma pregunta.
+    expect(serialDelDia("2026-02-30")).toBeNull();
+    expect(serialDelDia("2025-02-29")).toBeNull();  // 2025 no es bisiesto
+    expect(serialDelDia("2026-04-31")).toBeNull();
+    expect(serialDelDia("2026-13-01")).toBeNull();
+    // Y el que si existe, entra: 2024 es bisiesto.
+    expect(serialDelDia("2024-02-29")).toBe(45351);
+  });
 });
