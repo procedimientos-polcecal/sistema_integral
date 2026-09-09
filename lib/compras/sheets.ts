@@ -119,7 +119,16 @@ const ALIAS: Record<string, string[]> = {
   costo_envio: ["COSTO ENVIO"],
 };
 
-function indexarColumnas(encabezado: string[]): Record<string, number> {
+/**
+ * En qué columna está cada cosa, según el encabezado de la pestaña.
+ *
+ * Exportada porque el alta —`lib/compras/formulario.ts`— escribe PRIORIDAD y
+ * EMPRESA en la misma hoja y tenía su propia tabla de alias para esas dos
+ * columnas. Coincidían, pero eran dos dueños que no se hablaban: el día que
+ * alguien sume un alias acá, allá no se enteraba. Ese archivo ya importa de
+ * éste, así que compartir el indexador no agrega acoplamiento nuevo.
+ */
+export function indexarColumnas(encabezado: string[]): Record<string, number> {
   const normalizado = encabezado.map(norm);
   const idx: Record<string, number> = {};
   for (const [clave, alias] of Object.entries(ALIAS)) {
@@ -697,9 +706,19 @@ export async function leerLinksDeComparativa(): Promise<Map<number, string>> {
 /** Columnas de la hoja de área que gestiona Compras. */
 const COLUMNAS_COMPRA = ["comparativa", "proveedor", "estado", "costo_iva", "costo_envio"] as const;
 
-/** Columnas del master que escribe la app al aprobar. */
+/** La columna del master que escribe la app al aprobar. */
 const COLUMNA_APROBACION = "estado";
-const COLUMNAS_DEL_APROBADOR = ["prioridad", "empresa"] as const;
+
+/**
+ * Las columnas del master que la app escribe a mano.
+ *
+ * Se llamaban "las del aprobador", y el nombre era el defecto: son las dos
+ * únicas del master que **no** salen del `QUERY(IMPORTRANGE())`, y en un pedido
+ * cargado en el sistema las elige quien pide, en el alta. Creer que las decidía
+ * el aprobador las dejó escondidas detrás del estado de aprobación, y así no
+ * se escribieron nunca para un RI nuevo, que nace PENDIENTE.
+ */
+const COLUMNAS_A_MANO = ["prioridad", "empresa"] as const;
 
 /**
  * La base guarda las empresas en mayúsculas (POLCECAL) y el desplegable de la
@@ -1065,6 +1084,21 @@ export async function exportarRequerimiento(
   const escritas: string[] = [];
   const bloqueadas: string[] = [];
 
+  // En qué fila del master está este RI. La comparten la aprobación y las dos
+  // columnas a mano, así que se resuelve una vez y **sólo si alguna de las dos
+  // tiene algo que escribir**: buscarla lee la columna de N° del master, que son
+  // 1.885 filas, y hasta ahora un RI PENDIENTE no la pedía nunca.
+  let filaSabida: number | null | undefined;
+  const filaDeEsteRi = async (): Promise<number | null> => {
+    if (filaSabida === undefined) {
+      filaSabida =
+        r.hoja_origen === HOJA_MASTER && r.sheets_fila
+          ? (r.sheets_fila as number)
+          : await filaEnMaster(r.nro_ri as number, cache);
+    }
+    return filaSabida;
+  };
+
   // ── Estado de aprobación, en el master ──
   if (r.estado_aprobacion !== "PENDIENTE") {
     // El alias es con el que la persona figura en el desplegable de la planilla.
@@ -1083,9 +1117,7 @@ export async function exportarRequerimiento(
     if (!valor) {
       if (motivo) bloqueadas.push(`aprobación (${motivo})`);
     } else {
-      const fila = r.hoja_origen === HOJA_MASTER && r.sheets_fila
-        ? (r.sheets_fila as number)
-        : await filaEnMaster(r.nro_ri as number, cache);
+      const fila = await filaDeEsteRi();
 
       if (fila) {
         const encabezado = await leerEncabezado(HOJA_MASTER, cache);
@@ -1100,23 +1132,63 @@ export async function exportarRequerimiento(
           if (fallo) bloqueadas.push(`aprobación (${fallo})`);
           else escritas.push("aprobación");
         }
+      }
+    }
+  }
 
-        // Prioridad y quién paga se deciden al aprobar, así que se escriben
-        // junto con la aprobación y no antes.
-        const valoresAprobador: Record<string, string> = {
-          prioridad: (r.prioridad as string) ?? "",
-          empresa: empresaParaPlanilla(
-            (r.empresas as { nombre: string } | null)?.nombre,
-            r.paga_ambas === true
-          ),
-        };
+  // ── Prioridad y empresa, en el master ──
+  //
+  // Fuera de la rama de la aprobación **a propósito**. Estaban adentro porque
+  // "se deciden al aprobar", y eso dejaba sin escribir las de todo pedido
+  // cargado en el sistema: ahí las elige quien pide, en el alta, y un RI nuevo
+  // nace PENDIENTE. El alta escribe la hoja de respuestas del formulario y
+  // estas dos columnas son las únicas del master que **no** salen de ese
+  // `QUERY(IMPORTRANGE())`, así que si no se escriben acá no se escriben nunca:
+  // medido, cada alta terminaba con un pendiente que decía que la planilla no
+  // se había enterado y las dos celdas en blanco para siempre.
+  //
+  // Que el reintento pase por acá en cada corrida es lo que las acomoda solas:
+  // el `IMPORTRANGE` entre las dos planillas tarda minutos y no se puede forzar
+  // desde la API, así que en el alta la fila del master todavía no existe.
+  //
+  // Riesgo asumido: para un RI que vino de la planilla, esto reescribe las dos
+  // celdas con lo que sabe el sistema en cada exportación. Si alguien las
+  // cambió a mano y la importación todavía no pasó, se pisa con el valor
+  // viejo. Es la misma dirección que ya valía al aprobar —la app manda en lo
+  // que gestiona— y la ventana es de una corrida del cron.
+  {
+    const valores: Record<string, string> = {
+      prioridad: (r.prioridad as string | null) ?? "",
+      empresa: empresaParaPlanilla(
+        (r.empresas as { nombre: string } | null)?.nombre,
+        r.paga_ambas === true
+      ),
+    };
+    // Una celda que no tenemos con qué llenar no se pisa con vacío: es el mismo
+    // criterio que la celda de comparativa, que borraba el link de la planilla.
+    const conValor = COLUMNAS_A_MANO.filter((clave) => valores[clave] !== "");
 
-        for (const clave of COLUMNAS_DEL_APROBADOR) {
-          if (idx[clave] < 0) continue;
+    if (conValor.length > 0) {
+      const fila = await filaDeEsteRi();
+      if (!fila) {
+        // Queda pendiente y no se pierde: es un alta que la planilla todavía no
+        // bajó, y la próxima corrida vuelve a mirar.
+        bloqueadas.push(
+          `prioridad y empresa (el RI ${r.nro_ri} todavía no aparece en el master)`
+        );
+      } else {
+        const idx = indexarColumnas(await leerEncabezado(HOJA_MASTER, cache));
+        for (const clave of conValor) {
+          if (idx[clave] < 0) {
+            // Falta la columna: se anota. Escribir la otra y contestar que salió
+            // todo bien es lo que hacía esta misma escritura desde el alta.
+            bloqueadas.push(`${clave} (el master no tiene esa columna)`);
+            continue;
+          }
           const fallo = await escribirCelda(
             token,
             `${HOJA_MASTER}!${letraDeColumna(idx[clave])}${fila}`,
-            valoresAprobador[clave]
+            valores[clave]
           );
           if (fallo) bloqueadas.push(`${clave} (${fallo})`);
           else escritas.push(clave);

@@ -796,15 +796,24 @@ git commit -m "feat(compras): que celdas escribe un alta en la hoja del formular
 
 ### Task 4: Escribir el alta en la planilla
 
-El I/O. Reusa los helpers del núcleo (`leerValores`, `filaSiguienteSegunLaColumna`, `escribirCeldas`), busca la fila libre por la columna de la marca temporal, escribe, **lee el número de vuelta** y recién entonces escribe prioridad y empresa en el master.
+El I/O. Reusa los helpers del núcleo (`leerValores`, `filaSiguienteSegunLaColumna`, `escribirCeldas`), busca la fila libre por la columna de la marca temporal, escribe y **lee el número de vuelta**.
+
+> **Corregido el 09/09/2026, después de la revisión.** La primera versión de esta tarea escribía prioridad y empresa en el master **inmediatamente después** de escribir la hoja de respuestas, y verificaba que la fila del master ya dijera este N° de RI antes de tocarla. La verificación está bien —escribir a ciegas sería ponerle la prioridad de este pedido a otro—, pero entre las dos planillas hay un `IMPORTRANGE` que Google refresca por su cuenta, puede tardar minutos y **no se puede forzar desde la API**. Medido: la verificación fallaba siempre, cada alta terminaba con un `pendiente` que decía que la planilla no se había enterado, y prioridad y empresa no se escribían nunca. El reintento tampoco las recuperaba, porque `hoja_origen` ya quedaba seteado y `exportarRequerimiento` tenía esas dos escrituras adentro del `if (r.estado_aprobacion !== "PENDIENTE")` — y un RI recién creado nace `PENDIENTE`.
+
+**El diseño, corregido:**
+
+1. **`exportarRequerimiento` deja de esconder prioridad y empresa detrás de la aprobación.** Estaban ahí porque "se deciden al aprobar", pero en un pedido cargado en el sistema **las elige quien pide**, en el alta, y el sistema las sabe desde el minuto cero. Se escriben en **cada** exportación, con el criterio de siempre: sólo si hay algo que escribir —una celda que no tenemos con qué llenar no se pisa con vacío— y anotando en `bloqueadas` lo que la planilla no dejó. Con eso, el reintento de cada sincronización las escribe solo, cuando `IMPORTRANGE` ya refrescó.
+2. **El alta distingue lo esperable de lo que hay que mirar.** La fila del master vacía es **lo normal** (la planilla no refrescó todavía); que diga **otro** RI es un problema de verdad. Los dos dejan pendiente —el pendiente es la cola del reintento y es justo para esto—, pero **sólo el segundo se le muestra a quien cargó el pedido**: un cartel que aparece siempre y se arregla solo enseña a ignorar los carteles.
+3. **Riesgo asumido:** hasta que corra el reintento —hasta 15 minutos, que es cada cuánto pega el workflow de GitHub Actions— quien mire la planilla ve el pedido sin prioridad y sin empresa. Queda escrito en el docstring de `exportarAltaAlFormulario`.
 
 **Files:**
 - Modify: `lib/compras/formulario.ts`
 - Modify: `lib/compras/formulario.test.ts`
+- Modify: `lib/compras/sheets.ts` (`exportarRequerimiento`, y exportar `indexarColumnas`)
 
-- [ ] **Step 1: Escribir el test que falla**
+- [ ] **Step 1: Escribir los tests que fallan**
 
-Agregar a `lib/compras/formulario.test.ts` (y sumar `filaDelMaster` al import):
+Lo puro es `filaDelMaster` y **qué celdas del master se escriben**, que es donde vivía el segundo defecto: el chequeo de columnas devolvía motivo sólo si faltaban las dos, así que con una sola se escribía la otra y la función informaba éxito.
 
 ```ts
 describe("la fila del master que le corresponde a una fila de respuestas", () => {
@@ -820,279 +829,118 @@ describe("la fila del master que le corresponde a una fila de respuestas", () =>
     expect(filaDelMaster(1)).toBeNull();
   });
 });
+
+describe("prioridad y empresa, en las dos columnas a mano del master", () => {
+  it("escribe las dos cuando estan las dos columnas y hay los dos valores", () => { /* ... */ });
+
+  it("si falta UNA de las dos columnas, escribe la otra y avisa por la que falta", () => {
+    const r = celdasDePrioridadYEmpresa(
+      { prioridad: 10, empresa: -1 },
+      { prioridad: "ALTA", empresa: "Polcecal" }
+    );
+    expect(r.celdas).toEqual([{ columna: 10, valor: "ALTA" }]);
+    expect(r.bloqueadas).toHaveLength(1);
+  });
+
+  it("una celda que no tenemos con que llenar no se pisa con vacio ni se anota", () => { /* ... */ });
+  it("sin ninguna de las dos columnas no escribe nada y anota las dos", () => { /* ... */ });
+});
 ```
 
-- [ ] **Step 2: Correr el test y verificar que falla**
+- [ ] **Step 2: Correr los tests y verificar que fallan**
 
 Run: `npx vitest run lib/compras/formulario.test.ts`
-Expected: FAIL — `filaDelMaster is not a function`
+Expected: FAIL — `filaDelMaster is not a function`, `celdasDePrioridadYEmpresa is not a function`
 
-- [ ] **Step 3: Escribir `filaDelMaster` y la función de I/O**
+- [ ] **Step 3: `ResultadoAlta` con tres campos**
 
-Agregar a `lib/compras/formulario.ts`:
-
-```ts
-/**
- * A qué fila del master corresponde una fila de la hoja de respuestas.
- *
- * El `QUERY` del master lee `A4:L10000` y su salida arranca en la fila 2, así
- * que son dos menos. Es una cuenta y no una búsqueda porque la fórmula conserva
- * el orden de las respuestas y sólo agrega al final; buscar el N° de RI en el
- * master sería más honesto pero la fila del master puede no existir todavía
- * —`IMPORTRANGE` tarda en refrescar—, y por eso el que escribe **verifica antes
- * de escribir** en vez de confiar en la cuenta.
- */
-export function filaDelMaster(filaDeRespuestas: number): number | null {
-  const fila = filaDeRespuestas - 2;
-  return fila >= 2 ? fila : null;
-}
-```
-
-Y el I/O, en el mismo archivo:
+El pendiente y el aviso dejan de ser lo mismo:
 
 ```ts
-import { createAdminClient } from "@/lib/supabase/admin";
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
-
-const HOJA_RESPUESTAS = "Respuestas de formulario 1";
-const HOJA_MASTER = "Requerimientos internos";
-
-const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? "";
-
 export interface ResultadoAlta {
   /** En qué fila de la hoja de respuestas quedó. */
   fila: number | null;
-  /** Qué anotar en `sheets_pendiente`, o null si salió todo bien. */
+  /**
+   * Qué anotar en `sheets_pendiente`. Es la cola del reintento de cada
+   * sincronización, así que lo esperable también va acá: es lo que hace que
+   * prioridad y empresa se acomoden solas.
+   */
   pendiente: string | null;
+  /**
+   * Qué decirle a quien cargó el pedido, o `null` si no hay nada que le
+   * importe. Que la planilla tarde en refrescar no es noticia para él: un
+   * cartel que aparece siempre y se arregla solo enseña a ignorar los carteles.
+   */
+  avisar: string | null;
 }
+```
 
-/**
- * Escribe el alta de un requerimiento en la hoja de respuestas del formulario.
- *
- * Sin la variable de entorno no hace nada y **no es un error**: se omite, igual
- * que la sincronización sin `GOOGLE_SHEETS_COMPRAS_ID`. Mientras la planilla no
- * esté configurada, el sistema funciona solo.
- *
- * Lo que puede fallar queda en `pendiente` en vez de lanzar: el pedido ya está
- * guardado y perderlo por no poder escribir la planilla sería peor.
- */
-export async function exportarAltaAlFormulario(
-  requerimientoId: string
-): Promise<ResultadoAlta> {
-  if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return { fila: null, pendiente: null };
-  }
+Un fallo real —no se pudo escribir la fila, la hoja no tiene las columnas, la planilla numeró distinto— va en los dos campos. El caso "el master todavía no refrescó" va sólo en `pendiente`. Los tres casos se arman con tres helpers (`listo`, `falla(motivo)`, `enLaCola(motivo)`) para que no se pueda escribir uno a mano y olvidarse un campo.
 
-  const admin = createAdminClient();
-  const { data: r } = await admin
-    .from("compras_requerimientos")
-    .select(
-      "id, nro_ri, descripcion, codigo, cantidad, fecha_necesidad, detalle_extra, " +
-      "imagen_url, created_at, solicitante_id, solicitante_nombre, " +
-      "compras_areas(nombre), compras_ubicaciones(nombre)"
+- [ ] **Step 4: Escribir `filaDelMaster`, `celdasDePrioridadYEmpresa` y el I/O**
+
+Lo que el I/O tiene que cumplir, y que la primera versión no cumplía:
+
+- **Las consultas a la base van adentro del `try`**, desde `createAdminClient()`. `supabase-js` no lanza por un error de consulta pero **sí rechaza por fallo de red**, y el docstring promete que nada lanza porque el pedido ya está guardado.
+- **Un error de consulta no es "todo bien, se omitió".** Con `.maybeSingle()`, "no existe" viene como `data: null` sin error y es el único caso que se omite sin pendiente; cualquier `error` se devuelve como pendiente **y** como aviso. Antes se descartaba: el día que se renombre una columna del `select` o falle el service-role, PostgREST contesta 400 con `data: null` y cada alta se saltearía la planilla en silencio, sin pendiente y sin log. Vale para los dos `select` (el del requerimiento y el de prioridad/empresa).
+- **Las dos lecturas de control del número van con `{ sinFormato: true }`.** Limpiar el texto formateado con `replace(/[^0-9]/g, "")` anda de casualidad con separador de miles (`"1.954"` → `1954`) y miente con un formato de decimales (`"1.954,00"` → `195400`): el pendiente diría "la planilla numeró esa fila como 195400" y mandaría a revisar una numeración que está perfecta. Es lo que el módulo ya decidió para cualquier comparación de valores.
+- **Cada paso contra Google dice cuál era.** Son cinco operaciones sobre **dos planillas distintas**: un 404 sale como "conviene revisar el ID configurado" sin decir si el id a mirar es `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` o `GOOGLE_SHEETS_COMPRAS_ID`, y un 403 sin decir a qué planilla hay que dar permiso de editor. Eso es lo que se muestra en `/compras/configuracion`, así que el paso y la variable van adelante del mensaje de Google, que se deja sin traducir: `al escribir la hoja de respuestas (GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID): …`.
+- **El `catch` devuelve la fila que ya se escribió.** Si falla la lectura de vuelta, el alta ya está en la planilla: contestar `fila: null` haría pensar que no, y como el `update` de `sheets_fila` ya corrió, un reintento podría escribir una segunda fila para el mismo pedido — la doble numeración que la verificación quiere evitar.
+- **Hay piso para la fila.** Los datos de la hoja empiezan en la 4 y `filaSiguienteSegunLaColumna` puede devolver 2 si la columna B vuelve casi vacía; ahí la fórmula del N° de RI se hornearía contra `A1`. Con 1.955 filas no pasa por los datos: pasa cuando se leyó la hoja equivocada o la lectura volvió trunca, y ahí conviene negarse.
+- **La tabla de alias del master no se duplica.** `indexarColumnas` se exporta de `lib/compras/sheets.ts` y se usa desde acá: son las mismas dos columnas de la misma hoja, y tener los alias en dos lados significaba que el día que alguien sume uno allá, esto no se enteraba. Ese archivo ya se importaba para `empresaParaPlanilla`, así que no agrega acoplamiento nuevo.
+
+`escribirPrioridadYEmpresa` sigue verificando la fila antes de escribir, y ahora cuenta los dos resultados distinto:
+
+```ts
+  const enLaFila = nroDeControl(
+    await paso(`al verificar la fila del RI en ${PLANILLA.master}`, () =>
+      leerValores(idMaster, `${HOJA_MASTER}!A${fila}`, { sinFormato: true })
     )
-    .eq("id", requerimientoId)
-    .single();
-
-  if (!r) return { fila: null, pendiente: null };
-
-  const area = (r.compras_areas as { nombre: string } | null)?.nombre;
-  if (!area) {
-    // El área es con lo que el FILTER de cada pestaña compara: sin ella el
-    // pedido aparecería en el master y en ninguna pestaña.
-    return { fila: null, pendiente: "el pedido no tiene área, y la planilla la necesita" };
-  }
-
-  // El nombre y el apellido van en columnas separadas. `solicitante_nombre` los
-  // trae pegados, así que se prefiere el usuario.
-  let nombre = "";
-  let apellido = "";
-  if (r.solicitante_id) {
-    const { data: u } = await admin
-      .from("usuarios")
-      .select("nombre, apellido")
-      .eq("id", r.solicitante_id as string)
-      .single();
-    nombre = (u?.nombre as string) ?? "";
-    apellido = (u?.apellido as string) ?? "";
-  }
-  if (!nombre && r.solicitante_nombre) {
-    const partes = String(r.solicitante_nombre).trim().split(/\s+/);
-    nombre = partes[0] ?? "";
-    apellido = partes.slice(1).join(" ");
-  }
-
-  try {
-    const encabezado = (await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!1:1`))[0] ?? [];
-
-    // La fila libre se busca por la marca temporal y NO por la columna del N°
-    // de RI: esa columna tiene una fórmula en todas las filas de la grilla, y
-    // aunque hoy devuelva vacío para las filas sin marca, depender de eso es
-    // depender de que la fórmula siga escrita igual.
-    const columnaMarca = "B";
-    const marcas = await leerValores(
-      idFormulario(),
-      `${HOJA_RESPUESTAS}!${columnaMarca}:${columnaMarca}`
-    );
-    const fila = filaSiguienteSegunLaColumna(marcas);
-
-    const armado = celdasDelAlta(
-      encabezado,
-      {
-        nro_ri: r.nro_ri as number,
-        nombre,
-        apellido,
-        area,
-        descripcion: r.descripcion as string,
-        codigo: (r.codigo as string | null) ?? null,
-        cantidad: (r.cantidad as number | null) ?? null,
-        ubicacion: (r.compras_ubicaciones as { nombre: string } | null)?.nombre ?? null,
-        fecha_necesidad: (r.fecha_necesidad as string | null) ?? null,
-        detalle_extra: (r.detalle_extra as string | null) ?? null,
-        imagen_url: (r.imagen_url as string | null) ?? null,
-        creado: new Date((r.created_at as string) ?? Date.now()),
-      },
-      fila
-    );
-
-    if (!armado.ok) {
-      return {
-        fila: null,
-        pendiente:
-          "la hoja de respuestas no tiene las columnas esperadas; falta " +
-          armado.faltan.join("; "),
-      };
-    }
-
-    await escribirCeldas(
-      idFormulario(),
-      armado.celdas.map((c) => ({
-        pestana: HOJA_RESPUESTAS,
-        columna: c.columna,
-        fila,
-        valor: c.valor,
-      }))
-    );
-
-    // Qué número calculó la planilla. Si no es el que asignó el sistema, hay un
-    // hueco o una fila de más: se dice, en vez de dejar dos números para el
-    // mismo pedido.
-    const escrito = await leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${fila}`);
-    const numeroDeLaPlanilla = Number(String(escrito[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
-    if (numeroDeLaPlanilla !== r.nro_ri) {
-      return {
-        fila,
-        pendiente:
-          `la planilla numeró esa fila como ${numeroDeLaPlanilla || "(vacío)"} y el sistema ` +
-          `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`,
-      };
-    }
-
-    await admin
-      .from("compras_requerimientos")
-      .update({
-        hoja_origen: HOJA_MASTER,
-        sheets_fila: filaDelMaster(fila),
-        sheets_sincronizado_en: new Date().toISOString(),
-      })
-      .eq("id", requerimientoId);
-
-    return { fila, pendiente: await escribirPrioridadYEmpresa(admin, r.id as string, fila) };
-  } catch (e) {
-    return { fila: null, pendiente: e instanceof Error ? e.message : String(e) };
-  }
-}
-```
-
-Y la escritura del master, en el mismo archivo:
-
-```ts
-/**
- * Prioridad y empresa, en las columnas a mano del master.
- *
- * Las elige quien pide, en el alta, y en la planilla son dos columnas que no
- * salen de ninguna fórmula. Si no se escriben, la próxima sincronización las
- * lee vacías —y desde ahora las conserva, pero quien mira la planilla no las
- * ve—.
- *
- * **Se verifica la fila antes de escribir.** La cuenta `fila − 2` vale mientras
- * el `QUERY` conserve el orden, y además `IMPORTRANGE` tarda en refrescar: si
- * la fila del master todavía no dice este N° de RI, no se escribe nada y queda
- * pendiente. Escribir a ciegas sería ponerle la prioridad de este pedido a
- * otro.
- */
-async function escribirPrioridadYEmpresa(
-  admin: ReturnType<typeof createAdminClient>,
-  requerimientoId: string,
-  filaDeRespuestas: number
-): Promise<string | null> {
-  const idMaster = process.env.GOOGLE_SHEETS_COMPRAS_ID;
-  const fila = filaDelMaster(filaDeRespuestas);
-  if (!idMaster || fila === null) return null;
-
-  const { data: r } = await admin
-    .from("compras_requerimientos")
-    .select("nro_ri, prioridad, paga_ambas, empresas!empresa_id(nombre)")
-    .eq("id", requerimientoId)
-    .single();
-  if (!r) return null;
-
-  const prioridad = (r.prioridad as string | null) ?? "";
-  const empresa = empresaParaPlanilla(
-    (r.empresas as { nombre: string } | null)?.nombre,
-    r.paga_ambas === true
   );
-  // Una celda que no tenemos con qué llenar no se pisa con vacío. Es el mismo
-  // criterio que la celda de comparativa, que borraba el link de la planilla.
-  if (!prioridad && !empresa) return null;
-
-  const encabezado = (await leerValores(idMaster, `${HOJA_MASTER}!1:1`))[0] ?? [];
-  const columna = (nombres: string[]) =>
-    encabezado.findIndex((h) => nombres.includes(norm(h)));
-
-  const colPrioridad = columna(["PRIORIDAD"]);
-  const colEmpresa = columna(["EMPRESA", "PAGA"]);
-  if (colPrioridad < 0 && colEmpresa < 0) {
-    return "el master no tiene columnas de prioridad ni de empresa";
+  if (enLaFila.texto === "") {
+    // Lo esperable: el IMPORTRANGE no refresco. Va a la cola del reintento y no
+    // se le muestra a quien cargo el pedido.
+    return enLaCola(`la fila ${fila} del master todavía no dice el RI ${r.nro_ri}: …`);
   }
-
-  const enElMaster = await leerValores(idMaster, `${HOJA_MASTER}!A${fila}`);
-  const nroEnLaFila = Number(String(enElMaster[0]?.[0] ?? "").replace(/[^0-9]/g, ""));
-  if (nroEnLaFila !== r.nro_ri) {
-    return (
-      `la fila ${fila} del master todavía no dice el RI ${r.nro_ri} (dice ` +
-      `${nroEnLaFila || "vacío"}): no se escribieron prioridad ni empresa`
-    );
+  if (enLaFila.nro !== r.nro_ri) {
+    // Que diga OTRO RI si es un problema: el QUERY no conservo el orden o hay
+    // una fila de mas.
+    return falla(`la fila ${fila} del master dice ${enLaFila.texto} y no el RI ${r.nro_ri}: …`);
   }
-
-  const celdas = [
-    ...(colPrioridad >= 0 && prioridad
-      ? [{ pestana: HOJA_MASTER, columna: colPrioridad, fila, valor: prioridad }]
-      : []),
-    ...(colEmpresa >= 0 && empresa
-      ? [{ pestana: HOJA_MASTER, columna: colEmpresa, fila, valor: empresa }]
-      : []),
-  ];
-  await escribirCeldas(idMaster, celdas);
-  return null;
-}
 ```
 
-Y sumar el import de `empresaParaPlanilla` arriba del archivo:
+- [ ] **Step 5: Sacar prioridad y empresa de la rama de aprobación en `exportarRequerimiento`**
+
+En `lib/compras/sheets.ts`, el bloque que escribía las dos columnas junto con la aprobación sale de ahí y pasa a correr en cada exportación. `COLUMNAS_DEL_APROBADOR` se llama ahora `COLUMNAS_A_MANO`: el nombre viejo era el defecto.
+
+La fila del master la comparten los dos bloques, así que se resuelve **una vez y sólo si hay algo que escribir** —buscarla lee la columna de N° del master, 1.885 filas, y hasta ahora un RI `PENDIENTE` no la pedía nunca—:
 
 ```ts
-import { empresaParaPlanilla } from "@/lib/compras/sheets";
+  let filaSabida: number | null | undefined;
+  const filaDeEsteRi = async (): Promise<number | null> => {
+    if (filaSabida === undefined) {
+      filaSabida =
+        r.hoja_origen === HOJA_MASTER && r.sheets_fila
+          ? (r.sheets_fila as number)
+          : await filaEnMaster(r.nro_ri as number, cache);
+    }
+    return filaSabida;
+  };
 ```
 
-- [ ] **Step 4: Correr los tests y el chequeo de tipos**
+Y el bloque nuevo, después del de la aprobación: se queda con las claves que tienen valor, y si el RI todavía no está en el master o al master le falta una de las dos columnas, lo anota en `bloqueadas` en vez de dar por hecho que la planilla quedó al día.
 
-Run: `npx vitest run lib/compras/formulario.test.ts && npx tsc --noEmit`
+Riesgo asumido, escrito en el comentario: para un RI que vino de la planilla, esto reescribe las dos celdas con lo que sabe el sistema en cada exportación. Si alguien las cambió a mano y la importación todavía no pasó, se pisa con el valor viejo. Es la misma dirección que ya valía al aprobar —la app manda en lo que gestiona— y la ventana es de una corrida del cron.
+
+- [ ] **Step 6: Correr los tests y el chequeo de tipos**
+
+Run: `npx vitest run lib/compras && npx tsc --noEmit`
 Expected: PASS y sin errores de tipos.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add lib/compras/formulario.ts lib/compras/formulario.test.ts
+git add lib/compras/formulario.ts lib/compras/formulario.test.ts lib/compras/sheets.ts
 git commit -m "feat(compras): escribir el alta en la hoja de respuestas del formulario"
 ```
 
