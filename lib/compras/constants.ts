@@ -210,13 +210,53 @@ export function monedaExacta(valor: number | null | undefined): string {
     : fmtMonedaExacta.format(valor).replace(/\u00a0/g, " ");
 }
 
+/**
+ * Una fecha como se lee, sin corrimiento de día.
+ *
+ * Hay tres formas distintas de fecha dando vueltas en Compras y cada una se
+ * muestra distinto. Confundirlas corre el día, que es el error que no se nota
+ * —nadie sospecha de una fecha plausible— y el que ya dio vuelta 885 fechas en
+ * este módulo por el lado de la lectura.
+ *
+ *   * **Sin hora** (`"2026-09-11"`, una columna `date` como `fecha_necesidad`):
+ *     es una fecha de calendario. Se le pone el mediodía local antes de
+ *     formatear, porque `new Date("2026-09-11")` es medianoche UTC y en
+ *     Argentina eso ya es el 10.
+ *
+ *   * **Medianoche UTC exacta** (`"2026-09-10T00:00:00+00:00"`): también es una
+ *     fecha de calendario, sólo que guardada en una columna `timestamptz`. Es
+ *     lo que hace la sincronización: `fechaISO` devuelve `"2026-09-10"` y
+ *     Postgres lo guarda como medianoche UTC. Formatearla como instante la
+ *     muestra **un día antes** —medianoche UTC son las 21 del día anterior
+ *     acá—, y así los 1.958 requerimientos traídos de la planilla aparecían
+ *     con la fecha de ayer. Se muestra su parte de fecha, tal cual.
+ *
+ *   * **Un instante de verdad** (`"2026-09-10T14:40:56Z"`, el `created_at` de
+ *     un pedido cargado en el sistema): ahí sí corresponde la hora local, que
+ *     es la que vivió quien lo cargó.
+ *
+ * El caso del medio no se puede distinguir del tercero por el tipo: los dos son
+ * `timestamptz`. Se distingue por el valor, y por eso la regla está acá y no en
+ * la base: una fecha de calendario guardada en un `timestamptz` siempre cae en
+ * medianoche UTC, y un instante que caiga exactamente ahí es medianoche en
+ * Londres —21 de acá—, hora a la que nadie carga un pedido. Es una heurística,
+ * y es la que hace que el día que se ve sea el día que fue.
+ */
 export function fecha(valor: string | null | undefined): string {
   if (!valor) return "—";
-  const d = new Date(valor.length <= 10 ? valor + "T12:00:00" : valor);
+
+  const soloFecha =
+    valor.length <= 10 ? valor : (esMedianocheUTC(valor) ? valor.slice(0, 10) : null);
+
+  const d = new Date(soloFecha ? `${soloFecha}T12:00:00` : valor);
   return isNaN(d.getTime())
     ? "—"
     : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
+
+/** `2026-09-10T00:00:00+00:00` y `…T00:00:00Z`, con o sin milisegundos. */
+const esMedianocheUTC = (valor: string): boolean =>
+  /T00:00:00(\.000)?(Z|\+00:?00)$/.test(valor);
 
 export function fechaHora(valor: string | null | undefined): string {
   if (!valor) return "—";
