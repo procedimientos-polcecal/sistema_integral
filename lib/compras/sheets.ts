@@ -727,8 +727,18 @@ export async function leerLinksDeComparativa(): Promise<Map<number, string>> {
 
 // ── Exportar: app → planilla ─────────────────────────────────
 
-/** Columnas de la hoja de área que gestiona Compras. */
-const COLUMNAS_COMPRA = ["comparativa", "proveedor", "estado", "costo_iva", "costo_envio"] as const;
+/**
+ * Columnas de la hoja de área que gestiona Compras.
+ *
+ * `solicita` no es de la compra pero se escribe acá porque es el único lugar de
+ * la planilla donde figura quién pidió: el `QUERY` del master saltea las
+ * columnas de nombre y apellido de la hoja de respuestas. Para los RI que
+ * vinieron de la planilla es el mismo valor que ya está; para los cargados en
+ * el sistema, la diferencia entre un pedido con dueño y uno anónimo.
+ */
+const COLUMNAS_COMPRA = [
+  "solicita", "comparativa", "proveedor", "estado", "costo_iva", "costo_envio",
+] as const;
 
 /** La columna del master que escribe la app al aprobar. */
 const COLUMNA_APROBACION = "estado";
@@ -1339,6 +1349,9 @@ export async function exportarRequerimiento(
       }
 
       const valores: Record<string, string | null> = {
+        // Sólo si el sistema lo sabe: pisar con vacío el nombre que alguien
+        // escribió a mano allá sería perderlo.
+        solicita: (r.solicitante_nombre as string | null) || null,
         // Sin comparativa cargada acá NO se escribe la celda —null es "no
         // corresponde"—, y no se escribe vacío. La celda de la planilla dice
         // "LINK" con el hipervínculo escondido detrás, así que pisarla con ""
@@ -1443,7 +1456,7 @@ export interface ResultadoReintento {
 /**
  * Cuántos RI se escriben por corrida.
  *
- * La cuota de Sheets se cuenta por minuto, y escribir un RI son hasta ocho
+ * La cuota de Sheets se cuenta por minuto, y escribir un RI son hasta nueve
  * celdas —cada una es una llamada, porque un lote entero falla si una sola
  * celda está protegida—. Con doce pendientes de una, Google devolvía 429 a
  * mitad de camino y el reintento anotaba el 429 como si la planilla hubiera
