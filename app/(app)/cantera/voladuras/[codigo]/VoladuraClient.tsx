@@ -175,6 +175,8 @@ export default function VoladuraClient({
     espaciamiento_m: s(voladura.espaciamiento_m),
     perf_precio_usd_m: s(voladura.perf_precio_usd_m),
     perf_tc_usd: s(voladura.perf_tc_usd),
+    perf_noches_sereno: s(voladura.perf_noches_sereno),
+    perf_monto_noche: s(voladura.perf_monto_noche),
     material: tx(voladura.material),
     densidad_t_m3: s(voladura.densidad_t_m3),
     vol_fecha_carga: tx(voladura.vol_fecha_carga),
@@ -206,6 +208,8 @@ export default function VoladuraClient({
     metros: perfMetros,
     precioUsdM: n(f.perf_precio_usd_m),
     tc: n(f.perf_tc_usd),
+    nochesSereno: n(f.perf_noches_sereno),
+    montoNoche: n(f.perf_monto_noche),
   });
 
   const consumoParaMonto = useMemo(
@@ -253,6 +257,8 @@ export default function VoladuraClient({
         espaciamiento_m: f.espaciamiento_m,
         perf_precio_usd_m: f.perf_precio_usd_m,
         perf_tc_usd: f.perf_tc_usd,
+        perf_noches_sereno: f.perf_noches_sereno,
+        perf_monto_noche: f.perf_monto_noche,
         material: f.material,
         densidad_t_m3: f.densidad_t_m3,
         vol_fecha_carga: f.vol_fecha_carga,
@@ -316,6 +322,8 @@ export default function VoladuraClient({
           <Campo label="Espaciamiento (m)" value={f.espaciamiento_m} onChange={set("espaciamiento_m")} disabled={dis} />
           <Campo label="Precio USD/m" value={f.perf_precio_usd_m} onChange={set("perf_precio_usd_m")} disabled={dis} />
           <Campo label="TC USD ($/USD)" value={f.perf_tc_usd} onChange={set("perf_tc_usd")} disabled={dis} />
+          <Campo label="Noches de sereno" value={f.perf_noches_sereno} onChange={set("perf_noches_sereno")} disabled={dis} />
+          <Campo label="Monto por noche ($)" value={f.perf_monto_noche} onChange={set("perf_monto_noche")} disabled={dis} />
         </div>
       </section>
 

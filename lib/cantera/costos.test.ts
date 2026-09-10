@@ -13,6 +13,13 @@ describe("montoPerforacion", () => {
     expect(montoPerforacion({ metros: 108, precioUsdM: 13.43, tc: 1515 })).toBeCloseTo(2197416.6, 0);
   });
 
+  it("suma las noches de sereno en pesos, sin pasar por el TC", () => {
+    // 108 × 13,43 × 1515 = 2.197.417  +  4 noches × $30.000 = 120.000
+    expect(
+      montoPerforacion({ metros: 108, precioUsdM: 13.43, tc: 1515, nochesSereno: 4, montoNoche: 30000 })
+    ).toBeCloseTo(2197416.6 + 120000, 0);
+  });
+
   it("es null si falta un dato de carga", () => {
     expect(montoPerforacion({ metros: null, precioUsdM: 13.43, tc: 1515 })).toBeNull();
     expect(montoPerforacion({ metros: 108, precioUsdM: null, tc: 1515 })).toBeNull();

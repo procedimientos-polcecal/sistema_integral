@@ -48,37 +48,63 @@ export async function traerInsumos(
   return (data ?? []) as Insumo[];
 }
 
-/** Las voladuras de un yacimiento, de la más reciente a la más vieja. */
-export async function traerVoladurasDeYacimiento(
-  supabase: SupabaseClient,
-  yacimientoId: string
-): Promise<Voladura[]> {
-  return traerTodo<Voladura>((desde, hasta) =>
-    supabase
-      .from("cantera_voladuras")
-      .select(
-        "id, codigo, yacimiento_id, anio, correlativo, perf_inicio, perf_fin, pozos, metros_por_pozo, perf_tramos, vol_tramos, material, densidad_t_m3, burden_m, espaciamiento_m, perf_precio_usd_m, perf_tc_usd, perf_odoo_move_id, perf_odoo_move_name, perf_odoo_empresa, perf_odoo_ref, perf_odoo_importe, perf_odoo_leido_en, perf_conforme, perf_conforme_obs, perf_conforme_por, perf_conforme_en, vol_fecha_carga, vol_fecha, vol_pozos, vol_metros_por_pozo, vol_burden_m, vol_espaciamiento_m, vol_tc_usd, explosivos_raw, toneladas_planilla, vol_odoo_move_id, vol_odoo_move_name, vol_odoo_empresa, vol_odoo_ref, vol_odoo_importe, vol_odoo_leido_en, vol_conforme, vol_conforme_obs, vol_conforme_por, vol_conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
-      )
-      .eq("yacimiento_id", yacimientoId)
-      .order("anio", { ascending: false })
-      .order("correlativo", { ascending: false })
-      .range(desde, hasta)
-  );
+export interface FiltrosDeTablero {
+  yacimientoId?: string;
+  /** Rango sobre la fecha de voladura (ISO). */
+  desde?: string;
+  hasta?: string;
 }
 
-export async function traerBochonesDeYacimiento(
+/**
+ * Las voladuras del tablero: de todas las canteras o de una, filtradas por
+ * fecha de voladura si se pide. Sin yacimiento y sin fechas, trae todo.
+ */
+export async function traerVoladuras(
   supabase: SupabaseClient,
-  yacimientoId: string
+  filtros: FiltrosDeTablero = {}
+): Promise<Voladura[]> {
+  return traerTodo<Voladura>((desde, hasta) => {
+    let q = supabase
+      .from("cantera_voladuras")
+      .select(
+        "id, codigo, yacimiento_id, anio, correlativo, perf_inicio, perf_fin, pozos, metros_por_pozo, perf_tramos, vol_tramos, material, densidad_t_m3, burden_m, espaciamiento_m, perf_precio_usd_m, perf_tc_usd, perf_noches_sereno, perf_monto_noche, perf_odoo_move_id, perf_odoo_move_name, perf_odoo_empresa, perf_odoo_ref, perf_odoo_importe, perf_odoo_leido_en, perf_conforme, perf_conforme_obs, perf_conforme_por, perf_conforme_en, vol_fecha_carga, vol_fecha, vol_pozos, vol_metros_por_pozo, vol_burden_m, vol_espaciamiento_m, vol_tc_usd, explosivos_raw, toneladas_planilla, vol_odoo_move_id, vol_odoo_move_name, vol_odoo_empresa, vol_odoo_ref, vol_odoo_importe, vol_odoo_leido_en, vol_conforme, vol_conforme_obs, vol_conforme_por, vol_conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+      );
+    if (filtros.yacimientoId) q = q.eq("yacimiento_id", filtros.yacimientoId);
+    if (filtros.desde) q = q.gte("vol_fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("vol_fecha", filtros.hasta);
+    return q.order("vol_fecha", { ascending: false, nullsFirst: false }).order("codigo").range(desde, hasta);
+  });
+}
+
+export async function traerBochones(
+  supabase: SupabaseClient,
+  filtros: FiltrosDeTablero = {}
 ): Promise<Bochon[]> {
-  return traerTodo<Bochon>((desde, hasta) =>
-    supabase
+  return traerTodo<Bochon>((desde, hasta) => {
+    let q = supabase
       .from("cantera_bochones")
       .select(
         "id, codigo, yacimiento_id, anio, correlativo, voladura_codigo, inicio, fin, fecha_voladura, cantidad, metros_perforados, precio_usd_m, tc_usd, odoo_move_id, odoo_move_name, odoo_empresa, odoo_ref, odoo_importe, odoo_leido_en, conforme, conforme_obs, conforme_por, conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
-      )
-      .eq("yacimiento_id", yacimientoId)
-      .order("anio", { ascending: false })
-      .order("correlativo", { ascending: false })
+      );
+    if (filtros.yacimientoId) q = q.eq("yacimiento_id", filtros.yacimientoId);
+    if (filtros.desde) q = q.gte("fecha_voladura", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha_voladura", filtros.hasta);
+    return q.order("fecha_voladura", { ascending: false, nullsFirst: false }).order("codigo").range(desde, hasta);
+  });
+}
+
+/** Los consumos de varias voladuras de una, para el tablero. */
+export async function traerConsumosDe(
+  supabase: SupabaseClient,
+  codigos: string[]
+): Promise<Consumo[]> {
+  if (codigos.length === 0) return [];
+  return traerTodo<Consumo>((desde, hasta) =>
+    supabase
+      .from("cantera_consumos")
+      .select("id, voladura_codigo, insumo_id, insumo_raw, tipo, cantidad, precio_usd, orden")
+      .in("voladura_codigo", codigos)
+      .order("orden")
       .range(desde, hasta)
   );
 }
@@ -90,7 +116,7 @@ export async function traerVoladura(
   const { data, error } = await supabase
     .from("cantera_voladuras")
     .select(
-      "id, codigo, yacimiento_id, anio, correlativo, perf_inicio, perf_fin, pozos, metros_por_pozo, perf_tramos, vol_tramos, material, densidad_t_m3, burden_m, espaciamiento_m, perf_precio_usd_m, perf_tc_usd, perf_odoo_move_id, perf_odoo_move_name, perf_odoo_empresa, perf_odoo_ref, perf_odoo_importe, perf_odoo_leido_en, perf_conforme, perf_conforme_obs, perf_conforme_por, perf_conforme_en, vol_fecha_carga, vol_fecha, vol_pozos, vol_metros_por_pozo, vol_burden_m, vol_espaciamiento_m, vol_tc_usd, explosivos_raw, toneladas_planilla, vol_odoo_move_id, vol_odoo_move_name, vol_odoo_empresa, vol_odoo_ref, vol_odoo_importe, vol_odoo_leido_en, vol_conforme, vol_conforme_obs, vol_conforme_por, vol_conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+      "id, codigo, yacimiento_id, anio, correlativo, perf_inicio, perf_fin, pozos, metros_por_pozo, perf_tramos, vol_tramos, material, densidad_t_m3, burden_m, espaciamiento_m, perf_precio_usd_m, perf_tc_usd, perf_noches_sereno, perf_monto_noche, perf_odoo_move_id, perf_odoo_move_name, perf_odoo_empresa, perf_odoo_ref, perf_odoo_importe, perf_odoo_leido_en, perf_conforme, perf_conforme_obs, perf_conforme_por, perf_conforme_en, vol_fecha_carga, vol_fecha, vol_pozos, vol_metros_por_pozo, vol_burden_m, vol_espaciamiento_m, vol_tc_usd, explosivos_raw, toneladas_planilla, vol_odoo_move_id, vol_odoo_move_name, vol_odoo_empresa, vol_odoo_ref, vol_odoo_importe, vol_odoo_leido_en, vol_conforme, vol_conforme_obs, vol_conforme_por, vol_conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
     )
     .eq("codigo", codigo)
     .maybeSingle();

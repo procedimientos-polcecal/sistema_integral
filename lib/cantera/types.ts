@@ -59,6 +59,8 @@ export interface Voladura {
   espaciamiento_m: number | null;
   perf_precio_usd_m: number | null;
   perf_tc_usd: number | null;
+  perf_noches_sereno: number | null;
+  perf_monto_noche: number | null;
   perf_odoo_move_id: number | null;
   perf_odoo_move_name: string | null;
   perf_odoo_empresa: string | null;

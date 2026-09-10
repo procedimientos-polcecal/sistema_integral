@@ -58,6 +58,7 @@ export async function GET(
 const CAMPOS_FECHA = ["perf_inicio", "perf_fin", "vol_fecha_carga", "vol_fecha"] as const;
 const CAMPOS_NUM = [
   "burden_m", "espaciamiento_m", "perf_precio_usd_m", "perf_tc_usd",
+  "perf_noches_sereno", "perf_monto_noche",
   "vol_burden_m", "vol_espaciamiento_m", "vol_tc_usd", "densidad_t_m3", "toneladas_planilla",
 ] as const;
 

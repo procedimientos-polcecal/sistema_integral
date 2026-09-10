@@ -7,6 +7,7 @@ import type { Yacimiento } from "@/lib/cantera/types";
 
 export interface FilaVoladura {
   codigo: string;
+  yacimiento: string;
   vol_fecha: string | null;
   perf_fin: string | null;
   pozos: number | null;
@@ -22,6 +23,7 @@ export interface FilaVoladura {
 
 export interface FilaBochon {
   codigo: string;
+  yacimiento: string;
   fecha: string | null;
   voladura_codigo: string | null;
   cantidad: number | null;
@@ -53,7 +55,7 @@ function ChipCruce({ lectura }: { lectura: LecturaDeCruce }) {
 
 export default function CanteraClient({
   yacimientos,
-  elegido,
+  yacimientoId,
   desde,
   hasta,
   voladuras,
@@ -62,7 +64,7 @@ export default function CanteraClient({
   puedeFacturar,
 }: {
   yacimientos: Yacimiento[];
-  elegido: Yacimiento | null;
+  yacimientoId: string;
   desde: string;
   hasta: string;
   voladuras: FilaVoladura[];
@@ -106,56 +108,53 @@ export default function CanteraClient({
   const pendientes = [...voladuras, ...bochones].filter((f) => f.sheets_pendiente).length;
   if (pendientes > 0) avisos.push(`${pendientes} fila(s) que no llegaron a la planilla.`);
 
+  const desQ = yacimientoId ? `?y=${yacimientoId}` : "";
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Cantera</h1>
         {puedeEditar && (
-          <Link
-            href={`/cantera/voladuras/nueva${elegido ? `?y=${elegido.id}` : ""}`}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white"
-          >
-            Cargar voladura
-          </Link>
+          <div className="flex gap-2">
+            <Link href={`/cantera/voladuras/nueva${desQ}`} className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white">
+              Cargar voladura
+            </Link>
+            <Link href={`/cantera/bochones/nuevo${desQ}`} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              Cargar bochón
+            </Link>
+          </div>
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {yacimientos.map((y) => (
-          <button
-            key={y.id}
-            onClick={() => irCon({ y: y.id })}
-            className={`rounded-full border px-3 py-1 text-sm ${
-              elegido?.id === y.id ? "border-slate-800 bg-slate-800 text-white" : "border-slate-300"
-            }`}
-          >
-            {y.nombre} <span className="opacity-60">· {y.material}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-end gap-3 text-xs text-slate-600">
-        <label>
-          Desde
-          <input
-            type="date"
-            className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm"
-            value={desde}
-            onChange={(e) => irCon({ desde: e.target.value })}
-          />
-        </label>
-        <label>
-          Hasta
-          <input
-            type="date"
-            className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm"
-            value={hasta}
-            onChange={(e) => irCon({ hasta: e.target.value })}
-          />
-        </label>
+      {/* Filtros en una línea: cantera + rango de fecha de voladura. */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+        <select
+          className="rounded border border-slate-300 px-2 py-1"
+          value={yacimientoId}
+          onChange={(e) => irCon({ y: e.target.value })}
+        >
+          <option value="">Todas las canteras</option>
+          {yacimientos.map((y) => (
+            <option key={y.id} value={y.id}>{y.nombre} · {y.material}</option>
+          ))}
+        </select>
+        <span className="text-slate-400">·</span>
+        <input
+          type="date"
+          className="rounded border border-slate-300 px-2 py-1"
+          value={desde}
+          onChange={(e) => irCon({ desde: e.target.value })}
+        />
+        <span className="text-slate-400">a</span>
+        <input
+          type="date"
+          className="rounded border border-slate-300 px-2 py-1"
+          value={hasta}
+          onChange={(e) => irCon({ hasta: e.target.value })}
+        />
         {(desde || hasta) && (
-          <button onClick={() => irCon({ desde: "", hasta: "" })} className="pb-1 underline">
-            limpiar
+          <button onClick={() => irCon({ desde: "", hasta: "" })} className="text-xs text-slate-500 underline">
+            limpiar fechas
           </button>
         )}
       </div>
@@ -166,104 +165,91 @@ export default function CanteraClient({
         </ul>
       )}
 
-      {elegido && (
-        <>
-          <section className="mt-6">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Perforaciones y voladuras — {elegido.nombre}
-            </h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Voladura</th>
-                    <th className="px-3 py-2">Pozos</th>
-                    <th className="px-3 py-2">Monto perf.</th>
-                    <th className="px-3 py-2">Monto vol.</th>
-                    <th className="px-3 py-2">Toneladas</th>
-                    <th className="px-3 py-2">Facturas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {voladuras.map((v) => (
-                    <tr key={v.codigo} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono">
-                        <Link href={`/cantera/voladuras/${v.codigo}`} className="text-slate-800 underline">
-                          {v.codigo}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2">{v.vol_fecha ?? <span className="text-slate-400">sin volar</span>}</td>
-                      <td className="px-3 py-2">{v.pozos ?? "—"}</td>
-                      <td className="px-3 py-2">{money(v.montoPerf)}</td>
-                      <td className="px-3 py-2">{money(v.montoVol)}</td>
-                      <td className={`px-3 py-2 ${v.desvioFuera ? "text-amber-700" : ""}`}>
-                        {v.toneladas === null ? "—" : num.format(v.toneladas)}
-                        {v.toneladas_planilla != null && (
-                          <span className="ml-1 text-xs text-slate-400">(pl. {num.format(v.toneladas_planilla)})</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="mr-1">P:</span><ChipCruce lectura={v.crucePerf} />
-                        <span className="ml-2 mr-1">V:</span><ChipCruce lectura={v.cruceVol} />
-                      </td>
-                    </tr>
-                  ))}
-                  {voladuras.length === 0 && (
-                    <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">
-                      Sin voladuras en esta cantera.
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="mt-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">Bochones — {elegido.nombre}</h2>
-              {puedeEditar && (
-                <Link href={`/cantera/bochones/nuevo?y=${elegido.id}`} className="text-sm text-slate-800 underline">
-                  Cargar bochón
-                </Link>
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold text-slate-700">Perforaciones y voladuras</h2>
+        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Código</th>
+                <th className="px-3 py-2">Cantera</th>
+                <th className="px-3 py-2">Voladura</th>
+                <th className="px-3 py-2">Pozos</th>
+                <th className="px-3 py-2">Monto perf.</th>
+                <th className="px-3 py-2">Monto vol.</th>
+                <th className="px-3 py-2">Toneladas</th>
+                <th className="px-3 py-2">Facturas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {voladuras.map((v) => (
+                <tr key={v.codigo} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono">
+                    <Link href={`/cantera/voladuras/${v.codigo}`} className="text-slate-800 underline">{v.codigo}</Link>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-slate-500">{v.yacimiento}</td>
+                  <td className="px-3 py-2">{v.vol_fecha ?? <span className="text-slate-400">sin volar</span>}</td>
+                  <td className="px-3 py-2">{v.pozos ?? "—"}</td>
+                  <td className="px-3 py-2">{money(v.montoPerf)}</td>
+                  <td className="px-3 py-2">{money(v.montoVol)}</td>
+                  <td className={`px-3 py-2 ${v.desvioFuera ? "text-amber-700" : ""}`}>
+                    {v.toneladas === null ? "—" : num.format(v.toneladas)}
+                    {v.toneladas_planilla != null && (
+                      <span className="ml-1 text-xs text-slate-400">(pl. {num.format(v.toneladas_planilla)})</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <span className="mr-1">P:</span><ChipCruce lectura={v.crucePerf} />
+                    <span className="ml-2 mr-1">V:</span><ChipCruce lectura={v.cruceVol} />
+                  </td>
+                </tr>
+              ))}
+              {voladuras.length === 0 && (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">Sin voladuras para este filtro.</td></tr>
               )}
-            </div>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Fecha voladura</th>
-                    <th className="px-3 py-2">Voladura asoc.</th>
-                    <th className="px-3 py-2">Cantidad</th>
-                    <th className="px-3 py-2">Metros perf.</th>
-                    <th className="px-3 py-2">Monto</th>
-                    <th className="px-3 py-2">Factura</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bochones.map((b) => (
-                    <tr key={b.codigo} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono">
-                        <Link href={`/cantera/bochones/${b.codigo}`} className="text-slate-800 underline">{b.codigo}</Link>
-                      </td>
-                      <td className="px-3 py-2">{b.fecha ?? "—"}</td>
-                      <td className="px-3 py-2">{b.voladura_codigo ?? "—"}</td>
-                      <td className="px-3 py-2">{b.cantidad ?? "—"}</td>
-                      <td className="px-3 py-2">{b.metros_perforados ?? "—"}</td>
-                      <td className="px-3 py-2">{money(b.monto)}</td>
-                      <td className="px-3 py-2"><ChipCruce lectura={b.cruce} /></td>
-                    </tr>
-                  ))}
-                  {bochones.length === 0 && (
-                    <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Sin bochones en esta cantera.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
-      )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold text-slate-700">Bochones</h2>
+        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Código</th>
+                <th className="px-3 py-2">Cantera</th>
+                <th className="px-3 py-2">Fecha voladura</th>
+                <th className="px-3 py-2">Voladura asoc.</th>
+                <th className="px-3 py-2">Cantidad</th>
+                <th className="px-3 py-2">Metros perf.</th>
+                <th className="px-3 py-2">Monto</th>
+                <th className="px-3 py-2">Factura</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {bochones.map((b) => (
+                <tr key={b.codigo} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono">
+                    <Link href={`/cantera/bochones/${b.codigo}`} className="text-slate-800 underline">{b.codigo}</Link>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-slate-500">{b.yacimiento}</td>
+                  <td className="px-3 py-2">{b.fecha ?? "—"}</td>
+                  <td className="px-3 py-2">{b.voladura_codigo ?? "—"}</td>
+                  <td className="px-3 py-2">{b.cantidad ?? "—"}</td>
+                  <td className="px-3 py-2">{b.metros_perforados ?? "—"}</td>
+                  <td className="px-3 py-2">{money(b.monto)}</td>
+                  <td className="px-3 py-2"><ChipCruce lectura={b.cruce} /></td>
+                </tr>
+              ))}
+              {bochones.length === 0 && (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">Sin bochones para este filtro.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {puedeFacturar && !puedeEditar && (
         <p className="mt-6 text-xs text-slate-400">
