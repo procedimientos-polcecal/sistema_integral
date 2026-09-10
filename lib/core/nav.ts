@@ -217,6 +217,19 @@ export const NAV: NavItem[] = [
       { label: "Sin vincular", href: "/facturacion?estado=recibida", modulo: "facturacion" },
     ],
   },
+  {
+    label: "Cantera",
+    href: "/cantera",
+    modulo: "cantera",
+    // El tablero por yacimiento primero: es la pantalla desde donde el capataz
+    // cierra una voladura en el frente y desde donde finanzas mira los montos
+    // sin conciliar. Los catálogos y el informe se miran después, no durante.
+    children: [
+      { label: "Por yacimiento", href: "/cantera", modulo: "cantera" },
+      { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
+      { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
