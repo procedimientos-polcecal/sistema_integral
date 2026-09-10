@@ -97,9 +97,12 @@ export default function CanteraClient({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Cantera</h1>
         {puedeEditar && (
-          <span className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-400">
-            Cargar voladura — próxima entrega
-          </span>
+          <Link
+            href={`/cantera/voladuras/nueva${elegido ? `?y=${elegido.id}` : ""}`}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white"
+          >
+            Cargar voladura
+          </Link>
         )}
       </div>
 
@@ -149,7 +152,11 @@ export default function CanteraClient({
                 <tbody className="divide-y divide-slate-100">
                   {voladuras.map((v) => (
                     <tr key={v.codigo} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono">{v.codigo}</td>
+                      <td className="px-3 py-2 font-mono">
+                        <Link href={`/cantera/voladuras/${v.codigo}`} className="text-slate-800 underline">
+                          {v.codigo}
+                        </Link>
+                      </td>
                       <td className="px-3 py-2">{v.vol_fecha ?? <span className="text-slate-400">sin volar</span>}</td>
                       <td className="px-3 py-2">{v.pozos ?? "—"}</td>
                       <td className="px-3 py-2">{money(v.montoPerf)}</td>
