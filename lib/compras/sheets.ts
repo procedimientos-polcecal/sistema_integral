@@ -19,6 +19,13 @@ import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
+// Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
+// `indexarColumnas` de acá. Las cuatro son funciones y ninguna se llama al
+// cargar el módulo, así que en ESM el ciclo se resuelve solo. Se deja anotado
+// para que el día que alguien agregue una constante de módulo que llame a la
+// otra punta sepa por qué explota: la salida sería mover lo compartido a un
+// archivo que no dependa de nada de Sheets (`lib/compras/texto.ts`).
+import { exportarAltaAlFormulario } from "@/lib/compras/formulario";
 import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/types";
 import {
   obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
@@ -1411,6 +1418,13 @@ const POR_CORRIDA = 5;
  * faltaba, o alguien sumó la cuenta de servicio a la protección—, así que el
  * reintento es lo que hace que las dos herramientas vuelvan a coincidir sin
  * tener que tocar el requerimiento de nuevo.
+ *
+ * **No todo pendiente es el mismo pendiente.** Hasta acá la cola se interpretaba
+ * entera como "faltan las columnas de compra" y se reintentaba con
+ * `exportarRequerimiento`, que para un pedido que nunca llegó a la planilla no
+ * escribe nada: no tiene ninguna rama que escriba la hoja de respuestas, y no
+ * hay fila del master donde escribir. Ese caso se reconoce por `hoja_origen`
+ * nulo y se reintenta con el alta.
  */
 export async function reintentarPendientes(limite = POR_CORRIDA): Promise<ResultadoReintento> {
   const admin = createAdminClient();
@@ -1425,7 +1439,10 @@ export async function reintentarPendientes(limite = POR_CORRIDA): Promise<Result
 
   const { data: pendientes } = await admin
     .from("compras_requerimientos")
-    .select("id")
+    // `hoja_origen` dice si el pedido llegó alguna vez a la planilla: al que no
+    // llegó le falta el ALTA, y reintentarlo con las columnas de compra no
+    // escribe nada. El `nro_ri` es sólo para que el log diga de qué RI habla.
+    .select("id, nro_ri, hoja_origen")
     // Los que hace más que se intentaron van primero, así la cola rota y
     // ninguno queda esperando para siempre detrás de los mismos cinco.
     .order("sheets_intentado_en", { ascending: true, nullsFirst: true })
@@ -1442,6 +1459,45 @@ export async function reintentarPendientes(limite = POR_CORRIDA): Promise<Result
     if (i > 0) await espera(1000);
 
     try {
+      // Nunca llegó a la planilla: lo que falta es el alta, y sólo el alta lo
+      // puede resolver. Es la otra punta del guardarraíl de
+      // `exportarRequerimiento`, que para estos pedidos se niega a tocar
+      // `sheets_pendiente`: si esta rama no existiera, quedarían en la cola
+      // para siempre sin que nadie vuelva a intentar escribirlos.
+      if (!r.hoja_origen) {
+        const { pendiente } = await exportarAltaAlFormulario(r.id as string);
+
+        // Se deja **lo que devolvió el alta**: el motivo nuevo si sigue sin
+        // poder escribirse, o `null` si esta vez salió bien. Es la misma
+        // escritura que hace `exportarRequerimiento` al final y por la misma
+        // razón: este campo ES la cola.
+        const { error: errorCola } = await admin
+          .from("compras_requerimientos")
+          .update({
+            sheets_pendiente: pendiente,
+            sheets_intentado_en: new Date().toISOString(),
+          })
+          .eq("id", r.id as string);
+
+        if (errorCola) {
+          // No se pudo mover la cola: el RI sigue con el pendiente que traía,
+          // así que va a volver a aparecer en la próxima corrida. Eso está
+          // bien —es lo que queremos— pero **no es "resuelto"**: contarlo así
+          // haría que la pantalla diga que no queda nada mientras la cola dice
+          // que sí, que es la contradicción que este contador ya tuvo una vez.
+          console.error(
+            `RI ${r.nro_ri ?? r.id}: el alta se reintentó pero no se pudo actualizar la cola`,
+            errorCola
+          );
+          siguenPendientes++;
+        } else if (pendiente) {
+          siguenPendientes++;
+        } else {
+          resueltos++;
+        }
+        continue;
+      }
+
       const { bloqueadas, enEspera } = await exportarRequerimiento(r.id as string, cache);
       // Un RI con algo en espera **sigue pendiente**: la fila del master no
       // existía todavía, así que prioridad y empresa no se escribieron y
