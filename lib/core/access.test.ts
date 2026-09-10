@@ -20,6 +20,7 @@ describe("modulosVisibles", () => {
       "produccion",
       "despacho",
       "facturacion",
+      "cantera",
     ]);
   });
 
