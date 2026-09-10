@@ -144,7 +144,7 @@ const { data: bochIns, error: errBoch } = await sb
       voladura_codigo: b.voladura_codigo,
       inicio: b.inicio,
       fin: b.fin,
-      pozos: b.pozos,
+      cantidad: b.cantidad,
       metros_perforados: b.metros_perforados,
       precio_usd_m: b.precio_usd_m,
       tc_usd: b.tc_usd,

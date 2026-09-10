@@ -21,12 +21,20 @@ import CanteraClient, { type FilaBochon, type FilaVoladura } from "./CanteraClie
  * abajo van sus perforaciones/voladuras y sus bochones, con el monto y las
  * toneladas despejados al leer (nada de eso se guarda).
  */
+/** Una fecha ISO cae en el rango [desde, hasta] (cualquiera puede faltar). */
+function enRango(fecha: string | null, desde?: string, hasta?: string): boolean {
+  if (!fecha) return !desde && !hasta; // sin fecha: sólo si no se filtró
+  if (desde && fecha < desde) return false;
+  if (hasta && fecha > hasta) return false;
+  return true;
+}
+
 export default async function CanteraPage({
   searchParams,
 }: {
-  searchParams: Promise<{ y?: string }>;
+  searchParams: Promise<{ y?: string; desde?: string; hasta?: string }>;
 }) {
-  const { y } = await searchParams;
+  const { y, desde, hasta } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -36,6 +44,7 @@ export default async function CanteraPage({
 
   const yacimientos = await traerYacimientos(supabase, true);
   const elegido = yacimientos.find((yy) => yy.id === y) ?? yacimientos[0] ?? null;
+  const hayFiltro = Boolean(desde || hasta);
 
   let voladuras: FilaVoladura[] = [];
   let bochones: FilaBochon[] = [];
@@ -46,22 +55,32 @@ export default async function CanteraPage({
       traerBochonesDeYacimiento(supabase, elegido.id),
     ]);
 
+    // Filtro por fecha: la de voladura, y si no hay, la de fin de perforación.
+    const vsFiltradas = hayFiltro
+      ? vs.filter((v) => enRango(v.vol_fecha ?? v.perf_fin, desde, hasta))
+      : vs;
+    const bsFiltrados = hayFiltro
+      ? bs.filter((b) => enRango(b.fecha_voladura ?? b.fin, desde, hasta))
+      : bs;
+
     // Los consumos de cada voladura, para el monto de la etapa de voladura.
     const consumosPorCodigo = new Map<string, Awaited<ReturnType<typeof traerConsumos>>>();
     await Promise.all(
-      vs.map(async (v) => {
+      vsFiltradas.map(async (v) => {
         consumosPorCodigo.set(v.codigo, await traerConsumos(supabase, v.codigo));
       })
     );
 
-    voladuras = vs.map((v) => armarFilaVoladura(v, elegido, consumosPorCodigo.get(v.codigo) ?? []));
-    bochones = bs.map(armarFilaBochon);
+    voladuras = vsFiltradas.map((v) => armarFilaVoladura(v, elegido, consumosPorCodigo.get(v.codigo) ?? []));
+    bochones = bsFiltrados.map(armarFilaBochon);
   }
 
   return (
     <CanteraClient
       yacimientos={yacimientos}
       elegido={elegido}
+      desde={desde ?? ""}
+      hasta={hasta ?? ""}
       voladuras={voladuras}
       bochones={bochones}
       puedeEditar={permisos.puedeEditar}
@@ -116,8 +135,9 @@ function armarFilaBochon(b: Awaited<ReturnType<typeof traerBochonesDeYacimiento>
   });
   return {
     codigo: b.codigo,
-    fin: b.fin,
+    fecha: b.fecha_voladura ?? b.fin,
     voladura_codigo: b.voladura_codigo,
+    cantidad: b.cantidad,
     metros_perforados: b.metros_perforados,
     monto,
     cruce: cruce(monto, b.odoo_importe).lectura,

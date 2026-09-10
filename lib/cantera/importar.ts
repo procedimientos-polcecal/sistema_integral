@@ -260,7 +260,7 @@ export interface BochonParaImportar {
   voladura_codigo: string | null;
   inicio: string | null;
   fin: string | null;
-  pozos: number | null;
+  cantidad: number | null;
   metros_perforados: number | null;
   precio_usd_m: number | null;
   tc_usd: number | null;
@@ -298,7 +298,7 @@ export function bochonesDe2026(
       voladura_codigo: aTexto(f[5]),
       inicio: fechaDeSheets(f[1]),
       fin: fechaDeSheets(f[2]),
-      pozos: aNumero(f[6]),
+      cantidad: aNumero(f[6]),
       metros_perforados: aNumero(f[7]),
       precio_usd_m: aNumero(f[3]),
       tc_usd: aNumero(f[8]),

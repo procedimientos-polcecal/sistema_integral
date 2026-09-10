@@ -74,7 +74,7 @@ export async function traerBochonesDeYacimiento(
     supabase
       .from("cantera_bochones")
       .select(
-        "id, codigo, yacimiento_id, anio, correlativo, voladura_codigo, inicio, fin, pozos, metros_perforados, precio_usd_m, tc_usd, odoo_move_id, odoo_move_name, odoo_empresa, odoo_ref, odoo_importe, odoo_leido_en, conforme, conforme_obs, conforme_por, conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+        "id, codigo, yacimiento_id, anio, correlativo, voladura_codigo, inicio, fin, fecha_voladura, cantidad, metros_perforados, precio_usd_m, tc_usd, odoo_move_id, odoo_move_name, odoo_empresa, odoo_ref, odoo_importe, odoo_leido_en, conforme, conforme_obs, conforme_por, conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
       )
       .eq("yacimiento_id", yacimientoId)
       .order("anio", { ascending: false })
@@ -96,6 +96,21 @@ export async function traerVoladura(
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as Voladura | null) ?? null;
+}
+
+export async function traerBochon(
+  supabase: SupabaseClient,
+  codigo: string
+): Promise<Bochon | null> {
+  const { data, error } = await supabase
+    .from("cantera_bochones")
+    .select(
+      "id, codigo, yacimiento_id, anio, correlativo, voladura_codigo, inicio, fin, fecha_voladura, cantidad, metros_perforados, precio_usd_m, tc_usd, odoo_move_id, odoo_move_name, odoo_empresa, odoo_ref, odoo_importe, odoo_leido_en, conforme, conforme_obs, conforme_por, conforme_en, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+    )
+    .eq("codigo", codigo)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as Bochon | null) ?? null;
 }
 
 export async function traerConsumos(

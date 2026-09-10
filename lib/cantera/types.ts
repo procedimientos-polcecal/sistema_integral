@@ -110,7 +110,8 @@ export interface Bochon {
   voladura_codigo: string | null;
   inicio: string | null;
   fin: string | null;
-  pozos: number | null;
+  fecha_voladura: string | null;
+  cantidad: number | null;
   metros_perforados: number | null;
   precio_usd_m: number | null;
   tc_usd: number | null;

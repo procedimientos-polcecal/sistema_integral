@@ -10,8 +10,7 @@ import {
   TASA_SERVICIO_VOLADURA,
 } from "@/lib/cantera/costos";
 import { toneladasEstimadas, desvioContraPlanilla } from "@/lib/cantera/toneladas";
-import { faltaDesglose } from "@/lib/cantera/consumos";
-import { formatearTramos, parsearTramos, totalMetros, totalPozos } from "@/lib/cantera/tramos";
+import { totalMetros, totalPozos, type Tramo } from "@/lib/cantera/tramos";
 import { ETIQUETA_TIPO_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Consumo, Insumo, Voladura, Yacimiento } from "@/lib/cantera/types";
 
@@ -44,6 +43,10 @@ function Campo({
   );
 }
 
+interface TramoUI {
+  pozos: string;
+  metros: string;
+}
 interface RenglonUI {
   insumo_id: string;
   insumo_raw: string;
@@ -62,15 +65,86 @@ function aRenglon(c: Consumo): RenglonUI {
   };
 }
 
-/** El texto inicial del campo de tramos: los tramos guardados, o el promedio escalar. */
-function textoTramosInicial(
-  tramos: { pozos: number; metros: number }[] | null,
+/** Los tramos guardados, o uno solo con el promedio escalar, para el estado inicial. */
+function tramosIniciales(
+  tramos: Tramo[] | null,
   pozos: number | null,
   metrosPorPozo: number | null
-): string {
-  if (tramos && tramos.length) return formatearTramos(tramos);
-  if (pozos != null && metrosPorPozo != null) return `${pozos}*${String(metrosPorPozo).replace(".", ",")}`;
-  return "";
+): TramoUI[] {
+  if (tramos && tramos.length) return tramos.map((t) => ({ pozos: String(t.pozos), metros: String(t.metros) }));
+  if (pozos != null && metrosPorPozo != null) return [{ pozos: String(pozos), metros: String(metrosPorPozo) }];
+  return [];
+}
+
+/** Un `TramoUI[]` a `Tramo[]` limpio (descarta filas incompletas o inválidas). */
+function tramosLimpios(filas: TramoUI[]): Tramo[] {
+  const out: Tramo[] = [];
+  for (const f of filas) {
+    const p = Number(f.pozos);
+    const m = Number(f.metros.replace(",", "."));
+    if (Number.isInteger(p) && p > 0 && isFinite(m) && m > 0) out.push({ pozos: p, metros: m });
+  }
+  return out;
+}
+
+/** Un editor de tramos: filas de [cant. de pozos] × [metros por pozo]. */
+function GrillaTramos({
+  filas,
+  setFilas,
+  disabled,
+}: {
+  filas: TramoUI[];
+  setFilas: (f: TramoUI[]) => void;
+  disabled: boolean;
+}) {
+  const limpios = tramosLimpios(filas);
+  return (
+    <div className="mt-1">
+      <div className="space-y-1">
+        {filas.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              className="w-24 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+              disabled={disabled}
+              placeholder="pozos"
+              value={r.pozos}
+              onChange={(e) => setFilas(filas.map((x, j) => (j === i ? { ...x, pozos: e.target.value } : x)))}
+            />
+            <span className="text-slate-400">×</span>
+            <input
+              className="w-24 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+              disabled={disabled}
+              placeholder="metros"
+              value={r.metros}
+              onChange={(e) => setFilas(filas.map((x, j) => (j === i ? { ...x, metros: e.target.value } : x)))}
+            />
+            {!disabled && (
+              <button
+                onClick={() => setFilas(filas.filter((_, j) => j !== i))}
+                className="text-slate-400 hover:text-red-600"
+                aria-label="Quitar"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {!disabled && (
+        <button
+          onClick={() => setFilas([...filas, { pozos: "", metros: "" }])}
+          className="mt-1 text-sm text-slate-600 underline"
+        >
+          + agregar línea
+        </button>
+      )}
+      {limpios.length > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          {totalPozos(limpios)} pozos · {num1.format(totalMetros(limpios))} m perforados
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function VoladuraClient({
@@ -97,7 +171,6 @@ export default function VoladuraClient({
   const [f, setF] = useState({
     perf_inicio: tx(voladura.perf_inicio),
     perf_fin: tx(voladura.perf_fin),
-    perf_tramos_txt: textoTramosInicial(voladura.perf_tramos, voladura.pozos, voladura.metros_por_pozo),
     burden_m: s(voladura.burden_m),
     espaciamiento_m: s(voladura.espaciamiento_m),
     perf_precio_usd_m: s(voladura.perf_precio_usd_m),
@@ -106,11 +179,9 @@ export default function VoladuraClient({
     densidad_t_m3: s(voladura.densidad_t_m3),
     vol_fecha_carga: tx(voladura.vol_fecha_carga),
     vol_fecha: tx(voladura.vol_fecha),
-    vol_tramos_txt: textoTramosInicial(voladura.vol_tramos, voladura.vol_pozos, voladura.vol_metros_por_pozo),
     vol_burden_m: s(voladura.vol_burden_m),
     vol_espaciamiento_m: s(voladura.vol_espaciamiento_m),
     vol_tc_usd: s(voladura.vol_tc_usd),
-    explosivos_raw: tx(voladura.explosivos_raw),
     observaciones: tx(voladura.observaciones),
   });
   const set = (k: keyof typeof f) => (v: string) => {
@@ -118,13 +189,18 @@ export default function VoladuraClient({
     setOk(false);
   };
 
+  const [perfFilas, setPerfFilas] = useState<TramoUI[]>(
+    tramosIniciales(voladura.perf_tramos, voladura.pozos, voladura.metros_por_pozo)
+  );
+  const [volFilas, setVolFilas] = useState<TramoUI[]>(
+    tramosIniciales(voladura.vol_tramos, voladura.vol_pozos, voladura.vol_metros_por_pozo)
+  );
   const [renglones, setRenglones] = useState<RenglonUI[]>(consumos.map(aRenglon));
 
-  // Los tramos: null = campo vacío, [] = escrito pero no se entiende.
-  const perfTramos = f.perf_tramos_txt.trim() ? parsearTramos(f.perf_tramos_txt) : null;
-  const volTramos = f.vol_tramos_txt.trim() ? parsearTramos(f.vol_tramos_txt) : null;
-  const perfMetros = perfTramos && perfTramos.length ? totalMetros(perfTramos) : null;
-  const volMetros = volTramos && volTramos.length ? totalMetros(volTramos) : perfMetros;
+  const perfTramos = tramosLimpios(perfFilas);
+  const volTramos = tramosLimpios(volFilas);
+  const perfMetros = perfTramos.length ? totalMetros(perfTramos) : null;
+  const volMetros = volTramos.length ? totalMetros(volTramos) : perfMetros;
 
   const montoPerf = montoPerforacion({
     metros: perfMetros,
@@ -164,14 +240,6 @@ export default function VoladuraClient({
   }
 
   async function guardar() {
-    if (f.perf_tramos_txt.trim() && !perfTramos) {
-      setError('No se entiende la perforación. Formato: "14*3 / 3*3,5 / 6*4".');
-      return;
-    }
-    if (f.vol_tramos_txt.trim() && !volTramos) {
-      setError('No se entiende la voladura. Mismo formato que la perforación.');
-      return;
-    }
     setGuardando(true);
     setError("");
     const res = await fetch(`/api/cantera/voladuras/${voladura.codigo}`, {
@@ -180,7 +248,7 @@ export default function VoladuraClient({
       body: JSON.stringify({
         perf_inicio: f.perf_inicio,
         perf_fin: f.perf_fin,
-        perf_tramos: perfTramos ?? null,
+        perf_tramos: perfTramos.length ? perfTramos : null,
         burden_m: f.burden_m,
         espaciamiento_m: f.espaciamiento_m,
         perf_precio_usd_m: f.perf_precio_usd_m,
@@ -189,11 +257,10 @@ export default function VoladuraClient({
         densidad_t_m3: f.densidad_t_m3,
         vol_fecha_carga: f.vol_fecha_carga,
         vol_fecha: f.vol_fecha,
-        vol_tramos: volTramos ?? null,
+        vol_tramos: volTramos.length ? volTramos : null,
         vol_burden_m: f.vol_burden_m,
         vol_espaciamiento_m: f.vol_espaciamiento_m,
         vol_tc_usd: f.vol_tc_usd,
-        explosivos_raw: f.explosivos_raw,
         observaciones: f.observaciones,
         consumos: renglones.map((r) => ({
           insumo_id: r.insumo_id || null,
@@ -214,15 +281,6 @@ export default function VoladuraClient({
   }
 
   const dis = !puedeEditar;
-  const resumenTramos = (tr: { pozos: number; metros: number }[] | null, txt: string) => {
-    if (!txt.trim()) return null;
-    if (!tr) return <span className="text-red-600">no se entiende — formato 14*3 / 3*3,5</span>;
-    return (
-      <span className="text-slate-500">
-        {totalPozos(tr)} pozos · {num1.format(totalMetros(tr))} m perforados
-      </span>
-    );
-  };
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -247,17 +305,10 @@ export default function VoladuraClient({
           <h2 className="text-sm font-semibold">Perforación</h2>
           <span className="text-sm font-medium">{money(montoPerf)}</span>
         </div>
-        <label className="mt-3 block text-xs text-slate-600">
+        <div className="mt-3 text-xs text-slate-600">
           Pozos por profundidad
-          <input
-            className={INPUT_CLS}
-            disabled={dis}
-            value={f.perf_tramos_txt}
-            onChange={(e) => set("perf_tramos_txt")(e.target.value)}
-            placeholder="14*3 / 3*3,5 / 6*4"
-          />
-          <span className="mt-1 block">{resumenTramos(perfTramos, f.perf_tramos_txt)}</span>
-        </label>
+          <GrillaTramos filas={perfFilas} setFilas={(x) => { setPerfFilas(x); setOk(false); }} disabled={dis} />
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Campo label="Inicio" type="date" value={f.perf_inicio} onChange={set("perf_inicio")} disabled={dis} />
           <Campo label="Fin" type="date" value={f.perf_fin} onChange={set("perf_fin")} disabled={dis} />
@@ -283,17 +334,10 @@ export default function VoladuraClient({
             <span className="font-medium">{money(montoVol)}</span>
           </span>
         </div>
-        <label className="mt-3 block text-xs text-slate-600">
+        <div className="mt-3 text-xs text-slate-600">
           Pozos volados por profundidad <span className="text-slate-400">(vacío = igual que la perforación)</span>
-          <input
-            className={INPUT_CLS}
-            disabled={dis}
-            value={f.vol_tramos_txt}
-            onChange={(e) => set("vol_tramos_txt")(e.target.value)}
-            placeholder="14*3 / 3*3,5 / 6*4"
-          />
-          <span className="mt-1 block">{resumenTramos(volTramos, f.vol_tramos_txt)}</span>
-        </label>
+          <GrillaTramos filas={volFilas} setFilas={(x) => { setVolFilas(x); setOk(false); }} disabled={dis} />
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Campo label="Fecha carga explosivo" type="date" value={f.vol_fecha_carga} onChange={set("vol_fecha_carga")} disabled={dis} />
           <Campo label="Fecha de voladura" type="date" value={f.vol_fecha} onChange={set("vol_fecha")} disabled={dis} />
@@ -315,17 +359,6 @@ export default function VoladuraClient({
               placeholder={yacimiento ? String(yacimiento.densidad_t_m3) : "2.7"} />
           </label>
         </div>
-        <label className="mt-3 block text-xs text-slate-600">
-          Explosivos (texto libre, como en la planilla)
-          <input className={INPUT_CLS} disabled={dis} value={f.explosivos_raw}
-            onChange={(e) => set("explosivos_raw")(e.target.value)}
-            placeholder="emulex x 60 mm: 48,5 - anfo premium: 520" />
-        </label>
-        {faltaDesglose(f.explosivos_raw, renglones) && (
-          <p className="mt-1 text-xs text-amber-700">
-            Hay texto de explosivos pero ningún renglón de consumo: el monto de la voladura queda sin calcular.
-          </p>
-        )}
       </section>
 
       {/* ── Consumos ── */}

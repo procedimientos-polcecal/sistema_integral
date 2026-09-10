@@ -22,8 +22,9 @@ export interface FilaVoladura {
 
 export interface FilaBochon {
   codigo: string;
-  fin: string | null;
+  fecha: string | null;
   voladura_codigo: string | null;
+  cantidad: number | null;
   metros_perforados: number | null;
   monto: number | null;
   cruce: LecturaDeCruce;
@@ -53,6 +54,8 @@ function ChipCruce({ lectura }: { lectura: LecturaDeCruce }) {
 export default function CanteraClient({
   yacimientos,
   elegido,
+  desde,
+  hasta,
   voladuras,
   bochones,
   puedeEditar,
@@ -60,6 +63,8 @@ export default function CanteraClient({
 }: {
   yacimientos: Yacimiento[];
   elegido: Yacimiento | null;
+  desde: string;
+  hasta: string;
   voladuras: FilaVoladura[];
   bochones: FilaBochon[];
   puedeEditar: boolean;
@@ -67,6 +72,15 @@ export default function CanteraClient({
 }) {
   const router = useRouter();
   const search = useSearchParams();
+
+  function irCon(cambios: Record<string, string>) {
+    const p = new URLSearchParams(search);
+    for (const [k, v] of Object.entries(cambios)) {
+      if (v) p.set(k, v);
+      else p.delete(k);
+    }
+    router.push(`/cantera?${p.toString()}`);
+  }
 
   if (yacimientos.length === 0) {
     return (
@@ -110,11 +124,7 @@ export default function CanteraClient({
         {yacimientos.map((y) => (
           <button
             key={y.id}
-            onClick={() => {
-              const p = new URLSearchParams(search);
-              p.set("y", y.id);
-              router.push(`/cantera?${p.toString()}`);
-            }}
+            onClick={() => irCon({ y: y.id })}
             className={`rounded-full border px-3 py-1 text-sm ${
               elegido?.id === y.id ? "border-slate-800 bg-slate-800 text-white" : "border-slate-300"
             }`}
@@ -122,6 +132,32 @@ export default function CanteraClient({
             {y.nombre} <span className="opacity-60">· {y.material}</span>
           </button>
         ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3 text-xs text-slate-600">
+        <label>
+          Desde
+          <input
+            type="date"
+            className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm"
+            value={desde}
+            onChange={(e) => irCon({ desde: e.target.value })}
+          />
+        </label>
+        <label>
+          Hasta
+          <input
+            type="date"
+            className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm"
+            value={hasta}
+            onChange={(e) => irCon({ hasta: e.target.value })}
+          />
+        </label>
+        {(desde || hasta) && (
+          <button onClick={() => irCon({ desde: "", hasta: "" })} className="pb-1 underline">
+            limpiar
+          </button>
+        )}
       </div>
 
       {avisos.length > 0 && (
@@ -184,14 +220,22 @@ export default function CanteraClient({
           </section>
 
           <section className="mt-6">
-            <h2 className="text-sm font-semibold text-slate-700">Bochones — {elegido.nombre}</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-700">Bochones — {elegido.nombre}</h2>
+              {puedeEditar && (
+                <Link href={`/cantera/bochones/nuevo?y=${elegido.id}`} className="text-sm text-slate-800 underline">
+                  Cargar bochón
+                </Link>
+              )}
+            </div>
             <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Fin</th>
-                    <th className="px-3 py-2">Voladura</th>
+                    <th className="px-3 py-2">Fecha voladura</th>
+                    <th className="px-3 py-2">Voladura asoc.</th>
+                    <th className="px-3 py-2">Cantidad</th>
                     <th className="px-3 py-2">Metros perf.</th>
                     <th className="px-3 py-2">Monto</th>
                     <th className="px-3 py-2">Factura</th>
@@ -200,16 +244,19 @@ export default function CanteraClient({
                 <tbody className="divide-y divide-slate-100">
                   {bochones.map((b) => (
                     <tr key={b.codigo} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono">{b.codigo}</td>
-                      <td className="px-3 py-2">{b.fin ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono">
+                        <Link href={`/cantera/bochones/${b.codigo}`} className="text-slate-800 underline">{b.codigo}</Link>
+                      </td>
+                      <td className="px-3 py-2">{b.fecha ?? "—"}</td>
                       <td className="px-3 py-2">{b.voladura_codigo ?? "—"}</td>
+                      <td className="px-3 py-2">{b.cantidad ?? "—"}</td>
                       <td className="px-3 py-2">{b.metros_perforados ?? "—"}</td>
                       <td className="px-3 py-2">{money(b.monto)}</td>
                       <td className="px-3 py-2"><ChipCruce lectura={b.cruce} /></td>
                     </tr>
                   ))}
                   {bochones.length === 0 && (
-                    <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">Sin bochones en esta cantera.</td></tr>
+                    <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Sin bochones en esta cantera.</td></tr>
                   )}
                 </tbody>
               </table>
