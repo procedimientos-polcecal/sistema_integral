@@ -3,21 +3,15 @@ import { toneladasEstimadas, desvioContraPlanilla } from "./toneladas";
 
 describe("toneladasEstimadas", () => {
   it("aplica la fórmula de cantera con los datos de V01D625", () => {
-    // 36 pozos × 3 m × 2,65 (Dolomita) × 2,8 burden × 2,5 espaciamiento
+    // 108 m perforados × 2,65 (Dolomita) × 2,8 burden × 2,5 espaciamiento
     expect(
-      toneladasEstimadas({
-        pozos: 36,
-        metrosPorPozo: 3,
-        densidad: 2.65,
-        burden: 2.8,
-        espaciamiento: 2.5,
-      })
+      toneladasEstimadas({ metros: 108, densidad: 2.65, burden: 2.8, espaciamiento: 2.5 })
     ).toBeCloseTo(2003.4, 1);
   });
 
-  it("devuelve null si falta cualquiera de los cinco datos", () => {
-    const base = { pozos: 10, metrosPorPozo: 5, densidad: 2.7, burden: 2.8, espaciamiento: 2.5 };
-    expect(toneladasEstimadas({ ...base, pozos: null })).toBeNull();
+  it("devuelve null si falta cualquiera de los cuatro datos", () => {
+    const base = { metros: 50, densidad: 2.7, burden: 2.8, espaciamiento: 2.5 };
+    expect(toneladasEstimadas({ ...base, metros: null })).toBeNull();
     expect(toneladasEstimadas({ ...base, espaciamiento: undefined })).toBeNull();
   });
 });

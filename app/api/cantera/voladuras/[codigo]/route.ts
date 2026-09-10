@@ -57,10 +57,27 @@ export async function GET(
 
 const CAMPOS_FECHA = ["perf_inicio", "perf_fin", "vol_fecha_carga", "vol_fecha"] as const;
 const CAMPOS_NUM = [
-  "pozos", "metros_por_pozo", "burden_m", "espaciamiento_m", "perf_precio_usd_m", "perf_tc_usd",
-  "vol_pozos", "vol_metros_por_pozo", "vol_burden_m", "vol_espaciamiento_m", "vol_tc_usd",
-  "toneladas_planilla",
+  "burden_m", "espaciamiento_m", "perf_precio_usd_m", "perf_tc_usd",
+  "vol_burden_m", "vol_espaciamiento_m", "vol_tc_usd", "densidad_t_m3", "toneladas_planilla",
 ] as const;
+
+/** Un `[{pozos, metros}]` limpio, o `null` si no tiene forma. */
+function tramos(v: unknown): { pozos: number; metros: number }[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const out: { pozos: number; metros: number }[] = [];
+  for (const t of v) {
+    const pozos = Number((t as { pozos?: unknown })?.pozos);
+    const metros = Number((t as { metros?: unknown })?.metros);
+    if (!Number.isInteger(pozos) || pozos <= 0 || !isFinite(metros) || metros <= 0) return null;
+    out.push({ pozos, metros });
+  }
+  return out;
+}
+
+/** La cantidad total de pozos de un arreglo de tramos. */
+function totalPozos(tr: { pozos: number }[] | null): number | null {
+  return tr ? tr.reduce((s, t) => s + t.pozos, 0) : null;
+}
 
 export async function PATCH(
   request: Request,
@@ -87,6 +104,24 @@ export async function PATCH(
   for (const c of CAMPOS_NUM) if (c in b) cambios[c] = num(b[c]);
   if ("explosivos_raw" in b) cambios.explosivos_raw = texto(b.explosivos_raw);
   if ("observaciones" in b) cambios.observaciones = texto(b.observaciones);
+  if ("material" in b) cambios.material = texto(b.material);
+
+  // Los pozos por profundidad. El escalar `pozos` / `metros_por_pozo` se
+  // mantiene en sincronía —`pozos` = total, `metros_por_pozo` = null cuando hay
+  // tramos, que ya no es un promedio único— para no dejar dos números que digan
+  // cosas distintas.
+  if ("perf_tramos" in b) {
+    const tr = tramos(b.perf_tramos);
+    cambios.perf_tramos = tr;
+    cambios.pozos = totalPozos(tr);
+    if (tr) cambios.metros_por_pozo = null;
+  }
+  if ("vol_tramos" in b) {
+    const tr = tramos(b.vol_tramos);
+    cambios.vol_tramos = tr;
+    cambios.vol_pozos = totalPozos(tr);
+    if (tr) cambios.vol_metros_por_pozo = null;
+  }
 
   const { error: errUpd } = await supabase
     .from("cantera_voladuras")
@@ -107,7 +142,9 @@ export async function PATCH(
         precio_usd: num(r.precio_usd),
         orden: i,
       }))
-      .filter((r: { cantidad: number | null }) => r.cantidad !== null);
+      // El servicio de voladura (tipo "voladura") no se guarda: es el 4% de la
+      // base y se recalcula al leer.
+      .filter((r: { cantidad: number | null; tipo: string | null }) => r.cantidad !== null && r.tipo !== "voladura");
 
     const { error: errDel } = await supabase
       .from("cantera_consumos")

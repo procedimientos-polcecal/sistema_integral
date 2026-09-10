@@ -8,6 +8,7 @@
  * no cometer con los nombres de producto.
  */
 
+import { TASA_SERVICIO_VOLADURA } from "./costos";
 import type { TipoDeConsumo } from "./types";
 
 function num(v: unknown): number | null {
@@ -32,21 +33,26 @@ export function totalesDeConsumos(
   tc: number | null | undefined
 ): TotalesDeConsumos {
   const t = num(tc) ?? 0;
-  let totalUsd = 0;
   const porTipo: Record<string, { usd: number; ars: number }> = {};
+  let base = 0;
 
   for (const c of consumos) {
+    if (c.tipo === "voladura") continue; // el servicio se recalcula abajo
     const cant = num(c.cantidad);
     const precio = num(c.precio_usd);
     if (cant === null || precio === null) continue;
     const usd = cant * precio;
-    totalUsd += usd;
+    base += usd;
     const clave = (c.tipo ?? "otros_insumos") as TipoDeConsumo;
     porTipo[clave] ??= { usd: 0, ars: 0 };
     porTipo[clave].usd += usd;
-    porTipo[clave].ars += usd * t;
   }
 
+  // El servicio: 4% de la base, siempre calculado.
+  const servicioUsd = base * TASA_SERVICIO_VOLADURA;
+  if (base > 0) porTipo.voladura = { usd: servicioUsd, ars: 0 };
+
+  const totalUsd = base + servicioUsd;
   for (const k of Object.keys(porTipo)) porTipo[k].ars = porTipo[k].usd * t;
 
   return { totalUsd, totalArs: totalUsd * t, porTipo };

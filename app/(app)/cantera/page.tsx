@@ -9,6 +9,7 @@ import {
 } from "@/lib/cantera/consultas";
 import { montoBochon, montoPerforacion, montoVoladura, cruce } from "@/lib/cantera/costos";
 import { desvioContraPlanilla, toneladasEstimadas } from "@/lib/cantera/toneladas";
+import { metrosYPozos } from "@/lib/cantera/tramos";
 import type { Yacimiento } from "@/lib/cantera/types";
 import CanteraClient, { type FilaBochon, type FilaVoladura } from "./CanteraClient";
 
@@ -46,7 +47,7 @@ export default async function CanteraPage({
     ]);
 
     // Los consumos de cada voladura, para el monto de la etapa de voladura.
-    const consumosPorCodigo = new Map<string, { cantidad: number | null; precio_usd: number | null }[]>();
+    const consumosPorCodigo = new Map<string, Awaited<ReturnType<typeof traerConsumos>>>();
     await Promise.all(
       vs.map(async (v) => {
         consumosPorCodigo.set(v.codigo, await traerConsumos(supabase, v.codigo));
@@ -72,19 +73,21 @@ export default async function CanteraPage({
 function armarFilaVoladura(
   v: Awaited<ReturnType<typeof traerVoladurasDeYacimiento>>[number],
   yac: Yacimiento,
-  consumos: { cantidad: number | null; precio_usd: number | null }[]
+  consumos: { cantidad: number | null; precio_usd: number | null; tipo: string | null }[]
 ): FilaVoladura {
+  const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
+  const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
+  const metrosVol = vol.metros ?? perf.metros;
+
   const montoPerf = montoPerforacion({
-    pozos: v.pozos,
-    metrosPorPozo: v.metros_por_pozo,
+    metros: perf.metros,
     precioUsdM: v.perf_precio_usd_m,
     tc: v.perf_tc_usd,
   });
   const montoVol = montoVoladura(consumos, v.vol_tc_usd);
   const toneladas = toneladasEstimadas({
-    pozos: v.vol_pozos ?? v.pozos,
-    metrosPorPozo: v.vol_metros_por_pozo ?? v.metros_por_pozo,
-    densidad: yac.densidad_t_m3,
+    metros: metrosVol,
+    densidad: v.densidad_t_m3 ?? yac.densidad_t_m3,
     burden: v.vol_burden_m ?? v.burden_m ?? yac.burden_m,
     espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac.espaciamiento_m,
   });
@@ -93,7 +96,7 @@ function armarFilaVoladura(
     codigo: v.codigo,
     vol_fecha: v.vol_fecha,
     perf_fin: v.perf_fin,
-    pozos: v.pozos,
+    pozos: perf.pozos,
     montoPerf,
     montoVol,
     toneladas,
