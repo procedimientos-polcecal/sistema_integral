@@ -1135,6 +1135,10 @@ function detalleDeGoogle(cuerpo: string): string {
  * no es lo mismo un rechazo de la planilla (`bloqueadas`, que es lo único que se
  * le muestra a la persona) que algo que todavía no se pudo escribir y se va a
  * poder solo (`enEspera`). Ver `ResultadoExportacion`.
+ *
+ * **No toca el `sheets_pendiente` de un pedido cuyo alta todavía no llegó a la
+ * planilla** (`hoja_origen` nulo): ese pendiente es del alta. Ver el
+ * guardarraíl del final, que es el motivo por el que se lo dejó escrito.
  */
 export async function exportarRequerimiento(
   requerimientoId: string,
@@ -1377,14 +1381,53 @@ export async function exportarRequerimiento(
   if (bloqueadas.length > 0) partes.push(`la planilla rechazó: ${bloqueadas.join("; ")}`);
   if (enEspera.length > 0) partes.push(`se reintenta solo: ${enEspera.join("; ")}`);
 
-  await admin
-    .from("compras_requerimientos")
-    .update({
-      sheets_pendiente: partes.length > 0 ? partes.join(" — ") : null,
-      sheets_intentado_en: new Date().toISOString(),
-      ...(escritas.length > 0 ? { sheets_sincronizado_en: new Date().toISOString() } : {}),
-    })
-    .eq("id", requerimientoId);
+  // GUARDARRAÍL: el pendiente de un pedido cuyo alta todavía no llegó a la
+  // planilla NO se toca acá.
+  //
+  // Ese pendiente **es del alta** y sólo el alta lo puede resolver; pisarlo es
+  // borrar la única pista de por qué el pedido no está en la planilla. Y esta
+  // función lo pisaba de las dos maneras posibles, las dos peores:
+  //
+  //   - si el alta traía prioridad o empresa, el `enEspera` de más arriba
+  //     —"el RI todavía no aparece en el master; el IMPORTRANGE no refrescó y
+  //     las escribe el próximo reintento"— reemplazaba lo que había dicho
+  //     Google por un mensaje que promete que se arregla solo, cuando no se va
+  //     a arreglar nunca: el alta nunca se escribió. Quedaba rotando en la cola
+  //     para siempre y /compras/configuracion lo mostraba bajo "se reintenta
+  //     solo";
+  //   - si no traía ninguna de las dos —el caso normal: la prioridad no tiene
+  //     valor por defecto y "Quién paga" arranca sin definir— dejaba
+  //     `sheets_pendiente = null`, lo contaba como resuelto, y el pedido no
+  //     llegaba nunca a la planilla sin que quedara nada para mirar.
+  //
+  // El trabajo de arriba sí se hace igual, porque puede haber fila en el master
+  // aunque `hoja_origen` esté nulo (el alta escribió la fila y se cortó antes de
+  // guardarlo), y porque lo que quedó sin escribir se devuelve al que llamó y él
+  // lo muestra. Lo único que se protege es la columna.
+  //
+  // RIESGO ASUMIDO: si esta corrida encuentra un rechazo nuevo de la planilla
+  // para uno de estos pedidos, ese motivo no queda guardado —se lo lleva el
+  // valor de retorno y el log, no la columna—. Se acepta porque el pedido sigue
+  // en la cola por el pendiente del alta, así que va a volver a pasar por acá; y
+  // porque la alternativa —concatenar detrás de lo que había— hace crecer el
+  // campo sin techo en cada una de las corridas del cron.
+  const cambios: Record<string, string | null> = {};
+  if (r.hoja_origen) {
+    cambios.sheets_pendiente = partes.length > 0 ? partes.join(" — ") : null;
+    cambios.sheets_intentado_en = new Date().toISOString();
+  } else if (partes.length > 0) {
+    console.error(
+      `RI ${r.nro_ri}: no se encoló "${partes.join(" — ")}" porque el alta todavía no ` +
+        `llegó a la planilla y su pendiente no se pisa`
+    );
+  }
+  if (escritas.length > 0) cambios.sheets_sincronizado_en = new Date().toISOString();
+
+  // Un `update({})` es un PATCH sin cuerpo y PostgREST lo rechaza: con el
+  // guardarraíl puesto y nada escrito, no queda nada que actualizar.
+  if (Object.keys(cambios).length > 0) {
+    await admin.from("compras_requerimientos").update(cambios).eq("id", requerimientoId);
+  }
 
   return { escritas, bloqueadas, enEspera };
 }
