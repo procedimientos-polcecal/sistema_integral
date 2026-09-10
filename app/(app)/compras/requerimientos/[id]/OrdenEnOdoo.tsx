@@ -27,6 +27,47 @@ export interface OrdenDeOdoo {
   enlace: string | null;
 }
 
+/** Un producto comprable de Odoo, tal como lo trae el ensayo. */
+interface ProductoDelCatalogo {
+  id: number;
+  nombre: string;
+}
+
+type MotivoDeSugerencia = "aprendido" | "sugerido" | "sin_sugerencia";
+
+/**
+ * La forma del ensayo que importa acá: qué producto propone y con qué
+ * catálogo arma el selector. El resto de lo que trae el `GET` (precio,
+ * contexto, `armado`...) se muestra tal cual con `JSON.stringify` y no
+ * necesita tipo.
+ */
+interface EnsayoDeOrden {
+  producto?: {
+    sugerencia: {
+      producto: ProductoDelCatalogo | null;
+      motivo: MotivoDeSugerencia;
+      alternativas: ProductoDelCatalogo[];
+    };
+    catalogo: ProductoDelCatalogo[];
+  };
+  [clave: string]: unknown;
+}
+
+/**
+ * Por qué se llegó (o no) a una sugerencia. Las cuatro frases que la pantalla
+ * puede mostrar debajo del selector.
+ */
+function explicacionDeSugerencia(s: NonNullable<EnsayoDeOrden["producto"]>["sugerencia"]): string {
+  if (s.motivo === "aprendido") return "Ya se usó este producto para un pedido igual.";
+  if (s.motivo === "sugerido") return "Sugerido por la descripción del pedido.";
+  if (s.alternativas.length > 0) {
+    return `No hay una coincidencia clara. Estos se parecen: ${s.alternativas
+      .map((p) => p.nombre)
+      .join(", ")}.`;
+  }
+  return "Sin coincidencia: va como ART. VARIOS.";
+}
+
 export default function OrdenEnOdoo({
   requerimientoId,
   ordenes,
@@ -45,7 +86,10 @@ export default function OrdenEnOdoo({
   const router = useRouter();
   const [trabajando, setTrabajando] = useState(false);
   const [motivos, setMotivos] = useState<string[]>([]);
-  const [ensayo, setEnsayo] = useState<unknown>(null);
+  const [ensayo, setEnsayo] = useState<EnsayoDeOrden | null>(null);
+  // El producto elegido en el selector, como string porque así lo maneja un
+  // <select>. Vacío es el genérico: lo mismo que no mandar nada en el POST.
+  const [productoId, setProductoId] = useState("");
 
   const yaEstan = ordenes.length > 0;
 
@@ -56,6 +100,10 @@ export default function OrdenEnOdoo({
 
     const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Sin producto elegido va vacío y la ruta usa el genérico: el selector
+      // no cambia nada para quien no llegó a ensayar antes de crear.
+      body: JSON.stringify(productoId ? { producto_id: Number(productoId) } : {}),
     });
     const body = await res.json().catch(() => ({}));
     setTrabajando(false);
@@ -76,7 +124,11 @@ export default function OrdenEnOdoo({
     setTrabajando(true);
     setMotivos([]);
     const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo`);
-    setEnsayo(await res.json().catch(() => ({ error: "No se pudo leer el ensayo." })));
+    const body: EnsayoDeOrden = await res.json().catch(() => ({ error: "No se pudo leer el ensayo." }));
+    setEnsayo(body);
+    // Arranca en lo que sugiere el emparejador; Compras lo puede cambiar antes
+    // de crear. Sin sugerencia queda vacío, que es el genérico.
+    setProductoId(String(body.producto?.sugerencia.producto?.id ?? ""));
     setTrabajando(false);
   }
 
@@ -168,6 +220,36 @@ export default function OrdenEnOdoo({
           {motivos.map((m) => (
             <p key={m}>{m}</p>
           ))}
+        </div>
+      )}
+
+      {/*
+        El selector va junto al botón de crear, no en otra pantalla: se elige
+        el producto y se manda en el mismo gesto. Sólo aparece después de
+        ensayar, porque hasta entonces no hay catálogo con qué armarlo.
+      */}
+      {puedeEditar && ensayo?.producto && (
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            Producto de Odoo para la línea
+          </label>
+          <select
+            value={productoId}
+            onChange={(e) => setProductoId(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+          >
+            <option value="">ART. VARIOS (genérico)</option>
+            {[...ensayo.producto.catalogo]
+              .sort((a, b) => a.nombre.localeCompare(b.nombre))
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            {explicacionDeSugerencia(ensayo.producto.sugerencia)}
+          </p>
         </div>
       )}
 
