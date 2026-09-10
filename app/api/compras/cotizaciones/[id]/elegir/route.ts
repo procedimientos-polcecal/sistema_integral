@@ -145,6 +145,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   // El estado de compra va al master, como cualquier otro cambio.
   try {
+    // Sólo `bloqueadas`: es lo que la planilla rechazó y alguien tiene que ir a
+    // arreglar. `enEspera` —la fila del master que el IMPORTRANGE todavía no
+    // bajó— queda anotada en `sheets_pendiente` y se acomoda sola en el próximo
+    // reintento, así que mostrarla sería un cartel que aparece siempre y manda a
+    // corregir a mano algo que no hay que tocar.
     const { bloqueadas } = await exportarRequerimiento(ri.id);
     if (bloqueadas.length > 0) {
       avisos.push(

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   celdasDelAlta,
   celdasDePrioridadYEmpresa,
+  filaConEsteRi,
   filaDelMaster,
   type DatosDelAlta,
 } from "./formulario";
@@ -252,5 +253,94 @@ describe("prioridad y empresa, en las dos columnas a mano del master", () => {
     );
     expect(r.celdas).toEqual([]);
     expect(r.bloqueadas).toHaveLength(2);
+  });
+});
+
+describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
+  /**
+   * Las dos primeras columnas como las devuelve Google con `sinFormato`: la A es
+   * el N° de RI que calcula la formula y la B la marca temporal. Las filas 1 a 3
+   * no son datos.
+   */
+  const MARCA_1955 = 46274.400657;
+
+  const filas = (): string[][] => [
+    ["Nº RI", "Marca temporal"],
+    ["", ""],
+    ["", ""],
+    ["1954", "45900.5"],
+    ["1955", String(MARCA_1955)],
+    ["", ""],
+  ];
+
+  it("encuentra la fila del pedido y la reconoce como propia por la marca", () => {
+    // La 5 en base 1: el arreglo arranca en 0 y la primera respuesta es la 4.
+    expect(filaConEsteRi(filas(), 1955, MARCA_1955)).toEqual({ fila: 5, esNuestra: true });
+    expect(filaConEsteRi(filas(), 1954, 45900.5)).toEqual({ fila: 4, esNuestra: true });
+  });
+
+  it("tolera el redondeo del ida y vuelta del serial", () => {
+    // Se escribe como texto decimal y Google lo parsea a double: el ultimo bit
+    // puede moverse. 1e-6 de un dia son ocho centesimas de segundo.
+    const r = filaConEsteRi(filas(), 1955, MARCA_1955 + 1e-9);
+    expect(r).toEqual({ fila: 5, esNuestra: true });
+  });
+
+  it("una fila con el mismo numero y otra marca NO es la nuestra", () => {
+    // Es el caso que importa: el N° de RI lo asigna la base y el de la planilla
+    // lo calcula una formula, asi que si alguien manda el formulario de Google
+    // en el medio hay una fila con nuestro numero que es de otro pedido.
+    // Adoptarla dejaria este pedido apuntando a la fila ajena y sin fila propia.
+    const r = filaConEsteRi(filas(), 1955, 46280.123456);
+    expect(r).toEqual({ fila: 5, esNuestra: false });
+  });
+
+  it("una marca vacia tampoco cuenta como propia", () => {
+    // `Number("")` da 0 y es finito: sin comparar de verdad, una fila a medio
+    // escribir se habria dado por nuestra.
+    const conMarcaVacia: string[][] = [[], [], [], ["1954", ""]];
+    expect(filaConEsteRi(conMarcaVacia, 1954, 45900.5)).toEqual({ fila: 4, esNuestra: false });
+  });
+
+  it("un RI que no esta devuelve null, que es lo que deja escribir la fila nueva", () => {
+    expect(filaConEsteRi(filas(), 1956, 46275)).toBeNull();
+  });
+
+  it("las filas vacias no cuentan como el RI 0", () => {
+    // `Number("")` da 0: sin la guarda, un nro_ri invalido "coincidia" con la
+    // primera fila vacia y el alta se salteaba la escritura creyendo que ya
+    // estaba hecha.
+    expect(filaConEsteRi(filas(), 0, 46275)).toBeNull();
+    expect(filaConEsteRi(filas(), NaN, 46275)).toBeNull();
+  });
+
+  it("no mira el encabezado ni las dos filas que no son datos", () => {
+    // Si un numero aparece arriba de la fila 4 no es una respuesta: darlo por
+    // escrito dejaria el pedido sin fila propia y sin numero.
+    const conBasuraArriba: string[][] = [
+      ["1954", "45900.5"],
+      ["1954", "45900.5"],
+      ["1954", "45900.5"],
+      ["", ""],
+    ];
+    expect(filaConEsteRi(conBasuraArriba, 1954, 45900.5)).toBeNull();
+  });
+
+  it("compara el valor crudo y tolera espacios", () => {
+    expect(filaConEsteRi([[], [], [], [" 1954 ", " 45900.5 "]], 1954, 45900.5)).toEqual({
+      fila: 4,
+      esNuestra: true,
+    });
+  });
+
+  it("una lectura corta no encuentra nada en vez de romper", () => {
+    expect(filaConEsteRi([], 1954, 45900.5)).toBeNull();
+    expect(filaConEsteRi([["Nº RI"]], 1954, 45900.5)).toBeNull();
+  });
+
+  it("un serial invalido no puede reconocer ninguna fila como propia", () => {
+    // Un `created_at` que no es fecha da NaN. Que no reconozca su propia fila
+    // hace ruido; darla por propia enlazaria a ciegas.
+    expect(filaConEsteRi(filas(), 1955, NaN)).toEqual({ fila: 5, esNuestra: false });
   });
 });

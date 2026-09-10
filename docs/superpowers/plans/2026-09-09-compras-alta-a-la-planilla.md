@@ -967,22 +967,43 @@ Y dentro del `if (!error) {`, después del bloque que asienta el historial y **a
       // no entra al sistema. Si falla, el alta NO se voltea —el pedido ya está
       // guardado— y el motivo queda anotado en `sheets_pendiente`, que es lo
       // que el reintento de cada sincronización vuelve a intentar.
+      //
+      // `pendiente` y `avisar` son dos cosas distintas y acá se wirean por
+      // separado. `exportarAltaAlFormulario` ya las separa —ver `ResultadoAlta`—
+      // justamente para que esta ruta no le muestre a quien cargó el pedido lo
+      // que se arregla solo: que el master todavía no haya bajado la fila es lo
+      // ESPERABLE, va a la cola del reintento y no es noticia para nadie. Un
+      // cartel que aparece siempre enseña a ignorar los carteles, y encima
+      // manda a corregir a mano algo que no hay que tocar.
+      let pendiente: string | null = null;
       let avisoSheets: string | null = null;
       try {
-        const { pendiente } = await exportarAltaAlFormulario(data.id as string);
-        avisoSheets = pendiente;
+        const alta = await exportarAltaAlFormulario(data.id as string);
+        pendiente = alta.pendiente;
+        avisoSheets = alta.avisar;
       } catch (e) {
-        avisoSheets = e instanceof Error ? e.message : String(e);
+        // Que lance sí es un fallo de verdad: va a los dos lados. La función
+        // promete no lanzar, así que si lanza es algo que nadie previó.
+        pendiente = e instanceof Error ? e.message : String(e);
+        avisoSheets = pendiente;
       }
 
-      if (avisoSheets) {
+      // A la cola va todo lo que quedó sin escribir, lo esperable incluido: el
+      // pendiente ES la cola del reintento, y es lo que hace que prioridad y
+      // empresa se acomoden solas.
+      if (pendiente) {
         await admin
           .from("compras_requerimientos")
           .update({
-            sheets_pendiente: avisoSheets,
+            sheets_pendiente: pendiente,
             sheets_intentado_en: new Date().toISOString(),
           })
           .eq("id", data.id as string);
+      }
+
+      // Al log sólo lo que hay que mirar. Lo esperable no es un error, y
+      // loguearlo en cada alta entrena a no leer los logs.
+      if (avisoSheets) {
         console.error(`RI ${data.nro_ri}: no se pudo escribir en la planilla: ${avisoSheets}`);
       }
 

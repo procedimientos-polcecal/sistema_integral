@@ -244,6 +244,11 @@ export function celdasDelAlta(
  * el orden de las respuestas y sólo agrega al final; pero la fila del master
  * puede no existir todavía —`IMPORTRANGE` tarda en refrescar—, y por eso quien
  * escribe **verifica antes de escribir** en vez de confiar en la cuenta.
+ *
+ * Por la misma razón la cuenta **no se guarda en la base**: `sheets_fila` lleva
+ * la fila de la hoja de respuestas, que es un número que se leyó de vuelta. Un
+ * dato guardado ya no tiene a la vista que es una suposición, y el que lo lea
+ * después va a escribir en esa fila sin comprobar nada.
  */
 export function filaDelMaster(filaDeRespuestas: number): number | null {
   const fila = filaDeRespuestas - 2;
@@ -312,6 +317,69 @@ const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? ""
 const PRIMERA_FILA_DE_DATOS = 4;
 
 /**
+ * Cuánto puede diferir un serial leído de vuelta del que se escribió.
+ *
+ * Se escribe como texto decimal, Google lo parsea a un `double` y lo devuelve
+ * como número: el ida y vuelta puede mover el último bit. 1e-6 de un día son
+ * ocho centésimas de segundo — más fino que cualquier diferencia real entre dos
+ * respuestas, y más grueso que el error de redondeo.
+ */
+const TOLERANCIA_DEL_SERIAL = 1e-6;
+
+/**
+ * Si este pedido ya tiene su fila en la hoja de respuestas, cuál es.
+ *
+ * Existe para que llamar dos veces al alta no pueda escribir dos filas para el
+ * mismo pedido. El agujero era éste: la fila se escribe en la planilla y
+ * **después** se guarda en la base en qué fila quedó; si ese `update` falla —o
+ * el proceso se corta en el medio—, la fila ya está en la planilla y la base no
+ * lo sabe, así que un reintento escribía otra. Es la doble numeración que la
+ * lectura de control quiere evitar, y no la detectaba porque cada fila, por
+ * separado, estaba bien numerada.
+ *
+ * **No alcanza con que el número coincida**, y por eso también entra la marca
+ * temporal. El N° de RI lo asigna la base y el de la planilla lo calcula una
+ * fórmula: si alguien manda el formulario de Google entre el alta y esta
+ * escritura, hay una fila con nuestro número que **no es la nuestra**. Adoptarla
+ * sería enlazar al que se le parece —el pedido quedaría apuntando a la fila de
+ * otro y sin fila propia—, que es justo lo que el módulo prohíbe. La marca la
+ * escribe el alta con el `created_at` del pedido, así que identifica la fila sin
+ * ambigüedad, y se lee en la misma llamada que el número: no cuesta nada.
+ *
+ * Se busca desde `PRIMERA_FILA_DE_DATOS`: la 1 es el encabezado y la 2 y la 3 no
+ * son datos, así que un número que aparezca ahí no es una respuesta.
+ *
+ * Se comparan los valores crudos y no el texto formateado, por lo mismo que
+ * explica `nroDeControl`: `"1.954,00"` limpiado a mano da 195400.
+ *
+ * `filas` son las columnas `A` (el N°) y `B` (la marca) leídas juntas. Que sean
+ * esas dos es la misma suposición que ya hacían la búsqueda de la fila libre
+ * (`B:B`) y la lectura de control (`A{fila}`).
+ */
+export function filaConEsteRi(
+  filas: string[][],
+  nroRi: number,
+  serialDeLaMarca: number
+): { fila: number; esNuestra: boolean } | null {
+  // Un `nroRi` que no es un número positivo no puede "estar": sin esta guarda,
+  // `Number("")` da 0 y un cero coincidiría con la primera fila vacía.
+  if (!Number.isFinite(nroRi) || nroRi <= 0) return null;
+
+  for (let i = PRIMERA_FILA_DE_DATOS - 1; i < filas.length; i++) {
+    if (Number(String(filas[i]?.[0] ?? "").trim()) !== nroRi) continue;
+
+    const marca = Number(String(filas[i]?.[1] ?? "").trim());
+    const esNuestra =
+      Number.isFinite(serialDeLaMarca) &&
+      Number.isFinite(marca) &&
+      Math.abs(marca - serialDeLaMarca) < TOLERANCIA_DEL_SERIAL;
+
+    return { fila: i + 1, esNuestra };
+  }
+  return null;
+}
+
+/**
  * Cómo se nombra cada planilla en un motivo, con el id que hay que ir a mirar.
  *
  * El mensaje de Google no alcanza solo: un 404 dice "conviene revisar el ID
@@ -330,12 +398,16 @@ const PLANILLA = {
  *
  * Un solo `catch` para cinco operaciones sobre dos planillas distintas dejaba
  * motivos que no se podían accionar. Ver `PLANILLA`.
+ *
+ * El original viaja en `cause`: el `Error` nuevo se queda con el mensaje, y sin
+ * eso se perdían el stack y el tipo del que de verdad falló —que es lo único que
+ * sirve cuando lo que se rompió está dos capas más abajo, en `fetch`—.
  */
 async function paso<T>(cual: string, hacer: () => Promise<T>): Promise<T> {
   try {
     return await hacer();
   } catch (e) {
-    throw new Error(`${cual}: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`${cual}: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
   }
 }
 
@@ -408,6 +480,11 @@ function nroDeControl(valores: string[][]): { texto: string; nro: number } {
  * `try` empezando más abajo esta función sí podía lanzar aunque el docstring
  * prometiera que no.
  *
+ * **Llamarla dos veces no duplica nada.** Antes de escribir busca este N° de RI
+ * en la columna del N° de la hoja de respuestas; si ya está, no escribe otra
+ * fila y sigue con la verificación y con el master, que son los pasos que
+ * podrían haber quedado a medias. Ver `filaConEsteRi`.
+ *
  * RIESGO ASUMIDO
  *
  * Prioridad y empresa son las dos columnas del master que no salen de la
@@ -426,10 +503,12 @@ export async function exportarAltaAlFormulario(
   }
 
   // Fuera del `try` para que el `catch` la pueda devolver. Si falla la lectura
-  // de vuelta, el alta YA está en la planilla: contestar `fila: null` haría
-  // pensar que no se escribió, y como el `update` de `sheets_fila` ya corrió, un
-  // reintento podría escribir una segunda fila para el mismo pedido — la doble
-  // numeración que la verificación quiere justamente evitar.
+  // de vuelta, el alta YA está en la planilla y contestar `fila: null` haría
+  // pensar que no se escribió.
+  //
+  // Que un reintento no duplique la fila ya no depende de esto: lo garantiza
+  // `filaConEsteRi`, que busca el N° de RI en la columna A antes de escribir.
+  // Devolverla igual sigue sirviendo para saber dónde quedó sin ir a mirar.
   let filaEscrita: number | null = null;
 
   try {
@@ -471,11 +550,25 @@ export async function exportarAltaAlFormulario(
     let nombre = "";
     let apellido = "";
     if (r.solicitante_id) {
-      const { data: u } = await admin
+      const { data: u, error: errorUsuario } = await admin
         .from("usuarios")
         .select("nombre, apellido")
         .eq("id", r.solicitante_id as string)
         .maybeSingle();
+      // El `error` no se descarta, igual que en los otros dos `select`. Acá la
+      // consecuencia es más leve —se cae al split de `solicitante_nombre`, que
+      // parte "Juan Perez" en dos y suele quedar bien— pero justamente por eso
+      // un fallo de red era indistinguible de "el usuario no tiene nombre
+      // cargado", y el alta se escribía con el nombre partido a mano sin que
+      // nada lo dijera.
+      if (errorUsuario) {
+        return {
+          fila: null,
+          ...falla(
+            `no se pudo leer el nombre de quien pidió: ${errorUsuario.message}`
+          ),
+        };
+      }
       nombre = (u?.nombre as string) ?? "";
       apellido = (u?.apellido as string) ?? "";
     }
@@ -492,6 +585,11 @@ export async function exportarAltaAlFormulario(
         )
       )[0] ?? [];
 
+    // Se leen las dos primeras columnas de una sola vez, porque hacen falta las
+    // dos y por cosas distintas: la `A` es el N° de RI —para no escribir dos
+    // veces el mismo pedido, ver `filaConEsteRi`— y la `B` es la marca temporal,
+    // que es la que dice dónde termina lo cargado.
+    //
     // La fila libre se busca por la marca temporal y NO por la columna del N°
     // de RI: esa columna tiene una fórmula en todas las filas de la grilla, y
     // aunque hoy devuelva vacío para las filas sin marca, depender de eso es
@@ -502,63 +600,107 @@ export async function exportarAltaAlFormulario(
     // se corre el mismo riesgo que ya pasó en Despacho con una columna de fecha:
     // un formato particular puede mostrar vacía una celda que sí tiene serial, y
     // ahí la cuenta de la fila libre se corre y una respuesta nueva pisa a otra. El
-    // valor crudo no tiene ese problema y no cuesta nada pedirlo así.
-    const marcas = await paso(`al buscar la fila libre en ${PLANILLA.respuestas}`, () =>
-      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!B:B`, { sinFormato: true })
+    // valor crudo no tiene ese problema y no cuesta nada pedirlo así. Y para
+    // comparar el N° de RI hace falta igual.
+    const columnas = await paso(`al buscar la fila libre en ${PLANILLA.respuestas}`, () =>
+      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:B`, { sinFormato: true })
     );
-    const fila = filaSiguienteSegunLaColumna(marcas);
-    if (fila < PRIMERA_FILA_DE_DATOS) {
+
+    // Si este pedido ya tiene su fila, no se escribe otra: se sigue con la
+    // verificación y con el master, que son los pasos que pueden haber quedado a
+    // medias. Con esto, llamar dos veces a esta función no puede duplicar nada.
+    //
+    // Y si hay una fila con este número que **no** es la nuestra, no se escribe
+    // ni se adopta: el número ya está tomado —lo más probable es que alguien
+    // haya mandado el formulario de Google en el medio—, así que una fila nueva
+    // saldría numerada distinto de lo que dice la base y adoptar la ajena
+    // dejaría el pedido apuntando a la fila de otro. Se dice y se corrige a
+    // mano; escribir de nuevo sólo agregaría una fila para tirar. Ver
+    // `filaConEsteRi`.
+    //
+    // El serial se calcula igual que en `celdasDelAlta` y con el mismo
+    // `created_at`, que es lo que hace que reconozca su propia fila. Si algún
+    // día dejaran de coincidir, esto no la reconocería y el alta se caería con
+    // el mensaje de abajo: ruidoso, pero nunca duplicando ni enlazando mal, que
+    // es de qué lado conviene errar.
+    const serialMarca = serialDelInstante(new Date((r.created_at as string) ?? Date.now()));
+    const yaEstaba = filaConEsteRi(columnas, r.nro_ri as number, serialMarca);
+
+    if (yaEstaba && !yaEstaba.esNuestra) {
       return {
         fila: null,
         ...falla(
-          `la columna de la marca temporal volvió con muy poco y la fila libre daría la ` +
-            `${fila}, cuando los datos empiezan en la ${PRIMERA_FILA_DE_DATOS}: no se ` +
-            `escribió nada, hay que revisar que se esté leyendo la hoja ` +
-            `"${HOJA_RESPUESTAS}" y que la lectura no haya vuelto corta`
+          `la fila ${yaEstaba.fila} de la hoja de respuestas ya tiene el RI ${r.nro_ri} y no es ` +
+            `la de este pedido: no se escribió nada para no quedar enlazado a la fila de otro, ` +
+            `y hay que revisar la numeración a mano`
         ),
       };
     }
 
-    const armado = celdasDelAlta(
-      encabezado,
-      {
-        nro_ri: r.nro_ri as number,
-        nombre,
-        apellido,
-        area,
-        descripcion: r.descripcion as string,
-        codigo: (r.codigo as string | null) ?? null,
-        cantidad: (r.cantidad as number | null) ?? null,
-        ubicacion: (r.compras_ubicaciones as unknown as { nombre: string } | null)?.nombre ?? null,
-        fecha_necesidad: (r.fecha_necesidad as string | null) ?? null,
-        detalle_extra: (r.detalle_extra as string | null) ?? null,
-        imagen_url: (r.imagen_url as string | null) ?? null,
-        creado: new Date((r.created_at as string) ?? Date.now()),
-      },
-      fila
-    );
+    let filaDelAlta: number;
 
-    if (!armado.ok) {
-      return {
-        fila: null,
-        ...falla("no se pudo armar la fila del alta: " + armado.motivos.join("; ")),
-      };
+    if (yaEstaba) {
+      filaDelAlta = yaEstaba.fila;
+    } else {
+      const libre = filaSiguienteSegunLaColumna(
+        // Sólo la `B`: `filaSiguienteSegunLaColumna` mira la primera celda de
+        // cada fila que se le pasa.
+        columnas.map((f) => [String(f?.[1] ?? "")])
+      );
+      if (libre < PRIMERA_FILA_DE_DATOS) {
+        return {
+          fila: null,
+          ...falla(
+            `la columna de la marca temporal volvió con muy poco y la fila libre daría la ` +
+              `${libre}, cuando los datos empiezan en la ${PRIMERA_FILA_DE_DATOS}: no se ` +
+              `escribió nada, hay que revisar que se esté leyendo la hoja ` +
+              `"${HOJA_RESPUESTAS}" y que la lectura no haya vuelto corta`
+          ),
+        };
+      }
+
+      const armado = celdasDelAlta(
+        encabezado,
+        {
+          nro_ri: r.nro_ri as number,
+          nombre,
+          apellido,
+          area,
+          descripcion: r.descripcion as string,
+          codigo: (r.codigo as string | null) ?? null,
+          cantidad: (r.cantidad as number | null) ?? null,
+          ubicacion: (r.compras_ubicaciones as unknown as { nombre: string } | null)?.nombre ?? null,
+          fecha_necesidad: (r.fecha_necesidad as string | null) ?? null,
+          detalle_extra: (r.detalle_extra as string | null) ?? null,
+          imagen_url: (r.imagen_url as string | null) ?? null,
+          creado: new Date((r.created_at as string) ?? Date.now()),
+        },
+        libre
+      );
+
+      if (!armado.ok) {
+        return {
+          fila: null,
+          ...falla("no se pudo armar la fila del alta: " + armado.motivos.join("; ")),
+        };
+      }
+
+      // Se escribe en la fila que devolvió `celdasDelAlta`, no en la de acá: la
+      // fórmula del N° de RI la lleva horneada adentro.
+      await paso(`al escribir ${PLANILLA.respuestas}`, () =>
+        escribirCeldas(
+          idFormulario(),
+          armado.celdas.map((c) => ({
+            pestana: HOJA_RESPUESTAS,
+            columna: c.columna,
+            fila: armado.fila,
+            valor: c.valor,
+          }))
+        )
+      );
+      filaDelAlta = armado.fila;
     }
-
-    // Se escribe en la fila que devolvió `celdasDelAlta`, no en la de acá: la
-    // fórmula del N° de RI la lleva horneada adentro.
-    await paso(`al escribir ${PLANILLA.respuestas}`, () =>
-      escribirCeldas(
-        idFormulario(),
-        armado.celdas.map((c) => ({
-          pestana: HOJA_RESPUESTAS,
-          columna: c.columna,
-          fila: armado.fila,
-          valor: c.valor,
-        }))
-      )
-    );
-    filaEscrita = armado.fila;
+    filaEscrita = filaDelAlta;
 
     // Qué número calculó la planilla. Si no es el que asignó el sistema, hay un
     // hueco o una fila de más: se dice, en vez de dejar dos números para el
@@ -566,12 +708,12 @@ export async function exportarAltaAlFormulario(
     const escrito = await paso(
       `al leer de vuelta el número que calculó ${PLANILLA.respuestas}`,
       () =>
-        leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${armado.fila}`, { sinFormato: true })
+        leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${filaDelAlta}`, { sinFormato: true })
     );
     const numerada = nroDeControl(escrito);
     if (numerada.nro !== r.nro_ri) {
       return {
-        fila: armado.fila,
+        fila: filaDelAlta,
         ...falla(
           `la planilla numeró esa fila como ${numerada.texto || "(vacío)"} y el sistema ` +
             `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`
@@ -579,18 +721,33 @@ export async function exportarAltaAlFormulario(
       };
     }
 
+    // Se guarda **el hecho y no la cuenta**: la hoja de respuestas y la fila que
+    // se escribió ahí, que es un número que se leyó de vuelta. Antes se guardaba
+    // el master con `fila − 2`, que es una suposición sobre qué va a hacer el
+    // `QUERY`; y el atajo de `exportarRequerimiento` —`hoja_origen` es el master,
+    // así que `sheets_fila` sirve— la tomaba sin verificar la columna A. O sea
+    // que el reintento le escribía prioridad y empresa a una fila del master que
+    // nadie comprobó, que es justo lo que `escribirPrioridadYEmpresa` se niega a
+    // hacer acá abajo: escribir a ciegas es ponerle la prioridad de este pedido
+    // a otro.
+    //
+    // Con la hoja de respuestas guardada, ese atajo no aplica y
+    // `exportarRequerimiento` resuelve la fila con `filaEnMaster`, que la busca
+    // por la columna A. La importación después sobreescribe las dos columnas con
+    // la pestaña de área, como hace con todos los RI, y eso es lo que
+    // corresponde: es donde se escriben las columnas de compra.
     await admin
       .from("compras_requerimientos")
       .update({
-        hoja_origen: HOJA_MASTER,
-        sheets_fila: filaDelMaster(armado.fila),
+        hoja_origen: HOJA_RESPUESTAS,
+        sheets_fila: filaDelAlta,
         sheets_sincronizado_en: new Date().toISOString(),
       })
       .eq("id", requerimientoId);
 
     return {
-      fila: armado.fila,
-      ...(await escribirPrioridadYEmpresa(admin, r.id as string, armado.fila)),
+      fila: filaDelAlta,
+      ...(await escribirPrioridadYEmpresa(admin, r.id as string, filaDelAlta)),
     };
   } catch (e) {
     return { fila: filaEscrita, ...falla(e instanceof Error ? e.message : String(e)) };
