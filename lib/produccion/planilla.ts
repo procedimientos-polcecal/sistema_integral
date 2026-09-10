@@ -1,6 +1,6 @@
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 import { claveDeNombre } from "@/lib/core/catalogo";
-import type { Producto } from "./types";
+import type { RenglonDePapel } from "./types";
 
 /**
  * Armar las filas de los resúmenes de la planilla. Sin red: todo lo que decide
@@ -15,7 +15,7 @@ import type { Producto } from "./types";
  *
  * `Resumen Rotura` tiene además un segundo bloque con los porcentajes que
  * arranca en la columna S, marcado en la fila 3 con "% ROTURA / PRODUCCIÓN".
- * **Los nombres de los productos se repiten en los dos bloques**, así que buscar
+ * **Los nombres de los renglonesDePapel se repiten en los dos bloques**, así que buscar
  * el nombre en toda la fila de encabezados devolvería siempre el primero: por eso
  * `celdasDeResumen` recibe una ventana.
  */
@@ -106,7 +106,7 @@ export interface OpcionesDeResumen {
 
 export function celdasDeResumen(
   encabezados: readonly string[],
-  productos: readonly Producto[],
+  renglonesDePapel: readonly RenglonDePapel[],
   valores: Readonly<Record<string, number | string>>,
   opciones: OpcionesDeResumen = {}
 ): FilaDeResumen {
@@ -117,7 +117,7 @@ export function celdasDeResumen(
   const celdas: CeldaDeResumen[] = [];
   const sinColumna: string[] = [];
 
-  for (const p of productos) {
+  for (const p of renglonesDePapel) {
     // Null es una decisión: este producto no se exporta. No es un faltante.
     if (!p.nombre_planilla) continue;
 

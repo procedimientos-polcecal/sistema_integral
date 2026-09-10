@@ -19,7 +19,7 @@ describe("la cantidad del deposito: obligatoria y no negativa", () => {
     expect(interpretarCantidadDeDeposito("1.234,5")).toEqual({ ok: true, valor: 1234.5 });
   });
 
-  it("cero es un deposito valido: hay productos que se cuentan en cero", () => {
+  it("cero es un deposito valido: hay renglonesDePapel que se cuentan en cero", () => {
     expect(interpretarCantidadDeDeposito("0")).toEqual({ ok: true, valor: 0 });
   });
 

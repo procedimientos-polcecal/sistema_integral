@@ -35,6 +35,7 @@ Cada uno es un archivo chico, sin dependencias y con sus tests.
 | `lib/core/cuerpo.ts` | El cuerpo JSON de un request sin reventar si no hay | Las 58 rutas que lo parseaban a pelo |
 | `lib/core/paginado.ts` | Traer más de 1000 filas, y qué página pidió el navegador | Todo |
 | `lib/core/access.ts` | Qué módulos ve alguien y con qué nivel, y quién administra el SdG | El Sidebar, los siete módulos, `/administracion` |
+| `lib/core/productos.ts` | Qué es un producto, y qué material/granulometría/envase tiene | Producción y Despacho |
 
 ### Por qué archivos separados y no uno de utilidades
 

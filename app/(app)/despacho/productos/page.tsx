@@ -1,31 +1,44 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelDespachoDe } from "@/lib/despacho/auth";
-import {
-  productosUsadosEnOrdenes,
-  traerMapeoDeProductos,
-} from "@/lib/despacho/consultas";
-import type { ProductoDeDespacho } from "@/lib/despacho/types";
+import { productosUsadosEnOrdenes } from "@/lib/despacho/consultas";
+import { clasificacionDelProducto, traerCatalogoDeProductos } from "@/lib/core/productos";
+import type { Producto } from "@/lib/core/types";
 import ProductosClient from "./ProductosClient";
 
 /**
- * El mapeo de productos: qué material, granulometría y envase es cada producto
- * de Odoo.
+ * Clasificar el catálogo: qué material, granulometría y envase es cada producto.
  *
- * Es la pantalla de trabajo de un admin, y su lista de pendientes son los
- * productos **que ya aparecieron en órdenes y nadie clasificó**, ordenados por
- * cuántas órdenes los usaron. Mapear los primeros cinco cubre casi todo el
- * volumen; listar los 432 productos de Odoo dejaría el trabajo real perdido en
- * el medio.
+ * El catálogo es del núcleo y viene **sembrado** con los 49 productos que
+ * salieron en 180 días (la migración 20260910104534), así que el trabajo de esta
+ * pantalla no es dar de alta un mapeo: es ponerle la terna a filas que ya
+ * existen. Se ordenan por cuántas órdenes de carga las usaron, porque
+ * clasificar las primeras cinco cubre casi todo el volumen.
+ *
+ * La terna puede quedar vacía y eso es un estado válido: `MINERALES
+ * ECOLOGICOS` —el más despachado de todos— no es material × granulometría ×
+ * envase, igual que `BINDER` y `TOSCA`. Esos se van a ver con su nombre de Odoo
+ * para siempre, y está bien.
+ *
+ * El puente con los renglones del papel de Producción **no está acá**: lo edita
+ * `/produccion/productos`, que es la pantalla de quien sabe qué renglón del
+ * parte agrupa a qué productos.
  */
 
-export interface SinClasificar {
+/** Una fila del catálogo con cuántas órdenes de carga la usaron. */
+export interface FilaDeCatalogo {
+  producto: Producto;
+  ordenes: number;
+}
+
+/** Un producto que apareció en una orden y no está en el catálogo. */
+export interface FueraDelCatalogo {
   odoo_product_id: number | null;
   producto_raw: string | null;
   ordenes: number;
 }
 
-export default async function MapeoPage() {
+export default async function CatalogoPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -36,23 +49,42 @@ export default async function MapeoPage() {
   // esto la pantalla se abre y RLS devuelve el error al guardar, que es peor.
   if (nivel !== "admin") redirect("/despacho");
 
-  const [mapeo, usados, productosDeProduccion] = await Promise.all([
-    traerMapeoDeProductos(supabase),
+  const [catalogo, usados] = await Promise.all([
+    traerCatalogoDeProductos(supabase),
     productosUsadosEnOrdenes(supabase),
-    // Para el puente con el catálogo de fábrica. Es opcional: el granel quedó
-    // afuera de Producción a propósito y no tiene fila allá.
-    supabase.from("produccion_productos").select("id, nombre").order("orden"),
   ]);
 
-  const mapeados = new Set(mapeo.map((m) => m.odoo_product_id));
+  const ordenesPorOdoo = new Map<number, number>();
+  for (const u of usados) {
+    if (u.odoo_product_id !== null) ordenesPorOdoo.set(u.odoo_product_id, u.ordenes);
+  }
+
+  const filas: FilaDeCatalogo[] = catalogo.map((producto) => ({
+    producto,
+    ordenes: producto.odoo_product_id !== null
+      ? (ordenesPorOdoo.get(producto.odoo_product_id) ?? 0)
+      : 0,
+  }));
+
+  // Primero lo que más se usó: es la lista de trabajo. Los sembrados que todavía
+  // no aparecieron en ninguna orden quedan al final, ordenados por nombre.
+  const porVolumen = (a: FilaDeCatalogo, b: FilaDeCatalogo) =>
+    b.ordenes - a.ordenes || a.producto.nombre.localeCompare(b.producto.nombre);
+
+  const enElCatalogo = new Set(
+    catalogo.map((p) => p.odoo_product_id).filter((x): x is number => x !== null)
+  );
 
   return (
     <ProductosClient
-      mapeo={mapeo as ProductoDeDespacho[]}
-      sinClasificar={usados.filter(
-        (u) => u.odoo_product_id === null || !mapeados.has(u.odoo_product_id)
+      sinClasificar={filas.filter((f) => clasificacionDelProducto(f.producto) === null).sort(porVolumen)}
+      clasificados={filas.filter((f) => clasificacionDelProducto(f.producto) !== null).sort(porVolumen)}
+      // Un producto nuevo de Odoo que ya llegó en un remito y no está sembrado.
+      // Las órdenes sin remito no tienen producto de Odoo: se muestran para que
+      // se vea por qué no se pueden clasificar, pero no se pueden sumar.
+      fueraDelCatalogo={usados.filter(
+        (u) => u.odoo_product_id === null || !enElCatalogo.has(u.odoo_product_id)
       )}
-      productosDeProduccion={(productosDeProduccion.data ?? []) as { id: string; nombre: string }[]}
     />
   );
 }

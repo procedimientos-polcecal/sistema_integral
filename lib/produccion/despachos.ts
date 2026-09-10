@@ -24,11 +24,11 @@ export function totalesDeDespacho(renglones: readonly Despacho[]): TotalesDeDesp
   };
 
   for (const r of renglones) {
-    if (!r.producto_id) {
+    if (!r.renglon_papel_id) {
       t.sinProducto.push(r);
       continue;
     }
-    const id = r.producto_id;
+    const id = r.renglon_papel_id;
     t.despachado[id] = (t.despachado[id] ?? 0) + (r.bultos ?? 0);
     t.roturaBolsa[id] = (t.roturaBolsa[id] ?? 0) + (r.rotura_bolsa ?? 0);
     t.roturaBolson[id] = (t.roturaBolson[id] ?? 0) + (r.rotura_bolson ?? 0);
@@ -50,6 +50,38 @@ export function roturaTotal(t: TotalesDeDespacho): Record<string, number> {
   const salida: Record<string, number> = {};
   for (const id of new Set([...Object.keys(t.roturaBolsa), ...Object.keys(t.roturaBolson)])) {
     salida[id] = (t.roturaBolsa[id] ?? 0) + (t.roturaBolson[id] ?? 0);
+  }
+  return salida;
+}
+
+/**
+ * Los kilos por unidad de cada renglón del papel, a partir de sus productos.
+ *
+ * Ya no es una columna del renglón: el kg por unidad es del **producto**, y un
+ * renglón del papel puede agrupar varios —si el papel cuenta "cal en bolsón" en
+ * un solo renglón, ahí caen las tres variantes que Odoo despacha—.
+ *
+ * **Sólo vale si los productos del renglón coinciden.** Si dos declaran kilos
+ * distintos, el renglón queda en null y la comprobación no corre para él:
+ * elegir uno de los dos, o promediarlos, sería inventar el número contra el que
+ * se avisa, y un aviso que sale de un número inventado es peor que no avisar.
+ * Lo mismo si ninguno tiene el kg cargado — el del bolsón sigue sin confirmar.
+ */
+export function kilosQueCoinciden(
+  filas: readonly { renglon_papel_id: string; kg_por_unidad: number | null }[]
+): Record<string, number | null> {
+  const porRenglon = new Map<string, Set<number>>();
+  for (const f of filas) {
+    const vistos = porRenglon.get(f.renglon_papel_id) ?? new Set<number>();
+    if (f.kg_por_unidad !== null && f.kg_por_unidad !== undefined) {
+      vistos.add(Number(f.kg_por_unidad));
+    }
+    porRenglon.set(f.renglon_papel_id, vistos);
+  }
+
+  const salida: Record<string, number | null> = {};
+  for (const [renglon, kilos] of porRenglon) {
+    salida[renglon] = kilos.size === 1 ? [...kilos][0] : null;
   }
   return salida;
 }
@@ -83,9 +115,9 @@ export function desajustesDeKilos(
   const salida: DesajusteDeKilos[] = [];
 
   for (const r of renglones) {
-    if (!r.producto_id || r.kilos === null || r.bultos === null) continue;
+    if (!r.renglon_papel_id || r.kilos === null || r.bultos === null) continue;
 
-    const kg = kgPorUnidad.get(r.producto_id);
+    const kg = kgPorUnidad.get(r.renglon_papel_id);
     // Sin kg por unidad no hay contra qué comparar, y no se inventa un número:
     // el del bolsón está sin confirmar. `== null` distingue esto de un
     // kg_por_unidad en 0 (que no debería existir en el catálogo, pero si

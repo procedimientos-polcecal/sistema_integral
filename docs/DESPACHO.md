@@ -64,8 +64,9 @@ remito que se le parece**: un enlace equivocado no se nota nunca.
 metidos dentro del nombre del producto de Odoo (`CARBONATO DE CALCIO 0-1 BOLSÓN
 (NA)`), con espacios al final y sufijos `(NA)`/`(EA)`. Una expresión regular
 sobre eso es la forma segura de que un día `CAL EN TOLVA` entre como envase
-Bolsa. La tabla `despacho_productos` la carga una persona, y lo que falta se
-muestra **"sin clasificar"**.
+Bolsa. La clasificación de cada producto la pone una persona en el catálogo
+—`productos`, del núcleo, compartido con Producción desde el 10/09/2026— y lo
+que falta se muestra **"sin clasificar"**.
 
 **Un solo botón por fila.** La cola del día ofrece el próximo horario que falta
 y no los cuatro. Con un camión esperando, cuatro botones son cuatro
@@ -119,7 +120,8 @@ Cuatro cosas que conviene no volver a averiguar:
 | | |
 |---|---|
 | Estado, tiempos y próximo horario | `lib/despacho/orden.ts` |
-| Material / granulometría / envase, y las listas | `lib/despacho/clasificacion.ts` |
+| El catálogo, las listas, y resolver un producto de Odoo | `lib/core/productos.ts` (núcleo) |
+| De dónde saca su clasificación una orden, y la celda `Material` | `lib/despacho/clasificacion.ts` |
 | La columna `Material` del histórico, texto por texto | `lib/despacho/equivalenciasDelHistorico.ts` |
 | La planilla: fila, horas, fechas | `lib/despacho/planilla.ts` |
 | El espejo de una sola vía | `lib/despacho/espejo.ts` |
@@ -131,12 +133,13 @@ Cuatro cosas que conviene no volver a averiguar:
 | Filtros del histórico en la URL | `lib/despacho/filtrosUrl.ts` |
 | Cola del día | `app/(app)/despacho` |
 | Histórico e indicadores | `app/(app)/despacho/ordenes` |
-| Mapeo de productos | `app/(app)/despacho/productos` |
+| Clasificar el catálogo | `app/(app)/despacho/productos` |
 | Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
 | Importador del histórico (script) | `scripts/importar-despacho.mts` |
 | Comparar planilla contra base | `scripts/comparar-despacho.mts` |
 | Diagnóstico de punta a punta | `scripts/probar-despacho.mts` |
 | Migraciones (las cuatro **corridas**) | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`, `20260909095546_despacho_la_planilla_no_dice_de_que_empresa_es.sql` |
+| Migración del catálogo único (**pendiente de correr**) | `20260910104534_productos_el_catalogo_unico_del_nucleo.sql` |
 
 ## Lo que se relevó de la planilla (09/09/2026)
 
@@ -244,15 +247,23 @@ las dos cosas que aparecieron al cargarla:
 **Administración → Usuarios**, módulo `despacho`: `edicion` para la balanza,
 `admin` para el mapeo de productos y el importador.
 
-### Mapear los productos de Odoo
+### Clasificar los 49 productos del catálogo
 
-`despacho_productos` está **vacía**: ninguno de los 432 productos está mapeado
-todavía, así que toda orden que se cargue desde la balanza va a arrancar "sin
-clasificar" hasta que alguien mapee su producto en `/despacho/productos`, que
-ordena la lista por cuántas órdenes lo usaron. Es una vez por producto y los
-primeros cinco cubren casi todo.
+`despacho_productos` **ya no existe**: el catálogo es uno solo y del núcleo
+(`productos`), compartido con Producción — ver
+[el spec](superpowers/specs/2026-09-10-productos-catalogo-unico-design.md). Viene
+**sembrado con los 49 productos que salieron en 180 días**, con la terna vacía a
+propósito: deducirla del nombre del producto sería parsear.
 
-El histórico ya no depende de eso: ver abajo.
+Así que toda orden que se cargue desde la balanza va a arrancar "sin clasificar"
+hasta que alguien le ponga la terna en `/despacho/productos`, que ordena la lista
+por cuántas órdenes de carga usaron cada producto. **Las 26 primeras cubren el
+92%** de lo que sale, así que es una tarde. Y algunos van a quedar sin terna para
+siempre y está bien: `MINERALES ECOLOGICOS` —el más despachado de todos, 379
+líneas de remito— no es material × granulometría × envase, igual que `BINDER` y
+`TOSCA`.
+
+El histórico no depende de eso: se clasifica por texto, ver abajo.
 
 ## El histórico ya está importado (09/09/2026)
 

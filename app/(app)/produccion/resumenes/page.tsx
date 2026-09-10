@@ -31,7 +31,7 @@ export default async function ResumenesPage({
   if (!nivel) redirect("/");
 
   const { primerDia, ultimoDia } = rangoDelMes(mes);
-  const { productos, dias } = await armarElMes(supabase, primerDia, ultimoDia);
+  const { renglonesDePapel, dias } = await armarElMes(supabase, primerDia, ultimoDia);
 
-  return <ResumenesClient mes={mes} productos={productos} dias={dias} />;
+  return <ResumenesClient mes={mes} renglonesDePapel={renglonesDePapel} dias={dias} />;
 }

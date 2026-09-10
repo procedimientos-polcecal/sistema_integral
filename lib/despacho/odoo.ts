@@ -1,5 +1,5 @@
 import { buscarLeer, idDeRelacion, nombreDeRelacion, type Registro } from "@/lib/odoo/client";
-import { separarCodigoYNombre } from "./clasificacion";
+import { separarCodigoYNombre } from "@/lib/core/productos";
 import type { RemitoDeOdoo } from "./types";
 
 /**

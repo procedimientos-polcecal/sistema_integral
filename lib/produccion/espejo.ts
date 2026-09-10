@@ -5,7 +5,7 @@ import {
   filaDeLaFecha,
   porcentajeDeRotura,
 } from "./planilla";
-import type { Producto } from "./types";
+import type { RenglonDePapel } from "./types";
 
 /**
  * Escribir en la planilla el día que se acaba de cargar.
@@ -42,7 +42,7 @@ const FILA_MARCADOR = 3;
 export interface DiaAEspejar {
   /** "YYYY-MM-DD" */
   fecha: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   produccion: Record<string, number>;
   despacho: Record<string, number>;
   rotura: Record<string, number>;
@@ -126,7 +126,7 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
         // El bloque de unidades termina donde arranca el de porcentajes, si lo hay.
         const hasta = comienzoPct ?? encabezados.length;
 
-        const r = celdasDeResumen(encabezados, dia.productos, valores, { desde: 1, hasta, siFalta });
+        const r = celdasDeResumen(encabezados, dia.renglonesDePapel, valores, { desde: 1, hasta, siFalta });
         for (const c of r.celdas) celdas.push({ pestana, columna: c.columna, fila, valor: c.valor });
         for (const n of r.sinColumna) {
           problemas.push(`La pestaña "${pestana}" no tiene columna para "${n}"`);
@@ -135,10 +135,10 @@ export async function espejarDia(dia: DiaAEspejar): Promise<ResultadoEspejo> {
         // El segundo bloque de Resumen Rotura: el % de cada producto.
         if (esRotura && comienzoPct !== null) {
           const pct: Record<string, string> = {};
-          for (const p of dia.productos) {
+          for (const p of dia.renglonesDePapel) {
             pct[p.id] = porcentajeDeRotura(dia.rotura[p.id] ?? 0, dia.produccion[p.id] ?? 0);
           }
-          const rp = celdasDeResumen(encabezados, dia.productos, pct, {
+          const rp = celdasDeResumen(encabezados, dia.renglonesDePapel, pct, {
             desde: comienzoPct,
             hasta: encabezados.length,
           });

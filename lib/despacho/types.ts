@@ -24,27 +24,10 @@ export type HorarioDeOrden = keyof HorariosDeOrden;
  */
 export type EstadoDeOrden = "esperando" | "en_predio" | "cargando" | "cargado" | "cerrada";
 
-/**
- * Los tres campos que el talonario pide por separado y la planilla aplasta en
- * una sola celda.
- */
-export interface Clasificacion {
-  material: string;
-  /** Null de verdad: Chocolata y Pedregullo no tienen granulometría. */
-  granulometria: string | null;
-  envase: string;
-}
-
-/** Una fila de `despacho_productos`: el mapeo de un producto de Odoo. */
-export interface ProductoDeDespacho extends Clasificacion {
-  id: string;
-  odoo_product_id: number;
-  /** La referencia interna de Odoo: `[FAG]`, `[CET]`, `[CC02B]`. */
-  odoo_default_code: string | null;
-  odoo_nombre: string;
-  produccion_producto_id: string | null;
-  activo: boolean;
-}
+// `Clasificacion` y el catálogo de productos se fueron al núcleo cuando
+// Producción y Despacho pasaron a compartirlo: viven en `lib/core/types.ts`
+// (`Clasificacion`, `Producto`) y `lib/core/productos.ts`. `despacho_productos`
+// no existe más.
 
 /** Una fila de `despacho_ordenes_carga`. */
 export interface OrdenDeCarga extends HorariosDeOrden {

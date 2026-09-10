@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { comoSeLee } from "@/lib/core/fechas";
 import { ETIQUETA_DE_ESTADO, comoSeLeenLosMinutos } from "@/lib/despacho/orden";
-import { ENVASES, MATERIALES } from "@/lib/despacho/clasificacion";
+import { ENVASES, MATERIALES } from "@/lib/core/productos";
 import {
   HISTORICO_SIN_FILTROS,
   escribirFiltrosDelHistorico,

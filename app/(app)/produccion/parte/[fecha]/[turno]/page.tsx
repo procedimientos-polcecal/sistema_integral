@@ -2,7 +2,12 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelProduccionDe } from "@/lib/produccion/auth";
 import { esTurno, parteAnterior, comoSeLeeElTurno } from "@/lib/produccion/turnos";
-import { traerProductos, traerParte, traerDepositoDe } from "@/lib/produccion/consultas";
+import {
+  traerRenglonesDePapel,
+  traerParte,
+  traerDepositoDe,
+  kgPorRenglonDePapel,
+} from "@/lib/produccion/consultas";
 import ParteClient from "./ParteClient";
 
 /**
@@ -25,13 +30,13 @@ export default async function PartePage({
   const nivel = await nivelProduccionDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const [productos, completo, depositoAnterior, empleados] = await Promise.all([
+  const [renglonesDePapel, completo, depositoAnterior, empleados, kgPorRenglon] = await Promise.all([
     // Catálogo completo, no sólo activos: un producto que se desactiva entre
     // dos correcciones del mismo parte no puede perder su fila de depósito acá
     // — es lo que borraba el POST cuando el cliente sólo recorría los activos.
     // `ParteClient` decide qué mostrar (los activos, más un inactivo que ya
     // tiene un valor en este parte) y qué reenviar.
-    traerProductos(supabase, { soloActivos: false }),
+    traerRenglonesDePapel(supabase, { soloActivos: false }),
     traerParte(supabase, { fecha, turno }),
     traerDepositoDe(supabase, parteAnterior({ fecha, turno })),
     // Apellido y nombre, y sólo activos: el capataz elige de una lista de
@@ -39,6 +44,9 @@ export default async function PartePage({
     // distingue a un Fabricio de otro. El orden es el mismo que usa el resto
     // del sistema para listar personas (`apellido, nombre`).
     supabase.from("empleados").select("id, nombre, apellido").eq("activo", true).order("apellido").order("nombre"),
+    // Los kilos por unidad salen de los productos enlazados a cada renglón, no
+    // del renglón: ver `kgPorRenglonDePapel`.
+    kgPorRenglonDePapel(supabase),
   ]);
 
   return (
@@ -47,7 +55,8 @@ export default async function PartePage({
       turno={turno}
       turnoLegible={comoSeLeeElTurno(turno)}
       puedeEditar={nivel === "edicion" || nivel === "admin"}
-      productos={productos}
+      renglonesDePapel={renglonesDePapel}
+      kgPorRenglon={kgPorRenglon}
       parte={completo?.parte ?? null}
       deposito={completo?.deposito ?? {}}
       despachos={completo?.despachos ?? []}

@@ -1,4 +1,5 @@
-import type { Clasificacion, OrdenDeCarga } from "./types";
+import type { Clasificacion } from "@/lib/core/types";
+import type { OrdenDeCarga } from "./types";
 import { textoParaLaPlanilla } from "./clasificacion";
 
 /**

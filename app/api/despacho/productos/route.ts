@@ -2,24 +2,33 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { esAdminDespacho, tieneAccesoDespacho } from "@/lib/despacho/auth";
+import { productosUsadosEnOrdenes } from "@/lib/despacho/consultas";
 import {
-  traerMapeoDeProductos,
-  productosUsadosEnOrdenes,
-} from "@/lib/despacho/consultas";
-import { ENVASES, GRANULOMETRIAS, MATERIALES } from "@/lib/despacho/clasificacion";
+  ENVASES,
+  GRANULOMETRIAS,
+  MATERIALES,
+  clasificacionDelProducto,
+  problemaDeClasificacion,
+  traerCatalogoDeProductos,
+} from "@/lib/core/productos";
+import type { Producto } from "@/lib/core/types";
 
 /**
- * El mapeo de productos: qué material, granulometría y envase es cada producto
- * de Odoo.
+ * El catálogo de productos, desde Despacho.
  *
  * `GET` lo ve cualquiera con acceso al módulo: lo necesita la cola del día para
  * mostrar "Filler A granel" en vez del nombre crudo, no sólo la pantalla de
  * administración. `POST` y `PATCH` los reserva `esAdminDespacho`.
  *
+ * La tabla es del núcleo y la comparte con Producción, así que RLS la gatea con
+ * `puede_editar_productos()` —admin de Producción **o** de Despacho—. Este
+ * chequeo es el de esta pantalla y es más angosto a propósito: quien administra
+ * Producción tiene su propia pantalla.
+ *
  * Un producto **no se borra**: las órdenes viejas lo referencian por
  * `odoo_product_id` y perder su clasificación las dejaría sin material. Con
- * `activo: false` sale del desplegable y sigue clasificando su historia — es por
- * eso que `clasificacionDe` no mira `activo`.
+ * `activo: false` sale del alta y sigue clasificando su historia — es por eso
+ * que `clasificacionPorOdoo` no mira `activo`.
  */
 
 export async function GET() {
@@ -30,156 +39,167 @@ export async function GET() {
     return NextResponse.json({ error: "Sin acceso a Despacho" }, { status: 403 });
   }
 
-  const [mapeo, usados] = await Promise.all([
-    traerMapeoDeProductos(supabase),
+  const [catalogo, usados] = await Promise.all([
+    traerCatalogoDeProductos(supabase),
     productosUsadosEnOrdenes(supabase),
   ]);
 
-  const mapeados = new Set(mapeo.map((m) => m.odoo_product_id));
+  const enElCatalogo = new Set(
+    catalogo.map((p) => p.odoo_product_id).filter((x): x is number => x !== null)
+  );
 
   return NextResponse.json({
-    mapeo,
-    // Los que aparecieron en órdenes y nadie clasificó, de mayor uso a menor.
-    // Es la lista de trabajo de esta pantalla.
-    sinClasificar: usados.filter(
-      (u) => u.odoo_product_id === null || !mapeados.has(u.odoo_product_id)
+    catalogo,
+    // Los que ya están en el catálogo y nadie clasificó: la lista de trabajo.
+    sinClasificar: catalogo.filter((p) => clasificacionDelProducto(p) === null),
+    // Y los que aparecieron en una orden sin estar sembrados, de mayor uso a
+    // menor. Los de `odoo_product_id` null son órdenes sin remito: no hay
+    // producto de Odoo que sumar.
+    fueraDelCatalogo: usados.filter(
+      (u) => u.odoo_product_id === null || !enElCatalogo.has(u.odoo_product_id)
     ),
     listas: { materiales: MATERIALES, granulometrias: GRANULOMETRIAS, envases: ENVASES },
   });
 }
 
+/** Sumar al catálogo un producto de Odoo que la siembra no trajo. */
 export async function POST(request: Request) {
-  return guardar(request, "alta");
-}
-
-export async function PATCH(request: Request) {
-  return guardar(request, "edicion");
-}
-
-async function guardar(request: Request, modo: "alta" | "edicion") {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!(await esAdminDespacho(supabase, user.id))) {
-    return NextResponse.json(
-      { error: "Sólo un admin de Despacho edita el mapeo de productos" },
-      { status: 403 }
-    );
-  }
+  const { supabase, user, error } = await admin();
+  if (error) return error;
 
   const b = await cuerpoJson(request);
 
-  /*
-   * Se valida contra las listas de `clasificacion.ts` y no contra un enum de la
-   * base.
-   *
-   * En la base son columnas de texto a propósito: un valor de enum nuevo obliga
-   * a una migración sola por valor (55P04) y estas listas van a crecer mientras
-   * se mapeen los 432 productos. La contra es que la base no rechaza un valor
-   * inventado, así que la validación tiene que estar acá — si no, un typo entra
-   * y aparece como un material nuevo en los filtros.
-   */
-  if (b?.material !== undefined && !MATERIALES.includes(b.material)) {
-    return NextResponse.json(
-      { error: `Material inválido. Son: ${MATERIALES.join(", ")}` },
-      { status: 400 }
-    );
+  if (typeof b?.odoo_product_id !== "number") {
+    return NextResponse.json({ error: "Falta el producto de Odoo" }, { status: 400 });
   }
-  if (b?.envase !== undefined && !ENVASES.includes(b.envase)) {
-    return NextResponse.json(
-      { error: `Envase inválido. Son: ${ENVASES.join(", ")}` },
-      { status: 400 }
-    );
-  }
-  // La granulometría puede faltar de verdad: Chocolata y Pedregullo no tienen.
-  if (
-    b?.granulometria !== undefined &&
-    b.granulometria !== null &&
-    b.granulometria !== "" &&
-    !GRANULOMETRIAS.includes(b.granulometria)
-  ) {
-    return NextResponse.json(
-      { error: `Granulometría inválida. Son: ${GRANULOMETRIAS.join(", ")}` },
-      { status: 400 }
-    );
+  const nombre = String(b?.nombre ?? "").trim();
+  if (nombre === "") {
+    return NextResponse.json({ error: "Falta el nombre del producto" }, { status: 400 });
   }
 
-  if (modo === "alta") {
-    if (typeof b?.odoo_product_id !== "number") {
-      return NextResponse.json({ error: "Falta el producto de Odoo" }, { status: 400 });
-    }
-    if (!b?.material || !b?.envase) {
+  const problema = problemaDeClasificacion(b);
+  if (problema) return NextResponse.json({ error: problema }, { status: 400 });
+
+  const { data, error: errorSql } = await supabase
+    .from("productos")
+    .insert({
+      odoo_product_id: b.odoo_product_id,
+      odoo_default_code: textoOpcional(b.odoo_default_code),
+      nombre,
+      material: textoOpcional(b.material),
+      granulometria: textoOpcional(b.granulometria),
+      envase: textoOpcional(b.envase),
+      cargado_por: user.id,
+    })
+    .select(
+      "id, odoo_product_id, odoo_default_code, nombre, material, granulometria, envase, kg_por_unidad, activo"
+    )
+    .single();
+
+  if (errorSql) {
+    // 23505 es el unique de `odoo_product_id`: el producto ya está en el
+    // catálogo y lo que hay que hacer es clasificarlo, no sumarlo de nuevo.
+    if (errorSql.code === "23505") {
       return NextResponse.json(
-        { error: "El mapeo necesita material y envase" },
-        { status: 400 }
+        { error: "Ese producto ya está en el catálogo." },
+        { status: 409 }
       );
     }
-
-    const { data, error } = await supabase
-      .from("despacho_productos")
-      .insert({
-        odoo_product_id: b.odoo_product_id,
-        odoo_default_code: textoOpcional(b.odoo_default_code),
-        // Odoo trae los nombres con espacios al final: "CAL EN TOLVA ".
-        odoo_nombre: String(b.odoo_nombre ?? "").trim(),
-        material: b.material,
-        granulometria: textoOpcional(b.granulometria),
-        envase: b.envase,
-        produccion_producto_id: textoOpcional(b.produccion_producto_id),
-        cargado_por: user.id,
-      })
-      .select(
-        "id, odoo_product_id, odoo_default_code, odoo_nombre, material, granulometria, envase, produccion_producto_id, activo"
-      )
-      .single();
-
-    if (error) {
-      if (error.code === "23505") {
-        return NextResponse.json(
-          { error: "Ese producto ya está mapeado." },
-          { status: 409 }
-        );
-      }
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-    return NextResponse.json({ data });
+    return NextResponse.json({ error: errorSql.message }, { status: 400 });
   }
+  return NextResponse.json({ data });
+}
 
+/** Clasificar, reclasificar, o dar de baja una fila del catálogo. */
+export async function PATCH(request: Request) {
+  const { supabase, user, error } = await admin();
+  if (error) return error;
+
+  const b = await cuerpoJson(request);
   if (typeof b?.id !== "string" || b.id === "") {
-    return NextResponse.json({ error: "Falta el id del mapeo a editar" }, { status: 400 });
+    return NextResponse.json({ error: "Falta el id del producto" }, { status: 400 });
   }
+
+  // Hace falta lo que hay para decidir el "los tres o ninguno": un PATCH que
+  // manda sólo el envase de un producto sin material dejaría media
+  // clasificación, y ése es justo el caso que el `check` de la base rechaza —
+  // con un 23514 que la pantalla no sabe explicar.
+  const { data: actual } = await supabase
+    .from("productos")
+    .select("id, odoo_product_id, odoo_default_code, nombre, material, granulometria, envase, kg_por_unidad, activo")
+    .eq("id", b.id)
+    .maybeSingle();
+
+  if (!actual) {
+    return NextResponse.json({ error: "Ese producto no existe" }, { status: 404 });
+  }
+
+  const problema = problemaDeClasificacion(b, clasificacionDelProducto(actual as Producto));
+  if (problema) return NextResponse.json({ error: problema }, { status: 400 });
 
   const cambios: Record<string, unknown> = {
     actualizado_por: user.id,
     actualizado_en: new Date().toISOString(),
   };
-  if (b.material !== undefined) cambios.material = b.material;
-  if (b.envase !== undefined) cambios.envase = b.envase;
+  if (b.material !== undefined) cambios.material = textoOpcional(b.material);
+  if (b.envase !== undefined) cambios.envase = textoOpcional(b.envase);
   if (b.granulometria !== undefined) cambios.granulometria = textoOpcional(b.granulometria);
-  if (b.produccion_producto_id !== undefined) {
-    cambios.produccion_producto_id = textoOpcional(b.produccion_producto_id);
-  }
+  if (b.kg_por_unidad !== undefined) cambios.kg_por_unidad = numeroOpcional(b.kg_por_unidad);
   if (typeof b.activo === "boolean") cambios.activo = b.activo;
 
   if (Object.keys(cambios).length === 2) {
     return NextResponse.json({ error: "No vino ningún cambio" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("despacho_productos")
+  const { data, error: errorSql } = await supabase
+    .from("productos")
     .update(cambios)
     .eq("id", b.id)
     .select(
-      "id, odoo_product_id, odoo_default_code, odoo_nombre, material, granulometria, envase, produccion_producto_id, activo"
+      "id, odoo_product_id, odoo_default_code, nombre, material, granulometria, envase, kg_por_unidad, activo"
     )
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (errorSql) return NextResponse.json({ error: errorSql.message }, { status: 400 });
   return NextResponse.json({ data });
+}
+
+/** Sesión + admin de Despacho, que es lo que las dos escrituras piden igual. */
+async function admin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      supabase,
+      user: null as never,
+      error: NextResponse.json({ error: "No autorizado" }, { status: 401 }),
+    };
+  }
+  if (!(await esAdminDespacho(supabase, user.id))) {
+    return {
+      supabase,
+      user,
+      error: NextResponse.json(
+        { error: "Sólo un admin de Despacho edita el catálogo desde acá" },
+        { status: 403 }
+      ),
+    };
+  }
+  return { supabase, user, error: null };
 }
 
 function textoOpcional(valor: unknown): string | null {
   if (typeof valor !== "string") return null;
   const s = valor.trim();
   return s === "" ? null : s;
+}
+
+/** El kg por unidad puede venir vacío a propósito: el bolsón no está confirmado. */
+function numeroOpcional(valor: unknown): number | null {
+  if (typeof valor === "number" && Number.isFinite(valor)) return valor;
+  if (typeof valor === "string" && valor.trim() !== "") {
+    const n = Number(valor.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }

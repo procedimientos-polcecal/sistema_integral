@@ -42,10 +42,10 @@ function esFechaReal(fecha: string): boolean {
 }
 
 // Topes al tamaño del cuerpo, no al catálogo: el paso 0 valida los
-// `producto_id` con un `.in()` contra `produccion_productos`, y esa consulta
+// `renglon_papel_id` con un `.in()` contra `produccion_renglones_papel`, y esa consulta
 // es la que PostgREST rechaza con un 400 sin explicar por qué cuando la URL
 // junta demasiados ids (ver la regla del repo sobre lotes de 200). El
-// depósito tiene hoy 17 productos activos; 50 deja margen para que el
+// depósito tiene hoy 17 renglonesDePapel activos; 50 deja margen para que el
 // catálogo crezca sin tocar este número. Los despachos son en la práctica
 // entre 10 y 30 renglones por turno; 100 es una cota bien holgada. Entre los
 // dos, el peor caso son 150 ids únicos en el paso 0 — lejos del límite.
@@ -97,16 +97,16 @@ export async function POST(request: Request) {
     );
   }
 
-  // ── 0. Validar los producto_id antes de escribir nada ──────
-  // Un id que no existe en `produccion_productos` lo rechaza la FK con un error
+  // ── 0. Validar los renglon_papel_id antes de escribir nada ──────
+  // Un id que no existe en `produccion_renglones_papel` lo rechaza la FK con un error
   // de Postgres crudo, y sólo se entera después de haber borrado el depósito o
   // los despachos del parte (ver el punto 3 más abajo). Comprobar acá, contra
   // la lista real y no contra el catálogo activo —un parte viejo puede citar un
   // producto que después se dio de baja—, corta el pedido antes de tocar la
   // base y devuelve un mensaje que se entiende. Mismo patrón que
   // `solicitante_id` en `app/api/inventario/movimientos/route.ts`.
-  const idsDeDeposito: (string | null)[] = deposito.map((d: { producto_id?: unknown }) => texto(d?.producto_id));
-  const idsDeDespacho: (string | null)[] = renglones.map((d: Record<string, unknown>) => texto(d?.producto_id));
+  const idsDeDeposito: (string | null)[] = deposito.map((d: { renglon_papel_id?: unknown }) => texto(d?.renglon_papel_id));
+  const idsDeDespacho: (string | null)[] = renglones.map((d: Record<string, unknown>) => texto(d?.renglon_papel_id));
   const idsATestear = [...new Set([...idsDeDeposito, ...idsDeDespacho].filter((id): id is string => id !== null))];
 
   if (idsDeDeposito.some((id: string | null) => id === null)) {
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
 
   // Un producto repetido en el depósito no lo caza nada hasta el `insert` de
   // más abajo, con el depósito ya borrado: la primary key es
-  // `(parte_id, producto_id)`, y ese es el peor momento para enterarse.
+  // `(parte_id, renglon_papel_id)`, y ese es el peor momento para enterarse.
   if (new Set(idsDeDeposito).size !== idsDeDeposito.length) {
     return NextResponse.json(
       { error: "Hay un producto repetido en el depósito" },
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 
   if (idsATestear.length > 0) {
     const { data: productosExistentes, error: errProductos } = await admin
-      .from("produccion_productos")
+      .from("produccion_renglones_papel")
       .select("id")
       .in("id", idsATestear);
     if (errProductos) {
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
     const faltantes = idsATestear.filter((id) => !existentes.has(id));
     if (faltantes.length > 0) {
       return NextResponse.json(
-        { error: `Estos productos no existen en el catálogo: ${faltantes.join(", ")}` },
+        { error: `Estos renglonesDePapel no existen en el catálogo: ${faltantes.join(", ")}` },
         { status: 400 }
       );
     }
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
   // un error y qué es un vacío legítimo — acá sólo se junta el resultado.
   //
   // Se acumulan **todos** los errores en vez de cortar en el primero: quien
-  // transcribe tiene 17 productos y hasta 20 renglones de despacho enfrente,
+  // transcribe tiene 17 renglonesDePapel y hasta 20 renglones de despacho enfrente,
   // y corregir de a uno sería un ida y vuelta por renglón. El valor puesto en
   // el arreglo cuando hay error (0 o null) no se usa nunca: en cuanto
   // `erroresDeCantidades` tiene algo, la función devuelve antes de llegar al
@@ -401,7 +401,7 @@ export async function POST(request: Request) {
         // mismo dato es la clase de cosa que un día deja de serlo. La
         // cantidad, igual: la ya interpretada del paso 0b, no un `Number()`
         // recalculado acá que vuelva a coercer en silencio.
-        producto_id: idsDeDeposito[i] as string,
+        renglon_papel_id: idsDeDeposito[i] as string,
         cantidad: cantidadesDeDeposito[i],
       }))
     );
@@ -431,8 +431,8 @@ export async function POST(request: Request) {
         // Puede venir en null a propósito: el renglón "Otros" del papel, o un
         // nombre que no se reconoció. El texto crudo se guarda igual. Es el
         // mismo id ya validado y normalizado del paso 0, no un segundo
-        // `texto(d.producto_id)` recalculado acá.
-        producto_id: idsDeDespacho[i],
+        // `texto(d.renglon_papel_id)` recalculado acá.
+        renglon_papel_id: idsDeDespacho[i],
         producto_raw: texto(d.producto_raw),
         // Las cinco, ya interpretadas en el paso 0b: nada de esto se
         // recalcula acá con un `Number()` que vuelva a convertir un error de
@@ -453,7 +453,7 @@ export async function POST(request: Request) {
   // El día entero y no el turno: los resúmenes son diarios, y el turno recién
   // cargado cambia el total del día.
   //
-  // `armarElDia` lee con `traerProductos`/`traerParte`
+  // `armarElDia` lee con `traerRenglonesDePapel`/`traerParte`
   // (lib/produccion/consultas.ts), y esas dos **lanzan** ante cualquier error
   // de lectura (un corte de red, un timeout) en vez de devolver un
   // `{ ok: false }`. Sin este `try/catch`, esa excepción salía de la ruta
@@ -470,7 +470,7 @@ export async function POST(request: Request) {
     ids = dia.ids;
     resultado = await espejarDia({
       fecha,
-      productos: dia.productos,
+      renglonesDePapel: dia.renglonesDePapel,
       produccion: dia.produccion,
       despacho: dia.despacho,
       rotura: dia.rotura,

@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelDespachoDe } from "@/lib/despacho/auth";
-import { traerMapeoDeProductos, traerOrdenes } from "@/lib/despacho/consultas";
-import { clasificacionDeLaOrden, textoDeClasificacion } from "@/lib/despacho/clasificacion";
+import { traerOrdenes } from "@/lib/despacho/consultas";
+import { traerCatalogoDeProductos, textoDeClasificacion } from "@/lib/core/productos";
+import { clasificacionDeLaOrden } from "@/lib/despacho/clasificacion";
 import { estadoDeLaOrden, tiemposDeLaOrden } from "@/lib/despacho/orden";
 import { indicadoresDeOrdenes, type Indicadores } from "@/lib/despacho/indicadores";
 import { leerFiltrosDelHistorico, type FiltrosDeHistorico } from "@/lib/despacho/filtrosUrl";
@@ -63,7 +64,7 @@ export default async function HistoricoPage({
   const filtros = leerFiltrosDelHistorico(params, empresas.map((e) => e.nombre));
 
   const [mapeo, ordenes] = await Promise.all([
-    traerMapeoDeProductos(supabase),
+    traerCatalogoDeProductos(supabase),
     traerOrdenes(supabase, {
       desde: filtros.desde || undefined,
       hasta: filtros.hasta || undefined,

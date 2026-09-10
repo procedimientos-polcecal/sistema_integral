@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { nivelProduccionDe } from "@/lib/produccion/auth";
 import { parteAnterior, TURNOS } from "@/lib/produccion/turnos";
-import { traerProductos, traerParte, traerDepositoDe } from "@/lib/produccion/consultas";
+import { traerRenglonesDePapel, traerParte, traerDepositoDe } from "@/lib/produccion/consultas";
 import { totalesDeDespacho, roturaTotal } from "@/lib/produccion/despachos";
-import { produccionDelTurno, produccionDelDia, type ProduccionPorProducto } from "@/lib/produccion/produccion";
+import { produccionDelTurno, produccionDelDia, type ProduccionPorRenglon } from "@/lib/produccion/produccion";
 import type { TotalesDeDespacho } from "@/lib/produccion/despachos";
 import type { Despacho, Parte, Turno } from "@/lib/produccion/types";
 import DiaClient from "./DiaClient";
@@ -17,8 +17,8 @@ export interface TurnoDelDia {
   despachos: Despacho[];
   totales: TotalesDeDespacho | null;
   faltaAnterior: boolean;
-  /** `null` = el turno no está cargado. No es lo mismo que un turno sin productos. */
-  produccion: ProduccionPorProducto | null;
+  /** `null` = el turno no está cargado. No es lo mismo que un turno sin renglonesDePapel. */
+  produccion: ProduccionPorRenglon | null;
   /**
    * El depósito de este turno y el del turno anterior, tal como se contaron.
    * `null` = el turno no está cargado (`deposito`) o no existe el parte
@@ -49,7 +49,7 @@ export default async function ProduccionPage({
   const nivel = await nivelProduccionDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const productos = await traerProductos(supabase);
+  const renglonesDePapel = await traerRenglonesDePapel(supabase);
 
   // Las dos ramas empujan la **misma forma**: un turno sin cargar no es un
   // objeto distinto, es el mismo con todo en vacío. Si las formas difieren, el
@@ -92,7 +92,7 @@ export default async function ProduccionPage({
   return (
     <DiaClient
       fecha={fecha}
-      productos={productos}
+      renglonesDePapel={renglonesDePapel}
       turnos={turnos}
       delDia={produccionDelDia(turnos.map((t) => t.produccion))}
       puedeEditar={nivel === "edicion" || nivel === "admin"}

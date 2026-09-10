@@ -1,7 +1,8 @@
 import { agregarFila, crearPestana, escribirCeldas, leerValores, listarPestanas } from "@/lib/core/sheets";
 import { hayCredencialesGoogle } from "@/lib/core/google";
 import { COLUMNAS, filaDeLaPlanilla, pestanaDelMes, RANGO_QUE_SE_ESCRIBE } from "./planilla";
-import type { Clasificacion, OrdenDeCarga } from "./types";
+import type { Clasificacion } from "@/lib/core/types";
+import type { OrdenDeCarga } from "./types";
 
 /**
  * Escribir en la planilla la orden que se acaba de cerrar.

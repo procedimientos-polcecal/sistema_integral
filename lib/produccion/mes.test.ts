@@ -12,7 +12,7 @@ function despacho(parte_id: string, over: Partial<Despacho> = {}): Despacho {
     orden: 1,
     equipo_raw: null,
     cliente_raw: null,
-    producto_id: P1,
+    renglon_papel_id: P1,
     producto_raw: null,
     kilos: null,
     bultos: 0,
@@ -30,7 +30,7 @@ function parte(id: string, fecha: string, turno: FilaParte["turno"]): FilaParte 
 }
 
 function deposito(parte_id: string, cantidad: number): FilaDeposito {
-  return { parte_id, producto_id: P1, cantidad };
+  return { parte_id, renglon_papel_id: P1, cantidad };
 }
 
 describe("el borde del mes", () => {

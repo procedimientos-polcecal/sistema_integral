@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
-import type { OrdenDeCarga, ProductoDeDespacho } from "./types";
+import type { OrdenDeCarga } from "./types";
 
 /**
  * Las lecturas de Despacho.
@@ -17,20 +17,10 @@ import type { OrdenDeCarga, ProductoDeDespacho } from "./types";
  * se repite; la alternativa es peor.
  */
 
-export async function traerMapeoDeProductos(
-  supabase: SupabaseClient
-): Promise<ProductoDeDespacho[]> {
-  const filas = await traerTodo<ProductoDeDespacho>((desde, hasta) =>
-    supabase
-      .from("despacho_productos")
-      .select(
-        "id, odoo_product_id, odoo_default_code, odoo_nombre, material, granulometria, envase, produccion_producto_id, activo"
-      )
-      .order("odoo_nombre")
-      .range(desde, hasta)
-  );
-  return filas;
-}
+// El catálogo de productos se lee con `traerCatalogoDeProductos()` de
+// `lib/core/productos.ts`: desde el catálogo único es del núcleo y lo comparte
+// con Producción. Acá quedó `productosUsadosEnOrdenes`, que sí es de este
+// módulo — cuenta órdenes de carga.
 
 /** Las órdenes de un día de calendario, cerradas o no. */
 export async function traerOrdenesDelDia(

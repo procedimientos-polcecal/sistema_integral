@@ -1,16 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { TURNOS, parteAnterior } from "./turnos";
-import { totalesDeDespacho, roturaTotal } from "./despachos";
+import { totalesDeDespacho, roturaTotal, kilosQueCoinciden } from "./despachos";
 import {
   produccionDelTurno,
   produccionDelDia,
   soloLoCalculado,
-  type ProduccionPorProducto,
+  type ProduccionPorRenglon,
 } from "./produccion";
 import { armarLosDias, type DiaDelMes } from "./mes";
 import type { ClaveDeParte } from "./turnos";
-import type { Despacho, Parte, Producto } from "./types";
+import type { Despacho, Parte, RenglonDePapel } from "./types";
 
 export type { DiaDelMes } from "./mes";
 
@@ -26,19 +26,78 @@ export type { DiaDelMes } from "./mes";
  * variable pierde la inferencia de tipos de Supabase.
  */
 
-export async function traerProductos(
+export async function traerRenglonesDePapel(
   db: SupabaseClient,
   { soloActivos = true } = {}
-): Promise<Producto[]> {
+): Promise<RenglonDePapel[]> {
   let q = db
-    .from("produccion_productos")
-    .select("id, nombre, familia, envase, kg_por_unidad, nombre_planilla, orden, activo")
+    .from("produccion_renglones_papel")
+    .select("id, nombre, familia, nombre_planilla, orden, activo")
     .order("orden");
   if (soloActivos) q = q.eq("activo", true);
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data ?? []) as Producto[];
+  return (data ?? []) as RenglonDePapel[];
+}
+
+/**
+ * Los kilos por unidad de cada renglón del papel, para la comprobación
+ * kilos↔bultos del parte.
+ *
+ * Ya no es una columna del renglón: el kg por unidad es del **producto**, y un
+ * renglón del papel puede agrupar varios (si el papel cuenta "cal en bolsón" en
+ * un solo renglón, ahí caen CUV 65-70, CUV 55-60 y Puesta en Destino). Así que
+ * sale de los productos enlazados, **y sólo si coinciden**.
+ *
+ * Si dos productos del mismo renglón declaran kilos distintos, el renglón queda
+ * en null y la comprobación no corre para él. Es a propósito: elegir uno de los
+ * dos —o promediarlos— sería inventar el número contra el que se avisa, y un
+ * aviso de kilos que sale de un número inventado es peor que no avisar. Lo mismo
+ * si ningún producto tiene el kg cargado: el del bolsón sigue sin confirmar.
+ */
+/**
+ * Los kilos por unidad de cada renglón del papel, para la comprobación
+ * kilos↔bultos del parte.
+ *
+ * La regla —vale sólo si los productos del renglón coinciden— vive en
+ * `kilosQueCoinciden`, que es pura y tiene tests. Acá queda la lectura.
+ */
+export async function kgPorRenglonDePapel(
+  db: SupabaseClient
+): Promise<Record<string, number | null>> {
+  const { data, error } = await db
+    .from("produccion_renglon_productos")
+    .select("renglon_papel_id, productos(kg_por_unidad)");
+  if (error) throw new Error(error.message);
+
+  // El embed de un many2one llega como objeto, pero la inferencia de Supabase lo
+  // tipa como arreglo: se aceptan las dos formas en vez de castear a una y que
+  // la otra rompa en runtime.
+  const filas: { renglon_papel_id: string; kg_por_unidad: number | null }[] = [];
+  for (const fila of (data ?? []) as unknown as FilaDelPuente[]) {
+    const productos = Array.isArray(fila.productos)
+      ? fila.productos
+      : fila.productos
+        ? [fila.productos]
+        : [];
+    if (productos.length === 0) {
+      filas.push({ renglon_papel_id: fila.renglon_papel_id, kg_por_unidad: null });
+      continue;
+    }
+    for (const p of productos) {
+      filas.push({
+        renglon_papel_id: fila.renglon_papel_id,
+        kg_por_unidad: p?.kg_por_unidad ?? null,
+      });
+    }
+  }
+  return kilosQueCoinciden(filas);
+}
+
+interface FilaDelPuente {
+  renglon_papel_id: string;
+  productos: { kg_por_unidad: number | null } | { kg_por_unidad: number | null }[] | null;
 }
 
 export interface ParteCompleto {
@@ -64,10 +123,10 @@ export async function traerParte(
   if (error) throw new Error(error.message);
   if (!parte) return null;
 
-  const filas = await traerTodo<{ producto_id: string; cantidad: number }>((desde, hasta) =>
+  const filas = await traerTodo<{ renglon_papel_id: string; cantidad: number }>((desde, hasta) =>
     db
       .from("produccion_deposito")
-      .select("producto_id, cantidad")
+      .select("renglon_papel_id, cantidad")
       .eq("parte_id", parte.id)
       .range(desde, hasta)
   );
@@ -76,7 +135,7 @@ export async function traerParte(
     db
       .from("produccion_despachos")
       .select(
-        "id, parte_id, orden, equipo_raw, cliente_raw, producto_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
+        "id, parte_id, orden, equipo_raw, cliente_raw, renglon_papel_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
       )
       .eq("parte_id", parte.id)
       .order("orden")
@@ -84,7 +143,7 @@ export async function traerParte(
   );
 
   const deposito: Record<string, number> = {};
-  for (const f of filas) deposito[f.producto_id] = Number(f.cantidad);
+  for (const f of filas) deposito[f.renglon_papel_id] = Number(f.cantidad);
 
   return { parte: parte as Parte, deposito, despachos };
 }
@@ -106,7 +165,7 @@ export async function traerDepositoDe(
 export interface DiaArmado {
   /** Los partes cargados ese día, para poder anotarles el pendiente. */
   ids: string[];
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   produccion: Record<string, number>;
   despacho: Record<string, number>;
   rotura: Record<string, number>;
@@ -120,7 +179,7 @@ export interface DiaArmado {
  * cuenta es cómo se corrige una sola.
  *
  * Lo que no se puede calcular **no se exporta**: `soloLoCalculado` deja afuera
- * los productos de un turno al que le falta el parte anterior. Escribir un cero
+ * los renglonesDePapel de un turno al que le falta el parte anterior. Escribir un cero
  * en la planilla sería poner allá el mismo dato falso que el módulo vino a sacar.
  */
 export async function armarElDia(db: SupabaseClient, fecha: string): Promise<DiaArmado> {
@@ -133,7 +192,7 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   // sólo activos acá, `celdasDeResumen` no le encuentra columna y ese valor se
   // pierde al exportar sin que nada avise. La columna sigue en la planilla, y
   // quien decide si un producto se exporta es `nombre_planilla`, no `activo`.
-  const productos = await traerProductos(db, { soloActivos: false });
+  const renglonesDePapel = await traerRenglonesDePapel(db, { soloActivos: false });
 
   // Caché de depósitos ya traídos, sólo durante esta llamada (no entre pedidos
   // HTTP distintos). El depósito del parte anterior al turno `12_20` es el del
@@ -159,7 +218,7 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
   // forma de que `produccionDelDia` distinga "el turno produjo cero" de "el
   // turno no existe". Sin eso, un día con sólo la mañana cargada se exporta
   // como si fuera el día entero.
-  const porTurno: (ProduccionPorProducto | null)[] = [];
+  const porTurno: (ProduccionPorRenglon | null)[] = [];
   const despacho: Record<string, number> = {};
   const rotura: Record<string, number> = {};
 
@@ -196,7 +255,7 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
 
   return {
     ids,
-    productos,
+    renglonesDePapel,
     produccion: soloLoCalculado(produccionDelDia(porTurno)),
     despacho,
     rotura,
@@ -206,7 +265,7 @@ export async function armarElDia(db: SupabaseClient, fecha: string): Promise<Dia
 export interface MesArmado {
   primerDia: string;
   ultimoDia: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   dias: DiaDelMes[];
 }
 
@@ -221,7 +280,7 @@ export interface MesArmado {
  *
  * La diferencia con `armarElDia` es sólo de acceso a datos, no de aritmética.
  * Llamar a `armarElDia` una vez por día de un mes de 31 días dispararía del
- * orden de 300 consultas (productos + dos `traerParte` por día, cada uno con
+ * orden de 300 consultas (renglonesDePapel + dos `traerParte` por día, cada uno con
  * su parte, su depósito y sus despachos, más el parte anterior recalculado
  * cada vez sin acordarse del día previo). Acá se trae **todo el rango de una
  * sola vez** —partes por fecha, con `.gte`/`.lte` y nunca por un `.in()` de
@@ -237,7 +296,7 @@ export async function armarElMes(
   // Ver el comentario de armarElDia: acá también hace falta el catálogo
   // completo, no sólo activos, porque un parte viejo puede referenciar un
   // producto ya desactivado.
-  const productos = await traerProductos(db, { soloActivos: false });
+  const renglonesDePapel = await traerRenglonesDePapel(db, { soloActivos: false });
 
   // Las tres consultas de acá abajo son el primer lugar del módulo que cruza
   // de verdad el corte de 1000 de PostgREST (un mes completo son ~1.054 filas
@@ -267,14 +326,14 @@ export async function armarElMes(
   const filasDeposito =
     ids.length === 0
       ? []
-      : await traerTodo<{ parte_id: string; producto_id: string; cantidad: number }>(
+      : await traerTodo<{ parte_id: string; renglon_papel_id: string; cantidad: number }>(
           (desde, hasta) =>
             db
               .from("produccion_deposito")
-              .select("parte_id, producto_id, cantidad")
+              .select("parte_id, renglon_papel_id, cantidad")
               .in("parte_id", ids)
               .order("parte_id")
-              .order("producto_id")
+              .order("renglon_papel_id")
               .range(desde, hasta)
         );
 
@@ -285,7 +344,7 @@ export async function armarElMes(
           db
             .from("produccion_despachos")
             .select(
-              "id, parte_id, orden, equipo_raw, cliente_raw, producto_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
+              "id, parte_id, orden, equipo_raw, cliente_raw, renglon_papel_id, producto_raw, kilos, bultos, envase_raw, pallets_cantidad, pallets_tipo, rotura_bolsa, rotura_bolson"
             )
             .in("parte_id", ids)
             .order("id")
@@ -312,5 +371,5 @@ export async function armarElMes(
     depositoAnteriorAlMes: anteriorAlMes,
   });
 
-  return { primerDia, ultimoDia, productos, dias };
+  return { primerDia, ultimoDia, renglonesDePapel, dias };
 }

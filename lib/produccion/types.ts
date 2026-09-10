@@ -5,15 +5,28 @@
 
 export type Turno = "4_12" | "12_20";
 export type Familia = "filler" | "0_2" | "cal" | "otros";
-export type Envase = "bolsa" | "bolson";
 
-export interface Producto {
+/**
+ * Un renglón del parte en papel, que es también una columna del Excel.
+ *
+ * **No es un catálogo de productos**: eso es `productos` en el núcleo, que
+ * Producción comparte con Despacho desde el catálogo único
+ * (docs/superpowers/specs/2026-09-10-productos-catalogo-unico-design.md).
+ * `nombre_planilla` y `orden` no son propiedades de un bolsón de calcio: son de
+ * cómo se imprime el parte y de cómo se exporta la planilla.
+ *
+ * `envase` y `kg_por_unidad` se fueron al núcleo con el producto. El kg por
+ * unidad de un renglón sale ahora de los productos que tiene enlazados, y sólo
+ * si los enlazados coinciden — ver `kgPorRenglonDePapel` en `consultas.ts`.
+ *
+ * El nombre largo es a propósito: en este módulo "renglón" solo ya significa
+ * otra cosa —el renglón de despacho de un parte, `Despacho` acá abajo— y los
+ * dos aparecen en la misma pantalla.
+ */
+export interface RenglonDePapel {
   id: string;
   nombre: string;
   familia: Familia;
-  envase: Envase;
-  /** 25 la bolsa. El bolsón puede estar sin confirmar, y entonces es null. */
-  kg_por_unidad: number | null;
   /** La columna en los resúmenes de la planilla. Null = no se exporta. */
   nombre_planilla: string | null;
   orden: number;
@@ -47,7 +60,7 @@ export interface Despacho {
   orden: number;
   equipo_raw: string | null;
   cliente_raw: string | null;
-  producto_id: string | null;
+  renglon_papel_id: string | null;
   producto_raw: string | null;
   kilos: number | null;
   bultos: number | null;
@@ -61,10 +74,10 @@ export interface Despacho {
 /**
  * Cantidad por producto. La clave es el id del producto.
  *
- * `produccion_deposito` (parte_id, producto_id, cantidad) no tiene una
+ * `produccion_deposito` (parte_id, renglon_papel_id, cantidad) no tiene una
  * interfaz propia porque nadie la lee ni la escribe fila por fila: el depósito
  * siempre se maneja acotado a un parte —de a un turno entero, nunca una fila
  * suelta—, así que la forma útil de acá para afuera es este mapa por
  * producto. Si algún día hace falta la fila individual, se agrega acá.
  */
-export type PorProducto = Readonly<Record<string, number>>;
+export type PorRenglon = Readonly<Record<string, number>>;

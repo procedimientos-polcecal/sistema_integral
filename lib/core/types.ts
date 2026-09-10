@@ -39,3 +39,36 @@ export interface UsuarioModulo {
   modulo: Modulo;
   nivel: NivelAcceso;
 }
+
+/**
+ * Los tres campos que el talonario de Despacho pide por separado y la planilla
+ * aplasta en una sola celda. Vive en el núcleo porque es el vocabulario que
+ * comparten Producción y Despacho desde el catálogo único de productos.
+ */
+export interface Clasificacion {
+  material: string;
+  /** Null de verdad: Chocolata y Pedregullo no tienen granulometría. */
+  granulometria: string | null;
+  envase: string;
+}
+
+/**
+ * Una fila de `productos`: el catálogo de lo que la planta produce y despacha.
+ *
+ * La identidad es `odoo_product_id`; la terna es una clasificación encima y
+ * puede faltar entera (ver `lib/core/productos.ts`). `odoo_product_id` es
+ * nullable porque fábrica puede hacer algo que Odoo no vende con ese nombre.
+ */
+export interface Producto {
+  id: string;
+  odoo_product_id: number | null;
+  /** La referencia interna de Odoo: `[FAG]`, `[CET]`, `[CEB6570]`. */
+  odoo_default_code: string | null;
+  nombre: string;
+  material: string | null;
+  granulometria: string | null;
+  envase: string | null;
+  /** La bolsa son 25 kg. El bolsón sigue sin confirmar: null, no un inventado. */
+  kg_por_unidad: number | null;
+  activo: boolean;
+}

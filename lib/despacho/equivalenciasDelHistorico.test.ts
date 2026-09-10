@@ -3,8 +3,9 @@ import {
   EQUIVALENCIAS_DEL_HISTORICO,
   clasificacionDelHistorico,
 } from "./equivalenciasDelHistorico";
-import { clasificacionDeLaOrden, textoParaLaPlanilla, MATERIALES, GRANULOMETRIAS, ENVASES } from "./clasificacion";
-import type { ProductoDeDespacho } from "./types";
+import { clasificacionDeLaOrden, textoParaLaPlanilla } from "./clasificacion";
+import { MATERIALES, GRANULOMETRIAS, ENVASES } from "@/lib/core/productos";
+import type { Producto } from "@/lib/core/types";
 
 describe("la tabla de equivalencias del histórico", () => {
   /**
@@ -77,17 +78,18 @@ describe("la tabla de equivalencias del histórico", () => {
 });
 
 describe("clasificacionDeLaOrden: cuál de los dos caminos gana", () => {
-  const mapeo: ProductoDeDespacho[] = [
+  const catalogo: Producto[] = [
     {
       id: "p1",
       odoo_product_id: 7,
       odoo_default_code: "FAG",
-      odoo_nombre: "FILLER A GRANEL (NA)",
+      nombre: "FILLER A GRANEL (NA)",
       material: "Filler",
       granulometria: null,
       envase: "A granel",
+      kg_por_unidad: null,
       activo: true,
-    } as ProductoDeDespacho,
+    },
   ];
 
   /**
@@ -95,10 +97,10 @@ describe("clasificacionDeLaOrden: cuál de los dos caminos gana", () => {
    * interpretación. Una orden de la balanza que además tuviera un texto viejo
    * en `producto_raw` tiene que clasificarse por el remito.
    */
-  it("con producto de Odoo mapeado, gana el mapeo", () => {
+  it("con producto de Odoo clasificado, gana el catálogo", () => {
     const c = clasificacionDeLaOrden(
       { odoo_product_id: 7, producto_raw: "Cal en Bolsones" },
-      mapeo
+      catalogo
     );
     expect(c).toEqual({ material: "Filler", granulometria: null, envase: "A granel" });
   });
@@ -106,14 +108,14 @@ describe("clasificacionDeLaOrden: cuál de los dos caminos gana", () => {
   it("sin producto de Odoo, cae al texto del libro", () => {
     const c = clasificacionDeLaOrden(
       { odoo_product_id: null, producto_raw: "Cal en Bolsones" },
-      mapeo
+      catalogo
     );
     expect(c).toEqual({ material: "Cal", granulometria: null, envase: "Bolsón" });
   });
 
   /** Un producto de Odoo que nadie mapeó todavía tampoco cae al texto: no hay texto. */
-  it("con producto de Odoo sin mapear y sin texto, queda sin clasificar", () => {
-    expect(clasificacionDeLaOrden({ odoo_product_id: 99, producto_raw: null }, mapeo)).toBeNull();
+  it("con producto de Odoo sin clasificar y sin texto, queda sin clasificar", () => {
+    expect(clasificacionDeLaOrden({ odoo_product_id: 99, producto_raw: null }, catalogo)).toBeNull();
   });
 
   /**
@@ -121,10 +123,10 @@ describe("clasificacionDeLaOrden: cuál de los dos caminos gana", () => {
    * mapear, en una orden que sí trae texto. Cae al texto, y está bien: es lo
    * único que hay.
    */
-  it("con producto de Odoo sin mapear pero con texto conocido, usa el texto", () => {
+  it("con producto de Odoo sin clasificar pero con texto conocido, usa el texto", () => {
     const c = clasificacionDeLaOrden(
       { odoo_product_id: 99, producto_raw: "Filler en Tolva" },
-      mapeo
+      catalogo
     );
     expect(c).toEqual({ material: "Filler", granulometria: null, envase: "Tolva" });
   });

@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { totalesDeDespacho, roturaTotal, desajustesDeKilos } from "./despachos";
+import { totalesDeDespacho, roturaTotal, desajustesDeKilos, kilosQueCoinciden } from "./despachos";
 import type { Despacho } from "./types";
 
 const base: Despacho = {
   id: "d-1", parte_id: "pa-1", orden: 1,
   equipo_raw: "Bailin", cliente_raw: "Guemes",
-  producto_id: "p-cal-bolsa", producto_raw: "Cal en bolsas",
+  renglon_papel_id: "p-cal-bolsa", producto_raw: "Cal en bolsas",
   kilos: 30000, bultos: 1200, envase_raw: "bolsa",
   pallets_cantidad: null, pallets_tipo: null,
   rotura_bolsa: 0, rotura_bolson: 0,
@@ -37,7 +37,7 @@ describe("los totales de un parte salen de los renglones", () => {
    * en el lugar que no es— pero tampoco se pierde: sale listado.
    */
   it("un renglon sin producto no se suma pero no se pierde", () => {
-    const suelto = { ...base, id: "d-3", orden: 3, producto_id: null, producto_raw: "Otros: cal" };
+    const suelto = { ...base, id: "d-3", orden: 3, renglon_papel_id: null, producto_raw: "Otros: cal" };
     const t = totalesDeDespacho([base, suelto]);
     expect(t.despachado).toEqual({ "p-cal-bolsa": 1200 });
     expect(t.sinProducto.map((d) => d.id)).toEqual(["d-3"]);
@@ -96,5 +96,59 @@ describe("los kilos contra los bultos", () => {
   it("un producto con kg por unidad en 0 tampoco se comprueba", () => {
     const kgCero = new Map<string, number | null>([["p-cal-bolsa", 0]]);
     expect(desajustesDeKilos([{ ...base, kilos: 1 }], kgCero)).toEqual([]);
+  });
+});
+
+describe("kilosQueCoinciden", () => {
+  /**
+   * El caso que motiva la función: el papel cuenta "cal en bolsón" en un solo
+   * renglón y ahí caen las tres variantes que Odoo despacha —CUV 65-70, CUV
+   * 55-60 y Puesta en Destino—. Los tres son bolsones de 1.000 kg, así que el
+   * renglón tiene un kg por unidad y la comprobación corre.
+   */
+  it("un renglón con tres productos que coinciden vale ese kg", () => {
+    expect(
+      kilosQueCoinciden([
+        { renglon_papel_id: "r-cal-bolson", kg_por_unidad: 1000 },
+        { renglon_papel_id: "r-cal-bolson", kg_por_unidad: 1000 },
+        { renglon_papel_id: "r-cal-bolson", kg_por_unidad: 1000 },
+      ])
+    ).toEqual({ "r-cal-bolson": 1000 });
+  });
+
+  /**
+   * Y el caso que no se puede resolver: si el renglón junta una bolsa de 25 kg
+   * con un bolsón de 1.000, no hay un kg por unidad del renglón. Queda en null
+   * y `desajustesDeKilos` lo saltea, en vez de avisar contra un número
+   * inventado — o promediado, que es lo mismo pero peor porque parece un dato.
+   */
+  it("si no coinciden, el renglón queda sin kg y no se promedia", () => {
+    expect(
+      kilosQueCoinciden([
+        { renglon_papel_id: "r-mezclado", kg_por_unidad: 25 },
+        { renglon_papel_id: "r-mezclado", kg_por_unidad: 1000 },
+      ])
+    ).toEqual({ "r-mezclado": null });
+  });
+
+  it("un renglón sin productos, o con productos sin kg cargado, queda en null", () => {
+    expect(
+      kilosQueCoinciden([
+        { renglon_papel_id: "r-vacio", kg_por_unidad: null },
+        { renglon_papel_id: "r-otro", kg_por_unidad: null },
+        { renglon_papel_id: "r-otro", kg_por_unidad: null },
+      ])
+    ).toEqual({ "r-vacio": null, "r-otro": null });
+  });
+
+  /** Repetir el mismo kg no lo vuelve ambiguo: es un conjunto, no una lista. */
+  it("el mismo kg cargado dos veces sigue siendo uno", () => {
+    expect(
+      kilosQueCoinciden([
+        { renglon_papel_id: "r", kg_por_unidad: 25 },
+        { renglon_papel_id: "r", kg_por_unidad: 25 },
+        { renglon_papel_id: "r", kg_por_unidad: null },
+      ])
+    ).toEqual({ r: 25 });
   });
 });

@@ -32,13 +32,13 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { ids, productos, produccion, despacho, rotura } = await armarElDia(admin, fecha);
+  const { ids, renglonesDePapel, produccion, despacho, rotura } = await armarElDia(admin, fecha);
 
   if (ids.length === 0) {
     return NextResponse.json({ error: `No hay partes cargados el ${fecha}` }, { status: 404 });
   }
 
-  const resultado = await espejarDia({ fecha, productos, produccion, despacho, rotura });
+  const resultado = await espejarDia({ fecha, renglonesDePapel, produccion, despacho, rotura });
 
   // Anotado (o limpiado) en **todos** los partes del día, y no sólo en el que
   // haya quedado pendiente: si la mañana falló y la tarde no está cargada

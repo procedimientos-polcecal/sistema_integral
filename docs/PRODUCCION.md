@@ -125,7 +125,7 @@ Un fallo de escritura no es un `console.warn`: queda en
 `app/api/produccion/planilla/reintentar/route.ts` lo reintenta. Las
 credenciales de Google no están en local — esto sólo se prueba en el deploy.
 
-## El catálogo de productos
+## El renglón del papel y el producto son dos cosas (10/09/2026)
 
 El papel tiene **~15 renglones** agrupados en tres familias (*Filler*, *0-2*,
 *Cal*) más un renglón libre "Otros"; el Excel tiene **17 columnas** con otros
@@ -133,20 +133,51 @@ nombres, repartidas entre `Carga Diaria` y las hojas de resumen. **La
 correspondencia entre los dos no está escrita en ningún lado** — vive en la
 cabeza de quien carga hoy el Excel.
 
-Por eso `produccion_productos` está **vacía a propósito**. No se cargó una
-lista de arranque porque no hay ninguna que se pueda armar sin que alguien de
-calidad la revise renglón por renglón: enlazar "al que se parece" acá no es un
-enlace opcional, es sumar la producción de un producto en la columna de otro,
-y **eso no se nota nunca** — el número aparece, sólo que en el lugar que no es.
+Hasta el 10/09/2026 `produccion_productos` intentaba ser las dos cosas: el
+renglón del papel y el producto. Y no alcanzaba, porque su vocabulario
+—`familia` (`filler`, `0_2`, `cal`, `otros`) + `envase` (`bolsa`, `bolson`)— es
+**más grueso que el producto**: la familia `0_2` no dice el material, y en el
+libro de Despacho `Calcio 0-2 en Bolsón` son 135 órdenes y `Dolomita 0-2 en
+Bolsón` 20. Dos cosas que se venden distinto y que ese vocabulario cuenta
+juntas.
 
-**La carga inicial la tiene que definir calidad**, con tres cosas por
-confirmar además del nombre de cada renglón (detalladas más abajo, en "Lo que
-falta de una persona"): los kilos por unidad de cada envase, la tolerancia de
-la comprobación kilos↔bultos, y qué número va en cada columna del papel
-cuando hay dos candidatas.
+Ahora son dos tablas, y el
+[spec del catálogo único](superpowers/specs/2026-09-10-productos-catalogo-unico-design.md)
+explica por qué:
 
-La pantalla `/produccion/productos` (sólo `admin`) es donde se carga esa lista
-una vez que esté definida — no hay importador ni script de una vez.
+| | |
+|---|---|
+| `produccion_renglones_papel` | El renglón del parte y la columna del Excel: `nombre`, `familia`, `nombre_planilla`, `orden`. Sigue **vacía a propósito** |
+| `productos` (núcleo) | La cosa física, compartida con Despacho. Sembrada con los 49 productos que salieron en 180 días |
+| `produccion_renglon_productos` | Qué productos cuenta cada renglón. **Muchos a muchos** |
+
+**El puente es de muchos a muchos y eso es la decisión.** Si el papel cuenta
+"cal en bolsón" en un solo renglón, ese renglón apunta a las tres variantes que
+Odoo despacha —CUV 65-70, CUV 55-60 y Puesta en Destino— y la suma sale bien sin
+que nadie tenga que elegir una y perder dos. Una columna obligaría a elegir, y
+elegir "el que se parece" acá no es un enlace opcional: es sumar la producción de
+un producto en la columna de otro, y **eso no se nota nunca**.
+
+`produccion_renglones_papel` sigue vacía porque la lista la define calidad,
+renglón por renglón, igual que antes. Lo que cambió es que ya no hay que
+inventar en el mismo acto qué producto es cada renglón: eso es un enlace aparte,
+que se puede cargar después y corregir sin tocar los partes.
+
+### Los kilos por unidad ya no son del renglón
+
+`envase` y `kg_por_unidad` se fueron al producto, que es de quien son. El kg por
+unidad de un renglón **se despeja de sus productos enlazados, y sólo si
+coinciden** (`kilosQueCoinciden`, en `lib/produccion/despachos.ts`, con tests):
+si un renglón junta una bolsa de 25 kg con un bolsón de 1.000, queda en null y
+la comprobación kilos↔bultos no corre para él. Promediarlos o elegir uno sería
+inventar el número contra el que se avisa.
+
+O sea que hasta que calidad enlace los productos, la comprobación de kilos no
+avisa nada. Es visible en la pantalla —el renglón dice "sin definir"— y no
+silencioso.
+
+La pantalla `/produccion/productos` (sólo `admin`, en el menú **Renglones del
+parte**) es donde se cargan los renglones y se marcan sus productos.
 
 ## Lo que quedó afuera a propósito
 

@@ -189,7 +189,7 @@ export const NAV: NavItem[] = [
     children: [
       { label: "El día", href: "/produccion", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
-      { label: "Productos", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
+      { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
   {

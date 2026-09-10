@@ -5,11 +5,10 @@ import {
   celdasDeResumen,
   porcentajeDeRotura,
 } from "./planilla";
-import type { Producto } from "./types";
+import type { RenglonDePapel } from "./types";
 
-const producto = (id: string, nombre_planilla: string | null, orden: number): Producto => ({
-  id, nombre: id, familia: "cal", envase: "bolsa",
-  kg_por_unidad: 25, nombre_planilla, orden, activo: true,
+const producto = (id: string, nombre_planilla: string | null, orden: number): RenglonDePapel => ({
+  id, nombre: id, familia: "cal", nombre_planilla, orden, activo: true,
 });
 
 const CAL = producto("p-cal", "Bolsones de Cal", 1);

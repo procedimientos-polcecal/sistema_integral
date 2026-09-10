@@ -5,7 +5,7 @@ import {
   produccionDelTurno,
   produccionDelDia,
   soloLoCalculado,
-  type ProduccionPorProducto,
+  type ProduccionPorRenglon,
 } from "./produccion";
 import type { Despacho, Turno } from "./types";
 
@@ -33,7 +33,7 @@ export interface FilaParte {
 
 export interface FilaDeposito {
   parte_id: string;
-  producto_id: string;
+  renglon_papel_id: string;
   cantidad: number;
 }
 
@@ -41,7 +41,7 @@ export interface DiaDelMes {
   /** "YYYY-MM-DD" */
   fecha: string;
   /** Los tres estados, igual que en la pantalla del día: no se reduce acá. */
-  produccion: ProduccionPorProducto;
+  produccion: ProduccionPorRenglon;
   /**
    * La misma reducción que exporta la planilla (`soloLoCalculado`). Es contra
    * esto, y no contra `produccion`, que se calcula el % de rotura del día: es
@@ -93,7 +93,7 @@ export function armarLosDias(args: ArmarLosDiasArgs): DiaDelMes[] {
   const depositoPorParte = new Map<string, Record<string, number>>();
   for (const f of filasDeposito) {
     const d = depositoPorParte.get(f.parte_id) ?? {};
-    d[f.producto_id] = Number(f.cantidad);
+    d[f.renglon_papel_id] = Number(f.cantidad);
     depositoPorParte.set(f.parte_id, d);
   }
 
@@ -122,7 +122,7 @@ export function armarLosDias(args: ArmarLosDiasArgs): DiaDelMes[] {
   for (let fecha = primerDia; fecha <= ultimoDia; fecha = sumarDias(fecha, 1)) {
     const despacho: Record<string, number> = {};
     const rotura: Record<string, number> = {};
-    const porTurno: (ProduccionPorProducto | null)[] = [];
+    const porTurno: (ProduccionPorRenglon | null)[] = [];
     let turnosCargados = 0;
 
     for (const turno of TURNOS) {

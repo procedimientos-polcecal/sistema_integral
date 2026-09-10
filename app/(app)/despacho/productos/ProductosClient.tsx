@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ENVASES, GRANULOMETRIAS, MATERIALES, separarCodigoYNombre } from "@/lib/despacho/clasificacion";
-import type { ProductoDeDespacho } from "@/lib/despacho/types";
-import type { SinClasificar } from "./page";
+import {
+  ENVASES,
+  GRANULOMETRIAS,
+  MATERIALES,
+  separarCodigoYNombre,
+} from "@/lib/core/productos";
+import type { FilaDeCatalogo, FueraDelCatalogo } from "./page";
 
 /**
- * Clasificar los productos de Odoo.
+ * Clasificar el catálogo de productos.
  *
  * Los tres campos se eligen de una lista y no se escriben: un material tipeado a
  * mano entra con un typo y aparece como un material nuevo en los filtros del
@@ -17,92 +21,114 @@ import type { SinClasificar } from "./page";
  *
  * Un producto **no se borra**: las órdenes viejas lo referencian por
  * `odoo_product_id` y perder su clasificación las dejaría sin material. El botón
- * dice "Desactivar" y saca al producto del alta sin tocar su historia.
+ * dice "Desactivar" y lo saca del alta sin tocar su historia.
  */
 
 export default function ProductosClient({
-  mapeo,
   sinClasificar,
-  productosDeProduccion,
+  clasificados,
+  fueraDelCatalogo,
 }: {
-  mapeo: ProductoDeDespacho[];
-  sinClasificar: SinClasificar[];
-  productosDeProduccion: { id: string; nombre: string }[];
+  sinClasificar: FilaDeCatalogo[];
+  clasificados: FilaDeCatalogo[];
+  fueraDelCatalogo: FueraDelCatalogo[];
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
-  const [clasificando, setClasificando] = useState<SinClasificar | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  const [material, setMaterial] = useState<string>("");
-  const [granulometria, setGranulometria] = useState<string>("");
-  const [envase, setEnvase] = useState<string>("");
-  const [puente, setPuente] = useState<string>("");
+  /** El id del producto del catálogo que se está clasificando. */
+  const [editando, setEditando] = useState<FilaDeCatalogo | null>(null);
+  /** El de Odoo que hay que sumar al catálogo antes de clasificarlo. */
+  const [sumando, setSumando] = useState<FueraDelCatalogo | null>(null);
 
-  function abrir(p: SinClasificar) {
-    setClasificando(p);
+  const [material, setMaterial] = useState("");
+  const [granulometria, setGranulometria] = useState("");
+  const [envase, setEnvase] = useState("");
+
+  function abrirEdicion(f: FilaDeCatalogo) {
+    setEditando(f);
+    setSumando(null);
+    setMaterial(f.producto.material ?? "");
+    setGranulometria(f.producto.granulometria ?? "");
+    setEnvase(f.producto.envase ?? "");
+    setError("");
+  }
+
+  function abrirAlta(p: FueraDelCatalogo) {
+    setSumando(p);
+    setEditando(null);
     setMaterial("");
     setGranulometria("");
     setEnvase("");
-    setPuente("");
     setError("");
+  }
+
+  function cerrar() {
+    setEditando(null);
+    setSumando(null);
+    setError("");
+  }
+
+  async function llamar(metodo: "POST" | "PATCH", cuerpo: Record<string, unknown>) {
+    setGuardando(true);
+    setError("");
+    const res = await fetch("/api/despacho/productos", {
+      method: metodo,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cuerpo),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo guardar.");
+      return false;
+    }
+    return true;
   }
 
   async function guardar() {
-    if (!clasificando || clasificando.odoo_product_id === null) return;
     if (!material || !envase) {
-      setError("Faltan el material y el envase.");
+      setError("Faltan el material y el envase. La clasificación va entera o vacía.");
       return;
     }
+    const clasificacion = { material, granulometria: granulometria || null, envase };
 
-    setGuardando(true);
-    setError("");
-    const { codigo, nombre } = separarCodigoYNombre(clasificando.producto_raw ?? "");
-    const res = await fetch("/api/despacho/productos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        odoo_product_id: clasificando.odoo_product_id,
-        odoo_default_code: codigo,
-        odoo_nombre: nombre ?? clasificando.producto_raw ?? "",
-        material,
-        granulometria: granulometria || null,
-        envase,
-        produccion_producto_id: puente || null,
-      }),
-    });
-    setGuardando(false);
+    const ok = editando
+      ? await llamar("PATCH", { id: editando.producto.id, ...clasificacion })
+      : sumando && sumando.odoo_product_id !== null
+        ? await llamar("POST", {
+            odoo_product_id: sumando.odoo_product_id,
+            // El producto llega como "[FAG] FILLER A GRANEL " desde Odoo.
+            ...(() => {
+              const { codigo, nombre } = separarCodigoYNombre(sumando.producto_raw ?? "");
+              return { odoo_default_code: codigo, nombre: nombre ?? sumando.producto_raw ?? "" };
+            })(),
+            ...clasificacion,
+          })
+        : false;
 
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({}))).error ?? "No se pudo guardar.");
-      return;
+    if (ok) {
+      cerrar();
+      router.refresh();
     }
-    setClasificando(null);
-    router.refresh();
   }
 
-  async function alternarActivo(p: ProductoDeDespacho) {
-    setError("");
-    const res = await fetch("/api/despacho/productos", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: p.id, activo: !p.activo }),
-    });
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({}))).error ?? "No se pudo guardar.");
-      return;
-    }
-    router.refresh();
+  async function alternarActivo(f: FilaDeCatalogo) {
+    if (await llamar("PATCH", { id: f.producto.id, activo: !f.producto.activo })) router.refresh();
   }
+
+  const abierto = editando ?? sumando;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Productos de Despacho</h1>
+        <h1 className="text-xl font-bold text-slate-900">Productos</h1>
         <p className="text-sm text-slate-500">
-          Qué material, granulometría y envase es cada producto de Odoo. Los tres
-          campos del talonario están metidos dentro del nombre del producto, y acá
-          se separan a mano: no se deducen del texto.
+          Qué material, granulometría y envase es cada producto. Los tres campos
+          del talonario están metidos dentro del nombre del producto de Odoo, y
+          acá se separan a mano: no se deducen del texto. Un producto puede no
+          tener terna —Minerales Ecológicos, Binder— y ésos se muestran con su
+          nombre.
         </p>
       </div>
 
@@ -112,20 +138,14 @@ export default function ProductosClient({
         </div>
       )}
 
-      <section className="space-y-2">
-        <h2 className="font-semibold text-slate-900">
-          Sin clasificar{" "}
-          <span className="font-normal text-slate-400">
-            ({sinClasificar.length})
-          </span>
-        </h2>
-        {sinClasificar.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">
-            Todos los productos que aparecieron en órdenes están clasificados.
-          </p>
-        ) : (
+      {fueraDelCatalogo.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-semibold text-slate-900">
+            Apareció en órdenes y no está en el catálogo{" "}
+            <span className="font-normal text-slate-400">({fueraDelCatalogo.length})</span>
+          </h2>
           <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-amber-200 bg-white">
-            {sinClasificar.map((p) => (
+            {fueraDelCatalogo.map((p) => (
               <div
                 key={`${p.odoo_product_id ?? "raw"}-${p.producto_raw ?? ""}`}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
@@ -137,39 +157,40 @@ export default function ProductosClient({
                   <div className="text-xs text-slate-400">
                     {p.ordenes} {p.ordenes === 1 ? "orden" : "órdenes"}
                     {p.odoo_product_id === null &&
-                      " · órdenes cargadas sin remito: no hay producto de Odoo para mapear"}
+                      " · cargadas sin remito: no hay producto de Odoo que sumar"}
                   </div>
                 </div>
                 {p.odoo_product_id !== null && (
                   <button
-                    onClick={() => abrir(p)}
+                    onClick={() => abrirAlta(p)}
                     className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
                   >
-                    Clasificar
+                    Sumar y clasificar
                   </button>
                 )}
               </div>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
-      {clasificando && (
+      {abierto && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-slate-900">Clasificar</h3>
-              <p className="text-sm text-slate-500">{clasificando.producto_raw}</p>
+              <h3 className="font-semibold text-slate-900">
+                {editando ? "Cambiar la clasificación" : "Sumar al catálogo"}
+              </h3>
+              <p className="text-sm text-slate-500">
+                {editando ? editando.producto.nombre : sumando?.producto_raw}
+              </p>
             </div>
-            <button
-              onClick={() => setClasificando(null)}
-              className="text-sm text-slate-500 hover:text-slate-700"
-            >
+            <button onClick={cerrar} className="text-sm text-slate-500 hover:text-slate-700">
               Cancelar
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="text-xs font-medium text-slate-700">Material</span>
               <select
@@ -209,24 +230,6 @@ export default function ProductosClient({
                 ))}
               </select>
             </label>
-            <label className="block">
-              <span className="text-xs font-medium text-slate-700">
-                Producto de Producción
-              </span>
-              <select
-                value={puente}
-                onChange={(e) => setPuente(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">Ninguno</option>
-                {productosDeProduccion.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-slate-400">
-                Opcional: el granel no está en el catálogo de fábrica.
-              </span>
-            </label>
           </div>
 
           <button
@@ -239,54 +242,105 @@ export default function ProductosClient({
         </div>
       )}
 
-      <section className="space-y-2">
-        <h2 className="font-semibold text-slate-900">
-          Clasificados <span className="font-normal text-slate-400">({mapeo.length})</span>
-        </h2>
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <Tabla
+        titulo="Sin clasificar"
+        filas={sinClasificar}
+        vacio="Todo el catálogo está clasificado."
+        borde="border-amber-200"
+        onEditar={abrirEdicion}
+        onAlternar={alternarActivo}
+      />
+
+      <Tabla
+        titulo="Clasificados"
+        filas={clasificados}
+        vacio="Todavía no se clasificó ningún producto."
+        borde="border-slate-200"
+        onEditar={abrirEdicion}
+        onAlternar={alternarActivo}
+      />
+    </div>
+  );
+}
+
+function Tabla({
+  titulo,
+  filas,
+  vacio,
+  borde,
+  onEditar,
+  onAlternar,
+}: {
+  titulo: string;
+  filas: FilaDeCatalogo[];
+  vacio: string;
+  borde: string;
+  onEditar: (f: FilaDeCatalogo) => void;
+  onAlternar: (f: FilaDeCatalogo) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <h2 className="font-semibold text-slate-900">
+        {titulo} <span className="font-normal text-slate-400">({filas.length})</span>
+      </h2>
+      <div className={`overflow-hidden rounded-xl border bg-white ${borde}`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2 text-left">Código</th>
+                <th className="px-3 py-2 text-left">Producto</th>
+                <th className="px-3 py-2 text-right">Órdenes</th>
+                <th className="px-3 py-2 text-left">Material</th>
+                <th className="px-3 py-2 text-left">Granulometría</th>
+                <th className="px-3 py-2 text-left">Envase</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filas.length === 0 ? (
                 <tr>
-                  <th className="px-3 py-2 text-left">Código</th>
-                  <th className="px-3 py-2 text-left">Producto de Odoo</th>
-                  <th className="px-3 py-2 text-left">Material</th>
-                  <th className="px-3 py-2 text-left">Granulometría</th>
-                  <th className="px-3 py-2 text-left">Envase</th>
-                  <th className="px-3 py-2"></th>
+                  <td colSpan={7} className="px-3 py-10 text-center text-slate-400">
+                    {vacio}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {mapeo.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-slate-400">
-                      Todavía no se clasificó ningún producto.
+              ) : (
+                filas.map(({ producto, ordenes }) => (
+                  <tr
+                    key={producto.id}
+                    className={`hover:bg-slate-50 ${producto.activo ? "" : "opacity-50"}`}
+                  >
+                    <td className="px-3 py-2 text-slate-500">
+                      {producto.odoo_default_code ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-slate-900">{producto.nombre}</td>
+                    <td className="px-3 py-2 text-right text-slate-500">
+                      {ordenes === 0 ? "—" : ordenes}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{producto.material ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{producto.granulometria ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{producto.envase ?? "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={() => onEditar({ producto, ordenes })}
+                        className="text-sm text-slate-500 underline hover:text-slate-700"
+                      >
+                        Clasificar
+                      </button>
+                      <button
+                        onClick={() => onAlternar({ producto, ordenes })}
+                        className="ml-3 text-sm text-slate-500 underline hover:text-slate-700"
+                      >
+                        {producto.activo ? "Desactivar" : "Activar"}
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  mapeo.map((p) => (
-                    <tr key={p.id} className={`hover:bg-slate-50 ${p.activo ? "" : "opacity-50"}`}>
-                      <td className="px-3 py-2 text-slate-500">{p.odoo_default_code ?? "—"}</td>
-                      <td className="px-3 py-2 font-medium text-slate-900">{p.odoo_nombre}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.material}</td>
-                      <td className="px-3 py-2 text-slate-600">{p.granulometria ?? "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{p.envase}</td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          onClick={() => alternarActivo(p)}
-                          className="text-sm text-slate-500 underline hover:text-slate-700"
-                        >
-                          {p.activo ? "Desactivar" : "Activar"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }

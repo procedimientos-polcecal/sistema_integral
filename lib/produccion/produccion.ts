@@ -1,4 +1,4 @@
-import type { PorProducto } from "./types";
+import type { PorRenglon } from "./types";
 
 /**
  * Despejar la producción de un turno.
@@ -23,22 +23,22 @@ export interface EntradaDelTurno {
    * sale en rojo y alguien lo corrige — pero la garantía la tiene que dar
    * quien arma la carga, no esta función.
    */
-  deposito: PorProducto;
+  deposito: PorRenglon;
   /** El depósito del parte anterior. `null` = ese parte no existe todavía. */
-  depositoAnterior: PorProducto | null;
-  despachado: PorProducto;
-  rotura: PorProducto;
+  depositoAnterior: PorRenglon | null;
+  despachado: PorRenglon;
+  rotura: PorRenglon;
 }
 
-export type ProduccionDelProducto =
+export type ProduccionDelRenglon =
   | { estado: "calculada"; cantidad: number }
   | { estado: "sin_parte_anterior" }
   /** Sólo la devuelve `produccionDelDia`: le falta el parte de un turno entero. */
   | { estado: "dia_incompleto" };
 
-export type ProduccionPorProducto = Record<string, ProduccionDelProducto>;
+export type ProduccionPorRenglon = Record<string, ProduccionDelRenglon>;
 
-export function produccionDelTurno(e: EntradaDelTurno): ProduccionPorProducto {
+export function produccionDelTurno(e: EntradaDelTurno): ProduccionPorRenglon {
   const ids = new Set([
     ...Object.keys(e.deposito),
     ...Object.keys(e.depositoAnterior ?? {}),
@@ -46,7 +46,7 @@ export function produccionDelTurno(e: EntradaDelTurno): ProduccionPorProducto {
     ...Object.keys(e.rotura),
   ]);
 
-  const salida: ProduccionPorProducto = {};
+  const salida: ProduccionPorRenglon = {};
   for (const id of ids) {
     // Sin el parte anterior no hay resta posible. Devolver 0 sería inventar un
     // día sin producción, que es indistinguible de un día bien cargado.
@@ -71,15 +71,15 @@ export function produccionDelTurno(e: EntradaDelTurno): ProduccionPorProducto {
 /**
  * El día es la suma de sus turnos. Si a uno le falta el anterior, el día
  * tampoco se puede — eso ya lo manejaba `sin_parte_anterior`. Pero un turno
- * que no se cargó y un turno cargado sin productos son los dos `{}`, y sin
+ * que no se cargó y un turno cargado sin renglonesDePapel son los dos `{}`, y sin
  * distinguirlos un día al que le falta un turno entero se calculaba con lo
  * poco que había y mentía como si fuera el día completo. Por eso un turno
  * faltante se pasa como `null`, no como `{}`.
  */
 export function produccionDelDia(
-  turnos: readonly (ProduccionPorProducto | null)[]
-): ProduccionPorProducto {
-  const salida: ProduccionPorProducto = {};
+  turnos: readonly (ProduccionPorRenglon | null)[]
+): ProduccionPorRenglon {
+  const salida: ProduccionPorRenglon = {};
 
   if (turnos.some((t) => t === null)) {
     // El día no cierra. Todo producto que aparezca en algún turno sí cargado
@@ -97,7 +97,7 @@ export function produccionDelDia(
     return salida;
   }
 
-  for (const turno of turnos as readonly ProduccionPorProducto[]) {
+  for (const turno of turnos as readonly ProduccionPorRenglon[]) {
     for (const [id, p] of Object.entries(turno)) {
       const acumulado = salida[id];
       if (p.estado === "sin_parte_anterior" || acumulado?.estado === "sin_parte_anterior") {
@@ -115,7 +115,7 @@ export function produccionDelDia(
 }
 
 /** Sólo lo calculado, para exportar a la planilla. Lo no calculable no se exporta. */
-export function soloLoCalculado(p: ProduccionPorProducto): Record<string, number> {
+export function soloLoCalculado(p: ProduccionPorRenglon): Record<string, number> {
   const salida: Record<string, number> = {};
   for (const [id, v] of Object.entries(p)) {
     if (v.estado === "calculada") salida[id] = v.cantidad;

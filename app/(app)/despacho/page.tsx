@@ -3,11 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { nivelDespachoDe } from "@/lib/despacho/auth";
 import {
-  traerMapeoDeProductos,
   traerOrdenesDelDia,
   traerOrdenesAbiertasAnteriores,
 } from "@/lib/despacho/consultas";
-import { clasificacionDeLaOrden, textoDeClasificacion } from "@/lib/despacho/clasificacion";
+import { traerCatalogoDeProductos, textoDeClasificacion } from "@/lib/core/productos";
+import { clasificacionDeLaOrden } from "@/lib/despacho/clasificacion";
 import { estadoDeLaOrden, horariosSalteados, tiemposDeLaOrden } from "@/lib/despacho/orden";
 import type { EstadoDeOrden, HorarioDeOrden, OrdenDeCarga } from "@/lib/despacho/types";
 import ColaClient from "./ColaClient";
@@ -52,7 +52,7 @@ export default async function DespachoPage({
   if (!nivel) redirect("/");
 
   const [mapeo, delDia, abiertasAntes, empresas] = await Promise.all([
-    traerMapeoDeProductos(supabase),
+    traerCatalogoDeProductos(supabase),
     traerOrdenesDelDia(supabase, fecha),
     traerOrdenesAbiertasAnteriores(supabase, fecha),
     // Sólo hacen falta para el alta sin remito: con remito la empresa la dice

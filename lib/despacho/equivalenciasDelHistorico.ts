@@ -1,4 +1,4 @@
-import type { Clasificacion } from "./types";
+import type { Clasificacion } from "@/lib/core/types";
 
 /**
  * Cómo se lee la columna `Material` del histórico importado.

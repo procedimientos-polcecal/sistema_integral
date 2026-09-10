@@ -7,7 +7,7 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
  *
  *   lectura  ve los partes y los resúmenes
  *   edicion  además carga y corrige partes
- *   admin    además da de alta y edita productos del catálogo
+ *   admin    además da de alta y edita renglonesDePapel del catálogo
  *
  * En la base los espejan `tiene_acceso_produccion()`,
  * `puede_editar_produccion()` y `es_admin_produccion()`. Las dos mitades tienen
@@ -51,7 +51,7 @@ export async function puedeEditarProduccion(
   return nivel === "edicion" || nivel === "admin";
 }
 
-/** Dar de alta y editar productos del catálogo. */
+/** Dar de alta y editar renglonesDePapel del catálogo. */
 export async function esAdminProduccion(
   supabase: SupabaseClient,
   userId: string

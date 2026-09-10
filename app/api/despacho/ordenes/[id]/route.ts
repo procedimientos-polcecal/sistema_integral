@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarDespacho } from "@/lib/despacho/auth";
-import { traerOrden, traerMapeoDeProductos } from "@/lib/despacho/consultas";
+import { traerOrden } from "@/lib/despacho/consultas";
+import { traerCatalogoDeProductos } from "@/lib/core/productos";
 import { clasificacionDeLaOrden } from "@/lib/despacho/clasificacion";
 import { espejarOrden } from "@/lib/despacho/espejo";
 import { ORDEN_DE_HORARIOS, proximoHorario } from "@/lib/despacho/orden";
@@ -124,8 +125,8 @@ export async function PATCH(
     return NextResponse.json({ data: actualizada, planilla_error: null });
   }
 
-  const mapeo = await traerMapeoDeProductos(supabase);
-  const espejo = await espejarOrden(actualizada, clasificacionDeLaOrden(actualizada, mapeo));
+  const catalogo = await traerCatalogoDeProductos(supabase);
+  const espejo = await espejarOrden(actualizada, clasificacionDeLaOrden(actualizada, catalogo));
 
   // El pendiente se anota o se limpia; nunca queda a medias. Una fila que se
   // escribió bien después de fallar tiene que dejar de contarse como pendiente.

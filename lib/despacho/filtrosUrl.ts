@@ -1,6 +1,6 @@
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { escribirEnLaUrl, hayAlgunFiltro as hayAlguno, losQueEstanEnLaLista } from "@/lib/core/filtrosUrl";
-import { ENVASES, MATERIALES } from "./clasificacion";
+import { ENVASES, MATERIALES } from "@/lib/core/productos";
 
 /**
  * Los filtros del histórico de órdenes, leídos y escritos en la URL.

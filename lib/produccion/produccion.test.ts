@@ -115,13 +115,13 @@ describe("la produccion del dia", () => {
     expect(produccionDelDia([t1, t2])[calcio01]).toEqual({ estado: "sin_parte_anterior" });
   });
 
-  it("sin turnos cargados el dia no tiene productos", () => {
+  it("sin turnos cargados el dia no tiene renglonesDePapel", () => {
     expect(produccionDelDia([])).toEqual({});
   });
 
   /**
    * El caso que motivó el arreglo: 03/09, sólo el turno 4→12 cargado
-   * (29 - 17 = 12). Sin distinguir "no cargado" de "cargado sin productos",
+   * (29 - 17 = 12). Sin distinguir "no cargado" de "cargado sin renglonesDePapel",
    * esto se devolvía como { estado: "calculada", cantidad: 12 } y la grilla
    * mostraba 12 como si fuera la producción del día completo.
    */
@@ -134,7 +134,7 @@ describe("la produccion del dia", () => {
     expect(produccionDelDia([t1, null])[calcio01]).toEqual({ estado: "dia_incompleto" });
   });
 
-  it("los dos turnos null: el dia no tiene productos de los que hablar", () => {
+  it("los dos turnos null: el dia no tiene renglonesDePapel de los que hablar", () => {
     expect(produccionDelDia([null, null])).toEqual({});
   });
 

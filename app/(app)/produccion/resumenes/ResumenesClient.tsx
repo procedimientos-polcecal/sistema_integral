@@ -5,12 +5,12 @@ import { hoyEnArgentina, mesRelativo } from "@/lib/core/fechas";
 import { porcentajeDeRotura } from "@/lib/produccion/planilla";
 import { TURNOS } from "@/lib/produccion/turnos";
 import type { DiaDelMes } from "@/lib/produccion/consultas";
-import type { ProduccionDelProducto } from "@/lib/produccion/produccion";
-import type { Producto } from "@/lib/produccion/types";
+import type { ProduccionDelRenglon } from "@/lib/produccion/produccion";
+import type { RenglonDePapel } from "@/lib/produccion/types";
 
 interface Props {
   mes: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   dias: DiaDelMes[];
 }
 
@@ -45,7 +45,7 @@ function diaCorto(fecha: string): string {
  * `0`. `d.turnosCargados` es lo único que permite distinguirlos, y por eso
  * `CeldaDeSuma` y `CeldaDePorcentaje` lo reciben en vez de recalcular nada acá.
  */
-export default function ResumenesClient({ mes, productos, dias }: Props) {
+export default function ResumenesClient({ mes, renglonesDePapel, dias }: Props) {
   const mesActual = hoyEnArgentina().slice(0, 7);
 
   return (
@@ -84,24 +84,24 @@ export default function ResumenesClient({ mes, productos, dias }: Props) {
         </Link>
       </div>
 
-      {productos.length === 0 ? (
+      {renglonesDePapel.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-          Todavía no hay productos en el catálogo, así que no hay ninguna
+          Todavía no hay renglonesDePapel en el catálogo, así que no hay ninguna
           columna que mostrar. En cuanto calidad defina la lista, este mes va a
           tener sus tablas — no hace falta volver a cargar nada de lo que ya se
           transcribió: los partes están, sólo falta el catálogo para verlos acá.
         </div>
       ) : (
         <>
-          <TablaProduccion productos={productos} dias={dias} />
+          <TablaProduccion renglonesDePapel={renglonesDePapel} dias={dias} />
           <TablaDeSumas
             titulo="Despacho"
             leyenda="Bultos despachados por producto, sumados de los renglones del camión."
-            productos={productos}
+            renglonesDePapel={renglonesDePapel}
             dias={dias}
             campo={(d) => d.despacho}
           />
-          <TablaDeRotura productos={productos} dias={dias} />
+          <TablaDeRotura renglonesDePapel={renglonesDePapel} dias={dias} />
         </>
       )}
     </div>
@@ -109,7 +109,7 @@ export default function ResumenesClient({ mes, productos, dias }: Props) {
 }
 
 /** El nombre de un producto, o el genérico si `nombre_planilla` no lo da. */
-function nombreDeColumna(p: Producto): string {
+function nombreDeColumna(p: RenglonDePapel): string {
   return p.nombre;
 }
 
@@ -156,11 +156,11 @@ function fraseDiasFuera(n: number): string {
     : `${n} días de este mes no se pudieron calcular (falta un turno o el parte anterior) y no entran en el total.`;
 }
 
-function EncabezadoDeProductos({ productos }: { productos: Producto[] }) {
+function EncabezadoDeProductos({ renglonesDePapel }: { renglonesDePapel: RenglonDePapel[] }) {
   return (
     <tr>
       <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left">Día</th>
-      {productos.map((p) => (
+      {renglonesDePapel.map((p) => (
         <th key={p.id} className="px-3 py-2 text-right whitespace-nowrap">
           {nombreDeColumna(p)}
         </th>
@@ -170,7 +170,7 @@ function EncabezadoDeProductos({ productos }: { productos: Producto[] }) {
 }
 
 /** Producción: la única tabla que no es una simple suma, tiene estados. */
-function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: DiaDelMes[] }) {
+function TablaProduccion({ renglonesDePapel, dias }: { renglonesDePapel: RenglonDePapel[]; dias: DiaDelMes[] }) {
   const totales: Record<string, number> = {};
   for (const d of dias) {
     for (const [id, v] of Object.entries(d.produccionCalculada)) {
@@ -187,7 +187,7 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
     >
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-          <EncabezadoDeProductos productos={productos} />
+          <EncabezadoDeProductos renglonesDePapel={renglonesDePapel} />
         </thead>
         <tbody className="divide-y divide-slate-100">
           {dias.map((d) => (
@@ -195,7 +195,7 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
               <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-slate-700">
                 {diaCorto(d.fecha)}
               </td>
-              {productos.map((p) => (
+              {renglonesDePapel.map((p) => (
                 <td key={p.id} className="px-3 py-2 text-right">
                   <CeldaProduccion estado={d.produccion[p.id]} />
                 </td>
@@ -213,7 +213,7 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
                 </span>
               )}
             </td>
-            {productos.map((p) => (
+            {renglonesDePapel.map((p) => (
               <td key={p.id} className="px-3 py-2 text-right">
                 {totales[p.id] ?? 0}
               </td>
@@ -225,7 +225,7 @@ function TablaProduccion({ productos, dias }: { productos: Producto[]; dias: Dia
   );
 }
 
-function CeldaProduccion({ estado }: { estado: ProduccionDelProducto | undefined }) {
+function CeldaProduccion({ estado }: { estado: ProduccionDelRenglon | undefined }) {
   // Ningún turno del día tocó este producto (ni depósito, ni despacho, ni
   // rotura): no es lo mismo que "no calculable", es que no hay nada que
   // mostrar.
@@ -281,11 +281,11 @@ function CeldaDeSuma({ valor, turnosCargados }: { valor: number; turnosCargados:
 
 /** Despacho: una simple suma por producto, sin estados que desglosar. */
 function TablaDeSumas({
-  titulo, leyenda, productos, dias, campo,
+  titulo, leyenda, renglonesDePapel, dias, campo,
 }: {
   titulo: string;
   leyenda?: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   dias: DiaDelMes[];
   campo: (d: DiaDelMes) => Record<string, number>;
 }) {
@@ -300,7 +300,7 @@ function TablaDeSumas({
     <Envoltorio titulo={titulo} leyenda={leyenda}>
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-          <EncabezadoDeProductos productos={productos} />
+          <EncabezadoDeProductos renglonesDePapel={renglonesDePapel} />
         </thead>
         <tbody className="divide-y divide-slate-100">
           {dias.map((d) => (
@@ -308,7 +308,7 @@ function TablaDeSumas({
               <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-slate-700">
                 {diaCorto(d.fecha)}
               </td>
-              {productos.map((p) => (
+              {renglonesDePapel.map((p) => (
                 <td key={p.id} className="px-3 py-2 text-right">
                   <CeldaDeSuma valor={campo(d)[p.id] ?? 0} turnosCargados={d.turnosCargados} />
                 </td>
@@ -319,7 +319,7 @@ function TablaDeSumas({
         <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
           <tr>
             <td className="sticky left-0 z-10 bg-slate-50 px-3 py-2">Total del mes</td>
-            {productos.map((p) => (
+            {renglonesDePapel.map((p) => (
               <td key={p.id} className="px-3 py-2 text-right">
                 {totales[p.id] ?? 0}
               </td>
@@ -341,7 +341,7 @@ function TablaDeSumas({
  * aclaración "sin producción": es la información que hoy se pierde detrás
  * de un 0 % en el Excel.
  */
-function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDelMes[] }) {
+function TablaDeRotura({ renglonesDePapel, dias }: { renglonesDePapel: RenglonDePapel[]; dias: DiaDelMes[] }) {
   const totalRotura: Record<string, number> = {};
   const totalProduccion: Record<string, number> = {};
   for (const d of dias) {
@@ -370,7 +370,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
       <TablaDeSumas
         titulo="Rotura"
         leyenda="Unidades rotas, bolsa y bolsón sumados. Separadas en el renglón del despacho."
-        productos={productos}
+        renglonesDePapel={renglonesDePapel}
         dias={dias}
         campo={(d) => d.rotura}
       />
@@ -382,7 +382,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
       >
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <EncabezadoDeProductos productos={productos} />
+            <EncabezadoDeProductos renglonesDePapel={renglonesDePapel} />
           </thead>
           <tbody className="divide-y divide-slate-100">
             {dias.map((d) => (
@@ -390,7 +390,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
                 <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-slate-700">
                   {diaCorto(d.fecha)}
                 </td>
-                {productos.map((p) => (
+                {renglonesDePapel.map((p) => (
                   <td key={p.id} className="px-3 py-2 text-right">
                     <CeldaDePorcentaje
                       rotura={d.rotura[p.id] ?? 0}
@@ -412,7 +412,7 @@ function TablaDeRotura({ productos, dias }: { productos: Producto[]; dias: DiaDe
                   </span>
                 )}
               </td>
-              {productos.map((p) => (
+              {renglonesDePapel.map((p) => (
                 <td key={p.id} className="px-3 py-2 text-right">
                   <CeldaDePorcentaje
                     rotura={totalRotura[p.id] ?? 0}

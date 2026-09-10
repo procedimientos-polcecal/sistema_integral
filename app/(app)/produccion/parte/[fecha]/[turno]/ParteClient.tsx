@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClaveDeParte } from "@/lib/produccion/turnos";
 import { comoSeLeeElTurno } from "@/lib/produccion/turnos";
-import type { Turno, Producto, Familia, Parte, Despacho } from "@/lib/produccion/types";
+import type { Turno, RenglonDePapel, Familia, Parte, Despacho } from "@/lib/produccion/types";
 import { produccionDelTurno } from "@/lib/produccion/produccion";
 import { totalesDeDespacho, roturaTotal, desajustesDeKilos } from "@/lib/produccion/despachos";
 import {
@@ -26,8 +26,10 @@ interface Props {
   turno: Turno;
   turnoLegible: string;
   puedeEditar: boolean;
-  /** El catálogo completo (activos e inactivos): cargar y conservar no son lo mismo, ver más abajo. */
-  productos: Producto[];
+  /** Los renglones del papel, completos (activos e inactivos): cargar y conservar no son lo mismo, ver más abajo. */
+  renglonesDePapel: RenglonDePapel[];
+  /** Kilos por unidad de cada renglón, despejados de los productos que tiene enlazados. */
+  kgPorRenglon: Record<string, number | null>;
   parte: Parte | null;
   deposito: Record<string, number>;
   despachos: Despacho[];
@@ -42,7 +44,7 @@ interface RenglonForm {
   key: string;
   equipo_raw: string;
   cliente_raw: string;
-  producto_id: string;
+  renglon_papel_id: string;
   producto_raw: string;
   kilos: string;
   bultos: string;
@@ -63,7 +65,7 @@ const FAMILIAS: { clave: Familia; etiqueta: string }[] = [
 function nuevoRenglon(): RenglonForm {
   return {
     key: crypto.randomUUID(),
-    equipo_raw: "", cliente_raw: "", producto_id: "", producto_raw: "",
+    equipo_raw: "", cliente_raw: "", renglon_papel_id: "", producto_raw: "",
     kilos: "", bultos: "", envase_raw: "", pallets_cantidad: "", pallets_tipo: "",
     rotura_bolsa: "", rotura_bolson: "",
   };
@@ -74,7 +76,7 @@ function renglonDesdeDespacho(d: Despacho): RenglonForm {
     key: d.id,
     equipo_raw: d.equipo_raw ?? "",
     cliente_raw: d.cliente_raw ?? "",
-    producto_id: d.producto_id ?? "",
+    renglon_papel_id: d.renglon_papel_id ?? "",
     producto_raw: d.producto_raw ?? "",
     kilos: d.kilos !== null ? String(d.kilos) : "",
     bultos: d.bultos !== null ? String(d.bultos) : "",
@@ -113,8 +115,8 @@ function numeroDeRoturaPreview(texto: string): number {
  * un día después.
  */
 export default function ParteClient({
-  fecha, turno, turnoLegible, puedeEditar, productos, parte, deposito, despachos,
-  depositoAnterior, parteAnterior, empleados,
+  fecha, turno, turnoLegible, puedeEditar, renglonesDePapel, kgPorRenglon, parte, deposito,
+  despachos, depositoAnterior, parteAnterior, empleados,
 }: Props) {
   const router = useRouter();
 
@@ -122,7 +124,7 @@ export default function ParteClient({
   // ofrece el desplegable "Reconocido como" de cada despacho: nadie tiene que
   // poder cargar un producto discontinuado (mismo criterio que el comentario
   // de `armarElDia` en lib/produccion/consultas.ts).
-  const productosActivos = useMemo(() => productos.filter((p) => p.activo), [productos]);
+  const productosActivos = useMemo(() => renglonesDePapel.filter((p) => p.activo), [renglonesDePapel]);
 
   // Un producto inactivo que ya tiene un valor en este parte no puede
   // desaparecer del depósito: si el catálogo sólo trajera los activos, el
@@ -132,8 +134,8 @@ export default function ParteClient({
   // producción contra un depósito que le falta un producto (se lee como cero).
   // Uno inactivo *sin* valor acá no tiene nada que perder, y no se muestra.
   const productosEnUso = useMemo(
-    () => productos.filter((p) => p.activo || deposito[p.id] !== undefined),
-    [productos, deposito]
+    () => renglonesDePapel.filter((p) => p.activo || deposito[p.id] !== undefined),
+    [renglonesDePapel, deposito]
   );
 
   const [capatazRaw, setCapatazRaw] = useState(parte?.capataz_raw ?? "");
@@ -196,7 +198,7 @@ export default function ParteClient({
         orden: i + 1,
         equipo_raw: r.equipo_raw || null,
         cliente_raw: r.cliente_raw || null,
-        producto_id: r.producto_id || null,
+        renglon_papel_id: r.renglon_papel_id || null,
         producto_raw: r.producto_raw || null,
         kilos: numeroOpcionalDePreview(r.kilos),
         bultos: numeroOpcionalDePreview(r.bultos),
@@ -228,7 +230,7 @@ export default function ParteClient({
   // vivo — pero ese 0 no es un dato, es "no se sabe", y mostrarlo como una
   // producción calculada es exactamente el error que este módulo vino a
   // corregir: una fila con un tipeo se vería igual que una fila con un
-  // problema real de stock. Acá se guarda, aparte, qué productos tienen algo
+  // problema real de stock. Acá se guarda, aparte, qué renglonesDePapel tienen algo
   // sin poder leerse (depósito, o la rotura/los bultos de algún despacho que
   // los referencia), para que esa fila diga "no calculable" en vez de un
   // número inventado. El guardado ya está frenado por `erroresDeValidacion`
@@ -242,21 +244,24 @@ export default function ParteClient({
     }
 
     for (const r of renglones) {
-      if (!r.producto_id) continue;
+      if (!r.renglon_papel_id) continue;
       const invalido =
         !interpretarCantidadOpcional(r.bultos).ok ||
         !interpretarRotura(r.rotura_bolsa).ok ||
         !interpretarRotura(r.rotura_bolson).ok;
-      if (invalido) no.add(r.producto_id);
+      if (invalido) no.add(r.renglon_papel_id);
     }
 
     return no;
   }, [productosEnUso, depositoTexto, renglones]);
 
-  const kgPorUnidad = useMemo(
-    () => new Map(productos.map((p) => [p.id, p.kg_por_unidad] as const)),
-    [productos]
-  );
+  /**
+   * El kg por unidad ya no es del renglón del papel sino del producto, y un
+   * renglón puede agrupar varios: lo despeja `kgPorRenglonDePapel` en el
+   * servidor, que deja en null el renglón cuyos productos no coinciden. Acá
+   * sólo se indexa.
+   */
+  const kgPorUnidad = useMemo(() => new Map(Object.entries(kgPorRenglon)), [kgPorRenglon]);
   // Avisa, no bloquea: el papel es el papel. Se muestra debajo de la tabla y
   // el guardado sigue andando igual.
   const desajustes = useMemo(
@@ -317,12 +322,12 @@ export default function ParteClient({
         // parte después de desactivar el producto.
         deposito: productosEnUso.map((p) => {
           const texto = (depositoTexto[p.id] ?? "").trim();
-          return { producto_id: p.id, cantidad: texto === "" ? "0" : texto };
+          return { renglon_papel_id: p.id, cantidad: texto === "" ? "0" : texto };
         }),
         despachos: renglones.map((r) => ({
           equipo_raw: r.equipo_raw,
           cliente_raw: r.cliente_raw,
-          producto_id: r.producto_id || null,
+          renglon_papel_id: r.renglon_papel_id || null,
           producto_raw: r.producto_raw,
           kilos: r.kilos,
           bultos: r.bultos,
@@ -456,7 +461,7 @@ export default function ParteClient({
 
         {productosEnUso.length === 0 ? (
           <p className="rounded-lg bg-slate-50 px-3 py-4 text-sm text-slate-500">
-            Todavía no hay productos en el catálogo, así que no hay nada que
+            Todavía no hay renglonesDePapel en el catálogo, así que no hay nada que
             cargar acá. El resto del parte —capataz, despachos y los textos— se
             puede guardar igual.
           </p>
@@ -559,7 +564,7 @@ export default function ParteClient({
                 key={r.key}
                 indice={i}
                 renglon={r}
-                productos={productosActivos}
+                renglonesDePapel={productosActivos}
                 puedeEditar={puedeEditar}
                 onCambiar={(cambios) => actualizarRenglon(r.key, cambios)}
                 onQuitar={() => quitarRenglon(r.key)}
@@ -695,11 +700,11 @@ export default function ParteClient({
 
 /** Una tarjeta por camión: equipo, cliente, producto, kilos y bultos, envase, pallets y rotura. */
 function RenglonDespacho({
-  indice, renglon, productos, puedeEditar, onCambiar, onQuitar,
+  indice, renglon, renglonesDePapel, puedeEditar, onCambiar, onQuitar,
 }: {
   indice: number;
   renglon: RenglonForm;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   puedeEditar: boolean;
   onCambiar: (cambios: Partial<RenglonForm>) => void;
   onQuitar: () => void;
@@ -753,13 +758,13 @@ function RenglonDespacho({
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Reconocido como</span>
           <select
-            value={renglon.producto_id}
+            value={renglon.renglon_papel_id}
             disabled={!puedeEditar}
             onChange={(e) => {
               const id = e.target.value;
-              const p = productos.find((x) => x.id === id);
+              const p = renglonesDePapel.find((x) => x.id === id);
               onCambiar({
-                producto_id: id,
+                renglon_papel_id: id,
                 // Si todavía no se escribió nada, elegir del catálogo lo
                 // completa; si ya hay un texto (lo que dice el papel), no se
                 // pisa: puede no coincidir letra por letra con el nombre del
@@ -770,7 +775,7 @@ function RenglonDespacho({
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
           >
             <option value="">— sin reconocer —</option>
-            {productos.map((p) => (
+            {renglonesDePapel.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>

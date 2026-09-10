@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { comoSeLee, sumarDias, hoyEnArgentina } from "@/lib/core/fechas";
 import { comoSeLeeElTurno, parteAnterior } from "@/lib/produccion/turnos";
 import { roturaTotal, type TotalesDeDespacho } from "@/lib/produccion/despachos";
-import type { ProduccionPorProducto } from "@/lib/produccion/produccion";
-import type { Familia, Producto } from "@/lib/produccion/types";
+import type { ProduccionPorRenglon } from "@/lib/produccion/produccion";
+import type { Familia, RenglonDePapel } from "@/lib/produccion/types";
 import type { TurnoDelDia } from "./page";
 
 const FAMILIAS: { clave: Familia; etiqueta: string }[] = [
@@ -19,9 +19,9 @@ const FAMILIAS: { clave: Familia; etiqueta: string }[] = [
 
 interface Props {
   fecha: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   turnos: TurnoDelDia[];
-  delDia: ProduccionPorProducto;
+  delDia: ProduccionPorRenglon;
   puedeEditar: boolean;
 }
 
@@ -54,7 +54,7 @@ function fechaLegible(fecha: string): string {
  * `produccionDelDia`, `totalesDeDespacho`, `roturaTotal`); acá sólo se
  * despliega el desglose de una cuenta que ya está hecha, nunca se recalcula.
  */
-export default function DiaClient({ fecha, productos, turnos, delDia, puedeEditar }: Props) {
+export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, puedeEditar }: Props) {
   const router = useRouter();
   const [reintentando, setReintentando] = useState(false);
   const [errorReintento, setErrorReintento] = useState("");
@@ -88,7 +88,7 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
     router.refresh();
   }
 
-  const productosPorFamilia = (familia: Familia) => productos.filter((p) => p.familia === familia);
+  const productosPorFamilia = (familia: Familia) => renglonesDePapel.filter((p) => p.familia === familia);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 md:p-6">
@@ -188,9 +188,9 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
       </div>
 
       {/* ── La tabla del día ──────────────────────────────────── */}
-      {productos.length === 0 ? (
+      {renglonesDePapel.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-          Todavía no hay productos en el catálogo, así que no hay nada que
+          Todavía no hay renglonesDePapel en el catálogo, así que no hay nada que
           mostrar acá. Eso no impide cargar los partes del día: los avisos de
           arriba siguen valiendo.
         </div>
@@ -217,7 +217,7 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
                     <FamilyGroup
                       key={clave}
                       etiqueta={etiqueta}
-                      productos={deEstaFamilia}
+                      renglonesDePapel={deEstaFamilia}
                       t1={t1}
                       t2={t2}
                       delDia={delDia}
@@ -235,13 +235,13 @@ export default function DiaClient({ fecha, productos, turnos, delDia, puedeEdita
 }
 
 function FamilyGroup({
-  etiqueta, productos, t1, t2, delDia, diaIncompleto,
+  etiqueta, renglonesDePapel, t1, t2, delDia, diaIncompleto,
 }: {
   etiqueta: string;
-  productos: Producto[];
+  renglonesDePapel: RenglonDePapel[];
   t1: TurnoDelDia;
   t2: TurnoDelDia;
-  delDia: ProduccionPorProducto;
+  delDia: ProduccionPorRenglon;
   diaIncompleto: boolean;
 }) {
   return (
@@ -251,7 +251,7 @@ function FamilyGroup({
           {etiqueta}
         </td>
       </tr>
-      {productos.map((p) => (
+      {renglonesDePapel.map((p) => (
         <FilaDeProducto key={p.id} producto={p} t1={t1} t2={t2} delDia={delDia} diaIncompleto={diaIncompleto} />
       ))}
     </>
@@ -261,10 +261,10 @@ function FamilyGroup({
 function FilaDeProducto({
   producto, t1, t2, delDia, diaIncompleto,
 }: {
-  producto: Producto;
+  producto: RenglonDePapel;
   t1: TurnoDelDia;
   t2: TurnoDelDia;
-  delDia: ProduccionPorProducto;
+  delDia: ProduccionPorRenglon;
   diaIncompleto: boolean;
 }) {
   return (
@@ -390,7 +390,7 @@ function CeldaDelDia({
   productoId, delDia, t1, t2,
 }: {
   productoId: string;
-  delDia: ProduccionPorProducto;
+  delDia: ProduccionPorRenglon;
   t1: TurnoDelDia;
   t2: TurnoDelDia;
 }) {
