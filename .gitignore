@@ -24,3 +24,9 @@ scripts/import-proveedores/a-revisar.json
 *.iam.gserviceaccount.com.json
 *-service-account*.json
 mantenimientopp-*.json
+
+# El worker de pdf.js, que Facturación usa para rasterizar un PDF y buscarle el
+# QR. Lo copia `scripts/copiar-worker-pdf.mjs` desde node_modules en cada
+# `npm run dev` y `npm run build`. No se commitea porque su versión tiene que
+# coincidir con la del paquete instalado: pdf.js aborta si son distintas.
+public/pdfjs/

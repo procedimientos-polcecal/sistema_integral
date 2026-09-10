@@ -8,7 +8,7 @@
 // Postgres no deja quitar un valor de un enum, pero quedó inerte: no lo ofrece
 // la pantalla, no lo aceptan las rutas y no lo nombra ninguna policy.
 export type Rol = "admin_sistema" | "encargado" | "operario";
-export type Modulo = "rrhh" | "mantenimiento" | "remises" | "compras" | "inventario" | "produccion" | "despacho";
+export type Modulo = "rrhh" | "mantenimiento" | "remises" | "compras" | "inventario" | "produccion" | "despacho" | "facturacion";
 export type NivelAcceso = "lectura" | "edicion" | "admin";
 
 export interface Empresa {

@@ -16,11 +16,12 @@ interface Resumen {
     abiertasDeDiasAnteriores: number;
     sinLlegarALaPlanilla: number;
   } | null;
+  facturacion: { entraronHoy: number; sinVincular: number; sinProveedor: number } | null;
 }
 
 const VACIO: Resumen = {
   rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
-  despacho: null,
+  despacho: null, facturacion: null,
 };
 
 /**
@@ -210,8 +211,42 @@ export default function InicioClient({
             }
           />
         )}
+
+        {/* El titular es el ritmo del día. La alarma son las que quedaron sin
+            vincular: una factura en el buzón que nadie enganchó a una compra es
+            la que después aparece en Odoo sin que nadie sepa de qué era. */}
+        {tiene("facturacion") && (
+          <ModuloCard
+            titulo="Facturación"
+            href="/facturacion"
+            color="#0F766E"
+            icon={<IconComprobante />}
+            hero={
+              resumen?.facturacion
+                ? { label: "Facturas que entraron hoy", valor: resumen.facturacion.entraronHoy }
+                : null
+            }
+            secundarias={
+              resumen?.facturacion
+                ? [
+                    { label: "Sin vincular a una compra", valor: resumen.facturacion.sinVincular },
+                    { label: "Con un CUIT que no está en el padrón", valor: resumen.facturacion.sinProveedor },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function IconComprobante() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 8h6M9 12h6" strokeLinecap="round" />
+    </svg>
   );
 }
 

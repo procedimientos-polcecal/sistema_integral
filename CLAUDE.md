@@ -4,9 +4,13 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://sistema-integral-one.vercel.app
 
-Siete módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
-**Compras**, **Inventario**, **Producción** y **Despacho**. Cada uno vive en
-`app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
+Ocho módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+**Compras**, **Inventario**, **Producción**, **Despacho** y **Facturación**. Cada
+uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
+
+**Facturación se enlaza con el Odoo del grupo**, que es donde vive la
+contabilidad de verdad. La regla que gobierna ese enlace: **el SdG propone, Odoo
+confirma** — el SdG no postea asientos ni reemplaza la carga contable.
 
 Todo se escribe en **castellano**: nombres, comentarios, mensajes de pantalla y
 de commit.
@@ -24,6 +28,8 @@ código.
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
+| Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
+| Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |

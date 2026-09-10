@@ -19,6 +19,7 @@ describe("modulosVisibles", () => {
       "inventario",
       "produccion",
       "despacho",
+      "facturacion",
     ]);
   });
 

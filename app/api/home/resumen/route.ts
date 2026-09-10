@@ -23,15 +23,17 @@ export async function GET() {
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
 
-  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho] = await Promise.all([
-    modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
-    modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
-    modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
-    modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
-    modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
-    modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
-    modulos.has("despacho") ? resumenDespacho(supabase, hoyStr) : Promise.resolve(null),
-  ]);
+  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion] =
+    await Promise.all([
+      modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
+      modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
+      modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
+      modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
+      modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
+      modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
+      modulos.has("despacho") ? resumenDespacho(supabase, hoyStr) : Promise.resolve(null),
+      modulos.has("facturacion") ? resumenFacturacion(supabase, hoyStr) : Promise.resolve(null),
+    ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
   const notificaciones: { id: string; titulo: string; cantidad: number; href: string }[] = [];
@@ -92,6 +94,15 @@ export async function GET() {
     });
   }
 
+  if (facturacion && facturacion.sinVincular > 0) {
+    notificaciones.push({
+      id: "facturacion-sin-vincular",
+      titulo: "Facturas en el buzón sin vincular a una compra",
+      cantidad: facturacion.sinVincular,
+      href: "/facturacion?estado=recibida",
+    });
+  }
+
   if (despacho && despacho.sinLlegarALaPlanilla > 0) {
     notificaciones.push({
       id: "despacho-sin-planilla",
@@ -101,7 +112,7 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, notificaciones });
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -303,6 +314,36 @@ async function resumenProduccion(supabase: Awaited<ReturnType<typeof createClien
  * del predio, y ésas no son un olvido accionable: la planilla nunca tuvo esa
  * hora. Contarlas haría que el Inicio abriera con un 345 que nadie puede bajar.
  */
+/**
+ * El buzón de facturas.
+ *
+ * El titular es **lo que entró hoy**, que es el ritmo del día. La alarma son las
+ * que quedaron sin vincular a un requerimiento: una factura en el buzón que
+ * nadie enganchó a una compra es la que después aparece en Odoo sin que nadie
+ * sepa de qué era.
+ */
+async function resumenFacturacion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  hoyStr: string
+) {
+  const [{ count: deHoy }, { count: sinVincular }, { count: sinProveedor }] = await Promise.all([
+    supabase.from("facturas_proveedor")
+      .select("id", { count: "exact", head: true }).gte("created_at", `${hoyStr}T00:00:00`),
+    supabase.from("facturas_proveedor")
+      .select("id", { count: "exact", head: true }).is("requerimiento_id", null).eq("estado", "recibida"),
+    // Sin proveedor es un CUIT que no está en el padrón: se arregla cargándole
+    // el CUIT al proveedor, y entonces la próxima se engancha sola.
+    supabase.from("facturas_proveedor")
+      .select("id", { count: "exact", head: true }).is("proveedor_id", null),
+  ]);
+
+  return {
+    entraronHoy: deHoy ?? 0,
+    sinVincular: sinVincular ?? 0,
+    sinProveedor: sinProveedor ?? 0,
+  };
+}
+
 async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {
   const [{ count: ordenesDeHoy }, { count: abiertas }, { count: sinLlegar }] = await Promise.all([
     supabase.from("despacho_ordenes_carga")

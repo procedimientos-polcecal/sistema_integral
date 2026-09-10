@@ -132,16 +132,41 @@ Devuelve la cabecera normalizada **o un motivo de falla**. Ante cualquier duda n
 adivina: el formulario queda para carga manual con `identificado_por = 'a mano'`.
 Un importe mal leído es peor que un campo vacío.
 
-**Hay que confirmarlo contra tres facturas reales antes de construir la
-pantalla.** El formato está documentado por AFIP, pero si no es el que se supone,
-es mejor saberlo antes.
+**Confirmado el 10/09/2026 contra las 139 facturas de `FACTURAS/SEPTIEMBRE
+2026`** — no tres, la carpeta entera. Los trece nombres de campo son los que dice
+la especificación. Lo que la carpeta agregó, y que no se deducía:
+
+- **Un QR pegado a una línea del formulario no se lee.** El estándar pide una
+  zona de silencio de cuatro módulos y muchos emisores lo imprimen dentro de un
+  recuadro que lo toca. El lector le agrega el margen que el emisor no dejó.
+- **La resolución hay que escalonarla**: 84 se leen a 1600 px de ancho, 15
+  necesitan 2600 y 8 necesitan 3600.
+- **La página dibujada puede deformar el QR.** El de TODO RULEMAN es una imagen
+  de 330×330 que el PDF estira; estirado no se lee. Leerla a resolución nativa lo
+  arreglaría, pero **desde el navegador no se puede**: pdf.js decodifica las
+  imágenes con `OffscreenCanvas` en el worker y no manda los píxeles al hilo
+  principal. Funciona en Node y no en un navegador, así que esa pasada se escribió,
+  midió bien, se comprobó en el navegador y se sacó.
+- **Hay QR que no son de ARCA** en la misma hoja (SPETTER trae uno de
+  `gestionaguas.ar`). No se usan ni siendo el único.
+- **Hay emisores que rompen el QR y sirve igual**: coma decimal y payload
+  truncado (Pedro H. Camino), JSON sin base64 (BERNER), base64 partido en líneas
+  de 72 caracteres (TORRACO).
+
+El detalle y las decisiones que salieron de ahí están en
+[docs/FACTURACION.md](../../FACTURACION.md).
 
 ### Dependencias nuevas
 
-`jsqr` (12 KB) para decodificar el código de una imagen y, en la etapa 3,
-`pdfjs-dist` para rasterizar un PDF antes de buscar el QR. Las dos corren **en el
-navegador**, al subir el archivo: no agregan nada al servidor ni consumen
-créditos de ningún servicio.
+`jsqr` (12 KB) para decodificar el código de una imagen y `pdfjs-dist` para
+rasterizar un PDF antes de buscar el QR. Las dos corren **en el navegador**, al
+subir el archivo: no agregan nada al servidor ni consumen créditos de ningún
+servicio.
+
+**`pdfjs-dist` pasó de la etapa 3 a la etapa 2**, y no por comodidad: las 139
+facturas de septiembre son **todas PDF**. Una etapa 2 que sólo leyera imágenes no
+habría leído ninguna factura de verdad. Su worker se sirve desde `public/pdfjs/`,
+copiado por `scripts/copiar-worker-pdf.mjs` en `predev` y `prebuild`.
 
 ## Los errores, y qué hace el sistema con cada uno
 
@@ -304,14 +329,18 @@ empieza a generar facturas desde la orden. Requisito previo: aplicar la migraci�
 de `proveedores_odoo` y escribir los 122 enlaces, porque sin eso no hay
 `partner_id` que poner.
 
-**Etapa 2 — El buzón.** El módulo `facturacion` (dos migraciones por el enum),
-`facturas_proveedor`, la subida a Supabase Storage, el QR de imágenes con `jsqr`,
-la detección de duplicados, el vínculo al requerimiento y la cola de "listas para
-cargar".
+**Etapa 2 — El buzón. Entregada el 10/09/2026.** El módulo `facturacion` (dos
+migraciones por el enum), `facturas_proveedor`, la subida a Supabase Storage, la
+detección de duplicados por la clave natural, el vínculo al requerimiento por
+número de RI, y la pantalla que **carga varias a la vez** — con 19 por día, una
+pantalla de una factura por vez habría sido una versión más linda de lo que ya
+hacen.
 
-**Etapa 3 — PDFs y cierre del círculo.** `pdfjs-dist` para leer el QR de un PDF,
-y detectar por el pull incremental cuándo la factura ya apareció en Odoo para
-cerrarle el estado.
+Incluye la lectura de PDF, que estaba planificada para la etapa 3: ver arriba.
+
+**Etapa 3 — Cerrar el círculo.** Detectar por el pull incremental cuándo la
+factura ya apareció en Odoo y pasarla sola a `contabilizada`. Hoy ese estado lo
+pone una persona con el botón "Ya está en Odoo".
 
 ## Lo que queda abierto
 
@@ -319,8 +348,8 @@ cerrarle el estado.
    y 73 en Polysan, leído de lo que ya usan.
 2. ~~Dónde se prueba el primer write~~ **resuelto**: staging
    (`polcecal-staging-37495859`), y ya se probó ahí.
-3. **Tres facturas reales en PDF** para confirmar el formato del QR. Bloquea la
-   etapa 2, no la 1.
+3. ~~Tres facturas reales en PDF~~ **resuelto**: se midió contra las 139 de
+   septiembre. El formato es el esperado; lo que no era el esperado está arriba.
 4. **Por qué Polysan factura sin órdenes de compra.** Es una pregunta para
    administración. Si la respuesta es "porque casi nada pasa por un
    requerimiento", la etapa 1 rinde mucho menos de lo que parece y conviene
@@ -328,3 +357,15 @@ cerrarle el estado.
 5. **Si el push corre contra producción o staging.** El código toma la base de
    `ODOO_DB`, así que es configuración, no código: se puede dejar apuntando a
    staging hasta que administración valide un par de órdenes de verdad.
+6. **Las facturas que no traen QR.** 12 de las 139 de septiembre son "copia del
+   original" sin el bloque de ARCA — todas de ZITO Y PRIOLA, que factura seguido.
+   **Esto corrige un supuesto de este spec**: no es que el QR esté dentro de la
+   imagen de una página escaneada; no está. Su PDF sí trae el texto completo y
+   legible, así que una cuarta pasada que lea el texto las rescataría enteras. Es
+   la mejora con mejor relación entre trabajo y facturas ganadas.
+7. **Los QR que jsQR no decodifica** aunque se vean impecables (DON ALFREDO,
+   RUBIALES, ERGUY). Se probó a 7000 px, con umbral duro y con 274 ventanas: no
+   es resolución. Vale probar zxing antes de darlos por perdidos.
+8. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
+   `res.partner.vat` para los 207 enlazados: un cruce de una sola corrida que
+   sube el reconocimiento automático del emisor.

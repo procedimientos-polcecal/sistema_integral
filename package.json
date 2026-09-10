@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copiar-worker-pdf.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copiar-worker-pdf.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -19,6 +21,7 @@
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "next": "16.2.9",
+    "pdfjs-dist": "^6.3.289",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.10.0",

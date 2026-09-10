@@ -49,6 +49,7 @@ const MODULO_LABEL: Record<Modulo, string> = {
   inventario: "Inventario",
   produccion: "Producción",
   despacho: "Despacho",
+  facturacion: "Facturación",
 };
 const NIVEL_LABEL: Record<Nivel, string> = { lectura: "Lectura", edicion: "Edición", admin: "Admin" };
 

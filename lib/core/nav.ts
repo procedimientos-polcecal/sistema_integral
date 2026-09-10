@@ -205,6 +205,18 @@ export const NAV: NavItem[] = [
       { label: "Productos", href: "/despacho/productos", modulo: "despacho", soloAdmin: true },
     ],
   },
+  {
+    label: "Facturación",
+    href: "/facturacion",
+    modulo: "facturacion",
+    // El buzón primero, y por ahora es casi todo: es la pantalla donde se sube
+    // la factura que acaba de llegar por mail, en papel o por WhatsApp. Lo que
+    // queda por vincular se mira después, no durante.
+    children: [
+      { label: "El buzón", href: "/facturacion", modulo: "facturacion" },
+      { label: "Sin vincular", href: "/facturacion?estado=recibida", modulo: "facturacion" },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
