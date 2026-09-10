@@ -95,16 +95,10 @@ as $$
   )
 $$;
 
--- Conciliar facturas: estar en `cantera_finanzas`. A propósito NO incluye el
--- nivel del módulo ni admin_sistema — cargar una voladura y conciliar su
--- factura las hacen personas distintas. Mismo criterio que `puede_aprobar_os()`
--- (20260904140041).
-create or replace function public.puede_facturar_cantera()
-returns boolean
-language sql stable security definer set search_path = public
-as $$
-  select exists (select 1 from cantera_finanzas where usuario_id = auth.uid())
-$$;
+-- `puede_facturar_cantera()` va MÁS ABAJO, después de crear `cantera_finanzas`:
+-- una función `language sql` resuelve las tablas que nombra al crearse, así que
+-- referenciar una tabla que todavía no existe falla con 42P01 y revierte el
+-- archivo entero.
 
 -- ── 2. Catálogos ─────────────────────────────────────────────
 
@@ -148,6 +142,17 @@ create table if not exists cantera_finanzas (
 comment on table cantera_finanzas is
   'Quiénes pueden conciliar una factura de cantera contra la de Odoo. Pertenecer a la lista ES el permiso, igual que os_aprobadores: no depende del nivel en ningún módulo.';
 
+-- Conciliar facturas: estar en `cantera_finanzas`. A propósito NO incluye el
+-- nivel del módulo ni admin_sistema — cargar una voladura y conciliar su
+-- factura las hacen personas distintas. Mismo criterio que `puede_aprobar_os()`
+-- (20260904140041). Va acá y no arriba porque nombra la tabla recién creada.
+create or replace function public.puede_facturar_cantera()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from cantera_finanzas where usuario_id = auth.uid())
+$$;
+
 -- Los contratistas de cantera (hoy Canobe y Voladuras Olavarría). SIN rol:
 -- confirmado con el usuario que cualquiera de los dos factura cualquier etapa
 -- —perforación, voladura o bochones— y a cualquiera de las dos empresas. Se
@@ -164,7 +169,7 @@ create table if not exists cantera_contratistas (
 -- caso no inserta nada y lo agrega admin desde /cantera/configuracion.
 insert into cantera_contratistas (proveedor_id)
 select id from proveedores
-where regexp_replace(coalesce(cuit, ''), '\D', '', 'g') in ('23224987439', '30716046482')
+where regexp_replace(coalesce(cuit, ''), '[^0-9]', '', 'g') in ('23224987439', '30716046482')
 on conflict (proveedor_id) do nothing;
 
 -- ── 4. Perforación + voladura: un registro, dos facturas ─────
