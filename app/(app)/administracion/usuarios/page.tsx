@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { esAdminDelNucleo } from "@/lib/core/access";
 import UsuariosClient from "./UsuariosClient";
 
 export default async function UsuariosPage() {
@@ -11,8 +12,7 @@ export default async function UsuariosPage() {
   if (!user) redirect("/login");
 
   const { data: usuario } = await supabase.from("usuarios").select("rol").eq("id", user.id).single();
-  const esAdmin = usuario?.rol === "admin_sistema" || usuario?.rol === "admin";
-  if (!esAdmin) redirect("/");
+  if (!esAdminDelNucleo(usuario?.rol)) redirect("/");
 
   const admin = createAdminClient();
 

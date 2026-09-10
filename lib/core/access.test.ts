@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { modulosVisibles, nivelEnModulo } from "./access";
+import { modulosVisibles, nivelEnModulo, esAdminDelNucleo } from "./access";
 import type { UsuarioModulo } from "./types";
 
 const grant = (modulo: UsuarioModulo["modulo"]): UsuarioModulo => ({
@@ -72,5 +72,34 @@ describe("nivelEnModulo", () => {
   it("admin con grant en el módulo usa ese nivel, igual que cualquier otro rol", () => {
     const grants = [grant("mantenimiento")];
     expect(nivelEnModulo("admin", grants, "mantenimiento")).toBe("lectura");
+  });
+});
+
+describe("esAdminDelNucleo", () => {
+  it("admin_sistema administra el núcleo", () => {
+    expect(esAdminDelNucleo("admin_sistema")).toBe(true);
+  });
+
+  /**
+   * El cambio del 10/09/2026. Un usuario con rol `admin` —hoy una cuenta de
+   * soporte externa que entró por Mantenimiento— podía abrir
+   * /administracion/usuarios, crear usuarios y concederse cualquier módulo.
+   * Los grants de módulo nunca le dieron nada por rol (los dos describe de
+   * arriba), así que la pestaña era el único lugar donde `admin` mandaba, y
+   * era justo el que le dejaba ampliarse el resto.
+   */
+  it("admin ya no: la pestaña Administración es sólo de admin_sistema", () => {
+    expect(esAdminDelNucleo("admin")).toBe(false);
+  });
+
+  it("encargado y operario tampoco", () => {
+    expect(esAdminDelNucleo("encargado")).toBe(false);
+    expect(esAdminDelNucleo("operario")).toBe(false);
+  });
+
+  /** Las pantallas pasan `usuario?.rol`, y el cliente de Supabase no está tipado. */
+  it("sin rol no pasa", () => {
+    expect(esAdminDelNucleo(null)).toBe(false);
+    expect(esAdminDelNucleo(undefined)).toBe(false);
   });
 });

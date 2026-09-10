@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { esAdminDelNucleo } from "@/lib/core/access";
 import EmpresasSectoresManager from "@/components/administracion/EmpresasSectoresManager";
 
 export default async function EmpresasPage() {
@@ -10,8 +11,7 @@ export default async function EmpresasPage() {
   if (!user) redirect("/login");
 
   const { data: usuario } = await supabase.from("usuarios").select("rol").eq("id", user.id).single();
-  const esAdmin = usuario?.rol === "admin_sistema" || usuario?.rol === "admin";
-  if (!esAdmin) redirect("/");
+  if (!esAdminDelNucleo(usuario?.rol)) redirect("/");
 
   return (
     <div className="space-y-4">

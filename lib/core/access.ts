@@ -27,3 +27,29 @@ export function nivelEnModulo(
   const grant = grants.find((g) => g.modulo === modulo);
   return grant ? grant.nivel : null;
 }
+
+/**
+ * Quién administra el SdG mismo: la pestaña **Administración** —usuarios y sus
+ * permisos, empresas, sectores— y las tres rutas de Odoo que se gatean con la
+ * misma llave.
+ *
+ * **Sólo `admin_sistema`.** Hasta el 10/09/2026 la regla era
+ * `admin_sistema || admin`, escrita cuatro veces: el Sidebar, las dos
+ * pantallas de `/administracion` y `es_admin_check` de
+ * `lib/core/route-utils.ts`. Con eso, el único usuario con rol `admin` —una
+ * cuenta de soporte externa que entró por Mantenimiento— podía crear usuarios
+ * y concederse a sí mismo cualquier módulo. Un permiso que se puede ampliar
+ * solo no es un permiso, y el resto del sistema ya no le daba nada por rol:
+ * `modulosVisibles` y `nivelEnModulo` (arriba) lo tratan como a un encargado
+ * desde que se escribieron.
+ *
+ * Así que `admin` queda como un rol sin poder propio: lo que puede hacer sale
+ * de sus grants en `usuario_modulos`. Espejo de `es_admin_sistema()` en la
+ * base.
+ *
+ * Vive acá y no en cada pantalla porque cuatro copias de una regla de permisos
+ * son tres de más: la que se olvida de cambiar es la que queda abierta.
+ */
+export function esAdminDelNucleo(rol: Rol | null | undefined): boolean {
+  return rol === "admin_sistema";
+}

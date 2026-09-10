@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { NAV, puedeVerItem, type NavItem } from "@/lib/core/nav";
+import { esAdminDelNucleo } from "@/lib/core/access";
 import { useNavMovil } from "./NavMovil";
 import type { Modulo, Rol } from "@/lib/core/types";
 
@@ -80,7 +81,7 @@ export function Sidebar({
 }) {
   const set = new Set(modulos);
   const adminSet = new Set(modulosAdmin);
-  const esAdminGlobal = rol === "admin_sistema" || rol === "admin";
+  const esAdminGlobal = esAdminDelNucleo(rol);
   const ctx = {
     modulos: set, adminModulos: adminSet, esAdminGlobal, esAprobadorCompras, esAprobadorOS,
   };
