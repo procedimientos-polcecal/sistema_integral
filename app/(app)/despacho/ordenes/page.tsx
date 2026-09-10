@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelDespachoDe } from "@/lib/despacho/auth";
 import { traerMapeoDeProductos, traerOrdenes } from "@/lib/despacho/consultas";
-import { clasificacionDe, textoDeClasificacion } from "@/lib/despacho/clasificacion";
+import { clasificacionDeLaOrden, textoDeClasificacion } from "@/lib/despacho/clasificacion";
 import { estadoDeLaOrden, tiemposDeLaOrden } from "@/lib/despacho/orden";
 import { indicadoresDeOrdenes, type Indicadores } from "@/lib/despacho/indicadores";
 import { leerFiltrosDelHistorico, type FiltrosDeHistorico } from "@/lib/despacho/filtrosUrl";
@@ -74,7 +74,7 @@ export default async function HistoricoPage({
 
   const filas: FilaDeHistorico[] = [];
   for (const orden of ordenes) {
-    const clasificacion = clasificacionDe(orden.odoo_product_id, mapeo);
+    const clasificacion = clasificacionDeLaOrden(orden, mapeo);
 
     // Los filtros de material y envase sacan lo que no clasifica: pedir "todo lo
     // que salió a granel" y recibir además lo que nadie mapeó sería contestar

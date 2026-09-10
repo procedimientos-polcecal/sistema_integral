@@ -7,7 +7,7 @@ import {
   traerOrdenesDelDia,
   traerOrdenesAbiertasAnteriores,
 } from "@/lib/despacho/consultas";
-import { clasificacionDe, textoDeClasificacion } from "@/lib/despacho/clasificacion";
+import { clasificacionDeLaOrden, textoDeClasificacion } from "@/lib/despacho/clasificacion";
 import { estadoDeLaOrden, horariosSalteados, tiemposDeLaOrden } from "@/lib/despacho/orden";
 import type { EstadoDeOrden, HorarioDeOrden, OrdenDeCarga } from "@/lib/despacho/types";
 import ColaClient from "./ColaClient";
@@ -61,7 +61,7 @@ export default async function DespachoPage({
   ]);
 
   const armar = (orden: OrdenDeCarga, atrasada: boolean): FilaDeCola => {
-    const clasificacion = clasificacionDe(orden.odoo_product_id, mapeo);
+    const clasificacion = clasificacionDeLaOrden(orden, mapeo);
     const tiempos = tiemposDeLaOrden(orden);
     return {
       orden,

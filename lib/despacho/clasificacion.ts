@@ -1,4 +1,5 @@
 import type { Clasificacion, ProductoDeDespacho } from "./types";
+import { clasificacionDelHistorico } from "./equivalenciasDelHistorico";
 
 /**
  * Material, granulometría y envase: los tres campos que el talonario pide por
@@ -61,6 +62,29 @@ export function clasificacionDe(
   const p = mapeo.find((x) => x.odoo_product_id === odooProductId);
   if (!p) return null;
   return { material: p.material, granulometria: p.granulometria, envase: p.envase };
+}
+
+/**
+ * La clasificación de una orden, venga de donde venga.
+ *
+ * Dos orígenes y por eso dos caminos: una orden cargada en la balanza trae el
+ * producto del remito de Odoo y se resuelve contra `despacho_productos`; una
+ * de las 1.703 importadas del libro **no tiene producto de Odoo** —vino de la
+ * planilla— y se resuelve contra la tabla de equivalencias por texto.
+ *
+ * Está acá y no repetida en las tres pantallas que clasifican porque el orden
+ * importa: primero el mapeo de Odoo, que es un dato, y sólo si no hay, el texto,
+ * que es una interpretación. Al revés, una orden con remito quedaría clasificada
+ * por lo que alguien tipeó.
+ */
+export function clasificacionDeLaOrden(
+  orden: { odoo_product_id: number | null; producto_raw: string | null },
+  mapeo: ProductoDeDespacho[]
+): Clasificacion | null {
+  return (
+    clasificacionDe(orden.odoo_product_id, mapeo) ??
+    clasificacionDelHistorico(orden.producto_raw)
+  );
 }
 
 /**

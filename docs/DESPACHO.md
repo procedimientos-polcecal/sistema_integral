@@ -120,6 +120,7 @@ Cuatro cosas que conviene no volver a averiguar:
 |---|---|
 | Estado, tiempos y próximo horario | `lib/despacho/orden.ts` |
 | Material / granulometría / envase, y las listas | `lib/despacho/clasificacion.ts` |
+| La columna `Material` del histórico, texto por texto | `lib/despacho/equivalenciasDelHistorico.ts` |
 | La planilla: fila, horas, fechas | `lib/despacho/planilla.ts` |
 | El espejo de una sola vía | `lib/despacho/espejo.ts` |
 | Importador del histórico (parseo) | `lib/despacho/importar.ts` |
@@ -243,12 +244,15 @@ las dos cosas que aparecieron al cargarla:
 **Administración → Usuarios**, módulo `despacho`: `edicion` para la balanza,
 `admin` para el mapeo de productos y el importador.
 
-### Clasificar los productos
+### Mapear los productos de Odoo
 
-Las 1.702 órdenes importadas entran con el texto crudo de la planilla, así que
-arrancan **todas "sin clasificar"**. Las que se carguen desde la balanza traen el
-producto del remito de Odoo, y ésas se clasifican mapeando el producto una vez en
-`/despacho/productos`, que ordena la lista por cuántas órdenes lo usaron.
+`despacho_productos` está **vacía**: ninguno de los 432 productos está mapeado
+todavía, así que toda orden que se cargue desde la balanza va a arrancar "sin
+clasificar" hasta que alguien mapee su producto en `/despacho/productos`, que
+ordena la lista por cuántas órdenes lo usaron. Es una vez por producto y los
+primeros cinco cubren casi todo.
+
+El histórico ya no depende de eso: ver abajo.
 
 ## El histórico ya está importado (09/09/2026)
 
@@ -322,6 +326,87 @@ No es una sincronización y no debe volverse una: de acá en más **manda el
 sistema**. Es la herramienta del rato en que todavía se está acomodando el
 histórico.
 
+## El histórico ya está clasificado (10/09/2026)
+
+Faltaba algo que el documento no decía y que sale de mirar la base: **las 1.703
+órdenes importadas tienen `odoo_product_id` en null**, las 1.703. Vinieron de la
+planilla, no de un remito. Y `clasificacionDe` mapea por producto de Odoo, así
+que la pantalla de mapeo —por más que se carguen los 432 productos— **no iba a
+poder clasificar el histórico nunca**. No era "todavía no lo mapearon": era un
+camino que no llegaba.
+
+Así que se hizo la tabla por texto que este documento pedía:
+`lib/despacho/equivalenciasDelHistorico.ts`, **159 textos exactos → 34
+clasificaciones**. Medido contra la base: **1.649 de 1.703 órdenes clasificadas,
+el 97%**.
+
+| | |
+|---|---|
+| Filler a granel | 640, en 23 ortografías |
+| Cal en Bolsones | 363, en 18 |
+| Filler en Tolva | 150 |
+| Calcio 0-2 en Bolsones | 135 |
+| Cal en Bolsa | 91 |
+| …otras 29 clasificaciones | 270 |
+
+`clasificacionDeLaOrden()` es la que elige el camino, y el orden es la decisión:
+**primero el mapeo de Odoo, que es un dato; el texto sólo si no hay**, porque es
+una interpretación. Al revés, una orden con remito quedaría clasificada por lo
+que alguien tipeó a mano.
+
+Tres cosas que conviene saber:
+
+**La tabla busca por texto exacto y está congelada.** No hay una función que
+normalice antes de buscar, a propósito: eso sería otra decisión invisible, y acá
+lo que se revisa es qué se convierte en qué. Por eso hay entradas casi iguales
+—`Calcio 02  en Bolsones` con dos espacios es una clave propia—. Y no va a
+crecer: el histórico está cerrado y de acá en más el sistema escribe la columna
+con una sola ortografía.
+
+**Ahora corregir una orden importada reescribe su celda `Material` con la forma
+canónica**, no con el texto crudo que tenía. Antes caía a `producto_raw` porque
+no había clasificación. Es la decisión que ya estaba tomada —una sola ortografía
+de acá en más— aplicada a los renglones viejos que se toquen; los que nadie
+toque quedan como están.
+
+**La marca de la bolsa se pierde.** Las ~18 órdenes de `Cal en Bolsa guemes` y
+`Cal moreno en Bolsa` entran como Cal en Bolsa. El material y el envase son los
+correctos, pero la marca no es ninguno de los tres campos del talonario, así que
+no tiene dónde ir. Si importa, es una columna nueva y no una clasificación.
+
+### Las 54 que quedan sin clasificar, y por qué
+
+No es lo que no se pudo: es lo que no se debe.
+
+| Cuántas | Qué son |
+|---|---|
+| 13 | La celda viene vacía (12) o dice `-` (1) |
+| 11 | Traen **dos granulometrías**: `Calcio 200 Bolsa + 01 en BOlsones`, `Calcio 01 y7 02 en Bolsones` |
+| 9 | Traen **dos materiales**: `Calcio + Dolomita 02 bolsa`, `calcio magnesio 0-2 en bolsa` |
+| 8 | No nombran un producto: `Arena`, `muestra`, `binder`, `3 rollos de membrana`, `pallet de cale`, `10 bolsas`, `40 Bolsas de cal guemes`, `bolsas de cal y de Dolomita` |
+| 1 | Dos envases: `dolomita 02 en Bolsones + 02 en Bolsa` |
+| 12 | Erratas o textos incompletos que **una persona puede confirmar** (abajo) |
+
+Las de dos productos son el límite del modelo, no de la tabla: una orden tiene
+una clasificación, y el camión llevó dos cosas. Representarlas exige renglones
+por orden, que es otro spec.
+
+**Los doce para confirmar**, que se dejaron afuera a propósito porque
+escribirlos sería inventar el dato:
+
+| Texto | Lo que parece | Por qué no se escribió |
+|---|---|---|
+| `calk en bolsones`, `Calk en bolsones`, `Cak en bolsones`, `cxal en bolson` | Cal en Bolsones | Son cuatro órdenes con `cal` mal tipeado, pero `cal` y `calcio` están a una letra y la tabla no adivina entre dos materiales |
+| `fillerba granel`, `filklere a granel`, `filler a grael`, `filler a grranel` | Filler a granel | Igual, y acá el material no tiene con qué confundirse: son las más seguras de las doce |
+| `Filler` (sola) | Filler ¿en qué? | No dice envase, y el filler sale a granel, en tolva y en bolsón |
+| `calcio 1/2` | Calcio 1-2 ¿en qué? | Lo mismo |
+| `cal #200 en bolson` | ¿Calcio #200 en Bolsón? | En las ~516 órdenes de Cal del libro la Cal **nunca** lleva granulometría, y `Calcio 0-2 en Bolsón` tiene 135 precedentes |
+| `Cal 02 en Bolson` | ¿Calcio 0-2 en Bolsón? | La misma duda que la anterior |
+
+Confirmadas, son doce líneas más en la tabla y doce órdenes menos sin
+clasificar. Sin confirmar, se ven "sin clasificar" en la pantalla y la planilla
+les sigue mostrando su texto crudo, que es el comportamiento correcto.
+
 ## Lo que encontró probar el módulo (09/09/2026)
 
 Se probó de punta a punta con `scripts/probar-despacho.mts` (lectura) y una
@@ -389,8 +474,5 @@ módulo: hay que esperar el minuto.
 - **Que la orden nazca en administración** y el sistema imprima el papel,
   jubilando el talonario. Es el destino natural, pero toca el hábito de otra
   área.
-- **Limpiar el histórico de la columna `Material`.** Las 1.714 órdenes
-  importadas entran con su texto crudo, y por eso quedan "sin clasificar" en el
-  sistema. Clasificarlas a mano no tiene sentido; lo que sí lo tendría es
-  mapearlas por texto **con una tabla de equivalencias revisada por alguien**,
-  no por parecido.
+- **Confirmar las doce erratas** que la tabla de equivalencias dejó afuera (ver
+  más abajo). Es mirar doce renglones, no un spec.

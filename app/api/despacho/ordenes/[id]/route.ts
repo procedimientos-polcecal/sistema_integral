@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarDespacho } from "@/lib/despacho/auth";
 import { traerOrden, traerMapeoDeProductos } from "@/lib/despacho/consultas";
-import { clasificacionDe } from "@/lib/despacho/clasificacion";
+import { clasificacionDeLaOrden } from "@/lib/despacho/clasificacion";
 import { espejarOrden } from "@/lib/despacho/espejo";
 import { ORDEN_DE_HORARIOS, proximoHorario } from "@/lib/despacho/orden";
 import type { HorarioDeOrden, OrdenDeCarga } from "@/lib/despacho/types";
@@ -125,7 +125,7 @@ export async function PATCH(
   }
 
   const mapeo = await traerMapeoDeProductos(supabase);
-  const espejo = await espejarOrden(actualizada, clasificacionDe(actualizada.odoo_product_id, mapeo));
+  const espejo = await espejarOrden(actualizada, clasificacionDeLaOrden(actualizada, mapeo));
 
   // El pendiente se anota o se limpia; nunca queda a medias. Una fila que se
   // escribió bien después de fallar tiene que dejar de contarse como pendiente.
