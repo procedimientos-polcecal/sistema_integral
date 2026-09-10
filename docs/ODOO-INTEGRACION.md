@@ -380,8 +380,20 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 6. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.
-7. **Push de Compras**: crear la OC en draft al aprobarse en el SdG, con `crearEn`.
-   Para un RI compartido, dos órdenes, con el reparto de `repartoAmbas.ts`.
+7. ~~Push de Compras~~ **hecho**: crea la OC en draft al aprobarse en el SdG,
+   con `crearEn`. Para un RI compartido, dos órdenes, con el reparto de
+   `repartoAmbas.ts`. **La línea ya no lleva siempre el mismo producto
+   genérico**: el catálogo comprable de Odoo (`lib/odoo/catalogo.ts`, 378
+   `product.product`) no son SKUs sino rubros —`GUANTES`, `CABLES`, `BUJES`—,
+   así que `lib/compras/productoOdoo.ts` propone uno por la cabeza de la
+   descripción del RI y Compras lo confirma antes de generar la orden (sin
+   confirmar, sigue siendo `ART. VARIOS`, como antes). Lo confirmado se aprende
+   en `compras_producto_odoo` para la próxima vez que aparezca la misma
+   descripción exacta. El flete usa su propio producto, `FLETE`, en vez de
+   `ART. VARIOS`. Medido contra los 1957 requerimientos reales: 1139 (58%) con
+   sugerencia, 818 (42%) sin ella. Detalle del porqué —incluida la razón para
+   no aceptar coincidencias parciales— en `docs/COMPRAS-ESTADO.md` y en el
+   docstring de `lib/compras/productoOdoo.ts`.
 8. **Webhook** para lo urgente: Odoo 17 tiene la acción "Send Webhook
    Notification" en las reglas de automatización, con log de llamadas. Mismo
    patrón que el Apps Script de la planilla, protegido con un secreto propio.

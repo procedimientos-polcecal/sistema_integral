@@ -472,6 +472,26 @@ master y actualizar el rango de los nueve `FILTER`. El spec del alta decía que
 el techo estaba a ~8.000 pedidos: eso es el techo del `QUERY` del master
 (`A4:L10000`), no el de las pestañas, que es el que muerde primero.
 
+**El catálogo de Odoo no son SKUs, son rubros.** 432 productos, 378 comprables,
+todos compartidos entre las dos empresas y sólo 51 con código: `GUANTES`,
+`CABLES`, `BUJES`. Emparejar por código no sirve; emparejar por nombre sí, pero
+sólo con la regla de la cabeza —la primera palabra significativa de la
+descripción tiene que ser la primera del producto—. Un prototipo que puntuaba
+por cobertura del nombre daba `Guantes de grasa → GRASAS` y `MASCARILLA CON
+VÁLVULA → VÁLVULAS`: fallaba **con confianza**, que es lo peor, porque un
+producto equivocado no se nota —la descripción igual va en el texto de la
+línea— y lo único que queda mal es la cuenta contable.
+
+Por lo mismo **no se aceptan los emparejamientos parciales**: medido sobre 300
+requerimientos, esa franja son 29 y está mayormente mal (`Llave combinada fija
+13mm` → `LLAVE DE IMPACTO`, `Bolsas de cal Moreno` → `BOLSAS CAL GÜEMES`, que es
+otra marca). Se prefiere `ART. VARIOS` y que Compras elija. Medido contra los
+1957 requerimientos reales de Compras y los 378 comprables del catálogo: 1139
+(58%) con sugerencia y 818 (42%) van a `ART. VARIOS` — eso es lo que va llenando
+`compras_producto_odoo`, la tabla de lo aprendido, con el uso. El razonamiento
+completo y los números vigentes están en el docstring de
+`lib/compras/productoOdoo.ts`.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
