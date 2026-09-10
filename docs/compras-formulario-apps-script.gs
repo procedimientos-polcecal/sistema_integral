@@ -144,6 +144,50 @@ function siguienteNumero_(hoja, filaQueSeEstaNumerando) {
 }
 
 /**
+ * Numera a mano la última fila que tenga marca temporal. **Para probar.**
+ *
+ * Sirve para separar dos preguntas que se confunden fácil cuando el número
+ * "sale bien" igual:
+ *
+ *   - ¿está el archivo en este proyecto y la cuenta autorizada? → si esta
+ *     función corre y deja un **número** donde había una fórmula, sí;
+ *   - ¿está enganchada al envío del formulario? → eso sólo lo prueba una
+ *     respuesta de verdad, mirando si la celda quedó con un número.
+ *
+ * Que la columna A muestre el número correcto no alcanza como prueba: la
+ * fórmula vieja también lo muestra, y es justamente la que se quiere reemplazar.
+ * Lo que hay que mirar es la barra de fórmulas.
+ *
+ * Se puede correr las veces que se quiera: escribe el mismo número que ya
+ * estaba, sólo que como valor.
+ */
+function numerarUltimaFila() {
+  var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
+  if (!hoja) throw new Error('No encontré la hoja "' + HOJA + '".');
+
+  var ultima = hoja.getLastRow();
+  var marcas = hoja
+    .getRange(PRIMERA_FILA, COL_MARCA, ultima - PRIMERA_FILA + 1, 1)
+    .getValues();
+
+  var fila = 0;
+  for (var i = marcas.length - 1; i >= 0; i--) {
+    if (String(marcas[i][0]).trim() !== '') { fila = PRIMERA_FILA + i; break; }
+  }
+  if (!fila) throw new Error('No encontré ninguna fila con marca temporal.');
+
+  var antes = hoja.getRange(fila, COL_NRO).getFormula();
+  var n = siguienteNumero_(hoja, fila);
+  hoja.getRange(fila, COL_NRO).setValue(n);
+  SpreadsheetApp.flush();
+
+  Logger.log(
+    'Fila ' + fila + ': ' + (antes ? 'tenía la fórmula ' + antes : 'no tenía fórmula') +
+    ' y ahora tiene el valor ' + n + '.'
+  );
+}
+
+/**
  * Convierte en valores las fórmulas de la columna A que todavía queden.
  *
  * OPCIONAL y **de una sola vez**. Deja la numeración existente inmune a que
