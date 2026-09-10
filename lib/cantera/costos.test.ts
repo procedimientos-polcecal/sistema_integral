@@ -1,32 +1,21 @@
 import { describe, it, expect } from "vitest";
 import {
-  metrosPerforados,
   montoPerforacion,
   montoBochon,
   montoVoladura,
+  baseDeConsumosUsd,
   cruce,
 } from "./costos";
 
 describe("montoPerforacion", () => {
   it("reproduce el total de V01D625 de la planilla", () => {
     // 36 pozos × 3 m = 108 m perforados × 13,43 USD/m × 1515 $/USD
-    expect(
-      montoPerforacion({ pozos: 36, metrosPorPozo: 3, precioUsdM: 13.43, tc: 1515 })
-    ).toBeCloseTo(2197416.6, 0);
+    expect(montoPerforacion({ metros: 108, precioUsdM: 13.43, tc: 1515 })).toBeCloseTo(2197416.6, 0);
   });
 
   it("es null si falta un dato de carga", () => {
-    expect(montoPerforacion({ pozos: 36, metrosPorPozo: null, precioUsdM: 13.43, tc: 1515 })).toBeNull();
-    expect(montoPerforacion({ pozos: 36, metrosPorPozo: 3, precioUsdM: null, tc: 1515 })).toBeNull();
-  });
-});
-
-describe("metrosPerforados", () => {
-  it("es pozos × metros por pozo", () => {
-    expect(metrosPerforados(36, 3)).toBe(108);
-  });
-  it("es null si falta alguno", () => {
-    expect(metrosPerforados(null, 3)).toBeNull();
+    expect(montoPerforacion({ metros: null, precioUsdM: 13.43, tc: 1515 })).toBeNull();
+    expect(montoPerforacion({ metros: 108, precioUsdM: null, tc: 1515 })).toBeNull();
   });
 });
 
@@ -37,26 +26,39 @@ describe("montoBochon", () => {
 });
 
 describe("montoVoladura", () => {
-  it("suma los renglones de consumo y lo pasa a pesos", () => {
+  it("suma los insumos, agrega el 4% de servicio y lo pasa a pesos", () => {
     const consumos = [
       { cantidad: 48.5, precio_usd: 4.24 },
       { cantidad: 30, precio_usd: 5.34 },
     ];
-    // (48,5×4,24 + 30×5,34) = 205,64 + 160,2 = 365,84 USD × 1515
-    expect(montoVoladura(consumos, 1515)).toBeCloseTo(554247.6, 0);
+    // base = 205,64 + 160,2 = 365,84 USD → ×1,04 servicio → ×1515
+    expect(montoVoladura(consumos, 1515)).toBeCloseTo(365.84 * 1.04 * 1515, 0);
   });
 
-  it("ignora los renglones con cantidad o precio faltante, no rompe", () => {
+  it("no vuelve a sumar una fila de servicio ya cargada: la recalcula", () => {
     const consumos = [
-      { cantidad: 100, precio_usd: 2 },
-      { cantidad: null, precio_usd: 5 },
+      { cantidad: 100, precio_usd: 2, tipo: "detonador" },
+      { cantidad: 1, precio_usd: 0.04, tipo: "voladura" }, // se ignora
     ];
-    expect(montoVoladura(consumos, 1000)).toBe(200000);
+    // base 200 → ×1,04 → 208 × 1000
+    expect(montoVoladura(consumos, 1000)).toBe(208000);
   });
 
-  it("es null sin renglones o sin TC (0 diría que no costó nada)", () => {
+  it("ignora renglones incompletos y es null sin TC o sin renglones", () => {
+    expect(montoVoladura([{ cantidad: null, precio_usd: 5 }], 1000)).toBe(0);
     expect(montoVoladura([], 1515)).toBeNull();
     expect(montoVoladura([{ cantidad: 1, precio_usd: 1 }], null)).toBeNull();
+  });
+});
+
+describe("baseDeConsumosUsd", () => {
+  it("suma los insumos reales y excluye el servicio", () => {
+    expect(
+      baseDeConsumosUsd([
+        { cantidad: 10, precio_usd: 4, tipo: "detonador" },
+        { cantidad: 1, precio_usd: 99, tipo: "voladura" },
+      ])
+    ).toBe(40);
   });
 });
 

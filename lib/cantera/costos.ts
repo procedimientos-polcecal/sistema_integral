@@ -14,23 +14,18 @@ function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
 
-/** pozos × metros_por_pozo, o null si falta alguno. */
-export function metrosPerforados(
-  pozos: number | null | undefined,
-  metrosPorPozo: number | null | undefined
-): number | null {
-  const p = num(pozos);
-  const m = num(metrosPorPozo);
-  return p === null || m === null ? null : p * m;
-}
-
+/**
+ * El monto de la perforación: metros perforados × precio USD/m × TC.
+ *
+ * `metros` es el total (Σ pozos·metros de los tramos, o pozos×metros_por_pozo si
+ * es uniforme); lo calcula el que llama con `metrosYPozos()` de `tramos.ts`.
+ */
 export function montoPerforacion(e: {
-  pozos: number | null | undefined;
-  metrosPorPozo: number | null | undefined;
+  metros: number | null | undefined;
   precioUsdM: number | null | undefined;
   tc: number | null | undefined;
 }): number | null {
-  const metros = metrosPerforados(e.pozos, e.metrosPorPozo);
+  const metros = num(e.metros);
   const precio = num(e.precioUsdM);
   const tc = num(e.tc);
   if (metros === null || precio === null || tc === null) return null;
@@ -50,24 +45,41 @@ export function montoBochon(e: {
 }
 
 /**
- * El monto de la voladura sale de los renglones de consumo cargados. `null` si
- * no hay ninguno o falta el TC: sin insumos no hay número, y mostrar 0 sería
- * decir que la voladura no costó nada.
+ * El servicio de voladura es el **4% de la suma de todos los insumos usados**,
+ * no un renglón que se tipea (confirmado con el usuario). En la planilla figura
+ * como una fila con precio 0,04 y el total ya calculado; acá se recalcula
+ * siempre, así que las filas de `tipo === "voladura"` no se suman como insumo.
+ */
+export const TASA_SERVICIO_VOLADURA = 0.04;
+
+/** La suma de los insumos reales (sin el servicio), en USD. */
+export function baseDeConsumosUsd(
+  consumos: { cantidad: number | null; precio_usd: number | null; tipo?: string | null }[]
+): number {
+  let base = 0;
+  for (const c of consumos) {
+    if (c.tipo === "voladura") continue; // el servicio se recalcula, no se suma
+    const cant = num(c.cantidad);
+    const precio = num(c.precio_usd);
+    if (cant === null || precio === null) continue;
+    base += cant * precio;
+  }
+  return base;
+}
+
+/**
+ * El monto de la voladura: (insumos + 4% de servicio) × TC. `null` si no hay
+ * renglones o falta el TC: sin insumos no hay número, y mostrar 0 sería decir
+ * que la voladura no costó nada.
  */
 export function montoVoladura(
-  consumos: { cantidad: number | null; precio_usd: number | null }[],
+  consumos: { cantidad: number | null; precio_usd: number | null; tipo?: string | null }[],
   tc: number | null | undefined
 ): number | null {
   const t = num(tc);
   if (t === null || consumos.length === 0) return null;
-  let totalUsd = 0;
-  for (const c of consumos) {
-    const cant = num(c.cantidad);
-    const precio = num(c.precio_usd);
-    if (cant === null || precio === null) continue;
-    totalUsd += cant * precio;
-  }
-  return totalUsd * t;
+  const base = baseDeConsumosUsd(consumos);
+  return base * (1 + TASA_SERVICIO_VOLADURA) * t;
 }
 
 export type LecturaDeCruce = "coincide" | "revisar" | "sin_factura" | "sin_monto";

@@ -51,6 +51,10 @@ export interface Voladura {
   perf_fin: string | null;
   pozos: number | null;
   metros_por_pozo: number | null;
+  perf_tramos: { pozos: number; metros: number }[] | null;
+  vol_tramos: { pozos: number; metros: number }[] | null;
+  material: string | null;
+  densidad_t_m3: number | null;
   burden_m: number | null;
   espaciamiento_m: number | null;
   perf_precio_usd_m: number | null;

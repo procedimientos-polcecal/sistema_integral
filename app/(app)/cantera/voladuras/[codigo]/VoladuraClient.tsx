@@ -3,9 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { montoPerforacion, montoVoladura, metrosPerforados } from "@/lib/cantera/costos";
+import {
+  baseDeConsumosUsd,
+  montoPerforacion,
+  montoVoladura,
+  TASA_SERVICIO_VOLADURA,
+} from "@/lib/cantera/costos";
 import { toneladasEstimadas, desvioContraPlanilla } from "@/lib/cantera/toneladas";
 import { faltaDesglose } from "@/lib/cantera/consumos";
+import { formatearTramos, parsearTramos, totalMetros, totalPozos } from "@/lib/cantera/tramos";
 import { ETIQUETA_TIPO_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Consumo, Insumo, Voladura, Yacimiento } from "@/lib/cantera/types";
 
@@ -15,10 +21,7 @@ const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
 const n = (v: string) => (v.trim() === "" ? null : Number(v));
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
-/**
- * Fuera del componente a propósito: definido adentro, cada tecleo re-crea el
- * tipo del componente y React desmonta el input, y se pierde el foco.
- */
+/** Fuera del componente: definido adentro, cada tecleo desmonta el input y se pierde el foco. */
 function Campo({
   label,
   value,
@@ -35,13 +38,8 @@ function Campo({
   return (
     <label className="text-xs text-slate-600">
       {label}
-      <input
-        type={type}
-        className={INPUT_CLS}
-        disabled={disabled}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      <input type={type} className={INPUT_CLS} disabled={disabled} value={value}
+        onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
@@ -64,6 +62,17 @@ function aRenglon(c: Consumo): RenglonUI {
   };
 }
 
+/** El texto inicial del campo de tramos: los tramos guardados, o el promedio escalar. */
+function textoTramosInicial(
+  tramos: { pozos: number; metros: number }[] | null,
+  pozos: number | null,
+  metrosPorPozo: number | null
+): string {
+  if (tramos && tramos.length) return formatearTramos(tramos);
+  if (pozos != null && metrosPorPozo != null) return `${pozos}*${String(metrosPorPozo).replace(".", ",")}`;
+  return "";
+}
+
 export default function VoladuraClient({
   voladura,
   yacimiento,
@@ -82,27 +91,27 @@ export default function VoladuraClient({
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
 
-  const t = (v: string | null) => v ?? "";
+  const tx = (v: string | null) => v ?? "";
   const s = (v: number | null) => (v == null ? "" : String(v));
 
   const [f, setF] = useState({
-    perf_inicio: t(voladura.perf_inicio),
-    perf_fin: t(voladura.perf_fin),
-    pozos: s(voladura.pozos),
-    metros_por_pozo: s(voladura.metros_por_pozo),
+    perf_inicio: tx(voladura.perf_inicio),
+    perf_fin: tx(voladura.perf_fin),
+    perf_tramos_txt: textoTramosInicial(voladura.perf_tramos, voladura.pozos, voladura.metros_por_pozo),
     burden_m: s(voladura.burden_m),
     espaciamiento_m: s(voladura.espaciamiento_m),
     perf_precio_usd_m: s(voladura.perf_precio_usd_m),
     perf_tc_usd: s(voladura.perf_tc_usd),
-    vol_fecha_carga: t(voladura.vol_fecha_carga),
-    vol_fecha: t(voladura.vol_fecha),
-    vol_pozos: s(voladura.vol_pozos),
-    vol_metros_por_pozo: s(voladura.vol_metros_por_pozo),
+    material: tx(voladura.material),
+    densidad_t_m3: s(voladura.densidad_t_m3),
+    vol_fecha_carga: tx(voladura.vol_fecha_carga),
+    vol_fecha: tx(voladura.vol_fecha),
+    vol_tramos_txt: textoTramosInicial(voladura.vol_tramos, voladura.vol_pozos, voladura.vol_metros_por_pozo),
     vol_burden_m: s(voladura.vol_burden_m),
     vol_espaciamiento_m: s(voladura.vol_espaciamiento_m),
     vol_tc_usd: s(voladura.vol_tc_usd),
-    explosivos_raw: t(voladura.explosivos_raw),
-    observaciones: t(voladura.observaciones),
+    explosivos_raw: tx(voladura.explosivos_raw),
+    observaciones: tx(voladura.observaciones),
   });
   const set = (k: keyof typeof f) => (v: string) => {
     setF((prev) => ({ ...prev, [k]: v }));
@@ -111,24 +120,30 @@ export default function VoladuraClient({
 
   const [renglones, setRenglones] = useState<RenglonUI[]>(consumos.map(aRenglon));
 
-  const metros = metrosPerforados(n(f.pozos), n(f.metros_por_pozo));
+  // Los tramos: null = campo vacío, [] = escrito pero no se entiende.
+  const perfTramos = f.perf_tramos_txt.trim() ? parsearTramos(f.perf_tramos_txt) : null;
+  const volTramos = f.vol_tramos_txt.trim() ? parsearTramos(f.vol_tramos_txt) : null;
+  const perfMetros = perfTramos && perfTramos.length ? totalMetros(perfTramos) : null;
+  const volMetros = volTramos && volTramos.length ? totalMetros(volTramos) : perfMetros;
+
   const montoPerf = montoPerforacion({
-    pozos: n(f.pozos),
-    metrosPorPozo: n(f.metros_por_pozo),
+    metros: perfMetros,
     precioUsdM: n(f.perf_precio_usd_m),
     tc: n(f.perf_tc_usd),
   });
 
   const consumoParaMonto = useMemo(
-    () => renglones.map((r) => ({ cantidad: n(r.cantidad), precio_usd: n(r.precio_usd) })),
+    () => renglones.map((r) => ({ cantidad: n(r.cantidad), precio_usd: n(r.precio_usd), tipo: r.tipo })),
     [renglones]
   );
+  const baseUsd = baseDeConsumosUsd(consumoParaMonto);
+  const servicioUsd = baseUsd * TASA_SERVICIO_VOLADURA;
   const montoVol = montoVoladura(consumoParaMonto, n(f.vol_tc_usd));
 
+  const densidadEfectiva = n(f.densidad_t_m3) ?? yacimiento?.densidad_t_m3 ?? null;
   const toneladas = toneladasEstimadas({
-    pozos: n(f.vol_pozos) ?? n(f.pozos),
-    metrosPorPozo: n(f.vol_metros_por_pozo) ?? n(f.metros_por_pozo),
-    densidad: yacimiento?.densidad_t_m3 ?? null,
+    metros: volMetros,
+    densidad: densidadEfectiva,
     burden: n(f.vol_burden_m) ?? n(f.burden_m) ?? yacimiento?.burden_m ?? null,
     espaciamiento: n(f.vol_espaciamiento_m) ?? n(f.espaciamiento_m) ?? yacimiento?.espaciamiento_m ?? null,
   });
@@ -149,13 +164,37 @@ export default function VoladuraClient({
   }
 
   async function guardar() {
+    if (f.perf_tramos_txt.trim() && !perfTramos) {
+      setError('No se entiende la perforación. Formato: "14*3 / 3*3,5 / 6*4".');
+      return;
+    }
+    if (f.vol_tramos_txt.trim() && !volTramos) {
+      setError('No se entiende la voladura. Mismo formato que la perforación.');
+      return;
+    }
     setGuardando(true);
     setError("");
     const res = await fetch(`/api/cantera/voladuras/${voladura.codigo}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...f,
+        perf_inicio: f.perf_inicio,
+        perf_fin: f.perf_fin,
+        perf_tramos: perfTramos ?? null,
+        burden_m: f.burden_m,
+        espaciamiento_m: f.espaciamiento_m,
+        perf_precio_usd_m: f.perf_precio_usd_m,
+        perf_tc_usd: f.perf_tc_usd,
+        material: f.material,
+        densidad_t_m3: f.densidad_t_m3,
+        vol_fecha_carga: f.vol_fecha_carga,
+        vol_fecha: f.vol_fecha,
+        vol_tramos: volTramos ?? null,
+        vol_burden_m: f.vol_burden_m,
+        vol_espaciamiento_m: f.vol_espaciamiento_m,
+        vol_tc_usd: f.vol_tc_usd,
+        explosivos_raw: f.explosivos_raw,
+        observaciones: f.observaciones,
         consumos: renglones.map((r) => ({
           insumo_id: r.insumo_id || null,
           insumo_raw: r.insumo_raw || null,
@@ -175,6 +214,15 @@ export default function VoladuraClient({
   }
 
   const dis = !puedeEditar;
+  const resumenTramos = (tr: { pozos: number; metros: number }[] | null, txt: string) => {
+    if (!txt.trim()) return null;
+    if (!tr) return <span className="text-red-600">no se entiende — formato 14*3 / 3*3,5</span>;
+    return (
+      <span className="text-slate-500">
+        {totalPozos(tr)} pozos · {num1.format(totalMetros(tr))} m perforados
+      </span>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -197,16 +245,22 @@ export default function VoladuraClient({
       <section className="mt-5 rounded-lg border border-slate-200 p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Perforación</h2>
-          <span className="text-sm">
-            {metros != null && <span className="text-slate-500">{num1.format(metros)} m · </span>}
-            <span className="font-medium">{money(montoPerf)}</span>
-          </span>
+          <span className="text-sm font-medium">{money(montoPerf)}</span>
         </div>
+        <label className="mt-3 block text-xs text-slate-600">
+          Pozos por profundidad
+          <input
+            className={INPUT_CLS}
+            disabled={dis}
+            value={f.perf_tramos_txt}
+            onChange={(e) => set("perf_tramos_txt")(e.target.value)}
+            placeholder="14*3 / 3*3,5 / 6*4"
+          />
+          <span className="mt-1 block">{resumenTramos(perfTramos, f.perf_tramos_txt)}</span>
+        </label>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Campo label="Inicio" type="date" value={f.perf_inicio} onChange={set("perf_inicio")} disabled={dis} />
           <Campo label="Fin" type="date" value={f.perf_fin} onChange={set("perf_fin")} disabled={dis} />
-          <Campo label="Cant. de pozos" value={f.pozos} onChange={set("pozos")} disabled={dis} />
-          <Campo label="Metros por pozo" value={f.metros_por_pozo} onChange={set("metros_por_pozo")} disabled={dis} />
           <Campo label="Burden (m)" value={f.burden_m} onChange={set("burden_m")} disabled={dis} />
           <Campo label="Espaciamiento (m)" value={f.espaciamiento_m} onChange={set("espaciamiento_m")} disabled={dis} />
           <Campo label="Precio USD/m" value={f.perf_precio_usd_m} onChange={set("perf_precio_usd_m")} disabled={dis} />
@@ -229,24 +283,43 @@ export default function VoladuraClient({
             <span className="font-medium">{money(montoVol)}</span>
           </span>
         </div>
+        <label className="mt-3 block text-xs text-slate-600">
+          Pozos volados por profundidad <span className="text-slate-400">(vacío = igual que la perforación)</span>
+          <input
+            className={INPUT_CLS}
+            disabled={dis}
+            value={f.vol_tramos_txt}
+            onChange={(e) => set("vol_tramos_txt")(e.target.value)}
+            placeholder="14*3 / 3*3,5 / 6*4"
+          />
+          <span className="mt-1 block">{resumenTramos(volTramos, f.vol_tramos_txt)}</span>
+        </label>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Campo label="Fecha carga explosivo" type="date" value={f.vol_fecha_carga} onChange={set("vol_fecha_carga")} disabled={dis} />
           <Campo label="Fecha de voladura" type="date" value={f.vol_fecha} onChange={set("vol_fecha")} disabled={dis} />
-          <Campo label="Pozos volados" value={f.vol_pozos} onChange={set("vol_pozos")} disabled={dis} />
-          <Campo label="Metros por pozo" value={f.vol_metros_por_pozo} onChange={set("vol_metros_por_pozo")} disabled={dis} />
           <Campo label="Burden real (m)" value={f.vol_burden_m} onChange={set("vol_burden_m")} disabled={dis} />
           <Campo label="Espaciam. real (m)" value={f.vol_espaciamiento_m} onChange={set("vol_espaciamiento_m")} disabled={dis} />
           <Campo label="TC USD ($/USD)" value={f.vol_tc_usd} onChange={set("vol_tc_usd")} disabled={dis} />
         </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label className="text-xs text-slate-600">
+            Piedra <span className="text-slate-400">(si difiere del yacimiento)</span>
+            <input className={INPUT_CLS} disabled={dis} value={f.material}
+              onChange={(e) => set("material")(e.target.value)}
+              placeholder={yacimiento?.material ?? "Chocolata / Caliza"} />
+          </label>
+          <label className="text-xs text-slate-600">
+            Densidad (t/m³)
+            <input className={INPUT_CLS} disabled={dis} value={f.densidad_t_m3}
+              onChange={(e) => set("densidad_t_m3")(e.target.value)}
+              placeholder={yacimiento ? String(yacimiento.densidad_t_m3) : "2.7"} />
+          </label>
+        </div>
         <label className="mt-3 block text-xs text-slate-600">
           Explosivos (texto libre, como en la planilla)
-          <input
-            className={INPUT_CLS}
-            disabled={dis}
-            value={f.explosivos_raw}
+          <input className={INPUT_CLS} disabled={dis} value={f.explosivos_raw}
             onChange={(e) => set("explosivos_raw")(e.target.value)}
-            placeholder="emulex x 60 mm: 48,5 - anfo premium: 520"
-          />
+            placeholder="emulex x 60 mm: 48,5 - anfo premium: 520" />
         </label>
         {faltaDesglose(f.explosivos_raw, renglones) && (
           <p className="mt-1 text-xs text-amber-700">
@@ -271,9 +344,11 @@ export default function VoladuraClient({
                 onChange={(e) => elegirInsumo(i, e.target.value)}
               >
                 <option value="">— insumo del catálogo —</option>
-                {insumos.map((ins) => (
-                  <option key={ins.id} value={ins.id}>{ins.nombre}</option>
-                ))}
+                {insumos
+                  .filter((ins) => ins.tipo !== "voladura")
+                  .map((ins) => (
+                    <option key={ins.id} value={ins.id}>{ins.nombre}</option>
+                  ))}
               </select>
               {r.insumo_id === "" ? (
                 <input
@@ -327,28 +402,31 @@ export default function VoladuraClient({
             + agregar renglón
           </button>
         )}
+
+        <div className="mt-3 flex justify-between border-t border-slate-100 pt-2 text-sm">
+          <span className="text-slate-500">
+            Servicio de voladura (4% de {ars.format(baseUsd)} USD, se calcula solo)
+          </span>
+          <span>{baseUsd > 0 ? `${num1.format(servicioUsd)} USD` : "—"}</span>
+        </div>
+        <div className="flex justify-between text-sm font-medium">
+          <span>Total voladura</span>
+          <span>{money(montoVol)}</span>
+        </div>
       </section>
 
       <section className="mt-4">
         <label className="block text-xs text-slate-600">
           Observaciones
-          <textarea
-            className={INPUT_CLS}
-            rows={2}
-            disabled={dis}
-            value={f.observaciones}
-            onChange={(e) => set("observaciones")(e.target.value)}
-          />
+          <textarea className={INPUT_CLS} rows={2} disabled={dis} value={f.observaciones}
+            onChange={(e) => set("observaciones")(e.target.value)} />
         </label>
       </section>
 
       {!dis && (
         <div className="mt-4">
-          <button
-            disabled={guardando}
-            onClick={guardar}
-            className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
+          <button disabled={guardando} onClick={guardar}
+            className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50">
             {guardando ? "Guardando…" : "Guardar"}
           </button>
         </div>

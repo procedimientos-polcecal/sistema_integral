@@ -21,8 +21,8 @@
  */
 
 export interface EntradaToneladas {
-  pozos: number | null | undefined;
-  metrosPorPozo: number | null | undefined;
+  /** Metros perforados totales (Σ pozos·metros). Lo calcula el llamador. */
+  metros: number | null | undefined;
   densidad: number | null | undefined;
   burden: number | null | undefined;
   espaciamiento: number | null | undefined;
@@ -32,15 +32,18 @@ function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
 
-/** `null` si falta cualquiera de los cinco datos: una estimación a medias engaña. */
+/**
+ * `null` si falta cualquiera de los cuatro datos: una estimación a medias
+ * engaña. Como los pozos no tienen todos la misma profundidad, la cuenta va
+ * sobre los metros perforados totales y no sobre `pozos × metros_por_pozo`.
+ */
 export function toneladasEstimadas(e: EntradaToneladas): number | null {
-  const p = num(e.pozos);
-  const m = num(e.metrosPorPozo);
+  const m = num(e.metros);
   const d = num(e.densidad);
   const b = num(e.burden);
   const s = num(e.espaciamiento);
-  if (p === null || m === null || d === null || b === null || s === null) return null;
-  return p * m * d * b * s;
+  if (m === null || d === null || b === null || s === null) return null;
+  return m * d * b * s;
 }
 
 export interface Desvio {
