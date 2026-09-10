@@ -379,16 +379,44 @@ en `Respuestas de formulario 1`, y baja sola por las fórmulas. El mapa completo
 está en el spec del 09/09/2026 y en
 [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md).
 
-**La numeración de esa hoja es independiente de la base.** El N° de RI es una
-fórmula por fila (`=IF(B:B<>"",A_anterior+1,"")`) que cuenta las filas de la
-hoja; el sistema numeraba con `max(nro_ri)+1` sobre la base. Con el alta sin
-exportar las dos series se separaron: el RI 1954 se cargó en el sistema y la
-próxima respuesta del formulario iba a ser 1954 también, con el `upsert` por
-`nro_ri` pisándole la descripción al pedido del sistema. Se arregla porque cada
-alta ocupa su fila allá y **el que numera vuelve a ser uno solo**: el sistema
-escribe la misma fórmula que las otras filas y después **lee el número de
-vuelta** para confirmar que dio el que había asignado. Si no coincide, no
-numera por su cuenta: lo deja pendiente y lo dice.
+**Una fórmula que dice "el número de arriba más uno" no sobrevive a que Google
+Forms inserte una fila. Costó un pedido.**
+
+El N° de RI de la hoja de respuestas era una fórmula por fila,
+`=IF(B{n}:B<>"",A{n-1}+1,"")`, y el sistema numeraba con `max(nro_ri)+1` sobre
+la base: dos series independientes. Para que no chocaran, el alta escribía su
+fila con **la misma fórmula**, así el que numeraba seguía siendo la planilla. El
+09/09/2026 se escribió la fila del RI 1954 en la 1957 y se verificó que la
+fórmula daba 1954. Daba bien.
+
+**Forms inserta una fila por cada respuesta, y la inserta justo después de su
+propia última respuesta**, no después de la última fila con datos. Entraron dos
+respuestas: la fila del alta quedó en la 1959, su referencia `B` bajó con ella y
+la referencia `A1956` —que quería decir "la de arriba"— se quedó apuntando a la
+misma celda de siempre. Volvió a calcular `A1956+1` y quedaron **dos RI 1954**.
+La sincronización hace `upsert` por N° de RI: colapsó los dos en uno y el pedido
+que había entrado por el formulario —"Buje de goma de acoplamiento eje molino
+calera", de Mantenimiento— **desapareció del sistema**. La prioridad del pedido
+del sistema quedó escrita en la fila del master del otro. Se reparó a mano el
+10/09/2026: se recuperó el pedido de Mantenimiento como 1954 y el del sistema
+quedó como 5001.
+
+Tres cosas que valen para la próxima:
+
+- **Una referencia absoluta no puede significar "la de arriba"** en una hoja
+  donde alguien inserta filas. Ni nuestras filas ni las de Forms.
+- **La verificación en el momento de escribir no alcanza** cuando el daño lo
+  hace algo que pasa después. Se leyó el número de vuelta y estaba bien; se
+  rompió media hora más tarde.
+- **El riesgo estaba mal medido en el spec**: decía que la ventana era "el mismo
+  instante", y era *hasta la próxima respuesta del formulario*.
+
+Cómo quedó: el sistema numera y escribe el número **como valor**, y la planilla
+numera lo suyo con su Apps Script (`max(A)+1`, contando también las filas del
+sistema) en vez de con la fórmula. Los dos cuentan lo mismo, ninguno depende de
+dónde inserta el otro, y la serie sigue siendo una sola. El script está en
+`docs/compras-formulario-apps-script.gs` y **hay que instalarlo**: sin él, las
+respuestas del formulario siguen numerándose por fórmula.
 
 **Lo esperable y lo que hay que mirar son dos cosas distintas, y mezclarlas
 enseña a ignorar los carteles.** `IMPORTRANGE` refresca cuando Google quiere
@@ -432,6 +460,17 @@ salteaba la planilla en silencio. Ahora queda pendiente con el nombre de la
 variable en el motivo. Cuesta un pendiente por alta en un despliegue que a
 propósito no espeje el formulario, y es el precio de no poder distinguir "no lo
 configuraron" de "se configuró mal".
+
+**Las nueve pestañas por área están a ~54 filas de su techo, y cuando se pase
+no avisa.** Medido el 10/09/2026: la grilla de `Requerimientos internos` tiene
+2011 filas y la última con datos es la 1957; los nueve `FILTER` de las pestañas
+tienen el rango fijado en `M2:M2011`; y `RI MANTENIMIENTO` tiene 945 filas
+usadas de 1000. Cuando se pasen, un RI aprobado **deja de aparecer en su
+pestaña sin ningún error**, o el `FILTER` se cae entero y se van de golpe 945
+filas con todo lo que hay escrito a mano en `M:R`. Hay que ampliar la grilla del
+master y actualizar el rango de los nueve `FILTER`. El spec del alta decía que
+el techo estaba a ~8.000 pedidos: eso es el techo del `QUERY` del master
+(`A4:L10000`), no el de las pestañas, que es el que muerde primero.
 
 ## Lo que quedó pendiente
 

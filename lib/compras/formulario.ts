@@ -19,7 +19,6 @@
 
 import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
-import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
 import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
@@ -178,13 +177,33 @@ function indexar(encabezado: string[], borde: number): Record<Clave, number> {
 /**
  * Qué escribir en la fila `fila` de la hoja de respuestas.
  *
- * El N° de RI va como **la misma fórmula que tienen las otras 1.955 filas** y
- * no como número. Dos razones: el que numera sigue siendo uno solo —la
- * planilla—, y la fila que Google agrega en la próxima respuesta copia la
- * fórmula de la de arriba; si arriba encuentra un literal, la serie se corta.
- * Por eso `fila` también vuelve en el resultado cuando `ok: true`: queda
- * horneada en esa fórmula, y si quien escribe usara otra fila por error la
- * fórmula apuntaría al lugar equivocado sin que nada lo note.
+ * El N° de RI va como **valor**, no como fórmula, y esto costó un pedido
+ * perdido en producción.
+ *
+ * La primera versión escribía la misma fórmula que tienen las demás filas
+ * —`=IF(B{fila}:B<>"",A{fila-1}+1,"")`— para que el que numerara siguiera
+ * siendo uno solo: la planilla. Verificado en el momento de escribir, daba el
+ * número correcto. Lo que no sobrevive es lo que pasa después: **Google Forms
+ * inserta una fila por cada respuesta, y la inserta justo después de su propia
+ * última respuesta**, no después de la última fila con datos. Medido el
+ * 09/09/2026: la fila del alta se escribió en la 1957 y dos respuestas la
+ * empujaron a la 1959. Su referencia `B` bajó con ella; la referencia `A1956`
+ * —que quería decir "la fila de arriba"— se quedó apuntando a la misma celda de
+ * siempre. Volvió a calcular `A1956+1` y quedaron **dos RI 1954**: el `upsert`
+ * por `nro_ri` de la sincronización los colapsó y el pedido que había entrado
+ * por el formulario desapareció del sistema.
+ *
+ * Una referencia absoluta no puede significar "la de arriba" en una hoja donde
+ * alguien inserta filas. Así que el número lo pone el sistema —que ya lo tiene,
+ * y con su propio control de que no esté tomado— y **la planilla deja de
+ * numerar con una fórmula**: lo hace su Apps Script en cada envío del
+ * formulario, con `max(A)+1`, contando también las filas que escribió el
+ * sistema. Es lo que mantiene la serie única sin que ninguno de los dos tenga
+ * que adivinar dónde va a insertar el otro. Ver
+ * `docs/compras-formulario-apps-script.gs`.
+ *
+ * `fila` vuelve igual en el resultado: ya no hay nada horneado que dependa de
+ * ella, pero quien escribe tiene que usar la misma que se verificó libre.
  *
  * Las columnas que el `QUERY` del master ignora no se tocan: `DIRECCIÓN EMAIL
  * ENVIADA` la escribe el Apps Script de los avisos, y ponerle algo sería decir
@@ -225,12 +244,10 @@ export function celdasDelAlta(
     };
   }
 
-  const marca = letraDeColumna(idx.marca);
-  const nro = letraDeColumna(idx.nro_ri);
   const serialNecesidad = datos.fecha_necesidad ? serialDelDia(datos.fecha_necesidad) : null;
 
   const valores: Partial<Record<Clave, string>> = {
-    nro_ri: `=IF(${marca}${fila}:${marca}<>"",${nro}${fila - 1}+1,"")`,
+    nro_ri: String(datos.nro_ri),
     marca: String(serialMarca),
     nombre: datos.nombre,
     apellido: datos.apellido,

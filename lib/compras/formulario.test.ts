@@ -49,13 +49,29 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
     expect(c.get(10)).toBe("Repo Stock");    // K, DETALLES EXTRA
   });
 
-  it("el N° de RI va como la formula que tienen las otras filas", () => {
-    // El que numera sigue siendo uno solo: la planilla. Escribir el numero como
-    // literal haria que la proxima fila que Google agregue copie un valor en vez
-    // de una formula, y ahi la serie se corta.
+  it("el N° de RI va como valor, no como formula", () => {
+    // Una formula `A{fila-1}+1` no sobrevive a que Forms inserte una fila: la
+    // referencia absoluta deja de querer decir "la de arriba". Paso el
+    // 09/09/2026 y costo un pedido: la fila del alta se escribio en la 1957, dos
+    // respuestas la empujaron a la 1959, volvio a calcular contra A1956 y
+    // quedaron dos RI 1954. El upsert de la sincronizacion colapso los dos y el
+    // pedido del formulario desaparecio del sistema.
+    //
+    // Ahora numera el sistema y la planilla numera con su Apps Script
+    // (max(A)+1), que cuenta tambien estas filas. Ver el .gs de docs/.
     const r = celdasDelAlta(ENCABEZADO, DATOS, 1957);
     if (!r.ok) throw new Error("deberia mapear");
-    expect(porColumna(r.celdas).get(0)).toBe('=IF(B1957:B<>"",A1956+1,"")');
+    expect(porColumna(r.celdas).get(0)).toBe("1954");
+  });
+
+  it("y el numero no depende de en que fila se escriba", () => {
+    // Es la propiedad que se compro con el cambio: la misma fila escrita en otro
+    // lugar dice el mismo numero, asi que una fila insertada arriba no la
+    // renumera.
+    const a = celdasDelAlta(ENCABEZADO, DATOS, 1957);
+    const b = celdasDelAlta(ENCABEZADO, DATOS, 1990);
+    if (!a.ok || !b.ok) throw new Error("deberia mapear");
+    expect(porColumna(a.celdas).get(0)).toBe(porColumna(b.celdas).get(0));
   });
 
   it("las dos fechas van como serial", () => {

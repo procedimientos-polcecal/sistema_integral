@@ -92,8 +92,10 @@ sola.
 2. Busca la **primera fila libre por la columna B** y escribe `A:L` en un rango
    explícito. Nunca `append`: escribe después de *todo* el contenido de la hoja,
    no después de los datos, y ya mandó dos presupuestos a las filas 1003 y 1004.
-3. En `A` escribe **la misma fórmula que las otras filas**, no el número. El que
-   numera sigue siendo uno solo.
+3. En `A` escribe **el número como valor**. Al principio escribía la misma
+   fórmula que las otras filas, para que el que numerara siguiera siendo la
+   planilla; el 09/09/2026 eso costó un pedido perdido en producción y la
+   corrección está más abajo, en *"Lo que la fórmula no aguanta"*.
 4. Lee `A` de vuelta y **confirma que dio el `nro_ri` que asignó el sistema**. Si
    no coincide, no rompe: deja el pendiente y avisa. Dos números para un pedido
    es peor que un pedido sin fila.
@@ -251,14 +253,42 @@ el que sigue.
 
 ## Riesgos asumidos
 
-**La numeración sigue teniendo dos autoridades.** La hoja de respuestas numera
-por fórmula y el sistema por `max(nro_ri)+1`. Coinciden mientras cada alta llegue
-a la planilla —que es justo lo que esto arregla— y el paso 4 lo verifica en cada
-alta. La ventana que queda es un pedido cargado en el sistema y una respuesta del
-formulario **en el mismo instante**: la fila libre que los dos leen es la misma.
-Se acepta: son nueve áreas cargando pedidos ocasionales, no un flujo continuo, y
-el chequeo del paso 4 lo detecta y lo dice en vez de dejar dos pedidos con el
-mismo número en silencio.
+**Lo que la fórmula no aguanta, y lo que se hizo con eso.**
+
+La primera versión le dejaba el número a la fórmula de la hoja
+—`=IF(B{n}:B<>"",A{n-1}+1,"")`— y el sistema lo verificaba después de escribir.
+Verificado en el momento, daba bien. **Google Forms inserta una fila por cada
+respuesta, y la inserta justo después de su propia última respuesta**, no
+después de la última fila con datos: la fila del alta se escribió en la 1957,
+dos respuestas la empujaron a la 1959, su referencia `B` bajó con ella y la
+referencia `A1956` —que quería decir "la de arriba"— se quedó donde estaba.
+Volvió a calcular `A1956+1` y quedaron **dos RI 1954**. El `upsert` por `nro_ri`
+de la sincronización los colapsó y el pedido que había entrado por el formulario
+desapareció del sistema.
+
+El riesgo que este spec había dejado asumido —"la ventana que queda es un pedido
+cargado en el sistema y una respuesta del formulario **en el mismo instante**"—
+estaba mal medido: la ventana dura **hasta la próxima respuesta**, sin límite de
+tiempo. Y la verificación del paso 4 no puede detectarlo, porque en el instante
+de escribir el número todavía está bien.
+
+Una referencia absoluta no puede significar "la de arriba" en una hoja donde
+alguien inserta filas. Así que:
+
+- **el sistema numera y escribe el número como valor** —ya lleva la serie, y ya
+  tiene el control de que el número no esté tomado por otra fila—;
+- **la planilla deja de numerar con una fórmula**: lo hace su Apps Script en
+  cada envío del formulario, con `max(A)+1`, contando también las filas que
+  escribió el sistema. Va en `docs/compras-formulario-apps-script.gs`, con su
+  `LockService` para que dos respuestas simultáneas no se lleven el mismo
+  número.
+
+Los dos cuentan lo mismo y ninguno tiene que adivinar dónde va a insertar el
+otro: **la serie sigue siendo una sola**. Lo que queda asumido es más chico y
+está acotado: entre que el sistema lee `max(nro_ri)` y escribe su fila puede
+entrar una respuesta del formulario y tomar el mismo número. Lo detecta
+`filaConEsteRi` —se niega a escribir y lo dice— en vez de dejar dos pedidos con
+el mismo número en silencio.
 
 **El techo del `QUERY` es la fila 10000** (`A4:L10000`), o sea ~9.996 pedidos.
 Hoy hay 1.954. No es urgente, pero el día que se acerque, la fórmula deja de

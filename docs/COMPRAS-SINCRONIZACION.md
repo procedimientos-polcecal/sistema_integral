@@ -51,11 +51,15 @@ arriba**, en `Respuestas de formulario 1`, y baja sola. Necesita
 `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` y que la cuenta de servicio sea **Editor**
 de esa planilla.
 
-- El N° de RI lo sigue calculando **la fórmula de la planilla**: el sistema
-  escribe la misma que tienen las otras filas y después **lee el número de
-  vuelta** para confirmar que dio el que había asignado. Si no coincide, no
-  numera por su cuenta: lo deja pendiente y lo dice. Dos números para un pedido
-  es peor que un pedido sin fila.
+- **El número lo pone el sistema, como valor.** Le dejaba el número a la
+  fórmula de la hoja, y eso no sobrevive a que Forms inserte una fila: costó un
+  pedido perdido el 09/09/2026 (está contado en
+  [COMPRAS-ESTADO.md](COMPRAS-ESTADO.md)). La planilla numera lo suyo con su
+  Apps Script —`max(A)+1`, en `docs/compras-formulario-apps-script.gs`—, que
+  cuenta también las filas del sistema, así que **la serie sigue siendo una
+  sola**. Igual se **lee el número de vuelta** después de escribir: si la fila
+  no dice el que se asignó, no se numera por las nuestras, se deja pendiente y
+  se dice.
 - Las fechas van como **serial** y no como texto: la planilla es `es_MX` y un
   texto depende del locale.
 - El pedido **nace encolado** y la exportación limpia esa marca al terminar
