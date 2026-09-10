@@ -14,6 +14,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer, crearEn, mensajeDeOdoo } from "./client";
 import { resolverContextoDeOdoo } from "./contexto";
 import { armarOrdenes } from "./ordenDeCompra";
+import { leerCatalogoComprable, type ProductoComprable } from "./catalogo";
+import { normalizarDescripcion, sugerirProducto, type Sugerencia } from "@/lib/compras/productoOdoo";
 import { precioDesdeElRequerimiento } from "@/lib/compras/costoDelRequerimiento";
 import type { CotizacionParaOrden, EmpresaParaOrden, Problema } from "./ordenDeCompra";
 
@@ -63,7 +65,16 @@ interface FilaEmpresa {
  */
 export async function empujarOrdenesDeRequerimiento(
   admin: SupabaseClient,
-  requerimientoId: string
+  requerimientoId: string,
+  /**
+   * El producto que Compras confirmó, y quién lo confirmó.
+   *
+   * Sin esto la orden usa `ART. VARIOS`, que es lo que hacía siempre: una
+   * pantalla vieja no rompe. El id se valida contra el catálogo antes de
+   * usarlo —un id que no existe o no es comprable hace fallar la orden
+   * entera con un error de Odoo que no dice nada útil—.
+   */
+  elegido?: { productoId: number; usuarioId: string | null }
 ): Promise<ResultadoDelPush> {
   const { data: ri, error: errorRi } = await admin
     .from("compras_requerimientos")
@@ -159,6 +170,23 @@ export async function empujarOrdenesDeRequerimiento(
     };
   });
 
+  // El producto que Compras eligió se valida contra el catálogo comprable
+  // antes de usarlo: un id archivado o inventado hace que Odoo rechace la
+  // orden entera con un mensaje que no dice nada útil, y para entonces ya se
+  // gastó el viaje. Se detecta acá y se anota como cualquier otro pendiente.
+  let producto: ProductoComprable | undefined;
+  if (elegido) {
+    const catalogo = await leerCatalogoComprable();
+    const encontrado = catalogo.find((p) => p.id === elegido.productoId);
+    if (!encontrado) {
+      return await anotarPendiente(admin, ri.id, [
+        `El producto ${elegido.productoId} no está en el catálogo comprable de Odoo: ` +
+          `puede haberse archivado. Elegí otro y volvé a intentar.`,
+      ]);
+    }
+    producto = encontrado;
+  }
+
   const armado = armarOrdenes(
     {
       nroRi: ri.nro_ri,
@@ -177,7 +205,8 @@ export async function empujarOrdenesDeRequerimiento(
       uomId: contexto.contexto.uomId,
       fleteId: contexto.contexto.fleteId,
       ahora: new Date(),
-    }
+    },
+    producto && { id: producto.id, uomId: producto.uomId }
   );
 
   if (!armado.ok) {
@@ -288,6 +317,40 @@ export async function empujarOrdenesDeRequerimiento(
     .from("compras_requerimientos")
     .update({ odoo_pendiente: null })
     .eq("id", ri.id);
+
+  /*
+   * Lo aprendido se guarda con la orden ya creada, no antes: si la creación
+   * fallaba, no queda atado un producto que nunca se usó. Y si esto falla acá
+   * no se voltea nada — la orden ya está en Odoo, y una orden que le llega al
+   * proveedor dos veces por un reintento es el error más caro de todos.
+   *
+   * Se guarda también cuando Compras confirmó la sugerencia sin cambiarla, no
+   * sólo cuando corrigió: una confirmación es información igual, y es lo que
+   * hace que la segunda vez no haga falta mirar.
+   *
+   * La tabla `compras_producto_odoo` todavía no está aplicada (migración
+   * 20260910112738, pendiente de correrla a mano en Supabase): hasta entonces
+   * este upsert falla siempre, se loguea, y la orden sigue habiéndose creado
+   * bien.
+   */
+  if (producto) {
+    const clave = normalizarDescripcion(ri.descripcion);
+    if (clave) {
+      const { error } = await admin.from("compras_producto_odoo").upsert(
+        {
+          descripcion_normalizada: clave,
+          odoo_product_id: producto.id,
+          odoo_product_nombre: producto.nombre,
+          created_by: elegido?.usuarioId ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "descripcion_normalizada" }
+      );
+      if (error) {
+        console.error(`RI ${ri.nro_ri}: no se pudo guardar el producto aprendido`, error);
+      }
+    }
+  }
 
   return { ok: true, ordenes: creadas };
 }
@@ -524,12 +587,39 @@ export async function ensayarOrdenesDeRequerimiento(
   const aprobado =
     ri.costo_iva !== null ? Math.round(((ri.costo_iva ?? 0) + (ri.costo_envio ?? 0)) * 100) / 100 : null;
 
+  /*
+   * La sugerencia y el catálogo viajan con el ensayo porque la pantalla los
+   * necesita juntos: el selector muestra los 378 y arranca en el sugerido.
+   *
+   * Todo esto va en un solo `try`: si Odoo no contesta el catálogo, o si
+   * `compras_producto_odoo` todavía no existe (la migración está escrita pero
+   * la corre el usuario a mano), la pantalla ofrece el genérico y lo dice, en
+   * vez de trabar el ensayo por una sugerencia que es una ayuda y no un
+   * requisito.
+   */
+  let catalogo: ProductoComprable[] = [];
+  let sugerencia: Sugerencia = { producto: null, motivo: "sin_sugerencia", alternativas: [] };
+  try {
+    catalogo = await leerCatalogoComprable();
+    const { data: filas } = await admin
+      .from("compras_producto_odoo")
+      .select("descripcion_normalizada, odoo_product_id");
+    const aprendidos = new Map(
+      (filas ?? []).map((f) => [f.descripcion_normalizada as string, f.odoo_product_id as number])
+    );
+    sugerencia = sugerirProducto(ri.descripcion, catalogo, aprendidos);
+  } catch {
+    // Sin catálogo no hay sugerencia, y con eso el ensayo y la orden siguen
+    // siendo posibles.
+  }
+
   return {
     requerimiento: { nroRi: ri.nro_ri, descripcion: ri.descripcion, pagaAmbas: ri.paga_ambas },
     precio: { origen: fuente.origen, ...fuente.precio, costoAprobadoEnElRi: aprobado },
     cotizacion,
     yaCreadas,
     contexto: contexto.contexto,
+    producto: { sugerencia, catalogo },
     // Lo que se le mandaría a Odoo, tal cual, sin mandarlo.
     armado,
   };

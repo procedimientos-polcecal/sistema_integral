@@ -17,6 +17,11 @@ import { empujarOrdenesDeRequerimiento, ensayarOrdenesDeRequerimiento } from "@/
  *
  * Nunca postea ni confirma nada: la orden queda en `draft` y contabilidad
  * genera la factura desde ahí. El SdG propone, Odoo confirma.
+ *
+ * El `POST` acepta un cuerpo opcional `{ producto_id }` con el producto de
+ * Odoo que Compras confirmó en el selector del ensayo. Sin cuerpo (o con uno
+ * que no trae `producto_id`), la línea usa el genérico `ART. VARIOS`, que es
+ * lo que hacía siempre: una pantalla vieja no rompe.
  */
 
 export const maxDuration = 60;
@@ -64,13 +69,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 }
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const paso = await permiso();
   if ("error" in paso) return paso.error;
 
   const { id } = await params;
+  // El cuerpo es opcional: sin él, o sin `producto_id` adentro, la orden usa
+  // el producto genérico, como antes de que existiera este selector.
+  const body = await request.json().catch(() => null);
+  const productoId = Number(body?.producto_id);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   try {
-    const resultado = await empujarOrdenesDeRequerimiento(createAdminClient(), id);
+    const resultado = await empujarOrdenesDeRequerimiento(
+      createAdminClient(),
+      id,
+      Number.isInteger(productoId) && productoId > 0
+        ? { productoId, usuarioId: user?.id ?? null }
+        : undefined
+    );
 
     /*
      * 422 y no 500 cuando no se pudo armar: no es un error del servidor, es que
