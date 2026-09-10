@@ -43,7 +43,7 @@ const PLANT_STATUS_OPTIONS = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  admin_sistema: "Admin sistema", admin: "Admin",
+  admin_sistema: "Admin sistema",
   encargado: "Encargado", operario: "Operario",
 };
 

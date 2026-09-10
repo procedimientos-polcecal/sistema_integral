@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   if (!email || !nombre || !apellido) {
     return NextResponse.json({ error: "Completá email, nombre y apellido" }, { status: 400 });
   }
-  if (!["admin_sistema", "admin", "encargado", "operario"].includes(rol)) {
+  if (!["admin_sistema", "encargado", "operario"].includes(rol)) {
     return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
   }
 

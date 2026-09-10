@@ -43,9 +43,11 @@ export function nivelEnModulo(
  * `modulosVisibles` y `nivelEnModulo` (arriba) lo tratan como a un encargado
  * desde que se escribieron.
  *
- * Así que `admin` queda como un rol sin poder propio: lo que puede hacer sale
- * de sus grants en `usuario_modulos`. Espejo de `es_admin_sistema()` en la
- * base.
+ * Así que `admin` quedó como un rol sin poder propio: lo que podía hacer salía
+ * de sus grants en `usuario_modulos`. Y como eso es exactamente lo que hace un
+ * `encargado` —ni el código ni una policy los distinguían—, el mismo día se
+ * unificaron los dos en `encargado` y `admin` dejó de existir para el sistema
+ * (ver `Rol` en `./types.ts`). Espejo de `es_admin_sistema()` en la base.
  *
  * Vive acá y no en cada pantalla porque cuatro copias de una regla de permisos
  * son tres de más: la que se olvida de cambiar es la que queda abierta.

@@ -5,7 +5,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
 
-type Rol = "admin_sistema" | "admin" | "encargado" | "operario";
+type Rol = "admin_sistema" | "encargado" | "operario";
 type Nivel = "lectura" | "edicion" | "admin";
 
 interface UsuarioModulo {
@@ -30,9 +30,10 @@ interface Usuario {
 
 type Area = { id: string; nombre: string };
 
+// De acá sale el desplegable de roles, así que lo que no esté acá no se puede
+// asignar. `admin` salió el 10/09/2026 al unificarse con `encargado`.
 const ROL_LABEL: Record<Rol, string> = {
   admin_sistema: "Admin sistema",
-  admin: "Admin",
   encargado: "Encargado",
   operario: "Operario",
 };

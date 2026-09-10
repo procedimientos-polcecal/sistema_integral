@@ -17,7 +17,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (body.nombre !== undefined) data.nombre = body.nombre;
   if (body.apellido !== undefined) data.apellido = body.apellido;
   if (body.rol !== undefined) {
-    if (!["admin_sistema", "admin", "encargado", "operario"].includes(body.rol)) {
+    if (!["admin_sistema", "encargado", "operario"].includes(body.rol)) {
       return NextResponse.json({ error: "Rol inválido" }, { status: 400 });
     }
     data.rol = body.rol;

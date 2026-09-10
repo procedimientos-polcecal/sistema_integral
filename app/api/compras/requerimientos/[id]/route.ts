@@ -438,8 +438,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // Decía `admin_sistema || admin`. El rol `admin` se unificó con `encargado`
+  // el 10/09/2026, así que la segunda mitad ya no nombraba a nadie. Su gemela
+  // en la base es `compras_req_delete` (018), que usa `es_admin()`.
   const { data: usuario } = await supabase.from("usuarios").select("rol").eq("id", user.id).single();
-  if (usuario?.rol !== "admin_sistema" && usuario?.rol !== "admin") {
+  if (usuario?.rol !== "admin_sistema") {
     return NextResponse.json({ error: "Solo un administrador puede eliminar requerimientos" }, { status: 403 });
   }
 

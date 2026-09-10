@@ -4,7 +4,6 @@ import MiCuentaClient from "./MiCuentaClient";
 
 const ROL_LABEL: Record<string, string> = {
   admin_sistema: "Admin sistema",
-  admin: "Admin",
   encargado: "Encargado",
   operario: "Operario",
 };
