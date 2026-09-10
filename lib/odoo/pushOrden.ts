@@ -175,6 +175,7 @@ export async function empujarOrdenesDeRequerimiento(
       monedas: contexto.contexto.monedas,
       productoGenericoId: contexto.contexto.productoGenericoId,
       uomId: contexto.contexto.uomId,
+      fleteId: contexto.contexto.fleteId,
       ahora: new Date(),
     }
   );
@@ -508,6 +509,7 @@ export async function ensayarOrdenesDeRequerimiento(
       monedas: contexto.contexto.monedas,
       productoGenericoId: contexto.contexto.productoGenericoId,
       uomId: contexto.contexto.uomId,
+      fleteId: contexto.contexto.fleteId,
       ahora: new Date(),
     }
   );

@@ -25,6 +25,15 @@ import { buscarLeer, idDeRelacion } from "./client";
 const NOMBRE_PRODUCTO_GENERICO = "ART. VARIOS";
 
 /**
+ * El producto de la línea de flete.
+ *
+ * Antes también era `ART. VARIOS`. El grupo ya tiene uno hecho —`FLETE`—, así
+ * que la línea del envío deja de mezclarse con el resto del gasto. No hay nada
+ * que decidir acá: es determinístico, a diferencia del producto del ítem.
+ */
+const NOMBRE_PRODUCTO_FLETE = "FLETE";
+
+/**
  * El impuesto de las líneas.
  *
  * Es el que usan: 343 de las últimas 400 líneas de orden. Pertenece a una
@@ -43,6 +52,12 @@ export interface ContextoResuelto {
   monedas: Record<string, number>;
   productoGenericoId: number;
   uomId: number;
+  /**
+   * El producto de flete. `null` si no está en el catálogo: ahí la línea usa
+   * el genérico, como antes, en vez de no poder crear la orden por un producto
+   * de más.
+   */
+  fleteId: number | null;
   /** Por id de `res.company`. */
   porEmpresa: Record<number, DatosDeEmpresaOdoo>;
 }
@@ -56,7 +71,7 @@ export async function resolverContextoDeOdoo(
 ): Promise<ResultadoDeContexto> {
   const problemas: string[] = [];
 
-  const [monedasCrudas, productos, pickings, impuestos] = await Promise.all([
+  const [monedasCrudas, productos, flete, pickings, impuestos] = await Promise.all([
     buscarLeer<{ id: number; name: string }>(
       "res.currency",
       [["name", "in", ["ARS", "USD"]]],
@@ -70,6 +85,15 @@ export async function resolverContextoDeOdoo(
         ["purchase_ok", "=", true],
       ],
       ["name", "uom_po_id"],
+      { limite: 5 }
+    ),
+    buscarLeer<{ id: number; name: string }>(
+      "product.product",
+      [
+        ["name", "=", NOMBRE_PRODUCTO_FLETE],
+        ["purchase_ok", "=", true],
+      ],
+      ["name"],
       { limite: 5 }
     ),
     buscarLeer<{ id: number; company_id: unknown }>(
@@ -109,6 +133,14 @@ export async function resolverContextoDeOdoo(
   }
 
   /*
+   * A diferencia del genérico, que la línea sí necesita para existir, que
+   * falte el producto de flete no bloquea la orden: degrada al genérico, que
+   * es lo que pasaba antes de esta tarea. Fallar la orden entera por un
+   * producto de más sería peor que lo que hay hoy.
+   */
+  const fleteId = flete.length === 1 ? flete[0].id : null;
+
+  /*
    * Se toma el primero por id de cada empresa. Hoy hay uno solo por empresa —los
    * 2.295 pedidos existentes usan el 1 en Polcecal y el 8 en Polysan—, pero si
    * mañana hay dos depósitos, esto elige el más viejo en vez de fallar. Es
@@ -142,6 +174,7 @@ export async function resolverContextoDeOdoo(
       monedas,
       productoGenericoId: productos[0].id,
       uomId: uomId!,
+      fleteId,
       porEmpresa,
     },
   };

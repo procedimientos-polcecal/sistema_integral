@@ -100,6 +100,12 @@ export interface ContextoDeOdoo {
    */
   productoGenericoId: number;
   uomId: number;
+  /**
+   * El producto de la línea de flete. `null` si no está en el catálogo de
+   * Odoo: ahí la línea usa el genérico, como antes, en vez de no poder crear
+   * la orden por un producto de más.
+   */
+  fleteId: number | null;
   /** Momento de la orden. Se inyecta para que los tests no dependan del reloj. */
   ahora: Date;
 }

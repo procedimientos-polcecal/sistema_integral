@@ -18,6 +18,8 @@ const CONTEXTO: ContextoDeOdoo = {
   // ART. VARIOS, el genérico que el grupo ya tiene, y "Unidades".
   productoGenericoId: 6835,
   uomId: 1,
+  // FLETE, medido en staging el 10/09/2026 (ver el spec de esta tarea).
+  fleteId: 6954,
   ahora: new Date("2026-09-04T12:30:00.000Z"),
 };
 
