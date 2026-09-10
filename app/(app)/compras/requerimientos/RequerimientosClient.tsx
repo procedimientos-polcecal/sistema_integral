@@ -206,7 +206,7 @@ export default function RequerimientosClient({
       .from("compras_requerimientos")
       // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
       .select(
-        "*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre), compras_ubicaciones(nombre)",
+        "*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores!proveedor_id(nombre), compras_ubicaciones(nombre)",
         { count: "exact" }
       );
 

@@ -26,6 +26,23 @@ import {
 
 const HOJA_MASTER = "Requerimientos internos";
 
+/**
+ * Si una pestaña es la de un área.
+ *
+ * Las hojas por área se llaman `RI <ÁREA>` —`RI MANTENIMIENTO`, `RI ALMACÉN`— y
+ * el criterio es **ese prefijo**, no "cualquiera que no sea el master".
+ * Preguntar por la negativa daba verdadero para cualquier hoja ajena, y
+ * `hoja_origen` puede guardar el nombre de una hoja de **otra** planilla: el
+ * alta anota la hoja de respuestas del formulario, donde las columnas N a R no
+ * son las de compra sino las que escribe Google. Escribir proveedor, estado y
+ * costos ahí sería pisar datos del formulario.
+ *
+ * Es el mismo prefijo con el que la importación elige qué pestañas leer, y eso
+ * es a propósito: la importación es quien escribe `hoja_origen`, así que las dos
+ * puntas coinciden por construcción y no por casualidad.
+ */
+export const esPestanaDeArea = (pestana: string) => pestana.startsWith("RI ");
+
 type Admin = ReturnType<typeof createAdminClient>;
 
 // ── Autenticación con Google ─────────────────────────
@@ -307,7 +324,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     const pestanas = await listarPestanas();
     const aLeer = [
       ...(pestanas.includes(HOJA_MASTER) ? [HOJA_MASTER] : []),
-      ...pestanas.filter((p) => p.startsWith("RI ")),
+      ...pestanas.filter(esPestanaDeArea),
     ];
 
     const porRi = new Map<number, FilaPlanilla>();
@@ -721,6 +738,48 @@ const COLUMNA_APROBACION = "estado";
 const COLUMNAS_A_MANO = ["prioridad", "empresa"] as const;
 
 /**
+ * De las dos columnas a mano, cuáles se pueden escribir y cuáles no tienen dónde.
+ *
+ * Pura y aparte del I/O para poder probarla: es la que corre **en producción**
+ * —en cada exportación y en cada reintento—, mientras que
+ * `celdasDePrioridadYEmpresa` de `lib/compras/formulario.ts` hace lo mismo para
+ * el camino del alta. Son dos copias a propósito: el alta escribe otra planilla
+ * y no pasa por acá. Si se toca una hay que mirar la otra.
+ *
+ * Dos reglas, las dos ya pagadas:
+ *
+ *   - una celda que no tenemos con qué llenar **no se pisa con vacío** ni se
+ *     anota. Es el mismo criterio que la celda de comparativa, que borraba el
+ *     link que la planilla sí tenía;
+ *   - si hay valor y al master le falta **esa** columna, se anota. Escribir la
+ *     que sí está y contestar que todo salió bien es exactamente lo que hacía
+ *     esta escritura cuando la hacía el alta.
+ */
+export function columnasAManoAEscribir(
+  idx: Record<string, number>,
+  valores: Record<string, string>
+): {
+  aEscribir: { clave: string; columna: number; valor: string }[];
+  sinColumna: string[];
+} {
+  const aEscribir: { clave: string; columna: number; valor: string }[] = [];
+  const sinColumna: string[] = [];
+
+  for (const clave of COLUMNAS_A_MANO) {
+    const valor = valores[clave] ?? "";
+    if (valor === "") continue;
+    const columna = idx[clave] ?? -1;
+    if (columna < 0) {
+      sinColumna.push(`${clave} (el master no tiene esa columna)`);
+      continue;
+    }
+    aEscribir.push({ clave, columna, valor });
+  }
+
+  return { aEscribir, sinColumna };
+}
+
+/**
  * La base guarda las empresas en mayúsculas (POLCECAL) y el desplegable de la
  * planilla las espera capitalizadas (Polcecal). Sin null = "Ambas".
  */
@@ -766,8 +825,28 @@ export function textoParaComprar(alias: string | null): { valor: string | null; 
 
 export interface ResultadoExportacion {
   escritas: string[];
-  /** Celdas que la planilla no dejó tocar, con el motivo en lenguaje llano. */
+  /**
+   * Lo que la planilla **rechazó**: alguien tiene que ir a hacer algo.
+   *
+   * Es lo único que se le muestra a quien hizo la acción, y por eso el
+   * significado tiene que ser exactamente ése. Cuando lo esperable —una fila del
+   * master que todavía no bajó— entraba también acá, las cuatro rutas que
+   * consumen este campo terminaban diciéndole a quien cargaba un presupuesto de
+   * un RI recién dado de alta que «la planilla no dejó actualizar el estado» y
+   * que «hay que corregirlo a mano ahí»: atribuía el problema al estado —que se
+   * había escrito bien— y mandaba a arreglar a mano algo que se arregla solo.
+   */
   bloqueadas: string[];
+  /**
+   * Lo que **todavía** no se pudo escribir y se va a poder solo.
+   *
+   * Hoy es un caso: prioridad y empresa de un alta cuya fila del master no
+   * existe porque el `IMPORTRANGE` entre las dos planillas no refrescó —tarda
+   * minutos y no se puede forzar desde la API—. Va a la cola del reintento
+   * (`sheets_pendiente`) y **no se muestra**: un cartel que aparece siempre y se
+   * arregla solo enseña a ignorar los carteles.
+   */
+  enEspera: string[];
 }
 
 /**
@@ -1045,7 +1124,10 @@ function detalleDeGoogle(cuerpo: string): string {
  * tampoco el proveedor ni los costos, que sí están permitidos.
  *
  * Lo que no se pudo escribir se devuelve para avisarlo, en vez de dar por
- * hecho que la planilla quedó al día.
+ * hecho que la planilla quedó al día — y se devuelve **en dos listas**, porque
+ * no es lo mismo un rechazo de la planilla (`bloqueadas`, que es lo único que se
+ * le muestra a la persona) que algo que todavía no se pudo escribir y se va a
+ * poder solo (`enEspera`). Ver `ResultadoExportacion`.
  */
 export async function exportarRequerimiento(
   requerimientoId: string,
@@ -1054,14 +1136,14 @@ export async function exportarRequerimiento(
   // Sin cache se comporta como siempre: una llamada suelta arma el suyo y no
   // reusa nada. El reintento sí lo comparte entre todos los RI de la corrida.
   const cache = cacheDeLaCorrida ?? nuevoCacheSheets();
-  const vacio: ResultadoExportacion = { escritas: [], bloqueadas: [] };
+  const vacio: ResultadoExportacion = { escritas: [], bloqueadas: [], enEspera: [] };
   if (!process.env.GOOGLE_SHEETS_COMPRAS_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return vacio;
 
   const admin = createAdminClient();
   const { data: r } = await admin
     .from("compras_requerimientos")
     // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
-    .select("*, proveedores(nombre), empresas!empresa_id(nombre)")
+    .select("*, proveedores!proveedor_id(nombre), empresas!empresa_id(nombre)")
     .eq("id", requerimientoId)
     .single();
 
@@ -1083,11 +1165,21 @@ export async function exportarRequerimiento(
   const token = await obtenerToken(true);
   const escritas: string[] = [];
   const bloqueadas: string[] = [];
+  const enEspera: string[] = [];
 
   // En qué fila del master está este RI. La comparten la aprobación y las dos
   // columnas a mano, así que se resuelve una vez y **sólo si alguna de las dos
   // tiene algo que escribir**: buscarla lee la columna de N° del master, que son
   // 1.885 filas, y hasta ahora un RI PENDIENTE no la pedía nunca.
+  //
+  // El atajo de `sheets_fila` vale sólo cuando `hoja_origen` es el master, y eso
+  // no es una formalidad: esa pareja de valores la escribe la importación,
+  // leyendo la columna A fila por fila, así que el número **está verificado**.
+  // Para cualquier otro origen se busca por la columna A con `filaEnMaster`. El
+  // alta guarda a propósito la hoja de respuestas del formulario y no el master
+  // con la cuenta `fila − 2`: la cuenta es una suposición sobre lo que el
+  // `QUERY` va a hacer, y escribirle prioridad a una fila que nadie comprobó es
+  // ponerle la prioridad de este pedido a otro.
   let filaSabida: number | null | undefined;
   const filaDeEsteRi = async (): Promise<number | null> => {
     if (filaSabida === undefined) {
@@ -1151,11 +1243,24 @@ export async function exportarRequerimiento(
   // el `IMPORTRANGE` entre las dos planillas tarda minutos y no se puede forzar
   // desde la API, así que en el alta la fila del master todavía no existe.
   //
-  // Riesgo asumido: para un RI que vino de la planilla, esto reescribe las dos
-  // celdas con lo que sabe el sistema en cada exportación. Si alguien las
-  // cambió a mano y la importación todavía no pasó, se pisa con el valor
-  // viejo. Es la misma dirección que ya valía al aprobar —la app manda en lo
-  // que gestiona— y la ventana es de una corrida del cron.
+  // RIESGO ASUMIDO, y la ventana es más larga de lo que decía este comentario:
+  // para un RI que vino de la planilla, esto reescribe las dos celdas con lo que
+  // sabe el sistema en **cada** exportación. Si alguien las cambió a mano allá,
+  // se pisa con el valor viejo.
+  //
+  // Decía que la ventana era "una corrida del cron", y eso es falso justo para
+  // el grupo más grande: la importación **saltea** los RI con
+  // `editado_en_app = true`, así que a esos la base no les vuelve a leer estas
+  // columnas nunca y el pisado es **permanente** —no hasta la próxima corrida—.
+  // Y caer en ese grupo es fácil: cargar un presupuesto cambia `estado_compra`,
+  // que es una de las columnas que marcan el trigger. La ventana de una corrida
+  // vale sólo para el RI que todavía no se tocó desde el sistema.
+  //
+  // Se asume igual porque es la misma dirección que ya valía al aprobar —la app
+  // manda en lo que gestiona— y porque no escribirlas dejaba las dos celdas en
+  // blanco para siempre en todo pedido cargado en el sistema. Pero quien cambie
+  // una prioridad a mano en la planilla de un RI ya gestionado acá tiene que
+  // saber que la está perdiendo.
   {
     const valores: Record<string, string> = {
       prioridad: (r.prioridad as string | null) ?? "",
@@ -1164,31 +1269,33 @@ export async function exportarRequerimiento(
         r.paga_ambas === true
       ),
     };
-    // Una celda que no tenemos con qué llenar no se pisa con vacío: es el mismo
-    // criterio que la celda de comparativa, que borraba el link de la planilla.
-    const conValor = COLUMNAS_A_MANO.filter((clave) => valores[clave] !== "");
-
-    if (conValor.length > 0) {
+    // Guarda antes de tocar la planilla: sin ninguna de las dos con qué llenar
+    // no hay nada que buscar, y buscar la fila lee la columna de N° del master
+    // —1.885 filas—. Qué se escribe y qué no lo decide `columnasAManoAEscribir`,
+    // que además distingue la columna que al master le falta.
+    if (COLUMNAS_A_MANO.some((clave) => valores[clave] !== "")) {
       const fila = await filaDeEsteRi();
       if (!fila) {
-        // Queda pendiente y no se pierde: es un alta que la planilla todavía no
-        // bajó, y la próxima corrida vuelve a mirar.
-        bloqueadas.push(
-          `prioridad y empresa (el RI ${r.nro_ri} todavía no aparece en el master)`
+        // Esto NO es un rechazo de la planilla: es un alta que el
+        // `IMPORTRANGE` todavía no bajó al master. Va a la cola del reintento
+        // —que es lo que lo va a resolver, sin que nadie toque nada— y no se le
+        // muestra a quien hizo la acción. Ponerlo en `bloqueadas` hacía que las
+        // cuatro rutas le dijeran "hay que corregirlo a mano ahí" por algo que
+        // se corrige solo, y encima atribuido al campo equivocado.
+        enEspera.push(
+          `prioridad y empresa (el RI ${r.nro_ri} todavía no aparece en el master; ` +
+            `el IMPORTRANGE no refrescó y las escribe el próximo reintento)`
         );
       } else {
         const idx = indexarColumnas(await leerEncabezado(HOJA_MASTER, cache));
-        for (const clave of conValor) {
-          if (idx[clave] < 0) {
-            // Falta la columna: se anota. Escribir la otra y contestar que salió
-            // todo bien es lo que hacía esta misma escritura desde el alta.
-            bloqueadas.push(`${clave} (el master no tiene esa columna)`);
-            continue;
-          }
+        const { aEscribir, sinColumna } = columnasAManoAEscribir(idx, valores);
+        bloqueadas.push(...sinColumna);
+
+        for (const { clave, columna, valor } of aEscribir) {
           const fallo = await escribirCelda(
             token,
-            `${HOJA_MASTER}!${letraDeColumna(idx[clave])}${fila}`,
-            valores[clave]
+            `${HOJA_MASTER}!${letraDeColumna(columna)}${fila}`,
+            valor
           );
           if (fallo) bloqueadas.push(`${clave} (${fallo})`);
           else escritas.push(clave);
@@ -1198,7 +1305,13 @@ export async function exportarRequerimiento(
   }
 
   // ── Columnas de compra, en la hoja del área ──
-  if (r.hoja_origen && r.sheets_fila && r.hoja_origen !== HOJA_MASTER) {
+  //
+  // El criterio es que `hoja_origen` sea una pestaña de área **de verdad**, y no
+  // "cualquier cosa que no sea el master": ver `esPestanaDeArea`. Con la
+  // negativa, el alta —que anota la hoja de respuestas del formulario— hacía
+  // escribir proveedor, estado y costos en las columnas N a R de esa hoja, que
+  // son de Google.
+  if (r.hoja_origen && r.sheets_fila && esPestanaDeArea(r.hoja_origen as string)) {
     const encabezado = await leerEncabezado(r.hoja_origen as string, cache);
     if (encabezado.length > 0) {
       const idx = indexarColumnas(encabezado);
@@ -1246,16 +1359,27 @@ export async function exportarRequerimiento(
   // Se deja anotado qué quedó sin escribir. Sin esto, un rechazo de la planilla
   // se perdía apenas se cerraba el aviso: el RI ya estaba aprobado, la app no
   // volvía a ofrecer aprobarlo y no había manera de reintentar.
+  //
+  // Van las dos cosas, porque este campo **es** la cola del reintento y lo que
+  // está en espera es justamente lo que el reintento acomoda solo. Pero van
+  // separadas y rotuladas: es lo que se lee en /compras/configuracion para
+  // decidir si hay que ir a la planilla, y con los dos motivos mezclados en una
+  // sola lista no había forma de distinguir "la planilla lo rechazó" de "todavía
+  // no bajó".
+  const partes: string[] = [];
+  if (bloqueadas.length > 0) partes.push(`la planilla rechazó: ${bloqueadas.join("; ")}`);
+  if (enEspera.length > 0) partes.push(`se reintenta solo: ${enEspera.join("; ")}`);
+
   await admin
     .from("compras_requerimientos")
     .update({
-      sheets_pendiente: bloqueadas.length > 0 ? bloqueadas.join("; ") : null,
+      sheets_pendiente: partes.length > 0 ? partes.join(" — ") : null,
       sheets_intentado_en: new Date().toISOString(),
       ...(escritas.length > 0 ? { sheets_sincronizado_en: new Date().toISOString() } : {}),
     })
     .eq("id", requerimientoId);
 
-  return { escritas, bloqueadas };
+  return { escritas, bloqueadas, enEspera };
 }
 
 export interface ResultadoReintento {
@@ -1318,8 +1442,14 @@ export async function reintentarPendientes(limite = POR_CORRIDA): Promise<Result
     if (i > 0) await espera(1000);
 
     try {
-      const { bloqueadas } = await exportarRequerimiento(r.id as string, cache);
-      if (bloqueadas.length === 0) resueltos++;
+      const { bloqueadas, enEspera } = await exportarRequerimiento(r.id as string, cache);
+      // Un RI con algo en espera **sigue pendiente**: la fila del master no
+      // existía todavía, así que prioridad y empresa no se escribieron y
+      // `sheets_pendiente` quedó puesto. Contarlo como resuelto —que es lo que
+      // pasaba mirando sólo `bloqueadas`— hacía que la pantalla de Configuración
+      // dijera que no quedaba nada mientras seguía quedando, y encima con la
+      // cuenta de la cola contradiciéndola.
+      if (bloqueadas.length === 0 && enEspera.length === 0) resueltos++;
       else siguenPendientes++;
     } catch {
       // Si la planilla no responde, queda pendiente para la próxima.

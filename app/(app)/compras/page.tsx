@@ -48,7 +48,7 @@ export default async function ComprasDashboardPage() {
     supabase
       .from("compras_requerimientos")
       // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
-      .select("fecha, costo_iva, costo_envio, empresas!empresa_id(nombre), compras_areas(nombre), proveedores(nombre)")
+      .select("fecha, costo_iva, costo_envio, empresas!empresa_id(nombre), compras_areas(nombre), proveedores!proveedor_id(nombre)")
       .not("costo_iva", "is", null)
       .order("fecha", { ascending: false })
       .range(desde, hasta)

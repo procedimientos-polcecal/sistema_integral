@@ -21,7 +21,7 @@ export default async function ParaAprobarPage() {
     supabase
       .from("compras_requerimientos")
       // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
-      .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+      .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores!proveedor_id(nombre), compras_ubicaciones(nombre)")
       .eq("estado_aprobacion", "APROBADA")
       .eq("estado_compra", "PARA_COMPRAR")
       .order("fecha", { ascending: true })

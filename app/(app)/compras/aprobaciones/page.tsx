@@ -21,7 +21,7 @@ export default async function AprobacionesPage() {
     supabase
       .from("compras_requerimientos")
       // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
-      .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores(nombre), compras_ubicaciones(nombre)")
+      .select("*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores!proveedor_id(nombre), compras_ubicaciones(nombre)")
       .in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])
       .order("fecha", { ascending: true }),
 
