@@ -55,6 +55,15 @@ export default function NuevoRequerimientoModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * El pedido se guardó pero la planilla no se enteró.
+   *
+   * No es un error —el pedido existe— pero tampoco se puede cerrar el
+   * formulario como si nada: quien lo cargó tiene que saber que en la planilla
+   * todavía no está. Se reintenta solo en cada sincronización.
+   */
+  const [aviso, setAviso] = useState("");
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     setGuardando(true);
@@ -78,10 +87,14 @@ export default function NuevoRequerimientoModal({
       }),
     });
 
+    const body = await res.json().catch(() => ({}));
     setGuardando(false);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setError(body.error ?? "No se pudo guardar el requerimiento.");
+      return;
+    }
+    if (body.aviso_sheets) {
+      setAviso(body.aviso_sheets);
       return;
     }
     onSaved();
@@ -221,6 +234,24 @@ export default function NuevoRequerimientoModal({
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
+            </div>
+          )}
+
+          {aviso && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p className="font-semibold">El pedido se guardó, pero la planilla no se enteró.</p>
+              <p className="mt-1">{aviso}</p>
+              <p className="mt-1 text-xs">
+                Se reintenta solo en la próxima sincronización. Si sigue, mirá
+                Compras → Configuración.
+              </p>
+              <button
+                type="button"
+                onClick={onSaved}
+                className="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Entendido
+              </button>
             </div>
           )}
 
