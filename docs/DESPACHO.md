@@ -265,6 +265,20 @@ líneas de remito— no es material × granulometría × envase, igual que `BIND
 
 El histórico no depende de eso: se clasifica por texto, ver abajo.
 
+**Y conviene hacerlo antes de la primera orden real, no después.** `producto_raw`
+guarda el nombre del producto de Odoo (`CAL EN BOLSONES CUV 65-70`), y mientras
+ese producto no tenga terna, `filaDeLaPlanilla` cae a ese texto para la celda
+`Material`. O sea que una orden de un producto sin clasificar escribe en la
+planilla el vocabulario de Odoo, en la misma columna que tiene cinco meses del
+vocabulario del libro (`Cal en Bolsones`) — justo la divergencia de formas que
+este módulo decidió terminar. Con el producto clasificado escribe
+`textoParaLaPlanilla`, que es la forma del libro.
+
+Ojo con quién puede: la pantalla pide **`admin` en el módulo**, y la balanza
+tiene `edicion` (`despacho@polcecal.com`, asignado el 10/09/2026). Así que
+clasifica un `admin_sistema`, o hay que subirle el nivel a quien lo vaya a
+hacer.
+
 ## El histórico ya está importado (09/09/2026)
 
 **1.702 órdenes**, de abril a septiembre de 2026. Se corrió
