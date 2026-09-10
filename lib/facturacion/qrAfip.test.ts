@@ -2,14 +2,14 @@ import { describe, it, expect } from "vitest";
 import { leerQrAfip } from "./qrAfip";
 
 /**
- * El payload de ejemplo sigue la especificación pública de ARCA. Los valores
- * son los de una factura A del RI 1933 —Casa Camino, $39.022,50— para que los
- * tests hablen de algo reconocible.
+ * El payload sintético sirve para los casos de borde; los reales están al final
+ * del archivo, y son los que mandan.
  *
- * Ojo: el formato **no está confirmado contra una factura real del grupo**. Por
- * eso hay tests que fijan el comportamiento cuando el JSON no es el esperado:
- * eso es lo que va a pasar si la suposición estuviera mal, y tiene que ser
- * legible en vez de romper.
+ * El formato quedó **confirmado contra tres facturas del grupo el 10/09/2026**:
+ * los trece nombres de campo son los que usa el emisor de TORRACO. Lo que las
+ * facturas reales agregaron es que no se puede suponer que el QR sea válido —hay
+ * uno con coma decimal y truncado a 255 caracteres— ni que el base64 venga en
+ * una sola línea.
  */
 function qrCon(datos: Record<string, unknown>, host = "https://www.arca.gob.ar/fe/qr/"): string {
   const json = JSON.stringify(datos);
@@ -52,6 +52,7 @@ describe("leer el QR de una factura", () => {
       tipoDocReceptor: 80,
       cae: "74123456789012",
       tipoCae: "E",
+      reparado: false,
     });
   });
 
@@ -127,11 +128,11 @@ describe("cuando el QR no es lo que se espera", () => {
     expect(r.motivo).toContain("https://ejemplo.com");
   });
 
-  it("un `p` que no es base64 de un JSON lo dice", () => {
+  it("un `p` que no lleva datos de comprobante lo dice, y muestra qué leyó", () => {
     const r = leerQrAfip("https://www.arca.gob.ar/fe/qr/?p=esto-no-es-base64-de-un-json");
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.motivo).toContain("base64");
+    expect(r.motivo).toContain("no se pudo interpretar");
   });
 
   /*
@@ -169,5 +170,105 @@ describe("cuando el QR no es lo que se espera", () => {
   it("el código vacío no es un error raro", () => {
     expect(leerQrAfip("").ok).toBe(false);
     expect(leerQrAfip("   ").ok).toBe(false);
+  });
+});
+
+/*
+ * ── Facturas reales, leídas el 10/09/2026 ────────────────────
+ *
+ * Estos dos payloads salieron de decodificar el QR de dos facturas de verdad
+ * del grupo. No son ejemplos: son el contrato con el que hay que convivir, y
+ * cada uno enseñó algo que la especificación no dice.
+ */
+
+/**
+ * TORRACO, factura A 0005-00003733. El caso bien formado… con el base64
+ * partido en líneas de 72 caracteres, que es lo que hacía perder 218 de 290.
+ */
+const TORRACO = "https://www.afip.gob.ar/fe/qr/?p=eyJ2ZXIiOjEsImZlY2hhIjoiMjAyNi0wOS0wMSIsImN1aXQiOjIzMjE0ODExODM5LCJwdG9W\r\ndGEiOjUsInRpcG9DbXAiOjEsIm5yb0NtcCI6MzczMywiaW1wb3J0ZSI6MzEyMTgwMCwibW9u\r\nZWRhIjoiUEVTIiwiY3R6IjoxLCJ0aXBvRG9jUmVjIjo4MCwibnJvRG9jUmVjIjoiMzA2NDEw\r\nNjgwMTkiLCJ0aXBvQ29kQXV0IjoiRSIsImNvZEF1dCI6Ijg2MzUwODc5MzQzOTYwIn0=";
+
+/**
+ * PEDRO H. CAMINO, factura A 0005-00003317. El caso roto: coma decimal en el
+ * importe, tabs de relleno, y el payload cortado en 255 caracteres por el
+ * generador del emisor.
+ */
+const CAMINO = "https://www.afip.gob.ar/fe/qr/?p=eyJ2ZXIiOjEsImZlY2hhIjoiMjAyNi0wOS0wOSIsImN1aXQiOjMwNzEwOTc2MzU2LCJwdG9WdGEiOjUsInRpcG9DbXAiOjEsIm5yb0NtcCI6MzMxNwkJCSwiaW1wb3J0ZSI6MzgxNjYsODgsIm1vbmVkYSI6IlBFUyIsImN0eiI6MSwidGlwb0RvY1JlYyI6ODAsIm5yb0RvY1JlYyI6ODAsInRpcG";
+
+describe("las facturas reales del grupo", () => {
+  it("TORRACO: el base64 partido en líneas se lee completo", () => {
+    const r = leerQrAfip(TORRACO);
+    if (!r.ok) throw new Error(r.motivo);
+
+    expect(r.cabecera).toEqual({
+      version: 1,
+      fecha: "2026-09-01",
+      cuitEmisor: "23214811839",
+      puntoVenta: 5,
+      tipoComprobante: 1,
+      numero: 3733,
+      importeTotal: 3121800,
+      moneda: "PES",
+      cotizacion: 1,
+      // El CUIT de POLCECAL: el QR dice a cuál de las dos empresas se le facturó.
+      cuitReceptor: "30641068019",
+      tipoDocReceptor: 80,
+      cae: "86350879343960",
+      tipoCae: "E",
+      reparado: false,
+    });
+  });
+
+  it("TORRACO: el número y el punto de venta son los del nombre del archivo", () => {
+    // El archivo se llama "POLCECAL SA-Factura A-0005-00003733": 5 y 3733.
+    const r = leerQrAfip(TORRACO);
+    if (!r.ok) throw new Error(r.motivo);
+    expect([r.cabecera.puntoVenta, r.cabecera.numero]).toEqual([5, 3733]);
+  });
+
+  /*
+   * Este es el test que justifica el lector tolerante. El QR de esta factura
+   * no es un JSON válido y está cortado a la mitad, y aun así identifica el
+   * comprobante sin ambigüedad: emisor, tipo, punto de venta, número, fecha e
+   * importe. Rechazarla habría sido devolverle el problema a quien la carga.
+   */
+  it("CAMINO: un QR inválido y truncado se lee igual, y se marca", () => {
+    const r = leerQrAfip(CAMINO);
+    if (!r.ok) throw new Error(r.motivo);
+
+    expect(r.cabecera).toMatchObject({
+      fecha: "2026-09-09",
+      cuitEmisor: "30710976356",
+      puntoVenta: 5,
+      tipoComprobante: 1,
+      numero: 3317,
+      moneda: "PES",
+      // Hubo que reparar: la pantalla lo va a mostrar.
+      reparado: true,
+    });
+  });
+
+  it("CAMINO: la coma decimal del emisor se lee como decimal", () => {
+    // El QR dice `"importe":38166,88`, que en JSON no es un número.
+    const r = leerQrAfip(CAMINO);
+    if (!r.ok) throw new Error(r.motivo);
+    expect(r.cabecera.importeTotal).toBe(38166.88);
+  });
+
+  it("CAMINO: el receptor no se puede saber, y queda en null", () => {
+    /*
+     * El emisor escribió `"nroDocRec":80` —repitió el tipo de documento— y ahí
+     * el payload se corta. No hay forma de saber a qué empresa se le facturó,
+     * así que no se inventa: queda vacío y lo elige una persona.
+     */
+    const r = leerQrAfip(CAMINO);
+    if (!r.ok) throw new Error(r.motivo);
+    expect(r.cabecera.cuitReceptor).toBeNull();
+  });
+
+  it("los dos son del mismo punto de venta y distinto emisor", () => {
+    const a = leerQrAfip(TORRACO);
+    const b = leerQrAfip(CAMINO);
+    if (!a.ok || !b.ok) throw new Error("las dos tienen que leerse");
+    expect(a.cabecera.cuitEmisor).not.toBe(b.cabecera.cuitEmisor);
   });
 });

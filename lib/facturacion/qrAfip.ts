@@ -20,13 +20,33 @@
  * emisor escribió en el QR. Alcanza para identificar el comprobante y evitar
  * cargarlo dos veces, que es para lo que está.
  *
- * ## Cuando algo no encaja, lo dice
+ * ## Lo que enseñaron tres facturas reales (10/09/2026)
  *
- * Los nombres de los campos salen de la especificación pública de ARCA, pero
- * **todavía no se confirmaron contra una factura real del grupo**. Por eso,
- * cuando el JSON no trae lo que se espera, el motivo **incluye las claves que
- * sí trajo**: la primera factura que se suba va a decir la verdad en el acto,
- * en vez de fallar en silencio y dejar a alguien adivinando.
+ * Los nombres de los campos quedaron confirmados uno por uno contra la factura
+ * A 0005-00003733 de TORRACO, cuyo QR trae el payload completo y bien formado.
+ * Pero las otras dos mostraron que **no se puede suponer que el QR sea válido**:
+ *
+ * 1. **El base64 viene partido en líneas.** El de TORRACO trae un salto de
+ *    línea cada 72 caracteres —envoltura MIME—, así que cortar en el blanco
+ *    se queda con 72 de 290 caracteres y el JSON sale truncado. Se le saca todo
+ *    el espacio en blanco antes de decodificar.
+ *
+ * 2. **Hay emisores que generan un QR inválido.** El de PEDRO H. CAMINO
+ *    (factura A 0005-00003317) trae `"importe":38166,88` —coma decimal—, tabs
+ *    de relleno después del número de comprobante, y está **cortado en 255
+ *    caracteres**: un único segmento de 255 bytes en un QR versión 12, que
+ *    admite 65.535. O sea, un generador con un buffer fijo.
+ *
+ *    `JSON.parse` lo rechaza entero. Pero los datos que identifican la factura
+ *    —emisor, tipo, punto de venta, número, fecha, importe— están en el tramo
+ *    legible, así que **rechazar todo por un carácter sería tirar una factura
+ *    perfectamente identificable**. Cuando el JSON no parsea, se extrae campo
+ *    por campo y se avisa que hubo que reparar.
+ *
+ * 3. **Hay facturas donde el QR no es una imagen aparte.** La de ZITO Y PRIOLA
+ *    tiene la página entera como un JPEG: el QR existe pero está dentro de la
+ *    imagen del comprobante. Para ésas hay que rasterizar la página y buscar el
+ *    QR ahí, que es lo que hace el navegador al subir el archivo.
  */
 
 import { normalizarCuit } from "@/lib/core/cuit";
@@ -60,6 +80,13 @@ export interface CabeceraDelComprobante {
   cae: string | null;
   /** `E` = CAE, `A` = CAEA. */
   tipoCae: string | null;
+  /**
+   * `true` si el QR no era un JSON válido y hubo que extraer campo por campo.
+   *
+   * Pasa de verdad: hay emisores con coma decimal y payload truncado. La
+   * lectura sirve igual, pero merece una mirada humana antes de darla por buena.
+   */
+  reparado: boolean;
 }
 
 export type LecturaDelQr =
@@ -86,16 +113,24 @@ export function leerQrAfip(texto: string): LecturaDelQr {
     };
   }
 
-  let datos: Record<string, unknown>;
+  let texto_json: string;
   try {
-    datos = JSON.parse(decodificarBase64(codificado)) as Record<string, unknown>;
+    texto_json = decodificarBase64(codificado);
   } catch {
-    return { ok: false, motivo: "El QR tiene un parámetro `p` que no es un JSON en base64." };
+    return { ok: false, motivo: "El parámetro `p` del QR no es base64." };
   }
 
-  if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
-    return { ok: false, motivo: "El contenido del QR no es un objeto JSON." };
+  const leido = interpretar(texto_json);
+  if (!leido) {
+    return {
+      ok: false,
+      motivo:
+        "El contenido del QR no se pudo interpretar como los datos de un comprobante. " +
+        `Dice: ${texto_json.slice(0, 120)}`,
+    };
   }
+
+  const { datos, reparado } = leido;
 
   const faltan = IMPRESCINDIBLES.filter((c) => datos[c] === undefined || datos[c] === null);
   if (faltan.length) {
@@ -142,8 +177,58 @@ export function leerQrAfip(texto: string): LecturaDelQr {
       tipoDocReceptor,
       cae: datos.codAut === undefined || datos.codAut === null ? null : String(datos.codAut),
       tipoCae: typeof datos.tipoCodAut === "string" ? datos.tipoCodAut : null,
+      reparado,
     },
   };
+}
+
+/**
+ * El JSON del QR, aunque no sea un JSON válido.
+ *
+ * Primero se intenta `JSON.parse`, que es lo que corresponde y lo que va a
+ * funcionar con los emisores que respetan la especificación.
+ *
+ * Cuando falla se extrae **campo por campo**, y no es una concesión: la factura
+ * A 0005-00003317 de PEDRO H. CAMINO trae `"importe":38166,88` con coma
+ * decimal, tabs de relleno y el payload cortado en 255 caracteres. `JSON.parse`
+ * la rechaza entera, pero el emisor, el tipo, el punto de venta, el número, la
+ * fecha y el importe están todos en el tramo legible. Tirar una factura
+ * identificable por un carácter mal puesto de otro sería devolverle el problema
+ * a quien la está cargando.
+ *
+ * `reparado` viaja en la cabecera para que la pantalla pueda decir "esto salió
+ * de un QR mal formado": un dato que hubo que reparar merece una mirada, aunque
+ * la reparación sea correcta.
+ */
+function interpretar(texto: string): { datos: Record<string, unknown>; reparado: boolean } | null {
+  try {
+    const datos = JSON.parse(texto) as Record<string, unknown>;
+    if (datos && typeof datos === "object" && !Array.isArray(datos)) {
+      return { datos, reparado: false };
+    }
+  } catch {
+    // Sigue abajo: hay emisores que no generan un JSON válido.
+  }
+
+  const datos: Record<string, unknown> = {};
+  /*
+   * Un campo es `"nombre": valor`, donde el valor puede ser un texto entre
+   * comillas o un número —con punto o con coma decimal, que es el caso real—.
+   * No se exige que el objeto cierre: un payload truncado igual sirve.
+   */
+  const campo = /"(\w+)"\s*:\s*(?:"([^"]*)"|(-?\d+(?:[.,]\d+)?))/g;
+
+  for (const m of texto.matchAll(campo)) {
+    const [, nombre, comoTexto, comoNumero] = m;
+    if (comoTexto !== undefined) {
+      datos[nombre] = comoTexto;
+    } else if (comoNumero !== undefined) {
+      // La coma decimal del emisor es un punto para todo el resto del mundo.
+      datos[nombre] = Number(comoNumero.replace(",", "."));
+    }
+  }
+
+  return Object.keys(datos).length ? { datos, reparado: true } : null;
 }
 
 /**
@@ -154,12 +239,18 @@ export function leerQrAfip(texto: string): LecturaDelQr {
  * fallar por el host sería rechazar facturas válidas: ARCA cambió el dominio.
  */
 function parametroP(texto: string): string | null {
-  const conParametro = /[?&]p=([^&\s]+)/.exec(texto);
-  if (conParametro) return decodeURIComponent(conParametro[1]);
+  /*
+   * El `[^&]` incluye los saltos de línea a propósito: el QR de TORRACO trae el
+   * base64 partido cada 72 caracteres, y una clase que excluya el espacio en
+   * blanco se queda con 72 de 290 y devuelve un JSON truncado.
+   */
+  const conParametro = /[?&]p=([^&]+)/.exec(texto);
+  if (conParametro) return decodeURIComponent(conParametro[1].replace(/\s+/g, ""));
 
   // Sin URL: puede ser el base64 pelado. Se acepta si al menos lo parece.
-  if (!texto.includes("://") && /^[A-Za-z0-9+/_=-]+$/.test(texto) && texto.length > 40) {
-    return texto;
+  const sinEspacios = texto.replace(/\s+/g, "");
+  if (!sinEspacios.includes("://") && /^[A-Za-z0-9+/_=-]+$/.test(sinEspacios) && sinEspacios.length > 40) {
+    return sinEspacios;
   }
 
   return null;
