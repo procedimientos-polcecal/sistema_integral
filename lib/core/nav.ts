@@ -225,11 +225,9 @@ export const NAV: NavItem[] = [
     // cierra una voladura en el frente y desde donde finanzas mira los montos
     // sin conciliar. Los catálogos y el informe se miran después, no durante.
     children: [
-      { label: "Yacimientos", href: "/cantera", modulo: "cantera" },
-      { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
-      { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
+      { label: "Por yacimiento", href: "/cantera", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
-      { label: "Configuración", href: "/cantera/configuracion", modulo: "cantera", soloAdmin: true },
+      { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
