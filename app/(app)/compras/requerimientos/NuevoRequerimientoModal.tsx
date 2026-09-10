@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
+import { recortarParaPantalla } from "@/lib/compras/texto";
 
 type Opcion = { id: string; nombre: string };
 
@@ -64,10 +65,41 @@ export default function NuevoRequerimientoModal({
    */
   const [aviso, setAviso] = useState("");
 
+  /**
+   * El pedido ya se creó y este formulario no se puede volver a enviar.
+   *
+   * No es lo mismo que `aviso`: un alta puede salir perfecta y no dejar aviso.
+   * Lo que este estado impide es el alta DUPLICADA. Con el aviso en pantalla,
+   * `guardando` volvía a `false` y el submit seguía habilitado; volver a apretar
+   * "Crear requerimiento" insertaba **un segundo requerimiento**, con otro N° de
+   * RI y otra fila en la planilla. La idempotencia del alta protege contra
+   * escribir dos veces la fila del *mismo* pedido, no contra dos pedidos, y
+   * quien ve un cartel de que algo no salió bien lo más natural que puede hacer
+   * es apretar de nuevo.
+   */
+  const [creado, setCreado] = useState(false);
+
+  /**
+   * Cerrar cuando el pedido ya existe **tiene que recargar**.
+   *
+   * En las tres pantallas que abren este modal, `onClose` sólo cierra y `onSaved`
+   * es la que recarga el listado. Con el aviso en pantalla, el fondo y "Cancelar"
+   * llamaban a `onClose`: el pedido que sí se había creado no aparecía en la
+   * lista, y eso se lee como "no se guardó" — que es justo la lectura que hace
+   * que alguien lo cargue de nuevo.
+   */
+  const cerrar = () => (creado ? onSaved() : onClose());
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
+    // Red por si el submit llega igual (un Enter en un campo, o el navegador
+    // reenviando): una vez que el POST volvió 201 no se manda nada más.
+    if (creado || guardando) return;
     setGuardando(true);
     setError("");
+    // También el aviso: sin esto, un segundo intento que sí anda dejaba en
+    // pantalla el cartel del primero.
+    setAviso("");
 
     const res = await fetch("/api/compras/requerimientos", {
       method: "POST",
@@ -93,6 +125,8 @@ export default function NuevoRequerimientoModal({
       setError(body.error ?? "No se pudo guardar el requerimiento.");
       return;
     }
+    // El pedido existe. Desde acá el formulario ya no puede mandar nada.
+    setCreado(true);
     if (body.aviso_sheets) {
       setAviso(body.aviso_sheets);
       return;
@@ -102,7 +136,7 @@ export default function NuevoRequerimientoModal({
 
   return (
     <div
-      onClick={onClose}
+      onClick={cerrar}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
     >
       <div
@@ -240,10 +274,24 @@ export default function NuevoRequerimientoModal({
           {aviso && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               <p className="font-semibold">El pedido se guardó, pero la planilla no se enteró.</p>
-              <p className="mt-1">{aviso}</p>
+              {/* `break-words` y recorte: el motivo trae el mensaje de Google
+                  sin traducir, y ése puede ser una URL de activación de la API
+                  sin un solo espacio, que no corta y rompe el ancho del bloque.
+                  El texto completo queda en `sheets_pendiente`; acá va lo que
+                  entra, y el resto en el `title` para no perderlo del todo. */}
+              <p className="mt-1 break-words" title={aviso}>
+                {recortarParaPantalla(aviso)}
+              </p>
+              {/* No manda a Compras → Configuración: esa página redirige a
+                  cualquiera sin permiso de edición de Compras, que son
+                  justamente las nueve áreas para las que existe este
+                  formulario. Lo accionable para esa persona es no cargarlo de
+                  nuevo y, si mañana sigue sin aparecer, avisarle a Compras. */}
               <p className="mt-1 text-xs">
-                Se reintenta solo en la próxima sincronización. Si sigue, mirá
-                Compras → Configuración.
+                El pedido ya tiene su N° de RI: <strong>no hay que volver a
+                cargarlo</strong>. La planilla se reintenta sola en cada
+                sincronización. Si Compras no lo ve ahí, avisales y pasales este
+                mensaje.
               </p>
               <button
                 type="button"
@@ -258,18 +306,18 @@ export default function NuevoRequerimientoModal({
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={cerrar}
               disabled={guardando}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
-              Cancelar
+              {creado ? "Cerrar" : "Cancelar"}
             </button>
             <button
               type="submit"
-              disabled={guardando || !descripcion.trim() || !areaId}
+              disabled={guardando || creado || !descripcion.trim() || !areaId}
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
             >
-              {guardando ? "Guardando…" : "Crear requerimiento"}
+              {guardando ? "Guardando…" : creado ? "Ya se creó" : "Crear requerimiento"}
             </button>
           </div>
         </form>
