@@ -11,8 +11,15 @@ decisiones de personas distintas:
 
 1. **Alta** — un área carga un Requerimiento Interno (RI): qué necesita, cuánto,
    dónde y para cuándo. Hoja `Requerimientos internos`.
-2. **Aprobación** — gerencia aprueba o deniega, y de paso **define la prioridad
-   y quién paga**. Columnas `PRIORIDAD`, `Empresa` y `Estado` del master.
+2. **Aprobación** — gerencia aprueba o deniega. Columnas `PRIORIDAD`, `Empresa`
+   y `Estado` del master.
+
+   La prioridad y quién paga **las propone quien pide** cuando el pedido entra
+   por el sistema, y gerencia las confirma o las cambia al aprobar. Desde el
+   09/09/2026 el sistema las escribe en el master **en cada exportación** y no
+   sólo al aprobar: si las escribiera al aprobar, un pedido cargado acá se vería
+   en la planilla sin prioridad hasta que alguien lo apruebe, y ése es
+   justamente el dato que sirve para decidir el orden.
 
    Esos dos campos no los fija quien pide: el área sugiere, gerencia decide. Es
    la regla real del circuito, y es lo que explica que el 68% del histórico esté

@@ -57,6 +57,7 @@ funcionando y se puede importar a mano.
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
+| `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` | Dónde se escribe el **alta** de un pedido cargado en el sistema. Es `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, la planilla de respuestas del formulario de Google: `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. Va ahí y no en el master porque las columnas del alta del master son la salida de un `QUERY(IMPORTRANGE())` de esta hoja — ver [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md) | La cuenta de servicio necesita **Editor**. Si falta, el alta no se exporta y el pedido **queda en la cola de pendientes** con el nombre de la variable en el motivo: no se omite en silencio, porque el pedido no llegó a ninguna parte |
 | `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
 | `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
 | `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
@@ -188,6 +189,7 @@ NEXT_PUBLIC_APP_URL=https://tu-app.vercel.app
 CRON_SECRET=
 SHEETS_WEBHOOK_SECRET=
 GOOGLE_SHEETS_COMPRAS_ID=1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80
+GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID=1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=

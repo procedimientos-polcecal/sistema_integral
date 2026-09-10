@@ -25,7 +25,7 @@ Estado: **en producción, con el histórico cargado y la sincronización andando
 ```
 Un área pide (formulario de Google o /mis-pedidos)
   → PENDIENTE de aprobación
-  → gerencia aprueba y define prioridad y quién paga   [APROBADA]
+  → gerencia aprueba (confirma prioridad y quién paga)  [APROBADA]
   → Compras junta presupuestos                          [EN_COMPARATIVA]
   → comparativa lista, se asigna a NICO o MAXI          [PARA_COMPRAR]
   → esa persona aprueba la compra                       [APROBADO]
@@ -368,6 +368,70 @@ se guarda sólo si la planilla se pudo leer, el vínculo con el archivo se guard
 igual —es correcto y de ahí sale el link—, y la respuesta trae
 `sin_forma_de_comparativa` como número aparte, porque eso no se arregla
 apretando de nuevo: alguien tiene que ponerle la columna a esa planilla.
+
+**El alta viajaba en una sola dirección, y arreglarlo no era "exportar una fila
+más".** Un pedido cargado en el sistema no aparecía en la planilla. La razón está
+en la forma de la planilla y no en el código: **las columnas del alta del master
+son la salida de una fórmula** —`QUERY(IMPORTRANGE())` de la planilla de
+respuestas del formulario de Google— y cada pestaña por área es un `FILTER` del
+master. No hay dónde escribir un alta. Se escribe **una planilla más arriba**,
+en `Respuestas de formulario 1`, y baja sola por las fórmulas. El mapa completo
+está en el spec del 09/09/2026 y en
+[COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md).
+
+**La numeración de esa hoja es independiente de la base.** El N° de RI es una
+fórmula por fila (`=IF(B:B<>"",A_anterior+1,"")`) que cuenta las filas de la
+hoja; el sistema numeraba con `max(nro_ri)+1` sobre la base. Con el alta sin
+exportar las dos series se separaron: el RI 1954 se cargó en el sistema y la
+próxima respuesta del formulario iba a ser 1954 también, con el `upsert` por
+`nro_ri` pisándole la descripción al pedido del sistema. Se arregla porque cada
+alta ocupa su fila allá y **el que numera vuelve a ser uno solo**: el sistema
+escribe la misma fórmula que las otras filas y después **lee el número de
+vuelta** para confirmar que dio el que había asignado. Si no coincide, no
+numera por su cuenta: lo deja pendiente y lo dice.
+
+**Lo esperable y lo que hay que mirar son dos cosas distintas, y mezclarlas
+enseña a ignorar los carteles.** `IMPORTRANGE` refresca cuando Google quiere
+—minutos, y no se puede forzar—, así que cuando el alta acaba de escribirse la
+fila del master **todavía no existe**. Eso no es un fallo: es la mitad de la
+operación que va a completar el reintento. Por eso `ResultadoAlta` tiene
+`pendiente` (la cola) y `avisar` (la persona) separados, y `ResultadoExportacion`
+tiene `enEspera` además de `bloqueadas`. Antes, ese caso caía en `bloqueadas` y
+las cuatro rutas que lo consumen le decían a quien cargó un presupuesto "hay que
+corregirlo a mano ahí" por algo que se corrige solo, y atribuido al campo
+equivocado. Un cartel que aparece siempre no lo lee nadie.
+
+**Guardar la cuenta en vez del hecho hace que el reintento escriba a ciegas.**
+El alta guardaba `sheets_fila = fila − 2` del master —una cuenta— y el atajo de
+`exportarRequerimiento` la usa sin verificar la columna A. Escribir prioridad en
+una fila que nadie comprobó es ponerle la prioridad de este pedido a otro. Ahora
+se guarda **la hoja y la fila que de verdad se escribieron**, con el número
+leído de vuelta, y el atajo no aplica: la fila del master se resuelve
+buscándola. En la misma pasada, el bloque de las columnas de compra dejó de
+entrar con "cualquier cosa que no sea el master" y exige una pestaña de área de
+verdad (`esPestanaDeArea`) — si no, habría escrito proveedor, estado y costos en
+las columnas N a R de la hoja de respuestas del formulario.
+
+**El orden importa: primero encolar, después llamar a Google.** El POST del alta
+hace ocho llamadas a Google, y si la plataforma mata la función después del
+`insert` y antes de anotar el pendiente, el pedido queda creado con la cola
+vacía: invisible para el reintento, invisible en Configuración, y con un cartel
+que le dice a quien lo cargó que no se guardó —así que lo carga de nuevo y
+quedan dos—. Ahora el registro **nace encolado** (`ALTA_SIN_ESCRIBIR`) y la
+exportación es la que limpia esa marca. Muera donde muera, el pedido queda en la
+cola. Y el alta es **idempotente**: si ya hay una fila con ese N° de RI no
+escribe otra, y si la fila con ese número no es la suya —la reconoce por la
+marca temporal— no la adopta, porque adoptarla dejaría el pedido apuntando a la
+fila de otro.
+
+**"No está configurado" no es "salió bien".** Sin
+`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID`, la exportación del alta no corre. El
+criterio del módulo para las variables que faltan es omitir sin error, pero acá
+omitir **limpiaba la cola** en la que el pedido acababa de entrar: cada alta se
+salteaba la planilla en silencio. Ahora queda pendiente con el nombre de la
+variable en el motivo. Cuesta un pendiente por alta en un despliegue que a
+propósito no espeje el formulario, y es el precio de no poder distinguir "no lo
+configuraron" de "se configuró mal".
 
 ## Lo que quedó pendiente
 

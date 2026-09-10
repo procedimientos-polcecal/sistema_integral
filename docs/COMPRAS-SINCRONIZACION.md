@@ -9,7 +9,7 @@ Para que no haya dos verdades sobre el mismo dato, cada lado manda en una cosa:
 
 | | Manda en | Por qué |
 |---|---|---|
-| **Planilla** | El alta de RI nuevos | La gente sigue cargando por el formulario de Google |
+| **Planilla** | El alta de los RI que entran por el formulario | La gente sigue cargando por el formulario de Google. Un RI cargado en el sistema **también llega**: se escribe en la hoja de respuestas y baja por las mismas fórmulas |
 | **Sistema** | Aprobación, proveedor, costos, estado de compra | Es donde están los permisos y el historial |
 
 En la práctica: apenas alguien toca un requerimiento desde el sistema (lo
@@ -41,7 +41,33 @@ normalidad.
   entero, no sólo el cron. Con plan Pro se puede bajar a `0 */2 * * *`. Igual el
   webhook cubre la inmediatez, así que el cron es sólo la red de seguridad.
 
-**Sistema → planilla** (`exportarRequerimiento`)
+**Sistema → planilla, el alta** (`exportarAltaAlFormulario`)
+
+Es el sentido que faltaba, y no se escribe donde uno esperaría. Las columnas del
+alta del master **son la salida de una fórmula** —`QUERY(IMPORTRANGE())` de la
+planilla de respuestas del formulario— y cada pestaña por área es un `FILTER`
+del master: no hay dónde escribir un alta. Así que se escribe **una planilla más
+arriba**, en `Respuestas de formulario 1`, y baja sola. Necesita
+`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` y que la cuenta de servicio sea **Editor**
+de esa planilla.
+
+- El N° de RI lo sigue calculando **la fórmula de la planilla**: el sistema
+  escribe la misma que tienen las otras filas y después **lee el número de
+  vuelta** para confirmar que dio el que había asignado. Si no coincide, no
+  numera por su cuenta: lo deja pendiente y lo dice. Dos números para un pedido
+  es peor que un pedido sin fila.
+- Las fechas van como **serial** y no como texto: la planilla es `es_MX` y un
+  texto depende del locale.
+- El pedido **nace encolado** y la exportación limpia esa marca al terminar
+  bien. Si matan la función en el medio —son ocho llamadas a Google—, el pedido
+  queda en la cola en vez de quedar creado y olvidado.
+- Es **idempotente**: si ya hay una fila con ese N° de RI no escribe otra. Y si
+  esa fila no es la suya, no la adopta.
+- Prioridad y empresa van a las columnas a mano del master, y **sólo después de
+  verificar que esa fila ya diga este N° de RI**. Mientras el `IMPORTRANGE` no
+  refresque, quedan en la cola: las escribe el reintento.
+
+**Sistema → planilla, la compra** (`exportarRequerimiento`)
 
 - Al aprobar, escribe el estado en la columna correspondiente del master.
 - Al guardar un cambio de compra, escribe en la pestaña del área: comparativa,
@@ -52,6 +78,20 @@ normalidad.
   poner.** Cuando no tiene, no se escribe: escribir vacío borraba el link que la
   planilla sí tenía —la celda muestra "LINK" y esconde el hipervínculo—, y con
   eso el dato no quedaba en ninguno de los dos lados.
+- **`SOLICITA`, en la pestaña del área, junto con las demás.** Es el único lugar
+  de la planilla donde figura quién pidió: el `QUERY` del master saltea las
+  columnas de nombre y apellido de la hoja de respuestas. Se escribe sólo si el
+  sistema lo sabe, para no pisar con vacío lo que alguien escribió a mano.
+- **Prioridad y empresa, en cada exportación y no sólo al aprobar.** Las propone
+  quien pide, en el alta; escribirlas únicamente al aprobar dejaba el pedido
+  visible en la planilla sin el dato que sirve para ordenar el trabajo.
+- **Lo que no se pudo escribir se distingue de lo que todavía no se pudo.**
+  `bloqueadas` es lo que la planilla rechazó y alguien tiene que ir a arreglar;
+  `enEspera` es lo que se va a poder solo —típicamente, que el `IMPORTRANGE`
+  todavía no bajó la fila del alta al master—. Las dos van a
+  `sheets_pendiente`, que es la cola del reintento, pero **sólo `bloqueadas` se
+  le muestra a quien hizo la acción**: un cartel que aparece siempre y manda a
+  corregir a mano algo que se corrige solo enseña a ignorar los carteles.
 
 ### El alias de cada aprobador
 
