@@ -143,7 +143,9 @@ describe("una orden, una empresa", () => {
     expect(l).toHaveLength(2);
     expect(l[1]).toMatchObject({ name: "Flete", product_qty: 1, price_unit: 5000 });
     // El flete también necesita los obligatorios, o la orden entera se rechaza.
-    expect(l[1]).toMatchObject({ product_id: 6835, product_uom: 1 });
+    // El producto es el de flete del contexto, no el genérico: tiene su propia
+    // cuenta contable (ver el describe de "el producto de la línea").
+    expect(l[1]).toMatchObject({ product_id: CONTEXTO.fleteId, product_uom: 1 });
     /*
      * Y va SIN IVA: la fórmula de la comparativa suma el envío después del
      * impuesto, así que gravarlo haría que la orden totalice más que lo
@@ -343,5 +345,57 @@ describe("cuando no se puede armar", () => {
 
     // Quien lo lee arregla las cinco cosas de una, no una por intento.
     expect(r.problemas).toHaveLength(5);
+  });
+});
+
+describe("el producto de la línea", () => {
+  it("usa el elegido cuando viene, y no el genérico", () => {
+    // El producto es lo que aporta la cuenta contable. Con ART. VARIOS en
+    // todas las órdenes, todo el gasto del módulo caía en la misma bolsa.
+    const r = armarOrdenes(ri(), cotizacion(), [POLCECAL], CONTEXTO, { id: 77, uomId: 1 });
+    if (!r.ok) throw new Error("no armó");
+
+    expect(lineas(r.ordenes[0].vals)[0].product_id).toBe(77);
+  });
+
+  it("sin producto elegido sigue siendo el genérico: nada regresiona", () => {
+    const r = armarOrdenes(ri(), cotizacion(), [POLCECAL], CONTEXTO);
+    if (!r.ok) throw new Error("no armó");
+
+    expect(lineas(r.ordenes[0].vals)[0].product_id).toBe(CONTEXTO.productoGenericoId);
+  });
+
+  it("la línea de flete usa el producto de flete, no el elegido ni el genérico", () => {
+    const r = armarOrdenes(ri(), cotizacion({ costoEnvio: 5000 }), [POLCECAL], CONTEXTO, {
+      id: 77,
+      uomId: 1,
+    });
+    if (!r.ok) throw new Error("no armó");
+
+    const flete = lineas(r.ordenes[0].vals).find((l) => l.name === "Flete");
+    expect(flete?.product_id).toBe(CONTEXTO.fleteId);
+  });
+
+  it("sin producto de flete en el catálogo, la línea de flete usa el genérico", () => {
+    const r = armarOrdenes(
+      ri(),
+      cotizacion({ costoEnvio: 5000 }),
+      [POLCECAL],
+      { ...CONTEXTO, fleteId: null },
+      { id: 77, uomId: 1 }
+    );
+    if (!r.ok) throw new Error("no armó");
+
+    const flete = lineas(r.ordenes[0].vals).find((l) => l.name === "Flete");
+    expect(flete?.product_id).toBe(CONTEXTO.productoGenericoId);
+  });
+
+  it("la unidad de la línea es la del producto elegido, no la del contexto", () => {
+    // El día que alguien cargue un producto en kilos, Odoo rechaza la línea si
+    // la unidad no es la de su categoría.
+    const r = armarOrdenes(ri(), cotizacion(), [POLCECAL], CONTEXTO, { id: 77, uomId: 9 });
+    if (!r.ok) throw new Error("no armó");
+
+    expect(lineas(r.ordenes[0].vals)[0].product_uom).toBe(9);
   });
 });

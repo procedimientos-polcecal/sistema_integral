@@ -166,7 +166,12 @@ export function armarOrdenes(
   ri: RequerimientoParaOrden,
   cotizacion: CotizacionParaOrden,
   empresas: EmpresaParaOrden[],
-  contexto: ContextoDeOdoo
+  contexto: ContextoDeOdoo,
+  /**
+   * El producto que Compras confirmó para el ítem. Sin él, el genérico: una
+   * pantalla vieja que no lo manda sigue creando la orden como antes.
+   */
+  producto?: { id: number; uomId: number | null }
 ): ResultadoDeArmado {
   const problemas: Problema[] = [];
 
@@ -249,15 +254,22 @@ export function armarOrdenes(
     : null;
 
   const ordenes = empresas.map((empresa, i) =>
-    armarUna(ri, cotizacion, empresa, contexto, {
-      precio: precio!,
-      monedaId: monedaId!,
-      porcentaje,
-      esCompartido,
-      parte: partes
-        ? partes[i]
-        : { porcentaje: 100, importe: cotizacion.costoEnvio ?? 0, cantidad: cantidad! },
-    })
+    armarUna(
+      ri,
+      cotizacion,
+      empresa,
+      contexto,
+      {
+        precio: precio!,
+        monedaId: monedaId!,
+        porcentaje,
+        esCompartido,
+        parte: partes
+          ? partes[i]
+          : { porcentaje: 100, importe: cotizacion.costoEnvio ?? 0, cantidad: cantidad! },
+      },
+      producto
+    )
   );
 
   return { ok: true, ordenes };
@@ -275,7 +287,9 @@ function armarUna(
     esCompartido: boolean;
     /** Lo que le toca a esta empresa: cantidad y flete ya repartidos. */
     parte: { porcentaje: number; importe: number; cantidad: number | null };
-  }
+  },
+  /** El producto que Compras confirmó. Sin él, el genérico. */
+  producto?: { id: number; uomId: number | null }
 ): OrdenParaOdoo {
   const { precio, monedaId, porcentaje, esCompartido, parte } = calculado;
 
@@ -291,8 +305,12 @@ function armarUna(
    * impuesto de esta empresa. Van en las dos líneas igual.
    */
   const obligatorios = {
-    product_id: contexto.productoGenericoId,
-    product_uom: contexto.uomId,
+    product_id: producto?.id ?? contexto.productoGenericoId,
+    // La unidad es la del producto elegido. Hoy las 378 comprables son todas
+    // `Unidades`, así que no cambia nada; el día que alguien cargue un
+    // producto en kilos, Odoo rechaza la línea si la unidad no es la de su
+    // categoría.
+    product_uom: producto?.uomId ?? contexto.uomId,
     // La línea también exige `date_planned`. Si el RI no tiene fecha de
     // necesidad, la de la orden: no hay razón para prometer una fecha inventada.
     date_planned: ri.fechaNecesidad
@@ -319,6 +337,11 @@ function armarUna(
   if (parte.importe > 0) {
     lineas.push({
       ...obligatorios,
+      // El flete tiene su propio producto en el catálogo: no comparte cuenta
+      // contable con el ítem. Si no está en el catálogo, el genérico, que es
+      // lo que pasaba antes.
+      product_id: contexto.fleteId ?? contexto.productoGenericoId,
+      product_uom: contexto.uomId,
       name: "Flete",
       product_qty: 1,
       price_unit: parte.importe,
