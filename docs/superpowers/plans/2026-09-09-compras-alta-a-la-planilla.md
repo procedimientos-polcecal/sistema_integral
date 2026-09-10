@@ -1096,99 +1096,38 @@ git commit -m "feat(compras): el alta hecha en el sistema se escribe en la plani
 
 ---
 
-### Task 6: El reintento distingue el alta de la exportación de compra
+### Task 6: El reintento distingue el alta de la exportación de compra — HECHO
 
-`reintentarPendientes()` llama a `exportarRequerimiento`, que escribe las columnas de compra en la fila del RI. Para un pedido que **nunca llegó a la planilla** eso no escribe nada: no tiene fila. Se reconoce por `hoja_origen` nulo.
+`reintentarPendientes()` leía toda la cola como "faltan las columnas de compra". Para un pedido que **nunca llegó a la planilla** eso no escribe nada: no tiene fila, y no hay ninguna rama que escriba la hoja de respuestas. Se reconoce por `hoja_origen` nulo.
 
 **Files:**
-- Modify: `lib/compras/sheets.ts` (`reintentarPendientes`)
+- Modified: `lib/compras/sheets.ts` (`reintentarPendientes` y el final de `exportarRequerimiento`)
 
-- [ ] **Step 1: Traer también `hoja_origen` en la cola**
+- [x] **Step 1: Traer también `hoja_origen` en la cola**
 
-En `reintentarPendientes`, cambiar:
+Quedó `select("id, nro_ri, hoja_origen")`. El `nro_ri` no estaba en el plan y se sumó para que el log diga de qué RI habla: sin él, el `console.error` del paso siguiente imprime un uuid.
 
-```ts
-  const { data: pendientes } = await admin
-    .from("compras_requerimientos")
-    .select("id")
-```
+- [x] **Step 2: Elegir qué reintentar**
 
-por:
+Como en el plan —`hoja_origen` nulo va a `exportarAltaAlFormulario` y después se deja en `sheets_pendiente` lo que devolvió—, con una diferencia: el `error` de ese `update` **no se descarta**. Si no se pudo mover la cola, el RI sigue con el pendiente que traía y va a reaparecer en la próxima corrida, así que se loguea y se cuenta como `siguenPendientes` aunque el alta haya salido bien. Contarlo como resuelto era el bug que este contador ya tuvo una vez: la pantalla diciendo que no queda nada mientras la cola dice que sí.
 
-```ts
-  const { data: pendientes } = await admin
-    .from("compras_requerimientos")
-    // `hoja_origen` dice si el pedido llegó alguna vez a la planilla: el que no
-    // llegó se reintenta con el alta y no con las columnas de compra, que
-    // necesitan una fila que todavía no existe.
-    .select("id, hoja_origen")
-```
+- [x] **Step 3: El guardarraíl, que el plan no tenía**
 
-- [ ] **Step 2: Elegir qué reintentar**
+Esta tarea sola no alcanzaba, porque el primer paso de `exportarRequerimiento` por uno de esos RI **destruía el pendiente del alta** antes de que el reintento pudiera leerlo: con prioridad o empresa cargadas lo reemplazaba por su `enEspera` ("el IMPORTRANGE no refrescó y las escribe el próximo reintento", una promesa que no se iba a cumplir nunca), y sin ninguna de las dos —el caso normal— lo dejaba en `null` y lo contaba como resuelto.
 
-Reemplazar el cuerpo del `try` del bucle:
+Así que `exportarRequerimiento` ahora **no toca `sheets_pendiente` cuando `hoja_origen` es nulo**: ese pendiente es del alta y sólo el alta lo puede resolver. El trabajo de arriba se hace igual y lo que quedó sin escribir se sigue devolviendo al que llamó. El riesgo asumido —un rechazo nuevo de la planilla para uno de esos RI no queda guardado en la columna— está escrito al lado.
 
-```ts
-    try {
-      const { bloqueadas } = await exportarRequerimiento(r.id as string, cache);
-      if (bloqueadas.length === 0) resueltos++;
-      else siguenPendientes++;
-    } catch {
-      siguenPendientes++;
-    }
-```
+- [x] **Step 4: El ciclo de imports no hizo falta romperlo**
 
-por:
+`formulario.ts` toma `empresaParaPlanilla` e `indexarColumnas` de `sheets.ts`, y ahora `sheets.ts` toma `exportarAltaAlFormulario` de `formulario.ts`. Las cuatro son funciones y ninguna se llama al cargar el módulo, así que en ESM el ciclo se resuelve solo: `npx tsc --noEmit` limpio y `formulario.test.ts` lo ejercita al importar las dos puntas. **No se movió nada** a `texto.ts`; queda anotado al lado del import por si algún día deja de valer.
 
-```ts
-    try {
-      if (!r.hoja_origen) {
-        // Nunca llegó a la planilla: lo que falta es el alta.
-        const { pendiente } = await exportarAltaAlFormulario(r.id as string);
-        if (pendiente) {
-          await admin
-            .from("compras_requerimientos")
-            .update({ sheets_pendiente: pendiente, sheets_intentado_en: new Date().toISOString() })
-            .eq("id", r.id as string);
-          siguenPendientes++;
-        } else {
-          await admin
-            .from("compras_requerimientos")
-            .update({ sheets_pendiente: null, sheets_intentado_en: new Date().toISOString() })
-            .eq("id", r.id as string);
-          resueltos++;
-        }
-        continue;
-      }
+- [x] **Step 5: Verificar**
 
-      const { bloqueadas } = await exportarRequerimiento(r.id as string, cache);
-      if (bloqueadas.length === 0) resueltos++;
-      else siguenPendientes++;
-    } catch {
-      // Si la planilla no responde, queda pendiente para la próxima.
-      siguenPendientes++;
-    }
-```
+`npx tsc --noEmit` y `npx vitest run lib/compras`. El `npm run build` del plan no se corrió: el árbol tiene trabajo sin commitear de otra sesión y un build con el dev server levantado deja la app en 500.
 
-Y agregar el import arriba del archivo:
+- [x] **Step 6: Commit**
 
-```ts
-import { exportarAltaAlFormulario } from "@/lib/compras/formulario";
-```
-
-> `formulario.ts` importa `empresaParaPlanilla` de `sheets.ts` y `sheets.ts` importa `exportarAltaAlFormulario` de `formulario.ts`: es un ciclo de imports. En ESM funciona porque las dos son funciones y no se llaman al cargar el módulo, pero si Turbopack se queja, la salida es mover `empresaParaPlanilla` a `lib/compras/texto.ts` —no depende de nada de Sheets— y que `formulario.ts` la tome de ahí.
-
-- [ ] **Step 3: Verificar**
-
-Run: `npx tsc --noEmit && npm test && npm run build`
-Expected: sin errores. Ojo: parar `npm run dev` antes del build, o la app queda en 500.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add lib/compras/sheets.ts
-git commit -m "fix(compras): el reintento sabe que a un pedido nuevo le falta el alta"
-```
+`fix(compras): el reintento sabe que a un pedido nuevo le falta el alta` y `fix(compras): la exportacion de compra no pisa el pendiente del alta`, separados porque son dos cosas distintas: uno agrega la rama que faltaba, el otro impide que se borre la pista.
 
 ---
 
