@@ -63,6 +63,25 @@ type Clave = keyof typeof ALIAS;
  */
 const IMPRESCINDIBLES: Clave[] = ["nro_ri", "marca", "area", "descripcion"];
 
+/**
+ * Con qué queda encolado un requerimiento recién insertado.
+ *
+ * El registro **nace en la cola** y la ruta la limpia después, en vez de
+ * encolarlo si la escritura falló. Es la única variante que sobrevive a que la
+ * plataforma mate la función en el medio: el camino del alta hace ocho llamadas
+ * seguidas a Google, y si el corte cae entre el `insert` y el `update` del
+ * pendiente, con el orden viejo el pedido quedaba con `sheets_pendiente` nulo
+ * —el reintento no lo veía nunca, Configuración decía que no había nada
+ * pendiente, y el pedido no llegaba nunca a la planilla—. Encolando antes, lo
+ * peor que pasa es que quede en la cola un pedido que sí se escribió, y de eso
+ * lo saca el primer reintento, que es idempotente.
+ *
+ * Es lo que se muestra en /compras/configuracion mientras el alta no se
+ * escribió, así que dice el hecho y no promete nada: quién lo reintenta lo
+ * decide `reintentarPendientes` por `hoja_origen`, no por este texto.
+ */
+export const ALTA_SIN_ESCRIBIR = "el alta todavía no se escribió en la planilla";
+
 export interface DatosDelAlta {
   nro_ri: number;
   nombre: string;

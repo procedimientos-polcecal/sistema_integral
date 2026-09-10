@@ -16,6 +16,51 @@ import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 export { letraDeColumna };
 
 /**
+ * Cuánto se espera a Google antes de dar la llamada por perdida.
+ *
+ * `fetch` sin `AbortSignal` **no tiene cota**: si Google acepta la conexión y no
+ * contesta, la llamada queda colgada hasta que la plataforma mate la función. Y
+ * una función muerta no es un error que alguien pueda leer: no se anota el
+ * pendiente, no se le avisa a nadie y quien hizo la acción ve un fallo genérico
+ * sobre algo que a lo mejor se guardó. Con la cota, un Google colgado se
+ * convierte en un pendiente con motivo, que es lo que el módulo pide para
+ * cualquier fallo de escritura.
+ *
+ * Treinta segundos son **holgados a propósito**: este archivo lo comparten los
+ * siete módulos y la lectura más grande que hay hoy —las ~1.900 filas del master
+ * de Compras, las ~1.766 del libro de Mantenimiento— vuelve en uno o dos
+ * segundos. O sea que no puede cortar una llamada que iba a andar; sólo corta
+ * las que no iban a volver. Ningún llamador espera indefinidamente a propósito:
+ * todos corren dentro de un Route Handler o de un cron, que ya tienen su propio
+ * `maxDuration`, así que la elección no es "esperar o no" sino "quién corta y
+ * con qué diagnóstico".
+ */
+const CORTE_MS = 30_000;
+
+/**
+ * `fetch` con cota de tiempo y un mensaje que se distingue.
+ *
+ * El `TimeoutError` de `AbortSignal` dice "The operation was aborted due to
+ * timeout" y nada más: no dice a qué planilla ni en qué paso. Se traduce a algo
+ * que sirva en `sheets_pendiente`, que es lo que alguien lee para saber si tiene
+ * que ir a mirar la planilla o esperar.
+ */
+async function pedir(url: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(CORTE_MS) });
+  } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      throw new Error(
+        `Google no contestó en ${CORTE_MS / 1000} segundos y se cortó la espera; ` +
+          `se reintenta solo`,
+        { cause: e }
+      );
+    }
+    throw e;
+  }
+}
+
+/**
  * Los valores de una pestaña, incluida la fila de encabezados.
  *
  * `sinFormato` pide los valores crudos en vez del texto que se ve: las fechas
@@ -35,7 +80,7 @@ export async function leerValores(
     `/values/${encodeURIComponent(pestana)}` +
     (opciones.sinFormato ? "?valueRenderOption=UNFORMATTED_VALUE" : "");
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
   }
@@ -51,7 +96,7 @@ export async function listarPestanas(planillaId: string): Promise<string[]> {
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
     `?fields=sheets.properties.title`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
   }
@@ -75,7 +120,7 @@ export async function escribirCeldas(
   const token = await obtenerToken([SCOPE_SHEETS]);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}/values:batchUpdate`;
 
-  const res = await fetch(url, {
+  const res = await pedir(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -157,7 +202,7 @@ export async function agregarFila(
 ): Promise<number> {
   const token = await obtenerToken([SCOPE_SHEETS]);
 
-  const lectura = await fetch(
+  const lectura = await pedir(
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
       `/values/${encodeURIComponent(`${pestana}!${columnaQueManda}:${columnaQueManda}`)}`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -170,7 +215,7 @@ export async function agregarFila(
   // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
   // más chico, Google rechaza la escritura entera.
   const rango = `${pestana}!A${fila}:${letraDeColumna(valores.length - 1)}${fila}`;
-  const res = await fetch(
+  const res = await pedir(
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
       `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
     {
@@ -202,7 +247,7 @@ export async function leerFormulas(
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
     `/values/${encodeURIComponent(pestana)}?valueRenderOption=FORMULA`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
   }
@@ -232,7 +277,7 @@ export async function crearPestana(
 ): Promise<boolean> {
   const token = await obtenerToken([SCOPE_SHEETS]);
 
-  const res = await fetch(
+  const res = await pedir(
     `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
     {
       method: "POST",
@@ -251,7 +296,7 @@ export async function crearPestana(
 
   if (encabezados.length > 0) {
     const rango = `${titulo}!A1:${letraDeColumna(encabezados.length - 1)}1`;
-    const esc = await fetch(
+    const esc = await pedir(
       `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
         `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
       {

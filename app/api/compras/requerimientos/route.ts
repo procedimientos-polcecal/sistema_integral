@@ -4,7 +4,31 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { paginaPedida } from "@/lib/core/paginado";
-import { exportarAltaAlFormulario } from "@/lib/compras/formulario";
+import { ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario } from "@/lib/compras/formulario";
+
+/**
+ * Cuánto puede tardar el POST antes de que la plataforma lo mate.
+ *
+ * Sin esta línea la ruta tomaba el default de la plataforma —que depende del
+ * plan y no está a la vista en el repo— mientras el camino del alta hace **ocho
+ * llamadas seguidas a Google**: dos lecturas y una escritura en la hoja de
+ * respuestas, la lectura de control y hasta tres más en el master, además de dos
+ * canjes de token en frío. Todas las rutas hermanas que tocan Sheets lo declaran
+ * (`sheets/sync`, `sheets/reintentar`, `sheets/webhook` y el cron en 300; la de
+ * Odoo en 60) y ésta era la única que no.
+ *
+ * No son 300 como en `sheets/sync` o el cron: acá hay una persona esperando el
+ * formulario, y una ruta que puede tardar cinco minutos antes de contestar no
+ * sirve para nada. 120 es el doble de lo que usa la ruta de Odoo —que hace mucho
+ * menos— y unas ocho veces lo que tarda un alta normal.
+ *
+ * Y no es la única defensa, porque una cota de tiempo no puede garantizar que la
+ * suma de ocho llamadas entre: `lib/core/sheets.ts` corta cada llamada a Google
+ * a los 30 segundos para que una colgada se convierta en un pendiente con
+ * motivo, y el pedido queda encolado **antes** de la primera llamada, así que si
+ * igual lo matan, el reintento lo levanta. Ver `ALTA_SIN_ESCRIBIR`.
+ */
+export const maxDuration = 120;
 
 /**
  * Alta de un requerimiento interno.
@@ -66,6 +90,11 @@ export async function POST(request: Request) {
     estado_compra: "SIN_INICIAR" as const,
     origen: "app",
     created_by: user.id,
+    // Nace ENCOLADO, y la exportación de más abajo es la que limpia esto. El
+    // orden importa y es el punto: ver `ALTA_SIN_ESCRIBIR`. `sheets_intentado_en`
+    // se deja nulo a propósito —la cola ordena `nullsFirst`, así que un pedido
+    // al que mataron la función antes de poder intentar nada va primero.
+    sheets_pendiente: ALTA_SIN_ESCRIBIR,
   };
 
   const admin = createAdminClient();
@@ -134,14 +163,46 @@ export async function POST(request: Request) {
       // A la cola va todo lo que quedó sin escribir, lo esperable incluido: el
       // pendiente ES la cola del reintento, y es lo que hace que prioridad y
       // empresa se acomoden solas.
-      if (pendiente) {
-        await admin
-          .from("compras_requerimientos")
-          .update({
-            sheets_pendiente: pendiente,
-            sheets_intentado_en: new Date().toISOString(),
-          })
-          .eq("id", data.id as string);
+      //
+      // Corre SIEMPRE y no sólo `if (pendiente)`: el registro nació encolado
+      // con `ALTA_SIN_ESCRIBIR`, así que si el alta salió bien y esto no corre,
+      // el pedido queda en la cola para siempre diciendo que la planilla no se
+      // enteró cuando sí se enteró.
+      const { error: errorCola } = await admin
+        .from("compras_requerimientos")
+        .update({
+          sheets_pendiente: pendiente,
+          sheets_intentado_en: new Date().toISOString(),
+        })
+        .eq("id", data.id as string);
+
+      // Es la escritura que menos se puede permitir perder en silencio, así que
+      // se trata igual que la del historial doce líneas más arriba —y además se
+      // le dice a la persona, que es la regla del módulo para cualquier fallo de
+      // escritura—. Lo que se le dice depende de para qué lado falló:
+      //
+      //   - con `pendiente`, el motivo de verdad NO quedó guardado: la columna
+      //     sigue diciendo `ALTA_SIN_ESCRIBIR`, que es correcto pero no explica
+      //     nada, y lo único que queda del diagnóstico es lo que se muestra acá
+      //     y el log;
+      //   - sin `pendiente`, la planilla ya tiene el pedido pero la cola no se
+      //     enteró: va a aparecer como pendiente hasta que el primer reintento
+      //     lo saque, que es inofensivo pero desconcierta a quien lo mire.
+      //
+      // Lo que ya NO puede pasar —y es lo que este aviso decía antes— es que el
+      // pedido se quede afuera de la cola: entró en el `insert`.
+      if (errorCola) {
+        console.error(
+          `RI ${data.nro_ri}: no se pudo anotar el estado de la planilla`,
+          errorCola
+        );
+        const nota = pendiente
+          ? `además, el motivo no se pudo guardar en el pedido (${errorCola.message}), ` +
+            `así que copialo de acá si hay que reclamarlo`
+          : `la planilla recibió el pedido, pero no se pudo anotar en el pedido que ya ` +
+            `está escrito (${errorCola.message}): va a figurar como pendiente hasta la ` +
+            `próxima sincronización`;
+        avisoSheets = avisoSheets ? `${avisoSheets} — ${nota}` : nota;
       }
 
       // Al log sólo lo que hay que mirar. Lo esperable no es un error, y
