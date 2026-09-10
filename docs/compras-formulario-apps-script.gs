@@ -34,14 +34,36 @@
  * ── INSTALACIÓN ─────────────────────────────────────────────────────────────
  *
  *   1. En la planilla de respuestas: Extensiones -> Apps Script, y pegar esto
- *      en un archivo nuevo (no reemplaza al notificador de mails: convive).
- *   2. Activadores -> Añadir activador:
+ *      en un archivo nuevo. No reemplaza al notificador de mails: convive.
+ *
+ *   2. **UN SOLO ACTIVADOR, y la numeración va primero.** En el script del
+ *      notificador, agregar la primera línea de `triggerSolicitudForm`:
+ *
+ *        function triggerSolicitudForm(e) {
+ *          if (!e || !e.values) return;
+ *          numerarAlEnviarElFormulario(e);   // <- ESTA, antes de notificar
+ *          const tr = new NotificadorSolicitud(e);
+ *          tr.notificarArea();
+ *        }
+ *
+ *      Por qué así y no con un activador propio: **Google no garantiza en qué
+ *      orden corren dos activadores del mismo evento**, y pueden correr en
+ *      paralelo. El notificador lee el N° de RI de la columna A para el asunto
+ *      del mail ("Solicitud de compra: N°RI 1956"), así que si corriera antes
+ *      que la numeración el mail saldría con el número equivocado o vacío.
+ *      Llamándola desde adentro, el orden es el que se lee.
+ *
+ *      Si el notificador falla —`mailPorArea` lanza cuando el área no tiene
+ *      dirección cargada—, el número ya está escrito: numerar primero también
+ *      protege de eso.
+ *
+ *   3. Si NO tenés el notificador instalado en esa planilla, entonces sí hace
+ *      falta un activador propio: Activadores -> Añadir activador,
  *        numerarAlEnviarElFormulario | De la hoja de cálculo -> Al enviarse el formulario
+ *      Tiene que ser **instalable** (creado desde ese menú). Un activador simple
+ *      no existe para el envío de formulario.
  *
- *      Tiene que ser un activador **instalable** (de este menú). Un activador
- *      simple no sirve.
- *
- *   3. Probarlo: mandar una respuesta por el formulario y confirmar que la
+ *   4. Probarlo: mandar una respuesta por el formulario y confirmar que la
  *      columna A de la fila nueva quedó con un **número**, no con una fórmula
  *      —se ve en la barra de fórmulas—, y que es el siguiente de la serie.
  *
