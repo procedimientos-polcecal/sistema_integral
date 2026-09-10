@@ -101,23 +101,39 @@ export default function NuevoRequerimientoModal({
     // pantalla el cartel del primero.
     setAviso("");
 
-    const res = await fetch("/api/compras/requerimientos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        descripcion: descripcion.trim(),
-        area_id: areaId || null,
-        cantidad: cantidad ? Number(cantidad) : null,
-        codigo: codigo.trim() || null,
-        fecha_necesidad: fechaNecesidad || null,
-        prioridad: prioridad || null,
-        empresa_id: paga === "AMBAS" ? null : paga || null,
-        paga_ambas: paga === "AMBAS",
-        detalle_extra: detalle.trim() || null,
-        imagen_url: imagenUrl.trim() || null,
-        ubicacion_id: ubicacionId || null,
-      }),
-    });
+    // El `fetch` puede rechazar —se corta la red con el POST ya en vuelo— y sin
+    // este `catch` la excepción se escapaba de `enviar`: `guardando` quedaba en
+    // `true` para siempre y el formulario se trababa en "Guardando…". Lo peor no
+    // era el botón muerto: el pedido pudo haberse creado igual del otro lado, y
+    // quien lo cargó, sin nada en pantalla, lo carga de nuevo y quedan dos RI.
+    // Por eso el mensaje dice que hay que ir a mirar antes de reintentar.
+    let res: Response;
+    try {
+      res = await fetch("/api/compras/requerimientos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          descripcion: descripcion.trim(),
+          area_id: areaId || null,
+          cantidad: cantidad ? Number(cantidad) : null,
+          codigo: codigo.trim() || null,
+          fecha_necesidad: fechaNecesidad || null,
+          prioridad: prioridad || null,
+          empresa_id: paga === "AMBAS" ? null : paga || null,
+          paga_ambas: paga === "AMBAS",
+          detalle_extra: detalle.trim() || null,
+          imagen_url: imagenUrl.trim() || null,
+          ubicacion_id: ubicacionId || null,
+        }),
+      });
+    } catch {
+      setGuardando(false);
+      setError(
+        "Se cortó la conexión antes de saber si el pedido se guardó. Mirá el " +
+          "listado antes de cargarlo de nuevo: puede haber quedado creado."
+      );
+      return;
+    }
 
     const body = await res.json().catch(() => ({}));
     setGuardando(false);

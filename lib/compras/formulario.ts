@@ -518,7 +518,30 @@ export async function exportarAltaAlFormulario(
   requerimientoId: string
 ): Promise<ResultadoAlta> {
   if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return { fila: null, ...listo };
+    // Sin la planilla configurada esto NO es "salió bien": el pedido no llegó a
+    // ninguna parte. Y como la ruta escribe siempre lo que devolvemos, un
+    // `listo` acá **limpiaba la cola** en la que el pedido acababa de entrar:
+    // cada alta se salteaba la planilla en silencio, sin pendiente y sin log,
+    // y el día que alguien rote mal la variable en Vercel nadie se enteraría.
+    // Es el patrón que este módulo ya pagó dos veces.
+    //
+    // Va a la cola y no a la pantalla: quien carga un pedido no puede hacer
+    // nada con una variable de entorno, y el pendiente lo ve Compras en
+    // /compras/configuracion, que es quien sí puede. Se resuelve solo en el
+    // primer reintento después de que la variable vuelva.
+    //
+    // Riesgo asumido: en un despliegue que a propósito no espeje el formulario,
+    // cada alta queda con este pendiente puesto. Es el precio de no poder
+    // distinguir "no lo configuraron" de "se configuró mal", y de los dos lados
+    // el que no avisa es peor.
+    return {
+      fila: null,
+      ...enLaCola(
+        "la planilla del formulario no está configurada (falta " +
+          "GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID o GOOGLE_SERVICE_ACCOUNT_JSON): " +
+          "el pedido no se escribió en ninguna planilla"
+      ),
+    };
   }
 
   // Fuera del `try` para que el `catch` la pueda devolver. Si falla la lectura
