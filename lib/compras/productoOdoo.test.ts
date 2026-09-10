@@ -35,6 +35,24 @@ describe("normalizar una descripcion", () => {
     expect(normalizarDescripcion("")).toBe("");
     expect(normalizarDescripcion("   ")).toBe("");
   });
+
+  it("no descarta un token corto: a veces es lo unico que distingue", () => {
+    // Medido sobre RI reales: "CORREA A-68" y "Correa B 68" daban la misma
+    // clave porque un filtro de largo sacaba la "A" y la "B" por tener un solo
+    // caracter. Es la clave de lo aprendido: si empareja lo que no es lo mismo,
+    // el enlace queda mal y no se nota.
+    expect(normalizarDescripcion("Correa A-68")).toBe("CORREA A 68");
+    expect(normalizarDescripcion("Correa B 68")).toBe("CORREA B 68");
+    expect(normalizarDescripcion("Correa A-68")).not.toBe(normalizarDescripcion("Correa B 68"));
+  });
+
+  it("es idempotente: da la misma clave este escrito en singular o en plural", () => {
+    // Antes, el filtro de vacias corria antes que la raiz: "TIPOS" pasaba el
+    // filtro y la raiz lo dejaba en "TIPO", pero "TIPO" escrito asi de entrada
+    // ya estaba en la lista de vacias y se filtraba. La misma palabra daba una
+    // clave distinta segun como estaba escrita en el RI.
+    expect(normalizarDescripcion("Cable tipos varios")).toBe(normalizarDescripcion("Cable tipo varios"));
+  });
 });
 
 describe("sugerir el producto de Odoo", () => {
@@ -59,6 +77,13 @@ describe("sugerir el producto de Odoo", () => {
   it("NO acepta parciales, aunque compartan la cabeza", () => {
     // Medido sobre 300 RI: en esta franja el match esta mayormente mal. Es la
     // decision que sostiene todo el diseño.
+    //
+    // El catalogo de prueba tiene DOS productos con cabeza "LLAVE" (LLAVE DE
+    // IMPACTO y LLAVES ALLEN), asi que si se saca el filtro de "entra entero"
+    // los dos quedan como candidatos empatados en cantidad de tokens, y con el
+    // desempate resuelto (arreglo de la regla de empate) el que gana se
+    // sugiere igual: la mutacion sí cambia el resultado a "sugerido", que es
+    // lo que hace sensible a este test.
     const r = sugerir("Llave combinada fija 13mm");
     expect(r.motivo).toBe("sin_sugerencia");
     expect(r.producto).toBeNull();
@@ -75,12 +100,33 @@ describe("sugerir el producto de Odoo", () => {
   });
 
   it("con empate gana el nombre mas corto y los otros van como alternativas", () => {
-    // "SELLADOR SILICONADO" solo, sin decir cual, empata con los dos.
-    const r = sugerir("SELLADOR SILICONADO");
-    expect(r.motivo).toBe("sin_sugerencia");
-    expect(r.alternativas.map((p) => p.nombre).sort()).toEqual([
-      "SELLADOR SILICONADO ACÉTICO", "SELLADOR SILICONADO NEUTRO",
-    ]);
+    // Dos productos que ENTRAN ENTEROS con la misma cantidad de tokens: es la
+    // rama de empate de verdad. (El intento anterior con "SELLADOR SILICONADO"
+    // no la ejercitaba: ninguno de los dos entra entero ahí, así que caía por
+    // la rama de "cero candidatos, comparten cabeza" y no por el desempate.)
+    const catalogoConEmpate: ProductoDeOdoo[] = [
+      { id: 101, nombre: "CABLE UNIPOLAR" },
+      { id: 102, nombre: "CABLE SUBTERRANEO" },
+    ];
+    const r = sugerirProducto("Cable unipolar subterraneo 4mm", catalogoConEmpate, new Map());
+    expect(r.motivo).toBe("sugerido");
+    expect(r.producto?.nombre).toBe("CABLE UNIPOLAR");
+    expect(r.alternativas.map((p) => p.nombre)).toEqual(["CABLE SUBTERRANEO"]);
+  });
+
+  it("caso real: FILTRO y FILTROS son el mismo rubro duplicado en Odoo, y el empate no debe tapar la sugerencia", () => {
+    // Medido sobre 1957 RI reales: 82 de los 83 empates son exactamente este
+    // caso -FILTRO contra FILTROS, dos entradas del mismo rubro en el catalogo
+    // de Odoo-, y es el item que mas se compra. Rechazar por empate perdia la
+    // sugerencia justo ahi.
+    const catalogoConDuplicado: ProductoDeOdoo[] = [
+      { id: 201, nombre: "FILTRO" },
+      { id: 202, nombre: "FILTROS" },
+    ];
+    const r = sugerirProducto("Filtro de aire", catalogoConDuplicado, new Map());
+    expect(r.motivo).toBe("sugerido");
+    expect(r.producto?.nombre).toBe("FILTRO");
+    expect(r.alternativas.map((p) => p.nombre)).toEqual(["FILTROS"]);
   });
 
   it("lo aprendido gana sobre la regla", () => {

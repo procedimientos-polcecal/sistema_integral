@@ -23,8 +23,13 @@
  * → `ROLLO PAPEL FILM`, `Bolsas de cal Moreno` → `BOLSAS CAL GÜEMES`, que es
  * otra marca—. Un producto equivocado no se nota nunca. Se prefiere no sugerir.
  *
- * Cobertura medida con esta regla: 160 de 300 (53%) sugeridos, 111 (37%) sin
- * sugerencia. Lo que falta lo va llenando la tabla de lo aprendido.
+ * Cobertura medida contra los 1957 requerimientos reales de Compras y los 378
+ * comprables del catálogo (10/09/2026, después de resolver el empate hacia el
+ * nombre más corto en vez de rechazarlo — ver más abajo): 1139 de 1957 (58%)
+ * sugeridos, 818 (42%) sin sugerencia. Lo que falta lo va llenando la tabla de
+ * lo aprendido. (El spec de diseño trae los números de la muestra de 300 con
+ * la que se probó el criterio antes de medir contra todo lo real; no son estos
+ * números.)
  */
 
 /** Un producto comprable de Odoo. El id es de `product.product`. */
@@ -52,7 +57,7 @@ export interface Sugerencia {
  */
 const VACIAS = new Set([
   "DE", "DEL", "LA", "EL", "LOS", "LAS", "PARA", "CON", "SIN", "POR", "UN",
-  "UNA", "EN", "MM", "CM", "MT", "MTS", "KG", "LTS", "UNIDAD", "TIPO",
+  "UNA", "EN", "MM", "CM", "MT", "MTS", "KG", "LTS", "UNIDAD", "TIPO", "X",
 ]);
 
 /** Sólo dígitos: una medida (`3`, `4`) no es una palabra vacía aunque sea corta. */
@@ -63,6 +68,15 @@ const esNumero = (palabra: string) => /^[0-9]+$/.test(palabra);
  *
  * `GUANTES` → `GUANTE`, y así el rubro en plural del catálogo empareja con la
  * descripción en singular. Se deja corta a propósito: `GAS` no es `GA`.
+ *
+ * RIESGO ASUMIDO: no toca los plurales en `-ES` (`BULONES`, `PERFILES`,
+ * `AMORTIGUADORES`, `RETENES`, `IMANES`, `SENSORES`, `CONTACTORES`,
+ * `DISYUNTORES`, `BOTINES` — unas 21 cabezas así en el catálogo). Un RI que
+ * diga "Bulón de 1/2" en singular no engancha con `BULONES`. No se arregla
+ * a propósito: estirar la regla a `-ES` se lleva puestas palabras que no son
+ * plurales (`MES`, `INTERES`, `PIES` ya son otra cosa sin la `S`), y ese error
+ * —enlazar mal— es el caro. Éste falla hacia `sin_sugerencia`, que es el lado
+ * seguro: se pierde cobertura, no se rompe nada.
  */
 const raiz = (palabra: string) =>
   palabra.length >= 4 && palabra.endsWith("S") ? palabra.slice(0, -1) : palabra;
@@ -85,20 +99,33 @@ export function normalizarDescripcion(texto: string): string {
 
   if (!base) return "";
 
-  // Palabras vacías y plural tosco se aplican acá, no sólo al tokenizar para
-  // comparar contra el catálogo: esta función es también la clave con la que
-  // se guarda y se busca en la tabla de lo aprendido, y "Guantes de grasa" y
-  // "Guante grasa" tienen que ser la misma clave.
+  // El plural tosco corre ANTES que las vacías, no después: si primero se
+  // filtran las vacías, "TIPOS" (no está en la lista) sobrevive y la raíz lo
+  // deja en "TIPO", pero "TIPO" escrito así de entrada sí está en la lista y
+  // se filtra — la misma palabra da una clave distinta según cómo estaba
+  // escrita en el RI, que es exactamente lo que la normalización tiene que
+  // evitar. Con la raíz primero, las dos formas llegan a "TIPO" y ahí sí se
+  // filtran igual.
+  //
+  // A propósito, NO se descarta un token por ser corto (una o dos letras): la
+  // clave tiene que distinguir "CORREA A-68" de "CORREA B 68", y un filtro de
+  // longitud acá los igualaba a los dos en "CORREA 68". El filtro de longitud
+  // vive sólo en `tokens()`, que se usa para comparar, no para la clave.
   return base
     .split(" ")
-    .filter((p) => esNumero(p) || (p.length >= 3 && !VACIAS.has(p)))
     .map(raiz)
+    .filter((p) => !VACIAS.has(p))
     .join(" ");
 }
 
+// El filtro de longitud queda acá, aparte de la clave: sirve para no
+// engancharse con una letra suelta al comparar contra el catálogo, pero no
+// puede tocar `normalizarDescripcion` porque ahí borraría el dato que
+// distingue (ver el comentario de arriba).
 const tokens = (texto: string) => {
   const normalizado = normalizarDescripcion(texto);
-  return normalizado === "" ? [] : normalizado.split(" ");
+  if (normalizado === "") return [];
+  return normalizado.split(" ").filter((p) => esNumero(p) || p.length >= 3);
 };
 
 export function sugerirProducto(
@@ -138,18 +165,16 @@ export function sugerirProducto(
   }
 
   // Con empate gana el nombre más corto, que es el más genérico: entre
-  // `GUANTES` y `GUANTES DE NITRILO` para "Guantes", el rubro.
+  // `GUANTES` y `GUANTES DE NITRILO` para "Guantes", el rubro. De 1957 RI
+  // reales, 82 de los 83 empates son un solo caso —`FILTRO` contra `FILTROS`,
+  // dos entradas duplicadas del mismo rubro en el catálogo de Odoo— y ahí
+  // rechazar en vez de elegir tira la sugerencia justo en lo que más se
+  // compra. El desempate no arriesga nada que "entrar entero" no haya
+  // arriesgado ya: los dos ya son candidatos válidos, sólo falta uno.
   const ordenados = [...candidatos].sort(
     (a, b) => a.toks.length - b.toks.length || a.p.nombre.length - b.p.nombre.length
   );
   const gana = ordenados[0];
-  const empatan = ordenados.filter((c) => c.toks.length === gana.toks.length);
-
-  // Dos productos igual de específicos y los dos entran enteros: no hay con qué
-  // elegir, así que se ofrecen los dos y no se arriesga ninguno.
-  if (empatan.length > 1) {
-    return { ...sinNada, alternativas: empatan.map((c) => c.p) };
-  }
 
   return {
     producto: gana.p,
