@@ -607,7 +607,7 @@ la cola de pendientes — a propósito, para que no se omita en silencio.
    que lo motivó. Antes de crearle el activador, correr
    `revisarPendientesDeAviso()`, que no manda nada y dice a quién le llegaría.
 
-## Mudar el alta a su propia pestaña (11/09/2026) — FALTA EL PASO 2
+## Mudar el alta a su propia pestaña (11/09/2026) — HECHO
 
 El alta dejó de escribirse en `Respuestas de formulario 1`. El porqué está en
 [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md); el resumen es que Forms
@@ -615,16 +615,15 @@ empuja hacia abajo cualquier fila que no sea suya, y eso corría la salida del
 `QUERY` del master dejando las columnas a mano —PRIORIDAD, Empresa y **Estado**,
 que es la aprobación— pegadas al RI de al lado.
 
-**Estado al 11/09/2026:** hechos los pasos 1, 4 y 5. **Falta el 2**, y el 3
-dejó de hacer falta.
+**Estado al 11/09/2026: hecho.** Los pasos 1, 2, 4 y 5; el 3 dejó de hacer
+falta. Queda una sola comprobación, y es la que ningún agente puede hacer:
 
-> **PENDIENTE Y URGENTE: volver a pegar el Apps Script (paso 2).** La fórmula
-> nueva ya está puesta y el código desplegado, así que la próxima alta cae en
-> `Altas del sistema`. Con la versión vieja del script —que numera contando
-> sólo la hoja de respuestas— la primera respuesta del formulario que entre
-> después de esa alta se lleva un número ya usado, y el `upsert` por `nro_ri` de
-> la sincronización colapsa los dos pedidos en uno. Mientras la pestaña siga
-> vacía no hay riesgo; desde la primera alta, sí.
+> **Que la numeración quedó enganchada sólo lo prueba una respuesta de verdad.**
+> Mandar una por el formulario y mirar en la barra de fórmulas que la columna A
+> de la fila nueva tenga un **número** y no una fórmula. Que muestre el número
+> correcto no alcanza como prueba: la fórmula vieja también lo muestra, y es
+> justo la que se quiere reemplazar. Está en el paso 4 de la instalación del
+> `.gs`.
 
 **Van en este orden**, y no es capricho: el paso 2 antes que el 1 puede repartir
 un número repetido.
@@ -634,10 +633,11 @@ un número repetido.
    de `Respuestas de formulario 1` — se ubica cada columna por su nombre, y
    `DIRECCIÓN EMAIL ENVIADA` marca dónde termina lo que un alta puede llenar.
    Los datos empiezan en la fila 2: **sin filas de cebado**.
-2. **Volver a pegar `docs/compras-formulario-apps-script.gs`. ← LO QUE FALTA.**
-   La versión vieja numeraba contando sólo la hoja de respuestas; con la serie
+2. ~~Volver a pegar `docs/compras-formulario-apps-script.gs`~~ **HECHO.** La
+   versión vieja numeraba contando sólo la hoja de respuestas; con la serie
    repartida en dos pestañas, eso reparte un número que el sistema ya usó y el
-   `upsert` de la sincronización colapsa los dos pedidos en uno.
+   `upsert` de la sincronización colapsa los dos pedidos en uno. Lo que queda es
+   comprobarlo con una respuesta real — ver el recuadro de arriba.
 3. ~~Cargar un pedido de prueba antes de tocar la fórmula~~ **YA NO HACE
    FALTA.** Estaba para no exponerse a que `IMPORTRANGE` sobre la pestaña vacía
    devolviera error y rompiera el `{ ; }`. Se midió en vez de suponerlo: una
@@ -682,25 +682,50 @@ un número repetido.
    volver a pasar por esta vía —con el `ORDER BY` la salida es append-only—,
    pero sí si alguien inserta, borra u ordena una fila a mano.
 
-### Y al mismo tiempo, el techo de 2011 filas
+### El techo de 2011 filas (11/09/2026) — HECHO
 
-`Requerimientos internos` tiene la grilla en **2011 filas** y el `QUERY` va por
-la 1967. Al ritmo de estos días son unos nueve días. Cuando la salida no entre,
-el `QUERY` falla entero.
+`Requerimientos internos` tenía la grilla en **2011 filas** con el `QUERY` en la
+1967: nueve días. Cuando la salida no entra, el `QUERY` falla entero.
+
+**Eran dos techos, no uno.** `RI MANTENIMIENTO` tenía **950 filas de una grilla
+de 1000**, y su `FILTER` crece con cada aprobación — unas tres semanas. Medir
+las once pestañas en vez de sólo la que se venía siguiendo es lo que lo
+encontró.
 
 **El orden importa y al revés rompe las nueve pestañas por área de una:**
 
-1. **Primero las fórmulas.** En cada pestaña por área, en `A2`, cambiar
-   `'Requerimientos internos'!M2:M2011` por `M2:M`. En `RI MANTENIMIENTO`
-   cambiar además `A2:L2011` por `A2:L` y `C2:C2011` por `C2:C`: ahí las tres
-   están acotadas, y dejar una fija con las otras abiertas es el mismo error.
-   En `APROB MAXI`, en `B2`, cambiar `A436:I2011` por `A436:I` — ésa no rompe,
-   pero deja de encontrar los RI nuevos.
-2. **Después la grilla.** Recién ahí agrandar `Requerimientos internos` (al
-   final de la hoja, agregar unas 3.000 filas).
+1. **Primero las fórmulas.** En cada pestaña por área, en `A2`,
+   `'Requerimientos internos'!M2:M2011` pasó a `M2:M`. En `RI MANTENIMIENTO`
+   además `A2:L2011` → `A2:L` y `C2:C2011` → `C2:C`: ahí las tres estaban
+   acotadas, y dejar una fija con las otras abiertas es el mismo error.
+2. **Después la grilla.** `Requerimientos internos` 2011 → **5011** y
+   `RI MANTENIMIENTO` 1000 → **3000**, con `appendDimension`, que agrega al
+   final y no inserta en el medio: insertar correría filas, y correr filas es
+   desalinear las columnas a mano.
 
 Al revés, `A2:L` crece con la grilla y `M2:M2011` no: `FILTER` deja de coincidir
 y las nueve pestañas por área dan error juntas.
+
+**Cómo se verificó, que es la parte que importa.** El riesgo de todo esto no es
+que falle: es que *no* falle y calle. Cada pestaña se midió antes y después —
+filas de salida y errores en la columna A— y el script revierte solo si alguna
+cambia de tamaño. Las nueve quedaron con la misma cuenta que tenían (950, 561,
+251, 70, 12, 63, 23, 7, 3), cero errores, el master estrictamente creciente y
+los `sheets_fila` de la base intactos. Que la cuenta no cambie es lo que prueba
+que las columnas a mano no se movieron.
+
+**Lo que NO se tocó, a propósito: `APROB MAXI`.** Su columna B está rellenada
+hacia abajo con referencias **relativas**, así que cada fila mira una ventana
+distinta: `B2` busca en `A436:I2011`, `B3` en `A437:I2012`, `B4` en
+`A438:I2013`… Es otro problema y es anterior a esto —ya hoy cada fila deja
+afuera RI que están más arriba de su ventana—, y arreglarlo es reescribir sus
+~1.690 fórmulas. No rompe nada: un `VLOOKUP` que no encuentra da `#N/A`, no un
+dato equivocado. Queda anotado como tarea propia.
+
+**Lo que queda con margen** (grilla − usadas, al 11/09/2026): `RI ALMACÉN` 439,
+`RI TALLER VIAL` 749, `RI OTRA` 937, `RI LABORATORIO` 930, `RI DESPACHO` 977,
+`RI PRODUCCIÓN` 988, `RI CANTERA` 993, `RI INVERSIONES` 997. La primera en
+llegar es Almacén, y le faltan meses.
 
 ## La comprobación de punta a punta
 
