@@ -3,6 +3,7 @@ import { crearEn, llamar, mensajeDeOdoo } from "./client";
 import { resolverContextoDeFacturas } from "./contexto";
 import { armarBorradorDeFactura } from "@/lib/facturacion/borradorEnOdoo";
 import { discriminaIva } from "@/lib/facturacion/comprobante";
+import type { LineaDeFactura } from "@/lib/facturacion/lineas";
 
 /**
  * Crear en Odoo, **en borrador**, la factura de proveedor que está en el buzón.
@@ -35,6 +36,9 @@ interface FilaDeFactura {
   proveedor_id: string | null;
   requerimiento_id: string | null;
   odoo_move_id: number | null;
+  detalle_leido: string | null;
+  archivo_url: string | null;
+  archivo_nombre: string | null;
   empresas: { nombre: string; odoo_company_id: number | null } | null;
   proveedores: { nombre: string } | null;
   compras_requerimientos: { nro_ri: number } | null;
@@ -42,6 +46,10 @@ interface FilaDeFactura {
 
 export interface FacturaEmpujada {
   odooMoveId: number;
+  /** Cuántas líneas de detalle llevó. 0 = una sola por el total. */
+  lineas: number;
+  /** Si el PDF quedó adjunto al asiento. */
+  adjunto: boolean;
   /** `/` mientras está en borrador: Odoo numera al postear. */
   odooNombre: string | null;
   odooEstado: string;
@@ -65,7 +73,8 @@ export type ResultadoDelPushDeFactura =
 const SELECT =
   "id, cuit_emisor, tipo_comprobante, punto_venta, numero, fecha, importe_total, moneda, estado, " +
   "empresa_id, proveedor_id, requerimiento_id, odoo_move_id, odoo_nombre, odoo_estado, " +
-  "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, " +
+  "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, detalle_leido, " +
+  "archivo_url, archivo_nombre, " +
   "empresas!empresa_id(nombre, odoo_company_id), proveedores!proveedor_id(nombre), " +
   "compras_requerimientos!requerimiento_id(nro_ri)";
 
@@ -173,6 +182,21 @@ export async function empujarFacturaAOdoo(
     return { ok: false, motivos: [`Odoo no tiene activa la moneda ${moneda}.`] };
   }
 
+  /*
+   * El detalle **sólo si cuadra**. Una lectura que no cierra contra el neto es
+   * peor que no tener detalle: el borrador saldría por un importe que no es el
+   * de la factura, y eso lo tendría que descubrir alguien a mano.
+   */
+  let lineas: LineaDeFactura[] = [];
+  if (factura.detalle_leido === "cuadra") {
+    const { data } = await admin
+      .from("facturas_proveedor_lineas")
+      .select("*")
+      .eq("factura_id", facturaId)
+      .order("orden");
+    lineas = (data ?? []) as unknown as LineaDeFactura[];
+  }
+
   const armado = armarBorradorDeFactura(factura, {
     partnerId: enlace.odoo_partner_id as number,
     diarioId: datos.diarioId,
@@ -183,6 +207,7 @@ export async function empujarFacturaAOdoo(
         ? null
         : (contexto.contexto.tiposPorCodigo[factura.tipo_comprobante] ?? null),
     nroRi: factura.compras_requerimientos?.nro_ri ?? null,
+    lineas,
   });
 
   if (!armado.ok) return { ok: false, motivos: armado.problemas };
@@ -231,7 +256,13 @@ export async function empujarFacturaAOdoo(
    */
   const totalEnOdoo = Number(creada?.amount_total ?? 0);
   const totalDelComprobante = Math.abs(Number(factura.importe_total ?? 0));
-  if (Math.abs(totalEnOdoo - totalDelComprobante) > 0.01) {
+  /*
+   * El margen crece con la cantidad de líneas porque cada una puede aportar su
+   * centavo de redondeo. Con margen fijo, toda factura de cuatro ítems traería
+   * un aviso, y un aviso que aparece siempre deja de leerse.
+   */
+  const margen = Math.max(0.01, 0.01 * Math.max(1, lineas.length));
+  if (Math.abs(totalEnOdoo - totalDelComprobante) > margen) {
     avisos.push(
       `El borrador quedó en ${totalEnOdoo} y el comprobante dice ${totalDelComprobante}: ` +
         `hay que ajustar la diferencia en Odoo antes de postear.`
@@ -245,11 +276,14 @@ export async function empujarFacturaAOdoo(
    */
   const nombreParaMostrar = creada?.full_voucher_name || creada?.name || null;
 
+  const adjunto = await adjuntarElArchivo(admin, factura, odooMoveId, avisos);
+
   await admin
     .from("facturas_proveedor")
     .update({
       odoo_move_id: odooMoveId,
       odoo_nombre: nombreParaMostrar,
+      ...(adjunto ? { odoo_attachment_id: adjunto } : {}),
       odoo_estado: creada?.state ?? "draft",
       odoo_conciliado_por: "push",
       odoo_pendiente: null,
@@ -262,10 +296,59 @@ export async function empujarFacturaAOdoo(
     ok: true,
     factura: {
       odooMoveId,
+      lineas: armado.borrador.lineas,
+      adjunto: adjunto !== null,
       odooNombre: nombreParaMostrar,
       odooEstado: creada?.state ?? "draft",
       totalEnOdoo,
       avisos,
     },
   };
+}
+
+/**
+ * Subir el PDF del buzón como adjunto del asiento.
+ *
+ * Es el mismo archivo que el sistema escaneó, así que quien revisa el borrador
+ * en Odoo tiene el comprobante a mano sin salir de ahí — que es medio trabajo de
+ * revisar una factura.
+ *
+ * **No frena el push si falla.** El borrador ya existe y vale por sí solo; un
+ * adjunto que no subió se avisa y se puede reintentar. Al revés —perder el
+ * borrador porque el archivo pesaba de más— sería cambiar lo importante por lo
+ * accesorio.
+ */
+async function adjuntarElArchivo(
+  admin: SupabaseClient,
+  factura: FilaDeFactura,
+  odooMoveId: number,
+  avisos: string[]
+): Promise<number | null> {
+  if (!factura.archivo_url) return null;
+
+  try {
+    const { data, error } = await admin.storage
+      .from("facturas-proveedor")
+      .download(factura.archivo_url);
+
+    if (error || !data) throw new Error(error?.message ?? "no se pudo bajar el archivo");
+
+    const base64 = Buffer.from(await data.arrayBuffer()).toString("base64");
+
+    return await llamar<number>("ir.attachment", "create", [
+      {
+        name: factura.archivo_nombre || `${factura.cuit_emisor}.pdf`,
+        type: "binary",
+        datas: base64,
+        res_model: "account.move",
+        res_id: odooMoveId,
+        mimetype: data.type || "application/pdf",
+      },
+    ]);
+  } catch (e) {
+    avisos.push(
+      `El borrador se creó pero el PDF no se pudo adjuntar: ${e instanceof Error ? e.message : String(e)}`
+    );
+    return null;
+  }
 }

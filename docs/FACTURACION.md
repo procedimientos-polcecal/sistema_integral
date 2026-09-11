@@ -307,6 +307,76 @@ Una línea de `account.move` **no necesita producto**, a diferencia de
 cuenta de gasto que corresponde al proveedor. Y un borrador se borra directo;
 cancelar primero es cosa de las órdenes de compra.
 
+## Una línea por producto
+
+El borrador de Odoo salía con **una sola línea por el total**, con la cuenta que
+Odoo le pone al proveedor. Alcanza para que la factura exista y no alcanza para
+la contabilidad: el gasto de una factura con cuatro ítems distintos cae entero en
+una cuenta. Y hace falta — de las 11.048 líneas de factura de proveedor de la
+instancia, **9.659 (87%) llevan distribución analítica**.
+
+### El detalle no está en el QR: está en el texto del PDF
+
+El QR trae cabecera y nada más. El detalle sale de `getTextContent()` de pdf.js,
+y se lo reconoce **sin plantilla por proveedor** porque no se interpreta el
+diseño: se busca aritmética que cierre. Una fila de detalle tiene tres números al
+final —cantidad, precio, total— y el tercero es el producto de los dos primeros.
+
+Y hay una segunda red, independiente: **la suma de las líneas tiene que dar el
+neto que el QR ya dijo**. Si no da, el detalle no se usa y la factura va con una
+línea sola. Dos controles que fallan por motivos distintos son mucho más que dos
+controles.
+
+Lo que enseñó la primera factura real (ALMENTA, cuatro ítems):
+
+- **El producto de la fila no da exacto.** 20 × 4.426,45 = 88.529,00 y el papel
+  dice **88.528,93**. Siete centavos: la tolerancia tuvo que ser relativa.
+- **La descripción trae números que no son columnas** (`428X4/7.5`, `3x2.5mm`),
+  así que se toman los **últimos** tres y no los primeros.
+- **El pie imita una línea de detalle**: `I.V.A. 10,5% 0,00 0,00` cumple la
+  aritmética. Por eso una línea con importe cero no se acepta nunca.
+- **El PDF dibuja cada texto dos veces**, y sin deduplicar los últimos tres
+  números son los de la segunda copia.
+
+El 66% de las facturas tienen una sola línea (mediana 1, p90 3, máximo 14), así
+que esto no cambia el caso común: arregla el 34% donde había que desglosar a mano.
+
+### Producto, cuenta y analítica: quién pone cada cosa
+
+| | Quién | Cómo |
+|---|---|---|
+| Descripción, cantidad, precio | El papel | No se edita. Si está mal leído, se recarga la factura |
+| Producto de Odoo | El sistema propone, una persona corrige | El mismo emparejador que las órdenes de compra, con su tabla de lo aprendido |
+| Cuenta contable | Una persona | Odoo pone una por defecto según el proveedor; se puede cambiar |
+| Distribución analítica | Una persona, siempre | El comprobante no dice a qué equipo fue un repuesto |
+
+**Corregir el producto enseña.** La corrección va a `compras_producto_odoo`, que
+es la misma tabla que usan las órdenes: lo que alguien arregla acá mejora también
+la generación de órdenes desde un RI.
+
+Las cuentas y las analíticas **son por empresa** —242 cuentas imputables y 358
+analíticas en Polcecal— y se traen recién cuando alguien abre el detalle de una
+factura: son ~600 filas que no hacen falta para ver el buzón.
+
+`analytic_distribution` se guarda con la forma de Odoo, `{"<id>": porcentaje}`,
+para que no haya traducción en el medio. Los porcentajes suman 100 **con cinco
+centésimas de tolerancia**, y eso no es capricho: el gasto de carbonilla del grupo
+está repartido entre seis cuentas como `16,67 + 16,66 × 5`, que suma 99,97 y está
+posteado. Exigir 100 exacto rechazaría asientos que Odoo aceptó.
+
+### El PDF queda adjunto al asiento
+
+El mismo archivo que el buzón escaneó se sube como `ir.attachment` del
+`account.move`, así que quien revisa el borrador tiene el comprobante a mano sin
+salir de Odoo. **No frena el push si falla**: el borrador ya existe y vale por sí
+solo; un adjunto que no subió se avisa y se reintenta.
+
+Probado de punta a punta contra la instancia: borrador con las cuatro líneas de
+ALMENTA, la primera imputada a `5.2.1.01.220 Repuestos` y repartida entre tres
+equipos, el PDF adjunto (100.669 bytes), **posteado** como BILL/2026/09/0016 por
+1.774.706,11 contra los 1.774.706,10 del papel — el centavo del redondeo de la
+tercera línea. Después se borró.
+
 ## Los embeds hay que nombrarlos
 
 `facturas_proveedor` tiene FK a **empresas**, **proveedores** y

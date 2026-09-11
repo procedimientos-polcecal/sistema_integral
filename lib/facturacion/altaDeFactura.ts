@@ -54,6 +54,17 @@ export interface PedidoDeAlta {
   origen: OrigenDeFactura;
   requerimientoId?: string | null;
   notas?: string | null;
+  /**
+   * El detalle que el navegador leyó del texto del PDF.
+   *
+   * Viene del cliente y no se calcula acá porque leer el PDF es cosa del
+   * navegador —el servidor no lo tiene—, igual que el QR. Y como todo lo que
+   * viene del cliente, la ruta lo revisa antes de guardarlo.
+   */
+  detalle?: {
+    lineas: { descripcion: string; cantidad: number; precioUnitario: number; total: number }[];
+    cuadra: boolean;
+  } | null;
 }
 
 /** Los campos de `facturas_proveedor` que esta función decide. */

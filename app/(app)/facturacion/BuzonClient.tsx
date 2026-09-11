@@ -9,6 +9,7 @@ import type { EmpresaDelGrupo, ProveedorDelPadron } from "@/lib/facturacion/alta
 import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
 import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
+import LineasDeFactura from "./LineasDeFactura";
 
 /** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
 interface DondeApuntaOdoo {
@@ -181,6 +182,11 @@ export default function BuzonClient({
         cabecera: fila.lectura?.cabecera ?? null,
         origen,
         notas: fila.notas || null,
+        // El detalle leído del texto del PDF. El servidor le pone el producto
+        // de Odoo a cada línea: el catálogo y lo aprendido viven allá.
+        detalle: fila.lectura?.detalle
+          ? { lineas: fila.lectura.detalle.lineas, cuadra: fila.lectura.detalle.cuadra }
+          : null,
         aMano: {
           empresaId: fila.aMano.empresaId || null,
           proveedorId: fila.aMano.proveedorId || null,
@@ -614,6 +620,7 @@ function FilaDelBuzon({
   const [nota, setNota] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [candidatos, setCandidatos] = useState<CandidatoDeOdoo[] | null>(null);
+  const [verDetalle, setVerDetalle] = useState(false);
 
   async function parchear(cambios: Record<string, unknown>) {
     setOcupado(true);
@@ -809,6 +816,15 @@ function FilaDelBuzon({
             )
           )}
 
+          {/* El detalle se trae recién cuando alguien lo abre: son ~700 filas
+              de catálogo de Odoo por empresa y no hacen falta para ver el buzón. */}
+          <button
+            onClick={() => setVerDetalle((v) => !v)}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            {verDetalle ? "Ocultar el detalle" : "El detalle"}
+          </button>
+
           {factura.archivo_url && (
             <button
               onClick={abrir}
@@ -866,6 +882,14 @@ function FilaDelBuzon({
       )}
       {nota && <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">{nota}</p>}
       {aviso && <p className="mt-1 rounded bg-rose-50 px-2 py-1 text-xs text-rose-800">{aviso}</p>}
+
+      {verDetalle && (
+        <LineasDeFactura
+          facturaId={factura.id}
+          puedeEditar={puedeEditar}
+          onCerrar={() => setVerDetalle(false)}
+        />
+      )}
 
       {/*
        * Los candidatos se muestran con el motivo por el que están en la lista.

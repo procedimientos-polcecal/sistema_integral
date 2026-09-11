@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { traerTodo } from "@/lib/core/paginado";
+import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
+import type { ProductoDeOdoo } from "@/lib/compras/productoOdoo";
+import { prepararLineas } from "@/lib/facturacion/lineas";
 import { puedeEditarFacturacion, tieneAccesoFacturacion } from "@/lib/facturacion/auth";
 import { prepararAlta, type PedidoDeAlta } from "@/lib/facturacion/altaDeFactura";
 import {
@@ -187,12 +192,25 @@ export async function POST(request: Request) {
   }
 
   // ── 3. La fila ──
+  //
+  // `detalle_leido` dice en qué estado quedó la lectura del detalle, y se guarda
+  // aunque no haya líneas: la diferencia entre "no se pudo leer" y "se leyó y no
+  // cuadraba" es lo que evita la pregunta de por qué esta factura salió con una
+  // línea sola.
+  const detalle = pedido.detalle ?? null;
+  const detalleLeido = !detalle || detalle.lineas.length === 0
+    ? "sin detalle"
+    : detalle.cuadra
+      ? "cuadra"
+      : "no cuadra";
+
   const { data: factura, error } = await supabase
     .from("facturas_proveedor")
     .insert({
       ...alta.fila,
       archivo_url: rutaDelArchivo,
       archivo_nombre: archivo?.name ?? null,
+      detalle_leido: detalleLeido,
       cargado_por: user.id,
     })
     .select("*")
@@ -216,9 +234,72 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  /*
+   * ── 4. El detalle ──
+   *
+   * Va después de la fila y no en la misma transacción a propósito: si esto
+   * falla, la factura **ya entró**, que es lo que no puede perderse. Un detalle
+   * que no se guardó se vuelve a leer; una factura que se rechazó porque su
+   * detalle falló es una factura que alguien tiene que cargar de nuevo.
+   */
+  const avisosDelDetalle = await guardarElDetalle(supabase, factura.id as string, detalle);
+
   return NextResponse.json({
     factura,
-    avisos: [...avisosDelRi, ...alta.avisos],
+    avisos: [...avisosDelRi, ...alta.avisos, ...avisosDelDetalle],
     nombre: alta.nombre,
   });
+}
+
+/**
+ * Guardar las líneas leídas, con el producto de Odoo ya propuesto.
+ *
+ * La sugerencia se hace **acá y no en el navegador** porque necesita el catálogo
+ * de Odoo y la tabla de lo aprendido, que son del servidor. Es el mismo
+ * emparejador que usan las órdenes de compra: lo que alguien confirma de un lado
+ * mejora el otro.
+ */
+async function guardarElDetalle(
+  supabase: SupabaseClient,
+  facturaId: string,
+  detalle: PedidoDeAlta["detalle"]
+): Promise<string[]> {
+  if (!detalle || detalle.lineas.length === 0) return [];
+
+  let catalogo: ProductoDeOdoo[] = [];
+  let aprendidos = new Map<string, number>();
+
+  try {
+    catalogo = await leerCatalogoComprable();
+    const filas = await traerTodo<{ descripcion_normalizada: string; odoo_product_id: number }>(
+      (desde, hasta) =>
+        createAdminClient()
+          .from("compras_producto_odoo")
+          .select("descripcion_normalizada, odoo_product_id")
+          .range(desde, hasta)
+    );
+    aprendidos = new Map(filas.map((f) => [f.descripcion_normalizada, f.odoo_product_id]));
+  } catch {
+    // Sin Odoo el detalle se guarda igual, sin producto propuesto. Es mejor
+    // tener las líneas con su descripción que no tenerlas.
+  }
+
+  const lineas = prepararLineas(detalle.lineas, { catalogo, aprendidos });
+
+  const { error } = await supabase
+    .from("facturas_proveedor_lineas")
+    .insert(lineas.map((l) => ({ ...l, factura_id: facturaId })));
+
+  if (error) {
+    return [`La factura entró, pero su detalle no se pudo guardar: ${error.message}`];
+  }
+
+  const sinProducto = lineas.filter((l) => !l.odoo_product_id).length;
+  if (sinProducto) {
+    return [
+      `${sinProducto} de ${lineas.length} líneas quedaron sin producto de Odoo: hay que elegirlo a mano.`,
+    ];
+  }
+
+  return [];
 }

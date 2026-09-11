@@ -1,4 +1,5 @@
 import { discriminaIva, esNotaDeCredito, nombreDelComprobante, numeroFormateado } from "./comprobante";
+import type { LineaDeFactura } from "./lineas";
 
 /**
  * Armar el borrador de factura de proveedor que se crea en Odoo.
@@ -52,6 +53,19 @@ import { discriminaIva, esNotaDeCredito, nombreDelComprobante, numeroFormateado 
  * A diferencia de `purchase.order.line` —que sí lo exige por una restricción SQL
  * del modelo—, una línea de `account.move` sin producto se crea sin problema:
  * Odoo le pone la cuenta de gasto que corresponda al proveedor.
+ *
+ * ## Una línea por producto, cuando se la pudo leer
+ *
+ * El detalle sale del texto del PDF (`lineasDelPdf.ts`) y sólo se usa **si su
+ * suma cuadra con el neto**. Cada línea puede llevar producto, cuenta contable y
+ * distribución analítica; los tres van sólo si están cargados, porque mandar
+ * `false` le borraría a Odoo el valor que él calcula solo.
+ *
+ * Se manda cantidad y precio unitario y no el total de la fila: es lo que dice
+ * el papel. La contra es que hay emisores que redondean la multiplicación —siete
+ * centavos en una línea de ALMENTA—, así que el total del borrador puede quedar
+ * a centavos del comprobante. El push lo relee y lo avisa, con un margen que
+ * crece con la cantidad de líneas.
  */
 
 export interface DatosParaElBorrador {
@@ -77,6 +91,14 @@ export interface ContextoDelBorrador {
   voucherTypeId: number | null;
   /** El RI que la origina, para que la línea lo diga. */
   nroRi?: number | null;
+  /**
+   * El detalle del comprobante, **sólo si cuadra con el neto**.
+   *
+   * Cuando viene, el borrador sale con una línea por producto, cada una con su
+   * cuenta y su distribución analítica. Cuando no, con una sola por el total —
+   * que es lo que había antes y sigue siendo mejor que un detalle inventado.
+   */
+  lineas?: LineaDeFactura[] | null;
 }
 
 export interface BorradorArmado {
@@ -86,6 +108,8 @@ export interface BorradorArmado {
   totalEsperado: number;
   /** `in_invoice` o `in_refund`. */
   tipo: "in_invoice" | "in_refund";
+  /** Cuántas líneas de detalle lleva. 0 = una sola línea por el total. */
+  lineas: number;
 }
 
 export type ResultadoDelBorrador =
@@ -160,12 +184,41 @@ export function armarBorradorDeFactura(
     .filter(Boolean)
     .join(" · ");
 
+  /*
+   * `[[6, 0, ids]]` reemplaza los impuestos en vez de sumarlos. Sin el 6, Odoo
+   * deja además el impuesto por defecto del producto o de la cuenta y la
+   * factura totaliza de más.
+   */
+  const impuestos = [[6, 0, conIva ? [contexto.impuestoId] : []]];
+  const detalle = contexto.lineas ?? [];
+
+  const invoiceLines = detalle.length
+    ? detalle.map((linea) => [
+        0,
+        0,
+        {
+          name: linea.descripcion,
+          quantity: linea.cantidad ?? 1,
+          price_unit: linea.precio_unitario ?? linea.total ?? 0,
+          tax_ids: impuestos,
+          // Los tres opcionales van sólo si están: mandar `false` le borraría a
+          // Odoo el valor que él mismo calcula por el producto o el proveedor.
+          ...(linea.odoo_product_id ? { product_id: linea.odoo_product_id } : {}),
+          ...(linea.odoo_account_id ? { account_id: linea.odoo_account_id } : {}),
+          ...(linea.analitica && Object.keys(linea.analitica).length
+            ? { analytic_distribution: linea.analitica }
+            : {}),
+        },
+      ])
+    : [[0, 0, { name: descripcion, quantity: 1, price_unit: neto, tax_ids: impuestos }]];
+
   return {
     ok: true,
     borrador: {
       tipo,
       neto,
       totalEsperado,
+      lineas: detalle.length,
       vals: {
         move_type: tipo,
         partner_id: contexto.partnerId,
@@ -176,23 +229,7 @@ export function armarBorradorDeFactura(
         // Cuatro y ocho dígitos, que es como lo escribe el grupo y como sale
         // impreso en el comprobante.
         voucher_name: numeroFormateado(factura.punto_venta, factura.numero),
-        invoice_line_ids: [
-          [
-            0,
-            0,
-            {
-              name: descripcion,
-              quantity: 1,
-              price_unit: neto,
-              /*
-               * `[[6, 0, ids]]` reemplaza los impuestos en vez de sumarlos. Sin
-               * el 6, Odoo deja además el impuesto por defecto del producto o de
-               * la cuenta y la factura totaliza de más.
-               */
-              tax_ids: [[6, 0, conIva ? [contexto.impuestoId] : []]],
-            },
-          ],
-        ],
+        invoice_line_ids: invoiceLines,
       },
     },
   };
