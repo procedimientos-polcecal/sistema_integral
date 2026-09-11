@@ -78,6 +78,9 @@ const ESTADO_ETIQUETA: Record<string, string> = {
   contabilizada: "Contabilizada",
 };
 
+/** En el orden del circuito, que es como se lee el desplegable. */
+const ESTADOS = ["recibida", "vinculada", "informada", "contabilizada"] as const;
+
 export default function BuzonClient({
   puedeEditar,
   empresas,
@@ -630,6 +633,29 @@ function FilaDelBuzon({
     router.refresh();
   }
 
+  /**
+   * Cambiar el estado a mano.
+   *
+   * Cuando la factura ya está enlazada a un asiento posteado de Odoo, el estado
+   * lo manda Odoo: la sincronización lo va a volver a poner en "Contabilizada".
+   * Se avisa en vez de impedirlo — a veces hace falta sacarlo un momento, por
+   * ejemplo para volver a crear el borrador.
+   */
+  async function cambiarEstado(nuevo: string) {
+    await parchear({ estado: nuevo });
+
+    if (
+      nuevo !== "contabilizada" &&
+      factura.odoo_move_id &&
+      factura.odoo_estado === "posted"
+    ) {
+      setNota(
+        "Ojo: esta factura está enlazada a un asiento ya posteado en Odoo, " +
+          "así que la próxima sincronización la va a volver a marcar como contabilizada."
+      );
+    }
+  }
+
   async function abrir() {
     const r = await fetch(`/api/facturacion/facturas/${factura.id}`);
     const datos = await r.json().catch(() => ({}));
@@ -730,9 +756,30 @@ function FilaDelBuzon({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}
-          </span>
+          {/*
+            * El estado se edita en los dos sentidos, y no es un detalle: hasta
+            * que fue un desplegable, marcar "Ya esta en Odoo" por error no tenia
+            * vuelta atras —el boton que lo ponia desaparecia justo despues—, y
+            * la factura quedaba fuera de la cola para siempre.
+            */}
+          {puedeEditar ? (
+            <select
+              value={factura.estado}
+              disabled={ocupado}
+              onChange={(e) => cambiarEstado(e.target.value)}
+              className="rounded-full border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-700 disabled:opacity-40"
+            >
+              {ESTADOS.map((e) => (
+                <option key={e} value={e}>
+                  {ESTADO_ETIQUETA[e]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+              {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}
+            </span>
+          )}
 
           {factura.requerimiento ? (
             <Link
@@ -808,15 +855,6 @@ function FilaDelBuzon({
             )
           )}
 
-          {puedeEditar && factura.estado !== "contabilizada" && (
-            <button
-              disabled={ocupado}
-              onClick={() => parchear({ estado: "contabilizada" })}
-              className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-40 hover:bg-slate-50"
-            >
-              Ya está en Odoo
-            </button>
-          )}
         </div>
       </div>
 
