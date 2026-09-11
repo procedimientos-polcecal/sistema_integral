@@ -230,7 +230,6 @@ export const NAV: NavItem[] = [
       { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
-      { label: "Configuración", href: "/cantera/configuracion", modulo: "cantera", soloAdmin: true },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
