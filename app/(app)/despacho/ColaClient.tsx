@@ -7,23 +7,31 @@ import { comoSeLee, sumarDias } from "@/lib/core/fechas";
 import {
   ETIQUETA_DE_ESTADO,
   ETIQUETA_DE_HORARIO,
+  ORDEN_DE_HORARIOS,
   comoSeLeenLosMinutos,
+  horaComoSeEscribe,
   minutosEnCurso,
   proximoHorario,
 } from "@/lib/despacho/orden";
-import type { EstadoDeOrden, RemitoDeOdoo } from "@/lib/despacho/types";
+import type { EstadoDeOrden, HorarioDeOrden, RemitoDeOdoo } from "@/lib/despacho/types";
 import type { FilaDeCola } from "./page";
 import NuevaOrden from "./NuevaOrden";
 
 /**
- * La cola del día, en la PC de la balanza.
+ * Movimientos diarios, en la PC de la balanza.
  *
  * DOS DECISIONES QUE SON LA PANTALLA
  *
- * **Un solo botón por fila: el del próximo horario que falta.** Con un camión
- * esperando, cuatro botones son cuatro oportunidades de marcar el equivocado, y
- * un horario marcado mal no se arregla sin mirar la planilla. El encargado no
- * elige qué marcar: marca lo que acaba de pasar.
+ * **Los cuatro horarios son campos que se tipean.** Hasta el 11/09/2026 había un
+ * botón por fila —el del próximo horario— y la hora la ponía el servidor. Ese
+ * diseño suponía que quien marca está mirando pasar el camión, y resultó falso:
+ * **los horarios llegan tarde y de gente que no está en Despacho**, así que el
+ * botón obligaba a marcar "ahora" una hora que había pasado hace rato. Se
+ * completan en cualquier orden y se corrigen tipeando encima.
+ *
+ * Lo que quedó del diseño viejo es la guía sin la obligación: el campo del
+ * próximo horario que falta va resaltado, así que sigue estando claro qué toca
+ * — pero no impide cargar otro.
  *
  * **El reloj del tramo en curso corre.** Es lo único que se calcula en el
  * cliente, porque avanza mientras la pantalla está abierta, y es la mitad del
@@ -95,20 +103,25 @@ export default function ColaClient({
     if (remitos === null) void traerRemitos();
   }
 
-  async function marcar(id: string, horario: string) {
+  /**
+   * Guarda una hora tipeada. Se manda "HH:MM" y **la ancla el servidor** contra
+   * la fecha de la orden: así la zona horaria y el reloj de esta PC no entran en
+   * el dato, y la regla del cruce de medianoche se aplica en un solo lugar.
+   */
+  async function guardarHora(id: string, horario: HorarioDeOrden, valor: string) {
     setError("");
     setAvisoPlanilla("");
     setMarcando(id);
     const res = await fetch(`/api/despacho/ordenes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ horario }),
+      body: JSON.stringify({ horas: { [horario]: valor } }),
     });
     const json = await res.json().catch(() => ({}));
     setMarcando(null);
 
     if (!res.ok) {
-      setError(json.error ?? "No se pudo marcar el horario.");
+      setError(json.error ?? "No se pudo guardar el horario.");
       return;
     }
     // Un fallo de escritura en la planilla no es un warning en la consola: se le
@@ -123,7 +136,7 @@ export default function ColaClient({
     <div className="mx-auto max-w-6xl space-y-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Despacho — la cola del día</h1>
+          <h1 className="text-xl font-bold text-slate-900">Despacho — movimientos diarios</h1>
           <p className="text-sm text-slate-500">
             {comoSeLee(fecha)} · {filas.length} {filas.length === 1 ? "orden" : "órdenes"}
             {abiertas > 0 && ` · ${abiertas} sin cerrar`}
@@ -196,15 +209,18 @@ export default function ColaClient({
                 <th className="px-3 py-2 text-left">Material</th>
                 <th className="px-3 py-2 text-right">Cantidad</th>
                 <th className="px-3 py-2 text-left">Estado</th>
+                <th className="px-2 py-2 text-center">Entrada</th>
+                <th className="px-2 py-2 text-center">Inicio carga</th>
+                <th className="px-2 py-2 text-center">Fin carga</th>
+                <th className="px-2 py-2 text-center">Salida</th>
                 <th className="px-3 py-2 text-right">Carga</th>
                 <th className="px-3 py-2 text-right">En predio</th>
-                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-slate-400">
+                  <td colSpan={11} className="px-3 py-10 text-center text-slate-400">
                     Ninguna orden de carga este día.
                   </td>
                 </tr>
@@ -271,7 +287,27 @@ export default function ColaClient({
                             falta {f.salteados.map((h) => ETIQUETA_DE_HORARIO[h]).join(" y ")}
                           </div>
                         )}
+                        {f.orden.sheets_pendiente && (
+                          <div
+                            className="mt-1 text-xs text-amber-600"
+                            title={f.orden.sheets_pendiente}
+                          >
+                            sin llegar a la planilla
+                          </div>
+                        )}
                       </td>
+                      {ORDEN_DE_HORARIOS.map((horario) => (
+                        <td key={horario} className="px-2 py-3 text-center">
+                          <CampoDeHora
+                            valor={horaComoSeEscribe(f.orden[horario])}
+                            etiqueta={ETIQUETA_DE_HORARIO[horario]}
+                            editable={puedeEditar}
+                            esElQueSigue={siguiente === horario}
+                            guardando={marcando === f.orden.id}
+                            onGuardar={(v) => guardarHora(f.orden.id, horario, v)}
+                          />
+                        </td>
+                      ))}
                       <td
                         className={`px-3 py-3 text-right ${
                           (f.minutosDeCarga ?? 0) < 0 ? "font-semibold text-red-600" : "text-slate-600"
@@ -286,25 +322,6 @@ export default function ColaClient({
                       >
                         {comoSeLeenLosMinutos(f.minutosEnPredio)}
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        {puedeEditar && siguiente && (
-                          <button
-                            onClick={() => marcar(f.orden.id, siguiente)}
-                            disabled={marcando === f.orden.id}
-                            className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
-                          >
-                            {marcando === f.orden.id ? "…" : ETIQUETA_DE_HORARIO[siguiente]}
-                          </button>
-                        )}
-                        {f.orden.sheets_pendiente && (
-                          <div
-                            className="mt-1 text-xs text-amber-600"
-                            title={f.orden.sheets_pendiente}
-                          >
-                            sin llegar a la planilla
-                          </div>
-                        )}
-                      </td>
                     </tr>
                   );
                 })
@@ -315,9 +332,66 @@ export default function ColaClient({
       </div>
 
       <p className="text-xs text-slate-400">
-        Los horarios los pone el servidor al apretar el botón, no se tipean. La
-        planilla se escribe cuando la orden se cierra.
+        Los horarios se tipean y se guardan al salir del campo; vacío borra el
+        horario. La hora va como se lee acá —hora de Argentina— y la ancla el
+        servidor a la fecha de la orden. La planilla se escribe cuando la orden
+        se cierra, o sea al cargar la salida del predio.
       </p>
     </div>
+  );
+}
+
+/**
+ * Un horario de la orden, editable.
+ *
+ * **Guarda al salir del campo, no en cada tecla.** Un `input type="time"`
+ * dispara `change` mientras se completa —"0", "07", "07:3"— y guardar en cada
+ * uno mandaría cuatro PATCH por hora tipeada, tres de ellos con una hora a
+ * medio escribir que el servidor rechazaría.
+ *
+ * El valor local se resincroniza cuando cambia el de arriba: después de guardar,
+ * la fila se vuelve a traer del servidor y lo que hay que mostrar es lo que
+ * quedó guardado, no lo que se tipeó — si el servidor lo interpretó como del día
+ * siguiente por el cruce de medianoche, la hora es la misma pero el instante no.
+ */
+function CampoDeHora({
+  valor,
+  etiqueta,
+  editable,
+  esElQueSigue,
+  guardando,
+  onGuardar,
+}: {
+  valor: string;
+  etiqueta: string;
+  editable: boolean;
+  esElQueSigue: boolean;
+  guardando: boolean;
+  onGuardar: (valor: string) => void;
+}) {
+  const [texto, setTexto] = useState(valor);
+  useEffect(() => setTexto(valor), [valor]);
+
+  if (!editable) {
+    return <span className="text-sm text-slate-600">{valor || "—"}</span>;
+  }
+
+  return (
+    <input
+      type="time"
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => {
+        if (texto !== valor) onGuardar(texto);
+      }}
+      disabled={guardando}
+      aria-label={etiqueta}
+      title={etiqueta}
+      className={`w-[6.5rem] rounded-lg border px-2 py-1.5 text-sm disabled:opacity-50 ${
+        esElQueSigue && texto === ""
+          ? "border-[var(--primary)] bg-blue-50 ring-1 ring-[var(--primary)]"
+          : "border-slate-300"
+      }`}
+    />
   );
 }

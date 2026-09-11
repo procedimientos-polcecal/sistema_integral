@@ -13,7 +13,7 @@ import type { EstadoDeOrden, HorarioDeOrden, OrdenDeCarga } from "@/lib/despacho
 import ColaClient from "./ColaClient";
 
 /**
- * La cola del día: la pantalla que queda abierta en la PC de la balanza.
+ * Movimientos diarios: la pantalla que queda abierta en la PC de la balanza.
  *
  * Todo lo derivado se resuelve **acá**, en el servidor, con las mismas
  * funciones que exportan a la planilla: el estado, los dos tiempos y la

@@ -6,20 +6,33 @@ import { traerOrden } from "@/lib/despacho/consultas";
 import { traerCatalogoDeProductos } from "@/lib/core/productos";
 import { clasificacionDeLaOrden } from "@/lib/despacho/clasificacion";
 import { espejarOrden } from "@/lib/despacho/espejo";
-import { ORDEN_DE_HORARIOS, proximoHorario } from "@/lib/despacho/orden";
+import {
+  ORDEN_DE_HORARIOS,
+  horariosConLoTipeado,
+  minutosDeLaHoraTipeada,
+} from "@/lib/despacho/orden";
 import type { HorarioDeOrden, OrdenDeCarga } from "@/lib/despacho/types";
 
 /**
- * Marcar un horario, o corregir una orden.
+ * Completar o corregir los horarios de una orden.
  *
- * Son las dos cosas que hace la pantalla de la balanza y van por la misma ruta
- * porque terminan en el mismo lugar: si la orden queda cerrada, se escribe la
- * planilla.
+ * Es lo que hace la pantalla de la balanza, y termina donde tiene que terminar:
+ * si la orden queda cerrada, se escribe la planilla.
  *
- * **Marcar guarda la hora del servidor, no una hora que llegó del navegador.**
- * El punto del módulo es que los horarios sean reales; aceptar la hora del
- * cliente sería aceptar el reloj de una PC que nadie controla, y encima
- * permitiría que un reintento del navegador cambiara el horario ya marcado.
+ * **Los cuatro horarios se tipean.** Hasta el 11/09/2026 la pantalla tenía un
+ * botón por fila —el del próximo horario— y la hora la ponía el servidor, con
+ * el argumento de que aceptar la del navegador es aceptar el reloj de una PC
+ * que nadie controla. Ese diseño suponía que quien marca está mirando pasar el
+ * camión, y resultó falso: **los horarios llegan tarde y de gente que no está
+ * en Despacho**, así que el botón obligaba a marcar "ahora" una hora que había
+ * pasado hace rato. Ahora los cuatro son campos y se pueden completar y
+ * corregir en cualquier orden.
+ *
+ * Lo que sí se conserva del diseño viejo: **la hora llega como "HH:MM" y la
+ * ancla el servidor** contra la fecha de la orden. El navegador no manda un
+ * instante, así que su zona horaria y su reloj no entran en el dato — y la
+ * regla del cruce de medianoche (`instanteEnElDia`) se aplica una sola vez, en
+ * un solo lugar, igual que para el importador del libro.
  *
  * **Corregir no pide motivo, sólo deja rastro** de quién y cuándo. Es lo que ya
  * hace Producción con los partes, que también se transcriben y también se
@@ -50,59 +63,54 @@ export async function PATCH(
     actualizado_en: new Date().toISOString(),
   };
 
-  if (b?.horario !== undefined) {
-    const horario = String(b.horario) as HorarioDeOrden;
-    if (!ORDEN_DE_HORARIOS.includes(horario)) {
-      return NextResponse.json({ error: `Horario desconocido: ${horario}` }, { status: 400 });
+  /*
+   * Los horarios llegan tipeados, como "HH:MM", y se anclan a la fecha de la
+   * orden. Una cadena vacía borra el horario: es un estado válido —una orden a
+   * la que todavía no le informaron la salida— y no un error.
+   *
+   * El orden en que se anclan importa y lo resuelve `horariosConLoTipeado`: la
+   * salida a las 00:30 sólo se entiende como del día siguiente si antes se sabe
+   * que el fin de carga fue a las 23:40.
+   */
+  if (b?.horas !== undefined) {
+    const horas = b.horas as Record<string, unknown>;
+    if (typeof horas !== "object" || horas === null) {
+      return NextResponse.json({ error: "Las horas tienen que venir en un objeto" }, { status: 400 });
     }
 
-    /*
-     * Sólo se marca el que sigue.
-     *
-     * La pantalla muestra un botón —el del próximo horario— así que el único
-     * modo de llegar acá con otro es un doble toque contra una pantalla vieja, o
-     * dos personas en la misma orden. Aceptarlo pisaría un horario ya marcado
-     * con la hora de ahora, que es justo lo que no se puede deshacer sin mirar
-     * la planilla. Corregir a mano sigue estando: es el otro camino de abajo.
-     */
-    const esperado = proximoHorario(orden);
-    if (esperado !== horario) {
-      return NextResponse.json(
-        {
-          error: esperado
-            ? `Esa orden ya tiene marcado ese horario. Lo que sigue es "${esperado}".`
-            : "Esa orden ya está cerrada. Para cambiarle un horario hay que corregirla.",
-        },
-        { status: 409 }
-      );
-    }
-
-    cambios[horario] = new Date().toISOString();
-  } else {
-    // Corrección a mano. Los horarios llegan como ISO o null; el resto, texto.
-    for (const horario of ORDEN_DE_HORARIOS) {
-      if (b?.[horario] === undefined) continue;
-      const valor = b[horario];
+    const tipeadas: Partial<Record<HorarioDeOrden, string | null>> = {};
+    for (const [clave, valor] of Object.entries(horas)) {
+      const horario = clave as HorarioDeOrden;
+      if (!ORDEN_DE_HORARIOS.includes(horario)) {
+        return NextResponse.json({ error: `Horario desconocido: ${clave}` }, { status: 400 });
+      }
       if (valor === null || valor === "") {
-        cambios[horario] = null;
+        tipeadas[horario] = null;
         continue;
       }
-      const t = new Date(String(valor));
-      if (isNaN(t.getTime())) {
-        return NextResponse.json({ error: `${horario} no es una hora válida` }, { status: 400 });
+      if (minutosDeLaHoraTipeada(valor) === null) {
+        return NextResponse.json(
+          { error: `"${String(valor)}" no es una hora. Va como 07:35.` },
+          { status: 400 }
+        );
       }
-      cambios[horario] = t.toISOString();
+      tipeadas[horario] = String(valor);
     }
 
-    for (const campo of ["notas", "supervisor_raw", "cliente_raw", "producto_raw"]) {
-      if (b?.[campo] === undefined) continue;
-      const s = String(b[campo] ?? "").trim();
-      cambios[campo] = s === "" ? null : s;
+    const resueltos = horariosConLoTipeado(orden, tipeadas, orden.fecha);
+    for (const horario of Object.keys(tipeadas) as HorarioDeOrden[]) {
+      cambios[horario] = resueltos[horario];
     }
+  }
 
-    if (Object.keys(cambios).length === 2) {
-      return NextResponse.json({ error: "No vino ningún cambio" }, { status: 400 });
-    }
+  for (const campo of ["notas", "supervisor_raw", "cliente_raw", "producto_raw"]) {
+    if (b?.[campo] === undefined) continue;
+    const s = String(b[campo] ?? "").trim();
+    cambios[campo] = s === "" ? null : s;
+  }
+
+  if (Object.keys(cambios).length === 2) {
+    return NextResponse.json({ error: "No vino ningún cambio" }, { status: 400 });
   }
 
   const { data, error } = await supabase

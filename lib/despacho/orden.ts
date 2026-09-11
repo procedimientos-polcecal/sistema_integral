@@ -147,3 +147,122 @@ export function comoSeLeenLosMinutos(minutos: number | null): string {
   const resto = abs % 60;
   return resto === 0 ? `${signo}${horas} h` : `${signo}${horas} h ${resto} min`;
 }
+
+// ── Las horas que se tipean ──────────────────────────────────
+
+/**
+ * Argentina no tiene horario de verano desde 2009, así que un offset fijo
+ * alcanza y no hay que arrastrar una tabla de zonas al navegador.
+ */
+export const OFFSET_ARGENTINA_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * El umbral del cruce de medianoche: **gana la interpretación que da la
+ * duración más corta**, así que se suma un día sólo cuando el salto hacia atrás
+ * pasa las 12 horas.
+ *
+ * No es un umbral elegido a dedo. Se midieron los 394 saltos hacia atrás del
+ * libro y están partidos en dos grupos con el valle justo acá: 234 de menos de
+ * dos horas —una salida anotada unos minutos antes del fin de carga, o sea un
+ * error de tipeo— y 106 de más de doce, que son los cruces reales.
+ */
+const MEDIO_DIA_MS = 12 * 60 * 60 * 1000;
+
+/** "10:20" en hora de Argentina. Vacío si el horario no está marcado. */
+export function horaComoSeEscribe(iso: string | null): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
+  return new Date(t - OFFSET_ARGENTINA_MS).toISOString().slice(11, 16);
+}
+
+/**
+ * Los minutos desde medianoche de una hora tipeada: `"7:35"`, `"07:35"`,
+ * `"07:35:00"`. Null si no es una hora.
+ *
+ * Estricta a propósito: lo que llega de un `<input type="time">` siempre tiene
+ * esta forma, y aceptar "735" o "7.35" sería adivinar qué quiso poner alguien.
+ */
+export function minutosDeLaHoraTipeada(valor: unknown): number | null {
+  if (valor === null || valor === undefined) return null;
+  const s = String(valor).trim();
+  if (s === "") return null;
+
+  const hm = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!hm) return null;
+  const h = Number(hm[1]);
+  const m = Number(hm[2]);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+/**
+ * Unos minutos del día, anclados a la fecha de la orden y en hora de Argentina.
+ *
+ * **La hora no trae fecha, y de ahí sale toda la dificultad.** Un camión que
+ * entra 23:40 y sale 00:30 daría, con la misma fecha para los dos, un tiempo en
+ * predio de menos veintitrés horas. Por eso `anterior`: cuando el horario cae
+ * antes del que lo precede, se le suma un día — pero sólo si el salto hacia
+ * atrás pasa las 12 horas (ver `MEDIO_DIA_MS`). Un salto más corto es un error
+ * de tipeo y **tiene que quedar negativo**, para que se vea en rojo y alguien lo
+ * corrija.
+ *
+ * Es la misma regla que usa el importador del libro, y vive acá una sola vez:
+ * la primera versión sumaba un día ante cualquier salto y dejó 250 de las 1.702
+ * órdenes importadas con tiempos absurdos, que se promedian sin que nada avise.
+ */
+export function instanteEnElDia(
+  minutos: number | null,
+  fecha: string,
+  anterior?: string | null
+): string | null {
+  if (minutos === null) return null;
+
+  const base = new Date(`${fecha}T00:00:00.000Z`).getTime();
+  if (isNaN(base)) return null;
+
+  let instante = base + OFFSET_ARGENTINA_MS + minutos * 60000;
+
+  if (anterior) {
+    const previo = new Date(anterior).getTime();
+    if (!isNaN(previo) && previo - instante > MEDIO_DIA_MS) {
+      instante += 2 * MEDIO_DIA_MS;
+    }
+  }
+
+  return new Date(instante).toISOString();
+}
+
+/**
+ * Los cuatro horarios después de aplicar lo que se tipeó en la pantalla.
+ *
+ * Se recorre **en el orden en que ocurren** porque cada hora se ancla contra la
+ * anterior: tipear la salida a las 00:30 sólo se entiende como del día
+ * siguiente si antes se sabe que el fin de carga fue a las 23:40.
+ *
+ * **Sólo se ancla lo que vino tipeado.** Un horario que ya estaba guardado se
+ * devuelve tal cual, aunque editar otro campo cambie su referencia: volver a
+ * anclarlo movería en silencio una hora que nadie tocó. Una cadena vacía es un
+ * borrado explícito y deja el horario en null.
+ */
+export function horariosConLoTipeado(
+  actuales: HorariosDeOrden,
+  tipeadas: Partial<Record<HorarioDeOrden, string | null>>,
+  fecha: string
+): HorariosDeOrden {
+  const salida: HorariosDeOrden = { ...actuales };
+  let anterior: string | null = null;
+
+  for (const horario of ORDEN_DE_HORARIOS) {
+    if (horario in tipeadas) {
+      const tipeada = tipeadas[horario];
+      salida[horario] =
+        tipeada === null || tipeada === ""
+          ? null
+          : instanteEnElDia(minutosDeLaHoraTipeada(tipeada), fecha, anterior);
+    }
+    if (salida[horario]) anterior = salida[horario];
+  }
+
+  return salida;
+}

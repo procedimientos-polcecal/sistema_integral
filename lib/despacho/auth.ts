@@ -5,7 +5,7 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
 /**
  * Permisos del módulo Despacho.
  *
- *   lectura  ve la cola del día y el histórico
+ *   lectura  ve los movimientos diarios y el histórico
  *   edicion  además da de alta órdenes, marca horarios y corrige
  *   admin    además edita el mapeo de productos
  *

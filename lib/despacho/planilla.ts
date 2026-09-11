@@ -1,6 +1,7 @@
 import type { Clasificacion } from "@/lib/core/types";
 import type { OrdenDeCarga } from "./types";
 import { textoParaLaPlanilla } from "./clasificacion";
+import { instanteEnElDia, minutosDeLaHoraTipeada, horaComoSeEscribe } from "./orden";
 
 /**
  * La planilla `Órdenes de Carga`: cómo se lee y cómo se escribe.
@@ -50,25 +51,10 @@ export const COLUMNAS = [
  */
 export const RANGO_QUE_SE_ESCRIBE = { primera: "A", ultima: "I" } as const;
 
-/** Hora de Argentina = UTC−3, sin horario de verano. Igual que `lib/core/fechas.ts`. */
-const OFFSET_ARGENTINA_MS = 3 * 60 * 60 * 1000;
-
-/**
- * El corte entre "se anotó al revés" y "cruzó la medianoche".
- *
- * Doce horas no es un número elegido: es donde las dos interpretaciones de un
- * salto hacia atrás empatan (`1440 − salto` contra `salto`), y es también donde
- * cae el valle entre los dos grupos de saltos que tiene el libro.
- */
-const MEDIO_DIA_MS = 12 * 60 * 60 * 1000;
-
-/** "10:20" en hora de Argentina. Vacío si el horario no está marcado. */
-export function horaComoSeEscribe(iso: string | null): string {
-  if (!iso) return "";
-  const t = new Date(iso).getTime();
-  if (isNaN(t)) return "";
-  return new Date(t - OFFSET_ARGENTINA_MS).toISOString().slice(11, 16);
-}
+// El desfasaje de Argentina, el umbral del cruce de medianoche y
+// `horaComoSeEscribe` viven en `./orden`: los usa también la pantalla de la
+// balanza, y traerlos desde acá le arrastraría al navegador las 159
+// equivalencias del histórico, que este archivo importa por `clasificacion`.
 
 /** "8/9/2026": d/m, como la planilla. Nunca m/d — eso dio vuelta 885 fechas en Compras. */
 export function fechaComoSeEscribe(fecha: string): string {
@@ -135,25 +121,9 @@ export function parsearHoraDePlanilla(
   fecha: string,
   anterior?: string | null
 ): string | null {
-  const minutos = minutosDelDia(valor);
-  if (minutos === null) return null;
-
-  const base = new Date(`${fecha}T00:00:00.000Z`).getTime();
-  if (isNaN(base)) return null;
-
-  let instante = base + OFFSET_ARGENTINA_MS + minutos * 60000;
-
-  if (anterior) {
-    const previo = new Date(anterior).getTime();
-    // Sólo cuando el salto hacia atrás pasa las 12 h: ahí sumar un día da una
-    // duración más corta que dejarlo negativo. Por debajo de eso es un error de
-    // tipeo y tiene que quedar negativo, para que se vea en rojo y se corrija.
-    if (!isNaN(previo) && previo - instante > MEDIO_DIA_MS) {
-      instante += 2 * MEDIO_DIA_MS;
-    }
-  }
-
-  return new Date(instante).toISOString();
+  // El anclaje y la regla del cruce de medianoche son los mismos que usa la
+  // pantalla cuando alguien tipea una hora: viven en `instanteEnElDia`.
+  return instanteEnElDia(minutosDelDia(valor), fecha, anterior);
 }
 
 /** Minutos desde la medianoche, o null si la celda no es una hora. */
@@ -168,13 +138,8 @@ function minutosDelDia(valor: unknown): number | null {
   const s = String(valor).trim();
   if (s === "") return null;
 
-  const hm = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (hm) {
-    const h = Number(hm[1]);
-    const m = Number(hm[2]);
-    if (h > 23 || m > 59) return null;
-    return h * 60 + m;
-  }
+  const tipeada = minutosDeLaHoraTipeada(s);
+  if (tipeada !== null) return tipeada;
 
   // Un número que llegó como texto ("0,5" o "0.5") sigue siendo un serial.
   const n = Number(s.replace(",", "."));

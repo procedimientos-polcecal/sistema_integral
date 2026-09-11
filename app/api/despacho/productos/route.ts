@@ -16,9 +16,9 @@ import type { Producto } from "@/lib/core/types";
 /**
  * El catálogo de productos, desde Despacho.
  *
- * `GET` lo ve cualquiera con acceso al módulo: lo necesita la cola del día para
- * mostrar "Filler A granel" en vez del nombre crudo, no sólo la pantalla de
- * administración. `POST` y `PATCH` los reserva `esAdminDespacho`.
+ * `GET` lo ve cualquiera con acceso al módulo: lo necesitan los movimientos
+ * diarios para mostrar "Filler A granel" en vez del nombre crudo, no sólo la
+ * pantalla de administración. `POST` y `PATCH` los reserva `esAdminDespacho`.
  *
  * La tabla es del núcleo y la comparte con Producción, así que RLS la gatea con
  * `puede_editar_productos()` —admin de Producción **o** de Despacho—. Este

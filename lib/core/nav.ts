@@ -196,11 +196,11 @@ export const NAV: NavItem[] = [
     label: "Despacho",
     href: "/despacho",
     modulo: "despacho",
-    // La cola del día primero, y por lejos: es la pantalla que queda abierta
-    // todo el día en la PC de la balanza y desde donde se marcan los horarios
-    // con el camión en el predio. El histórico se mira después, no durante.
+    // Los movimientos del día primero, y por lejos: es la pantalla que queda
+    // abierta todo el día en la PC de la balanza y donde se cargan los cuatro
+    // horarios de cada camión. El histórico se mira después, no durante.
     children: [
-      { label: "La cola del día", href: "/despacho", modulo: "despacho" },
+      { label: "Movimientos diarios", href: "/despacho", modulo: "despacho" },
       { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
       { label: "Productos", href: "/despacho/productos", modulo: "despacho", soloAdmin: true },
     ],

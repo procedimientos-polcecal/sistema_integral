@@ -4,10 +4,10 @@ import {
   RANGO_QUE_SE_ESCRIBE,
   filaDeLaPlanilla,
   parsearHoraDePlanilla,
-  horaComoSeEscribe,
   fechaComoSeEscribe,
   pestanaDelMes,
 } from "./planilla";
+import { horaComoSeEscribe } from "./orden";
 import type { OrdenDeCarga } from "./types";
 
 const ORDEN: OrdenDeCarga = {

@@ -68,10 +68,24 @@ Bolsa. La clasificación de cada producto la pone una persona en el catálogo
 —`productos`, del núcleo, compartido con Producción desde el 10/09/2026— y lo
 que falta se muestra **"sin clasificar"**.
 
-**Un solo botón por fila.** La cola del día ofrece el próximo horario que falta
-y no los cuatro. Con un camión esperando, cuatro botones son cuatro
-oportunidades de marcar el equivocado, y un horario mal marcado no se arregla sin
-mirar la planilla. La hora la pone el servidor.
+**Los cuatro horarios se tipean** (cambiado el 11/09/2026). Hasta entonces la
+pantalla tenía **un solo botón por fila** —el del próximo horario que falta— y
+la hora la ponía el servidor: con un camión esperando, cuatro botones son cuatro
+oportunidades de marcar el equivocado.
+
+El argumento seguía siendo bueno y el supuesto no: **suponía que quien marca
+está mirando pasar el camión**. En la práctica los horarios llegan tarde y de
+gente que no está en Despacho, así que el botón obligaba a marcar "ahora" una
+hora que había pasado hacía rato — y no había forma de cargar la que fue. Ahora
+los cuatro son campos, se completan en cualquier orden y se corrigen tipeando
+encima. Del diseño viejo queda la guía sin la obligación: **el campo del próximo
+horario que falta va resaltado**.
+
+Lo que sí se conservó es que **el navegador no manda un instante**: manda
+`"HH:MM"` y lo ancla el servidor contra la fecha de la orden. La zona horaria y
+el reloj de esa PC no entran en el dato, y la regla del cruce de medianoche se
+aplica en un solo lugar — el mismo `instanteEnElDia` que usa el importador del
+libro.
 
 ## La frontera con Producción
 
@@ -131,7 +145,7 @@ Cuatro cosas que conviene no volver a averiguar:
 | Remitos y productos de Odoo | `lib/despacho/odoo.ts` |
 | Permisos | `lib/despacho/auth.ts` |
 | Filtros del histórico en la URL | `lib/despacho/filtrosUrl.ts` |
-| Cola del día | `app/(app)/despacho` |
+| Movimientos diarios (la pantalla de la balanza) | `app/(app)/despacho` |
 | Histórico e indicadores | `app/(app)/despacho/ordenes` |
 | Clasificar el catálogo | `app/(app)/despacho/productos` |
 | Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
@@ -227,7 +241,7 @@ de una pestaña a la que le faltara `Observaciones`.
 
 Sin la variable **el espejo no escribe** y cada orden que se cierre queda con
 `sheets_pendiente`, que es el comportamiento buscado y se ve en el Inicio y en la
-cola del día — pero la planilla se queda sin esas órdenes. Por eso conviene saber
+pantalla de movimientos diarios — pero la planilla se queda sin esas órdenes. Por eso conviene saber
 las dos cosas que aparecieron al cargarla:
 
 - **`vercel env ls` dice que la variable existe y no dice qué tiene adentro.**
@@ -302,7 +316,7 @@ Cómo quedó, medido contra la base:
 
 ### Las 345 sin salida del predio no son una alarma
 
-Y eso hubo que resolverlo: la cola del día muestra arriba las órdenes abiertas de
+Y eso hubo que resolverlo: los movimientos diarios muestran arriba las órdenes abiertas de
 días anteriores, así que sin filtro habría abierto con **345 filas rojas** y el
 Inicio habría avisado 345. Ninguna de ésas es un olvido accionable — la planilla
 nunca tuvo esa hora.

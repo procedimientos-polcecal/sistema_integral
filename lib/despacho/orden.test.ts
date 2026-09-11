@@ -6,6 +6,9 @@ import {
   horariosSalteados,
   tiemposDeLaOrden,
   minutosEnCurso,
+  minutosDeLaHoraTipeada,
+  instanteEnElDia,
+  horariosConLoTipeado,
 } from "./orden";
 import type { HorariosDeOrden } from "./types";
 
@@ -128,5 +131,105 @@ describe("minutosEnCurso", () => {
   it("una orden cerrada o que no llegó no tiene tramo en curso", () => {
     expect(minutosEnCurso(COMPLETA, ahora)).toBeNull();
     expect(minutosEnCurso(VACIA, ahora)).toBeNull();
+  });
+});
+
+describe("las horas que se tipean", () => {
+  it("lee una hora tipeada y rechaza lo que no lo es", () => {
+    expect(minutosDeLaHoraTipeada("07:35")).toBe(7 * 60 + 35);
+    expect(minutosDeLaHoraTipeada("7:35")).toBe(7 * 60 + 35);
+    expect(minutosDeLaHoraTipeada("07:35:00")).toBe(7 * 60 + 35);
+    expect(minutosDeLaHoraTipeada("00:00")).toBe(0);
+    // Estricta a propósito: adivinar qué quiso poner alguien es cómo entra un
+    // horario equivocado que después nadie distingue de uno real.
+    expect(minutosDeLaHoraTipeada("735")).toBeNull();
+    expect(minutosDeLaHoraTipeada("7.35")).toBeNull();
+    expect(minutosDeLaHoraTipeada("25:00")).toBeNull();
+    expect(minutosDeLaHoraTipeada("07:60")).toBeNull();
+    expect(minutosDeLaHoraTipeada("")).toBeNull();
+    expect(minutosDeLaHoraTipeada(null)).toBeNull();
+  });
+
+  /** La hora se ancla a la fecha de la orden y en hora de Argentina (UTC-3). */
+  it("ancla la hora al día de la orden", () => {
+    expect(instanteEnElDia(7 * 60 + 35, "2026-09-11")).toBe("2026-09-11T10:35:00.000Z");
+    expect(instanteEnElDia(0, "2026-09-11")).toBe("2026-09-11T03:00:00.000Z");
+    expect(instanteEnElDia(null, "2026-09-11")).toBeNull();
+  });
+});
+
+describe("horariosConLoTipeado", () => {
+  const vacia = {
+    entrada_predio: null,
+    inicio_carga: null,
+    fin_carga: null,
+    salida_predio: null,
+  };
+
+  it("ancla lo que se tipeó y deja lo demás como estaba", () => {
+    const r = horariosConLoTipeado(
+      { ...vacia, entrada_predio: "2026-09-11T13:00:00.000Z" },
+      { inicio_carga: "11:30" },
+      "2026-09-11"
+    );
+    expect(r.entrada_predio).toBe("2026-09-11T13:00:00.000Z");
+    expect(r.inicio_carga).toBe("2026-09-11T14:30:00.000Z");
+    expect(r.fin_carga).toBeNull();
+  });
+
+  /**
+   * El caso que obliga a recorrerlos en orden: un camión que termina de cargar
+   * 23:40 y sale 00:30. Con la fecha de la orden para los dos, el tiempo en
+   * predio daría menos veintitrés horas.
+   */
+  it("la salida después de medianoche cae en el día siguiente", () => {
+    const r = horariosConLoTipeado(
+      vacia,
+      { entrada_predio: "22:50", inicio_carga: "23:10", fin_carga: "23:40", salida_predio: "00:30" },
+      "2026-09-11"
+    );
+    expect(r.fin_carga).toBe("2026-09-12T02:40:00.000Z");
+    expect(r.salida_predio).toBe("2026-09-12T03:30:00.000Z");
+    // Cien minutos en predio, no menos veintitrés horas.
+    expect(tiemposDeLaOrden(r).predio).toBe(100);
+  });
+
+  /**
+   * Y el que no hay que "arreglar": una salida cinco minutos antes del fin de
+   * carga es un error de tipeo, no un cruce de medianoche. Queda negativo para
+   * que se vea en rojo.
+   */
+  it("un salto corto hacia atrás queda negativo y no se corre de día", () => {
+    const r = horariosConLoTipeado(
+      vacia,
+      { inicio_carga: "10:00", fin_carga: "11:00", salida_predio: "10:55" },
+      "2026-09-11"
+    );
+    expect(r.salida_predio).toBe("2026-09-11T13:55:00.000Z");
+    expect(tiemposDeLaOrden(r).carga).toBe(60);
+  });
+
+  it("una cadena vacía borra el horario", () => {
+    const r = horariosConLoTipeado(
+      { ...vacia, salida_predio: "2026-09-11T20:00:00.000Z" },
+      { salida_predio: "" },
+      "2026-09-11"
+    );
+    expect(r.salida_predio).toBeNull();
+  });
+
+  /**
+   * Editar un horario no vuelve a anclar los otros. Mover la entrada cambiaría
+   * la referencia de la salida, y re-anclarla correría en silencio una hora que
+   * nadie tocó.
+   */
+  it("no toca los horarios que ya estaban guardados", () => {
+    const r = horariosConLoTipeado(
+      { ...vacia, entrada_predio: "2026-09-11T13:00:00.000Z", salida_predio: "2026-09-12T02:00:00.000Z" },
+      { entrada_predio: "08:00" },
+      "2026-09-11"
+    );
+    expect(r.entrada_predio).toBe("2026-09-11T11:00:00.000Z");
+    expect(r.salida_predio).toBe("2026-09-12T02:00:00.000Z");
   });
 });

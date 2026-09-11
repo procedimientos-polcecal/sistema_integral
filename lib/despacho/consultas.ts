@@ -42,7 +42,7 @@ export async function traerOrdenesDelDia(
 /**
  * Las órdenes que quedaron abiertas de días anteriores.
  *
- * Van arriba en la cola del día y no escondidas en el histórico: una orden sin
+ * Van arriba en los movimientos diarios y no escondidas en el histórico: una orden sin
  * cerrar es un camión que se fue sin que nadie marcara la salida, y si sólo
  * apareciera en el día que le toca nadie la va a corregir nunca. Además no
  * llegó a la planilla —el espejo escribe al cerrar—, así que arrastrarla es
@@ -51,7 +51,7 @@ export async function traerOrdenesDelDia(
  * **Sólo las que nacieron en el sistema** (`cargado_por` no nulo). Del histórico
  * importado hay **345 de 1.702 sin salida del predio**, y no son un olvido que
  * alguien pueda arreglar hoy: la planilla nunca tuvo esa hora. Sin este filtro
- * la cola del día abriría con 345 filas rojas el primer día y el aviso del
+ * la pantalla abriría con 345 filas rojas el primer día y el aviso del
  * Inicio diría 345 — un número que no pide hacer nada es lo que enseña a
  * ignorar los avisos que sí.
  */
