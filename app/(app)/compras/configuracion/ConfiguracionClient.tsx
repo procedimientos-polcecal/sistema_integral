@@ -736,12 +736,29 @@ function FilaAprobador({
 }
 
 /**
- * Cambios hechos en el sistema que la planilla rechazó.
+ * Lo que el sistema guardó y la planilla todavía no tiene.
  *
  * Se muestran arriba de todo porque son la única forma de enterarse: el
  * requerimiento ya quedó aprobado, así que su ficha no vuelve a ofrecer la
  * acción, y sin esta lista la diferencia entre las dos herramientas quedaría
  * invisible.
+ *
+ * **No son todos rechazos, y por eso el cartel dejó de llamarlos así.** Decía
+ * "la planilla los rechazó" y mandaba a corregir el motivo, y eso era cierto
+ * mientras la cola tuvo una sola clase de anotación. Desde que el alta de un RI
+ * se escribe desde el sistema hay motivos que no son un rechazo y no piden
+ * nada: la fila del master que el `IMPORTRANGE` todavía no bajó —tarda minutos
+ * y no se puede forzar desde la API—, el alta que quedó sin escribirse, y la
+ * planilla del formulario sin configurar. Mandar a "corregir el motivo" de una
+ * fila que se acomoda sola en la próxima corrida es lo que enseña a ignorar el
+ * cartel, que es exactamente lo que este cartel no se puede permitir.
+ *
+ * Y no se clasifica leyendo el motivo. Es texto libre —lo que contestó Google,
+ * sin traducir, que es la regla del módulo— y partirlo por subcadenas es volver
+ * a inventar el diagnóstico que esa regla existe para no inventar: el día que
+ * Google cambie una palabra, la clasificación miente sin avisar. El cartel dice
+ * lo único que es cierto para todos, que es que están acá y no allá; cuál es
+ * cuál se lee en el renglón de cada uno.
  */
 function PanelPendientes({
   pendientes,
@@ -799,8 +816,10 @@ function PanelPendientes({
             {pendientes.length} {pendientes.length === 1 ? "cambio" : "cambios"} sin reflejar en la planilla
           </h2>
           <p className="mt-1 text-xs text-amber-800">
-            Están guardados acá, pero la planilla los rechazó. Corregí el motivo
-            —cargar el alias que falta, o dar permiso sobre la celda— y reintentá.
+            Están guardados acá y la planilla todavía no los tiene. Algunos se
+            acomodan solos en la próxima sincronización; otros esperan que
+            alguien haga algo —cargar el alias que falta, o dar permiso sobre la
+            celda—. Cuál es cuál lo dice el motivo de cada uno, ahí abajo.
           </p>
         </div>
         <button

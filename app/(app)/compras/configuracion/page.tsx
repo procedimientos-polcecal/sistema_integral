@@ -52,7 +52,9 @@ export default async function ConfiguracionPage() {
     cuenta((q) => q),
   ]);
 
-  // Lo que la planilla rechazó y sigue sin escribirse.
+  // Lo que el sistema guardó y la planilla todavía no tiene. No son todos
+  // rechazos —hay motivos que se acomodan solos—; por qué importa la
+  // diferencia está en `PanelPendientes`.
   const { data: pendientes } = await supabase
     .from("compras_requerimientos")
     .select("id, nro_ri, descripcion, sheets_pendiente, sheets_intentado_en")
