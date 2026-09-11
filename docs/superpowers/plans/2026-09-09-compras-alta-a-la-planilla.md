@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16 (App Router, Route Handlers), Supabase (PostgREST), Google Sheets API v4 con JWT firmado a mano (`lib/core/google.ts`), vitest.
 
-**Spec:** [docs/superpowers/specs/2026-09-09-compras-alta-a-la-planilla-design.md](../specs/2026-09-09-compras-alta-a-la-planilla-design.md) — puntos 1 a 6. El punto 7 (aviso por mail) queda para una segunda tanda.
+**Spec:** [docs/superpowers/specs/2026-09-09-compras-alta-a-la-planilla-design.md](../specs/2026-09-09-compras-alta-a-la-planilla-design.md) — puntos 1 a 6. El punto 7 (aviso por mail) quedó para una segunda tanda y **ya está hecho**: es `docs/compras-aviso-por-tiempo.gs`, para instalar a mano en el proyecto de Apps Script de la planilla de respuestas. No hay tarea de este plan que lo cubra porque no toca código del repo.
 
 ---
 

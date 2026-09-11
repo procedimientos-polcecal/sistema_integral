@@ -418,6 +418,23 @@ dónde inserta el otro, y la serie sigue siendo una sola. El script está en
 `docs/compras-formulario-apps-script.gs` y **hay que instalarlo**: sin él, las
 respuestas del formulario siguen numerándose por fórmula.
 
+**Y un pedido cargado en el sistema no avisa por mail solo.** El aviso lo manda
+un activador de *envío de formulario*, y una fila escrita por la API no dispara
+ningún activador —*"Script executions and API requests don't cause triggers to
+run"*, sin más excepción que `Form.submitGrades()`—. Enviar el formulario de
+verdad tampoco sirve: tiene subida de archivo y correo verificado, y las dos
+piden iniciar sesión. La salida es un **activador por tiempo** que barre las
+filas con la columna `M` vacía y les fabrica el evento al mismo notificador —`M`
+la escribe él justo antes de mandar el mail, así que ya es el marcador de "a
+quién le avisé"—. Está en `docs/compras-aviso-por-tiempo.gs`, también para
+instalar a mano, y sirve además para la respuesta del formulario cuyo aviso
+falló. Las tres cosas que hay que saber antes de tocarlo: está **acotado por
+fecha** (sin eso, la primera corrida avisa de un pedido de agosto de 2025), el
+que **falla escribe el motivo en `M`** para dejar de reintentarse, y si el
+notificador vuelve sin escribir `M` **la marca la escribe el barrido** — sin esa
+red, una fila sin marcar recibe un mail cada diez minutos, para siempre, y eso
+no se descubre leyendo el código sino cuando alguien se queja.
+
 **Lo esperable y lo que hay que mirar son dos cosas distintas, y mezclarlas
 enseña a ignorar los carteles.** `IMPORTRANGE` refresca cuando Google quiere
 —minutos, y no se puede forzar—, así que cuando el alta acaba de escribirse la
