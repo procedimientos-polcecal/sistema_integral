@@ -178,7 +178,7 @@ export default function ConciliacionOdoo({
                 <option value="">— elegir factura —</option>
                 {candidatas.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name} · {f.empresa} · $ {ars.format(f.importeNeto)} · {f.proveedor}
+                    {f.proveedor} · {f.name} · $ {ars.format(f.importeNeto)}
                     {f.fecha ? ` · ${f.fecha}` : ""}
                   </option>
                 ))}
