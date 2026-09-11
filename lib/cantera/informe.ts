@@ -119,9 +119,15 @@ function sum(vs: (number | null)[]): number {
   return vs.reduce((s: number, v) => s + (v ?? 0), 0);
 }
 
-/** Σ cantidad de los renglones de tipo "detonador" — los gramos de explosivo. */
+/**
+ * Los gramos de explosivo: Σ `cantidad` de los renglones de tipo "detonador",
+ * pasado de kilos a gramos. La `cantidad` se carga en kilos (confirmado con el
+ * usuario); "Gr Detonador" de la planilla vieja está en gramos.
+ */
+const KG_A_GRAMOS = 1000;
+
 function gramosDeDetonador(consumos: RenglonDeConsumo[]): number {
-  return sum(consumos.filter((c) => c.tipo === "detonador").map((c) => c.cantidad));
+  return sum(consumos.filter((c) => c.tipo === "detonador").map((c) => c.cantidad)) * KG_A_GRAMOS;
 }
 
 function enRango(fecha: string | null, desde: string, hasta: string): boolean {

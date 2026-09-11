@@ -49,7 +49,7 @@ describe("armarInformeMensual", () => {
     expect(informe.voladuras[0].montoArs).toBeCloseTo(400 * 1.04 * 1400, 0);
   });
 
-  it("los gramos de detonador son la suma de cantidad de los renglones tipo detonador", () => {
+  it("los gramos de detonador son la cantidad (en kilos) de los renglones tipo detonador, pasada a gramos", () => {
     const voladuras = [
       voladura({
         codigo: "V01D626", cantera: "D6", volFecha: "2026-08-10", volTc: 1000, toneladas: 200,
@@ -61,11 +61,12 @@ describe("armarInformeMensual", () => {
       }),
     ];
     const informe = armarInformeMensual("2026-08", voladuras, []);
-    expect(informe.voladuras[0].gramosDetonador).toBe(200);
-    expect(informe.totales.gramosDetonador).toBe(200);
+    // 150 + 50 = 200 kg × 1000 = 200.000 g
+    expect(informe.voladuras[0].gramosDetonador).toBe(200000);
+    expect(informe.totales.gramosDetonador).toBe(200000);
     const d6 = informe.porCantera.find((c) => c.cantera === "D6")!;
-    expect(d6.gramosDetonador).toBe(200);
-    expect(d6.grExplosivoPorTon).toBe(1); // 200 g / 200 t
+    expect(d6.gramosDetonador).toBe(200000);
+    expect(d6.grExplosivoPorTon).toBe(1000); // 200.000 g / 200 t
   });
 
   it("agrupa por cantera: USD/ton, ton/m perforado y el desglose de insumos", () => {
@@ -130,7 +131,7 @@ describe("serieMensual", () => {
     const serie = serieMensual(voladuras, []);
     expect(serie.map((s) => s.mes)).toEqual(["2026-07", "2026-08"]);
     expect(serie[0].toneladas).toBe(100);
-    expect(serie[0].gramosDetonador).toBe(50);
+    expect(serie[0].gramosDetonador).toBe(50000); // 50 kg × 1000
     expect(serie[1].toneladas).toBe(200);
   });
 
