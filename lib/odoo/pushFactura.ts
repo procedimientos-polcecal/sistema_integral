@@ -54,9 +54,18 @@ export type ResultadoDelPushDeFactura =
   | { ok: true; factura: FacturaEmpujada }
   | { ok: false; motivos: string[] };
 
+/*
+ * Las columnas del vínculo con Odoo se piden **acá**, antes de hablar con Odoo,
+ * aunque esta consulta no las use para nada. Es a propósito: si la migración
+ * todavía no se aplicó, PostgREST falla en este select y no en el update de
+ * después — o sea que el borrador no llega a crearse. Al revés quedaría un
+ * asiento en Odoo que el SdG no sabe que existe, y el siguiente intento lo
+ * duplicaría.
+ */
 const SELECT =
   "id, cuit_emisor, tipo_comprobante, punto_venta, numero, fecha, importe_total, moneda, estado, " +
-  "empresa_id, proveedor_id, requerimiento_id, odoo_move_id, " +
+  "empresa_id, proveedor_id, requerimiento_id, odoo_move_id, odoo_nombre, odoo_estado, " +
+  "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, " +
   "empresas!empresa_id(nombre, odoo_company_id), proveedores!proveedor_id(nombre), " +
   "compras_requerimientos!requerimiento_id(nro_ri)";
 
@@ -104,7 +113,19 @@ export async function empujarFacturaAOdoo(
     .eq("id", facturaId)
     .maybeSingle();
 
-  if (error) return { ok: false, motivos: [error.message] };
+  if (error) {
+    // El caso que vale la pena distinguir: la migración del vínculo con Odoo no
+    // se aplicó todavía, y el mensaje crudo de PostgREST no lo dice así.
+    const falta = /column .*odoo_/i.test(error.message);
+    return {
+      ok: false,
+      motivos: [
+        falta
+          ? `Falta aplicar la migración del vínculo con Odoo (20260911084048_facturacion_el_vinculo_con_odoo.sql). ${error.message}`
+          : error.message,
+      ],
+    };
+  }
   if (!data) return { ok: false, motivos: ["No existe esa factura."] };
 
   const factura = data as unknown as FilaDeFactura;
