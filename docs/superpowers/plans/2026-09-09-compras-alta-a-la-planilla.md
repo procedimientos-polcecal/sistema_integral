@@ -11,12 +11,18 @@
 **Spec:** [docs/superpowers/specs/2026-09-09-compras-alta-a-la-planilla-design.md](../specs/2026-09-09-compras-alta-a-la-planilla-design.md) — puntos 1 a 6. El punto 7 (aviso por mail) quedó para una segunda tanda y **ya está hecho**: es `docs/compras-aviso-por-tiempo.gs`, para instalar a mano en el proyecto de Apps Script de la planilla de respuestas. No hay tarea de este plan que lo cubra porque no toca código del repo.
 
 **Estado (11/09/2026): las ocho tareas están hechas y pusheadas.** Lo que falta
-no es código: son cuatro pasos a mano —la variable en Vercel, el permiso de
-Editor de la cuenta de servicio, y los dos Apps Script— más la comprobación de
-punta a punta, que escribe en la planilla de producción. Están juntos y en orden
-en [docs/COMPRAS-ESTADO.md](../../COMPRAS-ESTADO.md), en "Lo que hay que hacer a
-mano para que el alta llegue a la planilla". **Hasta que se hagan, cada alta
-queda en la cola de pendientes** con el nombre de la variable en el motivo.
+no es código: son pasos a mano —la variable en Vercel, el permiso de Editor de
+la cuenta de servicio, la pestaña nueva con la fórmula del master, y el Apps
+Script del aviso—. Están juntos y en orden en
+[docs/COMPRAS-ESTADO.md](../../COMPRAS-ESTADO.md). **Hasta que se hagan, cada
+alta queda en la cola de pendientes.**
+
+**Y el destino del alta cambió el mismo día.** Ya no se escribe en `Respuestas
+de formulario 1` sino en una pestaña propia, `Altas del sistema`: Forms empuja
+hacia abajo cualquier fila que no sea suya, y eso corría la salida del `QUERY`
+del master dejando PRIORIDAD, Empresa y Estado pegadas al RI de al lado —medido
+en producción, le pasó al RI 1959—. Todo este plan está escrito contra el
+destino viejo; lo que vale es COMPRAS-ESTADO.md y COMPRAS-SINCRONIZACION.md.
 
 Un detalle del texto de la Task 8 que quedó viejo y conviene no copiar de acá:
 decía que sin la variable el alta "se omite", y que el N° de RI lo pone la

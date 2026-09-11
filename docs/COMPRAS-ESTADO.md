@@ -585,22 +585,19 @@ dejar la ficha esperando.
 
 ## Lo que hay que hacer a mano para que el alta llegue a la planilla
 
-El código está desplegado, pero **el alta no sale hasta que alguien haga estas
-cuatro cosas**, y ninguna la puede hacer un agente: tres son en Google y una en
-Vercel. Están contadas más arriba cada una por su lado; acá juntas, que es como
-se hacen.
+**El código está desplegado y no sirve solo.** Son cuatro cosas, ninguna de
+agente: tres en Google y una en Vercel. Hasta que se hagan, cada alta queda en
+la cola de pendientes — a propósito, para que no se omita en silencio.
 
 1. **`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID`** en Vercel (y en `.env.local` para
-   probar desde acá), con el id de la planilla de respuestas del formulario:
+   probar desde acá), con el id de `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`:
    `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. **Hay que redesplegar** para
-   que tome. Sin ella cada alta queda en la cola de pendientes con el nombre de
-   la variable en el motivo — no se omite en silencio, a propósito.
-2. **Editor para la cuenta de servicio** sobre esa planilla. Es otra planilla
-   que el master: tener permiso sobre `PEDIDOS DE COMPRA` no alcanza.
-3. **Instalar `docs/compras-formulario-apps-script.gs`** en la planilla de
-   respuestas. Es el que numera las respuestas del formulario con `max(A)+1` en
-   vez de con la fórmula por fila. Sin él siguen numerándose por fórmula, que es
-   exactamente lo que hizo desaparecer un pedido el 09/09/2026.
+   que tome.
+2. **Editor para la cuenta de servicio** sobre esa planilla. Es otra que el
+   master: tener permiso sobre `PEDIDOS DE COMPRA` no alcanza.
+3. **Crear la pestaña `Altas del sistema` y reemplazar la fórmula del master**,
+   que es donde ahora se escribe el alta. Son cinco pasos y **el orden importa**:
+   están en la sección siguiente, que es la que manda sobre esto.
 4. **Instalar `docs/compras-aviso-por-tiempo.gs`** y darle su activador por
    tiempo. Es el que manda el mail de un pedido cargado en el sistema: una fila
    escrita por la API no dispara el activador de *envío de formulario*. Sin él
