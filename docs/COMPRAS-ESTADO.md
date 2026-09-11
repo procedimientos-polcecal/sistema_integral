@@ -585,26 +585,38 @@ dejar la ficha esperando.
 
 ## Lo que hay que hacer a mano para que el alta llegue a la planilla
 
-**El código está desplegado y no sirve solo.** Son cuatro cosas, ninguna de
-agente: tres en Google y una en Vercel. Hasta que se hagan, cada alta queda en
-la cola de pendientes — a propósito, para que no se omita en silencio.
+**El código está desplegado y no sirve solo.** Eran cuatro cosas, ninguna de
+agente: tres en Google y una en Vercel. **Al 11/09/2026 queda sólo la primera**,
+y hasta que se haga cada alta queda en la cola de pendientes — a propósito, para
+que no se omita en silencio.
 
 1. **`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID`** en Vercel (y en `.env.local` para
    probar desde acá), con el id de `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`:
    `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. **Hay que redesplegar** para
-   que tome.
-2. **Editor para la cuenta de servicio** sobre esa planilla. Es otra que el
-   master: tener permiso sobre `PEDIDOS DE COMPRA` no alcanza.
-3. **Crear la pestaña `Altas del sistema` y reemplazar la fórmula del master**,
-   que es donde ahora se escribe el alta. Son cinco pasos y **el orden importa**:
-   están en la sección siguiente, que es la que manda sobre esto.
-4. **Instalar `docs/compras-aviso-por-tiempo.gs`** y darle su activador por
-   tiempo. Es el que manda el mail de un pedido cargado en el sistema: una fila
-   escrita por la API no dispara el activador de *envío de formulario*. Sin él
-   el pedido entra igual, pero **nadie se entera por correo**. Barre **las dos
-   pestañas**, y esa es la parte que hay que mirar si alguna vez se toca: con la
-   mudanza del alta, un barrido de una sola hoja queda ciego justo para el caso
-   que lo motivó. Antes de crearle el activador, correr
+   que tome. **← LO ÚNICO QUE FALTA.** Es también lo único de esta lista que no
+   se puede comprobar desde afuera: lo que lo prueba es que `Altas del sistema`
+   deje de estar vacía.
+2. ~~**Editor para la cuenta de servicio** sobre esa planilla~~ **HECHO.**
+   Comprobado sin escribir, que es como conviene preguntarlo: Drive contesta
+   `capabilities.canEdit` de un archivo, y para `sheets-reader@mantenimientopp`
+   da `true` sobre las dos planillas. Intentar una escritura habría dado la
+   misma respuesta tocando producción.
+3. ~~**Crear la pestaña `Altas del sistema` y reemplazar la fórmula del
+   master**~~ **HECHO**, con el Apps Script de numeración ya reemplazado. El
+   detalle está en la sección siguiente.
+4. ~~**Instalar `docs/compras-aviso-por-tiempo.gs`** y darle su activador por
+   tiempo~~ **HECHO Y EJERCITADO.** Es el que manda el mail de un pedido cargado
+   en el sistema: una fila escrita por la API no dispara el activador de *envío
+   de formulario*. Sin él el pedido entra igual, pero **nadie se entera por
+   correo**. Lo primero que hizo al instalarse fue mandar el aviso de RI 1958
+   ("Correa B-60"), que se había perdido, y se comprueba en la planilla: su fila
+   1961 pasó de tener la columna `M` vacía a tener las direcciones de Almacén.
+   La fila 1969 —RI 1959, el alta vieja— quedó afuera por tener más de `DIAS`
+   días, que es el freno funcionando, no un fallo.
+
+   Barre **las dos pestañas**, y esa es la parte que hay que mirar si alguna vez
+   se toca: con la mudanza del alta, un barrido de una sola hoja queda ciego
+   justo para el caso que lo motivó. Antes de crearle el activador, correr
    `revisarPendientesDeAviso()`, que no manda nada y dice a quién le llegaría.
 
 ## Mudar el alta a su propia pestaña (11/09/2026) — HECHO
@@ -624,6 +636,14 @@ falta. Queda una sola comprobación, y es la que ningún agente puede hacer:
 > correcto no alcanza como prueba: la fórmula vieja también lo muestra, y es
 > justo la que se quiere reemplazar. Está en el paso 4 de la instalación del
 > `.gs`.
+>
+> Lo que **sí** quedó probado el 11/09/2026 es que el archivo nuevo está en el
+> proyecto y autorizado: `numerarUltimaFila()` contestó *"Fila 1969: NO LA TOCO.
+> Ya tiene el N° 1959 y esto le escribiría 1967"*. Ese mensaje es de la guarda
+> que se agregó ese día, así que no lo puede dar la versión vieja — y de paso
+> deja escrito que la última fila con marca temporal **ya no es** la última
+> respuesta. Lo que falta probar es lo otro: que cuenta las dos pestañas, y eso
+> recién se ve cuando `Altas del sistema` tenga una fila.
 
 **Van en este orden**, y no es capricho: el paso 2 antes que el 1 puede repartir
 un número repetido.
