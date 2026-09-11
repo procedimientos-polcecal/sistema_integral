@@ -153,14 +153,20 @@ p(`| En PEDIDO con proveedor y costo cargado | ${pedibles.length} |`);
 p(`| **Pueden generar orden hoy** | **${pedibles.filter((r) => { const q = r.paga_ambas ? empresas : r.empresa_id ? [r.empresa_id] : []; return q.length > 0 && q.every((e) => clave.has(`${r.proveedor_id}|${e}`)); }).length}** |`);
 p(`| Trabados por el proveedor | ${pedibles.length - pedibles.filter((r) => { const q = r.paga_ambas ? empresas : r.empresa_id ? [r.empresa_id] : []; return q.length > 0 && q.every((e) => clave.has(`${r.proveedor_id}|${e}`)); }).length} |`);
 p();
-p(`## 1. Tres CUIT duplicados en el padrón del SdG — ${riDup} RI, y se arregla en cinco ediciones`);
+p(`## 1. CUIT duplicados dentro del padrón del SdG — ${duplicados.length}, ${riDup} RI`);
 p();
-p("Es lo más barato que hay. El cruce **no enlaza un CUIT que aparece dos veces en el");
-p("SdG**, y con razón: dos filas apuntando al mismo partner no se sabe después cuál es");
-p("cuál. Pero acá el duplicado es siempre el mismo caso — una **persona** cargada con el");
-p("CUIT de la empresa para la que trabaja — y ninguna de esas personas tiene un solo");
-p("pedido. Sacándoles el CUIT (o borrándolas, si no se usan), el cruce las enlaza solo.");
+p("El cruce **no enlaza un CUIT que aparece dos veces en el SdG**, y con razón: dos");
+p("filas apuntando al mismo partner después no se sabe cuál es cuál. El caso típico es");
+p("una **persona** cargada con el CUIT de la empresa para la que trabaja; sacándole el");
+p("CUIT a la persona, el cruce enlaza la empresa solo.");
 p();
+if (!duplicados.length) {
+  p("**Ninguno hoy.** El 11/09/2026 eran tres y trababan 135 pedidos —`Diego Guarrochena`");
+  p("con el CUIT de *Todo Ruleman*, `Gimena Trackmar` con el de *Track Mar*, y tres Priola");
+  p("con el de *Zito y Priola*—. Se les sacó el CUIT y quedaron enlazadas las dos empresas");
+  p("con pedidos; los ids de partner se verificaron contra producción antes de escribirlos.");
+  p();
+}
 for (const d of duplicados) {
   p(`### CUIT ${d.cuit} — ${d.ri} RI`);
   p();

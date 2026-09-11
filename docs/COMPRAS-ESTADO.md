@@ -771,27 +771,32 @@ No es de agente: escribe en la planilla de producción.
 ## Lo que traba las órdenes de compra no es el cruce, son los datos
 
 Medido el 11/09/2026: de **1.682** RI en PEDIDO con proveedor y costo cargado,
-**1.170 pueden generar su orden** y **512 no**, porque su proveedor no tiene
-partner de Odoo. Y correr el botón de enlazar de `/compras/configuracion` **no
-cambia nada**: las 209 filas que se deducen por CUIT ya están escritas. Lo que
-falta es dato.
+**1.305 pueden generar su orden** y **377 no**, porque su proveedor no tiene
+partner de Odoo. Y el botón de enlazar de `/compras/configuracion` **no cambia
+nada**: las filas que se deducen por CUIT ya están todas escritas. Lo que falta
+es dato.
 
-Son tres causas, y la primera es casi gratis:
+**Los duplicados ya se arreglaron, y valieron 135 pedidos.** El cruce no enlaza
+un CUIT que aparece dos veces en el padrón del SdG —dos filas apuntando al mismo
+partner después no se sabe cuál es cuál—, y había tres casos, todos iguales: una
+**persona** cargada con el CUIT de la empresa para la que trabaja.
+`Diego Guarrochena` llevaba el de *Todo Ruleman* (88 RI trabados),
+`Gimena Trackmar` el de *Track Mar* (47), y tres Priola el de *Zito y Priola*.
+Ninguna tenía un solo pedido. Se les vació el CUIT y el cruce enlazó las dos
+empresas solo: 1.170 → 1.305. **Los cuatro ids de partner se verificaron contra
+producción antes de escribirlos** — lo que se lee con las credenciales de
+`.env.local` es staging, una copia del 03/09, y un id que allá es otro proveedor
+manda la orden al CUIT equivocado sin que nada avise.
 
-- **135 RI trabados por tres CUIT duplicados dentro del padrón del SdG.** El
-  cruce no enlaza un CUIT que aparece dos veces —dos filas apuntando al mismo
-  partner después no se sabe cuál es cuál—, y el duplicado es siempre una
-  **persona** cargada con el CUIT de la empresa para la que trabaja:
-  `Diego Guarrochena` con el de *Todo Ruleman* (88 RI), `Gimena Trackmar` con el
-  de *Track Mar* (47 RI), y tres Priola con el de *Zito y Priola*. Ninguna de
-  esas personas tiene un solo pedido. Sacándoles el CUIT, el cruce las enlaza
-  solo.
-- **148 proveedores sin CUIT**, 88 de ellos con pedidos. Es la causa grande y no
-  se arregla cruzando: sin CUIT no hay por dónde. De 52 hay un candidato claro en
-  Odoo del que se puede copiar el CUIT.
+Lo que queda:
+
+- **153 proveedores sin CUIT**, 88 con pedidos. Es la causa grande y no se
+  arregla cruzando: sin CUIT no hay por dónde. De 52 hay un candidato claro en
+  Odoo del que copiar el CUIT (259 RI).
 - **16 RI de pedidos AMBAS** cuyo proveedor está en una sola de las dos empresas.
+- 15 proveedores con CUIT que no están en Odoo, **ninguno con pedidos hoy**.
 
-El detalle, proveedor por proveedor y con los candidatos de Odoo, está en
+El detalle, proveedor por proveedor y con los candidatos, está en
 [COMPRAS-PROVEEDORES-ODOO.md](COMPRAS-PROVEEDORES-ODOO.md), que lo regenera
 `npx tsx scripts/cruce-proveedores.mts` sin escribir en ninguna base.
 

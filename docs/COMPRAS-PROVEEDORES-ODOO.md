@@ -19,40 +19,22 @@ sale de arreglar los datos. Son tres cosas, y la primera es barata.
 | | RI |
 |---|---|
 | En PEDIDO con proveedor y costo cargado | 1682 |
-| **Pueden generar orden hoy** | **1170** |
-| Trabados por el proveedor | 512 |
+| **Pueden generar orden hoy** | **1305** |
+| Trabados por el proveedor | 377 |
 
-## 1. Tres CUIT duplicados en el padrón del SdG — 135 RI, y se arregla en cinco ediciones
+## 1. CUIT duplicados dentro del padrón del SdG — 0, 0 RI
 
-Es lo más barato que hay. El cruce **no enlaza un CUIT que aparece dos veces en el
-SdG**, y con razón: dos filas apuntando al mismo partner no se sabe después cuál es
-cuál. Pero acá el duplicado es siempre el mismo caso — una **persona** cargada con el
-CUIT de la empresa para la que trabaja — y ninguna de esas personas tiene un solo
-pedido. Sacándoles el CUIT (o borrándolas, si no se usan), el cruce las enlaza solo.
+El cruce **no enlaza un CUIT que aparece dos veces en el SdG**, y con razón: dos
+filas apuntando al mismo partner después no se sabe cuál es cuál. El caso típico es
+una **persona** cargada con el CUIT de la empresa para la que trabaja; sacándole el
+CUIT a la persona, el cruce enlaza la empresa solo.
 
-### CUIT 30590139072 — 88 RI
+**Ninguno hoy.** El 11/09/2026 eran tres y trababan 135 pedidos —`Diego Guarrochena`
+con el CUIT de *Todo Ruleman*, `Gimena Trackmar` con el de *Track Mar*, y tres Priola
+con el de *Zito y Priola*—. Se les sacó el CUIT y quedaron enlazadas las dos empresas
+con pedidos; los ids de partner se verificaron contra producción antes de escribirlos.
 
-- SdG: **Todo Ruleman** — 88 RI en PEDIDO
-- SdG: **Diego Guarrochena** — 0 RI en PEDIDO
-- Odoo: `#2287` TODO RULEMAN 7400 S. A. — Polysan S.A
-- Odoo: `#1037` TODO RULEMAN 7400 S. A. — Polcecal S.A
-
-### CUIT 30563044914 — 47 RI
-
-- SdG: **Track Mar** — 47 RI en PEDIDO
-- SdG: **Gimena Trackmar** — 0 RI en PEDIDO
-- Odoo: `#1040` TRACK MAR SACI — Polcecal S.A
-- Odoo: `#2152` TRACK MAR SACI — Polysan S.A
-
-### CUIT 30711820279 — 0 RI
-
-- SdG: **David Priola** — 0 RI en PEDIDO
-- SdG: **Gustavo Priola** — 0 RI en PEDIDO
-- SdG: **Marcelo Priola** — 0 RI en PEDIDO
-- Odoo: `#1059` ZITO Y PRIOLA S.R.L. — Polcecal S.A
-- Odoo: `#2325` ZITO Y PRIOLA SRL — Polysan S.A
-
-## 2. 148 proveedores sin CUIT en el SdG — 355 RI
+## 2. 153 proveedores sin CUIT en el SdG — 355 RI
 
 Es la causa grande, y no se arregla cruzando: **sin CUIT no hay por dónde**. Lo que
 sí se puede es proponer, y que alguien confirme. Abajo, cada proveedor con los
