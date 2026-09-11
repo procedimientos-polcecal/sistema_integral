@@ -61,8 +61,6 @@ export default function BochonClient({
     voladura_codigo: tx(bochon.voladura_codigo),
     fecha_voladura: tx(bochon.fecha_voladura),
     cantidad: s(bochon.cantidad),
-    inicio: tx(bochon.inicio),
-    fin: tx(bochon.fin),
     metros_perforados: s(bochon.metros_perforados),
     precio_usd_m: s(bochon.precio_usd_m),
     tc_usd: s(bochon.tc_usd),
@@ -123,8 +121,6 @@ export default function BochonClient({
           <Campo label="Voladura asociada" value={f.voladura_codigo} onChange={set("voladura_codigo")} disabled={dis} mono />
           <Campo label="Fecha de voladura" type="date" value={f.fecha_voladura} onChange={set("fecha_voladura")} disabled={dis} />
           <Campo label="Cantidad de bochones" value={f.cantidad} onChange={set("cantidad")} disabled={dis} />
-          <Campo label="Inicio perforación" type="date" value={f.inicio} onChange={set("inicio")} disabled={dis} />
-          <Campo label="Fin perforación" type="date" value={f.fin} onChange={set("fin")} disabled={dis} />
           <Campo label="Metros perforados" value={f.metros_perforados} onChange={set("metros_perforados")} disabled={dis} />
           <Campo label="Precio USD/m" value={f.precio_usd_m} onChange={set("precio_usd_m")} disabled={dis} />
           <Campo label="TC USD ($/USD)" value={f.tc_usd} onChange={set("tc_usd")} disabled={dis} />

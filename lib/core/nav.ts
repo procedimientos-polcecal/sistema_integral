@@ -226,6 +226,7 @@ export const NAV: NavItem[] = [
     // sin conciliar. Los catálogos y el informe se miran después, no durante.
     children: [
       { label: "Por yacimiento", href: "/cantera", modulo: "cantera" },
+      { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
     ],
