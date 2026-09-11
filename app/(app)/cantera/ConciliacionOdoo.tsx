@@ -19,6 +19,8 @@ import { cruce } from "@/lib/cantera/costos";
 interface FacturaOdoo {
   id: number;
   name: string;
+  /** El número real ("FC A 0002-00002979"), no el interno de Odoo. */
+  numero: string;
   ref: string | null;
   fecha: string | null;
   empresa: string;
@@ -179,9 +181,7 @@ export default function ConciliacionOdoo({
                 <option value="">— elegir factura —</option>
                 {candidatas.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {/* El número real (`ref`, "0001-00000394") casi nunca está */}
-                    {/* cargado en Odoo: cuando falta, se ve el interno de Odoo. */}
-                    {f.proveedor} · {f.ref || f.name} · $ {ars.format(f.importeNeto)}
+                    {f.proveedor} · {f.numero} · $ {ars.format(f.importeNeto)}
                     {f.fecha ? ` · ${f.fecha}` : ""}
                   </option>
                 ))}
@@ -200,13 +200,13 @@ export default function ConciliacionOdoo({
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="text-xs text-slate-600">
-          Nro. de factura del proveedor
+          Nro. de factura <span className="text-slate-400">(se completa solo al vincular; editable)</span>
           <input
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
             onBlur={() => ref !== (vinculado.ref ?? "") && patch({ ref })}
-            placeholder="casi siempre vacío en Odoo"
+            placeholder="FC A 0002-00002979"
           />
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-600">

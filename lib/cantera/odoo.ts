@@ -12,7 +12,14 @@ export interface FacturaOdoo {
   id: number;
   /** La secuencia interna de Odoo ("BILL/2026/08/0204"), no el número de papel del proveedor. */
   name: string;
-  /** Casi siempre vacío: el proveedor no lo carga en `ref`. Se guarda igual por si acaso. */
+  /**
+   * El número real de la factura ("FC A 0002-00002979"): NO viaja en `ref`
+   * —ahí casi nunca está cargado, 2 de 135 medido en los contratistas de
+   * cantera— sino en `display_name`, que es lo que arma Odoo para mostrar en
+   * la columna "Número" de la lista de facturas y que sí está en las 135.
+   */
+  numero: string;
+  /** El campo "Referencia" de Odoo. Casi siempre vacío; se guarda por si acaso. */
   ref: string | null;
   fecha: string | null;
   empresa: string;
@@ -25,6 +32,7 @@ export interface FacturaOdoo {
 interface FilaCruda {
   id: number;
   name: string;
+  display_name: string;
   ref: string | false;
   invoice_date: string | false;
   amount_untaxed: number;
@@ -41,7 +49,7 @@ function nombreDeEmpresa(valor: unknown): string {
   return n || "?";
 }
 
-const CAMPOS = ["name", "ref", "invoice_date", "amount_untaxed", "amount_total", "company_id", "partner_id"];
+const CAMPOS = ["name", "display_name", "ref", "invoice_date", "amount_untaxed", "amount_total", "company_id", "partner_id"];
 
 /**
  * Las facturas de proveedor (`in_invoice`, posteadas) de una lista de
@@ -76,6 +84,7 @@ function aFacturaOdoo(f: FilaCruda): FacturaOdoo {
   return {
     id: f.id,
     name: f.name,
+    numero: f.display_name || f.name,
     ref: f.ref || null,
     fecha: f.invoice_date || null,
     empresa: nombreDeEmpresa(f.company_id),

@@ -81,10 +81,10 @@ export async function PATCH(
       }
       cambios.odoo_move_id = factura.id;
       cambios.odoo_move_name = factura.name;
-      // Igual que en voladuras: el número real de la factura viaja en `ref`
-      // de Odoo, y ahí casi nunca está cargado — se prellena cuando existe,
-      // y si no, finanzas lo tipea a mano en el campo de más abajo.
-      cambios.odoo_ref = factura.ref;
+      // Igual que en voladuras: el número real ("FC A 0002-00002979") es
+      // `factura.numero` (`display_name` de Odoo), no `ref` — `ref` es el
+      // campo "Referencia" y casi nunca está cargado.
+      cambios.odoo_ref = factura.numero;
       cambios.odoo_empresa = factura.empresa;
       cambios.odoo_importe = factura.importeNeto;
       cambios.odoo_leido_en = new Date().toISOString();
