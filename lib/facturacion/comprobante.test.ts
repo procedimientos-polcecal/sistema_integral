@@ -8,7 +8,6 @@ import {
   nombreDelComprobante,
   nombreDelTipo,
   numeroFormateado,
-  referenciaParaOdoo,
 } from "./comprobante";
 
 describe("cómo se nombra un comprobante", () => {
@@ -109,6 +108,8 @@ describe("la letra del comprobante", () => {
   });
 
   it("todo comprobante con nombre tiene letra: las dos tablas no se separan", () => {
+    // El nombre es para la pantalla y la letra decide el IVA del borrador. Que
+    // una tabla crezca y la otra no dejaría facturas sin impuesto en silencio.
     for (const codigo of Object.keys(TIPOS_DE_COMPROBANTE).map(Number)) {
       expect(letraDelComprobante(codigo), String(codigo)).not.toBeNull();
     }
@@ -127,29 +128,5 @@ describe("si el comprobante discrimina IVA", () => {
   it("ante un tipo desconocido no inventa un crédito fiscal", () => {
     expect(discriminaIva(88)).toBe(false);
     expect(discriminaIva(null)).toBe(false);
-  });
-});
-
-describe("la referencia con la que la factura se escribe en Odoo", () => {
-  it("usa la sigla que ya escribe administración y el punto de venta en cinco dígitos", () => {
-    expect(referenciaParaOdoo({ tipoComprobante: 1, puntoVenta: 6, numero: 10192 })).toBe(
-      "FC A 00006-00010192"
-    );
-    expect(referenciaParaOdoo({ tipoComprobante: 3, puntoVenta: 8, numero: 3715 })).toBe(
-      "NC A 00008-00003715"
-    );
-    expect(referenciaParaOdoo({ tipoComprobante: 201, puntoVenta: 8, numero: 273 })).toBe(
-      "FCE A 00008-00000273"
-    );
-  });
-
-  it("un tipo desconocido deja el número solo, sin inventarle sigla", () => {
-    expect(referenciaParaOdoo({ tipoComprobante: 88, puntoVenta: 6, numero: 10192 })).toBe(
-      "00006-00010192"
-    );
-  });
-
-  it("sin número no hay referencia", () => {
-    expect(referenciaParaOdoo({ tipoComprobante: 1, puntoVenta: null, numero: 10192 })).toBeNull();
   });
 });

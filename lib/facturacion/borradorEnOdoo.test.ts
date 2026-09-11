@@ -13,6 +13,8 @@ const CONTEXTO = {
   diarioId: 11,
   impuestoId: 4,
   monedaId: 19,
+  // `voucher.type` id 1 = code 1 = FACTURAS A, que es el código de ARCA del QR.
+  voucherTypeId: 1,
 };
 
 const FACTURA: DatosParaElBorrador = {
@@ -59,6 +61,8 @@ describe("el borrador de factura que se crea en Odoo", () => {
   });
 
   it("un tipo de comprobante desconocido no inventa impuesto", () => {
+    // Llega hasta acá sólo si Odoo conoce el código aunque el SdG no le sepa la
+    // letra. Sin letra no hay IVA: el borrador sale por el total.
     expect(armar({ tipo_comprobante: 88 }).neto).toBe(95080.59);
   });
 
@@ -68,8 +72,13 @@ describe("el borrador de factura que se crea en Odoo", () => {
     expect(linea(borrador).tax_ids).toEqual([[6, 0, []]]);
   });
 
-  it("la referencia es el número del comprobante, que es lo único que lo identifica en Odoo", () => {
-    expect(armar().vals.ref).toBe("FC A 00006-00010192");
+  it("el número va en su campo propio, con cuatro y ocho dígitos", () => {
+    expect(armar().vals.voucher_name).toBe("0006-00010192");
+    expect(armar().vals.voucher_type_id).toBe(1);
+  });
+
+  it("no toca `ref`: ahí administración escribe sus notas", () => {
+    expect(armar().vals).not.toHaveProperty("ref");
   });
 
   it("una nota de crédito es un in_refund", () => {
@@ -130,12 +139,23 @@ describe("lo que impide armar el borrador", () => {
     if (!r.ok) expect(r.problemas[0]).toContain("identifica");
   });
 
+  /*
+   * Éste lo enseñó Odoo, no el diseño: un borrador sin tipo de comprobante se
+   * crea igual y muere al postearlo con "El documento no tiene numero!". O sea
+   * que quedaría un borrador trabado que alguien tiene que descubrir.
+   */
+  it("sin tipo de comprobante no se manda: el borrador no se podría postear", () => {
+    const r = armarBorradorDeFactura(FACTURA, { ...CONTEXTO, voucherTypeId: null });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.problemas[0]).toContain("postear");
+  });
+
   it("junta todos los motivos en vez de contar el primero", () => {
     const r = armarBorradorDeFactura(
       { ...FACTURA, fecha: null, importe_total: null, numero: null },
-      CONTEXTO
+      { ...CONTEXTO, voucherTypeId: null }
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.problemas).toHaveLength(3);
+    if (!r.ok) expect(r.problemas).toHaveLength(4);
   });
 });

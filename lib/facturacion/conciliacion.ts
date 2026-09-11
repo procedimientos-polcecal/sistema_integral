@@ -3,32 +3,41 @@ import { normalizarCuit } from "@/lib/core/cuit";
 /**
  * Reconocer en Odoo la factura que ya está en el buzón.
  *
- * Es "cerrar el círculo": hoy alguien aprieta **Ya está en Odoo** y el sistema
- * le cree. Esto lo averigua.
+ * Es "cerrar el círculo": hasta ahora alguien apretaba **Ya está en Odoo** y el
+ * sistema le creía. Esto lo averigua.
  *
- * ## Por qué se concilia por el número y no por el importe
+ * ## De dónde sale el número, medido sobre las 6.423 facturas de la instancia
  *
- * Medido sobre las 6.423 facturas de proveedor de la instancia (11/09/2026):
+ * El Odoo del grupo tiene una localización argentina propia (`odoo_l10n_ar`), y
+ * ahí el comprobante tiene campos de verdad:
  *
- * - **Odoo no tiene la localización argentina instalada.** El `name` de una
- *   factura de proveedor es `BILL/2026/09/0004`, una secuencia interna que no
- *   tiene nada que ver con el comprobante. El número fiscal, cuando está, está
- *   en `ref`.
- * - **`ref` está escrito a mano y a mano no hay formato**: `FC A 00008-00003715`,
- *   `FC   A 00008-00003738`, `FC A - 00008-00003683`, y muy seguido **varios
- *   comprobantes en una sola factura de Odoo** (321 de 1.147 referencias). Por
- *   eso se extraen *todos* los pares que aparezcan y una factura de Odoo puede
- *   quedar vinculada a varias del buzón: eso no es un error, es lo que hicieron.
- * - **El trío (proveedor, fecha, importe) no alcanza.** Repite en el 1,4% de las
- *   facturas de 2026; sin la fecha, en el 14,5%. Un 1,4% de enlaces mudos y
- *   equivocados es exactamente lo que este sistema no hace: *enlazar al que se
- *   le parece es peor que dejar en null*, porque un enlace equivocado no se nota
- *   nunca.
+ * - **`voucher_name`** — el número, `0006-00010192`. Está en **6.412 de 6.423
+ *   (99,8%)**, y en **todas** las posteadas: la localización no deja postear sin
+ *   él.
+ * - **`voucher_type_id`** — el tipo, cuyo `code` es el número de ARCA. El mismo
+ *   que trae el QR.
  *
- * Entonces la conciliación automática pide **las dos cosas**: que el CUIT del
- * emisor sea el del proveedor de la factura de Odoo, y que el par
- * (punto de venta, número) aparezca en su referencia. Lo que no cumple eso queda
- * para que lo mire una persona, con los candidatos servidos.
+ * El `name` (`BILL/2026/09/0004`) es una secuencia interna que no tiene nada que
+ * ver con el papel, y mientras está en borrador es `/`: nunca sirve para
+ * reconocer un comprobante.
+ *
+ * ## Por qué la referencia es sólo un respaldo
+ *
+ * `ref` es texto libre donde administración escribe notas: `FC A 00008-00003715`
+ * pero también `REMITOS MEMBRANEX` o `YA PAGADA EN EFECTIVO`. Está en el 24% de
+ * las facturas, mezcla varios comprobantes en una (321 de 1.147 referencias) y
+ * **repite el mismo número en asientos distintos** — `FC A 00008-00003291`
+ * figura en seis facturas de RUBIALES, con seis importes y seis fechas—. Sirve
+ * para las 11 facturas sin `voucher_name`, y nada más: cuando hay alguna
+ * coincidencia por el campo propio, las de la referencia se descartan.
+ *
+ * ## Por qué nunca por el importe
+ *
+ * El trío (proveedor, fecha, importe) repite en el 1,4% de las facturas de 2026;
+ * sin la fecha, en el 14,5%. Un 1,4% de enlaces mudos y equivocados es
+ * exactamente lo que este sistema no hace: *enlazar al que se le parece es peor
+ * que dejar en null*, y acá menos que en ningún lado — la factura aparecería
+ * como contabilizada y nadie volvería a mirarla.
  */
 
 export interface NumeroDeComprobante {
@@ -36,17 +45,27 @@ export interface NumeroDeComprobante {
   numero: number;
 }
 
+/** `0006-00010192` → `{ puntoVenta: 6, numero: 10192 }`. */
+export function numeroDelVoucher(
+  voucherName: string | null | undefined
+): NumeroDeComprobante | null {
+  if (!voucherName) return null;
+  const m = String(voucherName).trim().match(/^(\d{1,5})\s*-\s*(\d{1,10})$/);
+  if (!m) return null;
+  return { puntoVenta: Number(m[1]), numero: Number(m[2]) };
+}
+
 /**
- * Los números de comprobante que aparecen en una referencia de Odoo.
+ * Los números de comprobante que aparecen en una referencia de texto libre.
  *
  * El patrón es deliberadamente ancho —`punto de venta - número`, con o sin
- * espacios— porque el corpus real lo es. Contra las 1.147 referencias cargadas
- * encuentra número en el 96,5%; el 3,5% que no son texto libre que nunca fue un
- * número (`REMITOS MEMBRANEX`, `YA PAGADA EN EFECTIVO`).
+ * espacios— porque el corpus real lo es: `FC   A 00008-00003738`,
+ * `FC A - 00008-00003683 - FC A - 00008-00003691`. Contra las 1.147 referencias
+ * cargadas encuentra número en el 96,5%; el 3,5% restante es texto que nunca fue
+ * un número.
  *
- * Se devuelven como enteros a propósito: el punto de venta está escrito con
- * cuatro dígitos en 214 casos y con cinco en 1.745, y `00006` y `0006` son el
- * mismo punto de venta.
+ * Devuelve enteros a propósito: el punto de venta está escrito con cuatro
+ * dígitos en 214 casos y con cinco en 1.745, y `00006` y `0006` son el mismo.
  */
 export function numerosDeLaReferencia(ref: string | null | undefined): NumeroDeComprobante[] {
   if (!ref) return [];
@@ -66,6 +85,11 @@ export function numerosDeLaReferencia(ref: string | null | undefined): NumeroDeC
 /** Una factura de proveedor de Odoo, con lo que hace falta para reconocerla. */
 export interface MovimientoDeOdoo {
   id: number;
+  /** `voucher_name`: el número del comprobante, en su campo propio. */
+  voucherName: string | null;
+  /** `voucher_type_id.code`: el tipo de comprobante, en código de ARCA. */
+  voucherCodigo: number | null;
+  /** `ref`: texto libre. Sólo se mira si no hay `voucherName`. */
   ref: string | null;
   /** El CUIT del `res.partner`, como venga: se normaliza acá. */
   cuitDelPartner: string | null;
@@ -82,6 +106,7 @@ export interface MovimientoDeOdoo {
 export interface FacturaParaConciliar {
   id: string;
   cuit_emisor: string | null;
+  tipo_comprobante: number | null;
   punto_venta: number | null;
   numero: number | null;
   importe_total: number | null;
@@ -94,6 +119,8 @@ export interface VinculoEncontrado {
   odooMoveId: number;
   odooNombre: string | null;
   odooEstado: string;
+  /** Por dónde se lo reconoció: el campo propio o la referencia de texto libre. */
+  por: "numero" | "referencia";
   /** Un aviso cuando el enlace es seguro pero algo no cuadra. */
   aviso: string | null;
 }
@@ -110,21 +137,26 @@ function mismoCuit(a: string | null, b: string | null): boolean {
   return x !== null && x === y;
 }
 
+function esLaMisma(n: NumeroDeComprobante, f: FacturaParaConciliar): boolean {
+  return n.puntoVenta === f.punto_venta && n.numero === f.numero;
+}
+
 /**
  * Qué facturas del buzón están en Odoo, con certeza.
  *
  * Nunca devuelve un enlace dudoso: si dos facturas de Odoo reclaman la misma del
  * buzón, la factura queda sin vincular y se informa. Es el caso raro —una
- * recarga, una factura anulada y vuelta a cargar— pero es justo el caso donde
- * elegir una al azar deja el importe contado dos veces.
+ * recarga, una factura anulada y vuelta a cargar— pero es justo donde elegir una
+ * al azar deja el importe contado dos veces.
  */
 export function conciliar(
   facturas: FacturaParaConciliar[],
   movimientos: MovimientoDeOdoo[]
 ): ResultadoDeLaConciliacion {
-  const numerosPorMovimiento = movimientos.map((m) => ({
+  const analizados = movimientos.map((m) => ({
     movimiento: m,
-    numeros: numerosDeLaReferencia(m.ref),
+    voucher: numeroDelVoucher(m.voucherName),
+    referencia: numerosDeLaReferencia(m.ref),
   }));
 
   const vinculos: VinculoEncontrado[] = [];
@@ -133,24 +165,43 @@ export function conciliar(
   for (const factura of facturas) {
     if (factura.punto_venta === null || factura.numero === null) continue;
 
-    const candidatos = numerosPorMovimiento.filter(({ movimiento, numeros }) => {
+    const delMismoProveedor = analizados.filter(({ movimiento }) => {
       if (!mismoCuit(factura.cuit_emisor, movimiento.cuitDelPartner)) return false;
       /*
        * La empresa tiene que coincidir cuando las dos se conocen. Una factura a
        * nombre de POLCECAL enlazada a un asiento de POLYSAN sería un enlace
        * correcto en apariencia y una contabilidad equivocada.
        */
-      if (
-        factura.empresaOdoo !== null &&
-        movimiento.empresaOdoo !== null &&
-        factura.empresaOdoo !== movimiento.empresaOdoo
-      ) {
-        return false;
-      }
-      return numeros.some(
-        (n) => n.puntoVenta === factura.punto_venta && n.numero === factura.numero
+      return (
+        factura.empresaOdoo === null ||
+        movimiento.empresaOdoo === null ||
+        factura.empresaOdoo === movimiento.empresaOdoo
       );
     });
+
+    /*
+     * Primero el campo propio. Si además los dos saben qué tipo de comprobante
+     * son, tienen que ser el mismo: una nota de crédito y la factura que revierte
+     * pueden llevar el mismo número, y son documentos distintos.
+     */
+    let por: VinculoEncontrado["por"] = "numero";
+    let candidatos = delMismoProveedor.filter(
+      ({ voucher, movimiento }) =>
+        voucher !== null &&
+        esLaMisma(voucher, factura) &&
+        (movimiento.voucherCodigo === null ||
+          factura.tipo_comprobante === null ||
+          movimiento.voucherCodigo === factura.tipo_comprobante)
+    );
+
+    // Y sólo si no hubo ninguna, la referencia de texto libre.
+    if (candidatos.length === 0) {
+      por = "referencia";
+      candidatos = delMismoProveedor.filter(
+        ({ voucher, referencia }) =>
+          voucher === null && referencia.some((n) => esLaMisma(n, factura))
+      );
+    }
 
     if (candidatos.length === 0) continue;
 
@@ -159,15 +210,17 @@ export function conciliar(
       continue;
     }
 
-    const { movimiento, numeros } = candidatos[0];
+    const { movimiento, voucher, referencia } = candidatos[0];
 
     /*
-     * El importe sólo se compara cuando la factura de Odoo cubre **un solo**
-     * comprobante. Cuando agrupa varios —que es lo que hacen con Rubiales, Bax o
-     * Sandoval— el total es la suma y que no coincida es lo esperado.
+     * El importe sólo se compara cuando el asiento cubre **un solo**
+     * comprobante. Cuando agrupa varios en la referencia —que es lo que hacen con
+     * Rubiales, Bax o Sandoval— el total es la suma y que no coincida es lo
+     * esperado.
      */
+    const cubreUnoSolo = voucher !== null || referencia.length === 1;
     const aviso =
-      numeros.length === 1 &&
+      cubreUnoSolo &&
       factura.importe_total !== null &&
       Math.abs(Math.abs(movimiento.importeTotal) - Math.abs(factura.importe_total)) > 0.01
         ? `En Odoo figura por ${movimiento.importeTotal} y el comprobante dice ${factura.importe_total}.`
@@ -178,6 +231,7 @@ export function conciliar(
       odooMoveId: movimiento.id,
       odooNombre: movimiento.nombre,
       odooEstado: movimiento.estado,
+      por,
       aviso,
     });
   }

@@ -1,4 +1,4 @@
-import { discriminaIva, esNotaDeCredito, nombreDelComprobante, referenciaParaOdoo } from "./comprobante";
+import { discriminaIva, esNotaDeCredito, nombreDelComprobante, numeroFormateado } from "./comprobante";
 
 /**
  * Armar el borrador de factura de proveedor que se crea en Odoo.
@@ -11,29 +11,47 @@ import { discriminaIva, esNotaDeCredito, nombreDelComprobante, referenciaParaOdo
  * Acá no hay red: son los `vals` y nada más, para poder probarlos sin Odoo. El
  * viaje vive en `lib/odoo/pushFactura.ts`.
  *
- * ## Lo que midió esta instancia de Odoo, y que decide casi todo (11/09/2026)
+ * ## El Odoo del grupo tiene una localización argentina propia (11/09/2026)
  *
- * **No tiene instalada la localización argentina.** No existe
- * `l10n_latam.document.type` ni el campo del tipo de comprobante: para Odoo esto
- * es una factura de proveedor genérica. Entonces el número fiscal **no tiene
- * campo propio** y va donde el grupo ya lo escribe cuando lo escribe: en `ref`,
- * con el formato `FC A 00006-00010192`.
+ * No es la estándar —`l10n_latam.document.type` no existe— sino un juego de
+ * módulos propios (`odoo_l10n_ar`), y eso **decide todo lo de abajo**. Se
+ * descubrió de la peor manera útil: creando un borrador que se veía perfecto y
+ * que al postearlo murió con *"El documento no tiene numero!"*.
  *
- * Y lo escribe poco: de 6.423 facturas de proveedor, **sólo 1.554 (24%) tienen
- * `ref`**. Las otras 4.869 no dicen en ningún lado qué comprobante son. Que el
- * SdG lo complete siempre no es sólo para poder reconocer la factura después
- * —que es para lo que lo necesita la conciliación—: es un dato que hoy se pierde.
+ * Los campos que importan en `account.move`:
  *
- * **El total se reconstruye desde el total.** El QR trae el importe **con IVA**
- * y una línea de Odoo lleva el neto, así que el neto sale de dividir por 1,21.
- * Contra las 793 facturas A del grupo, eso reproduce el total **exacto en 785**
- * y en las 8 restantes queda a menos de dos centavos. No se esconde: el push
- * relee el total que quedó en Odoo y avisa si no coincide.
+ * | Campo | Qué es | Cargado en |
+ * |---|---|---|
+ * | `voucher_type_id` | El tipo de comprobante. Su `code` **es el número de ARCA**, el mismo que trae el QR | 6.414 de 6.423 |
+ * | `voucher_name` | El número, `0006-00010192` | 6.412 de 6.423 |
+ * | `full_voucher_name` | `FC A 0006-00010192`, que lo calcula Odoo | — |
  *
- * **El producto no hace falta.** A diferencia de `purchase.order.line` —que sí
- * lo exige por una restricción SQL—, una línea de `account.move` sin producto se
- * crea sin problema: Odoo le pone la cuenta de gasto que corresponda al
- * proveedor. Probado creando una factura de verdad en staging y borrándola.
+ * Dos consecuencias:
+ *
+ * 1. **Sin esos dos campos el borrador no se puede postear**, o sea que no sirve
+ *    de nada: contabilidad tendría que completarlo igual. Con ellos sí —probado
+ *    creando y posteando una factura de verdad en staging, y borrándola—.
+ * 2. **El número del comprobante tiene un campo propio y está en el 99,8% de las
+ *    facturas.** Por eso la conciliación cruza `voucher_name` y no la referencia
+ *    de texto libre, que está en el 24% y se repite.
+ *
+ * `ref` queda **sin tocar** a propósito: administración la usa para sus notas
+ * ("REMITOS MEMBRANEX", "YA PAGADA EN EFECTIVO") y pisarla sería sacarles un
+ * campo que ya usan para otra cosa.
+ *
+ * ## El total se reconstruye desde el total
+ *
+ * El QR trae el importe **con IVA** y una línea de Odoo lleva el neto, así que
+ * el neto sale de dividir por 1,21. Contra las 793 facturas A del grupo eso
+ * reproduce el total **exacto en 785** y en las 8 restantes queda a menos de dos
+ * centavos. No se esconde: el push relee el total que quedó en Odoo y avisa si
+ * no coincide.
+ *
+ * ## El producto no hace falta
+ *
+ * A diferencia de `purchase.order.line` —que sí lo exige por una restricción SQL
+ * del modelo—, una línea de `account.move` sin producto se crea sin problema:
+ * Odoo le pone la cuenta de gasto que corresponda al proveedor.
  */
 
 export interface DatosParaElBorrador {
@@ -55,6 +73,8 @@ export interface ContextoDelBorrador {
   impuestoId: number | null;
   /** `res.currency` de la moneda de la factura. */
   monedaId: number;
+  /** El `voucher.type` cuyo `code` es el tipo de comprobante del QR. */
+  voucherTypeId: number | null;
   /** El RI que la origina, para que la línea lo diga. */
   nroRi?: number | null;
 }
@@ -86,24 +106,33 @@ export function armarBorradorDeFactura(
   const problemas: string[] = [];
 
   /*
-   * Los tres datos sin los cuales el borrador no serviría de nada. Una factura
-   * sin fecha o sin importe entra igual al buzón —la entrada nunca se bloquea—,
-   * pero mandarla así a Odoo sería crear un borrador vacío que alguien tiene que
-   * completar igual, o sea el trabajo que este módulo vino a sacar.
+   * Los datos sin los cuales el borrador no serviría de nada. Una factura sin
+   * fecha o sin importe entra igual al buzón —la entrada nunca se bloquea—, pero
+   * mandarla así a Odoo sería crear un borrador que alguien tiene que completar
+   * igual, o sea el trabajo que este módulo vino a sacar.
    */
   if (!factura.fecha) problemas.push("La factura no tiene fecha: hay que completarla antes.");
 
   const total = Math.abs(Number(factura.importe_total ?? 0));
   if (!total) problemas.push("La factura no tiene importe: hay que completarlo antes.");
 
-  const referencia = referenciaParaOdoo({
-    tipoComprobante: factura.tipo_comprobante,
-    puntoVenta: factura.punto_venta,
-    numero: factura.numero,
-  });
-  if (!referencia) {
+  if (factura.punto_venta === null || factura.numero === null) {
     problemas.push(
       "La factura no tiene punto de venta y número, que es lo único que la identifica en Odoo."
+    );
+  }
+
+  /*
+   * Sin tipo de comprobante el borrador se crearía, pero **no se podría
+   * postear**: es la validación de la localización del grupo. Más vale decirlo
+   * acá que dejar un borrador trabado que alguien tiene que descubrir.
+   */
+  if (contexto.voucherTypeId === null) {
+    problemas.push(
+      factura.tipo_comprobante === null
+        ? "La factura no dice qué tipo de comprobante es, y Odoo no deja postear sin eso."
+        : `Odoo no tiene ningún tipo de comprobante con el código ${factura.tipo_comprobante}, ` +
+            `así que el borrador no se podría postear.`
     );
   }
 
@@ -143,7 +172,10 @@ export function armarBorradorDeFactura(
         journal_id: contexto.diarioId,
         currency_id: contexto.monedaId,
         invoice_date: factura.fecha,
-        ref: referencia,
+        voucher_type_id: contexto.voucherTypeId,
+        // Cuatro y ocho dígitos, que es como lo escribe el grupo y como sale
+        // impreso en el comprobante.
+        voucher_name: numeroFormateado(factura.punto_venta, factura.numero),
         invoice_line_ids: [
           [
             0,

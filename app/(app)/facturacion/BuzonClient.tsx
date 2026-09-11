@@ -848,6 +848,7 @@ function FilaDelBuzon({
                   <span className="text-slate-700">{c.nombre !== "/" ? c.nombre : "borrador"}</span>
                   <span className="text-slate-500">{c.fecha ?? "sin fecha"}</span>
                   <span className="text-slate-500">{plata(c.importeTotal)}</span>
+                  {c.numero && <span className="text-slate-600">{c.numero}</span>}
                   {c.referencia && <span className="text-slate-400">{c.referencia}</span>}
                   <button
                     disabled={ocupado}

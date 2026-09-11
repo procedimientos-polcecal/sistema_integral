@@ -5,6 +5,7 @@ import { normalizarCuit } from "@/lib/core/cuit";
 import {
   conciliar,
   estadoSegunOdoo,
+  numeroDelVoucher,
   numerosDeLaReferencia,
   type FacturaParaConciliar,
   type MovimientoDeOdoo,
@@ -53,6 +54,7 @@ export interface ResumenDeLaSincronizacion {
 interface FilaPendiente {
   id: string;
   cuit_emisor: string | null;
+  tipo_comprobante: number | null;
   punto_venta: number | null;
   numero: number | null;
   importe_total: number | null;
@@ -68,8 +70,18 @@ interface FilaPendiente {
  * además son dos empresas — traerlas una vez y buscar en un `Map` es menos
  * código que pelearse con el tipo del embed.
  */
-const SELECT =
-  "id, cuit_emisor, punto_venta, numero, importe_total, fecha, estado, odoo_move_id, empresa_id";
+
+/**
+ * Como se lo nombra en pantalla.
+ *
+ * Odoo numera al postear: mientras esta en borrador el `name` es "/", que no le
+ * dice nada a nadie. Ahi se muestra el numero del comprobante, que es lo que la
+ * persona tiene en la mano.
+ */
+function nombreParaMostrar(m: { name: string | null; full_voucher_name: string | false }): string | null {
+  if (m.name && m.name !== "/") return m.name;
+  return m.full_voucher_name || null;
+}
 
 function restarDias(fecha: string, dias: number): string {
   const d = new Date(`${fecha}T00:00:00Z`);
@@ -96,7 +108,11 @@ export async function sincronizarFacturasConOdoo(
   const abiertas = await traerTodo<FilaPendiente>((desde, hasta) =>
     admin
       .from("facturas_proveedor")
-      .select(SELECT)
+      // La cadena va literal: partida en una variable, Supabase pierde la
+      // inferencia de tipos y la fila vuelve como `GenericStringError`.
+      .select(
+        "id, cuit_emisor, tipo_comprobante, punto_venta, numero, importe_total, fecha, estado, odoo_move_id, empresa_id"
+      )
       .neq("estado", "contabilizada")
       .order("created_at", { ascending: true })
       .range(desde, hasta)
@@ -129,11 +145,9 @@ async function refrescarLasQueYaTienenVinculo(
   if (!conVinculo.length) return;
 
   const ids = [...new Set(conVinculo.map((f) => f.odoo_move_id!))];
-  const movimientos = await llamar<{ id: number; name: string | null; state: string }[]>(
-    "account.move",
-    "read",
-    [ids, ["name", "state"]]
-  );
+  const movimientos = await llamar<
+    { id: number; name: string | null; state: string; full_voucher_name: string | false }[]
+  >("account.move", "read", [ids, ["name", "state", "full_voucher_name"]]);
 
   const porId = new Map(movimientos.map((m) => [m.id, m]));
   const ahora = new Date().toISOString();
@@ -168,7 +182,8 @@ async function refrescarLasQueYaTienenVinculo(
     }
 
     const cambios: Record<string, unknown> = {
-      odoo_nombre: movimiento.name,
+      // En borrador el `name` es "/": ahi vale mas el numero del comprobante.
+      odoo_nombre: nombreParaMostrar(movimiento),
       odoo_estado: movimiento.state,
       odoo_sincronizado_en: ahora,
     };
@@ -233,12 +248,15 @@ async function buscarLasQueFaltan(
   const crudos = await buscarLeer<{
     id: number;
     ref: string | false;
+    voucher_name: string | false;
+    voucher_type_id: unknown;
+    full_voucher_name: string | false;
     partner_id: unknown;
     company_id: unknown;
     state: string;
     invoice_date: string | false;
     amount_total: number;
-    name: string | false;
+    name: string | null;
   }>(
     "account.move",
     [
@@ -247,24 +265,53 @@ async function buscarLasQueFaltan(
       ["partner_id", "in", [...vatPorPartner.keys()]],
       ["invoice_date", ">=", desde],
     ],
-    ["ref", "partner_id", "company_id", "state", "invoice_date", "amount_total", "name"],
+    [
+      "ref",
+      "voucher_name",
+      "voucher_type_id",
+      "full_voucher_name",
+      "partner_id",
+      "company_id",
+      "state",
+      "invoice_date",
+      "amount_total",
+      "name",
+    ],
     { limite: 3000, orden: "id desc" }
   );
 
+  /*
+   * El codigo de ARCA no viaja en el many2one -de ahi vienen id y nombre nada
+   * mas-, asi que los `voucher.type` que aparecieron se leen en una llamada
+   * aparte. Son 88 en total: no hay nada que paginar.
+   */
+  const tipoIds = [
+    ...new Set(
+      crudos.map((m) => idDeRelacion(m.voucher_type_id)).filter((x): x is number => x !== null)
+    ),
+  ];
+  const tipos = tipoIds.length
+    ? await llamar<{ id: number; code: number }[]>("voucher.type", "read", [tipoIds, ["code"]])
+    : [];
+  const codigoPorTipo = new Map(tipos.map((t) => [t.id, Number(t.code)]));
+
   const movimientos: MovimientoDeOdoo[] = crudos.map((m) => ({
     id: m.id,
+    voucherName: m.voucher_name || null,
+    voucherCodigo: codigoPorTipo.get(idDeRelacion(m.voucher_type_id) ?? -1) ?? null,
     ref: m.ref || null,
     cuitDelPartner: vatPorPartner.get(idDeRelacion(m.partner_id) ?? -1) ?? null,
     empresaOdoo: idDeRelacion(m.company_id),
     estado: m.state,
     fecha: m.invoice_date || null,
     importeTotal: Number(m.amount_total ?? 0),
-    nombre: m.name || null,
+    nombre: nombreParaMostrar(m),
   }));
 
   const paraConciliar: FacturaParaConciliar[] = sinVinculo.map((f) => ({
     id: f.id,
     cuit_emisor: f.cuit_emisor,
+    tipo_comprobante: f.tipo_comprobante,
     punto_venta: f.punto_venta,
     numero: f.numero,
     importe_total: f.importe_total,
@@ -282,7 +329,7 @@ async function buscarLasQueFaltan(
         odoo_move_id: vinculo.odooMoveId,
         odoo_nombre: vinculo.odooNombre,
         odoo_estado: vinculo.odooEstado,
-        odoo_conciliado_por: "numero",
+        odoo_conciliado_por: vinculo.por === "numero" ? "numero" : "referencia",
         odoo_pendiente: vinculo.aviso,
         odoo_sincronizado_en: ahora,
         ...(estado ? { estado } : {}),
@@ -307,6 +354,9 @@ async function buscarLasQueFaltan(
 export interface CandidatoDeOdoo {
   odooMoveId: number;
   nombre: string | null;
+  /** `voucher_name`: el número del comprobante, si lo tiene cargado. */
+  numero: string | null;
+  /** `ref`: el texto libre, que puede ser una nota y no un número. */
   referencia: string | null;
   fecha: string | null;
   importeTotal: number;
@@ -334,7 +384,7 @@ export async function candidatosEnOdoo(
 ): Promise<{ candidatos: CandidatoDeOdoo[]; motivo?: string }> {
   const { data } = await admin
     .from("facturas_proveedor")
-    .select("cuit_emisor, punto_venta, numero, importe_total, fecha")
+    .select("cuit_emisor, tipo_comprobante, punto_venta, numero, importe_total, fecha")
     .eq("id", facturaId)
     .maybeSingle();
 
@@ -358,8 +408,10 @@ export async function candidatosEnOdoo(
   const fecha = (data.fecha as string | null) ?? new Date().toISOString().slice(0, 10);
   const crudos = await buscarLeer<{
     id: number;
-    name: string | false;
+    name: string | null;
     ref: string | false;
+    voucher_name: string | false;
+    full_voucher_name: string | false;
     invoice_date: string | false;
     amount_total: number;
     state: string;
@@ -371,7 +423,7 @@ export async function candidatosEnOdoo(
       ["partner_id", "in", partners.map((p) => p.id)],
       ["invoice_date", ">=", restarDias(fecha, 120)],
     ],
-    ["name", "ref", "invoice_date", "amount_total", "state"],
+    ["name", "ref", "voucher_name", "full_voucher_name", "invoice_date", "amount_total", "state"],
     { limite: 60, orden: "invoice_date desc, id desc" }
   );
 
@@ -380,15 +432,18 @@ export async function candidatosEnOdoo(
   const numero = data.numero as number | null;
 
   const candidatos = crudos.map((m): CandidatoDeOdoo => {
-    const numeros = numerosDeLaReferencia(m.ref || null);
+    const propio = numeroDelVoucher(m.voucher_name || null);
+    const enLaReferencia = numerosDeLaReferencia(m.ref || null);
+    const esElNumero = (n: { puntoVenta: number; numero: number }) =>
+      puntoVenta !== null && numero !== null && n.puntoVenta === puntoVenta && n.numero === numero;
+
     const porNumero =
-      puntoVenta !== null &&
-      numero !== null &&
-      numeros.some((n) => n.puntoVenta === puntoVenta && n.numero === numero);
+      (propio !== null && esElNumero(propio)) || enLaReferencia.some(esElNumero);
 
     return {
       odooMoveId: m.id,
-      nombre: m.name || null,
+      nombre: nombreParaMostrar(m),
+      numero: m.voucher_name || null,
       referencia: m.ref || null,
       fecha: m.invoice_date || null,
       importeTotal: Number(m.amount_total ?? 0),

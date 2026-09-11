@@ -198,30 +198,51 @@ igual: `lib/facturacion/borradorEnOdoo.ts` y `lib/facturacion/conciliacion.ts`
 son puros y se prueban sin red; `lib/odoo/pushFactura.ts` y
 `lib/odoo/sincronizarFacturas.ts` hacen los viajes.
 
-### Odoo no tiene la localización argentina, y eso decide todo
+### El Odoo del grupo tiene una localización argentina **propia**
 
-Medido el 11/09/2026 contra la instancia: **no existe `l10n_latam.document.type`
-ni ningún campo para el tipo de comprobante.** Para Odoo, una factura de
-proveedor del grupo es un documento genérico. Consecuencias directas:
+Es lo primero que hay que saber, porque decide todo lo demás. No es la estándar
+—`l10n_latam.document.type` no existe, y buscarlo hace creer que no hay
+localización— sino un juego de módulos propios en `odoo_l10n_ar`
+(`l10n_ar_afip_webservices_wsfe`, `l10n_ar_point_of_sale`, `l10n_ar_perceptions`).
 
-- El `name` es `BILL/2026/09/0004`, una **secuencia interna** que no tiene nada
-  que ver con el papel — y mientras está en borrador es `/`, porque Odoo numera
-  al postear. Nunca sirve para reconocer un comprobante.
-- El número fiscal vive en **`ref`**, escrito a mano: `FC A 00008-00003715`,
-  `FC   A 00008-00003738`, `FC A - 00008-00003683`. Y está en apenas **1.554 de
-  6.423 facturas (24%)**: de las otras 4.869 no hay registro de qué comprobante
-  son.
+Los campos que importan en `account.move`, medidos sobre las 6.423 facturas de
+proveedor de la instancia (11/09/2026):
 
-Por eso el borrador que crea el SdG **siempre** escribe la referencia, con la
-sigla y el formato que ya usa administración (punto de venta en cinco dígitos:
-1.745 de 1.959 números cargados van así). Además de servir para reconocerla
-después, completa un dato que hoy se pierde en tres de cada cuatro facturas.
+| Campo | Qué es | Cargado en |
+|---|---|---|
+| `voucher_type_id` | El tipo de comprobante. Su **`code` es el número de ARCA**, el mismo que trae el QR | 6.414 (99,9%) |
+| `voucher_name` | El número: `0006-00010192` | 6.412 (99,8%) |
+| `full_voucher_name` | `FC A 0006-00010192`, calculado por Odoo | — |
+| `name` | `BILL/2026/09/0004`: una **secuencia interna**, nada que ver con el papel. En borrador es `/` | — |
+
+**`voucher.type.code` es el código de ARCA**, con los 88 tipos de la tabla
+oficial cargados. O sea que el tipo que viene en el QR no hay que mapearlo a
+mano: se busca por código y listo. Los que el grupo no emite están archivados,
+así que la búsqueda va con `active_test: false` — un tipo archivado sigue siendo
+el tipo correcto de una factura que se recibe.
+
+### Esto se descubrió posteando, no leyendo
+
+El primer borrador se creó perfecto y murió al postearlo:
+**"El documento no tiene numero!"**, desde `_validate_supplier_invoice_number`.
+Sin `voucher_type_id` y `voucher_name` el borrador **no se puede postear**, o sea
+que no sirve para nada: contabilidad tendría que completarlo igual, que es el
+trabajo que este módulo vino a sacar.
+
+Con los dos campos puestos, sí. Probado de punta a punta contra la instancia: se
+creó el borrador con los datos de una factura real del buzón, se lo posteó, la
+sincronización la pasó a `contabilizada`, y después se borró el asiento y se
+dejó la fila como estaba.
+
+`ref` queda **sin tocar** a propósito: administración la usa para sus notas
+(`REMITOS MEMBRANEX`, `YA PAGADA EN EFECTIVO`) y pisarla sería sacarles un campo
+que ya usan para otra cosa.
 
 ### El IVA sale de la letra, no de una suposición
 
 El QR trae el importe **con IVA** y una línea de Odoo lleva el neto. Cuál es cuál
-lo decide la letra del comprobante, y eso está medido sobre los 1.143
-comprobantes con referencia cargada:
+lo decide la letra del comprobante, y está medido sobre los 1.143 comprobantes
+con referencia cargada:
 
 | Letra | Comprobantes | Con impuesto |
 |---|---|---|
@@ -238,45 +259,53 @@ Dividir el total por 1,21 reproduce el total **exacto en 785 de las 793 facturas
 A**, y en las otras 8 queda a menos de dos centavos. No se esconde: el push relee
 el `amount_total` que quedó en Odoo y avisa si no coincide.
 
-### La conciliación pide el número **y** el CUIT
+### La conciliación cruza el número **y** el CUIT
 
-No alcanza con el importe. El trío (proveedor, fecha, importe) se repite en el
-**1,4%** de las facturas de 2026, y sin la fecha en el **14,5%**. Un 1,4% de
-enlaces mudos y equivocados es justo lo que este sistema no hace: una factura mal
-conciliada aparece como contabilizada y nadie vuelve a mirarla.
+Nunca el importe: el trío (proveedor, fecha, importe) se repite en el **1,4%** de
+las facturas de 2026, y sin la fecha en el **14,5%**. Un 1,4% de enlaces mudos y
+equivocados es justo lo que este sistema no hace — una factura mal conciliada
+aparece como contabilizada y nadie vuelve a mirarla.
 
-Entonces se afirma el vínculo sólo cuando el CUIT del emisor es el del proveedor
-del asiento **y** el par (punto de venta, número) aparece en su referencia. Una
-factura de Odoo puede quedar vinculada a **varias** del buzón, y eso no es un
-error: 321 de las 1.147 referencias agrupan varios comprobantes en un asiento.
+Se afirma el vínculo cuando el CUIT del emisor es el del proveedor del asiento,
+la empresa coincide, y el `voucher_name` es el número del comprobante. Si además
+los dos saben el tipo, tiene que ser el mismo: una nota de crédito y la factura
+que revierte pueden llevar el mismo número y son documentos distintos.
 
-**Probado contra los datos reales**: de 400 facturas de Odoo con referencia, 210
-tienen un solo número; la conciliación reconoció **189, se equivocó en 0** y dejó
-**21 ambiguas**. Las ambiguas enseñaron algo que no se deducía: administración
-**repite la misma referencia en asientos distintos** — `FC A 00008-00003291`
-figura en seis facturas de RUBIALES, con seis importes y seis fechas. La
-referencia, para ellos, es una nota; no una identidad. Ahí no se elige: se le
-muestran los candidatos a una persona.
+**Medido contra los datos reales: de 1.196 facturas de Odoo con número, reconoció
+1.196, se equivocó en 0 y no dejó ninguna ambigua.**
+
+### La referencia es sólo el respaldo
+
+Para las 11 facturas de 6.423 que no tienen `voucher_name` se parsea `ref`, que
+es texto libre. La primera versión de este módulo se construyó así —antes de
+encontrar los campos propios— y los números de esa vuelta explican por qué quedó
+degradada a respaldo: de 210 asientos probados reconoció 189, y **21 quedaron
+ambiguos porque administración repite la misma referencia en asientos
+distintos**: `FC A 00008-00003291` figura en seis facturas de RUBIALES, con seis
+importes y seis fechas. Para ellos `ref` es una nota, no una identidad.
+
+Por eso, cuando hay algún candidato por el campo propio, los de la referencia se
+descartan enteros. Y `odoo_conciliado_por` distingue `numero` de `referencia`:
+uno vino de un campo estructurado y el otro de adivinarle el formato a un texto
+escrito a mano.
 
 ### Qué hace cada cosa
 
 | | |
 |---|---|
-| **Crear el borrador en Odoo** | Crea el `account.move` en borrador y deja la factura en `informada`, con `odoo_conciliado_por = push` |
+| **Crear el borrador en Odoo** | Crea el `account.move` en borrador —postable— y deja la factura en `informada`, con `odoo_conciliado_por = push` |
 | **Buscar en Odoo** | Trae los candidatos de ese proveedor, con el motivo por el que están en la lista, para elegir a mano |
 | **Sincronizar con Odoo** | Relee los vínculos que hay y busca los que faltan. Lo corre también el cron `/api/cron/facturacion-sync`, a las 9:30 |
 | **Ya está en Odoo** | Sigue existiendo: es la marca manual para lo que ninguna regla puede afirmar |
 
-`odoo_conciliado_por` distingue `push` de `numero` y de `a mano` por el mismo
-motivo que `identificado_por` distingue el QR de lo tipeado: si mañana una
-factura aparece contabilizada y no debía, la primera pregunta es si lo dedujo el
-sistema o lo decidió alguien.
+`odoo_conciliado_por` existe por el mismo motivo que `identificado_por` distingue
+el QR de lo tipeado: si mañana una factura aparece contabilizada y no debía, la
+primera pregunta es si lo dedujo el sistema o lo decidió alguien.
 
 Una línea de `account.move` **no necesita producto**, a diferencia de
 `purchase.order.line` —que lo exige por una restricción SQL—: Odoo le pone la
-cuenta de gasto que corresponde al proveedor. Comprobado creando facturas de
-verdad en staging y borrándolas (un borrador se borra directo; cancelar primero
-es cosa de las órdenes de compra).
+cuenta de gasto que corresponde al proveedor. Y un borrador se borra directo;
+cancelar primero es cosa de las órdenes de compra.
 
 ## Los embeds hay que nombrarlos
 
@@ -327,11 +356,11 @@ Acordarse de borrar las facturas de ahí después.
    que la página dibuja la imagen. Es la única forma que queda, ahora que se sabe
    que las imágenes embebidas no se pueden leer desde el navegador.
 4. ~~Cerrar el círculo con Odoo~~ **hecho**: ver [El vínculo con Odoo](#el-vínculo-con-odoo).
-5. **Las referencias repetidas de Odoo.** El 10% de los asientos con referencia
-   no se pueden conciliar solos porque el mismo número está escrito en varios.
-   Se resuelven a mano con los candidatos, pero si el volumen molesta, la
-   conversación es con administración: la referencia es el único lugar donde vive
-   el número del comprobante y hoy se usa como nota.
+5. **Las percepciones.** El borrador sale con el IVA y nada más. La localización
+   del grupo tiene `perception_ids` en `account.move`, así que una factura con
+   percepción de IIBB queda por un total menor y contabilidad la completa. El QR
+   no las trae desglosadas, así que sacarlas de ahí no se puede: habría que
+   leerlas del texto del PDF.
 6. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
    `res.partner.vat` para los 207 que están enlazados: es un cruce que se puede
    correr una vez y sube el reconocimiento automático del emisor.

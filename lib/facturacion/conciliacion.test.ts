@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   conciliar,
   estadoSegunOdoo,
+  numeroDelVoucher,
   numerosDeLaReferencia,
   type FacturaParaConciliar,
   type MovimientoDeOdoo,
@@ -72,9 +73,23 @@ describe("los números que hay dentro de una referencia de Odoo", () => {
   });
 });
 
+describe("el número que Odoo guarda en su campo propio", () => {
+  it("es punto de venta y número, y nada más", () => {
+    expect(numeroDelVoucher("0006-00010192")).toEqual({ puntoVenta: 6, numero: 10192 });
+    expect(numeroDelVoucher("0501-00317611")).toEqual({ puntoVenta: 501, numero: 317611 });
+  });
+
+  it("no acepta texto alrededor: para eso está la referencia", () => {
+    expect(numeroDelVoucher("FC A 0006-00010192")).toBeNull();
+    expect(numeroDelVoucher("")).toBeNull();
+    expect(numeroDelVoucher(null)).toBeNull();
+  });
+});
+
 const FACTURA: FacturaParaConciliar = {
   id: "f1",
   cuit_emisor: "20165811640",
+  tipo_comprobante: 1,
   punto_venta: 6,
   numero: 10192,
   importe_total: 1774706.1,
@@ -84,7 +99,9 @@ const FACTURA: FacturaParaConciliar = {
 function movimiento(parcial: Partial<MovimientoDeOdoo>): MovimientoDeOdoo {
   return {
     id: 900,
-    ref: "FC A 00006-00010192",
+    voucherName: "0006-00010192",
+    voucherCodigo: 1,
+    ref: null,
     cuitDelPartner: "20165811640",
     empresaOdoo: 1,
     estado: "posted",
@@ -96,7 +113,7 @@ function movimiento(parcial: Partial<MovimientoDeOdoo>): MovimientoDeOdoo {
 }
 
 describe("reconocer en Odoo la factura del buzón", () => {
-  it("la encuentra cuando coinciden el CUIT y el número", () => {
+  it("la encuentra por el número del comprobante y el CUIT del emisor", () => {
     const { vinculos } = conciliar([FACTURA], [movimiento({})]);
     expect(vinculos).toEqual([
       {
@@ -104,6 +121,7 @@ describe("reconocer en Odoo la factura del buzón", () => {
         odooMoveId: 900,
         odooNombre: "BILL/2026/09/0004",
         odooEstado: "posted",
+        por: "numero",
         aviso: null,
       },
     ]);
@@ -126,28 +144,34 @@ describe("reconocer en Odoo la factura del buzón", () => {
   });
 
   it("no la enlaza sólo porque el importe coincida", () => {
-    const { vinculos } = conciliar([FACTURA], [movimiento({ ref: "REMITOS MEMBRANEX" })]);
+    const { vinculos } = conciliar(
+      [FACTURA],
+      [movimiento({ voucherName: null, ref: "REMITOS MEMBRANEX" })]
+    );
     expect(vinculos).toEqual([]);
   });
 
-  it("una factura de Odoo que agrupa varios comprobantes vincula a todos", () => {
-    const otra: FacturaParaConciliar = { ...FACTURA, id: "f2", numero: 10193 };
-    const { vinculos } = conciliar(
-      [FACTURA, otra],
-      [movimiento({ ref: "FC A 00006-00010192 - FC A 00006-00010193", importeTotal: 3000000 })]
-    );
-    expect(vinculos.map((v) => v.facturaId)).toEqual(["f1", "f2"]);
+  /*
+   * Una nota de crédito lleva la referencia de la factura que revierte, y hasta
+   * puede llevar su mismo número. Son documentos distintos: el tipo los separa.
+   */
+  it("no confunde una nota de crédito con la factura que revierte", () => {
+    const { vinculos } = conciliar([FACTURA], [movimiento({ voucherCodigo: 3 })]);
+    expect(vinculos).toEqual([]);
   });
 
-  it("no compara el importe cuando el asiento cubre varios comprobantes", () => {
-    const { vinculos } = conciliar(
-      [FACTURA],
-      [movimiento({ ref: "FC A 00006-00010192 - FC A 00006-00010193", importeTotal: 3000000 })]
-    );
-    expect(vinculos[0].aviso).toBeNull();
+  it("ignora las facturas del buzón que no tienen número", () => {
+    const sinNumero: FacturaParaConciliar = { ...FACTURA, punto_venta: null, numero: null };
+    const { vinculos } = conciliar([sinNumero], [movimiento({})]);
+    expect(vinculos).toEqual([]);
   });
 
-  it("avisa cuando el asiento es de un solo comprobante y el importe no cuadra", () => {
+  it("acepta el enlace cuando la factura del buzón todavía no tiene empresa", () => {
+    const { vinculos } = conciliar([{ ...FACTURA, empresaOdoo: null }], [movimiento({})]);
+    expect(vinculos).toHaveLength(1);
+  });
+
+  it("avisa cuando el importe de Odoo no coincide con el del comprobante", () => {
     const { vinculos } = conciliar([FACTURA], [movimiento({ importeTotal: 1774000 })]);
     expect(vinculos[0].aviso).toContain("1774000");
   });
@@ -160,16 +184,64 @@ describe("reconocer en Odoo la factura del buzón", () => {
     expect(vinculos).toEqual([]);
     expect(ambiguas).toEqual([{ facturaId: "f1", candidatos: [900, 901] }]);
   });
+});
 
-  it("ignora las facturas del buzón que no tienen número", () => {
-    const sinNumero: FacturaParaConciliar = { ...FACTURA, punto_venta: null, numero: null };
-    const { vinculos } = conciliar([sinNumero], [movimiento({})]);
-    expect(vinculos).toEqual([]);
+describe("la referencia de texto libre, que es el respaldo", () => {
+  /*
+   * Son las 11 facturas de 6.423 que no tienen `voucher_name`. El resto de las
+   * reglas de acá existen porque ese campo es texto libre donde administración
+   * escribe notas, y no se puede confiar en él como en el campo propio.
+   */
+  const sinVoucher = (parcial: Partial<MovimientoDeOdoo> = {}) =>
+    movimiento({ voucherName: null, voucherCodigo: null, ...parcial });
+
+  it("reconoce el número escrito en la referencia, y lo dice", () => {
+    const { vinculos } = conciliar([FACTURA], [sinVoucher({ ref: "FC A 00006-00010192" })]);
+    expect(vinculos).toHaveLength(1);
+    expect(vinculos[0].por).toBe("referencia");
   });
 
-  it("acepta el enlace cuando la factura del buzón todavía no tiene empresa", () => {
-    const { vinculos } = conciliar([{ ...FACTURA, empresaOdoo: null }], [movimiento({})]);
+  it("un asiento con el campo propio le gana a uno que sólo lo tiene en la referencia", () => {
+    // Es lo que resuelve el caso RUBIALES: el mismo número escrito a mano en
+    // seis asientos distintos no vuelve ambigua a la factura que sí lo tiene.
+    const { vinculos, ambiguas } = conciliar(
+      [FACTURA],
+      [
+        movimiento({ id: 900 }),
+        sinVoucher({ id: 901, ref: "FC A 00006-00010192" }),
+        sinVoucher({ id: 902, ref: "FC A 00006-00010192 - FC A 00006-00010193" }),
+      ]
+    );
+    expect(ambiguas).toEqual([]);
     expect(vinculos).toHaveLength(1);
+    expect(vinculos[0].odooMoveId).toBe(900);
+  });
+
+  it("un asiento que agrupa varios comprobantes vincula a todos", () => {
+    const otra: FacturaParaConciliar = { ...FACTURA, id: "f2", numero: 10193 };
+    const { vinculos } = conciliar(
+      [FACTURA, otra],
+      [
+        sinVoucher({
+          ref: "FC A 00006-00010192 - FC A 00006-00010193",
+          importeTotal: 3000000,
+        }),
+      ]
+    );
+    expect(vinculos.map((v) => v.facturaId)).toEqual(["f1", "f2"]);
+  });
+
+  it("no compara el importe cuando el asiento agrupa varios comprobantes", () => {
+    const { vinculos } = conciliar(
+      [FACTURA],
+      [
+        sinVoucher({
+          ref: "FC A 00006-00010192 - FC A 00006-00010193",
+          importeTotal: 3000000,
+        }),
+      ]
+    );
+    expect(vinculos[0].aviso).toBeNull();
   });
 });
 

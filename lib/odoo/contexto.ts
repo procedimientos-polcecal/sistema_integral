@@ -191,6 +191,14 @@ export interface DatosDeEmpresaParaFacturas {
 export interface ContextoDeFacturas {
   monedas: Record<string, number>;
   porEmpresa: Record<number, DatosDeEmpresaParaFacturas>;
+  /**
+   * `voucher.type` por código de ARCA — el mismo número que trae el QR.
+   *
+   * Es el puente entre el comprobante de papel y Odoo, y no hace falta mapear
+   * nada a mano: la localización del grupo guarda el código de ARCA en
+   * `voucher.type.code`, con los 88 tipos de la tabla oficial cargados.
+   */
+  tiposPorCodigo: Record<number, number>;
 }
 
 export type ResultadoDeContextoDeFacturas =
@@ -213,13 +221,17 @@ export type ResultadoDeContextoDeFacturas =
  * - **El diario sí hace falta y es por empresa**: el `BILL` de Polcecal es el 11
  *   y el de Polysan el 23. Dejarlo implícito haría que la factura caiga en el
  *   diario de la empresa por defecto del usuario bot.
+ * - **Y hace falta el tipo de comprobante**, que no es por empresa: la
+ *   localización propia del grupo no deja postear una factura de proveedor sin
+ *   él. Se busca por `code`, que es el número de ARCA que trae el QR.
  */
 export async function resolverContextoDeFacturas(
-  companyIds: number[]
+  companyIds: number[],
+  codigosDeComprobante: number[] = []
 ): Promise<ResultadoDeContextoDeFacturas> {
   const problemas: string[] = [];
 
-  const [monedasCrudas, diarios, impuestos] = await Promise.all([
+  const [monedasCrudas, diarios, impuestos, tipos] = await Promise.all([
     buscarLeer<{ id: number; name: string }>(
       "res.currency",
       [["name", "in", ["ARS", "USD"]]],
@@ -245,11 +257,28 @@ export async function resolverContextoDeFacturas(
       ["name", "company_id"],
       { limite: 20, orden: "id asc" }
     ),
+    /*
+     * `active_test: false` porque de los 88 tipos de comprobante sólo están
+     * activos los que el grupo emite; los que **recibe** de un proveedor pueden
+     * estar archivados, y un tipo archivado sigue siendo el tipo correcto.
+     */
+    codigosDeComprobante.length
+      ? buscarLeer<{ id: number; code: number }>(
+          "voucher.type",
+          [["code", "in", codigosDeComprobante]],
+          ["code"],
+          { limite: 100, orden: "id asc", contexto: { active_test: false } }
+        )
+      : Promise.resolve([]),
   ]);
 
   const monedas: Record<string, number> = {};
   for (const m of monedasCrudas) monedas[m.name] = m.id;
   if (!monedas.ARS) problemas.push("Odoo no tiene la moneda ARS activa.");
+
+  const tiposPorCodigo: Record<number, number> = {};
+  // El primero por id: si hubiera dos con el mismo código, el original.
+  for (const t of tipos) if (!(t.code in tiposPorCodigo)) tiposPorCodigo[Number(t.code)] = t.id;
 
   const porEmpresa: Record<number, DatosDeEmpresaParaFacturas> = {};
   for (const companyId of companyIds) {
@@ -272,5 +301,5 @@ export async function resolverContextoDeFacturas(
 
   if (problemas.length) return { ok: false, problemas };
 
-  return { ok: true, contexto: { monedas, porEmpresa } };
+  return { ok: true, contexto: { monedas, porEmpresa, tiposPorCodigo } };
 }

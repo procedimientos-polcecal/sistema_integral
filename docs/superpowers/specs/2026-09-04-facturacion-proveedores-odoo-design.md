@@ -346,24 +346,27 @@ de compra —que es por donde entra casi todo— seguía obligando a tipearla en
 del otro lado, y el buzón ya tiene el dato leído del QR. Entonces son dos cosas:
 
 1. **El borrador en Odoo.** El SdG crea el `account.move` en borrador con
-   proveedor, número, fecha e importe. Sigue sin postear: el asiento lo confirma
-   una persona.
+   proveedor, tipo, número, fecha e importe. Sigue sin postear: el asiento lo
+   confirma una persona.
 2. **La conciliación**, diaria por cron y a pedido desde la pantalla, que pasa a
    `contabilizada` lo que Odoo ya posteó — tanto los borradores que creó el SdG
    como lo que cargó administración por su cuenta.
 
-**Lo que corrige de este spec: Odoo no tiene instalada la localización
-argentina.** No existe `l10n_latam.document.type` ni un campo para el tipo de
-comprobante; el `name` de una factura de proveedor es una secuencia interna
-(`BILL/2026/09/0004`) y el número fiscal está escrito a mano en `ref`, en apenas
-el 24% de las 6.423 facturas. Eso decide cómo se escribe el borrador y por qué la
-conciliación cruza el número **y** el CUIT y nunca el importe: el trío
-(proveedor, fecha, importe) se repite en el 1,4% de las facturas de 2026.
+**Lo que corrige de este spec: el Odoo del grupo tiene una localización argentina
+propia.** No es la estándar —`l10n_latam.document.type` no existe, y buscar eso
+hace creer que no hay localización— sino un juego de módulos en `odoo_l10n_ar`.
+`account.move` tiene `voucher_type_id` (cuyo **`code` es el número de ARCA**, el
+mismo del QR) y `voucher_name` (el número, `0006-00010192`), cargados en el
+**99,8%** de las 6.423 facturas de proveedor.
 
-Probado contra los datos reales: de 210 asientos con un solo número, reconoció
-189, se equivocó en **0** y dejó 21 ambiguos — porque administración repite la
-misma referencia en asientos distintos (`FC A 00008-00003291` figura en seis
-facturas de RUBIALES). Esos se muestran como candidatos y los elige una persona.
+Eso no se descubrió leyendo el modelo sino **posteando**: el primer borrador se
+veía perfecto y murió con *"El documento no tiene numero!"*. Sin esos dos campos
+el borrador no se puede postear, o sea que no sirve de nada.
+
+Probado contra los datos reales: la conciliación reconoció **1.196 de 1.196**
+facturas por su número, con **0 errores y 0 ambigüedades**. Y el circuito entero
+—crear el borrador, postearlo en Odoo, verlo pasar a `contabilizada`— se corrió
+con una factura real del buzón en staging, dejando todo como estaba.
 
 El detalle está en [docs/FACTURACION.md](../../FACTURACION.md).
 
@@ -391,11 +394,10 @@ El detalle está en [docs/FACTURACION.md](../../FACTURACION.md).
 7. **Los QR que jsQR no decodifica** aunque se vean impecables (DON ALFREDO,
    RUBIALES, ERGUY). Se probó a 7000 px, con umbral duro y con 274 ventanas: no
    es resolución. Vale probar zxing antes de darlos por perdidos.
-8. **La referencia de Odoo se usa como nota, no como identidad.** El mismo número
-   de comprobante aparece escrito en hasta seis asientos distintos del mismo
-   proveedor. Es lo que deja el 10% de la conciliación en manos de una persona, y
-   la conversación es con administración: hoy `ref` es el único lugar donde vive
-   el número del comprobante.
+8. **Las percepciones.** El borrador sale con el IVA y nada más; la localización
+   del grupo tiene `perception_ids` y una factura con percepción de IIBB queda
+   por un total menor hasta que contabilidad la completa. El QR no las trae
+   desglosadas.
 9. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
    `res.partner.vat` para los 207 enlazados: un cruce de una sola corrida que
    sube el reconocimiento automático del emisor.

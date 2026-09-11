@@ -30,7 +30,7 @@ export interface FacturaProveedor {
   odoo_nombre: string | null;
   /** `draft`, `posted` o `cancel`, como se vio en la última sincronización. */
   odoo_estado: string | null;
-  /** `push`, `numero` o `a mano`. Ver la migración del vínculo con Odoo. */
+  /** `push`, `numero`, `referencia` o `a mano`. Ver la migración del vínculo con Odoo. */
   odoo_conciliado_por: string | null;
   /** Lo que dijo Odoo cuando algo falló, sin traducir. */
   odoo_pendiente: string | null;

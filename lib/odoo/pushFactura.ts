@@ -159,7 +159,10 @@ export async function empujarFacturaAOdoo(
     };
   }
 
-  const contexto = await resolverContextoDeFacturas([companyId]);
+  const contexto = await resolverContextoDeFacturas(
+    [companyId],
+    factura.tipo_comprobante === null ? [] : [factura.tipo_comprobante]
+  );
   if (!contexto.ok) return { ok: false, motivos: contexto.problemas };
 
   const datos = contexto.contexto.porEmpresa[companyId];
@@ -175,6 +178,10 @@ export async function empujarFacturaAOdoo(
     diarioId: datos.diarioId,
     impuestoId: datos.impuestoId,
     monedaId,
+    voucherTypeId:
+      factura.tipo_comprobante === null
+        ? null
+        : (contexto.contexto.tiposPorCodigo[factura.tipo_comprobante] ?? null),
     nroRi: factura.compras_requerimientos?.nro_ri ?? null,
   });
 
@@ -206,11 +213,14 @@ export async function empujarFacturaAOdoo(
     return { ok: false, motivos: [motivo] };
   }
 
-  const [creada] = await llamar<{ name: string | null; state: string; amount_total: number }[]>(
-    "account.move",
-    "read",
-    [[odooMoveId], ["name", "state", "amount_total"]]
-  );
+  const [creada] = await llamar<
+    {
+      name: string | null;
+      state: string;
+      amount_total: number;
+      full_voucher_name: string | false;
+    }[]
+  >("account.move", "read", [[odooMoveId], ["name", "state", "amount_total", "full_voucher_name"]]);
 
   /*
    * Se relee el total en vez de confiar en la cuenta propia. `price_unit` tiene
@@ -228,11 +238,18 @@ export async function empujarFacturaAOdoo(
     );
   }
 
+  /*
+   * Se guarda `full_voucher_name` ("FC A 0006-00010192") y no `name`: en
+   * borrador el `name` es "/" y no le dice nada a nadie. Cuando la posteen, la
+   * sincronizacion lo reemplaza por el BILL/2026/09/0004, que ahi si existe.
+   */
+  const nombreParaMostrar = creada?.full_voucher_name || creada?.name || null;
+
   await admin
     .from("facturas_proveedor")
     .update({
       odoo_move_id: odooMoveId,
-      odoo_nombre: creada?.name ?? null,
+      odoo_nombre: nombreParaMostrar,
       odoo_estado: creada?.state ?? "draft",
       odoo_conciliado_por: "push",
       odoo_pendiente: null,
@@ -245,7 +262,7 @@ export async function empujarFacturaAOdoo(
     ok: true,
     factura: {
       odooMoveId,
-      odooNombre: creada?.name ?? null,
+      odooNombre: nombreParaMostrar,
       odooEstado: creada?.state ?? "draft",
       totalEnOdoo,
       avisos,

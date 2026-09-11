@@ -129,60 +129,34 @@ export function claveNatural(c: {
  * La letra del comprobante, que es lo que decide si trae IVA discriminado.
  *
  * No es cosmética: de eso depende cómo se arma el borrador en Odoo. Medido
- * contra los 1.143 comprobantes con referencia cargada del grupo (10/09/2026):
- *
- * | Letra | Comprobantes | Con impuesto |
- * |---|---|---|
- * | A | 793 | **793 (100%)**, y 778 al 21% exacto |
- * | B | 5 | 5 |
- * | C | 4 | **0** |
- *
- * O sea: una A o una B se cargan con IVA, una C no lleva —el monotributista no
- * lo discrimina— y ponérselo sería inventar un crédito fiscal que no existe.
+ * contra los comprobantes cargados del grupo (11/09/2026): de 793 facturas A,
+ * **las 793** tienen impuesto y 778 al 21% exacto; de 4 facturas C, **ninguna**.
+ * Una C no lo discrimina —la emite un monotributista— y ponérselo sería inventar
+ * un crédito fiscal que no existe.
  */
 export type LetraDeComprobante = "A" | "B" | "C" | "E" | "M";
 
 /**
- * Sigla y letra por código de ARCA.
+ * La letra por código de ARCA.
  *
- * La sigla es la que **ya usa administración** al cargar en Odoo: `FC A`,
- * `FCE A`, `NC A`. Se respeta al pie porque el que la lee después es un humano
- * buscando en Odoo, y lo que busca es lo que está acostumbrado a escribir.
+ * Los códigos son los mismos que usa `voucher.type.code` en el Odoo del grupo,
+ * que es adonde va a parar el tipo de comprobante del QR. Acá sólo hace falta la
+ * letra: el nombre lo pone Odoo.
  */
-const COMPROBANTES: Record<number, { sigla: string; letra: LetraDeComprobante }> = {
-  1: { sigla: "FC A", letra: "A" },
-  2: { sigla: "ND A", letra: "A" },
-  3: { sigla: "NC A", letra: "A" },
-  4: { sigla: "RC A", letra: "A" },
-  6: { sigla: "FC B", letra: "B" },
-  7: { sigla: "ND B", letra: "B" },
-  8: { sigla: "NC B", letra: "B" },
-  9: { sigla: "RC B", letra: "B" },
-  11: { sigla: "FC C", letra: "C" },
-  12: { sigla: "ND C", letra: "C" },
-  13: { sigla: "NC C", letra: "C" },
-  15: { sigla: "RC C", letra: "C" },
-  19: { sigla: "FC E", letra: "E" },
-  20: { sigla: "ND E", letra: "E" },
-  21: { sigla: "NC E", letra: "E" },
-  51: { sigla: "FC M", letra: "M" },
-  52: { sigla: "ND M", letra: "M" },
-  53: { sigla: "NC M", letra: "M" },
-  54: { sigla: "RC M", letra: "M" },
-  201: { sigla: "FCE A", letra: "A" },
-  202: { sigla: "ND FCE A", letra: "A" },
-  203: { sigla: "NC FCE A", letra: "A" },
-  206: { sigla: "FCE B", letra: "B" },
-  207: { sigla: "ND FCE B", letra: "B" },
-  208: { sigla: "NC FCE B", letra: "B" },
-  211: { sigla: "FCE C", letra: "C" },
-  212: { sigla: "ND FCE C", letra: "C" },
-  213: { sigla: "NC FCE C", letra: "C" },
+const LETRAS: Record<number, LetraDeComprobante> = {
+  1: "A", 2: "A", 3: "A", 4: "A",
+  6: "B", 7: "B", 8: "B", 9: "B",
+  11: "C", 12: "C", 13: "C", 15: "C",
+  19: "E", 20: "E", 21: "E",
+  51: "M", 52: "M", 53: "M", 54: "M",
+  201: "A", 202: "A", 203: "A",
+  206: "B", 207: "B", 208: "B",
+  211: "C", 212: "C", 213: "C",
 };
 
 /** La letra, o `null` si el código no es uno de los que el grupo puede recibir. */
 export function letraDelComprobante(tipo: number | null | undefined): LetraDeComprobante | null {
-  return typeof tipo === "number" ? (COMPROBANTES[tipo]?.letra ?? null) : null;
+  return typeof tipo === "number" ? (LETRAS[tipo] ?? null) : null;
 }
 
 /**
@@ -195,27 +169,4 @@ export function letraDelComprobante(tipo: number | null | undefined): LetraDeCom
 export function discriminaIva(tipo: number | null | undefined): boolean {
   const letra = letraDelComprobante(tipo);
   return letra === "A" || letra === "B" || letra === "M";
-}
-
-/**
- * La referencia con la que la factura se escribe en Odoo: `FC A 00006-00010192`.
- *
- * **Punto de venta en cinco dígitos**, aunque el comprobante lo imprima en
- * cuatro. Es como está escrito el corpus del grupo —1.745 de 1.959 números
- * cargados usan cinco—, y quien va a buscar esta factura en Odoo la va a buscar
- * así. El código que la vuelve a leer parsea enteros, así que el relleno no
- * cambia nada para la máquina; cambia para la persona.
- */
-export function referenciaParaOdoo(c: {
-  tipoComprobante?: number | null;
-  puntoVenta?: number | null;
-  numero?: number | null;
-}): string | null {
-  if (typeof c.puntoVenta !== "number" || typeof c.numero !== "number") return null;
-
-  const sigla =
-    typeof c.tipoComprobante === "number" ? COMPROBANTES[c.tipoComprobante]?.sigla : undefined;
-  const numero = `${String(c.puntoVenta).padStart(5, "0")}-${String(c.numero).padStart(8, "0")}`;
-
-  return sigla ? `${sigla} ${numero}` : numero;
 }
