@@ -1,5 +1,7 @@
 import { elegirLectura, type EleccionDeQr } from "./candidatos";
 import { buscarQr, buscarQrConVentanas, type PixelesDe } from "./escaneoQr";
+import { buscarLineas, type LecturaDeLineas } from "./lineasDelPdf";
+import { discriminaIva } from "./comprobante";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 /**
@@ -78,6 +80,13 @@ export interface LecturaDeFactura extends EleccionDeQr {
   tardo: number;
   /** Con qué pasada se encontró. Sirve para saber si conviene ajustar los anchos. */
   comoSeEncontro: "página dibujada" | "ventanas" | null;
+  /**
+   * El detalle del comprobante, leído del texto del PDF.
+   *
+   * `null` en una imagen: una foto de WhatsApp no tiene capa de texto, y sacar
+   * el detalle de ahí sería OCR, que es otro problema.
+   */
+  detalle: LecturaDeLineas | null;
 }
 
 export async function leerFactura(archivo: File): Promise<LecturaDeFactura> {
@@ -86,18 +95,42 @@ export async function leerFactura(archivo: File): Promise<LecturaDeFactura> {
     archivo.type === "application/pdf" || archivo.name.toLowerCase().endsWith(".pdf");
 
   const r = esPdf ? await deUnPdf(archivo) : await deUnaImagen(archivo);
+  const eleccion = elegirLectura(r.textos);
+
+  /*
+   * El detalle se controla contra el **neto** del comprobante, que sale del
+   * total del QR: si la factura discrimina IVA, el total viene con el 21%
+   * adentro y las líneas están netas. Sin QR no hay neto y el detalle queda
+   * marcado como que no se pudo confirmar — se muestra igual, pero nadie lo da
+   * por bueno.
+   */
+  const detalle = r.filas.length
+    ? buscarLineas(r.filas, { netoEsperado: netoDelComprobante(eleccion.cabecera) })
+    : null;
 
   return {
-    ...elegirLectura(r.textos),
+    ...eleccion,
     paginas: r.paginas,
     vistaPrevia: r.vistaPrevia,
     comoSeEncontro: r.comoSeEncontro,
+    detalle,
     tardo: Date.now() - desde,
   };
 }
 
+/** El neto sobre el que tienen que cerrar las líneas, o `null` si no se sabe. */
+function netoDelComprobante(
+  cabecera: { importeTotal: number; tipoComprobante: number } | null
+): number | null {
+  if (!cabecera) return null;
+  if (!discriminaIva(cabecera.tipoComprobante)) return cabecera.importeTotal;
+  return Math.round((cabecera.importeTotal / 1.21) * 100) / 100;
+}
+
 interface Hallazgo {
   textos: string[];
+  /** Las filas de texto del PDF, para sacar el detalle. Vacío en una imagen. */
+  filas: string[];
   paginas: number;
   vistaPrevia: string | null;
   comoSeEncontro: LecturaDeFactura["comoSeEncontro"];
@@ -123,6 +156,14 @@ async function deUnPdf(archivo: File): Promise<Hallazgo> {
   const hasta = Math.min(paginas, PAGINAS_MAXIMAS);
   let vistaPrevia: string | null = null;
 
+  /*
+   * El texto se lee **antes** que el QR y siempre, aunque el QR aparezca en el
+   * primer intento: la búsqueda del QR corta apenas encuentra algo, así que si
+   * el texto se leyera después nunca se leería en las facturas fáciles. Y es
+   * barato: no dibuja nada.
+   */
+  const filas = await filasDeTexto(documento, hasta);
+
   // ── Pasada 1: la página dibujada, subiendo la definición ──
   for (let n = 1; n <= hasta; n++) {
     const pagina = await documento.getPage(n);
@@ -134,7 +175,7 @@ async function deUnPdf(archivo: File): Promise<Hallazgo> {
 
       const textos = buscarQr(pixelesDe(lienzo, ctx));
       if (textos.length > 0) {
-        return { textos, paginas, vistaPrevia, comoSeEncontro: "página dibujada" };
+        return { textos, filas, paginas, vistaPrevia, comoSeEncontro: "página dibujada" };
       }
     }
   }
@@ -154,12 +195,61 @@ async function deUnPdf(archivo: File): Promise<Hallazgo> {
     if (ctx) {
       const textos = buscarQrConVentanas(pixelesDe(lienzo, ctx));
       if (textos.length > 0) {
-        return { textos, paginas, vistaPrevia, comoSeEncontro: "ventanas" };
+        return { textos, filas, paginas, vistaPrevia, comoSeEncontro: "ventanas" };
       }
     }
   }
 
-  return { textos: [], paginas, vistaPrevia, comoSeEncontro: null };
+  return { textos: [], filas, paginas, vistaPrevia, comoSeEncontro: null };
+}
+
+/**
+ * Las filas de texto del PDF, en el orden en que están impresas.
+ *
+ * pdf.js devuelve fragmentos sueltos con su posición, no renglones: cada celda
+ * de una tabla es un fragmento aparte. Se los agrupa por la coordenada Y —con
+ * dos puntos de tolerancia, porque una misma fila no siempre queda al pixel— y
+ * se los ordena por X, que es lo que reconstruye el renglón como se lee.
+ *
+ * No se limpia la repetición acá: hay emisores que dibujan cada texto dos veces
+ * y eso se resuelve sobre la fila ya armada, en `sinRepetir`.
+ */
+async function filasDeTexto(
+  documento: { numPages: number; getPage(n: number): Promise<PDFPageProxy> },
+  hasta: number
+): Promise<string[]> {
+  const filas: string[] = [];
+
+  for (let n = 1; n <= hasta; n++) {
+    try {
+      const contenido = await (await documento.getPage(n)).getTextContent();
+      const porRenglon = new Map<number, { x: number; texto: string }[]>();
+
+      for (const item of contenido.items) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const y = Math.round(item.transform[5]);
+        const clave = [...porRenglon.keys()].find((k) => Math.abs(k - y) <= 2) ?? y;
+        if (!porRenglon.has(clave)) porRenglon.set(clave, []);
+        porRenglon.get(clave)!.push({ x: item.transform[4], texto: item.str });
+      }
+
+      // De arriba hacia abajo: en un PDF la Y crece hacia arriba.
+      for (const [, partes] of [...porRenglon.entries()].sort((a, b) => b[0] - a[0])) {
+        const renglon = partes
+          .sort((a, b) => a.x - b.x)
+          .map((p) => p.texto)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (renglon) filas.push(renglon);
+      }
+    } catch {
+      // Un PDF sin capa de texto —un escaneo— no tiene nada que dar, y eso no
+      // es un error: la factura entra igual con lo que dijo el QR.
+    }
+  }
+
+  return filas;
 }
 
 /** Una foto de WhatsApp o un escaneo guardado como imagen. */
@@ -197,7 +287,7 @@ async function deUnaImagen(archivo: File): Promise<Hallazgo> {
     const textos = buscarQr(pixelesDe(lienzo, ctx));
     if (textos.length > 0) {
       bitmap.close?.();
-      return { textos, paginas: 1, vistaPrevia, comoSeEncontro: "página dibujada" };
+      return { textos, filas: [], paginas: 1, vistaPrevia, comoSeEncontro: "página dibujada" };
     }
     lienzos.push({ lienzo, ctx });
   }
@@ -207,12 +297,12 @@ async function deUnaImagen(archivo: File): Promise<Hallazgo> {
     const textos = buscarQrConVentanas(pixelesDe(lienzo, ctx));
     if (textos.length > 0) {
       bitmap.close?.();
-      return { textos, paginas: 1, vistaPrevia, comoSeEncontro: "ventanas" };
+      return { textos, filas: [], paginas: 1, vistaPrevia, comoSeEncontro: "ventanas" };
     }
   }
 
   bitmap.close?.();
-  return { textos: [], paginas: 1, vistaPrevia, comoSeEncontro: null };
+  return { textos: [], filas: [], paginas: 1, vistaPrevia, comoSeEncontro: null };
 }
 
 /**
