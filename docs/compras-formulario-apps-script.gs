@@ -40,11 +40,21 @@
  *      notificador, agregar la primera línea de `triggerSolicitudForm`:
  *
  *        function triggerSolicitudForm(e) {
- *          if (!e || !e.values) return;
+ *          if (!e || !e.values) { return; }
  *          numerarAlEnviarElFormulario(e);   // <- ESTA, antes de notificar
  *          const tr = new NotificadorSolicitud(e);
  *          tr.notificarArea();
  *        }
+ *
+ *      **Las llaves del `return` no son decoración: ya fallaron sin ellas.** La
+ *      instrucción decía "agregá esta línea" y la línea terminó pegada entre el
+ *      `if (!e || !e.values)` y el `return;`. Con el `if` sin llaves, la
+ *      llamada a numerar pasó a ser su cuerpo —corría sólo con el evento
+ *      vacío, o sea nunca— y el `return` quedó incondicional, cortando la
+ *      función antes de `notificarArea()`. Resultado: dejó de numerar **y**
+ *      dejaron de salir los mails, sin un solo error en el registro de
+ *      ejecuciones, porque la función terminaba bien; nada más que terminaba
+ *      enseguida. Con las llaves, la línea mal ubicada no puede hacer eso.
  *
  *      Por qué así y no con un activador propio: **Google no garantiza en qué
  *      orden corren dos activadores del mismo evento**, y pueden correr en
