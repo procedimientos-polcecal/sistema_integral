@@ -16,8 +16,28 @@
  * la cuenta ya figuraba en 946 protecciones y no hubo ninguna que agregar. Las
  * 8 que no se pudieron tocar son de filas que no son las que fallan.
  *
- * Así que el permiso no es lo que falta, y hay que averiguar qué es. Para eso
- * está `diagnosticarLosPendientes`.
+ * Así que ese día el permiso no era lo que faltaba. Para averiguar qué es
+ * cuando no lo es, está `diagnosticarLosPendientes`.
+ *
+ * Y LO QUE APRENDIMOS DESPUÉS (11/09/2026)
+ *
+ * Las 8 de arriba eran la punta. El RI 1952 y el 1953 se trabaron al pasar a
+ * "para comprar" y esta vez el permiso SÍ era el problema: la cuenta no estaba
+ * entre los editores de la protección de `RI MANTENIMIENTO!P947`. Medido contra
+ * la planilla: de las 941 protecciones de la columna Estado, 904 incluían a la
+ * cuenta y 37 no. Eran 8 hace dos semanas.
+ *
+ * O sea que lo de "OJO CON LAS PROTECCIONES NUEVAS", acá abajo, ya está
+ * pasando: **esto crece solo** y hay que correr `darPermisoALaCuentaDeServicio`
+ * cada tanto hasta que el script de la planilla agregue la cuenta al crear la
+ * protección. Correrla desde el dueño de la planilla —si no, las protecciones
+ * que creó él salen en "no se pudieron tocar" y el problema queda igual—.
+ *
+ * Desde ese día la app ya no confunde los dos casos: cuando una escritura
+ * vuelve con "celda protegida", le pregunta a la planilla si la cuenta figura
+ * entre los editores de esa celda y lo dice en el pendiente. Así que el
+ * pendiente de Compras -> Configuración ya avisa cuál de los dos problemas es,
+ * y esta planilla de funciones es para el primero.
  *
  * LAS DOS FUNCIONES
  *
@@ -30,7 +50,8 @@
  *   diagnosticarLosPendientes
  *     No cambia nada: sólo mira. Para cada fila que falla dice qué
  *     protecciones la tocan, quién puede editarlas, y si la hoja entera está
- *     protegida. Es lo que hay que correr ahora.
+ *     protegida. Es para cuando el pendiente dice que la cuenta SÍ figura entre
+ *     los editores y la escritura falla igual.
  *
  * CÓMO SE USA
  *
@@ -166,25 +187,25 @@ function _leInteresaALaApp(nombre) {
 /**
  * Dice por qué la app no puede escribir en las celdas de un RI.
  *
- * Correr `darPermisoALaCuentaDeServicio` mostró que la cuenta ya figuraba en
- * 946 protecciones y las escrituras seguían fallando. Así que el problema no es
- * "falta el permiso" sino algo más específico, y esto lo busca: para cada fila
- * que falla, qué protecciones la tocan, quién puede editarlas, y si la hoja
- * entera está protegida.
+ * El 27/08/2026 la cuenta ya figuraba en 946 protecciones y las escrituras
+ * seguían fallando: ahí el problema no era el permiso sino algo más específico,
+ * y esto es lo que lo busca —para cada fila que falla, qué protecciones la
+ * tocan, quién puede editarlas, y si la hoja entera está protegida—.
+ *
+ * Sirve para ese caso. Si el pendiente dice que la protección **no incluye** a
+ * la cuenta, no hace falta diagnosticar nada: es
+ * `darPermisoALaCuentaDeServicio`.
  *
  * Los casos vienen de la tabla de pendientes de Compras -> Configuración.
- * Cambiar la lista de abajo si son otros.
+ * Cambiar la lista de abajo si son otros; los de acá son los del 11/09/2026
+ * (RI 1952 y 1953), que se resolvieron dando el permiso.
  *
  * Elegir `diagnosticarLosPendientes` en el selector y Ejecutar. El resultado
  * va al registro (Ver -> Registros).
  */
 var PENDIENTES = [
-  ["RI ALMACÉN", 513],
-  ["RI ALMACÉN", 514],
-  ["RI MANTENIMIENTO", 375],
-  ["RI MANTENIMIENTO", 909],
-  ["RI TALLER VIAL", 162],
-  ["RI PRODUCCIÓN", 3]
+  ["RI MANTENIMIENTO", 947],
+  ["RI MANTENIMIENTO", 948]
 ];
 
 function diagnosticarLosPendientes() {

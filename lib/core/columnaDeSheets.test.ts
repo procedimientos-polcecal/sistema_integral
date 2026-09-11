@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { letraDeColumna } from "./columnaDeSheets";
+import { letraDeColumna, indiceDeColumna } from "./columnaDeSheets";
 
 /**
  * Habia tres implementaciones de esto y dos estaban rotas pasada la Z. Los
@@ -37,5 +37,32 @@ describe("letraDeColumna", () => {
   it("un indice que no es una columna revienta en vez de inventar un simbolo", () => {
     expect(() => letraDeColumna(-1)).toThrow(/no es un índice de columna/);
     expect(() => letraDeColumna(1.5)).toThrow();
+  });
+});
+
+describe("indiceDeColumna", () => {
+  it("es la vuelta exacta de letraDeColumna", () => {
+    for (const i of [0, 15, 25, 26, 27, 51, 52, 701, 702]) {
+      expect(indiceDeColumna(letraDeColumna(i))).toBe(i);
+    }
+  });
+
+  /** La que importa: `P` es la columna Estado de las hojas por área. */
+  it("P es la 15", () => {
+    expect(indiceDeColumna("P")).toBe(15);
+  });
+
+  it("no se pelea con minúsculas ni espacios", () => {
+    expect(indiceDeColumna(" p ")).toBe(15);
+  });
+
+  /**
+   * Devuelve -1 y no un número inventado: el llamador ya sabe leer ese -1 como
+   * "esta columna no existe" y frena ahí. Un 0 silencioso apuntaría a la A.
+   */
+  it("lo que no es una columna da -1", () => {
+    expect(indiceDeColumna("")).toBe(-1);
+    expect(indiceDeColumna("P9")).toBe(-1);
+    expect(indiceDeColumna("Ñ")).toBe(-1);
   });
 });

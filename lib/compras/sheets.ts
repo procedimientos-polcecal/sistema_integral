@@ -13,7 +13,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
-import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { letraDeColumna, indiceDeColumna } from "@/lib/core/columnaDeSheets";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
@@ -29,7 +29,7 @@ import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPla
 import { exportarAltaAlFormulario } from "@/lib/compras/formulario";
 import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/types";
 import {
-  obtenerToken as tokenGoogle, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
+  obtenerToken as tokenGoogle, cuentaDeServicio, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
 
 const HOJA_MASTER = "Requerimientos internos";
@@ -85,6 +85,15 @@ export interface CacheSheets {
   opciones?: string[];
   encabezados: Map<string, string[]>;
   filasDelMaster?: Map<number, number>;
+  /**
+   * Los rangos protegidos de cada pestaña, para explicar un rechazo.
+   *
+   * Se leen de una sola llamada que trae las de toda la planilla —son unas 950—
+   * y sólo cuando hubo un rechazo por protección, que es raro. Sin el cache,
+   * una corrida con varios pendientes de la misma protección repetiría esa
+   * lectura por cada celda.
+   */
+  protecciones?: Map<string, ProteccionDeSheets[]>;
 }
 
 export function nuevoCacheSheets(): CacheSheets {
@@ -1149,7 +1158,12 @@ const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * La cuota de Sheets se cuenta por minuto, así que las esperas son de segundos
  * y no de milisegundos: reintentar rápido sólo gasta el intento.
  */
-async function escribirCelda(token: string, rango: string, valor: string): Promise<string | null> {
+async function escribirCelda(
+  token: string,
+  rango: string,
+  valor: string,
+  cache?: CacheSheets
+): Promise<string | null> {
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
     `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
@@ -1185,7 +1199,17 @@ async function escribirCelda(token: string, rango: string, valor: string): Promi
     // lo mismo en los dos casos. Un diagnóstico que no se puede distinguir de
     // otro no es un diagnóstico.
     console.error(`Sheets rechazó ${rango}: ${res.status} ${cuerpo}`);
-    return `${etiquetaDeError(res.status, cuerpo)} — Sheets dijo: ${detalleDeGoogle(cuerpo)}`;
+
+    // Y "celda protegida" tampoco se distingue de sí misma: le pasa a la celda
+    // cuya protección no incluye a la cuenta —que lo tiene que arreglar el
+    // dueño de la planilla— y a la que sí la incluye, donde el permiso no es
+    // el problema. Se le pregunta a la planilla cuál de las dos es. Sólo en
+    // este caso: es una lectura más, y acá ya falló algo.
+    const etiqueta =
+      (cuerpo.includes("protected") ? await etiquetaDeLaProteccion(token, rango, cache) : null) ??
+      etiquetaDeError(res.status, cuerpo);
+
+    return `${etiqueta} — Sheets dijo: ${detalleDeGoogle(cuerpo)}`;
   }
 }
 
@@ -1213,6 +1237,198 @@ function detalleDeGoogle(cuerpo: string): string {
   }
   const limpio = texto.replace(/\s+/g, " ").trim();
   return limpio.length > 160 ? limpio.slice(0, 157) + "…" : limpio;
+}
+
+// ── Por qué una celda protegida no deja escribir ──────────────
+//
+// "Celda protegida en la planilla" era el final del diagnóstico, y no alcanza:
+// esa misma frase sale cuando a la cuenta de servicio le falta permiso sobre
+// **esa** protección —que se arregla en la planilla, y sólo el dueño puede— y
+// cuando la cuenta sí figura entre sus editores y el rechazo viene por otro
+// lado. Las dos veces mandaba a "corregirlo a mano ahí", que en el primer caso
+// no lo puede hacer quien lee el cartel: para escribir en un rango protegido no
+// alcanza con ser editor de la planilla.
+//
+// El 27/08/2026 la confusión al revés costó una tarde: se revisaron 946
+// protecciones que estaban bien. El 11/09/2026 costó la de ida: el RI 1952 y el
+// 1953 quedaron trabados en una protección de la columna Estado que el script
+// de la planilla creó **sin** la cuenta de servicio, y el cartel no lo decía.
+// Medido ese día: de las 941 protecciones de la columna P, 904 la incluían y 37
+// no, y el script de la planilla sigue creando las nuevas sin ella.
+
+/** Un rango protegido, tal como lo devuelve la API de Sheets. */
+export interface ProteccionDeSheets {
+  description?: string;
+  warningOnly?: boolean;
+  /**
+   * Si la cuenta con la que estamos hablando puede escribir en el rango.
+   *
+   * Google **no manda la lista de editores a quien no puede editarla**, así que
+   * este campo (y no `editors`) es lo que distingue los dos casos. Por eso se
+   * pregunta por `=== true` y no por su ausencia: si algún día dejara de venir,
+   * el diagnóstico tiene que ser el vago y no una acusación falsa, y para eso
+   * está también el `editors` de abajo.
+   */
+  requestingUserCanEdit?: boolean;
+  editors?: { users?: string[] };
+  range?: RangoDeSheets;
+  /** Los agujeros de una protección de hoja entera: ahí sí se puede escribir. */
+  unprotectedRanges?: RangoDeSheets[];
+}
+
+/** Un rango de la API: índices en base 0, y el final no se incluye. */
+interface RangoDeSheets {
+  sheetId?: number;
+  startRowIndex?: number;
+  endRowIndex?: number;
+  startColumnIndex?: number;
+  endColumnIndex?: number;
+}
+
+/**
+ * Si un rango de la API cubre esa celda.
+ *
+ * `fila` viene en base 1 —como en `P947`— y `columna` en base 0, que es como la
+ * maneja el resto del archivo. Un extremo que no viene es "sin límite de ese
+ * lado": una protección de hoja entera llega con el `range` vacío salvo el
+ * `sheetId`, y así queda cubierta sin tener que tratarla aparte.
+ */
+function elRangoCubre(rango: RangoDeSheets | undefined, fila: number, columna: number): boolean {
+  if (!rango) return true;
+  const f = fila - 1;
+  return (
+    f >= (rango.startRowIndex ?? 0) &&
+    f < (rango.endRowIndex ?? Infinity) &&
+    columna >= (rango.startColumnIndex ?? 0) &&
+    columna < (rango.endColumnIndex ?? Infinity)
+  );
+}
+
+/** Si una protección frena la escritura de esa celda. */
+function laProteccionTocaLaCelda(
+  p: ProteccionDeSheets,
+  fila: number,
+  columna: number
+): boolean {
+  // Las de sólo advertencia avisan y dejan escribir igual: nunca son la causa.
+  if (p.warningOnly) return false;
+  if (!elRangoCubre(p.range, fila, columna)) return false;
+  // Una hoja protegida "menos estos rangos" no cubre lo que dejó afuera. Sin
+  // esto, una celda de un rango libre se leería como protegida y el cartel
+  // mandaría a dar un permiso que no falta.
+  return !(p.unprotectedRanges ?? []).some((libre) => elRangoCubre(libre, fila, columna));
+}
+
+/**
+ * Cómo se llama este rechazo, sabiendo qué protege la celda.
+ *
+ * Devuelve la etiqueta entera y no un agregado, para que cada caso se lea solo
+ * en la tabla de pendientes. El mensaje de Google se le sigue pegando atrás sin
+ * traducir, como a cualquier otro.
+ */
+export function etiquetaSegunLaProteccion(
+  protecciones: ProteccionDeSheets[],
+  fila: number,
+  columna: number,
+  cuenta?: string
+): string {
+  const tocan = protecciones.filter((p) => laProteccionTocaLaCelda(p, fila, columna));
+
+  if (tocan.length === 0) {
+    // Google dijo que está protegida y ninguna protección de rango la toca. No
+    // se inventa una causa: se dice que la planilla no coincide con el rechazo,
+    // que es lo que hay para ir a mirar.
+    return "celda protegida, pero ninguna protección de la planilla la toca";
+  }
+
+  const bloquean = tocan.filter(
+    (p) =>
+      p.requestingUserCanEdit !== true &&
+      !(cuenta && (p.editors?.users ?? []).includes(cuenta))
+  );
+
+  if (bloquean.length === 0) {
+    return "celda protegida, pero la cuenta de servicio figura entre sus editores: el rechazo es por otra cosa";
+  }
+
+  return "la protección de esa celda no incluye a la cuenta de servicio; la agrega el dueño de la planilla";
+}
+
+/**
+ * La celda a la que apuntaba un rango ya armado: `RI MANTENIMIENTO!P947`.
+ *
+ * Lo que le queda al que recibe el rechazo es el texto que se le mandó a
+ * Google, así que se vuelve de ahí. La hoja se corta por el **último** `!`
+ * porque el nombre de la pestaña puede tener espacios —`Requerimientos
+ * internos`— y acá nunca viene entrecomillado: lo arma este mismo archivo.
+ */
+export function celdaDeUnRango(
+  rango: string
+): { hoja: string; fila: number; columna: number } | null {
+  const corte = rango.lastIndexOf("!");
+  if (corte < 1) return null;
+
+  const hoja = rango.slice(0, corte);
+  const celda = /^([A-Za-z]+)([0-9]+)$/.exec(rango.slice(corte + 1));
+  if (!celda) return null;
+
+  const columna = indiceDeColumna(celda[1]);
+  if (columna < 0) return null;
+
+  return { hoja, fila: Number(celda[2]), columna };
+}
+
+/** Los rangos protegidos de cada pestaña, una sola vez por corrida. */
+async function proteccionesDeLaPlanilla(
+  token: string,
+  cache?: CacheSheets
+): Promise<Map<string, ProteccionDeSheets[]>> {
+  if (cache?.protecciones) return cache.protecciones;
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}` +
+    `?fields=${encodeURIComponent("sheets(properties(title),protectedRanges)")}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+
+  const json = (await res.json()) as {
+    sheets?: { properties?: { title?: string }; protectedRanges?: ProteccionDeSheets[] }[];
+  };
+
+  const mapa = new Map<string, ProteccionDeSheets[]>();
+  for (const hoja of json.sheets ?? []) {
+    if (hoja.properties?.title) mapa.set(hoja.properties.title, hoja.protectedRanges ?? []);
+  }
+
+  if (cache) cache.protecciones = mapa;
+  return mapa;
+}
+
+/**
+ * Qué decir de un rechazo por protección, preguntándole a la planilla.
+ *
+ * Devuelve null cuando no se pudo averiguar, y ahí el llamador se queda con la
+ * etiqueta de siempre: **un error al diagnosticar no puede tapar el error que
+ * se estaba diagnosticando**, que es lo único que tiene valor acá.
+ */
+async function etiquetaDeLaProteccion(
+  token: string,
+  rango: string,
+  cache?: CacheSheets
+): Promise<string | null> {
+  try {
+    const celda = celdaDeUnRango(rango);
+    if (!celda) return null;
+
+    const porHoja = await proteccionesDeLaPlanilla(token, cache);
+    const protecciones = porHoja.get(celda.hoja);
+    if (!protecciones) return null;
+
+    return etiquetaSegunLaProteccion(protecciones, celda.fila, celda.columna, cuentaDeServicio());
+  } catch (err) {
+    console.error(`No se pudo averiguar qué protege ${rango}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /**
@@ -1324,7 +1540,8 @@ export async function exportarRequerimiento(
           const fallo = await escribirCelda(
             token,
             `${HOJA_MASTER}!${letraDeColumna(idx[COLUMNA_APROBACION])}${fila}`,
-            valor
+            valor,
+            cache
           );
           if (fallo) bloqueadas.push(`aprobación (${fallo})`);
           else escritas.push("aprobación");
@@ -1400,7 +1617,8 @@ export async function exportarRequerimiento(
           const fallo = await escribirCelda(
             token,
             `${HOJA_MASTER}!${letraDeColumna(columna)}${fila}`,
-            valor
+            valor,
+            cache
           );
           if (fallo) bloqueadas.push(`${clave} (${fallo})`);
           else escritas.push(clave);
@@ -1456,7 +1674,8 @@ export async function exportarRequerimiento(
         const motivo = await escribirCelda(
           token,
           `${r.hoja_origen}!${letraDeColumna(idx[clave])}${r.sheets_fila}`,
-          valor
+          valor,
+          cache
         );
         if (motivo) bloqueadas.push(`${clave} (${motivo})`);
         else escritas.push(clave);

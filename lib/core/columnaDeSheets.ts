@@ -37,3 +37,25 @@ export function letraDeColumna(indice: number): string {
   }
   return s;
 }
+
+/**
+ * El camino de vuelta: `A` → 0, `AA` → 26.
+ *
+ * Hace falta para leer un rango que ya está armado. Cuando una escritura vuelve
+ * rechazada, lo único que queda del destino es el `RI MANTENIMIENTO!P947` que se
+ * le mandó a Google, y para preguntarle a la planilla qué protege esa celda hay
+ * que volver de la letra al índice —que es como la API numera las columnas—.
+ *
+ * Vive acá, al lado de su gemela, por lo mismo que ella: no es una conversión
+ * que convenga reescribir en cada lugar que la necesite. Fuera del alfabeto no
+ * inventa un número: devuelve -1, que es lo que el resto del código ya sabe leer
+ * como "esta columna no existe".
+ */
+export function indiceDeColumna(letras: string): number {
+  const limpio = (letras ?? "").trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(limpio)) return -1;
+
+  let n = 0;
+  for (const letra of limpio) n = n * 26 + (letra.charCodeAt(0) - 64);
+  return n - 1;
+}

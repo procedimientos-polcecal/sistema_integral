@@ -120,7 +120,7 @@ Tiene un modelo de permisos propio y la cuenta de servicio no lo puede sortear:
   "APROBACIÓN DE GERENCIA", pero la cuenta de servicio pasa: verificado el
   26/08/2026, RI 1048, 1841 y 1860 |
 | Estado de compra de una fila aprobada | Protegida — 841 protecciones automáticas |
-| Comparativa (col. N) y estado (col. P) en las hojas por área | **Se escriben.** Están protegidas —`A:N` por rango, y `P<fila>` automática al aprobar— pero la cuenta de servicio figura entre sus editores. Verificado el 27/08/2026: los 12 pendientes que había quedaron en cero |
+| Comparativa (col. N) y estado (col. P) en las hojas por área | **Se escriben mientras alguien las mantenga.** Están protegidas —`A:N` por rango, y `P<fila>` automática al aprobar— y la cuenta de servicio figura entre los editores de casi todas, pero **no es una garantía permanente**: el script de la planilla crea las nuevas sin ella. Ver la trampa de más abajo |
 | Prioridad, empresa, proveedor, costos | Se escriben sin problema |
 
 Por eso **cada celda se escribe por separado**: con un lote único, una celda
@@ -240,6 +240,42 @@ Dos cosas quedaron de eso, y las dos valen para la próxima:
   orden. Hay dos funciones de apoyo en
   `docs/compras-permisos-apps-script.gs`: una agrega la cuenta a las
   protecciones y la otra sólo diagnostica, sin cambiar nada.
+
+**Y el mismo cartel también sale cuando el permiso SÍ es el problema.** El
+11/09/2026 pasó la otra mitad de lo de arriba: el RI 1952 y el 1953 quedaron
+trabados al pasar a "para comprar", con "celda protegida en la planilla", y esta
+vez la cuenta de servicio **realmente no estaba** entre los editores de la
+protección de `RI MANTENIMIENTO!P947`. Medido ese día contra la planilla real: de
+las 941 protecciones de la columna Estado, **904 incluían a la cuenta y 37 no**
+—filas 653, 708, 709, 854 y 947 a 950 de MANTENIMIENTO, 397, 505 y 552 a 561 de
+ALMACÉN, 216 y 251 de TALLER VIAL, 66 a 70 de LABORATORIO, 63 de OTRA—. El
+27/08/2026 esas mismas eran 8: **no es un incidente, es una fuga que crece**,
+porque el script de la planilla crea una protección al aprobar y no le agrega la
+cuenta. Se destrabó corriendo `darPermisoALaCuentaDeServicio` desde el dueño de
+la planilla (`nicolaslenzetti@polcecal.com`), y el reintento del cron escribió
+solo lo que había quedado pendiente.
+
+Tres cosas quedaron de eso:
+
+- **La solución de fondo no está en este repo.** Mientras el script de la
+  planilla que crea las protecciones no haga `proteccion.addEditor(CUENTA)` al
+  crearlas, esto vuelve de a poco. `darPermisoALaCuentaDeServicio` es la
+  curita, y hay que correrla cada tanto.
+- **Sólo el dueño de la planilla puede arreglarlo.** Para escribir en un rango
+  protegido no alcanza con ser editor del documento, así que `procedimientos@`
+  no puede ni corregir la celda a mano ni tocar la protección. El cartel decía
+  "hay que corregirlo a mano ahí" a alguien que no podía hacerlo.
+- **El cartel ahora distingue los dos casos.** Cuando Google contesta
+  `protected`, `escribirCelda` le pregunta a la planilla qué protege esa celda
+  y dice cuál de las tres cosas es: que la protección no incluye a la cuenta
+  —y que la agrega el dueño—, que sí la incluye y entonces el rechazo viene por
+  otro lado, o que ninguna protección la toca. La lógica está en
+  `etiquetaSegunLaProteccion` y se prueba en `proteccionDeLaCelda.test.ts` con
+  protecciones reales copiadas ese día. El truco para distinguirlas es que
+  **Google no manda la lista de editores a quien no puede editar**: lo que
+  decide es `requestingUserCanEdit`, no `editors`. Si falla la consulta, se
+  vuelve a la etiqueta de antes: un error al diagnosticar no puede tapar el
+  error que se estaba diagnosticando.
 
 **El reintento en lote se autoinfligía un 429.** Escribir un RI cuesta unas 13
 llamadas a la API de Sheets: hasta 8 escrituras —una por celda, porque un lote
