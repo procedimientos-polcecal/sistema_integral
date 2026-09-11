@@ -26,6 +26,15 @@ export interface FacturaProveedor {
   identificado_por: IdentificadoPor;
   estado: EstadoDeFactura;
   odoo_move_id: number | null;
+  /** `BILL/2026/09/0004`. En borrador Odoo lo deja en `/`: numera al postear. */
+  odoo_nombre: string | null;
+  /** `draft`, `posted` o `cancel`, como se vio en la última sincronización. */
+  odoo_estado: string | null;
+  /** `push`, `numero` o `a mano`. Ver la migración del vínculo con Odoo. */
+  odoo_conciliado_por: string | null;
+  /** Lo que dijo Odoo cuando algo falló, sin traducir. */
+  odoo_pendiente: string | null;
+  odoo_sincronizado_en: string | null;
   notas: string | null;
   cargado_por: string | null;
   created_at: string;

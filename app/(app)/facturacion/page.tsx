@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { nivelFacturacionDe } from "@/lib/facturacion/auth";
 import { traerCatalogos, traerElBuzon } from "@/lib/facturacion/consultas";
 import type { FacturaEnPantalla } from "@/lib/facturacion/types";
+import { dondeApuntaOdoo } from "@/lib/odoo/client";
 import BuzonClient from "./BuzonClient";
 
 /**
@@ -19,8 +20,10 @@ import BuzonClient from "./BuzonClient";
  * una. Una pantalla de una factura por vez habría sido una versión más linda de
  * lo que ya hacen.
  *
- * Lo que este buzón **no** hace: postear en Odoo. La factura la sigue cargando
- * administración. El SdG propone, Odoo confirma.
+ * Lo que este buzón **no** hace: postear en Odoo. Puede dejar la factura
+ * **en borrador** del lado de contabilidad, con todo puesto, y después averiguar
+ * sola cuándo la postearon; el asiento lo confirma una persona. El SdG propone,
+ * Odoo confirma.
  */
 export default async function FacturacionPage({
   searchParams,
@@ -48,6 +51,7 @@ export default async function FacturacionPage({
       proveedores={proveedores}
       estado={estado ?? null}
       facturas={filas.map(aPantalla)}
+      odoo={dondeApuntaOdoo()}
     />
   );
 }

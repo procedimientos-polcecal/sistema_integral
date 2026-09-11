@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+  TIPOS_DE_COMPROBANTE,
   claveNatural,
+  discriminaIva,
   esNotaDeCredito,
+  letraDelComprobante,
   nombreDelComprobante,
   nombreDelTipo,
   numeroFormateado,
+  referenciaParaOdoo,
 } from "./comprobante";
 
 describe("cómo se nombra un comprobante", () => {
@@ -87,5 +91,65 @@ describe("la clave natural del comprobante", () => {
   it("un CUIT que no tiene once dígitos no sirve como clave", () => {
     expect(claveNatural({ ...completa, cuitEmisor: "2321481183" })).toBeNull();
     expect(claveNatural({ ...completa, cuitEmisor: "23-21481183-9" })).toBeNull();
+  });
+});
+
+describe("la letra del comprobante", () => {
+  it("sale del código de ARCA", () => {
+    expect(letraDelComprobante(1)).toBe("A");
+    expect(letraDelComprobante(6)).toBe("B");
+    expect(letraDelComprobante(11)).toBe("C");
+    expect(letraDelComprobante(51)).toBe("M");
+    expect(letraDelComprobante(201)).toBe("A");
+  });
+
+  it("un código que no está en la tabla no tiene letra", () => {
+    expect(letraDelComprobante(88)).toBeNull();
+    expect(letraDelComprobante(null)).toBeNull();
+  });
+
+  it("todo comprobante con nombre tiene letra: las dos tablas no se separan", () => {
+    for (const codigo of Object.keys(TIPOS_DE_COMPROBANTE).map(Number)) {
+      expect(letraDelComprobante(codigo), String(codigo)).not.toBeNull();
+    }
+  });
+});
+
+describe("si el comprobante discrimina IVA", () => {
+  it("las A, las B y las M sí; las C no", () => {
+    // Medido contra el grupo: 793 facturas A, todas con impuesto; 4 C, ninguna.
+    expect(discriminaIva(1)).toBe(true);
+    expect(discriminaIva(6)).toBe(true);
+    expect(discriminaIva(51)).toBe(true);
+    expect(discriminaIva(11)).toBe(false);
+  });
+
+  it("ante un tipo desconocido no inventa un crédito fiscal", () => {
+    expect(discriminaIva(88)).toBe(false);
+    expect(discriminaIva(null)).toBe(false);
+  });
+});
+
+describe("la referencia con la que la factura se escribe en Odoo", () => {
+  it("usa la sigla que ya escribe administración y el punto de venta en cinco dígitos", () => {
+    expect(referenciaParaOdoo({ tipoComprobante: 1, puntoVenta: 6, numero: 10192 })).toBe(
+      "FC A 00006-00010192"
+    );
+    expect(referenciaParaOdoo({ tipoComprobante: 3, puntoVenta: 8, numero: 3715 })).toBe(
+      "NC A 00008-00003715"
+    );
+    expect(referenciaParaOdoo({ tipoComprobante: 201, puntoVenta: 8, numero: 273 })).toBe(
+      "FCE A 00008-00000273"
+    );
+  });
+
+  it("un tipo desconocido deja el número solo, sin inventarle sigla", () => {
+    expect(referenciaParaOdoo({ tipoComprobante: 88, puntoVenta: 6, numero: 10192 })).toBe(
+      "00006-00010192"
+    );
+  });
+
+  it("sin número no hay referencia", () => {
+    expect(referenciaParaOdoo({ tipoComprobante: 1, puntoVenta: null, numero: 10192 })).toBeNull();
   });
 });

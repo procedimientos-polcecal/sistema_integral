@@ -9,9 +9,14 @@ El buzón es la puerta única. Entra el archivo, el sistema lee el QR de ARCA, y
 ahí salen el emisor, el número, la fecha, el importe y **a cuál de las dos
 empresas se le facturó**, sin tipear nada.
 
-**Lo que el buzón no hace: postear en Odoo.** La factura la sigue cargando
-administración. Es la regla de todo el enlace con Odoo: el SdG propone, Odoo
-confirma. Ver [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+Desde ahí el buzón **deja la factura en borrador en Odoo** —con el proveedor, el
+número, la fecha y el importe puestos— y después **averigua solo** cuándo la
+postearon. Ver [El vínculo con Odoo](#el-vínculo-con-odoo).
+
+**Lo que el buzón no hace: postear en Odoo.** El asiento lo confirma una persona:
+un `account.move` posteado es inmutable y la numeración fiscal la asigna Odoo. Es
+la regla de todo el enlace: el SdG propone, Odoo confirma. Ver
+[ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
 
 El diseño acordado está en el
 [spec](superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md).
@@ -185,6 +190,94 @@ módulo está detrás del login.
   comprobante: cambiarlos lo convertiría en otro. Una cargada con el número
   equivocado se anota y se carga la buena.
 
+## El vínculo con Odoo
+
+Son dos cosas distintas y conviene no mezclarlas: **crear el borrador** (el SdG
+escribe en Odoo) y **conciliar** (el SdG lee de Odoo). El código está partido
+igual: `lib/facturacion/borradorEnOdoo.ts` y `lib/facturacion/conciliacion.ts`
+son puros y se prueban sin red; `lib/odoo/pushFactura.ts` y
+`lib/odoo/sincronizarFacturas.ts` hacen los viajes.
+
+### Odoo no tiene la localización argentina, y eso decide todo
+
+Medido el 11/09/2026 contra la instancia: **no existe `l10n_latam.document.type`
+ni ningún campo para el tipo de comprobante.** Para Odoo, una factura de
+proveedor del grupo es un documento genérico. Consecuencias directas:
+
+- El `name` es `BILL/2026/09/0004`, una **secuencia interna** que no tiene nada
+  que ver con el papel — y mientras está en borrador es `/`, porque Odoo numera
+  al postear. Nunca sirve para reconocer un comprobante.
+- El número fiscal vive en **`ref`**, escrito a mano: `FC A 00008-00003715`,
+  `FC   A 00008-00003738`, `FC A - 00008-00003683`. Y está en apenas **1.554 de
+  6.423 facturas (24%)**: de las otras 4.869 no hay registro de qué comprobante
+  son.
+
+Por eso el borrador que crea el SdG **siempre** escribe la referencia, con la
+sigla y el formato que ya usa administración (punto de venta en cinco dígitos:
+1.745 de 1.959 números cargados van así). Además de servir para reconocerla
+después, completa un dato que hoy se pierde en tres de cada cuatro facturas.
+
+### El IVA sale de la letra, no de una suposición
+
+El QR trae el importe **con IVA** y una línea de Odoo lleva el neto. Cuál es cuál
+lo decide la letra del comprobante, y eso está medido sobre los 1.143
+comprobantes con referencia cargada:
+
+| Letra | Comprobantes | Con impuesto |
+|---|---|---|
+| A | 793 | **793 (100%)**, 778 al 21% exacto |
+| B | 5 | 5 |
+| C | 4 | **0** |
+
+Una A o una B se cargan con IVA 21%; una C no lleva —el monotributista no lo
+discrimina— y ponérselo sería inventar un crédito fiscal. Un tipo desconocido va
+sin impuesto: un borrador al que le falta el IVA se completa mirándolo; uno con
+un IVA que no correspondía se postea sin que nadie lo note.
+
+Dividir el total por 1,21 reproduce el total **exacto en 785 de las 793 facturas
+A**, y en las otras 8 queda a menos de dos centavos. No se esconde: el push relee
+el `amount_total` que quedó en Odoo y avisa si no coincide.
+
+### La conciliación pide el número **y** el CUIT
+
+No alcanza con el importe. El trío (proveedor, fecha, importe) se repite en el
+**1,4%** de las facturas de 2026, y sin la fecha en el **14,5%**. Un 1,4% de
+enlaces mudos y equivocados es justo lo que este sistema no hace: una factura mal
+conciliada aparece como contabilizada y nadie vuelve a mirarla.
+
+Entonces se afirma el vínculo sólo cuando el CUIT del emisor es el del proveedor
+del asiento **y** el par (punto de venta, número) aparece en su referencia. Una
+factura de Odoo puede quedar vinculada a **varias** del buzón, y eso no es un
+error: 321 de las 1.147 referencias agrupan varios comprobantes en un asiento.
+
+**Probado contra los datos reales**: de 400 facturas de Odoo con referencia, 210
+tienen un solo número; la conciliación reconoció **189, se equivocó en 0** y dejó
+**21 ambiguas**. Las ambiguas enseñaron algo que no se deducía: administración
+**repite la misma referencia en asientos distintos** — `FC A 00008-00003291`
+figura en seis facturas de RUBIALES, con seis importes y seis fechas. La
+referencia, para ellos, es una nota; no una identidad. Ahí no se elige: se le
+muestran los candidatos a una persona.
+
+### Qué hace cada cosa
+
+| | |
+|---|---|
+| **Crear el borrador en Odoo** | Crea el `account.move` en borrador y deja la factura en `informada`, con `odoo_conciliado_por = push` |
+| **Buscar en Odoo** | Trae los candidatos de ese proveedor, con el motivo por el que están en la lista, para elegir a mano |
+| **Sincronizar con Odoo** | Relee los vínculos que hay y busca los que faltan. Lo corre también el cron `/api/cron/facturacion-sync`, a las 9:30 |
+| **Ya está en Odoo** | Sigue existiendo: es la marca manual para lo que ninguna regla puede afirmar |
+
+`odoo_conciliado_por` distingue `push` de `numero` y de `a mano` por el mismo
+motivo que `identificado_por` distingue el QR de lo tipeado: si mañana una
+factura aparece contabilizada y no debía, la primera pregunta es si lo dedujo el
+sistema o lo decidió alguien.
+
+Una línea de `account.move` **no necesita producto**, a diferencia de
+`purchase.order.line` —que lo exige por una restricción SQL—: Odoo le pone la
+cuenta de gasto que corresponde al proveedor. Comprobado creando facturas de
+verdad en staging y borrándolas (un borrador se borra directo; cancelar primero
+es cosa de las órdenes de compra).
+
 ## Los embeds hay que nombrarlos
 
 `facturas_proveedor` tiene FK a **empresas**, **proveedores** y
@@ -233,9 +326,12 @@ Acordarse de borrar las facturas de ahí después.
    proporción del recorte, que se puede sacar de la matriz de transformación con
    que la página dibuja la imagen. Es la única forma que queda, ahora que se sabe
    que las imágenes embebidas no se pueden leer desde el navegador.
-4. **Cerrar el círculo con Odoo**: detectar por el pull incremental cuándo la
-   factura ya apareció en Odoo y pasarla sola a `contabilizada`. Hoy ese estado
-   lo pone una persona con el botón "Ya está en Odoo".
-5. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
+4. ~~Cerrar el círculo con Odoo~~ **hecho**: ver [El vínculo con Odoo](#el-vínculo-con-odoo).
+5. **Las referencias repetidas de Odoo.** El 10% de los asientos con referencia
+   no se pueden conciliar solos porque el mismo número está escrito en varios.
+   Se resuelven a mano con los candidatos, pero si el volumen molesta, la
+   conversación es con administración: la referencia es el único lugar donde vive
+   el número del comprobante y hoy se usa como nota.
+6. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
    `res.partner.vat` para los 207 que están enlazados: es un cruce que se puede
    correr una vez y sube el reconocimiento automático del emisor.

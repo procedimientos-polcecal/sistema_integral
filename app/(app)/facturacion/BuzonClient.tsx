@@ -8,6 +8,14 @@ import { esNotaDeCredito, nombreDelComprobante } from "@/lib/facturacion/comprob
 import type { EmpresaDelGrupo, ProveedorDelPadron } from "@/lib/facturacion/altaDeFactura";
 import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
+import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
+
+/** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
+interface DondeApuntaOdoo {
+  base: string;
+  url: string;
+  esStaging: boolean;
+}
 
 /**
  * Cargar facturas al buzón, de a varias, y ver lo que ya entró.
@@ -76,14 +84,18 @@ export default function BuzonClient({
   proveedores,
   facturas,
   estado,
+  odoo,
 }: {
   puedeEditar: boolean;
   empresas: EmpresaDelGrupo[];
   proveedores: ProveedorDelPadron[];
   facturas: FacturaEnPantalla[];
   estado: string | null;
+  odoo: DondeApuntaOdoo;
 }) {
   const router = useRouter();
+  const [sincronizando, setSincronizando] = useState(false);
+  const [resumenOdoo, setResumenOdoo] = useState<string | null>(null);
   const [cola, setCola] = useState<Fila[]>([]);
   const [origen, setOrigen] = useState<OrigenDeFactura>("mail");
   const [leyendo, setLeyendo] = useState(false);
@@ -209,6 +221,35 @@ export default function BuzonClient({
 
   const pendientes = cola.filter((f) => f.estado === "lista" || f.estado === "sin-datos");
 
+  /**
+   * Preguntarle a Odoo cuáles de estas facturas ya están cargadas allá.
+   *
+   * Existe además del cron diario porque el cron corre una vez por día —el plan
+   * de Vercel no admite más— y cuando administración acaba de cargar un lote,
+   * esperar hasta mañana para ver el buzón limpio es esperar de más.
+   */
+  async function sincronizarConOdoo() {
+    setSincronizando(true);
+    setResumenOdoo(null);
+    const r = await fetch("/api/facturacion/odoo/sincronizar", { method: "POST" });
+    const datos = await r.json().catch(() => ({}));
+    setSincronizando(false);
+
+    if (!r.ok) {
+      setResumenOdoo(datos.error ?? "No se pudo consultar Odoo.");
+      return;
+    }
+
+    const partes = [
+      `${datos.revisadas} revisadas`,
+      `${datos.vinculadas} reconocidas`,
+      `${datos.contabilizadas} pasaron a contabilizadas`,
+    ];
+    if (datos.ambiguas) partes.push(`${datos.ambiguas} con más de un candidato`);
+    setResumenOdoo(partes.join(" · "));
+    router.refresh();
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 md:p-6">
       <div>
@@ -217,6 +258,18 @@ export default function BuzonClient({
           Subí el PDF o la foto y el sistema lee el QR: emisor, número, fecha, importe y a qué
           empresa se le facturó. Lo que el comprobante no diga, se completa acá.
         </p>
+        {/*
+         * Producción y staging se distinguen sólo por dos variables de entorno, y
+         * lo que se escribe de un lado es la contabilidad real del grupo. Que eso
+         * dependa de mirar un `.env` es demasiado frágil para una pantalla que
+         * crea borradores de factura.
+         */}
+        {odoo.esStaging && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Los borradores se están creando en <strong>{odoo.base}</strong>, que es una copia de
+            prueba: lo que se cree acá no aparece en el Odoo de verdad.
+          </p>
+        )}
       </div>
 
       {puedeEditar && (
@@ -308,8 +361,21 @@ export default function BuzonClient({
             >
               Sin vincular
             </Link>
+            {puedeEditar && (
+              <button
+                disabled={sincronizando}
+                onClick={sincronizarConOdoo}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+              >
+                {sincronizando ? "Preguntándole a Odoo…" : "Sincronizar con Odoo"}
+              </button>
+            )}
           </div>
         </div>
+
+        {resumenOdoo && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{resumenOdoo}</p>
+        )}
 
         {facturas.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400">
@@ -318,7 +384,7 @@ export default function BuzonClient({
         ) : (
           <ul className="space-y-2">
             {facturas.map((f) => (
-              <FilaDelBuzon key={f.id} factura={f} puedeEditar={puedeEditar} />
+              <FilaDelBuzon key={f.id} factura={f} puedeEditar={puedeEditar} odoo={odoo} />
             ))}
           </ul>
         )}
@@ -529,18 +595,22 @@ function FilaDeCarga({
   );
 }
 
-/** Una factura ya cargada: qué es, y las dos acciones que quedan. */
+/** Una factura ya cargada: qué es, y lo que queda por hacer con ella. */
 function FilaDelBuzon({
   factura,
   puedeEditar,
+  odoo,
 }: {
   factura: FacturaEnPantalla;
   puedeEditar: boolean;
+  odoo: DondeApuntaOdoo;
 }) {
   const router = useRouter();
   const [nroRi, setNroRi] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
+  const [nota, setNota] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [candidatos, setCandidatos] = useState<CandidatoDeOdoo[] | null>(null);
 
   async function parchear(cambios: Record<string, unknown>) {
     setOcupado(true);
@@ -569,6 +639,64 @@ function FilaDelBuzon({
     }
     window.open(datos.link, "_blank", "noopener");
   }
+
+  /** Crear el borrador en Odoo con lo que ya sabe el buzón. */
+  async function empujar() {
+    setOcupado(true);
+    setAviso(null);
+    setNota(null);
+    const r = await fetch(`/api/facturacion/facturas/${factura.id}/odoo`, { method: "POST" });
+    const datos = await r.json().catch(() => ({}));
+    setOcupado(false);
+    if (!r.ok) {
+      setAviso(datos.error ?? "No se pudo crear el borrador en Odoo.");
+      return;
+    }
+    // Los avisos no son errores: el borrador existe, pero hay algo para mirar.
+    if (datos.avisos?.length) setNota(datos.avisos.join(" "));
+    router.refresh();
+  }
+
+  /** Los candidatos de Odoo, para las que cargó administración por su cuenta. */
+  async function buscarEnOdoo() {
+    setOcupado(true);
+    setAviso(null);
+    const r = await fetch(`/api/facturacion/facturas/${factura.id}/odoo`);
+    const datos = await r.json().catch(() => ({}));
+    setOcupado(false);
+    if (!r.ok) {
+      setAviso(datos.error ?? "No se pudo consultar Odoo.");
+      return;
+    }
+    setCandidatos(datos.candidatos ?? []);
+    if (datos.motivo) setAviso(datos.motivo);
+  }
+
+  async function vincularEnOdoo(c: CandidatoDeOdoo) {
+    setOcupado(true);
+    const r = await fetch(`/api/facturacion/facturas/${factura.id}/odoo`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        odoo_move_id: c.odooMoveId,
+        odoo_nombre: c.nombre,
+        odoo_estado: c.estado,
+      }),
+    });
+    const datos = await r.json().catch(() => ({}));
+    setOcupado(false);
+    if (!r.ok) {
+      setAviso(datos.error ?? "No se pudo vincular.");
+      return;
+    }
+    setCandidatos(null);
+    router.refresh();
+  }
+
+  const enlaceAlAsiento =
+    factura.odoo_move_id && odoo.url
+      ? `${odoo.url}/web#id=${factura.odoo_move_id}&model=account.move&view_type=form`
+      : null;
 
   return (
     <li className="rounded-xl border border-slate-200 bg-white p-3">
@@ -643,6 +771,43 @@ function FilaDelBuzon({
             </button>
           )}
 
+          {/*
+           * El bloque de Odoo. Cuando la factura ya tiene asiento, el enlace: el
+           * número de una orden o de un asiento no identifica nada por sí solo
+           * —staging y producción tienen los dos el mismo— y un enlace sí.
+           */}
+          {factura.odoo_move_id ? (
+            <a
+              href={enlaceAlAsiento ?? "#"}
+              target="_blank"
+              rel="noopener"
+              className="rounded-lg border border-teal-300 bg-teal-50 px-2 py-1 text-xs text-teal-800 hover:bg-teal-100"
+            >
+              {factura.odoo_estado === "posted"
+                ? `En Odoo${factura.odoo_nombre && factura.odoo_nombre !== "/" ? `: ${factura.odoo_nombre}` : ""}`
+                : "Borrador en Odoo"}
+            </a>
+          ) : (
+            puedeEditar && (
+              <>
+                <button
+                  disabled={ocupado}
+                  onClick={empujar}
+                  className="rounded-lg border border-teal-300 bg-teal-50 px-2 py-1 text-xs text-teal-800 disabled:opacity-40 hover:bg-teal-100"
+                >
+                  Crear el borrador en Odoo
+                </button>
+                <button
+                  disabled={ocupado}
+                  onClick={buscarEnOdoo}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                >
+                  Buscar en Odoo
+                </button>
+              </>
+            )
+          )}
+
           {puedeEditar && factura.estado !== "contabilizada" && (
             <button
               disabled={ocupado}
@@ -656,7 +821,53 @@ function FilaDelBuzon({
       </div>
 
       {factura.notas && <p className="mt-1 text-xs text-slate-500">{factura.notas}</p>}
+      {factura.odoo_pendiente && (
+        <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
+          {factura.odoo_pendiente}
+        </p>
+      )}
+      {nota && <p className="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">{nota}</p>}
       {aviso && <p className="mt-1 rounded bg-rose-50 px-2 py-1 text-xs text-rose-800">{aviso}</p>}
+
+      {/*
+       * Los candidatos se muestran con el motivo por el que están en la lista.
+       * Es lo que permite elegir con criterio: "el número coincide" es una
+       * certeza y "es del mismo proveedor" es apenas un punto de partida.
+       */}
+      {candidatos && (
+        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+          {candidatos.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              No hay ninguna factura de ese proveedor en Odoo en los últimos meses.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {candidatos.map((c) => (
+                <li key={c.odooMoveId} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded bg-white px-1.5 py-0.5 text-slate-500">{c.porque}</span>
+                  <span className="text-slate-700">{c.nombre !== "/" ? c.nombre : "borrador"}</span>
+                  <span className="text-slate-500">{c.fecha ?? "sin fecha"}</span>
+                  <span className="text-slate-500">{plata(c.importeTotal)}</span>
+                  {c.referencia && <span className="text-slate-400">{c.referencia}</span>}
+                  <button
+                    disabled={ocupado}
+                    onClick={() => vincularEnOdoo(c)}
+                    className="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-700 disabled:opacity-40"
+                  >
+                    Es ésta
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            onClick={() => setCandidatos(null)}
+            className="mt-1 text-xs text-slate-400 underline"
+          >
+            cerrar
+          </button>
+        </div>
+      )}
     </li>
   );
 }

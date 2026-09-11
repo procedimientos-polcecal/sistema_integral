@@ -179,3 +179,98 @@ export async function resolverContextoDeOdoo(
     },
   };
 }
+
+// ── El contexto de las facturas de proveedor ─────────────────
+
+export interface DatosDeEmpresaParaFacturas {
+  diarioId: number;
+  /** El IVA 21% de compras de esa empresa. `null` si no lo tiene configurado. */
+  impuestoId: number | null;
+}
+
+export interface ContextoDeFacturas {
+  monedas: Record<string, number>;
+  porEmpresa: Record<number, DatosDeEmpresaParaFacturas>;
+}
+
+export type ResultadoDeContextoDeFacturas =
+  | { ok: true; contexto: ContextoDeFacturas }
+  | { ok: false; problemas: string[] };
+
+/**
+ * Los ids que necesita un borrador de factura de proveedor.
+ *
+ * Es el gemelo de `resolverContextoDeOdoo` para el otro lado del circuito, y por
+ * los mismos motivos: nada va fijo en el código, todo se busca por nombre exacto
+ * y si falta se informa en vez de elegir algo parecido.
+ *
+ * Dos diferencias con el de las órdenes de compra, y las dos salen de haberlo
+ * medido contra la instancia real:
+ *
+ * - **No hace falta producto.** `account.move.line` no tiene la restricción SQL
+ *   que obliga a `product_id` en `purchase.order.line`: la línea se crea con
+ *   nombre y precio, y Odoo resuelve la cuenta de gasto por el proveedor.
+ * - **El diario sí hace falta y es por empresa**: el `BILL` de Polcecal es el 11
+ *   y el de Polysan el 23. Dejarlo implícito haría que la factura caiga en el
+ *   diario de la empresa por defecto del usuario bot.
+ */
+export async function resolverContextoDeFacturas(
+  companyIds: number[]
+): Promise<ResultadoDeContextoDeFacturas> {
+  const problemas: string[] = [];
+
+  const [monedasCrudas, diarios, impuestos] = await Promise.all([
+    buscarLeer<{ id: number; name: string }>(
+      "res.currency",
+      [["name", "in", ["ARS", "USD"]]],
+      ["name"],
+      { limite: 10, contexto: { active_test: false } }
+    ),
+    buscarLeer<{ id: number; company_id: unknown }>(
+      "account.journal",
+      [
+        ["type", "=", "purchase"],
+        ["company_id", "in", companyIds],
+      ],
+      ["name", "company_id"],
+      { limite: 20, orden: "id asc" }
+    ),
+    buscarLeer<{ id: number; company_id: unknown }>(
+      "account.tax",
+      [
+        ["name", "=", NOMBRE_IMPUESTO],
+        ["type_tax_use", "=", "purchase"],
+        ["company_id", "in", companyIds],
+      ],
+      ["name", "company_id"],
+      { limite: 20, orden: "id asc" }
+    ),
+  ]);
+
+  const monedas: Record<string, number> = {};
+  for (const m of monedasCrudas) monedas[m.name] = m.id;
+  if (!monedas.ARS) problemas.push("Odoo no tiene la moneda ARS activa.");
+
+  const porEmpresa: Record<number, DatosDeEmpresaParaFacturas> = {};
+  for (const companyId of companyIds) {
+    const diario = diarios.find((d) => idDeRelacion(d.company_id) === companyId);
+    const impuesto = impuestos.find((t) => idDeRelacion(t.company_id) === companyId);
+
+    if (!diario) {
+      problemas.push(
+        `La empresa ${companyId} de Odoo no tiene un diario de compras donde poner la factura.`
+      );
+      continue;
+    }
+    /*
+     * Que falte el impuesto no frena nada: una factura C no lo lleva, y una A
+     * sin impuesto es un borrador al que contabilidad le agrega el IVA, que es
+     * mejor que no tener el borrador. Se informa arriba, en el push.
+     */
+    porEmpresa[companyId] = { diarioId: diario.id, impuestoId: impuesto?.id ?? null };
+  }
+
+  if (problemas.length) return { ok: false, problemas };
+
+  return { ok: true, contexto: { monedas, porEmpresa } };
+}
