@@ -161,29 +161,35 @@ y la tiene: **se baja el PDF oficial de Odoo, sin guardar ninguna contraseña**.
 `purchase.order.button_confirm` es público. Probado sobre la P02429 y la P02428
 en staging el 11/09/2026: pasaron de `draft` a `purchase`.
 
-La orden se confirma **al generarla**, que es lo que se pidió: sale lista para
-imprimir y mandarle al proveedor, no en borrador. Lo que eso trae, y conviene
-tenerlo escrito:
+**Es un botón aparte, no algo que pase al generar la orden.** La primera versión
+confirmaba sola y se cambió después de ver lo que eso arrastra:
 
 - **Confirmar crea el remito de entrada.** En la prueba, `Polys/IN/00176`, en
   estado *Preparado*. Es lo correcto —una orden confirmada tiene una recepción
   esperada— pero es un movimiento real en el Odoo del grupo.
 - **La orden deja de editarse y de borrarse** del otro lado: sólo se cancela.
   O sea que saltea la revisión que alguien podía hacer allá sobre el borrador.
-- Confirmar **no** es postear: no se escribe ningún asiento. La contabilidad la
-  sigue escribiendo Odoo.
 
-Un fallo al confirmar **no invalida la orden**: ya está creada y vinculada.
-Queda el aviso en `odoo_pendiente` y en pantalla, y el botón *Reintentar lo que
-falte* la confirma —por eso el reintento pasa por la confirmación también
-cuando la orden ya existía—. Una orden **cancelada** en Odoo no se reconfirma:
-Odoo manda.
+Las dos cosas son decisiones de quien compra, no efectos secundarios de haber
+pasado un RI a *pedido*. Confirmar **no** es postear: no se escribe ningún
+asiento, la contabilidad la sigue escribiendo Odoo.
 
-El orden de las operaciones importa y no es casual: **crear → guardar el
-vínculo → confirmar**. Si se corta en el medio, la orden queda en borrador pero
-atada al requerimiento, así que el reintento la encuentra y la termina. Al
-revés quedaría una orden confirmada que el SdG no puede volver a encontrar, y
-confirmada ya no se borra.
+El botón sólo aparece cuando la orden se puede confirmar, y eso no es "no está
+confirmada": `cancel` no se reconfirma —sería revivir a mano algo que dieron de
+baja del otro lado— y `to approve` tampoco, porque ahí Odoo pide
+`button_approve`, que es la aprobación de otra persona y con otra
+responsabilidad. La regla vive en `lib/odoo/estadoDeOrden.ts`, con tests.
+
+El estado se **pregunta a Odoo** cada vez que se abre la ficha, y no se guarda
+de este lado: la orden vive allá y ahí la confirma o la cancela cualquiera, así
+que una copia nuestra empezaría a mentir el primer día sin que nada avise. La
+consulta la hace el navegador, no la ficha: la ficha es un Server Component y
+meterle la llamada la haría esperar hasta 30s para mostrar dos palabras. Y
+antes de confirmar se vuelve a mirar el estado, porque entre que la pantalla se
+dibujó y el clic pudo haber cambiado.
+
+Un fallo al confirmar no rompe nada: la orden sigue creada y vinculada, en
+borrador, y se confirma en Odoo o apretando de nuevo.
 
 ### El PDF
 
@@ -243,6 +249,11 @@ por eso la ruta pide 60s. Si Odoo no contesta, no hay papel: no se guarda copia
 de este lado, a propósito, porque una copia vieja de una orden que cambió es
 peor que no tener ninguna.
 
-**La confirmación automática saltea la revisión del borrador en Odoo.** Es lo
-pedido y es reversible —una orden confirmada se cancela—, pero deja el remito
-de entrada creado.
+**Confirmar sigue siendo irreversible en la práctica.** Aunque lo aprieta una
+persona, una orden confirmada no vuelve a borrador: se cancela. Y deja el
+remito de entrada creado. Por eso el botón dice a qué instancia le está
+hablando, como todo el resto de la sección.
+
+**El estado se pregunta a Odoo en cada apertura de la ficha.** Es una llamada
+más por RI con orden. Si Odoo no contesta, no se muestra estado ni se ofrece
+confirmar, y el resto de la pantalla sigue andando.

@@ -15,11 +15,11 @@ import { empujarOrdenesDeRequerimiento, ensayarOrdenesDeRequerimiento } from "@/
  * los `vals` exactos antes de apretar el botón, y después de cada cambio en el
  * requerimiento, es más barato que revisar una orden mal creada en Odoo.
  *
- * La orden se crea y se confirma (`button_confirm`), que es lo que la deja
- * lista para imprimir. Confirmar **no** es postear un asiento: la contabilidad
- * la sigue escribiendo Odoo, y desde la orden confirmada contabilidad genera la
- * factura. Lo que sí trae confirmar es el remito de entrada, y que la orden ya
- * no se edite ni se borre del otro lado.
+ * La orden se crea **en borrador**. Confirmarla es otra ruta y otro botón
+ * (`…/odoo/estado`), porque confirmar crea el remito de entrada en Odoo y deja
+ * la orden sin poder editarse ni borrarse allá: es una decisión de quien
+ * compra, no un efecto secundario de pasar un RI a *pedido*. Nada de esto
+ * postea un asiento: la contabilidad la sigue escribiendo Odoo.
  *
  * El `POST` acepta un cuerpo opcional `{ producto_id }` con el producto de
  * Odoo que Compras confirmó en el selector del ensayo. Sin cuerpo (o con uno

@@ -440,7 +440,8 @@ Lo que hay que saber antes de copiarlo a otro reporte:
   texto con la lista adentro.
 
 Y `button_confirm` de `purchase.order` sí es público: confirma, y **crea el
-remito de entrada**.
+remito de entrada**. Ojo con dispararlo solo: además del remito, deja la orden
+sin poder editarse ni borrarse en Odoo. En Compras lo aprieta una persona.
 
 ## Cuidados
 

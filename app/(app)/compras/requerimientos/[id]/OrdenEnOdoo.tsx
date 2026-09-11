@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   explicacionDeSugerencia,
@@ -19,11 +19,19 @@ import {
  * **desde** la orden, con ítems, precios e impuestos ya puestos, en vez de
  * tipearla de cero. Eso es lo que hace lenta la carga de facturas hoy.
  *
- * La orden se crea y **se confirma**, para que quede lista para imprimir y
- * mandarle al proveedor. Confirmar no es postear: no se escribe ningún asiento
- * desde acá — eso lo sigue haciendo contabilidad en Odoo. El SdG propone, Odoo
- * confirma.
+ * La orden se crea **en borrador**, y confirmarla es un botón aparte: confirmar
+ * crea el remito de entrada en Odoo y deja la orden sin poder editarse ni
+ * borrarse allá, así que lo decide una persona y no la generación. Confirmar
+ * tampoco es postear: no se escribe ningún asiento desde acá. El SdG propone,
+ * Odoo confirma.
  */
+
+/** El estado de una orden, tal como lo devuelve `…/odoo/estado`. */
+interface EstadoEnPantalla {
+  nombre: string;
+  sePuedeConfirmar: boolean;
+  estaConfirmada: boolean;
+}
 
 export interface OrdenDeOdoo {
   empresa: string;
@@ -81,13 +89,49 @@ export default function OrdenEnOdoo({
   const [ensayo, setEnsayo] = useState<EnsayoDeOrden | null>(null);
   /** Lo que hay que decirle a quien apretó, cuando no es un fallo. */
   const [advertencia, setAdvertencia] = useState<string | null>(null);
-  /** Qué orden está generando su PDF en Odoo, si hay alguna. */
-  const [bajando, setBajando] = useState<number | null>(null);
+  /**
+   * Qué orden está ocupada y en qué. Uno solo para las dos acciones: las dos
+   * hablan con Odoo, y dejar apretar la segunda mientras corre la primera sólo
+   * sirve para encimar dos esperas de treinta segundos.
+   */
+  const [ocupada, setOcupada] = useState<{ orden: number; que: "pdf" | "confirmar" } | null>(null);
+  /** El estado de cada orden en Odoo, por id. Llega después del primer dibujo. */
+  const [estados, setEstados] = useState<Record<number, EstadoEnPantalla>>({});
   // El producto elegido en el selector, como string porque así lo maneja un
   // <select>. Vacío es el genérico: lo mismo que no mandar nada en el POST.
   const [productoId, setProductoId] = useState("");
 
   const yaEstan = ordenes.length > 0;
+
+  /*
+   * El estado de cada orden se pregunta a Odoo, y se pregunta desde el
+   * navegador: la ficha es un Server Component y meterle esta llamada la haría
+   * esperar hasta 30s para mostrar dos palabras. Así la pantalla dibuja
+   * primero y el estado aparece cuando llega.
+   *
+   * Un fallo no se grita: sin estado no se ofrece confirmar y no se muestra
+   * nada, que es mejor que un cartel rojo por algo que no impide trabajar. El
+   * PDF y el resto de la sección siguen andando.
+   */
+  const traerEstados = useCallback(async () => {
+    if (!ordenes.length) return;
+
+    try {
+      const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo/estado`);
+      if (!res.ok) return;
+
+      const body: { estados?: ({ odooOrderId: number } & EstadoEnPantalla)[] } = await res.json();
+      setEstados(
+        Object.fromEntries((body.estados ?? []).map(({ odooOrderId, ...e }) => [odooOrderId, e]))
+      );
+    } catch {
+      // Odoo no contestó. Se ve la orden, sin su estado.
+    }
+  }, [requerimientoId, ordenes.length]);
+
+  useEffect(() => {
+    void traerEstados();
+  }, [traerEstados]);
 
   async function crear() {
     setTrabajando(true);
@@ -141,13 +185,10 @@ export default function OrdenEnOdoo({
       );
     }
 
-    // Lo que quedó a medias del lado de Odoo —típicamente una orden que se
-    // creó pero no se pudo confirmar—. Ya quedó en `odoo_pendiente`, pero el
-    // que apretó tiene que enterarse ahora.
-    partes.push(...((body.avisos ?? []) as string[]));
-
     if (partes.length) setAdvertencia(partes.join(" "));
 
+    // Las órdenes recién creadas todavía no tienen estado en la pantalla.
+    void traerEstados();
     router.refresh();
   }
 
@@ -161,7 +202,7 @@ export default function OrdenEnOdoo({
    * que se saca de la cabecera en vez de inventarlo acá.
    */
   async function bajarPdf(odooOrderId: number, odooNombre: string | null) {
-    setBajando(odooOrderId);
+    setOcupada({ orden: odooOrderId, que: "pdf" });
     setMotivos([]);
 
     try {
@@ -187,7 +228,45 @@ export default function OrdenEnOdoo({
     } catch (e) {
       setMotivos([e instanceof Error ? e.message : String(e)]);
     } finally {
-      setBajando(null);
+      setOcupada(null);
+    }
+  }
+
+  /**
+   * Confirmar una orden en Odoo.
+   *
+   * El estado que quedó lo devuelve la ruta, leído de Odoo: no se supone
+   * "confirmada" por haber apretado. Si entre que la pantalla se dibujó y el
+   * clic alguien la confirmó o la canceló allá, la respuesta lo dice y la
+   * pantalla se acomoda.
+   */
+  async function confirmar(odooOrderId: number, odooNombre: string | null) {
+    setOcupada({ orden: odooOrderId, que: "confirmar" });
+    setMotivos([]);
+    setAdvertencia(null);
+
+    try {
+      const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo/estado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orden: odooOrderId }),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setMotivos([
+          body.error ??
+            `No se pudo confirmar la orden ${odooNombre ?? odooOrderId} en Odoo.`,
+        ]);
+        return;
+      }
+
+      setEstados((previos) => ({ ...previos, [odooOrderId]: body as EstadoEnPantalla }));
+      if (body.aviso) setAdvertencia(body.aviso);
+    } catch (e) {
+      setMotivos([e instanceof Error ? e.message : String(e)]);
+    } finally {
+      setOcupada(null);
     }
   }
 
@@ -271,6 +350,42 @@ export default function OrdenEnOdoo({
                   {o.empresa}
                   {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}
                 </span>
+
+                {/*
+                  El estado sale de Odoo, no de una copia nuestra: allá lo puede
+                  cambiar cualquiera y una copia empezaría a mentir el primer
+                  día. Llega después de que la pantalla se dibujó, así que hasta
+                  entonces no se muestra nada en vez de suponer.
+                */}
+                {estados[o.odooOrderId] && (
+                  <span
+                    className={
+                      estados[o.odooOrderId].estaConfirmada
+                        ? "font-semibold text-emerald-700"
+                        : "text-slate-600"
+                    }
+                  >
+                    {estados[o.odooOrderId].nombre}
+                  </span>
+                )}
+
+                {/*
+                  Confirmar lo aprieta una persona y no la generación de la
+                  orden: crea el remito de entrada y a partir de ahí la orden no
+                  se edita ni se borra en Odoo, sólo se cancela.
+                */}
+                {puedeEditar && estados[o.odooOrderId]?.sePuedeConfirmar && (
+                  <button
+                    onClick={() => confirmar(o.odooOrderId, o.odooNombre)}
+                    disabled={ocupada !== null}
+                    className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
+                  >
+                    {ocupada?.orden === o.odooOrderId && ocupada.que === "confirmar"
+                      ? "Confirmando…"
+                      : "Confirmar en Odoo"}
+                  </button>
+                )}
+
                 {/*
                   El PDF es el de Odoo, generado en el momento: el mismo que
                   sale de Imprimir → Orden de compra. Si la orden todavía está
@@ -279,10 +394,12 @@ export default function OrdenEnOdoo({
                 */}
                 <button
                   onClick={() => bajarPdf(o.odooOrderId, o.odooNombre)}
-                  disabled={bajando !== null}
+                  disabled={ocupada !== null}
                   className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
                 >
-                  {bajando === o.odooOrderId ? "Generando…" : "Bajar el PDF"}
+                  {ocupada?.orden === o.odooOrderId && ocupada.que === "pdf"
+                    ? "Generando…"
+                    : "Bajar el PDF"}
                 </button>
               </span>
             </li>

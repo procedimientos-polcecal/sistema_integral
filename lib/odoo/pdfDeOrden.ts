@@ -198,7 +198,8 @@ export async function pdfDeLaOrden(odooOrderId: number): Promise<PdfDeOrden> {
  * Es `button_confirm`, público, probado sobre la P02429 el 11/09/2026: pasó de
  * `draft` a `purchase`. **Y no es gratis**: confirmar crea el remito de entrada
  * —en esa prueba, `Polys/IN/00176`— y a partir de ahí la orden no se edita ni
- * se borra en Odoo, sólo se cancela.
+ * se borra en Odoo, sólo se cancela. Por eso lo dispara una persona desde la
+ * ficha, y no la generación de la orden.
  *
  * Devuelve el estado que quedó, leído de Odoo y no supuesto: si una regla del
  * otro lado la dejó en otro estado, lo que vale es lo que dice Odoo.
@@ -218,12 +219,28 @@ export async function confirmarLaOrden(odooOrderId: number): Promise<string> {
 
 /** El estado de una orden en Odoo, o `null` si ya no está. */
 export async function estadoDeLaOrden(odooOrderId: number): Promise<string | null> {
-  const [orden] = await buscarLeer<{ id: number; state: string }>(
+  return (await estadosDeLasOrdenes([odooOrderId])).get(odooOrderId) ?? null;
+}
+
+/**
+ * Los estados de varias órdenes, en **una** llamada.
+ *
+ * La ficha de un RI compartido tiene dos órdenes y las pregunta juntas: contra
+ * Odoo Online, dos viajes de red son el doble de espera para mostrar dos
+ * palabras.
+ *
+ * Una orden que no vuelve en el resultado es una orden que ya no está en Odoo
+ * —la borraron—, y eso es un dato: queda fuera del mapa, no como `null` dentro.
+ */
+export async function estadosDeLasOrdenes(ids: number[]): Promise<Map<number, string>> {
+  if (!ids.length) return new Map();
+
+  const ordenes = await buscarLeer<{ id: number; state: string }>(
     "purchase.order",
-    [["id", "=", odooOrderId]],
+    [["id", "in", ids]],
     ["state"],
-    { limite: 1 }
+    { limite: ids.length }
   );
 
-  return orden?.state ?? null;
+  return new Map(ordenes.map((o) => [o.id, o.state]));
 }
