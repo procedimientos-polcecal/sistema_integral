@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
-import { montoPerforacion } from "./costos";
+import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
@@ -241,16 +241,23 @@ export async function traerDatosParaInforme(
 
   const bochones: BochonParaInforme[] = bs.map((b) => {
     const yac = porId.get(b.yacimiento_id) ?? null;
+    const montoUsd =
+      b.cantidad != null && b.metros_perforados != null && b.precio_usd_m != null
+        ? b.cantidad * b.metros_perforados * b.precio_usd_m
+        : null;
     return {
       codigo: b.codigo,
       cantera: yac?.codigo ?? "?",
       fecha: b.fecha_voladura ?? b.fin,
+      cantidad: b.cantidad,
       metros: b.metros_perforados,
-      montoUsd: b.metros_perforados != null && b.precio_usd_m != null ? b.metros_perforados * b.precio_usd_m : null,
-      montoArs:
-        b.metros_perforados != null && b.precio_usd_m != null && b.tc_usd != null
-          ? b.metros_perforados * b.precio_usd_m * b.tc_usd
-          : null,
+      montoUsd,
+      montoArs: montoBochon({
+        cantidad: b.cantidad,
+        metrosPerforados: b.metros_perforados,
+        precioUsdM: b.precio_usd_m,
+        tc: b.tc_usd,
+      }),
     };
   });
 

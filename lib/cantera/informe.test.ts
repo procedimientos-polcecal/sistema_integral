@@ -117,8 +117,8 @@ describe("armarInformeMensual", () => {
 
   it("bochones del mes se filtran por su fecha y no afectan a las otras dos listas", () => {
     const bochones: BochonParaInforme[] = [
-      { codigo: "B01D626", cantera: "D6", fecha: "2026-08-15", metros: 197, montoUsd: 998.79, montoArs: 1513166.85 },
-      { codigo: "B02D626", cantera: "D6", fecha: "2026-07-15", metros: 100, montoUsd: 507, montoArs: 700000 },
+      { codigo: "B01D626", cantera: "D6", fecha: "2026-08-15", cantidad: 197, metros: 1, montoUsd: 998.79, montoArs: 1513166.85 },
+      { codigo: "B02D626", cantera: "D6", fecha: "2026-07-15", cantidad: 100, metros: 1, montoUsd: 507, montoArs: 700000 },
     ];
     const informe = armarInformeMensual("2026-08", [], bochones);
     expect(informe.bochones.map((b) => b.codigo)).toEqual(["B01D626"]);

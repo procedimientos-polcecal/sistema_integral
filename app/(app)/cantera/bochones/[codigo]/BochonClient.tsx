@@ -73,6 +73,7 @@ export default function BochonClient({
   const dis = !puedeEditar;
 
   const monto = montoBochon({
+    cantidad: n(f.cantidad),
     metrosPerforados: n(f.metros_perforados),
     precioUsdM: n(f.precio_usd_m),
     tc: n(f.tc_usd),
@@ -121,7 +122,7 @@ export default function BochonClient({
           <Campo label="Voladura asociada" value={f.voladura_codigo} onChange={set("voladura_codigo")} disabled={dis} mono />
           <Campo label="Fecha de voladura" type="date" value={f.fecha_voladura} onChange={set("fecha_voladura")} disabled={dis} />
           <Campo label="Cantidad de bochones" value={f.cantidad} onChange={set("cantidad")} disabled={dis} />
-          <Campo label="Metros perforados" value={f.metros_perforados} onChange={set("metros_perforados")} disabled={dis} />
+          <Campo label="Metros por bochón (≤1)" value={f.metros_perforados} onChange={set("metros_perforados")} disabled={dis} />
           <Campo label="Precio USD/m" value={f.precio_usd_m} onChange={set("precio_usd_m")} disabled={dis} />
           <Campo label="TC USD ($/USD)" value={f.tc_usd} onChange={set("tc_usd")} disabled={dis} />
         </div>

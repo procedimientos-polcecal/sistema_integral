@@ -111,6 +111,7 @@ function armarFilaVoladura(
 
 function armarFilaBochon(b: Bochon, yac: Yacimiento | null): FilaBochon {
   const monto = montoBochon({
+    cantidad: b.cantidad,
     metrosPerforados: b.metros_perforados,
     precioUsdM: b.precio_usd_m,
     tc: b.tc_usd,

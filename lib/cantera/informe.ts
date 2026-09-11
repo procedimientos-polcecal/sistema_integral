@@ -47,6 +47,9 @@ export interface BochonParaInforme {
   codigo: string;
   cantera: string;
   fecha: string | null;
+  /** Cuántos bochones. */
+  cantidad: number | null;
+  /** Metros por bochón (≤ 1, casi siempre). */
   metros: number | null;
   montoUsd: number | null;
   montoArs: number | null;
@@ -79,6 +82,7 @@ export interface FilaBochon {
   codigo: string;
   cantera: string;
   fecha: string | null;
+  cantidad: number | null;
   metros: number | null;
   montoUsd: number | null;
   montoArs: number | null;
@@ -210,6 +214,7 @@ export function armarInforme(
     codigo: b.codigo,
     cantera: b.cantera,
     fecha: b.fecha,
+    cantidad: b.cantidad,
     metros: b.metros,
     montoUsd: b.montoUsd,
     montoArs: b.montoArs,

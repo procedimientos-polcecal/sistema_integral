@@ -27,8 +27,12 @@ describe("montoPerforacion", () => {
 });
 
 describe("montoBochon", () => {
-  it("es metros × precio USD/m × TC (B01D625: 197 × 5,07 × 1515)", () => {
-    expect(montoBochon({ metrosPerforados: 197, precioUsdM: 5.07, tc: 1515 })).toBeCloseTo(1513166.85, 0);
+  it("es cantidad × metros × precio USD/m × TC (B01D625: 197 bochones × 1 m × 5,07 × 1515)", () => {
+    expect(montoBochon({ cantidad: 197, metrosPerforados: 1, precioUsdM: 5.07, tc: 1515 })).toBeCloseTo(1513166.85, 0);
+  });
+
+  it("es null si falta la cantidad de bochones", () => {
+    expect(montoBochon({ cantidad: null, metrosPerforados: 1, precioUsdM: 5.07, tc: 1515 })).toBeNull();
   });
 });
 

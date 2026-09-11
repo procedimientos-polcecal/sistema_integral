@@ -291,26 +291,28 @@ export default function InformeClient({
             </h2>
             <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-sm">
-                <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fecha Voladura", "Metros Perf.", "Total USD", "Total ARS"]} /></thead>
+                <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fecha Voladura", "Cantidad", "Metros/bochón", "Total USD", "Total ARS"]} /></thead>
                 <tbody>
                   {informe.bochones.map((b, i) => (
                     <FilaCebra key={b.codigo} i={i} claro={VERDE_CLARO}>
                       <td className="px-3 py-2 font-mono">{b.codigo}</td>
                       <td className="px-3 py-2 font-mono text-slate-500">{b.cantera}</td>
                       <td className="px-3 py-2">{b.fecha}</td>
+                      <td className="px-3 py-2">{b.cantidad ?? "—"}</td>
                       <td className="px-3 py-2">{b.metros == null ? "—" : num1.format(b.metros)}</td>
                       <td className="px-3 py-2">{usd(b.montoUsd)}</td>
                       <td className="px-3 py-2">{money(b.montoArs)}</td>
                     </FilaCebra>
                   ))}
                   {informe.bochones.length === 0 && (
-                    <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">Sin bochones en el período.</td></tr>
+                    <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Sin bochones en el período.</td></tr>
                   )}
                 </tbody>
                 {informe.bochones.length > 0 && (
                   <tfoot>
                     <FilaTotal>
                       <td className="px-3 py-2" colSpan={3}>TOTALES</td>
+                      <td className="px-3 py-2"></td>
                       <td className="px-3 py-2"></td>
                       <td className="px-3 py-2">{usd(informe.totales.bochonUsd)}</td>
                       <td className="px-3 py-2">{money(informe.totales.bochonArs)}</td>

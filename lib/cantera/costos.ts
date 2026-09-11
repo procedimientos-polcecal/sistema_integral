@@ -43,16 +43,27 @@ export function montoPerforacion(e: {
   return metros * precio * tc + sereno;
 }
 
+/**
+ * El monto de un bochón: cantidad de bochones × metros perforados (por bochón,
+ * casi siempre ≤ 1 m) × precio USD/m × TC.
+ *
+ * Los dos números vienen invertidos en la planilla vieja respecto de lo que
+ * dicen sus propios encabezados —"Metros perf." guarda la cantidad de
+ * bochones y "Perforaciones" los metros—, confirmado con el usuario. Acá cada
+ * campo tiene el nombre de lo que realmente es.
+ */
 export function montoBochon(e: {
+  cantidad: number | null | undefined;
   metrosPerforados: number | null | undefined;
   precioUsdM: number | null | undefined;
   tc: number | null | undefined;
 }): number | null {
+  const cantidad = num(e.cantidad);
   const metros = num(e.metrosPerforados);
   const precio = num(e.precioUsdM);
   const tc = num(e.tc);
-  if (metros === null || precio === null || tc === null) return null;
-  return metros * precio * tc;
+  if (cantidad === null || metros === null || precio === null || tc === null) return null;
+  return cantidad * metros * precio * tc;
 }
 
 /**
