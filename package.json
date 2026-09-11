@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.108.2",
     "@types/leaflet": "^1.9.21",
+    "exceljs": "^4.4.0",
     "html2pdf.js": "^0.14.0",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
