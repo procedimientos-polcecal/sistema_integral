@@ -219,8 +219,17 @@ function maximoDeLaHoja_(hoja, primeraFila, filaQueSeSaltea) {
  * fórmula vieja también lo muestra, y es justamente la que se quiere reemplazar.
  * Lo que hay que mirar es la barra de fórmulas.
  *
- * Se puede correr las veces que se quiera: escribe el mismo número que ya
- * estaba, sólo que como valor.
+ * **NO renumera una fila que ya tiene otro número, y eso dejó de ser una
+ * precaución teórica el 11/09/2026.** Esta función busca la última fila con
+ * marca temporal, y decía de sí misma que se podía correr las veces que se
+ * quisiera porque escribía el mismo número que ya estaba. Era cierto mientras
+ * la última fila con marca fuera la última respuesta. Hoy no lo es: la fila
+ * 1969 es el alta que el sistema escribió el 9/9 —marca del 9/9, RI 1959— y
+ * quedó **debajo** de respuestas más nuevas, porque Forms inserta las suyas
+ * arriba de cualquier fila ajena. Correrla ahí le habría escrito 1967 al RI
+ * 1959: dos pedidos con el mismo número y el `upsert` de la sincronización
+ * colapsándolos en uno, que es exactamente cómo desapareció un pedido el
+ * 09/09/2026. Por eso ahora compara antes de escribir y se planta.
  */
 function numerarUltimaFila() {
   var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
@@ -237,9 +246,22 @@ function numerarUltimaFila() {
   }
   if (!fila) throw new Error('No encontré ninguna fila con marca temporal.');
 
-  var antes = hoja.getRange(fila, COL_NRO).getFormula();
+  var celda = hoja.getRange(fila, COL_NRO);
+  var antes = celda.getFormula();
+  var tenia = Number(celda.getValue());
   var n = siguienteNumero_(hoja, fila);
-  hoja.getRange(fila, COL_NRO).setValue(n);
+
+  if (!isNaN(tenia) && tenia > 0 && tenia !== n) {
+    Logger.log(
+      'Fila ' + fila + ': NO LA TOCO. Ya tiene el N° ' + tenia + ' y esto le ' +
+      'escribiría ' + n + '. Es una fila que no es la última respuesta —el alta ' +
+      'del sistema queda debajo de las respuestas más nuevas—, y renumerarla ' +
+      'duplicaría un N° de RI.'
+    );
+    return;
+  }
+
+  celda.setValue(n);
   SpreadsheetApp.flush();
 
   Logger.log(
