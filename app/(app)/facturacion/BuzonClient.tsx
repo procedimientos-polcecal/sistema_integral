@@ -10,6 +10,7 @@ import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
 import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
 import LineasDeFactura from "./LineasDeFactura";
+import BorradorEnOdoo from "./BorradorEnOdoo";
 
 /** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
 interface DondeApuntaOdoo {
@@ -89,8 +90,11 @@ export default function BuzonClient({
   facturas,
   estado,
   odoo,
+  puedeConfirmar,
 }: {
   puedeEditar: boolean;
+  /** Postear el asiento en Odoo: sólo administradores. */
+  puedeConfirmar: boolean;
   empresas: EmpresaDelGrupo[];
   proveedores: ProveedorDelPadron[];
   facturas: FacturaEnPantalla[];
@@ -393,7 +397,12 @@ export default function BuzonClient({
         ) : (
           <ul className="space-y-2">
             {facturas.map((f) => (
-              <FilaDelBuzon key={f.id} factura={f} puedeEditar={puedeEditar} odoo={odoo} />
+              <FilaDelBuzon
+                key={f.id}
+                factura={f}
+                puedeEditar={puedeEditar}
+                puedeConfirmar={puedeConfirmar}
+              />
             ))}
           </ul>
         )}
@@ -608,11 +617,11 @@ function FilaDeCarga({
 function FilaDelBuzon({
   factura,
   puedeEditar,
-  odoo,
+  puedeConfirmar,
 }: {
   factura: FacturaEnPantalla;
   puedeEditar: boolean;
-  odoo: DondeApuntaOdoo;
+  puedeConfirmar: boolean;
 }) {
   const router = useRouter();
   const [nroRi, setNroRi] = useState("");
@@ -621,6 +630,7 @@ function FilaDelBuzon({
   const [ocupado, setOcupado] = useState(false);
   const [candidatos, setCandidatos] = useState<CandidatoDeOdoo[] | null>(null);
   const [verDetalle, setVerDetalle] = useState(false);
+  const [verBorrador, setVerBorrador] = useState(false);
 
   async function parchear(cambios: Record<string, unknown>) {
     setOcupado(true);
@@ -725,11 +735,6 @@ function FilaDelBuzon({
     setCandidatos(null);
     router.refresh();
   }
-
-  const enlaceAlAsiento =
-    factura.odoo_move_id && odoo.url
-      ? `${odoo.url}/web#id=${factura.odoo_move_id}&model=account.move&view_type=form`
-      : null;
 
   return (
     <li className="rounded-xl border border-slate-200 bg-white p-3">
@@ -840,16 +845,17 @@ function FilaDelBuzon({
            * —staging y producción tienen los dos el mismo— y un enlace sí.
            */}
           {factura.odoo_move_id ? (
-            <a
-              href={enlaceAlAsiento ?? "#"}
-              target="_blank"
-              rel="noopener"
+            // Abre el borrador **adentro del sistema**. El enlace a Odoo sigue
+            // estando, adentro del panel: revisar no debería obligar a cambiar
+            // de aplicación, pero corregir sí se hace allá.
+            <button
+              onClick={() => setVerBorrador((v) => !v)}
               className="rounded-lg border border-teal-300 bg-teal-50 px-2 py-1 text-xs text-teal-800 hover:bg-teal-100"
             >
               {factura.odoo_estado === "posted"
                 ? `En Odoo${factura.odoo_nombre && factura.odoo_nombre !== "/" ? `: ${factura.odoo_nombre}` : ""}`
-                : "Borrador en Odoo"}
-            </a>
+                : "Ver el borrador de Odoo"}
+            </button>
           ) : (
             puedeEditar && (
               <>
@@ -888,6 +894,18 @@ function FilaDelBuzon({
           facturaId={factura.id}
           puedeEditar={puedeEditar}
           onCerrar={() => setVerDetalle(false)}
+        />
+      )}
+
+      {verBorrador && factura.odoo_move_id && (
+        <BorradorEnOdoo
+          facturaId={factura.id}
+          puedeConfirmar={puedeConfirmar}
+          onCerrar={() => setVerBorrador(false)}
+          onConfirmado={() => {
+            setVerBorrador(false);
+            router.refresh();
+          }}
         />
       )}
 

@@ -13,10 +13,9 @@ Desde ahí el buzón **deja la factura en borrador en Odoo** —con el proveedor
 número, la fecha y el importe puestos— y después **averigua solo** cuándo la
 postearon. Ver [El vínculo con Odoo](#el-vínculo-con-odoo).
 
-**Lo que el buzón no hace: postear en Odoo.** El asiento lo confirma una persona:
-un `account.move` posteado es inmutable y la numeración fiscal la asigna Odoo. Es
-la regla de todo el enlace: el SdG propone, Odoo confirma. Ver
-[ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+El borrador se puede **revisar y confirmar sin salir del sistema**. Ver
+[Confirmar desde el SdG](#confirmar-desde-el-sdg), que cambió una regla y
+conviene leer antes de tocarlo.
 
 El diseño acordado está en el
 [spec](superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md).
@@ -376,6 +375,59 @@ ALMENTA, la primera imputada a `5.2.1.01.220 Repuestos` y repartida entre tres
 equipos, el PDF adjunto (100.669 bytes), **posteado** como BILL/2026/09/0016 por
 1.774.706,11 contra los 1.774.706,10 del papel — el centavo del redondeo de la
 tercera línea. Después se borró.
+
+## Confirmar desde el SdG
+
+Hasta el 11/09/2026 la regla era **"el SdG propone, Odoo confirma"**: el SdG
+creaba el borrador y una persona lo posteaba en Odoo. A pedido, ahora también se
+puede postear desde el buzón. Vale la pena tener presente qué implica:
+
+- **Un asiento posteado es inmutable.** Odoo le asigna la numeración del diario y
+  deja de ser editable; corregirlo después es reabrirlo o reversarlo, que es una
+  operación contable. **Esto no se deshace desde el sistema**, y es la única
+  acción del módulo de la que se puede decir eso.
+- Por eso el posteo pide dos cosas que crear el borrador no pedía: una
+  confirmación explícita —el botón pregunta de nuevo, con el importe a la vista—
+  y que **los números cuadren con el papel**. Si el total del asiento no es el
+  del comprobante, no se postea: hay que arreglarlo en Odoo primero. Postear algo
+  que no coincide con la factura es el error que después nadie encuentra.
+- Lo que **no** cambió: el SdG no inventa asientos. Postea el que él mismo creó
+  desde una factura que entró por el buzón.
+
+El panel **Ver el borrador de Odoo** muestra el asiento *como está en Odoo ahora*
+—líneas, cuenta, analítica, impuestos, adjuntos y totales—, no como el SdG lo
+mandó. Es la diferencia entre revisar y suponer: si alguien lo tocó del otro
+lado, eso es justamente lo que hay que ver antes de confirmar. El enlace para
+abrirlo en Odoo sigue estando adentro del panel, porque **corregir** se hace allá.
+
+**Es lo único del módulo reservado a `admin`.** Cargar la factura, imputarla y
+dejar el borrador armado siguen siendo de `edicion` —son el trabajo de todos los
+días y todo eso se corrige—; lo que se reserva es el último paso, que es el que
+no se deshace. `admin` acá es el nivel del módulo (`usuario_modulos.nivel`), y
+`admin_sistema` lo tiene por rol.
+
+Quien no puede confirmar **igual ve el borrador entero**: revisar no es escribir,
+y esconderlo lo dejaría sin poder chequear lo que cargó.
+
+Ese permiso no tiene función espejo en la base, a diferencia de
+`tiene_acceso_facturacion()` y `puede_editar_facturacion()`, y no es un olvido:
+no hay policy que lo custodie porque el posteo no es un `insert` ni un `update`
+sobre una tabla nuestra — es una llamada a Odoo. La puerta es
+`puedeConfirmarEnOdoo()` y la ruta que la usa.
+
+## Buscar escribiendo, no desplegando
+
+Los tres catálogos de una línea son largos —378 productos, 242 cuentas contables
+y 358 analíticas por empresa—, y en un desplegable eso son cientos de opciones
+que hay que recorrer con la rueda. Los tres campos son buscadores: se escribe y
+se filtra.
+
+La búsqueda es por **partes sueltas**, no por prefijo: `cat 950` encuentra
+`EM6 - CATERPILLAR 950 G` y `rep` encuentra `5.2.1.01.220 Repuestos`. Cada
+palabra tiene que aparecer en algún lado, ni todas juntas ni en orden — nadie
+recuerda el nombre exacto de una cuenta analítica. Las analíticas se muestran
+agrupadas por plan (`EQUIPOS MÓVILES`, `MANTENIMIENTO`), que es como las piensa
+quien imputa.
 
 ## Los embeds hay que nombrarlos
 

@@ -47,6 +47,9 @@ export default async function FacturacionPage({
   return (
     <BuzonClient
       puedeEditar={nivel === "edicion" || nivel === "admin"}
+      // Confirmar en Odoo postea el asiento y eso no se deshace: es lo único
+      // del módulo reservado a administradores.
+      puedeConfirmar={nivel === "admin"}
       empresas={empresas}
       proveedores={proveedores}
       estado={estado ?? null}
