@@ -38,6 +38,14 @@ const TIPOS = ["in_invoice", "in_refund"];
 /** Cuánto se mira hacia atrás de la factura más vieja que falta conciliar. */
 const DIAS_DE_MARGEN = 30;
 
+/**
+ * Cuánto se mira hacia atrás al buscar los candidatos de **una** factura.
+ *
+ * Hacia adelante no hay tope, y es a propósito: contabilidad puede cargar en
+ * octubre una factura fechada el 10 de septiembre, pero no al revés.
+ */
+const DIAS_HACIA_ATRAS = 120;
+
 export interface ResumenDeLaSincronizacion {
   /** Facturas del buzón que ya tenían vínculo y se releyeron. */
   revisadas: number;
@@ -398,14 +406,18 @@ export async function candidatosEnOdoo(
     };
   }
 
-  const partners = await buscarLeer<{ id: number }>("res.partner", [["vat", "=", cuit]], ["vat"], {
-    limite: 20,
-  });
+  const partners = await buscarLeer<{ id: number; name: string }>(
+    "res.partner",
+    [["vat", "=", cuit]],
+    ["vat", "name"],
+    { limite: 20 }
+  );
   if (!partners.length) {
     return { candidatos: [], motivo: `Ningún proveedor de Odoo tiene el CUIT ${cuit}.` };
   }
 
   const fecha = (data.fecha as string | null) ?? new Date().toISOString().slice(0, 10);
+  const desde = restarDias(fecha, DIAS_HACIA_ATRAS);
   const crudos = await buscarLeer<{
     id: number;
     name: string | null;
@@ -421,11 +433,25 @@ export async function candidatosEnOdoo(
       ["move_type", "in", TIPOS],
       ["state", "!=", "cancel"],
       ["partner_id", "in", partners.map((p) => p.id)],
-      ["invoice_date", ">=", restarDias(fecha, 120)],
+      ["invoice_date", ">=", desde],
     ],
     ["name", "ref", "voucher_name", "full_voucher_name", "invoice_date", "amount_total", "state"],
     { limite: 60, orden: "invoice_date desc, id desc" }
   );
+
+  /*
+   * Cero candidatos con el proveedor encontrado no es lo mismo que cero
+   * candidatos porque el CUIT no está: el mensaje tiene que distinguirlos, o la
+   * persona se queda sin saber si buscó mal o si de verdad no está cargada.
+   */
+  if (!crudos.length) {
+    return {
+      candidatos: [],
+      motivo:
+        `${partners[0].name} está en Odoo, pero no tiene ninguna factura de proveedor ` +
+        `desde el ${desde}. Lo más probable es que todavía no la hayan cargado.`,
+    };
+  }
 
   const importe = Math.abs(Number(data.importe_total ?? 0));
   const puntoVenta = data.punto_venta as number | null;
