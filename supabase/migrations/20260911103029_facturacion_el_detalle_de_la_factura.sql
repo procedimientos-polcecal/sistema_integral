@@ -26,13 +26,56 @@
 -- 14), así que esto no cambia el caso común: lo que arregla es el 34% donde hoy
 -- había que desglosar a mano.
 --
+-- ## El orden de acá abajo importa, y costó un deadlock
+--
+-- **Las columnas de `facturas_proveedor` van primero, y la tabla nueva
+-- después.** Al revés —que era como estaba escrita— esto falla con
+-- `40P01: deadlock detected`.
+--
+-- El motivo: crear una tabla con `references facturas_proveedor` toma sobre ella
+-- un `ShareRowExclusiveLock`, y el `alter table ... add column` de más abajo
+-- necesita un `AccessExclusiveLock`. Eso es una **subida de lock** dentro de la
+-- misma transacción, y entre una y otra queda una ventana. Supabase dispara la
+-- relectura del esquema de PostgREST con cada DDL, así que justo ahí entra
+-- PostgREST: toma `AccessShare` sobre `facturas_proveedor` —lo que bloquea
+-- nuestro `alter`— y después pide leer la tabla recién creada, que nuestra
+-- transacción todavía tiene tomada. Cada uno espera al otro.
+--
+-- Haciendo el `alter` primero no hay subida: la transacción ya tiene el lock más
+-- fuerte cuando crea la tabla, y PostgREST espera afuera sin haber tomado nada.
+-- ============================================================
+
+-- ── 1. Las columnas de la factura (primero: ver arriba) ──────
+
+-- Cómo quedó el detalle. Va en la factura y no en cada línea porque es una
+-- propiedad de la lectura entera: o el detalle cuadra con el neto y se usa, o no
+-- y la factura va con una línea sola. Que sea visible evita la pregunta "¿por
+-- qué esta salió con una línea y aquélla con cuatro?".
+alter table facturas_proveedor
+  add column if not exists detalle_leido text
+    check (detalle_leido is null or detalle_leido in ('cuadra', 'no cuadra', 'sin detalle'));
+
+-- El mismo PDF que el buzón escanea se sube como adjunto del asiento, así que
+-- quien revisa el borrador en Odoo tiene el comprobante a mano sin salir de ahí.
+-- Se guarda el id para no volver a subirlo en cada reintento: un adjunto
+-- duplicado no rompe nada pero ensucia el chatter.
+alter table facturas_proveedor
+  add column if not exists odoo_attachment_id integer;
+
+comment on column facturas_proveedor.detalle_leido is
+  'Si el detalle leído del PDF cuadra con el neto del comprobante. Sólo cuando cuadra el borrador de Odoo sale con una línea por producto.';
+
+comment on column facturas_proveedor.odoo_attachment_id is
+  'El ir.attachment del PDF en Odoo. Evita subir el mismo archivo dos veces.';
+
+-- ── 2. El detalle ────────────────────────────────────────────
+--
 -- ## Qué se guarda de Odoo, y qué no
 --
 -- Se guardan los ids **y** el nombre con que se eligieron. El id es lo que viaja
 -- a Odoo; el nombre es para poder leer la fila dentro de seis meses sin tener
 -- que ir a buscar qué era la cuenta 706 — y para notar si alguien la renombró.
 -- Es el mismo criterio que `proveedores_odoo.cuit`.
--- ============================================================
 
 create table if not exists facturas_proveedor_lineas (
   id            uuid primary key default gen_random_uuid(),
@@ -81,6 +124,7 @@ create table if not exists facturas_proveedor_lineas (
 create index if not exists facturas_proveedor_lineas_factura_idx
   on facturas_proveedor_lineas (factura_id, orden);
 
+drop trigger if exists facturas_proveedor_lineas_updated_at on facturas_proveedor_lineas;
 create trigger facturas_proveedor_lineas_updated_at
   before update on facturas_proveedor_lineas
   for each row execute function set_updated_at();
@@ -88,34 +132,7 @@ create trigger facturas_proveedor_lineas_updated_at
 comment on table facturas_proveedor_lineas is
   'El detalle de una factura del buzón, leído del texto del PDF. Una fila por producto; alimenta las líneas del borrador en Odoo.';
 
--- ── Cómo quedó el detalle, en la factura ─────────────────────
---
--- Va en la factura y no en cada línea porque es una propiedad de la lectura
--- entera: o el detalle cuadra con el neto y se usa, o no y la factura va con una
--- línea sola. Que sea visible evita la pregunta "¿por qué esta salió con una
--- línea y aquélla con cuatro?".
-
-alter table facturas_proveedor
-  add column if not exists detalle_leido text
-    check (detalle_leido is null or detalle_leido in ('cuadra', 'no cuadra', 'sin detalle'));
-
-comment on column facturas_proveedor.detalle_leido is
-  'Si el detalle leído del PDF cuadra con el neto del comprobante. Sólo cuando cuadra el borrador de Odoo sale con una línea por producto.';
-
--- ── El archivo, del lado de Odoo ─────────────────────────────
---
--- El mismo PDF que el buzón escanea se sube como adjunto del asiento, así que
--- quien revisa el borrador en Odoo tiene el comprobante a mano sin salir de ahí.
--- Se guarda el id para no volver a subirlo en cada reintento: un adjunto
--- duplicado no rompe nada pero ensucia el chatter.
-
-alter table facturas_proveedor
-  add column if not exists odoo_attachment_id integer;
-
-comment on column facturas_proveedor.odoo_attachment_id is
-  'El ir.attachment del PDF en Odoo. Evita subir el mismo archivo dos veces.';
-
--- ── RLS: las mismas reglas que la factura ────────────────────
+-- ── 3. RLS: las mismas reglas que la factura ─────────────────
 
 alter table facturas_proveedor_lineas enable row level security;
 

@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Ocho trampas que esta base ya pisó, dos de ellas **dos veces**:
+Nueve trampas que esta base ya pisó, dos de ellas **dos veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -121,6 +121,24 @@ puede depender de eso: la misma fila daría claves distintas según quién
 consulte. El arreglo es elegir la variante buena a mano: `fecha::timestamp`.
 Vale igual para `to_char` y `extract`, que tienen el mismo par de sobrecargas.
 Pasó en `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`.
+
+**Agregarle una columna a una tabla y crear otra que la referencia, en ese
+orden, da `40P01: deadlock detected`.** Y el mensaje no dice nada útil: habla de
+dos procesos y de números de relación.
+
+Crear una tabla con `references otra_tabla` toma sobre la referida un
+`ShareRowExclusiveLock`; un `alter table otra_tabla add column` necesita un
+`AccessExclusiveLock`. Hacer el `create` primero y el `alter` después es una
+**subida de lock** dentro de la misma transacción, y entre las dos queda una
+ventana. Supabase dispara la relectura del esquema de PostgREST con cada DDL, así
+que justo ahí entra PostgREST, toma `AccessShare` sobre la tabla referida —lo que
+bloquea el `alter`— y después pide leer la tabla recién creada, que la migración
+todavía tiene tomada. Cada uno espera al otro.
+
+El arreglo es de una línea: **los `alter table` primero, los `create table` que
+la referencian después.** Así la transacción ya tiene el lock más fuerte cuando
+crea la tabla y no hay subida. Pasó en
+`20260911103029_facturacion_el_detalle_de_la_factura.sql`.
 
 ## Y una que no es de las migraciones pero muerde igual
 
