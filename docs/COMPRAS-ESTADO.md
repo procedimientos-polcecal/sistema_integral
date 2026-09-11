@@ -545,6 +545,69 @@ otra marca). Se prefiere `ART. VARIOS` y que Compras elija. Medido contra los
 completo y los números vigentes están en el docstring de
 `lib/compras/productoOdoo.ts`.
 
+**La orden de compra se confirma y su PDF se baja del sistema.** Las dos cosas
+son de la ficha del RI, al lado del número de orden. Lo que costó averiguar es
+que el PDF **no se puede pedir por donde parece**: `_render_qweb_pdf` es
+privado, `render_qweb_pdf` no existe en la 17, `mail.template.generate_email`
+tampoco, y `/web/session/authenticate` con la API key devuelve `AccessDenied`
+sin cookie —las API keys de Odoo tienen alcance `rpc` y **no abren sesión
+web**, que es lo único que habilita el endpoint de reportes—. Se consigue por
+el compositor de correo, que al crearse renderiza el reporte como
+`ir.attachment`; se lee y se borra. Es el PDF oficial, el mismo de *Imprimir →
+Orden de compra*, y no manda ningún correo. Está en `lib/odoo/pdfDeOrden.ts`, y
+el detalle —que sirve para cualquier reporte de Odoo— en
+[ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+
+**Confirmar es un botón y no pasa solo al generar la orden.** Primero se hizo
+automático y se cambió: `button_confirm` crea el remito de entrada —medido,
+`Polys/IN/00176`— y deja la orden sin poder editarse ni borrarse en Odoo, sólo
+cancelarse. Eso lo decide quien compra, no el hecho de pasar un RI a *pedido*.
+El botón aparece sólo cuando confirmar tiene sentido, y eso no es "no está
+confirmada": una cancelada no se reconfirma y una en `to approve` tampoco,
+porque ahí Odoo pide la aprobación de otra persona. El estado **se le pregunta
+a Odoo** cada vez —guardarlo de este lado sería una copia que empieza a mentir
+el primer día que alguien la confirme allá— y lo pregunta el navegador, para no
+dejar la ficha esperando.
+
+## Lo que hay que hacer a mano para que el alta llegue a la planilla
+
+El código está desplegado, pero **el alta no sale hasta que alguien haga estas
+cuatro cosas**, y ninguna la puede hacer un agente: tres son en Google y una en
+Vercel. Están contadas más arriba cada una por su lado; acá juntas, que es como
+se hacen.
+
+1. **`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID`** en Vercel (y en `.env.local` para
+   probar desde acá), con el id de la planilla de respuestas del formulario:
+   `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. **Hay que redesplegar** para
+   que tome. Sin ella cada alta queda en la cola de pendientes con el nombre de
+   la variable en el motivo — no se omite en silencio, a propósito.
+2. **Editor para la cuenta de servicio** sobre esa planilla. Es otra planilla
+   que el master: tener permiso sobre `PEDIDOS DE COMPRA` no alcanza.
+3. **Instalar `docs/compras-formulario-apps-script.gs`** en la planilla de
+   respuestas. Es el que numera las respuestas del formulario con `max(A)+1` en
+   vez de con la fórmula por fila. Sin él siguen numerándose por fórmula, que es
+   exactamente lo que hizo desaparecer un pedido el 09/09/2026.
+4. **Instalar `docs/compras-aviso-por-tiempo.gs`** y darle su activador por
+   tiempo. Es el que manda el mail de un pedido cargado en el sistema: una fila
+   escrita por la API no dispara el activador de *envío de formulario*. Sin él
+   el pedido entra igual, pero **nadie se entera por correo**.
+
+Y después, la comprobación de punta a punta, que tampoco es de agente porque
+escribe en la planilla de producción:
+
+1. Cargar un pedido de prueba desde `/mis-pedidos`.
+2. En la hoja de respuestas, que la fila quedó **al final**, con su N° de RI en
+   la columna A y `M`, `N` y `O` vacías.
+3. En el master, que aparece con su prioridad y su empresa (tarda: el
+   `IMPORTRANGE` refresca en minutos, no al instante).
+4. Sincronizar desde `/compras/configuracion` y confirmar contra la base que el
+   pedido **sigue** con `origen = "app"`, su prioridad y su `paga_ambas`: eso es
+   lo que prueba que la planilla no le pisó lo que sólo sabe el sistema.
+5. Aprobarlo y ver que aparece en la pestaña de su área con `SOLICITA` puesto.
+6. Borrarlo de la base y **vaciar su fila** en la hoja de respuestas. Vaciar, no
+   borrar la fila: correrla desalinea las columnas que las pestañas por área
+   tienen escritas a mano.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de
@@ -618,6 +681,8 @@ la migración es la **042**.
 | Importador | `scripts/import-compras/import.mjs` (idempotente, tiene `--dry-run`) |
 | Cómo funciona | [COMPRAS.md](COMPRAS.md) |
 | Sincronización | [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md) |
+| La orden de compra en Odoo | `lib/odoo/pushOrden.ts` la crea, `lib/compras/productoOdoo.ts` elige el producto, `lib/odoo/pdfDeOrden.ts` confirma y baja el PDF; el terreno está en [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md) |
+| Scripts de la planilla, para instalar a mano | `docs/compras-formulario-apps-script.gs` (numera las respuestas) y `docs/compras-aviso-por-tiempo.gs` (manda el mail del pedido cargado en el sistema) |
 | Análisis de la planilla | [COMPRAS-ANALISIS-PLANILLA.md](COMPRAS-ANALISIS-PLANILLA.md) |
 | Login y correos | [AUTENTICACION.md](AUTENTICACION.md) |
 | Variables de entorno | [VARIABLES-VERCEL.md](VARIABLES-VERCEL.md) |

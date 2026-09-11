@@ -10,6 +10,21 @@
 
 **Spec:** [docs/superpowers/specs/2026-09-09-compras-alta-a-la-planilla-design.md](../specs/2026-09-09-compras-alta-a-la-planilla-design.md) — puntos 1 a 6. El punto 7 (aviso por mail) quedó para una segunda tanda y **ya está hecho**: es `docs/compras-aviso-por-tiempo.gs`, para instalar a mano en el proyecto de Apps Script de la planilla de respuestas. No hay tarea de este plan que lo cubra porque no toca código del repo.
 
+**Estado (11/09/2026): las ocho tareas están hechas y pusheadas.** Lo que falta
+no es código: son cuatro pasos a mano —la variable en Vercel, el permiso de
+Editor de la cuenta de servicio, y los dos Apps Script— más la comprobación de
+punta a punta, que escribe en la planilla de producción. Están juntos y en orden
+en [docs/COMPRAS-ESTADO.md](../../COMPRAS-ESTADO.md), en "Lo que hay que hacer a
+mano para que el alta llegue a la planilla". **Hasta que se hagan, cada alta
+queda en la cola de pendientes** con el nombre de la variable en el motivo.
+
+Un detalle del texto de la Task 8 que quedó viejo y conviene no copiar de acá:
+decía que sin la variable el alta "se omite", y que el N° de RI lo pone la
+fórmula de la hoja. Las dos cosas cambiaron sobre la marcha —la omisión
+silenciosa limpiaba la cola, y la fórmula por fila no sobrevive a que Forms
+inserte una fila, lo que costó un pedido el 09/09/2026—. Lo que se escribió en
+los documentos es la versión buena, no la de este plan.
+
 ---
 
 ## Los datos de la planilla, para no tener que ir a mirarlos
@@ -1188,14 +1203,14 @@ git commit -m "feat(compras): la planilla dice quien pidio cada requerimiento"
 
 ---
 
-### Task 8: La variable de entorno y los documentos
+### Task 8: La variable de entorno y los documentos — HECHO
 
 **Files:**
 - Modify: `docs/VARIABLES-VERCEL.md`
 - Modify: `docs/COMPRAS-SINCRONIZACION.md`
 - Modify: `docs/COMPRAS-ESTADO.md`
 
-- [ ] **Step 1: La variable**
+- [x] **Step 1: La variable**
 
 En `docs/VARIABLES-VERCEL.md`, en la tabla de "Sincronización con la planilla (módulo Compras)", agregar después de `GOOGLE_SHEETS_COMPRAS_ID`:
 
@@ -1209,7 +1224,7 @@ Y en el bloque de ejemplo con los valores, agregar la línea:
 GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID=1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM
 ```
 
-- [ ] **Step 2: La sincronización**
+- [x] **Step 2: La sincronización**
 
 En `docs/COMPRAS-SINCRONIZACION.md`, en la tabla de "La regla", cambiar la fila de la planilla:
 
@@ -1234,7 +1249,7 @@ Y en la sección **Sistema → planilla**, agregar al final de la lista:
   asignó, no numera por su cuenta, lo deja pendiente y lo dice.
 ```
 
-- [ ] **Step 3: La trampa, para la próxima**
+- [x] **Step 3: La trampa, para la próxima**
 
 En `docs/COMPRAS-ESTADO.md`, antes de `## Lo que quedó pendiente`, agregar:
 
@@ -1257,7 +1272,7 @@ arregla porque cada alta ahora ocupa su fila allá, y el que numera vuelve a ser
 uno solo.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/VARIABLES-VERCEL.md docs/COMPRAS-SINCRONIZACION.md docs/COMPRAS-ESTADO.md
