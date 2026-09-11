@@ -13,6 +13,7 @@ import { toneladasEstimadas, desvioContraPlanilla } from "@/lib/cantera/tonelada
 import { totalMetros, totalPozos, type Tramo } from "@/lib/cantera/tramos";
 import { ETIQUETA_TIPO_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Consumo, Insumo, Voladura, Yacimiento } from "@/lib/cantera/types";
+import ConciliacionOdoo from "../../ConciliacionOdoo";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -153,12 +154,14 @@ export default function VoladuraClient({
   consumos,
   insumos,
   puedeEditar,
+  puedeFacturar,
 }: {
   voladura: Voladura;
   yacimiento: Yacimiento | null;
   consumos: Consumo[];
   insumos: Insumo[];
   puedeEditar: boolean;
+  puedeFacturar: boolean;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -325,6 +328,24 @@ export default function VoladuraClient({
           <Campo label="Noches de sereno" value={f.perf_noches_sereno} onChange={set("perf_noches_sereno")} disabled={dis} />
           <Campo label="Monto por noche ($)" value={f.perf_monto_noche} onChange={set("perf_monto_noche")} disabled={dis} />
         </div>
+        {puedeFacturar && (
+          <ConciliacionOdoo
+            titulo="Perforación"
+            endpoint={`/api/cantera/voladuras/${voladura.codigo}/conciliacion`}
+            etapa="perf"
+            montoCalculado={montoPerf}
+            vinculado={{
+              moveId: voladura.perf_odoo_move_id,
+              moveName: voladura.perf_odoo_move_name,
+              empresa: voladura.perf_odoo_empresa,
+              ref: voladura.perf_odoo_ref,
+              importe: voladura.perf_odoo_importe,
+              conforme: voladura.perf_conforme,
+              conformeObs: voladura.perf_conforme_obs,
+            }}
+            onCambio={() => router.refresh()}
+          />
+        )}
       </section>
 
       {/* ── Voladura ── */}
@@ -367,6 +388,24 @@ export default function VoladuraClient({
               placeholder={yacimiento ? String(yacimiento.densidad_t_m3) : "2.7"} />
           </label>
         </div>
+        {puedeFacturar && (
+          <ConciliacionOdoo
+            titulo="Voladura"
+            endpoint={`/api/cantera/voladuras/${voladura.codigo}/conciliacion`}
+            etapa="vol"
+            montoCalculado={montoVol}
+            vinculado={{
+              moveId: voladura.vol_odoo_move_id,
+              moveName: voladura.vol_odoo_move_name,
+              empresa: voladura.vol_odoo_empresa,
+              ref: voladura.vol_odoo_ref,
+              importe: voladura.vol_odoo_importe,
+              conforme: voladura.vol_conforme,
+              conformeObs: voladura.vol_conforme_obs,
+            }}
+            onCambio={() => router.refresh()}
+          />
+        )}
       </section>
 
       {/* ── Consumos ── */}

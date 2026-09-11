@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { montoBochon } from "@/lib/cantera/costos";
 import type { Bochon, Yacimiento } from "@/lib/cantera/types";
+import ConciliacionOdoo from "../../ConciliacionOdoo";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
@@ -44,10 +45,12 @@ export default function BochonClient({
   bochon,
   yacimiento,
   puedeEditar,
+  puedeFacturar,
 }: {
   bochon: Bochon;
   yacimiento: Yacimiento | null;
   puedeEditar: boolean;
+  puedeFacturar: boolean;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -131,6 +134,23 @@ export default function BochonClient({
           <textarea className={INPUT_CLS} rows={2} disabled={dis} value={f.observaciones}
             onChange={(e) => set("observaciones")(e.target.value)} />
         </label>
+        {puedeFacturar && (
+          <ConciliacionOdoo
+            titulo="Bochón"
+            endpoint={`/api/cantera/bochones/${bochon.codigo}/conciliacion`}
+            montoCalculado={monto}
+            vinculado={{
+              moveId: bochon.odoo_move_id,
+              moveName: bochon.odoo_move_name,
+              empresa: bochon.odoo_empresa,
+              ref: bochon.odoo_ref,
+              importe: bochon.odoo_importe,
+              conforme: bochon.conforme,
+              conformeObs: bochon.conforme_obs,
+            }}
+            onCambio={() => router.refresh()}
+          />
+        )}
       </section>
 
       {!dis && (
