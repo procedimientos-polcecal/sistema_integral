@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import { montoPerforacion } from "./costos";
+import { toneladasEstimadas } from "./toneladas";
+import { metrosYPozos } from "./tramos";
+import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
 import type { Bochon, Consumo, Insumo, Voladura, Yacimiento } from "./types";
 
 /**
@@ -169,4 +173,76 @@ export async function correlativosUsados(
     .eq("anio", anio);
   if (error) throw new Error(error.message);
   return (data ?? []).map((f) => (f as { correlativo: number }).correlativo);
+}
+
+/**
+ * Todo lo que necesita `lib/cantera/informe.ts`, ya armado desde la base: las
+ * voladuras (con sus consumos) y los bochones, con los montos y las toneladas
+ * despejados. La usan la pantalla del informe y su export a Excel — una sola
+ * vez, para que las dos miren exactamente lo mismo.
+ */
+export async function traerDatosParaInforme(
+  supabase: SupabaseClient
+): Promise<{ voladuras: VoladuraParaInforme[]; bochones: BochonParaInforme[] }> {
+  const yacimientos = await traerYacimientos(supabase);
+  const porId = new Map(yacimientos.map((y) => [y.id, y]));
+
+  const [vs, bs] = await Promise.all([traerVoladuras(supabase, {}), traerBochones(supabase, {})]);
+  const consumos = await traerConsumosDe(supabase, vs.map((v) => v.codigo));
+  const consumosPorCodigo = new Map<string, Consumo[]>();
+  for (const c of consumos) {
+    const lista = consumosPorCodigo.get(c.voladura_codigo) ?? [];
+    lista.push(c);
+    consumosPorCodigo.set(c.voladura_codigo, lista);
+  }
+
+  const voladuras: VoladuraParaInforme[] = vs.map((v) => {
+    const yac = porId.get(v.yacimiento_id) ?? null;
+    const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
+    const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
+    return {
+      codigo: v.codigo,
+      cantera: yac?.codigo ?? "?",
+      perfFin: v.perf_fin,
+      perfMetros: perf.metros,
+      perfMontoUsd: perf.metros != null && v.perf_precio_usd_m != null ? perf.metros * v.perf_precio_usd_m : null,
+      perfMontoArs: montoPerforacion({
+        metros: perf.metros,
+        precioUsdM: v.perf_precio_usd_m,
+        tc: v.perf_tc_usd,
+        nochesSereno: v.perf_noches_sereno,
+        montoNoche: v.perf_monto_noche,
+      }),
+      volFecha: v.vol_fecha,
+      volTc: v.vol_tc_usd,
+      toneladas: toneladasEstimadas({
+        metros: vol.metros ?? perf.metros,
+        densidad: v.densidad_t_m3 ?? yac?.densidad_t_m3 ?? null,
+        burden: v.vol_burden_m ?? v.burden_m ?? yac?.burden_m ?? null,
+        espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac?.espaciamiento_m ?? null,
+      }),
+      consumos: (consumosPorCodigo.get(v.codigo) ?? []).map((c) => ({
+        tipo: c.tipo,
+        cantidad: c.cantidad,
+        precio_usd: c.precio_usd,
+      })),
+    };
+  });
+
+  const bochones: BochonParaInforme[] = bs.map((b) => {
+    const yac = porId.get(b.yacimiento_id) ?? null;
+    return {
+      codigo: b.codigo,
+      cantera: yac?.codigo ?? "?",
+      fecha: b.fecha_voladura ?? b.fin,
+      metros: b.metros_perforados,
+      montoUsd: b.metros_perforados != null && b.precio_usd_m != null ? b.metros_perforados * b.precio_usd_m : null,
+      montoArs:
+        b.metros_perforados != null && b.precio_usd_m != null && b.tc_usd != null
+          ? b.metros_perforados * b.precio_usd_m * b.tc_usd
+          : null,
+    };
+  });
+
+  return { voladuras, bochones };
 }

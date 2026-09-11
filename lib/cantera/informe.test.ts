@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { armarInformeMensual, type VoladuraParaInforme, type BochonParaInforme } from "./informe";
+import {
+  armarInforme,
+  armarInformeMensual,
+  serieMensual,
+  type VoladuraParaInforme,
+  type BochonParaInforme,
+} from "./informe";
 
 function voladura(v: Partial<VoladuraParaInforme> & { codigo: string; cantera: string }): VoladuraParaInforme {
   return {
@@ -43,6 +49,25 @@ describe("armarInformeMensual", () => {
     expect(informe.voladuras[0].montoArs).toBeCloseTo(400 * 1.04 * 1400, 0);
   });
 
+  it("los gramos de detonador son la suma de cantidad de los renglones tipo detonador", () => {
+    const voladuras = [
+      voladura({
+        codigo: "V01D626", cantera: "D6", volFecha: "2026-08-10", volTc: 1000, toneladas: 200,
+        consumos: [
+          { tipo: "detonador", cantidad: 150, precio_usd: 4 },
+          { tipo: "detonador", cantidad: 50, precio_usd: 3 },
+          { tipo: "otros_insumos", cantidad: 999, precio_usd: 1 }, // no cuenta
+        ],
+      }),
+    ];
+    const informe = armarInformeMensual("2026-08", voladuras, []);
+    expect(informe.voladuras[0].gramosDetonador).toBe(200);
+    expect(informe.totales.gramosDetonador).toBe(200);
+    const d6 = informe.porCantera.find((c) => c.cantera === "D6")!;
+    expect(d6.gramosDetonador).toBe(200);
+    expect(d6.grExplosivoPorTon).toBe(1); // 200 g / 200 t
+  });
+
   it("agrupa por cantera: USD/ton, ton/m perforado y el desglose de insumos", () => {
     const voladuras = [
       voladura({ codigo: "V01D626", cantera: "D6", perfFin: "2026-08-05", perfMetros: 100, perfMontoUsd: 1000 }),
@@ -81,5 +106,35 @@ describe("armarInformeMensual", () => {
     const informe = armarInformeMensual("2026-12", [], []);
     expect(informe.totales.toneladas).toBe(0);
     expect(informe.porCantera).toEqual([]);
+  });
+});
+
+describe("armarInforme (rango arbitrario)", () => {
+  it("acepta cualquier desde/hasta, no sólo un mes de calendario", () => {
+    const voladuras = [
+      voladura({ codigo: "V01D626", cantera: "D6", volFecha: "2026-08-15", toneladas: 100 }),
+      voladura({ codigo: "V02D626", cantera: "D6", volFecha: "2026-09-05", toneladas: 200 }),
+      voladura({ codigo: "V03D626", cantera: "D6", volFecha: "2026-09-20", toneladas: 300 }),
+    ];
+    const informe = armarInforme("2026-08-20", "2026-09-10", voladuras, []);
+    expect(informe.voladuras.map((v) => v.codigo)).toEqual(["V02D626"]);
+  });
+});
+
+describe("serieMensual", () => {
+  it("arma un punto por cada mes con actividad, ordenado cronológicamente", () => {
+    const voladuras = [
+      voladura({ codigo: "V01D626", cantera: "D6", volFecha: "2026-07-10", toneladas: 100, consumos: [{ tipo: "detonador", cantidad: 50, precio_usd: 4 }] }),
+      voladura({ codigo: "V02D626", cantera: "D6", volFecha: "2026-08-10", toneladas: 200, consumos: [{ tipo: "detonador", cantidad: 80, precio_usd: 4 }] }),
+    ];
+    const serie = serieMensual(voladuras, []);
+    expect(serie.map((s) => s.mes)).toEqual(["2026-07", "2026-08"]);
+    expect(serie[0].toneladas).toBe(100);
+    expect(serie[0].gramosDetonador).toBe(50);
+    expect(serie[1].toneladas).toBe(200);
+  });
+
+  it("sin datos, la serie es vacía", () => {
+    expect(serieMensual([], [])).toEqual([]);
   });
 });
