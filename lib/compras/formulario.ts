@@ -273,22 +273,34 @@ export function celdasDelAlta(
 }
 
 /**
- * A qué fila del master corresponde una fila de la hoja de respuestas.
+ * En qué fila del master está este RI, buscándolo por la columna A.
  *
- * El `QUERY` del master lee `A4:L10000` y su salida arranca en la fila 2, así
- * que son dos menos. Es una cuenta y no una búsqueda porque la fórmula conserva
- * el orden de las respuestas y sólo agrega al final; pero la fila del master
- * puede no existir todavía —`IMPORTRANGE` tarda en refrescar—, y por eso quien
- * escribe **verifica antes de escribir** en vez de confiar en la cuenta.
+ * Antes era una cuenta: `fila de respuestas − 2`, porque el `QUERY` leía
+ * `A4:L10000` y salía en `A2` conservando el orden. **Dejó de valer el
+ * 11/09/2026**, cuando el master pasó a apilar las dos fuentes y ordenarlas por
+ * N° de RI: ahora la posición de una fila depende de cuántos RI hay antes, no
+ * de dónde quedó escrita. La cuenta seguía dando un número, que es lo peor que
+ * podía hacer — un número plausible y equivocado.
  *
- * Por la misma razón la cuenta **no se guarda en la base**: `sheets_fila` lleva
- * la fila de la hoja de respuestas, que es un número que se leyó de vuelta. Un
- * dato guardado ya no tiene a la vista que es una suposición, y el que lo lea
- * después va a escribir en esa fila sin comprobar nada.
+ * Sigue siendo una búsqueda barata: es una lectura de columna que el alta hace
+ * una vez. Y sigue sin guardarse en la base: `sheets_fila` lleva la fila de la
+ * pestaña que escribimos nosotros, que es la única que no se mueve.
+ *
+ * Devuelve `null` si el RI todavía no está —`IMPORTRANGE` tarda en refrescar y
+ * en el alta eso es lo normal—, que es lo que manda el caso a la cola del
+ * reintento en vez de escribir en cualquier lado.
  */
-export function filaDelMaster(filaDeRespuestas: number): number | null {
-  const fila = filaDeRespuestas - 2;
-  return fila >= 2 ? fila : null;
+export function filaDelMasterConEsteRi(
+  columnaA: string[][],
+  nroRi: number
+): number | null {
+  if (!Number.isFinite(nroRi) || nroRi <= 0) return null;
+
+  // Desde la 2: la 1 es el encabezado del master, y su columna A dice "N° RI".
+  for (let i = 1; i < columnaA.length; i++) {
+    if (Number(String(columnaA[i]?.[0] ?? "").trim()) === nroRi) return i + 1;
+  }
+  return null;
 }
 
 /**
@@ -334,7 +346,68 @@ export function celdasDePrioridadYEmpresa(
   return { celdas, bloqueadas };
 }
 
+/**
+ * La hoja que llena Google Forms. **El alta ya no se escribe acá**, y sigue
+ * nombrada porque hay que leerle la columna A: es donde se comprueba que el N°
+ * de RI que asignó la base no se lo haya llevado antes una respuesta.
+ */
 const HOJA_RESPUESTAS = "Respuestas de formulario 1";
+
+/**
+ * Dónde se escribe el alta, desde el 11/09/2026.
+ *
+ * POR QUÉ NO EN LA HOJA DE RESPUESTAS
+ *
+ * **Google Forms decide el orden físico de su hoja.** Inserta cada respuesta
+ * justo después de su propia última respuesta, no después de la última fila
+ * con datos, así que cualquier fila que escribamos debajo de ese puntero baja
+ * una posición por cada respuesta que entra. No es que se desordene una vez:
+ * queda condenada a ser siempre la última, y no hay dónde escribirla para que
+ * no pase — arriba del puntero no se puede, porque su N° de RI es el más alto
+ * de la serie.
+ *
+ * Eso no era cosmético. En el master `A:J` son la salida de un
+ * `QUERY(IMPORTRANGE(...))` y `K`, `L` y `M` —PRIORIDAD, Empresa y Estado— son
+ * columnas **a mano**, que no viajan con la fórmula. Cuando la salida se corre
+ * hacia abajo, las columnas a mano se quedan donde estaban y quedan pegadas al
+ * RI de al lado. Medido el 11/09/2026: la prioridad `1 SEMANA` y la empresa
+ * `Ambas` que el alta escribió para el RI 1959 terminaron en la fila del RI
+ * 1960, y de ahí la sincronización se las importó a la base. El RI 1960 quedó
+ * con la prioridad de otro pedido y nada lo dijo. La siguiente en correrse es
+ * la columna Estado, que es la aprobación, y es sobre la que filtran las nueve
+ * pestañas por área.
+ *
+ * Mandar el alta **por el formulario** —un POST a `/formResponse`— se probó y
+ * no sale por dos motivos independientes: el formulario tiene una pregunta de
+ * subida de archivo, así que Google exige sesión iniciada y contesta `401` a
+ * cualquier petición sin ella; y el N° de RI no es una pregunta del formulario
+ * —lo pone el Apps Script al recibir la respuesta—, así que el sistema no
+ * podría saber qué número le tocó a un pedido sin reconocer su fila por el
+ * nombre y la descripción, que es enlazar al que se le parece.
+ *
+ * Así que el alta se va a una pestaña propia de la misma planilla, donde nadie
+ * inserta nada y la fila que se escribe se queda donde se escribió. El master
+ * apila las dos fuentes y las ordena por N° de RI:
+ *
+ *   =QUERY({IMPORTRANGE(form; "'Respuestas de formulario 1'!A4:L10000");
+ *           IMPORTRANGE(form; "'Altas del sistema'!A2:L10000")};
+ *          "SELECT Col1,Col2,Col5,Col6,Col7,Col8,Col9,Col10,Col11,Col12
+ *           WHERE Col1 IS NOT NULL ORDER BY Col1"; 0)
+ *
+ * El `ORDER BY` es lo que arregla el daño, y no es sólo prolijidad: como todo
+ * RI nuevo es el máximo de la serie, ordenar por N° deja la salida del master
+ * **estrictamente creciente**, o sea que agregar una fila no puede volver a
+ * correr las de arriba. Las columnas a mano dejan de poder desalinearse.
+ *
+ * La pestaña lleva el **mismo encabezado** que la hoja de respuestas (`A1:M1`):
+ * `celdasDelAlta` ubica cada columna por su nombre y busca `COLUMNA_BORDE`
+ * para saber dónde termina lo que un alta puede llenar.
+ *
+ * Ver `docs/COMPRAS-SINCRONIZACION.md` y `docs/compras-formulario-apps-script.gs`,
+ * que numera contando las dos pestañas.
+ */
+const HOJA_ALTAS = "Altas del sistema";
+
 const HOJA_MASTER = "Requerimientos internos";
 
 const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? "";
@@ -343,14 +416,25 @@ const idFormulario = () => process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID ?? ""
  * Desde qué fila hay respuestas en la hoja del formulario.
  *
  * La 1 es el encabezado y la 2 y la 3 no son datos: la primera respuesta está
- * en la 4. `filaSiguienteSegunLaColumna` no lo sabe, y si la columna de la
- * marca temporal vuelve vacía o truncada devuelve 2 — ahí la fórmula del N° de
- * RI, que lleva `A{fila-1}+1` horneada adentro, se hornearía contra `A1`, el
- * encabezado. Con 1.955 respuestas cargadas eso no puede pasar por los datos:
- * pasa cuando se leyó la hoja equivocada o la lectura volvió corta, que es
- * justo cuando conviene negarse en vez de escribir.
+ * en la 4.
  */
-const PRIMERA_FILA_DE_DATOS = 4;
+const PRIMERA_FILA_DE_RESPUESTAS = 4;
+
+/**
+ * Desde qué fila hay altas en la pestaña del sistema.
+ *
+ * Acá la 1 es el encabezado y la 2 ya es un alta: la pestaña la creamos
+ * nosotros y no tiene las dos filas de cebado que arrastra la del formulario.
+ *
+ * Igual se comprueba antes de escribir, por lo mismo que se comprobaba antes:
+ * `filaSiguienteSegunLaColumna` devuelve 2 cuando la lectura vuelve vacía o
+ * corta, y eso no se distingue de "la pestaña está recién creada". La
+ * diferencia es que acá el 2 **es** una fila válida, así que la guarda ya no
+ * puede ser "la fila libre da menos que la primera": lo que se mira es que la
+ * lectura haya traído al menos el encabezado. Sin eso, una lectura de la hoja
+ * equivocada escribiría el alta arriba de todo.
+ */
+const PRIMERA_FILA_DE_ALTAS = 2;
 
 /**
  * Cuánto puede diferir un serial leído de vuelta del que se escribió.
@@ -382,8 +466,9 @@ const TOLERANCIA_DEL_SERIAL = 1e-6;
  * escribe el alta con el `created_at` del pedido, así que identifica la fila sin
  * ambigüedad, y se lee en la misma llamada que el número: no cuesta nada.
  *
- * Se busca desde `PRIMERA_FILA_DE_DATOS`: la 1 es el encabezado y la 2 y la 3 no
- * son datos, así que un número que aparezca ahí no es una respuesta.
+ * Se busca desde `primeraFila`, que cambia según la pestaña: en la del
+ * formulario la 1 es el encabezado y la 2 y la 3 no son datos, en la del
+ * sistema la 2 ya es un alta. Un número que aparezca antes no es un pedido.
  *
  * Se comparan los valores crudos y no el texto formateado, por lo mismo que
  * explica `nroDeControl`: `"1.954,00"` limpiado a mano da 195400.
@@ -395,13 +480,14 @@ const TOLERANCIA_DEL_SERIAL = 1e-6;
 export function filaConEsteRi(
   filas: string[][],
   nroRi: number,
-  serialDeLaMarca: number
+  serialDeLaMarca: number,
+  primeraFila: number = PRIMERA_FILA_DE_ALTAS
 ): { fila: number; esNuestra: boolean } | null {
   // Un `nroRi` que no es un número positivo no puede "estar": sin esta guarda,
   // `Number("")` da 0 y un cero coincidiría con la primera fila vacía.
   if (!Number.isFinite(nroRi) || nroRi <= 0) return null;
 
-  for (let i = PRIMERA_FILA_DE_DATOS - 1; i < filas.length; i++) {
+  for (let i = primeraFila - 1; i < filas.length; i++) {
     if (Number(String(filas[i]?.[0] ?? "").trim()) !== nroRi) continue;
 
     const marca = Number(String(filas[i]?.[1] ?? "").trim());
@@ -425,7 +511,14 @@ export function filaConEsteRi(
  * adelante de lo que dijo Google, que se deja sin traducir.
  */
 const PLANILLA = {
+  /**
+   * Las dos primeras son **pestañas de la misma planilla**, así que comparten
+   * la variable de entorno. Se nombran distinto igual porque el problema que
+   * manda a mirar no es el mismo: en una falta un permiso o un id, en la otra
+   * puede faltar la pestaña.
+   */
   respuestas: "la hoja de respuestas (GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID)",
+  altas: "la planilla del formulario (GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID)",
   master: "el master (GOOGLE_SHEETS_COMPRAS_ID)",
 } as const;
 
@@ -639,10 +732,26 @@ export async function exportarAltaAlFormulario(
 
     const encabezado =
       (
-        await paso(`al leer el encabezado de ${PLANILLA.respuestas}`, () =>
-          leerValores(idFormulario(), `${HOJA_RESPUESTAS}!1:1`)
+        await paso(`al leer el encabezado de ${PLANILLA.altas}`, () =>
+          leerValores(idFormulario(), `${HOJA_ALTAS}!1:1`)
         )
       )[0] ?? [];
+
+    // Un encabezado vacío es una pestaña que no existe o una lectura que volvió
+    // corta, y las dos terminan igual: `celdasDelAlta` no encontraría ninguna
+    // columna y el motivo hablaría de columnas faltantes en vez de decir que la
+    // pestaña no está. Se dice lo que pasa, que es lo que alguien puede ir a
+    // arreglar.
+    if (encabezado.length === 0) {
+      return {
+        fila: null,
+        ...falla(
+          `la pestaña "${HOJA_ALTAS}" de ${PLANILLA.altas} no tiene encabezado: o no ` +
+            `existe, o la lectura volvió vacía. Tiene que llevar el mismo encabezado ` +
+            `que "${HOJA_RESPUESTAS}" (A1:M1)`
+        ),
+      };
+    }
 
     // Se leen las dos primeras columnas de una sola vez, porque hacen falta las
     // dos y por cosas distintas: la `A` es el N° de RI —para no escribir dos
@@ -650,20 +759,52 @@ export async function exportarAltaAlFormulario(
     // que es la que dice dónde termina lo cargado.
     //
     // La fila libre se busca por la marca temporal y NO por la columna del N°
-    // de RI: esa columna tiene una fórmula en todas las filas de la grilla, y
-    // aunque hoy devuelva vacío para las filas sin marca, depender de eso es
-    // depender de que la fórmula siga escrita igual.
+    // de RI, que es la misma elección que ya se hacía en la hoja de respuestas:
+    // el N° puede quedar vacío si algo falló en el medio, la marca no, porque es
+    // lo primero que identifica a la fila.
     //
     // `sinFormato: true` acá y no en el encabezado: a `filaSiguienteSegunLaColumna`
     // sólo le importa si la celda tiene algo, no qué dice. Con el texto formateado
     // se corre el mismo riesgo que ya pasó en Despacho con una columna de fecha:
     // un formato particular puede mostrar vacía una celda que sí tiene serial, y
-    // ahí la cuenta de la fila libre se corre y una respuesta nueva pisa a otra. El
-    // valor crudo no tiene ese problema y no cuesta nada pedirlo así. Y para
-    // comparar el N° de RI hace falta igual.
-    const columnas = await paso(`al buscar la fila libre en ${PLANILLA.respuestas}`, () =>
-      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:B`, { sinFormato: true })
+    // ahí la cuenta de la fila libre se corre y un alta pisa a otra. El valor
+    // crudo no tiene ese problema y no cuesta nada pedirlo así. Y para comparar
+    // el N° de RI hace falta igual.
+    const columnas = await paso(`al buscar la fila libre en ${PLANILLA.altas}`, () =>
+      leerValores(idFormulario(), `${HOJA_ALTAS}!A:B`, { sinFormato: true })
     );
+
+    // La serie es una sola y la reparten dos: el sistema con `max(nro_ri) + 1`
+    // sobre la base, y el Apps Script con `max(A) + 1` sobre la planilla. Entre
+    // que la base da un número y la sincronización trae las respuestas nuevas
+    // —hasta 15 minutos— los dos pueden haber elegido el mismo.
+    //
+    // Cuando el alta se escribía en la hoja de respuestas, esa colisión la
+    // encontraba `filaConEsteRi` sin buscarla: era la misma columna. Ahora son
+    // dos pestañas, así que **hay que ir a mirar la otra a propósito**. Sin
+    // esto, el sistema escribiría feliz un RI que el formulario ya usó y el
+    // `upsert` por `nro_ri` de la sincronización colapsaría los dos pedidos en
+    // uno — que es exactamente cómo desapareció un pedido el 09/09/2026.
+    const enRespuestas = await paso(
+      `al comprobar que el N° de RI no esté tomado en ${PLANILLA.respuestas}`,
+      () => leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:B`, { sinFormato: true })
+    );
+    const tomado = filaConEsteRi(
+      enRespuestas,
+      r.nro_ri as number,
+      Number.NaN, // Ninguna fila de esa hoja puede ser nuestra: ahí no escribimos.
+      PRIMERA_FILA_DE_RESPUESTAS
+    );
+    if (tomado) {
+      return {
+        fila: null,
+        ...falla(
+          `el RI ${r.nro_ri} ya está en la fila ${tomado.fila} de "${HOJA_RESPUESTAS}": ` +
+            `lo tomó una respuesta del formulario. No se escribió nada para no dejar dos ` +
+            `pedidos con el mismo número, y hay que renumerar este pedido a mano`
+        ),
+      };
+    }
 
     // Si este pedido ya tiene su fila, no se escribe otra: se sigue con la
     // verificación y con el master, que son los pasos que pueden haber quedado a
@@ -689,7 +830,7 @@ export async function exportarAltaAlFormulario(
       return {
         fila: null,
         ...falla(
-          `la fila ${yaEstaba.fila} de la hoja de respuestas ya tiene el RI ${r.nro_ri} y no es ` +
+          `la fila ${yaEstaba.fila} de "${HOJA_ALTAS}" ya tiene el RI ${r.nro_ri} y no es ` +
             `la de este pedido: no se escribió nada para no quedar enlazado a la fila de otro, ` +
             `y hay que revisar la numeración a mano`
         ),
@@ -706,14 +847,29 @@ export async function exportarAltaAlFormulario(
         // cada fila que se le pasa.
         columnas.map((f) => [String(f?.[1] ?? "")])
       );
-      if (libre < PRIMERA_FILA_DE_DATOS) {
+      // En la hoja de respuestas alcanzaba con negarse si la fila libre daba
+      // menos que la primera fila de datos: ahí los datos empiezan en la 4, así
+      // que un 2 sólo podía venir de una lectura corta o de la hoja equivocada.
+      // Acá la 2 **es** una fila válida —la pestaña la creamos nosotros y no
+      // tiene filas de cebado—, así que esa guarda ya no distingue nada y lo
+      // que queda es preguntar por la celda misma.
+      //
+      // Es la misma falla que evitaba antes: si la lectura de `A:B` vuelve más
+      // corta que la pestaña, la fila libre cae sobre un alta anterior y la
+      // escritura la borra sin decir nada — un pedido que desaparece de la
+      // planilla, que es la forma de romperse que este módulo ya pagó dos veces.
+      // Cuesta una llamada más en un camino que ya hace ocho.
+      const destino = await paso(`al comprobar que la fila ${libre} esté libre`, () =>
+        leerValores(idFormulario(), `${HOJA_ALTAS}!A${libre}:B${libre}`, { sinFormato: true })
+      );
+      const ocupada = (destino[0] ?? []).some((c) => String(c ?? "").trim() !== "");
+      if (ocupada) {
         return {
           fila: null,
           ...falla(
-            `la columna de la marca temporal volvió con muy poco y la fila libre daría la ` +
-              `${libre}, cuando los datos empiezan en la ${PRIMERA_FILA_DE_DATOS}: no se ` +
-              `escribió nada, hay que revisar que se esté leyendo la hoja ` +
-              `"${HOJA_RESPUESTAS}" y que la lectura no haya vuelto corta`
+            `la fila ${libre} de "${HOJA_ALTAS}" tendría que estar libre y tiene ` +
+              `${JSON.stringify(destino[0])}: no se escribió nada para no pisar un alta ` +
+              `anterior, y hay que revisar la pestaña a mano`
           ),
         };
       }
@@ -744,13 +900,14 @@ export async function exportarAltaAlFormulario(
         };
       }
 
-      // Se escribe en la fila que devolvió `celdasDelAlta`, no en la de acá: la
-      // fórmula del N° de RI la lleva horneada adentro.
-      await paso(`al escribir ${PLANILLA.respuestas}`, () =>
+      // Se escribe en la fila que devolvió `celdasDelAlta` y no en la de acá,
+      // aunque hoy sean la misma: `celdasDelAlta` es la que decide, y quien
+      // escribe usa lo que ella verificó.
+      await paso(`al escribir ${PLANILLA.altas}`, () =>
         escribirCeldas(
           idFormulario(),
           armado.celdas.map((c) => ({
-            pestana: HOJA_RESPUESTAS,
+            pestana: HOJA_ALTAS,
             columna: c.columna,
             fila: armado.fila,
             valor: c.valor,
@@ -761,44 +918,48 @@ export async function exportarAltaAlFormulario(
     }
     filaEscrita = filaDelAlta;
 
-    // Qué número calculó la planilla. Si no es el que asignó el sistema, hay un
-    // hueco o una fila de más: se dice, en vez de dejar dos números para el
-    // mismo pedido.
+    // Qué quedó escrito en la celda del N°. Ya no hay una fórmula que pueda
+    // numerar distinto —el número lo pone el sistema, como valor—, así que esto
+    // dejó de ser "qué calculó la planilla" y pasó a ser la comprobación de que
+    // la escritura fue a la fila que creíamos: un rango mal armado o una
+    // escritura a medias se ven acá y no dos semanas después.
     const escrito = await paso(
-      `al leer de vuelta el número que calculó ${PLANILLA.respuestas}`,
-      () =>
-        leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A${filaDelAlta}`, { sinFormato: true })
+      `al leer de vuelta el N° de RI que quedó en ${PLANILLA.altas}`,
+      () => leerValores(idFormulario(), `${HOJA_ALTAS}!A${filaDelAlta}`, { sinFormato: true })
     );
     const numerada = nroDeControl(escrito);
     if (numerada.nro !== r.nro_ri) {
       return {
         fila: filaDelAlta,
         ...falla(
-          `la planilla numeró esa fila como ${numerada.texto || "(vacío)"} y el sistema ` +
-            `la había dado de alta como ${r.nro_ri}: hay que revisar la numeración a mano`
+          `la fila ${filaDelAlta} de "${HOJA_ALTAS}" quedó con el N° ` +
+            `${numerada.texto || "(vacío)"} y el pedido es el ${r.nro_ri}: la escritura no ` +
+            `fue a donde tenía que ir, hay que revisarlo a mano`
         ),
       };
     }
 
-    // Se guarda **el hecho y no la cuenta**: la hoja de respuestas y la fila que
-    // se escribió ahí, que es un número que se leyó de vuelta. Antes se guardaba
-    // el master con `fila − 2`, que es una suposición sobre qué va a hacer el
-    // `QUERY`; y el atajo de `exportarRequerimiento` —`hoja_origen` es el master,
-    // así que `sheets_fila` sirve— la tomaba sin verificar la columna A. O sea
-    // que el reintento le escribía prioridad y empresa a una fila del master que
-    // nadie comprobó, que es justo lo que `escribirPrioridadYEmpresa` se niega a
-    // hacer acá abajo: escribir a ciegas es ponerle la prioridad de este pedido
-    // a otro.
+    // Se guarda **el hecho y no la cuenta**: la pestaña y la fila que se
+    // escribió ahí, leída de vuelta. Antes se guardaba el master con `fila − 2`,
+    // que es una suposición sobre qué va a hacer el `QUERY`; y el atajo de
+    // `exportarRequerimiento` —`hoja_origen` es el master, así que `sheets_fila`
+    // sirve— la tomaba sin verificar la columna A. O sea que el reintento le
+    // escribía prioridad y empresa a una fila del master que nadie comprobó, que
+    // es justo lo que `escribirPrioridadYEmpresa` se niega a hacer acá abajo.
     //
-    // Con la hoja de respuestas guardada, ese atajo no aplica y
-    // `exportarRequerimiento` resuelve la fila con `filaEnMaster`, que la busca
-    // por la columna A. La importación después sobreescribe las dos columnas con
-    // la pestaña de área, como hace con todos los RI, y eso es lo que
-    // corresponde: es donde se escriben las columnas de compra.
+    // Con `HOJA_ALTAS` guardada ese atajo no aplica y `exportarRequerimiento`
+    // resuelve la fila con `filaEnMaster`, que la busca por la columna A. La
+    // importación después sobreescribe las dos columnas con la pestaña de área,
+    // como hace con todos los RI, y eso es lo que corresponde: es donde se
+    // escriben las columnas de compra.
+    //
+    // Y ésta sí es una fila que **se queda quieta**: en esta pestaña no escribe
+    // nadie más. Era lo único que no se podía prometer de la fila de la hoja de
+    // respuestas.
     await admin
       .from("compras_requerimientos")
       .update({
-        hoja_origen: HOJA_RESPUESTAS,
+        hoja_origen: HOJA_ALTAS,
         sheets_fila: filaDelAlta,
         sheets_sincronizado_en: new Date().toISOString(),
       })
@@ -806,7 +967,7 @@ export async function exportarAltaAlFormulario(
 
     return {
       fila: filaDelAlta,
-      ...(await escribirPrioridadYEmpresa(admin, r.id as string, filaDelAlta)),
+      ...(await escribirPrioridadYEmpresa(admin, r.id as string, r.nro_ri as number)),
     };
   } catch (e) {
     return { fila: filaEscrita, ...falla(e instanceof Error ? e.message : String(e)) };
@@ -819,34 +980,29 @@ export async function exportarAltaAlFormulario(
  * Las elige quien pide, en el alta, y en la planilla son dos columnas que no
  * salen de ninguna fórmula. Si no se escriben, quien mira la planilla no las ve.
  *
- * **Se verifica la fila antes de escribir**, y casi siempre la verificación
- * dice que todavía no: la cuenta `fila − 2` vale mientras el `QUERY` conserve
- * el orden, pero entre las dos planillas hay un `IMPORTRANGE` que Google
- * refresca por su cuenta y puede tardar minutos —no se puede forzar desde la
- * API—, y esto corre milisegundos después de escribir la hoja de respuestas.
- * Escribir a ciegas sería ponerle la prioridad de este pedido a otro.
+ * **La fila se busca, no se calcula.** Hasta el 11/09/2026 era la cuenta
+ * `fila de respuestas − 2`, que valía mientras el `QUERY` conservara el orden;
+ * desde que el master apila las dos fuentes y las ordena por N° de RI no vale
+ * más, y una cuenta que deja de valer no avisa: sigue devolviendo un número.
+ * Ahora se busca el RI en la columna A del master, así que **la búsqueda es la
+ * verificación**: si no se lo encuentra, no hay dónde escribir y no se escribe.
+ * Ya no existe el caso "escribí en una fila que dice otro RI".
  *
- * Por eso los dos resultados de la verificación se cuentan distinto:
- *
- *   - **la fila del master vacía es lo normal** —la planilla no refrescó
- *     todavía—, así que queda en la cola del reintento y no se le muestra a
- *     quien cargó el pedido: un cartel que aparece siempre y se arregla solo
- *     enseña a ignorar los carteles;
- *   - **que diga otro RI** es un problema de verdad —el `QUERY` no conservó el
- *     orden, o hay una fila de más— y se avisa.
- *
- * Las dos dejan pendiente, porque el pendiente **es** la cola del reintento:
- * quien termina escribiéndolas es `exportarRequerimiento` en la próxima
- * sincronización, cuando `IMPORTRANGE` ya refrescó.
+ * No encontrarlo es **lo normal en el alta**: entre las dos planillas hay un
+ * `IMPORTRANGE` que Google refresca por su cuenta y puede tardar minutos —no se
+ * puede forzar desde la API—, y esto corre milisegundos después de escribir la
+ * pestaña de altas. Por eso se encola y no se le muestra a quien cargó el
+ * pedido: un cartel que aparece siempre y se arregla solo enseña a ignorar los
+ * carteles. El pendiente **es** la cola del reintento, y quien termina
+ * escribiéndolas es `exportarRequerimiento` en la próxima sincronización.
  */
 async function escribirPrioridadYEmpresa(
   admin: ReturnType<typeof createAdminClient>,
   requerimientoId: string,
-  filaDeRespuestas: number
+  nroRi: number
 ): Promise<Aviso> {
   const idMaster = process.env.GOOGLE_SHEETS_COMPRAS_ID;
-  const fila = filaDelMaster(filaDeRespuestas);
-  if (!idMaster || fila === null) return listo;
+  if (!idMaster) return listo;
 
   const { data: r, error } = await admin
     .from("compras_requerimientos")
@@ -870,6 +1026,22 @@ async function escribirPrioridadYEmpresa(
   };
   if (!valores.prioridad && !valores.empresa) return listo;
 
+  // Primero dónde, y recién después con qué: si el RI todavía no bajó del
+  // `IMPORTRANGE` —que es lo habitual acá— no hay nada que escribir y leer el
+  // encabezado sería una llamada de más.
+  const fila = filaDelMasterConEsteRi(
+    await paso(`al buscar la fila del RI en ${PLANILLA.master}`, () =>
+      leerValores(idMaster, `${HOJA_MASTER}!A:A`, { sinFormato: true })
+    ),
+    nroRi
+  );
+  if (fila === null) {
+    return enLaCola(
+      `el RI ${nroRi} todavía no está en el master: el IMPORTRANGE no refrescó, así que ` +
+        `prioridad y empresa las escribe el próximo reintento`
+    );
+  }
+
   const encabezado =
     (
       await paso(`al leer el encabezado de ${PLANILLA.master}`, () =>
@@ -886,23 +1058,6 @@ async function escribirPrioridadYEmpresa(
     valores
   );
   if (celdas.length === 0) return falla(bloqueadas.join("; "));
-
-  const enElMaster = await paso(`al verificar la fila del RI en ${PLANILLA.master}`, () =>
-    leerValores(idMaster, `${HOJA_MASTER}!A${fila}`, { sinFormato: true })
-  );
-  const enLaFila = nroDeControl(enElMaster);
-  if (enLaFila.texto === "") {
-    return enLaCola(
-      `la fila ${fila} del master todavía no dice el RI ${r.nro_ri}: el IMPORTRANGE no ` +
-        `refrescó, así que prioridad y empresa las escribe el próximo reintento`
-    );
-  }
-  if (enLaFila.nro !== r.nro_ri) {
-    return falla(
-      `la fila ${fila} del master dice ${enLaFila.texto} y no el RI ${r.nro_ri}: no se ` +
-        `escribieron prioridad ni empresa, y hay que revisar el orden del master a mano`
-    );
-  }
 
   await paso(`al escribir prioridad y empresa en ${PLANILLA.master}`, () =>
     escribirCeldas(

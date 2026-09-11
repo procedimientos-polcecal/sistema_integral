@@ -3,7 +3,7 @@ import {
   celdasDelAlta,
   celdasDePrioridadYEmpresa,
   filaConEsteRi,
-  filaDelMaster,
+  filaDelMasterConEsteRi,
   type DatosDelAlta,
 } from "./formulario";
 
@@ -209,17 +209,33 @@ describe("las celdas de un alta en la hoja de respuestas", () => {
   });
 });
 
-describe("la fila del master que le corresponde a una fila de respuestas", () => {
-  it("son dos menos: el QUERY lee desde A4 y sale en A2", () => {
-    // Verificado el 09/09/2026: la fila 1957 de respuestas es la 1955 del
-    // master, y ahi aparecio el RI 1954.
-    expect(filaDelMaster(1957)).toBe(1955);
-    expect(filaDelMaster(4)).toBe(2);
+describe("en que fila del master esta un RI", () => {
+  /** La columna A del master: encabezado y despues un RI por fila. */
+  const COLUMNA = [["N° RI"], ["1956"], ["1957"], ["1958"], ["1959"], ["1960"]];
+
+  it("lo busca por la columna A en vez de calcular la fila", () => {
+    expect(filaDelMasterConEsteRi(COLUMNA, 1956)).toBe(2);
+    expect(filaDelMasterConEsteRi(COLUMNA, 1960)).toBe(6);
   });
 
-  it("una fila que el QUERY no alcanza no tiene fila en el master", () => {
-    expect(filaDelMaster(3)).toBeNull();
-    expect(filaDelMaster(1)).toBeNull();
+  it("un RI que todavia no bajo del IMPORTRANGE no tiene fila", () => {
+    // Es el caso normal en el alta, y el que manda todo a la cola del
+    // reintento en vez de escribir en cualquier lado.
+    expect(filaDelMasterConEsteRi(COLUMNA, 1961)).toBeNull();
+  });
+
+  it("no confunde el encabezado ni las filas vacias con el RI 0", () => {
+    expect(filaDelMasterConEsteRi(COLUMNA, 0)).toBeNull();
+    expect(filaDelMasterConEsteRi([["N° RI"], [""], ["  "]], 0)).toBeNull();
+  });
+
+  it("tolera espacios y el numero como number", () => {
+    expect(filaDelMasterConEsteRi([["N° RI"], [" 1958 "]], 1958)).toBe(2);
+    expect(filaDelMasterConEsteRi([["N° RI"], [1958 as unknown as string]], 1958)).toBe(2);
+  });
+
+  it("una lectura vacia no encuentra nada en vez de romper", () => {
+    expect(filaDelMasterConEsteRi([], 1958)).toBeNull();
   });
 });
 
@@ -274,6 +290,15 @@ describe("prioridad y empresa, en las dos columnas a mano del master", () => {
 
 describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
   /**
+   * En la hoja del formulario los datos empiezan en la 4: la 1 es el encabezado
+   * y la 2 y la 3 ceban la vieja numeracion. El alta ya no se escribe ahi, pero
+   * esa columna se sigue leyendo para comprobar que el N° de RI no lo haya
+   * tomado antes una respuesta del formulario.
+   */
+  const enRespuestas = (filas: string[][], nroRi: number, serial: number) =>
+    filaConEsteRi(filas, nroRi, serial, 4);
+
+  /**
    * Las dos primeras columnas como las devuelve Google con `sinFormato`: la A es
    * el N° de RI que calcula la formula y la B la marca temporal. Las filas 1 a 3
    * no son datos.
@@ -291,14 +316,14 @@ describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
 
   it("encuentra la fila del pedido y la reconoce como propia por la marca", () => {
     // La 5 en base 1: el arreglo arranca en 0 y la primera respuesta es la 4.
-    expect(filaConEsteRi(filas(), 1955, MARCA_1955)).toEqual({ fila: 5, esNuestra: true });
-    expect(filaConEsteRi(filas(), 1954, 45900.5)).toEqual({ fila: 4, esNuestra: true });
+    expect(enRespuestas(filas(), 1955, MARCA_1955)).toEqual({ fila: 5, esNuestra: true });
+    expect(enRespuestas(filas(), 1954, 45900.5)).toEqual({ fila: 4, esNuestra: true });
   });
 
   it("tolera el redondeo del ida y vuelta del serial", () => {
     // Se escribe como texto decimal y Google lo parsea a double: el ultimo bit
     // puede moverse. 1e-6 de un dia son ocho centesimas de segundo.
-    const r = filaConEsteRi(filas(), 1955, MARCA_1955 + 1e-9);
+    const r = enRespuestas(filas(), 1955, MARCA_1955 + 1e-9);
     expect(r).toEqual({ fila: 5, esNuestra: true });
   });
 
@@ -307,7 +332,7 @@ describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
     // lo calcula una formula, asi que si alguien manda el formulario de Google
     // en el medio hay una fila con nuestro numero que es de otro pedido.
     // Adoptarla dejaria este pedido apuntando a la fila ajena y sin fila propia.
-    const r = filaConEsteRi(filas(), 1955, 46280.123456);
+    const r = enRespuestas(filas(), 1955, 46280.123456);
     expect(r).toEqual({ fila: 5, esNuestra: false });
   });
 
@@ -315,19 +340,19 @@ describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
     // `Number("")` da 0 y es finito: sin comparar de verdad, una fila a medio
     // escribir se habria dado por nuestra.
     const conMarcaVacia: string[][] = [[], [], [], ["1954", ""]];
-    expect(filaConEsteRi(conMarcaVacia, 1954, 45900.5)).toEqual({ fila: 4, esNuestra: false });
+    expect(enRespuestas(conMarcaVacia, 1954, 45900.5)).toEqual({ fila: 4, esNuestra: false });
   });
 
   it("un RI que no esta devuelve null, que es lo que deja escribir la fila nueva", () => {
-    expect(filaConEsteRi(filas(), 1956, 46275)).toBeNull();
+    expect(enRespuestas(filas(), 1956, 46275)).toBeNull();
   });
 
   it("las filas vacias no cuentan como el RI 0", () => {
     // `Number("")` da 0: sin la guarda, un nro_ri invalido "coincidia" con la
     // primera fila vacia y el alta se salteaba la escritura creyendo que ya
     // estaba hecha.
-    expect(filaConEsteRi(filas(), 0, 46275)).toBeNull();
-    expect(filaConEsteRi(filas(), NaN, 46275)).toBeNull();
+    expect(enRespuestas(filas(), 0, 46275)).toBeNull();
+    expect(enRespuestas(filas(), NaN, 46275)).toBeNull();
   });
 
   it("no mira el encabezado ni las dos filas que no son datos", () => {
@@ -339,24 +364,52 @@ describe("la fila que ya tiene este RI en la hoja de respuestas", () => {
       ["1954", "45900.5"],
       ["", ""],
     ];
-    expect(filaConEsteRi(conBasuraArriba, 1954, 45900.5)).toBeNull();
+    expect(enRespuestas(conBasuraArriba, 1954, 45900.5)).toBeNull();
   });
 
   it("compara el valor crudo y tolera espacios", () => {
-    expect(filaConEsteRi([[], [], [], [" 1954 ", " 45900.5 "]], 1954, 45900.5)).toEqual({
+    expect(enRespuestas([[], [], [], [" 1954 ", " 45900.5 "]], 1954, 45900.5)).toEqual({
       fila: 4,
       esNuestra: true,
     });
   });
 
   it("una lectura corta no encuentra nada en vez de romper", () => {
-    expect(filaConEsteRi([], 1954, 45900.5)).toBeNull();
-    expect(filaConEsteRi([["Nº RI"]], 1954, 45900.5)).toBeNull();
+    expect(enRespuestas([], 1954, 45900.5)).toBeNull();
+    expect(enRespuestas([["Nº RI"]], 1954, 45900.5)).toBeNull();
   });
 
   it("un serial invalido no puede reconocer ninguna fila como propia", () => {
     // Un `created_at` que no es fecha da NaN. Que no reconozca su propia fila
     // hace ruido; darla por propia enlazaria a ciegas.
-    expect(filaConEsteRi(filas(), 1955, NaN)).toEqual({ fila: 5, esNuestra: false });
+    expect(enRespuestas(filas(), 1955, NaN)).toEqual({ fila: 5, esNuestra: false });
+  });
+});
+
+describe("la fila que ya tiene este RI en la pestana de altas del sistema", () => {
+  // La pestana la creamos nosotros: la 1 es el encabezado y la 2 ya es un alta,
+  // sin las dos filas de cebado que arrastra la hoja del formulario. Es el
+  // valor por omision, asi que se llama sin cuarto argumento.
+  const MARCA = 46274.400657;
+
+  const altas = (): string[][] => [
+    ["Nº RI", "Marca temporal"],
+    ["1959", String(MARCA)],
+    ["", ""],
+  ];
+
+  it("la primera fila de datos es la 2, no la 4", () => {
+    // Con el limite de la hoja de respuestas esta fila caia fuera y el alta se
+    // habria escrito de nuevo, dejando dos filas para el mismo pedido.
+    expect(filaConEsteRi(altas(), 1959, MARCA)).toEqual({ fila: 2, esNuestra: true });
+  });
+
+  it("el encabezado sigue sin contar", () => {
+    const conNumeroEnElEncabezado: string[][] = [["1959", String(MARCA)], ["", ""]];
+    expect(filaConEsteRi(conNumeroEnElEncabezado, 1959, MARCA)).toBeNull();
+  });
+
+  it("un RI que no esta deja escribir la fila nueva", () => {
+    expect(filaConEsteRi(altas(), 1960, MARCA)).toBeNull();
   });
 });

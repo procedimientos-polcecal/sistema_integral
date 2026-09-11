@@ -33,6 +33,11 @@
  *
  * ── INSTALACIÓN ─────────────────────────────────────────────────────────────
  *
+ *   0. **SI YA LO TENÍAS INSTALADO, HAY QUE VOLVER A PEGARLO.** Desde el
+ *      11/09/2026 la numeración mira dos pestañas y no una — ver `HOJA_ALTAS`.
+ *      Con la versión vieja el formulario repartiría un número que el sistema
+ *      ya usó, y la sincronización colapsaría los dos pedidos en uno.
+ *
  *   1. En la planilla de respuestas: Extensiones -> Apps Script, y pegar esto
  *      en un archivo nuevo. No reemplaza al notificador de mails: convive.
  *
@@ -92,6 +97,35 @@ var HOJA = 'Respuestas de formulario 1';
 /** En qué fila arrancan los pedidos. Las 2 y 3 ceban la vieja numeración. */
 var PRIMERA_FILA = 4;
 
+/**
+ * La pestaña donde el SdG escribe los pedidos que se cargan en el sistema.
+ *
+ * **Desde el 11/09/2026 no comparte hoja con las respuestas**, y por eso esta
+ * numeración tiene que mirar las dos.
+ *
+ * Antes el alta se escribía en esta misma hoja, abajo de la última respuesta.
+ * El problema es que Forms inserta cada respuesta justo después de su propia
+ * última respuesta, así que esa fila bajaba una posición por cada envío y
+ * quedaba condenada a ser la última. En el master eso no era cosmético: `A:J`
+ * son la salida de un `QUERY(IMPORTRANGE())` y `K`, `L` y `M` —PRIORIDAD,
+ * Empresa y Estado— son columnas a mano, que no viajan con la fórmula. Medido
+ * el 11/09/2026: la prioridad y la empresa del RI 1959 terminaron en la fila
+ * del RI 1960, y la sincronización se las importó a la base.
+ *
+ * Con las altas en su propia pestaña nadie les inserta nada arriba. El precio
+ * es éste: **la serie quedó repartida entre dos hojas**, así que contar sólo
+ * ésta daría un número que el sistema ya usó. Los dos pedidos terminarían
+ * colapsados en uno por el `upsert` de la sincronización, que es exactamente
+ * cómo desapareció un pedido el 09/09/2026.
+ *
+ * Si la pestaña no existe todavía, `siguienteNumero_` la ignora en vez de
+ * fallar: así este script se puede instalar antes de crearla.
+ */
+var HOJA_ALTAS = 'Altas del sistema';
+
+/** En la pestaña de altas la 1 es el encabezado y la 2 ya es un pedido. */
+var PRIMERA_FILA_ALTAS = 2;
+
 /** Columna del N° de RI (A) y de la marca temporal (B), en número. */
 var COL_NRO = 1;
 var COL_MARCA = 2;
@@ -127,7 +161,11 @@ function numerarAlEnviarElFormulario(e) {
 }
 
 /**
- * El siguiente número de la serie, mirando la columna entera.
+ * El siguiente número de la serie, mirando **las dos pestañas**.
+ *
+ * La serie la reparten dos y ninguno puede contar sólo lo suyo: las respuestas
+ * del formulario viven acá y los pedidos cargados en el sistema en
+ * `HOJA_ALTAS`. Ver el comentario de esa variable.
  *
  * Se **excluye la fila que se está numerando**: Sheets suele autocompletar en
  * la fila nueva la fórmula de la de arriba, así que esa celda ya trae un número
@@ -135,22 +173,35 @@ function numerarAlEnviarElFormulario(e) {
  * serie en cada respuesta.
  */
 function siguienteNumero_(hoja, filaQueSeEstaNumerando) {
+  var maximo = maximoDeLaHoja_(hoja, PRIMERA_FILA, filaQueSeEstaNumerando);
+
+  // La pestaña de altas es de otra hoja, así que ninguna de sus filas puede ser
+  // la que se está numerando: se cuentan todas.
+  var altas = hoja.getParent().getSheetByName(HOJA_ALTAS);
+  if (altas) {
+    maximo = Math.max(maximo, maximoDeLaHoja_(altas, PRIMERA_FILA_ALTAS, 0));
+  }
+
+  return maximo + 1;
+}
+
+/** El N° de RI más alto de una hoja, salteando una fila si hace falta. */
+function maximoDeLaHoja_(hoja, primeraFila, filaQueSeSaltea) {
   var ultima = hoja.getLastRow();
-  if (ultima < PRIMERA_FILA) return 1;
+  if (ultima < primeraFila) return 0;
 
   var valores = hoja
-    .getRange(PRIMERA_FILA, COL_NRO, ultima - PRIMERA_FILA + 1, 1)
+    .getRange(primeraFila, COL_NRO, ultima - primeraFila + 1, 1)
     .getValues();
 
   var maximo = 0;
   for (var i = 0; i < valores.length; i++) {
-    var fila = PRIMERA_FILA + i;
-    if (fila === filaQueSeEstaNumerando) continue;
+    if (primeraFila + i === filaQueSeSaltea) continue;
 
     var n = Number(valores[i][0]);
     if (!isNaN(n) && n > maximo) maximo = n;
   }
-  return maximo + 1;
+  return maximo;
 }
 
 /**

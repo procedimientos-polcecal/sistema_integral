@@ -140,6 +140,20 @@ queda pendiente, en vez de meter un valor que la validación rechaza.
 
 ## Trampas que ya costaron tiempo
 
+**Las columnas a mano del master son posicionales, y cualquier cosa que mueva
+una fila las desalinea sin avisar.** `A:J` son la salida del
+`QUERY(IMPORTRANGE())`; `K`, `L` y `M` —PRIORIDAD, Empresa y **Estado**— las
+escribe una persona al lado, y no viajan con la fórmula. Escribir el alta en
+`Respuestas de formulario 1` era mover filas todo el tiempo: Forms inserta cada
+respuesta justo después de su propia última respuesta, así que la fila del alta
+bajaba una posición por envío y arrastraba a todas las de abajo. Medido el
+11/09/2026 en producción: la prioridad `1 SEMANA` y la empresa `Ambas` del
+RI 1959 quedaron en la fila del RI 1960, y la sincronización se las importó a la
+base — el RI 1960 terminó con la prioridad de otro pedido y nada lo dijo. Por eso
+el alta se mudó a `Altas del sistema` y el `QUERY` ordena por N° de RI. **Regla
+que queda: en el master no se inserta, no se borra y no se ordena una fila a
+mano.** Vaciarla, sí.
+
 **PostgREST corta en 1000 filas** y no avisa: `.limit(3000)` devuelve 1000. Con
 1846 requerimientos eso hacía que la sincronización revirtiera aprobaciones sin
 ruido. Usar siempre `traerTodo()` de `lib/core/paginado.ts`.
@@ -592,19 +606,96 @@ se hacen.
    escrita por la API no dispara el activador de *envío de formulario*. Sin él
    el pedido entra igual, pero **nadie se entera por correo**.
 
-Y después, la comprobación de punta a punta, que tampoco es de agente porque
-escribe en la planilla de producción:
+## Mudar el alta a su propia pestaña (11/09/2026) — SIN HACER
+
+El alta dejó de escribirse en `Respuestas de formulario 1`. El porqué está en
+[COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md); el resumen es que Forms
+empuja hacia abajo cualquier fila que no sea suya, y eso corría la salida del
+`QUERY` del master dejando las columnas a mano —PRIORIDAD, Empresa y **Estado**,
+que es la aprobación— pegadas al RI de al lado.
+
+**El código ya está y no sirve solo: hasta que se hagan estos pasos, cada alta
+queda en la cola de pendientes** diciendo que la pestaña no existe.
+
+**Van en este orden**, y no es capricho: el paso 2 antes que el 1 puede repartir
+un número repetido, y el paso 4 con la pestaña todavía vacía es el único tramo
+que no se pudo comprobar sin escribir en producción.
+
+1. En `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, crear la pestaña
+   **`Altas del sistema`** (el nombre, exacto). Copiarle a la fila 1 el
+   encabezado `A1:M1` de `Respuestas de formulario 1` — se ubica cada columna
+   por su nombre, y `DIRECCIÓN EMAIL ENVIADA` marca dónde termina lo que un alta
+   puede llenar. Los datos empiezan en la fila 2: **sin filas de cebado**.
+2. **Volver a pegar `docs/compras-formulario-apps-script.gs`.** La versión vieja
+   numeraba contando sólo la hoja de respuestas; con la serie repartida en dos
+   pestañas, eso reparte un número que el sistema ya usó y el `upsert` de la
+   sincronización colapsa los dos pedidos en uno. Va **antes** de que caiga la
+   primera alta en la pestaña nueva.
+3. Cargar **un pedido de prueba** desde `/mis-pedidos` y confirmar que aparece
+   en `Altas del sistema`. Todavía no va a estar en el master, y va a quedar un
+   pendiente diciendo que el `IMPORTRANGE` no lo trajo: es lo esperado.
+4. Recién ahora, en el master, reemplazar `A2` de `Requerimientos internos` por:
+
+   ```
+   =QUERY({IMPORTRANGE("https://docs.google.com/spreadsheets/d/1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM/edit"; "'Respuestas de formulario 1'!A4:L10000"); IMPORTRANGE("https://docs.google.com/spreadsheets/d/1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM/edit"; "'Altas del sistema'!A2:L10000")}; "SELECT Col1,Col2, Col5, Col6, Col7, Col8, Col9, Col10, Col11, Col12 WHERE Col1 IS NOT NULL ORDER BY Col1"; 0)
+   ```
+
+   El `ORDER BY Col1` es la mitad del arreglo: deja la salida **estrictamente
+   creciente**, así que una fila nueva no puede volver a correr las de arriba.
+
+   Va después del paso 3 porque **con la pestaña vacía no está comprobado**: que
+   `IMPORTRANGE` sobre un rango sin ninguna fila cargada devuelva un bloque
+   vacío y no un error es lo que se supone, y si devolviera error rompería el
+   `{ ; }` y con él el master entero. Con una fila adentro la pregunta no se
+   hace. Si igual aparece `#REF!` o `#N/A`, **deshacer con Ctrl+Z**: la fórmula
+   vieja vuelve y no se perdió nada.
+
+   El `A4:L10000` de la primera parte es el que ya estaba, y pide más filas de
+   las que la hoja tiene (la grilla son 1.969): eso ya funcionaba, así que el
+   `A2:L10000` de la segunda tampoco es un problema.
+5. **Reacomodar el RI 1959.** Su prioridad `1 SEMANA` y su empresa `Ambas` están
+   hoy en `K1967`/`L1967`; con el `ORDER BY` el RI 1959 vuelve más arriba y esas
+   dos celdas quedan al lado de otro pedido. Mirar en qué fila quedó el 1959,
+   vaciar `K1967`/`L1967` y escribirlas ahí.
+
+### Y al mismo tiempo, el techo de 2011 filas
+
+`Requerimientos internos` tiene la grilla en **2011 filas** y el `QUERY` va por
+la 1967. Al ritmo de estos días son unos nueve días. Cuando la salida no entre,
+el `QUERY` falla entero.
+
+**El orden importa y al revés rompe las nueve pestañas por área de una:**
+
+1. **Primero las fórmulas.** En cada pestaña por área, en `A2`, cambiar
+   `'Requerimientos internos'!M2:M2011` por `M2:M`. En `RI MANTENIMIENTO`
+   cambiar además `A2:L2011` por `A2:L` y `C2:C2011` por `C2:C`: ahí las tres
+   están acotadas, y dejar una fija con las otras abiertas es el mismo error.
+   En `APROB MAXI`, en `B2`, cambiar `A436:I2011` por `A436:I` — ésa no rompe,
+   pero deja de encontrar los RI nuevos.
+2. **Después la grilla.** Recién ahí agrandar `Requerimientos internos` (al
+   final de la hoja, agregar unas 3.000 filas).
+
+Al revés, `A2:L` crece con la grilla y `M2:M2011` no: `FILTER` deja de coincidir
+y las nueve pestañas por área dan error juntas.
+
+## La comprobación de punta a punta
+
+No es de agente: escribe en la planilla de producción.
 
 1. Cargar un pedido de prueba desde `/mis-pedidos`.
-2. En la hoja de respuestas, que la fila quedó **al final**, con su N° de RI en
-   la columna A y `M`, `N` y `O` vacías.
-3. En el master, que aparece con su prioridad y su empresa (tarda: el
-   `IMPORTRANGE` refresca en minutos, no al instante).
-4. Sincronizar desde `/compras/configuracion` y confirmar contra la base que el
+2. En `Altas del sistema`, que la fila quedó al final **de esa pestaña**, con su
+   N° de RI en la columna A.
+3. En el master, que aparece **en su lugar por número** —no al final— con su
+   prioridad y su empresa (tarda: el `IMPORTRANGE` refresca en minutos, no al
+   instante).
+4. Mandar una respuesta por el formulario y confirmar que **el pedido de prueba
+   no se movió** en el master. Eso es lo que se vino a arreglar y es lo único
+   que lo prueba.
+5. Sincronizar desde `/compras/configuracion` y confirmar contra la base que el
    pedido **sigue** con `origen = "app"`, su prioridad y su `paga_ambas`: eso es
    lo que prueba que la planilla no le pisó lo que sólo sabe el sistema.
-5. Aprobarlo y ver que aparece en la pestaña de su área con `SOLICITA` puesto.
-6. Borrarlo de la base y **vaciar su fila** en la hoja de respuestas. Vaciar, no
+6. Aprobarlo y ver que aparece en la pestaña de su área con `SOLICITA` puesto.
+7. Borrarlo de la base y **vaciar su fila** en `Altas del sistema`. Vaciar, no
    borrar la fila: correrla desalinea las columnas que las pestañas por área
    tienen escritas a mano.
 

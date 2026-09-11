@@ -9,7 +9,7 @@ Para que no haya dos verdades sobre el mismo dato, cada lado manda en una cosa:
 
 | | Manda en | Por qué |
 |---|---|---|
-| **Planilla** | El alta de los RI que entran por el formulario | La gente sigue cargando por el formulario de Google. Un RI cargado en el sistema **también llega**: se escribe en la hoja de respuestas y baja por las mismas fórmulas |
+| **Planilla** | El alta de los RI que entran por el formulario | La gente sigue cargando por el formulario de Google. Un RI cargado en el sistema **también llega**: se escribe en `Altas del sistema`, una pestaña aparte de esa misma planilla, y baja al master por la misma fórmula |
 | **Sistema** | Aprobación, proveedor, costos, estado de compra | Es donde están los permisos y el historial |
 
 En la práctica: apenas alguien toca un requerimiento desde el sistema (lo
@@ -58,9 +58,54 @@ Es el sentido que faltaba, y no se escribe donde uno esperaría. Las columnas de
 alta del master **son la salida de una fórmula** —`QUERY(IMPORTRANGE())` de la
 planilla de respuestas del formulario— y cada pestaña por área es un `FILTER`
 del master: no hay dónde escribir un alta. Así que se escribe **una planilla más
-arriba**, en `Respuestas de formulario 1`, y baja sola. Necesita
-`GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` y que la cuenta de servicio sea **Editor**
-de esa planilla.
+arriba** y baja sola. Necesita `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` y que la
+cuenta de servicio sea **Editor** de esa planilla.
+
+**Pero no en la hoja del formulario, y esto costó caro dos veces.** Hasta el
+11/09/2026 el alta iba a `Respuestas de formulario 1`, abajo de la última
+respuesta. Google Forms inserta cada respuesta **justo después de su propia
+última respuesta**, no después de la última fila con datos, así que esa fila
+bajaba una posición por cada envío: no se desordenaba una vez, quedaba
+condenada a ser siempre la última. Y no hay dónde ponerla para que no pase —más
+arriba no se puede, porque su N° de RI es el más alto de la serie—.
+
+Eso no era cosmético. En el master `A:J` son la salida del `QUERY` y `K`, `L` y
+`M` —PRIORIDAD, Empresa y **Estado**, que es la aprobación— son columnas **a
+mano**: no viajan con la fórmula. Cuando la salida se corre, las columnas a mano
+se quedan donde estaban y quedan pegadas al RI de al lado. Medido el
+11/09/2026: la prioridad `1 SEMANA` y la empresa `Ambas` del RI 1959 terminaron
+en la fila del RI 1960, y de ahí la sincronización se las importó a la base. El
+RI 1960 quedó con la prioridad de otro pedido y nada lo dijo.
+
+Mandar el alta **por el formulario** se probó y no sale, por dos motivos
+independientes: el formulario tiene una pregunta de subida de archivo, así que
+Google exige sesión iniciada y contesta `401` a cualquier petición sin ella
+(medido contra `/viewform` y `/formResponse`); y el N° de RI no es una pregunta
+del formulario, así que el sistema no sabría qué número le tocó a un pedido sin
+reconocer su fila por el nombre y la descripción — enlazar al que se le parece.
+
+Desde el 11/09/2026 el alta se escribe en **`Altas del sistema`**, una pestaña
+propia de la misma planilla donde no inserta nadie, y el master apila las dos
+fuentes ordenadas por N° de RI:
+
+```
+=QUERY({IMPORTRANGE(form; "'Respuestas de formulario 1'!A4:L10000");
+        IMPORTRANGE(form; "'Altas del sistema'!A2:L10000")};
+       "SELECT Col1,Col2,Col5,Col6,Col7,Col8,Col9,Col10,Col11,Col12
+        WHERE Col1 IS NOT NULL ORDER BY Col1"; 0)
+```
+
+El `ORDER BY` no es prolijidad: como todo RI nuevo es el máximo de la serie,
+ordenar por N° deja la salida del master **estrictamente creciente**, o sea que
+agregar una fila no puede correr las de arriba. Es lo que hace que las columnas
+a mano no se puedan volver a desalinear — ni por esto ni por cualquier otra
+cosa que mueva una fila.
+
+El precio es que **la serie quedó repartida entre dos hojas**, y eso obliga a
+dos cosas: el Apps Script de la planilla numera contando las dos pestañas (ver
+`docs/compras-formulario-apps-script.gs`), y el alta comprueba la columna A de
+`Respuestas de formulario 1` antes de escribir, por si una respuesta se llevó el
+número que la base había asignado.
 
 - **El número lo pone el sistema, como valor.** Le dejaba el número a la
   fórmula de la hoja, y eso no sobrevive a que Forms inserte una fila: costó un
@@ -78,9 +123,13 @@ de esa planilla.
   queda en la cola en vez de quedar creado y olvidado.
 - Es **idempotente**: si ya hay una fila con ese N° de RI no escribe otra. Y si
   esa fila no es la suya, no la adopta.
-- Prioridad y empresa van a las columnas a mano del master, y **sólo después de
-  verificar que esa fila ya diga este N° de RI**. Mientras el `IMPORTRANGE` no
-  refresque, quedan en la cola: las escribe el reintento.
+- Prioridad y empresa van a las columnas a mano del master, y **la fila se busca
+  por la columna A, no se calcula**. Era `fila de respuestas − 2` mientras el
+  `QUERY` conservaba el orden; con el `ORDER BY` esa cuenta dejó de valer, y una
+  cuenta que deja de valer no avisa: sigue devolviendo un número plausible.
+  Buscar hace que **la búsqueda sea la verificación**: si el RI no está, no se
+  escribe. No encontrarlo es lo normal en el alta —el `IMPORTRANGE` tarda—, y
+  ahí quedan en la cola: las escribe el reintento.
 
 **Sistema → planilla, la compra** (`exportarRequerimiento`)
 
