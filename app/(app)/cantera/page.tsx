@@ -13,10 +13,9 @@ import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
+import InicioGrafico from "./InicioGrafico";
 
-const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
-const money = (v: number | null) => (v == null ? "—" : `$ ${ars.format(v)}`);
 
 const NOMBRE_MES = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric", timeZone: "UTC" });
 function nombreDeMes(mes: string): string {
@@ -26,12 +25,13 @@ function nombreDeMes(mes: string): string {
 
 /**
  * La página de inicio del módulo: un adelanto real de Registros y del
- * Informe, no una lista de links sueltos — el usuario pidió explícitamente
- * "no esos 4 cuadros aburridos". El sidebar sigue teniendo su desplegable
- * (`lib/core/nav.ts`) para ir directo a cualquier sección; esta pantalla es
- * la puerta de entrada del módulo, con los mismos números que se verían
- * abriendo Registros o el Informe, para no tener que entrar a mirar si hay
- * algo pendiente.
+ * Informe, no una lista de links sueltos — el usuario lo pidió dos veces:
+ * primero que no fueran "cuadros aburridos", después que las estadísticas
+ * fueran representativas y que el informe se viera con un gráfico, no con
+ * números en una lista. El sidebar (`lib/core/nav.ts`) sigue teniendo su
+ * desplegable para ir directo a cualquier sección; esto es la puerta de
+ * entrada, con los mismos datos que se verían abriendo Registros o el
+ * Informe, para no tener que entrar a mirar si hay algo pendiente.
  */
 export default async function CanteraInicioPage() {
   const supabase = await createClient();
@@ -64,39 +64,73 @@ export default async function CanteraInicioPage() {
   const conteo = contarAvisos(filasVoladura, filasBochon);
 
   // `traerVoladuras`/`traerBochones` ya vienen ordenadas por fecha de voladura
-  // descendente (consultas.ts): las primeras 5 son el adelanto que interesa.
+  // descendente (consultas.ts): las primeras son el adelanto que interesa.
   const ultimasVoladuras = filasVoladura.slice(0, 5);
   const ultimosBochones = filasBochon.slice(0, 3);
 
   const serie = serieMensual(vParaInforme, bParaInforme);
-  const ultimoMes = serie.at(-1) ?? null;
+  // "Hoy" en un componente de servidor se resuelve una vez por request: no es
+  // estado que pueda dar un resultado distinto a mitad de un mismo render, así
+  // que la regla de purity no aplica acá (mismo caso que
+  // compras/configuracion/page.tsx).
+  // eslint-disable-next-line react-hooks/purity
+  const hoy = new Date();
+  const mesActual = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`;
+  const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
+  const serieReciente = serie.slice(-6);
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-semibold">Cantera</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold">Cantera</h1>
+          <p className="text-sm text-slate-500">Perforación, voladura y bochones de las cuatro canteras.</p>
+        </div>
+        {permisos.esAdmin && (
+          <div className="flex gap-1.5">
+            <Link href="/cantera/yacimientos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+              Canteras
+            </Link>
+            <Link href="/cantera/insumos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+              Insumos
+            </Link>
+          </div>
+        )}
+      </div>
 
-      {/* ── Estado general, de un vistazo ── */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tarjeta valor={String(conteo.sinConciliar)} label="a conciliar" alerta={conteo.sinConciliar > 0} />
-        <Tarjeta valor={String(conteo.desvios)} label="toneladas fuera de rango" alerta={conteo.desvios > 0} />
-        <Tarjeta
-          valor={ultimoMes ? num1.format(ultimoMes.toneladas) : "—"}
-          label={ultimoMes ? `toneladas en ${nombreDeMes(ultimoMes.mes)}` : "sin datos del mes"}
+      {/* ── Lo que importa de un vistazo ── */}
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Metrica
+          color="#1E7D34"
+          valor={delMesActual ? num1.format(delMesActual.toneladas) : "0"}
+          label={`Toneladas voladas · ${nombreDeMes(mesActual)}`}
         />
-        <Tarjeta
-          valor={ultimoMes?.usdPorTon != null ? `US$ ${num1.format(ultimoMes.usdPorTon)}` : "—"}
-          label="por tonelada, último mes"
+        <Metrica
+          color="#7E22CE"
+          valor={delMesActual?.usdPorTon != null ? `US$ ${num1.format(delMesActual.usdPorTon)}` : "—"}
+          label="Costo por tonelada este mes"
+        />
+        <Metrica
+          color={conteo.sinConciliar > 0 ? "#B45309" : "#1E7D34"}
+          valor={String(conteo.sinConciliar)}
+          label="Facturas a conciliar o revisar"
+          href="/cantera/registros"
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ── Adelanto de Registros ── */}
         <section className="card p-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-slate-900">Registros</h2>
             <Link href="/cantera/registros" className="text-xs text-slate-500 underline">Ver todos →</Link>
           </div>
-          <p className="mt-1 text-xs text-slate-500">Las últimas voladuras cargadas, de todas las canteras.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Las últimas voladuras cargadas, de todas las canteras.
+            {conteo.desvios > 0 && (
+              <span className="text-amber-700"> · {conteo.desvios} con toneladas fuera de rango.</span>
+            )}
+          </p>
           <ul className="mt-3 divide-y divide-slate-100">
             {ultimasVoladuras.map((v) => (
               <li key={v.codigo}>
@@ -139,60 +173,42 @@ export default async function CanteraInicioPage() {
           )}
         </section>
 
-        {/* ── Adelanto del Informe ── */}
+        {/* ── Adelanto del Informe: gráfico, no una lista de números ── */}
         <section className="card p-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-slate-900">Informe mensual</h2>
             <Link href="/cantera/informes" className="text-xs text-slate-500 underline">Ver informe →</Link>
           </div>
-          {ultimoMes ? (
+          {serieReciente.length > 0 ? (
             <>
-              <p className="mt-1 text-xs text-slate-500">{nombreDeMes(ultimoMes.mes)}, el último con datos cargados.</p>
-              <dl className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <dt className="text-xs text-slate-500">Toneladas</dt>
-                  <dd className="text-lg font-semibold text-slate-900">{num1.format(ultimoMes.toneladas)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-500">USD/tonelada</dt>
-                  <dd className="text-lg font-semibold text-slate-900">{ultimoMes.usdPorTon != null ? num1.format(ultimoMes.usdPorTon) : "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-500">Perforación</dt>
-                  <dd className="text-sm text-slate-700">{money(ultimoMes.perforacionUsd)} <span className="text-xs text-slate-400">USD</span></dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-500">Voladura</dt>
-                  <dd className="text-sm text-slate-700">{money(ultimoMes.voladuraUsd)} <span className="text-xs text-slate-400">USD</span></dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-xs text-slate-400">
-                {serie.length} {serie.length === 1 ? "mes cargado" : "meses cargados"} en total — el histórico completo, con
-                gráficos, está en el informe.
-              </p>
+              <p className="mt-1 text-xs text-slate-500">Toneladas y costo por tonelada, últimos {serieReciente.length} meses.</p>
+              <div className="mt-3 h-52">
+                <InicioGrafico datos={serieReciente} />
+              </div>
             </>
           ) : (
             <p className="mt-3 text-sm text-slate-400">Todavía no hay datos para armar un informe.</p>
           )}
         </section>
       </div>
-
-      {/* ── Catálogos, sólo admin ── */}
-      {permisos.esAdmin && (
-        <div className="mt-6 flex flex-wrap gap-4 text-sm">
-          <Link href="/cantera/yacimientos" className="text-slate-600 underline">Canteras</Link>
-          <Link href="/cantera/insumos" className="text-slate-600 underline">Insumos</Link>
-        </div>
-      )}
     </div>
   );
 }
 
-function Tarjeta({ valor, label, alerta }: { valor: string; label: string; alerta?: boolean }) {
-  return (
-    <div className="card p-3">
-      <div className={`text-2xl font-bold tabular-nums ${alerta ? "text-amber-700" : "text-slate-900"}`}>{valor}</div>
-      <div className="text-xs text-slate-500">{label}</div>
-    </div>
+function Metrica({
+  color, valor, label, href,
+}: { color: string; valor: string; label: string; href?: string }) {
+  const contenido = (
+    <>
+      <div className="text-3xl font-bold tabular-nums" style={{ color }}>{valor}</div>
+      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
+    </>
+  );
+  const clases = "card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg";
+  const estilo = { borderTop: `3px solid ${color}` };
+  return href ? (
+    <Link href={href} className={clases} style={estilo}>{contenido}</Link>
+  ) : (
+    <div className={clases} style={estilo}>{contenido}</div>
   );
 }

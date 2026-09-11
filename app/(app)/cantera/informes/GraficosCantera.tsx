@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
 import type { FilaSerieMensual, ResumenPorCantera } from "@/lib/cantera/informe";
@@ -75,6 +75,33 @@ export function TendenciaCostoUsd({ datos }: { datos: FilaSerieMensual[] }) {
         <Bar dataKey="perforacionUsd" name="Perforación" stackId="c" fill="#1E7D34" />
         <Bar dataKey="voladuraUsd" name="Voladura" stackId="c" fill="#7E22CE" radius={[4, 4, 0, 0]} />
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/**
+ * El adelanto de la página de inicio del módulo: toneladas (barras) y
+ * USD/ton (línea, eje derecho) en un solo gráfico, para que se vea de un
+ * vistazo que se cargó más y salió más caro/barato en el mismo golpe de
+ * vista — es la lectura que en el informe completo exige mirar dos gráficos
+ * separados.
+ */
+export function ResumenMensualMini({ datos }: { datos: FilaSerieMensual[] }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={datos} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+        <YAxis yAxisId="ton" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={ejeNum} width={36} />
+        <YAxis yAxisId="usd" orientation="right" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={ejeNum} width={30} />
+        <Tooltip
+          formatter={(v, n) => [n === "USD/ton" ? (v == null ? "—" : `US$ ${num.format(Number(v))}`) : num.format(Number(v)), n]}
+          contentStyle={{ fontSize: 12, borderRadius: 8 }}
+        />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Bar yAxisId="ton" dataKey="toneladas" name="Toneladas" fill="#1E7D34" radius={[4, 4, 0, 0]} />
+        <Line yAxisId="usd" type="monotone" dataKey="usdPorTon" name="USD/ton" stroke="#7E22CE" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
