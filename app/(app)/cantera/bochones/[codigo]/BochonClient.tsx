@@ -103,8 +103,8 @@ export default function BochonClient({
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
-          <Link href={`/cantera?y=${bochon.yacimiento_id}`} className="text-xs text-slate-500 underline">
-            ← {yacimiento?.nombre ?? "Cantera"}
+          <Link href={`/cantera/registros?y=${bochon.yacimiento_id}`} className="text-xs text-slate-500 underline">
+            ← {yacimiento?.nombre ?? "Registros"}
           </Link>
           <h1 className="font-mono text-xl font-semibold">{bochon.codigo}</h1>
         </div>

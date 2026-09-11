@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { LecturaDeCruce } from "@/lib/cantera/costos";
@@ -74,6 +75,9 @@ export default function CanteraClient({
 }) {
   const router = useRouter();
   const search = useSearchParams();
+  // Los avisos se pueden cerrar con la cruz; se recuerdan por su texto y no
+  // por índice, para no reabrir el que sigue si cambia la cantidad de filas.
+  const [avisosCerrados, setAvisosCerrados] = useState<string[]>([]);
 
   function irCon(cambios: Record<string, string>) {
     const p = new URLSearchParams(search);
@@ -81,13 +85,14 @@ export default function CanteraClient({
       if (v) p.set(k, v);
       else p.delete(k);
     }
-    router.push(`/cantera?${p.toString()}`);
+    router.push(`/cantera/registros?${p.toString()}`);
   }
 
   if (yacimientos.length === 0) {
     return (
       <div className="mx-auto max-w-lg text-center">
-        <h1 className="text-xl font-semibold">Cantera</h1>
+        <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
+        <h1 className="mt-1 text-xl font-semibold">Registros</h1>
         <p className="mt-3 text-sm text-slate-500">
           Todavía no hay canteras cargadas. Un admin las carga en{" "}
           <Link href="/cantera/yacimientos" className="text-slate-800 underline">Canteras</Link>.
@@ -112,8 +117,9 @@ export default function CanteraClient({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Cantera</h1>
+      <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Registros</h1>
         {puedeEditar && (
           <div className="flex gap-2">
             <Link href={`/cantera/voladuras/nueva${desQ}`} className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white">
@@ -159,9 +165,20 @@ export default function CanteraClient({
         )}
       </div>
 
-      {avisos.length > 0 && (
+      {avisos.filter((a) => !avisosCerrados.includes(a)).length > 0 && (
         <ul className="mt-4 space-y-1 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-          {avisos.map((a) => <li key={a}>• {a}</li>)}
+          {avisos.filter((a) => !avisosCerrados.includes(a)).map((a) => (
+            <li key={a} className="flex items-start justify-between gap-3">
+              <span>• {a}</span>
+              <button
+                onClick={() => setAvisosCerrados((prev) => [...prev, a])}
+                aria-label="Cerrar este aviso"
+                className="shrink-0 text-amber-600 hover:text-amber-900"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
         </ul>
       )}
 

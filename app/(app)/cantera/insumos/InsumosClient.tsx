@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ETIQUETA_TIPO_CONSUMO, TIPOS_DE_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Insumo } from "@/lib/cantera/types";
 
@@ -61,7 +62,8 @@ export default function InsumosClient({ insumos }: { insumos: Insumo[] }) {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-xl font-semibold">Insumos de voladura</h1>
+      <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
+      <h1 className="mt-1 text-xl font-semibold">Insumos de voladura</h1>
       <p className="mt-1 text-sm text-slate-500">
         El precio USD es el vigente; cada renglón de consumo lo puede pisar.
       </p>

@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { FilaSerieMensual, Informe } from "@/lib/cantera/informe";
 
@@ -106,7 +107,8 @@ export default function InformeClient({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="text-xl font-semibold">Informe de cantera</h1>
+      <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
+      <h1 className="mt-1 text-xl font-semibold">Informe de cantera</h1>
 
       {/* ── Histórico: cómo viene variando ── */}
       <section className="mt-4">
