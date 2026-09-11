@@ -218,15 +218,22 @@ export const NAV: NavItem[] = [
       { label: "Sin vincular", href: "/facturacion?estado=recibida", modulo: "facturacion" },
     ],
   },
-  // Sin `children`, a diferencia de los demás módulos: el usuario pidió que
-  // clickear "Cantera" entre directo a una página de inicio propia
-  // (`/cantera`) con los links a Registros/Informe/Canteras/Insumos, en vez
-  // de desplegar un submenú acá — con `children` el sidebar renderiza el ítem
-  // como un botón que sólo despliega, y no navega.
   {
     label: "Cantera",
+    // `href` propio, distinto al de todos los `children`: es justamente esa
+    // diferencia la que en `Sidebar.tsx` decide que el ítem se renderice como
+    // un link que navega (a la página de inicio del módulo) y despliega, en
+    // vez de sólo desplegar como el resto de los módulos — el usuario pidió
+    // las dos cosas juntas: mantener el desplegable y que clickear "Cantera"
+    // entre a una página propia con el adelanto de Registros y del informe.
     href: "/cantera",
     modulo: "cantera",
+    children: [
+      { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
+      { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
+      { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
+      { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
+    ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete

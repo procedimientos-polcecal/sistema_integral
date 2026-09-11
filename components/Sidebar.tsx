@@ -251,30 +251,57 @@ export function Sidebar({
             (c) => esRutaActiva(c.href, pathname, search) || c.children?.some((n) => esRutaActiva(n.href, pathname, search))
           );
 
+          // La mayoría de los módulos repiten el `href` del padre en su primer
+          // hijo (es la misma página, "Dashboard"): ahí el grupo entero se
+          // sigue tratando como un desplegable puro, sin navegar, que es el
+          // comportamiento de siempre. Cantera es la excepción: su `href` no
+          // lo tiene ningún hijo porque es una página propia (el inicio del
+          // módulo, con el adelanto de Registros y del informe) — eso es lo
+          // que activa que el encabezado navegue además de desplegar.
+          const hrefEsPropio = !item.children.some((c) => c.href === item.href);
+          const activoPropio = hrefEsPropio && esRutaActiva(item.href, pathname, search);
+
           // Colapsado: sin lugar para desplegar sub-ítems, un click entra
-          // directo a la primera página del sector (o del primer sub-grupo).
+          // directo a la página del sector — la propia si la tiene, si no la
+          // primera de sus hijos (o del primer sub-grupo).
           if (colapsado) {
-            const primerHref = hijosVisibles[0]?.children?.[0]?.href ?? hijosVisibles[0]?.href ?? item.href;
+            const primerHref = hrefEsPropio ? item.href : (hijosVisibles[0]?.children?.[0]?.href ?? hijosVisibles[0]?.href ?? item.href);
             return (
-              <Link key={item.href} href={primerHref} title={item.label} className={`nav-link justify-center ${hijoActivo ? "active" : ""}`}>
+              <Link key={item.href} href={primerHref} title={item.label} className={`nav-link justify-center ${hijoActivo || activoPropio ? "active" : ""}`}>
                 <Icon />
               </Link>
             );
           }
 
           const desplegado = abierto === item.label;
+          const alternarDesplegado = () => setAbierto(desplegado ? null : item.label);
+          const encabezadoActivo = hijoActivo || activoPropio;
+
           return (
             <div key={item.href}>
-              <button
-                type="button"
-                onClick={() => setAbierto(desplegado ? null : item.label)}
-                aria-expanded={desplegado}
-                className={`nav-link ${hijoActivo ? "active" : ""}`}
-              >
-                <Icon />
-                <span style={{ flex: 1 }}>{item.label}</span>
-                <ChevronIcon abierto={desplegado} />
-              </button>
+              {hrefEsPropio ? (
+                <Link
+                  href={item.href}
+                  onClick={alternarDesplegado}
+                  aria-expanded={desplegado}
+                  className={`nav-link ${encabezadoActivo ? "active" : ""}`}
+                >
+                  <Icon />
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <ChevronIcon abierto={desplegado} />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={alternarDesplegado}
+                  aria-expanded={desplegado}
+                  className={`nav-link ${encabezadoActivo ? "active" : ""}`}
+                >
+                  <Icon />
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <ChevronIcon abierto={desplegado} />
+                </button>
+              )}
               {desplegado && (
                 <div>
                   {hijosVisibles.map((c) => {

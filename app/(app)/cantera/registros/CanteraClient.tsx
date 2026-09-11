@@ -5,40 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { LecturaDeCruce } from "@/lib/cantera/costos";
 import type { Yacimiento } from "@/lib/cantera/types";
+import { avisosDe, type FilaBochon, type FilaVoladura } from "@/lib/cantera/tablero";
 
-export interface FilaVoladura {
-  codigo: string;
-  yacimiento: string;
-  vol_fecha: string | null;
-  perf_fin: string | null;
-  pozos: number | null;
-  montoPerf: number | null;
-  montoVol: number | null;
-  toneladas: number | null;
-  toneladas_planilla: number | null;
-  desvioFuera: boolean;
-  crucePerf: LecturaDeCruce;
-  cruceVol: LecturaDeCruce;
-  sheets_pendiente: string | null;
-}
-
-export interface FilaBochon {
-  codigo: string;
-  yacimiento: string;
-  fecha: string | null;
-  voladura_codigo: string | null;
-  cantidad: number | null;
-  metros_perforados: number | null;
-  monto: number | null;
-  cruce: LecturaDeCruce;
-  sheets_pendiente: string | null;
-}
+export type { FilaBochon, FilaVoladura };
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
 
-function ChipCruce({ lectura }: { lectura: LecturaDeCruce }) {
+/** Exportado: la página de inicio del módulo lo reusa para su adelanto de registros. */
+export function ChipCruce({ lectura }: { lectura: LecturaDeCruce }) {
   const estilo: Record<LecturaDeCruce, string> = {
     coincide: "bg-emerald-50 text-emerald-700",
     revisar: "bg-red-50 text-red-700",
@@ -101,17 +77,7 @@ export default function CanteraClient({
     );
   }
 
-  const avisos: string[] = [];
-  const sinConciliar = [...voladuras, ...bochones].filter((f) =>
-    "montoPerf" in f
-      ? f.crucePerf === "sin_factura" || f.cruceVol === "sin_factura" || f.crucePerf === "revisar" || f.cruceVol === "revisar"
-      : f.cruce === "sin_factura" || f.cruce === "revisar"
-  ).length;
-  if (sinConciliar > 0) avisos.push(`${sinConciliar} registro(s) con factura sin conciliar o a revisar.`);
-  const desvios = voladuras.filter((v) => v.desvioFuera).length;
-  if (desvios > 0) avisos.push(`${desvios} voladura(s) con toneladas fuera del ±15% de la planilla histórica.`);
-  const pendientes = [...voladuras, ...bochones].filter((f) => f.sheets_pendiente).length;
-  if (pendientes > 0) avisos.push(`${pendientes} fila(s) que no llegaron a la planilla.`);
+  const avisos = avisosDe(voladuras, bochones);
 
   const desQ = yacimientoId ? `?y=${yacimientoId}` : "";
 

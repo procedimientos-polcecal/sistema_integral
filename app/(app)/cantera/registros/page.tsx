@@ -7,11 +7,9 @@ import {
   traerVoladuras,
   traerYacimientos,
 } from "@/lib/cantera/consultas";
-import { montoBochon, montoPerforacion, montoVoladura, cruce } from "@/lib/cantera/costos";
-import { desvioContraPlanilla, toneladasEstimadas } from "@/lib/cantera/toneladas";
-import { metrosYPozos } from "@/lib/cantera/tramos";
-import type { Bochon, Consumo, Voladura, Yacimiento } from "@/lib/cantera/types";
-import CanteraClient, { type FilaBochon, type FilaVoladura } from "./CanteraClient";
+import { armarFilaBochon, armarFilaVoladura, type FilaBochon, type FilaVoladura } from "@/lib/cantera/tablero";
+import type { Consumo } from "@/lib/cantera/types";
+import CanteraClient from "./CanteraClient";
 
 /**
  * Registros: el tablero de cantera. Por defecto todas las canteras; se puede
@@ -19,7 +17,9 @@ import CanteraClient, { type FilaBochon, type FilaVoladura } from "./CanteraClie
  * se despejan al leer (nada de eso se guarda).
  *
  * Vivía en `/cantera` — se corrió acá cuando esa ruta pasó a ser la página de
- * inicio del módulo con los links a cada sección.
+ * inicio del módulo con los links a cada sección. `armarFilaVoladura`/
+ * `armarFilaBochon` viven en `lib/cantera/tablero.ts` porque la página de
+ * inicio también los necesita, para su adelanto de los últimos registros.
  */
 export default async function RegistrosPage({
   searchParams,
@@ -69,65 +69,4 @@ export default async function RegistrosPage({
       puedeFacturar={permisos.puedeFacturar}
     />
   );
-}
-
-function armarFilaVoladura(
-  v: Voladura,
-  yac: Yacimiento | null,
-  consumos: { cantidad: number | null; precio_usd: number | null; tipo: string | null }[]
-): FilaVoladura {
-  const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
-  const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
-  const metrosVol = vol.metros ?? perf.metros;
-
-  const montoPerf = montoPerforacion({
-    metros: perf.metros,
-    precioUsdM: v.perf_precio_usd_m,
-    tc: v.perf_tc_usd,
-    nochesSereno: v.perf_noches_sereno,
-    montoNoche: v.perf_monto_noche,
-  });
-  const montoVol = montoVoladura(consumos, v.vol_tc_usd);
-  const toneladas = toneladasEstimadas({
-    metros: metrosVol,
-    densidad: v.densidad_t_m3 ?? yac?.densidad_t_m3 ?? null,
-    burden: v.vol_burden_m ?? v.burden_m ?? yac?.burden_m ?? null,
-    espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac?.espaciamiento_m ?? null,
-  });
-
-  return {
-    codigo: v.codigo,
-    yacimiento: yac?.codigo ?? "?",
-    vol_fecha: v.vol_fecha,
-    perf_fin: v.perf_fin,
-    pozos: perf.pozos,
-    montoPerf,
-    montoVol,
-    toneladas,
-    toneladas_planilla: v.toneladas_planilla,
-    desvioFuera: desvioContraPlanilla(toneladas, v.toneladas_planilla).fueraDeRango,
-    crucePerf: cruce(montoPerf, v.perf_odoo_importe).lectura,
-    cruceVol: cruce(montoVol, v.vol_odoo_importe).lectura,
-    sheets_pendiente: v.sheets_pendiente,
-  };
-}
-
-function armarFilaBochon(b: Bochon, yac: Yacimiento | null): FilaBochon {
-  const monto = montoBochon({
-    cantidad: b.cantidad,
-    metrosPerforados: b.metros_perforados,
-    precioUsdM: b.precio_usd_m,
-    tc: b.tc_usd,
-  });
-  return {
-    codigo: b.codigo,
-    yacimiento: yac?.codigo ?? "?",
-    fecha: b.fecha_voladura ?? b.fin,
-    voladura_codigo: b.voladura_codigo,
-    cantidad: b.cantidad,
-    metros_perforados: b.metros_perforados,
-    monto,
-    cruce: cruce(monto, b.odoo_importe).lectura,
-    sheets_pendiente: b.sheets_pendiente,
-  };
 }
