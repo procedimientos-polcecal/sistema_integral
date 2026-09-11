@@ -20,8 +20,9 @@ import { empujarOrdenesDeRequerimiento, ensayarOrdenesDeRequerimiento } from "@/
  *
  * El `POST` acepta un cuerpo opcional `{ producto_id }` con el producto de
  * Odoo que Compras confirmó en el selector del ensayo. Sin cuerpo (o con uno
- * que no trae `producto_id`), la línea usa el genérico `ART. VARIOS`, que es
- * lo que hacía siempre: una pantalla vieja no rompe.
+ * que no trae `producto_id`), el push busca lo que ya se aprendió para esa
+ * misma descripción, y recién si tampoco hay usa el genérico `ART. VARIOS`.
+ * Una pantalla vieja no rompe.
  */
 
 export const maxDuration = 60;

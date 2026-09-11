@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  explicacionDeSugerencia,
+  type MotivoDeSugerencia,
+  type ProductoDeOdoo,
+} from "@/lib/compras/productoOdoo";
 
 /**
  * La orden de compra de este requerimiento en Odoo.
@@ -27,14 +32,6 @@ export interface OrdenDeOdoo {
   enlace: string | null;
 }
 
-/** Un producto comprable de Odoo, tal como lo trae el ensayo. */
-interface ProductoDelCatalogo {
-  id: number;
-  nombre: string;
-}
-
-type MotivoDeSugerencia = "aprendido" | "sugerido" | "sin_sugerencia";
-
 /**
  * La forma del ensayo que importa acá: qué producto propone y con qué
  * catálogo arma el selector. El resto de lo que trae el `GET` (precio,
@@ -44,28 +41,21 @@ type MotivoDeSugerencia = "aprendido" | "sugerido" | "sin_sugerencia";
 interface EnsayoDeOrden {
   producto?: {
     sugerencia: {
-      producto: ProductoDelCatalogo | null;
+      producto: ProductoDeOdoo | null;
       motivo: MotivoDeSugerencia;
-      alternativas: ProductoDelCatalogo[];
+      alternativas: ProductoDeOdoo[];
     };
-    catalogo: ProductoDelCatalogo[];
+    catalogo: ProductoDeOdoo[];
   };
   [clave: string]: unknown;
 }
 
-/**
- * Por qué se llegó (o no) a una sugerencia. Las cuatro frases que la pantalla
- * puede mostrar debajo del selector.
- */
-function explicacionDeSugerencia(s: NonNullable<EnsayoDeOrden["producto"]>["sugerencia"]): string {
-  if (s.motivo === "aprendido") return "Ya se usó este producto para un pedido igual.";
-  if (s.motivo === "sugerido") return "Sugerido por la descripción del pedido.";
-  if (s.alternativas.length > 0) {
-    return `No hay una coincidencia clara. Estos se parecen: ${s.alternativas
-      .map((p) => p.nombre)
-      .join(", ")}.`;
-  }
-  return "Sin coincidencia: va como ART. VARIOS.";
+/** El ensayo tal como se muestra: sin los 378 productos del catálogo. */
+function sinElCatalogo(ensayo: EnsayoDeOrden): unknown {
+  if (!ensayo.producto) return ensayo;
+
+  const { catalogo, ...resto } = ensayo.producto;
+  return { ...ensayo, producto: { ...resto, catalogo: `${catalogo.length} productos comprables` } };
 }
 
 export default function OrdenEnOdoo({
@@ -87,6 +77,8 @@ export default function OrdenEnOdoo({
   const [trabajando, setTrabajando] = useState(false);
   const [motivos, setMotivos] = useState<string[]>([]);
   const [ensayo, setEnsayo] = useState<EnsayoDeOrden | null>(null);
+  /** Lo que hay que decirle a quien apretó, cuando no es un fallo. */
+  const [advertencia, setAdvertencia] = useState<string | null>(null);
   // El producto elegido en el selector, como string porque así lo maneja un
   // <select>. Vacío es el genérico: lo mismo que no mandar nada en el POST.
   const [productoId, setProductoId] = useState("");
@@ -96,13 +88,19 @@ export default function OrdenEnOdoo({
   async function crear() {
     setTrabajando(true);
     setMotivos([]);
-    setEnsayo(null);
+    setAdvertencia(null);
+    /*
+     * El ensayo **no** se borra acá. Borrarlo hacía desaparecer el selector
+     * apenas se apretaba, así que después de un fallo —que es justo cuando hay
+     * que reintentar— la elección de producto se perdía y el reintento salía
+     * con el genérico sin que nada lo dijera.
+     */
 
     const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Sin producto elegido va vacío y la ruta usa el genérico: el selector
-      // no cambia nada para quien no llegó a ensayar antes de crear.
+      // Sin producto elegido va vacío y la ruta busca lo aprendido para esta
+      // descripción; si tampoco hay, usa el genérico.
       body: JSON.stringify(productoId ? { producto_id: Number(productoId) } : {}),
     });
     const body = await res.json().catch(() => ({}));
@@ -117,12 +115,33 @@ export default function OrdenEnOdoo({
       return;
     }
 
+    /*
+     * Salió bien no siempre quiere decir que pasó lo que se pidió.
+     *
+     * Cuando la orden ya existía en Odoo, el push la reconoce y **no toca la
+     * línea**: el producto que se acaba de elegir no se aplicó. Sin este aviso
+     * la pantalla se quedaba en silencio y daba a entender lo contrario, que es
+     * exactamente la forma de las trampas que este módulo ya pagó —el dato
+     * aparece en el lugar que no es y se descubre meses después—.
+     */
+    const intactas: { odooNombre: string | null; odooOrderId: number }[] = (body.ordenes ?? [])
+      .filter((o: { yaExistia?: boolean }) => o.yaExistia);
+
+    if (productoId && intactas.length > 0) {
+      const cuales = intactas.map((o) => o.odooNombre ?? `#${o.odooOrderId}`).join(" y ");
+      setAdvertencia(
+        `La orden ${cuales} ya estaba en Odoo y no se modificó: el producto que elegiste ` +
+          `no se aplicó. Si hay que cambiarlo, se cambia en Odoo, sobre la orden.`
+      );
+    }
+
     router.refresh();
   }
 
   async function ensayar() {
     setTrabajando(true);
     setMotivos([]);
+    setAdvertencia(null);
     const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo`);
     const body: EnsayoDeOrden = await res.json().catch(() => ({ error: "No se pudo leer el ensayo." }));
     setEnsayo(body);
@@ -223,6 +242,12 @@ export default function OrdenEnOdoo({
         </div>
       )}
 
+      {advertencia && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {advertencia}
+        </div>
+      )}
+
       {/*
         El selector va junto al botón de crear, no en otra pantalla: se elige
         el producto y se manda en el mismo gesto. Sólo aparece después de
@@ -250,6 +275,19 @@ export default function OrdenEnOdoo({
           <p className="mt-1 text-xs text-slate-500">
             {explicacionDeSugerencia(ensayo.producto.sugerencia)}
           </p>
+          {/*
+            Y lo que de verdad va, que después de tocar el selector deja de ser
+            lo sugerido. Son dos hechos distintos y antes se contaban con una
+            sola frase.
+          */}
+          {String(ensayo.producto.sugerencia.producto?.id ?? "") !== productoId && (
+            <p className="mt-1 text-xs font-medium text-slate-700">
+              Cambiado a mano: va{" "}
+              {ensayo.producto.catalogo.find((p) => String(p.id) === productoId)?.nombre ??
+                "ART. VARIOS"}
+              .
+            </p>
+          )}
         </div>
       )}
 
@@ -279,9 +317,15 @@ export default function OrdenEnOdoo({
         </div>
       )}
 
+      {/*
+        El volcado es para leerlo antes de apretar, así que el catálogo no va:
+        son 378 objetos que empujan los `vals` —lo único que de verdad hay que
+        mirar— fuera de la pantalla. Lo sustituye la cuenta, que es lo que
+        importa saber de él: si vino vacío, Odoo no contestó.
+      */}
       {ensayo !== null && (
         <pre className="mt-3 max-h-72 overflow-auto rounded-lg bg-slate-900 p-3 text-[11px] leading-relaxed text-slate-100">
-          {JSON.stringify(ensayo, null, 2)}
+          {JSON.stringify(sinElCatalogo(ensayo), null, 2)}
         </pre>
       )}
     </section>

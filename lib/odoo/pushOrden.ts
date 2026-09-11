@@ -15,8 +15,14 @@ import { buscarLeer, crearEn, mensajeDeOdoo } from "./client";
 import { resolverContextoDeOdoo } from "./contexto";
 import { armarOrdenes } from "./ordenDeCompra";
 import { leerCatalogoComprable, type ProductoComprable } from "./catalogo";
-import { normalizarDescripcion, sugerirProducto, type Sugerencia } from "@/lib/compras/productoOdoo";
+import {
+  correspondeAprender,
+  normalizarDescripcion,
+  sugerirProducto,
+  type Sugerencia,
+} from "@/lib/compras/productoOdoo";
 import { precioDesdeElRequerimiento } from "@/lib/compras/costoDelRequerimiento";
+import { traerTodo } from "@/lib/core/paginado";
 import type { CotizacionParaOrden, EmpresaParaOrden, Problema } from "./ordenDeCompra";
 
 export interface OrdenCreada {
@@ -67,12 +73,15 @@ export async function empujarOrdenesDeRequerimiento(
   admin: SupabaseClient,
   requerimientoId: string,
   /**
-   * El producto que Compras confirmó, y quién lo confirmó.
+   * El producto que Compras confirmó en el selector, y quién lo confirmó.
    *
-   * Sin esto la orden usa `ART. VARIOS`, que es lo que hacía siempre: una
-   * pantalla vieja no rompe. El id se valida contra el catálogo antes de
-   * usarlo —un id que no existe o no es comprable hace fallar la orden
-   * entera con un error de Odoo que no dice nada útil—.
+   * Sin esto **no** se cae directo al genérico: primero se busca lo aprendido
+   * para esta misma descripción (ver `productoAprendidoDe`). Recién si no hay
+   * nada aprendido la orden usa `ART. VARIOS`, que es lo que hacía siempre.
+   *
+   * El id se valida contra el catálogo antes de usarlo —un id que no existe o
+   * no es comprable hace fallar la orden entera con un error de Odoo que no
+   * dice nada útil—.
    */
   elegido?: { productoId: number; usuarioId: string | null }
 ): Promise<ResultadoDelPush> {
@@ -170,21 +179,67 @@ export async function empujarOrdenesDeRequerimiento(
     };
   });
 
-  // El producto que Compras eligió se valida contra el catálogo comprable
-  // antes de usarlo: un id archivado o inventado hace que Odoo rechace la
-  // orden entera con un mensaje que no dice nada útil, y para entonces ya se
-  // gastó el viaje. Se detecta acá y se anota como cualquier otro pendiente.
+  /*
+   * De dónde sale el producto de la línea, en orden:
+   *
+   *  1. **El selector**, si Compras eligió: es una decisión humana de ahora.
+   *  2. **Lo aprendido** para esta misma descripción exacta, si hay: también es
+   *     una decisión humana, tomada antes y ya confirmada. Sin esto el camino
+   *     normal —la orden se crea sola al pasar el RI a *pedido*, sin que nadie
+   *     abra el selector— mandaba `ART. VARIOS` siempre, y la tabla de lo
+   *     aprendido no servía para nada. El emparejador **no** corre acá: una
+   *     sugerencia que nadie miró no se manda sola, que es la decisión que
+   *     sostiene todo el diseño.
+   *  3. Nada: `ART. VARIOS`, como antes.
+   */
+  const humano = elegido !== undefined;
+  const aprendido = humano ? null : await productoAprendidoDe(admin, ri.descripcion);
+  const productoPedido = elegido?.productoId ?? aprendido;
+
+  // El id se valida contra el catálogo comprable antes de usarlo: uno archivado
+  // o inventado hace que Odoo rechace la orden entera con un mensaje que no
+  // dice nada útil, y para entonces ya se gastó el viaje. Se detecta acá y se
+  // anota como cualquier otro pendiente.
   let producto: ProductoComprable | undefined;
-  if (elegido) {
-    const catalogo = await leerCatalogoComprable();
-    const encontrado = catalogo.find((p) => p.id === elegido.productoId);
-    if (!encontrado) {
+  if (productoPedido !== null && productoPedido !== undefined) {
+    let catalogo: ProductoComprable[];
+    try {
+      catalogo = await leerCatalogoComprable();
+    } catch (e) {
+      /*
+       * Que Odoo no conteste el catálogo no puede terminar en un 500 pelado: el
+       * requerimiento ya cambió de estado y sin pendiente anotado la
+       * divergencia no avisa sola. Se anota con lo que dijo Odoo, sin traducir.
+       */
+      const detalle = e instanceof Error ? e.message : String(e);
       return await anotarPendiente(admin, ri.id, [
-        `El producto ${elegido.productoId} no está en el catálogo comprable de Odoo: ` +
-          `puede haberse archivado. Elegí otro y volvé a intentar.`,
+        `No se pudo leer el catálogo de productos de Odoo para validar el producto ` +
+          `${productoPedido}: ${detalle}`,
       ]);
     }
-    producto = encontrado;
+
+    const encontrado = catalogo.find((p) => p.id === productoPedido);
+    if (!encontrado) {
+      /*
+       * Si lo que no está es lo aprendido —y no lo que alguien acaba de
+       * elegir—, trabar la orden sería castigar al que no eligió nada por un
+       * producto que Odoo archivó después. Se sigue con el genérico, que es lo
+       * que pasaba antes de que existiera todo esto.
+       */
+      if (!humano) {
+        console.error(
+          `RI ${ri.nro_ri}: el producto aprendido ${productoPedido} ya no está en el ` +
+            `catálogo comprable de Odoo; la orden va con el genérico.`
+        );
+      } else {
+        return await anotarPendiente(admin, ri.id, [
+          `El producto ${productoPedido} no está en el catálogo comprable de Odoo: ` +
+            `puede haberse archivado. Elegí otro y volvé a intentar.`,
+        ]);
+      }
+    } else {
+      producto = encontrado;
+    }
   }
 
   const armado = armarOrdenes(
@@ -328,12 +383,19 @@ export async function empujarOrdenesDeRequerimiento(
    * sólo cuando corrigió: una confirmación es información igual, y es lo que
    * hace que la segunda vez no haga falta mirar.
    *
-   * La tabla `compras_producto_odoo` todavía no está aplicada (migración
-   * 20260910112738, pendiente de correrla a mano en Supabase): hasta entonces
-   * este upsert falla siempre, se loguea, y la orden sigue habiéndose creado
-   * bien.
+   * Dos condiciones, las dos aprendidas de una revisión:
+   *
+   * - **Sólo si es una decisión humana.** Reescribir la fila con lo que la
+   *   propia fila dictó no agrega información: le pisa el `created_by` con el
+   *   de ahora y borra quién lo decidió de verdad.
+   * - **Sólo si se creó alguna orden.** Cuando las dos ya existían no se tocó
+   *   ninguna línea en Odoo, así que no hay nada que ese producto haya
+   *   decidido: guardarlo sería aprender de un gesto que no pasó.
    */
-  if (producto) {
+  if (
+    producto &&
+    correspondeAprender({ hayProducto: true, eleccionHumana: humano, ordenes: creadas })
+  ) {
     const clave = normalizarDescripcion(ri.descripcion);
     if (clave) {
       const { error } = await admin.from("compras_producto_odoo").upsert(
@@ -353,6 +415,39 @@ export async function empujarOrdenesDeRequerimiento(
   }
 
   return { ok: true, ordenes: creadas };
+}
+
+/**
+ * El producto que ya se confirmó para **esta misma descripción**, si hay.
+ *
+ * Es una sola fila por clave, así que se busca por igualdad y no se trae la
+ * tabla: además de barato, esquiva el corte de PostgREST en 1000 filas, que
+ * sobre `compras_producto_odoo` haría desaparecer lo aprendido en silencio
+ * justo cuando empieza a haber suficiente como para que sirva.
+ *
+ * Devuelve el id de Odoo, o `null` si nunca se eligió nada para esa
+ * descripción. Un fallo de lectura también devuelve `null`: sin lo aprendido
+ * la orden sale con el genérico, que es lo que pasaba antes.
+ */
+export async function productoAprendidoDe(
+  admin: SupabaseClient,
+  descripcion: string
+): Promise<number | null> {
+  const clave = normalizarDescripcion(descripcion);
+  if (!clave) return null;
+
+  const { data, error } = await admin
+    .from("compras_producto_odoo")
+    .select("odoo_product_id")
+    .eq("descripcion_normalizada", clave)
+    .maybeSingle();
+
+  if (error) {
+    console.error("No se pudo leer el producto aprendido:", error.message);
+    return null;
+  }
+
+  return (data?.odoo_product_id as number | undefined) ?? null;
 }
 
 /**
@@ -601,12 +696,21 @@ export async function ensayarOrdenesDeRequerimiento(
   let sugerencia: Sugerencia = { producto: null, motivo: "sin_sugerencia", alternativas: [] };
   try {
     catalogo = await leerCatalogoComprable();
-    const { data: filas } = await admin
-      .from("compras_producto_odoo")
-      .select("descripcion_normalizada, odoo_product_id");
-    const aprendidos = new Map(
-      (filas ?? []).map((f) => [f.descripcion_normalizada as string, f.odoo_product_id as number])
+    /*
+     * Paginado: `compras_producto_odoo` crece una fila por descripción distinta
+     * que alguien confirme, y el módulo ya arrastra 1.900 requerimientos. Sin
+     * `traerTodo` PostgREST corta en 1000 y no avisa, así que a partir de ahí
+     * lo aprendido empezaría a no encontrarse — en silencio, y sólo para las
+     * descripciones que quedaron del otro lado del corte.
+     */
+    const filas = await traerTodo<{ descripcion_normalizada: string; odoo_product_id: number }>(
+      (desde, hasta) =>
+        admin
+          .from("compras_producto_odoo")
+          .select("descripcion_normalizada, odoo_product_id")
+          .range(desde, hasta)
     );
+    const aprendidos = new Map(filas.map((f) => [f.descripcion_normalizada, f.odoo_product_id]));
     sugerencia = sugerirProducto(ri.descripcion, catalogo, aprendidos);
   } catch {
     // Sin catálogo no hay sugerencia, y con eso el ensayo y la orden siguen

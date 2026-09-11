@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  normalizarDescripcion, sugerirProducto, type ProductoDeOdoo,
+  normalizarDescripcion, sugerirProducto, explicacionDeSugerencia, correspondeAprender,
+  type ProductoDeOdoo, type Sugerencia,
 } from "./productoOdoo";
 
 /** Una muestra del catalogo real, con los casos que importan. */
@@ -141,5 +142,81 @@ describe("sugerir el producto de Odoo", () => {
     // id que la orden va a rechazar.
     const aprendidos = new Map([[normalizarDescripcion("Guantes de grasa"), 999]]);
     expect(sugerir("Guantes de grasa", aprendidos).motivo).toBe("sugerido");
+  });
+});
+
+describe("la frase que explica la sugerencia", () => {
+  const sug = (p: Partial<Sugerencia>): Sugerencia => ({
+    producto: null, motivo: "sin_sugerencia", alternativas: [], ...p,
+  });
+
+  it("cuando empataron varios, lo dice y los nombra", () => {
+    // Es el caso que la version anterior se callaba, y el unico en que hay
+    // algo que mirar: el emparejador se quedo con el nombre mas corto de
+    // varios validos.
+    const frase = explicacionDeSugerencia(
+      sug({ producto: { id: 1, nombre: "FILTRO" }, motivo: "sugerido", alternativas: [{ id: 2, nombre: "FILTROS" }] })
+    );
+    expect(frase).toContain("FILTROS");
+    expect(frase.toLowerCase()).toContain("empat");
+  });
+
+  it("sin empates no inventa un empate", () => {
+    const frase = explicacionDeSugerencia(
+      sug({ producto: { id: 1, nombre: "GUANTES" }, motivo: "sugerido" })
+    );
+    expect(frase.toLowerCase()).not.toContain("empat");
+  });
+
+  it("lo aprendido se anuncia como aprendido y no como sugerido", () => {
+    const frase = explicacionDeSugerencia(
+      sug({ producto: { id: 1, nombre: "GUANTES" }, motivo: "aprendido" })
+    );
+    expect(frase.toLowerCase()).toContain("ya se us");
+    expect(frase.toLowerCase()).not.toContain("sugerido");
+  });
+
+  it("sin sugerencia avisa que va el generico, con o sin parecidos", () => {
+    expect(explicacionDeSugerencia(sug({}))).toContain("ART. VARIOS");
+    const conParecidos = explicacionDeSugerencia(
+      sug({ alternativas: [{ id: 5, nombre: "LLAVE DE IMPACTO" }] })
+    );
+    expect(conParecidos).toContain("ART. VARIOS");
+    expect(conParecidos).toContain("LLAVE DE IMPACTO");
+  });
+});
+
+describe("cuando corresponde aprender el producto", () => {
+  const creada = [{ yaExistia: false }];
+  const existente = [{ yaExistia: true }];
+
+  it("aprende una eleccion humana que creo la orden", () => {
+    expect(correspondeAprender({ hayProducto: true, eleccionHumana: true, ordenes: creada })).toBe(true);
+  });
+
+  it("NO aprende lo que salio de la propia tabla", () => {
+    // Reescribir la fila con lo que ella misma dicto le pisa el created_by y
+    // borra quien lo decidio de verdad.
+    expect(correspondeAprender({ hayProducto: true, eleccionHumana: false, ordenes: creada })).toBe(false);
+  });
+
+  it("NO aprende cuando todas las ordenes ya existian", () => {
+    // Ahi no se toco ninguna linea en Odoo: ese producto no decidio nada.
+    expect(correspondeAprender({ hayProducto: true, eleccionHumana: true, ordenes: existente })).toBe(false);
+  });
+
+  it("aprende si al menos una de las dos se creo", () => {
+    // Un RI compartido donde la primera ya estaba y la segunda se creo ahora.
+    expect(
+      correspondeAprender({ hayProducto: true, eleccionHumana: true, ordenes: [...existente, ...creada] })
+    ).toBe(true);
+  });
+
+  it("sin producto no aprende ART. VARIOS", () => {
+    expect(correspondeAprender({ hayProducto: false, eleccionHumana: true, ordenes: creada })).toBe(false);
+  });
+
+  it("sin ordenes no aprende nada", () => {
+    expect(correspondeAprender({ hayProducto: true, eleccionHumana: true, ordenes: [] })).toBe(false);
   });
 });

@@ -182,3 +182,58 @@ export function sugerirProducto(
     alternativas: ordenados.slice(1).map((c) => c.p),
   };
 }
+
+/**
+ * La frase que explica **la sugerencia** debajo del selector.
+ *
+ * Vive acá y no en la pantalla porque ya mintió una vez: decía "sugerido por la
+ * descripción" callándose que habían empatado varios, que es justo el caso en
+ * que mirar importa —el emparejador se queda con el nombre más corto y el
+ * elegido puede no ser el que corresponde—. Una frase que describe una decisión
+ * es lógica, y la lógica se testea.
+ *
+ * Habla de lo propuesto, nunca de lo que quedó elegido en el selector: son dos
+ * hechos distintos y contarlos con una sola frase fue el error original.
+ */
+export function explicacionDeSugerencia(s: Sugerencia): string {
+  const empates = s.alternativas.map((p) => p.nombre).join(", ");
+
+  if (s.motivo === "aprendido") {
+    return "Ya se usó este producto para un pedido con esta misma descripción.";
+  }
+
+  if (s.motivo === "sugerido") {
+    return empates
+      ? `Sugerido por la descripción del pedido. Empató con: ${empates}.`
+      : "Sugerido por la descripción del pedido.";
+  }
+
+  return empates
+    ? `Sin coincidencia clara: va como ART. VARIOS. Empiezan igual: ${empates}.`
+    : "Sin coincidencia: va como ART. VARIOS.";
+}
+
+/**
+ * ¿Hay que guardar este producto como aprendido?
+ *
+ * Tres condiciones, y las tres salieron de una revisión que encontro que la
+ * tabla se ensuciaba sola:
+ *
+ * - **Hay producto.** Sin producto no se aprende `ART. VARIOS`, que no es una
+ *   elección sino la ausencia de una.
+ * - **La elección es humana.** Si el producto salió de la propia tabla,
+ *   reescribir la fila con lo que ella misma dictó no agrega informacion: le
+ *   pisa el `created_by` con el de ahora y borra quién lo decidió de verdad.
+ * - **Se creó alguna orden.** Si las dos ya existían en Odoo no se tocó
+ *   ninguna línea, así que ese producto no decidió nada: aprenderlo sería
+ *   aprender de un gesto que no pasó.
+ */
+export function correspondeAprender(caso: {
+  hayProducto: boolean;
+  eleccionHumana: boolean;
+  ordenes: { yaExistia: boolean }[];
+}): boolean {
+  if (!caso.hayProducto) return false;
+  if (!caso.eleccionHumana) return false;
+  return caso.ordenes.some((o) => !o.yaExistia);
+}

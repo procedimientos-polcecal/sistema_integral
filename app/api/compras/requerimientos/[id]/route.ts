@@ -401,6 +401,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
    * queda anotado en `odoo_pendiente` del requerimiento, visible en su ficha,
    * con el botón para reintentar. Un estado que cambió acá y no llegó al otro
    * lado es una divergencia que no avisa sola.
+   *
+   * Va **sin producto elegido**, y eso no quiere decir `ART. VARIOS`: acá nadie
+   * abrió el selector, así que el push usa lo que ya se confirmó a mano para
+   * esa misma descripción —una decisión humana, sólo que tomada antes—. Lo que
+   * el emparejador sugiere y nadie miró no se manda por este camino.
    */
   let avisoOdoo: string | null = null;
   let ordenOdoo: string[] | null = null;
