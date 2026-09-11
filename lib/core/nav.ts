@@ -202,6 +202,7 @@ export const NAV: NavItem[] = [
     children: [
       { label: "Movimientos diarios", href: "/despacho", modulo: "despacho" },
       { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
+      { label: "Recepción de material", href: "/despacho/recepciones", modulo: "despacho" },
       { label: "Productos", href: "/despacho/productos", modulo: "despacho", soloAdmin: true },
     ],
   },

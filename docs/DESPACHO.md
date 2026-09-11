@@ -32,12 +32,12 @@ y ese remito, más los cuatro horarios. Eso es lo que guarda este módulo.
 
 ## Alcance de lo que está hecho
 
-De los cinco frentes que tiene el área, está hecho **uno**: las órdenes de carga.
+De los cinco frentes que tiene el área, están hechos **dos**.
 
 | Frente | Estado |
 |---|---|
-| Órdenes de carga | **hecho** (este spec) |
-| Recepción de material | sin relevar |
+| Órdenes de carga | **hecho** ([spec](superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md)) |
+| Recepción de material | **hecho** ([spec](superpowers/specs/2026-09-11-despacho-recepcion-de-carbonilla-design.md)) |
 | Programación del día | sin relevar |
 | Stock de producto terminado | sin relevar |
 | Pedidos de clientes | sin relevar |
@@ -129,6 +129,74 @@ Cuatro cosas que conviene no volver a averiguar:
 - **Los productos tienen código interno** —`[FAG]`, `[CET]`, `[CC02B]`,
   `[P620]`—, que es el identificador legible del mapeo.
 
+## La recepción de material (11/09/2026)
+
+El segundo frente.
+[Spec](superpowers/specs/2026-09-11-despacho-recepcion-de-carbonilla-design.md).
+
+Llega un camión de carbonilla: se pesa cargado (**bruto**), descarga, se pesa
+vacío (**tara**), y con el neto se crea en Odoo una orden de compra que se
+confirma y cuya recepción se valida — porque el carbonillero no se va sin un
+papel con el número, y porque esa orden es contra la que después se carga la
+factura. Al final el dato se escribe en la planilla.
+
+Lo que se midió antes de diseñarlo, y que conviene no volver a averiguar:
+
+| | |
+|---|---|
+| Renglones de la planilla, en un año | **567** (09/09/2025 → 10/09/2026) |
+| Órdenes de compra de carbonilla en Odoo, mismo período | **577** — una por camión |
+| Camiones por día | 2,5 (hasta 10); **11.221 toneladas** en el año |
+| Líneas por orden | 570 de 577 tienen **una sola**; 7 llevan `FLETE` aparte |
+| `Nro Orden` anotado en la planilla | 20% — y `orden 1615` **es** la `P01615` de Odoo |
+| Textos distintos de proveedor | **51** para ~10 proveedores |
+
+**El precio nace simbólico y se corrige al facturar.** De las órdenes sin
+facturar, 287 tienen precio ≤ $2 y 3 tienen precio real; de las facturadas, 190
+real y 97 simbólico. Por eso el SdG pone $1 y no pregunta: en la balanza el
+precio no está acordado. Es el mismo patrón que
+[el spec de facturación](superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md)
+ya había medido sin conocer el circuito — "la orden de compra se usa como
+documento de recepción de material a granel".
+
+**Lo único que hoy se perdía entero era el pesaje**: ni Odoo ni la planilla
+guardan el bruto y la tara. Es lo verdaderamente nuevo de `despacho_recepciones`.
+
+### Las tres decisiones que hay que conocer
+
+**Cada paso de Odoo se guarda apenas ocurre.** Crear, confirmar y validar la
+recepción son tres llamadas, y entre una y otra puede fallar la red. Si la
+validación falla después de crear, la fila queda con su
+`odoo_purchase_order_id` y el reintento valida lo que falta **sin crear una
+segunda orden**. Es la lección de `empujarOrdenesDeRequerimiento`: mandarle al
+proveedor el mismo pedido dos veces es el error más caro.
+
+**Lo que no se puede resolver se resuelve antes de escribir nada.** El partner,
+la empresa, el tipo de operación y la unidad se buscan primero: si falta uno, la
+recepción no se cierra y no queda media orden en la contabilidad de otros. Con
+un camión esperando, "no se pudo, cargalo a mano como siempre" es mejor que eso.
+
+**La tara mayor que el bruto no se guarda.** De ese neto sale la cantidad de una
+orden que se confirma sola, así que un negativo —o un cero— tiene que verse. Lo
+que sí pasa y sólo avisa es un neto fuera del rango del año (4,1 a 44,36 t): el
+papel es el papel.
+
+### Lo que falta de una persona
+
+**Los CUIT de seis proveedores.** De los 10 con rubro `CARBONILLA`, sólo cuatro
+están vinculados a Odoo (`proveedores_odoo`), y el vínculo va **por CUIT**. Los
+que faltan son los que más traen: **Bruzzone (176 órdenes), Puricelli (105),
+Sosa (54) y Fillia (44)** — el 66% de los camiones. Sin vínculo, su recepción no
+se puede cerrar.
+
+**El producto y el nombre de planilla de cada uno**, en
+`/despacho/recepciones/proveedores`. Ojo con el producto: en Odoo hay dos que se
+ven idénticos, `CARBONILLA` y `CARBONILLA ` con un espacio al final, y el de
+toneladas está archivado — las últimas 15 órdenes usan el id **6909**.
+
+**Cargar `GOOGLE_SHEETS_CARBONILLA_ID`.** Sin eso la recepción se cierra igual
+—la orden se crea— pero queda con `sheets_pendiente` y la planilla no se entera.
+
 ## Cómo está armado
 
 | | |
@@ -145,10 +213,15 @@ Cuatro cosas que conviene no volver a averiguar:
 | Remitos y productos de Odoo | `lib/despacho/odoo.ts` |
 | Permisos | `lib/despacho/auth.ts` |
 | Filtros del histórico en la URL | `lib/despacho/filtrosUrl.ts` |
+| El pesaje, el estado y las celdas de la planilla | `lib/despacho/recepcion.ts` |
+| Los `vals` de la orden de compra de una recepción | `lib/despacho/ordenDeCarbonilla.ts` |
+| Crear, confirmar y validar en Odoo | `lib/despacho/pushRecepcion.ts` |
+| El espejo de la planilla de carbonilla | `lib/despacho/espejoRecepcion.ts` |
+| La balanza | `app/(app)/despacho/recepciones` |
 | Movimientos diarios (la pantalla de la balanza) | `app/(app)/despacho` |
 | Histórico e indicadores | `app/(app)/despacho/ordenes` |
 | Clasificar el catálogo | `app/(app)/despacho/productos` |
-| Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar}` |
+| Rutas | `app/api/despacho/{ordenes,ordenes/[id],remitos,productos,importar,recepciones,recepciones/[id]}` |
 | Importador del histórico (script) | `scripts/importar-despacho.mts` |
 | Comparar planilla contra base | `scripts/comparar-despacho.mts` |
 | Diagnóstico de punta a punta | `scripts/probar-despacho.mts` |
@@ -504,8 +577,8 @@ módulo: hay que esperar el minuto.
   más de 3.000 `res.partner` en dos empresas y el cruce va **por CUIT (`vat`),
   no por nombre**: la lección de los 147 CUITs duplicados de
   [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
-- **Los otros cuatro frentes del área**: recepción de material, programación del
-  día, stock de producto terminado y pedidos de clientes.
+- **Los otros tres frentes del área**: programación del día, stock de producto
+  terminado y pedidos de clientes.
 - **Cruzar con `produccion_despachos`** para ver los desajustes entre lo que
   fábrica dice que cargó y lo que salió con remito.
 - **El pesaje.** El puesto es la balanza y el peso no está en el papel, ni en la

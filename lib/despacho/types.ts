@@ -73,3 +73,47 @@ export interface RemitoDeOdoo {
   cantidad: number | null;
   unidad: string | null;
 }
+
+/**
+ * Una fila de `despacho_recepciones`: un camión de material que entró.
+ *
+ * El neto y el estado **no están acá** porque no se guardan: se despejan de los
+ * pesos y de si ya tiene orden (ver `recepcion.ts`).
+ */
+export interface Recepcion {
+  id: string;
+  fecha: string;
+  empresa_id: string | null;
+  proveedor_id: string;
+  odoo_product_id: number | null;
+  odoo_product_nombre: string | null;
+  /** En kilos, que es lo que dice la balanza. La tonelada es una división. */
+  peso_bruto_kg: number | null;
+  peso_tara_kg: number | null;
+  lugar_descarga: string | null;
+  notas: string | null;
+  /** Los tres pasos de Odoo, guardados apenas ocurren. */
+  odoo_purchase_order_id: number | null;
+  odoo_purchase_name: string | null;
+  odoo_picking_id: number | null;
+  /** Lo que dijo Odoo, sin traducir. */
+  odoo_error: string | null;
+  odoo_error_en: string | null;
+  sheets_fila: number | null;
+  sheets_pendiente: string | null;
+  sheets_pendiente_en: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+}
+
+/** Qué producto de Odoo y qué nombre de planilla le corresponde a un proveedor. */
+export interface ProveedorDeRecepcion {
+  proveedor_id: string;
+  odoo_product_id: number;
+  odoo_product_nombre: string;
+  /** `Bruzzone`, no `BRUZZONE JUAN ALBERTO`: es como lo escribe el libro. */
+  nombre_planilla: string;
+  activo: boolean;
+}

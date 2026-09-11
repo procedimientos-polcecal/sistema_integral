@@ -68,6 +68,7 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_PRODUCCION_TAB_ROT` | Pestaña del resumen de rotura | Por defecto `Resumen Rotura` |
 | `GOOGLE_SHEETS_DESPACHO_ID` | La planilla de Despacho, `Órdenes de Carga`: `1jF2lqDn_9H_BRQ8TQFNopfappOPyMGCQwFsGkWSkonM`. Como en Producción, acá **manda el sistema** y esto es un espejo de una sola vía — sin la variable el espejo no escribe y cada orden queda con `sheets_pendiente` | El tramo entre `/d/` y `/edit` de la URL |
 | ~~`GOOGLE_SHEETS_DESPACHO_TAB`~~ | **Ya no se usa.** El libro tiene una pestaña por mes (`ABRIL 2026`, `MAYO 2026`, …), así que la pestaña se despeja del mes de la orden y no hay una sola que configurar. Ver `pestanaDelMes` en `lib/despacho/planilla.ts` | — |
+| `GOOGLE_SHEETS_CARBONILLA_ID` | La planilla de recepción de carbonilla: `1N5y09kgCMAs5U4uj_D4EcSH-xlJIcZdnlQMX7nlUVVc`. Espejo de una sola vía, como la de Despacho: sin la variable la recepción se cierra igual —la orden de compra se crea en Odoo— pero queda con `sheets_pendiente` | El tramo entre `/d/` y `/edit` de la URL |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 

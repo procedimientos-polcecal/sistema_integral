@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
-import type { OrdenDeCarga } from "./types";
+import type { OrdenDeCarga, Recepcion, ProveedorDeRecepcion } from "./types";
 
 /**
  * Las lecturas de Despacho.
@@ -205,4 +205,60 @@ export async function remitosYaUsados(
     }
   }
   return usados;
+}
+
+// ── Recepción de material ────────────────────────────────────
+
+/** Las columnas de una recepción. Literal en cada llamada: ver la cabecera. */
+const RECEPCION =
+  "id, fecha, empresa_id, proveedor_id, odoo_product_id, odoo_product_nombre, peso_bruto_kg, peso_tara_kg, lugar_descarga, notas, odoo_purchase_order_id, odoo_purchase_name, odoo_picking_id, odoo_error, odoo_error_en, sheets_fila, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en";
+
+/** Las recepciones de un día, cerradas o no. */
+export async function traerRecepcionesDelDia(
+  supabase: SupabaseClient,
+  fecha: string
+): Promise<Recepcion[]> {
+  return traerTodo<Recepcion>((desde, hasta) =>
+    supabase
+      .from("despacho_recepciones")
+      .select(RECEPCION)
+      .eq("fecha", fecha)
+      .order("cargado_en")
+      .range(desde, hasta)
+  );
+}
+
+/**
+ * Las que quedaron abiertas en días anteriores.
+ *
+ * Van arriba de la pantalla: un camión que entró ayer y no se cerró es un
+ * pendiente, no historia. A diferencia de las órdenes de carga —donde el
+ * histórico importado obligó a filtrar por `cargado_por`— acá no hay histórico
+ * importado: todo lo que existe nació en el sistema.
+ */
+export async function traerRecepcionesAbiertasAnteriores(
+  supabase: SupabaseClient,
+  fecha: string
+): Promise<Recepcion[]> {
+  return traerTodo<Recepcion>((desde, hasta) =>
+    supabase
+      .from("despacho_recepciones")
+      .select(RECEPCION)
+      .lt("fecha", fecha)
+      .is("odoo_purchase_order_id", null)
+      .order("fecha", { ascending: false })
+      .range(desde, hasta)
+  );
+}
+
+/** Qué producto y qué nombre de planilla le corresponde a cada proveedor. */
+export async function traerProveedoresDeRecepcion(
+  supabase: SupabaseClient
+): Promise<ProveedorDeRecepcion[]> {
+  return traerTodo<ProveedorDeRecepcion>((desde, hasta) =>
+    supabase
+      .from("despacho_recepcion_proveedores")
+      .select("proveedor_id, odoo_product_id, odoo_product_nombre, nombre_planilla, activo")
+      .range(desde, hasta)
+  );
 }
