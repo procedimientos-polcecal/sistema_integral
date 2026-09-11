@@ -98,6 +98,11 @@ export async function PATCH(
       }
       cambios[`${etapa}_odoo_move_id`] = factura.id;
       cambios[`${etapa}_odoo_move_name`] = factura.name;
+      // El número real de la factura (formato "0001-00000394") viaja en `ref`
+      // de Odoo, pero ahí casi nunca está cargado —2 de 135 en los
+      // contratistas de cantera, medido—: se prellena cuando existe, y si no
+      // finanzas lo tipea a mano más abajo (el campo queda editable igual).
+      cambios[`${etapa}_odoo_ref`] = factura.ref;
       cambios[`${etapa}_odoo_empresa`] = factura.empresa;
       cambios[`${etapa}_odoo_importe`] = factura.importeNeto;
       cambios[`${etapa}_odoo_leido_en`] = new Date().toISOString();

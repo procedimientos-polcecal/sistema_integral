@@ -148,7 +148,8 @@ export default function ConciliacionOdoo({
       {vinculado.moveId != null ? (
         <div className="mt-2 space-y-1 text-xs text-slate-700">
           <p>
-            <span className="font-mono">{vinculado.moveName}</span>
+            <span className="font-mono">{vinculado.ref || vinculado.moveName}</span>
+            {vinculado.ref && <span className="text-slate-400"> ({vinculado.moveName})</span>}
             {vinculado.empresa && ` · ${vinculado.empresa}`}
             {vinculado.importe != null && ` · $ ${ars.format(vinculado.importe)} neto`}
           </p>
@@ -178,7 +179,9 @@ export default function ConciliacionOdoo({
                 <option value="">— elegir factura —</option>
                 {candidatas.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.proveedor} · {f.name} · $ {ars.format(f.importeNeto)}
+                    {/* El número real (`ref`, "0001-00000394") casi nunca está */}
+                    {/* cargado en Odoo: cuando falta, se ve el interno de Odoo. */}
+                    {f.proveedor} · {f.ref || f.name} · $ {ars.format(f.importeNeto)}
                     {f.fecha ? ` · ${f.fecha}` : ""}
                   </option>
                 ))}
