@@ -184,8 +184,9 @@ export async function correlativosUsados(
 export async function traerDatosParaInforme(
   supabase: SupabaseClient
 ): Promise<{ voladuras: VoladuraParaInforme[]; bochones: BochonParaInforme[] }> {
-  const yacimientos = await traerYacimientos(supabase);
+  const [yacimientos, insumos] = await Promise.all([traerYacimientos(supabase), traerInsumos(supabase)]);
   const porId = new Map(yacimientos.map((y) => [y.id, y]));
+  const nombreInsumoPorId = new Map(insumos.map((i) => [i.id, i.nombre]));
 
   const [vs, bs] = await Promise.all([traerVoladuras(supabase, {}), traerBochones(supabase, {})]);
   const consumos = await traerConsumosDe(supabase, vs.map((v) => v.codigo));
@@ -200,10 +201,17 @@ export async function traerDatosParaInforme(
     const yac = porId.get(v.yacimiento_id) ?? null;
     const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
     const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
+    const toneladasCalculadas = toneladasEstimadas({
+      metros: vol.metros ?? perf.metros,
+      densidad: v.densidad_t_m3 ?? yac?.densidad_t_m3 ?? null,
+      burden: v.vol_burden_m ?? v.burden_m ?? yac?.burden_m ?? null,
+      espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac?.espaciamiento_m ?? null,
+    });
     return {
       codigo: v.codigo,
       cantera: yac?.codigo ?? "?",
       perfFin: v.perf_fin,
+      perfPozos: perf.pozos,
       perfMetros: perf.metros,
       perfMontoUsd: perf.metros != null && v.perf_precio_usd_m != null ? perf.metros * v.perf_precio_usd_m : null,
       perfMontoArs: montoPerforacion({
@@ -215,16 +223,18 @@ export async function traerDatosParaInforme(
       }),
       volFecha: v.vol_fecha,
       volTc: v.vol_tc_usd,
-      toneladas: toneladasEstimadas({
-        metros: vol.metros ?? perf.metros,
-        densidad: v.densidad_t_m3 ?? yac?.densidad_t_m3 ?? null,
-        burden: v.vol_burden_m ?? v.burden_m ?? yac?.burden_m ?? null,
-        espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac?.espaciamiento_m ?? null,
-      }),
+      // El informe reproduce el histórico de la planilla: usa la tonelada que
+      // ella cargó cuando existe, y sólo cae en la fórmula de cantera para lo
+      // que se cargue de acá en más y todavía no la tenga. Es distinto del
+      // tablero de /cantera, que siempre muestra la calculada (y al lado, para
+      // comparar, la de la planilla) — acá el objetivo es igualar el informe
+      // que ya se escribía, no la operación del día a día.
+      toneladas: v.toneladas_planilla ?? toneladasCalculadas,
       consumos: (consumosPorCodigo.get(v.codigo) ?? []).map((c) => ({
         tipo: c.tipo,
         cantidad: c.cantidad,
         precio_usd: c.precio_usd,
+        insumo: c.insumo_raw ?? (c.insumo_id ? (nombreInsumoPorId.get(c.insumo_id) ?? null) : null),
       })),
     };
   });

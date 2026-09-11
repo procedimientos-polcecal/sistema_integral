@@ -16,14 +16,21 @@
  * perforación de fin de mes puede volarse recién el mes siguiente.
  */
 
-import { baseDeConsumosUsd, montoVoladura } from "./costos";
+import { baseDeConsumosUsd, montoVoladura, TASA_SERVICIO_VOLADURA } from "./costos";
 import { totalesDeConsumos, type RenglonDeConsumo } from "./consumos";
+
+/** Un renglón de consumo con el nombre del insumo, para la tabla de detalle. */
+export interface RenglonParaInforme extends RenglonDeConsumo {
+  insumo?: string | null;
+}
 
 export interface VoladuraParaInforme {
   codigo: string;
   /** El código corto del yacimiento (D1, D6, C1, C3…). */
   cantera: string;
   perfFin: string | null;
+  /** Cantidad de pozos (Σ tramos), para "Prof. (mts)" = metros / pozos. */
+  perfPozos: number | null;
   /** Metros perforados totales (Σ tramos). */
   perfMetros: number | null;
   /** metros × precio USD/m, sin TC y sin noches de sereno: el "Total USD" de la planilla. */
@@ -33,7 +40,7 @@ export interface VoladuraParaInforme {
   volFecha: string | null;
   volTc: number | null;
   toneladas: number | null;
-  consumos: RenglonDeConsumo[];
+  consumos: RenglonParaInforme[];
 }
 
 export interface BochonParaInforme {
@@ -49,6 +56,9 @@ export interface FilaPerforacion {
   codigo: string;
   cantera: string;
   fin: string | null;
+  pozos: number | null;
+  /** metros / pozos — la profundidad promedio, "Prof. (mts)" de la planilla. */
+  profundidadProm: number | null;
   metros: number | null;
   montoUsd: number | null;
   montoArs: number | null;
@@ -88,7 +98,11 @@ export interface ResumenPorCantera {
   tonPorMetroPerforado: number | null;
   /** gramos de detonador / toneladas — "Gr Expl./Ton" de la planilla. */
   grExplosivoPorTon: number | null;
+  /** perforación + voladura, en USD — "Costo Total USD por Cantera" (el gráfico de torta). */
+  costoTotalUsd: number;
+  /** "Explosivo USD" de la planilla. */
   detonadorUsd: number;
+  /** "Accesorios USD" de la planilla. */
   otrosInsumosUsd: number;
   servicioUsd: number;
 }
@@ -105,12 +119,29 @@ export interface Totales {
   gramosDetonador: number;
 }
 
+export interface FilaConsumoDetalle {
+  codigo: string;
+  tipo: string;
+  insumo: string;
+  cantidad: number;
+  precioUsd: number | null;
+  totalUsd: number | null;
+  totalArs: number | null;
+}
+
 export interface Informe {
   desde: string;
   hasta: string;
   perforaciones: FilaPerforacion[];
   voladuras: FilaVoladura[];
   bochones: FilaBochon[];
+  /**
+   * El detalle de insumos de las voladuras del período, "CONSUMOS DEL MES" de
+   * la planilla — incluido un renglón de servicio por voladura (4% de la
+   * base), que ya no se guarda como fila propia pero la planilla sí la
+   * mostraba.
+   */
+  consumosDetalle: FilaConsumoDetalle[];
   totales: Totales;
   porCantera: ResumenPorCantera[];
 }
@@ -158,6 +189,8 @@ export function armarInforme(
     codigo: v.codigo,
     cantera: v.cantera,
     fin: v.perfFin,
+    pozos: v.perfPozos,
+    profundidadProm: v.perfPozos && v.perfMetros != null ? v.perfMetros / v.perfPozos : null,
     metros: v.perfMetros,
     montoUsd: v.perfMontoUsd,
     montoArs: v.perfMontoArs,
@@ -227,13 +260,46 @@ export function armarInforme(
       usdPorTon: toneladas > 0 ? (perforacionUsd + voladuraUsd) / toneladas : null,
       tonPorMetroPerforado: metrosPerforados > 0 ? toneladas / metrosPerforados : null,
       grExplosivoPorTon: toneladas > 0 ? gramosDetonador / toneladas : null,
+      costoTotalUsd: perforacionUsd + voladuraUsd,
       detonadorUsd: desglose.porTipo.detonador?.usd ?? 0,
       otrosInsumosUsd: desglose.porTipo.otros_insumos?.usd ?? 0,
       servicioUsd: desglose.porTipo.voladura?.usd ?? 0,
     };
   });
 
-  return { desde, hasta, perforaciones, voladuras, bochones, totales, porCantera };
+  // ── El detalle de consumos, con el servicio sintetizado por voladura ──
+  // (ya no es una fila guardada: se recalcula, pero la planilla la mostraba).
+  const consumosDetalle: FilaConsumoDetalle[] = [];
+  for (const v of conVol) {
+    for (const c of v.consumos) {
+      if (c.cantidad === null) continue;
+      const totalUsd = c.precio_usd !== null ? c.cantidad * c.precio_usd : null;
+      consumosDetalle.push({
+        codigo: v.codigo,
+        tipo: c.tipo ?? "otros_insumos",
+        insumo: c.insumo ?? "—",
+        cantidad: c.cantidad,
+        precioUsd: c.precio_usd,
+        totalUsd,
+        totalArs: totalUsd !== null && v.volTc !== null ? totalUsd * v.volTc : null,
+      });
+    }
+    const base = baseDeConsumosUsd(v.consumos);
+    if (base > 0) {
+      const servicioUsd = base * TASA_SERVICIO_VOLADURA;
+      consumosDetalle.push({
+        codigo: v.codigo,
+        tipo: "voladura",
+        insumo: "Servicio de voladura",
+        cantidad: 1,
+        precioUsd: TASA_SERVICIO_VOLADURA,
+        totalUsd: servicioUsd,
+        totalArs: v.volTc !== null ? servicioUsd * v.volTc : null,
+      });
+    }
+  }
+
+  return { desde, hasta, perforaciones, voladuras, bochones, consumosDetalle, totales, porCantera };
 }
 
 /** El primer y último día de un mes `"2026-08"`, como límites de `armarInforme`. */
@@ -265,11 +331,19 @@ export interface FilaSerieMensual {
  * La serie mes a mes de todo el histórico cargado, para el gráfico de
  * variación. Un mes entra si hay al menos una perforación, voladura o bochón
  * con fecha en él.
+ *
+ * `cantera`, si se pasa, acota todo a esa cantera (para el filtro "ver estos
+ * mismos gráficos por cantera" del informe) — sin ella, es el total de las
+ * cuatro juntas.
  */
 export function serieMensual(
-  voladuras: VoladuraParaInforme[],
-  bochones: BochonParaInforme[]
+  voladurasEntrada: VoladuraParaInforme[],
+  bochonesEntrada: BochonParaInforme[],
+  cantera?: string
 ): FilaSerieMensual[] {
+  const voladuras = cantera ? voladurasEntrada.filter((v) => v.cantera === cantera) : voladurasEntrada;
+  const bochones = cantera ? bochonesEntrada.filter((b) => b.cantera === cantera) : bochonesEntrada;
+
   const meses = new Set<string>();
   for (const v of voladuras) {
     if (v.perfFin) meses.add(v.perfFin.slice(0, 7));

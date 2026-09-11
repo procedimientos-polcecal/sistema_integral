@@ -2,8 +2,12 @@
 
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+  PieChart, Pie, Cell,
 } from "recharts";
-import type { FilaSerieMensual } from "@/lib/cantera/informe";
+import type { FilaSerieMensual, ResumenPorCantera } from "@/lib/cantera/informe";
+
+// Verde, violeta, teal, terracota — nunca azul junto a amarillo.
+const COLORES_CANTERA = ["#1E7D34", "#7E22CE", "#0891B2", "#C2410C", "#B45309"];
 
 /**
  * Los gráficos de la variación mes a mes. Aparte del resto de la pantalla para
@@ -67,8 +71,42 @@ export function TendenciaCostoUsd({ datos }: { datos: FilaSerieMensual[] }) {
         <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={ejeNum} />
         <Tooltip formatter={(v) => `US$ ${num.format(Number(v))}`} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="perforacionUsd" name="Perforación" stackId="c" fill="#E8A020" />
-        <Bar dataKey="voladuraUsd" name="Voladura" stackId="c" fill="#2563EB" radius={[4, 4, 0, 0]} />
+        {/* Verde y violeta, nunca azul con amarillo. */}
+        <Bar dataKey="perforacionUsd" name="Perforación" stackId="c" fill="#1E7D34" />
+        <Bar dataKey="voladuraUsd" name="Voladura" stackId="c" fill="#7E22CE" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/**
+ * Los dos gráficos del informe generado — calcados de los que trae la
+ * planilla ("Costo Total USD por Cantera" y "Costo USD/Ton por Cantera"), pero
+ * por el período que se haya elegido en vez de fijos a un mes.
+ */
+export function TortaCostoPorCantera({ datos }: { datos: ResumenPorCantera[] }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie data={datos} dataKey="costoTotalUsd" nameKey="cantera" innerRadius={45} outerRadius={80} paddingAngle={2}>
+          {datos.map((_, i) => <Cell key={i} fill={COLORES_CANTERA[i % COLORES_CANTERA.length]} />)}
+        </Pie>
+        <Tooltip formatter={(v) => `US$ ${num.format(Number(v))}`} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function BarraUsdPorTonPorCantera({ datos }: { datos: ResumenPorCantera[] }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={datos} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="cantera" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} width={40} />
+        <Tooltip formatter={(v) => (v == null ? "—" : num.format(Number(v)))} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+        <Bar dataKey="usdPorTon" name="USD/Ton" fill="#1E7D34" radius={[0, 4, 4, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

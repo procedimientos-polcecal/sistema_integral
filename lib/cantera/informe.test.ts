@@ -10,6 +10,7 @@ import {
 function voladura(v: Partial<VoladuraParaInforme> & { codigo: string; cantera: string }): VoladuraParaInforme {
   return {
     perfFin: null,
+    perfPozos: null,
     perfMetros: null,
     perfMontoUsd: null,
     perfMontoArs: null,
@@ -91,6 +92,27 @@ describe("armarInformeMensual", () => {
     expect(d6.detonadorUsd).toBe(200);
     expect(d6.otrosInsumosUsd).toBe(50);
     expect(d6.servicioUsd).toBeCloseTo(10, 2); // 4% de 250
+    expect(d6.costoTotalUsd).toBeCloseTo(1260, 2); // perforación + voladura
+  });
+
+  it("la profundidad promedio es metros / pozos, y el detalle de consumos sintetiza el servicio", () => {
+    const voladuras = [
+      voladura({
+        codigo: "V01D626", cantera: "D6", perfFin: "2026-08-05", perfPozos: 36, perfMetros: 108,
+        volFecha: "2026-08-10", volTc: 1000,
+        consumos: [{ tipo: "detonador", cantidad: 100, precio_usd: 4, insumo: "emulex" }],
+      }),
+    ];
+    const informe = armarInformeMensual("2026-08", voladuras, []);
+    expect(informe.perforaciones[0].profundidadProm).toBeCloseTo(3, 4);
+
+    // dos renglones por voladura: el real y el servicio sintetizado
+    expect(informe.consumosDetalle).toHaveLength(2);
+    expect(informe.consumosDetalle[0]).toMatchObject({ codigo: "V01D626", insumo: "emulex", cantidad: 100 });
+    const servicio = informe.consumosDetalle[1];
+    expect(servicio.insumo).toBe("Servicio de voladura");
+    expect(servicio.totalUsd).toBeCloseTo(400 * 0.04, 2);
+    expect(servicio.totalArs).toBeCloseTo(400 * 0.04 * 1000, 0);
   });
 
   it("bochones del mes se filtran por su fecha y no afectan a las otras dos listas", () => {
@@ -137,5 +159,15 @@ describe("serieMensual", () => {
 
   it("sin datos, la serie es vacía", () => {
     expect(serieMensual([], [])).toEqual([]);
+  });
+
+  it("con una cantera, acota la serie a esa cantera", () => {
+    const voladuras = [
+      voladura({ codigo: "V01D626", cantera: "D6", volFecha: "2026-08-10", toneladas: 100 }),
+      voladura({ codigo: "V01C326", cantera: "C3", volFecha: "2026-08-10", toneladas: 300 }),
+    ];
+    const serieD6 = serieMensual(voladuras, [], "D6");
+    expect(serieD6).toHaveLength(1);
+    expect(serieD6[0].toneladas).toBe(100);
   });
 });

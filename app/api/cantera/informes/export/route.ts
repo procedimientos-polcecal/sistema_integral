@@ -10,6 +10,10 @@ import { xlsxMultiSheetResponse } from "@/lib/core/xlsxExport";
  * informe en Word/Excel con lo que ya está calculado. No arma un texto: da las
  * tablas, que es lo que pidió el usuario en vez de una prosa que el SdG no
  * puede escribir por él.
+ *
+ * Las mismas tablas que muestra la pantalla, en el mismo orden que las de la
+ * planilla — sin los colores: `xlsx` (SheetJS, gratuita) no pinta celdas al
+ * escribir. Si hace falta igual el color en el Excel, es una librería aparte.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -30,27 +34,35 @@ export async function GET(request: Request) {
   const informe = armarInforme(desde, hasta, voladuras, bochones);
 
   const resumenHeaders = [
-    "Cantera", "Toneladas", "Perf. USD", "Detonador USD", "Otros insumos USD",
-    "Servicio USD", "Gr expl./ton", "USD/Ton", "Ton/m perf.",
+    "Cantera", "Toneladas", "Costo total USD", "Perf. USD", "Explosivo USD",
+    "Accesorios USD", "Servicio USD", "Gr Expl./Ton", "USD/Ton", "Ton/m Perf.",
   ];
   const resumenRows = informe.porCantera.map((c) => [
-    c.cantera, c.toneladas, c.perforacionUsd, c.detonadorUsd, c.otrosInsumosUsd,
-    c.servicioUsd, c.grExplosivoPorTon, c.usdPorTon, c.tonPorMetroPerforado,
+    c.cantera, c.toneladas, c.costoTotalUsd, c.perforacionUsd, c.detonadorUsd,
+    c.otrosInsumosUsd, c.servicioUsd, c.grExplosivoPorTon, c.usdPorTon, c.tonPorMetroPerforado,
   ]);
 
-  const perforacionesHeaders = ["Código", "Cantera", "Fin de perforación", "Metros", "Total USD", "Total ARS"];
-  const perforacionesRows = informe.perforaciones.map((p) => [p.codigo, p.cantera, p.fin, p.metros, p.montoUsd, p.montoArs]);
+  const perforacionesHeaders = ["Código", "Cantera", "Fin Perf.", "Prof. (mts)", "Pozos", "Metros Perf.", "Total USD", "Total ARS"];
+  const perforacionesRows = informe.perforaciones.map((p) => [
+    p.codigo, p.cantera, p.fin, p.profundidadProm, p.pozos, p.metros, p.montoUsd, p.montoArs,
+  ]);
 
-  const voladurasHeaders = ["Código", "Cantera", "Fecha de voladura", "Gr detonador", "Toneladas", "Total USD", "Total ARS"];
+  const voladurasHeaders = ["Código", "Cantera", "Fecha Voladura", "Gr Detonador", "Toneladas", "Total USD", "Total ARS"];
   const voladurasRows = informe.voladuras.map((v) => [v.codigo, v.cantera, v.fecha, v.gramosDetonador, v.toneladas, v.montoUsd, v.montoArs]);
 
-  const bochonesHeaders = ["Código", "Cantera", "Fecha de voladura", "Metros", "Total USD", "Total ARS"];
+  const bochonesHeaders = ["Código", "Cantera", "Fecha Voladura", "Metros Perf.", "Total USD", "Total ARS"];
   const bochonesRows = informe.bochones.map((b) => [b.codigo, b.cantera, b.fecha, b.metros, b.montoUsd, b.montoArs]);
 
+  const consumosHeaders = ["Código", "Tipo", "Insumo", "Cantidad", "Precio USD", "Total USD", "Total ARS"];
+  const consumosRows = informe.consumosDetalle.map((c) => [
+    c.codigo, c.tipo, c.insumo, c.cantidad, c.precioUsd, c.totalUsd, c.totalArs,
+  ]);
+
   return xlsxMultiSheetResponse(`cantera_informe_${desde}_a_${hasta}.xlsx`, [
-    { name: "Resumen por cantera", rows: [resumenHeaders, ...resumenRows], anchos: [10, 12, 12, 14, 16, 12, 12, 10, 12] },
-    { name: "Perforaciones", rows: [perforacionesHeaders, ...perforacionesRows], anchos: [12, 10, 16, 10, 12, 14] },
-    { name: "Voladuras", rows: [voladurasHeaders, ...voladurasRows], anchos: [12, 10, 16, 12, 12, 12, 14] },
-    { name: "Bochones", rows: [bochonesHeaders, ...bochonesRows], anchos: [12, 10, 16, 10, 12, 14] },
+    { name: "Resumen por cantera", rows: [resumenHeaders, ...resumenRows], anchos: [10, 12, 14, 12, 14, 14, 12, 12, 10, 12] },
+    { name: "Perforaciones", rows: [perforacionesHeaders, ...perforacionesRows], anchos: [12, 10, 12, 12, 8, 12, 12, 14] },
+    { name: "Voladuras", rows: [voladurasHeaders, ...voladurasRows], anchos: [12, 10, 14, 12, 12, 12, 14] },
+    { name: "Bochones", rows: [bochonesHeaders, ...bochonesRows], anchos: [12, 10, 14, 12, 12, 14] },
+    { name: "Consumos", rows: [consumosHeaders, ...consumosRows], anchos: [12, 12, 20, 10, 12, 12, 14] },
   ]);
 }
