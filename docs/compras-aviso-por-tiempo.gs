@@ -1,6 +1,7 @@
 /**
  * Apps Script de la planilla de respuestas del formulario
- * ("FORM PEDIDO DE COMPRA POLCECAL - POLYSAN", hoja "Respuestas de formulario 1").
+ * ("FORM PEDIDO DE COMPRA POLCECAL - POLYSAN"), sobre sus DOS pestañas de
+ * pedidos: "Respuestas de formulario 1" y "Altas del sistema".
  *
  * AVISA POR MAIL de los pedidos a los que nadie les avisó: el que carga el
  * sistema, y también la respuesta del formulario cuyo aviso falló.
@@ -50,10 +51,10 @@
  *
  *   1. **Acotado por fecha.** Sin límite, la primera corrida le mandaría a
  *      Mantenimiento el aviso de un pedido de agosto de 2025. Medido el
- *      11/09/2026: de 1.968 filas hay 5 con `M` vacía, y tres son viejas —la 4
- *      (RI 1, del arranque), la 330 (RI 327, de diciembre de 2025) y la 3, que
- *      ni siquiera es una respuesta—. Se procesan sólo las de los últimos
- *      `DIAS` días.
+ *      11/09/2026 en la hoja de respuestas: de 1.968 filas hay 5 con `M` vacía,
+ *      y tres son viejas —la 4 (RI 1, del arranque), la 330 (RI 327, de
+ *      diciembre de 2025) y la 3, que ni siquiera es una respuesta—. Se
+ *      procesan sólo las de los últimos `DIAS` días.
  *
  *   2. **Cada fila en su propio `try/catch`, y el que falla no reintenta.**
  *      `mailPorArea` **lanza** si el área no está en la planilla de mails, así
@@ -89,19 +90,42 @@
  *      Tiene que crearlo **la cuenta dueña de la planilla**: el mail sale de esa
  *      cuenta y es la que tiene acceso a la planilla de direcciones.
  *
- *   4. Al 11/09/2026 hay dos filas que el barrido tiene pendientes y que NO son
- *      viejas: la 1961 (RI 1958, "Correa B-60", de ayer) y la 1969 (RI 1959,
- *      "Modulo llave punto Kalop", el que cargó el sistema). Con `DIAS = 2` la
- *      primera entra sola en la primera corrida; la segunda queda justo al
- *      borde. Para mandar una puntual sin tocar la ventana está
- *      `avisarUnaFila(1969)`, que se corre a mano una vez.
+ *   4. Al 11/09/2026, en `Respuestas de formulario 1` hay dos filas pendientes
+ *      que NO son viejas: la 1961 (RI 1958, "Correa B-60") y la 1969 (RI 1959,
+ *      el que cargó el sistema antes de la mudanza). Con `DIAS = 2` la primera
+ *      puede entrar sola en la primera corrida y la segunda queda al borde;
+ *      cuál de las dos cae adentro lo dice `revisarPendientesDeAviso()` con la
+ *      antigüedad en horas. Para mandar una puntual sin tocar la ventana:
+ *      `avisarUnaFila('Respuestas de formulario 1', 1969)`.
+ *
+ *      La fila 1969 se queda donde está aunque el alta se haya mudado: es una
+ *      fila vieja de la hoja de respuestas y el barrido la ve igual.
  */
 
-/** Cuál es la hoja de las respuestas. Si le cambian el nombre, cambiarlo acá. */
-var HOJA = 'Respuestas de formulario 1';
-
-/** En qué fila arrancan los pedidos. Las 2 y 3 ceban la vieja numeración. */
-var PRIMERA_FILA = 4;
+/**
+ * Las dos pestañas donde puede aparecer un pedido, con su primera fila de datos.
+ *
+ * **Son dos y no una desde el 11/09/2026**, y barrer sólo la primera dejaría
+ * ciego a este script justo para el caso que lo motivó. El alta que escribe el
+ * sistema se mudó a `Altas del sistema` porque Forms empuja hacia abajo
+ * cualquier fila que no sea suya, y eso corría la salida del `QUERY` del master
+ * dejando las columnas a mano —PRIORIDAD, Empresa y Estado— pegadas al RI de al
+ * lado. En `Respuestas de formulario 1` los pedidos arrancan en la 4, porque la
+ * 2 y la 3 cebaban la vieja numeración; en la pestaña nueva no hay cebado y la
+ * 2 ya es un pedido.
+ *
+ * La columna `M` existe en las dos: al crear la pestaña se le copia el
+ * encabezado `A1:M1`, y `DIRECCIÓN EMAIL ENVIADA` es justamente el borde de lo
+ * que un alta puede llenar. El master importa `A:L`, así que escribir `M` en la
+ * pestaña de altas no viaja a ninguna parte — es sólo la marca de "ya avisé".
+ *
+ * Si `Altas del sistema` todavía no existe, se la saltea en vez de fallar: así
+ * este script se puede instalar antes de crearla.
+ */
+var HOJAS = [
+  { nombre: 'Respuestas de formulario 1', primeraFila: 4 },
+  { nombre: 'Altas del sistema', primeraFila: 2 },
+];
 
 /** Marca temporal (B) y "DIRECCIÓN EMAIL ENVIADA" (M), en número de columna. */
 var COL_MARCA = 2;
@@ -127,14 +151,18 @@ function avisarPendientesDeAviso() {
   if (!lock.tryLock(5 * 1000)) return;
 
   try {
-    var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
-    if (!hoja) throw new Error('No encontré la hoja "' + HOJA + '".');
+    var avisadas = 0;
+    for (var h = 0; h < HOJAS.length; h++) {
+      var hoja = SpreadsheetApp.getActive().getSheetByName(HOJAS[h].nombre);
+      if (!hoja) continue;
 
-    var pendientes = filasSinAviso_(hoja, DIAS);
-    for (var i = 0; i < pendientes.length; i++) {
-      avisarFila_(hoja, pendientes[i].fila);
+      var pendientes = filasSinAviso_(hoja, HOJAS[h].primeraFila, DIAS);
+      for (var i = 0; i < pendientes.length; i++) {
+        avisarFila_(hoja, pendientes[i].fila);
+        avisadas++;
+      }
     }
-    if (pendientes.length) Logger.log('Filas avisadas: ' + pendientes.length);
+    if (avisadas) Logger.log('Filas avisadas: ' + avisadas);
   } finally {
     lock.releaseLock();
   }
@@ -147,19 +175,25 @@ function avisarPendientesDeAviso() {
  * ventana está bien elegida, y no se ven de ninguna otra forma.
  */
 function revisarPendientesDeAviso() {
-  var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
-  if (!hoja) throw new Error('No encontré la hoja "' + HOJA + '".');
+  for (var h = 0; h < HOJAS.length; h++) {
+    var hoja = SpreadsheetApp.getActive().getSheetByName(HOJAS[h].nombre);
+    if (!hoja) {
+      Logger.log('· ' + HOJAS[h].nombre + ': no existe todavía, se saltea.');
+      continue;
+    }
 
-  var dentro = filasSinAviso_(hoja, DIAS);
-  var todas = filasSinAviso_(hoja, 1e6);
+    var dentro = filasSinAviso_(hoja, HOJAS[h].primeraFila, DIAS);
+    var todas = filasSinAviso_(hoja, HOJAS[h].primeraFila, 1e6);
 
-  Logger.log('ENTRARÍAN (' + dentro.length + ', ventana de ' + DIAS + ' días):');
-  for (var i = 0; i < dentro.length; i++) Logger.log('   ' + describir_(dentro[i]));
+    Logger.log('· ' + HOJAS[h].nombre + ' — ENTRARÍAN (' + dentro.length +
+      ', ventana de ' + DIAS + ' días):');
+    for (var i = 0; i < dentro.length; i++) Logger.log('     ' + describir_(dentro[i]));
 
-  Logger.log('QUEDAN AFUERA POR VIEJAS (' + (todas.length - dentro.length) + '):');
-  for (var j = 0; j < todas.length; j++) {
-    if (todas[j].horas <= DIAS * 24) continue;
-    Logger.log('   ' + describir_(todas[j]));
+    Logger.log('  QUEDAN AFUERA POR VIEJAS (' + (todas.length - dentro.length) + '):');
+    for (var j = 0; j < todas.length; j++) {
+      if (todas[j].horas <= DIAS * 24) continue;
+      Logger.log('     ' + describir_(todas[j]));
+    }
   }
 }
 
@@ -167,13 +201,16 @@ function revisarPendientesDeAviso() {
  * Avisa de UNA fila, sin mirar la ventana. **Manda un mail de verdad.**
  *
  * Para las filas viejas que sí hay que avisar —una que se pasó de la ventana
- * mientras se instalaba esto, por ejemplo—. Se corre a mano desde el editor,
- * cambiando el número acá abajo.
+ * mientras se instalaba esto, por ejemplo—. Se corre a mano desde el editor.
+ *
+ * La pestaña va explícita y sin valor por omisión: las dos hojas tienen filas
+ * con el mismo número y ninguna es "la obvia", así que adivinarla sería mandar
+ * el mail del pedido equivocado. `avisarUnaFila('Altas del sistema', 2)`.
  */
-function avisarUnaFila(fila) {
-  var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
-  if (!hoja) throw new Error('No encontré la hoja "' + HOJA + '".');
-  if (!fila) throw new Error('Decime qué fila: avisarUnaFila(1969).');
+function avisarUnaFila(pestana, fila) {
+  var hoja = SpreadsheetApp.getActive().getSheetByName(pestana);
+  if (!hoja) throw new Error('No encontré la hoja "' + pestana + '".');
+  if (!fila) throw new Error("Decime hoja y fila: avisarUnaFila('Altas del sistema', 2).");
 
   var yaAvisada = String(hoja.getRange(fila, COL_AVISO).getValue()).trim();
   if (yaAvisada) {
@@ -185,14 +222,14 @@ function avisarUnaFila(fila) {
 }
 
 /** Las filas con marca temporal, sin `M`, de los últimos `dias` días. */
-function filasSinAviso_(hoja, dias) {
+function filasSinAviso_(hoja, primeraFila, dias) {
   var ultima = hoja.getLastRow();
-  if (ultima < PRIMERA_FILA) return [];
+  if (ultima < primeraFila) return [];
 
-  var alto = ultima - PRIMERA_FILA + 1;
-  var marcas = hoja.getRange(PRIMERA_FILA, COL_MARCA, alto, 1).getValues();
-  var avisos = hoja.getRange(PRIMERA_FILA, COL_AVISO, alto, 1).getValues();
-  var numeros = hoja.getRange(PRIMERA_FILA, 1, alto, 1).getValues();
+  var alto = ultima - primeraFila + 1;
+  var marcas = hoja.getRange(primeraFila, COL_MARCA, alto, 1).getValues();
+  var avisos = hoja.getRange(primeraFila, COL_AVISO, alto, 1).getValues();
+  var numeros = hoja.getRange(primeraFila, 1, alto, 1).getValues();
 
   var ahora = new Date().getTime();
   var pendientes = [];
@@ -209,7 +246,7 @@ function filasSinAviso_(hoja, dias) {
     if (horas > dias * 24) continue;
 
     pendientes.push({
-      fila: PRIMERA_FILA + i,
+      fila: primeraFila + i,
       ri: numeros[i][0],
       marca: marca,
       horas: Math.round(horas),

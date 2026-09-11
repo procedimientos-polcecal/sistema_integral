@@ -601,7 +601,11 @@ la cola de pendientes — a propósito, para que no se omita en silencio.
 4. **Instalar `docs/compras-aviso-por-tiempo.gs`** y darle su activador por
    tiempo. Es el que manda el mail de un pedido cargado en el sistema: una fila
    escrita por la API no dispara el activador de *envío de formulario*. Sin él
-   el pedido entra igual, pero **nadie se entera por correo**.
+   el pedido entra igual, pero **nadie se entera por correo**. Barre **las dos
+   pestañas**, y esa es la parte que hay que mirar si alguna vez se toca: con la
+   mudanza del alta, un barrido de una sola hoja queda ciego justo para el caso
+   que lo motivó. Antes de crearle el activador, correr
+   `revisarPendientesDeAviso()`, que no manda nada y dice a quién le llegaría.
 
 ## Mudar el alta a su propia pestaña (11/09/2026) — SIN HACER
 
