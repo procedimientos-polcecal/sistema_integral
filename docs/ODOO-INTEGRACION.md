@@ -398,6 +398,50 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
    Notification" en las reglas de automatización, con log de llamadas. Mismo
    patrón que el Apps Script de la planilla, protegido con un secreto propio.
 
+## El PDF de un reporte: se puede, pero no por donde parece
+
+Lo necesitó Compras —bajar desde el SdG el mismo papel que Odoo imprime en
+*Imprimir → Orden de compra*— y vale para **cualquier** reporte de Odoo, así que
+queda acá y no en el módulo. Medido contra staging el 10 y el 11/09/2026.
+
+Las tres puertas obvias están cerradas para un cliente JSON-RPC con API key:
+
+| camino | resultado |
+|---|---|
+| `ir.actions.report._render_qweb_pdf` por RPC | **bloqueado**: "Private methods cannot be called remotely" |
+| `ir.actions.report.render_qweb_pdf` (el público viejo) | **no existe** en la 17 |
+| `mail.template.generate_email` | **no existe** en la 17: pasó a privado |
+| `/web/session/authenticate` con la API key → `/report/pdf/…` | **`AccessDenied`**, y sin cookie |
+
+La última merece decirse bien, porque se pierde una tarde entendiéndola: no es
+un permiso que le falte al usuario bot. **Las API keys de Odoo tienen alcance
+`rpc` y no abren sesión web**, y la sesión web es lo único que habilita el
+endpoint de reportes. La salida "guardar una contraseña de usuario de Odoo" es
+real y es la que conviene no tomar.
+
+La que sí abre es el **compositor de correo**: al crear un
+`mail.compose.message` con una plantilla que lleva el reporte en
+`report_template_ids`, Odoo lo renderiza y lo guarda como `ir.attachment`. Se
+lee el `datas` y se borra el adjunto. Todo `create`, `read` y `unlink`, o sea
+ORM público. Está implementado en `lib/odoo/pdfDeOrden.ts`.
+
+Lo que hay que saber antes de copiarlo a otro reporte:
+
+- **No manda ningún correo.** El correo sale con `action_send_mail`, que no se
+  llama. Verificado: el adjunto cuelga del compositor y no del registro, el
+  chatter no se mueve y el `write_date` del registro no cambia.
+- **No deja basura**, pero hay que borrar el adjunto a mano (el `unlink` está
+  permitido). El compositor es un modelo transitorio y lo limpia el autovacuum.
+- **`ir.model.data` está cerrado** para el usuario bot, así que no se puede
+  resolver nada por xmlid: hay que buscar el reporte por `report_name` y la
+  plantilla por llevarlo adjunto.
+- **`default_res_id` en singular ya no se acepta** en la 17 (`Uso obsoleto de
+  'default_res_id'`): va `default_res_ids`, y `res_ids` del compositor es un
+  texto con la lista adentro.
+
+Y `button_confirm` de `purchase.order` sí es público: confirma, y **crea el
+remito de entrada**.
+
 ## Cuidados
 
 - **Throttling**: siempre `fields` explícitos y `limit`. Sin `fields`, Odoo

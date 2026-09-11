@@ -151,38 +151,98 @@ hoy pasa con el 100%, y la tabla de lo aprendido lo baja con el uso.
 llamada. Si Odoo no responde, la pantalla ofrece `ART. VARIOS` y lo dice, en vez
 de trabar la generación de la orden.
 
-## Etapa 2 — confirmar la orden y bajar el PDF
+## Etapa 2 — la orden se confirma y su PDF se baja del sistema
 
-Pedido después de acordar lo anterior. Se documenta acá lo que se midió, porque
-**una de las dos mitades tiene un obstáculo real**.
+Pedido después de acordar lo anterior. La mitad del PDF parecía no tener salida
+y la tiene: **se baja el PDF oficial de Odoo, sin guardar ninguna contraseña**.
 
-**Confirmar: alcanzable.** `button_confirm` es un método público de
-`purchase.order` y en staging ya hay órdenes en estado `purchase`. Lo que hay que
-decidir es si la orden se confirma **automáticamente al generarla** —lo pedido—
-o con un botón aparte: confirmar deja de ser un borrador y ya no se puede
-editar ni borrar desde Odoo, así que saltea la revisión que hoy alguien hace
-allá.
+### Confirmar
 
-**El PDF: no alcanzable con las credenciales de hoy.** Medido contra staging el
-10/09/2026:
+`purchase.order.button_confirm` es público. Probado sobre la P02429 y la P02428
+en staging el 11/09/2026: pasaron de `draft` a `purchase`.
+
+La orden se confirma **al generarla**, que es lo que se pidió: sale lista para
+imprimir y mandarle al proveedor, no en borrador. Lo que eso trae, y conviene
+tenerlo escrito:
+
+- **Confirmar crea el remito de entrada.** En la prueba, `Polys/IN/00176`, en
+  estado *Preparado*. Es lo correcto —una orden confirmada tiene una recepción
+  esperada— pero es un movimiento real en el Odoo del grupo.
+- **La orden deja de editarse y de borrarse** del otro lado: sólo se cancela.
+  O sea que saltea la revisión que alguien podía hacer allá sobre el borrador.
+- Confirmar **no** es postear: no se escribe ningún asiento. La contabilidad la
+  sigue escribiendo Odoo.
+
+Un fallo al confirmar **no invalida la orden**: ya está creada y vinculada.
+Queda el aviso en `odoo_pendiente` y en pantalla, y el botón *Reintentar lo que
+falte* la confirma —por eso el reintento pasa por la confirmación también
+cuando la orden ya existía—. Una orden **cancelada** en Odoo no se reconfirma:
+Odoo manda.
+
+El orden de las operaciones importa y no es casual: **crear → guardar el
+vínculo → confirmar**. Si se corta en el medio, la orden queda en borrador pero
+atada al requerimiento, así que el reintento la encuentra y la termina. Al
+revés quedaría una orden confirmada que el SdG no puede volver a encontrar, y
+confirmada ya no se borra.
+
+### El PDF
+
+El documento es **el mismo** que sale de *Imprimir → Orden de compra* en Odoo
+(`ir.actions.report` con `report_name = purchase.report_purchaseorder`), no uno
+parecido generado acá. Importa porque es el papel que ve el proveedor.
+
+Las tres puertas obvias están cerradas para un cliente JSON-RPC con API key.
+Medido contra staging el 10 y el 11/09/2026:
 
 | camino | resultado |
 |---|---|
 | `ir.actions.report._render_qweb_pdf` por RPC | **bloqueado**: "Private methods cannot be called remotely" |
-| `ir.actions.report.render_qweb_pdf` (el público viejo) | **no existe** en esta versión |
-| `/web/session/authenticate` con la API key → `/report/pdf/...` | **`AccessError`**, no devuelve cookie |
+| `ir.actions.report.render_qweb_pdf` (el público viejo) | **no existe** en la 17 |
+| `mail.template.generate_email` | **no existe** en la 17: pasó a privado |
+| `/web/session/authenticate` con la API key → `/report/pdf/…` | **`AccessDenied`**, y sin cookie |
 
-El cliente del SdG habla JSON-RPC con API key y no tiene sesión web, que es lo
-único que abre el endpoint de reportes. Las salidas posibles, ninguna gratis:
+Lo último no es un permiso que falte: **las API keys de Odoo tienen alcance
+`rpc` y no abren sesión web**, que es lo único que habilita el endpoint de
+reportes.
 
-1. **Guardar una contraseña de usuario de Odoo** (no una API key) para abrir
-   sesión web y bajar `/report/pdf/purchase.report_purchaseorder/<id>`. Es el PDF
-   oficial, igual al que imprime Odoo. Cuesta guardar una contraseña.
-2. **Leer el PDF como adjunto.** Si se consigue que Odoo materialice el reporte
-   como `ir.attachment` —los adjuntos sí se leen por RPC—, se baja de ahí. Hay
-   que confirmar si en esta instancia el reporte guarda adjunto.
-3. **Generar el PDF en el SdG** con los datos de la orden, que ya los tenemos.
-   No depende de Odoo, y no es el documento oficial: si el proveedor espera el
-   formato de Odoo, no sirve.
+La puerta que sí abre es el **compositor de correo**. Al crear un
+`mail.compose.message` con una plantilla que lleva el reporte adjunto, Odoo
+renderiza el PDF y lo guarda como `ir.attachment`; se lee y se borra. Todo con
+`create`, `read` y `unlink`, o sea ORM público. Es el mismo mecanismo por el
+que en la base ya había un `Orden de compra - P01766.pdf` colgado de una orden.
 
-Queda pendiente de decisión antes de implementarla.
+**No manda ningún correo**: eso sale recién con `action_send_mail`, que no se
+llama nunca. Verificado sobre la P02420: el adjunto cuelga del compositor y no
+de la orden, el chatter no se mueve y el `write_date` de la orden no cambia.
+Y no deja basura: los adjuntos generados se borran —medido, 0 antes y 0
+después—, y el registro del compositor es un modelo transitorio que limpia el
+autovacuum de Odoo.
+
+Dos detalles que se descubrieron midiendo:
+
+- **`ir.model.data` está cerrado** para el usuario de integración, así que
+  nada se resuelve por xmlid: el reporte se busca por su nombre técnico, y la
+  plantilla por llevar ese reporte adjunto. Hay dos que sirven y las dos dan el
+  mismo PDF; se toma la de id más bajo para que el resultado no dependa del
+  orden en que Odoo las devuelva. Si alguien le saca el informe a la plantilla,
+  se falla diciéndolo.
+- **Una orden en borrador sale titulada *Solicitud de cotización***, porque así
+  lo decide Odoo (`print_report_name` mira el estado). Se respeta: un papel que
+  dijera "orden" sobre algo que nadie confirmó sería peor. Como la orden se
+  confirma al generarla, el caso normal es el título que corresponde.
+
+La ruta es `GET …/requerimientos/[id]/odoo/pdf?orden=<id de Odoo>`, y **valida
+la orden contra el vínculo del requerimiento**: no alcanza con tener acceso a
+Compras. Sin eso, cambiar un número en la barra de direcciones bajaría el PDF
+de cualquier orden del grupo, incluidas las que nunca pasaron por el SdG.
+
+### Riesgo asumido
+
+**El PDF se genera en el momento, en Odoo.** Son unos segundos de wkhtmltopdf y
+por eso la ruta pide 60s. Si Odoo no contesta, no hay papel: no se guarda copia
+de este lado, a propósito, porque una copia vieja de una orden que cambió es
+peor que no tener ninguna.
+
+**La confirmación automática saltea la revisión del borrador en Odoo.** Es lo
+pedido y es reversible —una orden confirmada se cancela—, pero deja el remito
+de entrada creado.

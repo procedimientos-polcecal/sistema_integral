@@ -19,8 +19,10 @@ import {
  * **desde** la orden, con ítems, precios e impuestos ya puestos, en vez de
  * tipearla de cero. Eso es lo que hace lenta la carga de facturas hoy.
  *
- * La orden se crea **en borrador**. El SdG propone, Odoo confirma: nadie postea
- * un asiento desde acá.
+ * La orden se crea y **se confirma**, para que quede lista para imprimir y
+ * mandarle al proveedor. Confirmar no es postear: no se escribe ningún asiento
+ * desde acá — eso lo sigue haciendo contabilidad en Odoo. El SdG propone, Odoo
+ * confirma.
  */
 
 export interface OrdenDeOdoo {
@@ -79,6 +81,8 @@ export default function OrdenEnOdoo({
   const [ensayo, setEnsayo] = useState<EnsayoDeOrden | null>(null);
   /** Lo que hay que decirle a quien apretó, cuando no es un fallo. */
   const [advertencia, setAdvertencia] = useState<string | null>(null);
+  /** Qué orden está generando su PDF en Odoo, si hay alguna. */
+  const [bajando, setBajando] = useState<number | null>(null);
   // El producto elegido en el selector, como string porque así lo maneja un
   // <select>. Vacío es el genérico: lo mismo que no mandar nada en el POST.
   const [productoId, setProductoId] = useState("");
@@ -127,15 +131,64 @@ export default function OrdenEnOdoo({
     const intactas: { odooNombre: string | null; odooOrderId: number }[] = (body.ordenes ?? [])
       .filter((o: { yaExistia?: boolean }) => o.yaExistia);
 
+    const partes: string[] = [];
+
     if (productoId && intactas.length > 0) {
       const cuales = intactas.map((o) => o.odooNombre ?? `#${o.odooOrderId}`).join(" y ");
-      setAdvertencia(
+      partes.push(
         `La orden ${cuales} ya estaba en Odoo y no se modificó: el producto que elegiste ` +
           `no se aplicó. Si hay que cambiarlo, se cambia en Odoo, sobre la orden.`
       );
     }
 
+    // Lo que quedó a medias del lado de Odoo —típicamente una orden que se
+    // creó pero no se pudo confirmar—. Ya quedó en `odoo_pendiente`, pero el
+    // que apretó tiene que enterarse ahora.
+    partes.push(...((body.avisos ?? []) as string[]));
+
+    if (partes.length) setAdvertencia(partes.join(" "));
+
     router.refresh();
+  }
+
+  /**
+   * Bajar el PDF oficial de una orden.
+   *
+   * Va por `fetch` y no por un `<a href>` a secas porque la ruta contesta JSON
+   * cuando algo falla: con un enlace común, un fallo de Odoo abriría una
+   * pestaña con `{"error":…}` en vez de decirlo en la pantalla donde se apretó.
+   * Y el nombre del archivo lo pone Odoo —`Orden de compra - P02420.pdf`—, así
+   * que se saca de la cabecera en vez de inventarlo acá.
+   */
+  async function bajarPdf(odooOrderId: number, odooNombre: string | null) {
+    setBajando(odooOrderId);
+    setMotivos([]);
+
+    try {
+      const res = await fetch(
+        `/api/compras/requerimientos/${requerimientoId}/odoo/pdf?orden=${odooOrderId}`
+      );
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setMotivos([body.error ?? "No se pudo bajar el PDF de la orden."]);
+        return;
+      }
+
+      const nombre =
+        /filename\*=UTF-8''([^;]+)/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "";
+
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombre ? decodeURIComponent(nombre) : `${odooNombre ?? odooOrderId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setMotivos([e instanceof Error ? e.message : String(e)]);
+    } finally {
+      setBajando(null);
+    }
   }
 
   async function ensayar() {
@@ -213,9 +266,24 @@ export default function OrdenEnOdoo({
                   {o.odooNombre ?? `#${o.odooOrderId}`}
                 </span>
               )}
-              <span className="text-xs text-slate-500">
-                {o.empresa}
-                {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}
+              <span className="flex items-baseline gap-3 text-xs text-slate-500">
+                <span>
+                  {o.empresa}
+                  {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}
+                </span>
+                {/*
+                  El PDF es el de Odoo, generado en el momento: el mismo que
+                  sale de Imprimir → Orden de compra. Si la orden todavía está
+                  en borrador, Odoo lo titula "Solicitud de cotización" — es su
+                  regla, no un error nuestro.
+                */}
+                <button
+                  onClick={() => bajarPdf(o.odooOrderId, o.odooNombre)}
+                  disabled={bajando !== null}
+                  className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
+                >
+                  {bajando === o.odooOrderId ? "Generando…" : "Bajar el PDF"}
+                </button>
               </span>
             </li>
           ))}

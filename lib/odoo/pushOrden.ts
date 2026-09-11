@@ -15,6 +15,7 @@ import { buscarLeer, crearEn, mensajeDeOdoo } from "./client";
 import { resolverContextoDeOdoo } from "./contexto";
 import { armarOrdenes } from "./ordenDeCompra";
 import { leerCatalogoComprable, type ProductoComprable } from "./catalogo";
+import { confirmarLaOrden, estadoDeLaOrden } from "./pdfDeOrden";
 import {
   correspondeAprender,
   normalizarDescripcion,
@@ -32,10 +33,17 @@ export interface OrdenCreada {
   porcentaje: number;
   /** `true` si ya existía de antes y no se creó nada. */
   yaExistia: boolean;
+  /** El estado en Odoo después de intentar confirmarla, leído y no supuesto. */
+  estado: string | null;
 }
 
 export type ResultadoDelPush =
-  | { ok: true; ordenes: OrdenCreada[] }
+  | {
+      ok: true;
+      ordenes: OrdenCreada[];
+      /** Lo que salió a medias: la orden está, pero algo quedó por hacer. */
+      avisos: string[];
+    }
   | { ok: false; motivos: string[] };
 
 interface FilaRequerimiento {
@@ -269,6 +277,12 @@ export async function empujarOrdenesDeRequerimiento(
   }
 
   const creadas: OrdenCreada[] = [];
+  /*
+   * Lo que salió a medias. No son fallos del push: la orden está en Odoo y el
+   * vínculo guardado. Son cosas que alguien tiene que terminar —confirmarla a
+   * mano, por ejemplo— y que si no se dicen no se entera nadie.
+   */
+  const avisos: string[] = [];
 
   for (const orden of armado.ordenes) {
     const previa = existentes.get(orden.empresaId);
@@ -285,12 +299,22 @@ export async function empujarOrdenesDeRequerimiento(
      * el vínculo se descarta y se crea de nuevo.
      */
     if (previa && (await existeEnOdoo(previa.odooOrderId))) {
+      /*
+       * Se le pasa igual por la confirmación: si la orden quedó en borrador
+       * porque el intento anterior se cortó justo ahí, "Reintentar lo que
+       * falte" tiene que terminar el trabajo. Si ya estaba confirmada no hace
+       * nada.
+       */
+      const cierre = await asegurarConfirmada(previa.odooOrderId, previa.odooNombre);
+      if (cierre.aviso) avisos.push(cierre.aviso);
+
       creadas.push({
         empresa: orden.empresaNombre,
         odooOrderId: previa.odooOrderId,
         odooNombre: previa.odooNombre,
         porcentaje: previa.porcentaje,
         yaExistia: true,
+        estado: cierre.estado,
       });
       continue;
     }
@@ -358,19 +382,38 @@ export async function empujarOrdenesDeRequerimiento(
       return { ok: false, motivos: [aviso] };
     }
 
+    /*
+     * Y recién ahora se confirma, con el vínculo ya guardado.
+     *
+     * El orden importa: si esto falla —o si el proceso se corta acá— la orden
+     * queda en borrador pero **atada** al requerimiento, así que el reintento
+     * la encuentra y la confirma en vez de crear una segunda. Al revés, una
+     * orden confirmada sin vínculo sería una orden que nadie puede volver a
+     * encontrar desde el SdG, y confirmada ya no se borra en Odoo.
+     */
+    const cierre = await asegurarConfirmada(odooOrderId, odooNombre);
+    if (cierre.aviso) avisos.push(cierre.aviso);
+
     creadas.push({
       empresa: orden.empresaNombre,
       odooOrderId,
       odooNombre,
       porcentaje: orden.porcentaje,
       yaExistia: false,
+      estado: cierre.estado,
     });
   }
 
-  // Salió bien: si había un pendiente de un intento anterior, ya no aplica.
+  /*
+   * Salió bien: si había un pendiente de un intento anterior, ya no aplica.
+   *
+   * Salvo que haya avisos —una orden que quedó sin confirmar—, que sí son algo
+   * por hacer y tienen que sobrevivir a que nadie estuviera mirando la
+   * pantalla. Mismo criterio que `sheets_pendiente`.
+   */
   await admin
     .from("compras_requerimientos")
-    .update({ odoo_pendiente: null })
+    .update({ odoo_pendiente: avisos.length ? avisos.join(" | ") : null })
     .eq("id", ri.id);
 
   /*
@@ -414,7 +457,67 @@ export async function empujarOrdenesDeRequerimiento(
     }
   }
 
-  return { ok: true, ordenes: creadas };
+  return { ok: true, ordenes: creadas, avisos };
+}
+
+/**
+ * Dejar la orden confirmada en Odoo, sin voltear nada si no se puede.
+ *
+ * Confirmar es lo que pidió Compras: la orden generada desde el SdG sale
+ * confirmada y lista para imprimir, no en borrador. **No es gratis** y conviene
+ * tenerlo presente: `button_confirm` crea el remito de entrada y, a partir de
+ * ahí, la orden ya no se edita ni se borra en Odoo —sólo se cancela—.
+ *
+ * Un fallo acá **nunca** invalida la orden: ya está creada y vinculada, y
+ * borrarla o reintentar desde cero le mandaría al proveedor el mismo pedido dos
+ * veces. Se devuelve el aviso para que quede en `odoo_pendiente` y en pantalla,
+ * y confirmarla a mano en Odoo es un clic.
+ */
+async function asegurarConfirmada(
+  odooOrderId: number,
+  odooNombre: string | null
+): Promise<{ estado: string | null; aviso: string | null }> {
+  const cual = odooNombre ?? `#${odooOrderId}`;
+
+  let estado: string | null;
+  try {
+    estado = await estadoDeLaOrden(odooOrderId);
+  } catch (e) {
+    return {
+      estado: null,
+      aviso:
+        `La orden ${cual} se creó en Odoo pero no se pudo leer su estado para confirmarla: ` +
+        `${e instanceof Error ? e.message : String(e)}. Hay que confirmarla en Odoo.`,
+    };
+  }
+
+  // Ya confirmada (o recibida, o facturada): no hay nada que hacer.
+  if (estado && estado !== "draft" && estado !== "sent") {
+    if (estado === "cancel") {
+      /*
+       * Cancelada no se confirma: Odoo lo rechazaría, y aunque lo aceptara
+       * sería revivir a mano algo que alguien dio de baja del otro lado. Odoo
+       * manda.
+       */
+      return {
+        estado,
+        aviso: `La orden ${cual} está cancelada en Odoo, así que no se confirmó.`,
+      };
+    }
+    return { estado, aviso: null };
+  }
+
+  try {
+    return { estado: await confirmarLaOrden(odooOrderId), aviso: null };
+  } catch (e) {
+    return {
+      estado,
+      aviso:
+        `La orden ${cual} se creó en Odoo pero quedó **sin confirmar**: ` +
+        `${e instanceof Error ? e.message : String(e)}. ` +
+        `Se confirma en Odoo, o volviendo a apretar el botón acá.`,
+    };
+  }
 }
 
 /**
