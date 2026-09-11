@@ -607,7 +607,7 @@ la cola de pendientes — a propósito, para que no se omita en silencio.
    que lo motivó. Antes de crearle el activador, correr
    `revisarPendientesDeAviso()`, que no manda nada y dice a quién le llegaría.
 
-## Mudar el alta a su propia pestaña (11/09/2026) — SIN HACER
+## Mudar el alta a su propia pestaña (11/09/2026) — FALTA EL PASO 2
 
 El alta dejó de escribirse en `Respuestas de formulario 1`. El porqué está en
 [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md); el resumen es que Forms
@@ -615,27 +615,41 @@ empuja hacia abajo cualquier fila que no sea suya, y eso corría la salida del
 `QUERY` del master dejando las columnas a mano —PRIORIDAD, Empresa y **Estado**,
 que es la aprobación— pegadas al RI de al lado.
 
-**El código ya está y no sirve solo: hasta que se hagan estos pasos, cada alta
-queda en la cola de pendientes** diciendo que la pestaña no existe.
+**Estado al 11/09/2026:** hechos los pasos 1, 4 y 5. **Falta el 2**, y el 3
+dejó de hacer falta.
+
+> **PENDIENTE Y URGENTE: volver a pegar el Apps Script (paso 2).** La fórmula
+> nueva ya está puesta y el código desplegado, así que la próxima alta cae en
+> `Altas del sistema`. Con la versión vieja del script —que numera contando
+> sólo la hoja de respuestas— la primera respuesta del formulario que entre
+> después de esa alta se lleva un número ya usado, y el `upsert` por `nro_ri` de
+> la sincronización colapsa los dos pedidos en uno. Mientras la pestaña siga
+> vacía no hay riesgo; desde la primera alta, sí.
 
 **Van en este orden**, y no es capricho: el paso 2 antes que el 1 puede repartir
-un número repetido, y el paso 4 con la pestaña todavía vacía es el único tramo
-que no se pudo comprobar sin escribir en producción.
+un número repetido.
 
-1. En `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, crear la pestaña
-   **`Altas del sistema`** (el nombre, exacto). Copiarle a la fila 1 el
-   encabezado `A1:M1` de `Respuestas de formulario 1` — se ubica cada columna
-   por su nombre, y `DIRECCIÓN EMAIL ENVIADA` marca dónde termina lo que un alta
-   puede llenar. Los datos empiezan en la fila 2: **sin filas de cebado**.
-2. **Volver a pegar `docs/compras-formulario-apps-script.gs`.** La versión vieja
-   numeraba contando sólo la hoja de respuestas; con la serie repartida en dos
-   pestañas, eso reparte un número que el sistema ya usó y el `upsert` de la
-   sincronización colapsa los dos pedidos en uno. Va **antes** de que caiga la
-   primera alta en la pestaña nueva.
-3. Cargar **un pedido de prueba** desde `/mis-pedidos` y confirmar que aparece
-   en `Altas del sistema`. Todavía no va a estar en el master, y va a quedar un
-   pendiente diciendo que el `IMPORTRANGE` no lo trajo: es lo esperado.
-4. Recién ahora, en el master, reemplazar `A2` de `Requerimientos internos` por:
+1. ~~En `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, crear la pestaña
+   **`Altas del sistema`**~~ **HECHO.** Lleva en la fila 1 el encabezado `A1:M1`
+   de `Respuestas de formulario 1` — se ubica cada columna por su nombre, y
+   `DIRECCIÓN EMAIL ENVIADA` marca dónde termina lo que un alta puede llenar.
+   Los datos empiezan en la fila 2: **sin filas de cebado**.
+2. **Volver a pegar `docs/compras-formulario-apps-script.gs`. ← LO QUE FALTA.**
+   La versión vieja numeraba contando sólo la hoja de respuestas; con la serie
+   repartida en dos pestañas, eso reparte un número que el sistema ya usó y el
+   `upsert` de la sincronización colapsa los dos pedidos en uno.
+3. ~~Cargar un pedido de prueba antes de tocar la fórmula~~ **YA NO HACE
+   FALTA.** Estaba para no exponerse a que `IMPORTRANGE` sobre la pestaña vacía
+   devolviera error y rompiera el `{ ; }`. Se midió en vez de suponerlo: una
+   sonda de una sola celda —`=ROWS(QUERY({...};...))` en `N1` del master, fuera
+   de todo rango que alguien lea— devolvió **1966 con la pestaña vacía**, que es
+   la misma cuenta que daba la fórmula vieja. También probó que los `;` del
+   locale sobreviven a `USER_ENTERED` y que el segundo `IMPORTRANGE` no pide
+   autorización nueva, por ser la misma planilla de origen. **Es la forma de
+   probar una fórmula en producción sin arriesgar nada: una celda suelta que no
+   desborda.**
+4. ~~En el master, reemplazar `A2` de `Requerimientos internos`~~ **HECHO.**
+   Quedó:
 
    ```
    =QUERY({IMPORTRANGE("https://docs.google.com/spreadsheets/d/1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM/edit"; "'Respuestas de formulario 1'!A4:L10000"); IMPORTRANGE("https://docs.google.com/spreadsheets/d/1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM/edit"; "'Altas del sistema'!A2:L10000")}; "SELECT Col1,Col2, Col5, Col6, Col7, Col8, Col9, Col10, Col11, Col12 WHERE Col1 IS NOT NULL ORDER BY Col1"; 0)
@@ -644,20 +658,29 @@ que no se pudo comprobar sin escribir en producción.
    El `ORDER BY Col1` es la mitad del arreglo: deja la salida **estrictamente
    creciente**, así que una fila nueva no puede volver a correr las de arriba.
 
-   Va después del paso 3 porque **con la pestaña vacía no está comprobado**: que
-   `IMPORTRANGE` sobre un rango sin ninguna fila cargada devuelva un bloque
-   vacío y no un error es lo que se supone, y si devolviera error rompería el
-   `{ ; }` y con él el master entero. Con una fila adentro la pregunta no se
-   hace. Si igual aparece `#REF!` o `#N/A`, **deshacer con Ctrl+Z**: la fórmula
-   vieja vuelve y no se perdió nada.
-
    El `A4:L10000` de la primera parte es el que ya estaba, y pide más filas de
    las que la hoja tiene (la grilla son 1.969): eso ya funcionaba, así que el
    `A2:L10000` de la segunda tampoco es un problema.
-5. **Reacomodar el RI 1959.** Su prioridad `1 SEMANA` y su empresa `Ambas` están
-   hoy en `K1967`/`L1967`; con el `ORDER BY` el RI 1959 vuelve más arriba y esas
-   dos celdas quedan al lado de otro pedido. Mirar en qué fila quedó el 1959,
-   vaciar `K1967`/`L1967` y escribirlas ahí.
+
+   Verificado después de escribirla: **1967 filas, cero errores en la columna A
+   y cero descensos** — el orden quedó estrictamente creciente. La fórmula
+   anterior quedó respaldada por si hiciera falta volver.
+5. ~~Reacomodar el RI 1959~~ **HECHO.** Su prioridad `1 SEMANA` y su empresa
+   `Ambas` se movieron a la fila donde quedó el 1959.
+
+   **Y algo que no estaba previsto: el reordenamiento dejó viejos los punteros
+   `sheets_fila` de la base.** Las filas del master se corrieron una vez, y el
+   atajo de `exportarRequerimiento` —cuando `hoja_origen` es el master usa
+   `sheets_fila` **sin verificar la columna A**, [sheets.ts](../lib/compras/sheets.ts)—
+   habría escrito la aprobación de un RI en la fila del de al lado. Eran ocho,
+   del 1959 al 1966, y se corrigieron leyendo la columna A del master. La
+   próxima sincronización los habría arreglado sola, pero la ventana era de
+   hasta 15 minutos con aprobaciones de por medio.
+
+   **Regla que queda: cualquier cosa que reordene el master invalida los
+   `sheets_fila` guardados, y hay que refrescarlos en el momento.** No va a
+   volver a pasar por esta vía —con el `ORDER BY` la salida es append-only—,
+   pero sí si alguien inserta, borra u ordena una fila a mano.
 
 ### Y al mismo tiempo, el techo de 2011 filas
 
