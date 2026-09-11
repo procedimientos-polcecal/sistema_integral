@@ -19,6 +19,7 @@ import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
+import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPlanilla";
 // Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
 // `indexarColumnas` de acá. Las cuatro son funciones y ninguna se llama al
 // cargar el módulo, así que en ESM el ciclo se resuelve solo. Se deja anotado
@@ -314,6 +315,24 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
   comparativas_sin_planilla: number;
   /** Si no se pudieron leer los links, por qué. La importación siguió igual. */
   comparativas_error?: string;
+  /**
+   * Cuántos de los RI salteados cambiaron de lugar en la planilla.
+   *
+   * Va **aparte de `filas_omitidas`** y no sumado a `filas_actualizadas`: esas
+   * dos cuentas significan "no se pisó el dato" y "se pisó el dato", y esto no
+   * es ninguna de las dos —se movió el puntero de una fila que igual no se
+   * pisó—. Se informa porque es la única señal de que los RI congelados se
+   * están reacomodando: en régimen tiene que dar 0, y un número alto corrida
+   * tras corrida diría que hay filas bailando en la planilla.
+   */
+  punteros_actualizados: number;
+  /**
+   * Si algún puntero no se pudo guardar, por qué. La importación siguió igual:
+   * lo que se pierde es que ese RI exporte a la celda que le toca, no el alta
+   * de los nuevos. Se devuelve en vez de quedar en un `console.warn` porque un
+   * fallo de escritura que no se distingue del silencio no es un diagnóstico.
+   */
+  punteros_error?: string;
 }
 
 interface FilaPlanilla {
@@ -473,10 +492,13 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       empresa_id: string | null;
       paga_ambas: boolean;
       origen: string;
+      // El puntero de posición, para no reescribirlo cuando no se movió.
+      hoja_origen: string | null;
+      sheets_fila: number | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen, hoja_origen, sheets_fila")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -485,12 +507,24 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
     const previo = new Map(existentes.map((r) => [r.nro_ri, r]));
 
     const aEscribir: Record<string, unknown>[] = [];
+    /**
+     * Dónde encontró la planilla a los RI que esta corrida NO pisa.
+     *
+     * La hoja y la fila ya vienen calculadas en el `registro` del bucle de
+     * arriba, así que no hace falta volver a leer la planilla para saberlo: la
+     * fila se saltea después de haberla leído, no antes.
+     */
+    const salteadas: DondeEsta[] = [];
     let omitidas = 0;
     let nuevas = 0;
 
     for (const registro of registros) {
       const yaExiste = estado.has(registro.nro_ri);
-      if (yaExiste && estado.get(registro.nro_ri)) { omitidas++; continue; }
+      if (yaExiste && estado.get(registro.nro_ri)) {
+        omitidas++;
+        salteadas.push({ nro_ri: registro.nro_ri, hoja: registro.hoja, fila: registro.fila });
+        continue;
+      }
       if (!yaExiste) nuevas++;
 
       const d = registro.datos;
@@ -562,6 +596,54 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       if (error) throw new Error(error.message);
     }
 
+    // ── Dónde quedó la fila de los RI que no se pisaron ──
+    //
+    // `editado_en_app` protege **el dato** —el estado, el proveedor, los
+    // costos— de un RI ya gestionado acá. No tiene por qué proteger **la
+    // posición**: `hoja_origen` y `sheets_fila` son punteros, y saltear la fila
+    // entera los congelaba. El agujero completo, con la medición, está en
+    // `punteroDeLaPlanilla.ts`; el resumen es que aprobar desde el sistema pone
+    // la marca y la aprobación es lo que hace que el `FILTER` lleve el RI a la
+    // pestaña de su área, así que el puntero se congelaba en el master justo
+    // antes de servir para algo y las columnas de compra no se escribían nunca.
+    //
+    // Se escribe **sólo** `hoja_origen` y `sheets_fila`, y eso no dispara el
+    // trigger de `editado_en_app`: la 027 mira `estado_aprobacion`,
+    // `estado_compra`, `proveedor_id`, `costo_iva`, `costo_envio` y
+    // `comparativa_url`, ninguna de las cuales viaja acá. Tampoco haría falta la
+    // guarda de `sheets_sincronizado_en` de esa función, que es la otra manera
+    // de no marcar.
+    //
+    // Y `sheets_sincronizado_en` NO se toca a propósito, aunque esta escritura
+    // sí venga de la planilla. Esa columna es lo que se mira para saber si el
+    // espejo de un RI quedó viejo, y para estos RI el espejo **está** viejo: de
+    // la fila se leyó dónde está, no lo que dice. Refrescarla haría que un RI
+    // congelado desde agosto pareciera sincronizado hace un minuto, que es
+    // justo la pregunta que esa columna contesta.
+    //
+    // Cada puntero va en su propio `update`: un `upsert` en lote tendría que
+    // traer las columnas `not null` de la tabla —`descripcion`, `fecha`—, que es
+    // exactamente lo que acá no se puede pisar. No es un `.in()` con muchos ids
+    // (que armaría una URL que PostgREST rechaza con un 400 mudo) ni un lote de
+    // 200, porque cada fila lleva un par de valores distinto. Lo que acota el
+    // costo es que `punterosARefrescar` devuelve sólo las que se movieron: hoy
+    // son 12 la primera vez y 0 en cada corrida siguiente.
+    const punteros = punterosARefrescar(salteadas, previo);
+    let punterosMovidos = 0;
+    let errorDePunteros: string | undefined;
+
+    for (const p of punteros) {
+      const { error } = await admin
+        .from("compras_requerimientos")
+        .update({ hoja_origen: p.hoja_origen, sheets_fila: p.sheets_fila })
+        .eq("nro_ri", p.nro_ri);
+      // No se corta la corrida por esto: el puntero de un RI ya gestionado no
+      // vale lo que el alta de los que entraron nuevos. Se guarda el primer
+      // motivo para decirlo en el resultado y se sigue.
+      if (error) errorDePunteros ??= `RI ${p.nro_ri}: ${error.message}`;
+      else punterosMovidos++;
+    }
+
     const resultado: ResultadoSync = {
       filas_leidas: leidas,
       filas_nuevas: nuevas,
@@ -579,6 +661,8 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       comparativas: aEscribir.filter((f) => f.comparativa_drive_id).length,
       comparativas_sin_planilla: sinPlanilla.length,
       ...(errorDeLinks ? { comparativas_error: errorDeLinks } : {}),
+      punteros_actualizados: punterosMovidos,
+      ...(errorDePunteros ? { punteros_error: errorDePunteros } : {}),
     };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);

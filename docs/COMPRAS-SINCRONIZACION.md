@@ -22,6 +22,17 @@ el código de una ruta: así no depende de que alguien se acuerde de marcarlo.
 Los RI que nadie tocó en el sistema se siguen actualizando desde la planilla con
 normalidad.
 
+**La marca protege el dato, no la posición.** De la fila salteada se sigue
+leyendo *dónde está* (`hoja_origen` y `sheets_fila`), que es lo único con lo que
+la exportación sabe en qué celda escribir. Mientras se salteaba la fila entera,
+esos dos punteros se congelaban — y se congelaban en el peor momento: aprobar
+desde el sistema es lo que pone la marca, y también es lo que hace que el
+`FILTER` lleve el RI del master a la pestaña de su área. Resultado medido el
+10/09/2026: 12 requerimientos apuntando a una fila del master, y a ninguno se le
+escribía nunca `SOLICITA`, ni la comparativa, ni el proveedor, ni los costos,
+porque ese bloque exige una pestaña de área de verdad. El porqué largo está en
+`lib/compras/punteroDeLaPlanilla.ts`.
+
 ## Los dos sentidos
 
 **Planilla → sistema** (`importarDesdeSheets`)
