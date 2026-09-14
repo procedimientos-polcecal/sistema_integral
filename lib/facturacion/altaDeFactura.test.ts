@@ -249,3 +249,42 @@ describe("las notas", () => {
     expect(alta.fila.notas).toBe("llegó sin remito");
   });
 });
+
+describe("de dónde salieron los datos fiscales", () => {
+  /*
+   * Tres orígenes y no dos, desde que el lector saca la cabecera del texto del
+   * PDF cuando el comprobante no trae QR. No son la misma calidad de dato: el
+   * QR está firmado por ARCA y el texto lo interpreta un lector de patrones.
+   */
+  it("una cabecera leída del texto queda marcada como texto", () => {
+    const alta = prepararAlta(
+      { cabecera: cabeceraDe(TORRACO), origenDeLaCabecera: "texto", origen: "mail" },
+      CATALOGOS
+    );
+    expect(alta.fila.identificado_por).toBe("texto");
+  });
+
+  it("sin decir de dónde vino, se asume el QR, que es el caso normal", () => {
+    const alta = prepararAlta({ cabecera: cabeceraDe(TORRACO), origen: "mail" }, CATALOGOS);
+    expect(alta.fila.identificado_por).toBe("qr");
+  });
+
+  it("sin cabecera sigue siendo a mano, venga de donde venga", () => {
+    const alta = prepararAlta({ origenDeLaCabecera: "texto", origen: "papel" }, CATALOGOS);
+    expect(alta.fila.identificado_por).toBe("a mano");
+  });
+
+  /*
+   * Lo demás no cambia por el origen: una cabecera leída del texto resuelve la
+   * empresa y el proveedor igual que una del QR, porque los datos son los
+   * mismos y el cruce es por CUIT.
+   */
+  it("el texto resuelve empresa y proveedor igual que el QR", () => {
+    const alta = prepararAlta(
+      { cabecera: cabeceraDe(TORRACO), origenDeLaCabecera: "texto", origen: "mail" },
+      CATALOGOS
+    );
+    expect(alta.fila.empresa_id).toBe("emp-polcecal");
+    expect(alta.fila.proveedor_id).toBe("prov-torraco");
+  });
+});
