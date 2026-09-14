@@ -135,7 +135,20 @@ equivocado no se nota nunca — el dato aparece en el lugar que no es.
 npm test              # vitest — la lógica pura, que es donde están las decisiones
 npx tsc --noEmit
 npm run build
+node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
 ```
+
+**El último es el que atrapa lo que los otros tres no pueden.** Los tres primeros
+miran **el disco**; Vercel construye **el árbol commiteado**, y en este repo esos
+dos no son lo mismo: como suele haber otra sesión en el mismo árbol, se commitea
+con rutas explícitas y a veces se pushea armando el árbol con plumbing, y las dos
+cosas copian sólo lo que se nombra. Un archivo nuevo que quedó *staged* y nunca
+se commiteó no viaja, mientras los que lo importan sí — y nada avisa, porque
+`git push` confirma que la ref se movió, no que el árbol esté completo. Eso tiró
+**cuatro deploys seguidos** el 14/09/2026 con un `Module not found` que el build
+local no podía reproducir. El script resuelve todos los imports del árbol de git
+contra sí mismo; sin argumento mira `origin/main`, y acepta una ref para revisar
+otra cosa.
 
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
