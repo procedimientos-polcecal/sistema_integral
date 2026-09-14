@@ -4,7 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { paginaPedida } from "@/lib/core/paginado";
-import { ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario } from "@/lib/compras/formulario";
+import {
+  ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario, maximoDeLaSerieEnLaPlanilla,
+} from "@/lib/compras/formulario";
+import { proximoNroRi } from "@/lib/compras/serieDeRi";
 
 /**
  * Cuánto puede tardar el POST antes de que la plataforma lo mate.
@@ -99,6 +102,18 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
+  // El piso de la serie sale de las dos fuentes que la reparten, y no sólo de
+  // la base. La base se entera de las respuestas del formulario cuando corre la
+  // sincronización —cada quince minutos—, así que en esa ventana su máximo
+  // miente por defecto y el sistema elegía un número que el Apps Script ya
+  // había repartido. Pasó en el primer alta real, el 14/09/2026. El porqué
+  // completo, y lo que este arreglo NO cierra, están en `serieDeRi.ts`.
+  //
+  // Va afuera del bucle: es una llamada a Google y los reintentos de acá abajo
+  // son por choques de la base, que se resuelven sumando uno. Si la planilla no
+  // se puede leer devuelve 0 y la cuenta queda como estaba.
+  const enLaPlanilla = await maximoDeLaSerieEnLaPlanilla();
+
   for (let intento = 0; intento < 5; intento++) {
     const { data: ultimo } = await admin
       .from("compras_requerimientos")
@@ -107,7 +122,7 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    const nro_ri = (ultimo?.nro_ri ?? 0) + 1 + intento;
+    const nro_ri = proximoNroRi([ultimo?.nro_ri ?? 0, enLaPlanilla]) + intento;
 
     const { data, error } = await admin
       .from("compras_requerimientos")
