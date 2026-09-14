@@ -2,8 +2,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
-import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
-import { agruparPesadasPorFleteroTipoMes, toneladasPorYacimientoDesdePesadas } from "@/lib/cantera/pesadas";
+import { resumenPorFletero, totalesPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import {
+  agruparPesadasPorFleteroTipoMes,
+  agruparPesadasPorTipoMes,
+  toneladasPorYacimientoDesdePesadas,
+} from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
 /**
@@ -57,11 +61,24 @@ export default async function AcarreoPage({
   const totalGeneral = resumenes.reduce((s, r) => s + r.resumen.totalMonto, 0);
   const sinFleteroResuelto = pesadasDelMes.filter((p) => !p.fletero_id).length;
 
+  // Todo lo que la empresa movió ese mes, material + actividades, sin
+  // depender de a quién se le pudo atribuir el viaje — "RESUMEN ANUAL DE
+  // MATERIALES" de la planilla real. Las pesadas van sin filtrar por
+  // fletero a propósito (ver `agruparPesadasPorTipoMes`).
+  const totalesDelMes = totalesPorTipo(
+    [
+      ...acarreosDelMes.map((a) => ({ tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
+      ...agruparPesadasPorTipoMes(pesadasDelMes),
+    ],
+    mes
+  );
+
   return (
     <AcarreoClient
       mes={mes}
       resumenes={resumenes.map((r) => ({ fletero: r.fletero, resumen: r.resumen }))}
       toneladas={toneladas}
+      totalesDelMes={totalesDelMes}
       totalGeneral={totalGeneral}
       puedeEditar={permisos.puedeEditar}
       esAdmin={permisos.esAdmin}

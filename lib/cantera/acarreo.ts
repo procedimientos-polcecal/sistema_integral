@@ -155,3 +155,42 @@ export interface FilaToneladasPorYacimiento {
  * ambigüedad de "Caliza" sin adivinar: una pesada de caliza con origen C1 es
  * de C1, no hace falta excluirla.
  */
+
+export interface FilaTotalPorTipo {
+  tipo: string;
+  etiqueta: string;
+  unidad: UnidadDeAcarreo;
+  cantidad: number;
+}
+
+/**
+ * El total de la empresa en un mes, por tipo de material o actividad —la
+ * pestaña "RESUMEN ANUAL DE MATERIALES" de la planilla real, que junta a
+ * todos los fleteros por renglón. A diferencia de `resumenPorFletero`, no
+ * hace falta saber quién hizo cada viaje: recibe cualquier lista con
+ * `{tipo, mes, cantidad}` —tanto `cantera_acarreos` como las pesadas ya
+ * agrupadas por tipo y mes (`agruparPesadasPorTipoMes` de `pesadas.ts`, que
+ * a propósito no filtra por fletero, por la misma razón que
+ * `toneladasPorYacimientoDesdePesadas`— y suma todo junto.
+ *
+ * Sólo entran los tipos con algo cargado ese mes: el usuario pidió ver "todo
+ * lo que sea distinto a 0", no las diecinueve filas siempre.
+ */
+export function totalesPorTipo(
+  entradas: { tipo: string; mes: string; cantidad: number }[],
+  mes: string
+): FilaTotalPorTipo[] {
+  const totales = new Map<string, number>();
+  for (const e of entradas) {
+    if (e.mes.slice(0, 7) !== mes.slice(0, 7)) continue;
+    totales.set(e.tipo, (totales.get(e.tipo) ?? 0) + e.cantidad);
+  }
+
+  return [...totales.entries()]
+    .filter(([, cantidad]) => cantidad !== 0)
+    .map(([tipo, cantidad]) => {
+      const t = tipoDeAcarreo(tipo);
+      return { tipo, etiqueta: t?.etiqueta ?? tipo, unidad: t?.unidad ?? "tonelada", cantidad };
+    })
+    .sort((a, b) => b.cantidad - a.cantidad);
+}

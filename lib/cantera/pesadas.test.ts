@@ -4,7 +4,9 @@ import {
   fechaDatosAIso,
   pesadaDeFilaCruda,
   agruparPesadasPorFleteroTipoMes,
+  agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
+  patentesParaMostrar,
 } from "./pesadas";
 import type { PesadaDB } from "./types";
 
@@ -161,5 +163,39 @@ describe("toneladasPorYacimientoDesdePesadas", () => {
       { fecha: "2026-08-01", origen: null, toneladas: 20 },
     ]);
     expect(r).toEqual([]);
+  });
+});
+
+describe("patentesParaMostrar", () => {
+  it("un fletero con un solo camión, una patente con espacio", () => {
+    expect(patentesParaMostrar("Amaray")).toBe("XAG 816");
+  });
+
+  it("Schneider tiene dos camiones: las dos patentes, no sólo la primera", () => {
+    expect(patentesParaMostrar("Schneider")).toBe("GBL 929 / VGC 250");
+  });
+
+  it("un nombre que no es uno de los 11 conocidos, null", () => {
+    expect(patentesParaMostrar("Conte Gaston")).toBeNull();
+  });
+});
+
+describe("agruparPesadasPorTipoMes", () => {
+  function pesada(p: Partial<PesadaDB>): PesadaDB {
+    return {
+      id: "1", fecha: "2026-08-15", hora: null, bruto: null, tara: null,
+      tipo: "dolomita_d1", toneladas: 10, origen: null, destino: null,
+      fletero_raw: null, fletero_id: null,
+      ...p,
+    };
+  }
+
+  it("suma por tipo y mes sin mirar el fletero — una sin fletero resuelto también cuenta", () => {
+    const r = agruparPesadasPorTipoMes([pesada({ toneladas: 10, fletero_id: "f1" }), pesada({ toneladas: 5, fletero_id: null })]);
+    expect(r).toEqual([{ tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 15 }]);
+  });
+
+  it("sin tipo (destape) no entra", () => {
+    expect(agruparPesadasPorTipoMes([pesada({ tipo: null })])).toEqual([]);
   });
 });

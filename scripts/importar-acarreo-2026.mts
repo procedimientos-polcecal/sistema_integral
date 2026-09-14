@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { leerValores } from "../lib/core/sheets.ts";
-import { FLETEROS_CONOCIDOS, pesadaDeFilaCruda } from "../lib/cantera/pesadas.ts";
+import { FLETEROS_CONOCIDOS, pesadaDeFilaCruda, patentesParaMostrar } from "../lib/cantera/pesadas.ts";
 import { TIPOS_DE_ACARREO } from "../lib/cantera/acarreo.ts";
 
 for (const line of readFileSync(new URL("../.env.local", import.meta.url), "utf-8").split("\n")) {
@@ -28,11 +28,10 @@ const sb = createClient(
   { auth: { persistSession: false } }
 );
 
-// ── 1. Fleteros: los 11 conocidos, con su patente principal ──
+// ── 1. Fleteros: los 11 conocidos, con sus patentes (Schneider tiene dos) ──
 console.log("── Fleteros ──");
-const patentePrincipal = new Map(FLETEROS_CONOCIDOS.map((f) => [f.nombre, f.patentes[0]]));
 if (escribir) {
-  const filas = FLETEROS_CONOCIDOS.map((f) => ({ nombre: f.nombre, patente: patentePrincipal.get(f.nombre) ?? null }));
+  const filas = FLETEROS_CONOCIDOS.map((f) => ({ nombre: f.nombre, patente: patentesParaMostrar(f.nombre) }));
   const { error } = await sb.from("cantera_fleteros").upsert(filas, { onConflict: "nombre" });
   if (error) console.log(`  ! ${error.message}`);
 }
@@ -95,6 +94,14 @@ if (sinResolver > 0) {
 }
 
 if (escribir) {
+  // Sin clave natural (dos pesadas bien podrían tener misma fecha/hora/bruto)
+  // no hay con qué hacer upsert: se borra todo y se recarga entero cada vez.
+  // Es seguro porque esta tabla es 100% reproducible desde "Datos" —nada acá
+  // lo carga a mano—, y evita el error real que ya pasó una vez de insertar
+  // sobre lo que ya estaba y duplicar 7500 filas.
+  const { error: errDel } = await sb.from("cantera_pesadas").delete().not("id", "is", null);
+  if (errDel) { console.log(`  ! borrando lo anterior: ${errDel.message}`); process.exit(1); }
+
   const filas = pesadas.map((p) => ({
     fecha: p.fecha,
     hora: p.hora,
@@ -115,7 +122,7 @@ if (escribir) {
     if (error) { console.log(`  ! lote ${i}: ${error.message}`); break; }
     insertadas += lote.length;
   }
-  console.log(`  ${insertadas} pesadas insertadas.`);
+  console.log(`  ${insertadas} pesadas insertadas (reemplazan lo que hubiera antes).`);
 }
 
 // ── 4. Las tres actividades sin pesada, desde "Ingreso de Datos" ──

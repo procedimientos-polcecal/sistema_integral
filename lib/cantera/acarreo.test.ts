@@ -3,6 +3,7 @@ import {
   tarifaVigente,
   montoAcarreo,
   resumenPorFletero,
+  totalesPorTipo,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -82,6 +83,36 @@ describe("resumenPorFletero", () => {
     const r = resumenPorFletero(acarreos, [], "f1", "2026-08");
     expect(r.sinTarifa).toEqual(["arcilla"]);
     expect(r.totalMonto).toBe(0);
+  });
+});
+
+describe("totalesPorTipo", () => {
+  it("suma todos los fleteros juntos, por tipo, del mes pedido", () => {
+    const entradas = [
+      { tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 100 },
+      { tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 50 }, // otro fletero, mismo tipo: se suma
+      { tipo: "horas_destape", mes: "2026-08-01", cantidad: 10 },
+      { tipo: "dolomita_d1", mes: "2026-07-01", cantidad: 999 }, // otro mes, no cuenta
+    ];
+    const r = totalesPorTipo(entradas, "2026-08");
+    expect(r).toContainEqual({ tipo: "dolomita_d1", etiqueta: "Dolomita D1", unidad: "tonelada", cantidad: 150 });
+    expect(r).toContainEqual({ tipo: "horas_destape", etiqueta: "Horas destape", unidad: "hora", cantidad: 10 });
+  });
+
+  it("lo que da 0 en el mes no aparece — sólo lo distinto de cero", () => {
+    const r = totalesPorTipo([{ tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 0 }], "2026-08");
+    expect(r).toEqual([]);
+  });
+
+  it("ordena de mayor a menor cantidad", () => {
+    const r = totalesPorTipo(
+      [
+        { tipo: "horas_destape", mes: "2026-08-01", cantidad: 5 },
+        { tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 500 },
+      ],
+      "2026-08"
+    );
+    expect(r.map((f) => f.tipo)).toEqual(["dolomita_d1", "horas_destape"]);
   });
 });
 

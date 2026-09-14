@@ -2,7 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { tipoDeAcarreo, ETIQUETA_UNIDAD, type FilaResumenFletero, type FilaToneladasPorYacimiento } from "@/lib/cantera/acarreo";
+import {
+  tipoDeAcarreo,
+  ETIQUETA_UNIDAD,
+  type FilaResumenFletero,
+  type FilaToneladasPorYacimiento,
+  type FilaTotalPorTipo,
+} from "@/lib/cantera/acarreo";
 import type { Fletero } from "@/lib/cantera/types";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -13,6 +19,7 @@ export default function AcarreoClient({
   mes,
   resumenes,
   toneladas,
+  totalesDelMes,
   totalGeneral,
   puedeEditar,
   esAdmin,
@@ -21,6 +28,7 @@ export default function AcarreoClient({
   mes: string;
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
   toneladas: FilaToneladasPorYacimiento[];
+  totalesDelMes: FilaTotalPorTipo[];
   totalGeneral: number;
   puedeEditar: boolean;
   esAdmin: boolean;
@@ -97,6 +105,28 @@ export default function AcarreoClient({
           {resumenes.length === 0 && (
             <p className="rounded-lg border border-slate-200 p-4 text-center text-sm text-slate-400">Sin acarreo cargado este mes.</p>
           )}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold text-slate-700">Total del mes, por tipo</h2>
+        <p className="text-xs text-slate-500">Todos los fleteros juntos — material, horas y viajes; sólo lo que tuvo movimiento este mes.</p>
+        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {totalesDelMes.map((t) => (
+                <tr key={t.tipo}>
+                  <td className="px-3 py-1.5 text-slate-700">{t.etiqueta}</td>
+                  <td className="px-3 py-1.5 text-right font-medium">
+                    {num.format(t.cantidad)} <span className="text-xs text-slate-400">{ETIQUETA_UNIDAD[t.unidad]}</span>
+                  </td>
+                </tr>
+              ))}
+              {totalesDelMes.length === 0 && (
+                <tr><td className="px-3 py-4 text-center text-slate-400">Sin movimiento este mes.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

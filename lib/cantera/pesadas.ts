@@ -61,6 +61,24 @@ function normalizarPatente(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+/** "GBL929" -> "GBL 929", para mostrar. Las de `FLETEROS_CONOCIDOS` van sin espacio para comparar. */
+function formatearPatente(p: string): string {
+  const m = normalizarPatente(p).match(/^([A-Z]+)(\d+)$/);
+  return m ? `${m[1]} ${m[2]}` : p;
+}
+
+/**
+ * La patente (o las dos) de un fletero conocido, para mostrar en el
+ * catálogo. Schneider tiene dos camiones —GBL 929 y VGC 250— y las dos
+ * cuentan para resolver sus pesadas (`normalizarFletero`); acá se muestran
+ * juntas para que el catálogo no esconda que hay dos.
+ */
+export function patentesParaMostrar(nombre: string): string | null {
+  const f = FLETEROS_CONOCIDOS.find((f) => f.nombre === nombre);
+  if (!f) return null;
+  return f.patentes.map(formatearPatente).join(" / ");
+}
+
 /**
  * Resuelve el texto de fletero de una fila de "Datos" a uno de los 11
  * conocidos, o `null` si no se puede sin adivinar.
@@ -253,5 +271,27 @@ export function agruparPesadasPorFleteroTipoMes(pesadas: PesadaDB[]): AcarreoPla
   return [...totales.entries()].map(([clave, cantidad]) => {
     const [fleteroId, tipo, mes] = clave.split("|");
     return { fleteroId, tipo, mes, cantidad };
+  });
+}
+
+/**
+ * Las pesadas sumadas por tipo y mes, **sin mirar el fletero** — para
+ * `totalesPorTipo` de `acarreo.ts`. El total de la empresa en "Dolomita D1"
+ * no depende de a quién se le pudo atribuir cada viaje, así que acá no se
+ * excluyen las pesadas con fletero sin resolver (a diferencia de
+ * `agruparPesadasPorFleteroTipoMes`, que sí las excluye porque ahí el fin es
+ * el pago).
+ */
+export function agruparPesadasPorTipoMes(pesadas: PesadaDB[]): { tipo: string; mes: string; cantidad: number }[] {
+  const totales = new Map<string, number>();
+  for (const p of pesadas) {
+    if (!p.tipo) continue;
+    const mes = `${p.fecha.slice(0, 7)}-01`;
+    const clave = `${p.tipo}|${mes}`;
+    totales.set(clave, (totales.get(clave) ?? 0) + p.toneladas);
+  }
+  return [...totales.entries()].map(([clave, cantidad]) => {
+    const [tipo, mes] = clave.split("|");
+    return { tipo, mes, cantidad };
   });
 }
