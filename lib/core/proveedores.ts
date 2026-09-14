@@ -158,3 +158,69 @@ export function proveedoresQueCoinciden<T extends { nombre: string }>(
     : proveedores;
   return lista.slice(0, cuantos);
 }
+
+/** Lo que hace falta saber de un proveedor para elegir entre duplicados. */
+export interface ProveedorIndexable {
+  id: string;
+  nombre: string;
+  cuit?: string | null;
+  created_at?: string | null;
+}
+
+/**
+ * Indexa el padron por la clave que se le pase, **eligiendo a conciencia**
+ * cuando dos filas caen en la misma.
+ *
+ * Existe por lo que paso el 14/09/2026. Las tres partes de Compras que resuelven
+ * un proveedor por nombre lo hacian con `new Map(filas.map(f => [clave, id]))`,
+ * y en un `Map` construido asi **gana el ultimo**. El ultimo de un `select` sin
+ * `order` es el que PostgREST haya querido devolver: no es una eleccion, es el
+ * azar. Mientras el padron no tuvo duplicados no se noto.
+ *
+ * Ese dia aparecieron 89 filas nuevas en mayuscula, sin CUIT, duplicando a
+ * proveedores que ya existian, y la sincronizacion de las 13:06 re-apunto
+ * **1.937 requerimientos** a ellas. Las buenas -con CUIT y con su enlace a
+ * Odoo- quedaron sin un solo requerimiento, y la generacion de ordenes de
+ * compra paso de 1.305 posibles a **cero**, sin un error en ninguna parte.
+ *
+ * La regla de desempate no es "el primero" sino la que sobrevive a que cambie
+ * el orden de la consulta:
+ *
+ *   1. **La que tiene CUIT.** Es la identificada, la que cruza con Odoo y la
+ *      que alguien cargo a proposito. Una fila que solo tiene un nombre salio
+ *      de leer una planilla.
+ *   2. **La mas vieja.** Si las dos estan identificadas, la que venia usandose.
+ *   3. **El id mas chico.** Para que el resultado no dependa nunca del orden en
+ *      que llegaron las filas, ni siquiera cuando las dos son iguales.
+ *
+ * No fusiona ni borra nada: `proveedores` es catalogo del nucleo y lo comparten
+ * los seis modulos. Esto solo decide a cual de las dos se apunta mientras el
+ * duplicado siga existiendo.
+ */
+export function indicePorClave(
+  proveedores: ProveedorIndexable[],
+  clave: (nombre: string) => string
+): Map<string, string> {
+  const mejor = new Map<string, ProveedorIndexable>();
+
+  for (const p of proveedores) {
+    const k = clave(p.nombre);
+    if (!k) continue;
+
+    const previo = mejor.get(k);
+    if (!previo || leGana(p, previo)) mejor.set(k, p);
+  }
+
+  return new Map([...mejor].map(([k, p]) => [k, p.id]));
+}
+
+/** Si `a` es mejor candidato que `b` para representar a la clave. */
+function leGana(a: ProveedorIndexable, b: ProveedorIndexable): boolean {
+  const identificada = (p: ProveedorIndexable) => Boolean(String(p.cuit ?? "").trim());
+  if (identificada(a) !== identificada(b)) return identificada(a);
+
+  const cuando = (p: ProveedorIndexable) => p.created_at ?? "";
+  if (cuando(a) !== cuando(b)) return cuando(a) < cuando(b);
+
+  return a.id < b.id;
+}

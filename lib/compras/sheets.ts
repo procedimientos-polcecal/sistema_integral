@@ -16,6 +16,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import { letraDeColumna, indiceDeColumna } from "@/lib/core/columnaDeSheets";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { numeroArgentino } from "@/lib/core/numeroArgentino";
+import { indicePorClave } from "@/lib/core/proveedores";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
@@ -714,10 +715,17 @@ async function asegurarAreas(admin: Admin, valores: unknown[]) {
 
 /** Igual, pero unificando variantes del nombre del proveedor. */
 async function asegurarProveedores(admin: Admin, valores: unknown[]) {
-  const { data: actuales } = await admin.from("proveedores").select("id, nombre");
-  const porClave = new Map(
-    (actuales ?? []).map((p) => [claveProveedor(p.nombre as string), p.id as string])
-  );
+  /*
+   * `cuit` y `created_at` no son decoración: son con lo que `indicePorClave`
+   * elige cuando el padrón tiene dos filas para el mismo proveedor. Con el
+   * `new Map(...)` que había acá ganaba la última que devolviera PostgREST, o
+   * sea el azar, y el 14/09/2026 eso re-apuntó 1.937 requerimientos a filas
+   * recién creadas sin CUIT.
+   */
+  const { data: actuales } = await admin
+    .from("proveedores")
+    .select("id, nombre, cuit, created_at");
+  const porClave = indicePorClave(actuales ?? [], claveProveedor);
 
   const nuevos = [...new Set(valores.filter(Boolean).map(String))]
     .filter((n) => claveProveedor(n) && !porClave.has(claveProveedor(n)));
@@ -727,7 +735,12 @@ async function asegurarProveedores(admin: Admin, valores: unknown[]) {
       .from("proveedores")
       .upsert(nuevos.map((nombre) => ({ nombre })), { onConflict: "nombre", ignoreDuplicates: true })
       .select("id, nombre");
-    for (const p of creados ?? []) porClave.set(claveProveedor(p.nombre as string), p.id as string);
+    for (const p of creados ?? []) {
+      // Reciennacidos: no hay con qué desempatar, y tampoco hace falta —se
+      // crearon justamente porque su clave no estaba—.
+      const k = claveProveedor(p.nombre as string);
+      if (!porClave.has(k)) porClave.set(k, p.id as string);
+    }
   }
   return porClave;
 }

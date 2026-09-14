@@ -8,6 +8,7 @@ import {
 } from "@/lib/compras/drive";
 import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
 import { claveProveedor } from "@/lib/compras/sheets";
+import { indicePorClave } from "@/lib/core/proveedores";
 
 /** Estados en los que la comparativa ya es el respaldo de una decisión tomada. */
 import { comparativaCongelada, tienePresupuestoElegido } from "@/lib/compras/congelada";
@@ -98,10 +99,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { propias, ajenas, sinRi } = filasParaEsteRi(planilla.filas, mapeo.idx.nro_ri, ri.nro_ri);
 
   // Proveedores por nombre normalizado, para resolver cada fila.
-  const { data: proveedores } = await admin.from("proveedores").select("id, nombre");
-  const porNombre = new Map(
-    (proveedores ?? []).map((p) => [claveProveedor(p.nombre), p.id as string])
-  );
+  // `cuit` y `created_at` deciden a cuál se apunta cuando el padrón tiene la
+  // misma clave dos veces: ver `indicePorClave`.
+  const { data: proveedores } = await admin
+    .from("proveedores")
+    .select("id, nombre, cuit, created_at");
+  const porNombre = indicePorClave(proveedores ?? [], claveProveedor);
 
   // Qué presupuesto estaba elegido, para no perderlo al reemplazar.
   //

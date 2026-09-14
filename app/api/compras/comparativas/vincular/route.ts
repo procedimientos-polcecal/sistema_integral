@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { leerLinksDeComparativa, claveProveedor } from "@/lib/compras/sheets";
+import { indicePorClave } from "@/lib/core/proveedores";
 import { archivosPorHacer, idDePlanilla } from "@/lib/compras/vincular";
 import { leerComparativa } from "@/lib/compras/drive";
 import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
@@ -71,10 +72,12 @@ export async function POST(request: Request) {
 
   // El padrón de proveedores, una vez: adentro del bucle serían cientos de
   // consultas para resolver los mismos nombres.
-  const { data: proveedores } = await admin.from("proveedores").select("id, nombre");
-  const porNombre = new Map(
-    (proveedores ?? []).map((p) => [claveProveedor(p.nombre), p.id as string])
-  );
+  // `cuit` y `created_at` deciden a cuál se apunta cuando el padrón tiene la
+  // misma clave dos veces: ver `indicePorClave`.
+  const { data: proveedores } = await admin
+    .from("proveedores")
+    .select("id, nombre, cuit, created_at");
+  const porNombre = indicePorClave(proveedores ?? [], claveProveedor);
 
   // Los requerimientos que todavía tiene sentido enlazar: los aprobados que no
   // se cerraron. Un denegado o un recibido no se va a volver a mirar.
