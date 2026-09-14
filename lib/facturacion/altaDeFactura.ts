@@ -47,8 +47,16 @@ export interface DatosAMano {
 }
 
 export interface PedidoDeAlta {
-  /** Lo que dio el QR, si se pudo leer. */
+  /** Lo que dio el QR —o el texto del PDF—, si se pudo leer. */
   cabecera?: CabeceraDelComprobante | null;
+  /**
+   * De dónde salió esa cabecera. Por defecto `qr`, que es el caso normal.
+   *
+   * Importa guardarlo: una cabecera leída del texto impreso vale menos que una
+   * firmada por ARCA, y si mañana un importe no cuadra ésa es la primera
+   * pregunta.
+   */
+  origenDeLaCabecera?: "qr" | "texto";
   /** Lo que puso la persona. Manda sobre el QR sólo donde el QR no dijo nada. */
   aMano?: DatosAMano;
   origen: OrigenDeFactura;
@@ -128,7 +136,11 @@ export function prepararAlta(
   const fecha = qr?.fecha ?? aMano.fecha ?? null;
   const importeTotal = primero(qr?.importeTotal, aMano.importeTotal);
 
-  const identificadoPor: IdentificadoPor = qr ? "qr" : "a mano";
+  const identificadoPor: IdentificadoPor = qr
+    ? pedido.origenDeLaCabecera === "texto"
+      ? "texto"
+      : "qr"
+    : "a mano";
 
   if (qr?.reparado) {
     avisos.push(

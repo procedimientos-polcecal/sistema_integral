@@ -1,8 +1,14 @@
 /** Por dónde entró la factura. Los cuatro valores que acepta el `check`. */
 export type OrigenDeFactura = "mail" | "papel" | "whatsapp" | "carga manual";
 
-/** Si los datos los leyó el QR o los tipeó una persona. */
-export type IdentificadoPor = "qr" | "a mano";
+/**
+ * De dónde salieron los datos fiscales.
+ *
+ * No son la misma calidad de dato y por eso se distinguen: `qr` está firmado
+ * por ARCA, `texto` lo interpretó el lector del PDF impreso —sólo cuando no hay
+ * QR— y `a mano` lo tipeó una persona.
+ */
+export type IdentificadoPor = "qr" | "texto" | "a mano";
 
 export type EstadoDeFactura = "recibida" | "vinculada" | "informada" | "contabilizada";
 

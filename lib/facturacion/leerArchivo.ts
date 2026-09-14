@@ -2,6 +2,7 @@ import { elegirLectura, type EleccionDeQr } from "./candidatos";
 import { buscarQr, buscarQrConVentanas, type PixelesDe } from "./escaneoQr";
 import { buscarLineas, type LecturaDeLineas } from "./lineasDelPdf";
 import { discriminaIva } from "./comprobante";
+import { leerCabeceraDelTexto } from "./cabeceraDelTexto";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 /**
@@ -79,7 +80,12 @@ export interface LecturaDeFactura extends EleccionDeQr {
   /** Cuánto tardó, en milisegundos. */
   tardo: number;
   /** Con qué pasada se encontró. Sirve para saber si conviene ajustar los anchos. */
-  comoSeEncontro: "página dibujada" | "ventanas" | null;
+  comoSeEncontro: "página dibujada" | "ventanas" | "texto del PDF" | null;
+  /**
+   * De dónde salió la cabecera. `texto` sólo cuando no se encontró QR: un
+   * dato firmado por ARCA siempre le gana a uno interpretado de lo impreso.
+   */
+  origenDeLaCabecera: "qr" | "texto" | null;
   /**
    * El detalle del comprobante, leído del texto del PDF.
    *
@@ -89,7 +95,10 @@ export interface LecturaDeFactura extends EleccionDeQr {
   detalle: LecturaDeLineas | null;
 }
 
-export async function leerFactura(archivo: File): Promise<LecturaDeFactura> {
+export async function leerFactura(
+  archivo: File,
+  opciones: { cuitsDelGrupo?: string[] } = {}
+): Promise<LecturaDeFactura> {
   const desde = Date.now();
   const esPdf =
     archivo.type === "application/pdf" || archivo.name.toLowerCase().endsWith(".pdf");
@@ -104,15 +113,44 @@ export async function leerFactura(archivo: File): Promise<LecturaDeFactura> {
    * marcado como que no se pudo confirmar — se muestra igual, pero nadie lo da
    * por bueno.
    */
+  /*
+   * ── El texto, sólo si no hubo QR ──
+   *
+   * Hay emisores que no imprimen el bloque de ARCA —ZITO Y PRIOLA son 280
+   * facturas al año— y su capa de texto está completa. El QR manda siempre: esto
+   * no compite con él, lo reemplaza cuando no está.
+   */
+  let cabecera = eleccion.cabecera;
+  let motivo = eleccion.motivo;
+  let comoSeEncontro = r.comoSeEncontro;
+  let origenDeLaCabecera: LecturaDeFactura["origenDeLaCabecera"] = cabecera ? "qr" : null;
+
+  if (!cabecera && r.filas.length) {
+    const delTexto = leerCabeceraDelTexto(r.filas, opciones.cuitsDelGrupo ?? []);
+    if (delTexto.cabecera) {
+      cabecera = delTexto.cabecera;
+      origenDeLaCabecera = "texto";
+      comoSeEncontro = "texto del PDF";
+      motivo = null;
+    } else if (delTexto.falta.length) {
+      // Decir qué falta es más útil que "no se encontró el QR" a secas: quien
+      // carga ya sabe qué campos va a tener que completar.
+      motivo = `${motivo ?? "No se encontró el QR."} Del texto tampoco salió ${delTexto.falta.join(", ")}.`;
+    }
+  }
+
   const detalle = r.filas.length
-    ? buscarLineas(r.filas, { netoEsperado: netoDelComprobante(eleccion.cabecera) })
+    ? buscarLineas(r.filas, { netoEsperado: netoDelComprobante(cabecera) })
     : null;
 
   return {
     ...eleccion,
+    cabecera,
+    motivo,
+    origenDeLaCabecera,
     paginas: r.paginas,
     vistaPrevia: r.vistaPrevia,
-    comoSeEncontro: r.comoSeEncontro,
+    comoSeEncontro,
     detalle,
     tardo: Date.now() - desde,
   };

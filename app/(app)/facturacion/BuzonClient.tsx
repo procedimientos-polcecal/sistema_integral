@@ -35,6 +35,8 @@ interface DondeApuntaOdoo {
 type EstadoDeFila =
   | "leyendo"
   | "lista"
+  /** Sin QR, pero la cabecera salió del texto del PDF. */
+  | "texto"
   | "sin-datos"
   | "guardando"
   | "guardada"
@@ -152,10 +154,18 @@ export default function BuzonClient({
 
     for (const fila of nuevas) {
       try {
-        const lectura = await leerFactura(fila.archivo);
+        const lectura = await leerFactura(fila.archivo, {
+          // Sin esto el lector de texto no puede distinguir al emisor del
+          // receptor: el CUIT que es del grupo es el que recibe.
+          cuitsDelGrupo: empresas.map((e) => e.cuit ?? "").filter(Boolean),
+        });
         cambiar(fila.id, {
           lectura,
-          estado: lectura.cabecera ? "lista" : "sin-datos",
+          estado: lectura.cabecera
+            ? lectura.origenDeLaCabecera === "texto"
+              ? "texto"
+              : "lista"
+            : "sin-datos",
           mensaje: lectura.cabecera ? null : lectura.motivo,
         });
       } catch (e) {
@@ -184,6 +194,7 @@ export default function BuzonClient({
       "datos",
       JSON.stringify({
         cabecera: fila.lectura?.cabecera ?? null,
+        origenDeLaCabecera: fila.lectura?.origenDeLaCabecera ?? "qr",
         origen,
         notas: fila.notas || null,
         // El detalle leído del texto del PDF. El servidor le pone el producto
@@ -772,7 +783,12 @@ function FilaDelBuzon({
             {factura.empresa ?? "empresa sin definir"}
             {" · "}
             <span className="text-slate-400">
-              {factura.origen} · {factura.identificado_por === "qr" ? "leída del QR" : "a mano"}
+              {factura.origen} ·{" "}
+              {factura.identificado_por === "qr"
+                ? "leída del QR"
+                : factura.identificado_por === "texto"
+                  ? "leída del texto"
+                  : "a mano"}
             </span>
           </div>
         </div>
@@ -977,6 +993,7 @@ function Insignia({ estado }: { estado: EstadoDeFila }) {
   const estilos: Record<EstadoDeFila, string> = {
     leyendo: "bg-slate-100 text-slate-500",
     lista: "bg-emerald-50 text-emerald-700",
+    texto: "bg-sky-50 text-sky-800",
     "sin-datos": "bg-amber-50 text-amber-800",
     guardando: "bg-slate-100 text-slate-500",
     guardada: "bg-emerald-600 text-white",
@@ -986,6 +1003,7 @@ function Insignia({ estado }: { estado: EstadoDeFila }) {
   const texto: Record<EstadoDeFila, string> = {
     leyendo: "leyendo",
     lista: "leída del QR",
+    texto: "leída del texto",
     "sin-datos": "hay que completar",
     guardando: "cargando",
     guardada: "en el buzón",

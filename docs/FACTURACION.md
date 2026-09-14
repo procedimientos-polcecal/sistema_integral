@@ -189,6 +189,57 @@ módulo está detrás del login.
   comprobante: cambiarlos lo convertiría en otro. Una cargada con el número
   equivocado se anota y se carga la buena.
 
+## Cuando no hay QR, la cabecera sale del texto
+
+Hay emisores que no imprimen el bloque de ARCA. El caso grande es **ZITO Y
+PRIOLA: 280 facturas en 2026**, el que más factura del grupo, y sus PDF son
+"copia del original". Hoy esas se tipean enteras. Su capa de texto, en cambio,
+está completa — la misma que ya se usa para el detalle.
+
+**El QR manda siempre.** El texto se lee **sólo si no se encontró QR**: uno es un
+dato firmado por ARCA, el otro un diseño impreso que cada sistema arma como
+quiere. No compiten.
+
+### Lo único que podía salir mal y no notarse
+
+Una factura trae dos CUIT —emisor y receptor— y confundirlos pondría la factura a
+nombre del grupo. **No se resuelve por posición en la hoja**, porque cada diseño
+la pone donde quiere, sino por un dato que ya tenemos: el CUIT que es de una de
+las dos empresas del grupo es el **receptor**; el otro es el **emisor**.
+Determinístico, no heurístico. Hay un test que lee las filas al revés y saca lo
+mismo.
+
+### Las otras trampas, una por campo
+
+- **El número no es un CUIT.** `20-16581164-0` tiene la forma de un par
+  `punto de venta - número`; el patrón exige cuatro o cinco dígitos del lado
+  izquierdo, que es lo que los separa.
+- **La fecha de emisión no es la de vencimiento** ni la de inicio de actividades:
+  una factura trae tres o cuatro fechas. Se descartan las filas que dicen `Vto`,
+  `Venc` o `Inicio`. Y se lee **d/m**, que ya dio vuelta 885 fechas en Compras
+  cuando se leyó al revés.
+- **El total no es el subtotal**: de las filas que dicen `TOTAL` y no `SUBTOTAL`
+  se toma el número más grande.
+- **El tipo sale del código impreso** (`Cod. 01`), que es el número de ARCA sin
+  intermediarios; si no está, se arma con el documento y la letra.
+
+### Cómo se puede medir esto, que es lo interesante
+
+**Cada factura que sí trae QR es un banco de pruebas.** Se lee el texto, se
+compara contra el QR —que es la verdad— y ahí se ve si acierta. Contra el PDF de
+ALMENTA, leído del bucket: los **siete campos** salen del texto y los siete
+coinciden con ARCA, CAE incluido.
+
+Lo que **no** está medido es la variedad: **un solo diseño probado**. Si aparece
+`G:\Mi unidad\FACTURAS`, correr el lector de texto sobre las 139 de septiembre y
+comparar contra sus QR da la cobertura real en una tarde. Mientras tanto, todo lo
+que no se encuentra queda vacío y lo completa una persona: el buzón nunca se
+bloquea y nunca inventa un número.
+
+`identificado_por` distingue ahora **tres** orígenes: `qr`, `texto` y `a mano`.
+No son la misma calidad de dato, y la columna existe justamente para poder
+preguntarlo después.
+
 ## A quién se le facturó: el emisor sale de Odoo, no del padrón
 
 **Es lo que destrabó más de la mitad de las facturas.** El buzón resolvía el
@@ -585,12 +636,9 @@ Acordarse de borrar las facturas de ahí después.
 
 ## Lo que queda pendiente
 
-1. **Las que no traen QR.** 12 de 139 en septiembre son copias sin el bloque de
-   ARCA (todas de ZITO Y PRIOLA, que factura seguido). Se pueden completar a mano,
-   pero si ese proveedor es habitual conviene pedirle el original — o leer el
-   **texto** del PDF, que en su caso está completo y legible: número, CUIT,
-   receptor e importe. Sería una cuarta pasada, y es la de mejor relación entre
-   trabajo y facturas rescatadas.
+1. ~~Las que no traen QR~~ **hecho**: ver
+   [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). Falta
+   medirlo contra más de un diseño de factura.
 2. **Los QR que jsQR no decodifica** (DON ALFREDO, RUBIALES, ERGUY). Probar otro
    decodificador —zxing— antes de darlos por perdidos.
 3. **Los QR que el PDF estira** (TODO RULEMAN). Se leerían corrigiendo la
