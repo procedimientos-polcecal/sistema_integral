@@ -125,8 +125,8 @@ if (escribir) {
   console.log(`  ${insertadas} pesadas insertadas (reemplazan lo que hubiera antes).`);
 }
 
-// ── 4. Las tres actividades sin pesada, desde "Ingreso de Datos" ──
-console.log("\n── Actividades manuales (Horas destape, Viaje de bloques, Hora bochones) ──");
+// ── 4. Actividades y materiales sin pesada, desde "Ingreso de Datos" ──
+console.log("\n── Actividades manuales (Horas destape, Viaje de bloques, Hora bochones, Materiales Pezzuchi) ──");
 const ingresoSheet = await leerValores(LIBRO, "Ingreso de Datos");
 const MESES_2026 = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"];
 // Las cuatro actividades sin pesada: el usuario nombró tres (destape, bloques,
@@ -135,12 +135,31 @@ const MESES_2026 = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026
 // igual que a las otras tres. Faltaba acá y explicaba un desvío real: a
 // Amaray de julio le faltaban exacto 8 viajes × $34.166,23 = $273.330, el
 // hueco completo contra la planilla real.
+//
+// "Materiales desde Pezzuchi" es un quinto renglón sin pesada, pero es
+// tonelada (no hora/viaje): a diferencia de todo el resto de los materiales,
+// no sale de la balanza de "Datos" — es piedra de un tercero (Pezzuchi) que
+// nunca pasa por la báscula propia, así que en la planilla real también se
+// carga a mano ahí. Sólo lo tienen Orsatti 2 y Schneider. Faltaba y explicaba
+// buena parte de sus desvíos de marzo contra la planilla real (Schneider
+// marzo: con esto el sistema da $13.596.085 contra $13.596.278 real —
+// diferencia de $193, redondeo de tarifa).
+//
+// El texto de la etiqueta no es el mismo en las dos pestañas: "Ingreso de
+// Datos" dice "Materiales desde Pezzuchi", pero "Tarifas" (de donde sale el
+// `codigo` en `TIPOS_DE_ACARREO`) dice "Materiales pezzuchi" — por eso el
+// alias en vez de agregarlo tal cual a `ACTIVIDADES_MANUALES`, que compara
+// contra el `etiqueta` exacto de `TIPOS_DE_ACARREO`.
 const ACTIVIDADES_MANUALES = new Set([
   "Horas destape",
   "Viaje de bloques",
   "Hora movimiento bochones pozo",
   "Viajes de estabilizado",
+  "Materiales desde Pezzuchi",
 ]);
+const ALIAS_ACTIVIDAD: Record<string, string> = {
+  "Materiales desde Pezzuchi": "Materiales Pezzuchi",
+};
 
 function fleteroDeBloque(encabezado: string): string | null {
   // "Amaray  –  XAG 816" -> "Amaray"; "Schneider 1 y 2 – GBL 929 - (VGC 250)"
@@ -166,14 +185,19 @@ for (const fila of ingresoSheet.slice(1)) {
   }
   const actividad = (fila[1] ?? "").trim();
   if (!fleteroActual || !ACTIVIDADES_MANUALES.has(actividad)) continue;
-  const tipo = TIPOS_DE_ACARREO.find((t) => t.etiqueta === actividad)?.codigo;
-  if (!tipo) continue;
+  const etiquetaBuscada = ALIAS_ACTIVIDAD[actividad] ?? actividad;
+  const t = TIPOS_DE_ACARREO.find((t) => t.etiqueta === etiquetaBuscada);
+  if (!t) continue;
+  // Los materiales (acá sólo Pezzuchi) están en kilos con "." de miles, igual
+  // que las columnas de "Datos"; la fórmula real de "Resumen" también divide
+  // por 1000. Las horas y viajes son un conteo simple, sin conversión.
+  const divisor = t.unidad === "tonelada" ? 1000 : 1;
   MESES_2026.forEach((mes, i) => {
     const texto = (fila[2 + i] ?? "").trim();
     if (!texto || texto === "-") return;
-    const cantidad = Number(texto.replace(/\./g, "").replace(",", "."));
-    if (!isFinite(cantidad) || cantidad <= 0) return;
-    acarreosPorNombre.push({ fleteroNombre: fleteroActual!, tipo, mes: `${mes}-01`, cantidad });
+    const cantidadCruda = Number(texto.replace(/\./g, "").replace(",", "."));
+    if (!isFinite(cantidadCruda) || cantidadCruda <= 0) return;
+    acarreosPorNombre.push({ fleteroNombre: fleteroActual!, tipo: t.codigo, mes: `${mes}-01`, cantidad: cantidadCruda / divisor });
   });
 }
 console.log(`  ${acarreosPorNombre.length} renglones mensuales para insertar.`);

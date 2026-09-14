@@ -9,8 +9,12 @@ import type { AcarreoDB, Fletero } from "@/lib/cantera/types";
 const INPUT_CLS = "w-28 rounded border border-slate-300 px-2 py-1 text-sm text-right disabled:bg-slate-50";
 
 // El material (toneladas) se cuenta solo desde las pesadas de balanza — sólo
-// lo que no pasa por la balanza (horas, viajes) se carga a mano acá.
-const TIPOS_MANUALES = TIPOS_DE_ACARREO.filter((t) => t.unidad !== "tonelada");
+// lo que no pasa por la balanza (horas, viajes) se carga a mano acá. La
+// excepción es "Materiales Pezzuchi": es tonelada pero no es piedra propia
+// pesada en la cantera, sino que llega de un tercero (Pezzuchi) y no pasa por
+// la balanza de "Datos" — en la planilla real también se carga a mano en
+// "Ingreso de Datos", nunca sale de una pesada.
+const TIPOS_MANUALES = TIPOS_DE_ACARREO.filter((t) => t.unidad !== "tonelada" || t.codigo === "materiales_pezzuchi");
 
 export default function CargarAcarreoClient({
   fleteros,
