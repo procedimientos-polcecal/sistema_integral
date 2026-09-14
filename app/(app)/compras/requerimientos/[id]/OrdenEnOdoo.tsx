@@ -43,12 +43,14 @@ export interface OrdenDeOdoo {
 }
 
 /**
- * La forma del ensayo que importa acá: qué producto propone y con qué
- * catálogo arma el selector. El resto de lo que trae el `GET` (precio,
- * contexto, `armado`...) se muestra tal cual con `JSON.stringify` y no
- * necesita tipo.
+ * La forma del ensayo que importa acá: qué producto propone, con qué catálogo
+ * arma el selector, y qué advertencias trae el armado. El resto de lo que trae
+ * el `GET` (precio, contexto, los `vals`...) se muestra tal cual con
+ * `JSON.stringify` y no necesita tipo.
  */
 interface EnsayoDeOrden {
+  /** Lo que se puede mandar igual, pero conviene mirar antes. */
+  armado?: { advertencias?: string[] };
   producto?: {
     sugerencia: {
       producto: ProductoDeOdoo | null;
@@ -280,6 +282,14 @@ export default function OrdenEnOdoo({
     // Arranca en lo que sugiere el emparejador; Compras lo puede cambiar antes
     // de crear. Sin sugerencia queda vacío, que es el genérico.
     setProductoId(String(body.producto?.sugerencia.producto?.id ?? ""));
+    /*
+     * Lo que el armado quiere que se mire antes de apretar —hoy, que un pedido
+     * AMBAS de cantidad impar le pide media unidad a cada proveedor—. Va al
+     * mismo cartel ámbar que el resto de los avisos: es para leer, no para
+     * buscar dentro del volcado.
+     */
+    const avisos = body.armado?.advertencias ?? [];
+    if (avisos.length) setAdvertencia(avisos.join(" "));
     setTrabajando(false);
   }
 

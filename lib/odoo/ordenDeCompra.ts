@@ -18,7 +18,11 @@
  * el id del build en el nombre.
  */
 
-import { PORCENTAJE_AMBAS, repartirAmbas } from "@/lib/compras/repartoAmbas";
+import {
+  PORCENTAJE_AMBAS,
+  cantidadQuedaFraccionada,
+  repartirAmbas,
+} from "@/lib/compras/repartoAmbas";
 
 /** Lo que hace falta saber del requerimiento. */
 export interface RequerimientoParaOrden {
@@ -140,7 +144,18 @@ export type Problema =
   | { tipo: "sin empresa"; detalle: string };
 
 export type ResultadoDeArmado =
-  | { ok: true; ordenes: OrdenParaOdoo[] }
+  | {
+      ok: true;
+      ordenes: OrdenParaOdoo[];
+      /**
+       * Lo que hay que mirar antes de mandar, pero no impide mandar.
+       *
+       * Distinto de `problemas`, que es lo que hace que no haya orden. Una
+       * advertencia describe una orden que se puede crear y que a alguien le
+       * puede no gustar — media unidad en cada empresa, por ejemplo—.
+       */
+      advertencias: string[];
+    }
   | { ok: false; problemas: Problema[] };
 
 /**
@@ -272,7 +287,33 @@ export function armarOrdenes(
     )
   );
 
-  return { ok: true, ordenes };
+  /*
+   * El 50/50 exacto y las cantidades enteras no se pueden cumplir los dos a la
+   * vez, y eso ya estaba resuelto y dicho en `repartoAmbas.ts`: se privilegia el
+   * importe. Lo que faltaba era **decirlo**. `cantidadQuedaFraccionada()` se
+   * escribió para avisarlo en pantalla antes de mandar nada —así lo dice su
+   * docstring y ODOO-INTEGRACION.md— pero no la llamaba nadie: existía, tenía
+   * tests, y la advertencia no llegaba a ninguna parte.
+   *
+   * No es un caso de borde. Medido el 14/09/2026 sobre los 645 requerimientos
+   * AMBAS con costo cargado: **246 quedan con media unidad en cada orden**. Una
+   * orden que le pide al proveedor 0,5 de una bomba se lee mal del otro lado, y
+   * quien la aprobó nunca vio que iba a salir así.
+   *
+   * No bloquea, porque hay casos donde partir la cantidad está bien —kilos,
+   * metros, horas— y porque la alternativa (romper el 50/50) es peor. Se avisa.
+   */
+  const advertencias: string[] = [];
+  if (esCompartido && cantidadQuedaFraccionada(cantidad, porcentaje)) {
+    const mitad = partes![0].cantidad;
+    advertencias.push(
+      `El pedido es de ${cantidad} y lo pagan las dos empresas, así que a cada orden le ` +
+        `tocan ${mitad} unidades. Si la cantidad no se puede partir, conviene ponerla a ` +
+        `nombre de una sola empresa.`
+    );
+  }
+
+  return { ok: true, ordenes, advertencias };
 }
 
 function armarUna(

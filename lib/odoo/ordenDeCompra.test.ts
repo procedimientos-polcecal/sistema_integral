@@ -399,3 +399,54 @@ describe("el producto de la línea", () => {
     expect(lineas(r.ordenes[0].vals)[0].product_uom).toBe(9);
   });
 });
+
+describe("la advertencia de cantidad fraccionada", () => {
+  const ambas = (cant: number | null) =>
+    armarOrdenes(
+      ri({ cantidad: cant, empresaId: null, pagaAmbas: true }),
+      cotizacion({ cantidad: cant }),
+      [POLCECAL, POLYSAN],
+      CONTEXTO
+    );
+
+  it("avisa cuando una cantidad impar se parte al medio", () => {
+    // Medido el 14/09/2026: 246 de los 645 RI AMBAS con costo caen aca. La
+    // orden se crea igual -partir el importe es lo acordado- pero quien
+    // aprueba tiene que ver que al proveedor le van a pedir media unidad.
+    const r = ambas(1);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.advertencias).toHaveLength(1);
+    expect(r.advertencias[0]).toContain("0.5");
+  });
+
+  it("la orden se arma igual: avisa, no bloquea", () => {
+    const r = ambas(3);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ordenes).toHaveLength(2);
+    expect(r.advertencias).toHaveLength(1);
+  });
+
+  it("con cantidad par no inventa una advertencia", () => {
+    const r = ambas(4);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.advertencias).toEqual([]);
+  });
+
+  it("una cantidad que ya venia fraccionada -kilos, metros- no se avisa", () => {
+    // 12,5 metros partidos en 6,25 y 6,25 no sorprenden a nadie.
+    const r = ambas(12.5);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.advertencias).toEqual([]);
+  });
+
+  it("una orden de una sola empresa nunca se parte, asi que nunca avisa", () => {
+    const r = armarOrdenes(ri({ cantidad: 1 }), cotizacion({ cantidad: 1 }), [POLCECAL], CONTEXTO);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.advertencias).toEqual([]);
+  });
+});
