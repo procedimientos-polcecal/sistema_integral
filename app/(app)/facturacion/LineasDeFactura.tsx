@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Buscador, { type Opcion } from "./Buscador";
 import {
   describirDistribucion,
   repartirEnPartesIguales,
@@ -149,6 +150,25 @@ function Linea({
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
+  /*
+   * Los tres catálogos se convierten una vez por línea y no en cada tecla: son
+   * 378 + 242 + 358 filas, y rehacerlas mientras alguien escribe se nota.
+   */
+  const opcionesDeProducto = useMemo<Opcion[]>(
+    () => (catalogos?.productos ?? []).map((p) => ({ id: p.id, texto: p.nombre })),
+    [catalogos]
+  );
+  const opcionesDeCuenta = useMemo<Opcion[]>(
+    () => (catalogos?.cuentas ?? []).map((c) => ({ id: c.id, texto: `${c.codigo} ${c.nombre}` })),
+    [catalogos]
+  );
+  // Agrupadas por plan: sin el plan —EQUIPOS MÓVILES, MANTENIMIENTO— una lista
+  // de 358 nombres sueltos no se recorre.
+  const opcionesDeAnalitica = useMemo<Opcion[]>(
+    () => (catalogos?.analiticas ?? []).map((a) => ({ id: a.id, texto: a.nombre, grupo: a.plan })),
+    [catalogos]
+  );
+
   async function guardar(cambios: Record<string, unknown>) {
     setGuardando(true);
     setAviso(null);
@@ -164,22 +184,6 @@ function Linea({
       return;
     }
     onGuardada(datos.linea);
-  }
-
-  function cambiarProducto(id: string) {
-    const producto = catalogos?.productos.find((p) => String(p.id) === id);
-    void guardar({
-      odoo_product_id: producto?.id ?? null,
-      odoo_product_nombre: producto?.nombre ?? null,
-    });
-  }
-
-  function cambiarCuenta(id: string) {
-    const cuenta = catalogos?.cuentas.find((c) => String(c.id) === id);
-    void guardar({
-      odoo_account_id: cuenta?.id ?? null,
-      odoo_account_nombre: cuenta ? `${cuenta.codigo} ${cuenta.nombre}` : null,
-    });
   }
 
   function agregarAnalitica(id: string) {
@@ -221,46 +225,44 @@ function Linea({
       </div>
 
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <label className="block">
-          <span className="block text-[10px] uppercase tracking-wide text-slate-400">
-            Producto
-            {/* De dónde salió: lo propuso una regla, lo aprendió de una
-                corrección anterior, o lo eligió una persona. */}
-            {linea.producto_origen && (
-              <span className="ml-1 normal-case text-slate-400">· {linea.producto_origen}</span>
-            )}
-          </span>
-          <select
-            value={linea.odoo_product_id ?? ""}
-            disabled={!puedeEditar || guardando || !catalogos}
-            onChange={(e) => cambiarProducto(e.target.value)}
-            className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-xs disabled:bg-slate-50"
-          >
-            <option value="">— sin producto —</option>
-            {catalogos?.productos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Buscador
+          etiqueta={
+            <>
+              Producto
+              {/* De dónde salió: lo propuso una regla, lo aprendió de una
+                  corrección anterior, o lo eligió una persona. */}
+              {linea.producto_origen && (
+                <span className="ml-1 normal-case">· {linea.producto_origen}</span>
+              )}
+            </>
+          }
+          opciones={opcionesDeProducto}
+          valor={linea.odoo_product_id}
+          textoDelValor={linea.odoo_product_nombre}
+          deshabilitado={!puedeEditar || guardando || !catalogos}
+          vacio="— sin producto —"
+          onElegir={(o) =>
+            void guardar({
+              odoo_product_id: o?.id ?? null,
+              odoo_product_nombre: o?.texto ?? null,
+            })
+          }
+        />
 
-        <label className="block">
-          <span className="block text-[10px] uppercase tracking-wide text-slate-400">Cuenta</span>
-          <select
-            value={linea.odoo_account_id ?? ""}
-            disabled={!puedeEditar || guardando || !catalogos}
-            onChange={(e) => cambiarCuenta(e.target.value)}
-            className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-xs disabled:bg-slate-50"
-          >
-            <option value="">— la que ponga Odoo —</option>
-            {catalogos?.cuentas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.codigo} {c.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Buscador
+          etiqueta="Cuenta"
+          opciones={opcionesDeCuenta}
+          valor={linea.odoo_account_id}
+          textoDelValor={linea.odoo_account_nombre}
+          deshabilitado={!puedeEditar || guardando || !catalogos}
+          vacio="— la que ponga Odoo —"
+          onElegir={(o) =>
+            void guardar({
+              odoo_account_id: o?.id ?? null,
+              odoo_account_nombre: o?.texto ?? null,
+            })
+          }
+        />
       </div>
 
       <div className="mt-2">
@@ -305,34 +307,16 @@ function Linea({
 
         {puedeEditar && (
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <select
-              value=""
-              disabled={guardando || !catalogos}
-              onChange={(e) => agregarAnalitica(e.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 text-xs disabled:bg-slate-50"
-            >
-              <option value="">+ agregar una cuenta analítica…</option>
-              {/* Agrupadas por plan: son ~360 por empresa y sin el plano
-                  —EQUIPOS MÓVILES, MANTENIMIENTO— no se encuentra ninguna. */}
-              {Object.entries(
-                (catalogos?.analiticas ?? []).reduce<Record<string, Catalogos["analiticas"]>>(
-                  (grupos, a) => {
-                    const plan = a.plan ?? "Sin plan";
-                    (grupos[plan] ??= []).push(a);
-                    return grupos;
-                  },
-                  {}
-                )
-              ).map(([plan, cuentas]) => (
-                <optgroup key={plan} label={plan}>
-                  {cuentas.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.nombre}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <div className="min-w-[14rem]">
+              <Buscador
+                etiqueta=""
+                opciones={opcionesDeAnalitica}
+                valor={null}
+                deshabilitado={guardando || !catalogos}
+                vacio="+ agregar una cuenta analítica…"
+                onElegir={(o) => o && agregarAnalitica(String(o.id))}
+              />
+            </div>
 
             {sinGuardar && (
               <button

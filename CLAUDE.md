@@ -9,8 +9,14 @@ Ocho módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
 
 **Facturación se enlaza con el Odoo del grupo**, que es donde vive la
-contabilidad de verdad. La regla que gobierna ese enlace: **el SdG propone, Odoo
-confirma** — el SdG no postea asientos ni reemplaza la carga contable.
+contabilidad de verdad. La regla que gobernaba ese enlace era **el SdG propone,
+Odoo confirma**; desde el 11/09/2026, a pedido, el SdG **también puede postear**
+el borrador que él mismo creó, con dos condiciones: que una persona lo confirme
+explícitamente y que el total coincida con el comprobante. Lo que no cambió es
+que **el SdG no inventa asientos**: postea el que creó desde una factura que
+entró por el buzón, nunca uno armado a mano. Un asiento posteado es inmutable,
+así que esa acción no se deshace desde el sistema — el detalle está en
+[docs/FACTURACION.md](docs/FACTURACION.md).
 
 Todo se escribe en **castellano**: nombres, comentarios, mensajes de pantalla y
 de commit.
