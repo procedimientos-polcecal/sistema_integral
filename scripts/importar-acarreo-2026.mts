@@ -129,7 +129,18 @@ if (escribir) {
 console.log("\n── Actividades manuales (Horas destape, Viaje de bloques, Hora bochones) ──");
 const ingresoSheet = await leerValores(LIBRO, "Ingreso de Datos");
 const MESES_2026 = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"];
-const ACTIVIDADES_MANUALES = new Set(["Horas destape", "Viaje de bloques", "Hora movimiento bochones pozo"]);
+// Las cuatro actividades sin pesada: el usuario nombró tres (destape, bloques,
+// bochones); "Viajes de estabilizado" es la cuarta — no la nombró pero está en
+// el mismo bloque de "Ingreso de Datos" y la fórmula real de "Resumen" la usa
+// igual que a las otras tres. Faltaba acá y explicaba un desvío real: a
+// Amaray de julio le faltaban exacto 8 viajes × $34.166,23 = $273.330, el
+// hueco completo contra la planilla real.
+const ACTIVIDADES_MANUALES = new Set([
+  "Horas destape",
+  "Viaje de bloques",
+  "Hora movimiento bochones pozo",
+  "Viajes de estabilizado",
+]);
 
 function fleteroDeBloque(encabezado: string): string | null {
   // "Amaray  –  XAG 816" -> "Amaray"; "Schneider 1 y 2 – GBL 929 - (VGC 250)"
