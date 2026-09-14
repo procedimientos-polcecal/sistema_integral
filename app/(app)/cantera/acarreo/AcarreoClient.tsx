@@ -101,7 +101,7 @@ export default function AcarreoClient({
 
       <section className="mt-6">
         <h2 className="text-sm font-semibold text-slate-700">Toneladas por yacimiento</h2>
-        <p className="text-xs text-slate-500">No incluye "Caliza": puede venir de C1 o de C3 y la carga no distingue cuál.</p>
+        <p className="text-xs text-slate-500">Por el origen real de cada pesada — todos los materiales, incluida Caliza.</p>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {toneladas.filter((t) => t.mes === mes).map((t) => (
             <div key={t.yacimientoCodigo} className="rounded-lg border border-slate-200 p-3 text-center">

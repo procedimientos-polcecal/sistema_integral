@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
-import { resumenPorFletero, toneladasPorYacimiento, type AcarreoPlano } from "@/lib/cantera/acarreo";
-import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { agruparPesadasPorFleteroTipoMes, toneladasPorYacimientoDesdePesadas } from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
 /**
@@ -51,7 +51,9 @@ export default async function AcarreoPage({
     .map((f) => ({ fletero: f, resumen: resumenPorFletero(acarreosPlanos, tarifas, f.id, mes) }))
     .filter((r) => r.resumen.porTipo.length > 0);
 
-  const toneladas = toneladasPorYacimiento(acarreosPlanos);
+  // Por origen real de la pesada, no por fletero ni por nombre de material —
+  // ver el comentario grande en `toneladasPorYacimientoDesdePesadas`.
+  const toneladas = toneladasPorYacimientoDesdePesadas(pesadasDelMes);
   const totalGeneral = resumenes.reduce((s, r) => s + r.resumen.totalMonto, 0);
   const sinFleteroResuelto = pesadasDelMes.filter((p) => !p.fletero_id).length;
 

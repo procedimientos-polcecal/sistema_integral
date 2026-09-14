@@ -7,12 +7,13 @@
  * unidad de cada uno (tonelada/hora/viaje) sale de mirar la columna "Tarifa
  * ($/tn o $/hr)" de la pestaña Tarifas.
  *
- * `yacimientoCodigo` sólo lo tienen los materiales que vienen sin ambigüedad
- * de una sola cantera. "Caliza" queda sin yacimiento a propósito: tanto C1
- * como C3 dan caliza (ya documentado en `cantera_yacimientos`), la planilla
- * la carga como un solo renglón por fletero sin decir de cuál vino, y
- * enlazarla a una de las dos sería adivinar. El análisis "toneladas por
- * yacimiento" la deja afuera, no la reparte.
+ * `yacimientoCodigo` es informativo (de qué cantera sale típicamente ese
+ * material) y no lo usa "toneladas por yacimiento" — esa cuenta va por el
+ * `ORIGEN` real de cada pesada (`toneladasPorYacimientoDesdePesadas` en
+ * `pesadas.ts`), que no es ambiguo ni siquiera para "Caliza": una pesada de
+ * caliza con origen C1 es de C1. Enlazar por el nombre del material, en
+ * cambio, sí era una apuesta —tanto C1 como C3 dan caliza— y encima quedó
+ * mal (el bug real que encontró el usuario comparando contra la planilla).
  */
 
 export type UnidadDeAcarreo = "tonelada" | "hora" | "viaje";
@@ -21,7 +22,7 @@ export interface TipoDeAcarreo {
   codigo: string;
   etiqueta: string;
   unidad: UnidadDeAcarreo;
-  /** El código corto del yacimiento de origen (`D1`, `D6`, `C1`, `C3`), o `null` si no es un solo yacimiento. */
+  /** El código corto del yacimiento del que suele salir (`D1`, `D6`, `C1`, `C3`), o `null` si no es uno solo. Sólo informativo, ver el comentario de arriba. */
   yacimientoCodigo: string | null;
 }
 
@@ -141,26 +142,16 @@ export interface FilaToneladasPorYacimiento {
 }
 
 /**
- * Toneladas acarreadas por yacimiento y mes, sumando todos los fleteros —
- * "de dónde vino la piedra", la pestaña "Acarreo" de la planilla real. Sólo
- * entran los tipos con `yacimientoCodigo` fijo (no "Caliza", que puede ser de
- * C1 o de C3) y los de unidad "tonelada" (una hora o un viaje no son toneladas).
+ * Toneladas por yacimiento y mes: `toneladasPorYacimientoDesdePesadas` de
+ * `pesadas.ts`, no una función de acá.
+ *
+ * La primera versión de esto sumaba por el **tipo** de material (Dolomita
+ * D1 → yacimiento D1) y sólo entre los acarreos ya atribuidos a un fletero —
+ * las dos decisiones estaban mal. El usuario detectó el número raro contra
+ * la planilla real: faltaban justo las pesadas con fletero sin resolver
+ * (354 de 7510, un mes se caía D1 de 4074 t reales a 3060 t), porque "de qué
+ * yacimiento vino la piedra" no tiene nada que ver con quién la llevó. Y el
+ * **origen** de la pesada —que si está en "Datos"— resuelve además la
+ * ambigüedad de "Caliza" sin adivinar: una pesada de caliza con origen C1 es
+ * de C1, no hace falta excluirla.
  */
-export function toneladasPorYacimiento(acarreos: AcarreoPlano[]): FilaToneladasPorYacimiento[] {
-  const totales = new Map<string, number>(); // clave: `${yacimiento}|${mes}`
-
-  for (const a of acarreos) {
-    const tipo = tipoDeAcarreo(a.tipo);
-    if (!tipo || tipo.unidad !== "tonelada" || !tipo.yacimientoCodigo) continue;
-    const mes = a.mes.slice(0, 7);
-    const clave = `${tipo.yacimientoCodigo}|${mes}`;
-    totales.set(clave, (totales.get(clave) ?? 0) + a.cantidad);
-  }
-
-  return [...totales.entries()]
-    .map(([clave, toneladas]) => {
-      const [yacimientoCodigo, mes] = clave.split("|");
-      return { yacimientoCodigo, mes, toneladas };
-    })
-    .sort((a, b) => (a.mes === b.mes ? a.yacimientoCodigo.localeCompare(b.yacimientoCodigo) : a.mes.localeCompare(b.mes)));
-}

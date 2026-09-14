@@ -184,11 +184,60 @@ export function pesadaDeFilaCruda(fila: string[]): PesadaResuelta | null {
 }
 
 /**
+ * Los cuatro yacimientos cuyo código aparece tal cual en la columna ORIGEN de
+ * "Datos". Todo lo demás que aparece ahí —PAVONE, PT 1/2/3, RESERVA A-F,
+ * GALPÓN 1-5, SERJEN, y también "LA ALCANCIA"/"L NEGRA"— no es un origen que
+ * el sistema reconozca todavía (Alcancía no está cargada como yacimiento) o
+ * directamente no es una cantera, así que queda afuera del análisis "por
+ * yacimiento" en vez de forzarlo a uno de los cuatro.
+ */
+const ORIGENES_DE_YACIMIENTO = new Set(["D1", "D6", "C1", "C3"]);
+
+/**
+ * Toneladas acarreadas por yacimiento y mes, sumando todas las pesadas —"de
+ * dónde vino la piedra", la pestaña "Acarreo" de la planilla real.
+ *
+ * Agrupa por el **origen real de la pesada**, no por el nombre del material:
+ * la primera versión de esto sumaba "Dolomita D1" → yacimiento D1 y dejaba
+ * "Caliza" afuera por no saber si era de C1 o de C3. El origen ya lo dice sin
+ * ambigüedad —una pesada de caliza con ORIGEN "C1" es de C1— y de paso no
+ * hace falta la lista de tipos de `acarreo.ts` para esto.
+ *
+ * Tampoco filtra por fletero: a diferencia del pago (que si no sabés quién
+ * hizo el viaje no podés pagarle), de dónde vino la piedra no depende de
+ * quién la trajo. Filtrar por fletero acá fue el bug real que el usuario
+ * encontró comparando contra la planilla —un mes entero de pesadas con
+ * fletero sin resolver desaparecía del total—.
+ */
+export function toneladasPorYacimientoDesdePesadas(
+  pesadas: { fecha: string; origen: string | null; toneladas: number }[]
+): { yacimientoCodigo: string; mes: string; toneladas: number }[] {
+  const totales = new Map<string, number>(); // clave: `${yacimiento}|${mes}`
+
+  for (const p of pesadas) {
+    const origen = (p.origen ?? "").trim().toUpperCase();
+    if (!ORIGENES_DE_YACIMIENTO.has(origen)) continue;
+    const mes = p.fecha.slice(0, 7);
+    const clave = `${origen}|${mes}`;
+    totales.set(clave, (totales.get(clave) ?? 0) + p.toneladas);
+  }
+
+  return [...totales.entries()]
+    .map(([clave, toneladas]) => {
+      const [yacimientoCodigo, mes] = clave.split("|");
+      return { yacimientoCodigo, mes, toneladas };
+    })
+    .sort((a, b) => (a.mes === b.mes ? a.yacimientoCodigo.localeCompare(b.yacimientoCodigo) : a.mes.localeCompare(b.mes)));
+}
+
+/**
  * Las pesadas ya en la base, sumadas por fletero+tipo+mes — el mismo formato
- * (`AcarreoPlano`) que usan `resumenPorFletero`/`toneladasPorYacimiento` de
- * `acarreo.ts`, para poder juntarlas con las tres actividades manuales sin
- * que esas funciones sepan que unas vienen de una pesada y otras de un
- * formulario.
+ * (`AcarreoPlano`) que usa `resumenPorFletero` de `acarreo.ts`, para poder
+ * juntarlas con las tres actividades manuales sin que esa función sepa que
+ * unas vienen de una pesada y otras de un formulario. Esto es sólo para el
+ * **pago** (por eso sí filtra por fletero): para "toneladas por yacimiento"
+ * usar `toneladasPorYacimientoDesdePesadas`, que no depende de saber quién
+ * hizo el viaje.
  *
  * Sin fletero o sin tipo (destape, o un fletero que no se pudo resolver al
  * importar) quedan afuera: no hay a quién ni a qué tarifa cargárselas.

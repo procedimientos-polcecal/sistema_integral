@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { normalizarFletero, fechaDatosAIso, pesadaDeFilaCruda, agruparPesadasPorFleteroTipoMes } from "./pesadas";
+import {
+  normalizarFletero,
+  fechaDatosAIso,
+  pesadaDeFilaCruda,
+  agruparPesadasPorFleteroTipoMes,
+  toneladasPorYacimientoDesdePesadas,
+} from "./pesadas";
 import type { PesadaDB } from "./types";
 
 describe("normalizarFletero", () => {
@@ -124,6 +130,35 @@ describe("agruparPesadasPorFleteroTipoMes", () => {
     const r = agruparPesadasPorFleteroTipoMes([
       pesada({ fletero_id: null }),
       pesada({ tipo: null }),
+    ]);
+    expect(r).toEqual([]);
+  });
+});
+
+describe("toneladasPorYacimientoDesdePesadas", () => {
+  it("suma por el ORIGEN real, no por el nombre del material", () => {
+    const r = toneladasPorYacimientoDesdePesadas([
+      { fecha: "2026-08-01", origen: "C1", toneladas: 100 }, // caliza, chocolata, lo que sea: vino de C1
+      { fecha: "2026-08-15", origen: "c1", toneladas: 50 }, // minúscula, mismo yacimiento
+      { fecha: "2026-08-20", origen: "D1", toneladas: 30 },
+    ]);
+    expect(r).toEqual([
+      { yacimientoCodigo: "C1", mes: "2026-08", toneladas: 150 },
+      { yacimientoCodigo: "D1", mes: "2026-08", toneladas: 30 },
+    ]);
+  });
+
+  it("no depende de si la pesada tiene fletero resuelto — de dónde vino la piedra no es de quién la trajo", () => {
+    // Ninguna de estas pesadas trae fletero (no forma parte del objeto ni hace falta).
+    const r = toneladasPorYacimientoDesdePesadas([{ fecha: "2026-08-01", origen: "D1", toneladas: 1000 }]);
+    expect(r).toEqual([{ yacimientoCodigo: "D1", mes: "2026-08", toneladas: 1000 }]);
+  });
+
+  it("un origen que no es uno de los cuatro yacimientos conocidos queda afuera, no se adivina", () => {
+    const r = toneladasPorYacimientoDesdePesadas([
+      { fecha: "2026-08-01", origen: "PAVONE", toneladas: 100 },
+      { fecha: "2026-08-01", origen: "LA ALCANCIA", toneladas: 50 },
+      { fecha: "2026-08-01", origen: null, toneladas: 20 },
     ]);
     expect(r).toEqual([]);
   });

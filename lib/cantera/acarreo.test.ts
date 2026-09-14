@@ -3,7 +3,6 @@ import {
   tarifaVigente,
   montoAcarreo,
   resumenPorFletero,
-  toneladasPorYacimiento,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -86,25 +85,3 @@ describe("resumenPorFletero", () => {
   });
 });
 
-describe("toneladasPorYacimiento", () => {
-  it("suma por yacimiento y mes, todos los fleteros juntos", () => {
-    const acarreos: AcarreoPlano[] = [
-      { fleteroId: "f1", tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 100 },
-      { fleteroId: "f2", tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 50 },
-      { fleteroId: "f1", tipo: "dolomita_d6", mes: "2026-08-01", cantidad: 30 },
-    ];
-    const r = toneladasPorYacimiento(acarreos);
-    expect(r).toEqual([
-      { yacimientoCodigo: "D1", mes: "2026-08", toneladas: 150 },
-      { yacimientoCodigo: "D6", mes: "2026-08", toneladas: 30 },
-    ]);
-  });
-
-  it("caliza (sin yacimiento fijo) y las horas/viajes no entran", () => {
-    const acarreos: AcarreoPlano[] = [
-      { fleteroId: "f1", tipo: "caliza", mes: "2026-08-01", cantidad: 100 },
-      { fleteroId: "f1", tipo: "horas_destape", mes: "2026-08-01", cantidad: 10 },
-    ];
-    expect(toneladasPorYacimiento(acarreos)).toEqual([]);
-  });
-});
