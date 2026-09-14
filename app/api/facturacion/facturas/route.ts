@@ -6,6 +6,8 @@ import { traerTodo } from "@/lib/core/paginado";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import type { ProductoDeOdoo } from "@/lib/compras/productoOdoo";
 import { prepararLineas } from "@/lib/facturacion/lineas";
+import { resolverElEmisor } from "@/lib/odoo/emisor";
+import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { puedeEditarFacturacion, tieneAccesoFacturacion } from "@/lib/facturacion/auth";
 import { prepararAlta, type PedidoDeAlta } from "@/lib/facturacion/altaDeFactura";
 import {
@@ -244,11 +246,69 @@ export async function POST(request: Request) {
    */
   const avisosDelDetalle = await guardarElDetalle(supabase, factura.id as string, detalle);
 
+  /*
+   * ── 5. Quién la emitió, según Odoo ──
+   *
+   * El proveedor del SdG lo resolvió `prepararAlta` contra el padrón, que cubre
+   * el 44% de lo que entra. Esto reconoce al resto: el partner de Odoo por CUIT,
+   * que es lo que después necesita el asiento.
+   */
+  const avisosDelEmisor = await reconocerAlEmisor(
+    supabase,
+    factura.id as string,
+    factura.cuit_emisor as string | null,
+    factura.empresa_id as string | null
+  );
+
   return NextResponse.json({
     factura,
-    avisos: [...avisosDelRi, ...alta.avisos, ...avisosDelDetalle],
+    avisos: [...avisosDelRi, ...alta.avisos, ...avisosDelDetalle, ...avisosDelEmisor],
     nombre: alta.nombre,
   });
+}
+
+/**
+ * Reconocer al emisor contra Odoo y dejarlo guardado.
+ *
+ * **Nunca frena la carga.** Si Odoo no contesta, o el CUIT no está allá, la
+ * factura entra igual y esto se vuelve a intentar al crear el borrador: la
+ * puerta del buzón no se bloquea por nada, que es la regla del módulo desde el
+ * primer día.
+ */
+async function reconocerAlEmisor(
+  supabase: SupabaseClient,
+  facturaId: string,
+  cuit: string | null,
+  empresaId: string | null
+): Promise<string[]> {
+  if (!cuit || !empresaId || !hayCredencialesOdoo()) return [];
+
+  try {
+    const { data: empresa } = await supabase
+      .from("empresas")
+      .select("odoo_company_id")
+      .eq("id", empresaId)
+      .maybeSingle();
+
+    const companyId = empresa?.odoo_company_id as number | null | undefined;
+    if (!companyId) return [];
+
+    const emisor = await resolverElEmisor(cuit, companyId);
+    if (!emisor.partner) return [emisor.motivo];
+
+    await supabase
+      .from("facturas_proveedor")
+      .update({
+        odoo_partner_id: emisor.partner.id,
+        odoo_partner_nombre: emisor.partner.nombre,
+      })
+      .eq("id", facturaId);
+
+    return [];
+  } catch {
+    // Odoo caído no es asunto de quien está cargando facturas.
+    return [];
+  }
 }
 
 /**

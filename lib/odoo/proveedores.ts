@@ -247,3 +247,116 @@ export function cruzarProveedores(
     partnersHuerfanos: [...partnersPorCuit.keys()].filter((c) => !cuitsUsados.has(c)).length,
   };
 }
+
+// ── El emisor de una factura, resuelto contra Odoo ───────────
+
+/**
+ * Un `res.partner` candidato a ser el emisor, con lo que hace falta para elegir.
+ */
+export interface PartnerCandidato {
+  id: number;
+  nombre: string;
+  /** `res.company`, o `null` si es compartido entre las dos empresas. */
+  empresa: number | null;
+  activo: boolean;
+  /** `parent_id`: si lo tiene, es un contacto de otro, no el proveedor. */
+  esContactoDeOtro: boolean;
+  /**
+   * `supplier_rank`: cuántas veces Odoo lo usó como proveedor.
+   *
+   * Es el desempate entre duplicados, y es un dato y no una corazonada: los
+   * duplicados reales del grupo son un registro con uso y otro en cero o
+   * marcado "(No usar)" —`IPERACTIVE S.A.` 37 contra `Ipertactive S.A.` 0—.
+   */
+  usos: number;
+}
+
+export type EleccionDelEmisor =
+  | { partner: PartnerCandidato; motivo: null }
+  | { partner: null; motivo: string; candidatos: PartnerCandidato[] };
+
+/**
+ * Cuál de los partners de Odoo es el emisor de la factura.
+ *
+ * **Es lo que destraba más de la mitad de las facturas.** Medido sobre las 2.776
+ * facturas de proveedor de 2026: en **1.558 (56%)** el CUIT del emisor no está en
+ * el padrón del SdG, así que el buzón no podía resolver el proveedor y sin
+ * proveedor no se podía crear el borrador. Y no es que falte el dato: Odoo tiene
+ * el CUIT del **100%** de esos partners. El padrón del SdG tiene 293 proveedores
+ * y Odoo 587, y los que más facturan —transportistas y servicios— nunca pasaron
+ * por un requerimiento de Compras, que es de donde salió el padrón.
+ *
+ * ## Cómo se elige, y por qué así
+ *
+ * Sobre los 1.555 partners con CUIT hay **1.341 claves (CUIT, empresa)** y 142
+ * con más de un registro. Casi todos esos duplicados son **contactos hijos** —la
+ * dirección de entrega de la misma empresa, con `parent_id` puesto— o registros
+ * archivados. Descartando esos dos, **1.283 claves quedan con un solo partner y
+ * 57 siguen ambiguas (4%)**.
+ *
+ * Con las 57 no se elige: se informan los candidatos para que decida una persona.
+ * Un partner equivocado manda la factura a nombre de otro y eso no se nota.
+ *
+ * La empresa manda sobre el resto: en Odoo cada registro pertenece a una, y
+ * facturarle a POLCECAL con el partner de POLYSAN es un asiento en la
+ * contabilidad equivocada. Un partner sin empresa está compartido y sirve para
+ * las dos, pero sólo si no hay uno propio.
+ */
+export function elegirPartnerDelEmisor(
+  candidatos: PartnerCandidato[],
+  companyId: number
+): EleccionDelEmisor {
+  const utiles = candidatos.filter((p) => p.activo && !p.esContactoDeOtro);
+
+  if (utiles.length === 0) {
+    return candidatos.length === 0
+      ? { partner: null, motivo: "Ningún proveedor de Odoo tiene ese CUIT.", candidatos: [] }
+      : {
+          partner: null,
+          motivo:
+            "Los proveedores de Odoo con ese CUIT están archivados o son contactos de otro, " +
+            "así que no sirven para facturar.",
+          candidatos,
+        };
+  }
+
+  // El propio de la empresa gana; el compartido sirve sólo si no hay propio.
+  const propios = utiles.filter((p) => p.empresa === companyId);
+  const elegibles = propios.length ? propios : utiles.filter((p) => p.empresa === null);
+
+  if (elegibles.length === 1) return { partner: elegibles[0], motivo: null };
+
+  /*
+   * Desempatar por uso. De los 9 CUIT que quedaban ambiguos en las facturas de
+   * 2026, **todos** son un registro usado y otro sin usar o mal escrito: BAX 68
+   * contra 0, DON ALFREDO 41 contra 0, `R&C MAQUINADOS SRL` 10 contra
+   * `R&C MAQUINADOS SRL (No usar)` 2.
+   *
+   * Se exige que el primero **triplique** al segundo. Con eso no se elige entre
+   * dos registros que se usan de verdad —que sería inventar—, y sí se resuelve
+   * el caso real, que es un duplicado que nadie limpió. El más flojo de los
+   * medidos es 5 a 1.
+   */
+  if (elegibles.length > 1) {
+    const porUso = [...elegibles].sort((a, b) => b.usos - a.usos);
+    if (porUso[0].usos > 0 && porUso[0].usos >= porUso[1].usos * 3) {
+      return { partner: porUso[0], motivo: null };
+    }
+  }
+
+  if (elegibles.length === 0) {
+    return {
+      partner: null,
+      motivo:
+        "Ese CUIT existe en Odoo pero en la otra empresa. Hay que darlo de alta en ésta, " +
+        "o cambiarle la empresa a la factura.",
+      candidatos: utiles,
+    };
+  }
+
+  return {
+    partner: null,
+    motivo: `En Odoo hay ${elegibles.length} proveedores con ese CUIT en la misma empresa: hay que elegir cuál.`,
+    candidatos: elegibles,
+  };
+}

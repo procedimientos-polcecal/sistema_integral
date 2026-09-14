@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   cruzarProveedores,
   cuitEsValido,
+  elegirPartnerDelEmisor,
   filasParaGuardar,
   normalizarCuit,
+  type PartnerCandidato,
 } from "./proveedores";
 import type { PartnerDeOdoo, ProveedorSdG } from "./proveedores";
 
@@ -284,5 +286,114 @@ describe("las filas que se guardan", () => {
     const { filas, empresaDesconocida } = filasParaGuardar(cruce, EMPRESAS);
     expect(filas).toHaveLength(0);
     expect(empresaDesconocida).toBe(1);
+  });
+});
+
+describe("cuál partner de Odoo es el emisor de la factura", () => {
+  /*
+   * Los casos de acá son los que aparecieron al mirar los 1.555 partners con
+   * CUIT de la instancia: contactos hijos —la dirección de entrega de la misma
+   * empresa—, registros archivados, y el mismo CUIT en las dos empresas.
+   */
+  const partner = (parcial: Partial<PartnerCandidato>): PartnerCandidato => ({
+    id: 1,
+    nombre: "ALMENTA JUAN CARLOS",
+    empresa: 1,
+    activo: true,
+    esContactoDeOtro: false,
+    usos: 1,
+    ...parcial,
+  });
+
+  it("con uno solo, ése es", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 2976 })], 1);
+    expect(r.partner?.id).toBe(2976);
+    expect(r.motivo).toBeNull();
+  });
+
+  /*
+   * El caso más común de los 142 duplicados: AXIL S.R.L. tiene cuatro contactos
+   * más, uno por sucursal. Ninguno es el proveedor.
+   */
+  it("descarta los contactos de otro, que son direcciones de entrega", () => {
+    const r = elegirPartnerDelEmisor(
+      [
+        partner({ id: 10 }),
+        partner({ id: 11, nombre: "AXIL S.R.L - OJEDA", esContactoDeOtro: true }),
+        partner({ id: 12, nombre: "AXIL S.R.L - MIGUEL CANÉ", esContactoDeOtro: true }),
+      ],
+      1
+    );
+    expect(r.partner?.id).toBe(10);
+  });
+
+  it("descarta los archivados", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 10, activo: false }), partner({ id: 11 })], 1);
+    expect(r.partner?.id).toBe(11);
+  });
+
+  /*
+   * Cada registro de Odoo pertenece a una empresa: facturarle a POLCECAL con el
+   * partner de POLYSAN es un asiento en la contabilidad equivocada.
+   */
+  it("elige el de la empresa a la que se le facturó", () => {
+    const r = elegirPartnerDelEmisor(
+      [partner({ id: 10, empresa: 2 }), partner({ id: 11, empresa: 1 })],
+      1
+    );
+    expect(r.partner?.id).toBe(11);
+  });
+
+  it("un partner compartido sirve, pero sólo si no hay uno propio", () => {
+    expect(elegirPartnerDelEmisor([partner({ id: 10, empresa: null })], 1).partner?.id).toBe(10);
+    expect(
+      elegirPartnerDelEmisor([partner({ id: 10, empresa: null }), partner({ id: 11 })], 1).partner
+        ?.id
+    ).toBe(11);
+  });
+
+  it("si sólo existe en la otra empresa, lo dice en vez de usarlo", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 10, empresa: 2 })], 1);
+    expect(r.partner).toBeNull();
+    expect(r.motivo).toContain("otra empresa");
+  });
+
+  /*
+   * Las 57 claves que quedan ambiguas después de filtrar. Acá no se elige: un
+   * partner equivocado manda la factura a nombre de otro y no se nota nunca.
+   */
+  /*
+   * El duplicado real del grupo: un registro que se usa y otro que no, o mal
+   * escrito. `IPERACTIVE S.A.` tiene 37 usos y `Ipertactive S.A.` cero.
+   */
+  it("entre duplicados gana el que Odoo viene usando", () => {
+    const r = elegirPartnerDelEmisor(
+      [partner({ id: 896, nombre: "Ipertactive S.A.", usos: 0 }), partner({ id: 895, usos: 37 })],
+      1
+    );
+    expect(r.partner?.id).toBe(895);
+  });
+
+  it("pero no elige entre dos que se usan parecido: eso sería inventar", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 10, usos: 12 }), partner({ id: 11, usos: 9 })], 1);
+    expect(r.partner).toBeNull();
+  });
+
+  it("con dos en la misma empresa sin uso claro no elige: los ofrece", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 10, usos: 0 }), partner({ id: 11, usos: 0 })], 1);
+    expect(r.partner).toBeNull();
+    expect(r.motivo).toContain("2 proveedores");
+    // El tipo separa las dos ramas: sin partner, vienen los candidatos.
+    if (!r.partner) expect(r.candidatos).toHaveLength(2);
+  });
+
+  it("sin ningún candidato lo dice con esas palabras", () => {
+    expect(elegirPartnerDelEmisor([], 1).motivo).toContain("Ningún proveedor de Odoo");
+  });
+
+  it("si los únicos que hay están archivados o son contactos, también lo dice", () => {
+    const r = elegirPartnerDelEmisor([partner({ id: 10, esContactoDeOtro: true })], 1);
+    expect(r.partner).toBeNull();
+    expect(r.motivo).toContain("contactos de otro");
   });
 });

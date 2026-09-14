@@ -26,6 +26,15 @@ export interface FacturaProveedor {
   identificado_por: IdentificadoPor;
   estado: EstadoDeFactura;
   odoo_move_id: number | null;
+  /**
+   * El `res.partner` de Odoo que emitió la factura, reconocido por CUIT.
+   *
+   * Es lo que necesita el asiento. `proveedor_id` es el del padrón del SdG y
+   * puede no existir: el 56% de las facturas que entran son de alguien que no
+   * está en ese padrón.
+   */
+  odoo_partner_id: number | null;
+  odoo_partner_nombre: string | null;
   /** `BILL/2026/09/0004`. En borrador Odoo lo deja en `/`: numera al postear. */
   odoo_nombre: string | null;
   /** `draft`, `posted` o `cancel`, como se vio en la última sincronización. */

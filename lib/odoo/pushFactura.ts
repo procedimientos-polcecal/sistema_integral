@@ -4,6 +4,7 @@ import { resolverContextoDeFacturas } from "./contexto";
 import { armarBorradorDeFactura, type BorradorArmado } from "@/lib/facturacion/borradorEnOdoo";
 import { discriminaIva } from "@/lib/facturacion/comprobante";
 import type { LineaDeFactura } from "@/lib/facturacion/lineas";
+import { resolverElEmisor } from "./emisor";
 
 /**
  * Crear en Odoo, **en borrador**, la factura de proveedor que está en el buzón.
@@ -37,6 +38,7 @@ interface FilaDeFactura {
   requerimiento_id: string | null;
   odoo_move_id: number | null;
   odoo_attachment_id: number | null;
+  odoo_partner_id: number | null;
   detalle_leido: string | null;
   archivo_url: string | null;
   archivo_nombre: string | null;
@@ -75,6 +77,7 @@ const SELECT =
   "id, cuit_emisor, tipo_comprobante, punto_venta, numero, fecha, importe_total, moneda, estado, " +
   "empresa_id, proveedor_id, requerimiento_id, odoo_move_id, odoo_nombre, odoo_estado, " +
   "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, detalle_leido, odoo_attachment_id, " +
+  "odoo_partner_id, odoo_partner_nombre, " +
   "archivo_url, archivo_nombre, " +
   "empresas!empresa_id(nombre, odoo_company_id), proveedores!proveedor_id(nombre), " +
   "compras_requerimientos!requerimiento_id(nro_ri)";
@@ -97,9 +100,15 @@ function problemasDeDatos(f: FilaDeFactura): string[] {
     motivos.push(`La empresa ${f.empresas?.nombre ?? ""} no está mapeada a una empresa de Odoo.`);
   }
 
-  if (!f.proveedor_id) {
+  /*
+   * El proveedor del SdG **ya no es obligatorio**. Lo que la factura de Odoo
+   * necesita es su propio `partner`, y eso se resuelve por CUIT contra Odoo —ver
+   * `resolverElEmisor`—. Exigir el padrón del SdG dejaba afuera al 56% de las
+   * facturas que entran.
+   */
+  if (!f.cuit_emisor && !f.proveedor_id) {
     motivos.push(
-      "La factura no tiene proveedor. Si el CUIT del emisor no está en el padrón, hay que darlo de alta."
+      "La factura no tiene ni CUIT del emisor ni proveedor, así que no hay con qué reconocer a quién facturó."
     );
   }
 
@@ -146,7 +155,7 @@ async function prepararElBorrador(
       ok: false,
       motivos: [
         falta
-          ? `Falta aplicar la migración del vínculo con Odoo (20260911084048_facturacion_el_vinculo_con_odoo.sql). ${error.message}`
+          ? `Falta aplicar una migración de Facturación: la base todavía no tiene esa columna. ${error.message}`
           : error.message,
       ],
     };
@@ -160,28 +169,51 @@ async function prepararElBorrador(
 
   const companyId = factura.empresas!.odoo_company_id!;
 
-  const { data: enlace } = await admin
-    .from("proveedores_odoo")
-    .select("odoo_partner_id")
-    .eq("proveedor_id", factura.proveedor_id!)
-    .eq("empresa_id", factura.empresa_id!)
-    .maybeSingle();
-
   /*
-   * El proveedor puede existir en una empresa y no en la otra: hay 262 en
-   * Polcecal, 237 en Polysan y sólo 147 en las dos. Decirlo con ese detalle es
-   * la diferencia entre una tarea de dos minutos en Odoo y un "error al crear la
-   * factura" que no se sabe por dónde agarrar.
+   * A quién se le factura, en dos pasos:
+   *
+   * 1. **El enlace curado**, si la factura tiene proveedor del SdG y alguien ya
+   *    lo emparejó con un partner de esa empresa. Es una decisión humana y gana.
+   * 2. **El CUIT contra Odoo**, que es el caso mayoritario: el 56% de las
+   *    facturas de 2026 vienen de alguien que no está en el padrón del SdG.
    */
-  if (!enlace?.odoo_partner_id) {
-    return {
-      ok: false,
-      motivos: [
-        `${factura.proveedores?.nombre ?? "El proveedor"} no está enlazado con Odoo en ` +
-          `${factura.empresas?.nombre ?? "esa empresa"}. Hay que darlo de alta ahí, o correr el ` +
-          `cruce de proveedores si ya existe.`,
-      ],
-    };
+  let partnerId: number | null = null;
+
+  if (factura.proveedor_id) {
+    const { data: enlace } = await admin
+      .from("proveedores_odoo")
+      .select("odoo_partner_id")
+      .eq("proveedor_id", factura.proveedor_id)
+      .eq("empresa_id", factura.empresa_id!)
+      .maybeSingle();
+    partnerId = (enlace?.odoo_partner_id as number | undefined) ?? null;
+  }
+
+  if (partnerId === null) {
+    const emisor = await resolverElEmisor(factura.cuit_emisor, companyId);
+    if (!emisor.partner) {
+      return {
+        ok: false,
+        motivos: [
+          `No se pudo reconocer al emisor en ${factura.empresas?.nombre ?? "esa empresa"}: ${emisor.motivo}` +
+            (emisor.candidatos.length
+              ? ` Candidatos: ${emisor.candidatos.map((c) => `${c.nombre} (#${c.id})`).join(", ")}.`
+              : ""),
+        ],
+      };
+    }
+    partnerId = emisor.partner.id;
+
+    /*
+     * Se guarda a quién se reconoció para que el buzón lo muestre sin volver a
+     * preguntarle a Odoo. El valor es para leer: el push lo resuelve de nuevo
+     * cada vez, porque la empresa de la factura puede cambiar y el partner es
+     * por empresa.
+     */
+    await admin
+      .from("facturas_proveedor")
+      .update({ odoo_partner_id: partnerId, odoo_partner_nombre: emisor.partner.nombre })
+      .eq("id", facturaId);
   }
 
   const contexto = await resolverContextoDeFacturas(
@@ -214,7 +246,7 @@ async function prepararElBorrador(
   }
 
   const armado = armarBorradorDeFactura(factura, {
-    partnerId: enlace.odoo_partner_id as number,
+    partnerId,
     diarioId: datos.diarioId,
     impuestoId: datos.impuestoId,
     monedaId,

@@ -189,6 +189,55 @@ módulo está detrás del login.
   comprobante: cambiarlos lo convertiría en otro. Una cargada con el número
   equivocado se anota y se carga la buena.
 
+## A quién se le facturó: el emisor sale de Odoo, no del padrón
+
+**Es lo que destrabó más de la mitad de las facturas.** El buzón resolvía el
+emisor contra el padrón de proveedores del SdG, y sin proveedor no se podía crear
+el borrador. Medido sobre las **2.776 facturas de proveedor de 2026**: en **1.558
+(56%)** el CUIT del emisor no está en ese padrón.
+
+No es que falte el dato — **Odoo tiene el CUIT del 100% de esos partners**. Es que
+el padrón del SdG tiene 293 proveedores activos y Odoo 587 con CUIT, y los que
+más facturan nunca pasaron por un requerimiento de Compras, que es de donde salió
+el padrón: ZITO Y PRIOLA (280 facturas), RUBIALES (98), BAX (66), SANDOVAL (49),
+la cooperativa eléctrica (49). Transportistas y servicios.
+
+Así que el emisor se resuelve **contra `res.partner` por CUIT**, que además es lo
+que el asiento necesita de verdad. El proveedor del SdG sigue existiendo y sigue
+sirviendo —vincula la factura a un requerimiento— pero **dejó de ser obligatorio**.
+
+**No se importan los proveedores de Odoo al padrón**, y es deliberado:
+`proveedores` es un catálogo del núcleo que comparten seis módulos, y meterle 300
+transportistas que sólo le sirven a Facturación ensuciaría los selectores de
+Compras, Mantenimiento e Inventario. El emisor de una factura y el proveedor al
+que se le compra se parecen y no son lo mismo.
+
+### Cómo se elige entre varios
+
+Sobre los 1.555 partners con CUIT hay 1.341 claves (CUIT, empresa) y 142 con más
+de un registro. Tres filtros, en orden, y cada uno sale de mirar los duplicados
+reales:
+
+1. **Fuera los contactos hijos** (`parent_id`): son direcciones de entrega de la
+   misma empresa. AXIL S.R.L. tiene cuatro.
+2. **Fuera los archivados.**
+3. **La empresa manda**: en Odoo cada registro pertenece a una, y facturarle a
+   POLCECAL con el partner de POLYSAN es un asiento en la contabilidad
+   equivocada. Un partner sin empresa es compartido y sirve para las dos, pero
+   sólo si no hay uno propio.
+
+Con eso quedaban 9 CUIT ambiguos. **Todos son el mismo caso: un registro que se
+usa y otro que no**, o mal escrito — `IPERACTIVE S.A.` con 37 usos contra
+`Ipertactive S.A.` con cero, `R&C MAQUINADOS SRL` contra
+`R&C MAQUINADOS SRL (No usar)`. Odoo lleva esa cuenta en `supplier_rank`, así que
+el desempate es por uso y no por parecido, y **se exige que el primero triplique
+al segundo**: así no se elige entre dos registros que se usan de verdad.
+
+**Resultado medido: de reconocer el 44% de las facturas a reconocer el 100%**
+(2.772 de 2.776). Las 4 que quedan son un CUIT que existe en Odoo pero en la otra
+empresa, que es una negativa correcta: hay que darlo de alta ahí, o la factura
+está asignada a la empresa equivocada.
+
 ## El vínculo con Odoo
 
 Son dos cosas distintas y conviene no mezclarlas: **crear el borrador** (el SdG

@@ -753,7 +753,17 @@ function FilaDelBuzon({
             )}
           </div>
           <div className="text-xs text-slate-500">
-            {factura.proveedor ?? (factura.cuit_emisor ? `CUIT ${factura.cuit_emisor}` : "sin proveedor")}
+            {/*
+              * El proveedor del SdG primero, y si no está el de Odoo: la mayoría
+              * de las facturas vienen de alguien que no está en el padrón, y
+              * mostrar el CUIT pelado no le dice nada a nadie.
+              */}
+            {factura.proveedor ??
+              factura.odoo_partner_nombre ??
+              (factura.cuit_emisor ? `CUIT ${factura.cuit_emisor}` : "sin proveedor")}
+            {!factura.proveedor && factura.odoo_partner_nombre && (
+              <span className="ml-1 text-slate-400">(de Odoo)</span>
+            )}
             {" · "}
             {factura.fecha ?? "sin fecha"}
             {" · "}
