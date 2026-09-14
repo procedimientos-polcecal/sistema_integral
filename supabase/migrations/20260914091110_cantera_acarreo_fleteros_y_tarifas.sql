@@ -36,17 +36,74 @@
 -- tiene yacimiento fijo en el vocabulario, y el análisis "por yacimiento" la
 -- deja afuera en vez de adivinar. Enlazar al que se parece es peor que dejar
 -- en null.
+--
+-- CORRECCIÓN SOBRE LA PRIMERA VERSIÓN DE ESTE ARCHIVO (todavía no corrida):
+-- el usuario aclaró que las toneladas de material SÍ tienen fletero, pesada
+-- por pesada, en la pestaña "Datos" — lo que no tenía la primera lectura
+-- era la columna bien indexada (ver más abajo). Por eso se agrega
+-- `cantera_pesadas`: el material (Dolomita D1, Chocolata 3, ...) se cuenta
+-- solo desde ahí, agrupando por fletero+tipo+mes; sólo las tres actividades
+-- sin pesada (Horas destape, Viaje de bloques, Hora movimiento bochones
+-- pozo) se siguen cargando a mano en `cantera_acarreos`.
+--
+-- LA COLUMNA DEL FLETERO EN "Datos" ESTÁ CORRIDA UNA POSICIÓN RESPECTO DE SU
+-- TÍTULO: la columna que dice "FechaArchivo" en el encabezado trae en
+-- realidad el nombre del fletero ("Amaray", "Dumerauf 1 (SQV 625)", ...), y
+-- la que dice "OrigenArchivo" trae una fecha. Verificado leyendo filas
+-- reales, no sólo el encabezado — el mismo tipo de trampa que ya costó
+-- "Pozos"/"Metros Perf." invertidos en BOCHONES. `lib/cantera/pesadas.ts`
+-- lee por esa posición real, con un comentario que no se puede pasar por
+-- alto.
+--
+-- LOS NOMBRES DE FLETERO EN "Datos" SON UN DESORDEN (30 variantes para 12
+-- fleteros: con y sin patente entre paréntesis, "Dumerauf" a secas para dos
+-- camiones distintos, "Priola2", "CONTE"/"Conte Gaston" que ni siquiera está
+-- en el catálogo). `normalizarFletero()` resuelve por patente primero —es
+-- inequívoca— y por nombre sólo cuando el fletero tiene un solo camión
+-- conocido; un nombre a secas que puede ser más de uno ("Dumerauf", "Orsatti"
+-- sin número) queda sin fletero en vez de adivinar cuál.
+
+create table if not exists cantera_pesadas (
+  id            uuid primary key default gen_random_uuid(),
+  fecha         date not null,
+  hora          text,
+  bruto         numeric,
+  tara          numeric,
+  -- El tipo de `lib/cantera/acarreo.ts` que corresponde a la columna de
+  -- material que tenía el neto en esa fila ("dolomita_d1", "caliza", ...), o
+  -- null para columnas sin tipo tarifado (los "Destape ..." de la planilla,
+  -- que son sobrecarga y no piedra vendible).
+  tipo          text,
+  -- Bruto - Tara de esa fila, en toneladas (la planilla lo da en kilos).
+  toneladas     numeric not null,
+  origen        text,
+  destino       text,
+  -- El texto tal como está en la planilla, para poder auditar un fletero_id
+  -- null contra lo que decía la fila real.
+  fletero_raw   text,
+  fletero_id    uuid references cantera_fleteros(id) on delete set null,
+  created_at    timestamptz not null default now()
+);
+
+comment on table cantera_pesadas is
+  'Una pesada de balanza (una fila de la pestaña "Datos"): fecha, material, origen/destino y fletero. De acá sale, agrupando por fletero+tipo+mes, cuánto acarreó cada uno en materiales — las tres actividades sin pesada (destape, bloques, bochones) no están acá, van en cantera_acarreos.';
+
+create index if not exists cantera_pesadas_fecha_idx on cantera_pesadas (fecha);
+create index if not exists cantera_pesadas_fletero_idx on cantera_pesadas (fletero_id);
+create index if not exists cantera_pesadas_tipo_idx on cantera_pesadas (tipo);
 
 create table if not exists cantera_fleteros (
   id          uuid primary key default gen_random_uuid(),
-  nombre      text not null,
+  -- Único para que el import histórico pueda hacer upsert por nombre sin
+  -- duplicar al re-correrlo.
+  nombre      text not null unique,
   patente     text,
   activo      boolean not null default true,
   created_at  timestamptz not null default now()
 );
 
 comment on table cantera_fleteros is
-  'Los fleteros de acarreo (transporte cantera → plantas/reservas). Catálogo aparte de `proveedores`: hoy son 12 y no facturan por Odoo como los contratistas de voladura, así que no comparten tabla con `cantera_contratistas`.';
+  'Los fleteros de acarreo (transporte cantera → plantas/reservas). Catálogo aparte de `proveedores`: hoy son 11 y no facturan por Odoo como los contratistas de voladura, así que no comparten tabla con `cantera_contratistas`.';
 
 create table if not exists cantera_tarifas_acarreo (
   id          uuid primary key default gen_random_uuid(),
@@ -92,7 +149,7 @@ create table if not exists cantera_acarreos (
 );
 
 comment on table cantera_acarreos is
-  'El total mensual de un fletero en un tipo de material/actividad — el mismo nivel que la pestaña "Ingreso de Datos" de la planilla de balanza. El monto (cantidad × tarifa vigente en `mes`) se calcula al leer, no se guarda.';
+  'El total mensual de un fletero en una actividad sin pesada (horas de destape, viajes de bloques, horas de bochones) — los materiales con pesada van en cantera_pesadas y se suman solos. El monto (cantidad × tarifa vigente en `mes`) se calcula al leer, no se guarda.';
 
 create index if not exists cantera_acarreos_mes_idx on cantera_acarreos (mes);
 create index if not exists cantera_acarreos_fletero_idx on cantera_acarreos (fletero_id);
@@ -100,6 +157,7 @@ create index if not exists cantera_acarreos_fletero_idx on cantera_acarreos (fle
 alter table cantera_fleteros        enable row level security;
 alter table cantera_tarifas_acarreo enable row level security;
 alter table cantera_acarreos        enable row level security;
+alter table cantera_pesadas         enable row level security;
 
 -- Mismas funciones de acceso que ya existen para el resto de Cantera
 -- (20260910103229): quien tiene el módulo lee, quien puede editar carga
@@ -125,5 +183,15 @@ create policy cantera_acarreos_select on cantera_acarreos
 drop policy if exists cantera_acarreos_write on cantera_acarreos;
 create policy cantera_acarreos_write on cantera_acarreos
   for all to authenticated using (puede_editar_cantera()) with check (puede_editar_cantera());
+
+-- Las pesadas se cargan por import (service role, que no pasa por RLS), no
+-- fila por fila desde una pantalla — por eso el write queda en admin y no en
+-- "puede editar", a diferencia de cantera_acarreos.
+drop policy if exists cantera_pesadas_select on cantera_pesadas;
+create policy cantera_pesadas_select on cantera_pesadas
+  for select to authenticated using (tiene_acceso_cantera());
+drop policy if exists cantera_pesadas_write on cantera_pesadas;
+create policy cantera_pesadas_write on cantera_pesadas
+  for all to authenticated using (es_admin_cantera()) with check (es_admin_cantera());
 
 notify pgrst, 'reload schema';

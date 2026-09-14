@@ -154,6 +154,21 @@ export interface TarifaAcarreoDB {
   tarifa: number;
 }
 
+/** Una fila de `cantera_pesadas`: una pesada de balanza ya resuelta. */
+export interface PesadaDB {
+  id: string;
+  fecha: string;
+  hora: string | null;
+  bruto: number | null;
+  tara: number | null;
+  tipo: string | null;
+  toneladas: number;
+  origen: string | null;
+  destino: string | null;
+  fletero_raw: string | null;
+  fletero_id: string | null;
+}
+
 /** Una fila de `cantera_acarreos`: el total mensual de un fletero en un tipo. */
 export interface AcarreoDB {
   id: string;

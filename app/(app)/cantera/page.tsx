@@ -8,6 +8,7 @@ import {
   traerConsumosDe,
   traerDatosParaInforme,
   traerFleteros,
+  traerPesadas,
   traerTarifasAcarreo,
   traerVoladuras,
   traerYacimientos,
@@ -15,6 +16,7 @@ import {
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
 import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
 import InicioGrafico from "./InicioGrafico";
@@ -83,14 +85,16 @@ export default async function CanteraInicioPage() {
   const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
   const serieReciente = serie.slice(-6);
 
-  const [fleteros, tarifasAcarreo, acarreosDelMes] = await Promise.all([
+  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { mes: mesActual }),
+    traerPesadas(supabase, { mes: mesActual }),
   ]);
-  const acarreosPlanos: AcarreoPlano[] = acarreosDelMes.map((a) => ({
-    fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad,
-  }));
+  const acarreosPlanos: AcarreoPlano[] = [
+    ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
+    ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
+  ];
   const totalAcarreoMes = fleteros.reduce(
     (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0

@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, Fletero, Insumo, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -308,5 +308,31 @@ export async function traerAcarreos(
       q = q.gte("mes", primerDia).lte("mes", ultimoDia);
     }
     return q.order("mes", { ascending: false }).order("tipo").range(desde, hasta);
+  });
+}
+
+export interface FiltrosDePesadas {
+  fleteroId?: string;
+  /** "YYYY-MM": trae ese mes de calendario completo. */
+  mes?: string;
+}
+
+/** Las pesadas de balanza, ya resueltas — de acá sale el material acarreado por fletero. */
+export async function traerPesadas(
+  supabase: SupabaseClient,
+  filtros: FiltrosDePesadas = {}
+): Promise<PesadaDB[]> {
+  return traerTodo<PesadaDB>((desde, hasta) => {
+    let q = supabase
+      .from("cantera_pesadas")
+      .select("id, fecha, hora, bruto, tara, tipo, toneladas, origen, destino, fletero_raw, fletero_id");
+    if (filtros.fleteroId) q = q.eq("fletero_id", filtros.fleteroId);
+    if (filtros.mes) {
+      const [anio, mesNum] = filtros.mes.split("-").map(Number);
+      const primerDia = `${filtros.mes}-01`;
+      const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
+      q = q.gte("fecha", primerDia).lte("fecha", ultimoDia);
+    }
+    return q.order("fecha").range(desde, hasta);
   });
 }

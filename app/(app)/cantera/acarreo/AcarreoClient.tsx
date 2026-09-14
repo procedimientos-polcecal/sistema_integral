@@ -16,6 +16,7 @@ export default function AcarreoClient({
   totalGeneral,
   puedeEditar,
   esAdmin,
+  sinFleteroResuelto,
 }: {
   mes: string;
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
@@ -23,6 +24,8 @@ export default function AcarreoClient({
   totalGeneral: number;
   puedeEditar: boolean;
   esAdmin: boolean;
+  /** Pesadas del mes cuyo fletero no se pudo reconocer (nombre ambiguo o desconocido). */
+  sinFleteroResuelto: number;
 }) {
   const router = useRouter();
 
@@ -55,6 +58,13 @@ export default function AcarreoClient({
           onChange={(e) => e.target.value && router.push(`/cantera/acarreo?mes=${e.target.value}`)}
         />
       </div>
+
+      {sinFleteroResuelto > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {sinFleteroResuelto} pesada(s) de este mes tienen un fletero que no se pudo reconocer (nombre ambiguo o
+          que no está en la lista) — no entran en ningún total. Revisar en "Datos" de la planilla de balanza.
+        </p>
+      )}
 
       <section className="mt-6">
         <div className="flex items-baseline justify-between">
