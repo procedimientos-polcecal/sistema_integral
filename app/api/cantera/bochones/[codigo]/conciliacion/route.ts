@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeFacturarCantera } from "@/lib/cantera/auth";
-import { traerBochon } from "@/lib/cantera/consultas";
+import { traerBochon, traerYacimientos } from "@/lib/cantera/consultas";
 import { contratistasDeCantera, todosLosPartnerIds } from "@/lib/cantera/contratistas";
 import { facturasDisponibles, facturaEsDeAlgunContratista } from "@/lib/cantera/odoo";
 import { hayCredencialesOdoo, avisoDeCredencialesFaltantes } from "@/lib/odoo/client";
+import { espejarBochon } from "@/lib/cantera/espejo";
 
 /**
  * La conciliación de un bochón contra Odoo — un solo campo `odoo_*`, a
@@ -95,13 +96,25 @@ export async function PATCH(
   if (typeof b?.conforme === "boolean" || b?.conforme === null) cambios.conforme = b.conforme;
   if (typeof b?.conforme_obs === "string") cambios.conforme_obs = b.conforme_obs.trim() || null;
 
-  const { data, error } = await supabase
-    .from("cantera_bochones")
-    .update(cambios)
-    .eq("codigo", codigo)
-    .select("odoo_move_id, odoo_move_name, odoo_empresa, odoo_ref, odoo_importe, conforme, conforme_obs")
-    .single();
-
+  const { error } = await supabase.from("cantera_bochones").update(cambios).eq("codigo", codigo);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ data });
+
+  const actualizado = await traerBochon(supabase, codigo);
+  if (!actualizado) return NextResponse.json({ error: "Ese bochón no existe" }, { status: 404 });
+
+  const yacimientos = await traerYacimientos(supabase);
+  const yacimiento = yacimientos.find((y) => y.id === actualizado.yacimiento_id) ?? null;
+
+  const espejo = await espejarBochon(actualizado, yacimiento);
+  await supabase
+    .from("cantera_bochones")
+    .update(
+      espejo.ok
+        ? { sheets_pendiente: null, sheets_pendiente_en: null }
+        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }
+    )
+    .eq("codigo", codigo);
+  const conPlanilla = await traerBochon(supabase, codigo);
+
+  return NextResponse.json({ data: conPlanilla ?? actualizado, planilla_error: espejo.ok ? null : espejo.error });
 }

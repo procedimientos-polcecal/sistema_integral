@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
-import { traerBochon } from "@/lib/cantera/consultas";
+import { traerBochon, traerYacimientos } from "@/lib/cantera/consultas";
+import { espejarBochon } from "@/lib/cantera/espejo";
 
 /**
  * Ver y editar un bochón. Los campos de conciliación (`odoo_*`, `conforme*`)
  * son de finanzas y no se tocan acá.
+ *
+ * Al final se espeja BOCHONES en la planilla — una sola dirección, manda el
+ * sistema. Un fallo no impide guardar: queda `sheets_pendiente` anotado y se
+ * avisa en `planilla_error`, igual que en voladuras.
  */
 
 function num(v: unknown): number | null {
@@ -67,15 +72,25 @@ export async function PATCH(
   if ("voladura_codigo" in b) cambios.voladura_codigo = texto(b.voladura_codigo);
   if ("observaciones" in b) cambios.observaciones = texto(b.observaciones);
 
-  const { data, error } = await supabase
-    .from("cantera_bochones")
-    .update(cambios)
-    .eq("codigo", codigo)
-    .select(
-      "id, codigo, yacimiento_id, anio, correlativo, voladura_codigo, inicio, fin, fecha_voladura, cantidad, metros_perforados, precio_usd_m, tc_usd, observaciones, origen"
-    )
-    .single();
-
+  const { error } = await supabase.from("cantera_bochones").update(cambios).eq("codigo", codigo);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ bochon: data });
+
+  const actualizado = await traerBochon(supabase, codigo);
+  if (!actualizado) return NextResponse.json({ error: "Ese bochón no existe" }, { status: 404 });
+
+  const yacimientos = await traerYacimientos(supabase);
+  const yacimiento = yacimientos.find((y) => y.id === actualizado.yacimiento_id) ?? null;
+
+  const espejo = await espejarBochon(actualizado, yacimiento);
+  await supabase
+    .from("cantera_bochones")
+    .update(
+      espejo.ok
+        ? { sheets_pendiente: null, sheets_pendiente_en: null }
+        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }
+    )
+    .eq("codigo", codigo);
+  const conPlanilla = await traerBochon(supabase, codigo);
+
+  return NextResponse.json({ bochon: conPlanilla ?? actualizado, planilla_error: espejo.ok ? null : espejo.error });
 }

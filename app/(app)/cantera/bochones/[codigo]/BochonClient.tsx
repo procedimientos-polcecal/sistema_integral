@@ -56,6 +56,7 @@ export default function BochonClient({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
+  const [avisoPlanilla, setAvisoPlanilla] = useState("");
 
   const s = (v: number | null) => (v == null ? "" : String(v));
   const tx = (v: string | null) => v ?? "";
@@ -91,10 +92,14 @@ export default function BochonClient({
       body: JSON.stringify(f),
     });
     setGuardando(false);
+    const json = await res.json();
     if (!res.ok) {
-      setError((await res.json()).error ?? "No se pudo guardar.");
+      setError(json.error ?? "No se pudo guardar.");
       return;
     }
+    // Un fallo de escritura en la planilla no es un warning en la consola: se
+    // le dice a quien guardó. El bochón quedó guardado igual.
+    setAvisoPlanilla(json.planilla_error ?? "");
     setOk(true);
     router.refresh();
   }
@@ -115,6 +120,11 @@ export default function BochonClient({
 
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {ok && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Guardado.</p>}
+      {avisoPlanilla && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Se guardó, pero no se pudo escribir en la planilla: {avisoPlanilla}
+        </p>
+      )}
 
       <section className="mt-5 rounded-lg border border-slate-200 p-4">
         <div className="flex items-baseline justify-between">

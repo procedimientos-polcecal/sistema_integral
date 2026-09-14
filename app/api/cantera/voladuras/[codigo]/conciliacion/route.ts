@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeFacturarCantera } from "@/lib/cantera/auth";
-import { traerVoladura } from "@/lib/cantera/consultas";
+import { traerConsumos, traerInsumos, traerVoladura, traerYacimientos } from "@/lib/cantera/consultas";
 import { contratistasDeCantera, todosLosPartnerIds } from "@/lib/cantera/contratistas";
 import { facturasDisponibles, facturaEsDeAlgunContratista } from "@/lib/cantera/odoo";
 import { hayCredencialesOdoo, avisoDeCredencialesFaltantes } from "@/lib/odoo/client";
+import { espejarVoladura } from "@/lib/cantera/espejo";
+import type { RenglonPlano } from "@/lib/cantera/planilla";
 
 /**
  * La conciliación de una voladura contra Odoo: vincular la factura de
@@ -114,16 +116,38 @@ export async function PATCH(
   if (typeof b?.conforme === "boolean" || b?.conforme === null) cambios[`${etapa}_conforme`] = b.conforme;
   if (typeof b?.conforme_obs === "string") cambios[`${etapa}_conforme_obs`] = b.conforme_obs.trim() || null;
 
-  const { data, error } = await supabase
-    .from("cantera_voladuras")
-    .update(cambios)
-    .eq("codigo", codigo)
-    .select(
-      "perf_odoo_move_id, perf_odoo_move_name, perf_odoo_empresa, perf_odoo_ref, perf_odoo_importe, perf_conforme, perf_conforme_obs, " +
-        "vol_odoo_move_id, vol_odoo_move_name, vol_odoo_empresa, vol_odoo_ref, vol_odoo_importe, vol_conforme, vol_conforme_obs"
-    )
-    .single();
-
+  const { error } = await supabase.from("cantera_voladuras").update(cambios).eq("codigo", codigo);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ data });
+
+  // La columna "Facturación"/"N° factura" y "Coincide" de la planilla dependen
+  // de esto: se espeja también acá, no sólo al editar metros y pozos.
+  const [actualizada, consumos, yacimientos, insumos] = await Promise.all([
+    traerVoladura(supabase, codigo),
+    traerConsumos(supabase, codigo),
+    traerYacimientos(supabase),
+    traerInsumos(supabase),
+  ]);
+  if (!actualizada) return NextResponse.json({ error: "Esa voladura no existe" }, { status: 404 });
+
+  const yacimiento = yacimientos.find((y) => y.id === actualizada.yacimiento_id) ?? null;
+  const nombreInsumoPorId = new Map(insumos.map((i) => [i.id, i.nombre]));
+  const renglones: RenglonPlano[] = consumos.map((c) => ({
+    insumo: c.insumo_raw ?? (c.insumo_id ? (nombreInsumoPorId.get(c.insumo_id) ?? null) : null),
+    cantidad: c.cantidad,
+    precio_usd: c.precio_usd,
+    tipo: c.tipo,
+  }));
+
+  const espejo = await espejarVoladura(actualizada, yacimiento, renglones);
+  await supabase
+    .from("cantera_voladuras")
+    .update(
+      espejo.ok
+        ? { sheets_pendiente: null, sheets_pendiente_en: null }
+        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }
+    )
+    .eq("codigo", codigo);
+  const conPlanilla = await traerVoladura(supabase, codigo);
+
+  return NextResponse.json({ data: conPlanilla ?? actualizada, planilla_error: espejo.ok ? null : espejo.error });
 }
