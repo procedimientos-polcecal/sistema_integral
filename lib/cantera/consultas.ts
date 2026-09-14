@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { Bochon, Consumo, Insumo, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, Fletero, Insumo, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -262,4 +262,51 @@ export async function traerDatosParaInforme(
   });
 
   return { voladuras, bochones };
+}
+
+// ── Acarreo (fase 2) ─────────────────────────────────────────
+
+export async function traerFleteros(supabase: SupabaseClient, soloActivos = false): Promise<Fletero[]> {
+  let consulta = supabase.from("cantera_fleteros").select("id, nombre, patente, activo").order("nombre");
+  if (soloActivos) consulta = consulta.eq("activo", true);
+  const { data, error } = await consulta;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Fletero[];
+}
+
+export async function traerTarifasAcarreo(supabase: SupabaseClient): Promise<TarifaAcarreoDB[]> {
+  const { data, error } = await supabase
+    .from("cantera_tarifas_acarreo")
+    .select("id, tipo, desde, hasta, tarifa")
+    .order("tipo")
+    .order("desde");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TarifaAcarreoDB[];
+}
+
+export interface FiltrosDeAcarreo {
+  fleteroId?: string;
+  /** "YYYY-MM": trae ese mes de calendario completo. */
+  mes?: string;
+}
+
+export async function traerAcarreos(
+  supabase: SupabaseClient,
+  filtros: FiltrosDeAcarreo = {}
+): Promise<AcarreoDB[]> {
+  return traerTodo<AcarreoDB>((desde, hasta) => {
+    let q = supabase
+      .from("cantera_acarreos")
+      .select(
+        "id, fletero_id, tipo, mes, cantidad, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+      );
+    if (filtros.fleteroId) q = q.eq("fletero_id", filtros.fleteroId);
+    if (filtros.mes) {
+      const [anio, mesNum] = filtros.mes.split("-").map(Number);
+      const primerDia = `${filtros.mes}-01`;
+      const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
+      q = q.gte("mes", primerDia).lte("mes", ultimoDia);
+    }
+    return q.order("mes", { ascending: false }).order("tipo").range(desde, hasta);
+  });
 }

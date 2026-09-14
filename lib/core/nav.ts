@@ -230,9 +230,12 @@ export const NAV: NavItem[] = [
     modulo: "cantera",
     children: [
       { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
+      { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
       { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
+      { label: "Fleteros", href: "/cantera/fleteros", modulo: "cantera", soloAdmin: true },
+      { label: "Tarifas de acarreo", href: "/cantera/tarifas-acarreo", modulo: "cantera", soloAdmin: true },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

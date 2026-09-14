@@ -3,14 +3,18 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import {
+  traerAcarreos,
   traerBochones,
   traerConsumosDe,
   traerDatosParaInforme,
+  traerFleteros,
+  traerTarifasAcarreo,
   traerVoladuras,
   traerYacimientos,
 } from "@/lib/cantera/consultas";
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
 import InicioGrafico from "./InicioGrafico";
@@ -79,6 +83,19 @@ export default async function CanteraInicioPage() {
   const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
   const serieReciente = serie.slice(-6);
 
+  const [fleteros, tarifasAcarreo, acarreosDelMes] = await Promise.all([
+    traerFleteros(supabase, true),
+    traerTarifasAcarreo(supabase),
+    traerAcarreos(supabase, { mes: mesActual }),
+  ]);
+  const acarreosPlanos: AcarreoPlano[] = acarreosDelMes.map((a) => ({
+    fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad,
+  }));
+  const totalAcarreoMes = fleteros.reduce(
+    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
+    0
+  );
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -86,20 +103,28 @@ export default async function CanteraInicioPage() {
           <h1 className="text-xl font-semibold">Cantera</h1>
           <p className="text-sm text-slate-500">Perforación, voladura y bochones de las cuatro canteras.</p>
         </div>
-        {permisos.esAdmin && (
-          <div className="flex gap-1.5">
-            <Link href="/cantera/yacimientos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-              Canteras
-            </Link>
-            <Link href="/cantera/insumos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-              Insumos
-            </Link>
-          </div>
-        )}
+        <div className="flex gap-1.5">
+          <Link href="/cantera/acarreo" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+            Acarreo
+          </Link>
+          {permisos.esAdmin && (
+            <>
+              <Link href="/cantera/yacimientos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+                Canteras
+              </Link>
+              <Link href="/cantera/insumos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+                Insumos
+              </Link>
+              <Link href="/cantera/fleteros" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
+                Fleteros
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Lo que importa de un vistazo ── */}
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metrica
           color="#1E7D34"
           valor={delMesActual ? num1.format(delMesActual.toneladas) : "0"}
@@ -115,6 +140,12 @@ export default async function CanteraInicioPage() {
           valor={String(conteo.sinConciliar)}
           label="Facturas a conciliar o revisar"
           href="/cantera/registros"
+        />
+        <Metrica
+          color="#0891B2"
+          valor={`$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(totalAcarreoMes)}`}
+          label="Acarreo a pagar este mes"
+          href="/cantera/acarreo"
         />
       </div>
 
