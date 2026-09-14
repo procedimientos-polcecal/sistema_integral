@@ -431,6 +431,47 @@ comportamiento correcto, y conviene esperarlo en los proveedores nuevos.
 cobertura al 78% de acierto. Ese rango es justo donde uno aprende a apretar "sí"
 sin mirar.
 
+### La analítica: primero el equipo, después la costumbre
+
+Dos fuentes en cascada, y **no valen lo mismo**.
+
+**El equipo del requerimiento, que es el dato y no una probabilidad.** Si la
+factura está vinculada a un RI y ese RI se pidió para un equipo, el gasto va a la
+analítica de ese equipo. El enlace es por **código**: el grupo le puso `PO-A1-01`,
+`EM6` a cada equipo y ese mismo código está escrito en el nombre de la analítica
+de Odoo (`EM6 - CATERPILLAR 950 G`). No es que los nombres se parezcan — es el
+mismo identificador de los dos lados.
+
+Medido con el código real sobre los 239 equipos activos: **235 resuelven en
+Polcecal y 236 en Polysan**. Los que no: `C1`, `C2` y `C3`, porque en Odoo conviven
+un `C1` del plan CANTERA y un `C1 - COMPRESOR 1` del plan COMPRESORES —dos cosas
+distintas que empiezan igual, así que no se elige ninguna—, y `PO-C1-10`, que no
+tiene analítica en Polcecal.
+
+Un borde que costó: **`EM1` no puede matchear `EM10`**. Se exige que el código
+termine ahí. Sin eso, el equipo EM1 se llevaba dieciséis analíticas por delante.
+
+**Lo que este proveedor repartió antes, cuando no hay equipo.** Acierta mucho
+menos: en el backtest, 38% de cobertura al 78%. A qué equipo fue un repuesto
+depende de qué se rompió esa semana, no del proveedor. Se muestra con el
+antecedente y se aplica a mano, nunca sola.
+
+### Lo que esta vía **no** resuelve, con número
+
+El RI **cubre poco**: de 1.969 requerimientos, **206 (10%) apuntan a un equipo**;
+812 (41%) apuntan a un sector y el resto a un taller o a una oficina. Y los
+sectores **no tienen código**, así que no hay llave dura para ellos — emparejarlos
+por nombre sería exactamente lo que este sistema no hace.
+
+Así que la vía del equipo es **certera y angosta**, y la del historial es ancha y
+floja. Juntas cubren bastante más que cualquiera de las dos, y la pantalla
+distingue cuál es cuál: la del equipo se muestra en verde, la del historial con
+su "12 de 18 veces".
+
+Un ejemplo real de por qué el umbral importa: RUBIALES repartió sus últimas
+líneas 122 veces a una analítica, 110 a otra y 19 a una tercera. Eso es 48%, muy
+por debajo del 0,8 — así que **no propone nada**, que es lo correcto.
+
 ### El borrador se actualiza, y confirmar controla que esté al día
 
 **Faltaba, y costó una factura mal contabilizada.** El circuito real es cargar la

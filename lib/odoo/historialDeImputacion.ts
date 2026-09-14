@@ -74,3 +74,60 @@ export async function traerHistorialDeCuentas(partnerId: number): Promise<Histor
 
   return { porProducto, delProveedor, nombres };
 }
+
+// ── La distribución analítica que ya se usó ──────────────────
+
+/** Cuántas veces esta compra se repartió así. La clave es el JSON de Odoo. */
+export type VecesPorReparto = Record<string, number>;
+
+export interface HistorialDeAnalitica {
+  porProducto: Record<string, VecesPorReparto>;
+  delProveedor: VecesPorReparto;
+}
+
+/**
+ * Cómo repartió este proveedor sus compras anteriores.
+ *
+ * A diferencia de la cuenta, esto **no se puede pedir con `read_group`**:
+ * `analytic_distribution` es un campo JSON y Odoo no agrupa por él. Así que se
+ * traen las líneas y se cuenta acá, acotado a las últimas 500 — que para el
+ * proveedor con más historia del grupo son dos años de facturas, y lo viejo no
+ * dice cómo se imputa hoy.
+ */
+export async function traerHistorialDeAnalitica(
+  partnerId: number
+): Promise<HistorialDeAnalitica> {
+  const lineas = await llamar<
+    { product_id: unknown; analytic_distribution: Record<string, number> | false }[]
+  >("account.move.line", "search_read", [dominio(partnerId)], {
+    fields: ["product_id", "analytic_distribution"],
+    limit: 500,
+    order: "id desc",
+  });
+
+  const porProducto: Record<string, VecesPorReparto> = {};
+  const delProveedor: VecesPorReparto = {};
+
+  for (const l of lineas) {
+    if (!l.analytic_distribution || !Object.keys(l.analytic_distribution).length) continue;
+
+    /*
+     * La clave es el reparto entero y no cada cuenta suelta: repartir 50/50
+     * entre dos equipos es una decisión distinta de mandarle todo a uno, y
+     * contarlas por separado perdería justamente eso.
+     */
+    const reparto = JSON.stringify(
+      Object.fromEntries(Object.entries(l.analytic_distribution).sort(([a], [b]) => a.localeCompare(b)))
+    );
+
+    delProveedor[reparto] = (delProveedor[reparto] ?? 0) + 1;
+
+    const producto = idDeRelacion(l.product_id);
+    if (producto === null) continue;
+    const clave = String(producto);
+    porProducto[clave] ??= {};
+    porProducto[clave][reparto] = (porProducto[clave][reparto] ?? 0) + 1;
+  }
+
+  return { porProducto, delProveedor };
+}

@@ -8,7 +8,12 @@ import { normalizarDescripcion } from "@/lib/compras/productoOdoo";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import { leerCuentasAnaliticas, leerCuentasContables } from "@/lib/odoo/catalogoContable";
-import { traerHistorialDeCuentas } from "@/lib/odoo/historialDeImputacion";
+import {
+  traerHistorialDeAnalitica,
+  traerHistorialDeCuentas,
+} from "@/lib/odoo/historialDeImputacion";
+import { analiticaDelEquipo } from "@/lib/facturacion/analiticaDelEquipo";
+import { sugerirAnalitica } from "@/lib/facturacion/sugerirAnalitica";
 import { porQueSeSugiere, sugerirCuenta } from "@/lib/facturacion/sugerirCuenta";
 import { resolverElEmisor } from "@/lib/odoo/emisor";
 
@@ -28,8 +33,10 @@ import { resolverElEmisor } from "@/lib/odoo/emisor";
 async function laFactura(supabase: Awaited<ReturnType<typeof createClient>>, id: string) {
   const { data } = await supabase
     .from("facturas_proveedor")
+    // La cadena va literal: partida en dos, Supabase pierde la inferencia de
+    // tipos y la fila vuelve como `GenericStringError`.
     .select(
-      "id, empresa_id, detalle_leido, cuit_emisor, odoo_partner_id, empresas!empresa_id(nombre, odoo_company_id)"
+      "id, empresa_id, detalle_leido, cuit_emisor, odoo_partner_id, requerimiento_id, empresas!empresa_id(nombre, odoo_company_id)"
     )
     .eq("id", id)
     .maybeSingle();
@@ -90,12 +97,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
      * facturó. Va junto con los catálogos y no en otra llamada: la pantalla las
      * necesita a la vez, y el historial es un `read_group` de 220 ms.
      */
-    const sugerencias = await sugerirLasCuentas(
-      supabase,
-      factura,
-      companyId,
-      (lineas ?? []) as { id: string; odoo_product_id: number | null; odoo_account_id: number | null }[]
-    );
+    const pendientes = (lineas ?? []) as {
+      id: string;
+      odoo_product_id: number | null;
+      odoo_account_id: number | null;
+      analitica: Record<string, number> | null;
+    }[];
+
+    const [sugerencias, sugerenciasDeAnalitica] = await Promise.all([
+      sugerirLasCuentas(supabase, factura, companyId, pendientes),
+      sugerirLasAnaliticas(supabase, factura, companyId, analiticas, pendientes),
+    ]);
 
     return NextResponse.json({
       lineas: lineas ?? [],
@@ -103,6 +115,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       empresa: empresa?.nombre ?? null,
       catalogos: { productos, cuentas, analiticas },
       sugerencias,
+      sugerenciasDeAnalitica,
       motivo: null,
     });
   } catch (e) {
@@ -267,4 +280,123 @@ async function sugerirLasCuentas(
   } catch {
     return [];
   }
+}
+
+export interface AnaliticaSugerida {
+  lineaId: string;
+  analitica: Record<string, number>;
+  /** Cómo se lee: "EM6 - CATERPILLAR 950 G 100%". */
+  detalle: string;
+  /** La evidencia, o de dónde salió la certeza. */
+  porque: string;
+  /** `true` cuando sale del equipo del requerimiento, que no es una estadística. */
+  esCerteza: boolean;
+}
+
+/**
+ * Proponer la distribución analítica de las líneas que no tienen.
+ *
+ * Dos fuentes en cascada, y no valen lo mismo: **el equipo del requerimiento**
+ * —que es el dato, no una probabilidad— y, cuando no hay, lo que este proveedor
+ * repartió antes.
+ *
+ * Igual que la cuenta, **no se guarda nada**: la propuesta viaja a la pantalla
+ * con su evidencia y la aplica una persona.
+ */
+async function sugerirLasAnaliticas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  factura: { cuit_emisor: string | null; odoo_partner_id: number | null; requerimiento_id: string | null },
+  companyId: number,
+  analiticas: { id: number; nombre: string; plan: string | null }[],
+  lineas: { id: string; odoo_product_id: number | null; analitica: Record<string, number> | null }[]
+): Promise<AnaliticaSugerida[]> {
+  const pendientes = lineas.filter((l) => !l.analitica || !Object.keys(l.analitica).length);
+  if (!pendientes.length) return [];
+
+  try {
+    const delEquipo = await equipoDelRequerimiento(supabase, factura.requerimiento_id, companyId, analiticas);
+
+    /*
+     * El historial sólo si hace falta: cuando el RI dice el equipo, la analítica
+     * ya está decidida y no vale gastar un viaje a Odoo para contradecirla.
+     */
+    let historial = null;
+    if (!delEquipo) {
+      let partnerId = factura.odoo_partner_id;
+      if (!partnerId) {
+        const emisor = await resolverElEmisor(factura.cuit_emisor, companyId);
+        partnerId = emisor.partner?.id ?? null;
+      }
+      if (partnerId) historial = await traerHistorialDeAnalitica(partnerId);
+    }
+
+    const nombres = new Map(analiticas.map((a) => [a.id, a.nombre]));
+
+    return pendientes.flatMap((l) => {
+      const s = sugerirAnalitica(l.odoo_product_id, { delEquipo, historial, nombres });
+      return s
+        ? [
+            {
+              lineaId: l.id,
+              analitica: s.analitica,
+              detalle: s.detalle,
+              porque: s.porque,
+              esCerteza: s.segun === "el equipo del requerimiento",
+            },
+          ]
+        : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * El equipo para el que se pidió el requerimiento, y su analítica.
+ *
+ * La cadena es factura → requerimiento → ubicación → equipo. Cubre poco —de
+ * 1.969 requerimientos, 206 apuntan a un equipo; los demás a un sector o a un
+ * taller— pero lo que cubre lo sabe con certeza, y por código, no por nombre.
+ */
+async function equipoDelRequerimiento(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  requerimientoId: string | null,
+  companyId: number,
+  analiticas: { id: number; nombre: string; plan: string | null }[]
+): Promise<{ id: number; nombre: string; nroRi: number } | null> {
+  if (!requerimientoId) return null;
+
+  const { data: ri } = await supabase
+    .from("compras_requerimientos")
+    .select("nro_ri, ubicacion_id")
+    .eq("id", requerimientoId)
+    .maybeSingle();
+
+  if (!ri?.ubicacion_id) return null;
+
+  const { data: ubicacion } = await supabase
+    .from("compras_ubicaciones")
+    .select("equipo_id")
+    .eq("id", ri.ubicacion_id)
+    .maybeSingle();
+
+  if (!ubicacion?.equipo_id) return null;
+
+  const { data: equipo } = await supabase
+    .from("equipos")
+    .select("code, name")
+    .eq("id", ubicacion.equipo_id)
+    .maybeSingle();
+
+  if (!equipo?.code) return null;
+
+  const elegida = analiticaDelEquipo(
+    equipo.code as string,
+    analiticas.map((a) => ({ id: a.id, nombre: a.nombre, empresa: companyId })),
+    companyId
+  );
+
+  return elegida.analitica
+    ? { id: elegida.analitica.id, nombre: elegida.analitica.nombre, nroRi: ri.nro_ri as number }
+    : null;
 }

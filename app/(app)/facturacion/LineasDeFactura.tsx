@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Buscador, { type Opcion } from "./Buscador";
-import type { CuentaSugerida } from "@/app/api/facturacion/facturas/[id]/lineas/route";
+import type {
+  AnaliticaSugerida,
+  CuentaSugerida,
+} from "@/app/api/facturacion/facturas/[id]/lineas/route";
 import {
   describirDistribucion,
   repartirEnPartesIguales,
@@ -46,6 +49,7 @@ export default function LineasDeFactura({
   const [catalogos, setCatalogos] = useState<Catalogos | null>(null);
   const [detalleLeido, setDetalleLeido] = useState<string | null>(null);
   const [sugerencias, setSugerencias] = useState<CuentaSugerida[]>([]);
+  const [analiticasSugeridas, setAnaliticasSugeridas] = useState<AnaliticaSugerida[]>([]);
   const [aplicando, setAplicando] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +65,7 @@ export default function LineasDeFactura({
     setCatalogos(datos.catalogos ?? null);
     setDetalleLeido(datos.detalleLeido ?? null);
     setSugerencias(datos.sugerencias ?? []);
+    setAnaliticasSugeridas(datos.sugerenciasDeAnalitica ?? []);
     setMotivo(datos.motivo ?? null);
   }, [facturaId]);
 
@@ -96,10 +101,37 @@ export default function LineasDeFactura({
     [facturaId]
   );
 
+  /** Guardar una distribución sugerida. Misma ruta que el reparto a mano. */
+  const usarLaAnalitica = useCallback(
+    async (lineaId: string, s: AnaliticaSugerida) => {
+      const r = await fetch(`/api/facturacion/facturas/${facturaId}/lineas`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          linea_id: lineaId,
+          analitica: s.analitica,
+          analitica_nombres: Object.fromEntries(
+            Object.keys(s.analitica).map((id) => [
+              id,
+              (catalogos?.analiticas ?? []).find((a) => String(a.id) === id)?.nombre ?? `#${id}`,
+            ])
+          ),
+        }),
+      });
+      if (!r.ok) return false;
+      const datos = await r.json().catch(() => ({}));
+      setLineas((antes) => (antes ?? []).map((l) => (l.id === datos.linea?.id ? datos.linea : l)));
+      setAnaliticasSugeridas((antes) => antes.filter((x) => x.lineaId !== lineaId));
+      return true;
+    },
+    [facturaId, catalogos]
+  );
+
   async function aplicarTodas() {
     setAplicando(true);
     // De a una y en orden: son pocas, y así una que falle no arrastra al resto.
     for (const s of [...sugerencias]) await usarLaCuenta(s.lineaId, s);
+    for (const s of [...analiticasSugeridas]) await usarLaAnalitica(s.lineaId, s);
     setAplicando(false);
   }
 
@@ -148,7 +180,11 @@ export default function LineasDeFactura({
                 catalogos={catalogos}
                 nombresAnaliticos={nombresAnaliticos}
                 sugerencia={sugerencias.find((s) => s.lineaId === linea.id) ?? null}
+                sugerenciaDeAnalitica={
+                  analiticasSugeridas.find((s) => s.lineaId === linea.id) ?? null
+                }
                 onUsarLaCuenta={usarLaCuenta}
+                onUsarLaAnalitica={usarLaAnalitica}
                 puedeEditar={puedeEditar}
                 onGuardada={(nueva) =>
                   setLineas((antes) =>
@@ -165,7 +201,7 @@ export default function LineasDeFactura({
               * rápido que elegir una por una, y cada propuesta sigue mostrando
               * su antecedente al lado para poder no aceptarla.
               */}
-            {sugerencias.length > 1 ? (
+            {sugerencias.length + analiticasSugeridas.length > 1 ? (
               <button
                 disabled={aplicando}
                 onClick={aplicarTodas}
@@ -173,7 +209,7 @@ export default function LineasDeFactura({
               >
                 {aplicando
                   ? "Aplicando…"
-                  : `Usar las ${sugerencias.length} cuentas sugeridas`}
+                  : `Usar las ${sugerencias.length + analiticasSugeridas.length} sugerencias`}
               </button>
             ) : (
               <span />
@@ -193,7 +229,9 @@ function Linea({
   catalogos,
   nombresAnaliticos,
   sugerencia,
+  sugerenciaDeAnalitica,
   onUsarLaCuenta,
+  onUsarLaAnalitica,
   puedeEditar,
   onGuardada,
 }: {
@@ -203,6 +241,9 @@ function Linea({
   /** Lo que el historial del proveedor dice que correspondería. */
   sugerencia: CuentaSugerida | null;
   onUsarLaCuenta: (lineaId: string, s: CuentaSugerida) => Promise<boolean>;
+  /** Lo que el equipo del RI —o el historial— dice que correspondería. */
+  sugerenciaDeAnalitica: AnaliticaSugerida | null;
+  onUsarLaAnalitica: (lineaId: string, s: AnaliticaSugerida) => Promise<boolean>;
   puedeEditar: boolean;
   onGuardada: (linea: LineaDeFactura) => void;
 }) {
@@ -412,6 +453,31 @@ function Linea({
 
         {!Object.keys(analitica).length && linea.analitica_detalle && (
           <p className="text-xs text-slate-500">{linea.analitica_detalle}</p>
+        )}
+
+        {/*
+          * La sugerencia distingue **certeza de estadística**: cuando sale del
+          * equipo del requerimiento no es una probabilidad —el RI dice para qué
+          * se compró— y se muestra distinta de la que sale del historial, que
+          * acierta el 78% y por eso lleva su antecedente al lado.
+          */}
+        {sugerenciaDeAnalitica && puedeEditar && !Object.keys(analitica).length && (
+          <div
+            className={`mt-1 rounded px-2 py-1 text-[11px] ${
+              sugerenciaDeAnalitica.esCerteza
+                ? "bg-emerald-50 text-emerald-900"
+                : "bg-white text-slate-600"
+            }`}
+          >
+            <button
+              disabled={guardando}
+              onClick={() => void onUsarLaAnalitica(linea.id, sugerenciaDeAnalitica)}
+              className="font-medium underline disabled:opacity-40"
+            >
+              Usar {sugerenciaDeAnalitica.detalle}
+            </button>
+            <span className="ml-1 opacity-70">— {sugerenciaDeAnalitica.porque}</span>
+          </div>
         )}
       </div>
 
