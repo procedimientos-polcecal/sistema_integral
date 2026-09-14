@@ -810,6 +810,42 @@ palabra *MERCADO*, y es otra empresa: cargarle ese CUIT sin mirar manda 33
 órdenes al proveedor equivocado. Es la misma trampa de siempre — enlazar al que
 se le parece es peor que dejar en null.
 
+## La sincronización leía las cantidades mil veces más chicas
+
+Medido contra la planilla real el 14/09/2026. `lib/compras/sheets.ts` tenía su
+**propia copia** de la regla para leer números, con la versión vieja: *si no hay
+coma, el punto es decimal*. Con eso `"30.000"` entraba como **30**, y el valor
+equivocado ya estaba guardado: el RI 57 pide 30.000 unidades y el sistema tenía
+30. Eran **62 cantidades** en el master y otras tantas en las pestañas por área.
+
+Lo irónico es que el núcleo ya lo había arreglado. `lib/core/numeroArgentino.ts`
+resuelve exactamente esta ambigüedad, su docstring cuenta la misma historia
+—"'3.500' entraba como 3,5"— y lo usan Comparativa, Producción y RRHH. La
+sincronización de Compras, que es la que más números lee, se quedó afuera de esa
+corrección. Ahora delega, y el parseo quedó expuesto como `numeroDeLaPlanilla`
+con tests sobre los valores reales medidos.
+
+**La plata nunca estuvo mal**, y conviene saber por qué: los importes de la
+planilla vienen con decimales —`$64.343,57`—, o sea con los dos separadores, y
+esa rama de la regla no era la rota. De las 65 celdas mal leídas, 62 eran
+cantidades; las 3 restantes eran ruido de punto flotante donde el parseo ya
+acertaba.
+
+Las 58 filas que quedaron mal en la base **se corrigen solas en la próxima
+sincronización**: ninguna está marcada con `editado_en_app`, así que la planilla
+las puede volver a pisar.
+
+### Lo que queda, y es chico
+
+Quedan **4 cantidades** mal leídas por otra causa: la sincronización pide los
+valores sin `valueRenderOption`, y el default de Google es `FORMATTED_VALUE`,
+que devuelve lo que la celda **muestra**. Si el formato redondea, se pierde el
+decimal: el RI 640 muestra `6` y vale 5,5. Arreglarlo es pedir
+`UNFORMATTED_VALUE`, pero eso cambia también cómo llegan las fechas —pasarían a
+ser el serial de Sheets en vez de `d/m/aaaa`— así que toca todo el parseo de la
+sincronización. Son 4 filas sobre 1.965 y ninguna es de plata: queda anotado,
+no hecho.
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

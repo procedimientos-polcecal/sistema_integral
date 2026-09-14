@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
 import { letraDeColumna, indiceDeColumna } from "@/lib/core/columnaDeSheets";
 import { fechaDeTexto } from "@/lib/core/fechas";
+import { numeroArgentino } from "@/lib/core/numeroArgentino";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
@@ -183,19 +184,36 @@ const texto = (v: unknown) => {
   return s === "" ? null : s;
 };
 
-function numero(v: unknown): number | null {
+/**
+ * Un número de la planilla.
+ *
+ * La regla vive en `numeroArgentino`, en el núcleo. Acá había una copia con la
+ * versión vieja —"si no hay coma, el punto es decimal"— y con ella **"30.000"
+ * entraba como 30**. Medido contra la planilla real el 14/09/2026: 62
+ * cantidades mal leídas, y el valor equivocado ya estaba guardado en la base.
+ * El RI 57 pide 30.000 unidades y el sistema tenía 30.
+ *
+ * Es el mismo error que el núcleo ya había corregido para Comparativa,
+ * Producción y RRHH, y que su propio docstring cuenta ("los dos tenían el
+ * mismo error y se arreglaron el mismo día"). Esta copia se quedó afuera de esa
+ * corrección: la sincronización de Compras es justamente la que más números
+ * lee.
+ *
+ * Por qué no es riesgoso para la plata: los importes de la planilla vienen con
+ * decimales —"$64.343,57"—, o sea con los dos separadores, y esa rama no
+ * cambió. Lo medido lo confirma: de las 65 celdas mal leídas, 62 son cantidades
+ * y las 3 restantes eran ruido de punto flotante donde el parseo ya acertaba.
+ *
+ * Se le saca los símbolos acá porque decidir qué es basura depende de dónde
+ * viene el dato, y eso lo sabe quien llama: ver el docstring del núcleo.
+ */
+export function numeroDeLaPlanilla(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   // Conviven "$1.234.567,89" y "1,234,567.89"
   const limpio = String(v).replace(/[^0-9.,-]/g, "");
   if (!limpio) return null;
-  const ultimaComa = limpio.lastIndexOf(",");
-  const ultimoPunto = limpio.lastIndexOf(".");
-  const normalizado = ultimaComa > ultimoPunto
-    ? limpio.replace(/\./g, "").replace(",", ".")
-    : limpio.replace(/,/g, "");
-  const n = Number(normalizado);
-  return Number.isFinite(n) ? n : null;
+  return numeroArgentino(limpio);
 }
 
 /**
@@ -395,7 +413,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             area: texto(val(fila, "area")),
             descripcion: texto(val(fila, "descripcion")) ?? "(sin descripción)",
             codigo: texto(val(fila, "codigo")),
-            cantidad: numero(val(fila, "cantidad")),
+            cantidad: numeroDeLaPlanilla(val(fila, "cantidad")),
             ubicacion: texto(val(fila, "ubicacion")),
             fecha_necesidad: fechaISO(val(fila, "fecha_necesidad")),
             detalle_extra: texto(val(fila, "detalle_extra")),
@@ -421,8 +439,8 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             // durante meses quedó guardado como si fuera la dirección. El link
             // de verdad lo trae `leerLinksDeComparativa`, más abajo.
             proveedor: texto(val(fila, "proveedor")),
-            costo_iva: numero(val(fila, "costo_iva")),
-            costo_envio: numero(val(fila, "costo_envio")),
+            costo_iva: numeroDeLaPlanilla(val(fila, "costo_iva")),
+            costo_envio: numeroDeLaPlanilla(val(fila, "costo_envio")),
           });
           if (compra.estado === "DENEGADO") datos.estado_aprobacion = "DENEGADA";
           datos.aprobador ??= compra.aprobador;
