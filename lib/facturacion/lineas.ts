@@ -165,3 +165,72 @@ export function describirDistribucion(
     .map(([id, pct]) => `${nombres.get(Number(id)) ?? `#${id}`} ${pct}%`)
     .join(" · ");
 }
+
+/** Lo que hace falta de una línea del asiento de Odoo para compararla. */
+export interface LineaImputadaEnOdoo {
+  descripcion: string;
+  /** El nombre de la cuenta tal como lo muestra Odoo. */
+  cuenta: string | null;
+  /** La distribución ya resuelta a texto, o `null` si no tiene. */
+  analitica: string | null;
+}
+
+/** Lo mismo, del lado del SdG. */
+export interface LineaImputadaEnElSdg {
+  descripcion: string;
+  odoo_account_nombre: string | null;
+  analitica: DistribucionAnalitica | null;
+}
+
+/**
+ * En qué difiere la imputación del asiento de Odoo de la que tiene el SdG.
+ *
+ * **Existe por una factura que se contabilizó mal.** El borrador se había creado
+ * antes de imputar; la cuenta y la analítica se cargaron después, se guardaron
+ * bien en el SdG, y confirmar posteó el asiento viejo — sin nada de eso, y ya
+ * inmutable.
+ *
+ * Se miran **sólo la cuenta y la distribución analítica**, que son las dos cosas
+ * que una persona imputa a mano y las dos que **no mueven el total**: o sea las
+ * que el control de importes no puede ver. Las descripciones y los precios
+ * vienen del comprobante y ya los cubre ese otro control.
+ *
+ * Devuelve frases y no un booleano a propósito: quien lee el error tiene que
+ * saber **cuál** línea está mal, no sólo que algo lo está.
+ */
+export function diferenciasDeImputacion(
+  enElSdg: LineaImputadaEnElSdg[],
+  enOdoo: LineaImputadaEnOdoo[]
+): string[] {
+  // Sin detalle cargado no hay nada que comparar: el asiento va con una línea
+  // por el total y eso es lo correcto.
+  if (enElSdg.length === 0) return [];
+
+  if (enElSdg.length !== enOdoo.length) {
+    return [`el sistema tiene ${enElSdg.length} líneas y el asiento ${enOdoo.length}`];
+  }
+
+  const diferencias: string[] = [];
+
+  for (const [i, linea] of enElSdg.entries()) {
+    const otra = enOdoo[i];
+    const comoSeLlama = linea.descripcion.slice(0, 30);
+
+    /*
+     * La cuenta se compara por **nombre** y no por id porque de Odoo vuelve el
+     * `display_name` del many2one. Se guarda ese mismo texto al elegirla, así
+     * que la comparación es exacta y no aproximada.
+     */
+    if (linea.odoo_account_nombre && linea.odoo_account_nombre !== otra.cuenta) {
+      diferencias.push(
+        `"${comoSeLlama}" tendría que ir a ${linea.odoo_account_nombre} y en Odoo está en ${otra.cuenta ?? "ninguna"}`
+      );
+    }
+
+    if (linea.analitica && Object.keys(linea.analitica).length > 0 && !otra.analitica) {
+      diferencias.push(`"${comoSeLlama}" tiene distribución analítica en el sistema y en Odoo no`);
+    }
+  }
+
+  return diferencias;
+}

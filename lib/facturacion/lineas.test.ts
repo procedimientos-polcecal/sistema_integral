@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   describirDistribucion,
+  diferenciasDeImputacion,
   prepararLineas,
   repartirEnPartesIguales,
   revisarDistribucion,
@@ -157,5 +158,67 @@ describe("cómo se lee una distribución", () => {
 
   it("sin distribución no hay texto", () => {
     expect(describirDistribucion(null, new Map())).toBeNull();
+  });
+});
+
+describe("qué difiere entre la imputación del sistema y la de Odoo", () => {
+  /*
+   * Esto existe por una factura que se contabilizó mal: el borrador se creó
+   * antes de imputar, la cuenta y la analítica se cargaron después, y confirmar
+   * posteó el asiento viejo. Lo que hace peligroso al caso es que **el total no
+   * cambia**, así que el control de importes no lo ve.
+   */
+  const enElSdg = [
+    { descripcion: "CPO BOMBA MOTORARG 428X4/7.5", odoo_account_nombre: "126003000000 Maquinaria y Equipos", analitica: null },
+    { descripcion: "CONDUCTOR CHATO 3x2.5mm", odoo_account_nombre: "5.2.1.01.220 Repuestos", analitica: { "254": 100 } },
+  ];
+
+  const enOdoo = [
+    { descripcion: "CPO BOMBA MOTORARG 428X4/7.5", cuenta: "126003000000 Maquinaria y Equipos", analitica: null },
+    { descripcion: "CONDUCTOR CHATO 3x2.5mm", cuenta: "5.2.1.01.220 Repuestos", analitica: "D1 100%" },
+  ];
+
+  it("cuando el asiento tiene lo mismo, no hay nada que decir", () => {
+    expect(diferenciasDeImputacion(enElSdg, enOdoo)).toEqual([]);
+  });
+
+  it("avisa qué línea quedó en otra cuenta, y en cuál", () => {
+    const viejo = [{ ...enOdoo[0], cuenta: "5.2.1.01.220 Repuestos" }, enOdoo[1]];
+    const [diferencia] = diferenciasDeImputacion(enElSdg, viejo);
+
+    expect(diferencia).toContain("CPO BOMBA");
+    expect(diferencia).toContain("126003000000 Maquinaria y Equipos");
+    expect(diferencia).toContain("5.2.1.01.220 Repuestos");
+  });
+
+  it("avisa la analítica que se quedó sin viajar", () => {
+    const sinAnalitica = [enOdoo[0], { ...enOdoo[1], analitica: null }];
+    expect(diferenciasDeImputacion(enElSdg, sinAnalitica)).toEqual([
+      '"CONDUCTOR CHATO 3x2.5mm" tiene distribución analítica en el sistema y en Odoo no',
+    ]);
+  });
+
+  it("una línea sin cuenta elegida no reclama nada: la pone Odoo", () => {
+    const sinElegir = [{ ...enElSdg[0], odoo_account_nombre: null }, enElSdg[1]];
+    expect(diferenciasDeImputacion(sinElegir, enOdoo)).toEqual([]);
+  });
+
+  it("si no coincide la cantidad de líneas, eso se dice y se corta", () => {
+    const diferencias = diferenciasDeImputacion(enElSdg, [enOdoo[0]]);
+    expect(diferencias).toHaveLength(1);
+    expect(diferencias[0]).toContain("2 líneas y el asiento 1");
+  });
+
+  /*
+   * El asiento va con una línea por el total cuando el detalle no se pudo leer,
+   * y eso es lo correcto: no hay con qué compararlo.
+   */
+  it("sin detalle cargado no hay nada que comparar", () => {
+    expect(diferenciasDeImputacion([], enOdoo)).toEqual([]);
+  });
+
+  it("una analítica vacía no es una analítica", () => {
+    const vacia = [enElSdg[0], { ...enElSdg[1], analitica: {} }];
+    expect(diferenciasDeImputacion(vacia, [enOdoo[0], { ...enOdoo[1], analitica: null }])).toEqual([]);
   });
 });

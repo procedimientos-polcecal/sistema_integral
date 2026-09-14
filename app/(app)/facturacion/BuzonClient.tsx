@@ -900,6 +900,7 @@ function FilaDelBuzon({
       {verBorrador && factura.odoo_move_id && (
         <BorradorEnOdoo
           facturaId={factura.id}
+          puedeEditar={puedeEditar}
           puedeConfirmar={puedeConfirmar}
           onCerrar={() => setVerBorrador(false)}
           onConfirmado={() => {

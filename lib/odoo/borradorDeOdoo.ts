@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer, enlaceAOdoo, idDeRelacion, llamar, mensajeDeOdoo } from "./client";
+import {
+  diferenciasDeImputacion,
+  type LineaImputadaEnElSdg,
+} from "@/lib/facturacion/lineas";
 
 /**
  * Mirar el borrador que está en Odoo, y confirmarlo desde el SdG.
@@ -21,6 +25,14 @@ import { buscarLeer, enlaceAOdoo, idDeRelacion, llamar, mensajeDeOdoo } from "./
  *   encuentra.
  * - Lo que **no** cambia: el SdG sigue sin inventar asientos. Postea el que ya
  *   había creado y que una persona miró.
+ *
+ * ## Y no postea un borrador desactualizado
+ *
+ * Costó una factura mal contabilizada: el borrador se había creado **antes** de
+ * imputar las líneas, la imputación quedó guardada en el SdG, y confirmar posteó
+ * el asiento viejo — sin cuenta y sin analítica, y ya inmutable. Así que ahora
+ * se compara línea por línea antes de postear, y si no coinciden se dice qué
+ * hacer en vez de dejar pasar algo que nadie revisó con esos números.
  */
 
 export interface LineaDelBorrador {
@@ -226,6 +238,22 @@ export async function confirmarElBorrador(
     };
   }
 
+  /*
+   * Que el asiento sea lo que el SdG dice que es. El control del total no
+   * alcanza: cambiar la cuenta o la analítica de una línea no mueve el total ni
+   * un centavo, y es exactamente lo que se perdía.
+   */
+  const desactualizado = await loQueNoCoincide(admin, facturaId, borrador);
+  if (desactualizado.length) {
+    return {
+      ok: false,
+      motivos: [
+        `El borrador de Odoo no tiene lo que está cargado en el sistema: ${desactualizado.join("; ")}. ` +
+          `Hay que actualizar el borrador antes de confirmarlo.`,
+      ],
+    };
+  }
+
   try {
     await llamar("account.move", "action_post", [[data.odoo_move_id]]);
   } catch (e) {
@@ -263,3 +291,21 @@ export async function confirmarElBorrador(
 
 /** Sirve para no repetir la conversión en la ruta. */
 export { idDeRelacion };
+
+/** Trae lo imputado en el SdG y lo compara con el asiento. Ver `diferenciasDeImputacion`. */
+async function loQueNoCoincide(
+  admin: SupabaseClient,
+  facturaId: string,
+  borrador: BorradorDeOdoo
+): Promise<string[]> {
+  const { data } = await admin
+    .from("facturas_proveedor_lineas")
+    .select("orden, descripcion, odoo_account_nombre, analitica")
+    .eq("factura_id", facturaId)
+    .order("orden");
+
+  return diferenciasDeImputacion(
+    (data ?? []) as unknown as LineaImputadaEnElSdg[],
+    borrador.lineas
+  );
+}

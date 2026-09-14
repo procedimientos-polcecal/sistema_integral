@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { crearEn, llamar, mensajeDeOdoo } from "./client";
 import { resolverContextoDeFacturas } from "./contexto";
-import { armarBorradorDeFactura } from "@/lib/facturacion/borradorEnOdoo";
+import { armarBorradorDeFactura, type BorradorArmado } from "@/lib/facturacion/borradorEnOdoo";
 import { discriminaIva } from "@/lib/facturacion/comprobante";
 import type { LineaDeFactura } from "@/lib/facturacion/lineas";
 
@@ -36,6 +36,7 @@ interface FilaDeFactura {
   proveedor_id: string | null;
   requerimiento_id: string | null;
   odoo_move_id: number | null;
+  odoo_attachment_id: number | null;
   detalle_leido: string | null;
   archivo_url: string | null;
   archivo_nombre: string | null;
@@ -73,29 +74,22 @@ export type ResultadoDelPushDeFactura =
 const SELECT =
   "id, cuit_emisor, tipo_comprobante, punto_venta, numero, fecha, importe_total, moneda, estado, " +
   "empresa_id, proveedor_id, requerimiento_id, odoo_move_id, odoo_nombre, odoo_estado, " +
-  "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, detalle_leido, " +
+  "odoo_conciliado_por, odoo_pendiente, odoo_sincronizado_en, detalle_leido, odoo_attachment_id, " +
   "archivo_url, archivo_nombre, " +
   "empresas!empresa_id(nombre, odoo_company_id), proveedores!proveedor_id(nombre), " +
   "compras_requerimientos!requerimiento_id(nro_ri)";
 
 /**
- * Lo que impide empujar antes de hablar con Odoo.
+ * Lo que le falta a la factura para poder armar un borrador.
  *
  * Se separa para poder contestarlo sin gastar un viaje de red, y porque casi
  * todos los motivos son cosas que alguien tiene que ir a arreglar a otra
- * pantalla: el mensaje dice cuál.
+ * pantalla: el mensaje dice cuál. Sirve igual para crear el borrador y para
+ * actualizarlo; lo que cambia entre los dos —si el asiento tiene que existir o
+ * no— lo mira cada uno.
  */
-function problemasPrevios(f: FilaDeFactura): string[] {
+function problemasDeDatos(f: FilaDeFactura): string[] {
   const motivos: string[] = [];
-
-  if (f.odoo_move_id) {
-    motivos.push(`Esta factura ya está en Odoo (id ${f.odoo_move_id}). Crear otra la duplicaría.`);
-  } else if (f.estado === "contabilizada") {
-    motivos.push(
-      "Esta factura ya figura como contabilizada, así que alguien la cargó en Odoo a mano. " +
-        "Si hace falta el borrador igual, primero hay que sacarle ese estado."
-    );
-  }
 
   if (!f.empresa_id) {
     motivos.push("Falta decir a cuál de las dos empresas se le facturó.");
@@ -112,10 +106,32 @@ function problemasPrevios(f: FilaDeFactura): string[] {
   return motivos;
 }
 
-export async function empujarFacturaAOdoo(
+/** Todo lo que hace falta para crear o reescribir el borrador de una factura. */
+interface BorradorPreparado {
+  factura: FilaDeFactura;
+  companyId: number;
+  lineas: LineaDeFactura[];
+  borrador: BorradorArmado;
+  avisos: string[];
+}
+
+type ResultadoDePreparar =
+  | { ok: true; preparado: BorradorPreparado }
+  | { ok: false; motivos: string[] };
+
+/**
+ * Leer la factura y armar los `vals`, sin escribir nada en Odoo.
+ *
+ * Lo comparten **crear** el borrador y **actualizarlo**: los dos mandan
+ * exactamente lo mismo, y que salga de un solo lugar es lo que garantiza que un
+ * borrador actualizado quede igual que uno recién creado. Si esto estuviera
+ * duplicado, la imputación se perdería en una de las dos ramas y nadie lo
+ * notaría hasta ver el asiento.
+ */
+async function prepararElBorrador(
   admin: SupabaseClient,
   facturaId: string
-): Promise<ResultadoDelPushDeFactura> {
+): Promise<ResultadoDePreparar> {
   const { data, error } = await admin
     .from("facturas_proveedor")
     .select(SELECT)
@@ -139,7 +155,7 @@ export async function empujarFacturaAOdoo(
 
   const factura = data as unknown as FilaDeFactura;
 
-  const previos = problemasPrevios(factura);
+  const previos = problemasDeDatos(factura);
   if (previos.length) return { ok: false, motivos: previos };
 
   const companyId = factura.empresas!.odoo_company_id!;
@@ -219,26 +235,169 @@ export async function empujarFacturaAOdoo(
     );
   }
 
-  let odooMoveId: number;
-  try {
-    odooMoveId = await crearEn("account.move", companyId, armado.borrador.vals);
-  } catch (e) {
-    const motivo = e instanceof Error ? e.message : mensajeDeOdoo(e as never);
-    /*
-     * Un fallo de escritura no es un `console.warn`: queda guardado con lo que
-     * dijo Odoo, sin traducir, y se muestra en la pantalla de quien lo intentó.
-     * Es la misma regla que `sheets_pendiente` y que el `odoo_pendiente` de las
-     * órdenes de compra.
-     */
-    await admin
-      .from("facturas_proveedor")
-      .update({ odoo_pendiente: motivo, odoo_sincronizado_en: new Date().toISOString() })
-      .eq("id", facturaId);
+  return {
+    ok: true,
+    preparado: { factura, companyId, lineas, borrador: armado.borrador, avisos },
+  };
+}
 
-    return { ok: false, motivos: [motivo] };
+/**
+ * Crear el borrador en Odoo.
+ *
+ * Se niega si la factura ya tiene asiento: para eso está
+ * `actualizarElBorradorEnOdoo`, que reescribe el que hay en vez de duplicarlo.
+ */
+export async function empujarFacturaAOdoo(
+  admin: SupabaseClient,
+  facturaId: string
+): Promise<ResultadoDelPushDeFactura> {
+  const preparado = await prepararElBorrador(admin, facturaId);
+  if (!preparado.ok) return preparado;
+
+  const { factura, companyId, lineas, borrador, avisos } = preparado.preparado;
+
+  if (factura.odoo_move_id) {
+    return {
+      ok: false,
+      motivos: [
+        `Esta factura ya está en Odoo (id ${factura.odoo_move_id}). Crear otra la duplicaría: ` +
+          `si lo que hace falta es mandarle los cambios, hay que actualizar ese borrador.`,
+      ],
+    };
+  }
+  if (factura.estado === "contabilizada") {
+    return {
+      ok: false,
+      motivos: [
+        "Esta factura ya figura como contabilizada, así que alguien la cargó en Odoo a mano. " +
+          "Si hace falta el borrador igual, primero hay que sacarle ese estado.",
+      ],
+    };
   }
 
-  const [creada] = await llamar<
+  let odooMoveId: number;
+  try {
+    odooMoveId = await crearEn("account.move", companyId, borrador.vals);
+  } catch (e) {
+    return { ok: false, motivos: [await anotarElFallo(admin, facturaId, e)] };
+  }
+
+  return await cerrarElPush(admin, facturaId, factura, odooMoveId, lineas, borrador, avisos, {
+    esNuevo: true,
+  });
+}
+
+/**
+ * Reescribir en Odoo el borrador que ya existe, con lo que dice el SdG ahora.
+ *
+ * **Es la acción que faltaba, y su ausencia costó una factura mal contabilizada.**
+ * El circuito natural es cargar la factura, crear el borrador para verlo, y
+ * recién ahí imputar cada línea con su cuenta y su distribución analítica. Con
+ * sólo "crear", esas correcciones quedaban en el SdG y nunca llegaban al asiento:
+ * el borrador seguía siendo el de antes de imputar, y confirmarlo posteaba eso.
+ *
+ * Manda **los mismos `vals` que usaría un borrador nuevo** —salen de la misma
+ * función— y reemplaza las líneas enteras con `(5, 0, 0)`. Reemplazar y no
+ * parchear es a propósito: una línea que se borró del detalle tiene que
+ * desaparecer del asiento, y emparejar línea por línea entre dos sistemas es
+ * justo donde se cuelan los duplicados.
+ *
+ * Sólo sobre un borrador. Un asiento posteado es inmutable y esto no lo toca.
+ */
+export async function actualizarElBorradorEnOdoo(
+  admin: SupabaseClient,
+  facturaId: string
+): Promise<ResultadoDelPushDeFactura> {
+  const preparado = await prepararElBorrador(admin, facturaId);
+  if (!preparado.ok) return preparado;
+
+  const { factura, companyId, lineas, borrador, avisos } = preparado.preparado;
+
+  if (!factura.odoo_move_id) {
+    return { ok: false, motivos: ["Esta factura todavía no tiene un borrador en Odoo."] };
+  }
+
+  const [enOdoo] = await llamar<{ id: number; state: string }[]>("account.move", "read", [
+    [factura.odoo_move_id],
+    ["state"],
+  ]).catch(() => []);
+
+  if (!enOdoo) {
+    return {
+      ok: false,
+      motivos: [`El asiento ${factura.odoo_move_id} ya no existe en Odoo.`],
+    };
+  }
+  if (enOdoo.state !== "draft") {
+    return {
+      ok: false,
+      motivos: [
+        `Ese asiento está ${enOdoo.state === "posted" ? "posteado" : `en estado "${enOdoo.state}"`} ` +
+          `y ya no se puede cambiar. Para corregirlo hay que volverlo a borrador en Odoo.`,
+      ],
+    };
+  }
+
+  try {
+    await llamar(
+      "account.move",
+      "write",
+      [
+        [factura.odoo_move_id],
+        {
+          ...borrador.vals,
+          // `(5, 0, 0)` borra las líneas que había antes de poner las nuevas.
+          invoice_line_ids: [[5, 0, 0], ...(borrador.vals.invoice_line_ids as unknown[])],
+        },
+      ],
+      { context: { allowed_company_ids: [companyId] } }
+    );
+  } catch (e) {
+    return { ok: false, motivos: [await anotarElFallo(admin, facturaId, e)] };
+  }
+
+  return await cerrarElPush(
+    admin,
+    facturaId,
+    factura,
+    factura.odoo_move_id,
+    lineas,
+    borrador,
+    avisos,
+    { esNuevo: false }
+  );
+}
+
+/**
+ * Un fallo de escritura no es un `console.warn`: queda guardado con lo que dijo
+ * Odoo, sin traducir, y se muestra en la pantalla de quien lo intentó. Es la
+ * misma regla que `sheets_pendiente` y que el `odoo_pendiente` de las órdenes.
+ */
+async function anotarElFallo(
+  admin: SupabaseClient,
+  facturaId: string,
+  e: unknown
+): Promise<string> {
+  const motivo = e instanceof Error ? e.message : mensajeDeOdoo(e as never);
+  await admin
+    .from("facturas_proveedor")
+    .update({ odoo_pendiente: motivo, odoo_sincronizado_en: new Date().toISOString() })
+    .eq("id", facturaId);
+  return motivo;
+}
+
+/** Releer lo que quedó en Odoo, adjuntar el PDF si falta, y guardar el vínculo. */
+async function cerrarElPush(
+  admin: SupabaseClient,
+  facturaId: string,
+  factura: FilaDeFactura,
+  odooMoveId: number,
+  lineas: LineaDeFactura[],
+  borrador: BorradorArmado,
+  avisos: string[],
+  opciones: { esNuevo: boolean }
+): Promise<ResultadoDelPushDeFactura> {
+  const [enOdoo] = await llamar<
     {
       name: string | null;
       state: string;
@@ -254,7 +413,7 @@ export async function empujarFacturaAOdoo(
    * por menos de dos centavos. Es poco, y es justo el tipo de diferencia que
    * aparece meses después en una conciliación si nadie la dijo.
    */
-  const totalEnOdoo = Number(creada?.amount_total ?? 0);
+  const totalEnOdoo = Number(enOdoo?.amount_total ?? 0);
   const totalDelComprobante = Math.abs(Number(factura.importe_total ?? 0));
   /*
    * El margen crece con la cantidad de líneas porque cada una puede aportar su
@@ -272,11 +431,14 @@ export async function empujarFacturaAOdoo(
   /*
    * Se guarda `full_voucher_name` ("FC A 0006-00010192") y no `name`: en
    * borrador el `name` es "/" y no le dice nada a nadie. Cuando la posteen, la
-   * sincronizacion lo reemplaza por el BILL/2026/09/0004, que ahi si existe.
+   * sincronización lo reemplaza por el BILL/2026/09/0004, que ahí sí existe.
    */
-  const nombreParaMostrar = creada?.full_voucher_name || creada?.name || null;
+  const nombreParaMostrar = enOdoo?.full_voucher_name || enOdoo?.name || null;
 
-  const adjunto = await adjuntarElArchivo(admin, factura, odooMoveId, avisos);
+  // Al actualizar, el PDF ya está adjunto salvo que la vez anterior fallara.
+  const adjunto = factura.odoo_attachment_id
+    ? factura.odoo_attachment_id
+    : await adjuntarElArchivo(admin, factura, odooMoveId, avisos);
 
   await admin
     .from("facturas_proveedor")
@@ -284,11 +446,10 @@ export async function empujarFacturaAOdoo(
       odoo_move_id: odooMoveId,
       odoo_nombre: nombreParaMostrar,
       ...(adjunto ? { odoo_attachment_id: adjunto } : {}),
-      odoo_estado: creada?.state ?? "draft",
-      odoo_conciliado_por: "push",
+      odoo_estado: enOdoo?.state ?? "draft",
+      ...(opciones.esNuevo ? { odoo_conciliado_por: "push", estado: "informada" } : {}),
       odoo_pendiente: null,
       odoo_sincronizado_en: new Date().toISOString(),
-      estado: "informada",
     })
     .eq("id", facturaId);
 
@@ -296,10 +457,10 @@ export async function empujarFacturaAOdoo(
     ok: true,
     factura: {
       odooMoveId,
-      lineas: armado.borrador.lineas,
+      lineas: borrador.lineas,
       adjunto: adjunto !== null,
       odooNombre: nombreParaMostrar,
-      odooEstado: creada?.state ?? "draft",
+      odooEstado: enOdoo?.state ?? "draft",
       totalEnOdoo,
       avisos,
     },

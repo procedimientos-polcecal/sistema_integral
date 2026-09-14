@@ -288,11 +288,39 @@ descartan enteros. Y `odoo_conciliado_por` distingue `numero` de `referencia`:
 uno vino de un campo estructurado y el otro de adivinarle el formato a un texto
 escrito a mano.
 
+### El borrador se actualiza, y confirmar controla que esté al día
+
+**Faltaba, y costó una factura mal contabilizada.** El circuito real es cargar la
+factura, crear el borrador para verlo, y **recién ahí** imputar cada línea con su
+cuenta y su distribución analítica. Con sólo "crear", esas correcciones quedaban
+guardadas en el SdG y no llegaban nunca al asiento: el borrador seguía siendo el
+de antes de imputar, y confirmarlo posteaba eso — sin cuenta, sin analítica y ya
+inmutable.
+
+**Actualizar el borrador** lo reescribe con lo que dice el sistema ahora. Manda
+los mismos `vals` que un borrador nuevo —salen de la misma función, que es lo que
+garantiza que los dos queden iguales— y reemplaza las líneas enteras con
+`(5, 0, 0)`: una línea que se borró del detalle tiene que desaparecer del asiento,
+y emparejar línea por línea entre dos sistemas es justo donde se cuelan los
+duplicados. Sólo sobre un borrador, y el PDF no se vuelve a adjuntar.
+
+Y **confirmar se niega si el asiento no es lo que dice el SdG**. El control del
+total no alcanzaba: cambiar la cuenta o la analítica de una línea no mueve el
+total ni un centavo, que es exactamente por lo que se perdió sin que nada avisara.
+Ahora se compara línea por línea y el error dice cuál está mal y en qué
+(`diferenciasDeImputacion`, que es pura y está testeada).
+
+Un dato que hubo que medir antes de culpar al código: **Odoo sí respeta una
+cuenta y una `analytic_distribution` explícitas**, con producto y sin producto,
+tanto al crear como al escribir. No las pisa con las del proveedor. El problema
+nunca fue Odoo.
+
 ### Qué hace cada cosa
 
 | | |
 |---|---|
 | **Crear el borrador en Odoo** | Crea el `account.move` en borrador —postable— y deja la factura en `informada`, con `odoo_conciliado_por = push` |
+| **Actualizar con lo del sistema** | Reescribe las líneas del borrador con la imputación de ahora. Nivel de edición |
 | **Buscar en Odoo** | Trae los candidatos de ese proveedor, con el motivo por el que están en la lista, para elegir a mano |
 | **Sincronizar con Odoo** | Relee los vínculos que hay y busca los que faltan. Lo corre también el cron `/api/cron/facturacion-sync`, a las 9:30 |
 | **Ya está en Odoo** | Sigue existiendo: es la marca manual para lo que ninguna regla puede afirmar |

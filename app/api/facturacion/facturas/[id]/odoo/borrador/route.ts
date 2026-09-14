@@ -9,6 +9,8 @@ import {
   hayCredencialesOdoo,
 } from "@/lib/odoo/client";
 import { confirmarElBorrador, traerElBorrador } from "@/lib/odoo/borradorDeOdoo";
+import { actualizarElBorradorEnOdoo } from "@/lib/odoo/pushFactura";
+import { puedeEditarFacturacion } from "@/lib/facturacion/auth";
 
 /**
  * El borrador de Odoo, visto y confirmado desde el SdG.
@@ -16,6 +18,10 @@ import { confirmarElBorrador, traerElBorrador } from "@/lib/odoo/borradorDeOdoo"
  * `GET` lo muestra: líneas, cuentas, analítica, impuestos y adjuntos, como están
  * en Odoo **ahora** —no como el SdG los mandó—, que es la diferencia entre
  * revisar y suponer.
+ *
+ * `PUT` lo **reescribe** con lo que dice el SdG ahora. Es la acción que faltaba:
+ * sin ella, lo que se imputaba después de crear el borrador no llegaba nunca al
+ * asiento. Pide nivel de edición, como imputar — sólo toca un borrador.
  *
  * `POST` lo postea, y es lo único del módulo reservado a **administradores**:
  * un asiento posteado es inmutable. Además pide `confirmar: true` en el cuerpo a
@@ -118,4 +124,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   return NextResponse.json(resultado);
+}
+
+export async function PUT(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  // Edición y no admin: reescribir un borrador se deshace volviéndolo a escribir.
+  if (!(await puedeEditarFacturacion(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Actualizar el borrador requiere nivel de edición en Facturación" },
+      { status: 403 }
+    );
+  }
+  if (!hayCredencialesOdoo()) {
+    return NextResponse.json({ error: avisoDeCredencialesFaltantes() }, { status: 503 });
+  }
+
+  const resultado = await actualizarElBorradorEnOdoo(createAdminClient(), id);
+
+  if (!resultado.ok) {
+    return NextResponse.json(
+      { error: resultado.motivos.join(" "), motivos: resultado.motivos },
+      { status: 409 }
+    );
+  }
+
+  return NextResponse.json(resultado.factura);
 }

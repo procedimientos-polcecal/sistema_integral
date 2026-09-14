@@ -24,11 +24,14 @@ const plata = (n: number) =>
 
 export default function BorradorEnOdoo({
   facturaId,
+  puedeEditar,
   puedeConfirmar,
   onCerrar,
   onConfirmado,
 }: {
   facturaId: string;
+  /** Actualizar el borrador: alcanza con edición, sólo toca un borrador. */
+  puedeEditar: boolean;
   puedeConfirmar: boolean;
   onCerrar: () => void;
   onConfirmado: () => void;
@@ -38,6 +41,8 @@ export default function BorradorEnOdoo({
   const [error, setError] = useState<string | null>(null);
   const [seguro, setSeguro] = useState(false);
   const [posteando, setPosteando] = useState(false);
+  const [actualizando, setActualizando] = useState(false);
+  const [nota, setNota] = useState<string | null>(null);
 
   const traer = useCallback(async () => {
     setError(null);
@@ -54,6 +59,33 @@ export default function BorradorEnOdoo({
   useEffect(() => {
     void traer();
   }, [traer]);
+
+  /**
+   * Reescribir el borrador con lo que dice el SdG ahora.
+   *
+   * Hace falta porque la imputación se hace **después** de crear el borrador:
+   * sin esto, la cuenta y la analítica que alguien cargó se quedaban en el
+   * sistema y el asiento seguía siendo el de antes.
+   */
+  async function actualizar() {
+    setActualizando(true);
+    setError(null);
+    setNota(null);
+    const r = await fetch(`/api/facturacion/facturas/${facturaId}/odoo/borrador`, {
+      method: "PUT",
+    });
+    const datos = await r.json().catch(() => ({}));
+    setActualizando(false);
+
+    if (!r.ok) {
+      setError(datos.error ?? "No se pudo actualizar el borrador.");
+      return;
+    }
+    setNota(
+      `El borrador quedó con ${datos.lineas || 1} línea${datos.lineas === 1 ? "" : "s"}, por ${plata(datos.totalEnOdoo ?? 0)}.`
+    );
+    await traer();
+  }
 
   async function confirmar() {
     setPosteando(true);
@@ -103,6 +135,7 @@ export default function BorradorEnOdoo({
       </div>
 
       {error && <p className="mb-2 rounded bg-rose-50 px-2 py-1 text-xs text-rose-800">{error}</p>}
+      {nota && <p className="mb-2 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">{nota}</p>}
 
       {!borrador ? (
         <p className="text-xs text-slate-400">Preguntándole a Odoo…</p>
@@ -174,7 +207,26 @@ export default function BorradorEnOdoo({
             <p className="mt-2 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">
               Ya está contabilizada en Odoo como {borrador.nombre}.
             </p>
-          ) : !puedeConfirmar ? (
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {/*
+                * Actualizar va antes que confirmar, y no es casualidad: el
+                * circuito real es crear el borrador, mirarlo, imputar, y recién
+                * ahí postear. Sin este botón lo imputado no llegaba nunca.
+                */}
+              {puedeEditar && (
+                <button
+                  disabled={actualizando || posteando}
+                  onClick={actualizar}
+                  className="rounded-lg border border-teal-300 bg-white px-2 py-1 text-xs text-teal-800 disabled:opacity-40 hover:bg-teal-50"
+                >
+                  {actualizando ? "Actualizando…" : "Actualizar con lo del sistema"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {borrador.estado === "posted" ? null : !puedeConfirmar ? (
             <p className="mt-2 text-xs text-slate-500">
               Confirmarla en Odoo la postea, y eso no se deshace: lo hace alguien con nivel de
               administrador en Facturación.
