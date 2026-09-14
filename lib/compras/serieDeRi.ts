@@ -7,11 +7,19 @@
  *   - el Apps Script numera cada respuesta del formulario con `max(A) + 1`
  *     sobre las dos pestañas de la planilla, en el momento en que entra;
  *   - el sistema numeraba con `max(nro_ri) + 1` sobre la base, y la base
- *     **sólo se entera de las respuestas cuando corre la sincronización**, cada
- *     quince minutos.
+ *     **sólo se entera de las respuestas cuando corre la sincronización**.
  *
- * O sea que durante esos quince minutos la base miente por defecto: no sabe el
- * número que la planilla acaba de repartir. Pasó en el primer alta real, el
+ * Y esa ventana no son los quince minutos del cron. Medido el 14/09/2026 sobre
+ * `compras_sincronizaciones`: en tres días el cron corrió **24 veces, no 288**,
+ * con huecos de hasta cinco horas —los crons de GitHub Actions son "mejor
+ * esfuerzo" y saltean corridas—. El webhook de la planilla, que es lo que
+ * tapaba ese agujero, **no sirve para este caso**: avisa cuando alguien *edita*
+ * el master, y una respuesta del formulario no lo edita — entra en la otra
+ * planilla y llega por `IMPORTRANGE`, que es un recálculo y no dispara nada. O
+ * sea que un RI nuevo del formulario puede tardar **horas** en llegar a la
+ * base, y todo ese tiempo el máximo de la base miente por defecto.
+ *
+ * Pasó en el primer alta real, el
  * 14/09/2026: a las 10:45 entró "Pinza amperometrica" por el formulario y el
  * script la numeró 1970; a las 10:47 se cargó un pedido desde el sistema, la
  * base todavía tenía 1969 como máximo y eligió 1970 también. La escritura no
