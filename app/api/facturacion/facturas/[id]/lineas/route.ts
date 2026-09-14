@@ -8,6 +8,9 @@ import { normalizarDescripcion } from "@/lib/compras/productoOdoo";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import { leerCuentasAnaliticas, leerCuentasContables } from "@/lib/odoo/catalogoContable";
+import { traerHistorialDeCuentas } from "@/lib/odoo/historialDeImputacion";
+import { porQueSeSugiere, sugerirCuenta } from "@/lib/facturacion/sugerirCuenta";
+import { resolverElEmisor } from "@/lib/odoo/emisor";
 
 /**
  * El detalle de una factura del buzón: verlo, y corregirlo.
@@ -25,7 +28,9 @@ import { leerCuentasAnaliticas, leerCuentasContables } from "@/lib/odoo/catalogo
 async function laFactura(supabase: Awaited<ReturnType<typeof createClient>>, id: string) {
   const { data } = await supabase
     .from("facturas_proveedor")
-    .select("id, empresa_id, detalle_leido, empresas!empresa_id(nombre, odoo_company_id)")
+    .select(
+      "id, empresa_id, detalle_leido, cuit_emisor, odoo_partner_id, empresas!empresa_id(nombre, odoo_company_id)"
+    )
     .eq("id", id)
     .maybeSingle();
   return data;
@@ -80,11 +85,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       leerCuentasAnaliticas(companyId),
     ]);
 
+    /*
+     * La cuenta propuesta para cada línea, desde lo que este proveedor ya
+     * facturó. Va junto con los catálogos y no en otra llamada: la pantalla las
+     * necesita a la vez, y el historial es un `read_group` de 220 ms.
+     */
+    const sugerencias = await sugerirLasCuentas(
+      supabase,
+      factura,
+      companyId,
+      (lineas ?? []) as { id: string; odoo_product_id: number | null; odoo_account_id: number | null }[]
+    );
+
     return NextResponse.json({
       lineas: lineas ?? [],
       detalleLeido: factura.detalle_leido,
       empresa: empresa?.nombre ?? null,
       catalogos: { productos, cuentas, analiticas },
+      sugerencias,
       motivo: null,
     });
   } catch (e) {
@@ -200,4 +218,53 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json({ linea: guardada });
+}
+
+export interface CuentaSugerida {
+  lineaId: string;
+  cuentaId: number;
+  nombre: string;
+  /** La evidencia, en castellano: "18 de 20 veces fue a esta cuenta…". */
+  porque: string;
+}
+
+/**
+ * Proponer la cuenta de las líneas que todavía no tienen una.
+ *
+ * **No toca las que ya están imputadas**: una sugerencia que pisa una decisión
+ * es peor que ninguna. Y no guarda nada — la propuesta viaja a la pantalla y se
+ * guarda recién cuando alguien la aplica, así que todo lo que queda en la base
+ * lo eligió una persona.
+ *
+ * Si Odoo no contesta, se devuelven cero sugerencias y el detalle se ve igual:
+ * esto acelera, no habilita.
+ */
+async function sugerirLasCuentas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  factura: { cuit_emisor: string | null; odoo_partner_id: number | null },
+  companyId: number,
+  lineas: { id: string; odoo_product_id: number | null; odoo_account_id: number | null }[]
+): Promise<CuentaSugerida[]> {
+  const pendientes = lineas.filter((l) => !l.odoo_account_id);
+  if (!pendientes.length) return [];
+
+  try {
+    let partnerId = factura.odoo_partner_id;
+    if (!partnerId) {
+      const emisor = await resolverElEmisor(factura.cuit_emisor, companyId);
+      partnerId = emisor.partner?.id ?? null;
+    }
+    if (!partnerId) return [];
+
+    const historial = await traerHistorialDeCuentas(partnerId);
+
+    return pendientes.flatMap((l) => {
+      const s = sugerirCuenta(l.odoo_product_id, historial);
+      return s
+        ? [{ lineaId: l.id, cuentaId: s.cuentaId, nombre: s.nombre, porque: porQueSeSugiere(s) }]
+        : [];
+    });
+  } catch {
+    return [];
+  }
 }

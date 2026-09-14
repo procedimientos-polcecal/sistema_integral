@@ -337,6 +337,49 @@ descartan enteros. Y `odoo_conciliado_por` distingue `numero` de `referencia`:
 uno vino de un campo estructurado y el otro de adivinarle el formato a un texto
 escrito a mano.
 
+### La cuenta contable se propone desde lo que ya se hizo
+
+La cuenta se elegía a mano en cada línea, siempre. Y había **11.013 líneas de
+factura de proveedor en Odoo** diciendo a qué cuenta fue cada compra: el dato
+estaba sin usar.
+
+Los umbrales salen de un **backtest**, no de una corazonada: se aprendió de las
+8.700 líneas más viejas y se predijeron las 2.200 más nuevas, en cascada
+proveedor+producto y, si no alcanza, proveedor solo.
+
+| Confianza mínima | Propone en | Acierta | Resuelve del total |
+|---|---|---|---|
+| sin umbral | 94% | 76,4% | 72% |
+| 0,7 | 69% | 87,2% | 60% |
+| **0,8** | **65%** | **89,3%** | **58%** |
+| 0,9 | 57% | 90,4% | 51% |
+
+Se eligió **0,8**: subir a 0,9 gana un punto de acierto y pierde ocho de
+cobertura. Y se piden **dos antecedentes**, porque una sola compra anterior no es
+una costumbre.
+
+**Propone, no completa.** Un 89% es mucho para ahorrar trabajo y poco para
+decidir solo: una de cada diez iría a la cuenta equivocada, y un gasto mal
+imputado no se nota nunca. Así que la sugerencia aparece **con su antecedente a
+la vista** —"257 de 267 veces fue a Fletes y Acarreos, según este proveedor"— y
+**no se guarda hasta que alguien la aplica**, de a una o todas juntas. Todo lo que
+queda en la base lo eligió una persona, y por eso no hizo falta una columna que
+distinga lo sugerido de lo elegido.
+
+El historial se consulta **en vivo y por factura**, con un `read_group` que Odoo
+resuelve del lado del servidor: 12 combinaciones y 220 ms para el proveedor con
+más historia de la instancia. Sin tabla local que mantener — el historial cambia
+cada vez que contabilidad imputa algo, y una copia vieja propondría lo que el
+grupo dejó de hacer.
+
+Y se calla cuando no sabe. ALMENTA tiene 5 líneas históricas repartidas entre dos
+cuentas: 3 de 5 es 60%, por debajo del umbral, así que no propone nada. Es el
+comportamiento correcto, y conviene esperarlo en los proveedores nuevos.
+
+**La analítica no se propone**, y no es un olvido: el mismo backtest da 38% de
+cobertura al 78% de acierto. Ese rango es justo donde uno aprende a apretar "sí"
+sin mirar.
+
 ### El borrador se actualiza, y confirmar controla que esté al día
 
 **Faltaba, y costó una factura mal contabilizada.** El circuito real es cargar la
