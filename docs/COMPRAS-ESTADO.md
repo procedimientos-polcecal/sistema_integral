@@ -14,11 +14,15 @@ Estado: **en producción, con el histórico cargado y la sincronización andando
 
 - Deploy: `https://sistema-integral-one.vercel.app`
 - Supabase: proyecto `sqfdqoxyqkaekxlluvpg`
-- 1.846 requerimientos, 163 proveedores, 37 ubicaciones, 9 áreas
-- Migraciones aplicadas: hasta la **025**. La **030** —la vista que alimenta
-  los indicadores del tablero— está escrita y **todavía no aplicada**: hasta
-  que se corra, el tablero muestra los cinco indicadores en cero con el
-  cartel de que no pudo traer el resumen.
+- 1.968 requerimientos, 293 proveedores, 42 ubicaciones, 9 áreas
+  (medido el 14/09/2026)
+- La **030** —la vista `compras_resumen_por_estado`, que alimenta los
+  indicadores del tablero— **está aplicada**. Se comprobó consultándola: hoy
+  devuelve `SIN_INICIAR 14`, `PARA_COMPRAR 17`, `EN_COMPARATIVA 16`. Este
+  documento decía lo contrario —que estaba escrita y sin correr, y que por eso
+  el tablero mostraba ceros— y esa línea sobrevivió a que alguien la corriera.
+  Un estado escrito a mano envejece sin avisar: cuando dice algo comprobable,
+  conviene comprobarlo antes de creerle.
 
 ## El circuito, tal como funciona de verdad
 
