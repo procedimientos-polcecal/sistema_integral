@@ -36,6 +36,15 @@ describe("filaDeSeguimiento", () => {
   });
 
   /**
+   * El cero es un valor, no una ausencia: `??` y no `||`. Sin este test, cambiar
+   * uno por el otro deja la suite en verde y escribe la cantidad del pedido
+   * donde tenía que ir un cero.
+   */
+  it("una cantidad comprada de cero es cero, y no la del RI", () => {
+    expect(filaDeSeguimiento({ ...BASE, cantidad_comprada: 0 })[6]).toBe("0");
+  });
+
+  /**
    * Las fechas salen como SERIAL y no como texto.
    *
    * Es la decisión que ya tomó `lib/core/fechaDeSheets.ts` y el motivo está

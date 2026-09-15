@@ -6,7 +6,7 @@
  * El I/O está en `seguimientoSheets.ts`.
  */
 
-import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
 import type { Cumplio } from "@/lib/compras/types";
 
