@@ -214,6 +214,15 @@ describe("filaDeSeguimiento", () => {
   });
 
   /**
+   * El cero es un valor, no una ausencia: `??` y no `||`. Sin este test,
+   * cambiar uno por el otro deja la suite en verde y escribe la cantidad del
+   * pedido donde tenía que ir un cero.
+   */
+  it("una cantidad comprada de cero es cero, y no la del RI", () => {
+    expect(filaDeSeguimiento({ ...BASE, cantidad_comprada: 0 })[6]).toBe("0");
+  });
+
+  /**
    * Las fechas salen como SERIAL y no como texto.
    *
    * Es la decisión que ya tomó `lib/core/fechaDeSheets.ts` y el motivo está
@@ -278,7 +287,7 @@ Esperado: FAIL, `Cannot find module './seguimiento'`.
  * El I/O está en `seguimientoSheets.ts`.
  */
 
-import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
 import type { Cumplio } from "@/lib/compras/types";
 
@@ -358,7 +367,7 @@ export function filaDeSeguimiento(r: DatosDeSeguimiento): (string | null)[] {
 ```bash
 npx vitest run lib/compras/filaDeSeguimiento.test.ts
 ```
-Esperado: PASS, 7 tests.
+Esperado: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1158,7 +1167,13 @@ Esperado: FAIL, `filaDelHistorico is not a function`.
 
 Agregar al final de `lib/compras/seguimiento.ts`:
 
-`fechaDeSheets` ya está importada arriba desde la Task 3; no repetir el import.
+Sumar `fechaDeSheets` al import que ya existe arriba, que hoy trae sólo `serialDelDia`:
+
+```ts
+import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
+```
+
+Y al final del archivo:
 
 ```ts
 /** Lo que una fila del histórico aporta a su requerimiento. */
