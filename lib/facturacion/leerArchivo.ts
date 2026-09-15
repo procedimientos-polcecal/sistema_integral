@@ -4,6 +4,7 @@ import { buscarQrConZxing } from "./escaneoQrZxing";
 import { buscarLineas, type LecturaDeLineas } from "./lineasDelPdf";
 import { discriminaIva } from "./comprobante";
 import { leerCabeceraDelTexto } from "./cabeceraDelTexto";
+import { avisarSiElQrNoCoincide, type AvisoDelImporte } from "./importeContraLoImpreso";
 import type { PDFPageProxy } from "pdfjs-dist";
 
 /**
@@ -104,6 +105,13 @@ export interface LecturaDeFactura extends EleccionDeQr {
    * el detalle de ahí sería OCR, que es otro problema.
    */
   detalle: LecturaDeLineas | null;
+  /**
+   * Cuando el importe del QR y el impreso no dicen lo mismo.
+   *
+   * No corrige nada: el QR sigue siendo la fuente. Pone el conflicto adelante
+   * de quien carga, que es el único que puede mirar el papel.
+   */
+  avisoDelImporte: AvisoDelImporte | null;
 }
 
 export async function leerFactura(
@@ -154,11 +162,22 @@ export async function leerFactura(
     ? buscarLineas(r.filas, { netoEsperado: netoDelComprobante(cabecera) })
     : null;
 
+  /*
+   * El contraste contra lo impreso, sólo cuando la cabecera salió del QR: si
+   * salió del texto, comparar el texto contra sí mismo no dice nada. Es gratis,
+   * porque las filas ya están leídas.
+   */
+  const avisoDelImporte =
+    origenDeLaCabecera === "qr"
+      ? avisarSiElQrNoCoincide(cabecera?.importeTotal, r.filas, opciones.cuitsDelGrupo ?? [])
+      : null;
+
   return {
     ...eleccion,
     cabecera,
     motivo,
     origenDeLaCabecera,
+    avisoDelImporte,
     paginas: r.paginas,
     vistaPrevia: r.vistaPrevia,
     comoSeEncontro,

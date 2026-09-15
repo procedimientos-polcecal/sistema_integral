@@ -330,12 +330,39 @@ Son **11 de las 187 de septiembre (6%)**, todas exactamente ×100:
 | REPUESTOS AGRÍCOLAS COLON | 10 |
 | EL MANU MATERIALES | 1 |
 
-Eso hoy entra al borrador de Odoo **cien veces más grande**, y el único control
-que había era que alguien mirara el número. El QR es la fuente —esa regla no
-cambia— pero cuando el PDF tiene capa de texto se puede contrastar, que es
-exactamente lo que hace el banco. Las otras seis diferencias de importe que
-aparecen en ese control (ratios 1,21, 1,40, 4,88, 0,0007) son el lector de texto
-equivocándose, no el QR.
+Eso entraba al borrador de Odoo **cien veces más grande**, y el único control era
+que alguien mirara el número.
+
+**Ahora el buzón lo avisa**, en rojo y sobre la fila: cuando el importe del QR es
+exactamente cien veces el impreso, lo dice con los dos números. `avisarSiElQrNoCoincide`.
+
+### Por qué sólo el ×100
+
+Porque avisar de cualquier diferencia sería enseñar a ignorar el aviso. De las
+152 facturas de septiembre que traen QR **y** capa de texto, el lector de texto
+difiere del QR en 17 importes: 11 son este caso y las otras 6 son el lector
+equivocándose —se queda con el neto (ratio 1,21), con el total de otro
+comprobante (4,88), con un número de otra columna (0,0007)—.
+
+Con la regla del ×100 el cartel sale en esas 11 y **en ninguna otra**: medido
+sobre la carpeta entera, cero falsos positivos.
+
+### Avisa, no corrige — y por qué no hay botón
+
+El QR sigue siendo la fuente. Reemplazarlo por lo que dice un texto impreso sería
+cambiar un dato firmado por ARCA por una lectura nuestra, y el lector de texto se
+equivoca en 6 de 152.
+
+Tampoco hay un botón de "usar el impreso", y eso es a propósito: en el alta el
+importe del QR **le gana siempre** al cargado a mano (`primero()` en
+`altaDeFactura.ts`), así que el botón no haría nada. Un botón que no hace nada es
+peor que ninguno. Hoy el aviso dice que se va a guardar el del QR y que hay que
+revisar el borrador antes de confirmarlo.
+
+**Queda por decidir** si conviene permitir la corrección explícita en el alta —un
+importe cargado a mano que le gane al QR cuando el sistema detectó la
+discrepancia, y que quede anotado—. Es un cambio a la regla "el QR manda", así
+que no se hizo sin preguntar.
 
 ## A quién se le facturó: el emisor sale de Odoo, no del padrón
 
@@ -842,10 +869,10 @@ de dónde salen los píxeles (`@napi-rs/canvas`) y de dónde sale el wasm de ZXi
 
 - **3 de LOGÍSTICA VW.** Escaneos sin capa de texto y sin QR legible. Sin OCR no
   hay nada que sacar, y son el 1,6% de la carpeta.
-- **Los 11 QR con el importe en centavos.** El lector los carga con un total 100
-  veces mayor — ver [la sección](#hay-qr-que-vienen-con-el-importe-en-centavos).
-  El contraste contra lo impreso ya está medido y detecta exactamente esos 11,
-  sin un solo falso positivo sobre 151; falta llevarlo del banco a la pantalla.
+- **Los 11 QR con el importe en centavos** se avisan pero no se corrigen: el
+  borrador sale con el total del QR y hay que arreglarlo en Odoo. Falta decidir
+  si el alta acepta una corrección explícita — ver
+  [la sección](#hay-qr-que-vienen-con-el-importe-en-centavos).
 - **11 diferencias del lector de texto** contra el QR, en facturas que sí traen
   QR. Hoy no molestan —el texto sólo se usa cuando no hay QR— pero son la lista
   de lo que el lector todavía lee mal: dos tomaron el neto por el total

@@ -38,6 +38,7 @@ import { buscarQrConZxing, leerConZxing, type Lector } from "../lib/facturacion/
 import { leerQrAfip } from "../lib/facturacion/qrAfip";
 import { filasDeTexto } from "../lib/facturacion/leerArchivo";
 import { leerCabeceraDelTexto } from "../lib/facturacion/cabeceraDelTexto";
+import { avisarSiElQrNoCoincide } from "../lib/facturacion/importeContraLoImpreso";
 
 /** Los CUIT del grupo: es lo que separa al emisor del receptor en el texto. */
 const CUITS_DEL_GRUPO = ["30641068019", "30707285008"];
@@ -56,6 +57,8 @@ interface Resultado {
   cuit: string | null;
   /** Lo que salió del texto, cuando hubo QR con qué compararlo. */
   control?: { campo: string; qr: unknown; texto: unknown }[];
+  /** El aviso que la pantalla mostraría, si corresponde. */
+  aviso?: string | null;
   importe?: number | null;
   ms: number;
   error?: string;
@@ -164,7 +167,12 @@ async function medirUna(ruta: string, lector: Lector): Promise<Resultado> {
       { campo: "importe", qr: qr.importeTotal, texto: t.importeTotal },
     ].filter((c) => c.texto !== null && String(c.qr) !== String(c.texto));
 
-    return { ...base, control };
+    return {
+      ...base,
+      control,
+      // Exactamente lo que va a ver quien carga la factura.
+      aviso: avisarSiElQrNoCoincide(qr.importeTotal, filas, CUITS_DEL_GRUPO)?.texto ?? null,
+    };
   };
 
   for (let n = 1; n <= hasta; n++) {
@@ -300,6 +308,10 @@ if (controlar) {
 ── control del lector de texto contra el QR ──`);
   console.log(`  facturas con QR y con texto: ${conControl.length}`);
   console.log(`  coinciden en todo lo que el texto pudo leer: ${conControl.length - discrepantes.length}`);
+  const conAviso = conControl.filter((r) => r.aviso);
+  console.log(`  a cuántas la pantalla les mostraría el aviso del importe: ${conAviso.length}`);
+  for (const r of conAviso) console.log(`     ${r.archivo}`);
+
   for (const r of discrepantes) {
     console.log(`  ${r.archivo}`);
     for (const c of r.control!) console.log(`     ${c.campo}: QR ${JSON.stringify(c.qr)} · texto ${JSON.stringify(c.texto)}`);

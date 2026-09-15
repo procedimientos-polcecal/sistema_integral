@@ -496,6 +496,23 @@ function FilaDeCarga({
             </p>
           )}
 
+          {/*
+            * El QR contra lo impreso. Va en rojo y no en ámbar porque no es "mirá
+            * esto por las dudas": son dos números que tendrían que ser el mismo y
+            * el que se va a guardar es cien veces más grande.
+            *
+            * **No hay botón para corregirlo, a propósito.** En el alta el importe
+            * del QR le gana siempre al cargado a mano —`primero()` en
+            * `altaDeFactura.ts`—, así que un botón acá no haría nada y sería peor
+            * que no tenerlo. Cambiar esa regla es una decisión del módulo, no de
+            * esta pantalla.
+            */}
+          {fila.lectura?.avisoDelImporte && (
+            <p className="mt-1 rounded bg-rose-50 px-2 py-1 text-xs text-rose-900">
+              {fila.lectura.avisoDelImporte.texto}
+            </p>
+          )}
+
           {fila.mensaje && (
             <p
               className={`mt-1 rounded px-2 py-1 text-xs ${
