@@ -37,19 +37,46 @@ const idPlanilla = () => process.env.GOOGLE_SHEETS_SEGUIMIENTO_ID ?? "";
 export const haySeguimiento = () => Boolean(idPlanilla());
 
 /**
- * La primera fila libre del master, mirando la columna A.
+ * Dónde va la fila de este RI, y si hay que estrenarla.
  *
- * Por la columna A y no por `getLastRow`: lo que hay debajo son restos de
- * fórmula con `#N/A` en C..H y la A vacía, así que la A es la única que dice
- * de verdad si una fila tiene datos.
+ * Busca **por el número de RI en la columna A** antes de tomar una fila libre,
+ * que es lo mismo que hace `filaEnMaster` para el otro libro. Tomar siempre la
+ * primera libre traía dos males que no avisan: si el `update` que guarda
+ * `seguimiento_fila` falló después de una escritura buena, el intento
+ * siguiente escribía una SEGUNDA fila para el mismo RI; y dos RI exportados a
+ * la vez calculaban la misma fila y el segundo pisaba al primero.
+ *
+ * Por la columna A y no por `getLastRow`: debajo de la última fila real hay
+ * 362 filas con `#N/A` cuya columna A está vacía, así que la A es la única que
+ * dice de verdad si una fila tiene datos.
  */
-async function primeraFilaLibre(): Promise<number> {
-  const filas = await leerValores(idPlanilla(), `${HOJA}!A:A`);
+async function ubicarFila(
+  nroRi: number,
+  cache?: CacheDeSeguimiento
+): Promise<{ fila: number; esNueva: boolean }> {
+  const columnaA = cache?.columnaA ?? (await leerValores(idPlanilla(), `${HOJA}!A:A`));
+  if (cache) cache.columnaA = columnaA;
+
   let ultima = 1; // la 1 es el encabezado
-  for (let i = 0; i < filas.length; i++) {
-    if (String(filas[i]?.[0] ?? "").trim() !== "") ultima = i + 1;
+  for (let i = 1; i < columnaA.length; i++) {
+    const celda = String(columnaA[i]?.[0] ?? "").trim();
+    if (celda === "") continue;
+    if (Number(celda) === nroRi) return { fila: i + 1, esNueva: false };
+    ultima = i + 1;
   }
-  return ultima + 1;
+
+  // La primera libre. En una corrida con varios pendientes nuevos se avanza en
+  // memoria: releer la columna entera por cada uno gasta cuota y ensancha la
+  // ventana en que dos se pisan.
+  const fila = Math.max(ultima, cache?.ultimaTomada ?? 0) + 1;
+  if (cache) cache.ultimaTomada = fila;
+  return { fila, esNueva: true };
+}
+
+/** Lo que no cambia durante una corrida de escrituras. */
+export interface CacheDeSeguimiento {
+  columnaA?: string[][];
+  ultimaTomada?: number;
 }
 
 /**
@@ -59,7 +86,10 @@ async function primeraFilaLibre(): Promise<number> {
  * con **lo que dijo Google, sin traducir**: un diagnóstico que no se distingue
  * de otro no es un diagnóstico.
  */
-export async function exportarSeguimiento(requerimientoId: string): Promise<string | null> {
+export async function exportarSeguimiento(
+  requerimientoId: string,
+  cache?: CacheDeSeguimiento
+): Promise<string | null> {
   if (!haySeguimiento()) return null;
 
   const admin = createAdminClient();
@@ -89,30 +119,52 @@ export async function exportarSeguimiento(requerimientoId: string): Promise<stri
     cumplio_proveedor: r.cumplio_proveedor as Cumplio | null,
   };
 
-  let fila = r.seguimiento_fila as number | null;
-  const esNueva = !fila;
-
   try {
-    if (!fila) fila = await primeraFilaLibre();
+    const { fila, esNueva } = await ubicarFila(r.nro_ri as number, cache);
 
     // Las celdas se arman salteando las `null`: hoy es sólo MAIL_ENVIADO, y
     // saltearla es lo que evita que el área reciba el aviso dos veces.
     const celdas = filaDeSeguimiento(datos)
-      .map((valor, columna) => ({ pestana: HOJA, columna, fila: fila as number, valor }))
+      .map((valor, columna) => ({ pestana: HOJA, columna, fila, valor }))
       .filter((c): c is { pestana: string; columna: number; fila: number; valor: string } =>
         c.valor !== null
       );
 
     await escribirCeldas(idPlanilla(), celdas);
 
+    // Una fila estrenada se comprueba: dos exportaciones simultáneas pueden
+    // haber calculado la misma, y la segunda escritura no falla, pisa. Sin
+    // esto el RI perdido no deja rastro en ningún lado.
+    if (esNueva) {
+      const [[quedo] = []] = await leerValores(idPlanilla(), `${HOJA}!A${fila}:A${fila}`);
+      if (Number(String(quedo ?? "").trim()) !== r.nro_ri) {
+        const motivo = `otra escritura tomó la fila ${fila}; se reubica en el próximo intento`;
+        await admin
+          .from("compras_requerimientos")
+          .update({ seguimiento_pendiente: motivo })
+          .eq("id", requerimientoId);
+        return motivo;
+      }
+    }
+
+    // La fila que manda es la de la planilla, no la guardada en la base: si el
+    // RI ya figuraba en la columna A, ésa es su fila aunque `seguimiento_fila`
+    // dijera otra cosa (por ejemplo, si un `update` anterior falló después de
+    // haber escrito bien).
     const cambios: Record<string, unknown> = { seguimiento_pendiente: null };
-    if (esNueva) cambios.seguimiento_fila = fila;
+    if (fila !== (r.seguimiento_fila as number | null)) cambios.seguimiento_fila = fila;
     await admin.from("compras_requerimientos").update(cambios).eq("id", requerimientoId);
 
     return null;
   } catch (e) {
-    const motivo = e instanceof Error ? e.message : String(e);
-    console.error(`No se pudo escribir el RI ${r.nro_ri} en SEGUIMIENTO DE COMPRA: ${motivo}`);
+    const dijoGoogle = e instanceof Error ? e.message : String(e);
+    // Un 429 no es un rechazo: es "no ahora". Se nombra distinto para que no
+    // mande a revisar la planilla algo que se arregla solo en la próxima
+    // corrida. Es la misma lección que `escribirCelda` del otro libro.
+    const motivo = dijoGoogle.includes("429")
+      ? "la planilla no dio lugar por cuota; se reintenta solo"
+      : dijoGoogle;
+    console.error(`No se pudo escribir el RI ${r.nro_ri} en SEGUIMIENTO DE COMPRA: ${dijoGoogle}`);
     await admin
       .from("compras_requerimientos")
       .update({ seguimiento_pendiente: motivo })
@@ -126,6 +178,8 @@ export async function exportarSeguimiento(requerimientoId: string): Promise<stri
  *
  * Cinco por corrida, como el otro libro: la cuota de Sheets se cuenta por
  * minuto y un 429 anotado como rechazo hace pensar que la planilla no quiso.
+ * Comparten un único `CacheDeSeguimiento`: la columna A se lee una vez para
+ * los cinco, no cinco veces.
  */
 export async function reintentarSeguimiento(): Promise<{ intentados: number; resueltos: number }> {
   if (!haySeguimiento()) return { intentados: 0, resueltos: 0 };
@@ -137,9 +191,10 @@ export async function reintentarSeguimiento(): Promise<{ intentados: number; res
     .not("seguimiento_pendiente", "is", null)
     .limit(5);
 
+  const cache: CacheDeSeguimiento = {};
   let resueltos = 0;
   for (const { id } of data ?? []) {
-    if ((await exportarSeguimiento(id as string)) === null) resueltos++;
+    if ((await exportarSeguimiento(id as string, cache)) === null) resueltos++;
   }
   return { intentados: (data ?? []).length, resueltos };
 }
