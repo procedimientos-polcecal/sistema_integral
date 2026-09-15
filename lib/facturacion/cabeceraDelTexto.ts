@@ -54,11 +54,54 @@ export interface CabeceraLeidaDelTexto {
   };
 }
 
-/** Un número con formato argentino: `1.774.706,10`. */
+/**
+ * Un importe, escrito a la argentina o a la inglesa.
+ *
+ * Las dos formas aparecen en la misma carpeta: `1.774.706,10` en la mayoría y
+ * `1,699,556.67` en ZITO Y PRIOLA y en COOPELECTRIC. No alcanza con "sacar los
+ * puntos y cambiar la coma por punto", que es lo que hacía antes: sobre
+ * `41,269,391.77` eso devolvía **177**, cuatro órdenes de magnitud abajo y sin
+ * que nada avisara. Un importe equivocado es peor que ninguno.
+ *
+ * La regla que distingue las dos: **manda el último separador**. Si lo siguen
+ * exactamente dos dígitos y ahí termina el texto, es el decimal y todo lo demás
+ * es agrupamiento de miles. Si no, no hay decimales y todos los separadores son
+ * de miles.
+ */
 function aNumero(texto: string): number | null {
-  const limpio = texto.replace(/\./g, "").replace(",", ".");
-  const n = Number(limpio);
+  const limpio = texto.trim();
+  const ultimo = Math.max(limpio.lastIndexOf("."), limpio.lastIndexOf(","));
+  const esDecimal = ultimo >= 0 && /^\d{2}$/.test(limpio.slice(ultimo + 1));
+
+  const entero = (esDecimal ? limpio.slice(0, ultimo) : limpio).replace(/[.,\s ]/g, "");
+  if (!/^\d+$/.test(entero)) return null;
+
+  const n = Number(esDecimal ? `${entero}.${limpio.slice(ultimo + 1)}` : entero);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Los importes de una fila: un número con dos decimales, agrupado o no.
+ *
+ * Se exige la parte decimal a propósito — sin eso, el año de una fecha o el
+ * número de un comprobante entrarían como candidatos a importe.
+ *
+ * **Los miles también se separan con espacios.** AGROINGA imprime
+ * `TOTAL 1 586 745.60`, y sin contemplarlo el patrón se quedaba con `745.60`:
+ * no fallaba, devolvía **mil veces menos**. Lo atrapó el control del banco
+ * contra el QR, que para esa factura decía 1.586.745,60. El grupo tiene que ser
+ * de exactamente tres dígitos, que es lo que evita que una cantidad y un precio
+ * de dos columnas distintas se peguen en un solo número.
+ */
+const IMPORTE = /\d{1,3}(?:[.,  ]\d{3})*[.,]\d{2}(?![\d.,])|\d+[.,]\d{2}(?![\d.,])/g;
+
+function importesDe(fila: string): number[] {
+  const salida: number[] = [];
+  for (const m of fila.matchAll(IMPORTE)) {
+    const n = aNumero(m[0]);
+    if (n !== null && n > 0) salida.push(n);
+  }
+  return salida;
 }
 
 /** Todos los CUIT que aparecen, con o sin guiones, en orden de aparición. */
@@ -152,10 +195,32 @@ function tipoDelTexto(filas: string[]): number | null {
  */
 function fechaDelTexto(filas: string[]): string | null {
   const noEsLaDeEmision = /vto|venc|inicio|desde|hasta|per[ií]odo|pago/i;
+  const candidatas = filas.filter((f) => !noEsLaDeEmision.test(f));
 
+  /*
+   * Las que dicen "emisión" primero. Hace falta porque el patrón tolera palabras
+   * entre "fecha" y el número —`Fecha de Emisión: 02/09/2026`— y esa tolerancia,
+   * sin la preferencia, podría enganchar la fecha equivocada en una fila que
+   * nombre dos.
+   */
+  return (
+    laPrimeraFecha(candidatas.filter((f) => /emisi[oó]n/i.test(f))) ??
+    laPrimeraFecha(candidatas)
+  );
+}
+
+/**
+ * Entre "fecha" y el número puede haber palabras.
+ *
+ * `FECHA : 1/9/2026` y `A Fecha de Emisión: 02/09/2026 09:14:16` son la misma
+ * cosa escrita por dos emisores. Exigir el número pegado a la palabra dejaba
+ * afuera a ZITO Y PRIOLA, BER IMPORT y COOPELECTRIC — 26 facturas de 187. La
+ * ventana es corta a propósito: con más, "fecha" engancharía un número de otra
+ * columna de la misma fila.
+ */
+function laPrimeraFecha(filas: string[]): string | null {
   for (const fila of filas) {
-    if (noEsLaDeEmision.test(fila)) continue;
-    const m = fila.match(/fecha\s*:?\s*(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/i);
+    const m = fila.match(/fecha\D{0,24}?(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/i);
     if (!m) continue;
 
     const dia = Number(m[1]);
@@ -178,12 +243,21 @@ function fechaDelTexto(filas: string[]): string | null {
 function totalDelTexto(filas: string[]): number | null {
   let mayor: number | null = null;
 
-  for (const fila of filas) {
+  for (let i = 0; i < filas.length; i++) {
+    const fila = filas[i];
     if (!/\btotal\b/i.test(fila) || /sub\s*-?\s*total/i.test(fila)) continue;
-    for (const m of fila.matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2}/g)) {
-      const n = aNumero(m[0]);
-      if (n !== null && n > 0 && (mayor === null || n > mayor)) mayor = n;
-    }
+
+    /*
+     * Cuando la fila que dice TOTAL no trae ningún importe es un **encabezado de
+     * columna**, y el número está en la de abajo. Pasa en ZITO Y PRIOLA —`… Tasa
+     * Vial Total` y recién después los ocho números—, en COOPELECTRIC y en
+     * ERGUY, donde la fila es literalmente `TOTAL:`. Son 26 de las 187 de
+     * septiembre.
+     */
+    const propios = importesDe(fila);
+    const candidatos = propios.length ? propios : importesDe(filas[i + 1] ?? "");
+
+    for (const n of candidatos) if (mayor === null || n > mayor) mayor = n;
   }
   return mayor;
 }

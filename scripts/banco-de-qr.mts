@@ -32,6 +32,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import type { PDFPageProxy } from "pdfjs-dist";
 import { buscarQr, buscarQrConVentanas, type PixelesDe } from "../lib/facturacion/escaneoQr";
 import { buscarQrConZxing, leerConZxing, type Lector } from "../lib/facturacion/escaneoQrZxing";
 import { leerQrAfip } from "../lib/facturacion/qrAfip";
@@ -53,6 +54,9 @@ interface Resultado {
   pasada: Pasada;
   ancho: number | null;
   cuit: string | null;
+  /** Lo que salió del texto, cuando hubo QR con qué compararlo. */
+  control?: { campo: string; qr: unknown; texto: unknown }[];
+  importe?: number | null;
   ms: number;
   error?: string;
   /** Qué campos no se pudieron sacar del texto, cuando tampoco hubo QR. */
@@ -65,7 +69,10 @@ async function lectorDeZxing(): Promise<Lector> {
     join(import.meta.dirname, "..", "node_modules", "zxing-wasm", "dist", "reader", "zxing_reader.wasm")
   );
   // En el navegador el wasm se baja de `/pdfjs/`; acá se le pasan los bytes.
-  await prepareZXingModule({ overrides: { wasmBinary }, fireImmediately: true });
+  await prepareZXingModule({
+    overrides: { wasmBinary: new Uint8Array(wasmBinary).buffer },
+    fireImmediately: true,
+  });
   return (p) => leerConZxing(readBarcodes as never, p);
 }
 
@@ -77,7 +84,7 @@ function pixelesDe(ctx: SKRSContext2D, ancho: number, alto: number): PixelesDe {
   };
 }
 
-async function dibujar(pagina: { getViewport: (o: { scale: number }) => { width: number; height: number }; render: (o: Record<string, unknown>) => { promise: Promise<unknown> } }, ancho: number) {
+async function dibujar(pagina: PDFPageProxy, ancho: number) {
   const base = pagina.getViewport({ scale: 1 });
   const viewport = pagina.getViewport({ scale: ancho / base.width });
 
@@ -86,7 +93,17 @@ async function dibujar(pagina: { getViewport: (o: { scale: number }) => { width:
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, lienzo.width, lienzo.height);
 
-  await pagina.render({ canvasContext: ctx, viewport, intent: "print" }).promise;
+  // El canvas de `@napi-rs/canvas` cumple la interfaz que pdf.js usa, pero no
+  // es el del DOM: el cast es por los tipos, no por el comportamiento.
+  await pagina.render({
+    // `canvas: null` es lo que pdf.js pide cuando se le da el contexto y no el
+    // lienzo, que es el único camino acá: el de `@napi-rs/canvas` cumple la
+    // interfaz pero no es un `HTMLCanvasElement`. El cast es por los tipos.
+    canvas: null,
+    canvasContext: ctx as unknown as CanvasRenderingContext2D,
+    viewport,
+    intent: "print",
+  }).promise;
   return { ctx, ancho: lienzo.width, alto: lienzo.height };
 }
 
@@ -113,14 +130,41 @@ async function medirUna(ruta: string, lector: Lector): Promise<Resultado> {
      */
     wasmUrl: join(import.meta.dirname, "..", "node_modules", "pdfjs-dist", "wasm") + "/",
     useSystemFonts: false,
-    isEvalSupported: false,
   }).promise;
 
   const hasta = Math.min(documento.numPages, PAGINAS_MAXIMAS);
 
-  const salida = (pasada: Pasada, ancho: number | null, textos: string[]): Resultado => {
-    const qr = textos.map((t) => leerQrAfip(t)).find((x) => x.qr);
-    return { archivo, pasada, ancho, cuit: qr?.qr?.cuitEmisor ?? null, ms: Date.now() - desde };
+  const salida = async (pasada: Pasada, ancho: number | null, textos: string[]): Promise<Resultado> => {
+    const leidos = textos.map((t) => leerQrAfip(t));
+    const qr = leidos.find((x): x is Extract<typeof x, { ok: true }> => x.ok)?.cabecera ?? null;
+    const base = {
+      archivo,
+      pasada,
+      ancho,
+      cuit: qr?.cuitEmisor ?? null,
+      importe: qr?.importeTotal ?? null,
+      ms: Date.now() - desde,
+    };
+    if (!controlar || !qr) return base;
+
+    /*
+     * El control que hace posible confiar en el lector de texto: **cada factura
+     * que sí trae QR es un banco de pruebas**. Se lee el texto igual y se compara
+     * contra lo que firmó ARCA, que es la verdad. Un importe equivocado no se
+     * nota nunca, así que esto es lo que separa "el texto encontró algo" de "el
+     * texto encontró lo correcto".
+     */
+    const filas = await filasDeTexto(documento, hasta);
+    const t = leerCabeceraDelTexto(filas, CUITS_DEL_GRUPO).parcial;
+    const control = [
+      { campo: "cuit", qr: qr.cuitEmisor, texto: t.cuitEmisor },
+      { campo: "punto de venta", qr: qr.puntoVenta, texto: t.puntoVenta },
+      { campo: "número", qr: qr.numero, texto: t.numero },
+      { campo: "fecha", qr: qr.fecha, texto: t.fecha },
+      { campo: "importe", qr: qr.importeTotal, texto: t.importeTotal },
+    ].filter((c) => c.texto !== null && String(c.qr) !== String(c.texto));
+
+    return { ...base, control };
   };
 
   for (let n = 1; n <= hasta; n++) {
@@ -131,17 +175,17 @@ async function medirUna(ruta: string, lector: Lector): Promise<Resultado> {
       const px = pixelesDe(ctx, w, h);
 
       const conJsQr = buscarQr(px);
-      if (conJsQr.length) return salida("página dibujada", ancho, conJsQr);
+      if (conJsQr.length) return await salida("página dibujada", ancho, conJsQr);
 
       const conZxing = await buscarQrConZxing(px, lector);
-      if (conZxing.length) return salida("segundo decodificador", ancho, conZxing);
+      if (conZxing.length) return await salida("segundo decodificador", ancho, conZxing);
     }
   }
 
   const pagina = await documento.getPage(1);
   const { ctx, ancho: w, alto: h } = await dibujar(pagina, ANCHO_DE_VENTANAS);
   const conVentanas = buscarQrConVentanas(pixelesDe(ctx, w, h));
-  if (conVentanas.length) return salida("ventanas", ANCHO_DE_VENTANAS, conVentanas);
+  if (conVentanas.length) return await salida("ventanas", ANCHO_DE_VENTANAS, conVentanas);
 
   /*
    * Sin QR queda el texto del PDF, que es lo que cubre a los emisores que no
@@ -156,6 +200,7 @@ async function medirUna(ruta: string, lector: Lector): Promise<Resultado> {
       pasada: "texto del PDF",
       ancho: null,
       cuit: delTexto.cabecera.cuitEmisor,
+      importe: delTexto.cabecera.importeTotal,
       ms: Date.now() - desde,
     };
   }
@@ -176,6 +221,8 @@ if (!carpeta) {
   process.exit(1);
 }
 const detallado = process.argv.includes("--detalle");
+/** Compara el lector de texto contra el QR en las que traen los dos. */
+const controlar = process.argv.includes("--controlar");
 
 const archivos = (await readdir(carpeta))
   .filter((f) => f.toLowerCase().endsWith(".pdf"))
@@ -225,7 +272,10 @@ const porTexto = resultados.filter((r) => r.pasada === "texto del PDF");
 if (porTexto.length) {
   console.log(`
 ── las que salieron del texto, sin QR ──`);
-  for (const r of porTexto) console.log(`  ${String(r.cuit ?? "sin cuit").padEnd(12)} ${r.archivo}`);
+  for (const r of porTexto) {
+    const importe = r.importe === null || r.importe === undefined ? "sin importe" : r.importe.toFixed(2);
+    console.log(`  ${String(r.cuit ?? "sin cuit").padEnd(12)} ${importe.padStart(14)}  ${r.archivo}`);
+  }
 }
 
 const rescatadas = resultados.filter((r) => r.pasada === "segundo decodificador");
@@ -240,5 +290,18 @@ if (perdidas.length) {
   for (const r of perdidas) {
     console.log(`  ${r.error ? "ERROR " + r.error.slice(0, 40) + "  " : ""}${r.archivo}`);
     if (r.falta?.length) console.log(`       del texto sale todo menos: ${r.falta.join(", ")}`);
+  }
+}
+
+if (controlar) {
+  const conControl = resultados.filter((r) => r.control);
+  const discrepantes = conControl.filter((r) => r.control!.length);
+  console.log(`
+── control del lector de texto contra el QR ──`);
+  console.log(`  facturas con QR y con texto: ${conControl.length}`);
+  console.log(`  coinciden en todo lo que el texto pudo leer: ${conControl.length - discrepantes.length}`);
+  for (const r of discrepantes) {
+    console.log(`  ${r.archivo}`);
+    for (const c of r.control!) console.log(`     ${c.campo}: QR ${JSON.stringify(c.qr)} · texto ${JSON.stringify(c.texto)}`);
   }
 }

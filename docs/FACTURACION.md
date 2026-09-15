@@ -26,7 +26,7 @@ Todo lo que sigue salió de correr el lector contra las **139 facturas de
 `FACTURAS/SEPTIEMBRE 2026`** — la carpeta completa, no una muestra. Ninguna de
 estas cosas se deducía de la especificación de ARCA, y cada una cambió el código.
 
-### El lector, medido: **156 de 187 facturas se leen solas (83%)**
+### El lector, medido: **184 de 187 facturas se leen solas (98%)**
 
 Corrido con `scripts/banco-de-qr.mts` sobre `FACTURAS/SEPTIEMBRE 2026` entera.
 
@@ -35,11 +35,13 @@ Corrido con `scripts/banco-de-qr.mts` sobre `FACTURAS/SEPTIEMBRE 2026` entera.
 | **La página dibujada, subiendo la definición** (1600 → 2600 → 3600 px) | **121** | Un QR de dos centímetros en una A4 dibujada a 1600 px queda en unos 90 px, y el payload de ARCA —una matriz de 69×69 módulos— no llega a un píxel por módulo. |
 | **El segundo decodificador** (ZXing en WebAssembly), sobre el lienzo que acaba de fallar | **30** | Hay QR impecables que jsQR no decodifica y ZXing sí. Cuesta decenas de milisegundos y 950 KB que se bajan **sólo** cuando jsQR falló. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador). |
 | **Ventanas deslizantes**, sólo si las dos primeras fallaron y **sólo en la página 1** | **0** | Hasta 274 recortes, unos segundos. Rescataba 9 antes de que existiera el segundo decodificador; hoy no rescata ninguna, porque lo que necesitaba ventanas ya se lee a 1600. Se deja igual: cuesta sólo en las que van a fallar de todos modos. |
-| **El texto del PDF**, cuando no hay QR en ninguna página | **5** | Emisores que no imprimen el bloque de ARCA. Ver [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). |
+| **El texto del PDF**, cuando no hay QR en ninguna página | **33** | Emisores que no imprimen el bloque de ARCA — ZITO Y PRIOLA son 22. Ver [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). |
 
-Mediana: **607 ms por factura**. El peor caso son 69 segundos, y es siempre una
-que **no** se lee: es lo que tardan las ventanas en recorrer una hoja a 3000 px
-antes de rendirse.
+Mediana: **525 ms por factura**. El peor caso es una que **no** se lee: es lo que
+tardan las ventanas en recorrer una hoja a 3000 px antes de rendirse.
+
+**Las tres que quedan son de LOGÍSTICA VW**: escaneos sin capa de texto y sin QR
+legible. Sin OCR no hay nada que sacar de ahí.
 
 **Las 151 que se leen por QR se leen todas a 1600 px.** El escalonado a 2600 y
 3600 ya no rescata a ninguna: lo que necesitaba más definición lo resuelve zxing
@@ -257,27 +259,83 @@ mismo.
   una factura trae tres o cuatro fechas. Se descartan las filas que dicen `Vto`,
   `Venc` o `Inicio`. Y se lee **d/m**, que ya dio vuelta 885 fechas en Compras
   cuando se leyó al revés.
+- **Entre "fecha" y el número puede haber palabras.** `FECHA : 1/9/2026` y
+  `A Fecha de Emisión: 02/09/2026 09:14:16` son lo mismo escrito por dos
+  emisores. Exigir el número pegado a la palabra dejaba afuera a ZITO Y PRIOLA,
+  BER IMPORT y COOPELECTRIC — 26 de 187. La ventana es corta y se prefieren las
+  filas que dicen "emisión", para que la tolerancia no enganche otra fecha.
 - **El total no es el subtotal**: de las filas que dicen `TOTAL` y no `SUBTOTAL`
   se toma el número más grande.
+- **Y el total puede estar en la fila de abajo.** Cuando la fila que dice TOTAL
+  no trae ningún importe es un encabezado de columna: ZITO Y PRIOLA escribe
+  `… Tasa Vial Total` y recién después los ocho números, y ERGUY escribe
+  literalmente `TOTAL:` y el importe abajo.
 - **El tipo sale del código impreso** (`Cod. 01`), que es el número de ARCA sin
   intermediarios; si no está, se arma con el documento y la letra.
+
+### Los números se escriben de tres maneras, y confundirlas no falla: miente
+
+Las tres están en la misma carpeta de un mes:
+
+| Cómo se escribe | Quién | Qué pasaba antes |
+|---|---|---|
+| `1.774.706,10` | la mayoría | bien |
+| `1,699,556.67` | ZITO Y PRIOLA, COOPELECTRIC | de `41,269,391.77` salía **177** |
+| `1 586 745.60` | AGROINGA | salía **745,60**, mil veces menos |
+
+La regla que las distingue: **manda el último separador**. Si lo siguen
+exactamente dos dígitos y ahí termina, es el decimal y todo lo demás es
+agrupamiento; si no, no hay decimales. Los espacios —incluido el duro, que es
+invisible— cuentan como agrupamiento sólo en grupos de tres dígitos exactos.
+
+Ninguno de los dos casos **fallaba**: los dos devolvían un número plausible y
+equivocado, que es la clase de error que nadie mira dos veces. Los encontró el
+control del banco contra el QR, no un test.
 
 ### Cómo se puede medir esto, que es lo interesante
 
 **Cada factura que sí trae QR es un banco de pruebas.** Se lee el texto, se
-compara contra el QR —que es la verdad— y ahí se ve si acierta. Contra el PDF de
-ALMENTA, leído del bucket: los **siete campos** salen del texto y los siete
-coinciden con ARCA, CAE incluido.
+compara contra el QR —que es la verdad— y ahí se ve si acierta. Eso ya no es una
+idea: es `scripts/banco-de-qr.mts --controlar`, y corrido sobre septiembre da
+**151 facturas con QR y con texto, 129 en las que el texto coincide con ARCA en
+todo lo que pudo leer**.
 
-Lo que **no** está medido es la variedad: **un solo diseño probado**. Si aparece
-`G:\Mi unidad\FACTURAS`, correr el lector de texto sobre las 139 de septiembre y
-comparar contra sus QR da la cobertura real en una tarde. Mientras tanto, todo lo
-que no se encuentra queda vacío y lo completa una persona: el buzón nunca se
-bloquea y nunca inventa un número.
+De las 22 que no coinciden, **11 son del emisor y no del lector** — ver
+[Hay QR que vienen con el importe en centavos](#hay-qr-que-vienen-con-el-importe-en-centavos).
+Las otras 11 son el lector de texto equivocándose en facturas **que sí tienen
+QR**, así que en producción no las toca: el texto se lee sólo cuando no hay QR.
+
+Todo lo que no se encuentra queda vacío y lo completa una persona: el buzón nunca
+se bloquea y nunca inventa un número.
 
 `identificado_por` distingue ahora **tres** orígenes: `qr`, `texto` y `a mano`.
 No son la misma calidad de dato, y la columna existe justamente para poder
 preguntarlo después.
+
+## Hay QR que vienen con el importe en centavos
+
+**Es lo más grave que encontró el banco, y no es un problema del sistema: es de
+quien emite.**
+
+REPUESTOS AGRÍCOLAS COLON y EL MANU MATERIALES firman el QR con el importe **sin
+el punto decimal**. La factura 0004-00029315 está impresa `Total $ 27.830.00` y
+su QR dice `"importe":2783000`. El payload está además corrupto —trae tabuladores
+en el medio del JSON, `"nroCmp":29315			,`— así que los dos vienen del mismo
+sistema de facturación mal hecho.
+
+Son **11 de las 187 de septiembre (6%)**, todas exactamente ×100:
+
+| Emisor | Cuántas |
+|---|---|
+| REPUESTOS AGRÍCOLAS COLON | 10 |
+| EL MANU MATERIALES | 1 |
+
+Eso hoy entra al borrador de Odoo **cien veces más grande**, y el único control
+que había era que alguien mirara el número. El QR es la fuente —esa regla no
+cambia— pero cuando el PDF tiene capa de texto se puede contrastar, que es
+exactamente lo que hace el banco. Las otras seis diferencias de importe que
+aparecen en ese control (ratios 1,21, 1,40, 4,88, 0,0007) son el lector de texto
+equivocándose, no el QR.
 
 ## A quién se le facturó: el emisor sale de Odoo, no del padrón
 
@@ -776,21 +834,23 @@ de dónde salen los píxeles (`@napi-rs/canvas`) y de dónde sale el wasm de ZXi
    imagen. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador).
 3. ~~El QR de TODO RULEMAN~~ **no era un problema**: se lee. Estaba dado por
    perdido sobre un PNG, no sobre el PDF.
+4. ~~Las 28 que fallaban por patrón de texto~~ **hecho**: ZITO Y PRIOLA (22),
+   ERGUY (2), BER IMPORT (2) y COOPELECTRIC (2) pasaron a leerse. De 156 a 184
+   sobre 187. Ver [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto).
 
-### Las 31 de 187 que todavía no se leen, con nombre y apellido
+### Lo que queda, medido
 
-Medido, no estimado. Es la lista de lo que queda por hacer en el lector:
-
-| Cuántas | Quién | Qué le falta |
-|---|---|---|
-| **22** | ZITO Y PRIOLA | No traen QR, y del texto sale todo **menos la fecha y el importe**. La fecha está como `A Fecha de Emisión: 02/09/2026 09:14:16` y el patrón exige el número pegado a "fecha". El total está en la **fila siguiente** a la que dice `Total`, y con separador de miles a la inglesa (`1,699,556.67`). |
-| **2** | ERGUY SERANTES | Falta el importe: la fila dice `TOTAL:` y el número está aparte. |
-| **2** | BER IMPORT | Falta la fecha: `FACTURA A Fecha emisión: 04/09/2026`. Mismo patrón que ZITO. |
-| **2** | COOPELECTRIC | Falta la fecha, y **el importe que saca hoy está mal** (da $177 sobre una factura de millones). Arreglar sólo la fecha la daría por completa con un total falso: hay que mirar las dos juntas. |
-| **3** | LOGÍSTICA VW | **Cero filas de texto**: son escaneos sin capa de texto y sin QR legible. Sin OCR no hay nada que sacar. |
-
-Las cuatro primeras filas son **28 facturas** —el 15% de la carpeta— y las tres
-causas son de patrón, no de imagen.
+- **3 de LOGÍSTICA VW.** Escaneos sin capa de texto y sin QR legible. Sin OCR no
+  hay nada que sacar, y son el 1,6% de la carpeta.
+- **Los 11 QR con el importe en centavos.** El lector los carga con un total 100
+  veces mayor — ver [la sección](#hay-qr-que-vienen-con-el-importe-en-centavos).
+  El contraste contra lo impreso ya está medido y detecta exactamente esos 11,
+  sin un solo falso positivo sobre 151; falta llevarlo del banco a la pantalla.
+- **11 diferencias del lector de texto** contra el QR, en facturas que sí traen
+  QR. Hoy no molestan —el texto sólo se usa cuando no hay QR— pero son la lista
+  de lo que el lector todavía lee mal: dos tomaron el neto por el total
+  (FUNDICIÓN ELÉCTRICA NAVARRO), dos el número de otra columna (CANOBE,
+  FERRETERÍA MARFRA), dos la fecha corrida un día (SIS, PERERA).
 4. ~~Cerrar el círculo con Odoo~~ **hecho**: ver [El vínculo con Odoo](#el-vínculo-con-odoo).
 5. **Las percepciones.** El borrador sale con el IVA y nada más. La localización
    del grupo tiene `perception_ids` en `account.move`, así que una factura con

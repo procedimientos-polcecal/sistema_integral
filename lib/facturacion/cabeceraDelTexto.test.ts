@@ -151,3 +151,188 @@ describe("cuando no alcanza", () => {
     expect(() => leerCabeceraDelTexto([""], DEL_GRUPO)).not.toThrow();
   });
 });
+
+/*
+ * Las filas de abajo son **textuales** de las facturas de septiembre de 2026,
+ * sacadas con `getTextContent()`. Son las cuatro familias que el banco
+ * (`scripts/banco-de-qr.mts`) dejó a la vista: 28 de las 31 que no se leían.
+ */
+
+const ZITO = [
+  "A Fecha de Emisión: 02/09/2026 09:14:16",
+  "Zito y Priola S.R.L COD.01",
+  "Factura 0027-00070568",
+  "C.U.I.T 30-71182027-9",
+  "Vencimiento: 02/09/2026",
+  "Razón Social: POLCECAL S.A. CUIT: 30-64106801-9",
+  "Cantidad Código Descripción Precio Unit. Imp. Int. Tasa IVA Precio Subtotal",
+  "436.3156 3 (3)DIESEL 500 1,668.75 263.8382 30.98 21.00 2,314.00 728,100.97",
+  "Precio sin impuestos IVA % IVA contenido ICL/imp.int. Tasas Percepciones Tasa Vial Total",
+  "1,231,198.18 21.00 258,551.62 187,986.17 21,820.71 0.00 0.00 1,699,556.67",
+];
+
+describe("ZITO Y PRIOLA: 22 de las 187, y no traen QR", () => {
+  it("la fecha de emisión aunque la palabra esté lejos del número", () => {
+    expect(leerCabeceraDelTexto(ZITO, DEL_GRUPO).parcial.fecha).toBe("2026-09-02");
+  });
+
+  /*
+   * El total está en la fila de ABAJO de la que dice "Total", que es el
+   * encabezado de la tabla de impuestos. Y viene con separador de miles a la
+   * inglesa.
+   */
+  it("el total sale de la fila siguiente al encabezado", () => {
+    expect(leerCabeceraDelTexto(ZITO, DEL_GRUPO).parcial.importeTotal).toBe(1699556.67);
+  });
+
+  it("no se queda con el subtotal de una línea, que también está en esa fila", () => {
+    expect(leerCabeceraDelTexto(ZITO, DEL_GRUPO).parcial.importeTotal).not.toBe(728100.97);
+  });
+
+  it("con eso la cabecera queda completa", () => {
+    const { cabecera, falta } = leerCabeceraDelTexto(ZITO, DEL_GRUPO);
+    expect(falta).toEqual([]);
+    expect(cabecera).toMatchObject({
+      cuitEmisor: "30711820279",
+      cuitReceptor: "30641068019",
+      puntoVenta: 27,
+      numero: 70568,
+      fecha: "2026-09-02",
+      importeTotal: 1699556.67,
+    });
+  });
+
+  it("no toma el vencimiento, que en esta factura es el mismo día", () => {
+    const conOtroVto = ZITO.map((f) => (f.startsWith("Vencimiento") ? "Vencimiento: 30/09/2026" : f));
+    expect(leerCabeceraDelTexto(conOtroVto, DEL_GRUPO).parcial.fecha).toBe("2026-09-02");
+  });
+});
+
+/*
+ * El caso que más importa de los cuatro: acá el lector **no fallaba, mentía**.
+ * Sobre `41,269,391.77` el parseo viejo devolvía 177.
+ */
+describe("COOPELECTRIC: el importe que salía estaba mal, no ausente", () => {
+  const COOPELECTRIC = [
+    "FECHA DE EMISIÓN: 14/09/2026 CÓDIGO 017",
+    "C.U.I.T.: 30-54569139-2",
+    "Nº 0008-00453668",
+    "CUIT: 30-70728500-8",
+    "TOTAL FACTURA",
+    "41,269,391.77",
+    "TOTAL A PAGAR $ 41,269,391.77 TOTAL A PAGAR $ 41,269,391.77",
+    "VENCIMIENTO 21/09/26 VENCIMIENTO 21/09/26",
+  ];
+
+  it("lee los millones y no 177", () => {
+    expect(leerCabeceraDelTexto(COOPELECTRIC, DEL_GRUPO).parcial.importeTotal).toBe(41269391.77);
+  });
+
+  it("la fecha de emisión, con el código pegado atrás", () => {
+    expect(leerCabeceraDelTexto(COOPELECTRIC, DEL_GRUPO).parcial.fecha).toBe("2026-09-14");
+  });
+});
+
+describe("ERGUY: la fila dice TOTAL: y el número está abajo", () => {
+  const ERGUY = [
+    "FECHA : 1/9/2026",
+    "C.U.I.T.: 20-36745118-2",
+    "FACTURA Nº 0001-00012278",
+    "CUIT: 30-70728500-8",
+    "Código Cantidad Descripción P. Unitario P. Total",
+    "7792261031833 3,5 VENIER ESMALTE 3 EN 1 SEC.RÁP. NEGRO X 400ML $4.697,62 $16.441,67",
+    "SUBTOTAL: 35.654,26",
+    "TOTAL:",
+    "$ 43.141,65",
+    "ORIGINAL CAE: 86351028531697 FECHA VENC. CAE: 11/9/2026",
+  ];
+
+  it("toma el total de la fila de abajo y no el subtotal", () => {
+    expect(leerCabeceraDelTexto(ERGUY, DEL_GRUPO).parcial.importeTotal).toBe(43141.65);
+  });
+
+  /*
+   * `P. Total` también es un encabezado sin números, y su fila de abajo trae los
+   * importes de la primera línea. No molesta porque gana el mayor — pero si
+   * alguna vez molestara, es acá donde se vería.
+   */
+  it("el encabezado de la tabla no le gana al total", () => {
+    expect(leerCabeceraDelTexto(ERGUY, DEL_GRUPO).parcial.importeTotal).not.toBe(16441.67);
+  });
+
+  it("no confunde la fecha del CAE con la de emisión", () => {
+    expect(leerCabeceraDelTexto(ERGUY, DEL_GRUPO).parcial.fecha).toBe("2026-09-01");
+  });
+});
+
+describe("BER IMPORT: la fecha viene al final de una fila larga", () => {
+  const BER = [
+    "Cond. IVA: IVA Responsable Inscripto FACTURA A Fecha emisión: 04/09/2026",
+    "C.U.I.T.: 30-71721420-6",
+    "Comprobante Nº 0005-00000262",
+    "CUIT: 30-64106801-9",
+    "Subtotal: $ 189.240,00",
+    "IMPORTE TOTAL: $ 228.980,40",
+  ];
+
+  it("la encuentra", () => {
+    expect(leerCabeceraDelTexto(BER, DEL_GRUPO).parcial.fecha).toBe("2026-09-04");
+  });
+
+  it("y el importe sigue saliendo de su propia fila", () => {
+    expect(leerCabeceraDelTexto(BER, DEL_GRUPO).parcial.importeTotal).toBe(228980.4);
+  });
+});
+
+describe("los dos formatos de número conviven en la misma carpeta", () => {
+  const conTotal = (n: string) => leerCabeceraDelTexto([`TOTAL: ${n}`], DEL_GRUPO).parcial.importeTotal;
+
+  it("a la argentina", () => {
+    expect(conTotal("1.774.706,10")).toBe(1774706.1);
+    expect(conTotal("35.654,26")).toBe(35654.26);
+    expect(conTotal("1774706,10")).toBe(1774706.1);
+  });
+
+  it("a la inglesa", () => {
+    expect(conTotal("1,699,556.67")).toBe(1699556.67);
+    expect(conTotal("41,269,391.77")).toBe(41269391.77);
+    expect(conTotal("1774706.10")).toBe(1774706.1);
+  });
+
+  /*
+   * El caso que rompía: sin decidir cuál es el separador decimal, de
+   * `41,269,391.77` salía `1.77` y de ahí 177.
+   */
+  it("un importe chico no se confunde con el final de uno grande", () => {
+    expect(conTotal("1.77")).toBe(1.77);
+    expect(conTotal("41,269,391.77")).not.toBe(177);
+  });
+});
+
+/*
+ * AGROINGA separa los miles con ESPACIOS. Lo encontró el control del banco
+ * comparando el texto contra el QR de la misma factura: el QR decía
+ * 1.586.745,60 y el texto devolvía 745,60. No fallaba — devolvía mil veces
+ * menos, que es la clase de error que nadie mira dos veces.
+ */
+describe("AGROINGA: los miles separados con espacios", () => {
+  const conTotal = (n: string) => leerCabeceraDelTexto([`TOTAL ${n}`], DEL_GRUPO).parcial.importeTotal;
+
+  it("lee el número entero y no el último grupo", () => {
+    expect(conTotal("1 586 745.60")).toBe(1586745.6);
+  });
+
+  it("también con el espacio duro, que es el que suele poner un PDF", () => {
+    expect(conTotal("1\u00A0586\u00A0745.60")).toBe(1586745.6);
+  });
+
+  /*
+   * El borde: el grupo tiene que ser de tres dígitos exactos. Si no, una
+   * cantidad y un precio de dos columnas distintas se pegarían en un número que
+   * no existe.
+   */
+  it("no junta dos columnas que no son un solo número", () => {
+    expect(conTotal("5 10.00")).toBe(10);
+    expect(conTotal("35 2 47.50")).toBe(47.5);
+  });
+});
