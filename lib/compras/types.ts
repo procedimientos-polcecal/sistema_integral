@@ -77,6 +77,17 @@ export interface Requerimiento {
   ubicacion_raw: string | null;
   ubicacion_id: string | null;
 
+  /**
+   * Lo que contestó quien pidió en EQUIPO QUE SOLICITA, tal cual.
+   *
+   * No siempre nombra una máquina: el desplegable tiene lugares (PAÑOL,
+   * GALPON 1) que igual son la imputación de la compra. Es lo que Facturación
+   * usa para encontrar la cuenta analítica.
+   */
+  equipo_raw: string | null;
+  /** El equipo del núcleo, sólo cuando el texto lo identifica sin ambigüedad. */
+  equipo_id: string | null;
+
   fecha_necesidad: string | null;
   detalle_extra: string | null;
   imagen_url: string | null;

@@ -431,42 +431,79 @@ comportamiento correcto, y conviene esperarlo en los proveedores nuevos.
 cobertura al 78% de acierto. Ese rango es justo donde uno aprende a apretar "sí"
 sin mirar.
 
-### La analítica: primero el equipo, después la costumbre
+### La analítica: primero lo que dijo quien pidió, después la costumbre
 
 Dos fuentes en cascada, y **no valen lo mismo**.
 
-**El equipo del requerimiento, que es el dato y no una probabilidad.** Si la
-factura está vinculada a un RI y ese RI se pidió para un equipo, el gasto va a la
-analítica de ese equipo. El enlace es por **código**: el grupo le puso `PO-A1-01`,
-`EM6` a cada equipo y ese mismo código está escrito en el nombre de la analítica
-de Odoo (`EM6 - CATERPILLAR 950 G`). No es que los nombres se parezcan — es el
-mismo identificador de los dos lados.
+**Lo que contestó quien pidió, que es el dato y no una probabilidad.** Desde el
+15/09/2026 el formulario de Google pregunta **EQUIPO QUE SOLICITA**, y el
+desplegable usa el vocabulario del grupo: `PO-A1-01 - ACARREADOR DE PLACAS`. Ese
+texto **es**, palabra por palabra, el nombre de la cuenta analítica de Odoo. Así
+que la imputación deja de deducirse: la dice la persona que pidió el repuesto.
 
-Medido con el código real sobre los 239 equipos activos: **235 resuelven en
-Polcecal y 236 en Polysan**. Los que no: `C1`, `C2` y `C3`, porque en Odoo conviven
-un `C1` del plan CANTERA y un `C1 - COMPRESOR 1` del plan COMPRESORES —dos cosas
-distintas que empiezan igual, así que no se elige ninguna—, y `PO-C1-10`, que no
-tiene analítica en Polcecal.
+Medido con el código real sobre las 255 opciones del desplegable: **241 resuelven
+a una única cuenta analítica en cada empresa, y ninguna queda ambigua.** Las 14
+que no: ocho equipos que están en el desplegable y no en Odoo (`PO-C1-10`,
+`PO-C1-11`, los cuatro `PY-A2-1x`, dos molinos a martillos) y seis opciones que no
+tienen cuenta propia (MECÁNICO, CONSTRUCTORA, CAPATACES, LABORATORIO, LUBRICADOR,
+LA ALCANCIA).
+
+Y cubre lo que el equipo no podía: **PAÑOL, GALPON 1, TALLER ELÉCTRICO,
+CONTRATISTA** no son máquinas y no existen en el catálogo de equipos, pero sí son
+cuentas analíticas. Por el nombre llegan; por el equipo no llegarían nunca.
+
+**El equipo de la ubicación, como respaldo.** Es el camino anterior y queda para
+los RI cargados antes de que el formulario preguntara. El enlace es por
+**código**: el grupo le puso `PO-A1-01`, `EM6` a cada equipo y ese mismo código
+está escrito en el nombre de la analítica. Medido sobre los 239 equipos activos,
+**235 resuelven en Polcecal y 236 en Polysan**; los que no son `C1`, `C2` y `C3`
+—en Odoo conviven un `C1` del plan CANTERA y un `C1 - COMPRESOR 1` del plan
+COMPRESORES, dos cosas distintas que empiezan igual— y `PO-C1-10`, que no tiene
+analítica en Polcecal.
 
 Un borde que costó: **`EM1` no puede matchear `EM10`**. Se exige que el código
 termine ahí. Sin eso, el equipo EM1 se llevaba dieciséis analíticas por delante.
 
-**Lo que este proveedor repartió antes, cuando no hay equipo.** Acierta mucho
-menos: en el backtest, 38% de cobertura al 78%. A qué equipo fue un repuesto
+**Lo que este proveedor repartió antes, cuando no hay requerimiento.** Acierta
+mucho menos: en el backtest, 38% de cobertura al 78%. A qué equipo fue un repuesto
 depende de qué se rompió esa semana, no del proveedor. Se muestra con el
 antecedente y se aplica a mano, nunca sola.
 
-### Lo que esta vía **no** resuelve, con número
+### De dónde sale el equipo, y por qué no de la columna del master
 
-El RI **cubre poco**: de 1.969 requerimientos, **206 (10%) apuntan a un equipo**;
-812 (41%) apuntan a un sector y el resto a un taller o a una oficina. Y los
-sectores **no tienen código**, así que no hay llave dura para ellos — emparejarlos
-por nombre sería exactamente lo que este sistema no hace.
+La planilla master **también** tiene una columna EQUIPO, y **no se puede leer**.
+La arma un `FILTER(FLATTEN(...); ... <> "")` sobre las dieciséis columnas de la
+hoja de respuestas —la pregunta está repetida una vez por rama del formulario—, y
+ese filtro tira los blancos y aprieta los valores hacia arriba. En cuanto un RI
+tenga equipo y el de abajo no, la fila N de esa columna deja de corresponderse
+con el RI de la fila N: cada compra quedaría imputada a la máquina de otro, sin
+que nada avise. Es el enlace equivocado que no se nota nunca.
 
-Así que la vía del equipo es **certera y angosta**, y la del historial es ancha y
-floja. Juntas cubren bastante más que cualquiera de las dos, y la pantalla
-distingue cuál es cuál: la del equipo se muestra en verde, la del historial con
-su "12 de 18 veces".
+Por eso el SdG lee **la hoja de respuestas del formulario** y une **por número de
+RI**, que es lo único que identifica la fila. Queda pendiente del lado de la
+planilla: mientras esa fórmula siga así, lo que ven en la columna EQUIPO del
+master los que no entran al sistema va a estar corrido.
+
+### Qué se guarda, y qué queda en null
+
+Las mismas dos columnas que ya usa la ubicación, por la misma razón:
+`equipo_raw` es lo que contestó la persona, tal cual, y es lo que Facturación usa
+para buscar la analítica; `equipo_id` es el enlace al catálogo del núcleo y sólo
+se completa cuando el texto identifica un equipo **sin ambigüedad**. Las opciones
+que no son máquinas quedan con `equipo_id` en null a propósito: enlazar al que se
+le parece es peor que dejar en null.
+
+La precedencia entre lo declarado y lo que dice la ubicación no se decide acá:
+vive en `lib/compras/equipoDelPedido.ts`, para que no esté distinta en cada
+consulta que la necesita. Lo que importa para la imputación es su segunda mitad:
+**un equipo declarado que no se pudo enlazar no cae de vuelta en la ubicación.**
+Si alguien contestó "LA ALCANCIA" —que no tiene analítica— no se propone la del
+lugar donde se entrega: eso sería mostrar un equipo que nadie dijo. Se cae al
+historial del proveedor, que al menos se muestra como lo que es.
+
+La vía del requerimiento es **certera**, y la del historial es ancha y floja. La
+pantalla distingue cuál es cuál: la del requerimiento se muestra en verde, la del
+historial con su "12 de 18 veces".
 
 Un ejemplo real de por qué el umbral importa: RUBIALES repartió sus últimas
 líneas 122 veces a una analítica, 110 a otra y 19 a una tercera. Eso es 48%, muy
@@ -695,3 +732,16 @@ Acordarse de borrar las facturas de ahí después.
 6. **El CUIT de los 146 proveedores que no lo tienen.** Odoo lo tiene en
    `res.partner.vat` para los 207 que están enlazados: es un cruce que se puede
    correr una vez y sube el reconocimiento automático del emisor.
+7. **La columna EQUIPO del master está corrida**, y eso es de la planilla, no del
+   sistema — ver [De dónde sale el equipo](#de-dónde-sale-el-equipo-y-por-qué-no-de-la-columna-del-master).
+   El SdG no la usa, así que no le afecta; lo que queda mal es lo que ven en la
+   planilla los que no entran al sistema. Se arregla del lado de Sheets, uniendo
+   por N° de RI en vez de apretar los blancos con `FILTER`.
+8. **Los RI cargados desde el sistema no declaran equipo.** El alta escribe en la
+   pestaña `Altas del sistema`, que no tiene esa columna, y la pregunta sólo
+   existe en el formulario de Google. Mientras siga así, esos pedidos caen en la
+   vía del historial. Se resuelve cuando el alta del sistema pregunte lo mismo.
+9. **Los 1.970 RI que ya están cargados no tienen equipo**, porque la pregunta es
+   nueva y nadie la contestó todavía. La sincronización lo va a ir llenando a
+   medida que entren pedidos nuevos; los viejos se quedan con la vía de la
+   ubicación (206) y con la del historial.

@@ -40,6 +40,8 @@ porque ese bloque exige una pestaña de área de verdad. El porqué largo está 
 - Lee la hoja master y todas las pestañas `RI *`, y las fusiona por N° de RI.
 - Da de alta áreas y proveedores nuevos que aparezcan.
 - Resuelve "dónde se necesita" contra sectores y equipos del núcleo.
+- **Lee para qué equipo se pidió**, de la hoja de respuestas del formulario. Ver
+  "El equipo que solicita", más abajo.
 - **Enlaza la planilla de comparativa** que anote la columna de cada hoja de
   área. Ver "La comparativa entra por acá", más abajo.
 - Omite los RI ya gestionados en el sistema.
@@ -211,6 +213,46 @@ Para que la app también pueda escribir esas celdas hay que **agregar
 protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
 protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
 control de quién aprueba pasa a estar en los permisos de la app.
+
+## El equipo que solicita
+
+Desde el 15/09/2026 el formulario de Google pregunta **EQUIPO QUE SOLICITA**, con
+el vocabulario del grupo (`PO-A1-01 - ACARREADOR DE PLACAS`). Es lo que le
+permite a Facturación imputar la compra sin adivinar: ese texto es, palabra por
+palabra, el nombre de la cuenta analítica de Odoo.
+
+**La pregunta está repetida dieciséis veces**, una por rama del formulario, así
+que en la hoja de respuestas ocupa dieciséis columnas —hoy de la O a la AD— y
+quien contesta llena una sola.
+
+**El master también tiene una columna EQUIPO, y no se lee.** La arma un
+`FILTER(FLATTEN(...); ... <> "")` sobre esas dieciséis columnas, y ese filtro
+tira los blancos y aprieta los valores hacia arriba. En cuanto un RI tenga equipo
+y el de abajo no, la fila N de esa columna deja de ser el equipo del RI de la
+fila N. Sería el mismo tipo de corrimiento que costó caro con las columnas a mano
+del master, sólo que peor: acá el resultado es una compra imputada a la máquina
+de otro, y eso no se nota nunca.
+
+Por eso se lee **la hoja de respuestas** y se une **por N° de RI**. Queda
+pendiente del lado de la planilla arreglar esa fórmula, para que lo que ven ahí
+los que no entran al sistema no esté corrido.
+
+Se guardan dos columnas, igual que con la ubicación y por la misma razón:
+`equipo_raw` es la respuesta tal cual, y `equipo_id` el enlace al catálogo del
+núcleo, que **sólo se completa cuando el texto identifica un equipo sin
+ambigüedad**. Catorce de las opciones del desplegable no son máquinas —PAÑOL,
+GALPON 1, LABORATORIO, CONTRATISTA— y ésas quedan con `equipo_id` en null a
+propósito: siguen sirviendo para la analítica, que se busca por el texto.
+
+Leer la celda y resolverla contra el catálogo es `lib/compras/equipoDelFormulario.ts`.
+Qué equipo **termina teniendo** un pedido, cuando además su ubicación apunta a
+otro, es una pregunta distinta y la contesta `lib/compras/equipoDelPedido.ts`:
+gana el declarado, y un declarado que no se pudo enlazar **no** cae de vuelta en
+la inferencia de la ubicación.
+
+Si la lectura falla —un permiso que falte sobre la planilla del formulario— la
+importación sigue y el motivo vuelve en `equipos_error`. El equipo es un dato que
+se suma, no una condición del alta.
 
 ## La carpeta de comparativas
 

@@ -5,6 +5,7 @@ import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarFacturacion, tieneAccesoFacturacion } from "@/lib/facturacion/auth";
 import { describirDistribucion, revisarDistribucion } from "@/lib/facturacion/lineas";
 import { normalizarDescripcion } from "@/lib/compras/productoOdoo";
+import { equipoDelPedido } from "@/lib/compras/equipoDelPedido";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import { leerCuentasAnaliticas, leerCuentasContables } from "@/lib/odoo/catalogoContable";
@@ -12,7 +13,7 @@ import {
   traerHistorialDeAnalitica,
   traerHistorialDeCuentas,
 } from "@/lib/odoo/historialDeImputacion";
-import { analiticaDelEquipo } from "@/lib/facturacion/analiticaDelEquipo";
+import { analiticaDelEquipo, analiticaPorNombre } from "@/lib/facturacion/analiticaDelEquipo";
 import { sugerirAnalitica } from "@/lib/facturacion/sugerirAnalitica";
 import { porQueSeSugiere, sugerirCuenta } from "@/lib/facturacion/sugerirCuenta";
 import { resolverElEmisor } from "@/lib/odoo/emisor";
@@ -352,51 +353,100 @@ async function sugerirLasAnaliticas(
 }
 
 /**
- * El equipo para el que se pidió el requerimiento, y su analítica.
+ * Qué analítica sale del requerimiento, y por qué.
  *
- * La cadena es factura → requerimiento → ubicación → equipo. Cubre poco —de
- * 1.969 requerimientos, 206 apuntan a un equipo; los demás a un sector o a un
- * taller— pero lo que cubre lo sabe con certeza, y por código, no por nombre.
+ * Cuál es el equipo del pedido lo decide `equipoDelPedido`, que es donde vive la
+ * precedencia —gana el declarado, la ubicación queda de respaldo— para que no
+ * esté distinta en cada consulta que la necesita. Acá se traduce eso a una
+ * analítica, por dos caminos:
+ *
+ * 1. **El texto que contestó quien pidió.** El formulario pregunta EQUIPO QUE
+ *    SOLICITA con el vocabulario del grupo, y ese texto **es** el nombre de la
+ *    cuenta analítica de Odoo: 241 de las 255 opciones resuelven a una sola. Acá
+ *    no hay deducción — la persona que pidió el repuesto dijo para qué era. Es
+ *    además el único camino que llega a PAÑOL, GALPON 1 o TALLER ELÉCTRICO, que
+ *    son analíticas y no son máquinas.
+ * 2. **El código del equipo.** Sirve para el declarado que sí se enlazó y para
+ *    el que cuelga de la ubicación, que es el camino anterior y cubre 206 de
+ *    1.969 requerimientos.
+ *
+ * Lo que **no** se hace: si quien pidió declaró algo que no se pudo resolver,
+ * no se cae a la ubicación. `equipoDelPedido` ya devuelve `id: null` en ese
+ * caso, y está bien que así sea — proponer la analítica del lugar donde se
+ * entrega sería mostrar un equipo que nadie dijo.
+ *
+ * En los dos caminos la coincidencia es por un identificador —el nombre completo
+ * o el código—, nunca por parecido: si no resuelve, devuelve `null` y la
+ * sugerencia cae al historial del proveedor.
  */
 async function equipoDelRequerimiento(
   supabase: Awaited<ReturnType<typeof createClient>>,
   requerimientoId: string | null,
   companyId: number,
   analiticas: { id: number; nombre: string; plan: string | null }[]
-): Promise<{ id: number; nombre: string; nroRi: number } | null> {
+): Promise<{ id: number; nombre: string; porque: string } | null> {
   if (!requerimientoId) return null;
 
   const { data: ri } = await supabase
     .from("compras_requerimientos")
-    .select("nro_ri, ubicacion_id")
+    .select("nro_ri, ubicacion_id, equipo_id, equipo_raw")
     .eq("id", requerimientoId)
     .maybeSingle();
 
-  if (!ri?.ubicacion_id) return null;
+  if (!ri) return null;
 
-  const { data: ubicacion } = await supabase
-    .from("compras_ubicaciones")
-    .select("equipo_id")
-    .eq("id", ri.ubicacion_id)
-    .maybeSingle();
+  const deOdoo = analiticas.map((a) => ({ id: a.id, nombre: a.nombre, empresa: companyId }));
+  const nroRi = ri.nro_ri as number;
 
-  if (!ubicacion?.equipo_id) return null;
+  const delPedido = equipoDelPedido({
+    equipo_raw: ri.equipo_raw as string | null,
+    equipo_id: ri.equipo_id as string | null,
+    ubicacion_equipo_id: await equipoDeLaUbicacion(supabase, ri.ubicacion_id as string | null),
+  });
+
+  // 1. El texto que contestó quien pidió, tal cual.
+  const dicha = analiticaPorNombre(delPedido.texto, deOdoo, companyId);
+  if (dicha) {
+    return {
+      id: dicha.id,
+      nombre: dicha.nombre,
+      porque: `el RI ${nroRi} se pidió para ${delPedido.texto}`,
+    };
+  }
+
+  // 2. El código del equipo, cuando hay uno usable.
+  if (!delPedido.id) return null;
 
   const { data: equipo } = await supabase
     .from("equipos")
     .select("code, name")
-    .eq("id", ubicacion.equipo_id)
+    .eq("id", delPedido.id)
     .maybeSingle();
 
   if (!equipo?.code) return null;
 
-  const elegida = analiticaDelEquipo(
-    equipo.code as string,
-    analiticas.map((a) => ({ id: a.id, nombre: a.nombre, empresa: companyId })),
-    companyId
-  );
-
+  const elegida = analiticaDelEquipo(equipo.code as string, deOdoo, companyId);
   return elegida.analitica
-    ? { id: elegida.analitica.id, nombre: elegida.analitica.nombre, nroRi: ri.nro_ri as number }
+    ? {
+        id: elegida.analitica.id,
+        nombre: elegida.analitica.nombre,
+        porque: `el RI ${nroRi} se pidió para ${equipo.name ?? equipo.code}`,
+      }
     : null;
+}
+
+/** El equipo al que el catálogo enlaza esa ubicación, si lo enlaza a alguno. */
+async function equipoDeLaUbicacion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ubicacionId: string | null
+): Promise<string | null> {
+  if (!ubicacionId) return null;
+
+  const { data } = await supabase
+    .from("compras_ubicaciones")
+    .select("equipo_id")
+    .eq("id", ubicacionId)
+    .maybeSingle();
+
+  return (data?.equipo_id as string | null) ?? null;
 }

@@ -20,6 +20,7 @@ import { indicePorClave } from "@/lib/core/proveedores";
 import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
+import { equiposPorRi, resolverElEquipo } from "@/lib/compras/equipoDelFormulario";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
 import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPlanilla";
 // Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
@@ -33,6 +34,7 @@ import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/ty
 import {
   obtenerToken as tokenGoogle, cuentaDeServicio, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
+import { leerValores } from "@/lib/core/sheets";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -361,6 +363,23 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
    * fallo de escritura que no se distingue del silencio no es un diagnóstico.
    */
   punteros_error?: string;
+  /** Requerimientos que traen el equipo que declaró quien pidió. */
+  equipos: number;
+  /**
+   * De ésos, cuántos se pudieron enlazar a un equipo del catálogo.
+   *
+   * Es **menor que `equipos` a propósito**: catorce de las opciones del
+   * desplegable son lugares y no máquinas (PAÑOL, GALPON 1, LABORATORIO…). Ésas
+   * conservan el texto y no enlazan nada, que es lo correcto.
+   */
+  equipos_enlazados: number;
+  /**
+   * Si el equipo no se pudo leer, por qué. La importación siguió igual: vive en
+   * la planilla del formulario, y un permiso que falte ahí no puede tirar abajo
+   * el alta de los requerimientos. Se devuelve en vez de quedar en un
+   * `console.warn` por la misma razón que los demás motivos de este módulo.
+   */
+  equipos_error?: string;
 }
 
 interface FilaPlanilla {
@@ -496,6 +515,20 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       errorDeLinks = e instanceof Error ? e.message : String(e);
     }
 
+    /*
+     * Para qué equipo se pidió cada RI. Va aparte y con su propio try, por lo
+     * mismo que los links de comparativa: vive en otra planilla y un permiso
+     * que falta ahí no puede tirar abajo el alta de los requerimientos.
+     */
+    let equipos = new Map<number, string>();
+    let errorDeEquipos: string | undefined;
+    try {
+      equipos = await leerEquiposDelFormulario();
+    } catch (e) {
+      errorDeEquipos = e instanceof Error ? e.message : String(e);
+    }
+    const catalogoEquipos = equipos.size ? await equiposDelNucleo(admin) : [];
+
     // Catálogos y referencias
     const idArea = await asegurarAreas(admin, registros.map((r) => r.datos.area));
     const idProveedor = await asegurarProveedores(admin, registros.map((r) => r.datos.proveedor));
@@ -556,6 +589,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       if (!yaExiste) nuevas++;
 
       const d = registro.datos;
+      const equipoDicho = equipos.get(registro.nro_ri) ?? null;
       const ubicacion = d.ubicacion ? String(d.ubicacion) : null;
       const clave = ubicacion ? norm(ubicacion) : null;
       const yaHabia = previo.get(registro.nro_ri);
@@ -598,6 +632,12 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         // Se guarda el texto original como respaldo; ubicacion_id es el dato bueno.
         ubicacion_raw: ubicacion,
         ubicacion_id: clave ? idUbicacion.get(clave) ?? null : null,
+        // El equipo, igual: el texto siempre, el enlace sólo cuando es seguro.
+        // Catorce opciones del desplegable no son equipos (PAÑOL, GALPON 1,
+        // LABORATORIO…) y ésas quedan con `equipo_id` en null a propósito — el
+        // texto alcanza para que Facturación encuentre la analítica.
+        equipo_raw: equipoDicho,
+        equipo_id: resolverElEquipo(equipoDicho, catalogoEquipos),
         fecha_necesidad: d.fecha_necesidad ?? null,
         detalle_extra: d.detalle_extra ?? null,
         imagen_url: d.imagen_url ?? null,
@@ -691,6 +731,12 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       ...(errorDeLinks ? { comparativas_error: errorDeLinks } : {}),
       punteros_actualizados: punterosMovidos,
       ...(errorDePunteros ? { punteros_error: errorDePunteros } : {}),
+      // El equipo que declaró quien pidió, y cuántos de ésos se pudieron
+      // enlazar al catálogo. La diferencia entre los dos números no es un
+      // fallo: hay opciones del desplegable que no son equipos.
+      equipos: aEscribir.filter((f) => f.equipo_raw).length,
+      equipos_enlazados: aEscribir.filter((f) => f.equipo_id).length,
+      ...(errorDeEquipos ? { equipos_error: errorDeEquipos } : {}),
     };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);
@@ -847,6 +893,47 @@ export async function leerLinksDeComparativa(): Promise<Map<number, string>> {
   }
 
   return porRi;
+}
+
+// ── Para qué equipo se pidió cada RI ─────────────────────────
+
+/**
+ * El equipo que declaró quien cargó el pedido, por número de RI.
+ *
+ * ## Por qué se lee la hoja del formulario y no el master
+ *
+ * El master **también** tiene una columna EQUIPO, pero no se puede usar: la
+ * arma un `FILTER(FLATTEN(...); ... <> "")` sobre las dieciséis columnas de la
+ * hoja de respuestas, y ese filtro tira los blancos y aprieta los valores hacia
+ * arriba. En cuanto un RI tenga equipo y el de abajo no, la fila N de esa
+ * columna deja de corresponderse con el RI de la fila N — cada compra quedaría
+ * imputada a la máquina de otro, sin que nada avise. Es exactamente el enlace
+ * equivocado que el módulo prohíbe.
+ *
+ * La hoja de respuestas trae el N° de RI en la primera columna, así que ahí la
+ * unión es por identificador.
+ *
+ * ## Qué pasa si falla
+ *
+ * Devuelve el mapa vacío y la importación sigue: el equipo es un dato que se
+ * suma, no una condición del alta. Quien llama informa el motivo —no se
+ * silencia— y los RI de esa corrida quedan sin equipo hasta la siguiente.
+ */
+export async function leerEquiposDelFormulario(): Promise<Map<number, string>> {
+  const planilla = process.env.GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID;
+  if (!planilla) return new Map();
+
+  const grilla = await leerValores(planilla, HOJA_RESPUESTAS);
+  return equiposPorRi(grilla);
+}
+
+/** La hoja donde Google deja lo que se manda por el formulario. */
+const HOJA_RESPUESTAS = "Respuestas de formulario 1";
+
+/** El catálogo de equipos del núcleo, con lo justo para reconocer un texto. */
+async function equiposDelNucleo(admin: Admin) {
+  const { data } = await admin.from("equipos").select("id, code, name");
+  return (data ?? []) as { id: string; code: string | null; name: string | null }[];
 }
 
 // ── Exportar: app → planilla ─────────────────────────────────

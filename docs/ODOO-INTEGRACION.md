@@ -455,6 +455,14 @@ sin poder editarse ni borrarse en Odoo. En Compras lo aprieta una persona.
   número equivocado que nadie cuestiona porque la llamada "funcionó".
 - **El nombre de la base puede cambiar en un redeploy** (lleva el id del build de
   Odoo.sh). Ver "El terreno".
+- **El nombre de una cuenta analítica depende del idioma del pedido.** `name` es
+  traducible, así que una llamada sin `lang: "es_AR"` en el contexto devuelve
+  **otro texto** para buena parte de las cuentas: medido el 15/09/2026, de las
+  255 opciones del desplegable de equipos, con `lang` enganchan 241 y sin `lang`
+  sólo 161 — y `EM6 - CATERPILLAR 950 G` es una de las que desaparece. El cliente
+  del SdG lo manda siempre (`CONTEXTO_BASE` en `lib/odoo/client.ts`), así que la
+  app está bien; lo que se cae es cualquier script suelto que arme el RPC a mano.
+  Costó una medición que daba 161 y parecía un bug del código.
 - **Una tabla puente nueva rompe los embeds de PostgREST.** `compras_odoo_ordenes`
   tiene FK a `compras_requerimientos` y a `empresas`, y con eso abrió un **segundo
   camino** de requerimientos a empresas: todo

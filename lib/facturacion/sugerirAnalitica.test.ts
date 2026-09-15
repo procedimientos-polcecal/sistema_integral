@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { analiticaDelEquipo, type AnaliticaDeOdoo } from "./analiticaDelEquipo";
+import {
+  analiticaDelEquipo,
+  analiticaPorNombre,
+  type AnaliticaDeOdoo,
+} from "./analiticaDelEquipo";
 import { sugerirAnalitica } from "./sugerirAnalitica";
 
 /*
@@ -70,6 +74,54 @@ describe("la analítica que le corresponde a un equipo", () => {
   });
 });
 
+/*
+ * El camino bueno: lo que contestó quien pidió en el formulario ES el nombre de
+ * la analítica. `PAÑOL` está a propósito — es una de las catorce opciones del
+ * desplegable que no son máquinas y que por el camino del equipo no llegarían.
+ */
+describe("la analítica que se llama como lo que contestó quien pidió", () => {
+  const CON_PANOL: AnaliticaDeOdoo[] = [
+    ...ANALITICAS,
+    { id: 700, nombre: "PAÑOL", empresa: 1 },
+    { id: 701, nombre: "PAÑOL", empresa: 2 },
+  ];
+
+  it("empareja por el nombre completo", () => {
+    expect(analiticaPorNombre("EM6 - CATERPILLAR 950 G", CON_PANOL, 1)?.id).toBe(152);
+  });
+
+  it("un lugar que no es un equipo también tiene analítica", () => {
+    expect(analiticaPorNombre("PAÑOL", CON_PANOL, 1)?.id).toBe(700);
+    expect(analiticaPorNombre("PAÑOL", CON_PANOL, 2)?.id).toBe(701);
+  });
+
+  it("los acentos y los espacios de más no la pierden", () => {
+    expect(analiticaPorNombre("  panol ", CON_PANOL, 1)?.id).toBe(700);
+  });
+
+  /*
+   * Acá no vale "empieza con": si valiera, `EM1` se llevaría la analítica de la
+   * 320 B para cualquier cosa que empezara igual.
+   */
+  it("no alcanza con que empiece igual", () => {
+    expect(analiticaPorNombre("EM1", CON_PANOL, 1)).toBeNull();
+  });
+
+  it("una respuesta que no es ninguna analítica no propone nada", () => {
+    expect(analiticaPorNombre("LA ALCANCIA", CON_PANOL, 1)).toBeNull();
+    expect(analiticaPorNombre(null, CON_PANOL, 1)).toBeNull();
+    expect(analiticaPorNombre("   ", CON_PANOL, 1)).toBeNull();
+  });
+
+  it("si sólo existe en la otra empresa no se usa", () => {
+    expect(analiticaPorNombre("EM1 - CATERPILLAR 320 B", CON_PANOL, 3)).toBeNull();
+  });
+
+  it("una compartida sirve cuando no hay propia", () => {
+    expect(analiticaPorNombre("COMPARTIDA - TALLER", CON_PANOL, 2)?.id).toBe(500);
+  });
+});
+
 const NOMBRES = new Map([
   [152, "EM6 - CATERPILLAR 950 G"],
   [254, "D1"],
@@ -77,16 +129,22 @@ const NOMBRES = new Map([
 ]);
 
 describe("la distribución que se propone para una línea", () => {
-  it("el equipo del requerimiento gana, y sin umbral: no es una probabilidad", () => {
+  it("el requerimiento gana, y sin umbral: no es una probabilidad", () => {
     const s = sugerirAnalitica(6835, {
-      delEquipo: { id: 152, nombre: "EM6 - CATERPILLAR 950 G", nroRi: 1933 },
+      delEquipo: {
+        id: 152,
+        nombre: "EM6 - CATERPILLAR 950 G",
+        porque: "el RI 1933 se pidió para EM6 - CATERPILLAR 950 G",
+      },
       historial: { porProducto: { "6835": { '{"254":100}': 50 } }, delProveedor: {} },
       nombres: NOMBRES,
     });
 
     expect(s?.analitica).toEqual({ "152": 100 });
     expect(s?.segun).toBe("el equipo del requerimiento");
-    expect(s?.porque).toBe("el RI 1933 se pidió para ese equipo");
+    // La razón la arma quien resolvió la analítica: sólo ahí se sabe si salió
+    // de lo que contestó la persona o del equipo que cuelga de la ubicación.
+    expect(s?.porque).toBe("el RI 1933 se pidió para EM6 - CATERPILLAR 950 G");
   });
 
   it("sin equipo, lo que este proveedor repartió para ese producto", () => {

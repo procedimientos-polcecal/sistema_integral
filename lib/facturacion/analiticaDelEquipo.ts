@@ -94,3 +94,51 @@ export function analiticaDelEquipo(
     candidatas: elegibles,
   };
 }
+
+/**
+ * La analítica que se llama **exactamente** como lo que contestó quien pidió.
+ *
+ * ## Por qué esto es mejor que pasar por el equipo
+ *
+ * El desplegable de EQUIPO QUE SOLICITA del formulario no usa un vocabulario
+ * propio: usa el del grupo, `PO-A1-01 - ACARREADOR DE PLACAS`, que es palabra
+ * por palabra el nombre de la cuenta analítica de Odoo. Medido sobre las 255
+ * opciones del desplegable, **241 son una única cuenta analítica en cada
+ * empresa y ninguna es ambigua**.
+ *
+ * Y cubre lo que el equipo no puede: catorce de esas opciones —PAÑOL, GALPON 1,
+ * TALLER ELÉCTRICO, CONTRATISTA— no son máquinas y no existen en el catálogo de
+ * equipos, pero **sí** son cuentas analíticas. Por el nombre llegan; por el
+ * equipo no llegarían nunca.
+ *
+ * ## Exacto, o nada
+ *
+ * La comparación es por igualdad del nombre completo, sin acentos y sin
+ * espacios de más. No hay "empieza con" ni "se parece": si la respuesta no es
+ * una analítica, no se propone ninguna y queda el camino del código.
+ */
+export function analiticaPorNombre(
+  texto: string | null | undefined,
+  analiticas: AnaliticaDeOdoo[],
+  companyId: number
+): AnaliticaDeOdoo | null {
+  const buscado = sinAcentos(texto ?? "");
+  if (!buscado) return null;
+
+  const iguales = analiticas.filter((a) => sinAcentos(a.nombre) === buscado);
+  if (!iguales.length) return null;
+
+  const propias = iguales.filter((a) => a.empresa === companyId);
+  const elegibles = propias.length ? propias : iguales.filter((a) => a.empresa === null);
+
+  return elegibles.length === 1 ? elegibles[0] : null;
+}
+
+function sinAcentos(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}

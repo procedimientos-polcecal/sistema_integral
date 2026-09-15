@@ -157,6 +157,13 @@ export default function RequerimientoDetalle({
                 label="Dónde se necesita"
                 valor={r.compras_ubicaciones?.nombre ?? r.ubicacion_raw}
               />
+              {/*
+                * Se muestra lo que contestó quien pidió, no el equipo enlazado:
+                * hay opciones del desplegable que no son máquinas —PAÑOL,
+                * GALPON 1— y que igual son la imputación de la compra. Mostrar
+                * sólo las enlazadas escondería justo ésas.
+                */}
+              {r.equipo_raw && <Dato label="Equipo que solicita" valor={r.equipo_raw} />}
               <Dato
                 label="Para cuándo"
                 alerta={dias !== null && dias < 0 && r.estado_compra !== "RECIBIDO"}

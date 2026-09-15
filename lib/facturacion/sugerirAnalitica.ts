@@ -5,18 +5,21 @@ import type { DistribucionAnalitica } from "./lineas";
  *
  * Dos fuentes, y **no valen lo mismo**, así que van en cascada:
  *
- * 1. **El equipo del requerimiento.** Si la factura está vinculada a un RI y ese
- *    RI se pidió para un equipo, la analítica es la de ese equipo — enlazada por
- *    **código**, que es un identificador que está de los dos lados. Eso no es una
- *    estadística: es el dato.
- * 2. **Lo que este proveedor repartió antes.** Cuando no hay equipo. Acierta
- *    mucho menos, y por eso se muestra con el antecedente a la vista.
+ * 1. **El requerimiento.** Si la factura está vinculada a un RI, lo que quien
+ *    pidió contestó en EQUIPO QUE SOLICITA **es** la imputación: ese desplegable
+ *    usa el vocabulario del grupo, que es palabra por palabra el nombre de la
+ *    cuenta analítica de Odoo. Eso no es una estadística: es el dato.
+ * 2. **Lo que este proveedor repartió antes.** Cuando no hay requerimiento o no
+ *    se pudo resolver. Acierta mucho menos, y por eso se muestra con el
+ *    antecedente a la vista.
  *
  * ## Los números, medidos
  *
- * El RI **cubre poco**: de 1.969 requerimientos, sólo 206 (10%) apuntan a un
- * equipo; los demás apuntan a un sector o a un taller. Y no toda factura tiene
- * requerimiento. O sea que esta vía es certera y angosta.
+ * De las 255 opciones del desplegable, **241 son una única cuenta analítica en
+ * cada empresa y ninguna es ambigua**. El camino viejo —factura → RI → ubicación
+ * → equipo— cubría 206 de 1.969 requerimientos (10%), porque la mayoría de las
+ * ubicaciones son lugares y no máquinas; se conserva como respaldo para los RI
+ * viejos, que se cargaron antes de que el formulario preguntara.
  *
  * El historial cubre más y acierta menos. En el backtest —aprender de 8.700
  * líneas, predecir 2.200— con dos antecedentes y confianza 0,8 **propone en el
@@ -67,8 +70,12 @@ function describir(analitica: DistribucionAnalitica, nombres: Map<number, string
 }
 
 export interface DeDondeSugerir {
-  /** La analítica del equipo del RI, si la factura tiene uno y se pudo resolver. */
-  delEquipo?: { id: number; nombre: string; nroRi: number } | null;
+  /**
+   * La analítica que sale del requerimiento, si la factura tiene uno y se pudo
+   * resolver. `porque` lo arma quien la resolvió, porque sólo ahí se sabe si
+   * salió de lo que contestó la persona o del equipo de la ubicación.
+   */
+  delEquipo?: { id: number; nombre: string; porque: string } | null;
   historial?: HistorialDeAnalitica | null;
   /** Nombres de las analíticas, para poder mostrar el reparto. */
   nombres: Map<number, string>;
@@ -88,7 +95,7 @@ export function sugerirAnalitica(
       analitica,
       detalle: `${fuentes.delEquipo.nombre} 100%`,
       segun: "el equipo del requerimiento",
-      porque: `el RI ${fuentes.delEquipo.nroRi} se pidió para ese equipo`,
+      porque: fuentes.delEquipo.porque,
     };
   }
 
