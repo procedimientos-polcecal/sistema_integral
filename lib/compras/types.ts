@@ -20,6 +20,9 @@ export type EstadoCompra =
 
 export type Prioridad = "URGENTE" | "1 SEMANA" | "2 SEMANAS" | "NORMAL" | "LEVE";
 
+/** Los tres valores del juicio, tal como los ofrece la planilla. */
+export type Cumplio = "SI" | "MAS_O_MENOS" | "NO";
+
 export interface UbicacionCompras {
   id: string;
   nombre: string;
@@ -128,6 +131,15 @@ export interface Requerimiento {
   oc_numero: string | null;
   fecha_pedido: string | null;
   fecha_recepcion: string | null;
+  /** Lo que Compras efectivamente compró. Vacío = lo que pedía el RI. */
+  cantidad_comprada: number | null;
+  cantidad_recibida: number | null;
+  /** Cuándo dijo Compras que llegaba. No es `fecha_necesidad`. */
+  fecha_estimada_recepcion: string | null;
+  cumplio_compras: Cumplio | null;
+  cumplio_proveedor: Cumplio | null;
+  seguimiento_fila: number | null;
+  seguimiento_pendiente: string | null;
 
   /**
    * Por qué no se pudo crear la orden de compra en Odoo, con el mensaje real.
