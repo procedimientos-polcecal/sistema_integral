@@ -44,18 +44,22 @@ export default function ResumenesAnuales({
         </select>
       </div>
 
-      <p className="mt-3 text-sm font-medium text-slate-700">Por fletero</p>
-      <p className="text-xs text-slate-500">Cuánto se le pagó a cada fletero cada mes — material + horas + viajes juntos.</p>
+      <p className="mt-4 text-sm font-semibold text-cyan-700">Por fletero</p>
       <TablaAnual
         filas={filasFleteros.map((f) => ({ etiqueta: f.fletero.nombre, porMes: f.porMes, total: f.totalAnual }))}
         formato={money}
+        colorCabecera="bg-cyan-600"
+        colorTotal="bg-cyan-50 text-cyan-900"
+        colorFranja="even:bg-cyan-50/40"
       />
 
-      <p className="mt-5 text-sm font-medium text-slate-700">De materiales</p>
-      <p className="text-xs text-slate-500">Toneladas y actividades de toda la empresa, sin depender de a quién se le atribuyó cada viaje.</p>
+      <p className="mt-6 text-sm font-semibold text-emerald-700">De materiales</p>
       <TablaAnual
         filas={filasMateriales.map((f) => ({ etiqueta: f.etiqueta, porMes: f.porMes, total: f.totalAnual, unidad: f.unidad }))}
         formato={(v, unidad) => cantidad(v, unidad ?? "tonelada")}
+        colorCabecera="bg-emerald-600"
+        colorTotal="bg-emerald-50 text-emerald-900"
+        colorFranja="even:bg-emerald-50/40"
       />
     </section>
   );
@@ -64,9 +68,15 @@ export default function ResumenesAnuales({
 function TablaAnual({
   filas,
   formato,
+  colorCabecera,
+  colorTotal,
+  colorFranja,
 }: {
   filas: { etiqueta: string; porMes: number[]; total: number; unidad?: UnidadDeAcarreo }[];
   formato: (v: number, unidad?: UnidadDeAcarreo) => string;
+  colorCabecera: string;
+  colorTotal: string;
+  colorFranja: string;
 }) {
   if (filas.length === 0) {
     return <p className="mt-2 text-sm text-slate-400">Todavía no hay datos este año.</p>;
@@ -75,23 +85,25 @@ function TablaAnual({
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-left uppercase text-slate-500">
+        <thead className={`${colorCabecera} text-center text-white`}>
           <tr>
-            <th className="whitespace-nowrap px-3 py-2">&nbsp;</th>
+            <th className="whitespace-nowrap px-3 py-2 text-left">&nbsp;</th>
             {NOMBRES_MES.map((m) => (
-              <th key={m} className="whitespace-nowrap px-2 py-2 text-right">{m}</th>
+              <th key={m} className="whitespace-nowrap px-2 py-2">{m}</th>
             ))}
-            <th className="whitespace-nowrap px-3 py-2 text-right">Total anual</th>
+            <th className="whitespace-nowrap px-3 py-2">Total anual</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {filas.map((f) => (
-            <tr key={f.etiqueta} className={f.total > 0 ? "" : "text-slate-300"}>
-              <td className="whitespace-nowrap px-3 py-1.5 font-medium text-slate-800">{f.etiqueta}</td>
+            <tr key={f.etiqueta} className={`${colorFranja} ${f.total > 0 ? "" : "text-slate-300"}`}>
+              <td className="whitespace-nowrap px-3 py-1.5 text-left font-medium text-slate-800">{f.etiqueta}</td>
               {f.porMes.map((v, i) => (
-                <td key={i} className="whitespace-nowrap px-2 py-1.5 text-right">{formato(v, f.unidad)}</td>
+                <td key={i} className="whitespace-nowrap px-2 py-1.5 text-center">{formato(v, f.unidad)}</td>
               ))}
-              <td className="whitespace-nowrap px-3 py-1.5 text-right font-semibold">{formato(f.total, f.unidad)}</td>
+              <td className={`whitespace-nowrap px-3 py-1.5 text-center font-semibold ${f.total > 0 ? colorTotal : ""}`}>
+                {formato(f.total, f.unidad)}
+              </td>
             </tr>
           ))}
         </tbody>

@@ -136,10 +136,7 @@ export default async function CanteraInicioPage({
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-semibold">Cantera</h1>
-          <p className="text-sm text-slate-500">Perforación, voladura y bochones de las cuatro canteras.</p>
-        </div>
+        <h1 className="text-xl font-semibold">Cantera</h1>
         <div className="flex gap-1.5">
           <Link href="/cantera/acarreo" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
             Acarreo
@@ -193,12 +190,9 @@ export default async function CanteraInicioPage({
             <h2 className="font-semibold text-slate-900">Registros</h2>
             <Link href="/cantera/registros" className="text-xs text-slate-500 underline">Ver todos →</Link>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            Las últimas voladuras cargadas, de todas las canteras.
-            {conteo.desvios > 0 && (
-              <span className="text-amber-700"> · {conteo.desvios} con toneladas fuera de rango.</span>
-            )}
-          </p>
+          {conteo.desvios > 0 && (
+            <p className="mt-1 text-xs text-amber-700">{conteo.desvios} con toneladas fuera de rango.</p>
+          )}
           <ul className="mt-3 divide-y divide-slate-100">
             {ultimasVoladuras.map((v) => (
               <li key={v.codigo}>
@@ -248,12 +242,9 @@ export default async function CanteraInicioPage({
             <Link href="/cantera/informes" className="text-xs text-slate-500 underline">Ver informe →</Link>
           </div>
           {serieReciente.length > 0 ? (
-            <>
-              <p className="mt-1 text-xs text-slate-500">Toneladas y costo por tonelada, últimos {serieReciente.length} meses.</p>
-              <div className="mt-3 h-52">
-                <InicioGrafico datos={serieReciente} />
-              </div>
-            </>
+            <div className="mt-3 h-52">
+              <InicioGrafico datos={serieReciente} />
+            </div>
           ) : (
             <p className="mt-3 text-sm text-slate-400">Todavía no hay datos para armar un informe.</p>
           )}
