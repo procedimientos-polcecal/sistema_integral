@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
+import { esAdminCantera, puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
 import { traerConsumos, traerInsumos, traerVoladura, traerYacimientos } from "@/lib/cantera/consultas";
 import { esTipoDeConsumoValido } from "@/lib/cantera/vocabulario";
-import { espejarVoladura } from "@/lib/cantera/espejo";
+import { desespejarVoladura, espejarVoladura } from "@/lib/cantera/espejo";
 import type { RenglonPlano } from "@/lib/cantera/planilla";
 
 /**
@@ -24,6 +24,13 @@ import type { RenglonPlano } from "@/lib/cantera/planilla";
  * dirección — un fallo no impide guardar, deja `sheets_pendiente` anotado con
  * lo que dijo Google y se lo dice a quien guardó (`planilla_error` en la
  * respuesta), igual que Despacho.
+ *
+ * `DELETE` borra la voladura por si se cargó mal — sólo admin de Cantera: es
+ * irreversible (se van los consumos con ella, por `on delete cascade`) y a
+ * diferencia de editar, nada la puede corregir después. Vacía también su fila
+ * en PERFORACIÓN y VOLADURAS de la planilla; si eso falla, la voladura ya se
+ * borró igual (no hay a qué fila del sistema colgarle un `sheets_pendiente`),
+ * así que el error de Google se devuelve para mostrarlo una vez y ya.
  */
 
 function num(v: unknown): number | null {
@@ -202,4 +209,29 @@ export async function PATCH(
     // de que quedó en la planilla y la planilla no la tiene.
     planilla_error: espejo.ok ? null : espejo.error,
   });
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ codigo: string }> }
+) {
+  const { codigo } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  if (!(await esAdminCantera(supabase, user.id))) {
+    return NextResponse.json({ error: "Sólo un admin de Cantera puede borrar una voladura" }, { status: 403 });
+  }
+
+  const { data: borrada, error: errDel } = await supabase
+    .from("cantera_voladuras")
+    .delete()
+    .eq("codigo", codigo)
+    .select("codigo");
+  if (errDel) return NextResponse.json({ error: errDel.message }, { status: 400 });
+  if (!borrada || borrada.length === 0) return NextResponse.json({ error: "Esa voladura no existe" }, { status: 404 });
+
+  const espejo = await desespejarVoladura(codigo);
+  return NextResponse.json({ ok: true, planilla_error: espejo.ok ? null : espejo.error });
 }

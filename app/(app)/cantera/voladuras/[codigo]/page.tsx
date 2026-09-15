@@ -50,6 +50,7 @@ export default async function VoladuraPage({
       insumos={insumos}
       puedeEditar={permisos.puedeEditar}
       puedeFacturar={permisos.puedeFacturar}
+      esAdmin={permisos.esAdmin}
     />
   );
 }

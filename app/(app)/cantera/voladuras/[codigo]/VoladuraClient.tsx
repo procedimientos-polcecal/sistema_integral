@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useConfirm } from "@/components/ConfirmProvider";
 import {
   baseDeConsumosUsd,
   montoPerforacion,
@@ -155,6 +156,7 @@ export default function VoladuraClient({
   insumos,
   puedeEditar,
   puedeFacturar,
+  esAdmin,
 }: {
   voladura: Voladura;
   yacimiento: Yacimiento | null;
@@ -162,9 +164,12 @@ export default function VoladuraClient({
   insumos: Insumo[];
   puedeEditar: boolean;
   puedeFacturar: boolean;
+  esAdmin: boolean;
 }) {
   const router = useRouter();
+  const confirmar = useConfirm();
   const [guardando, setGuardando] = useState(false);
+  const [borrando, setBorrando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
   const [avisoPlanilla, setAvisoPlanilla] = useState("");
@@ -294,6 +299,31 @@ export default function VoladuraClient({
     router.refresh();
   }
 
+  async function borrar() {
+    const confirmado = await confirmar({
+      title: "¿Borrar esta voladura?",
+      message: `Se borra ${voladura.codigo} con todos sus consumos. No se puede deshacer.`,
+      confirmText: "Borrar",
+      danger: true,
+    });
+    if (!confirmado) return;
+
+    setBorrando(true);
+    setError("");
+    const res = await fetch(`/api/cantera/voladuras/${voladura.codigo}`, { method: "DELETE" });
+    const json = await res.json();
+    if (!res.ok) {
+      setBorrando(false);
+      setError(json.error ?? "No se pudo borrar.");
+      return;
+    }
+    if (json.planilla_error) {
+      // Ya se borró en el sistema; esto es lo único que queda por avisar.
+      window.alert(`Se borró, pero no se pudo vaciar la fila en la planilla: ${json.planilla_error}`);
+    }
+    router.push(`/cantera/registros?y=${voladura.yacimiento_id}`);
+  }
+
   const dis = !puedeEditar;
 
   return (
@@ -305,9 +335,20 @@ export default function VoladuraClient({
           </Link>
           <h1 className="font-mono text-xl font-semibold">{voladura.codigo}</h1>
         </div>
-        {voladura.origen === "importacion" && (
-          <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">de la planilla</span>
-        )}
+        <div className="flex items-center gap-2">
+          {voladura.origen === "importacion" && (
+            <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">de la planilla</span>
+          )}
+          {esAdmin && (
+            <button
+              onClick={borrar}
+              disabled={borrando}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {borrando ? "Borrando…" : "Borrar voladura"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -107,3 +107,42 @@ export async function espejarBochon(bochon: Bochon, yacimiento: Yacimiento | nul
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * Vacía (no borra la fila, no corre las de abajo) la fila de una pestaña
+ * cuya columna A es `codigo`, si existe. `ancho` es la cantidad de columnas
+ * que escribe `filaPerforacion`/`filaVoladura` para ese código (13 y 19: "A a
+ * M" y "A a S", ver sus comentarios) — hay que limpiar las mismas que se
+ * llegaron a escribir alguna vez, no más ni menos.
+ */
+async function limpiarFilaSiExiste(planilla: string, pestana: string, codigo: string, ancho: number): Promise<void> {
+  const fila = await buscarFilaPorCodigo(planilla, pestana, codigo);
+  if (fila === null) return;
+  await escribirCeldas(
+    planilla,
+    Array.from({ length: ancho }, (_, columna) => ({ pestana, columna, fila, valor: "" }))
+  );
+}
+
+/**
+ * Al borrar una voladura del sistema, vaciar su fila en PERFORACIÓN y en
+ * VOLADURAS — a pedido, para que la planilla no siga mostrando algo que ya no
+ * existe. Se vacía en vez de borrar la fila entera: borrar una fila corre
+ * todas las de abajo, y eso puede romper una fórmula de otra fila que sume un
+ * rango fijo — vaciar dentro es más chico pero seguro.
+ *
+ * Si no hay espejo configurado no hay nada que vaciar: a diferencia de
+ * `espejarVoladura`, acá no es un fallo — nunca se llegó a escribir nada.
+ */
+export async function desespejarVoladura(codigo: string): Promise<ResultadoEspejo> {
+  if (!hayEspejoDeCantera()) return { ok: true };
+
+  const planilla = PLANILLA();
+  try {
+    await limpiarFilaSiExiste(planilla, TAB_PERFORACION(), codigo, 13);
+    await limpiarFilaSiExiste(planilla, TAB_VOLADURAS(), codigo, 19);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
