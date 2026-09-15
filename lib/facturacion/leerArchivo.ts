@@ -278,8 +278,12 @@ async function deUnPdf(archivo: File): Promise<Hallazgo> {
  *
  * No se limpia la repetición acá: hay emisores que dibujan cada texto dos veces
  * y eso se resuelve sobre la fila ya armada, en `sinRepetir`.
+ *
+ * Está exportada para el banco de pruebas (`scripts/banco-de-qr.mts`): sin eso,
+ * el banco tendría que rehacer este agrupado por coordenada y mediría su propia
+ * copia en vez del lector de verdad.
  */
-async function filasDeTexto(
+export async function filasDeTexto(
   documento: { numPages: number; getPage(n: number): Promise<PDFPageProxy> },
   hasta: number
 ): Promise<string[]> {

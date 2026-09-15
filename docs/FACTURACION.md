@@ -26,23 +26,28 @@ Todo lo que sigue salió de correr el lector contra las **139 facturas de
 `FACTURAS/SEPTIEMBRE 2026`** — la carpeta completa, no una muestra. Ninguna de
 estas cosas se deducía de la especificación de ARCA, y cada una cambió el código.
 
-### El lector necesita tres pasadas, y **110 de 139 facturas se leen solas**
+### El lector, medido: **156 de 187 facturas se leen solas (83%)**
 
-`lib/facturacion/escaneoQr.ts` busca el QR de tres maneras, en este orden:
+Corrido con `scripts/banco-de-qr.mts` sobre `FACTURAS/SEPTIEMBRE 2026` entera.
 
 | Pasada | Rescata | Por qué existe |
 |---|---|---|
-| **La página dibujada, subiendo la definición** (1600 → 2600 → 3600 px) | 84 + 17 | Un QR de dos centímetros en una A4 dibujada a 1600 px queda en unos 90 px, y el payload de ARCA —una matriz de 69×69 módulos— no llega a un píxel por módulo. Empezar en 2600 sería pagar el dibujo caro 84 veces; quedarse en 1600 sería perder 17. |
-| **El segundo decodificador** (ZXing en WebAssembly), sobre el lienzo que acaba de fallar | DON ALFREDO y compañía | Hay QR impecables que jsQR no decodifica y ZXing sí. Cuesta decenas de milisegundos y 950 KB que se bajan **sólo** cuando jsQR falló. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador). |
-| **Ventanas deslizantes**, sólo si las dos primeras fallaron y **sólo en la página 1** | 9 | Hasta 274 recortes, unos segundos. La comparación no es contra un segundo: es contra tipear la factura entera. |
+| **La página dibujada, subiendo la definición** (1600 → 2600 → 3600 px) | **121** | Un QR de dos centímetros en una A4 dibujada a 1600 px queda en unos 90 px, y el payload de ARCA —una matriz de 69×69 módulos— no llega a un píxel por módulo. |
+| **El segundo decodificador** (ZXing en WebAssembly), sobre el lienzo que acaba de fallar | **30** | Hay QR impecables que jsQR no decodifica y ZXing sí. Cuesta decenas de milisegundos y 950 KB que se bajan **sólo** cuando jsQR falló. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador). |
+| **Ventanas deslizantes**, sólo si las dos primeras fallaron y **sólo en la página 1** | **0** | Hasta 274 recortes, unos segundos. Rescataba 9 antes de que existiera el segundo decodificador; hoy no rescata ninguna, porque lo que necesitaba ventanas ya se lee a 1600. Se deja igual: cuesta sólo en las que van a fallar de todos modos. |
+| **El texto del PDF**, cuando no hay QR en ninguna página | **5** | Emisores que no imprimen el bloque de ARCA. Ver [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). |
 
-Los 84+17 y los 9 son de antes del segundo decodificador: **falta volver a correr
-el banco de las 139** para saber cuánto mueve el número de cabecera.
+Mediana: **607 ms por factura**. El peor caso son 69 segundos, y es siempre una
+que **no** se lee: es lo que tardan las ventanas en recorrer una hoja a 3000 px
+antes de rendirse.
 
-Mediana: **495 ms por factura**; peor caso, 32 segundos.
+**Las 151 que se leen por QR se leen todas a 1600 px.** El escalonado a 2600 y
+3600 ya no rescata a ninguna: lo que necesitaba más definición lo resuelve zxing
+en el primer intento. Se deja porque cuesta sólo en las que igual iban a fallar,
+y porque el próximo emisor puede imprimir el QR más chico.
 
 Las ventanas corren sólo en la primera página, y no es una simplificación: en las
-139 el QR está siempre ahí, y correrlas en tres páginas llevaba el peor caso a
+187 el QR está siempre ahí, y correrlas en tres páginas llevaba el peor caso a
 **53 segundos**. Con 19 facturas por día, eso es la diferencia entre una cola que
 avanza y una que parece colgada.
 
@@ -80,7 +85,9 @@ servidas desde `public/`. La lección es la de siempre en este repo, con una
 vuelta más: **medir contra datos reales no alcanza si se mide en el entorno que
 no es.**
 
-Las facturas con el QR estirado quedan para carga manual.
+La pasada se sacó y la conclusión que la acompañaba —que el QR de TODO RULEMAN
+quedaba para carga manual— resultó ser falsa: se lee con el segundo
+decodificador. Lo que sigue en pie es la lección del entorno, no el diagnóstico.
 
 ### Se dibuja con `intent: "print"`, no con el de por defecto
 
@@ -110,22 +117,29 @@ probó a 7000 px, con umbral duro y con 274 ventanas: no era resolución. Era
 original en la corrección de errores.
 
 El ZXing de verdad, compilado a WebAssembly, lee la página de DON ALFREDO
-**entera y de una**: 53 ms a 1600 px, 75 ms a 2600, contra jsQR que no la lee a
-ninguna escala. Comprobado en un navegador, con el lector que se commitea:
+**entera y de una**: 53 ms a 1600 px, contra jsQR que no la lee a ninguna escala.
+Comprobado en un navegador, con el lector que se commitea:
 `comoSeEncontro=segundo decodificador`, cabecera de ARCA completa —CUIT
 30712622802, factura A 0003-00001826 del 10/09/2026 por $559.262—.
 
-**No reemplaza a jsQR, corre después.** jsQR resuelve 110 de 139 sin bajar un
-byte de más; el wasm son 950 KB y se baja sólo cuando jsQR falló, o sea en las
-facturas que hoy se tipean a mano. Y va **antes** de las ventanas deslizantes:
-cuesta decenas de milisegundos y rescata en el primer intento lo que las ventanas
-tardarían medio minuto en no encontrar.
+Sobre la carpeta entera **rescata 30 de 187**: diez de REPUESTOS AGRÍCOLAS COLON,
+tres de DON ALFREDO, dos de TODO RULEMAN, dos de PEDRO H. CAMINO, y AGROINGA, que
+antes necesitaba las 274 ventanas.
 
-Lo que sigue sin leerse es el QR de **TODO RULEMAN**, y ahí zxing falla igual:
-ampliando el recorte se ve que son más de cien módulos impresos en dos
-centímetros, que a 1600 px de hoja no llegan a dos píxeles por módulo. Eso no lo
-arregla un decodificador mejor. Lo arreglaría dibujar esa zona mucho más grande,
-y **no se pudo comprobar**: de esa factura quedó un PNG de 1400 px y no el PDF.
+**No reemplaza a jsQR, corre después.** jsQR resuelve 121 de 187 sin bajar un byte
+de más; el wasm son 950 KB y se baja sólo cuando jsQR falló. Y va **antes** de las
+ventanas deslizantes: cuesta decenas de milisegundos y rescata en el primer
+intento lo que las ventanas tardarían un minuto en no encontrar.
+
+#### Dos cosas que este doc decía y el banco desmintió
+
+- **El QR de TODO RULEMAN sí se lee.** Estaba dado por perdido —"el PDF lo
+  estira", "no llega a dos píxeles por módulo"— y las dos facturas de septiembre
+  se leen a 1600 px. El error fue medir sobre un **PNG de 1400 px** en vez del
+  PDF: reescalar un derivado no agrega la información que el original tiene.
+- **RUBIALES no era un problema de decodificador.** Sus facturas **no traen QR**:
+  se abrió la página y se miró. Salen por el lector de texto, como ZITO Y PRIOLA.
+  Estaban listadas como "se ven impecables y jsQR no las lee", que era falso.
 
 ### El QR de un emisor puede venir roto, y sirve igual
 
@@ -725,31 +739,58 @@ fixtures**: los payloads de TORRACO y de CAMINO están literales en
 de verdad —con guiones, como los cargó una persona, que es lo que hace que la
 normalización importe—.
 
-La búsqueda del QR en sí **no se puede probar con un fixture inventado**: se mide
-contra la carpeta de facturas. El banco de pruebas no está commiteado porque
-depende de una carpeta de Drive, pero es reproducible: renderizar con
-`@napi-rs/canvas` (`npm i --no-save @napi-rs/canvas`) y llamar a `buscarQr` y
-`buscarQrConVentanas` — las mismas funciones que corre el navegador, no una copia.
+La búsqueda del QR en sí **no se puede probar con un fixture inventado**: lo que
+decide si una factura se lee no es la lógica sino cómo la imprimió el emisor. Se
+mide con el banco, que **sí está commiteado** —`scripts/banco-de-qr.mts`— aunque
+la carpeta que necesita no:
 
-**Y después comprobarlo en el navegador**, que es lo que atrapó la pasada
-fantasma de las imágenes embebidas: copiar `pdfjs-dist/build/pdf.min.mjs`,
-`jsqr/dist/jsQR.js` y un par de facturas a `public/pdfjs/` —que es la única ruta
-que el proxy de sesión no intercepta— y correr el pipeline desde la consola.
-Acordarse de borrar las facturas de ahí después.
+```bash
+npm i --no-save @napi-rs/canvas
+npx tsx scripts/banco-de-qr.mts "G:/…/FACTURAS/SEPTIEMBRE 2026"
+```
+
+Corre `buscarQr`, `buscarQrConZxing`, `buscarQrConVentanas` y
+`leerCabeceraDelTexto` **importadas de `lib/`**, no copiadas. Lo único distinto es
+de dónde salen los píxeles (`@napi-rs/canvas`) y de dónde sale el wasm de ZXing
+(del disco). Tarda unos 20 minutos sobre 187 facturas.
+
+**Dos trampas del banco, las dos ya pisadas:**
+
+- **Hay que pasarle `wasmUrl` a pdf.js.** Desde la 6 decodifica JBIG2 y JPEG2000
+  con WebAssembly, y sin esa ruta **una factura escaneada se dibuja sin su
+  imagen**: el banco la cuenta como perdida y en el navegador se lee perfecto.
+  Invalidó una corrida entera —38 avisos sobre 10 imágenes— y dio 149 donde eran
+  151. En el navegador pdf.js resuelve su propio wasm y no hace falta.
+- **Medir en Node no alcanza.** Es lo que atrapó la pasada fantasma de las
+  imágenes embebidas. Después del banco hay que comprobarlo en un navegador de
+  verdad: no hay `middleware.ts` —la autenticación vive en el layout de
+  `(app)`—, así que una ruta temporal fuera de ese grupo, más la factura servida
+  desde `public/pdfjs/`, alcanza para correr el lector real. Acordarse de borrar
+  las dos cosas después.
 
 ## Lo que queda pendiente
 
 1. ~~Las que no traen QR~~ **hecho**: ver
-   [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). Falta
-   medirlo contra más de un diseño de factura.
+   [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto).
 2. ~~Los QR que jsQR no decodifica~~ **hecho**: era el decodificador, no la
    imagen. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador).
-   Falta volver a correr el banco de las 139 para saber cuántas de las 29 que
-   quedaban rescata — se midió contra DON ALFREDO, que es la única cuyo archivo
-   quedó a mano.
-3. **El QR de TODO RULEMAN**, que es diminuto para la cantidad de módulos que
-   tiene. Habría que dibujar esa zona mucho más grande; con el PDF original a
-   mano se puede medir en una tarde.
+3. ~~El QR de TODO RULEMAN~~ **no era un problema**: se lee. Estaba dado por
+   perdido sobre un PNG, no sobre el PDF.
+
+### Las 31 de 187 que todavía no se leen, con nombre y apellido
+
+Medido, no estimado. Es la lista de lo que queda por hacer en el lector:
+
+| Cuántas | Quién | Qué le falta |
+|---|---|---|
+| **22** | ZITO Y PRIOLA | No traen QR, y del texto sale todo **menos la fecha y el importe**. La fecha está como `A Fecha de Emisión: 02/09/2026 09:14:16` y el patrón exige el número pegado a "fecha". El total está en la **fila siguiente** a la que dice `Total`, y con separador de miles a la inglesa (`1,699,556.67`). |
+| **2** | ERGUY SERANTES | Falta el importe: la fila dice `TOTAL:` y el número está aparte. |
+| **2** | BER IMPORT | Falta la fecha: `FACTURA A Fecha emisión: 04/09/2026`. Mismo patrón que ZITO. |
+| **2** | COOPELECTRIC | Falta la fecha, y **el importe que saca hoy está mal** (da $177 sobre una factura de millones). Arreglar sólo la fecha la daría por completa con un total falso: hay que mirar las dos juntas. |
+| **3** | LOGÍSTICA VW | **Cero filas de texto**: son escaneos sin capa de texto y sin QR legible. Sin OCR no hay nada que sacar. |
+
+Las cuatro primeras filas son **28 facturas** —el 15% de la carpeta— y las tres
+causas son de patrón, no de imagen.
 4. ~~Cerrar el círculo con Odoo~~ **hecho**: ver [El vínculo con Odoo](#el-vínculo-con-odoo).
 5. **Las percepciones.** El borrador sale con el IVA y nada más. La localización
    del grupo tiene `perception_ids` en `account.move`, así que una factura con

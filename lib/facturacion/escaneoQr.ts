@@ -41,16 +41,18 @@ import jsQR from "jsqr";
  * datos — o sea que era una pasada que **medía bien y en producción no habría
  * hecho nada**. Se comprobó en el navegador y se sacó.
  *
- * Las facturas con el QR diminuto quedan entonces para carga manual, igual que
- * las que no traen QR.
+ * La lección que queda es la del entorno. El **diagnóstico** que la acompañaba
+ * —que el QR de TODO RULEMAN era ilegible— era falso: se lee con el segundo
+ * decodificador, y se había dado por perdido midiendo sobre un PNG de 1400 px
+ * en vez del PDF.
  *
  * ## Lo que sí sirvió: un segundo decodificador
  *
  * Las que "se ven impecables y no se leen" **no eran un problema de imagen, era
- * jsQR**. El ZXing original, compilado a WebAssembly, lee la página de DON
- * ALFREDO entera y de una. Vive en `escaneoQrZxing.ts` y corre después de esta
- * pasada, sobre el mismo lienzo; acá no se toca nada, porque esto resuelve 110
- * de 139 sin bajar un solo byte de más.
+ * jsQR**. El ZXing original, compilado a WebAssembly, rescata 30 de las 187 de
+ * septiembre. Vive en `escaneoQrZxing.ts` y corre después de esta pasada, sobre
+ * el mismo lienzo; acá no se toca nada, porque esto resuelve 121 de 187 sin
+ * bajar un solo byte de más.
  */
 
 /** Lo mínimo que se le pide a un canvas para poder escanearlo. */
