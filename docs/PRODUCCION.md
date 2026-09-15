@@ -228,22 +228,42 @@ Del **usuario**:
    nombres de pestaña si difieren de los que trae el código por defecto:
    `Resumen Producción`, `Resumen Despacho`, `Resumen Rotura`), y la decisión
    de ampliarla a 31 filas si se quiere dejar de perder los meses largos.
-6. **Correr una migración que falta.**
-   `supabase/migrations/20260908082159_produccion_despachos_sin_renglones_duplicados.sql`
-   agrega `unique (parte_id, orden)` a `produccion_despachos`. Las otras dos
-   del módulo —el enum y el schema— **sí están corridas**; ésta todavía no.
-   Hasta que se corra: `app/api/produccion/partes/route.ts` reemplaza el
-   depósito y los despachos de un parte con un `delete` + `insert` sueltos
-   —PostgREST no da transacciones multi-sentencia—, así que dos guardados
-   simultáneos del mismo parte (alcanza un doble clic en Guardar) pueden
-   intercalarse y duplicar todos los renglones de despacho, y el día se
-   exporta con el despacho y la rotura al doble **sin ningún error**. La
-   migración no arregla la carrera —para eso hace falta un RPC que serialice
-   las dos escrituras—, convierte la duplicación silenciosa en un error visible
-   que la ruta ya sabe manejar como cualquier otro fallo de escritura.
+6. **Darle nivel `edicion` a quien transcribe.** Al 15/09/2026 hay ocho
+   usuarios con acceso al módulo: siete con `lectura` y uno con `admin`.
+   **Ninguno con `edicion`**, así que hoy nadie de calidad puede guardar un
+   parte — la pantalla se ve y el botón no escribe. Se da desde
+   Administración → Usuarios.
+
+## Las tres migraciones del módulo están corridas
+
+Las tres: el enum, el schema y
+`20260908082159_produccion_despachos_sin_renglones_duplicados.sql`, que agrega
+`unique (parte_id, orden)` a `produccion_despachos`. Verificado contra la base
+el 8/09 —el insert duplicado devuelve `23505`— y de nuevo el 15/09: la
+migración del catálogo único (`20260910104534`) sólo le renombró una columna a
+esa tabla, no la rehízo, así que la constraint sobrevivió.
+
+**El riesgo que la constraint no elimina, y que sigue vigente:**
+`app/api/produccion/partes/route.ts` reemplaza el depósito y los despachos de
+un parte con un `delete` + `insert` sueltos —PostgREST no da transacciones
+multi-sentencia—, así que dos guardados simultáneos del mismo parte (alcanza un
+doble clic en Guardar) todavía pueden intercalarse. Lo que cambió es que ahora
+el segundo insert **choca y falla en voz alta** en vez de duplicar todos los
+renglones y exportar el día con el despacho y la rotura al doble sin ningún
+error. Arreglar la carrera de verdad pide un RPC que serialice las dos
+escrituras; no está hecho.
 
 Nada de esto frena el código ni los tests, que están completos. Frena cargar
 datos de verdad.
+
+## Al 15/09/2026 el módulo todavía no se usó
+
+Cero partes cargados desde que se terminó, el 8/09.
+`produccion_renglones_papel` sigue vacía —es el punto 1 de la lista de arriba— y
+sin renglones la pantalla de carga no tiene depósito que mostrar. El catálogo
+único del núcleo sí tiene 49 productos, pero eso es otra cosa: son los productos
+que se venden, no los renglones del papel, y el puente entre los dos es
+justamente lo que falta definir.
 
 ## Dónde está cada cosa
 
