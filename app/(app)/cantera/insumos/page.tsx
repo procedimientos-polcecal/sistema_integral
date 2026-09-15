@@ -16,7 +16,7 @@ export default async function InsumosPage() {
 
   const nivel = await nivelCanteraDe(supabase, user.id);
   if (!nivel) redirect("/");
-  if (nivel !== "admin") redirect("/cantera");
+  if (nivel !== "admin") redirect("/cantera/registros");
 
   return <InsumosClient insumos={await traerInsumos(supabase)} />;
 }

@@ -100,11 +100,11 @@ describe("bochonesDe2026", () => {
     "Metros perf.", "Perforaciones", "TC USD", "Pesos", "N° factura", "Coincide", "Observaciones",
   ];
 
-  it("toma la col 7 como metros y la col 6 como cantidad de bochones", () => {
+  it("toma la col 6 como metros (≤1 m) y la col 7 como cantidad de bochones", () => {
     const rows = [header, ["B06D126", 46164, 46164, 5.07, "D1", "V03D126", 1, 172, 1425, 1242657, "FC A 0001-00000382", "COINCIDE"]];
     const { filas } = bochonesDe2026(rows, YAC);
-    expect(filas[0].cantidad).toBe(1);
-    expect(filas[0].metros_perforados).toBe(172);
+    expect(filas[0].metros_perforados).toBe(1);
+    expect(filas[0].cantidad).toBe(172);
     expect(filas[0].precio_usd_m).toBe(5.07);
     expect(filas[0].voladura_codigo).toBe("V03D126");
   });

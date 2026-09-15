@@ -220,16 +220,22 @@ export const NAV: NavItem[] = [
   },
   {
     label: "Cantera",
+    // `href` propio, distinto al de todos los `children`: es justamente esa
+    // diferencia la que en `Sidebar.tsx` decide que el ítem se renderice como
+    // un link que navega (a la página de inicio del módulo) y despliega, en
+    // vez de sólo desplegar como el resto de los módulos — el usuario pidió
+    // las dos cosas juntas: mantener el desplegable y que clickear "Cantera"
+    // entre a una página propia con el adelanto de Registros y del informe.
     href: "/cantera",
     modulo: "cantera",
-    // El tablero por yacimiento primero: es la pantalla desde donde el capataz
-    // cierra una voladura en el frente y desde donde finanzas mira los montos
-    // sin conciliar. Los catálogos y el informe se miran después, no durante.
     children: [
-      { label: "Por yacimiento", href: "/cantera", modulo: "cantera" },
+      { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
+      { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
       { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
+      { label: "Fleteros", href: "/cantera/fleteros", modulo: "cantera", soloAdmin: true },
+      { label: "Tarifas de acarreo", href: "/cantera/tarifas-acarreo", modulo: "cantera", soloAdmin: true },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

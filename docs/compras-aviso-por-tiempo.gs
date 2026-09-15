@@ -221,6 +221,48 @@ function avisarUnaFila(pestana, fila) {
   Logger.log('Fila ' + fila + ': ' + hoja.getRange(fila, COL_AVISO).getValue());
 }
 
+/**
+ * La marca temporal de una celda, venga como venga. `null` si no hay ninguna.
+ *
+ * **Una celda con la misma fecha llega de dos formas distintas, y esto costó un
+ * aviso el 14/09/2026.** `getValues()` devuelve un `Date` sólo cuando la celda
+ * está **formateada** como fecha; con formato de número devuelve el serial
+ * pelado. En `Respuestas de formulario 1` la columna B la formatea Google Forms
+ * y siempre es un `Date`. En `Altas del sistema` la creamos a mano copiando el
+ * encabezado, que trae los títulos pero no los formatos, así que la marca que
+ * escribe el sistema se guardó como número: la celda muestra `46279.44936` en
+ * vez de `14/9/2026 10:47`.
+ *
+ * El barrido filtraba con `marca instanceof Date` y salteaba esa fila. No
+ * "todavía no": **nunca**, porque el formato no iba a cambiar solo. El primer
+ * alta real se escribió bien, bajó bien al master, y su aviso no salió ni iba a
+ * salir — y nada lo decía, porque una fila que no entra al barrido se ve igual
+ * que una que ya se avisó.
+ *
+ * Se acepta el serial en vez de exigir el formato porque el formato es estado
+ * invisible: no está en ningún archivo, nadie lo revisa y se pierde la próxima
+ * vez que alguien cree una pestaña copiando un encabezado. Formatear la columna
+ * conviene igual —para quien la lea—, pero no puede ser de lo que dependa que
+ * salga un mail.
+ *
+ * El serial se interpreta como UTC y la planilla está en hora de Argentina, así
+ * que una fila puede parecer hasta tres horas **más vieja** de lo que es. Es la
+ * dirección inofensiva del error: corre el borde de la ventana, y nunca hace
+ * parecer nueva a una vieja.
+ */
+function fechaDeLaMarca_(valor) {
+  if (valor instanceof Date) return valor;
+
+  // Serial de Sheets: días desde el 30/12/1899. El 25569 es ese origen contado
+  // desde el epoch de Unix. Se exige un serial plausible —del 2000 en adelante—
+  // para que el `-1` de la fila 2 y el `0` de la 3, que ceban la vieja
+  // numeración, no se conviertan en fechas de 1899.
+  var n = Number(valor);
+  if (!isFinite(n) || n < 36526) return null;
+
+  return new Date((n - 25569) * 86400000);
+}
+
 /** Las filas con marca temporal, sin `M`, de los últimos `dias` días. */
 function filasSinAviso_(hoja, primeraFila, dias) {
   var ultima = hoja.getLastRow();
@@ -235,11 +277,8 @@ function filasSinAviso_(hoja, primeraFila, dias) {
   var pendientes = [];
 
   for (var i = 0; i < alto; i++) {
-    // `instanceof Date` y no "la celda no está vacía": la fila 3 tiene un
-    // guión en la marca temporal, y una fila que no es una respuesta no puede
-    // recibir un aviso.
-    var marca = marcas[i][0];
-    if (!(marca instanceof Date)) continue;
+    var marca = fechaDeLaMarca_(marcas[i][0]);
+    if (!marca) continue;
     if (String(avisos[i][0]).trim() !== '') continue;
 
     var horas = (ahora - marca.getTime()) / 36e5;

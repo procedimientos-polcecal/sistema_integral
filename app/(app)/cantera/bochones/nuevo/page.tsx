@@ -17,7 +17,7 @@ export default async function NuevoBochonPage({
 
   const nivel = await nivelCanteraDe(supabase, user.id);
   if (!nivel) redirect("/");
-  if (nivel === "lectura") redirect("/cantera");
+  if (nivel === "lectura") redirect("/cantera/registros");
 
   const yacimientos = await traerYacimientos(supabase, true);
   return <NuevoBochonClient yacimientos={yacimientos} yacimientoPreseleccionado={y ?? ""} />;

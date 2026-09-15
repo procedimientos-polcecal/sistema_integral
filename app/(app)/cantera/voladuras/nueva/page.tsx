@@ -20,7 +20,7 @@ export default async function NuevaVoladuraPage({
 
   const nivel = await nivelCanteraDe(supabase, user.id);
   if (!nivel) redirect("/");
-  if (nivel === "lectura") redirect("/cantera");
+  if (nivel === "lectura") redirect("/cantera/registros");
 
   const yacimientos = await traerYacimientos(supabase, true);
   return <NuevaVoladuraClient yacimientos={yacimientos} yacimientoPreseleccionado={y ?? ""} />;

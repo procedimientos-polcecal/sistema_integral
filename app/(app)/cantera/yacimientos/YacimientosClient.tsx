@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { MATERIALES } from "@/lib/cantera/vocabulario";
 import type { Yacimiento } from "@/lib/cantera/types";
 
@@ -76,7 +77,8 @@ export default function YacimientosClient({ yacimientos }: { yacimientos: Yacimi
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-xl font-semibold">Canteras</h1>
+      <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
+      <h1 className="mt-1 text-xl font-semibold">Canteras</h1>
       <p className="mt-1 text-sm text-slate-500">
         El código corto es el que va dentro del código de voladura. La densidad la usa el cálculo de toneladas.
       </p>

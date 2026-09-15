@@ -244,13 +244,16 @@ export function voladurasDe2026(
 
 // ── BOCHONES ─────────────────────────────────────────────────
 // [0]cod [1]inicio [2]fin [3]precio_usd_m [4]cantera [5]voladura_asoc
-// [6]"Metros perf." (=1, en realidad la cantidad de pozos)
-// [7]"Perforaciones" (los metros; es lo que usa el costo) [8]tc [9]pesos
+// [6]"Metros perf." (siempre ≤ 1 m, por bochón) [7]"Perforaciones" (en
+// realidad la cantidad de bochones a volar) [8]tc [9]pesos
 // [10]factura [11]coincide [12]obs
 //
-// Las columnas 6 y 7 están al revés de sus nombres: el total en pesos sale de
-// col 7 × precio × tc, así que col 7 son los metros y col 6 la cantidad de
-// pozos. Confirmar con cantera.
+// Confirmado con el usuario: los nombres de columna de la planilla están al
+// revés de lo que contienen. "Metros perf." (col 6) es la profundidad por
+// bochón —casi siempre 1 m o menos— y "Perforaciones" (col 7) es cuántos
+// bochones son. El costo es cantidad × metros × precio × tc (ver
+// `montoBochon` en costos.ts); como los metros valen ~1, coincide numéricamente
+// con "col7 × precio × tc" y por eso no se había notado antes.
 
 export interface BochonParaImportar {
   codigo: string;
@@ -298,8 +301,8 @@ export function bochonesDe2026(
       voladura_codigo: aTexto(f[5]),
       inicio: fechaDeSheets(f[1]),
       fin: fechaDeSheets(f[2]),
-      cantidad: aNumero(f[6]),
-      metros_perforados: aNumero(f[7]),
+      cantidad: aNumero(f[7]),
+      metros_perforados: aNumero(f[6]),
       precio_usd_m: aNumero(f[3]),
       tc_usd: aNumero(f[8]),
       odoo_ref: aTexto(f[10]),

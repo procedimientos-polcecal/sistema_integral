@@ -8,10 +8,24 @@
 # El endpoint ya se protege solo: exige el mismo CRON_SECRET que usa el cron de
 # Vercel, y sin él responde 503 en vez de quedar abierto.
 #
-# Nota sobre la puntualidad: los crons de GitHub Actions se atrasan cuando hay
-# cola, a veces varios minutos. Para esto alcanza — el webhook de la planilla
-# ya avisa cuando alguien la edita, y esto es la red que junta lo que se le
-# escape.
+# Nota sobre la puntualidad: decía "se atrasan a veces varios minutos" y eso
+# subestima el problema. Medido el 14/09/2026 sobre `compras_sincronizaciones`:
+# en tres días esto corrió **24 veces, no 288**, con huecos de hasta cinco
+# horas. Los crons de GitHub Actions son "mejor esfuerzo": se atrasan con cola y
+# directamente saltean corridas.
+#
+# Y el consuelo de que "el webhook ya avisa cuando alguien la edita" no cubre el
+# caso que más importa. El webhook se dispara con una **edición** del master;
+# una respuesta del formulario no lo edita: entra en la otra planilla y llega
+# por `IMPORTRANGE`, que es un recálculo y no dispara nada. Así que los RI
+# nuevos del formulario dependen **sólo** de este cron, y pueden tardar horas en
+# entrar al sistema. Medido: el RI 1970 entró a la planilla 10:45 y a las 11:11
+# todavía no estaba en la base.
+#
+# Qué se hizo con eso, para que no quede como una queja: la numeración del alta
+# dejó de confiar en el máximo de la base y lo cruza con la planilla
+# (`lib/compras/serieDeRi.ts`). Lo que sigue en pie es la demora en ver un
+# pedido nuevo, que es molesta pero no corrompe nada.
 
 name: Sincronizar Compras
 
