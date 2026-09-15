@@ -23,13 +23,14 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   /*
-   * `pdfjs` queda afuera: es el worker de pdf.js que Facturación baja para
-   * rasterizar un PDF y buscarle el QR. Son 1,2 MB de un paquete público, así
-   * que no hay nada que proteger, y hacerlo pasar por acá tendría dos costos: un
-   * `getUser()` contra Supabase por cada carga, y —si por cualquier motivo la
-   * cookie no viajara en el pedido del Worker— un 307 al login que del lado del
-   * navegador aparece como un error opaco de pdf.js, justo en medio de la carga
-   * de una factura.
+   * `pdfjs` queda afuera: ahí viven los dos archivos que el lector de facturas
+   * baja por su cuenta —el worker de pdf.js, que rasteriza el PDF para buscarle
+   * el QR, y el wasm de ZXing, que es el segundo decodificador—. Son 2,2 MB de
+   * dos paquetes públicos, así que no hay nada que proteger, y hacerlos pasar
+   * por acá tendría dos costos: un `getUser()` contra Supabase por cada carga,
+   * y —si por cualquier motivo la cookie no viajara en el pedido del Worker— un
+   * 307 al login que del lado del navegador aparece como un error opaco, justo
+   * en medio de la carga de una factura.
    */
   matcher: [
     "/((?!_next/static|_next/image|pdfjs|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",

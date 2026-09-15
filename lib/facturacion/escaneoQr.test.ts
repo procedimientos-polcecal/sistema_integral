@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { conMargenBlanco } from "./escaneoQr";
+import { conMargenBlanco, rincones } from "./escaneoQr";
 
 /*
  * La búsqueda del QR en sí se mide contra las facturas reales —no hay forma
@@ -51,6 +51,46 @@ describe("el margen blanco que el emisor no dejó", () => {
     const m = 8; // max(8, 6)
     for (let x = 0; x < 60; x++) {
       expect(con.data[((m * con.width) + m + x) * 4]).toBe(33);
+    }
+  });
+});
+
+/*
+ * Los rincones los comparten las dos pasadas —jsQR y el segundo decodificador—
+ * desde que zxing entró: si el solape cambiara para una sola, habría facturas
+ * que una encuentra y la otra no, y eso se vería recién en producción.
+ */
+describe("los cuatro rincones de la hoja", () => {
+  it("son cuatro y ninguno se sale de la hoja", () => {
+    const r = rincones(1000, 1400);
+    expect(r).toHaveLength(4);
+    for (const x of r) {
+      expect(x.x).toBeGreaterThanOrEqual(0);
+      expect(x.y).toBeGreaterThanOrEqual(0);
+      expect(x.x + x.w).toBeLessThanOrEqual(1000);
+      expect(x.y + x.h).toBeLessThanOrEqual(1400);
+    }
+  });
+
+  /*
+   * La razón de ser del solape: un QR justo en el centro quedaría partido por la
+   * mitad en los cuatro recortes y no se leería en ninguno.
+   */
+  it("se solapan, así que el centro cae entero adentro de los cuatro", () => {
+    const [cx, cy] = [500, 700];
+    for (const x of rincones(1000, 1400)) {
+      expect(cx).toBeGreaterThanOrEqual(x.x);
+      expect(cx).toBeLessThanOrEqual(x.x + x.w);
+      expect(cy).toBeGreaterThanOrEqual(x.y);
+      expect(cy).toBeLessThanOrEqual(x.y + x.h);
+    }
+  });
+
+  it("entre los cuatro cubren la hoja entera", () => {
+    const [a, b] = [1000, 1400];
+    const r = rincones(a, b);
+    for (const [px, py] of [[0, 0], [a - 1, 0], [0, b - 1], [a - 1, b - 1], [a / 2, b / 2]]) {
+      expect(r.some((x) => px >= x.x && px <= x.x + x.w && py >= x.y && py <= x.y + x.h)).toBe(true);
     }
   });
 });

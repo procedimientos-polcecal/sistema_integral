@@ -1,5 +1,6 @@
 import { elegirLectura, type EleccionDeQr } from "./candidatos";
 import { buscarQr, buscarQrConVentanas, type PixelesDe } from "./escaneoQr";
+import { buscarQrConZxing } from "./escaneoQrZxing";
 import { buscarLineas, type LecturaDeLineas } from "./lineasDelPdf";
 import { discriminaIva } from "./comprobante";
 import { leerCabeceraDelTexto } from "./cabeceraDelTexto";
@@ -22,9 +23,14 @@ import type { PDFPageProxy } from "pdfjs-dist";
  *    px de ancho y 17 más a 2600. Un QR de dos centímetros en una A4 dibujada a
  *    1600 px queda en unos 90 px, y el payload de ARCA —unos 290 caracteres, una
  *    matriz de 69×69 módulos— no llega a un píxel por módulo.
- * 2. **Ventanas deslizantes**, sólo si la primera falló y sólo en la página 1.
- *    Rescata 9. Cuesta segundos, y la comparación no es contra un segundo: es
- *    contra tipear la factura entera.
+ * 2. **El segundo decodificador**, sobre el mismo lienzo que acaba de fallar.
+ *    Hay QR impecables que jsQR no decodifica y el ZXing original sí; va acá y
+ *    no al final porque cuesta decenas de milisegundos y rescata en el primer
+ *    intento lo que la pasada de ventanas tardaría medio minuto en no
+ *    encontrar. Ver `escaneoQrZxing.ts`.
+ * 3. **Ventanas deslizantes**, sólo si las dos primeras fallaron y sólo en la
+ *    página 1. Rescata 9. Cuesta segundos, y la comparación no es contra un
+ *    segundo: es contra tipear la factura entera.
  *
  * La mediana quedó en 495 ms por factura, y el peor caso en 32 segundos.
  *
@@ -43,11 +49,16 @@ import type { PDFPageProxy } from "pdfjs-dist";
  *
  * ## Lo que ninguna pasada arregla
  *
- * 29 de las 139: las 12 sin QR de ZITO Y PRIOLA, las que el PDF estira, y unas
- * cuantas que jsQR no decodifica aunque se vean impecables (DON ALFREDO,
- * RUBIALES, ERGUY) —se probó a 7000 px, con umbral duro y con 274 ventanas: no
- * es resolución—. Para todas ésas el buzón acepta la carga y la persona completa
- * cuatro datos, que sigue siendo mejor que tipear la factura entera.
+ * Eran 29 de las 139. Las que jsQR no decodificaba aunque se vieran impecables
+ * **no eran resolución, era el decodificador**: se probó a 7000 px, con umbral
+ * duro y con 274 ventanas, y lo que las lee es ZXing —DON ALFREDO entera, de
+ * una, en 53 ms—. Quedan las 12 sin QR de ZITO Y PRIOLA, que van por el texto,
+ * y las de QR diminuto como TODO RULEMAN: más de cien módulos impresos en dos
+ * centímetros, que a 1600 px de hoja no llegan a dos píxeles por módulo. Eso no
+ * lo arregla un decodificador mejor.
+ *
+ * Para ésas el buzón acepta la carga y la persona completa cuatro datos, que
+ * sigue siendo mejor que tipear la factura entera.
  */
 
 /**
@@ -80,7 +91,7 @@ export interface LecturaDeFactura extends EleccionDeQr {
   /** Cuánto tardó, en milisegundos. */
   tardo: number;
   /** Con qué pasada se encontró. Sirve para saber si conviene ajustar los anchos. */
-  comoSeEncontro: "página dibujada" | "ventanas" | "texto del PDF" | null;
+  comoSeEncontro: "página dibujada" | "segundo decodificador" | "ventanas" | "texto del PDF" | null;
   /**
    * De dónde salió la cabecera. `texto` sólo cuando no se encontró QR: un
    * dato firmado por ARCA siempre le gana a uno interpretado de lo impreso.
@@ -211,9 +222,25 @@ async function deUnPdf(archivo: File): Promise<Hallazgo> {
       if (!ctx) break;
       if (n === 1 && vistaPrevia === null) vistaPrevia = miniatura(lienzo);
 
-      const textos = buscarQr(pixelesDe(lienzo, ctx));
+      const pixeles = pixelesDe(lienzo, ctx);
+
+      const textos = buscarQr(pixeles);
       if (textos.length > 0) {
         return { textos, filas, paginas, vistaPrevia, comoSeEncontro: "página dibujada" };
+      }
+
+      /*
+       * El segundo decodificador, sobre el lienzo que ya está dibujado.
+       *
+       * Va acá y no al final porque cuesta decenas de milisegundos y rescata en
+       * el primer intento lo que la pasada de ventanas tardaría medio minuto en
+       * no encontrar: DON ALFREDO se lee entero a 1600 px en 53 ms. Ponerlo
+       * después de las ventanas sería hacer esperar media hora de cola para
+       * llegar a lo barato.
+       */
+      const conZxing = await buscarQrConZxing(pixeles);
+      if (conZxing.length > 0) {
+        return { textos: conZxing, filas, paginas, vistaPrevia, comoSeEncontro: "segundo decodificador" };
       }
     }
   }
@@ -322,11 +349,20 @@ async function deUnaImagen(archivo: File): Promise<Hallazgo> {
     ctx.drawImage(bitmap, 0, 0, lienzo.width, lienzo.height);
     if (vistaPrevia === null) vistaPrevia = miniatura(lienzo);
 
-    const textos = buscarQr(pixelesDe(lienzo, ctx));
+    const pixeles = pixelesDe(lienzo, ctx);
+
+    const textos = buscarQr(pixeles);
     if (textos.length > 0) {
       bitmap.close?.();
       return { textos, filas: [], paginas: 1, vistaPrevia, comoSeEncontro: "página dibujada" };
     }
+
+    const conZxing = await buscarQrConZxing(pixeles);
+    if (conZxing.length > 0) {
+      bitmap.close?.();
+      return { textos: conZxing, filas: [], paginas: 1, vistaPrevia, comoSeEncontro: "segundo decodificador" };
+    }
+
     lienzos.push({ lienzo, ctx });
   }
 

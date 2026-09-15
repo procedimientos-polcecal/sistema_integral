@@ -41,8 +41,16 @@ import jsQR from "jsqr";
  * datos — o sea que era una pasada que **medía bien y en producción no habría
  * hecho nada**. Se comprobó en el navegador y se sacó.
  *
- * Las facturas con el QR estirado quedan entonces para carga manual, igual que
+ * Las facturas con el QR diminuto quedan entonces para carga manual, igual que
  * las que no traen QR.
+ *
+ * ## Lo que sí sirvió: un segundo decodificador
+ *
+ * Las que "se ven impecables y no se leen" **no eran un problema de imagen, era
+ * jsQR**. El ZXing original, compilado a WebAssembly, lee la página de DON
+ * ALFREDO entera y de una. Vive en `escaneoQrZxing.ts` y corre después de esta
+ * pasada, sobre el mismo lienzo; acá no se toca nada, porque esto resuelve 110
+ * de 139 sin bajar un solo byte de más.
  */
 
 /** Lo mínimo que se le pide a un canvas para poder escanearlo. */
@@ -103,35 +111,50 @@ function recortar(px: PixelesDe, x: number, y: number, w: number, h: number): st
   }
 }
 
+/** Un rectángulo de la hoja, en píxeles. */
+export interface Rectangulo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
- * Pasada normal: la hoja completa y después los cuatro rincones.
+ * Los cuatro rincones de una hoja, con solape.
  *
- * Los rincones van con solape porque un QR justo en el medio quedaría partido
- * por la mitad en los cuatro y no se leería en ninguno. Y sirven porque recortar
- * deja el QR más grande dentro de lo que jsQR analiza, que es lo que rescata a
- * los escaneos torcidos.
+ * El solape no es capricho: un QR justo en el medio quedaría partido por la
+ * mitad en los cuatro y no se leería en ninguno. Y los rincones sirven porque
+ * recortar deja el QR más grande dentro de lo que el decodificador analiza, que
+ * es lo que rescata a los escaneos torcidos.
+ *
+ * Está exportado porque la pasada de zxing usa exactamente la misma geometría:
+ * si un día se ajusta el solape, tiene que cambiar para las dos a la vez.
  */
+export function rincones(ancho: number, alto: number): Rectangulo[] {
+  const w = Math.round(ancho * 0.62);
+  const h = Math.round(alto * 0.62);
+
+  return ([
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ] as const).map(([fx, fy]) => ({
+    x: fx === 0 ? 0 : ancho - w,
+    y: fy === 0 ? 0 : alto - h,
+    w,
+    h,
+  }));
+}
+
+/** Pasada normal: la hoja completa y después los cuatro rincones. */
 export function buscarQr(px: PixelesDe): string[] {
   const completo = recortar(px, 0, 0, px.width, px.height);
   if (completo) return [completo];
 
   const encontrados: string[] = [];
-  const w = Math.round(px.width * 0.62);
-  const h = Math.round(px.height * 0.62);
-
-  for (const [fx, fy] of [
-    [0, 0],
-    [1, 0],
-    [0, 1],
-    [1, 1],
-  ] as const) {
-    const texto = recortar(
-      px,
-      fx === 0 ? 0 : px.width - w,
-      fy === 0 ? 0 : px.height - h,
-      w,
-      h
-    );
+  for (const r of rincones(px.width, px.height)) {
+    const texto = recortar(px, r.x, r.y, r.w, r.h);
     if (texto && !encontrados.includes(texto)) encontrados.push(texto);
   }
 

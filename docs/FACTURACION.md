@@ -26,14 +26,18 @@ Todo lo que sigue salió de correr el lector contra las **139 facturas de
 `FACTURAS/SEPTIEMBRE 2026`** — la carpeta completa, no una muestra. Ninguna de
 estas cosas se deducía de la especificación de ARCA, y cada una cambió el código.
 
-### El lector necesita dos pasadas, y **110 de 139 facturas se leen solas**
+### El lector necesita tres pasadas, y **110 de 139 facturas se leen solas**
 
-`lib/facturacion/escaneoQr.ts` busca el QR de dos maneras:
+`lib/facturacion/escaneoQr.ts` busca el QR de tres maneras, en este orden:
 
 | Pasada | Rescata | Por qué existe |
 |---|---|---|
 | **La página dibujada, subiendo la definición** (1600 → 2600 → 3600 px) | 84 + 17 | Un QR de dos centímetros en una A4 dibujada a 1600 px queda en unos 90 px, y el payload de ARCA —una matriz de 69×69 módulos— no llega a un píxel por módulo. Empezar en 2600 sería pagar el dibujo caro 84 veces; quedarse en 1600 sería perder 17. |
-| **Ventanas deslizantes**, sólo si la primera falló y **sólo en la página 1** | 9 | Hasta 274 recortes, unos segundos. La comparación no es contra un segundo: es contra tipear la factura entera. |
+| **El segundo decodificador** (ZXing en WebAssembly), sobre el lienzo que acaba de fallar | DON ALFREDO y compañía | Hay QR impecables que jsQR no decodifica y ZXing sí. Cuesta decenas de milisegundos y 950 KB que se bajan **sólo** cuando jsQR falló. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador). |
+| **Ventanas deslizantes**, sólo si las dos primeras fallaron y **sólo en la página 1** | 9 | Hasta 274 recortes, unos segundos. La comparación no es contra un segundo: es contra tipear la factura entera. |
+
+Los 84+17 y los 9 son de antes del segundo decodificador: **falta volver a correr
+el banco de las 139** para saber cuánto mueve el número de cabecera.
 
 Mediana: **495 ms por factura**; peor caso, 32 segundos.
 
@@ -98,9 +102,30 @@ Esto **corrige un supuesto anterior** que estaba escrito en el spec: que el QR
 estaba dentro de la imagen de la página escaneada. No está. Para estas facturas,
 o se le pide al proveedor el original, o se completan a mano.
 
-Y hay QR que jsQR no decodifica aunque se vean impecables: DON ALFREDO, RUBIALES
-y ERGUY. Se probó a 7000 px, con umbral duro y con 274 ventanas. No es
-resolución.
+### Había QR que "no se leían" y el problema era el decodificador
+
+DON ALFREDO, RUBIALES y ERGUY se ven impecables y jsQR no los decodificaba. Se
+probó a 7000 px, con umbral duro y con 274 ventanas: no era resolución. Era
+**jsQR**, que es un port en JavaScript y se rinde antes que la implementación
+original en la corrección de errores.
+
+El ZXing de verdad, compilado a WebAssembly, lee la página de DON ALFREDO
+**entera y de una**: 53 ms a 1600 px, 75 ms a 2600, contra jsQR que no la lee a
+ninguna escala. Comprobado en un navegador, con el lector que se commitea:
+`comoSeEncontro=segundo decodificador`, cabecera de ARCA completa —CUIT
+30712622802, factura A 0003-00001826 del 10/09/2026 por $559.262—.
+
+**No reemplaza a jsQR, corre después.** jsQR resuelve 110 de 139 sin bajar un
+byte de más; el wasm son 950 KB y se baja sólo cuando jsQR falló, o sea en las
+facturas que hoy se tipean a mano. Y va **antes** de las ventanas deslizantes:
+cuesta decenas de milisegundos y rescata en el primer intento lo que las ventanas
+tardarían medio minuto en no encontrar.
+
+Lo que sigue sin leerse es el QR de **TODO RULEMAN**, y ahí zxing falla igual:
+ampliando el recorte se ve que son más de cien módulos impresos en dos
+centímetros, que a 1600 px de hoja no llegan a dos píxeles por módulo. Eso no lo
+arregla un decodificador mejor. Lo arreglaría dibujar esa zona mucho más grande,
+y **no se pudo comprobar**: de esa factura quedó un PNG de 1400 px y no el PDF.
 
 ### El QR de un emisor puede venir roto, y sirve igual
 
@@ -717,12 +742,14 @@ Acordarse de borrar las facturas de ahí después.
 1. ~~Las que no traen QR~~ **hecho**: ver
    [Cuando no hay QR](#cuando-no-hay-qr-la-cabecera-sale-del-texto). Falta
    medirlo contra más de un diseño de factura.
-2. **Los QR que jsQR no decodifica** (DON ALFREDO, RUBIALES, ERGUY). Probar otro
-   decodificador —zxing— antes de darlos por perdidos.
-3. **Los QR que el PDF estira** (TODO RULEMAN). Se leerían corrigiendo la
-   proporción del recorte, que se puede sacar de la matriz de transformación con
-   que la página dibuja la imagen. Es la única forma que queda, ahora que se sabe
-   que las imágenes embebidas no se pueden leer desde el navegador.
+2. ~~Los QR que jsQR no decodifica~~ **hecho**: era el decodificador, no la
+   imagen. Ver [Había QR que "no se leían"](#había-qr-que-no-se-leían-y-el-problema-era-el-decodificador).
+   Falta volver a correr el banco de las 139 para saber cuántas de las 29 que
+   quedaban rescata — se midió contra DON ALFREDO, que es la única cuyo archivo
+   quedó a mano.
+3. **El QR de TODO RULEMAN**, que es diminuto para la cantidad de módulos que
+   tiene. Habría que dibujar esa zona mucho más grande; con el PDF original a
+   mano se puede medir en una tarde.
 4. ~~Cerrar el círculo con Odoo~~ **hecho**: ver [El vínculo con Odoo](#el-vínculo-con-odoo).
 5. **Las percepciones.** El borrador sale con el IVA y nada más. La localización
    del grupo tiene `perception_ids` en `account.move`, así que una factura con

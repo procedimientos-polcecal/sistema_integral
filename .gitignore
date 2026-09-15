@@ -25,8 +25,11 @@ scripts/import-proveedores/a-revisar.json
 *-service-account*.json
 mantenimientopp-*.json
 
-# El worker de pdf.js, que Facturación usa para rasterizar un PDF y buscarle el
-# QR. Lo copia `scripts/copiar-worker-pdf.mjs` desde node_modules en cada
-# `npm run dev` y `npm run build`. No se commitea porque su versión tiene que
-# coincidir con la del paquete instalado: pdf.js aborta si son distintas.
+# Lo que el lector de facturas baja por su cuenta desde el navegador: el worker
+# de pdf.js, que rasteriza el PDF para buscarle el QR, y el wasm de ZXing, que
+# es el segundo decodificador. Los copia `scripts/copiar-activos-del-lector.mjs`
+# desde node_modules en cada `npm run dev` y `npm run build`. No se commitean
+# porque su versión tiene que coincidir con la del paquete instalado: pdf.js
+# aborta si el worker es de otra, y el wasm lo carga un JS que espera
+# exactamente esos símbolos.
 public/pdfjs/
