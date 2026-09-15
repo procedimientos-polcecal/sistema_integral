@@ -42,6 +42,15 @@ export interface DeLaPlanilla {
    * vacío y decisión se confundían.
    */
   paga: { empresa_id: string | null; ambas: boolean } | null;
+  /**
+   * El equipo que declaró quien pidió, leído de la hoja de respuestas.
+   *
+   * `null` es "esta corrida no lo trajo", y eso pasa **siempre** con un pedido
+   * cargado en el sistema: no tiene fila en la hoja de respuestas, así que la
+   * búsqueda por N° de RI no lo encuentra. Los dos campos salen de la misma
+   * celda, así que se deciden juntos: o manda la planilla o manda lo que había.
+   */
+  equipo: { raw: string | null; id: string | null } | null;
 }
 
 /** Lo que el sistema ya sabía del requerimiento. */
@@ -55,6 +64,8 @@ export interface LoQueYaHabia {
   empresa_id: string | null;
   paga_ambas: boolean;
   origen: string;
+  equipo_raw: string | null;
+  equipo_id: string | null;
 }
 
 /**
@@ -102,5 +113,13 @@ export function fusionarConLoQueYaHabia(
     // Haber entrado por el sistema no se deshace por aparecer después en la
     // planilla: aparecer allá es justamente lo que se quiere que pase.
     origen: previo?.origen === "app" ? "app" : "sheets",
+    // El equipo declarado. Es la sexta columna que aprende esta lección, y la
+    // aprendió antes de romperse: el equipo se lee de la **hoja de respuestas**
+    // uniendo por N° de RI, y un pedido cargado en el sistema no tiene fila
+    // ahí. O sea que para todo pedido del sistema la planilla dice `null`
+    // **siempre**, no de casualidad: sin esto, el equipo que eligió quien lo
+    // cargó se borraba en la primera sincronización y no volvía nunca.
+    equipo_raw: dePlanilla.equipo ? dePlanilla.equipo.raw : (previo?.equipo_raw ?? null),
+    equipo_id: dePlanilla.equipo ? dePlanilla.equipo.id : (previo?.equipo_id ?? null),
   };
 }

@@ -12,6 +12,7 @@ const NADA: DeLaPlanilla = {
   compra_asignada_a: null,
   comparativa_drive_id: null,
   paga: null,
+  equipo: null,
 };
 
 /**
@@ -33,6 +34,8 @@ const DEL_SISTEMA: LoQueYaHabia = {
   empresa_id: null,
   paga_ambas: true,
   origen: "app",
+  equipo_raw: "EM6 - CATERPILLAR 950 G",
+  equipo_id: "eq-em6",
 };
 
 describe("lo que se conserva cuando la planilla vuelve a traer un RI", () => {
@@ -143,5 +146,46 @@ describe("lo que se conserva cuando la planilla vuelve a traer un RI", () => {
     );
     expect(r.empresa_id).toBeNull();
     expect(r.paga_ambas).toBe(false);
+  });
+});
+
+describe("el equipo declarado", () => {
+  it("un pedido del sistema no pierde su equipo, que la planilla NUNCA va a decir", () => {
+    // El equipo se lee de la hoja de respuestas uniendo por N° de RI, y un
+    // pedido cargado en el sistema no tiene fila ahi. O sea que para el la
+    // planilla dice null en TODAS las corridas, no en una: sin conservarlo, el
+    // equipo que eligio quien lo cargo se borraba en la primera sincronizacion
+    // y no volvia nunca.
+    const r = fusionarConLoQueYaHabia(NADA, DEL_SISTEMA);
+    expect(r.equipo_raw).toBe("EM6 - CATERPILLAR 950 G");
+    expect(r.equipo_id).toBe("eq-em6");
+  });
+
+  it("cuando la planilla lo trae, manda la planilla", () => {
+    const r = fusionarConLoQueYaHabia(
+      { ...NADA, equipo: { raw: "PO-A1-01 - ACARREADOR DE PLACAS", id: "eq-po-a1-01" } },
+      DEL_SISTEMA
+    );
+    expect(r.equipo_raw).toBe("PO-A1-01 - ACARREADOR DE PLACAS");
+    expect(r.equipo_id).toBe("eq-po-a1-01");
+  });
+
+  it("un equipo dicho que no se pudo enlazar guarda el texto y deja el id en null", () => {
+    // Catorce opciones del desplegable no son equipos del catalogo (PANOL,
+    // GALPON 1, LABORATORIO). El texto alcanza para que Facturacion encuentre
+    // la analitica, asi que se guarda igual — y NO se hereda el id viejo, que
+    // seria decir que este pedido es de una maquina que nadie nombro.
+    const r = fusionarConLoQueYaHabia(
+      { ...NADA, equipo: { raw: "PANOL", id: null } },
+      DEL_SISTEMA
+    );
+    expect(r.equipo_raw).toBe("PANOL");
+    expect(r.equipo_id).toBeNull();
+  });
+
+  it("un RI que no existia y sin equipo queda en null, no rompe", () => {
+    const r = fusionarConLoQueYaHabia(NADA, undefined);
+    expect(r.equipo_raw).toBeNull();
+    expect(r.equipo_id).toBeNull();
   });
 });

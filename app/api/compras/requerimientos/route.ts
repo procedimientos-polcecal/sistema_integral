@@ -71,12 +71,40 @@ export async function POST(request: Request) {
   // alguien apruebe. Poner "NORMAL" sería inventar una decisión.
   const prioridad = PRIORIDADES.includes(body.prioridad) ? body.prioridad : null;
 
+  // ── El equipo, resuelto del lado del servidor ──
+  //
+  // El formulario manda el id; el texto lo arma acá con el catálogo. Que no lo
+  // escriba el cliente no es desconfianza: es que `equipo_raw` tiene que decir
+  // exactamente lo mismo que el desplegable del formulario de Google —"EM6 -
+  // CATERPILLAR 950 G"—, porque ése es, palabra por palabra, el nombre de la
+  // cuenta analítica de Odoo que Facturación después busca. Un texto armado en
+  // la pantalla se desincroniza el día que alguien cambie una etiqueta.
+  //
+  // Un id que no esté en el catálogo deja las dos columnas en null en vez de
+  // fallar: el pedido no se puede perder por esto, y un equipo que no se
+  // reconoce es exactamente lo que `equipo_id is null` significa.
+  let equipo_id: string | null = null;
+  let equipo_raw: string | null = null;
+  if (body.equipo_id) {
+    const { data: equipo } = await supabase
+      .from("equipos")
+      .select("id, code, name")
+      .eq("id", body.equipo_id)
+      .maybeSingle();
+    if (equipo) {
+      equipo_id = equipo.id as string;
+      equipo_raw = [equipo.code, equipo.name].filter(Boolean).join(" - ") || null;
+    }
+  }
+
   const registro = {
     descripcion,
     area_id: body.area_id ?? null,
     codigo: body.codigo ?? null,
     cantidad: body.cantidad ?? null,
     ubicacion_id: body.ubicacion_id ?? null,
+    equipo_id,
+    equipo_raw,
     fecha_necesidad: body.fecha_necesidad ?? null,
     detalle_extra: body.detalle_extra ?? null,
     imagen_url: body.imagen_url ?? null,
@@ -103,11 +131,13 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   // El piso de la serie sale de las dos fuentes que la reparten, y no sólo de
-  // la base. La base se entera de las respuestas del formulario cuando corre la
-  // sincronización —cada quince minutos—, así que en esa ventana su máximo
-  // miente por defecto y el sistema elegía un número que el Apps Script ya
-  // había repartido. Pasó en el primer alta real, el 14/09/2026. El porqué
-  // completo, y lo que este arreglo NO cierra, están en `serieDeRi.ts`.
+  // la base. La base se entera de las respuestas del formulario recién cuando
+  // corre la sincronización, y esa ventana es de **horas** —el cron es mejor
+  // esfuerzo y el webhook no se dispara por un recálculo de `IMPORTRANGE`—, así
+  // que en todo ese rato su máximo miente por defecto y el sistema elegía un
+  // número que el Apps Script ya había repartido. Pasó en el primer alta real,
+  // el 14/09/2026. El porqué completo, con la medición, y lo que este arreglo
+  // NO cierra, están en `serieDeRi.ts`.
   //
   // Va afuera del bucle: es una llamada a Google y los reintentos de acá abajo
   // son por choques de la base, que se resuelven sumando uno. Si la planilla no

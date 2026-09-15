@@ -553,13 +553,15 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       empresa_id: string | null;
       paga_ambas: boolean;
       origen: string;
+      equipo_raw: string | null;
+      equipo_id: string | null;
       // El puntero de posición, para no reescribirlo cuando no se movió.
       hoja_origen: string | null;
       sheets_fila: number | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen, hoja_origen, sheets_fila")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen, equipo_raw, equipo_id, hoja_origen, sheets_fila")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));
@@ -618,6 +620,13 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
             : null,
           comparativa_drive_id: planillas.get(registro.nro_ri) ?? null,
           paga: pagaResuelta,
+          // `null` es "esta corrida no trajo el equipo de este RI", que es lo
+          // que pasa con todo pedido cargado en el sistema: se lee de la hoja
+          // de respuestas y ahí no tiene fila. Con el texto dicho van los dos
+          // campos juntos, porque salen de la misma celda.
+          equipo: equipoDicho
+            ? { raw: equipoDicho, id: resolverElEquipo(equipoDicho, catalogoEquipos) }
+            : null,
         },
         yaHabia
       );
@@ -632,12 +641,12 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         // Se guarda el texto original como respaldo; ubicacion_id es el dato bueno.
         ubicacion_raw: ubicacion,
         ubicacion_id: clave ? idUbicacion.get(clave) ?? null : null,
-        // El equipo, igual: el texto siempre, el enlace sólo cuando es seguro.
-        // Catorce opciones del desplegable no son equipos (PAÑOL, GALPON 1,
-        // LABORATORIO…) y ésas quedan con `equipo_id` en null a propósito — el
-        // texto alcanza para que Facturación encuentre la analítica.
-        equipo_raw: equipoDicho,
-        equipo_id: resolverElEquipo(equipoDicho, catalogoEquipos),
+        // El equipo **no se decide acá**: viaja en la fusión, junto con las
+        // otras columnas que la planilla puede no mencionar. El texto siempre y
+        // el enlace sólo cuando es seguro —catorce opciones del desplegable no
+        // son equipos (PAÑOL, GALPON 1, LABORATORIO…) y ésas quedan con
+        // `equipo_id` en null a propósito, porque el texto alcanza para que
+        // Facturación encuentre la analítica—.
         fecha_necesidad: d.fecha_necesidad ?? null,
         detalle_extra: d.detalle_extra ?? null,
         imagen_url: d.imagen_url ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 import { recortarParaPantalla } from "@/lib/compras/texto";
 
@@ -23,6 +23,7 @@ export interface ValoresIniciales {
   cantidad?: string;
   detalle?: string;
   ubicacionId?: string;
+  equipoId?: string;
 }
 
 /**
@@ -52,6 +53,53 @@ export default function NuevoRequerimientoModal({
   const [imagenUrl, setImagenUrl] = useState("");
 
   const [ubicacionId, setUbicacionId] = useState(inicial?.ubicacionId ?? "");
+
+  /**
+   * Para qué equipo es el pedido.
+   *
+   * La lista se pide acá adentro en vez de recibirse por prop, y es a
+   * propósito: este formulario lo usan tres pantallas —Requerimientos, Mis
+   * pedidos y Repuestos de una OT— y una de ellas dice en un comentario que
+   * "un campo que se agregue allá aparece acá sin que nadie se acuerde". Con
+   * una prop nueva esa promesa se rompe: las tres tendrían que acordarse, y la
+   * que no lo haga pierde el campo en silencio.
+   *
+   * Si la lista no carga, el campo queda deshabilitado con el motivo a la
+   * vista y el pedido se puede mandar igual. El equipo es opcional —hay
+   * pedidos que no son de ninguna máquina— y no llegar a elegirlo no puede
+   * impedir cargar lo que alguien necesita.
+   */
+  const [equipos, setEquipos] = useState<{ id: string; etiqueta: string }[]>([]);
+  const [equipoId, setEquipoId] = useState(inicial?.equipoId ?? "");
+  const [equiposError, setEquiposError] = useState("");
+
+  useEffect(() => {
+    let vigente = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/mantenimiento/equipos-y-sectores");
+        if (!res.ok) throw new Error(`la lista volvió con ${res.status}`);
+        const body = await res.json();
+        if (!vigente) return;
+        // La etiqueta arma el mismo texto que el desplegable del formulario de
+        // Google —"EM6 - CATERPILLAR 950 G"—, que además es, palabra por
+        // palabra, el nombre de la cuenta analítica de Odoo. Escribirlo igual
+        // es lo que deja que Facturación encuentre la analítica de un pedido
+        // cargado acá igual que la de uno que entró por el formulario.
+        setEquipos(
+          (body.equipos ?? [])
+            .map((e2: { id: string; code: string | null; name: string | null }) => ({
+              id: e2.id,
+              etiqueta: [e2.code, e2.name].filter(Boolean).join(" - "),
+            }))
+            .filter((e2: { etiqueta: string }) => e2.etiqueta)
+        );
+      } catch (e2) {
+        if (vigente) setEquiposError(e2 instanceof Error ? e2.message : String(e2));
+      }
+    })();
+    return () => { vigente = false; };
+  }, []);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +172,10 @@ export default function NuevoRequerimientoModal({
           detalle_extra: detalle.trim() || null,
           imagen_url: imagenUrl.trim() || null,
           ubicacion_id: ubicacionId || null,
+          // Va el id y no el texto: el nombre canónico lo arma el servidor
+          // desde el catálogo, así que no depende de lo que tenga cargado la
+          // pantalla ni de que alguien lo escriba a mano.
+          equipo_id: equipoId || null,
         }),
       });
     } catch {
@@ -259,6 +311,28 @@ export default function NuevoRequerimientoModal({
             <p className="mt-1 text-xs text-slate-500">
               ¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos
               lo escriben igual y se puede filtrar por ubicación.
+            </p>
+          </Campo>
+
+          {/* Para qué equipo */}
+          <Campo label="Para qué equipo">
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+              value={equipoId}
+              disabled={equipos.length === 0}
+              onChange={(e2) => setEquipoId(e2.target.value)}
+            >
+              <option value="">Sin especificar</option>
+              {equipos.map((e2) => (
+                <option key={e2.id} value={e2.id}>{e2.etiqueta}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              {equiposError
+                ? `No se pudo traer la lista de equipos (${equiposError}). El pedido se ` +
+                  "puede cargar igual; el equipo se le agrega después."
+                : "Opcional. Es lo que después deja ver cuánto se gastó en cada máquina, " +
+                  "y de dónde sale la imputación contable."}
             </p>
           </Campo>
 
