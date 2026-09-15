@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -15,12 +16,12 @@ import {
 } from "@/lib/cantera/consultas";
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
-import { resumenPorFletero, resumenAnualPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
-import { agruparPesadasPorFleteroTipoMes, agruparPesadasPorTipoMes } from "@/lib/cantera/pesadas";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
 import InicioGrafico from "./InicioGrafico";
-import ResumenesAnuales from "./ResumenesAnuales";
+import ResumenAnualSection from "./ResumenAnualSection";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -92,18 +93,12 @@ export default async function CanteraInicioPage({
   const serieReciente = serie.slice(-6);
   const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
 
-  // Se trae el histórico entero una sola vez (paginado con traerTodo, así que
-  // no pega contra el límite de 1000 filas de PostgREST) y de ahí se sacan
-  // tanto el mes en curso (para las métricas) como el año elegido (para el
-  // resumen anual) — evita traer las pesadas dos veces.
-  const [fleteros, tarifasAcarreo, acarreosTodos, pesadasTodas] = await Promise.all([
+  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
-    traerAcarreos(supabase, {}),
-    traerPesadas(supabase, {}),
+    traerAcarreos(supabase, { mes: mesActual }),
+    traerPesadas(supabase, { mes: mesActual }),
   ]);
-  const acarreosDelMes = acarreosTodos.filter((a) => a.mes.slice(0, 7) === mesActual);
-  const pesadasDelMes = pesadasTodas.filter((p) => p.fecha.slice(0, 7) === mesActual);
   const acarreosPlanos: AcarreoPlano[] = [
     ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
     ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
@@ -111,26 +106,6 @@ export default async function CanteraInicioPage({
   const totalAcarreoMes = fleteros.reduce(
     (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0
-  );
-
-  // Resumen anual: "Por fletero" (RESUMEN ANUAL POR FLETERO) y "De
-  // materiales" (RESUMEN ANUAL DE MATERIALES) de la planilla real, ahora acá
-  // en vez de en `/cantera/acarreo/resumen` — se sacó esa pestaña a pedido.
-  const acarreosDelAnioPlanos: AcarreoPlano[] = [
-    ...acarreosTodos.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
-    ...agruparPesadasPorFleteroTipoMes(pesadasTodas),
-  ].filter((a) => a.mes.startsWith(anio));
-  const MESES_DEL_ANIO = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, "0")}`);
-  const filasFleteros = fleteros.map((f) => {
-    const porMes = MESES_DEL_ANIO.map((mes) => resumenPorFletero(acarreosDelAnioPlanos, tarifasAcarreo, f.id, mes).totalMonto);
-    return { fletero: f, porMes, totalAnual: porMes.reduce((s, v) => s + v, 0) };
-  });
-  const filasMateriales = resumenAnualPorTipo(
-    [
-      ...acarreosTodos.map((a) => ({ tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
-      ...agruparPesadasPorTipoMes(pesadasTodas),
-    ],
-    anio
   );
 
   return (
@@ -251,8 +226,19 @@ export default async function CanteraInicioPage({
         </section>
       </div>
 
-      <ResumenesAnuales anio={anio} filasFleteros={filasFleteros} filasMateriales={filasMateriales} />
+      <Suspense fallback={<CargandoResumenAnual />}>
+        <ResumenAnualSection anio={anio} />
+      </Suspense>
     </div>
+  );
+}
+
+function CargandoResumenAnual() {
+  return (
+    <section className="card mt-4 p-4">
+      <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
+      <div className="mt-4 h-40 animate-pulse rounded-lg bg-slate-100" />
+    </section>
   );
 }
 

@@ -288,6 +288,8 @@ export interface FiltrosDeAcarreo {
   fleteroId?: string;
   /** "YYYY-MM": trae ese mes de calendario completo. */
   mes?: string;
+  /** "YYYY": trae ese año calendario completo. Se ignora si también viene `mes`. */
+  anio?: string;
 }
 
 export async function traerAcarreos(
@@ -306,6 +308,8 @@ export async function traerAcarreos(
       const primerDia = `${filtros.mes}-01`;
       const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
       q = q.gte("mes", primerDia).lte("mes", ultimoDia);
+    } else if (filtros.anio) {
+      q = q.gte("mes", `${filtros.anio}-01-01`).lte("mes", `${filtros.anio}-12-31`);
     }
     return q.order("mes", { ascending: false }).order("tipo").range(desde, hasta);
   });
@@ -315,6 +319,8 @@ export interface FiltrosDePesadas {
   fleteroId?: string;
   /** "YYYY-MM": trae ese mes de calendario completo. */
   mes?: string;
+  /** "YYYY": trae ese año calendario completo. Se ignora si también viene `mes`. */
+  anio?: string;
 }
 
 /** Las pesadas de balanza, ya resueltas — de acá sale el material acarreado por fletero. */
@@ -332,6 +338,8 @@ export async function traerPesadas(
       const primerDia = `${filtros.mes}-01`;
       const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
       q = q.gte("fecha", primerDia).lte("fecha", ultimoDia);
+    } else if (filtros.anio) {
+      q = q.gte("fecha", `${filtros.anio}-01-01`).lte("fecha", `${filtros.anio}-12-31`);
     }
     return q.order("fecha").range(desde, hasta);
   });
