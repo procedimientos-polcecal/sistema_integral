@@ -72,4 +72,29 @@ describe("comoLeLlego", () => {
     });
     expect(r.cantidad).toBeNull();
   });
+
+  /**
+   * Una fecha que no se puede leer no produce un número: produce nada. Con un
+   * `" "` esto devolvía "llegó 46310 días tarde", que es el peor error posible
+   * acá —un dato inventado que se lee como cierto— al lado de un juicio que
+   * decide una persona.
+   */
+  it("una fecha ilegible no inventa una demora", () => {
+    const base = { cantidad: 1, cantidad_comprada: null, cantidad_recibida: 1 };
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: " ", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: "31/12/2026", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: "2026-02-30", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+  });
+
+  /**
+   * El cero es un valor, no una ausencia: `??` y no `||`. Con `||`, un cero
+   * comprado compararía contra la cantidad del pedido original.
+   */
+  it("compara contra un cero comprado y no contra lo pedido", () => {
+    const r = comoLeLlego({
+      fecha_estimada_recepcion: null, fecha_recepcion: null,
+      cantidad: 100, cantidad_comprada: 0, cantidad_recibida: 0,
+    });
+    expect(r.cantidad).toBe("recibió todo lo comprado");
+  });
 });

@@ -110,10 +110,18 @@ function laDemora(r: {
 }): string | null {
   if (!r.fecha_estimada_recepcion || !r.fecha_recepcion) return null;
 
-  // En UTC y sobre la fecha sola: restar dos `Date` locales cruza mal el
-  // cambio de hora y devuelve 8,96 días donde hay 9.
-  const dia = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
-  const dias = Math.round((dia(r.fecha_recepcion) - dia(r.fecha_estimada_recepcion)) / 86400000);
+  // La misma guardia que usa `fecha()` para escribir en la planilla: una fecha
+  // que no existe, o que no viene como YYYY-MM-DD, no se corrige ni se estima.
+  // Sin esto, un `" "` daba "llegó 46310 días tarde" —un número con forma de
+  // dato real al lado de un juicio que carga una persona—, que es peor que no
+  // decir nada.
+  const estimada = serialDelDia(r.fecha_estimada_recepcion);
+  const recibida = serialDelDia(r.fecha_recepcion);
+  if (estimada === null || recibida === null) return null;
+
+  // Los seriales ya son días enteros, así que la resta es la cantidad de días y
+  // no hay husos de por medio.
+  const dias = recibida - estimada;
 
   if (dias <= 0) return "llegó a tiempo";
   return `llegó ${dias} ${dias === 1 ? "día" : "días"} tarde`;
