@@ -43,7 +43,6 @@ export default function AcarreoClient({
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Acarreo</h1>
         <div className="flex items-center gap-2">
-          <Link href="/cantera/acarreo/resumen" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50">Resumen anual</Link>
           {esAdmin && (
             <>
               <Link href="/cantera/fleteros" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50">Fleteros</Link>

@@ -15,11 +15,12 @@ import {
 } from "@/lib/cantera/consultas";
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
-import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
-import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
+import { resumenPorFletero, resumenAnualPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { agruparPesadasPorFleteroTipoMes, agruparPesadasPorTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
 import InicioGrafico from "./InicioGrafico";
+import ResumenesAnuales from "./ResumenesAnuales";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -39,7 +40,12 @@ function nombreDeMes(mes: string): string {
  * entrada, con los mismos datos que se verían abriendo Registros o el
  * Informe, para no tener que entrar a mirar si hay algo pendiente.
  */
-export default async function CanteraInicioPage() {
+export default async function CanteraInicioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ anio?: string }>;
+}) {
+  const { anio: anioParam } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -84,13 +90,20 @@ export default async function CanteraInicioPage() {
   const mesActual = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`;
   const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
   const serieReciente = serie.slice(-6);
+  const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
 
-  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
+  // Se trae el histórico entero una sola vez (paginado con traerTodo, así que
+  // no pega contra el límite de 1000 filas de PostgREST) y de ahí se sacan
+  // tanto el mes en curso (para las métricas) como el año elegido (para el
+  // resumen anual) — evita traer las pesadas dos veces.
+  const [fleteros, tarifasAcarreo, acarreosTodos, pesadasTodas] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
-    traerAcarreos(supabase, { mes: mesActual }),
-    traerPesadas(supabase, { mes: mesActual }),
+    traerAcarreos(supabase, {}),
+    traerPesadas(supabase, {}),
   ]);
+  const acarreosDelMes = acarreosTodos.filter((a) => a.mes.slice(0, 7) === mesActual);
+  const pesadasDelMes = pesadasTodas.filter((p) => p.fecha.slice(0, 7) === mesActual);
   const acarreosPlanos: AcarreoPlano[] = [
     ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
     ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
@@ -98,6 +111,26 @@ export default async function CanteraInicioPage() {
   const totalAcarreoMes = fleteros.reduce(
     (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0
+  );
+
+  // Resumen anual: "Por fletero" (RESUMEN ANUAL POR FLETERO) y "De
+  // materiales" (RESUMEN ANUAL DE MATERIALES) de la planilla real, ahora acá
+  // en vez de en `/cantera/acarreo/resumen` — se sacó esa pestaña a pedido.
+  const acarreosDelAnioPlanos: AcarreoPlano[] = [
+    ...acarreosTodos.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
+    ...agruparPesadasPorFleteroTipoMes(pesadasTodas),
+  ].filter((a) => a.mes.startsWith(anio));
+  const MESES_DEL_ANIO = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, "0")}`);
+  const filasFleteros = fleteros.map((f) => {
+    const porMes = MESES_DEL_ANIO.map((mes) => resumenPorFletero(acarreosDelAnioPlanos, tarifasAcarreo, f.id, mes).totalMonto);
+    return { fletero: f, porMes, totalAnual: porMes.reduce((s, v) => s + v, 0) };
+  });
+  const filasMateriales = resumenAnualPorTipo(
+    [
+      ...acarreosTodos.map((a) => ({ tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
+      ...agruparPesadasPorTipoMes(pesadasTodas),
+    ],
+    anio
   );
 
   return (
@@ -226,6 +259,8 @@ export default async function CanteraInicioPage() {
           )}
         </section>
       </div>
+
+      <ResumenesAnuales anio={anio} filasFleteros={filasFleteros} filasMateriales={filasMateriales} />
     </div>
   );
 }

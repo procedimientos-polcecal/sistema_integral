@@ -4,6 +4,7 @@ import {
   montoAcarreo,
   resumenPorFletero,
   totalesPorTipo,
+  resumenAnualPorTipo,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -111,6 +112,42 @@ describe("totalesPorTipo", () => {
         { tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 500 },
       ],
       "2026-08"
+    );
+    expect(r.map((f) => f.tipo)).toEqual(["dolomita_d1", "horas_destape"]);
+  });
+});
+
+describe("resumenAnualPorTipo", () => {
+  it("junta por tipo, un total por mes del año pedido", () => {
+    const entradas = [
+      { tipo: "dolomita_d1", mes: "2026-01-01", cantidad: 100 },
+      { tipo: "dolomita_d1", mes: "2026-01-01", cantidad: 50 }, // otro fletero, mismo tipo y mes: se suma
+      { tipo: "dolomita_d1", mes: "2026-03-01", cantidad: 200 },
+      { tipo: "horas_destape", mes: "2026-01-01", cantidad: 10 },
+      { tipo: "dolomita_d1", mes: "2025-01-01", cantidad: 999 }, // otro año, no cuenta
+    ];
+    const r = resumenAnualPorTipo(entradas, "2026");
+    const d1 = r.find((f) => f.tipo === "dolomita_d1")!;
+    expect(d1.porMes[0]).toBe(150);
+    expect(d1.porMes[2]).toBe(200);
+    expect(d1.porMes[1]).toBe(0);
+    expect(d1.totalAnual).toBe(350);
+    expect(d1.etiqueta).toBe("Dolomita D1");
+    expect(d1.unidad).toBe("tonelada");
+  });
+
+  it("un tipo sin ningún movimiento en el año no aparece", () => {
+    const r = resumenAnualPorTipo([{ tipo: "dolomita_d1", mes: "2025-06-01", cantidad: 100 }], "2026");
+    expect(r).toEqual([]);
+  });
+
+  it("ordena de mayor a menor total anual", () => {
+    const r = resumenAnualPorTipo(
+      [
+        { tipo: "horas_destape", mes: "2026-01-01", cantidad: 5 },
+        { tipo: "dolomita_d1", mes: "2026-01-01", cantidad: 500 },
+      ],
+      "2026"
     );
     expect(r.map((f) => f.tipo)).toEqual(["dolomita_d1", "horas_destape"]);
   });

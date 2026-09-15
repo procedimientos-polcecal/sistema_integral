@@ -194,3 +194,42 @@ export function totalesPorTipo(
     })
     .sort((a, b) => b.cantidad - a.cantidad);
 }
+
+export interface FilaResumenAnualTipo {
+  tipo: string;
+  etiqueta: string;
+  unidad: UnidadDeAcarreo;
+  /** Enero a diciembre, en ese orden. */
+  porMes: number[];
+  totalAnual: number;
+}
+
+/**
+ * Lo mismo que `totalesPorTipo`, pero el año entero en una sola tabla —
+ * "RESUMEN ANUAL DE MATERIALES" de la planilla real, mes a mes en vez de un
+ * mes a la vez. Sólo entran los tipos con algo cargado en algún mes del año;
+ * los que no tuvieron ningún movimiento no aparecen (como en `totalesPorTipo`).
+ */
+export function resumenAnualPorTipo(
+  entradas: { tipo: string; mes: string; cantidad: number }[],
+  anio: string
+): FilaResumenAnualTipo[] {
+  const porTipo = new Map<string, number[]>();
+  for (const e of entradas) {
+    if (!e.mes.startsWith(anio)) continue;
+    const indiceMes = Number(e.mes.slice(5, 7)) - 1;
+    if (indiceMes < 0 || indiceMes > 11) continue;
+    const porMes = porTipo.get(e.tipo) ?? new Array(12).fill(0);
+    porMes[indiceMes] += e.cantidad;
+    porTipo.set(e.tipo, porMes);
+  }
+
+  return [...porTipo.entries()]
+    .map(([tipo, porMes]) => {
+      const t = tipoDeAcarreo(tipo);
+      const totalAnual = porMes.reduce((s, v) => s + v, 0);
+      return { tipo, etiqueta: t?.etiqueta ?? tipo, unidad: t?.unidad ?? "tonelada", porMes, totalAnual };
+    })
+    .filter((f) => f.totalAnual !== 0)
+    .sort((a, b) => b.totalAnual - a.totalAnual);
+}
