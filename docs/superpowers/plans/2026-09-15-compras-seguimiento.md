@@ -463,6 +463,34 @@ describe("comoLeLlego", () => {
     });
     expect(r.cantidad).toBeNull();
   });
+
+  /**
+   * Una fecha que no se puede leer no produce un número: produce nada. Con un
+   * `" "` esto devolvía "llegó 46310 días tarde", que es el peor error posible
+   * acá —un dato inventado que se lee como cierto— al lado de un juicio que
+   * decide una persona.
+   */
+  it("una fecha ilegible no inventa una demora", () => {
+    const base = { cantidad: 1, cantidad_comprada: null, cantidad_recibida: 1 };
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: " ", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: "31/12/2026", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+    expect(comoLeLlego({ ...base, fecha_estimada_recepcion: "2026-02-30", fecha_recepcion: "2026-09-15" }).demora).toBeNull();
+  });
+
+  /**
+   * El cero es un valor, no una ausencia: `??` y no `||`. Con `||`, un cero
+   * comprado compararía contra la cantidad del pedido original. El test fija
+   * el operador, no la redacción: "todo lo comprado" para 0 de 0 es cierto, y
+   * una rama para un caso que no aparece en las 1.757 filas del histórico
+   * sería trabajo inventado.
+   */
+  it("compara contra un cero comprado y no contra lo pedido", () => {
+    const r = comoLeLlego({
+      fecha_estimada_recepcion: null, fecha_recepcion: null,
+      cantidad: 100, cantidad_comprada: 0, cantidad_recibida: 0,
+    });
+    expect(r.cantidad).toBe("recibió todo lo comprado");
+  });
 });
 ```
 
@@ -508,10 +536,19 @@ function laDemora(r: {
 }): string | null {
   if (!r.fecha_estimada_recepcion || !r.fecha_recepcion) return null;
 
-  // En UTC y sobre la fecha sola: restar dos `Date` locales cruza mal el
-  // cambio de hora y devuelve 8,96 días donde hay 9.
-  const dia = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
-  const dias = Math.round((dia(r.fecha_recepcion) - dia(r.fecha_estimada_recepcion)) / 86400000);
+  // La misma guardia que usa `fecha()` para escribir en la planilla: una fecha
+  // que no existe, o que no viene como YYYY-MM-DD, no se corrige ni se estima.
+  // Sin esto un `" "` daba "llegó 46310 días tarde" —un número con forma de
+  // dato real, al lado de un juicio que decide una persona—, que es peor que
+  // no decir nada.
+  const estimada = serialDelDia(r.fecha_estimada_recepcion);
+  const recibida = serialDelDia(r.fecha_recepcion);
+  if (estimada === null || recibida === null) return null;
+
+  // Los seriales ya son días enteros, así que la resta da días y no hay husos
+  // de por medio. Restar dos `Date` locales sí los tendría: cruzando el cambio
+  // de hora devuelve 8,96 días donde hay 9.
+  const dias = recibida - estimada;
 
   if (dias <= 0) return "llegó a tiempo";
   return `llegó ${dias} ${dias === 1 ? "día" : "días"} tarde`;
@@ -539,7 +576,7 @@ function laCantidad(r: {
 ```bash
 npx vitest run lib/compras/comoLeLlego.test.ts
 ```
-Esperado: PASS, 8 tests.
+Esperado: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
