@@ -18,7 +18,7 @@ export default async function YacimientosPage() {
 
   const nivel = await nivelCanteraDe(supabase, user.id);
   if (!nivel) redirect("/");
-  if (nivel !== "admin") redirect("/cantera/registros");
+  if (nivel !== "admin") redirect("/cantera");
 
   return <YacimientosClient yacimientos={await traerYacimientos(supabase)} />;
 }

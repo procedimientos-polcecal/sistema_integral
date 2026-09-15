@@ -1,52 +1,40 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import {
-  traerAcarreos,
-  traerBochones,
-  traerConsumosDe,
-  traerDatosParaInforme,
-  traerFleteros,
-  traerPesadas,
-  traerTarifasAcarreo,
-  traerVoladuras,
+  traerBochonesDeYacimiento,
+  traerConsumos,
+  traerVoladurasDeYacimiento,
   traerYacimientos,
 } from "@/lib/cantera/consultas";
-import { serieMensual } from "@/lib/cantera/informe";
-import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
-import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
-import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
-import type { Consumo } from "@/lib/cantera/types";
-import { ChipCruce } from "./registros/CanteraClient";
-import InicioGrafico from "./InicioGrafico";
-import ResumenAnualSection from "./ResumenAnualSection";
-
-const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
-
-const NOMBRE_MES = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric", timeZone: "UTC" });
-function nombreDeMes(mes: string): string {
-  const texto = NOMBRE_MES.format(new Date(`${mes}-01T00:00:00Z`));
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-}
+import { montoBochon, montoPerforacion, montoVoladura, cruce } from "@/lib/cantera/costos";
+import { desvioContraPlanilla, toneladasEstimadas } from "@/lib/cantera/toneladas";
+import { metrosYPozos } from "@/lib/cantera/tramos";
+import type { Yacimiento } from "@/lib/cantera/types";
+import CanteraClient, { type FilaBochon, type FilaVoladura } from "./CanteraClient";
 
 /**
- * La página de inicio del módulo: un adelanto real de Registros y del
- * Informe, no una lista de links sueltos — el usuario lo pidió dos veces:
- * primero que no fueran "cuadros aburridos", después que las estadísticas
- * fueran representativas y que el informe se viera con un gráfico, no con
- * números en una lista. El sidebar (`lib/core/nav.ts`) sigue teniendo su
- * desplegable para ir directo a cualquier sección; esto es la puerta de
- * entrada, con los mismos datos que se verían abriendo Registros o el
- * Informe, para no tener que entrar a mirar si hay algo pendiente.
+ * El tablero por yacimiento.
+ *
+ * Es la pantalla desde donde el capataz cierra una voladura en el frente y
+ * desde donde finanzas mira los montos sin conciliar. Se elige una cantera y
+ * abajo van sus perforaciones/voladuras y sus bochones, con el monto y las
+ * toneladas despejados al leer (nada de eso se guarda).
  */
-export default async function CanteraInicioPage({
+/** Una fecha ISO cae en el rango [desde, hasta] (cualquiera puede faltar). */
+function enRango(fecha: string | null, desde?: string, hasta?: string): boolean {
+  if (!fecha) return !desde && !hasta; // sin fecha: sólo si no se filtró
+  if (desde && fecha < desde) return false;
+  if (hasta && fecha > hasta) return false;
+  return true;
+}
+
+export default async function CanteraPage({
   searchParams,
 }: {
-  searchParams: Promise<{ anio?: string }>;
+  searchParams: Promise<{ y?: string; desde?: string; hasta?: string }>;
 }) {
-  const { anio: anioParam } = await searchParams;
+  const { y, desde, hasta } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -54,208 +42,105 @@ export default async function CanteraInicioPage({
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  const [yacimientos, vs, bs, { voladuras: vParaInforme, bochones: bParaInforme }] = await Promise.all([
-    traerYacimientos(supabase, true),
-    traerVoladuras(supabase, {}),
-    traerBochones(supabase, {}),
-    traerDatosParaInforme(supabase),
-  ]);
-  const porId = new Map(yacimientos.map((y) => [y.id, y]));
+  const yacimientos = await traerYacimientos(supabase, true);
+  const elegido = yacimientos.find((yy) => yy.id === y) ?? yacimientos[0] ?? null;
+  const hayFiltro = Boolean(desde || hasta);
 
-  const consumos = await traerConsumosDe(supabase, vs.map((v) => v.codigo));
-  const consumosPorCodigo = new Map<string, Consumo[]>();
-  for (const c of consumos) {
-    const lista = consumosPorCodigo.get(c.voladura_codigo) ?? [];
-    lista.push(c);
-    consumosPorCodigo.set(c.voladura_codigo, lista);
+  let voladuras: FilaVoladura[] = [];
+  let bochones: FilaBochon[] = [];
+
+  if (elegido) {
+    const [vs, bs] = await Promise.all([
+      traerVoladurasDeYacimiento(supabase, elegido.id),
+      traerBochonesDeYacimiento(supabase, elegido.id),
+    ]);
+
+    // Filtro por fecha: la de voladura, y si no hay, la de fin de perforación.
+    const vsFiltradas = hayFiltro
+      ? vs.filter((v) => enRango(v.vol_fecha ?? v.perf_fin, desde, hasta))
+      : vs;
+    const bsFiltrados = hayFiltro
+      ? bs.filter((b) => enRango(b.fecha_voladura ?? b.fin, desde, hasta))
+      : bs;
+
+    // Los consumos de cada voladura, para el monto de la etapa de voladura.
+    const consumosPorCodigo = new Map<string, Awaited<ReturnType<typeof traerConsumos>>>();
+    await Promise.all(
+      vsFiltradas.map(async (v) => {
+        consumosPorCodigo.set(v.codigo, await traerConsumos(supabase, v.codigo));
+      })
+    );
+
+    voladuras = vsFiltradas.map((v) => armarFilaVoladura(v, elegido, consumosPorCodigo.get(v.codigo) ?? []));
+    bochones = bsFiltrados.map(armarFilaBochon);
   }
 
-  const filasVoladura = vs.map((v) =>
-    armarFilaVoladura(v, porId.get(v.yacimiento_id) ?? null, consumosPorCodigo.get(v.codigo) ?? [])
-  );
-  const filasBochon = bs.map((b) => armarFilaBochon(b, porId.get(b.yacimiento_id) ?? null));
-  const conteo = contarAvisos(filasVoladura, filasBochon);
-
-  // `traerVoladuras`/`traerBochones` ya vienen ordenadas por fecha de voladura
-  // descendente (consultas.ts): las primeras son el adelanto que interesa.
-  const ultimasVoladuras = filasVoladura.slice(0, 5);
-  const ultimosBochones = filasBochon.slice(0, 3);
-
-  const serie = serieMensual(vParaInforme, bParaInforme);
-  // "Hoy" en un componente de servidor se resuelve una vez por request: no es
-  // estado que pueda dar un resultado distinto a mitad de un mismo render, así
-  // que la regla de purity no aplica acá (mismo caso que
-  // compras/configuracion/page.tsx).
-  // eslint-disable-next-line react-hooks/purity
-  const hoy = new Date();
-  const mesActual = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`;
-  const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
-  const serieReciente = serie.slice(-6);
-  const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
-
-  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
-    traerFleteros(supabase, true),
-    traerTarifasAcarreo(supabase),
-    traerAcarreos(supabase, { mes: mesActual }),
-    traerPesadas(supabase, { mes: mesActual }),
-  ]);
-  const acarreosPlanos: AcarreoPlano[] = [
-    ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
-    ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
-  ];
-  const totalAcarreoMes = fleteros.reduce(
-    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
-    0
-  );
-
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold">Cantera</h1>
-        <div className="flex gap-1.5">
-          <Link href="/cantera/acarreo" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-            Acarreo
-          </Link>
-          {permisos.esAdmin && (
-            <>
-              <Link href="/cantera/yacimientos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Canteras
-              </Link>
-              <Link href="/cantera/insumos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Insumos
-              </Link>
-              <Link href="/cantera/fleteros" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Fleteros
-              </Link>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Lo que importa de un vistazo ── */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metrica
-          color="#1E7D34"
-          valor={delMesActual ? num1.format(delMesActual.toneladas) : "0"}
-          label={`Toneladas voladas · ${nombreDeMes(mesActual)}`}
-        />
-        <Metrica
-          color="#7E22CE"
-          valor={delMesActual?.usdPorTon != null ? `US$ ${num1.format(delMesActual.usdPorTon)}` : "—"}
-          label="Costo por tonelada este mes"
-        />
-        <Metrica
-          color={conteo.sinConciliar > 0 ? "#B45309" : "#1E7D34"}
-          valor={String(conteo.sinConciliar)}
-          label="Facturas a conciliar o revisar"
-          href="/cantera/registros"
-        />
-        <Metrica
-          color="#0891B2"
-          valor={`$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(totalAcarreoMes)}`}
-          label="Acarreo a pagar este mes"
-          href="/cantera/acarreo"
-        />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* ── Adelanto de Registros ── */}
-        <section className="card p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Registros</h2>
-            <Link href="/cantera/registros" className="text-xs text-slate-500 underline">Ver todos →</Link>
-          </div>
-          {conteo.desvios > 0 && (
-            <p className="mt-1 text-xs text-amber-700">{conteo.desvios} con toneladas fuera de rango.</p>
-          )}
-          <ul className="mt-3 divide-y divide-slate-100">
-            {ultimasVoladuras.map((v) => (
-              <li key={v.codigo}>
-                <Link href={`/cantera/voladuras/${v.codigo}`} className="flex items-center justify-between gap-2 py-2 text-sm hover:bg-slate-50">
-                  <span className="font-mono">{v.codigo}</span>
-                  <span className="text-xs text-slate-400">{v.yacimiento}</span>
-                  <span className="flex-1 text-right text-xs text-slate-500">{v.vol_fecha ?? "sin volar"}</span>
-                  <span className="whitespace-nowrap">
-                    <ChipCruce lectura={v.crucePerf} /> <ChipCruce lectura={v.cruceVol} />
-                  </span>
-                </Link>
-              </li>
-            ))}
-            {ultimasVoladuras.length === 0 && (
-              <li className="py-4 text-center text-sm text-slate-400">Todavía no hay voladuras cargadas.</li>
-            )}
-          </ul>
-          {ultimosBochones.length > 0 && (
-            <>
-              <p className="mt-3 text-xs font-semibold text-slate-500">Bochones recientes</p>
-              <ul className="mt-1 divide-y divide-slate-100">
-                {ultimosBochones.map((b) => (
-                  <li key={b.codigo}>
-                    <Link href={`/cantera/bochones/${b.codigo}`} className="flex items-center justify-between gap-2 py-1.5 text-sm hover:bg-slate-50">
-                      <span className="font-mono">{b.codigo}</span>
-                      <span className="text-xs text-slate-400">{b.yacimiento}</span>
-                      <span className="flex-1 text-right text-xs text-slate-500">{b.fecha ?? "—"}</span>
-                      <ChipCruce lectura={b.cruce} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {permisos.puedeEditar && (
-            <div className="mt-3 flex gap-2">
-              <Link href="/cantera/voladuras/nueva" className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-white">Cargar voladura</Link>
-              <Link href="/cantera/bochones/nuevo" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs">Cargar bochón</Link>
-            </div>
-          )}
-        </section>
-
-        {/* ── Adelanto del Informe: gráfico, no una lista de números ── */}
-        <section className="card p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Informe mensual</h2>
-            <Link href="/cantera/informes" className="text-xs text-slate-500 underline">Ver informe →</Link>
-          </div>
-          {serieReciente.length > 0 ? (
-            <div className="mt-3 h-52">
-              <InicioGrafico datos={serieReciente} />
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-400">Todavía no hay datos para armar un informe.</p>
-          )}
-        </section>
-      </div>
-
-      <Suspense fallback={<CargandoResumenAnual />}>
-        <ResumenAnualSection anio={anio} />
-      </Suspense>
-    </div>
+    <CanteraClient
+      yacimientos={yacimientos}
+      elegido={elegido}
+      desde={desde ?? ""}
+      hasta={hasta ?? ""}
+      voladuras={voladuras}
+      bochones={bochones}
+      puedeEditar={permisos.puedeEditar}
+      puedeFacturar={permisos.puedeFacturar}
+    />
   );
 }
 
-function CargandoResumenAnual() {
-  return (
-    <section className="card mt-4 p-4">
-      <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
-      <div className="mt-4 h-40 animate-pulse rounded-lg bg-slate-100" />
-    </section>
-  );
+function armarFilaVoladura(
+  v: Awaited<ReturnType<typeof traerVoladurasDeYacimiento>>[number],
+  yac: Yacimiento,
+  consumos: { cantidad: number | null; precio_usd: number | null; tipo: string | null }[]
+): FilaVoladura {
+  const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
+  const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
+  const metrosVol = vol.metros ?? perf.metros;
+
+  const montoPerf = montoPerforacion({
+    metros: perf.metros,
+    precioUsdM: v.perf_precio_usd_m,
+    tc: v.perf_tc_usd,
+  });
+  const montoVol = montoVoladura(consumos, v.vol_tc_usd);
+  const toneladas = toneladasEstimadas({
+    metros: metrosVol,
+    densidad: v.densidad_t_m3 ?? yac.densidad_t_m3,
+    burden: v.vol_burden_m ?? v.burden_m ?? yac.burden_m,
+    espaciamiento: v.vol_espaciamiento_m ?? v.espaciamiento_m ?? yac.espaciamiento_m,
+  });
+
+  return {
+    codigo: v.codigo,
+    vol_fecha: v.vol_fecha,
+    perf_fin: v.perf_fin,
+    pozos: perf.pozos,
+    montoPerf,
+    montoVol,
+    toneladas,
+    toneladas_planilla: v.toneladas_planilla,
+    desvioFuera: desvioContraPlanilla(toneladas, v.toneladas_planilla).fueraDeRango,
+    crucePerf: cruce(montoPerf, v.perf_odoo_importe).lectura,
+    cruceVol: cruce(montoVol, v.vol_odoo_importe).lectura,
+    sheets_pendiente: v.sheets_pendiente,
+  };
 }
 
-function Metrica({
-  color, valor, label, href,
-}: { color: string; valor: string; label: string; href?: string }) {
-  const contenido = (
-    <>
-      <div className="text-3xl font-bold tabular-nums" style={{ color }}>{valor}</div>
-      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
-    </>
-  );
-  const clases = "card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg";
-  const estilo = { borderTop: `3px solid ${color}` };
-  return href ? (
-    <Link href={href} className={clases} style={estilo}>{contenido}</Link>
-  ) : (
-    <div className={clases} style={estilo}>{contenido}</div>
-  );
+function armarFilaBochon(b: Awaited<ReturnType<typeof traerBochonesDeYacimiento>>[number]): FilaBochon {
+  const monto = montoBochon({
+    metrosPerforados: b.metros_perforados,
+    precioUsdM: b.precio_usd_m,
+    tc: b.tc_usd,
+  });
+  return {
+    codigo: b.codigo,
+    fecha: b.fecha_voladura ?? b.fin,
+    voladura_codigo: b.voladura_codigo,
+    cantidad: b.cantidad,
+    metros_perforados: b.metros_perforados,
+    monto,
+    cruce: cruce(monto, b.odoo_importe).lectura,
+    sheets_pendiente: b.sheets_pendiente,
+  };
 }

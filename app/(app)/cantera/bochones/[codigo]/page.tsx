@@ -24,12 +24,5 @@ export default async function BochonPage({
   const yacimientos = await traerYacimientos(supabase);
   const yacimiento = yacimientos.find((y) => y.id === bochon.yacimiento_id) ?? null;
 
-  return (
-    <BochonClient
-      bochon={bochon}
-      yacimiento={yacimiento}
-      puedeEditar={permisos.puedeEditar}
-      puedeFacturar={permisos.puedeFacturar}
-    />
-  );
+  return <BochonClient bochon={bochon} yacimiento={yacimiento} puedeEditar={permisos.puedeEditar} />;
 }

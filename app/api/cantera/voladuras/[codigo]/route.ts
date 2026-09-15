@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
-import { traerConsumos, traerInsumos, traerVoladura, traerYacimientos } from "@/lib/cantera/consultas";
+import { traerConsumos, traerInsumos, traerVoladura } from "@/lib/cantera/consultas";
 import { esTipoDeConsumoValido } from "@/lib/cantera/vocabulario";
-import { espejarVoladura } from "@/lib/cantera/espejo";
-import type { RenglonPlano } from "@/lib/cantera/planilla";
 
 /**
  * Ver y editar una voladura.
@@ -18,12 +16,6 @@ import type { RenglonPlano } from "@/lib/cantera/planilla";
  * que vengan. Los campos de conciliación (`*_odoo_*`, `*_conforme*`) NO se
  * tocan acá: los edita finanzas por su propia ruta. Deja rastro de quién y
  * cuándo, igual que Producción y Despacho con las correcciones.
- *
- * Al final se espeja PERFORACIÓN y VOLADURAS en la planilla: manda el
- * sistema, no la planilla, así que esto es una exportación de una sola
- * dirección — un fallo no impide guardar, deja `sheets_pendiente` anotado con
- * lo que dijo Google y se lo dice a quien guardó (`planilla_error` en la
- * respuesta), igual que Despacho.
  */
 
 function num(v: unknown): number | null {
@@ -66,7 +58,6 @@ export async function GET(
 const CAMPOS_FECHA = ["perf_inicio", "perf_fin", "vol_fecha_carga", "vol_fecha"] as const;
 const CAMPOS_NUM = [
   "burden_m", "espaciamiento_m", "perf_precio_usd_m", "perf_tc_usd",
-  "perf_noches_sereno", "perf_monto_noche",
   "vol_burden_m", "vol_espaciamiento_m", "vol_tc_usd", "densidad_t_m3", "toneladas_planilla",
 ] as const;
 
@@ -167,39 +158,9 @@ export async function PATCH(
     }
   }
 
-  const [actualizada, consumos, yacimientos, insumos] = await Promise.all([
+  const [actualizada, consumos] = await Promise.all([
     traerVoladura(supabase, codigo),
     traerConsumos(supabase, codigo),
-    traerYacimientos(supabase),
-    traerInsumos(supabase),
   ]);
-  if (!actualizada) return NextResponse.json({ error: "Esa voladura no existe" }, { status: 404 });
-
-  const yacimiento = yacimientos.find((y) => y.id === actualizada.yacimiento_id) ?? null;
-  const nombreInsumoPorId = new Map(insumos.map((i) => [i.id, i.nombre]));
-  const renglones: RenglonPlano[] = consumos.map((c) => ({
-    insumo: c.insumo_raw ?? (c.insumo_id ? (nombreInsumoPorId.get(c.insumo_id) ?? null) : null),
-    cantidad: c.cantidad,
-    precio_usd: c.precio_usd,
-    tipo: c.tipo,
-  }));
-
-  const espejo = await espejarVoladura(actualizada, yacimiento, renglones);
-  await supabase
-    .from("cantera_voladuras")
-    .update(
-      espejo.ok
-        ? { sheets_pendiente: null, sheets_pendiente_en: null }
-        : { sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() }
-    )
-    .eq("codigo", codigo);
-  const conPlanilla = await traerVoladura(supabase, codigo);
-
-  return NextResponse.json({
-    voladura: conPlanilla ?? actualizada,
-    consumos,
-    // Que la pantalla lo pueda decir: sin esto, quien guardó se va convencido
-    // de que quedó en la planilla y la planilla no la tiene.
-    planilla_error: espejo.ok ? null : espejo.error,
-  });
+  return NextResponse.json({ voladura: actualizada, consumos });
 }

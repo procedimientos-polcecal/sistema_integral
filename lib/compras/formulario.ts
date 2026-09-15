@@ -22,7 +22,6 @@ import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
 import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
-import { maximoDeLaColumna } from "@/lib/compras/serieDeRi";
 
 /**
  * Cómo se llama cada columna en la hoja. La primera que exista gana.
@@ -625,43 +624,6 @@ function nroDeControl(valores: string[][]): { texto: string; nro: number } {
  * minutos después —que es cada cuánto pega el workflow de GitHub Actions—. En
  * esa ventana, quien mire la planilla ve el pedido sin prioridad y sin empresa.
  */
-/**
- * El N° de RI más alto que hay hoy en la planilla, mirando las dos pestañas.
- *
- * Lo usa la ruta del alta para no repartir un número que el formulario acaba de
- * tomar: el porqué completo está en `serieDeRi.ts`. Vive acá y no allá porque
- * llama a Google, que es lo que ese archivo deja afuera para poder probarse.
- *
- * **Nunca lanza.** Si la planilla no está configurada o Google no contesta,
- * devuelve 0 —"esta fuente no dice nada"— y la ruta sigue con lo que sabe la
- * base. Que no se pueda leer la planilla no puede impedir cargar un pedido: el
- * alta ya está diseñada para entrar igual y reintentar la escritura después, y
- * la comprobación previa a escribir sigue estando de red. El motivo se anota
- * igual, porque una lectura que falla en silencio es la clase de cosa que este
- * módulo ya pagó dos veces.
- */
-export async function maximoDeLaSerieEnLaPlanilla(): Promise<number> {
-  if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return 0;
-
-  try {
-    const [respuestas, altas] = await Promise.all([
-      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:A`, { sinFormato: true }),
-      leerValores(idFormulario(), `${HOJA_ALTAS}!A:A`, { sinFormato: true }),
-    ]);
-    return Math.max(
-      maximoDeLaColumna(respuestas, PRIMERA_FILA_DE_RESPUESTAS),
-      maximoDeLaColumna(altas, PRIMERA_FILA_DE_ALTAS)
-    );
-  } catch (e) {
-    console.error(
-      "no se pudo leer el máximo de la serie en la planilla; se numera con lo " +
-        "que sabe la base y queda la comprobación previa a escribir: " +
-        (e instanceof Error ? e.message : String(e))
-    );
-    return 0;
-  }
-}
-
 export async function exportarAltaAlFormulario(
   requerimientoId: string
 ): Promise<ResultadoAlta> {

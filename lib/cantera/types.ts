@@ -59,8 +59,6 @@ export interface Voladura {
   espaciamiento_m: number | null;
   perf_precio_usd_m: number | null;
   perf_tc_usd: number | null;
-  perf_noches_sereno: number | null;
-  perf_monto_noche: number | null;
   perf_odoo_move_id: number | null;
   perf_odoo_move_name: string | null;
   perf_odoo_empresa: string | null;
@@ -127,55 +125,6 @@ export interface Bochon {
   conforme_obs: string | null;
   conforme_por: string | null;
   conforme_en: string | null;
-  observaciones: string | null;
-  origen: string;
-  sheets_pendiente: string | null;
-  sheets_pendiente_en: string | null;
-  cargado_por: string | null;
-  cargado_en: string;
-  actualizado_por: string | null;
-  actualizado_en: string | null;
-}
-
-/** Una fila de `cantera_fleteros`. */
-export interface Fletero {
-  id: string;
-  nombre: string;
-  patente: string | null;
-  activo: boolean;
-}
-
-/** Una fila de `cantera_tarifas_acarreo`. */
-export interface TarifaAcarreoDB {
-  id: string;
-  tipo: string;
-  desde: string;
-  hasta: string | null;
-  tarifa: number;
-}
-
-/** Una fila de `cantera_pesadas`: una pesada de balanza ya resuelta. */
-export interface PesadaDB {
-  id: string;
-  fecha: string;
-  hora: string | null;
-  bruto: number | null;
-  tara: number | null;
-  tipo: string | null;
-  toneladas: number;
-  origen: string | null;
-  destino: string | null;
-  fletero_raw: string | null;
-  fletero_id: string | null;
-}
-
-/** Una fila de `cantera_acarreos`: el total mensual de un fletero en un tipo. */
-export interface AcarreoDB {
-  id: string;
-  fletero_id: string;
-  tipo: string;
-  mes: string;
-  cantidad: number;
   observaciones: string | null;
   origen: string;
   sheets_pendiente: string | null;

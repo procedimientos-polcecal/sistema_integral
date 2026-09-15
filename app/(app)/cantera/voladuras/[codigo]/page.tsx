@@ -15,9 +15,7 @@ import VoladuraClient from "./VoladuraClient";
  * consumos que alimenta el monto de la voladura.
  *
  * La conciliación de facturas (vincular la de Odoo, marcar conforme) es de
- * finanzas: el bloque sólo se muestra si `puedeFacturar`, uno por etapa —
- * perforación y voladura pueden facturarse por separado y no necesariamente
- * el mismo contratista.
+ * finanzas y va en su propio bloque, más abajo — llega en la próxima entrega.
  */
 export default async function VoladuraPage({
   params,
@@ -49,7 +47,6 @@ export default async function VoladuraPage({
       consumos={consumos}
       insumos={insumos}
       puedeEditar={permisos.puedeEditar}
-      puedeFacturar={permisos.puedeFacturar}
     />
   );
 }
