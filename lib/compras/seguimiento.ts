@@ -79,3 +79,58 @@ export function filaDeSeguimiento(r: DatosDeSeguimiento): (string | null)[] {
     r.cumplio_proveedor ? ETIQUETA_CUMPLIO[r.cumplio_proveedor] : "", // M
   ];
 }
+
+/** Lo que la pantalla muestra al lado de cada juicio. `null` = no hay qué decir. */
+export interface ComoLlego {
+  demora: string | null;
+  cantidad: string | null;
+}
+
+/**
+ * El dato duro, para decidir el juicio mirándolo.
+ *
+ * NO decide el juicio: `Cumplió COMPRAS?` y `Cumplió PROV?` son de la persona.
+ * Se midió sobre las 1.757 filas del histórico y no hay regla: 295 de los "Sí"
+ * de Compras habían llegado tarde, y 16 de los "No" del proveedor habían
+ * recibido todo. Llegar tarde avisando no es lo mismo que llegar tarde.
+ */
+export function comoLeLlego(r: {
+  fecha_estimada_recepcion: string | null;
+  fecha_recepcion: string | null;
+  cantidad: number | null;
+  cantidad_comprada: number | null;
+  cantidad_recibida: number | null;
+}): ComoLlego {
+  return { demora: laDemora(r), cantidad: laCantidad(r) };
+}
+
+function laDemora(r: {
+  fecha_estimada_recepcion: string | null;
+  fecha_recepcion: string | null;
+}): string | null {
+  if (!r.fecha_estimada_recepcion || !r.fecha_recepcion) return null;
+
+  // En UTC y sobre la fecha sola: restar dos `Date` locales cruza mal el
+  // cambio de hora y devuelve 8,96 días donde hay 9.
+  const dia = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  const dias = Math.round((dia(r.fecha_recepcion) - dia(r.fecha_estimada_recepcion)) / 86400000);
+
+  if (dias <= 0) return "llegó a tiempo";
+  return `llegó ${dias} ${dias === 1 ? "día" : "días"} tarde`;
+}
+
+function laCantidad(r: {
+  cantidad: number | null;
+  cantidad_comprada: number | null;
+  cantidad_recibida: number | null;
+}): string | null {
+  const recibida = r.cantidad_recibida;
+  const esperada = r.cantidad_comprada ?? r.cantidad;
+  if (recibida === null || esperada === null) return null;
+
+  if (recibida === esperada) return "recibió todo lo comprado";
+  if (recibida > esperada) {
+    return `recibió ${recibida} de ${esperada}: ${recibida - esperada} de más`;
+  }
+  return `recibió ${recibida} de ${esperada}`;
+}
