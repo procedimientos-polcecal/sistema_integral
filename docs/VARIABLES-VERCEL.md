@@ -166,6 +166,12 @@ existe. El síntoma es que todo falla junto y de golpe; el mensaje del SdG lo di
 Conviene para validar las primeras órdenes sin escribir en la contabilidad de
 verdad. Es la misma API key: la base de staging es una copia.
 
+## Asistente de IA
+
+| Variable | Para qué | De dónde sale |
+|---|---|---|
+| `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde |
+
 ## Que NO va en Vercel
 
 `DATABASE_URL` aparece en el código, pero sólo en

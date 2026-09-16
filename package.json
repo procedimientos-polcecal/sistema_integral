@@ -15,9 +15,11 @@
     "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.105",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.108.2",
     "@types/leaflet": "^1.9.21",
+    "ai": "^7.0.102",
     "exceljs": "^4.4.0",
     "html2pdf.js": "^0.14.0",
     "jsqr": "^1.4.0",
@@ -29,6 +31,7 @@
     "recharts": "^3.10.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
+    "zod": "^4.6.5",
     "zxing-wasm": "^3.1.4"
   },
   "devDependencies": {
