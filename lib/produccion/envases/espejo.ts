@@ -1,0 +1,158 @@
+/**
+ * Escribir en la planilla de envases el movimiento que se cargó en el SdG.
+ *
+ * La planilla manda, así que un movimiento que no llega allá **no existe**: la
+ * próxima sincronización lee el stock de la fórmula —que no lo incluye— y
+ * revierte el número. Por eso esto no es decorativo, no corre en segundo plano,
+ * y cuando falla queda anotado en vez de perderse en un log.
+ */
+
+import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
+
+/**
+ * Las columnas del kardex `Entradas  Salidas`, en base 0.
+ *
+ * **Faltan tres, y las tres faltan a propósito:**
+ *
+ * - **B (1)** es la descripción, un `VLOOKUP` contra el listado.
+ * - **G (6)** es el saldo corriente. Escribirla rompe el stock de todo lo que
+ *   viene abajo.
+ * - **K (10)** es el grupo de envase, una `ARRAYFORMULA` puesta en `K2` que
+ *   cubre la columna entera.
+ *
+ * Están arrastradas hasta la fila 3296 —verificado celda por celda—, así que
+ * una fila nueva se completa sola y hay ~1.890 libres antes de tener que
+ * estirar nada.
+ */
+export const COL = {
+  codigo: 0,      // A  ← la que dice si la fila tiene datos
+  // B = descripción, fórmula. No se toca.
+  entrada: 2,     // C
+  salida: 3,      // D
+  rotura: 4,      // E
+  despacho: 5,    // F
+  // G = saldo, fórmula. No se toca.
+  fecha: 7,       // H
+  observacion: 8, // I
+  proveedor: 9,   // J
+  // K = grupo, ARRAYFORMULA. No se toca.
+} as const;
+
+export interface MovimientoAEspejar {
+  codigo: string;
+  entrada: number;
+  salida: number;
+  rotura: number;
+  despacho: number;
+  /** ISO corto. Se escribe como serial de Sheets — ver `fechaParaLaPlanilla`. */
+  fecha: string | null;
+  observacion: string | null;
+  proveedor: string | null;
+}
+
+export interface Celda {
+  pestana: string;
+  columna: number;
+  fila: number;
+  valor: string;
+}
+
+/**
+ * Una fecha ISO como la escribe la planilla: **el serial, no el texto**.
+ *
+ * Un "15/9/2026" lo interpreta la planilla según su locale —hoy `es_AR`, y
+ * puede no serlo mañana—, y leer al revés d/m y m/d ya dio vuelta 885 fechas en
+ * Compras. Un número no se interpreta. Es la regla que dejó escrita
+ * `lib/core/fechaDeSheets.ts`, y la razón por la que esto no copia el
+ * `fechaParaLaPlanilla` de Inventario, que escribe texto.
+ *
+ * Se ve como fecha igual: la columna H tiene formato `DATE:d/M/yyyy` hasta la
+ * fila 3296 —verificado—, así que el serial se muestra d/m y no como un número
+ * suelto.
+ *
+ * Una fecha que no existe da celda vacía en vez de rodar sola: `serialDelDia`
+ * descarta el 30 de febrero en lugar de convertirlo en 2 de marzo.
+ */
+export function fechaParaLaPlanilla(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const serial = serialDelDia(String(iso).slice(0, 10));
+  return serial === null ? "" : String(serial);
+}
+
+/**
+ * Un número para la planilla, donde el cero va vacío.
+ *
+ * Es cómo las escribe la gente, y además preserva la distinción: una celda
+ * vacía es "acá no pasó nada" y un cero escrito es "se contó y dio cero". La
+ * fórmula del saldo suma igual las dos, pero quien mira la planilla no.
+ */
+const numero = (n: number): string => (n > 0 ? String(n) : "");
+
+/**
+ * Qué celdas hay que escribir para dejar el movimiento en la planilla.
+ *
+ * Va aparte de la llamada a Google para poder probarla: es la parte que decide
+ * qué se toca y qué no, y tocar la G de más sería romper la planilla entera.
+ */
+export function celdasDelMovimiento(
+  m: MovimientoAEspejar, fila: number, pestana: string
+): Celda[] {
+  const celda = (columna: number, valor: string): Celda => ({ pestana, columna, fila, valor });
+
+  return [
+    celda(COL.codigo, m.codigo),
+    celda(COL.entrada, numero(m.entrada)),
+    celda(COL.salida, numero(m.salida)),
+    celda(COL.rotura, numero(m.rotura)),
+    celda(COL.despacho, numero(m.despacho)),
+    celda(COL.fecha, fechaParaLaPlanilla(m.fecha)),
+    celda(COL.observacion, m.observacion ?? ""),
+    celda(COL.proveedor, m.proveedor ?? ""),
+  ];
+}
+
+const PLANILLA = () => process.env.GOOGLE_SHEETS_ENVASES_ID ?? "";
+const TAB_KARDEX = () => process.env.GOOGLE_SHEETS_ENVASES_TAB_MOV ?? "Entradas  Salidas";
+
+export interface ResultadoEspejo {
+  ok: boolean;
+  /** En qué fila quedó, para reconocerlo al releer. */
+  fila?: number;
+  /** Qué dijo Google, sin traducir. */
+  error?: string;
+}
+
+/**
+ * Escribe el movimiento al final del kardex.
+ *
+ * La fila se busca por la **columna A**, que acá es el código y está en todas
+ * las filas con datos. (En el almacén se busca por la B, porque allá la A es el
+ * N° de requerimiento y viene vacía casi siempre: son dos planillas parecidas
+ * con la primera columna distinta.)
+ *
+ * Se **busca** y no se cuenta: hay huecos —la última fila con código está más
+ * abajo que la cantidad de filas con datos—, así que contar dejaría la fila
+ * nueva encima de una que ya existe.
+ *
+ * No lanza: devuelve qué pasó. Quien lo llama decide, y lo que decide es anotar
+ * el pendiente — no tragárselo.
+ */
+export async function espejarMovimiento(m: MovimientoAEspejar): Promise<ResultadoEspejo> {
+  const planilla = PLANILLA();
+  if (!planilla) {
+    return { ok: false, error: "Falta configurar GOOGLE_SHEETS_ENVASES_ID" };
+  }
+
+  const pestana = TAB_KARDEX();
+
+  try {
+    const columnaA = await leerValores(planilla, `${pestana}!A:A`, { sinFormato: true });
+    const fila = filaSiguienteSegunLaColumna(columnaA);
+
+    await escribirCeldas(planilla, celdasDelMovimiento(m, fila, pestana));
+    return { ok: true, fila };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
