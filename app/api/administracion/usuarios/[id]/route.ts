@@ -23,13 +23,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     data.rol = body.rol;
   }
   if (body.activo !== undefined) data.activo = body.activo;
+  // Permiso de gasto, no de datos: lo que ve el asistente sale de RLS igual que
+  // en las pantallas. Ver `puedeUsarAsistente` en lib/core/access.ts.
+  if (body.puede_usar_asistente !== undefined) {
+    data.puede_usar_asistente = Boolean(body.puede_usar_asistente);
+  }
 
   if (Object.keys(data).length > 0) {
     const { error } = await admin.from("usuarios").update(data).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data: usuario } = await admin.from("usuarios").select("id, email, nombre, apellido, rol, activo").eq("id", id).single();
+  const { data: usuario } = await admin.from("usuarios").select("id, email, nombre, apellido, rol, activo, puede_usar_asistente").eq("id", id).single();
   return NextResponse.json(usuario);
 }
 

@@ -13,7 +13,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data: usuarios, error } = await admin
     .from("usuarios")
-    .select("id, email, nombre, apellido, rol, activo, usuario_modulos(id, modulo, nivel)")
+    .select("id, email, nombre, apellido, rol, activo, puede_usar_asistente, usuario_modulos(id, modulo, nivel)")
     .order("email");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(usuarios);

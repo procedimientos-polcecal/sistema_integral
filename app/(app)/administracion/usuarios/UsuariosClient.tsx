@@ -24,6 +24,7 @@ interface Usuario {
   apellido: string;
   rol: Rol;
   activo: boolean;
+  puede_usar_asistente: boolean;
   usuario_modulos: UsuarioModulo[];
   usuario_areas_compras: AreaDelUsuario[];
 }
@@ -278,7 +279,13 @@ function EditarUsuarioModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState({ nombre: usuario.nombre, apellido: usuario.apellido, rol: usuario.rol, activo: usuario.activo });
+  const [form, setForm] = useState({
+    nombre: usuario.nombre,
+    apellido: usuario.apellido,
+    rol: usuario.rol,
+    activo: usuario.activo,
+    puede_usar_asistente: usuario.puede_usar_asistente,
+  });
   const [grants, setGrants] = useState<Record<Modulo, Nivel | "">>(() => {
     const base = Object.fromEntries(MODULOS.map((m) => [m, ""])) as Record<Modulo, Nivel | "">;
     for (const m of usuario.usuario_modulos) base[m.modulo] = m.nivel;
@@ -360,6 +367,20 @@ function EditarUsuarioModal({
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
             Activo
+          </label>
+          <label className="flex items-start gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.puede_usar_asistente}
+              onChange={(e) => setForm({ ...form, puede_usar_asistente: e.target.checked })}
+            />
+            <span>
+              Puede usar el asistente
+              <span className="block text-xs text-gray-400">
+                Sólo ve lo que ya puede ver. Se concede de a poco porque cada pregunta cuesta.
+              </span>
+            </span>
           </label>
 
           <div className="pt-2 border-t">

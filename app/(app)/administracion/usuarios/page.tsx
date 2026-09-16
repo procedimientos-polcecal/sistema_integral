@@ -22,7 +22,7 @@ export default async function UsuariosPage() {
   const [{ data: usuarios }, { data: areas }] = await Promise.all([
     admin
       .from("usuarios")
-      .select("id, email, nombre, apellido, rol, activo, usuario_modulos(id, modulo, nivel), usuario_areas_compras(area_id)")
+      .select("id, email, nombre, apellido, rol, activo, puede_usar_asistente, usuario_modulos(id, modulo, nivel), usuario_areas_compras(area_id)")
       .order("email"),
     // De qué área es cada uno decide qué requerimientos ve primero en Mis
     // pedidos. No es un permiso —la lectura de compras es abierta desde la
