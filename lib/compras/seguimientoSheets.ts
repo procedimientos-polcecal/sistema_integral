@@ -5,11 +5,15 @@
  * donde miran los que no entran al sistema, igual que en Producción. El SdG no
  * la vuelve a leer nunca, salvo la importación del histórico, que corre una vez.
  *
- * Escribe SÓLO la pestaña `COMPRAS CON RI`. Las nueve pestañas por área son
- * `=FILTER('COMPRAS CON RI'!A2:M3151; C2:C3151="<Área>")` y se recalculan
- * solas; además sus columnas A:M están protegidas contra esta cuenta.
+ * Escribe la pestaña `COMPRAS CON RI` y, si hay algo que decir, también las
+ * nueve pestañas por área. Sus columnas A:M son `=FILTER('COMPRAS CON RI'!
+ * A2:M3151; C2:C3151="<Área>")`, se recalculan solas y están protegidas contra
+ * esta cuenta; de la N en adelante hay columnas propias del área, cargadas a
+ * mano, y ahí es donde este archivo escribe `Se aplicó?` y `Fecha de
+ * Aplicación` — decidido por `celdasDeAplicacion`, que ya sabe ubicarlas por
+ * nombre y saltear las que son fórmula.
  *
- * ── LAS DOS REGLAS QUE NO SE DEDUCEN ──────────────────────
+ * ── LAS DOS REGLAS QUE NO SE DEDUCEN (del master) ──────────
  *
  * 1. NUNCA `values.append`. Debajo de la última fila real (la 1.759) hay 362
  *    filas con `#N/A` hasta la 2.121, y `append` no escribe después de los
@@ -25,11 +29,24 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leerValores, escribirCeldas } from "@/lib/core/sheets";
-import { entraEnElSeguimiento, filaDeSeguimiento, type DatosDeSeguimiento } from "@/lib/compras/seguimiento";
+import { leerValores, escribirCeldas, leerFormulasDeRango, listarPestanas } from "@/lib/core/sheets";
+import {
+  entraEnElSeguimiento, filaDeSeguimiento, celdasDeAplicacion,
+  type DatosDeSeguimiento,
+} from "@/lib/compras/seguimiento";
 import type { Cumplio } from "@/lib/compras/types";
 
 const HOJA = "COMPRAS CON RI";
+
+/**
+ * Dónde, dentro de las columnas propias del área (N en adelante), puede vivir
+ * `Se aplicó?` o `Fecha de Aplicación`. Mantenimiento tiene tres columnas más
+ * que el resto **antes** de esas dos (`Estimada Aplicación`, `ANALISIS`,
+ * `Equipo` van en el medio), así que U alcanza de sobra en las nueve.
+ */
+const RANGO_COLUMNAS_DE_AREA = "N:U";
+/** N es la columna índice 13 contando A = 0, que es como indexa `celdasDeAplicacion`. */
+const OFFSET_COLUMNAS_DE_AREA = 13;
 
 const idPlanilla = () => process.env.GOOGLE_SHEETS_SEGUIMIENTO_ID ?? "";
 
@@ -73,10 +90,113 @@ async function ubicarFila(
   return { fila, esNueva: true };
 }
 
+/** Lo que se leyó de una pestaña por área, para no releerlo por cada RI. */
+interface InfoPestana {
+  encabezado: string[];
+  columnaA: string[][];
+  /** `formulas[fila - 1]` son las columnas de `RANGO_COLUMNAS_DE_AREA` en esa fila. */
+  formulas: boolean[][];
+}
+
 /** Lo que no cambia durante una corrida de escrituras. */
 export interface CacheDeSeguimiento {
   columnaA?: string[][];
   ultimaTomada?: number;
+  /** Los títulos de pestaña del libro, para saber si la del área existe sin adivinar por el texto de un error. */
+  pestanasExistentes?: string[];
+  /** Una entrada por pestaña de área ya leída en esta corrida. */
+  pestanas?: Map<string, InfoPestana>;
+}
+
+/**
+ * La fila de ESTE RI en la pestaña del área. `null` si todavía no aparece.
+ *
+ * No es lo mismo que `ubicarFila` del master: acá no hay fila para "estrenar"
+ * —la pestaña es un `FILTER` que numera sola— así que si el RI no está, no hay
+ * nada para calcular: se espera a que la fórmula lo traiga.
+ */
+function ubicarFilaEnPestana(nroRi: number, columnaA: string[][]): number | null {
+  for (let i = 1; i < columnaA.length; i++) { // la 0 es el encabezado
+    const celda = String(columnaA[i]?.[0] ?? "").trim();
+    if (celda !== "" && Number(celda) === nroRi) return i + 1;
+  }
+  return null;
+}
+
+/** Lee (o devuelve de la caché) lo que hace falta saber de la pestaña de un área. */
+async function datosDePestana(
+  pestana: string,
+  cache: CacheDeSeguimiento
+): Promise<InfoPestana | null> {
+  cache.pestanasExistentes ??= await listarPestanas(idPlanilla());
+  if (!cache.pestanasExistentes.includes(pestana)) return null;
+
+  cache.pestanas ??= new Map();
+  const enCache = cache.pestanas.get(pestana);
+  if (enCache) return enCache;
+
+  const [encabezadoFilas, columnaA, formulas] = await Promise.all([
+    leerValores(idPlanilla(), `${pestana}!1:1`),
+    leerValores(idPlanilla(), `${pestana}!A:A`),
+    leerFormulasDeRango(idPlanilla(), pestana, RANGO_COLUMNAS_DE_AREA),
+  ]);
+
+  const info: InfoPestana = { encabezado: encabezadoFilas[0] ?? [], columnaA, formulas };
+  cache.pestanas.set(pestana, info);
+  return info;
+}
+
+/**
+ * Escribe, en la pestaña del área, si el material se aplicó y cuándo.
+ *
+ * Es aparte de `exportarSeguimiento` a propósito: ahí se escribe el master por
+ * el número de RI en SU columna A, acá se busca la fila por el número de RI en
+ * la columna A **de la pestaña**, que numera distinto porque es un `FILTER`.
+ * Nunca lanza: lo que no se pudo escribir vuelve como texto, con el nombre de
+ * la pestaña adelante, para sumarlo a la misma cola que el master.
+ */
+async function exportarAplicacionEnPestana(
+  nroRi: number,
+  area: string | null,
+  datos: { seAplico: string | null; fechaAplicacion: string | null },
+  cache: CacheDeSeguimiento
+): Promise<string[]> {
+  if (!area) return ["la aplicación no se pudo ubicar: el RI no tiene área"];
+
+  const pestana = `COMPRAS ${area.toUpperCase()}`;
+
+  try {
+    const info = await datosDePestana(pestana, cache);
+    if (!info) return [`${pestana}: la pestaña no existe`];
+
+    const fila = ubicarFilaEnPestana(nroRi, info.columnaA);
+    if (fila === null) {
+      return [`${pestana}: el RI todavía no aparece (el FILTER puede tardar); se reintenta solo`];
+    }
+
+    const filaDeFormulas = info.formulas[fila - 1] ?? [];
+    const conFormula = filaDeFormulas
+      .map((esFormula, i) => (esFormula ? OFFSET_COLUMNAS_DE_AREA + i : -1))
+      .filter((i) => i >= 0);
+
+    const { aEscribir, salteadas } = celdasDeAplicacion(info.encabezado, conFormula, datos);
+
+    if (aEscribir.length > 0) {
+      await escribirCeldas(
+        idPlanilla(),
+        aEscribir.map((c) => ({ pestana, columna: c.columna, fila, valor: c.valor }))
+      );
+    }
+
+    return salteadas.map((s) => `${pestana}: ${s}`);
+  } catch (e) {
+    const dijoGoogle = e instanceof Error ? e.message : String(e);
+    const motivo = dijoGoogle.includes("429")
+      ? `${pestana}: la planilla no dio lugar por cuota; se reintenta solo`
+      : `${pestana}: ${dijoGoogle}`;
+    console.error(`No se pudo escribir la aplicación del RI ${nroRi} en ${pestana}: ${dijoGoogle}`);
+    return [motivo];
+  }
 }
 
 /**
@@ -126,8 +246,14 @@ export async function exportarSeguimiento(
     cumplio_proveedor: r.cumplio_proveedor as Cumplio | null,
   };
 
+  // Un solo objeto de caché para todo lo de esta corrida, sea o no la que pasó
+  // el llamador: `exportarAplicacionEnPestana` necesita uno propio, y crear uno
+  // nuevo por RI cuando no viene de `reintentarSeguimiento` perdería el sentido
+  // de cachear (aunque acá sólo importa dentro de esta única llamada).
+  const laCache = cache ?? {};
+
   try {
-    const { fila, esNueva } = await ubicarFila(r.nro_ri as number, cache);
+    const { fila, esNueva } = await ubicarFila(r.nro_ri as number, laCache);
 
     // Las celdas se arman salteando las `null`: hoy es sólo MAIL_ENVIADO, y
     // saltearla es lo que evita que el área reciba el aviso dos veces.
@@ -154,15 +280,38 @@ export async function exportarSeguimiento(
       }
     }
 
+    // La pestaña del área es otra escritura, sobre otro libro en la práctica
+    // —distintas columnas, distinta fila—, así que se hace después de que el
+    // master ya quedó bien. Sólo si hay algo que decir: sin esto, un RI sin
+    // aplicación todavía gastaría una lectura de la pestaña por nada.
+    const datosAplicacion = {
+      seAplico: r.se_aplico as string | null,
+      fechaAplicacion: r.fecha_aplicacion as string | null,
+    };
+    const pendientesAplicacion =
+      datosAplicacion.seAplico !== null || datosAplicacion.fechaAplicacion !== null
+        ? await exportarAplicacionEnPestana(
+            r.nro_ri as number,
+            (r.compras_areas as { nombre: string } | null)?.nombre ?? null,
+            datosAplicacion,
+            laCache
+          )
+        : [];
+
     // La fila que manda es la de la planilla, no la guardada en la base: si el
     // RI ya figuraba en la columna A, ésa es su fila aunque `seguimiento_fila`
     // dijera otra cosa (por ejemplo, si un `update` anterior falló después de
     // haber escrito bien).
-    const cambios: Record<string, unknown> = { seguimiento_pendiente: null };
+    //
+    // La cola es una sola: lo que quedó sin escribir en la pestaña del área se
+    // suma a lo del master, con el nombre de la pestaña adelante para saber
+    // dónde mirar.
+    const motivoFinal = pendientesAplicacion.length > 0 ? pendientesAplicacion.join("; ") : null;
+    const cambios: Record<string, unknown> = { seguimiento_pendiente: motivoFinal };
     if (fila !== (r.seguimiento_fila as number | null)) cambios.seguimiento_fila = fila;
     await admin.from("compras_requerimientos").update(cambios).eq("id", requerimientoId);
 
-    return null;
+    return motivoFinal;
   } catch (e) {
     const dijoGoogle = e instanceof Error ? e.message : String(e);
     // Un 429 no es un rechazo: es "no ahora". Se nombra distinto para que no

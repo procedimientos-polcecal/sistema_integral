@@ -264,6 +264,46 @@ export async function leerFormulas(
 }
 
 /**
+ * Qué celdas de un rango son fórmula, fila por fila.
+ *
+ * `leerValores` y `leerFormulas` piden `/values`, que sólo da lo que se ve o
+ * el texto de la fórmula como si fuera un valor más: no alcanza para separar
+ * "esta celda la carga una persona" de "esta celda la calcula el libro", que es
+ * justo lo que hace falta antes de escribir al lado de una fórmula ajena. Para
+ * eso pide `includeGridData`, que en `userEnteredValue` sí distingue
+ * `formulaValue` de un literal.
+ *
+ * Devuelve una fila por cada una del rango pedido —con huecos si la fila no
+ * tiene nada en esas columnas— y en cada una `true` en la posición que es
+ * fórmula. La columna 0 del resultado es la primera del rango, no la A de la
+ * planilla: quien llama es quien sabe el corrimiento.
+ */
+export async function leerFormulasDeRango(
+  planillaId: string,
+  pestana: string,
+  rango: string
+): Promise<boolean[][]> {
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+    `?ranges=${encodeURIComponent(`${pestana}!${rango}`)}` +
+    `&includeGridData=true` +
+    `&fields=${encodeURIComponent("sheets(data(rowData(values(userEnteredValue))))")}`;
+
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
+
+  const json = await res.json();
+  const filas = json.sheets?.[0]?.data?.[0]?.rowData ?? [];
+  return (filas as { values?: { userEnteredValue?: { formulaValue?: string } }[] }[]).map(
+    (fila) => (fila.values ?? []).map((celda) => celda.userEnteredValue?.formulaValue !== undefined)
+  );
+}
+
+/**
  * Crea una pestaña y le escribe los encabezados. Devuelve si la creó.
  *
  * Existe para los libros que llevan **una hoja por mes**, como el de Despacho:
