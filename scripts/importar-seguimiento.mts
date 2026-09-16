@@ -29,14 +29,42 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// El estado actual de cada RI, para no forzarlo. PostgREST corta en 1000 filas
+// sin avisar y son ~1.968 requerimientos, así que se pagina a mano: `traerTodo`
+// de `lib/core/paginado.ts` no se puede usar desde un script suelto.
+const estadoPorRi = new Map<number, string | null>();
+for (let desde = 0; ; desde += 1000) {
+  const { data, error } = await supabase
+    .from("compras_requerimientos")
+    .select("nro_ri, estado_compra")
+    .range(desde, desde + 999);
+  if (error) throw new Error(error.message);
+  for (const fila of data ?? []) estadoPorRi.set(fila.nro_ri, fila.estado_compra);
+  if ((data ?? []).length < 1000) break;
+}
+
 let listas = 0, sinRi = 0;
 const sucias: string[] = [];
+const discrepantes: string[] = [];
 
 for (let i = 0; i < filas.length; i++) {
   const r = filaDelHistorico(filas[i]);
   if (!r) { sinRi++; continue; }
 
   for (const s of r.sucias) sucias.push(`fila ${i + 2} (RI ${r.nro_ri}): ${s}`);
+
+  const estadoActual = estadoPorRi.get(r.nro_ri) ?? null;
+  // Sólo se da por recibido lo que el sistema ya sabía comprado. Un RI que
+  // figura recibido en la planilla pero acá está en SIN_INICIAR o en
+  // comparativa es una discrepancia para mirar, no algo que el importador
+  // arregle solo saltándose el circuito: pasarlo a RECIBIDO borraría la
+  // pregunta de por qué nunca se marcó como pedido. Se importan sus datos de
+  // recepción igual —y su `seguimiento_fila`, así el exportador los sigue
+  // manteniendo— y se los informa al final.
+  const yaEstabaComprado = estadoActual === "PEDIDO" || estadoActual === "RECIBIDO";
+  if (r.fecha_recepcion && !yaEstabaComprado) {
+    discrepantes.push(`RI ${r.nro_ri}: estado actual ${estadoActual}, recibido ${r.fecha_recepcion} según la planilla`);
+  }
 
   const cambios = {
     cantidad_comprada: r.cantidad_comprada,
@@ -47,10 +75,7 @@ for (let i = 0; i < filas.length; i++) {
     cumplio_proveedor: r.cumplio_proveedor,
     // La fila real de la planilla: la 2 del rango leído es la 2 de la hoja.
     seguimiento_fila: i + 2,
-    // Con fecha de recepción, el RI está recibido. Sin ella sigue esperando, y
-    // su estado queda como está: los 10 que no están en PEDIDO se importan con
-    // el suyo. El seguimiento describe lo que pasó, no corrige el circuito.
-    ...(r.fecha_recepcion ? { estado_compra: "RECIBIDO" } : {}),
+    ...(r.fecha_recepcion && yaEstabaComprado ? { estado_compra: "RECIBIDO" } : {}),
   };
 
   if (ESCRIBE) await supabase.from("compras_requerimientos").update(cambios).eq("nro_ri", r.nro_ri);
@@ -60,4 +85,7 @@ for (let i = 0; i < filas.length; i++) {
 console.log(`filas con RI: ${listas} | restos de fórmula salteados: ${sinRi}`);
 console.log(`celdas que no se pudieron leer y quedan en null: ${sucias.length}`);
 sucias.slice(0, 20).forEach((s) => console.log("  " + s));
+console.log(`\nRI que la planilla da por recibidos pero el sistema no tenía comprados: ${discrepantes.length}`);
+discrepantes.forEach((d) => console.log("  " + d));
+console.log("Se importaron sus datos y NO se les cambió el estado: hay que mirarlos a mano.");
 console.log(ESCRIBE ? "ESCRITO" : "ensayo: no se escribió nada. Correr con --escribir");
