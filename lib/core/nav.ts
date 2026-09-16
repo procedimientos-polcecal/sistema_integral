@@ -42,7 +42,6 @@ export const NAV: NavItem[] = [
     href: "/rrhh",
     modulo: "rrhh",
     children: [
-      { label: "Dashboard", href: "/rrhh", modulo: "rrhh" },
       {
         label: "Administración",
         href: "/rrhh/empleados",
@@ -92,7 +91,7 @@ export const NAV: NavItem[] = [
     href: "/remises",
     modulo: "remises",
     children: [
-      { label: "Hoy", href: "/remises", modulo: "remises" },
+      { label: "Hoy", href: "/remises/hoy", modulo: "remises" },
       { label: "Semana", href: "/remises/semana", modulo: "remises" },
       { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
       { label: "Vehículos", href: "/remises/vehiculos", modulo: "remises" },
@@ -108,7 +107,6 @@ export const NAV: NavItem[] = [
     // mira una máquina, y de ahí para abajo el trabajo — lo que se avisa, lo
     // que se hace y lo que se planifica.
     children: [
-      { label: "Dashboard", href: "/mantenimiento", modulo: "mantenimiento" },
       { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
@@ -128,11 +126,10 @@ export const NAV: NavItem[] = [
     label: "Compras",
     href: "/compras",
     modulo: "compras",
-    // Las dos vistas de resumen van juntas y arriba: el dashboard de gráficos
-    // primero, y el tablero —que dice cuánto trabajo hay en cada etapa—
-    // enseguida. Después, el trabajo del día a día.
+    // El tablero primero —dice cuánto trabajo hay en cada etapa—, después el
+    // trabajo del día a día. El dashboard de gráficos es la raíz del módulo,
+    // fuera de esta lista, mismo caso que Cantera.
     children: [
-      { label: "Dashboard", href: "/compras", modulo: "compras" },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
       // Después de Requerimientos, que es el orden del circuito: se piden, se
@@ -170,11 +167,12 @@ export const NAV: NavItem[] = [
     label: "Inventario",
     href: "/inventario",
     modulo: "inventario",
-    // El stock primero después del dashboard: es la pantalla que se abre en el
-    // celular parado en el pañol, y la que reemplaza abrir el Sheets para ver
-    // si hay algo.
+    // El stock primero: es la pantalla que se abre en el celular parado en el
+    // pañol, y la que reemplaza abrir el Sheets para ver si hay algo. La raíz
+    // del módulo (`href` de arriba) es el dashboard — no está en esta lista a
+    // propósito, mismo caso que Cantera: así clickear el nombre del módulo en
+    // la barra lateral entra directo, en vez de sólo desplegar.
     children: [
-      { label: "Dashboard", href: "/inventario", modulo: "inventario" },
       { label: "Stock", href: "/inventario/stock", modulo: "inventario" },
       { label: "Cargar movimiento", href: "/inventario/movimientos/nuevo", modulo: "inventario" },
       { label: "Movimientos", href: "/inventario/movimientos", modulo: "inventario" },
@@ -189,11 +187,11 @@ export const NAV: NavItem[] = [
     label: "Producción",
     href: "/produccion",
     modulo: "produccion",
-    // El día primero después del dashboard: es la pantalla que se abre para
-    // cargar el parte del turno que acaba de terminar, que es el 95% de lo
-    // que se hace acá.
+    // El día primero: es la pantalla que se abre para cargar el parte del
+    // turno que acaba de terminar, que es el 95% de lo que se hace acá. La
+    // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
+    // Cantera e Inventario.
     children: [
-      { label: "Dashboard", href: "/produccion", modulo: "produccion" },
       { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },

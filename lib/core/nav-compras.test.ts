@@ -22,10 +22,10 @@ const visibles = (c: ContextoNav) =>
 
 describe("menu de Compras", () => {
   it("va en el orden del trabajo: primero los resumenes", () => {
-    // Dashboard y Tablero arriba, y despues el dia a dia. Queda fijado para
-    // que no se de vuelta sin querer, igual que el orden del circuito.
+    // Tablero arriba (el dashboard de graficos es la raiz del modulo, fuera
+    // de esta lista), y despues el dia a dia. Queda fijado para que no se de
+    // vuelta sin querer, igual que el orden del circuito.
     expect(itemsDeCompras().map((i) => i.label)).toEqual([
-      "Dashboard",
       "Tablero",
       "Requerimientos",
       // Después de Requerimientos, que es el orden del circuito: se piden, se
