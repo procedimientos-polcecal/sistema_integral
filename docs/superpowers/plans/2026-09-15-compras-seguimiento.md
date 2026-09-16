@@ -968,7 +968,9 @@ export default async function SeguimientoPage() {
 
 - [ ] **Step 2: El cliente**
 
-Dos listas —**Esperando** (`PEDIDO`, arranca en ~144) y **Recibidos** (`RECIBIDO`)—, filtro por área y por proveedor. Cada fila muestra lo que devuelve `comoLeLlego()`:
+Dos listas —**Esperando** (`PEDIDO`, arranca en ~144) y **Recibidos** (`RECIBIDO`)—, filtro por área y por proveedor, y **un buscador de texto** por N° de RI, descripción y proveedor: con ~1.700 recibidos, dos desplegables no alcanzan para encontrar un pedido. El patrón sale de `RequerimientosClient.tsx` (`placeholder="Buscar texto o N° de RI…"`), no se inventa.
+
+Cada fila muestra lo que devuelve `comoLeLlego()`:
 
 ```tsx
 "use client";
@@ -1035,7 +1037,8 @@ export default function FormularioRecepcion({
   alGuardar,
 }: {
   requerimiento: RequerimientoConRelaciones;
-  alGuardar: () => void;
+  /** El padre cierra, refresca y muestra el aviso: ver el comentario de abajo. */
+  alGuardar: (aviso: string | null) => void;
 }) {
   const [campos, setCampos] = useState({
     cantidad_comprada: requerimiento.cantidad_comprada ?? requerimiento.cantidad ?? "",
@@ -1072,24 +1075,31 @@ export default function FormularioRecepcion({
         cumplio_proveedor: campos.cumplio_proveedor || null,
         fecha_estimada_recepcion: campos.fecha_estimada_recepcion || null,
         fecha_recepcion: campos.fecha_recepcion || null,
-        // Con fecha de recepción el RI está recibido. Sin ella sigue esperando.
-        ...(campos.fecha_recepcion ? { estado_compra: "RECIBIDO" } : {}),
+        // La fecha de recepción define el estado en LOS DOS SENTIDOS: ponerla
+        // lo da por recibido y borrarla lo devuelve a la espera. Agregar la
+        // clave sólo cuando hay fecha dejaba un RI RECIBIDO sin fecha de
+        // recepción, en la solapa equivocada y sin forma de sacarlo de ahí.
+        // El formulario sólo se muestra en PEDIDO y RECIBIDO, así que esto no
+        // puede pisar ningún otro estado.
+        estado_compra: campos.fecha_recepcion ? "RECIBIDO" : "PEDIDO",
       }),
     });
     const cuerpo = await res.json();
     setGuardando(false);
 
-    // `aviso_sheets` en snake_case, que es lo que la ruta manda de verdad
-    // —ver el final de `app/api/compras/requerimientos/[id]/route.ts`— y lo que
-    // ya leen `BandejaClient` y `NuevoRequerimientoModal`. Con la forma
-    // camelCase el aviso nunca aparecía.
+    // El formulario INFORMA y no decide: el aviso sube al padre.
     //
-    // Y con aviso NO se llama a `alGuardar`: en la lista eso cierra la tarjeta,
-    // y cerrarla desmonta el cartel antes de que nadie lo lea. El cambio se
-    // guardó igual, pero los dos lados quedaron diciendo cosas distintas y eso
-    // no se puede tragar.
-    if (cuerpo.aviso_sheets) setAviso(cuerpo.aviso_sheets);
-    else alGuardar();
+    // `aviso_sheets` en snake_case, que es lo que la ruta manda de verdad —ver
+    // el final de `app/api/compras/requerimientos/[id]/route.ts`— y lo que ya
+    // leen `BandejaClient` y `NuevoRequerimientoModal`. Con la forma camelCase
+    // el aviso nunca aparecía.
+    //
+    // Y sube en vez de mostrarse acá porque este componente se cierra al
+    // guardar: mostrarlo adentro obliga a NO cerrar, y entonces el resumen de
+    // la tarjeta —que se arma con lo que trajo el server component— queda
+    // mostrando lo viejo justo arriba del formulario que tiene lo nuevo. Es lo
+    // que ya resuelve `BandejaClient`, que guarda el aviso en la página.
+    alGuardar(cuerpo.aviso_sheets ?? null);
   }
 
   return (
