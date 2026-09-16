@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
-import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
+import { modulosVisibles, nivelEnModulo, puedeUsarAsistente, MODULOS_ORDEN } from "@/lib/core/access";
 import { puedeAprobarCompras, puedeAprobarOS } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: usuario } = await supabase
     .from("usuarios")
-    .select("nombre, apellido, rol, empleado_id, activo")
+    .select("nombre, apellido, rol, empleado_id, activo, puede_usar_asistente")
     .eq("id", user.id)
     .single();
 
@@ -73,7 +73,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <NavMovilProvider>
       <div className="flex h-screen flex-col">
-        <Header usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()} />
+        <Header
+          usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
+          asistenteHabilitado={puedeUsarAsistente({ rol, puede_usar_asistente: usuario.puede_usar_asistente })}
+        />
         <div className="flex min-h-0 flex-1">
           <Sidebar
             modulos={modulos}

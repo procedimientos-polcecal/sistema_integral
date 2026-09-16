@@ -3,8 +3,15 @@ import { logout } from "@/app/login/actions";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationsBell } from "./NotificationsBell";
 import { BotonMenu } from "./NavMovil";
+import { Asistente } from "./Asistente";
 
-export function Header({ usuarioNombre }: { usuarioNombre: string }) {
+export function Header({
+  usuarioNombre,
+  asistenteHabilitado,
+}: {
+  usuarioNombre: string;
+  asistenteHabilitado: boolean;
+}) {
   const iniciales =
     usuarioNombre
       .trim()
@@ -35,6 +42,7 @@ export function Header({ usuarioNombre }: { usuarioNombre: string }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <Asistente habilitado={asistenteHabilitado} />
         <NotificationsBell />
         <Link
           href="/mi-cuenta"
