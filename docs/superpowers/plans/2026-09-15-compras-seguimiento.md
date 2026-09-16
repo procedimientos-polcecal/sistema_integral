@@ -1079,9 +1079,16 @@ export default function FormularioRecepcion({
     const cuerpo = await res.json();
     setGuardando(false);
 
-    // Si la planilla rechazó algo, se dice: el cambio se guardó igual, pero los
-    // dos lados quedaron diciendo cosas distintas y eso no se puede tragar.
-    if (cuerpo.avisoSheets) setAviso(cuerpo.avisoSheets);
+    // `aviso_sheets` en snake_case, que es lo que la ruta manda de verdad
+    // —ver el final de `app/api/compras/requerimientos/[id]/route.ts`— y lo que
+    // ya leen `BandejaClient` y `NuevoRequerimientoModal`. Con la forma
+    // camelCase el aviso nunca aparecía.
+    //
+    // Y con aviso NO se llama a `alGuardar`: en la lista eso cierra la tarjeta,
+    // y cerrarla desmonta el cartel antes de que nadie lo lea. El cambio se
+    // guardó igual, pero los dos lados quedaron diciendo cosas distintas y eso
+    // no se puede tragar.
+    if (cuerpo.aviso_sheets) setAviso(cuerpo.aviso_sheets);
     else alGuardar();
   }
 
