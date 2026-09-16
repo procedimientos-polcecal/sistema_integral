@@ -21,6 +21,7 @@ describe("modulosVisibles", () => {
       "despacho",
       "facturacion",
       "cantera",
+      "calidad",
     ]);
   });
 
