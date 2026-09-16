@@ -34,7 +34,7 @@ npx tsc --noEmit
 | `lib/core/types.ts` | Sumar `"calidad"` al tipo `Modulo` |
 | `lib/core/access.ts` | Sumar `"calidad"` a `MODULOS_ORDEN` |
 | `lib/core/sheets.ts` | Ensanchar `escribirCeldas()` a `string \| number` |
-| `lib/core/nav.ts` | El grupo de navegación. **Se toca en la tarea 19**, no antes: un `admin_sistema` ve el menú apenas se agrega, y hasta entonces sus rutas son 404 |
+| `lib/core/nav.ts` | Los hijos de carbonilla dentro del grupo `Calidad`, **que ya existe** (lo creó la mudanza de envases). **Se toca en la tarea 19**, no antes: un `admin_sistema` ve el menú apenas se agrega, y hasta entonces sus rutas son 404 |
 | `lib/calidad/types.ts` | Los tipos del módulo. Sin lógica |
 | `lib/calidad/movimientos.ts` | El signo, los saldos y el saldo corrido. El corazón del módulo |
 | `lib/calidad/conteos.ts` | El desvío del conteo y el ajuste que propone |
@@ -2679,33 +2679,67 @@ git commit -m "feat(calidad): los dos catalogos, con la deuda con el nucleo a la
 
 ---
 
-## Tarea 19: El módulo entra al menú
+## Tarea 19: La carbonilla entra al menú
 
 **Archivos:**
 - Modificar: `lib/core/nav.ts`
 
 **Recién ahora**, con las cuatro pantallas construidas.
 
-- [ ] **Paso 1: Agregar el grupo**
+**OJO: el grupo `Calidad` YA EXISTE.** Otra sesión mudó el stock de envases de
+Producción a Calidad el 16/09/2026 (`a6e1a80`) y creó el grupo con sus cuatro
+hijos, dejando escrito *"y el de carbonilla cuando tenga pantallas"*. Esta tarea
+**le suma los hijos de carbonilla**, no lo crea. Mirá `lib/core/nav.ts` antes de
+tocar nada: si el grupo cambió otra vez, gana lo que está en el archivo.
 
-Después del bloque de `Cantera`:
+- [ ] **Paso 1: Anidar las dos mitades**
+
+Con ocho hijos planos el menú deja de leerse, y las dos mitades no tienen nada
+que ver entre sí —en envases manda la planilla y en carbonilla la planilla se
+va—. Van como dos subgrupos, que es la forma que `NavItem` ya soporta (la usaba
+`Envases` cuando vivía dentro de Producción):
 
 ```ts
 {
   label: "Calidad",
   href: "/calidad",
   modulo: "calidad",
-  // El stock primero: es la pantalla que se abre a la tarde para cargar el
-  // consumo del día, que es lo que se hace 224 de 256 días. El libro entero y
-  // los catálogos se miran después, no durante.
+  // Las dos planillas del sector, y van para lados distintos. En envases
+  // **manda la planilla** —el stock es una fórmula que vive allá— y en
+  // carbonilla la planilla se va, porque las entradas salen de Odoo y de la
+  // balanza. Ver docs/CALIDAD-ENVASES.md y docs/CALIDAD.md.
   children: [
-    { label: "El stock", href: "/calidad", modulo: "calidad" },
-    { label: "Movimientos", href: "/calidad/movimientos", modulo: "calidad" },
-    { label: "Carbonilleros", href: "/calidad/carbonilleros", modulo: "calidad", soloAdmin: true },
-    { label: "Productos", href: "/calidad/productos", modulo: "calidad", soloAdmin: true },
+    {
+      label: "Carbonilla",
+      href: "/calidad",
+      modulo: "calidad",
+      // El stock primero: es la pantalla que se abre a la tarde para cargar el
+      // consumo del día, que es lo que se hace 224 de 256 días. El libro entero
+      // y los catálogos se miran después, no durante.
+      children: [
+        { label: "El stock", href: "/calidad", modulo: "calidad" },
+        { label: "Movimientos", href: "/calidad/movimientos", modulo: "calidad" },
+        { label: "Carbonilleros", href: "/calidad/carbonilleros", modulo: "calidad", soloAdmin: true },
+        { label: "Productos", href: "/calidad/productos", modulo: "calidad", soloAdmin: true },
+      ],
+    },
+    {
+      label: "Envases",
+      href: "/calidad/envases",
+      modulo: "calidad",
+      children: [
+        { label: "Stock", href: "/calidad/envases", modulo: "calidad" },
+        { label: "Movimientos", href: "/calidad/envases/movimientos", modulo: "calidad" },
+        { label: "Por período", href: "/calidad/envases/periodo", modulo: "calidad" },
+        { label: "Proveedores", href: "/calidad/envases/proveedores", modulo: "calidad" },
+      ],
+    },
   ],
 },
 ```
+
+El `href` del grupo pasa de `/calidad/envases` a `/calidad`, que es el stock de
+carbonilla. Si preferís que siga abriendo envases, cambiá esa línea y nada más.
 
 - [ ] **Paso 2: Verificar y commitear**
 
@@ -2713,7 +2747,7 @@ Después del bloque de `Cantera`:
 npm test
 npx tsc --noEmit
 git add lib/core/nav.ts
-git commit -m "feat(calidad): el modulo entra al menu"
+git commit -m "feat(calidad): la carbonilla entra al menu, al lado de los envases"
 ```
 
 ---
