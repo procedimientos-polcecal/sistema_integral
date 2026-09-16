@@ -188,21 +188,38 @@ lados**: el 16/09 eran 21 camiones, unas 400 toneladas.
 
 | | |
 |---|---|
-| Movimientos | **1.047** — 615 entradas, 427 consumos, 5 ajustes |
-| Por tipo | 572 vegetal · 90 residual · **385 `sin_separar`** |
+| Movimientos | **1.049** — 615 entradas, 427 consumos, 7 ajustes |
+| Por tipo | 574 vegetal · 91 residual · **385 `sin_separar`** |
 | Conteos físicos | 13 |
 | Sin importar | **0** |
-| Saldo | vegetal **−206,26** · residual **183,65** |
+| Saldo | vegetal **204,24** · residual **55,647** |
 
-**El saldo arranca negativo y es lo esperado.** La diferencia contra los 260,34
-que mostraba la planilla son **283 toneladas**, y son literalmente la suma de lo
+**El saldo recalculado arrancó en −206,26 de vegetal**, y eso no era un error: la
+diferencia contra la planilla eran **283 toneladas**, literalmente la suma de lo
 que se hizo pisando celdas a mano en veinte meses. El grueso es el **+232,5 del
-02/05/2026**, que no está en ninguna columna: esa fila tiene `SALIDAS 55` y el
+02/05/2026**, que no está en ninguna columna — esa fila tiene `SALIDAS 55` y el
 número vive sólo en el texto.
 
-Se decidió no inventarlo: el stock arranca en lo que está registrado y **se cierra
-con un conteo físico**, que deja el ajuste con su motivo escrito. Un saldo
-negativo se ve —la pantalla lo muestra en rojo— y no se corrige solo.
+Y **no estaba repartida parejo**: el residual quedaba 128 t de más y el vegetal
+410 de menos, lo que apunta al ajuste del 23/07 —*"se ajustó el sobrante de
+carbón residual al stock de vegetal"*— que la planilla aplicó pisando celdas y la
+importación no pudo reproducir.
+
+**Se cerró igualando a la planilla**, a pedido y contra la recomendación, con dos
+ajustes del 16/09 de `+410,50` y `−128,00`. El motivo de los dos dice de dónde
+sale el número y, textual, que **no es un conteo físico**: nadie midió el carbón.
+El stock arranca en lo que la planilla quedó mostrando después de veinte meses de
+correcciones a mano, que es un valor **no verificado**.
+
+La recomendación era un conteo físico, y sigue en pie: cuando alguien mida, el
+conteo de `/calidad` calcula el desvío contra estos 204,24 y 55,647 y deja su
+propio ajuste. Recién ahí el stock va a estar parado sobre una medición.
+
+Un detalle de la planilla que quedó a la vista al hacer esa cuenta: **su propio
+`TOTAL` no es la suma de sus dos columnas**. La fila 1046 dice `TOTAL` 260,337 y
+`VEGETAL` + `RESIDUAL` 259,887 — cuarenta y cinco kilos de desfasaje entre tres
+celdas del mismo renglón. Se igualó contra las dos columnas por tipo, que son las
+que el SdG lleva.
 
 Dos cosas más que la importación dejó anotadas:
 
@@ -236,7 +253,8 @@ Dos cosas más que la importación dejó anotadas:
 
 ## Lo que falta de una persona
 
-- **El conteo físico**, que es lo que cierra las 283 toneladas.
+- **El conteo físico.** Ya no bloquea —el saldo se igualó a la planilla— pero es
+  lo único que va a poner el stock sobre un número medido en vez de uno heredado.
 - **`CALIDAD_DESDE`** en Vercel, con `2026-09-16`. En local ya está.
 - **`GOOGLE_SHEETS_STOCK_CARBONILLA_ID`** en Vercel y en `.env.local`, más
   **permiso de EDITOR** para la cuenta de servicio sobre la planilla: hoy está
