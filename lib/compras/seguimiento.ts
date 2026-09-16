@@ -6,7 +6,7 @@
  * El I/O está en `seguimientoSheets.ts`.
  */
 
-import { serialDelDia } from "@/lib/core/fechaDeSheets";
+import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
 import type { Cumplio } from "@/lib/compras/types";
 
@@ -162,4 +162,62 @@ export function entraEnElSeguimiento(
 ): boolean {
   if (estadoCompra === "PEDIDO" || estadoCompra === "RECIBIDO") return true;
   return yaTieneFila;
+}
+
+/** Lo que una fila del histórico aporta a su requerimiento. */
+export interface DelHistorico {
+  nro_ri: number;
+  cantidad_comprada: number | null;
+  cantidad_recibida: number | null;
+  fecha_estimada_recepcion: string | null;
+  fecha_recepcion: string | null;
+  cumplio_compras: Cumplio | null;
+  cumplio_proveedor: Cumplio | null;
+  /** Celdas que no se pudieron leer. Quedan en null y se informan. */
+  sucias: string[];
+}
+
+const DE_LA_PLANILLA: Record<string, Cumplio> = {
+  "si": "SI",
+  "más o menos": "MAS_O_MENOS",
+  "mas o menos": "MAS_O_MENOS",
+  "no": "NO",
+};
+
+/**
+ * Una fila A..M del master del histórico. `null` si no es una compra.
+ *
+ * Las filas sin NºRI —363 de las 2.120— son restos de una fórmula rota, con
+ * `#N/A` en el resto de las columnas. No hay ninguna compra real sin RI: se
+ * midió.
+ */
+export function filaDelHistorico(celdas: string[]): DelHistorico | null {
+  const nro_ri = Number(String(celdas[0] ?? "").trim());
+  if (!Number.isFinite(nro_ri) || nro_ri === 0) return null;
+
+  const sucias: string[] = [];
+
+  const numero = (v: unknown, comoSeLlama: string): number | null => {
+    const t = String(v ?? "").trim();
+    if (t === "") return null;
+    const n = Number(t.replace(",", "."));
+    if (Number.isFinite(n)) return n;
+    // No se adivina: se informa y queda vacío.
+    sucias.push(`${comoSeLlama} "${t}"`);
+    return null;
+  };
+
+  const juicio = (v: unknown): Cumplio | null =>
+    DE_LA_PLANILLA[String(v ?? "").trim().toLowerCase()] ?? null;
+
+  return {
+    nro_ri,
+    cantidad_comprada: numero(celdas[6], "cantidad comprada"),
+    cantidad_recibida: numero(celdas[7], "cantidad recibida"),
+    fecha_estimada_recepcion: fechaDeSheets(celdas[8]),
+    fecha_recepcion: fechaDeSheets(celdas[9]),
+    cumplio_compras: juicio(celdas[11]),
+    cumplio_proveedor: juicio(celdas[12]),
+    sucias,
+  };
 }
