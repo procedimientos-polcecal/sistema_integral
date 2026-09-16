@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { importarDesdeSheets, reintentarPendientes } from "@/lib/compras/sheets";
+import { reintentarSeguimiento } from "@/lib/compras/seguimientoSheets";
 
 export const maxDuration = 300;
 
@@ -29,7 +30,9 @@ export async function GET(request: Request) {
     // Y de paso reintenta lo que la planilla había rechazado: casi siempre el
     // motivo se corrigió afuera (se cargó un alias, se dio un permiso).
     const reintento = await reintentarPendientes();
-    return NextResponse.json({ ...importado, reintento });
+    // El libro de seguimiento tiene su propia cola: `seguimiento_pendiente`.
+    const seguimiento = await reintentarSeguimiento();
+    return NextResponse.json({ ...importado, reintento, seguimiento });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
