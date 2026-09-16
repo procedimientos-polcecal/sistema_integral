@@ -54,9 +54,9 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Ejecuciones": IconBolt,
   "Órdenes de trabajo": IconClipboard,
   "Planificación diaria": IconCalendar,
-  // Envases, el stock que lleva calidad. "Por período" ya está más arriba: el
-  // mismo concepto se reusa entre módulos y la clave no se duplica.
-  "Envases": IconClipboard,
+  // Calidad. "Por período" ya está más arriba: el mismo concepto se reusa entre
+  // módulos y la clave no se duplica.
+  "Calidad": IconCheck,
   "Stock": IconList,
   "Movimientos": IconBolt,
   "Proveedores": IconUsers,

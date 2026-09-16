@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import {
   resumirPorGrupo,
   type ArticuloDelInforme, type MovimientoDelInforme,
-} from "@/lib/produccion/envases/informe";
+} from "@/lib/calidad/envases/informe";
 
 /** El primer día del mes en curso, que es el rango que se mira casi siempre. */
 function arranque(): { desde: string; hasta: string } {

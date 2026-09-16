@@ -82,7 +82,7 @@ export default function MovimientosClient({
     setError("");
     setAvisoPlanilla("");
 
-    const res = await fetch("/api/produccion/envases/movimientos", {
+    const res = await fetch("/api/calidad/envases/movimientos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),

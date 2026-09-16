@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { puedeEditarProduccion } from "@/lib/produccion/auth";
-import { espejarMovimiento } from "@/lib/produccion/envases/espejo";
+import { puedeEditarCalidad } from "@/lib/calidad/auth";
+import { espejarMovimiento } from "@/lib/calidad/envases/espejo";
 
 /**
  * Cargar un movimiento de envases.
  *
  * Dos cosas pasan acá, y la segunda no es opcional aunque lo parezca:
  *
- * 1. La fila en `produccion_envases_movimientos`.
+ * 1. La fila en `calidad_envases_movimientos`.
  * 2. El **espejo a la planilla**. La planilla manda: un movimiento que no llega
  *    allá no existe, porque la próxima sincronización lee el stock de la
  *    fórmula —que no lo incluye— y lo borra de hecho.
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await puedeEditarProduccion(supabase, user.id))) {
+  if (!(await puedeEditarCalidad(supabase, user.id))) {
     return NextResponse.json({ error: "Sin permiso para cargar movimientos" }, { status: 403 });
   }
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   }
 
   const { data: articulo } = await supabase
-    .from("produccion_envases_articulos")
+    .from("calidad_envases_articulos")
     .select("id, codigo")
     .eq("id", body.articulo_id)
     .single();
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     typeof v === "string" && v.trim() ? v.trim() : null;
 
   const { data: mov, error } = await supabase
-    .from("produccion_envases_movimientos")
+    .from("calidad_envases_movimientos")
     .insert({
       articulo_id: articulo.id,
       codigo: articulo.codigo,
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
   // El pendiente se anota o se limpia; nunca queda a medias.
   await supabase
-    .from("produccion_envases_movimientos")
+    .from("calidad_envases_movimientos")
     .update(
       espejo.ok
         ? { sheets_fila: espejo.fila, sheets_pendiente: null, sheets_pendiente_en: null }

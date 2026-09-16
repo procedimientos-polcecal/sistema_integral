@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
-import { nivelProduccionDe } from "@/lib/produccion/auth";
+import { nivelCalidadDe } from "@/lib/calidad/auth";
 
 interface Proveedor {
   id: string;
@@ -24,19 +24,19 @@ export default async function ProveedoresDeEnvasesPage() {
   const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  if (!(await nivelProduccionDe(supabase, user.id))) redirect("/");
+  if (!(await nivelCalidadDe(supabase, user.id))) redirect("/");
 
   const [{ data: proveedores }, { data: referencias }, { data: historial }] = await Promise.all([
     supabase
-      .from("produccion_envases_proveedores")
+      .from("calidad_envases_proveedores")
       .select("id, nombre, tipos, contacto_nombre, contacto_tel, cuit, proveedor_id")
       .order("nombre"),
     supabase
-      .from("produccion_envases_referencias")
+      .from("calidad_envases_referencias")
       .select("id, color, proveedor_nombre")
       .order("orden"),
     supabase
-      .from("produccion_envases_referencias_historial")
+      .from("calidad_envases_referencias_historial")
       .select("id, texto")
       .order("sheets_fila"),
   ]);

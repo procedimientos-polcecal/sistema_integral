@@ -189,24 +189,25 @@ export const NAV: NavItem[] = [
     children: [
       { label: "El día", href: "/produccion", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
-      // El stock de envases que lleva calidad. Va adentro de Producción y no
-      // como módulo aparte para no tener que darle un permiso nuevo a nadie:
-      // quien entra a cargar el parte del turno entra a esto.
-      //
-      // Ojo al retomarlo: acá **manda la planilla**, al revés que el resto del
-      // módulo. Ver docs/PRODUCCION.md.
-      {
-        label: "Envases",
-        href: "/produccion/envases",
-        modulo: "produccion",
-        children: [
-          { label: "Stock", href: "/produccion/envases", modulo: "produccion" },
-          { label: "Movimientos", href: "/produccion/envases/movimientos", modulo: "produccion" },
-          { label: "Por período", href: "/produccion/envases/periodo", modulo: "produccion" },
-          { label: "Proveedores", href: "/produccion/envases/proveedores", modulo: "produccion" },
-        ],
-      },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
+    ],
+  },
+  {
+    label: "Calidad",
+    href: "/calidad/envases",
+    modulo: "calidad",
+    // Lo que lleva el sector Calidad y no es el parte de fábrica: hoy el stock
+    // de envases, y el de carbonilla cuando tenga pantallas.
+    //
+    // Ojo al retomarlo: las dos mitades van para lados distintos. En envases
+    // **manda la planilla** —el stock es una fórmula que vive allá— y en
+    // carbonilla la planilla se va, porque las entradas salen de Odoo y de la
+    // balanza. Ver docs/PRODUCCION.md y el spec de carbonilla.
+    children: [
+      { label: "Stock", href: "/calidad/envases", modulo: "calidad" },
+      { label: "Movimientos", href: "/calidad/envases/movimientos", modulo: "calidad" },
+      { label: "Por período", href: "/calidad/envases/periodo", modulo: "calidad" },
+      { label: "Proveedores", href: "/calidad/envases/proveedores", modulo: "calidad" },
     ],
   },
   {

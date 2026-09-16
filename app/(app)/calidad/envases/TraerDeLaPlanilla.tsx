@@ -27,7 +27,7 @@ export default function TraerDeLaPlanilla({ sync }: { sync: UltimaSync | null })
     setAviso(null);
     setFallo(false);
 
-    const res = await fetch("/api/produccion/envases/sync", { method: "POST" });
+    const res = await fetch("/api/calidad/envases/sync", { method: "POST" });
     const body = await res.json().catch(() => ({}));
     setSincronizando(false);
 

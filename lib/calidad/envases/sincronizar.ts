@@ -1,7 +1,10 @@
 /**
  * Traer de la planilla lo que la sección Envases espeja.
  *
- * LA PLANILLA MANDA, al revés que el resto de Producción. El stock del listado
+ * LA PLANILLA MANDA, y conviene saberlo porque en la otra mitad de este módulo
+ * pasa lo contrario: en carbonilla la planilla **se va** —las entradas salen de
+ * Odoo y de la balanza— y acá se queda, porque es donde carga la gente que no
+ * entra al sistema y donde vive la fórmula del stock. El stock del listado
  * es una fórmula sobre el kardex, así que es el stock consolidado correcto: acá
  * se lee y se anota cuándo. El SdG no lo calcula.
  *
@@ -24,7 +27,7 @@ import { normalizarCuit } from "@/lib/core/cuit";
 import {
   mapearListado, mapearKardex, filaDeArticulo, filaDeMovimiento, filaDeProveedor,
   type ArticuloLeido, type MovimientoLeido, type ProveedorLeido,
-} from "@/lib/produccion/envases/planilla";
+} from "@/lib/calidad/envases/planilla";
 
 type Datos = Record<string, unknown>;
 
@@ -79,7 +82,7 @@ export async function sincronizarEnvases(): Promise<Resultado> {
   } catch (e) {
     const detalle = mensaje(e);
     await registrarSincronizacion({
-      modulo: "produccion", recurso: "envases_movimientos", ok: false, error: detalle,
+      modulo: "calidad", recurso: "envases_movimientos", ok: false, error: detalle,
     });
     return falla(500, detalle);
   }
@@ -167,11 +170,11 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
       stock_sincronizado_en: ahora,
     }));
     const { error } = await admin
-      .from("produccion_envases_articulos")
+      .from("calidad_envases_articulos")
       .upsert(lote, { onConflict: "codigo" });
     if (error) {
       await registrarSincronizacion({
-        modulo: "produccion", recurso: "envases_articulos", ok: false, error: error.message,
+        modulo: "calidad", recurso: "envases_articulos", ok: false, error: error.message,
       });
       return falla(400, error.message);
     }
@@ -189,7 +192,7 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   // ── Los movimientos ────────────────────────────────────────
   const porCodigo = new Map(
     (await traerTodo<{ id: string; codigo: string }>((desde, hasta) =>
-      admin.from("produccion_envases_articulos").select("id, codigo").range(desde, hasta)
+      admin.from("calidad_envases_articulos").select("id, codigo").range(desde, hasta)
     )).map((f) => [f.codigo, f.id])
   );
 
@@ -231,11 +234,11 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   for (let i = 0; i < filas.length; i += 500) {
     const lote = filas.slice(i, i + 500);
     const { error } = await admin
-      .from("produccion_envases_movimientos")
+      .from("calidad_envases_movimientos")
       .upsert(lote, { onConflict: "sheets_fila" });
     if (error) {
       await registrarSincronizacion({
-        modulo: "produccion", recurso: "envases_movimientos", ok: false, error: error.message,
+        modulo: "calidad", recurso: "envases_movimientos", ok: false, error: error.message,
       });
       return falla(400, error.message);
     }
@@ -243,10 +246,10 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   }
 
   await registrarSincronizacion({
-    modulo: "produccion", recurso: "envases_articulos", ok: true, filas: guardadosArticulos,
+    modulo: "calidad", recurso: "envases_articulos", ok: true, filas: guardadosArticulos,
   });
   await registrarSincronizacion({
-    modulo: "produccion", recurso: "envases_movimientos", ok: true, filas: guardadosMovimientos,
+    modulo: "calidad", recurso: "envases_movimientos", ok: true, filas: guardadosMovimientos,
   });
 
   return logra({
@@ -308,7 +311,7 @@ async function sincronizarProveedores(
   });
 
   const { error } = await admin
-    .from("produccion_envases_proveedores")
+    .from("calidad_envases_proveedores")
     .upsert(lote, { onConflict: "nombre" });
 
   return error
@@ -364,13 +367,13 @@ async function sincronizarReferencias(
 
   if (colores.length) {
     const { error } = await admin
-      .from("produccion_envases_referencias")
+      .from("calidad_envases_referencias")
       .upsert(colores, { onConflict: "color" });
     if (error) return { colores: 0, historial: 0, error: error.message };
   }
   if (historial.length) {
     const { error } = await admin
-      .from("produccion_envases_referencias_historial")
+      .from("calidad_envases_referencias_historial")
       .upsert(historial, { onConflict: "sheets_fila" });
     if (error) return { colores: colores.length, historial: 0, error: error.message };
   }

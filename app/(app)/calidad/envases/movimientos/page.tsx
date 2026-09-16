@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
-import { nivelProduccionDe } from "@/lib/produccion/auth";
+import { nivelCalidadDe } from "@/lib/calidad/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import MovimientosClient, {
   type MovimientoEnPantalla, type ArticuloDelSelector,
@@ -13,13 +13,13 @@ export default async function MovimientosPage() {
   const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const nivel = await nivelProduccionDe(supabase, user.id);
+  const nivel = await nivelCalidadDe(supabase, user.id);
   if (!nivel) redirect("/");
 
   const [articulos, movimientos] = await Promise.all([
     traerTodo<ArticuloDelSelector>((desde, hasta) =>
       supabase
-        .from("produccion_envases_articulos")
+        .from("calidad_envases_articulos")
         .select("id, codigo, descripcion, grupo")
         .eq("activo", true)
         .order("codigo")
@@ -30,7 +30,7 @@ export default async function MovimientosPage() {
     // nada falle.
     traerTodo<MovimientoEnPantalla>((desde, hasta) =>
       supabase
-        .from("produccion_envases_movimientos")
+        .from("calidad_envases_movimientos")
         .select("id, articulo_id, codigo, fecha, entrada, salida, rotura, despacho, observacion, sheets_pendiente")
         .order("fecha", { ascending: false })
         .range(desde, hasta)

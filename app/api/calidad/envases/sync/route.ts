@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { tieneAccesoProduccion } from "@/lib/produccion/auth";
-import { sincronizarEnvases } from "@/lib/produccion/envases/sincronizar";
+import { tieneAccesoCalidad } from "@/lib/calidad/auth";
+import { sincronizarEnvases } from "@/lib/calidad/envases/sincronizar";
 
 /**
  * Traer de la planilla de envases.
@@ -17,8 +17,8 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await tieneAccesoProduccion(supabase, user.id))) {
-    return NextResponse.json({ error: "Sin acceso a Producción" }, { status: 403 });
+  if (!(await tieneAccesoCalidad(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin acceso a Calidad" }, { status: 403 });
   }
 
   const r = await sincronizarEnvases();
