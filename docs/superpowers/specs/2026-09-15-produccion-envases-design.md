@@ -114,7 +114,7 @@ produccion_envases_movimientos          -- 1.398 filas
   observacion text,
   proveedor_raw text, proveedor_id uuid references proveedores(id),
   origen text ('app'|'planilla'), creado_por,
-  sheets_fila int unique where not null,
+  sheets_fila int unique,                -- comun y no parcial: ver abajo
   sheets_pendiente text, sheets_pendiente_en timestamptz,
   check (entrada + salida + rotura + despacho > 0)
 

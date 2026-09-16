@@ -200,11 +200,14 @@ create index if not exists produccion_envases_mov_fecha_idx
 
 -- Una fila de la planilla es un movimiento y uno solo: es lo que hace que
 -- reimportar no duplique, y el destino del ON CONFLICT de la sincronización.
--- Índice único parcial: como destino de ON CONFLICT hay que nombrar la misma
--- condición (`where sheets_fila is not null`) en el upsert, o Postgres no lo
--- encuentra — trampa #2 del README de migraciones.
+--
+-- Único COMÚN y no parcial, aunque `sheets_fila` sea null en los movimientos
+-- cargados desde la app hasta que el espejo escribe. **Postgres no acepta un
+-- índice parcial como destino de ON CONFLICT** —trampa #2 del README, y la
+-- misma que ya rompieron la 034 y la 049— y no hace falta: en Postgres los
+-- nulos no chocan entre sí, así que varios conviven sin pisarse.
 create unique index if not exists produccion_envases_mov_sheets_fila_idx
-  on produccion_envases_movimientos (sheets_fila) where sheets_fila is not null;
+  on produccion_envases_movimientos (sheets_fila);
 
 create index if not exists produccion_envases_mov_pendiente_idx
   on produccion_envases_movimientos (sheets_pendiente_en)
@@ -1470,8 +1473,6 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   for (let i = 0; i < filas.length; i += 500) {
     const { error } = await admin
       .from("produccion_envases_movimientos")
-      // La condición del índice parcial va nombrada: sin ella Postgres no
-      // encuentra el índice como destino del ON CONFLICT.
       .upsert(filas.slice(i, i + 500), { onConflict: "sheets_fila" });
     if (error) {
       await registrarSincronizacion({
