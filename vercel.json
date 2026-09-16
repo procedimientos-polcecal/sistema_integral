@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/calidad-sync",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/cantera-acarreo-sync",
+      "schedule": "30 8 * * *"
     }
   ]
 }
