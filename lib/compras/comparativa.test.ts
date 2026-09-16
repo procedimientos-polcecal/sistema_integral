@@ -4,7 +4,7 @@ import {
   totalCotizacion, parsearFila, filaParaPlanilla, DISPONIBILIDADES, PLAZOS_PAGO,
   datosDePagoDe, alCambiarDeProveedor,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
-  totalEnPesos, faltaLaCotizacion, numero, diasDePlazo,
+  totalEnPesos, faltaLaCotizacion, numero, plazosDePago,
   casillaMarcada, eleccionDeLaPlanilla,
 } from "./comparativa";
 import type { CotizacionLeida } from "./comparativa";
@@ -92,9 +92,10 @@ describe("numeros de la planilla", () => {
   it("un plazo con punto de miles ya no pasa por dos dias", () => {
     // Antes "1.500" daba 1,5, redondeaba a 2 y se guardaba como dos dias de
     // plazo. Ahora son 1500, que supera el tope de un año: sin definir.
-    expect(diasDePlazo("1.500")).toBeNull();
-    expect(diasDePlazo("30")).toBe(30);
-    expect(diasDePlazo("30/60")).toBeNull();
+    expect(plazosDePago("1.500")).toEqual([]);
+    expect(plazosDePago("30")).toEqual([30]);
+    // "30/60" son dos cuotas. Antes se descartaban las dos; ver plazosDePago.test.ts.
+    expect(plazosDePago("30/60")).toEqual([30, 60]);
   });
 });
 
@@ -180,7 +181,7 @@ describe("parsear una fila de la planilla", () => {
     expect(c.descuento).toBe(0.1);
     expect(c.iva).toBe(0.21);
     expect(c.precio_hasta).toBe("2026-08-31");
-    expect(c.plazo_pago_dias).toBe(30);
+    expect(c.plazos_pago_dias).toEqual([30]);
     expect(c.disponibilidad).toBe("4-7 días");
   });
 
@@ -232,7 +233,7 @@ describe("fila para escribir en la planilla", () => {
         proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
         precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
         descuento: 0.1, iva: 0.21, precio_hasta: "2026-08-31",
-        plazo_pago_dias: 30, condiciones_pago: "Transferencia",
+        plazos_pago_dias: [30], condiciones_pago: "Transferencia",
         disponibilidad: "4-7 días", comentario: "",
       },
     });
@@ -254,7 +255,7 @@ describe("fila para escribir en la planilla", () => {
     proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
     precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
     descuento: 0.1, iva: 0.21, precio_hasta: "2026-08-31",
-    plazo_pago_dias: 30, condiciones_pago: "Transferencia",
+    plazos_pago_dias: [30], condiciones_pago: "Transferencia",
     disponibilidad: "4-7 días", comentario: "",
   };
 
@@ -426,12 +427,15 @@ describe("variantes del encabezado", () => {
 });
 
 /**
- * `plazo_pago_dias` es la unica columna entera que sale de la planilla, y ahi
- * la gente escribe lo que quiere. Un decimal hacia fallar el INSERT entero con
- * "invalid input syntax for type integer", asi que una sola celda rara dejaba
- * sin adjuntar toda la comparativa.
+ * `plazos_pago_dias` sale de la planilla, y ahi la gente escribe lo que quiere.
+ * Un decimal hacia fallar el INSERT entero con "invalid input syntax for type
+ * integer", asi que una sola celda rara dejaba sin adjuntar toda la
+ * comparativa.
+ *
+ * Desde el 16/09/2026 son varias cuotas y no un numero solo. El detalle de por
+ * que —y el dato inventado que eso arreglo— esta en `plazosDePago.test.ts`.
  */
-describe("el plazo de pago entra en una columna entera", () => {
+describe("los plazos de pago entran en una columna de enteros", () => {
   const idx = (() => {
     const r = mapearEncabezados([...COLUMNAS_COMPARATIVA]);
     if (!r.ok) throw new Error("encabezado invalido");
@@ -448,21 +452,24 @@ describe("el plazo de pago entra en una columna entera", () => {
   };
 
   it("redondea un decimal en vez de romper el insert", () => {
-    expect(conPlazo("30.6")?.plazo_pago_dias).toBe(31);
-    expect(conPlazo("30,4")?.plazo_pago_dias).toBe(30);
+    expect(conPlazo("30.6")?.plazos_pago_dias).toEqual([31]);
   });
 
   it("un entero queda igual", () => {
-    expect(conPlazo("30")?.plazo_pago_dias).toBe(30);
-    expect(conPlazo("60 dias")?.plazo_pago_dias).toBe(60);
+    expect(conPlazo("30")?.plazos_pago_dias).toEqual([30]);
+    expect(conPlazo("60 dias")?.plazos_pago_dias).toEqual([60]);
   });
 
-  it("lo que no es un plazo de pago queda sin definir, no en cualquier cosa", () => {
-    // "30/60" son dos opciones, no 3060 dias.
-    expect(conPlazo("30/60")?.plazo_pago_dias).toBeNull();
-    expect(conPlazo("contado")?.plazo_pago_dias).toBeNull();
-    expect(conPlazo("")?.plazo_pago_dias).toBeNull();
-    expect(conPlazo("-5")?.plazo_pago_dias).toBeNull();
+  /** El caso que motivo el cambio: eran 46 celdas en 25 libros. */
+  it("varias cuotas entran todas", () => {
+    expect(conPlazo("30, 60")?.plazos_pago_dias).toEqual([30, 60]);
+    expect(conPlazo("0, 30, 60, 90")?.plazos_pago_dias).toEqual([0, 30, 60, 90]);
+  });
+
+  it("lo que no es un plazo de pago no entra, en vez de entrar como cualquier cosa", () => {
+    expect(conPlazo("contado")?.plazos_pago_dias).toEqual([]);
+    expect(conPlazo("")?.plazos_pago_dias).toEqual([]);
+    expect(conPlazo("-5")?.plazos_pago_dias).toEqual([]);
   });
 });
 
@@ -559,26 +566,33 @@ describe("costosParaElPedido con presupuestos en dolares", () => {
  */
 describe("datosDePagoDe", () => {
   it("sin proveedor no completa nada", () => {
-    expect(datosDePagoDe(null)).toEqual({ plazo: "", condiciones: "" });
+    expect(datosDePagoDe(null)).toEqual({ plazos: [], condiciones: "" });
   });
 
   it("un proveedor sin datos de pago no completa nada", () => {
     expect(datosDePagoDe({ plazo_pago_dias: null, forma_pago: null, condicion_pago: null }))
-      .toEqual({ plazo: "", condiciones: "" });
+      .toEqual({ plazos: [], condiciones: "" });
   });
 
-  it("trae el plazo como lo espera el desplegable", () => {
-    expect(datosDePagoDe({ plazo_pago_dias: 30, forma_pago: null, condicion_pago: null }).plazo).toBe("30");
+  /**
+   * El proveedor tiene UN plazo por defecto, no cuotas: llega como una sola
+   * cuota. Cargar cuotas por proveedor seria otra decision y nadie la pidio.
+   */
+  it("trae el plazo del proveedor como una sola cuota", () => {
+    expect(datosDePagoDe({ plazo_pago_dias: 30, forma_pago: null, condicion_pago: null }).plazos)
+      .toEqual([30]);
   });
 
   it("el contado son 0 dias, y 0 es un plazo de verdad", () => {
-    expect(datosDePagoDe({ plazo_pago_dias: 0, forma_pago: null, condicion_pago: null }).plazo).toBe("0");
+    expect(datosDePagoDe({ plazo_pago_dias: 0, forma_pago: null, condicion_pago: null }).plazos)
+      .toEqual([0]);
   });
 
   it("un plazo que el desplegable no ofrece se deja vacio", () => {
     // Elegirlo igual dejaria el select en blanco mostrando un valor que no
     // existe: se prefiere no completar y que la persona elija.
-    expect(datosDePagoDe({ plazo_pago_dias: 40, forma_pago: null, condicion_pago: null }).plazo).toBe("");
+    expect(datosDePagoDe({ plazo_pago_dias: 40, forma_pago: null, condicion_pago: null }).plazos)
+      .toEqual([]);
   });
 
   it("junta la forma y la condicion", () => {

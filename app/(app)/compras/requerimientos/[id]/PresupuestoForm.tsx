@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { moneda, fecha } from "@/lib/compras/constants";
 import {
-  totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES,
+  totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES, plazosAlCambiarDeProveedor, mismosPlazos,
   datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
+import MultiSelect from "@/components/MultiSelect";
 
 /**
  * Cargar un presupuesto, con los campos de la planilla.
@@ -44,7 +45,8 @@ export default function PresupuestoForm({
   const [descuento, setDescuento] = useState("0");
   const [iva, setIva] = useState("21");
   const [precioHasta, setPrecioHasta] = useState("");
-  const [plazo, setPlazo] = useState("");
+  // Cuotas, no una opción: [30, 60] es "una parte a 30 días y otra a 60".
+  const [plazos, setPlazos] = useState<number[]>([]);
   const [condiciones, setCondiciones] = useState("");
   const [disponibilidad, setDisponibilidad] = useState("");
   const [comentario, setComentario] = useState("");
@@ -55,12 +57,14 @@ export default function PresupuestoForm({
   // Lo último que puso el autocompletado. Sirve para dos cosas: saber qué se
   // puede reemplazar al cambiar de proveedor sin pisar lo que escribió una
   // persona, y avisar en pantalla de dónde salió cada valor.
-  const [traido, setTraido] = useState({ plazo: "", condiciones: "" });
+  const [traido, setTraido] = useState<{ plazos: number[]; condiciones: string }>({
+    plazos: [], condiciones: "",
+  });
 
   function elegirProveedor(id: string) {
     setProveedorId(id);
     const datos = datosDePagoDe(proveedores.find((p) => p.id === id));
-    setPlazo((actual) => alCambiarDeProveedor(actual, traido.plazo, datos.plazo));
+    setPlazos((actual) => plazosAlCambiarDeProveedor(actual, traido.plazos, datos.plazos));
     setCondiciones((actual) => alCambiarDeProveedor(actual, traido.condiciones, datos.condiciones));
     setTraido(datos);
   }
@@ -99,7 +103,7 @@ export default function PresupuestoForm({
         descuento: (num(descuento) ?? 0) / 100,
         iva: (num(iva) ?? 0) / 100,
         precio_hasta: precioHasta || null,
-        plazo_pago_dias: num(plazo),
+        plazos_pago_dias: plazos,
         condiciones_pago: condiciones.trim() || null,
         disponibilidad: disponibilidad || null,
         comentario: comentario.trim() || null,
@@ -164,15 +168,25 @@ export default function PresupuestoForm({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
-        <Campo label="Plazo de pago (días)" nota={delProveedor(plazo, traido.plazo) ? "del proveedor" : undefined}>
-          <select
-            value={plazo}
-            onChange={(e) => setPlazo(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">—</option>
-            {PLAZOS_PAGO.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+        <Campo
+          label="Plazos de pago"
+          nota={
+            plazos.length > 0 && mismosPlazos(plazos, traido.plazos) ? "del proveedor" : undefined
+          }
+        >
+          {/*
+            Varias cuotas a la vez: la columna PLAZOS de las comparativas ya se
+            usa así —46 celdas medidas en 25 libros— y hasta ahora el sistema
+            sólo podía guardar una, con el agravante de que "30, 60" entraba
+            redondeado a 31 días.
+          */}
+          <MultiSelect
+            valores={plazos.map(String)}
+            onCambio={(v) => setPlazos(v.map(Number).sort((a, b) => a - b))}
+            vacio="Sin definir"
+            plural="cuotas"
+            opciones={PLAZOS_PAGO.map((p) => [String(p), p === 0 ? "contado" : `${p} días`])}
+          />
         </Campo>
         <Campo label="Disponibilidad">
           <select

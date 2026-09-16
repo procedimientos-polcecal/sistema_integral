@@ -1,7 +1,7 @@
 "use client";
 
 import { monedaExacta, fecha } from "@/lib/compras/constants";
-import { diferenciaPorcentual, detalleCotizacion } from "@/lib/compras/comparativa";
+import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
 
 /**
@@ -121,7 +121,7 @@ export default function ComparativaDecision({
               ))}
             </tr>
 
-            <Fila label="Plazo de pago" cs={cotizaciones} valor={(c) => (c.plazo_pago_dias === null ? "—" : c.plazo_pago_dias === 0 ? "contado" : `${c.plazo_pago_dias} días`)} />
+            <Fila label="Plazo de pago" cs={cotizaciones} valor={(c) => textoDePlazos(c.plazos_pago_dias)} />
             <Fila label="Condiciones" cs={cotizaciones} valor={(c) => c.condiciones_pago ?? "—"} />
             <Fila label="Disponibilidad" cs={cotizaciones} valor={(c) => c.disponibilidad ?? "—"} />
 
@@ -176,7 +176,7 @@ export default function ComparativaDecision({
             </div>
 
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
-              <Dato label="Pago" valor={c.plazo_pago_dias === null ? "—" : c.plazo_pago_dias === 0 ? "contado" : `${c.plazo_pago_dias} días`} />
+              <Dato label="Pago" valor={textoDePlazos(c.plazos_pago_dias)} />
               <Dato label="Disponibilidad" valor={c.disponibilidad ?? "—"} />
               <Dato
                 label="Vale hasta"

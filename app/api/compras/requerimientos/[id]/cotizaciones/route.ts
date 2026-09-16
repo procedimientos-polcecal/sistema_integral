@@ -9,7 +9,7 @@ import { mapearEncabezados, filaParaPlanilla } from "@/lib/compras/comparativa";
 
 const CAMPOS = [
   "proveedor_id", "marca", "unidad_medida", "precio_unitario", "cantidad",
-  "costo_envio", "descuento", "iva", "precio_hasta", "plazo_pago_dias",
+  "costo_envio", "descuento", "iva", "precio_hasta", "plazos_pago_dias",
   "condiciones_pago", "disponibilidad", "comentario", "url",
   // En qué moneda cotizó el proveedor. La conversión a pesos no se guarda:
   // se hace al mostrar, con el dólar del día, y recién se congela al elegir
@@ -170,7 +170,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             descuento: cotizacion.descuento,
             iva: cotizacion.iva,
             precio_hasta: cotizacion.precio_hasta,
-            plazo_pago_dias: cotizacion.plazo_pago_dias,
+            plazos_pago_dias: cotizacion.plazos_pago_dias,
             condiciones_pago: cotizacion.condiciones_pago,
             disponibilidad: cotizacion.disponibilidad,
             comentario: cotizacion.comentario,

@@ -152,26 +152,67 @@ export function numero(v: unknown): number | null {
 }
 
 /**
- * Días de plazo de pago, que van a una columna `integer`.
+ * Los plazos de pago de un presupuesto, en días, ordenados y sin repetir.
  *
- * En esa celda la gente escribe lo que quiere, y un decimal hacía fallar el
- * INSERT entero con "invalid input syntax for type integer": una sola celda
- * rara dejaba sin adjuntar toda la comparativa. Se redondea.
+ * Son **cuotas y no opciones**: `[30, 60]` es "una parte a 30 días y otra a
+ * 60", no "elegí una de las dos".
  *
- * Lo que no puede ser un plazo de pago queda sin definir en vez de guardarse
- * como cualquier cosa: "30/60" son dos opciones, no 3060 días. El tope es un
- * año, que ya es más de lo que nadie financia.
+ * REEMPLAZA A `diasDePlazo`, QUE GUARDABA UN DATO INVENTADO. Aquella devolvía
+ * un solo número y tenía una guarda contra varios, pero escrita para barra y
+ * pipe (`[/|]`). La gente usa **coma**, que esa guarda no miraba y que
+ * `numeroArgentino` lee como separador decimal: `"30, 60"` entraba como 30,6 y
+ * se guardaba redondeado a **31 días**. Once cotizaciones quedaron con un plazo
+ * que nadie escribió nunca, y 31 es un número que no se mira dos veces. Con
+ * tres valores o más `numeroArgentino` se rendía y devolvía null, que sí era
+ * correcto — por eso el problema era invisible salvo en los de dos.
+ *
+ * Medido el 16/09/2026 sobre 25 de los 198 libros de comparativa: 46 celdas con
+ * más de un plazo, todas separadas por coma y espacio y con valores del
+ * desplegable.
+ *
+ * En esa celda la gente escribe lo que quiere, así que un decimal se redondea:
+ * la columna es `integer[]` y un decimal hacía fallar el INSERT de la
+ * comparativa entera con "invalid input syntax for type integer".
+ *
+ * Lo que no puede ser un plazo se descarta —el tope es un año, que ya es más de
+ * lo que nadie financia— y no se adivina. Acá descartar no pierde un enlace:
+ * un "1.500" no es el plazo de nadie.
  */
-export function diasDePlazo(v: unknown): number | null {
+export function plazosDePago(v: unknown): number[] {
   const bruto = String(v ?? "").trim();
-  // Varios números separados no son un plazo: no hay forma de elegir cuál.
-  if (/\d\s*[/|]\s*\d/.test(bruto)) return null;
+  if (bruto === "") return [];
 
-  const n = numero(bruto);
-  if (n === null) return null;
+  const dias = bruto
+    .split(/\s*(?:,|\/|\||;|\sy\s)\s*/i)
+    .map((parte) => {
+      const n = numero(parte);
+      if (n === null) return null;
+      const d = Math.round(n);
+      return d < 0 || d > 365 ? null : d;
+    })
+    .filter((d): d is number => d !== null);
 
-  const dias = Math.round(n);
-  return dias < 0 || dias > 365 ? null : dias;
+  return [...new Set(dias)].sort((a, b) => a - b);
+}
+
+/**
+ * Cómo se leen las cuotas en pantalla.
+ *
+ * Dice "2 cuotas" adelante a propósito: un "30, 60 días" pelado se lee como
+ * "elegí uno", que es justo lo que **no** significa. La unidad va una sola vez,
+ * al final.
+ */
+export function textoDePlazos(plazos: number[] | null | undefined): string {
+  if (!plazos || plazos.length === 0) return "—";
+
+  const enDias = (d: number) => `${d} ${d === 1 ? "día" : "días"}`;
+  if (plazos.length === 1) return plazos[0] === 0 ? "contado" : enDias(plazos[0]);
+
+  const partes = plazos.map((d, i) =>
+    d === 0 ? "contado" : i === plazos.length - 1 ? enDias(d) : String(d)
+  );
+  const ultima = partes.pop() as string;
+  return `${plazos.length} cuotas: ${partes.join(", ")} y ${ultima}`;
 }
 
 /**
@@ -276,7 +317,8 @@ export interface CotizacionLeida {
   descuento: number | null;
   iva: number | null;
   precio_hasta: string | null;
-  plazo_pago_dias: number | null;
+  /** Las cuotas en las que se paga, en días. Vacío es "no se sabe". */
+  plazos_pago_dias: number[];
   condiciones_pago: string | null;
   disponibilidad: string | null;
   comentario: string | null;
@@ -417,7 +459,7 @@ export function parsearFila(fila: string[], idx: Indice): CotizacionLeida | null
     descuento: numero(en("descuento")) ?? 0,
     iva: numero(en("iva")) ?? 0,
     precio_hasta: fechaISO(en("precio_hasta")),
-    plazo_pago_dias: diasDePlazo(en("plazos")),
+    plazos_pago_dias: plazosDePago(en("plazos")),
     condiciones_pago: texto(en("condiciones_pago")),
     disponibilidad: texto(en("disponibilidad")),
     comentario: texto(en("comentario")),
@@ -480,7 +522,12 @@ export function filaParaPlanilla(args: {
   poner("descuento", porcentaje(c.descuento));
   poner("iva", porcentaje(c.iva));
   poner("precio_hasta", c.precio_hasta ?? "");
-  poner("plazos", c.plazo_pago_dias === null ? "" : String(c.plazo_pago_dias));
+  // Coma y espacio: es el formato que ya tienen las 46 celdas con varias
+  // cuotas que se midieron en las planillas, y el que la gente escribe a mano.
+  // La validación de esa columna es `ONE_OF_LIST` NO estricta —lo prueba que
+  // esas celdas existan—, así que Google lo acepta con su triangulito de
+  // advertencia en vez de rechazar la escritura.
+  poner("plazos", c.plazos_pago_dias.join(", "));
   poner("condiciones_pago", c.condiciones_pago ?? "");
   poner("disponibilidad", c.disponibilidad ?? "");
   poner("comentario", c.comentario ?? "");
@@ -714,24 +761,27 @@ export interface PagoDelProveedor {
  * planilla —"ECHEQ · FF"—, que es donde una persona las escribiría.
  */
 export function datosDePagoDe(p: PagoDelProveedor | null | undefined): {
-  plazo: string;
+  plazos: number[];
   condiciones: string;
 } {
-  if (!p) return { plazo: "", condiciones: "" };
+  if (!p) return { plazos: [], condiciones: "" };
 
-  // Un plazo que el desplegable no ofrece dejaría el select en blanco mostrando
-  // un valor que no existe: mejor no completarlo y que la persona elija.
-  const plazo =
+  // El proveedor tiene UN plazo por defecto, no cuotas, así que llega como una
+  // sola. Llevar cuotas por proveedor sería otra decisión y nadie la pidió.
+  //
+  // Un plazo que el desplegable no ofrece no se completa: dejaría marcada una
+  // opción que no existe en la lista, y es preferible que la persona elija.
+  const plazos =
     p.plazo_pago_dias != null && (PLAZOS_PAGO as readonly number[]).includes(p.plazo_pago_dias)
-      ? String(p.plazo_pago_dias)
-      : "";
+      ? [p.plazo_pago_dias]
+      : [];
 
   const condiciones = [p.forma_pago, p.condicion_pago]
     .map((v) => (v ?? "").trim())
     .filter(Boolean)
     .join(" · ");
 
-  return { plazo, condiciones };
+  return { plazos, condiciones };
 }
 
 /**
@@ -744,6 +794,26 @@ export function datosDePagoDe(p: PagoDelProveedor | null | undefined): {
  */
 export function alCambiarDeProveedor(actual: string, puestoAntes: string, nuevo: string): string {
   return actual.trim() === "" || actual === puestoAntes ? nuevo : actual;
+}
+
+/** Si dos listas de cuotas dicen lo mismo. Vienen ordenadas y sin repetir. */
+export const mismosPlazos = (a: number[], b: number[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * La misma regla que `alCambiarDeProveedor`, para las cuotas.
+ *
+ * Va aparte y no reusando aquella sobre un texto unido: comparar `"30,60"` como
+ * cadena funciona por casualidad mientras las listas vengan ordenadas, y el día
+ * que dejen de venirlo el campo de una persona se pisaría sin que nada lo
+ * explique.
+ */
+export function plazosAlCambiarDeProveedor(
+  actual: number[],
+  puestosAntes: number[],
+  nuevos: number[]
+): number[] {
+  return actual.length === 0 || mismosPlazos(actual, puestosAntes) ? nuevos : actual;
 }
 
 /** Un proveedor en el selector del formulario, con lo que se autocompleta de él. */

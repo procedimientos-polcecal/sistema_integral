@@ -7,7 +7,7 @@ import { COLUMNAS_COMPARATIVA } from "@/lib/compras/comparativa";
 
 const CAMPOS = [
   "marca", "unidad_medida", "precio_unitario", "cantidad", "costo_envio",
-  "descuento", "iva", "precio_hasta", "plazo_pago_dias", "condiciones_pago",
+  "descuento", "iva", "precio_hasta", "plazos_pago_dias", "condiciones_pago",
   "disponibilidad", "comentario", "url",
 ] as const;
 

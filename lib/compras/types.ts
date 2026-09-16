@@ -194,7 +194,8 @@ export interface Cotizacion {
   cotizacion: number | null;
   /** Hasta cuándo vale ese precio. */
   precio_hasta: string | null;
-  plazo_pago_dias: number | null;
+  /** Las cuotas en las que se paga, en días y en orden. Vacío es "no se sabe". */
+  plazos_pago_dias: number[];
   condiciones_pago: string | null;
   disponibilidad: string | null;
   comentario: string | null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { monedaExacta, fecha } from "@/lib/compras/constants";
-import { diferenciaPorcentual, detalleCotizacion } from "@/lib/compras/comparativa";
+import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
 
 /**
@@ -77,11 +77,7 @@ export default function ComparativaTabla({
                   </div>
                 </td>
                 <td className="px-3 py-2 text-slate-600">
-                  {c.plazo_pago_dias === null
-                    ? "—"
-                    : c.plazo_pago_dias === 0
-                      ? "contado"
-                      : `${c.plazo_pago_dias} días`}
+                  {textoDePlazos(c.plazos_pago_dias)}
                 </td>
                 <td className="px-3 py-2 text-slate-600">
                   <div>{c.disponibilidad ?? "—"}</div>
