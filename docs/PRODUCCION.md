@@ -207,7 +207,12 @@ parte**) es donde se cargan los renglones y se marcan sus productos.
 
 De **calidad**, antes de poder cargar un parte de verdad:
 
-1. **El catálogo canónico**, renglón por renglón — ver arriba.
+1. ~~**El catálogo canónico**, renglón por renglón.~~ **Hecho el 16/09**: los 17
+   renglones están cargados, uno por columna del Excel — ver la sección de abajo.
+   Queda, cuando calidad quiera: renombrarlos con las palabras del papel (no
+   afecta la exportación) y **enlazar cada renglón con los productos que cuenta**
+   en `/produccion/productos`. Sin ese puente la comprobación kilos↔bultos no
+   corre, y nada más.
 2. **Los kilos por unidad de cada envase.** La bolsa son 25 kg; el bolsón está
    sin confirmar. Sin ese número, `desajustesDeKilos()` no compara ese
    producto — no inventa un kg por unidad, lo salta.
@@ -256,14 +261,34 @@ escrituras; no está hecho.
 Nada de esto frena el código ni los tests, que están completos. Frena cargar
 datos de verdad.
 
-## Al 15/09/2026 el módulo todavía no se usó
+## Los renglones ya están cargados, y cómo se cargaron
 
-Cero partes cargados desde que se terminó, el 8/09.
-`produccion_renglones_papel` sigue vacía —es el punto 1 de la lista de arriba— y
-sin renglones la pantalla de carga no tiene depósito que mostrar. El catálogo
-único del núcleo sí tiene 49 productos, pero eso es otra cosa: son los productos
-que se venden, no los renglones del papel, y el puente entre los dos es
-justamente lo que falta definir.
+El 16/09/2026 se cargaron los **17 renglones** de `produccion_renglones_papel`,
+uno por cada columna del Excel. La pantalla de carga ya tiene depósito que
+mostrar.
+
+**El criterio importa más que el dato.** El campo que puede hacer daño es
+`nombre_planilla`: si apunta a la columna equivocada, la producción de un
+producto se escribe en la columna de otro y **no se nota nunca**. Así que no se
+inventó ninguna correspondencia entre los renglones del papel y las columnas del
+Excel — se cargó **un renglón por columna real**, con `nombre` idéntico a
+`nombre_planilla`. Los nombres salieron de leer el `.xlsx` con openpyxl, no de
+una foto, y están verificados con el propio `celdasDeResumen` del módulo: las 17
+ubican una columna distinta, ninguna repetida, ninguna sin columna.
+
+Lo único inferido es la **familia** —el grupo *Filler* / *0-2* / *Cal* del
+papel—, y es a propósito: sólo decide cómo se agrupa la pantalla, no toca ningún
+número, y si está mal se ve a simple vista. Quedaron dos renglones en `otros`
+—*Bolsones de Calcio* y *Bolsones de Magnesio 1-2*— porque son las dos columnas
+del Excel que no tienen un renglón evidente en el papel.
+
+**Lo que esto no resuelve.** Los renglones tienen el nombre del Excel, no el del
+papel. Si calidad prefiere el del papel, se renombran desde
+`/produccion/productos` **sin tocar la exportación**: `nombre` y
+`nombre_planilla` son campos distintos, justamente para eso. Y el puente a
+`productos` del núcleo sigue vacío — mientras lo esté, la comprobación
+kilos↔bultos no corre para ningún renglón, que es su comportamiento documentado
+cuando no hay kg por unidad, no una falla.
 
 ## Dónde está cada cosa
 
