@@ -144,14 +144,14 @@ export default function ColaClient({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={`/despacho?fecha=${sumarDias(fecha, -1)}`}
+            href={`/despacho/movimientos?fecha=${sumarDias(fecha, -1)}`}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
           >
             ← Día anterior
           </Link>
           {fecha !== hoy && (
             <Link
-              href="/despacho"
+              href="/despacho/movimientos"
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               Hoy

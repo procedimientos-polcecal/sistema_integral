@@ -245,9 +245,11 @@ export const NAV: NavItem[] = [
     modulo: "despacho",
     // Los movimientos del día primero, y por lejos: es la pantalla que queda
     // abierta todo el día en la PC de la balanza y donde se cargan los cuatro
-    // horarios de cada camión. El histórico se mira después, no durante.
+    // horarios de cada camión. El histórico se mira después, no durante. La
+    // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
+    // Cantera.
     children: [
-      { label: "Movimientos diarios", href: "/despacho", modulo: "despacho" },
+      { label: "Movimientos diarios", href: "/despacho/movimientos", modulo: "despacho" },
       { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
       { label: "Recepción de material", href: "/despacho/recepciones", modulo: "despacho" },
       { label: "Productos", href: "/despacho/productos", modulo: "despacho", soloAdmin: true },
