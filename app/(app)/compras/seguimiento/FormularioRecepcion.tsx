@@ -69,10 +69,14 @@ export default function FormularioRecepcion({
       return;
     }
 
-    // Si la planilla rechazó algo, se dice: el cambio se guardó igual, pero
-    // los dos lados quedaron diciendo cosas distintas y eso no se puede
-    // tragar.
-    if (cuerpo.aviso_sheets) setAviso(cuerpo.aviso_sheets);
+    // Si la planilla rechazó algo, se dice y ACÁ se queda: `alGuardar` puede
+    // cerrar o desmontar este formulario (la lista lo hace), y eso se llevaría
+    // el aviso antes de que alguien lo lea. El cambio ya está guardado en la
+    // base — lo que falta es que la persona vea que la planilla no lo tiene.
+    if (cuerpo.aviso_sheets) {
+      setAviso(cuerpo.aviso_sheets);
+      return;
+    }
     alGuardar();
   }
 
