@@ -590,9 +590,35 @@ git commit lib/compras/seguimiento.ts lib/compras/comoLeLlego.test.ts -m "feat(c
 ## Task 5: El exportador
 
 **Files:**
+- Modify: `lib/compras/seguimiento.ts`
+- Test: `lib/compras/entraEnElSeguimiento.test.ts`
 - Create: `lib/compras/seguimientoSheets.ts`
 
-- [ ] **Step 1: Escribirlo entero**
+- [ ] **Step 1: La guarda de estado, primero y con test**
+
+El libro es de **compras hechas**. `exportarSeguimiento` se llama desde el PATCH del requerimiento, que es por donde pasan también aprobar, asignar y cargar un presupuesto: sin esta guarda, cada una de esas acciones le crea una fila a un RI que nadie compró. La decisión va en `lib/compras/seguimiento.ts` y no adentro del I/O porque así se puede probar.
+
+```ts
+/**
+ * Si un requerimiento tiene que estar en el libro de seguimiento.
+ *
+ * `yaTieneFila` es la excepción y no una concesión: si el RI ya ocupa una fila
+ * —porque se compró y después volvió a comparativa— esa fila existe, y dejar de
+ * escribirla la congelaría con datos viejos. Se sigue manteniendo al día; lo que
+ * no se hace nunca es CREARLA fuera de tiempo.
+ */
+export function entraEnElSeguimiento(
+  estadoCompra: string | null,
+  yaTieneFila: boolean
+): boolean {
+  if (estadoCompra === "PEDIDO" || estadoCompra === "RECIBIDO") return true;
+  return yaTieneFila;
+}
+```
+
+Su test, en `lib/compras/entraEnElSeguimiento.test.ts`, cubre los tres casos: lo comprado entra; ninguno de los otros estados entra (`SIN_INICIAR`, `EN_COMPARATIVA`, `PARA_COMPRAR`, `APROBADO`, `DENEGADO`, `EN_ESPERA`, `null`); y un RI que ya tiene fila se sigue escribiendo aunque haya vuelto atrás.
+
+- [ ] **Step 2: Escribir el exportador entero**
 
 No lleva test: es I/O contra Google. Lo que se puede probar ya está probado en las Tasks 3 y 4.
 
@@ -625,7 +651,9 @@ No lleva test: es I/O contra Google. Lo que se puede probar ya está probado en 
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores, escribirCeldas } from "@/lib/core/sheets";
-import { filaDeSeguimiento, type DatosDeSeguimiento } from "@/lib/compras/seguimiento";
+import {
+  filaDeSeguimiento, entraEnElSeguimiento, type DatosDeSeguimiento,
+} from "@/lib/compras/seguimiento";
 import type { Cumplio } from "@/lib/compras/types";
 
 const HOJA = "COMPRAS CON RI";
@@ -635,20 +663,47 @@ const idPlanilla = () => process.env.GOOGLE_SHEETS_SEGUIMIENTO_ID ?? "";
 /** Si la exportación está configurada. Sin la variable no es un error: se omite. */
 export const haySeguimiento = () => Boolean(idPlanilla());
 
+/** Lo que no cambia durante una corrida de escrituras. */
+export interface CacheDeSeguimiento {
+  columnaA?: string[][];
+  ultimaTomada?: number;
+}
+
 /**
- * La primera fila libre del master, mirando la columna A.
+ * Dónde va la fila de este RI, y si hay que estrenarla.
  *
- * Por la columna A y no por `getLastRow`: lo que hay debajo son restos de
- * fórmula con `#N/A` en C..H y la A vacía, así que la A es la única que dice
- * de verdad si una fila tiene datos.
+ * Busca **por el número de RI en la columna A** antes de tomar una fila libre,
+ * que es lo mismo que hace `filaEnMaster` para el otro libro. Tomar siempre la
+ * primera libre traía dos males que no avisan: si el `update` que guarda
+ * `seguimiento_fila` falló después de una escritura buena, el intento
+ * siguiente escribía una SEGUNDA fila para el mismo RI; y dos RI exportados a
+ * la vez calculaban la misma fila y el segundo pisaba al primero sin error.
+ *
+ * Por la columna A y no por `getLastRow`: debajo de la última fila real hay
+ * 362 filas con `#N/A` cuya columna A está vacía, así que la A es la única que
+ * dice de verdad si una fila tiene datos.
  */
-async function primeraFilaLibre(): Promise<number> {
-  const filas = await leerValores(idPlanilla(), `${HOJA}!A:A`);
+async function ubicarFila(
+  nroRi: number,
+  cache?: CacheDeSeguimiento
+): Promise<{ fila: number; esNueva: boolean }> {
+  const columnaA = cache?.columnaA ?? (await leerValores(idPlanilla(), `${HOJA}!A:A`));
+  if (cache) cache.columnaA = columnaA;
+
   let ultima = 1; // la 1 es el encabezado
-  for (let i = 0; i < filas.length; i++) {
-    if (String(filas[i]?.[0] ?? "").trim() !== "") ultima = i + 1;
+  for (let i = 1; i < columnaA.length; i++) {
+    const celda = String(columnaA[i]?.[0] ?? "").trim();
+    if (celda === "") continue;
+    if (Number(celda) === nroRi) return { fila: i + 1, esNueva: false };
+    ultima = i + 1;
   }
-  return ultima + 1;
+
+  // La primera libre. En una corrida con varios pendientes nuevos se avanza en
+  // memoria: releer la columna entera por cada uno gasta cuota y ensancha la
+  // ventana en que dos se pisan.
+  const fila = Math.max(ultima, cache?.ultimaTomada ?? 0) + 1;
+  if (cache) cache.ultimaTomada = fila;
+  return { fila, esNueva: true };
 }
 
 /**
@@ -670,6 +725,15 @@ export async function exportarSeguimiento(requerimientoId: string): Promise<stri
     .single();
 
   if (!r) return null;
+
+  // Un RI que todavía no se compró no va al libro de seguimiento, y sin esto
+  // iba: esta función se llama desde el PATCH del requerimiento, por donde
+  // pasan también aprobar, asignar y cargar un presupuesto. La planilla tiene
+  // 1.757 filas y todas son compras hechas; sin la guarda se llenaba con los
+  // ~1.968 requerimientos del sistema, y el exportador no borra filas.
+  if (!entraEnElSeguimiento(r.estado_compra as string | null, r.seguimiento_fila != null)) {
+    return null;
+  }
 
   const datos: DatosDeSeguimiento = {
     nro_ri: r.nro_ri as number,
@@ -744,17 +808,17 @@ export async function reintentarSeguimiento(): Promise<{ intentados: number; res
 }
 ```
 
-- [ ] **Step 2: Verificar que compila**
+- [ ] **Step 3: Verificar que compila**
 
 ```bash
-npx tsc --noEmit
+npx tsc --noEmit && npx vitest run
 ```
-Esperado: sin salida.
+Esperado: tsc sin salida, tests en verde.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add lib/compras/seguimientoSheets.ts
+git add lib/compras/seguimientoSheets.ts lib/compras/entraEnElSeguimiento.test.ts
 git commit lib/compras/seguimientoSheets.ts -m "feat(compras): exportacion al libro de seguimiento, sin append y sin tocar el mail"
 ```
 
