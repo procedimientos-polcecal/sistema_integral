@@ -111,6 +111,15 @@ una sola dirección, que el SdG nunca vuelve a leer. El riesgo asumido está
 escrito en [docs/PRODUCCION.md](docs/PRODUCCION.md): si alguien la edita a mano,
 el SdG no se entera y la pisa.
 
+**Y adentro de esa excepción hay otra**, así que conviene mirar en qué parte del
+módulo se está parado antes de tocar una ruta: la sección **Envases**
+(`/produccion/envases`) espeja el stock de bolsas y bolsones, y ahí **manda la
+planilla**, como en Compras, Mantenimiento e Inventario. Es la planilla del
+almacén clonada: su stock es una fórmula sobre el kardex, así que el SdG lo lee
+en vez de calcularlo, y un movimiento cargado en la app que no llega a la
+planilla no existe — la próxima sincronización lo borra de hecho. Las dos
+direcciones conviven en el mismo módulo.
+
 Tres reglas que costaron caro, y que valen para las cuatro:
 
 - **Toda ruta que toque un campo que se exporta tiene que exportar**, y si no

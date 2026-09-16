@@ -54,6 +54,12 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Ejecuciones": IconBolt,
   "Órdenes de trabajo": IconClipboard,
   "Planificación diaria": IconCalendar,
+  // Envases, el stock que lleva calidad. "Por período" ya está más arriba: el
+  // mismo concepto se reusa entre módulos y la clave no se duplica.
+  "Envases": IconClipboard,
+  "Stock": IconList,
+  "Movimientos": IconBolt,
+  "Proveedores": IconUsers,
 };
 
 function iconForItem(item: NavItem) {
