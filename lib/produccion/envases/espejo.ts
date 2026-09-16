@@ -131,9 +131,12 @@ export interface ResultadoEspejo {
  * N° de requerimiento y viene vacía casi siempre: son dos planillas parecidas
  * con la primera columna distinta.)
  *
- * Se **busca** y no se cuenta: hay huecos —la última fila con código está más
- * abajo que la cantidad de filas con datos—, así que contar dejaría la fila
- * nueva encima de una que ya existe.
+ * Se **busca** y no se cuenta, y el motivo no es que la columna tenga huecos
+ * —medido el 16/09: la A va de la fila 2 a la 1405, consecutiva—. Es que las
+ * fórmulas de B, G y K están arrastradas hasta la 3296: leer el rango entero
+ * devuelve **3.298 filas**, y contarlas escribiría el movimiento mil ochocientas
+ * filas debajo de donde alguien lo puede ver. Por eso se lee `A:A` —que corta
+ * en la última con contenido— y se busca hacia atrás la última llena.
  *
  * No lanza: devuelve qué pasó. Quien lo llama decide, y lo que decide es anotar
  * el pendiente — no tragárselo.
