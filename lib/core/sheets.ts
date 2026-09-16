@@ -111,9 +111,17 @@ export async function listarPestanas(planillaId: string): Promise<string[]> {
  * Una llamada por celda gastaría una cuota que no hace falta gastar, y dejaría
  * la planilla a medio escribir si falla la tercera de cinco.
  */
+/*
+ * `valor` acepta número desde el 16/09/2026, y conviene usarlo.
+ *
+ * La escritura va con `USER_ENTERED`, así que un `"19,58"` lo interpreta la
+ * planilla según su locale — la misma trampa que leyendo m/d en vez de d/m dio
+ * vuelta 885 fechas en Compras. `agregarFila` ya aceptaba `string | number`;
+ * esto empareja las dos. Un número no se interpreta.
+ */
 export async function escribirCeldas(
   planillaId: string,
-  celdas: { pestana: string; columna: number; fila: number; valor: string }[]
+  celdas: { pestana: string; columna: number; fila: number; valor: string | number }[]
 ): Promise<void> {
   if (celdas.length === 0) return;
 
