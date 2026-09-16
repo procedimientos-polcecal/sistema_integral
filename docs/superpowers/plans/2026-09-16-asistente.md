@@ -1794,6 +1794,11 @@ persona.
 - Si no reconocés un artículo, un equipo o un área **con certeza**, dejá el campo
   vacío y decilo. En este sistema, enlazar a lo que se le parece es peor que
   dejar en null: un enlace equivocado no se nota nunca.
+- Para un movimiento de inventario, \`articulo\` es el **id (uuid)** de
+  \`inventario_articulos\`, no el código ni la descripción: la pantalla lo busca
+  por id. Buscalo antes con \`consultar\` y usá ese id. Si la búsqueda trae más
+  de un artículo parecido, **no elijas vos**: mostrá los candidatos y dejá que
+  la persona diga cuál.
 - El área del requerimiento y quién paga no se precargan. Son decisiones de quien
   pide.
 
