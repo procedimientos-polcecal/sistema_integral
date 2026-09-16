@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Nueve trampas que esta base ya pisó, dos de ellas **dos veces**:
+Diez trampas que esta base ya pisó; una de ellas **tres veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
@@ -57,13 +57,53 @@ index … where columna is not null` parece más prolijo, y hace fallar todo
 `upsert` que apunte a esa columna con "there is no unique or exclusion
 constraint matching the ON CONFLICT specification". Un índice único común hace
 lo mismo sin el problema: en Postgres los nulos no chocan entre sí. Pasó en la
-`033` con `sectores.codigo` y **otra vez** en la `046` con
-`inventario_movimientos.sheets_fila`. Ver `034` y `049`.
+`033` con `sectores.codigo`, **otra vez** en la `046` con
+`inventario_movimientos.sheets_fila`, y **una tercera** en
+`20260916082032_produccion_envases.sql` — ahí el diseño copió de Inventario la
+versión anterior a su propio arreglo. Ver `034`, `049` y
+`20260916083842_envases_sheets_fila_unica_de_verdad.sql`.
+
+Lo que la deja pasar las tres veces es que **el error no aparece al crear el
+índice sino en el primer `upsert`**, cuando ya nadie está mirando la migración.
+Si una tabla nueva va a ser destino de un `ON CONFLICT`, conviene probarlo:
+insertar dos veces la misma fila contra la base y ver que la segunda actualice
+en vez de fallar con `42P10`.
 
 **Los catálogos del núcleo los comparten cinco módulos.** `sectores`, `equipos`,
 `empleados`, `proveedores` y `usuarios` no son de nadie en particular. Una
 migración de un módulo no los borra ni los rehace: los lee. Ver
 `032_mantenimiento_proveedores.sql`.
+
+**Una migración se va a correr dos veces, así que tiene que aguantarlo.** Acá
+las aplica una persona a mano, sin tabla de control y sin nada que avise si ya
+corrió: repetir una es normal, no un accidente. Casi todo el DDL de este repo ya
+lo tolera —`create table if not exists`, `drop policy if exists`, `alter table
+if exists`—, pero **`alter table … rename constraint` no acepta `if exists`** y
+`alter trigger … rename` tampoco. En la segunda corrida tiran `42704` y, como el
+editor envuelve el script en una transacción, **revierten todo lo demás**: el
+resultado es un error que parece decir que la migración está rota cuando en
+realidad ya estaba aplicada.
+
+Para eso van en un bloque que mira antes de renombrar:
+
+```sql
+do $$
+declare c record;
+begin
+  for c in
+    select conname from pg_constraint
+    where conrelid = 'calidad_envases_movimientos'::regclass
+      and conname like 'produccion\_%'
+  loop
+    execute format('alter table calidad_envases_movimientos rename constraint %I to %I',
+                   c.conname, replace(c.conname, 'produccion_', 'calidad_'));
+  end loop;
+end $$;
+```
+
+Pasó en `20260916093203_envases_se_mudan_a_calidad.sql`: la primera corrida
+terminó entera y la segunda falló en el `rename constraint`, que era la única
+sentencia del archivo que no se podía repetir.
 
 **Un error en cualquier línea revierte el archivo entero.** El editor de
 Supabase corre cada script dentro de una transacción, así que una migración que
