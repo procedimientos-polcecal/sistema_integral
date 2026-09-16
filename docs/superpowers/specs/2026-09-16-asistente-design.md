@@ -85,9 +85,16 @@ Tres grupos:
   `ordenes_servicio`, `os_comparativas` y las demás con `mant_puede_ver()`— no
   las alcanzó.
 
-Y una suelta que conviene mirar: **`cantera_finanzas` está abierta** mientras las
-otras diez tablas de Cantera están gateadas con `tiene_acceso_cantera()`. Tiene
-forma de descuido, no de decisión.
+Un cuarto grupo que **no** hay que tocar, aunque aparezca en la lista de
+abiertas: los padrones de permisos. `cantera_finanzas`, `compras_aprobadores` y
+`os_aprobadores` son tablas de `usuario_id` —quién puede conciliar, quién puede
+aprobar—, no datos del negocio, y se leen abiertas a propósito porque la
+navegación las consulta para decidir qué dibujar. La 20260910103229 lo deja
+escrito para `cantera_finanzas`: *"la lee cualquier autenticado —la nav pregunta
+si quien mira es finanzas para decidir qué dibujar"*. Cerrarlas rompe el menú.
+
+Vale anotarlo porque el nombre engaña: `cantera_finanzas` suena a plata y es una
+lista de seis ids.
 
 El asistente **no va a ser más estricto que el sistema**. Si hoy cualquier
 usuario logueado ve los requerimientos entrando a la pantalla, también los va a
