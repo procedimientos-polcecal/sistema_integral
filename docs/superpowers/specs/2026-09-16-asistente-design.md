@@ -43,13 +43,14 @@ una puerta:
 Éste es el punto de todo el diseño, así que va primero y con el detalle que
 merece.
 
-**El hallazgo que lo hace posible:** ocho de los nueve módulos ya tienen la
-lectura gateada en la base. `tiene_acceso_rrhh()`, `mant_puede_ver()`,
+**El hallazgo que lo hace posible:** los diez módulos tienen sus tablas
+propias gateadas en la base (Calidad se sumó como décimo el 16/09/2026). `tiene_acceso_rrhh()`, `mant_puede_ver()`,
 `tiene_acceso_remises()`, `tiene_acceso_inventario()`,
 `tiene_acceso_produccion()`, `tiene_acceso_despacho()`,
-`tiene_acceso_facturacion()`, `tiene_acceso_cantera()`, y `es_admin_rrhh()` para
-`liquidaciones`. El único abierto es Compras. No hay que reimplementar nada: hay
-que **no puentearlo**.
+`tiene_acceso_facturacion()`, `tiene_acceso_cantera()`, `tiene_acceso_calidad()`,
+y `es_admin_rrhh()` para `liquidaciones`. No hay que reimplementar nada: hay que
+**no puentearlo**. Lo que sí hay que saber es cuánto queda abierto igual, que es
+más de lo que parecía — está abajo.
 
 Tres capas, y sólo la tercera sostiene:
 
@@ -66,15 +67,35 @@ es una pregunta sin respuesta.
 
 ### Lo que hereda y no corrige
 
-**Compras es lectura abierta para todos los autenticados.** La 018 lo decidió
-así y lo dejó escrito: *"el circuito de compras es transversal a toda la
-empresa"*. El núcleo también: `empresas`, `sectores`, `empleados`, `proveedores`,
-`productos`.
+**Son 30 de las 102 tablas las que cualquier usuario autenticado puede leer.**
+Medido el 16/09/2026 cruzando `information_schema.tables` con `pg_policies`, no
+leyendo migraciones — que es como se había estimado antes, y daba muchas menos.
+
+Tres grupos:
+
+- **Todo Compras**, por decisión explícita de la 018: *"el circuito de compras
+  es transversal a toda la empresa"*.
+- **Los catálogos del núcleo**: `empresas`, `sectores`, `empleados`, `productos`,
+  `proveedores`, `proveedores_odoo`, `cotizaciones_dolar`, `sincronizaciones`.
+- **Media Mantenimiento**, y esto no parece deliberado: `equipos`,
+  `equipos_checklists`, `equipos_status_log`, `ordenes_trabajo`,
+  `mantenimientos_programados`, `mantenimientos_ejecuciones`,
+  `planificacion_diaria` y `planificacion_diaria_items` vienen con
+  `using (true)` desde la 006, y la 029 —que sí cerró `avisos`,
+  `ordenes_servicio`, `os_comparativas` y las demás con `mant_puede_ver()`— no
+  las alcanzó.
+
+Y una suelta que conviene mirar: **`cantera_finanzas` está abierta** mientras las
+otras diez tablas de Cantera están gateadas con `tiene_acceso_cantera()`. Tiene
+forma de descuido, no de decisión.
 
 El asistente **no va a ser más estricto que el sistema**. Si hoy cualquier
 usuario logueado ve los requerimientos entrando a la pantalla, también los va a
-poder preguntar. Si eso incomoda, se arregla en las policies de Compras y el
-asistente lo hereda solo — pero es un cambio a Compras, no al asistente.
+poder preguntar. Lo que sí cambia es el esfuerzo: antes había que saber a qué
+pantalla ir; ahora alcanza con preguntar. Eso no es un argumento para que el
+asistente filtre por su cuenta —sería una segunda definición de permisos, y la
+que se olvide de actualizar es la que queda mal— sino para cerrar las policies
+que estén abiertas por olvido. El asistente lo hereda solo.
 
 Se escribe acá porque es exactamente la clase de cosa que se descubre tarde y
 parece un bug del asistente.
