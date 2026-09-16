@@ -6,7 +6,7 @@ import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
 import {
   leerFiltrosDeStock, escribirFiltrosDeStock,
 } from "@/lib/inventario/filtrosUrl";
-import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
+import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {

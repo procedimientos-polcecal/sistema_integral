@@ -170,10 +170,12 @@ export const NAV: NavItem[] = [
     label: "Inventario",
     href: "/inventario",
     modulo: "inventario",
-    // El stock primero: es la pantalla que se abre en el celular parado en el
-    // pañol, y la que reemplaza abrir el Sheets para ver si hay algo.
+    // El stock primero después del dashboard: es la pantalla que se abre en el
+    // celular parado en el pañol, y la que reemplaza abrir el Sheets para ver
+    // si hay algo.
     children: [
-      { label: "Stock", href: "/inventario", modulo: "inventario" },
+      { label: "Dashboard", href: "/inventario", modulo: "inventario" },
+      { label: "Stock", href: "/inventario/stock", modulo: "inventario" },
       { label: "Cargar movimiento", href: "/inventario/movimientos/nuevo", modulo: "inventario" },
       { label: "Movimientos", href: "/inventario/movimientos", modulo: "inventario" },
       { label: "Artículos", href: "/inventario/articulos", modulo: "inventario", soloAdmin: true },

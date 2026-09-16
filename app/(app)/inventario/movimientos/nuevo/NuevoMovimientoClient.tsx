@@ -421,7 +421,7 @@ export default function NuevoMovimientoClient({
               {guardando ? "Registrando…" : "Registrar"}
             </button>
             <Link
-              href="/inventario"
+              href="/inventario/stock"
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Volver
