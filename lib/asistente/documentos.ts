@@ -14,6 +14,9 @@ import type { Ambito } from "./modulos";
  */
 const AMBITO_DEL_DOCUMENTO: Record<string, Ambito> = {
   "NUCLEO-COMPARTIDO.md": "nucleo",
+  // El documento del asistente mismo: sin esto no puede contestar cómo se
+  // usa a sí mismo, que es de las primeras cosas que le van a preguntar.
+  "ASISTENTE.md": "nucleo",
   "AUTENTICACION.md": "nucleo",
   "BACKUPS.md": "nucleo",
   "VARIABLES-VERCEL.md": "nucleo",

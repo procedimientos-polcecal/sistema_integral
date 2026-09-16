@@ -41,6 +41,7 @@ código.
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
 | Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
+| Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
