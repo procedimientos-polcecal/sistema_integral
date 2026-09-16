@@ -68,7 +68,29 @@ export default function RequerimientosClient({
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalAbierto, setModalAbierto] = useState(false);
+  /**
+   * `?nuevo=1` abre el alta, y los demás parámetros la precargan.
+   *
+   * Lo usa el asistente: no escribe en la base, arma la URL y el formulario de
+   * siempre hace lo de siempre. Se lee una sola vez al montar —igual que los
+   * filtros de más abajo— porque de ahí en más el estado lo maneja la pantalla.
+   *
+   * El área y quién paga NO se leen de la URL, a propósito: son decisiones de
+   * quien pide. Ver el comentario de `ValoresIniciales` en el modal.
+   */
+  const [arranqueDelAlta] = useState(() => {
+    const params = new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.search
+    );
+    if (params.get("nuevo") !== "1") return null;
+    return {
+      descripcion: params.get("descripcion") ?? undefined,
+      codigo: params.get("codigo") ?? undefined,
+      cantidad: params.get("cantidad") ?? undefined,
+      detalle: params.get("detalle") ?? undefined,
+    };
+  });
+  const [modalAbierto, setModalAbierto] = useState(arranqueDelAlta !== null);
 
   // Las listas contra las que se validan los filtros que vienen de la URL. Son
   // las mismas que usó el servidor; acá hacen falta porque la pantalla vuelve a
@@ -758,6 +780,7 @@ export default function RequerimientosClient({
           areas={areas}
           empresas={empresas}
           ubicaciones={ubicaciones}
+          inicial={arranqueDelAlta ?? undefined}
           onClose={() => setModalAbierto(false)}
           onSaved={() => { setModalAbierto(false); cargar(); }}
         />
