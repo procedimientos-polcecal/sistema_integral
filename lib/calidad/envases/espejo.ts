@@ -156,6 +156,37 @@ export async function espejarMovimiento(m: MovimientoAEspejar): Promise<Resultad
     await escribirCeldas(planilla, celdasDelMovimiento(m, fila, pestana));
     return { ok: true, fila };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const detalle = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `${detalle}${contextoDeProteccion(detalle)}` };
   }
+}
+
+/**
+ * Lo que le falta al mensaje de Google cuando la celda está protegida.
+ *
+ * Google dice "contact the spreadsheet owner to remove protection", y eso manda
+ * a mirar con quién está compartida la planilla — donde la cuenta de servicio
+ * figura como editor y todo parece bien. **Ser editor del archivo no alcanza:
+ * un rango protegido tiene su propia lista de editores**, y si la cuenta no está
+ * ahí, la escritura se rechaza igual.
+ *
+ * Medido el 16/09/2026 en la planilla de envases: `canEdit: true` sobre el
+ * archivo, y la pestaña `Entradas  Salidas` con una protección de hoja entera
+ * —"ACTUALIZACIÓN DE STOCK"— que no la incluye. El primer alta quedó pendiente
+ * con el texto de Google y nada indicaba dónde estaba el permiso que faltaba.
+ *
+ * El texto de Google se conserva **entero y sin traducir**, como manda la regla
+ * del módulo; esto se le pega atrás. Compras resuelve lo mismo pero mejor
+ * —`etiquetaSegunLaProteccion` le pregunta a la API *cuál* protección la toca y
+ * si la cuenta figura entre sus editores—; acá no se importa para no arrastrar
+ * todo `lib/compras/sheets.ts` por un mensaje. Si esto hace falta una tercera
+ * vez, esa función se muda al núcleo y las tres la usan.
+ */
+export function contextoDeProteccion(mensaje: string): string {
+  if (!/protected/i.test(mensaje)) return "";
+  return (
+    " — Ojo: no es el permiso del archivo sino el del rango protegido, que tiene" +
+    " su propia lista de editores. El dueño de la planilla tiene que agregar a la" +
+    " cuenta de servicio en Datos → Hojas y rangos protegidos."
+  );
 }

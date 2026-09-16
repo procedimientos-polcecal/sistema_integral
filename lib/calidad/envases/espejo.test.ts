@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { celdasDelMovimiento, fechaParaLaPlanilla, COL } from "./espejo";
+import {
+  celdasDelMovimiento, fechaParaLaPlanilla, contextoDeProteccion, COL,
+} from "./espejo";
 
 const MOV = {
   codigo: "00001",
@@ -74,5 +76,27 @@ describe("fechaParaLaPlanilla", () => {
     // El 30 de febrero lo rueda `Date.parse` al 2 de marzo y devolvería un
     // serial perfectamente plausible. Preferimos la celda vacía.
     expect(fechaParaLaPlanilla("2026-02-30")).toBe("");
+  });
+});
+
+describe("contextoDeProteccion", () => {
+  // El mensaje real que devolvió Google el 16/09/2026 al intentar la primera
+  // alta: la cuenta es editora del archivo, pero no del rango protegido.
+  const DE_GOOGLE =
+    "Google respondió 400: Invalid data[0]: You are trying to edit a protected " +
+    "cell or object. Please contact the spreadsheet owner to remove protection " +
+    "if you need to edit.";
+
+  it("aclara que el permiso que falta es el del rango, no el del archivo", () => {
+    const extra = contextoDeProteccion(DE_GOOGLE);
+    expect(extra).toContain("rango protegido");
+    expect(extra).toContain("Hojas y rangos protegidos");
+  });
+
+  it("no dice nada cuando el rechazo es por otra cosa", () => {
+    // Un fallo que no habla de protección no tiene que arrastrar un consejo
+    // sobre permisos: mandaría a arreglar algo que no está roto.
+    expect(contextoDeProteccion("Google no contestó en 30 segundos")).toBe("");
+    expect(contextoDeProteccion("Google respondió 403: insufficient scope")).toBe("");
   });
 });
