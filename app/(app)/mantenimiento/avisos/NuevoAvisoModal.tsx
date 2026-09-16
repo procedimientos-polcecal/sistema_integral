@@ -4,14 +4,32 @@ import { useEffect, useState } from "react";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
 
 /**
+ * Con qué campos abre el formulario.
+ *
+ * Mismo criterio que `ValoresIniciales` del RI: lo que ya está escrito de otro
+ * lado no se vuelve a tipear. Lo usa el asistente, que arma la URL y no escribe
+ * en la base.
+ *
+ * El sector no va acá: sale solo al elegir el equipo, porque la máquina sabe
+ * dónde está.
+ */
+export interface ValoresInicialesAviso {
+  equipo?: string;
+  descripcion?: string;
+  urgencia?: string;
+}
+
+/**
  * Cargar un aviso: alguien vio que algo anda mal.
  *
  * Es el primer eslabón del módulo y hasta ahora sólo se podía hacer abriendo la
  * planilla. El número se lo pone el sistema leyendo el último de la planilla.
  */
 export default function NuevoAvisoModal({
-  onCerrar, onCreado,
+  inicial, onCerrar, onCreado,
 }: {
+  /** Precargado desde la URL. Se puede editar todo antes de enviar. */
+  inicial?: ValoresInicialesAviso;
   onCerrar: () => void;
   onCreado: (oaNumber: string) => void;
 }) {
@@ -21,11 +39,11 @@ export default function NuevoAvisoModal({
   const [error, setError] = useState("");
 
   const [campos, setCampos] = useState({
-    equipo_raw: "",
+    equipo_raw: inicial?.equipo ?? "",
     sector_raw: "",
     sector_id: "",
-    descripcion: "",
-    urgencia: URGENCIAS[1] as string,
+    descripcion: inicial?.descripcion ?? "",
+    urgencia: inicial?.urgencia ?? (URGENCIAS[1] as string),
     quien_aviso: "",
     observaciones: "",
   });

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { urlDeCarga } from "./urlDeCarga";
+import { URGENCIAS } from "@/lib/mantenimiento/avisos";
 
 describe("la URL del formulario prellenado", () => {
   it("arma el alta de un requerimiento", () => {
@@ -99,5 +100,24 @@ describe("la URL del formulario prellenado", () => {
 
   it("no deja un signo de pregunta pelado cuando no hay ningún campo", () => {
     expect(urlDeCarga("movimiento", {})).toEqual({ ok: true, url: "/inventario/movimientos/nuevo" });
+  });
+
+  /**
+   * Las urgencias llevan emoji y no son un enum de la base, así que el modelo
+   * no las ve en el catálogo: sin validar, escribiría "Alta" y el `<select>`
+   * del modal quedaría en un valor que no existe, sin avisarle a nadie.
+   */
+  it("rechaza una urgencia que no es una de las tres exactas", () => {
+    expect(urlDeCarga("aviso", { descripcion: "x", urgencia: "Alta" }).ok).toBe(false);
+    expect(urlDeCarga("aviso", { descripcion: "x", urgencia: "APURADISIMO" }).ok).toBe(false);
+  });
+
+  it("acepta la urgencia exacta, con su emoji", () => {
+    const r = urlDeCarga("aviso", { descripcion: "x", urgencia: URGENCIAS[0] });
+    expect(r.ok).toBe(true);
+  });
+
+  it("deja armar un aviso sin urgencia, que es lo normal", () => {
+    expect(urlDeCarga("aviso", { descripcion: "x" }).ok).toBe(true);
   });
 });

@@ -31,7 +31,27 @@ export default function AvisosClient({
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<string | null>(null);
-  const [creando, setCreando] = useState(false);
+
+  /**
+   * `?nuevo=1` abre el alta con los campos que vengan en la URL. Lo usa el
+   * asistente: arma la intención, y la pantalla hace lo de siempre.
+   *
+   * Se lee una sola vez al montar, de `window.location.search` y no del hook:
+   * al volver con el botón de atrás, `useSearchParams()` devuelve la URL vieja.
+   * Es la misma razón que está escrita en `lib/core/usarLaUrl.ts`.
+   */
+  const [arranqueDelAlta] = useState(() => {
+    const params = new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.search
+    );
+    if (params.get("nuevo") !== "1") return null;
+    return {
+      equipo: params.get("equipo") ?? undefined,
+      descripcion: params.get("descripcion") ?? undefined,
+      urgencia: params.get("urgencia") ?? undefined,
+    };
+  });
+  const [creando, setCreando] = useState(arranqueDelAlta !== null);
   const [generando, setGenerando] = useState<string | null>(null);
 
   /** Un aviso tiene OT si la app la generó o si la planilla dice que sí. */
@@ -309,6 +329,7 @@ export default function AvisosClient({
 
       {creando && (
         <NuevoAvisoModal
+          inicial={arranqueDelAlta ?? undefined}
           onCerrar={() => setCreando(false)}
           onCreado={(oa) => {
             setCreando(false);

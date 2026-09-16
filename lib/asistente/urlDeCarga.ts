@@ -16,6 +16,8 @@
  * saben abrirse con datos puestos.
  */
 
+import { URGENCIAS } from "@/lib/mantenimiento/avisos";
+
 export type TipoDeCarga = "requerimiento" | "movimiento" | "aviso" | "parte";
 
 export type Armada =
@@ -98,6 +100,27 @@ export function urlDeCarga(tipo: TipoDeCarga, campos: Record<string, string>): A
       return { ok: false, motivo: `El turno es ${TURNOS.join(" o ")}.` };
     }
     return { ok: true, url: `/produccion/parte/${fecha}/${turno}` };
+  }
+
+  /**
+   * La urgencia tiene que ser una de las tres exactas, emoji incluido.
+   *
+   * No es una manía: el modal la usa como `value` de un `<select>`, así que una
+   * urgencia inventada no da error — deja el desplegable en un valor que no
+   * existe, y quien carga el aviso no se entera. Y como no es un enum de la
+   * base, el catálogo no se la muestra al modelo: sin este chequeo escribiría
+   * "Alta" pelado y nadie lo notaría hasta ver un aviso sin urgencia.
+   *
+   * El mensaje lista los valores exactos a propósito: es lo que el modelo usa
+   * para corregir en el intento siguiente.
+   */
+  if (tipo === "aviso" && campos.urgencia !== undefined && campos.urgencia !== "") {
+    if (!URGENCIAS.includes(campos.urgencia as never)) {
+      return {
+        ok: false,
+        motivo: `La urgencia tiene que ser exactamente una de: ${URGENCIAS.join(", ")}.`,
+      };
+    }
   }
 
   const query = new URLSearchParams();
