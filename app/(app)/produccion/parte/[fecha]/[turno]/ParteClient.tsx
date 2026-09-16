@@ -683,7 +683,7 @@ export default function ParteClient({
             {guardando ? "Guardando…" : "Guardar parte"}
           </button>
           <Link
-            href="/produccion"
+            href={`/produccion/dia?fecha=${fecha}`}
             className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Volver

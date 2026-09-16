@@ -1,47 +1,30 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { hoyEnArgentina } from "@/lib/core/fechas";
+import { hoyEnArgentina, rangoDelMes, comoSeLee } from "@/lib/core/fechas";
 import { nivelProduccionDe } from "@/lib/produccion/auth";
-import { parteAnterior, TURNOS } from "@/lib/produccion/turnos";
-import { traerRenglonesDePapel, traerParte, traerDepositoDe } from "@/lib/produccion/consultas";
-import { totalesDeDespacho, roturaTotal } from "@/lib/produccion/despachos";
-import { produccionDelTurno, produccionDelDia, type ProduccionPorRenglon } from "@/lib/produccion/produccion";
-import type { TotalesDeDespacho } from "@/lib/produccion/despachos";
-import type { Despacho, Parte, Turno } from "@/lib/produccion/types";
-import DiaClient from "./DiaClient";
+import { armarElMes } from "@/lib/produccion/consultas";
+import { TURNOS, comoSeLeeElTurno } from "@/lib/produccion/turnos";
 
-export interface TurnoDelDia {
-  turno: Turno;
-  cargado: boolean;
-  parte: Parte | null;
-  despachos: Despacho[];
-  totales: TotalesDeDespacho | null;
-  faltaAnterior: boolean;
-  /** `null` = el turno no está cargado. No es lo mismo que un turno sin renglonesDePapel. */
-  produccion: ProduccionPorRenglon | null;
-  /**
-   * El depósito de este turno y el del turno anterior, tal como se contaron.
-   * `null` = el turno no está cargado (`deposito`) o no existe el parte
-   * anterior (`depositoAnterior`, mismo dato que `faltaAnterior`).
-   *
-   * Se llevan hasta el cliente para que el desglose de una producción
-   * negativa muestre los números reales del papel, en vez de despejar la
-   * fórmula al revés a partir de `produccion` — eso es lo que hacía
-   * `DiaClient` y lo que un día terminó mostrando un "depósito" que no salía
-   * de ningún renglón, porque en realidad era la variación del depósito.
-   */
-  deposito: Record<string, number> | null;
-  depositoAnterior: Record<string, number> | null;
+const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
+
+function sumaTotal(dias: { produccionCalculada: Record<string, number>; despacho: Record<string, number>; rotura: Record<string, number> }[]) {
+  let produccion = 0, despacho = 0, rotura = 0;
+  for (const d of dias) {
+    produccion += Object.values(d.produccionCalculada).reduce((s, v) => s + v, 0);
+    despacho += Object.values(d.despacho).reduce((s, v) => s + v, 0);
+    rotura += Object.values(d.rotura).reduce((s, v) => s + v, 0);
+  }
+  return { produccion, despacho, rotura };
 }
 
-export default async function ProduccionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ fecha?: string }>;
-}) {
-  const { fecha: pedida } = await searchParams;
-  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(pedida ?? "") ? pedida! : hoyEnArgentina();
-
+/**
+ * La página de inicio del módulo: un adelanto del mes y de hoy, no la
+ * pantalla para cargar el parte del turno —esa se mudó a `/produccion/dia`
+ * para que la raíz pueda ser un dashboard, mismo cambio que ya se hizo en
+ * Cantera/Remises/Inventario.
+ */
+export default async function ProduccionDashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -49,53 +32,103 @@ export default async function ProduccionPage({
   const nivel = await nivelProduccionDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const renglonesDePapel = await traerRenglonesDePapel(supabase);
+  const hoy = hoyEnArgentina();
+  const mes = hoy.slice(0, 7);
+  const { primerDia, ultimoDia } = rangoDelMes(mes);
 
-  // Las dos ramas empujan la **misma forma**: un turno sin cargar no es un
-  // objeto distinto, es el mismo con todo en vacío. Si las formas difieren, el
-  // tipo que infiere TS es una unión y el cliente termina lleno de `in`.
-  const turnos: TurnoDelDia[] = [];
-  for (const turno of TURNOS) {
-    const completo = await traerParte(supabase, { fecha, turno });
+  const [{ dias }, { data: partesHoy }] = await Promise.all([
+    armarElMes(supabase, primerDia, ultimoDia),
+    supabase.from("produccion_partes").select("turno").eq("fecha", hoy),
+  ]);
 
-    if (!completo) {
-      turnos.push({
-        turno, cargado: false, parte: null, despachos: [],
-        totales: null, faltaAnterior: false, produccion: null,
-        deposito: null, depositoAnterior: null,
-      });
-      continue;
-    }
-
-    const totales = totalesDeDespacho(completo.despachos);
-    const anterior = await traerDepositoDe(supabase, parteAnterior({ fecha, turno }));
-
-    turnos.push({
-      turno,
-      cargado: true,
-      parte: completo.parte,
-      despachos: completo.despachos,
-      totales,
-      // `null` es el dato: sin el parte anterior no hay resta posible.
-      faltaAnterior: anterior === null,
-      produccion: produccionDelTurno({
-        deposito: completo.deposito,
-        depositoAnterior: anterior,
-        despachado: totales.despachado,
-        rotura: roturaTotal(totales),
-      }),
-      deposito: completo.deposito,
-      depositoAnterior: anterior,
-    });
-  }
+  const { produccion, despacho, rotura } = sumaTotal(dias);
+  const turnosCargados = dias.reduce((s, d) => s + d.turnosCargados, 0);
+  const turnosPosibles = dias.length * TURNOS.length;
+  const turnosHoy = new Set((partesHoy ?? []).map((p) => p.turno));
 
   return (
-    <DiaClient
-      fecha={fecha}
-      renglonesDePapel={renglonesDePapel}
-      turnos={turnos}
-      delDia={produccionDelDia(turnos.map((t) => t.produccion))}
-      puedeEditar={nivel === "edicion" || nivel === "admin"}
-    />
+    <div className="mx-auto max-w-4xl">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="page-header">Producción</h1>
+        <Link href="/produccion/dia" className="btn-primary">Ir al día →</Link>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link href="/produccion/dia" className="btn-secondary">El día</Link>
+        <Link href="/produccion/resumenes" className="btn-secondary">Resúmenes</Link>
+        {nivel === "admin" && <Link href="/produccion/productos" className="btn-secondary">Renglones del parte</Link>}
+      </div>
+
+      {/* ── KPIs del mes ── */}
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi color="#1E7D34" label="Producido este mes" value={`${num1.format(produccion)} t`} />
+        <Kpi color="#0891B2" label="Despachado este mes" value={`${num1.format(despacho)} t`} />
+        <Kpi color="#7E22CE" label="Rotura este mes" value={`${num1.format(rotura)} t`} />
+        <Kpi color="#B45309" label="Turnos cargados" value={`${turnosCargados} / ${turnosPosibles}`} />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* ── Hoy ── */}
+        <section className="card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="section-title">Hoy · {comoSeLee(hoy)}</h2>
+            <Link href="/produccion/dia" className="text-xs text-slate-500 underline">Ir al día →</Link>
+          </div>
+          <ul className="mt-3 divide-y divide-[var(--border)]">
+            {TURNOS.map((t) => {
+              const cargado = turnosHoy.has(t);
+              return (
+                <li key={t} className="flex items-center justify-between py-2 text-sm">
+                  <span className="text-[var(--text-secondary)]">Turno {comoSeLeeElTurno(t)}</span>
+                  <span className={`text-xs font-semibold ${cargado ? "text-[var(--primary)]" : "text-amber-700"}`}>
+                    {cargado ? "Cargado" : "Sin cargar"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {/* ── El mes, por día ── */}
+        <section className="card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="section-title">Este mes</h2>
+            <Link href="/produccion/resumenes" className="text-xs text-slate-500 underline">Ver resúmenes →</Link>
+          </div>
+          {dias.every((d) => d.turnosCargados === 0) ? (
+            <p className="empty-state mt-3">Todavía no se cargó ningún parte este mes.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-[var(--border)]">
+              {dias
+                .filter((d) => d.turnosCargados > 0)
+                .slice(-6)
+                .reverse()
+                .map((d) => (
+                  <li key={d.fecha} className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-[var(--text-secondary)]">{comoSeLee(d.fecha)}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{d.turnosCargados} / {TURNOS.length} turnos</span>
+                    <span className="font-medium text-[var(--text-primary)]">
+                      {num1.format(Object.values(d.produccionCalculada).reduce((s, v) => s + v, 0))} t
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
+      </div>
+      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
+    </div>
   );
 }

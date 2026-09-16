@@ -189,10 +189,12 @@ export const NAV: NavItem[] = [
     label: "Producción",
     href: "/produccion",
     modulo: "produccion",
-    // El día primero: es la pantalla que se abre para cargar el parte del turno
-    // que acaba de terminar, que es el 95% de lo que se hace acá.
+    // El día primero después del dashboard: es la pantalla que se abre para
+    // cargar el parte del turno que acaba de terminar, que es el 95% de lo
+    // que se hace acá.
     children: [
-      { label: "El día", href: "/produccion", modulo: "produccion" },
+      { label: "Dashboard", href: "/produccion", modulo: "produccion" },
+      { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],

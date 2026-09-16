@@ -100,7 +100,7 @@ export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, pue
       {/* ── Selector de fecha ─────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <Link
-          href={`/produccion?fecha=${sumarDias(fecha, -1)}`}
+          href={`/produccion/dia?fecha=${sumarDias(fecha, -1)}`}
           aria-label="Día anterior"
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
@@ -109,13 +109,13 @@ export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, pue
         <div className="text-center">
           <div className="text-base font-semibold text-slate-900">{fechaLegible(fecha)}</div>
           {fecha !== hoy && (
-            <Link href="/produccion" className="text-xs font-medium text-[var(--primary)] hover:underline">
+            <Link href="/produccion/dia" className="text-xs font-medium text-[var(--primary)] hover:underline">
               Ir a hoy
             </Link>
           )}
         </div>
         <Link
-          href={`/produccion?fecha=${sumarDias(fecha, 1)}`}
+          href={`/produccion/dia?fecha=${sumarDias(fecha, 1)}`}
           aria-label="Día siguiente"
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
