@@ -7,8 +7,18 @@ import type { TipoDeMovimiento, TipoDeCarbon } from "./types";
  * vacías: había un solo saldo. Los movimientos importados de antes llevan
  * `carbon = 'sin_separar'`, y un CHECK en la base impide que ese valor aparezca
  * con fecha posterior.
+ *
+ * **Es el 16 y no el 15, y eso no es un detalle.** El corte real no es una
+ * fecha sino UNA FILA: el saldo por tipo aparece por primera vez en la fila 386
+ * de la planilla —`VEGETAL` 208, `RESIDUAL` 169— y es el saldo **después** de
+ * esa entrada. Las filas 385 y 386 son las dos del 15/12, así que cortar en el
+ * 15 las deja del lado nuevo, donde el saldo inicial ya las contó, y el mismo
+ * camión entra dos veces. Con el 16 quedan del lado viejo y el saldo inicial es
+ * el único aporte de ese día.
+ *
+ * Espejo del CHECK `calidad_mov_sin_separar` (migración 20260916101523).
  */
-export const CORTE_DE_LOS_TIPOS = "2025-12-15";
+export const CORTE_DE_LOS_TIPOS = "2025-12-16";
 
 /** Tres decimales, que es `numeric(12,3)` en la base. */
 function aTresDecimales(n: number): number {
