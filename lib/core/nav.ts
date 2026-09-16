@@ -92,7 +92,8 @@ export const NAV: NavItem[] = [
     href: "/remises",
     modulo: "remises",
     children: [
-      { label: "Hoy", href: "/remises", modulo: "remises" },
+      { label: "Dashboard", href: "/remises", modulo: "remises" },
+      { label: "Hoy", href: "/remises/hoy", modulo: "remises" },
       { label: "Semana", href: "/remises/semana", modulo: "remises" },
       { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
       { label: "Vehículos", href: "/remises/vehiculos", modulo: "remises" },
