@@ -33,10 +33,21 @@ Cuatro cosas que no se deducen del código:
   La planilla agrupa con comodines sobre la descripción y cuenta los bolsones
   nuevos dos veces; el SdG agrupa por la K. La diferencia está explicada en la
   pantalla para que no se lea como un bug propio.
-- **El espejo escribe la fecha como serial y no como texto**, a diferencia del
-  de Inventario. Un texto lo interpreta la planilla según su locale, y eso ya
-  dio vuelta 885 fechas en Compras. La columna H tiene formato `DATE:d/M/yyyy`
-  hasta la fila 3296, así que el serial se ve como fecha igual.
+- **El espejo escribe la fecha en ISO**, y eso se decidió midiendo las tres
+  formas contra la planilla real el 16/09/2026:
+
+  | lo que se escribe | cómo queda |
+  |---|---|
+  | `46281` (el serial) | valor correcto, **formato borrado**, se ve `46281` |
+  | `16/9/2026` (texto d/m) | queda bien, **pero lo parsea el locale** |
+  | `2026-09-16` (ISO) | valor correcto, `DATE:d/M/yyyy`, se ve `16/9/2026` |
+
+  El serial parecía lo correcto —es lo que pide `lib/core/fechaDeSheets.ts`— y
+  no lo es acá: `escribirCeldas` manda `USER_ENTERED`, y con eso Google
+  **reemplaza el formato de la celda** por el que infiere de lo que entró. Un
+  número deja la celda sin formato aunque la columna entera sea de fechas. El
+  ISO no se interpreta en ningún locale y deja el formato bien; probado con un
+  día ≤ 12, que es donde un locale al revés mentiría en silencio.
 
 Al 16/09/2026, la carga inicial dejó 28 artículos, 1.404 movimientos, 16
 proveedores —los 16 enganchados al catálogo del núcleo—, 5 colores de referencia

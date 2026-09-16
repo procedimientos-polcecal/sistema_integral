@@ -59,25 +59,40 @@ export interface Celda {
 }
 
 /**
- * Una fecha ISO como la escribe la planilla: **el serial, no el texto**.
+ * Una fecha para la planilla: **el ISO tal cual**, ni el serial ni "d/m/aaaa".
  *
- * Un "15/9/2026" lo interpreta la planilla según su locale —hoy `es_AR`, y
- * puede no serlo mañana—, y leer al revés d/m y m/d ya dio vuelta 885 fechas en
- * Compras. Un número no se interpreta. Es la regla que dejó escrita
- * `lib/core/fechaDeSheets.ts`, y la razón por la que esto no copia el
- * `fechaParaLaPlanilla` de Inventario, que escribe texto.
+ * Las tres se midieron escribiéndolas de verdad el 16/09/2026, porque las dos
+ * primeras parecían razonables y las dos estaban mal:
  *
- * Se ve como fecha igual: la columna H tiene formato `DATE:d/M/yyyy` hasta la
- * fila 3296 —verificado—, así que el serial se muestra d/m y no como un número
- * suelto.
+ * | lo que se escribe | cómo queda |
+ * |---|---|
+ * | `46281` (el serial) | valor 46281, **formato borrado**, se ve `46281` |
+ * | `16/9/2026` (texto d/m) | valor 46281, `DATE:d/m/yyyy`, se ve bien — **pero lo parsea según el locale** |
+ * | `2026-09-16` (ISO) | valor 46281, `DATE:d/m/yyyy`, se ve `16/9/2026` |
  *
- * Una fecha que no existe da celda vacía en vez de rodar sola: `serialDelDia`
- * descarta el 30 de febrero en lugar de convertirlo en 2 de marzo.
+ * **El serial no sirve aunque la columna tenga formato de fecha.** Ese era el
+ * razonamiento —la H está en `DATE:d/M/yyyy` hasta la fila 3296— y es falso:
+ * `escribirCeldas` manda `valueInputOption: USER_ENTERED`, y con eso Google
+ * **reemplaza el formato de la celda** por el que infiere de lo que entró. Un
+ * número entra como número y la celda queda sin formato: la fila escrita mostró
+ * `46281` mientras la de al lado, intacta, seguía mostrando `13/9/2026`.
+ *
+ * **El ISO gana porque no se interpreta.** Google lo parsea igual en cualquier
+ * locale y le deja a la celda el formato de fecha que corresponde, así que se ve
+ * en el d/m de la planilla sin depender de que la planilla siga en `es_AR`.
+ * Probado con `2026-09-05` —un día ≤ 12, que es donde un locale al revés mentiría
+ * en silencio—: quedó 5 de septiembre. Leer al revés d/m y m/d ya dio vuelta 885
+ * fechas en Compras, y esto cierra esa puerta sin depender de una configuración
+ * que nadie controla.
+ *
+ * `serialDelDia` se sigue usando, pero para **comprobar** y no para escribir: una
+ * fecha que no existe se descarta en vez de rodar sola —el 30 de febrero no se
+ * convierte en 2 de marzo— y la celda queda vacía.
  */
 export function fechaParaLaPlanilla(iso: string | null | undefined): string {
   if (!iso) return "";
-  const serial = serialDelDia(String(iso).slice(0, 10));
-  return serial === null ? "" : String(serial);
+  const dia = String(iso).slice(0, 10);
+  return serialDelDia(dia) === null ? "" : dia;
 }
 
 /**

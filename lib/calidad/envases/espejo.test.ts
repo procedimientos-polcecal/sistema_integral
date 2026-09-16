@@ -58,14 +58,15 @@ describe("celdasDelMovimiento", () => {
 });
 
 describe("fechaParaLaPlanilla", () => {
-  it("escribe el serial de Sheets y no el texto", () => {
-    // El texto lo interpreta la planilla según su locale —hoy es_AR, mañana
-    // quién sabe— y leer al revés d/m y m/d ya dio vuelta 885 fechas en
-    // Compras. Un número no se interpreta. La columna H tiene formato
-    // DATE:d/M/yyyy hasta la fila 3296, así que se ve como fecha igual.
-    expect(fechaParaLaPlanilla("2026-09-15")).toBe("46280");
+  it("escribe el ISO, que Google parsea igual en cualquier locale", () => {
+    // Medido el 16/09/2026 escribiendo las tres formas de verdad: el serial
+    // (46280) entra como número y BORRA el formato de la celda —USER_ENTERED
+    // reemplaza el formato por el que infiere—, así que se ve "46280"; el texto
+    // "15/9/2026" se ve bien pero lo parsea el locale de la planilla; el ISO se
+    // ve "15/9/2026" y no depende de nada.
+    expect(fechaParaLaPlanilla("2026-09-15")).toBe("2026-09-15");
     // El caso que importa: el 1 de septiembre no es el 9 de enero.
-    expect(fechaParaLaPlanilla("2025-09-01")).toBe("45901");
+    expect(fechaParaLaPlanilla("2025-09-01")).toBe("2025-09-01");
   });
 
   it("sin fecha, celda vacía", () => {
