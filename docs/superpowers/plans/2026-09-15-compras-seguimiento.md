@@ -1423,10 +1423,20 @@ for (let i = 0; i < filas.length; i++) {
     cumplio_proveedor: r.cumplio_proveedor,
     // La fila real de la planilla: la 2 del rango leído es la 2 de la hoja.
     seguimiento_fila: i + 2,
-    // Con fecha de recepción, el RI está recibido. Sin ella sigue esperando, y
-    // su estado queda como está: los 10 que no están en PEDIDO se importan con
-    // el suyo. El seguimiento describe lo que pasó, no corrige el circuito.
-    ...(r.fecha_recepcion ? { estado_compra: "RECIBIDO" } : {}),
+    // Sólo se da por recibido lo que el sistema YA sabía comprado.
+    //
+    // Un RI que figura recibido en la planilla pero acá está en SIN_INICIAR o
+    // en comparativa es una discrepancia para mirar, no algo que el importador
+    // arregle solo saltándose el circuito: pasarlo a RECIBIDO borraría la
+    // pregunta de por qué nunca se marcó como pedido. Medidos el 16/09/2026 son
+    // 10 —los RI 1841, 1843, 1844, 1845, 1847 y 1905 en SIN_INICIAR, 1902, 1903
+    // y 1904 en comparativa, y el 1860 en PARA_COMPRAR—, todos con fecha de
+    // recepción de agosto o septiembre.
+    //
+    // Sus datos de recepción y su `seguimiento_fila` se importan igual, así que
+    // el exportador los sigue manteniendo; lo único que no se toca es el
+    // estado, y se los informa al final para que alguien los mire.
+    ...(r.fecha_recepcion && yaEstabaComprado ? { estado_compra: "RECIBIDO" } : {}),
   };
 
   if (ESCRIBE) await supabase.from("compras_requerimientos").update(cambios).eq("nro_ri", r.nro_ri);
