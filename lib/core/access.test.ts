@@ -115,4 +115,16 @@ describe("quién puede usar el asistente", () => {
     expect(puedeUsarAsistente(null)).toBe(false);
     expect(puedeUsarAsistente(undefined)).toBe(false);
   });
+
+  /**
+   * Cierra por defecto. Un `select` que se olvide de pedir la columna —o una
+   * fila donde todavía sea null— deniega en vez de permitir. Es la dirección
+   * segura del error, y por eso está testeada: sin este caso, el `=== true`
+   * parece una manía y alguien lo cambia por un `!!`.
+   */
+  it("si la columna no vino en el select, o es null, no pasa", () => {
+    expect(puedeUsarAsistente({ rol: "operario" })).toBe(false);
+    expect(puedeUsarAsistente({ rol: "operario", puede_usar_asistente: undefined })).toBe(false);
+    expect(puedeUsarAsistente({ rol: "operario", puede_usar_asistente: null })).toBe(false);
+  });
 });

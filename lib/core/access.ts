@@ -70,6 +70,11 @@ export function esAdminDelNucleo(rol: Rol | null | undefined): boolean {
  *
  * Vive acá y no en la ruta por la misma razón que `esAdminDelNucleo`: cuatro
  * copias de una regla de permisos son tres de más.
+ *
+ * Recibe lo mínimo —un rol y la bandera— y no un `Usuario` entero a propósito:
+ * quien pregunta suele venir de un `select` corto que no trae el resto de la
+ * fila, y pedirle la interfaz completa lo obligaría a inventar los campos que
+ * no usa. Mismo criterio que `esAdminDelNucleo`, que recibe un `Rol` pelado.
  */
 export function puedeUsarAsistente(
   usuario: { rol: Rol; puede_usar_asistente?: boolean | null } | null | undefined
