@@ -1534,13 +1534,31 @@ cuando("la consulta contra la base real", () => {
   });
 
   /**
-   * El test que justifica todo el diseño.
+   * El test que justifica todo el diseño — y que hay que escribir con cuidado,
+   * porque la versión obvia no prueba nada.
    *
-   * Leer que PostgREST corre los GET en transacción de sólo lectura no alcanza:
-   * hay que correr la operación final. Si algún día esto pasa a verde con un
-   * UPDATE aplicado, el asistente dejó de ser de sólo lectura.
+   * Mandar un `update` NO sirve: lo rechaza el guard de texto antes de salir.
+   * Un CTE que escribe (`with x as (update …) select …`) tampoco: lo rechaza el
+   * envoltorio `select * from (…) sub` de la función, porque un CTE que
+   * modifica tiene que estar en el nivel superior. Las dos cosas dan verde por
+   * la razón equivocada.
+   *
+   * Lo único que mide la barrera de verdad es preguntarle a la transacción en
+   * qué modo está. Medido el 16/09/2026: da `on`, y da `on` **también por
+   * POST** — porque PostgREST corre en sólo lectura toda función `stable`, no
+   * sólo los GET. La declaración `stable` es lo que sostiene; `get: true` es
+   * honesto pero no es lo que salva.
+   *
+   * Si este test se pone rojo, alguien le sacó el `stable` a la función y el
+   * asistente dejó de ser de sólo lectura sin que nada más lo note.
    */
-  it("Postgres rechaza una escritura, no un filtro nuestro", async () => {
+  it("la consulta corre en una transacción de sólo lectura", async () => {
+    const r = await correrConsulta(db, "select current_setting('transaction_read_only') as modo");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.filas[0]).toEqual({ modo: "on" });
+  });
+
+  it("el guard de texto rechaza una escritura antes de salir", async () => {
     const r = await correrConsulta(db, "update empresas set nombre = nombre");
     expect(r.ok).toBe(false);
   });

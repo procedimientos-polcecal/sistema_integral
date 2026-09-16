@@ -157,11 +157,23 @@ Se llama así:
 await supabase.rpc("asistente_consulta", { consulta }, { get: true });
 ```
 
-**El `get: true` es la barrera real.** PostgREST corre los GET en una transacción
-de sólo lectura, así que un `update` que se le escape al filtro de texto lo
-rechaza Postgres. El filtro de texto queda igual, pero como conveniencia para
-dar un mensaje claro, no como la defensa. Verificado en los typings del
-`@supabase/postgrest-js` instalado: la opción existe.
+**La barrera real es el `stable`.** Medido contra la base el 16/09/2026:
+PostgREST corre en una transacción de sólo lectura toda función declarada
+`stable` o `immutable` — **también por POST**, no sólo por GET. Así que la
+garantía la da la declaración de la función, no la forma de llamarla. El
+`get: true` se usa igual, porque es lo que hace que PostgREST acepte el GET y
+porque es honesto sobre lo que la llamada hace, pero no es lo que sostiene.
+
+Conviene saber cómo se rompe esto: el día que alguien le saque el `stable` a la
+función —"me tiraba error y lo puse volatile"— **la garantía desaparece en
+silencio** y `get: true` no la salva. Por eso el test no manda un `update`
+(ése lo frena el filtro de texto) ni un CTE que escribe (ése lo frena el
+envoltorio `select * from (…) sub`): pregunta directamente
+`current_setting('transaction_read_only')`, que es lo único que mide la barrera
+y no otra cosa.
+
+El filtro de texto queda igual, pero como conveniencia para dar un mensaje
+claro, no como la defensa.
 
 Dos detalles de este repo que juegan a favor:
 
