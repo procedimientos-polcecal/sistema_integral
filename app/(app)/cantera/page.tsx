@@ -112,24 +112,6 @@ export default async function CanteraInicioPage({
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-xl font-semibold">Cantera</h1>
-        <div className="flex gap-1.5">
-          <Link href="/cantera/acarreo" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-            Acarreo
-          </Link>
-          {permisos.esAdmin && (
-            <>
-              <Link href="/cantera/yacimientos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Canteras
-              </Link>
-              <Link href="/cantera/insumos" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Insumos
-              </Link>
-              <Link href="/cantera/fleteros" className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-slate-50">
-                Fleteros
-              </Link>
-            </>
-          )}
-        </div>
       </div>
 
       {/* ── Lo que importa de un vistazo ── */}
@@ -229,7 +211,31 @@ export default async function CanteraInicioPage({
       <Suspense fallback={<CargandoResumenAnual />}>
         <ResumenAnualSection anio={anio} />
       </Suspense>
+
+      {permisos.esAdmin && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Más</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Acceso href="/cantera/yacimientos" label="Canteras" />
+            <Acceso href="/cantera/insumos" label="Insumos" />
+            <Acceso href="/cantera/fleteros" label="Fleteros" />
+            <Acceso href="/cantera/tarifas-acarreo" label="Tarifas de acarreo" />
+          </div>
+        </section>
+      )}
     </div>
+  );
+}
+
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+    >
+      {label}
+      <span className="text-slate-400">→</span>
+    </Link>
   );
 }
 
