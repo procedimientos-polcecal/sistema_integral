@@ -5,6 +5,7 @@ import { permisosComprasDe } from "@/lib/compras/auth";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
+import { exportarSeguimiento } from "@/lib/compras/seguimientoSheets";
 import { costosParaElPedido } from "@/lib/compras/comparativa";
 import { puedeAprobarLaCompra, esAprobacionNueva } from "@/lib/compras/aprobarCompra";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
@@ -40,6 +41,9 @@ const CAMPOS_COMPRA = [
   "estado_compra", "comparativa_url", "proveedor_id", "costo_iva",
   "costo_envio", "oc_numero", "fecha_pedido", "fecha_recepcion",
   "compra_asignada_a",
+  // Seguimiento de la compra: los decide quien compra, igual que el resto.
+  "cantidad_comprada", "cantidad_recibida", "fecha_estimada_recepcion",
+  "cumplio_compras", "cumplio_proveedor",
 ] as const;
 
 /**
@@ -391,6 +395,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       avisoSheets = e instanceof Error ? e.message : String(e);
       console.error(`No se pudo escribir el RI ${id} en la planilla:`, avisoSheets);
     }
+  }
+
+  // Y al libro de seguimiento, que es otro y tiene su propia cola. Va aparte
+  // a propósito: un fallo acá no tiene por qué ensuciar el pendiente del
+  // otro libro, ni al revés.
+  //
+  // Toda ruta que toque un campo que se exporta tiene que exportar: cambiar
+  // un estado sin escribirlo en la planilla es una divergencia que no avisa.
+  try {
+    const motivo = await exportarSeguimiento(id);
+    if (motivo) {
+      avisoSheets = (avisoSheets ? avisoSheets + " " : "") +
+        `El seguimiento no se pudo escribir en la planilla: ${motivo}. Se reintenta solo.`;
+    }
+  } catch (e) {
+    console.error(`No se pudo escribir el seguimiento del RI ${id}:`, e);
   }
 
   /*
