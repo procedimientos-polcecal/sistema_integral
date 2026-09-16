@@ -48,6 +48,11 @@ export default async function NuevoMovimientoPage({
   const params = await searchParams;
   const articuloId = typeof params.articulo === "string" ? params.articulo : null;
 
+  // La cantidad la puede precargar quien manda a esta pantalla (hoy, el
+  // asistente). Se pasa como texto: la valida el formulario, igual que si la
+  // hubieran tipeado. No se parsea acá para no inventar un 0 donde vino basura.
+  const cantidadInicial = typeof params.cantidad === "string" ? params.cantidad : "";
+
   // Si vino elegido desde el stock se trae acá, por id. Buscarlo desde el
   // cliente entre los primeros resultados no lo encontraría: son 2.800.
   const { data: articulo } = articuloId
@@ -66,6 +71,7 @@ export default async function NuevoMovimientoPage({
     <NuevoMovimientoClient
       sync={sync}
       articuloInicial={articulo}
+      cantidadInicial={cantidadInicial}
       solicitantes={solicitantes.map((s) => ({
         id: s.id,
         nombre: s.nombre,

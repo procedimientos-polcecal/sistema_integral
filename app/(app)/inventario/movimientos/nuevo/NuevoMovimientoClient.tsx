@@ -40,9 +40,11 @@ type Tipo = "entrada" | "salida" | "ajuste";
  * las mismas palabras que escribe la gente. Ver `lib/inventario/catalogos.ts`.
  */
 export default function NuevoMovimientoClient({
-  articuloInicial, destinos, solicitantes, equipos, proveedores, sync,
+  articuloInicial, cantidadInicial, destinos, solicitantes, equipos, proveedores, sync,
 }: {
   articuloInicial: Articulo | null;
+  /** Precargada desde la URL. Se puede editar antes de guardar. */
+  cantidadInicial: string;
   destinos: Opcion[];
   solicitantes: Solicitante[];
   equipos: Equipo[];
@@ -54,7 +56,7 @@ export default function NuevoMovimientoClient({
   const [opciones, setOpciones] = useState<Articulo[]>([]);
 
   const [tipo, setTipo] = useState<Tipo>("salida");
-  const [cantidad, setCantidad] = useState("");
+  const [cantidad, setCantidad] = useState(cantidadInicial);
   const [solicitanteId, setSolicitanteId] = useState("");
   // Vacío no es "sin destino": es "el que diga quien retira". Sólo se guarda
   // acá lo que alguien eligió a mano, para que cambiar de persona siga
