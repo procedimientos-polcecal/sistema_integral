@@ -92,8 +92,7 @@ export const NAV: NavItem[] = [
     href: "/remises",
     modulo: "remises",
     children: [
-      { label: "Dashboard", href: "/remises", modulo: "remises" },
-      { label: "Hoy", href: "/remises/hoy", modulo: "remises" },
+      { label: "Hoy", href: "/remises", modulo: "remises" },
       { label: "Semana", href: "/remises/semana", modulo: "remises" },
       { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
       { label: "Vehículos", href: "/remises/vehiculos", modulo: "remises" },
@@ -198,20 +197,44 @@ export const NAV: NavItem[] = [
   },
   {
     label: "Calidad",
-    href: "/calidad/envases",
+    href: "/calidad",
     modulo: "calidad",
-    // Lo que lleva el sector Calidad y no es el parte de fábrica: hoy el stock
-    // de envases, y el de carbonilla cuando tenga pantallas.
+    // Las dos planillas del sector, y **van para lados distintos**. En envases
+    // manda la planilla —el stock es una fórmula que vive allá y el SdG la
+    // lee—; en carbonilla la planilla se va, porque las entradas salen de Odoo
+    // y de la balanza y acá manda el sistema.
     //
-    // Ojo al retomarlo: las dos mitades van para lados distintos. En envases
-    // **manda la planilla** —el stock es una fórmula que vive allá— y en
-    // carbonilla la planilla se va, porque las entradas salen de Odoo y de la
-    // balanza. Ver docs/PRODUCCION.md y el spec de carbonilla.
+    // Por eso van como dos subgrupos y no como ocho hijos planos: con ocho el
+    // menú deja de leerse, y dos mitades que funcionan al revés puestas una al
+    // lado de la otra invitan a suponer que funcionan igual.
+    //
+    // Ver docs/CALIDAD.md y docs/CALIDAD-ENVASES.md.
     children: [
-      { label: "Stock", href: "/calidad/envases", modulo: "calidad" },
-      { label: "Movimientos", href: "/calidad/envases/movimientos", modulo: "calidad" },
-      { label: "Por período", href: "/calidad/envases/periodo", modulo: "calidad" },
-      { label: "Proveedores", href: "/calidad/envases/proveedores", modulo: "calidad" },
+      {
+        label: "Carbonilla",
+        href: "/calidad",
+        modulo: "calidad",
+        // El stock primero: es la pantalla que se abre a la tarde para cargar
+        // el consumo del día, que es lo que se hace 224 de 256 días. El libro
+        // entero y los catálogos se miran después, no durante.
+        children: [
+          { label: "El stock", href: "/calidad", modulo: "calidad" },
+          { label: "Movimientos", href: "/calidad/movimientos", modulo: "calidad" },
+          { label: "Carbonilleros", href: "/calidad/carbonilleros", modulo: "calidad", soloAdmin: true },
+          { label: "Productos", href: "/calidad/productos", modulo: "calidad", soloAdmin: true },
+        ],
+      },
+      {
+        label: "Envases",
+        href: "/calidad/envases",
+        modulo: "calidad",
+        children: [
+          { label: "Stock", href: "/calidad/envases", modulo: "calidad" },
+          { label: "Movimientos", href: "/calidad/envases/movimientos", modulo: "calidad" },
+          { label: "Por período", href: "/calidad/envases/periodo", modulo: "calidad" },
+          { label: "Proveedores", href: "/calidad/envases/proveedores", modulo: "calidad" },
+        ],
+      },
     ],
   },
   {
