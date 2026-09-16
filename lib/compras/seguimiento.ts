@@ -8,6 +8,7 @@
 
 import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
+import { norm } from "@/lib/compras/texto";
 import type { Cumplio } from "@/lib/compras/types";
 
 /** Cómo se escribe cada juicio en la planilla. "Si" va sin tilde: es así allá. */
@@ -220,4 +221,116 @@ export function filaDelHistorico(celdas: string[]): DelHistorico | null {
     cumplio_proveedor: juicio(celdas[12]),
     sucias,
   };
+}
+
+/**
+ * Cuánto estuvo el material guardado antes de usarse.
+ *
+ * Es el único indicador del seguimiento que no existe en ningún otro lado, y
+ * sale de las dos fechas: recepción y aplicación. No se guarda en la base
+ * porque es una resta —ya es una fórmula en la planilla— y dos copias del mismo
+ * hecho se pelean sin que nadie gane.
+ *
+ * Medido el 16/09/2026 sobre las 343 filas de Mantenimiento con las dos fechas:
+ * mediana 3 días, percentil 75 en 7, máximo 66, y **13 negativas**. Esas trece
+ * dicen que el material se aplicó antes de recibirse, o sea que alguna de las
+ * dos fechas está mal cargada. Mostrarlas como "-15 días en stock" las
+ * disfrazaría de medición; acá se nombra el problema y se deja que alguien lo
+ * corrija.
+ *
+ * La guardia de fechas es la misma que usa `laDemora`: una fecha que no existe
+ * o que no viene como YYYY-MM-DD no produce un número, produce nada.
+ */
+export function tiempoEnStock(
+  fechaRecepcion: string | null,
+  fechaAplicacion: string | null
+): string | null {
+  if (!fechaRecepcion || !fechaAplicacion) return null;
+
+  const recibido = serialDelDia(fechaRecepcion);
+  const aplicado = serialDelDia(fechaAplicacion);
+  if (recibido === null || aplicado === null) return null;
+
+  const dias = aplicado - recibido;
+  if (dias < 0) return "la fecha de aplicación es anterior a la de recepción";
+  if (dias === 0) return "se aplicó el mismo día";
+  return `${dias} ${dias === 1 ? "día" : "días"} en stock`;
+}
+
+/** Cómo se escribe la aplicación en la planilla. "Si" sin tilde, como está allá. */
+export const ETIQUETA_APLICADO: Record<string, string> = { SI: "Si", NO: "No" };
+
+/** Cómo puede venir escrito cada encabezado de la aplicación. */
+const ALIAS_APLICACION = {
+  se_aplico: { nombre: "Se aplicó?", variantes: ["SE APLICO?", "SE APLICO", "APLICADO"] },
+  fecha_aplicacion: {
+    nombre: "Fecha de Aplicación",
+    variantes: ["FECHA DE APLICACION", "FECHA APLICACION"],
+  },
+} as const;
+
+/**
+ * Qué celdas de la pestaña del área se escriben, y cuáles no.
+ *
+ * Las pestañas por área no tienen todas la misma forma: Mantenimiento tiene 21
+ * columnas y las demás 18, porque `Estimada Aplicación`, `ANALISIS` y `Equipo`
+ * existen sólo ahí **y en el medio**. Por eso las columnas se ubican por nombre;
+ * con un índice fijo la fecha de Mantenimiento caería en `ANALISIS`.
+ *
+ * `conFormula` son las columnas que en ESA fila tienen una fórmula. No se
+ * escriben nunca: en Almacén la columna entera de `Fecha de Aplicación` es `=J`
+ * —599 de 599 celdas medidas el 16/09/2026—, o sea que copia la fecha de
+ * recepción, y en Taller Vial son 539 de 599. Pisarlas rompe el cálculo y el
+ * libro no tiene deshacer.
+ *
+ * Un valor en null **no se escribe**, y no se escribe vacío: es lo que deja que
+ * el área siga tildando a mano en la planilla sin que el sistema se lo borre.
+ * Es la misma regla que `solicita` y `comparativa` en el otro libro.
+ *
+ * Lo que no se pudo escribir se devuelve en `salteadas` en vez de callarse: un
+ * dato que está en la base y no aparece en la planilla, sin que nadie sepa por
+ * qué, es la divergencia que no avisa.
+ */
+export function celdasDeAplicacion(
+  encabezado: string[],
+  conFormula: number[],
+  datos: { seAplico: string | null; fechaAplicacion: string | null }
+): { aEscribir: { columna: number; valor: string }[]; salteadas: string[] } {
+  const normalizado = encabezado.map((h) => norm(h).replace(/\s*\?$/, ""));
+  const ubicar = (variantes: readonly string[]) => {
+    for (const v of variantes) {
+      const i = normalizado.indexOf(norm(v).replace(/\s*\?$/, ""));
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+
+  const aEscribir: { columna: number; valor: string }[] = [];
+  const salteadas: string[] = [];
+
+  const poner = (clave: keyof typeof ALIAS_APLICACION, valor: string | null) => {
+    // Sin valor no hay nada que decidir: la celda no se toca.
+    if (valor === null) return;
+
+    const { nombre, variantes } = ALIAS_APLICACION[clave];
+    const columna = ubicar(variantes);
+    if (columna < 0) {
+      salteadas.push(`${nombre} (la pestaña no tiene esa columna)`);
+      return;
+    }
+    if (conFormula.includes(columna)) {
+      salteadas.push(`${nombre} (es una fórmula en la planilla)`);
+      return;
+    }
+    aEscribir.push({ columna, valor });
+  };
+
+  poner("se_aplico", datos.seAplico ? (ETIQUETA_APLICADO[datos.seAplico] ?? null) : null);
+
+  // La fecha va como serial, igual que en el master. Una que no existe deja la
+  // celda quieta en vez de correrla tres días.
+  const serial = datos.fechaAplicacion ? serialDelDia(datos.fechaAplicacion) : null;
+  poner("fecha_aplicacion", serial === null ? null : String(serial));
+
+  return { aEscribir, salteadas };
 }

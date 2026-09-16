@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { comoLeLlego, ETIQUETA_CUMPLIO } from "@/lib/compras/seguimiento";
+import { comoLeLlego, ETIQUETA_CUMPLIO, tiempoEnStock } from "@/lib/compras/seguimiento";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
 
 const OPCIONES: Cumplio[] = ["SI", "MAS_O_MENOS", "NO"];
@@ -34,6 +34,8 @@ export default function FormularioRecepcion({
     fecha_recepcion: requerimiento.fecha_recepcion ?? "",
     cumplio_compras: requerimiento.cumplio_compras ?? ("" as Cumplio | ""),
     cumplio_proveedor: requerimiento.cumplio_proveedor ?? ("" as Cumplio | ""),
+    se_aplico: requerimiento.se_aplico ?? ("" as "SI" | "NO" | ""),
+    fecha_aplicacion: requerimiento.fecha_aplicacion ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -41,6 +43,12 @@ export default function FormularioRecepcion({
   // El dato duro se recalcula con lo que hay escrito ahora, no con lo
   // guardado: la idea es que la persona vea "llegó 9 días tarde" mientras
   // elige el juicio, no después de guardarlo.
+  // Igual que `dato`: se recalcula con lo que hay escrito ahora, así se ve
+  // "3 días en stock" mientras se carga la fecha y no después de guardar. Y es
+  // lo que denuncia las 13 filas del histórico que dicen que el material se
+  // aplicó antes de recibirse.
+  const enStock = tiempoEnStock(campos.fecha_recepcion || null, campos.fecha_aplicacion || null);
+
   const dato = comoLeLlego({
     fecha_estimada_recepcion: campos.fecha_estimada_recepcion || null,
     fecha_recepcion: campos.fecha_recepcion || null,
@@ -62,6 +70,8 @@ export default function FormularioRecepcion({
         fecha_recepcion: campos.fecha_recepcion || null,
         cumplio_compras: campos.cumplio_compras || null,
         cumplio_proveedor: campos.cumplio_proveedor || null,
+        se_aplico: campos.se_aplico || null,
+        fecha_aplicacion: campos.fecha_aplicacion || null,
         // La fecha de recepción es lo que define el estado, en los dos
         // sentidos: ponerla lo da por recibido y borrarla lo devuelve a la
         // espera. Sólo agregar la clave cuando había fecha dejaba un RI
@@ -149,6 +159,43 @@ export default function FormularioRecepcion({
             {OPCIONES.map((o) => <option key={o} value={o}>{ETIQUETA_CUMPLIO[o]}</option>)}
           </select>
         </Campo>
+      </div>
+
+      {/*
+        La aplicación es el otro momento del circuito y casi siempre la carga
+        otra persona: Compras registra que llegó, el área que se usó. Va en su
+        propia sección para que se lea como lo que es.
+
+        El permiso es el mismo que el del resto de la pantalla a propósito:
+        `usuario_areas_compras` tiene UNA fila, así que un gate por área hoy no
+        protegería a nadie y le cerraría la puerta a todos.
+      */}
+      <div>
+        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Aplicación
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo label="¿Se aplicó?">
+            {enStock && <p className="mb-1 text-xs text-slate-500">{enStock}</p>}
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={campos.se_aplico}
+              onChange={(e) => setCampos({ ...campos, se_aplico: e.target.value as "SI" | "NO" })}
+            >
+              <option value="">Sin responder</option>
+              <option value="SI">Si</option>
+              <option value="NO">No</option>
+            </select>
+          </Campo>
+          <Campo label="Fecha de aplicación">
+            <input
+              type="date"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={campos.fecha_aplicacion}
+              onChange={(e) => setCampos({ ...campos, fecha_aplicacion: e.target.value })}
+            />
+          </Campo>
+        </div>
       </div>
 
       {error && (

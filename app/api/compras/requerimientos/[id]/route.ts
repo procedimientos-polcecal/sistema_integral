@@ -44,6 +44,9 @@ const CAMPOS_COMPRA = [
   // Seguimiento de la compra: los decide quien compra, igual que el resto.
   "cantidad_comprada", "cantidad_recibida", "fecha_estimada_recepcion",
   "cumplio_compras", "cumplio_proveedor",
+  // La aplicación: la carga el área, pero el permiso es el mismo. Gatearla por
+  // `usuario_areas_compras` no protegería a nadie: esa tabla tiene una fila.
+  "se_aplico", "fecha_aplicacion",
 ] as const;
 
 /**

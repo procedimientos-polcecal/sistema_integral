@@ -227,10 +227,55 @@ tarde", "recibió 500 de 1.000", vía `comoLeLlego()`— para que la persona dec
 mirándolo. Calcularlos habría cambiado el significado de la columna y roto la
 comparación con todo el histórico.
 
-La fase 2 —`Se aplicó?`, `Fecha de Aplicación` y `Tiempo en Stock`— está sin
-hacer. La cargan tres áreas (Mantenimiento, Almacén y Taller Vial, que son el 92%
-del volumen) y vive en las pestañas por área **de la N en adelante**, donde la
-protección no llega. El diseño está en
+### La fase 2: la aplicación del material, y lo que Almacén no carga
+
+`Se aplicó?` y `Fecha de Aplicación` viven en las pestañas por área, **de la N en
+adelante**, donde la protección no llega. El SdG las escribe desde el mismo
+formulario de recepción.
+
+El spec decía que las cargaban tres áreas que son el 92% del volumen. **Eso era
+falso y se midió el 16/09/2026**: `Se aplicó?` sí lo carga todo el mundo a mano
+—entre el 67% y el 100% según la pestaña—, pero la FECHA es de una sola:
+
+| | `Fecha de Aplicación` | Filas con dato real |
+|---|---|---|
+| Mantenimiento | a mano | 345 |
+| Taller Vial | mayormente fórmula | 60 |
+| **Almacén** | **fórmula `=J`** | **0** |
+| Las otras seis | — | 0 |
+
+En Almacén la columna entera **copia la fecha de recepción** —528 de 528 celdas—,
+o sea que no es una aplicación sino un espejo, y por eso su `Tiempo en Stock` da
+siempre "0 DÍAS" y parecía estar al 98%. En Taller Vial son 165 de 225.
+
+De ahí sale la regla del exportador: **nunca se escribe una celda que sea
+fórmula.** Se leen las fórmulas de esas columnas una vez por pestaña y por
+corrida (`leerFormulasDeRango`) y las que lo son se saltean, anotándolo. Pisarlas
+rompería el cálculo y el libro no tiene deshacer.
+
+Y dos reglas más, del mismo tenor que las del master:
+
+- **Las columnas se ubican por nombre, nunca por posición.** Mantenimiento tiene
+  21 columnas y las demás 18: `Estimada Aplicación`, `ANALISIS` y `Equipo`
+  existen sólo ahí y **en el medio**. Con un índice fijo, la fecha de
+  Mantenimiento caería en `ANALISIS`.
+- **La fila se busca en la columna A de la pestaña**, no con `seguimiento_fila`:
+  ésa es la del master, y las pestañas son un `FILTER` con su propia numeración.
+
+`Tiempo en Stock` **no se guarda**: es la resta de las dos fechas, ya es una
+fórmula en la planilla, y guardarlo sería una segunda copia del mismo hecho.
+Sobre las 343 filas de Mantenimiento que tienen las dos: mediana 3 días, p75 en
+7, máximo 66 — y **13 negativas**, que dicen que el material se aplicó antes de
+recibirse. Son datos mal cargados, y el sistema los nombra en vez de mostrar
+"-15 días en stock", que los disfrazaría de medición.
+
+El permiso es el mismo que el del resto del seguimiento. Gatearlo por área
+—`usuario_areas_compras`— sería construir para un mundo imaginario: esa tabla
+tiene **una fila**. Y como el sistema **nunca escribe vacío** en esas celdas, el
+área que prefiera seguir tildando a mano en la planilla puede hacerlo sin que el
+SdG se lo borre.
+
+El diseño de las dos fases está en
 [el spec](superpowers/specs/2026-09-15-compras-seguimiento-design.md).
 
 ## Trampas que ya costaron tiempo

@@ -140,6 +140,10 @@ export interface Requerimiento {
   cumplio_proveedor: Cumplio | null;
   seguimiento_fila: number | null;
   seguimiento_pendiente: string | null;
+  /** Si el material se usó. Null es "todavía no contestaron". */
+  se_aplico: "SI" | "NO" | null;
+  /** Cuándo se usó. El tiempo en stock sale de restarle `fecha_recepcion`. */
+  fecha_aplicacion: string | null;
 
   /**
    * Por qué no se pudo crear la orden de compra en Odoo, con el mensaje real.
