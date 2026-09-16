@@ -1393,7 +1393,7 @@ describe("filaDeLaPlanilla", () => {
       345.997,
       269.9,
       76.097,
-      46274,
+      46269,
       "",
       "",
     ]);
@@ -1441,10 +1441,11 @@ describe("filaDeLaPlanilla", () => {
 
   it("la fecha va como serial y nunca como texto", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-04" },
+      { tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-09" },
       saldos
     );
     expect(typeof fila[7]).toBe("number");
+    // 46274 es el serial que la planilla real tiene en las filas del 09/09/2026.
     expect(fila[7]).toBe(46274);
   });
 
