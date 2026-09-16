@@ -1,37 +1,18 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { hoyEnArgentina, rangoDelMes, sumarDias, comoSeLee } from "@/lib/core/fechas";
 import { nivelFacturacionDe } from "@/lib/facturacion/auth";
-import { traerCatalogos, traerElBuzon } from "@/lib/facturacion/consultas";
-import type { FacturaEnPantalla } from "@/lib/facturacion/types";
-import { dondeApuntaOdoo } from "@/lib/odoo/client";
-import BuzonClient from "./BuzonClient";
+
+const num = new Intl.NumberFormat("es-AR");
+const ars = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
 
 /**
- * El buzón de facturas de proveedor.
- *
- * Es la puerta única: entra el archivo —de mail, de papel escaneado o de una
- * foto de WhatsApp— y el sistema lee el QR. De ahí salen el emisor, el número,
- * la fecha, el importe y a cuál de las dos empresas se le facturó, **sin tipear
- * nada**.
- *
- * Entran unas 19 por día (96 en los cinco días entre el 03 y el 08/09/2026), así
- * que la pantalla está armada para **varias a la vez**: se eligen todos los
- * archivos juntos, el navegador los lee mientras la persona mira, y se cargan de
- * una. Una pantalla de una factura por vez habría sido una versión más linda de
- * lo que ya hacen.
- *
- * Lo que este buzón **no** hace: postear en Odoo. Puede dejar la factura
- * **en borrador** del lado de contabilidad, con todo puesto, y después averiguar
- * sola cuándo la postearon; el asiento lo confirma una persona. El SdG propone,
- * Odoo confirma.
+ * La página de inicio del módulo: un adelanto de lo que entró y de lo que
+ * falta vincular, no el buzón en sí —ese se mudó a `/facturacion/buzon` para
+ * que la raíz pueda ser un dashboard, mismo cambio que en los otros módulos.
  */
-export default async function FacturacionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ estado?: string }>;
-}) {
-  const { estado } = await searchParams;
-
+export default async function FacturacionDashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -39,42 +20,98 @@ export default async function FacturacionPage({
   const nivel = await nivelFacturacionDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const [{ empresas, proveedores }, filas] = await Promise.all([
-    traerCatalogos(supabase),
-    traerElBuzon(supabase, { estado: estado ?? null }),
+  const hoy = hoyEnArgentina();
+  const { primerDia } = rangoDelMes(hoy.slice(0, 7));
+  const manana = sumarDias(hoy, 1);
+
+  const base = () => supabase.from("facturas_proveedor").select("id", { count: "exact", head: true });
+
+  const [
+    { count: sinVincular },
+    { count: esperandoConfirmar },
+    { count: cargadasHoy },
+    { count: cargadasMes },
+    { data: recientes },
+  ] = await Promise.all([
+    base().eq("estado", "recibida"),
+    base().in("estado", ["vinculada", "informada"]),
+    base().gte("created_at", hoy).lt("created_at", manana),
+    base().gte("created_at", primerDia),
+    supabase
+      .from("facturas_proveedor")
+      .select("id, numero, punto_venta, importe_total, moneda, estado, odoo_partner_nombre, proveedores!proveedor_id(nombre), created_at")
+      .order("created_at", { ascending: false })
+      .limit(6),
   ]);
 
   return (
-    <BuzonClient
-      puedeEditar={nivel === "edicion" || nivel === "admin"}
-      // Confirmar en Odoo postea el asiento y eso no se deshace: es lo único
-      // del módulo reservado a administradores.
-      puedeConfirmar={nivel === "admin"}
-      empresas={empresas}
-      proveedores={proveedores}
-      estado={estado ?? null}
-      facturas={filas.map(aPantalla)}
-      odoo={dondeApuntaOdoo()}
-    />
+    <div className="mx-auto max-w-4xl">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="page-header">Facturación</h1>
+        <Link href="/facturacion/buzon" className="btn-primary">Ir al buzón →</Link>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link href="/facturacion/buzon" className="btn-secondary">El buzón</Link>
+        <Link href="/facturacion/buzon?estado=recibida" className="btn-secondary">Sin vincular</Link>
+      </div>
+
+      {/* ── KPIs ── */}
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi color="#1E7D34" label="Cargadas hoy" value={num.format(cargadasHoy ?? 0)} />
+        <Kpi color="#0891B2" label="Cargadas este mes" value={num.format(cargadasMes ?? 0)} />
+        <Kpi
+          color={(sinVincular ?? 0) > 0 ? "#B45309" : "#1E7D34"}
+          label="Sin vincular"
+          value={num.format(sinVincular ?? 0)}
+        />
+        <Kpi color="#7E22CE" label="Esperando confirmar" value={num.format(esperandoConfirmar ?? 0)} />
+      </div>
+
+      {/* ── Últimas cargadas ── */}
+      <section className="card mt-6 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Últimas cargadas</h2>
+          <Link href="/facturacion/buzon" className="text-xs text-slate-500 underline">Ver todas →</Link>
+        </div>
+        {!recientes || recientes.length === 0 ? (
+          <p className="empty-state mt-3">Todavía no entró ninguna factura.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-[var(--border)]">
+            {recientes.map((f: any) => (
+              <li key={f.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <span className="min-w-0 truncate">
+                  <span className="text-[var(--text-secondary)]">
+                    {f.proveedores?.nombre ?? f.odoo_partner_nombre ?? "—"}
+                  </span>{" "}
+                  {f.numero != null && (
+                    <span className="font-mono text-xs text-[var(--text-muted)]">
+                      {String(f.punto_venta ?? 0).padStart(4, "0")}-{String(f.numero).padStart(8, "0")}
+                    </span>
+                  )}
+                </span>
+                <span className="whitespace-nowrap text-xs text-[var(--text-muted)]">{comoSeLee(f.created_at.slice(0, 10))}</span>
+                <span className="whitespace-nowrap font-medium text-[var(--text-primary)]">
+                  {f.importe_total != null ? ars.format(f.importe_total) : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
 
-/**
- * Aplana los embeds.
- *
- * PostgREST devuelve la relación como objeto o como arreglo según cómo esté
- * declarada, así que se aceptan las dos formas — el mismo cuidado que
- * `descripcionDelArticulo` en Compras.
- */
-function aPantalla(fila: Record<string, unknown>): FacturaEnPantalla {
-  const uno = (embed: unknown) => (Array.isArray(embed) ? embed[0] : embed) as Record<string, unknown> | null;
-
-  const ri = uno(fila.compras_requerimientos);
-
-  return {
-    ...(fila as unknown as FacturaEnPantalla),
-    empresa: (uno(fila.empresas)?.nombre as string) ?? null,
-    proveedor: (uno(fila.proveedores)?.nombre as string) ?? null,
-    requerimiento: ri?.nro_ri != null ? String(ri.nro_ri) : null,
-  };
+function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
+      </div>
+      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
+    </div>
+  );
 }

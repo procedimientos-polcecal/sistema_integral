@@ -261,10 +261,11 @@ export const NAV: NavItem[] = [
     modulo: "facturacion",
     // El buzón primero, y por ahora es casi todo: es la pantalla donde se sube
     // la factura que acaba de llegar por mail, en papel o por WhatsApp. Lo que
-    // queda por vincular se mira después, no durante.
+    // queda por vincular se mira después, no durante. La raíz del módulo es
+    // el dashboard, fuera de esta lista — mismo caso que Cantera.
     children: [
-      { label: "El buzón", href: "/facturacion", modulo: "facturacion" },
-      { label: "Sin vincular", href: "/facturacion?estado=recibida", modulo: "facturacion" },
+      { label: "El buzón", href: "/facturacion/buzon", modulo: "facturacion" },
+      { label: "Sin vincular", href: "/facturacion/buzon?estado=recibida", modulo: "facturacion" },
     ],
   },
   {

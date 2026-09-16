@@ -374,13 +374,13 @@ export default function BuzonClient({
           </h2>
           <div className="flex gap-2 text-xs">
             <Link
-              href="/facturacion"
+              href="/facturacion/buzon"
               className={`rounded-lg px-2 py-1 ${estado ? "text-slate-500 hover:bg-slate-100" : "bg-slate-900 text-white"}`}
             >
               Todas
             </Link>
             <Link
-              href="/facturacion?estado=recibida"
+              href="/facturacion/buzon?estado=recibida"
               className={`rounded-lg px-2 py-1 ${estado === "recibida" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
             >
               Sin vincular
