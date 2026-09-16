@@ -475,23 +475,108 @@ llegara a necesitar `date_trunc('month', fecha)`, va con el cast explícito
 `lib/core/access.ts` suma `calidad` a `MODULOS_ORDEN`, y `lib/core/nav.ts` el
 bloque de navegación.
 
+## La secuencia obligatoria: importar y después sincronizar
+
+Esto se descubrió ejercitando la sincronización contra el Odoo real el
+16/09/2026, y no estaba escrito en ningún lado.
+
+**La sincronización no puede aportar nada hasta que corra la importación**, y
+eso es correcto, no una falla. El cron nunca mira antes de `CALIDAD_DESDE`, que
+es el día en que corre el script de importación; y como Odoo está once días
+atrasado, todo lo que hay para traer queda de un lado del corte y el libro vacío
+del otro. Medido: la corrida real leyó **45 líneas y escribió cero**.
+
+El orden es el único que no pierde ni duplica nada:
+
+1. Corre `scripts/importar-stock-carbonilla.mts`, que trae de la planilla
+   **todo hasta el día anterior** — incluidos los 21 camiones que Odoo todavía
+   no tiene.
+2. `CALIDAD_DESDE` queda en **el día de esa corrida**.
+3. De ahí en más la sincronización se ocupa sola, y cada línea entra una sola
+   vez porque su `odoo_purchase_line_id` es único.
+
+Adelantar el corte para que la sincronización "haga algo" antes de la
+importación es la tentación a evitar: los camiones que quedan entre medio
+—cargados en la planilla y todavía no en Odoo— se caen de los dos lados a la vez,
+y son unas 400 toneladas.
+
+## Lo que ya está cargado (16/09/2026)
+
+Los dos catálogos se cargaron ejercitando el módulo, así que salen de la lista
+de abajo.
+
+**Trece carbonilleros.** Uno por partner de Odoo con órdenes en el último año,
+con su código y su nombre de la planilla. Tres cosas que aparecieron al armarlo:
+
+- **`00014 RODRIGUES` y `00011 EL TIGRE SERGIO RODRIGUEZ` son la misma persona.**
+  Las dos filas del `00014` aparean exacto contra el partner `999`: 02/10/2025
+  9,72 ↔ `P01507` 9,76 y 27/01/2026 16,96 ↔ `P01888` 16,96. Queda el `00011`,
+  que tiene 10 de los 12 renglones y es el que se usa desde junio.
+- **`MEMBRANEX S.A.` está dos veces en Odoo**, `2527` y `2139`. Se declararon
+  los dos: si no, las órdenes del duplicado caerían en la bandeja para siempre.
+- **`00011`, `00012` y `00013` tienen la columna `TIPO DE CARBÓN` vacía** en la
+  planilla. Se declararon vegetal, y no por parecido: la fórmula del libro sólo
+  suma al saldo residual con el código `00010`, así que esos tres vinieron
+  contándose como vegetal toda su historia. Declararlos vegetal reproduce el
+  saldo que ya tienen.
+
+Quedaron afuera `00002 CARBONELLA SRL (POLETTI)` y `00004 BRUZZONE JOSE`, que no
+tienen ninguna orden en el último año: sin partner de Odoo no hay a qué
+enlazarlos, y **enlazar al que se le parece es peor que dejar en null**. Si
+vuelven a traer, la línea cae en la bandeja con el nombre y se declaran ahí.
+
+**Diez productos.** Cuentan `CARBONILLA` (6909), `CARBONILLA ` (4419),
+`Carbonilla de coque` (5583), `CARBON RESIDUAL` (7111),
+`Carbonilla (Archivado)` (4378), `Carbonillia` (4734) y
+`97000kl de carbonilla` (5267). No cuentan los tres fletes: `FLETE` (6954),
+`Flete carbonilla` (4914) y `Flete de Carbonilla` (4401).
+
+El criterio fue medible y no de nombre: **los que cuentan tienen cantidades de
+camión (4,8 a 40 t) y los tres fletes tienen cantidad 1** — un servicio, no
+toneladas.
+
+**Siete de los diez están archivados en Odoo**, y hay que pedirlos con
+`active_test: false` o no vienen. Sólo importan para la importación de los veinte
+meses: hoy toda la carbonilla entra con `CARBONILLA` (6909) —35 líneas en
+treinta días— y `CARBON RESIDUAL` (7111) —4—.
+
+## Lo que se verificó contra los sistemas reales (16/09/2026)
+
+- **El dominio de Odoo funciona**: `order_id.state`, `order_id.partner_id in` y
+  sobre todo `create_date` sobre `purchase.order.line`. Eran tres supuestos sin
+  probar, y si alguno estuviera mal el cron se caía a las cinco de la mañana sin
+  que nadie lo viera.
+- **Ocho entradas reales entraron bien**, con su signo, su tipo de carbón, su
+  número de orden y el nombre de la planilla en vez de la razón social.
+- **Es idempotente**: la segunda corrida devolvió 0 nuevas y 8 ya estaban.
+- **Los fletes de LA INVENCIBLE se descartan solos** una vez resuelto el
+  producto: pasaron de 6 en la bandeja a 2 descartadas en silencio.
+- **Y el cruce contra la planilla es el módulo entero en una línea**: para esos
+  mismos ocho camiones, la planilla suma **140,76 t** y Odoo **140,84**.
+  Ochenta kilos, de dos renglones mal transcritos (Bruzzone 16,50 contra 16,60 y
+  Walkimia 14,38 contra 14,36).
+
+Las ocho filas se borraron después de mirarlas: el corte quedó en el 16/09 y esos
+camiones le corresponden a la importación.
+
 ## Lo que falta de una persona
 
 - **Permiso de EDITOR** para la cuenta de servicio sobre la planilla de stock.
   Hoy está compartida como lectora, y el espejo escribe.
 - `GOOGLE_SHEETS_STOCK_CARBONILLA_ID` en Vercel y en `.env.local`.
-- **Declarar los carbonilleros** (~16): partner de Odoo, tipo de carbón, nombre y
-  código de planilla.
-- **Resolver la lista blanca de productos**: `CARBONILLA ` (4419) y `CARBONILLA`
-  (6909) cuentan seguro; los tres fletes no —`Flete carbonilla` (4914), `Flete de Carbonilla` (4401) y
-  **`FLETE` (6954)**, el de LA INVENCIBLE—; hay que decidir `Carbonilla de coque`
-  (5583), `CARBON RESIDUAL` (7111), `Carbonilla (Archivado)` (4378),
-  `Carbonillia` (4734) y `97000kl de carbonilla` (5267).
-- Agregar `AJUSTE VEGETAL` y `AJUSTE RESIDUAL` a `Listado articulos GRAL`.
+- `CALIDAD_DESDE` en Vercel, con **el día en que corra la importación**.
+- Agregar `AJUSTE VEGETAL` (`00019`) y `AJUSTE RESIDUAL` (`00020`) a
+  `Listado articulos GRAL`.
 - **Los once días de Odoo sin cargar**: los 21 camiones del 04 al 15/09 que están
-  en la planilla y no en Odoo. O se cargan en Odoo, o se cargan a mano en el SdG
-  con origen `A mano`. Y de paso, decidir cuál de los dos Bruzzone de 19,58 del
-  04/09 es el bueno.
+  en la planilla y no en Odoo. La importación los va a traer de la planilla, así
+  que el stock no los pierde — pero **sin orden de compra no se les puede
+  facturar**, y eso sigue pendiente del lado de Odoo. Y de paso, decidir cuál de
+  los dos Bruzzone de 19,58 del 04/09 es el bueno: está duplicado en la planilla.
+- **Los CUIT de nueve carbonilleros.** Bruzzone, Puricelli, Sosa y Fillia son los
+  que más traen y siguen sin CUIT desde que lo pidió el spec de Despacho el
+  11/09. El stock funciona igual; lo que no funciona sin eso es cruzar ese carbón
+  con Compras y con Facturación. La columna *"En el núcleo"* de la pantalla de
+  carbonilleros los muestra como `falta`.
 
 ## Riesgos asumidos
 
