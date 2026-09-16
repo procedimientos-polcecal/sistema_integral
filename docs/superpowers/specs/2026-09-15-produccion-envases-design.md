@@ -37,7 +37,8 @@ Pero las columnas del kardex **no** son las del almacén:
 | H, I, J | fecha, proveedor, sector | fecha, **OBSERVACIÓN**, proveedor |
 | K | equipo | **grupo de envase** — *`ARRAYFORMULA` sin encabezado* |
 
-Escala al 15/09/2026: **26 artículos**, **1.398 movimientos** entre el
+Escala al 15/09/2026: **28 artículos** —26 envases más dos restos del
+almacén, ver abajo—, **1.404 movimientos** entre el
 01/09/2025 y el 12/09/2026, 16 proveedores y 5 colores de referencia.
 
 ### Las tres cosas que se midieron antes de diseñar
@@ -60,6 +61,32 @@ B y G están arrastradas hasta ahí (verificado celda por celda), así que una f
 escrita al final se autocompleta sola y hay ~1.890 libres antes de tener que
 estirar nada. La K es una `ARRAYFORMULA` desde `K2`, que cubre la columna
 entera.
+
+### Cuatro cosas más, medidas el 16/09 al escribir el plan
+
+Volver a leer la planilla antes de planificar corrigió tres números de este spec
+—están arriba, ya corregidos— y encontró esto:
+
+**1. Los 28 del listado son 26 envases y dos que no lo son.** `00966 ABRAZADERA
+PARA MANGAS` y `00967 GOMAS DE GUARDERA (XM) 10MM X 500 MM` son restos del
+almacén que quedaron al clonar la planilla. **No tienen un solo movimiento**, así
+que tampoco tienen K ni grupo. Junto con el `00011` —el SHARMAR, mismo caso—, son
+los **tres** artículos que van a caer en la fila "Sin grupo" de `/periodo`, no
+uno.
+
+No se filtran: acá manda la planilla, y un filtro por código escrito en el parser
+es una regla invisible. Si molestan, se borran de la planilla.
+
+**2. La K no tiene encabezado.** La fila 1 del kardex trae exactamente diez
+celdas, de `CODIGO` a `PROVEEDOR`; la `ARRAYFORMULA` arranca en `K2`. O sea que
+la K **no se puede mapear por encabezado** y es la única columna posicional del
+parser — lo que obliga a una guarda, porque una columna insertada la corre.
+
+**3. El listado escribe `STOCK INICAL`**, sin la segunda "I". El mapeo por alias
+tiene que traer las dos formas.
+
+**4. El listado tiene una columna de más**, con encabezado `3/9 (0:00)`: una foto
+que alguien pegó. No se usa, y el mapeo por encabezado la ignora sola.
 
 ---
 
@@ -93,7 +120,7 @@ una sola fila de planilla, y eso rompe el `sheets_fila` único — que es
 justamente lo que hace que volver a importar no duplique.
 
 ```sql
-produccion_envases_articulos            -- 26 filas
+produccion_envases_articulos            -- 28 filas
   codigo text unique, descripcion, ubicacion, proveedores_ref,
   grupo text,                           -- lo que dice la K; null si no se reconoce
   stock_inicial numeric,
@@ -104,7 +131,7 @@ produccion_envases_articulos            -- 26 filas
   stock_sincronizado_en timestamptz,
   sheets_fila int, activo boolean
 
-produccion_envases_movimientos          -- 1.398 filas
+produccion_envases_movimientos          -- 1.404 filas
   articulo_id, codigo,
   fecha date,                           -- date y no timestamptz: es un día
   entrada numeric default 0,
@@ -131,7 +158,7 @@ produccion_envases_referencias_historial -- 3 líneas hoy
 
 El `check` y el `date` no son invención: son dos lecciones que Inventario ya
 pagó (`20260903081542_inventario_la_fecha_del_kardex_es_un_dia_no_un_instante`).
-Ninguna de las 1.398 filas tiene los cuatro números en cero, así que el `check`
+Ninguna de las 1.404 filas tiene los cuatro números en cero, así que el `check`
 no rechaza nada de lo que hay.
 
 `stock_actual` es **lo que dijo la planilla la última vez que se la leyó**, con
@@ -163,7 +190,7 @@ columna insertada a mano corre todo lo que está a su derecha y nadie se entera.
 
 - `fechaDeSheets()` para el d/m — leerlo al revés dio vuelta 885 fechas en
   Compras.
-- `traerTodo()` de `lib/core/paginado.ts`: 1.398 filas ya pasan el corte mudo de
+- `traerTodo()` de `lib/core/paginado.ts`: 1.404 filas ya pasan el corte mudo de
   1000 de PostgREST.
 - `registrarSincronizacion()`, como los otros módulos.
 - **La primera corrida es la carga inicial.** No hay importador aparte: un
@@ -185,8 +212,12 @@ Columnas escribibles: **A, C, D, E, F, H, I, J**.
 stock de todo lo que viene abajo.
 
 La fila libre se **busca** con `filaSiguienteSegunLaColumna` sobre la A, no se
-cuenta: la última fila con código es la 1403 pero sólo 1.398 tienen datos — hay
-huecos en el medio.
+cuenta — pero el motivo no es el que decía este spec. **En la columna A no hay
+huecos**: al 15/09/2026 son 1.404 filas consecutivas, de la 2 a la 1405, y la
+primera libre es la 1406. El motivo real es que leer `A:K` devuelve **3.298**
+filas, porque las fórmulas de B, G y K están arrastradas hasta abajo: contar
+filas del rango escribiría el movimiento mil ochocientas filas debajo de donde
+alguien lo puede ver.
 
 El espejo **no corre en segundo plano**, por la misma razón que en Inventario:
 un movimiento que no llega a la planilla **no existe**, porque la próxima
@@ -260,7 +291,7 @@ Van a `docs/VARIABLES-VERCEL.md` cuando se implemente.
 - **La rotura no descuenta stock.** Se guarda y no se descuenta, igual que la
   planilla. Si mañana se decide que sí, es una consulta y no una migración: los
   cuatro números están guardados crudos.
-- **La J (proveedor) está vacía en las 1.398 filas.** Se espeja igual, porque el
+- **La J (proveedor) está vacía en las 1.404 filas.** Se espeja igual, porque el
   alta desde la app la puede llenar.
 - **`CONSULTA` no se espeja.** Es basura heredada del almacén: columnas "QUIEN
   LO PIDIÓ / N°RI / SECTOR" que en envases no existen, y seis filas residuales

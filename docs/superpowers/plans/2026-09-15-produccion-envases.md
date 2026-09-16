@@ -19,6 +19,35 @@ servicio de Google que el repo ya usa.
 
 ---
 
+## Los números del spec, vueltos a medir el 15/09/2026
+
+El spec dice 26 artículos y 1.398 movimientos, y este plan los usaba. Se leyó la
+planilla real con la cuenta de servicio y **no son los que tiene hoy**. Corregido
+en todo el documento; queda anotado acá porque el spec sigue diciendo lo otro.
+
+| | Spec | Medido |
+|---|---|---|
+| Artículos en el listado | 26 | **28** — los 26 envases más `00966` y `00967`, dos restos del almacén que quedaron al clonar la planilla |
+| Filas con código en el kardex | 1.398 | **1.404** |
+| Artículos sin grupo | 1 (`00011`) | **3** — el `00011` y los dos restos, los tres sin un solo movimiento |
+| Huecos en la columna A | *"hay huecos en el medio"* | **Ninguno.** Son consecutivas de la 2 a la 1405, y la primera libre es la 1406 |
+
+De la diferencia de seis movimientos **no sé el origen**: no son de los dos
+restos del almacén, que tienen cero. Puede ser que la planilla haya crecido entre
+las dos mediciones, que es lo más probable — la escribe gente todos los días.
+
+**Por eso ninguno de estos números va como constante en un test.** Lo que se
+compara es el conteo de la columna A leído en el mismo momento; el detalle está
+en la tarea 5.
+
+**Tres cosas más que se midieron y el spec no menciona**, las tres ya
+contempladas en las tareas: el listado escribe `STOCK INICAL` sin la segunda "I";
+tiene una columna extra con encabezado `3/9 (0:00)` que nadie usa; y la fila de
+encabezados del kardex trae exactamente diez celdas, así que **la K no tiene
+encabezado** y es la única columna que se lee por posición.
+
+---
+
 ## Antes de empezar
 
 Leer, en este orden:
@@ -185,7 +214,7 @@ create table if not exists produccion_envases_movimientos (
   sheets_pendiente_en timestamptz,
   created_at       timestamptz not null default now(),
 
-  -- Ninguna de las 1.398 filas de la planilla tiene los cuatro en cero: esto
+  -- Ninguna de las 1.404 filas de la planilla tiene los cuatro en cero: esto
   -- no rechaza nada de lo que hay, y frena la fila empezada y no terminada.
   constraint produccion_envases_mov_algo_paso
     check (entrada + salida + rotura + despacho > 0),
@@ -1196,9 +1225,13 @@ export interface ResultadoEspejo {
  * N° de requerimiento y viene vacía casi siempre: son dos planillas parecidas
  * con la primera columna distinta.)
  *
- * Se **busca** y no se cuenta: hay huecos —la última fila con código es la 1403
- * y sólo 1.398 tienen datos—, así que contar dejaría la fila nueva encima de
- * una que ya existe.
+ * Se **busca** y no se cuenta, y el motivo medido es otro que el que decía el
+ * spec: en la columna A no hay huecos —al 15/09/2026 son 1.404 filas
+ * consecutivas, de la 2 a la 1405— pero leer `A:K` devuelve **3.298**, porque
+ * las fórmulas de B, G y K están arrastradas hasta abajo. Contar filas del
+ * rango escribiría el movimiento mil ochocientas filas debajo de donde alguien
+ * lo puede ver. Es lo que dejó la OT 2381 en la fila 3717 de la planilla de
+ * Mantenimiento y terminó con dos órdenes con el mismo número.
  *
  * No lanza: devuelve qué pasó. Quien lo llama decide, y lo que decide es anotar
  * el pendiente — no tragárselo.
@@ -1241,8 +1274,10 @@ descripcion, G es el saldo corriente y K la ARRAYFORMULA del grupo. Hay un test
 que falla si alguna vuelve a aparecer.
 
 La fila libre se busca por la columna A —que aca es el codigo, no el N° de RI
-como en el almacen— y se busca en vez de contarse: hay huecos, la ultima fila
-con codigo es la 1403 y solo 1.398 tienen datos.
+como en el almacen— y se busca en vez de contarse. No por huecos: en la A no
+hay. Es porque leer A:K devuelve 3.298 filas contra 1.404 con codigo, por las
+formulas de B, G y K arrastradas hasta abajo, y contar el rango escribiria el
+movimiento mil ochocientas filas debajo de donde se lo puede ver.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -1257,8 +1292,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Crear: `lib/produccion/envases/sincronizar.ts`
 - Crear: `app/api/produccion/envases/sync/route.ts`
 
-Esta misma función **es la carga inicial**: la primera corrida trae los 26
-artículos, los 1.398 movimientos, los 16 proveedores y las referencias. No hay
+Esta misma función **es la carga inicial**: la primera corrida trae los 28
+artículos, los 1.404 movimientos, los 16 proveedores y las referencias. No hay
 importador aparte — un script `.mjs` no podría usar el parser de la tarea 2 y
 habría que duplicarlo sin tests, que es cómo las dos copias se separan.
 
@@ -1436,7 +1471,7 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   );
 
   // Los proveedores del núcleo, sólo para leer. La columna J viene vacía en las
-  // 1.398 filas de hoy, pero el alta desde la app la puede llenar.
+  // 1.404 filas de hoy, pero el alta desde la app la puede llenar.
   const proveedoresNucleo = indiceDeProveedores(
     await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
       admin.from("proveedores").select("id, nombre").range(desde, hasta)
@@ -1693,8 +1728,8 @@ import { sincronizarEnvases } from "@/lib/produccion/envases/sincronizar";
 /**
  * Traer de la planilla de envases.
  *
- * Es la misma función que corre la carga inicial: la primera vez trae los 26
- * artículos y los 1.398 movimientos, y de ahí en adelante refresca.
+ * Es la misma función que corre la carga inicial: la primera vez trae los 28
+ * artículos y los 1.404 movimientos, y de ahí en adelante refresca.
  *
  * Alcanza con tener acceso al módulo: traer de la planilla no cambia lo que la
  * planilla dice —sólo lo copia— así que no es una operación de edición.
@@ -1744,19 +1779,38 @@ npx tsx scripts/tmp-sync-envases.mts; rm -f scripts/tmp-sync-envases.mts
 Esperado, y hay que verificar los números uno por uno:
 
 ```
-articulos: 26
-movimientos: 1398
+articulos: 28
+movimientos: 1404
 movimientos_sin_articulo: 0
 proveedores: 16
 referencias: 5
-articulos_sin_grupo: ["00011"]   ← el SHARMAR, que no tiene movimientos
+articulos_sin_grupo: ["00011", "00966", "00967"]
 articulos_con_grupo_en_disputa: []
 ```
 
-Si `movimientos` no da 1398, el parser está descartando filas buenas: comparar
-contra el conteo con `leerValores` crudo antes de tocar nada. Si
-`articulos_con_grupo_en_disputa` trae algo, la columna K está corrida — no
-arreglarlo en el código, avisarlo.
+**Estos números son de una medición del 15/09/2026, no una constante.** La
+planilla la escribe gente todos los días: para cuando se ejecute esta tarea, la
+cantidad de movimientos va a ser otra. Contrastar así, en este orden:
+
+1. Contar la columna A del kardex con `leerValores(ID, "Entradas  Salidas!A:A")`
+   y restarle el encabezado. **Ese** es el número contra el que se compara,
+   medido en el mismo momento.
+2. Si `movimientos` no da eso, el parser está descartando filas buenas.
+3. Si `articulos_con_grupo_en_disputa` trae algo, la columna K está corrida —
+   no arreglarlo en el código, avisarlo.
+
+**Por qué 28 artículos y tres sin grupo, y no 26 y uno.** El listado trae 28
+códigos. Dos son restos del almacén que quedaron al clonar la planilla —
+`00966 ABRAZADERA PARA MANGAS` y `00967 GOMAS DE GUARDERA (XM) 10MM X 500 MM` —
+y **no tienen ni un movimiento**, así que tampoco tienen K y tampoco tienen
+grupo. El tercero sin grupo es el `00011`, el SHARMAR, por el mismo motivo.
+
+**No los filtres.** Acá manda la planilla: si están en el listado, entran. Un
+filtro por código escrito en el parser es una regla invisible que nadie va a
+encontrar dentro de seis meses, y el diseño ya tiene el lugar donde estos tres
+se ven — la fila "Sin grupo" de `/periodo`, que existe justamente para que un
+artículo sin grupo no desaparezca de los totales. Si molestan, se borran **de la
+planilla**.
 
 - [ ] **Paso 5: Correr la suite entera y los tipos**
 
@@ -1774,7 +1828,7 @@ arreglarlo es pisarlo.
 ```bash
 git commit --only lib/produccion/envases/sincronizar.ts lib/produccion/envases/sincronizar.test.ts app/api/produccion/envases/sync/route.ts -m "feat(produccion): traer de la planilla de envases
 
-Es tambien la carga inicial: la primera corrida trae 26 articulos, 1.398
+Es tambien la carga inicial: la primera corrida trae 28 articulos, 1.404
 movimientos, 16 proveedores y las referencias. Sin importador aparte, que es
 como las dos copias del parser se separan.
 
@@ -1784,8 +1838,10 @@ movimientos, queda en null y se informa. Los proveedores se enganchan primero
 por CUIT y despues por nombre, porque en esta pestaña 'Torraco Pablo Javier' es
 'Flexi Rigs' en las facturas.
 
-Medido contra la planilla real: 26 / 1.398 / 16 / 5, y el unico articulo sin
-grupo es el 00011, que nunca tuvo un movimiento.
+Medido contra la planilla real el 15/09/2026: 28 articulos / 1.404 movimientos /
+16 proveedores / 5 colores, y los tres articulos sin grupo son el 00011 y los dos
+restos del almacen (00966, 00967), que nunca tuvieron un movimiento y por eso
+tampoco tienen K.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -1941,7 +1997,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Crear: `app/(app)/produccion/envases/StockClient.tsx`
 - Crear: `app/(app)/produccion/envases/TraerDeLaPlanilla.tsx`
 
-**Sin ruta de API para leer.** Son 26 artículos: el Server Component los trae y
+**Sin ruta de API para leer.** Son 28 artículos: el Server Component los trae y
 los pasa. Inventario tiene `/api/inventario/articulos` porque allá son ~2.800 y
 la búsqueda va contra la base; acá la búsqueda es sobre una lista que entra
 entera en la pantalla, y una ruta más sería plomería sin trabajo que hacer.
@@ -2250,7 +2306,7 @@ Ordenada por faltante, que es lo que ordena el trabajo, y con la fecha de la
 ultima lectura a la vista: el stock es lo que dijo la planilla, no un calculo, y
 sin la fecha el numero se lee como si fuera de ahora.
 
-Sin ruta de API para leer: son 26 articulos y los trae el Server Component. El
+Sin ruta de API para leer: son 28 articulos y los trae el Server Component. El
 boton muestra entero lo que devuelve la sincronizacion, incluido lo que no
 reconocio — un resumen que solo dice 'listo' esconde lo que hay que arreglar.
 
@@ -2296,7 +2352,7 @@ export default async function MovimientosPage() {
         .order("codigo")
         .range(desde, hasta)
     ),
-    // `traerTodo` y no un `.limit()`: son 1.398 filas y PostgREST corta en 1000
+    // `traerTodo` y no un `.limit()`: son 1.404 filas y PostgREST corta en 1000
     // sin avisar. Un `.limit(3000)` devuelve 1000 y la pantalla miente sin que
     // nada falle.
     traerTodo<MovimientoEnPantalla>((desde, hasta) =>
@@ -2603,7 +2659,7 @@ npx tsc --noEmit
 ```bash
 git commit --only "app/(app)/produccion/envases/movimientos/page.tsx" "app/(app)/produccion/envases/movimientos/MovimientosClient.tsx" -m "feat(produccion): el kardex de envases y el alta de un movimiento
 
-Con traerTodo: son 1.398 filas y PostgREST corta en 1000 sin avisar, asi que un
+Con traerTodo: son 1.404 filas y PostgREST corta en 1000 sin avisar, asi que un
 limit devolveria 1000 y la pantalla mentiria sin que nada falle.
 
 Las filas que no llegaron a la planilla van marcadas con el motivo a la vista y
