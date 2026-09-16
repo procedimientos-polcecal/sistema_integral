@@ -142,6 +142,97 @@ Por eso cada aprobador tiene un **alias** (`NICO`, `MAXI`) que se carga en
 `/compras/configuracion`. Sin alias la aprobación no se escribe: se avisa y
 queda pendiente, en vez de meter un valor que la validación rechaza.
 
+## Y hay un segundo libro: SEGUIMIENTO DE COMPRA
+
+Es donde se anota **qué llegó** de cada compra. Un RI que llega a `PEDIDO` ya se
+compró y espera la mercadería; cuando llega se registra en `/compras/seguimiento`
+y pasa a `RECIBIDO`. Antes eso vivía sólo en la planilla, cargado a mano: por eso
+había 1.787 requerimientos en `PEDIDO` y **ninguno** había llegado nunca a
+`RECIBIDO`.
+
+Acá la dirección es **al revés que en el otro libro**: manda el sistema y la
+planilla recibe, como en Producción. El SdG no la vuelve a leer, salvo la
+importación del histórico, que corrió una vez.
+
+El libro tiene el master `COMPRAS CON RI` y nueve pestañas por área que son
+`=FILTER('COMPRAS CON RI'!A2:M3151; C2:C3151="<Área>")`. **El SdG escribe sólo
+el master**: las de área se recalculan solas, y además sus columnas `A:M` están
+protegidas contra esta cuenta.
+
+Tres reglas que no se deducen del código, y ninguna avisa cuando se rompe:
+
+**`MAIL_ENVIADO` (columna K) no se escribe nunca.** Un Apps Script de la
+planilla —`triggerPedidoRecibidoTiempo`— barre el master buscando filas con
+fecha de recepción y sin `MAIL_ENVIADO`, le manda el aviso de "pedido recibido"
+al mail del área y estampa un `SI`. Si al corregir una recepción el SdG pisara
+esa celda con vacío, **el área recibiría el aviso por segunda vez**. Por eso
+`filaDeSeguimiento` devuelve `null` en esa posición y el exportador saltea las
+`null` en vez de convertirlas en cadena vacía. El SdG no puede mandar ese mail en
+su lugar: no hay transporte de correo en el proyecto —Remises usa web push— ni
+dirección de mail por área en la base.
+
+**Nunca `values.append`.** Debajo de la última fila real hay ~360 filas con
+`#N/A` hasta el final de la grilla, y `append` no escribe después de los datos:
+escribe después de **todo**. Mandaría la fila nueva al fondo. Es el mismo bug que
+llevó dos presupuestos del RI 1865 a las filas 1003 y 1004 de una comparativa
+mientras la app decía que los había escrito. La fila se busca **por el número de
+RI en la columna A** —`ubicarFila`, igual que `filaEnMaster` en el otro libro— y
+sólo si no está se toma la primera libre.
+
+**Nunca insertar en el medio ni ordenar.** Las columnas de aplicación de cada
+pestaña por área (`Se aplicó?`, `Fecha de Aplicación`) viven **al lado** del
+`FILTER` y son posicionales. Correr una fila del master hace que cada una pase a
+describir el RI de al lado. Es el mismo riesgo que ya tienen las columnas a mano
+del otro master, y tampoco se puede evitar desde acá: si alguien ordena el master
+a mano, el SdG no se entera.
+
+**El seguimiento es de lo comprado, no de todo lo que se edita.**
+`exportarSeguimiento` se llama desde el PATCH del requerimiento, que es por donde
+pasan también aprobar, asignar y cargar un presupuesto. Sin una guarda de estado,
+cada una de esas acciones le creaba una fila a un RI que nadie compró: la
+planilla habría pasado de 1.757 filas a las ~1.968 del sistema, y el exportador
+no borra. La guarda es `entraEnElSeguimiento` y vive en el exportador y no en la
+ruta, para que la hereden el cron y cualquier llamador que venga. Contempla que
+un RI que **ya** tiene fila se siga escribiendo aunque haya vuelto a comparativa:
+esa fila existe, y dejar de escribirla la congelaría con datos viejos.
+
+### Lo que se importó, y los diez que quedaron para mirar
+
+El histórico se trajo cruzando por `NºRI`, sin un solo huérfano: las 1.766 filas
+de la planilla existen todas en la base.
+
+Diez de ellas la planilla las da por **recibidas** y el sistema nunca las marcó
+como pedidas —los RI 1841, 1843, 1844, 1845, 1847 y 1905 en `SIN_INICIAR`, 1902,
+1903 y 1904 en `EN_COMPARATIVA`, y el 1860 en `PARA_COMPRAR`, todos con fecha de
+recepción de agosto o septiembre—. **La importación no les tocó el estado**: se
+trajeron sus datos de recepción y su `seguimiento_fila`, así el exportador los
+sigue manteniendo, pero pasarlos a `RECIBIDO` habría borrado la pregunta de por
+qué nunca se marcaron como pedidos, saltándose de un salto la aprobación y la
+compra. El seguimiento describe lo que pasó; no corrige el circuito.
+
+Noventa y tres celdas de cantidad no se pudieron leer y quedaron en null, con
+aviso: 86 son `#N/A` —la celda está rota y no hay nada que recuperar—, 5 son un
+número con la unidad pegada (`"100 metros"`, `"5 LTS"`) y 2 son medidas y no
+cantidades (`"1500x1500"`). No se adivinan: rescatar las 5 obligaría a una
+tolerancia que convertiría las 2 últimas en quince millones.
+
+### `Cumplió COMPRAS?` y `Cumplió PROV?` no son un cálculo
+
+Se cargan a mano, con tres valores. Se midió sobre las 1.757 filas del histórico
+y **no hay regla que los explique**: de los "Sí" de Compras, 295 sobre 1.538
+habían llegado tarde; de los "Sí" del proveedor, 52 estaban incompletos, y 16 de
+los "No" habían recibido todo. Llegar tarde avisando no es lo mismo que llegar
+tarde. Lo que hace el sistema es poner el dato duro al lado —"llegó 9 días
+tarde", "recibió 500 de 1.000", vía `comoLeLlego()`— para que la persona decida
+mirándolo. Calcularlos habría cambiado el significado de la columna y roto la
+comparación con todo el histórico.
+
+La fase 2 —`Se aplicó?`, `Fecha de Aplicación` y `Tiempo en Stock`— está sin
+hacer. La cargan tres áreas (Mantenimiento, Almacén y Taller Vial, que son el 92%
+del volumen) y vive en las pestañas por área **de la N en adelante**, donde la
+protección no llega. El diseño está en
+[el spec](superpowers/specs/2026-09-15-compras-seguimiento-design.md).
+
 ## Trampas que ya costaron tiempo
 
 **Las columnas a mano del master son posicionales, y cualquier cosa que mueva

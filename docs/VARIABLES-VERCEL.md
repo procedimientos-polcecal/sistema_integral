@@ -58,6 +58,7 @@ funcionando y se puede importar a mano.
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
 | `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` | Dónde se escribe el **alta** de un pedido cargado en el sistema. Es `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, la planilla de respuestas del formulario de Google: `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. Va ahí y no en el master porque las columnas del alta del master son la salida de un `QUERY(IMPORTRANGE())` de esta planilla. Dentro de ella se escribe en la pestaña **`Altas del sistema`** y **no** en `Respuestas de formulario 1`: Forms empuja hacia abajo cualquier fila ajena y eso desalineaba las columnas a mano del master — ver [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md) | La cuenta de servicio necesita **Editor**. Si falta, el alta no se exporta y el pedido **queda en la cola de pendientes** con el nombre de la variable en el motivo: no se omite en silencio, porque el pedido no llegó a ninguna parte |
+| `GOOGLE_SHEETS_SEGUIMIENTO_ID` | El libro `SEGUIMIENTO DE COMPRA`, donde se anota qué llegó de cada compra: `1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8`. Es de **una sola vía** —manda el sistema, como en Producción— y el SdG sólo escribe la pestaña `COMPRAS CON RI`: las nueve por área son `FILTER` de ésa y se recalculan solas | La cuenta de servicio necesita **Editor**. Sin la variable el seguimiento no se exporta y **no es un error**: se omite, igual que `GOOGLE_SHEETS_COMPRAS_ID`. Lo que quede sin escribir se anota en `seguimiento_pendiente` — que es una cola **aparte** de `sheets_pendiente`, porque son dos libros distintos y mezclarlos deja sin saber a cuál ir |
 | `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
 | `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
 | `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
@@ -200,6 +201,7 @@ CRON_SECRET=
 SHEETS_WEBHOOK_SECRET=
 GOOGLE_SHEETS_COMPRAS_ID=1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80
 GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID=1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM
+GOOGLE_SHEETS_SEGUIMIENTO_ID=1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
