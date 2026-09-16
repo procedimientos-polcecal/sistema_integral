@@ -181,6 +181,26 @@ orden que se confirma sola, así que un negativo —o un cero— tiene que verse
 que sí pasa y sólo avisa es un neto fuera del rango del año (4,1 a 44,36 t): el
 papel es el papel.
 
+### Y desde el 16/09, cerrar una recepción mueve el stock de Calidad
+
+Después de confirmar la orden y antes de validar el picking, `pushRecepcion`
+llama a `anotarLaRecepcionEnElStock` (`lib/calidad/desdeLaRecepcion.ts`) y anota
+el camión en el libro de carbonilla con el **id de la línea de la orden de compra
+que acaba de crear**.
+
+Ese id es todo el mecanismo anti-duplicado: la sincronización de Calidad lee esa
+misma línea de Odoo y el índice único la frena. Por eso `pushRecepcion` la lee de
+vuelta — es lo único que se le agregó.
+
+**No bloquea el cierre.** Si el proveedor no está declarado como carbonillero o
+si Odoo no contesta, la recepción se cierra igual y el aviso se muestra: hay un
+camión afuera esperando el papel, y el stock puede esperar al cron. Por eso mismo
+los avisos ahora se juntan (`juntarAvisos`): el neto fuera de rango, el stock que
+no se movió y el picking que no validó pueden pasar juntos, y devolver sólo el
+último es perder los otros dos.
+
+El detalle está en [CALIDAD.md](CALIDAD.md).
+
 ### Lo que falta de una persona
 
 **Los CUIT de seis proveedores.** De los 10 con rubro `CARBONILLA`, sólo cuatro

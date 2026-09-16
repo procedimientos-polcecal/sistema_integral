@@ -39,7 +39,7 @@ código.
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
-| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
@@ -138,6 +138,11 @@ Tres reglas que costaron caro, y que valen para las cuatro:
 - **Las fechas van en d/m, no en m/d.** Leerlo al revés dio vuelta 885 fechas en
   Compras. Usar `fechaDeSheets()`, que vive en `lib/core/fechaDeSheets.ts` desde
   que la necesitó el tercer módulo.
+- **Al escribir, nada va como texto.** Las dos funciones de escritura usan
+  `USER_ENTERED`, así que un `"19,58"` lo interpreta la planilla según su locale
+  — la misma trampa que la anterior, por el otro lado. La fecha va como serial
+  con `serialDelDia()` y los números como número; `escribirCeldas()` y
+  `agregarFila()` aceptan los dos tipos. Un número no se interpreta.
 
 Y una de diseño que se repite en todo el sistema: **enlazar al que se le parece
 es peor que dejar en null.** Cuando una planilla nombra algo en texto libre y no
