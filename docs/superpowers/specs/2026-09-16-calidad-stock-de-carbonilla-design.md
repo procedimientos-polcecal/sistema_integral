@@ -407,8 +407,14 @@ lo completa con la fila original de cada renglón, así los movimientos importad
 nacen sabiendo dónde viven.
 
 Si Google falla, queda `sheets_pendiente` con **lo que dijo Google sin
-traducir**, y se le dice a quien hizo la acción. Las fechas van en **d/m** con
-`fechaDeSheets()`.
+traducir**, y se le dice a quien hizo la acción.
+
+**Nada se manda como texto.** Las celdas del libro guardan números, y la
+escritura va con `USER_ENTERED`: un `"19,58"` lo interpreta la planilla según su
+locale, que es la misma trampa que dio vuelta 885 fechas en Compras. La fecha va
+como **serial** con `serialDelDia()` y las toneladas como **número**. Eso pide
+ensanchar `escribirCeldas()` de `lib/core/sheets.ts` para que acepte
+`string | number`, como ya hace `agregarFila()`.
 
 ## Qué se testea
 
@@ -419,12 +425,15 @@ Vitest sobre funciones puras, que es donde están las decisiones:
 - `saldosDelLibro(movimientos)` — los dos saldos; que `sin_separar` no caiga en
   ninguno; y el caso feo: un ajuste que deja el saldo **negativo**, que tiene que
   verse y no bloquearse (el residual llegó a −0,47 el 19/08 y era real).
-- `desvioDelConteo` y `ajustePropuesto` — incluido contado igual a teórico, donde
-  no se propone ajuste ninguno.
+- `desvioDelConteo` — el desvío y el ajuste que propone, en una sola función
+  porque son el mismo cálculo. Incluido contado igual a teórico, donde no se
+  propone ajuste ninguno, y el conteo negativo, que no existe.
 - `movimientoDesdeLaLineaDeOdoo` — qué movimiento sale de una línea y **los tres
   motivos de rechazo**, con los casos reales: la `P02304` de 38.660, la `P02292`
   de 0 y el `Flete carbonilla`.
-- `filaDeLaPlanilla` — las diez celdas, la fecha en d/m y el número con coma.
+- `filaDeLaPlanilla` — las diez celdas: la fecha como serial, las toneladas como
+  número, el código y la descripción que le tocan a cada tipo, y el ajuste en más
+  cayendo en `ENTRADAS` y el ajuste en menos en `SALIDAS`.
 - `movimientoDesdeElRenglon` — la importación: las tres eras y las tres filas que
   tienen texto donde va un número.
 
