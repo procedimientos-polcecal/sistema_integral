@@ -219,33 +219,55 @@ Esto no inventa una convención: el repo ya tiene *la URL es el estado de la
 pantalla*, escrita una vez en `usarLaUrl.ts` y `filtrosUrl.ts` después de que
 Compras y las OT la duplicaran.
 
-| Alta | Dónde vive hoy | URL que arma |
-|---|---|---|
-| Requerimiento interno | Modal en el listado (`NuevoRequerimientoModal`) | `/compras/requerimientos?nuevo=1&area=…&descripcion=…&cantidad=…` |
-| Movimiento de inventario | Página propia | `/inventario/movimientos/nuevo?articulo=…&cantidad=…&destino=…` |
-| Aviso de mantenimiento | Modal en el listado (`NuevoAvisoModal`) | `/mantenimiento/avisos?nuevo=1&equipo=…&descripcion=…` |
-| Parte de producción | Página por fecha | `/produccion/parte/2026-09-16?…` |
+| Alta | Dónde vive hoy | URL que arma | Qué falta construir |
+|---|---|---|---|
+| Requerimiento interno | Modal en el listado (`NuevoRequerimientoModal`) | `/compras/requerimientos?nuevo=1&descripcion=…&codigo=…&cantidad=…` | Sólo el cableado URL → `inicial` en `RequerimientosClient` |
+| Movimiento de inventario | Página propia | `/inventario/movimientos/nuevo?articulo=…&cantidad=…` | Sólo `cantidad`: `articulo` ya anda |
+| Aviso de mantenimiento | Modal en el listado (`NuevoAvisoModal`) | `/mantenimiento/avisos?nuevo=1&equipo=…&descripcion=…` | Una prop `inicial` en el modal, y el cableado |
+| Parte de producción | Página por fecha y turno | `/produccion/parte/2026-09-16/<turno>` | **Nada**: la ruta ya existe |
 
 `urlDeCarga(tipo, campos)` es una **función pura**: valida el tipo, valida que
 los campos existan para ese tipo, escapa, y devuelve la ruta. Se testea con
 vitest sin base ni red.
 
-El trabajo real está del otro lado: **los cuatro formularios tienen que aprender
-a arrancar prellenados** — leer la URL al montar con `useArranqueDeLaUrl` y
-sembrar el estado inicial. Son cuatro cambios chicos y ninguno toca el guardado.
-Ésa es la propiedad que importa: la validación, la exportación a planilla y el
-manejo de `sheets_pendiente` siguen siendo **los de siempre, sin una segunda
-copia**. Un segundo camino de escritura es un camino que se puede olvidar de
-exportar, y eso es una divergencia que no avisa.
+### El trabajo es menos del que parecía, y el motivo importa
 
-Dos reglas que se heredan del resto del sistema:
+`NuevoRequerimientoModal` **ya recibe una prop `inicial: ValoresIniciales`**: la
+usa `RepuestosOTModal` desde Mantenimiento cuando el pañol no tiene un repuesto,
+para no volver a tipear el código. `/inventario/movimientos/nuevo` **ya lee
+`?articulo=`**, y lo resuelve en el servidor por id porque son 2.800 artículos.
+Y el parte de producción ya tiene ruta por fecha y turno.
+
+O sea que de las cuatro altas, una está entera, dos están a mitad de camino y
+sólo el aviso de mantenimiento necesita la prop. El asistente no inaugura la
+idea de "abrir un formulario con cosas puestas": se suma a una que el sistema ya
+usa.
+
+### Lo que el RI no deja precargar, y hay que respetarlo
+
+El comentario de `ValoresIniciales` es explícito: **el área y quién paga no se
+pueden precargar, a propósito.** Son decisiones de quien pide, y elegirlas por
+él es cómo un pedido de Mantenimiento entra como si fuera de Producción.
+
+Así que `urlDeCarga("requerimiento", …)` **no acepta `area`** — y no como olvido
+sino como validación: si el modelo la manda, la función la rechaza. Es la misma
+regla de siempre —enlazar al que se le parece es peor que dejar en null— sólo
+que acá ya está escrita en el código y el asistente la obedece en vez de
+reinventarla.
+
+El resto se hereda igual:
 
 - Si el modelo se equivoca en un campo, **se ve antes de guardar**, porque quien
   confirma está mirando el formulario de siempre. Ésa es la defensa entera de
   este diseño.
-- **Enlazar al que se le parece es peor que dejar en null.** Si no reconoce el
-  artículo o el área con certeza, el campo va vacío y lo dice. Un enlace
-  equivocado no se nota nunca.
+- Si no reconoce el artículo o el equipo con certeza, el campo va vacío y lo
+  dice. Un enlace equivocado no se nota nunca.
+
+Y la propiedad que no se negocia: ninguno de estos cambios toca el guardado. La
+validación, la exportación a planilla y el manejo de `sheets_pendiente` siguen
+siendo **los de siempre, sin una segunda copia**. Un segundo camino de escritura
+es un camino que se puede olvidar de exportar, y eso es una divergencia que no
+avisa.
 
 ## La pantalla
 
@@ -280,7 +302,7 @@ Vitest sobre funciones puras, como el resto del repo:
   que una tabla sin mapear no salga para nadie.
 - `validarConsulta(sql)` — que pase un `select`, que rechace `update`, `;`, y un
   `insert` disfrazado en un comentario.
-- `urlDeCarga(tipo, campos)` — los cuatro tipos, campos desconocidos rechazados,
+- `urlDeCarga(tipo, campos)` — los cuatro tipos, `area` rechazada en el RI,
   escapado correcto.
 - `puedeUsarAsistente(usuario)`.
 
