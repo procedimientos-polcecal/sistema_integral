@@ -136,24 +136,7 @@ export default function DashboardClient({
   return (
     <div>
       <h1 className="text-xl font-bold text-gray-900 mb-1">Hola, {nombreUsuario}</h1>
-      <p className="text-gray-500 mb-4">Resumen general</p>
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        <Link href="/rrhh/empleados" className="btn-secondary">Empleados</Link>
-        <Link href="/rrhh/fichadas" className="btn-secondary">Marcaciones</Link>
-        <Link href="/rrhh/ausencias" className="btn-secondary">Ausencias</Link>
-        <Link href="/rrhh/vacaciones" className="btn-secondary">Vacaciones</Link>
-        <Link href="/rrhh/francos" className="btn-secondary">Francos</Link>
-        <Link href="/rrhh/liquidaciones" className="btn-secondary">Liquidaciones</Link>
-        <Link href="/rrhh/analitico" className="btn-secondary">Analítico</Link>
-        {esAdmin && (
-          <>
-            <Link href="/rrhh/turnos" className="btn-secondary">Turnos</Link>
-            <Link href="/rrhh/feriados" className="btn-secondary">Feriados</Link>
-            <Link href="/rrhh/configuracion" className="btn-secondary">Configuración</Link>
-          </>
-        )}
-      </div>
+      <p className="text-gray-500 mb-6">Resumen general</p>
 
       <div className="flex gap-4 mb-6 card p-4">
         <div>
@@ -243,6 +226,23 @@ export default function DashboardClient({
         hastaGraficos={hastaGraficos}
         onSectorClick={setSectorSeleccionado}
       />
+
+      <p className="mt-6 text-xs text-gray-400">
+        También: <Link href="/rrhh/empleados" className="text-gray-600 underline">Empleados</Link>
+        {" · "}<Link href="/rrhh/fichadas" className="text-gray-600 underline">Marcaciones</Link>
+        {" · "}<Link href="/rrhh/ausencias" className="text-gray-600 underline">Ausencias</Link>
+        {" · "}<Link href="/rrhh/vacaciones" className="text-gray-600 underline">Vacaciones</Link>
+        {" · "}<Link href="/rrhh/francos" className="text-gray-600 underline">Francos</Link>
+        {" · "}<Link href="/rrhh/liquidaciones" className="text-gray-600 underline">Liquidaciones</Link>
+        {" · "}<Link href="/rrhh/analitico" className="text-gray-600 underline">Analítico</Link>
+        {esAdmin && (
+          <>
+            {" · "}<Link href="/rrhh/turnos" className="text-gray-600 underline">Turnos</Link>
+            {" · "}<Link href="/rrhh/feriados" className="text-gray-600 underline">Feriados</Link>
+            {" · "}<Link href="/rrhh/configuracion" className="text-gray-600 underline">Configuración</Link>
+          </>
+        )}
+      </p>
 
       {categoriaHoy && (
         <ModalListaEmpleados titulo={TITULOS_CATEGORIA[categoriaHoy]} empleados={detalleHoy?.[categoriaHoy]} onClose={() => setCategoriaHoy(null)} />

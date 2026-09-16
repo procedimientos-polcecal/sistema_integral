@@ -64,30 +64,27 @@ export default async function InventarioDashboardPage() {
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="page-header">Inventario</h1>
-        <TraerDeLaPlanilla sync={sync} />
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link href="/inventario/stock" className="btn-primary">Ver stock</Link>
-        <Link href="/inventario/movimientos/nuevo" className="btn-secondary">Cargar movimiento</Link>
-        <Link href="/inventario/movimientos" className="btn-secondary">Movimientos</Link>
-        <Link href="/inventario/lista" className="btn-secondary">La lista del pañol</Link>
-        {nivel === "admin" && <Link href="/inventario/articulos" className="btn-secondary">Artículos</Link>}
+        <div className="flex items-center gap-2">
+          <TraerDeLaPlanilla sync={sync} />
+          <Link href="/inventario/movimientos/nuevo" className="btn-primary">Cargar movimiento</Link>
+        </div>
       </div>
 
       {/* ── KPIs ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi color="#1E7D34" label="Artículos" value={num.format(total.count ?? 0)} />
+        <Kpi color="#1E7D34" label="Artículos" value={num.format(total.count ?? 0)} href="/inventario/stock" />
         <Kpi
           color={(cantidadFaltantes ?? 0) > 0 ? "#B45309" : "#1E7D34"}
           label="Con faltante"
           value={num.format(cantidadFaltantes ?? 0)}
+          href="/inventario/stock?faltantes=1"
         />
-        <Kpi color="#0891B2" label="Movimientos hoy" value={num.format(movimientosHoy ?? 0)} />
+        <Kpi color="#0891B2" label="Movimientos hoy" value={num.format(movimientosHoy ?? 0)} href="/inventario/movimientos" />
         <Kpi
           color={(cantidadPendientes ?? 0) > 0 ? "#B45309" : "#1E7D34"}
           label="Sin sincronizar"
           value={num.format(cantidadPendientes ?? 0)}
+          href="/inventario/movimientos"
         />
       </div>
 
@@ -162,19 +159,35 @@ export default async function InventarioDashboardPage() {
           </Link>
         </section>
       )}
+
+      <p className="mt-6 text-xs text-[var(--text-muted)]">
+        También: <Link href="/inventario/lista" className="text-slate-600 underline">La lista del pañol</Link>
+        {nivel === "admin" && (
+          <>
+            {" · "}
+            <Link href="/inventario/articulos" className="text-slate-600 underline">Artículos</Link>
+          </>
+        )}
+      </p>
     </div>
   );
 }
 
-function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+function Kpi({ color, label, value, href }: { color: string; label: string; value: string; href?: string }) {
+  const contenido = (
+    <>
       <div className="mb-1.5 flex items-center gap-2">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
       </div>
       <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
-    </div>
+    </>
+  );
+  const clases = "relative block overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md";
+  const franja = <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />;
+  return href ? (
+    <Link href={href} className={clases}>{franja}{contenido}</Link>
+  ) : (
+    <div className={clases}>{franja}{contenido}</div>
   );
 }

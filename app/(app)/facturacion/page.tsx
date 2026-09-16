@@ -51,21 +51,17 @@ export default async function FacturacionDashboardPage() {
         <Link href="/facturacion/buzon" className="btn-primary">Ir al buzón →</Link>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link href="/facturacion/buzon" className="btn-secondary">El buzón</Link>
-        <Link href="/facturacion/buzon?estado=recibida" className="btn-secondary">Sin vincular</Link>
-      </div>
-
       {/* ── KPIs ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi color="#1E7D34" label="Cargadas hoy" value={num.format(cargadasHoy ?? 0)} />
-        <Kpi color="#0891B2" label="Cargadas este mes" value={num.format(cargadasMes ?? 0)} />
+        <Kpi color="#1E7D34" label="Cargadas hoy" value={num.format(cargadasHoy ?? 0)} href="/facturacion/buzon" />
+        <Kpi color="#0891B2" label="Cargadas este mes" value={num.format(cargadasMes ?? 0)} href="/facturacion/buzon" />
         <Kpi
           color={(sinVincular ?? 0) > 0 ? "#B45309" : "#1E7D34"}
           label="Sin vincular"
           value={num.format(sinVincular ?? 0)}
+          href="/facturacion/buzon?estado=recibida"
         />
-        <Kpi color="#7E22CE" label="Esperando confirmar" value={num.format(esperandoConfirmar ?? 0)} />
+        <Kpi color="#7E22CE" label="Esperando confirmar" value={num.format(esperandoConfirmar ?? 0)} href="/facturacion/buzon" />
       </div>
 
       {/* ── Últimas cargadas ── */}
@@ -103,15 +99,21 @@ export default async function FacturacionDashboardPage() {
   );
 }
 
-function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+function Kpi({ color, label, value, href }: { color: string; label: string; value: string; href?: string }) {
+  const contenido = (
+    <>
       <div className="mb-1.5 flex items-center gap-2">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
       </div>
       <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
-    </div>
+    </>
+  );
+  const clases = "relative block overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md";
+  const franja = <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />;
+  return href ? (
+    <Link href={href} className={clases}>{franja}{contenido}</Link>
+  ) : (
+    <div className={clases}>{franja}{contenido}</div>
   );
 }

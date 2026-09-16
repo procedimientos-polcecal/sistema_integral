@@ -53,18 +53,12 @@ export default async function ProduccionDashboardPage() {
         <Link href="/produccion/dia" className="btn-primary">Ir al día →</Link>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link href="/produccion/dia" className="btn-secondary">El día</Link>
-        <Link href="/produccion/resumenes" className="btn-secondary">Resúmenes</Link>
-        {nivel === "admin" && <Link href="/produccion/productos" className="btn-secondary">Renglones del parte</Link>}
-      </div>
-
       {/* ── KPIs del mes ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi color="#1E7D34" label="Producido este mes" value={`${num1.format(produccion)} t`} />
-        <Kpi color="#0891B2" label="Despachado este mes" value={`${num1.format(despacho)} t`} />
-        <Kpi color="#7E22CE" label="Rotura este mes" value={`${num1.format(rotura)} t`} />
-        <Kpi color="#B45309" label="Turnos cargados" value={`${turnosCargados} / ${turnosPosibles}`} />
+        <Kpi color="#1E7D34" label="Producido este mes" value={`${num1.format(produccion)} t`} href="/produccion/resumenes" />
+        <Kpi color="#0891B2" label="Despachado este mes" value={`${num1.format(despacho)} t`} href="/produccion/resumenes" />
+        <Kpi color="#7E22CE" label="Rotura este mes" value={`${num1.format(rotura)} t`} href="/produccion/resumenes" />
+        <Kpi color="#B45309" label="Turnos cargados" value={`${turnosCargados} / ${turnosPosibles}`} href="/produccion/dia" />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -116,19 +110,31 @@ export default async function ProduccionDashboardPage() {
           )}
         </section>
       </div>
+
+      {nivel === "admin" && (
+        <p className="mt-6 text-xs text-[var(--text-muted)]">
+          También: <Link href="/produccion/productos" className="text-slate-600 underline">Renglones del parte</Link>
+        </p>
+      )}
     </div>
   );
 }
 
-function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+function Kpi({ color, label, value, href }: { color: string; label: string; value: string; href?: string }) {
+  const contenido = (
+    <>
       <div className="mb-1.5 flex items-center gap-2">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
       </div>
       <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
-    </div>
+    </>
+  );
+  const clases = "relative block overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md";
+  const franja = <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />;
+  return href ? (
+    <Link href={href} className={clases}>{franja}{contenido}</Link>
+  ) : (
+    <div className={clases}>{franja}{contenido}</div>
   );
 }

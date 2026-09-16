@@ -440,16 +440,16 @@ export default function DashboardClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Link href="/mantenimiento/equipos" className="btn-secondary">Equipos</Link>
-        <Link href="/mantenimiento/avisos" className="btn-secondary">Avisos</Link>
-        <Link href="/mantenimiento/ordenes" className="btn-secondary">Órdenes de trabajo</Link>
-        <Link href="/mantenimiento/ordenes-servicio" className="btn-secondary">Órdenes de servicio</Link>
-        <Link href="/mantenimiento/planificacion" className="btn-secondary">Planificación</Link>
-        <Link href="/mantenimiento/produccion" className="btn-secondary">Producción</Link>
-        <Link href="/mantenimiento/historial" className="btn-secondary">Historial</Link>
-        {esAdmin && <Link href="/mantenimiento/configuracion" className="btn-secondary">Configuración</Link>}
-      </div>
+      <p className="text-xs text-gray-400">
+        <Link href="/mantenimiento/equipos" className="text-gray-600 underline">Equipos</Link>
+        {" · "}<Link href="/mantenimiento/avisos" className="text-gray-600 underline">Avisos</Link>
+        {" · "}<Link href="/mantenimiento/ordenes" className="text-gray-600 underline">Órdenes de trabajo</Link>
+        {" · "}<Link href="/mantenimiento/ordenes-servicio" className="text-gray-600 underline">Órdenes de servicio</Link>
+        {" · "}<Link href="/mantenimiento/planificacion" className="text-gray-600 underline">Planificación</Link>
+        {" · "}<Link href="/mantenimiento/produccion" className="text-gray-600 underline">Producción</Link>
+        {" · "}<Link href="/mantenimiento/historial" className="text-gray-600 underline">Historial</Link>
+        {esAdmin && <>{" · "}<Link href="/mantenimiento/configuracion" className="text-gray-600 underline">Configuración</Link></>}
+      </p>
 
       {(() => {
         const aParar = new Set(sectoresParados);
@@ -619,7 +619,11 @@ export default function DashboardClient({
             const meta = OT_ESTADO_META[s.estado] ?? { label: s.estado, color: "#94A3B8" };
             const pct = otTotal > 0 ? Math.round((s.count / otTotal) * 100) : 0;
             return (
-              <div key={s.estado} className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden">
+              <Link
+                key={s.estado}
+                href={`/mantenimiento/ordenes?estado=${s.estado}`}
+                className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden block transition hover:-translate-y-0.5 hover:shadow-md"
+              >
                 <div className="absolute top-0 left-0 right-0 h-1" style={{ background: meta.color }} />
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: meta.color }} />
@@ -627,7 +631,7 @@ export default function DashboardClient({
                 </div>
                 <div className="text-3xl font-bold text-gray-900">{s.count}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{pct}% del total</div>
-              </div>
+              </Link>
             );
           })}
         </div>
