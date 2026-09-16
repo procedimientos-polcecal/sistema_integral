@@ -5,6 +5,8 @@ import {
   resumenPorFletero,
   totalesPorTipo,
   resumenAnualPorTipo,
+  toneladasPorMaterialYDestino,
+  detalleDiarioPorDestino,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -150,6 +152,96 @@ describe("resumenAnualPorTipo", () => {
       "2026"
     );
     expect(r.map((f) => f.tipo)).toEqual(["dolomita_d1", "horas_destape"]);
+  });
+});
+
+describe("toneladasPorMaterialYDestino", () => {
+  it("trae los 19 tipos siempre, aunque no hayan tenido movimiento", () => {
+    const r = toneladasPorMaterialYDestino(
+      [{ tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 100 }],
+      "2026-08"
+    );
+    expect(r.filas).toHaveLength(19);
+    expect(r.filas.find((f) => f.tipo === "arcilla")!.porDestino["PT 1"]).toBe(0);
+  });
+
+  it("cruza tipo por destino, sumando lo del mismo par", () => {
+    const r = toneladasPorMaterialYDestino(
+      [
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 100 },
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 50 },
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 3", cantidad: 30 },
+        { tipo: "chocolata_1", mes: "2026-08-01", destino: "PT 1", cantidad: 10 },
+        { tipo: "dolomita_d1", mes: "2026-07-01", destino: "PT 1", cantidad: 999 }, // otro mes, no cuenta
+      ],
+      "2026-08"
+    );
+    expect(r.destinos).toEqual(expect.arrayContaining(["PT 1", "PT 3"]));
+    const d1 = r.filas.find((f) => f.tipo === "dolomita_d1")!;
+    expect(d1.porDestino["PT 1"]).toBe(150);
+    expect(d1.porDestino["PT 3"]).toBe(30);
+    expect(r.totalesPorDestino["PT 1"]).toBe(160); // 150 de D1 + 10 de chocolata 1
+  });
+
+  it("sin destino cargado, se agrupa como tal en vez de perderse", () => {
+    const r = toneladasPorMaterialYDestino(
+      [{ tipo: "dolomita_d1", mes: "2026-08-01", destino: null, cantidad: 10 }],
+      "2026-08"
+    );
+    expect(r.destinos).toEqual(["(sin destino)"]);
+  });
+
+  it("ordena los destinos de mayor a menor total", () => {
+    const r = toneladasPorMaterialYDestino(
+      [
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "CHICO", cantidad: 5 },
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "GRANDE", cantidad: 500 },
+      ],
+      "2026-08"
+    );
+    expect(r.destinos).toEqual(["GRANDE", "CHICO"]);
+  });
+});
+
+describe("detalleDiarioPorDestino", () => {
+  it("un renglón por fecha y tipo, cruzado por destino", () => {
+    const r = detalleDiarioPorDestino(
+      [
+        { fecha: "2026-08-01", tipo: "dolomita_d1", destino: "PT 1", cantidad: 675.54 },
+        { fecha: "2026-08-05", tipo: "dolomita_d1", destino: "PT 1", cantidad: 693.72 },
+        { fecha: "2026-08-04", tipo: "material_desde_pavone", destino: "GALPON 1", cantidad: 105.42 },
+      ],
+      "2026-08"
+    );
+    expect(r.filas).toHaveLength(3);
+    const dia1 = r.filas.find((f) => f.fecha === "2026-08-01")!;
+    expect(dia1.etiqueta).toBe("Dolomita D1");
+    expect(dia1.porDestino["PT 1"]).toBeCloseTo(675.54, 2);
+    expect(dia1.porDestino["GALPON 1"]).toBe(0);
+  });
+
+  it("no trae una fila para un tipo sin movimiento ese día — a diferencia de la matriz mensual", () => {
+    const r = detalleDiarioPorDestino(
+      [{ fecha: "2026-08-01", tipo: "dolomita_d1", destino: "PT 1", cantidad: 10 }],
+      "2026-08"
+    );
+    expect(r.filas).toHaveLength(1);
+  });
+
+  it("ordena por fecha y, dentro del día, por etiqueta", () => {
+    const r = detalleDiarioPorDestino(
+      [
+        { fecha: "2026-08-03", tipo: "dolomita_d1", destino: "PT 1", cantidad: 1 },
+        { fecha: "2026-08-01", tipo: "chocolata_1", destino: "PT 1", cantidad: 1 },
+        { fecha: "2026-08-01", tipo: "dolomita_d1", destino: "PT 1", cantidad: 1 },
+      ],
+      "2026-08"
+    );
+    expect(r.filas.map((f) => `${f.fecha}/${f.tipo}`)).toEqual([
+      "2026-08-01/chocolata_1",
+      "2026-08-01/dolomita_d1",
+      "2026-08-03/dolomita_d1",
+    ]);
   });
 });
 

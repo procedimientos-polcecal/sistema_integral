@@ -6,8 +6,6 @@ import {
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
-  toneladasPorOrigenDestino,
-  detallePorFecha,
   patentesParaMostrar,
 } from "./pesadas";
 import type { PesadaDB } from "./types";
@@ -202,84 +200,3 @@ describe("agruparPesadasPorTipoMes", () => {
   });
 });
 
-describe("toneladasPorOrigenDestino", () => {
-  function pesada(p: Partial<PesadaDB>): PesadaDB {
-    return {
-      id: "1", fecha: "2026-08-15", hora: null, bruto: null, tara: null,
-      tipo: "dolomita_d1", toneladas: 10, origen: "D1", destino: "PLANTA",
-      fletero_raw: null, fletero_id: null,
-      ...p,
-    };
-  }
-
-  it("suma por par origen/destino del mes, sin mirar el tipo ni el fletero", () => {
-    const r = toneladasPorOrigenDestino(
-      [
-        pesada({ origen: "D1", destino: "PLANTA", toneladas: 10 }),
-        pesada({ origen: "D1", destino: "PLANTA", toneladas: 5, tipo: "dolomita_d6", fletero_id: "f1" }),
-        pesada({ origen: "PAVONE", destino: "GALPON 1", toneladas: 12 }),
-      ],
-      "2026-08"
-    );
-    expect(r).toContainEqual({ origen: "D1", destino: "PLANTA", toneladas: 15 });
-    expect(r).toContainEqual({ origen: "PAVONE", destino: "GALPON 1", toneladas: 12 });
-  });
-
-  it("no confunde un mes con otro", () => {
-    const r = toneladasPorOrigenDestino([pesada({ fecha: "2026-07-20" })], "2026-08");
-    expect(r).toEqual([]);
-  });
-
-  it("sin origen o destino cargado, se agrupa como tal en vez de perderse", () => {
-    const r = toneladasPorOrigenDestino([pesada({ origen: null, destino: null })], "2026-08");
-    expect(r).toEqual([{ origen: "(sin origen)", destino: "(sin destino)", toneladas: 10 }]);
-  });
-
-  it("ordena de mayor a menor toneladas", () => {
-    const r = toneladasPorOrigenDestino(
-      [pesada({ origen: "A", destino: "X", toneladas: 5 }), pesada({ origen: "B", destino: "Y", toneladas: 50 })],
-      "2026-08"
-    );
-    expect(r.map((f) => f.origen)).toEqual(["B", "A"]);
-  });
-});
-
-describe("detallePorFecha", () => {
-  function pesada(p: Partial<PesadaDB>): PesadaDB {
-    return {
-      id: "1", fecha: "2026-08-15", hora: null, bruto: null, tara: null,
-      tipo: "dolomita_d1", toneladas: 10, origen: "D1", destino: "PLANTA",
-      fletero_raw: null, fletero_id: null,
-      ...p,
-    };
-  }
-
-  it("junta en una fila las pesadas del mismo día, tipo, origen y destino", () => {
-    const r = detallePorFecha(
-      [
-        pesada({ toneladas: 10 }),
-        pesada({ toneladas: 8 }), // mismo día/tipo/origen/destino: un solo camión más
-        pesada({ toneladas: 6, tipo: "dolomita_d6" }), // mismo día, otro tipo: fila aparte
-      ],
-      "2026-08"
-    );
-    expect(r).toContainEqual({ fecha: "2026-08-15", tipo: "dolomita_d1", origen: "D1", destino: "PLANTA", toneladas: 18 });
-    expect(r).toContainEqual({ fecha: "2026-08-15", tipo: "dolomita_d6", origen: "D1", destino: "PLANTA", toneladas: 6 });
-  });
-
-  it("no mezcla un mes con otro", () => {
-    expect(detallePorFecha([pesada({ fecha: "2026-07-20" })], "2026-08")).toEqual([]);
-  });
-
-  it("ordena por fecha y dentro del día por origen", () => {
-    const r = detallePorFecha(
-      [
-        pesada({ fecha: "2026-08-16", origen: "B" }),
-        pesada({ fecha: "2026-08-15", origen: "B" }),
-        pesada({ fecha: "2026-08-15", origen: "A" }),
-      ],
-      "2026-08"
-    );
-    expect(r.map((f) => `${f.fecha}/${f.origen}`)).toEqual(["2026-08-15/A", "2026-08-15/B", "2026-08-16/B"]);
-  });
-});

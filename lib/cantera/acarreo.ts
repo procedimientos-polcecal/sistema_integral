@@ -233,3 +233,109 @@ export function resumenAnualPorTipo(
     .filter((f) => f.totalAnual !== 0)
     .sort((a, b) => b.totalAnual - a.totalAnual);
 }
+
+function construirPorDestino(
+  entradas: { tipo: string; destino: string | null; cantidad: number }[]
+): { destinos: string[]; porTipoDestino: Map<string, number> } {
+  const porTipoDestino = new Map<string, number>();
+  const totalesPorDestino = new Map<string, number>();
+  for (const e of entradas) {
+    const destino = e.destino?.trim() || "(sin destino)";
+    porTipoDestino.set(`${e.tipo}|${destino}`, (porTipoDestino.get(`${e.tipo}|${destino}`) ?? 0) + e.cantidad);
+    totalesPorDestino.set(destino, (totalesPorDestino.get(destino) ?? 0) + e.cantidad);
+  }
+  const destinos = [...totalesPorDestino.keys()].sort((a, b) => totalesPorDestino.get(b)! - totalesPorDestino.get(a)!);
+  return { destinos, porTipoDestino };
+}
+
+export interface FilaTipoPorDestino {
+  tipo: string;
+  etiqueta: string;
+  porDestino: Record<string, number>;
+}
+
+export interface MatrizPorDestino {
+  destinos: string[];
+  filas: FilaTipoPorDestino[];
+  totalesPorDestino: Record<string, number>;
+}
+
+/**
+ * Material × destino de un mes: los 19 tipos siempre, en el orden fijo de
+ * `TIPOS_DE_ACARREO` —igual que "RESUMEN ANUAL DE MATERIALES" de la
+ * planilla real—, cruzados contra cada destino que tuvo algo ese mes. A
+ * pedido, en vez de la lista plana de `toneladasPorOrigenDestino`
+ * (`pesadas.ts`).
+ *
+ * Sólo tiene sentido con lo que sí trae destino por pesada —las 14 columnas
+ * de material de "Datos"—: los renglones sin pesada (horas, viajes,
+ * Materiales Pezzuchi) no tienen de dónde sacar un destino, así que quedan
+ * en "-" en toda la fila. Es lo esperado, no un error: `entradas` decide qué
+ * le pasa, esta función no filtra por tipo.
+ */
+export function toneladasPorMaterialYDestino(
+  entradas: { tipo: string; mes: string; destino: string | null; cantidad: number }[],
+  mes: string
+): MatrizPorDestino {
+  const delMes = entradas.filter((e) => e.mes.slice(0, 7) === mes.slice(0, 7));
+  const { destinos, porTipoDestino } = construirPorDestino(delMes);
+
+  const filas: FilaTipoPorDestino[] = TIPOS_DE_ACARREO.map((t) => ({
+    tipo: t.codigo,
+    etiqueta: t.etiqueta,
+    porDestino: Object.fromEntries(destinos.map((d) => [d, porTipoDestino.get(`${t.codigo}|${d}`) ?? 0])),
+  }));
+
+  const totalesPorDestino = Object.fromEntries(
+    destinos.map((d) => [d, filas.reduce((s, f) => s + f.porDestino[d], 0)])
+  );
+
+  return { destinos, filas, totalesPorDestino };
+}
+
+export interface FilaDiariaPorDestino {
+  fecha: string;
+  tipo: string;
+  etiqueta: string;
+  porDestino: Record<string, number>;
+}
+
+export interface DetalleDiarioPorDestino {
+  destinos: string[];
+  filas: FilaDiariaPorDestino[];
+}
+
+/**
+ * El mismo cruce que `toneladasPorMaterialYDestino`, pero un renglón por día
+ * y tipo en vez de un total del mes entero — y sólo los que tuvieron algo
+ * ese día: a diferencia de la matriz mensual, mostrar los 19 tipos todos los
+ * días del mes daría, casi siempre, una fila de puros "-".
+ */
+export function detalleDiarioPorDestino(
+  entradas: { fecha: string; tipo: string; destino: string | null; cantidad: number }[],
+  mes: string
+): DetalleDiarioPorDestino {
+  const delMes = entradas.filter((e) => e.fecha.slice(0, 7) === mes.slice(0, 7));
+  const { destinos } = construirPorDestino(delMes);
+
+  const porFechaTipoDestino = new Map<string, number>();
+  const fechasYTipos = new Map<string, { fecha: string; tipo: string }>();
+  for (const e of delMes) {
+    const destino = e.destino?.trim() || "(sin destino)";
+    const claveFT = `${e.fecha}|${e.tipo}`;
+    fechasYTipos.set(claveFT, { fecha: e.fecha, tipo: e.tipo });
+    const clave = `${claveFT}|${destino}`;
+    porFechaTipoDestino.set(clave, (porFechaTipoDestino.get(clave) ?? 0) + e.cantidad);
+  }
+
+  const filas: FilaDiariaPorDestino[] = [...fechasYTipos.values()]
+    .map(({ fecha, tipo }) => ({
+      fecha,
+      tipo,
+      etiqueta: tipoDeAcarreo(tipo)?.etiqueta ?? tipo,
+      porDestino: Object.fromEntries(destinos.map((d) => [d, porFechaTipoDestino.get(`${fecha}|${tipo}|${d}`) ?? 0])),
+    }))
+    .sort((a, b) => (a.fecha === b.fecha ? a.etiqueta.localeCompare(b.etiqueta) : a.fecha.localeCompare(b.fecha)));
+
+  return { destinos, filas };
+}

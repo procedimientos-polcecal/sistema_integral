@@ -2,13 +2,17 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
-import { resumenPorFletero, totalesPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import {
+  resumenPorFletero,
+  totalesPorTipo,
+  toneladasPorMaterialYDestino,
+  detalleDiarioPorDestino,
+  type AcarreoPlano,
+} from "@/lib/cantera/acarreo";
 import {
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
-  toneladasPorOrigenDestino,
-  detallePorFecha,
 } from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
@@ -75,11 +79,18 @@ export default async function AcarreoPage({
     mes
   );
 
-  // De dónde vino y adónde fue cada pesada del mes, y el detalle día a día —
-  // las dos, a diferencia de "Toneladas por yacimiento", con el texto de
-  // ORIGEN/DESTINO tal cual está en "Datos" (no sólo D1/D6/C1/C3).
-  const origenDestino = toneladasPorOrigenDestino(pesadasDelMes, mes);
-  const detalleDiario = detallePorFecha(pesadasDelMes, mes);
+  // Material × destino del mes, y el mismo cruce día a día — sólo con
+  // pesadas (son las únicas que traen destino; ver el comentario de
+  // `toneladasPorMaterialYDestino`).
+  const pesadasConTipo = pesadasDelMes.filter((p): p is typeof p & { tipo: string } => p.tipo !== null);
+  const matrizMaterialDestino = toneladasPorMaterialYDestino(
+    pesadasConTipo.map((p) => ({ tipo: p.tipo, mes: p.fecha, destino: p.destino, cantidad: p.toneladas })),
+    mes
+  );
+  const detalleDiario = detalleDiarioPorDestino(
+    pesadasConTipo.map((p) => ({ fecha: p.fecha, tipo: p.tipo, destino: p.destino, cantidad: p.toneladas })),
+    mes
+  );
 
   return (
     <AcarreoClient
@@ -91,7 +102,7 @@ export default async function AcarreoPage({
       puedeEditar={permisos.puedeEditar}
       esAdmin={permisos.esAdmin}
       sinFleteroResuelto={sinFleteroResuelto}
-      origenDestino={origenDestino}
+      matrizMaterialDestino={matrizMaterialDestino}
       detalleDiario={detalleDiario}
     />
   );

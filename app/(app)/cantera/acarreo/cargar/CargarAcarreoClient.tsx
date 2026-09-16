@@ -71,7 +71,7 @@ export default function CargarAcarreoClient({
   return (
     <div className="mx-auto max-w-2xl">
       <Link href="/cantera/acarreo" className="text-xs text-slate-500 underline">← Acarreo</Link>
-      <h1 className="mt-1 text-xl font-semibold">Cargar acarreo</h1>
+      <h1 className="mt-1 text-xl font-semibold">Cargar datos</h1>
       <p className="mt-1 text-sm text-slate-500">Sólo lo que no pesa la balanza: horas y viajes. El material sale solo de las pesadas de balanza. Guardar en 0 (o vacío) borra ese renglón.</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
