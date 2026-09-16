@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { modulosVisibles, nivelEnModulo, esAdminDelNucleo } from "./access";
+import { modulosVisibles, nivelEnModulo, esAdminDelNucleo, puedeUsarAsistente } from "./access";
 import type { UsuarioModulo } from "./types";
 
 const grant = (modulo: UsuarioModulo["modulo"]): UsuarioModulo => ({
@@ -92,5 +92,27 @@ describe("esAdminDelNucleo", () => {
   it("sin rol no pasa", () => {
     expect(esAdminDelNucleo(null)).toBe(false);
     expect(esAdminDelNucleo(undefined)).toBe(false);
+  });
+});
+
+describe("quién puede usar el asistente", () => {
+  it("lo deja pasar si lo tiene concedido", () => {
+    expect(puedeUsarAsistente({ rol: "operario", puede_usar_asistente: true })).toBe(true);
+  });
+
+  it("no lo deja pasar si no lo tiene, aunque sea encargado", () => {
+    expect(puedeUsarAsistente({ rol: "encargado", puede_usar_asistente: false })).toBe(false);
+  });
+
+  // admin_sistema pasa siempre por la misma razón que en el resto del núcleo:
+  // es quien concede el permiso, y no poder probarlo sin concedérselo a sí
+  // mismo es un lazo bobo.
+  it("admin_sistema pasa aunque la columna diga que no", () => {
+    expect(puedeUsarAsistente({ rol: "admin_sistema", puede_usar_asistente: false })).toBe(true);
+  });
+
+  it("sin usuario, no", () => {
+    expect(puedeUsarAsistente(null)).toBe(false);
+    expect(puedeUsarAsistente(undefined)).toBe(false);
   });
 });

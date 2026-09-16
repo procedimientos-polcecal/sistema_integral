@@ -55,3 +55,26 @@ export function nivelEnModulo(
 export function esAdminDelNucleo(rol: Rol | null | undefined): boolean {
   return rol === "admin_sistema";
 }
+
+/**
+ * Quién puede usar el asistente de IA.
+ *
+ * **No es un permiso de datos.** Lo que el asistente le muestra a cada uno sale
+ * de RLS, igual que en las pantallas: la consulta la ejecuta la sesión del
+ * usuario. Esto es un permiso de **gasto** — cada pregunta son dos o tres
+ * llamadas a un modelo — y por eso arranca cerrado y se abre de a poco.
+ *
+ * `admin_sistema` pasa siempre, como en el resto del núcleo: es quien concede
+ * el permiso, y obligarlo a concedérselo a sí mismo para poder probar no
+ * protege de nada.
+ *
+ * Vive acá y no en la ruta por la misma razón que `esAdminDelNucleo`: cuatro
+ * copias de una regla de permisos son tres de más.
+ */
+export function puedeUsarAsistente(
+  usuario: { rol: Rol; puede_usar_asistente?: boolean | null } | null | undefined
+): boolean {
+  if (!usuario) return false;
+  if (usuario.rol === "admin_sistema") return true;
+  return usuario.puede_usar_asistente === true;
+}

@@ -31,6 +31,8 @@ export interface Usuario {
   apellido: string;
   rol: Rol;
   activo: boolean;
+  /** Si puede usar el asistente de IA. Es un permiso de gasto, no de datos. */
+  puede_usar_asistente: boolean;
 }
 
 export interface UsuarioModulo {
