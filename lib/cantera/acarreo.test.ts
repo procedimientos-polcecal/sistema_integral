@@ -156,13 +156,13 @@ describe("resumenAnualPorTipo", () => {
 });
 
 describe("toneladasPorMaterialYDestino", () => {
-  it("trae los 19 tipos siempre, aunque no hayan tenido movimiento", () => {
+  it("un material sin ningún movimiento este mes no aparece — no una fila de puros ceros", () => {
     const r = toneladasPorMaterialYDestino(
       [{ tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 100 }],
       "2026-08"
     );
-    expect(r.filas).toHaveLength(19);
-    expect(r.filas.find((f) => f.tipo === "arcilla")!.porDestino["PT 1"]).toBe(0);
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0].tipo).toBe("dolomita_d1");
   });
 
   it("cruza tipo por destino, sumando lo del mismo par", () => {

@@ -261,17 +261,15 @@ export interface MatrizPorDestino {
 }
 
 /**
- * Material × destino de un mes: los 19 tipos siempre, en el orden fijo de
- * `TIPOS_DE_ACARREO` —igual que "RESUMEN ANUAL DE MATERIALES" de la
- * planilla real—, cruzados contra cada destino que tuvo algo ese mes. A
- * pedido, en vez de la lista plana de `toneladasPorOrigenDestino`
- * (`pesadas.ts`).
+ * Material × destino de un mes, cruzados contra cada destino que tuvo algo
+ * ese mes — sólo los materiales que también tuvieron algo: una fila (o
+ * columna) enteramente en cero no suma nada a la tabla, así que no entra.
  *
  * Sólo tiene sentido con lo que sí trae destino por pesada —las 14 columnas
  * de material de "Datos"—: los renglones sin pesada (horas, viajes,
- * Materiales Pezzuchi) no tienen de dónde sacar un destino, así que quedan
- * en "-" en toda la fila. Es lo esperado, no un error: `entradas` decide qué
- * le pasa, esta función no filtra por tipo.
+ * Materiales Pezzuchi) no tienen de dónde sacar un destino, y por eso mismo
+ * nunca van a tener nada que sumar acá. `entradas` decide qué le pasa, esta
+ * función no filtra por tipo de antemano.
  */
 export function toneladasPorMaterialYDestino(
   entradas: { tipo: string; mes: string; destino: string | null; cantidad: number }[],
@@ -279,8 +277,9 @@ export function toneladasPorMaterialYDestino(
 ): MatrizPorDestino {
   const delMes = entradas.filter((e) => e.mes.slice(0, 7) === mes.slice(0, 7));
   const { destinos, porTipoDestino } = construirPorDestino(delMes);
+  const tiposConDatos = new Set(delMes.map((e) => e.tipo));
 
-  const filas: FilaTipoPorDestino[] = TIPOS_DE_ACARREO.map((t) => ({
+  const filas: FilaTipoPorDestino[] = TIPOS_DE_ACARREO.filter((t) => tiposConDatos.has(t.codigo)).map((t) => ({
     tipo: t.codigo,
     etiqueta: t.etiqueta,
     porDestino: Object.fromEntries(destinos.map((d) => [d, porTipoDestino.get(`${t.codigo}|${d}`) ?? 0])),
