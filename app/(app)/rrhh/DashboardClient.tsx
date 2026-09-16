@@ -63,8 +63,8 @@ function StatCard({
 }
 
 export default function DashboardClient({
-  nombreUsuario, empresas, sectores, resumenInicial,
-}: { nombreUsuario: string; empresas: any[]; sectores: any[]; resumenInicial: ResumenHoy }) {
+  nombreUsuario, empresas, sectores, resumenInicial, esAdmin,
+}: { nombreUsuario: string; empresas: any[]; sectores: any[]; resumenInicial: ResumenHoy; esAdmin: boolean }) {
   const [empresaId, setEmpresaId] = useState("");
   const [sectorId, setSectorId] = useState("");
   const [desdeGraficos, setDesdeGraficos] = useState(firstOfMonth());
@@ -136,7 +136,24 @@ export default function DashboardClient({
   return (
     <div>
       <h1 className="text-xl font-bold text-gray-900 mb-1">Hola, {nombreUsuario}</h1>
-      <p className="text-gray-500 mb-6">Resumen general</p>
+      <p className="text-gray-500 mb-4">Resumen general</p>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link href="/rrhh/empleados" className="btn-secondary">Empleados</Link>
+        <Link href="/rrhh/fichadas" className="btn-secondary">Marcaciones</Link>
+        <Link href="/rrhh/ausencias" className="btn-secondary">Ausencias</Link>
+        <Link href="/rrhh/vacaciones" className="btn-secondary">Vacaciones</Link>
+        <Link href="/rrhh/francos" className="btn-secondary">Francos</Link>
+        <Link href="/rrhh/liquidaciones" className="btn-secondary">Liquidaciones</Link>
+        <Link href="/rrhh/analitico" className="btn-secondary">Analítico</Link>
+        {esAdmin && (
+          <>
+            <Link href="/rrhh/turnos" className="btn-secondary">Turnos</Link>
+            <Link href="/rrhh/feriados" className="btn-secondary">Feriados</Link>
+            <Link href="/rrhh/configuracion" className="btn-secondary">Configuración</Link>
+          </>
+        )}
+      </div>
 
       <div className="flex gap-4 mb-6 card p-4">
         <div>

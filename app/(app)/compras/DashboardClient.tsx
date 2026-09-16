@@ -119,6 +119,14 @@ export default function DashboardClient({
         <p className="text-sm text-slate-500">Estado del circuito de compras de POLCECAL y POLYSAN</p>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Link href="/compras/tablero" className="btn-secondary">Tablero</Link>
+        <Link href="/compras/requerimientos" className="btn-secondary">Requerimientos</Link>
+        <Link href="/compras/seguimiento" className="btn-secondary">Seguimiento</Link>
+        <Link href="/compras/proveedores" className="btn-secondary">Proveedores</Link>
+        <Link href="/compras/ubicaciones" className="btn-secondary">Ubicaciones</Link>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Indicador titulo="Requerimientos" valor={contadores.total} href="/compras/requerimientos" />
         <Indicador titulo="Esperando aprobación" valor={contadores.pendientes} href="/compras/aprobaciones" acento="text-amber-600" />

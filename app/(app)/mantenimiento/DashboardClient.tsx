@@ -250,7 +250,7 @@ export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
   empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
   otPorMes, otMes, mesActual, ventanas, semanaQueViene, sectoresParados, atrasadas, hoy,
-  avisosSinOT, osPendientes, canEdit,
+  avisosSinOT, osPendientes, canEdit, esAdmin,
 }: {
   usuario: any;
   equipos: any[];
@@ -279,6 +279,7 @@ export default function DashboardClient({
   avisosSinOT: number;
   osPendientes: number;
   canEdit: boolean;
+  esAdmin: boolean;
 }) {
   const router = useRouter();
   const [plantFilter, setPlantFilter] = useState("TODAS");
@@ -437,6 +438,17 @@ export default function DashboardClient({
             </select>
           )}
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link href="/mantenimiento/equipos" className="btn-secondary">Equipos</Link>
+        <Link href="/mantenimiento/avisos" className="btn-secondary">Avisos</Link>
+        <Link href="/mantenimiento/ordenes" className="btn-secondary">Órdenes de trabajo</Link>
+        <Link href="/mantenimiento/ordenes-servicio" className="btn-secondary">Órdenes de servicio</Link>
+        <Link href="/mantenimiento/planificacion" className="btn-secondary">Planificación</Link>
+        <Link href="/mantenimiento/produccion" className="btn-secondary">Producción</Link>
+        <Link href="/mantenimiento/historial" className="btn-secondary">Historial</Link>
+        {esAdmin && <Link href="/mantenimiento/configuracion" className="btn-secondary">Configuración</Link>}
       </div>
 
       {(() => {

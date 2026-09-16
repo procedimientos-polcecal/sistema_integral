@@ -198,6 +198,7 @@ export default async function MantenimientoDashboardPage() {
       avisosSinOT={avisosSinOT ?? 0}
       osPendientes={osPendientes ?? 0}
       canEdit={canEdit}
+      esAdmin={nivel === "admin"}
     />
   );
 }
