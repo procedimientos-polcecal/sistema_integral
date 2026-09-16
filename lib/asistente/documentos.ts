@@ -32,6 +32,8 @@ const AMBITO_DEL_DOCUMENTO: Record<string, Ambito> = {
   "PRODUCCION.md": "produccion",
   "DESPACHO.md": "despacho",
   "FACTURACION.md": "facturacion",
+  "CALIDAD.md": "calidad",
+  "CALIDAD-ENVASES.md": "calidad",
 };
 
 export function documentosPara(modulos: Modulo[]): string[] {

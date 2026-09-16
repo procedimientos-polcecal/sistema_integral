@@ -250,23 +250,31 @@ tiene en cuenta (`await convertToModelMessages(mensajes)`).
 
 ## Pendientes
 
-1. **Sumar `CALIDAD.md` y `CALIDAD-ENVASES.md` a `AMBITO_DEL_DOCUMENTO`
-   (`lib/asistente/documentos.ts`).** El módulo Calidad se construyó en
-   paralelo a esto y todavía se movía cuando se armó la lista de documentos:
-   hoy `documentos.ts` mapea 16 archivos y `docs/` tiene 18 — los dos de
-   Calidad quedaron afuera de los dos (no sólo `CALIDAD-ENVASES.md`, que es el
-   que se había anotado al principio). Mientras no se agreguen, `leer_documento`
-   los rechaza con "no tenés acceso o no existe" para cualquier usuario, incluido
-   uno con Calidad. Es una lista explícita a propósito —no un `readdir`—, así
-   que agregarlos es sumar dos líneas con `ambito: "calidad"`, no cambiar el
-   mecanismo.
-2. **Media Mantenimiento con lectura abierta a cualquier autenticado**
-   (`equipos`, `ordenes_trabajo`, `mantenimientos_*`, `planificacion_diaria*`)
-   es una decisión de la base que quedó sin cerrar en la 029, no del
-   asistente — ver [Lo que hereda y no corrige](#lo-que-hereda-y-no-corrige).
-   Cerrarla es tocar policies de Mantenimiento, con su propio análisis de a
-   quién le rompe el acceso hoy; el asistente sólo la hereda y la va a seguir
-   heredando hasta que se decida.
+1. **El asistente nunca se ejercitó contra un modelo real.** Ver *Lo que quedó
+   sin verificar*. Es el pendiente que importa: todo lo demás está medido.
+2. **Las vistas de consulta**, si la bitácora las justifica. El spec las dejó
+   explícitamente para después, con las preguntas fallidas en la mano en vez de
+   adivinadas.
+3. **La pantalla completa del asistente.** Hoy es sólo panel. Se gana el lugar
+   cuando las respuestas ya sean buenas.
+
+### Resueltos
+
+- ~~Sumar `CALIDAD.md` y `CALIDAD-ENVASES.md` a `AMBITO_DEL_DOCUMENTO`~~ —
+  hecho el 16/09/2026. `documentos.ts` cubre los 18 archivos de `docs/`,
+  incluido el de este módulo: sin él, el asistente no podía contestar cómo se
+  usa a sí mismo.
+- ~~Media Mantenimiento con lectura abierta~~ — cerrada por la migración
+  `20260916110349`, salvo `equipos`, que queda abierta **a propósito**: la leen
+  Compras (dos pantallas, una ruta y la exportación a la planilla), Inventario,
+  Facturación y el buscador global del header. En los hechos dejó de ser una
+  tabla de Mantenimiento y es un catálogo del núcleo; cerrarla dejaría a un
+  comprador sin ver el equipo de su propio requerimiento. La tabla tiene un
+  `comment on table` que lo explica.
+
+  Verificado en las dos direcciones con el usuario de prueba: con el módulo ve
+  1.869 órdenes de trabajo y 523 filas de bitácora de estado; sin el módulo, ve
+  cero de las dos y sigue viendo los 239 equipos.
 
 ## Dónde está cada cosa
 
