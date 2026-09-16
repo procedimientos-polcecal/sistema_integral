@@ -3021,7 +3021,7 @@ Con esta lista, textual:
 1. **Permiso de EDITOR** para la cuenta de servicio sobre la planilla de stock. Hoy está compartida como lectora y el espejo escribe.
 2. `GOOGLE_SHEETS_STOCK_CARBONILLA_ID` y `CALIDAD_DESDE` en Vercel.
 3. **Declarar los ~16 carbonilleros**: partner de Odoo, tipo de carbón, nombre y código de planilla.
-4. **Resolver la lista blanca**: `CARBONILLA ` (4419) y `CARBONILLA` (6909) cuentan seguro; `Flete carbonilla` (4914) y `Flete de Carbonilla` (4401) no; falta decidir `Carbonilla de coque` (5583), `CARBON RESIDUAL` (7111), `Carbonilla (Archivado)` (4378), `Carbonillia` (4734) y `97000kl de carbonilla` (5267).
+4. **Resolver la lista blanca**: `CARBONILLA ` (4419) y `CARBONILLA` (6909) cuentan seguro; `Flete carbonilla` (4914), `Flete de Carbonilla` (4401) y **`FLETE` (6954)** no; falta decidir `Carbonilla de coque` (5583), `CARBON RESIDUAL` (7111), `Carbonilla (Archivado)` (4378), `Carbonillia` (4734) y `97000kl de carbonilla` (5267).
 5. Agregar `AJUSTE VEGETAL` (`00019`) y `AJUSTE RESIDUAL` (`00020`) a `Listado articulos GRAL`.
 6. **Los once días de Odoo sin cargar**: los 21 camiones del 04 al 15/09 que están en la planilla y no en Odoo. Y decidir cuál de los dos Bruzzone de 19,58 del 04/09 es el bueno — está duplicado en la planilla.
 

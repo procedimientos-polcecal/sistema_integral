@@ -89,6 +89,21 @@ las cuales 1.069 en órdenes `purchase`, 7 `cancel` y 1 `draft`.
 | Empresas | Polcecal 1.055, Polysan 8 |
 | Basura | `P02304` con **38.660** (son kilos) y `P02292` con **0** |
 
+**Y uno que esta medición no podía ver: `FLETE` (id 6954).** Se encontró el
+16/09/2026 ejercitando la sincronización real contra Odoo: **LA INVENCIBLE le
+agrega una línea de flete a todas sus órdenes** — seis en los últimos treinta
+días. No aparecía acá porque el filtro de la medición era
+`product_id.name ilike 'carbon'`, y "FLETE" no dice carbón.
+
+Eso corrige de paso un número del
+[spec de recepción](2026-09-11-despacho-recepcion-de-carbonilla-design.md), que
+dice "570 de 577 órdenes tienen una sola línea": ese conteo salía del mismo
+filtro y por lo tanto también está corto.
+
+Es la mejor prueba de que la lista blanca por id tiene que existir: sin ella,
+seis fletes por mes se habrían sumado al stock como si fueran toneladas de
+carbón.
+
 **Odoo se carga el mismo día**: 1.053 de 1.055 órdenes tienen `create_date`
 igual a `date_order`; el máximo son 3 días.
 
@@ -468,7 +483,8 @@ bloque de navegación.
 - **Declarar los carbonilleros** (~16): partner de Odoo, tipo de carbón, nombre y
   código de planilla.
 - **Resolver la lista blanca de productos**: `CARBONILLA ` (4419) y `CARBONILLA`
-  (6909) cuentan seguro; los dos fletes no; hay que decidir `Carbonilla de coque`
+  (6909) cuentan seguro; los tres fletes no —`Flete carbonilla` (4914), `Flete de Carbonilla` (4401) y
+  **`FLETE` (6954)**, el de LA INVENCIBLE—; hay que decidir `Carbonilla de coque`
   (5583), `CARBON RESIDUAL` (7111), `Carbonilla (Archivado)` (4378),
   `Carbonillia` (4734) y `97000kl de carbonilla` (5267).
 - Agregar `AJUSTE VEGETAL` y `AJUSTE RESIDUAL` a `Listado articulos GRAL`.
