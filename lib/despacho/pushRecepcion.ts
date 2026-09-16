@@ -3,6 +3,7 @@ import { buscarLeer, camposDe, crearEn, llamar, mensajeDeOdoo } from "@/lib/odoo
 import { resolverContextoDeOdoo } from "@/lib/odoo/contexto";
 import { netoDeLaRecepcion } from "./recepcion";
 import { origenDeLaRecepcion, valoresDeLaOrdenDeRecepcion } from "./ordenDeCarbonilla";
+import { anotarLaRecepcionEnElStock } from "@/lib/calidad/desdeLaRecepcion";
 import type { Recepcion } from "./types";
 
 /**
@@ -205,6 +206,25 @@ export async function empujarRecepcion(
     };
   }
 
+  // ── 2b. El stock de Calidad ────────────────────────────────
+  //
+  // Va acá, después de confirmar y antes de validar el picking: la orden ya
+  // tiene su línea y su P#####, y el material ya llegó. Si la validación
+  // fallara después, el camión igual está en el stock, que es la verdad.
+  //
+  // No bloquea nada: si el proveedor no está declarado como carbonillero o si
+  // Odoo no contesta, la recepción se cierra igual y el aviso se muestra. Hay un
+  // camión afuera esperando el papel; el stock puede esperar al cron.
+  const stock = await anotarLaRecepcionEnElStock(admin, {
+    recepcionId: recepcionId,
+    proveedorId: r.proveedor_id,
+    odooPurchaseOrderId: ordenId!,
+    odooPurchaseName: nombre,
+    fecha: r.fecha,
+    toneladas: neto.toneladas!,
+    cargadoPor: r.actualizado_por ?? r.cargado_por,
+  });
+
   // ── 3. Validar la recepción ────────────────────────────────
   if (!pickingId) {
     return {
@@ -212,7 +232,11 @@ export async function empujarRecepcion(
       odooOrderId: ordenId!,
       odooNombre: nombre ?? "",
       recepcionValidada: false,
-      aviso: "La orden quedó confirmada pero Odoo no devolvió una recepción para validar.",
+      aviso: juntarAvisos(
+        neto.aviso,
+        stock.aviso,
+        "La orden quedó confirmada pero Odoo no devolvió una recepción para validar."
+      ),
     };
   }
 
@@ -225,7 +249,7 @@ export async function empujarRecepcion(
         odooOrderId: ordenId!,
         odooNombre: nombre ?? "",
         recepcionValidada: false,
-        aviso: validada.motivo,
+        aviso: juntarAvisos(neto.aviso, stock.aviso, validada.motivo),
       };
     }
   } catch (e) {
@@ -235,7 +259,11 @@ export async function empujarRecepcion(
       odooOrderId: ordenId!,
       odooNombre: nombre ?? "",
       recepcionValidada: false,
-      aviso: "La orden quedó confirmada; la recepción no se pudo validar y queda para reintentar.",
+      aviso: juntarAvisos(
+        neto.aviso,
+        stock.aviso,
+        "La orden quedó confirmada; la recepción no se pudo validar y queda para reintentar."
+      ),
     };
   }
 
@@ -249,7 +277,7 @@ export async function empujarRecepcion(
     odooOrderId: ordenId!,
     odooNombre: nombre ?? "",
     recepcionValidada: true,
-    ...(neto.aviso ? { aviso: neto.aviso } : {}),
+    ...(juntarAvisos(neto.aviso, stock.aviso) ? { aviso: juntarAvisos(neto.aviso, stock.aviso)! } : {}),
   };
 }
 
@@ -317,4 +345,18 @@ async function anotarElError(
     .update({ odoo_error: motivo, odoo_error_en: new Date().toISOString() })
     .eq("id", recepcionId);
   return { ok: false, motivo };
+}
+
+/**
+ * Junta los avisos que puede dejar una recepción en un solo texto.
+ *
+ * Son tres cosas distintas y pueden pasar juntas: que el neto esté fuera de lo
+ * que trajo un camión en todo el año, que el stock de Calidad no se haya podido
+ * mover, y que la validación del picking haya fallado. Devolver sólo el último
+ * es perder los otros dos, y quien cerró la recepción se entera de uno y no de
+ * los otros.
+ */
+function juntarAvisos(...avisos: (string | null | undefined)[]): string | undefined {
+  const hay = avisos.filter((a): a is string => Boolean(a && a.trim()));
+  return hay.length ? hay.join(" · ") : undefined;
 }
