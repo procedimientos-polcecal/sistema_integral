@@ -4,9 +4,14 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://sistema-integral-one.vercel.app
 
-Ocho módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
-**Compras**, **Inventario**, **Producción**, **Despacho** y **Facturación**. Cada
-uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y `app/api/<modulo>`.
+Diez módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+**Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,
+**Cantera** y **Calidad**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>`
+y `app/api/<modulo>`.
+
+**Producción y Calidad son dos cosas distintas y se confunden fácil**, porque las
+carga la misma gente: Producción es el parte de fábrica por turno, y Calidad es
+lo que ese sector lleva aparte —el stock de envases y el de carbonilla—.
 
 **Facturación se enlaza con el Odoo del grupo**, que es donde vive la
 contabilidad de verdad. La regla que gobernaba ese enlace era **el SdG propone,
@@ -34,6 +39,7 @@ código.
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
@@ -111,14 +117,14 @@ una sola dirección, que el SdG nunca vuelve a leer. El riesgo asumido está
 escrito en [docs/PRODUCCION.md](docs/PRODUCCION.md): si alguien la edita a mano,
 el SdG no se entera y la pisa.
 
-**Y adentro de esa excepción hay otra**, así que conviene mirar en qué parte del
-módulo se está parado antes de tocar una ruta: la sección **Envases**
-(`/produccion/envases`) espeja el stock de bolsas y bolsones, y ahí **manda la
-planilla**, como en Compras, Mantenimiento e Inventario. Es la planilla del
-almacén clonada: su stock es una fórmula sobre el kardex, así que el SdG lo lee
-en vez de calcularlo, y un movimiento cargado en la app que no llega a la
-planilla no existe — la próxima sincronización lo borra de hecho. Las dos
-direcciones conviven en el mismo módulo.
+**Calidad tiene las dos direcciones a la vez**, así que conviene mirar en qué
+mitad del módulo se está parado antes de tocar una ruta. En **Envases**
+(`/calidad/envases`, el stock de bolsas y bolsones) **manda la planilla**, como
+en Compras, Mantenimiento e Inventario: es la planilla del almacén clonada, su
+stock es una fórmula sobre el kardex, y un movimiento cargado en la app que no
+llega allá **no existe** — la próxima sincronización lo borra de hecho. En
+**carbonilla**, en cambio, la planilla se va: las entradas salen de Odoo y de la
+balanza.
 
 Tres reglas que costaron caro, y que valen para las cuatro:
 
