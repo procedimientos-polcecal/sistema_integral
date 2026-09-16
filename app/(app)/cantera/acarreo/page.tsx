@@ -7,6 +7,8 @@ import {
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
+  toneladasPorOrigenDestino,
+  detallePorFecha,
 } from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
@@ -73,6 +75,12 @@ export default async function AcarreoPage({
     mes
   );
 
+  // De dónde vino y adónde fue cada pesada del mes, y el detalle día a día —
+  // las dos, a diferencia de "Toneladas por yacimiento", con el texto de
+  // ORIGEN/DESTINO tal cual está en "Datos" (no sólo D1/D6/C1/C3).
+  const origenDestino = toneladasPorOrigenDestino(pesadasDelMes, mes);
+  const detalleDiario = detallePorFecha(pesadasDelMes, mes);
+
   return (
     <AcarreoClient
       mes={mes}
@@ -83,6 +91,8 @@ export default async function AcarreoPage({
       puedeEditar={permisos.puedeEditar}
       esAdmin={permisos.esAdmin}
       sinFleteroResuelto={sinFleteroResuelto}
+      origenDestino={origenDestino}
+      detalleDiario={detalleDiario}
     />
   );
 }

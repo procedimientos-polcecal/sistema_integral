@@ -9,6 +9,7 @@ import {
   type FilaToneladasPorYacimiento,
   type FilaTotalPorTipo,
 } from "@/lib/cantera/acarreo";
+import type { FilaOrigenDestino, FilaDetallePorFecha } from "@/lib/cantera/pesadas";
 import type { Fletero } from "@/lib/cantera/types";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -24,6 +25,8 @@ export default function AcarreoClient({
   puedeEditar,
   esAdmin,
   sinFleteroResuelto,
+  origenDestino,
+  detalleDiario,
 }: {
   mes: string;
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
@@ -34,6 +37,8 @@ export default function AcarreoClient({
   esAdmin: boolean;
   /** Pesadas del mes cuyo fletero no se pudo reconocer (nombre ambiguo o desconocido). */
   sinFleteroResuelto: number;
+  origenDestino: FilaOrigenDestino[];
+  detalleDiario: FilaDetallePorFecha[];
 }) {
   const router = useRouter();
 
@@ -142,6 +147,68 @@ export default function AcarreoClient({
           {toneladas.filter((t) => t.mes === mes).length === 0 && (
             <p className="col-span-full text-sm text-slate-400">Sin datos este mes.</p>
           )}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold text-slate-700">Por origen y destino</h2>
+        <p className="text-xs text-slate-500">
+          Todo lo que dice ORIGEN/DESTINO en "Datos", tal cual — no sólo los cuatro yacimientos.
+        </p>
+        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Origen</th>
+                <th className="px-3 py-2">Destino</th>
+                <th className="px-3 py-2 text-right">Toneladas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {origenDestino.map((f) => (
+                <tr key={`${f.origen}|${f.destino}`}>
+                  <td className="px-3 py-1.5 text-slate-700">{f.origen}</td>
+                  <td className="px-3 py-1.5 text-slate-700">{f.destino}</td>
+                  <td className="px-3 py-1.5 text-right font-medium">{num.format(f.toneladas)}</td>
+                </tr>
+              ))}
+              {origenDestino.length === 0 && (
+                <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">Sin datos este mes.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold text-slate-700">Detalle diario</h2>
+        <p className="text-xs text-slate-500">Por fecha, material, origen y destino — un renglón por día, no por camión.</p>
+        <div className="mt-2 max-h-96 overflow-y-auto overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Fecha</th>
+                <th className="px-3 py-2">Material</th>
+                <th className="px-3 py-2">Origen</th>
+                <th className="px-3 py-2">Destino</th>
+                <th className="px-3 py-2 text-right">Toneladas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {detalleDiario.map((f, i) => (
+                <tr key={i}>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-slate-700">{f.fecha}</td>
+                  <td className="px-3 py-1.5 text-slate-700">{tipoDeAcarreo(f.tipo)?.etiqueta ?? f.tipo}</td>
+                  <td className="px-3 py-1.5 text-slate-700">{f.origen}</td>
+                  <td className="px-3 py-1.5 text-slate-700">{f.destino}</td>
+                  <td className="px-3 py-1.5 text-right font-medium">{num.format(f.toneladas)}</td>
+                </tr>
+              ))}
+              {detalleDiario.length === 0 && (
+                <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-400">Sin datos este mes.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
