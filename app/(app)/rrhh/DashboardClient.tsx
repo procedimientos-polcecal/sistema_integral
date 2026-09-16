@@ -62,6 +62,18 @@ function StatCard({
   );
 }
 
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+    >
+      {label}
+      <span className="text-gray-400">→</span>
+    </Link>
+  );
+}
+
 export default function DashboardClient({
   nombreUsuario, empresas, sectores, resumenInicial, esAdmin,
 }: { nombreUsuario: string; empresas: any[]; sectores: any[]; resumenInicial: ResumenHoy; esAdmin: boolean }) {
@@ -227,22 +239,25 @@ export default function DashboardClient({
         onSectorClick={setSectorSeleccionado}
       />
 
-      <p className="mt-6 text-xs text-gray-400">
-        También: <Link href="/rrhh/empleados" className="text-gray-600 underline">Empleados</Link>
-        {" · "}<Link href="/rrhh/fichadas" className="text-gray-600 underline">Marcaciones</Link>
-        {" · "}<Link href="/rrhh/ausencias" className="text-gray-600 underline">Ausencias</Link>
-        {" · "}<Link href="/rrhh/vacaciones" className="text-gray-600 underline">Vacaciones</Link>
-        {" · "}<Link href="/rrhh/francos" className="text-gray-600 underline">Francos</Link>
-        {" · "}<Link href="/rrhh/liquidaciones" className="text-gray-600 underline">Liquidaciones</Link>
-        {" · "}<Link href="/rrhh/analitico" className="text-gray-600 underline">Analítico</Link>
-        {esAdmin && (
-          <>
-            {" · "}<Link href="/rrhh/turnos" className="text-gray-600 underline">Turnos</Link>
-            {" · "}<Link href="/rrhh/feriados" className="text-gray-600 underline">Feriados</Link>
-            {" · "}<Link href="/rrhh/configuracion" className="text-gray-600 underline">Configuración</Link>
-          </>
-        )}
-      </p>
+      <div>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Más</h2>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Acceso href="/rrhh/empleados" label="Empleados" />
+          <Acceso href="/rrhh/fichadas" label="Marcaciones" />
+          <Acceso href="/rrhh/ausencias" label="Ausencias" />
+          <Acceso href="/rrhh/vacaciones" label="Vacaciones" />
+          <Acceso href="/rrhh/francos" label="Francos" />
+          <Acceso href="/rrhh/liquidaciones" label="Liquidaciones" />
+          <Acceso href="/rrhh/analitico" label="Analítico" />
+          {esAdmin && (
+            <>
+              <Acceso href="/rrhh/turnos" label="Turnos" />
+              <Acceso href="/rrhh/feriados" label="Feriados" />
+              <Acceso href="/rrhh/configuracion" label="Configuración" />
+            </>
+          )}
+        </div>
+      </div>
 
       {categoriaHoy && (
         <ModalListaEmpleados titulo={TITULOS_CATEGORIA[categoriaHoy]} empleados={detalleHoy?.[categoriaHoy]} onClose={() => setCategoriaHoy(null)} />

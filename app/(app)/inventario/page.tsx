@@ -160,16 +160,26 @@ export default async function InventarioDashboardPage() {
         </section>
       )}
 
-      <p className="mt-6 text-xs text-[var(--text-muted)]">
-        También: <Link href="/inventario/lista" className="text-slate-600 underline">La lista del pañol</Link>
-        {nivel === "admin" && (
-          <>
-            {" · "}
-            <Link href="/inventario/articulos" className="text-slate-600 underline">Artículos</Link>
-          </>
-        )}
-      </p>
+      <section className="mt-6">
+        <h2 className="section-title mb-2">Más</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Acceso href="/inventario/lista" label="La lista del pañol" />
+          {nivel === "admin" && <Acceso href="/inventario/articulos" label="Artículos" />}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition hover:-translate-y-0.5 hover:border-[var(--border-dark)] hover:text-[var(--text-primary)] hover:shadow-md"
+    >
+      {label}
+      <span className="text-[var(--text-muted)]">→</span>
+    </Link>
   );
 }
 

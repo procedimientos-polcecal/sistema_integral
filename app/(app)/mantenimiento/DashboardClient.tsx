@@ -440,16 +440,19 @@ export default function DashboardClient({
         </div>
       </div>
 
-      <p className="text-xs text-gray-400">
-        <Link href="/mantenimiento/equipos" className="text-gray-600 underline">Equipos</Link>
-        {" · "}<Link href="/mantenimiento/avisos" className="text-gray-600 underline">Avisos</Link>
-        {" · "}<Link href="/mantenimiento/ordenes" className="text-gray-600 underline">Órdenes de trabajo</Link>
-        {" · "}<Link href="/mantenimiento/ordenes-servicio" className="text-gray-600 underline">Órdenes de servicio</Link>
-        {" · "}<Link href="/mantenimiento/planificacion" className="text-gray-600 underline">Planificación</Link>
-        {" · "}<Link href="/mantenimiento/produccion" className="text-gray-600 underline">Producción</Link>
-        {" · "}<Link href="/mantenimiento/historial" className="text-gray-600 underline">Historial</Link>
-        {esAdmin && <>{" · "}<Link href="/mantenimiento/configuracion" className="text-gray-600 underline">Configuración</Link></>}
-      </p>
+      <div>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Más</h2>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Acceso href="/mantenimiento/equipos" label="Equipos" />
+          <Acceso href="/mantenimiento/avisos" label="Avisos" />
+          <Acceso href="/mantenimiento/ordenes" label="Órdenes de trabajo" />
+          <Acceso href="/mantenimiento/ordenes-servicio" label="Órdenes de servicio" />
+          <Acceso href="/mantenimiento/planificacion" label="Planificación" />
+          <Acceso href="/mantenimiento/produccion" label="Producción" />
+          <Acceso href="/mantenimiento/historial" label="Historial" />
+          {esAdmin && <Acceso href="/mantenimiento/configuracion" label="Configuración" />}
+        </div>
+      </div>
 
       {(() => {
         const aParar = new Set(sectoresParados);
@@ -755,6 +758,18 @@ export default function DashboardClient({
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+    >
+      {label}
+      <span className="text-gray-400">→</span>
+    </Link>
+  );
+}
 
 function IndicatorGroup({ title, tally, colors }: {
   title: string; tally: Record<string, number>; colors: Record<string, string>;

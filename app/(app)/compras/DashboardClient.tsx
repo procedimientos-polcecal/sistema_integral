@@ -232,12 +232,27 @@ export default function DashboardClient({
         </div>
       </section>
 
-      <p className="text-xs text-slate-400">
-        También: <Link href="/compras/seguimiento" className="text-slate-600 underline">Seguimiento</Link>
-        {" · "}<Link href="/compras/proveedores" className="text-slate-600 underline">Proveedores</Link>
-        {" · "}<Link href="/compras/ubicaciones" className="text-slate-600 underline">Ubicaciones</Link>
-      </p>
+      <div>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Más</h2>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Acceso href="/compras/seguimiento" label="Seguimiento" />
+          <Acceso href="/compras/proveedores" label="Proveedores" />
+          <Acceso href="/compras/ubicaciones" label="Ubicaciones" />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+    >
+      {label}
+      <span className="text-slate-400">→</span>
+    </Link>
   );
 }
 

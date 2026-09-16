@@ -112,11 +112,26 @@ export default async function ProduccionDashboardPage() {
       </div>
 
       {nivel === "admin" && (
-        <p className="mt-6 text-xs text-[var(--text-muted)]">
-          También: <Link href="/produccion/productos" className="text-slate-600 underline">Renglones del parte</Link>
-        </p>
+        <section className="mt-6">
+          <h2 className="section-title mb-2">Más</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Acceso href="/produccion/productos" label="Renglones del parte" />
+          </div>
+        </section>
       )}
     </div>
+  );
+}
+
+function Acceso({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition hover:-translate-y-0.5 hover:border-[var(--border-dark)] hover:text-[var(--text-primary)] hover:shadow-md"
+    >
+      {label}
+      <span className="text-[var(--text-muted)]">→</span>
+    </Link>
   );
 }
 
