@@ -11,6 +11,7 @@ import type {
   RequerimientoConRelaciones, HistorialItem, Cotizacion, EstadoCompra, Prioridad,
 } from "@/lib/compras/types";
 import Comparativa from "./Comparativa";
+import FormularioRecepcion from "../../seguimiento/FormularioRecepcion";
 import OrdenEnOdoo from "./OrdenEnOdoo";
 import type { OrdenDeOdoo } from "./OrdenEnOdoo";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
@@ -278,6 +279,18 @@ export default function RequerimientoDetalle({
               >
                 {guardando ? "Guardando…" : "Guardar cambios de compra"}
               </button>
+            </section>
+          )}
+
+          {/* Recepción: el mismo formulario que usa la lista de seguimiento,
+              no una copia — dos formularios que escriben los mismos campos
+              terminan diciendo cosas distintas. */}
+          {puedeEditar && (r.estado_compra === "PEDIDO" || r.estado_compra === "RECIBIDO") && (
+            <section className="rounded-xl border border-slate-200 bg-white p-5">
+              <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Recepción
+              </h2>
+              <FormularioRecepcion requerimiento={r} alGuardar={() => router.refresh()} />
             </section>
           )}
 

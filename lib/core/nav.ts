@@ -135,6 +135,9 @@ export const NAV: NavItem[] = [
       { label: "Dashboard", href: "/compras", modulo: "compras" },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
+      // Después de Requerimientos, que es el orden del circuito: se piden, se
+      // aprueban, se compran, se reciben.
+      { label: "Seguimiento", href: "/compras/seguimiento", modulo: "compras" },
       /**
        * Atajo a la sección de Mantenimiento, no una copia.
        *

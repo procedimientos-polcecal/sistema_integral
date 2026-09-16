@@ -28,6 +28,9 @@ describe("menu de Compras", () => {
       "Dashboard",
       "Tablero",
       "Requerimientos",
+      // Después de Requerimientos, que es el orden del circuito: se piden, se
+      // aprueban, se compran, se reciben.
+      "Seguimiento",
       // Al lado de Requerimientos porque es el mismo trabajo: se piden
       // presupuestos y se baja una comparativa, sobre un servicio en vez de un
       // material.
