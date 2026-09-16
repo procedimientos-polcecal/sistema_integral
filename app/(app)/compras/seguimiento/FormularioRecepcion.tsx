@@ -18,7 +18,14 @@ export default function FormularioRecepcion({
   alGuardar,
 }: {
   requerimiento: RequerimientoConRelaciones;
-  alGuardar: () => void;
+  /**
+   * Se llama SIEMPRE que el guardado sale bien, con el aviso de la planilla
+   * si vino uno (o `null` si no). El formulario no decide qué hacer con eso
+   * —cerrar, refrescar, dónde mostrarlo—: lo decide quien lo puso en pantalla,
+   * porque cada uno lo hace distinto y quedarse con el aviso acá lo pierde
+   * apenas el padre cierra o desmonta este formulario.
+   */
+  alGuardar: (avisoSheets: string | null) => void;
 }) {
   const [campos, setCampos] = useState({
     cantidad_comprada: String(requerimiento.cantidad_comprada ?? requerimiento.cantidad ?? ""),
@@ -28,7 +35,6 @@ export default function FormularioRecepcion({
     cumplio_compras: requerimiento.cumplio_compras ?? ("" as Cumplio | ""),
     cumplio_proveedor: requerimiento.cumplio_proveedor ?? ("" as Cumplio | ""),
   });
-  const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -45,7 +51,6 @@ export default function FormularioRecepcion({
 
   async function guardar() {
     setGuardando(true);
-    setAviso(null);
     setError(null);
     const res = await fetch(`/api/compras/requerimientos/${requerimiento.id}`, {
       method: "PATCH",
@@ -57,8 +62,13 @@ export default function FormularioRecepcion({
         fecha_recepcion: campos.fecha_recepcion || null,
         cumplio_compras: campos.cumplio_compras || null,
         cumplio_proveedor: campos.cumplio_proveedor || null,
-        // Con fecha de recepción el RI está recibido. Sin ella sigue esperando.
-        ...(campos.fecha_recepcion ? { estado_compra: "RECIBIDO" } : {}),
+        // La fecha de recepción es lo que define el estado, en los dos
+        // sentidos: ponerla lo da por recibido y borrarla lo devuelve a la
+        // espera. Sólo agregar la clave cuando había fecha dejaba un RI
+        // RECIBIDO sin fecha de recepción, en la solapa equivocada y sin forma
+        // de sacarlo de ahí. El formulario sólo se muestra en PEDIDO o
+        // RECIBIDO, así que esto no puede pisar ningún otro estado.
+        estado_compra: campos.fecha_recepcion ? "RECIBIDO" : "PEDIDO",
       }),
     });
     const cuerpo = await res.json().catch(() => ({}));
@@ -69,15 +79,11 @@ export default function FormularioRecepcion({
       return;
     }
 
-    // Si la planilla rechazó algo, se dice y ACÁ se queda: `alGuardar` puede
-    // cerrar o desmontar este formulario (la lista lo hace), y eso se llevaría
-    // el aviso antes de que alguien lo lea. El cambio ya está guardado en la
-    // base — lo que falta es que la persona vea que la planilla no lo tiene.
-    if (cuerpo.aviso_sheets) {
-      setAviso(cuerpo.aviso_sheets);
-      return;
-    }
-    alGuardar();
+    // El cambio ya está guardado: de acá para arriba no es decisión de este
+    // formulario. Quien lo puso en pantalla sabe si cierra, si refresca y
+    // dónde mostrar el aviso — quedarse con el aviso acá lo pierde apenas el
+    // padre cierra o desmonta este formulario.
+    alGuardar(cuerpo.aviso_sheets ?? null);
   }
 
   return (
@@ -147,11 +153,6 @@ export default function FormularioRecepcion({
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
-      {aviso && (
-        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {aviso}
-        </div>
       )}
 
       <button

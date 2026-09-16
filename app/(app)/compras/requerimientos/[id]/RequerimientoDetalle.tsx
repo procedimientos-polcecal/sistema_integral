@@ -290,7 +290,17 @@ export default function RequerimientoDetalle({
               <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Recepción
               </h2>
-              <FormularioRecepcion requerimiento={r} alGuardar={() => router.refresh()} />
+              <FormularioRecepcion
+                requerimiento={r}
+                alGuardar={(avisoSheets) => {
+                  // Mismo cartel que usa `guardar()` para el resto de la
+                  // ficha: el aviso vive en el estado de la página, no en el
+                  // formulario, porque acá no se cierra nada al guardar pero
+                  // el criterio es el mismo que en la lista de seguimiento.
+                  setAviso(avisoSheets);
+                  router.refresh();
+                }}
+              />
             </section>
           )}
 

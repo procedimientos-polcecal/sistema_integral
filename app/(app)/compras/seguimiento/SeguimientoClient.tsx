@@ -26,9 +26,14 @@ export default function SeguimientoClient({
 }) {
   const router = useRouter();
   const [solapa, setSolapa] = useState<"PEDIDO" | "RECIBIDO">("PEDIDO");
+  const [busqueda, setBusqueda] = useState("");
   const [area, setArea] = useState(SIN_FILTRO);
   const [proveedor, setProveedor] = useState(SIN_FILTRO);
   const [abierto, setAbierto] = useState<string | null>(null);
+  // Vive acá y no en el formulario: cerrar la tarjeta desmonta el formulario,
+  // y con el aviso adentro se perdía antes de que alguien lo leyera. Acá
+  // arriba sobrevive al cierre, igual que en `BandejaClient.tsx`.
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const areas = useMemo(
     () => [...new Set(requerimientos.map((r) => r.compras_areas?.nombre).filter((n): n is string => !!n))].sort(),
@@ -42,12 +47,26 @@ export default function SeguimientoClient({
   const filtrados = requerimientos.filter((r) => {
     if (area !== SIN_FILTRO && r.compras_areas?.nombre !== area) return false;
     if (proveedor !== SIN_FILTRO && r.proveedores?.nombre !== proveedor) return false;
+
+    const texto = busqueda.trim().toLowerCase();
+    if (texto) {
+      const enNumero = String(r.nro_ri).includes(texto);
+      const enDescripcion = r.descripcion?.toLowerCase().includes(texto);
+      const enProveedor = r.proveedores?.nombre?.toLowerCase().includes(texto);
+      if (!enNumero && !enDescripcion && !enProveedor) return false;
+    }
     return true;
   });
 
   const esperando = filtrados.filter((r) => r.estado_compra === "PEDIDO");
   const recibidos = filtrados.filter((r) => r.estado_compra === "RECIBIDO");
   const visibles = solapa === "PEDIDO" ? esperando : recibidos;
+
+  function guardado(avisoSheets: string | null) {
+    setAbierto(null);
+    setAviso(avisoSheets);
+    router.refresh();
+  }
 
   return (
     <div className="space-y-6">
@@ -57,6 +76,10 @@ export default function SeguimientoClient({
           Lo que ya se compró y espera llegar, y lo que ya llegó.
         </p>
       </div>
+
+      {aviso && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{aviso}</div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav className="flex gap-2">
@@ -83,6 +106,12 @@ export default function SeguimientoClient({
         </nav>
 
         <div className="flex flex-wrap gap-2">
+          <input
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Buscar texto o N° de RI…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
           <select
             aria-label="Filtrar por área"
             value={area}
@@ -116,7 +145,7 @@ export default function SeguimientoClient({
               r={r}
               abierto={abierto === r.id}
               onAbrir={() => setAbierto(abierto === r.id ? null : r.id)}
-              onGuardar={() => { setAbierto(null); router.refresh(); }}
+              onGuardar={guardado}
             />
           ))
         )}
@@ -131,7 +160,7 @@ function Fila({
   r: RequerimientoConRelaciones;
   abierto: boolean;
   onAbrir: () => void;
-  onGuardar: () => void;
+  onGuardar: (avisoSheets: string | null) => void;
 }) {
   const dato = comoLeLlego(r);
 
