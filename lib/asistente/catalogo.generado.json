@@ -1,0 +1,6299 @@
+{
+  "tablas": {
+    "asientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "hoja_ruta_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "asistente_consultas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "pregunta",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sql_corrido",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "filas",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "tokens_entrada",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "tokens_salida",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "error",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "ausencias": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_hasta",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "tipo_ausencia",
+        "nuleable": false
+      },
+      {
+        "columna": "justificada",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "avisos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "oa_number",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "urgencia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "quien_aviso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_asignada",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "work_order_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "app_created",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_row",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "synced_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "reference_photos",
+        "tipo": "text[]",
+        "nuleable": true
+      },
+      {
+        "columna": "repuesto",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "calculos_diarios": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo_dia",
+        "tipo": "tipo_dia",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_normales",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_extra_50",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_extra_100",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "franco_generado",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "ausente",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "justificada",
+        "tipo": "bool",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo_ausencia",
+        "tipo": "tipo_ausencia",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "extras_validadas",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "validado_por_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_validacion",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "horas_manual",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "tarde",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "retiro_anticipado",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_carbonilleros": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_partner_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "carbon",
+        "tipo": "calidad_tipo_carbon",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre_planilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo_planilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "calidad_conteos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "carbon",
+        "tipo": "calidad_tipo_carbon",
+        "nuleable": false
+      },
+      {
+        "columna": "toneladas_contadas",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "teorico_al_contar",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "ajuste_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_envases_articulos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "ubicacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedores_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "grupo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "stock_inicial",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_actual",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_seguridad",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "faltante",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "stock_sincronizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_envases_movimientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "articulo_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "entrada",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "salida",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "rotura",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "despacho",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "observacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_envases_proveedores": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tipos",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "contacto_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "contacto_tel",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "contacto_alt",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "direccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_envases_referencias": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "color",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "proveedor_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      }
+    ],
+    "calidad_envases_referencias_historial": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "texto",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      }
+    ],
+    "calidad_movimientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "calidad_movimiento_tipo",
+        "nuleable": false
+      },
+      {
+        "columna": "carbon",
+        "tipo": "calidad_tipo_carbon",
+        "nuleable": false
+      },
+      {
+        "columna": "toneladas",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "motivo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "carbonillero_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "calidad_origen",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_purchase_line_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_purchase_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "despacho_recepcion_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "calidad_odoo_sin_reconocer": [
+      {
+        "columna": "odoo_purchase_line_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_purchase_name",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_partner_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_partner_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "toneladas",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "motivo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "visto_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "calidad_productos_odoo": [
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cuenta",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "cantera_acarreos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fletero_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "mes",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "cantera_bochones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "yacimiento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "anio",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "correlativo",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "voladura_codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "fin",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "metros_perforados",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "precio_usd_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "tc_usd",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_move_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_move_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_empresa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_importe",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_leido_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "conforme",
+        "tipo": "bool",
+        "nuleable": true
+      },
+      {
+        "columna": "conforme_obs",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "conforme_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "conforme_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_voladura",
+        "tipo": "date",
+        "nuleable": true
+      }
+    ],
+    "cantera_consumos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "voladura_codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "insumo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "insumo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "precio_usd",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "cantera_contratistas": [
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      }
+    ],
+    "cantera_finanzas": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "cantera_fleteros": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "patente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "cantera_insumos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "precio_usd",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "cantera_pesadas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "hora",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "bruto",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "tara",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "toneladas",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "destino",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fletero_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fletero_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "cantera_tarifas_acarreo": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "hasta",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "tarifa",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "cantera_voladuras": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "yacimiento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "anio",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "correlativo",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "perf_inicio",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_fin",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "pozos",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "metros_por_pozo",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "burden_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "espaciamiento_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_precio_usd_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_tc_usd",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_move_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_move_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_empresa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_importe",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_odoo_leido_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_conforme",
+        "tipo": "bool",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_conforme_obs",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_conforme_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_conforme_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_fecha_carga",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_pozos",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_metros_por_pozo",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_burden_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_espaciamiento_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_tc_usd",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "explosivos_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "toneladas_planilla",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_move_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_move_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_empresa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_importe",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_odoo_leido_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_conforme",
+        "tipo": "bool",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_conforme_obs",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_conforme_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_conforme_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "material",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "densidad_t_m3",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_tramos",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "vol_tramos",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_noches_sereno",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "perf_monto_noche",
+        "tipo": "numeric",
+        "nuleable": true
+      }
+    ],
+    "cantera_yacimientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "material",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "densidad_t_m3",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "burden_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "espaciamiento_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "choferes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "telefono",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_aprobadores": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "alias_planilla",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_areas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_cotizaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "requerimiento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "precio_unitario",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "costo_envio",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "condiciones_pago",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "elegida",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "marca",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "unidad_medida",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "descuento",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "iva",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "precio_hasta",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "plazos_pago_dias",
+        "tipo": "int4[]",
+        "nuleable": true
+      },
+      {
+        "columna": "disponibilidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "comentario",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "drive_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "moneda",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cotizacion",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "precio_total",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "elegida_en_planilla",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "compras_historial": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "requerimiento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "campo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "valor_anterior",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "valor_nuevo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "usuario_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nota",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_odoo_ordenes": [
+      {
+        "columna": "requerimiento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_order_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "porcentaje",
+        "tipo": "int2",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_write_date",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_producto_odoo": [
+      {
+        "columna": "descripcion_normalizada",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "veces",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_requerimientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nro_ri",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "area_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "ubicacion_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_necesidad",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "detalle_extra",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "imagen_url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "prioridad",
+        "tipo": "compras_prioridad",
+        "nuleable": true
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "solicitante_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "solicitante_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "estado_aprobacion",
+        "tipo": "compras_estado_aprobacion",
+        "nuleable": false
+      },
+      {
+        "columna": "aprobador",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "aprobado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "motivo_rechazo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "estado_compra",
+        "tipo": "compras_estado_compra",
+        "nuleable": false
+      },
+      {
+        "columna": "comparativa_url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "costo_iva",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "costo_envio",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "moneda",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "oc_numero",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_pedido",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_recepcion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "hoja_origen",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_sincronizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "editado_en_app",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "ubicacion_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "aprobado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_intentado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "paga_ambas",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "compra_asignada_a",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "compra_aprobada_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "compra_aprobada_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "comparativa_drive_id",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "comparativa_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "etapa_previa",
+        "tipo": "compras_estado_compra",
+        "nuleable": true
+      },
+      {
+        "columna": "solicitante_email",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad_comprada",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad_recibida",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_estimada_recepcion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "cumplio_compras",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cumplio_proveedor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "seguimiento_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "seguimiento_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "compras_sincronizaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "direccion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "filas_leidas",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "filas_nuevas",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "filas_actualizadas",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "filas_omitidas",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "error",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "duracion_ms",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_ubicaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "config_liquidacion": [
+      {
+        "columna": "id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_normales_por_dia",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_corte_sabado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "multiplicador_extra_50",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "multiplicador_extra_100",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_franco_compensatorio",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "feriado_como_domingo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "escala_vacaciones",
+        "tipo": "jsonb",
+        "nuleable": false
+      }
+    ],
+    "cotizaciones_dolar": [
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "compra",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "venta",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "fuente",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "despacho_ordenes_carga": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "numero",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_picking_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_picking_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_sale_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "cliente_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "producto_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "unidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "entrada_predio",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio_carga",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "fin_carga",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "salida_predio",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "supervisor_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "supervisor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "despacho_recepcion_proveedores": [
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre_planilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "despacho_recepciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "peso_bruto_kg",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "peso_tara_kg",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "lugar_descarga",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_purchase_order_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_purchase_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_picking_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_error",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_error_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "empleados": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "legajo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "apellido",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_ingreso",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "valor_hora_normal",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_teoricas_diarias",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "domicilio",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "modalidad_pago",
+        "tipo": "modalidad_pago",
+        "nuleable": false
+      }
+    ],
+    "empresa_status_log": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "old_status",
+        "tipo": "plant_status",
+        "nuleable": true
+      },
+      {
+        "columna": "new_status",
+        "tipo": "plant_status",
+        "nuleable": false
+      },
+      {
+        "columna": "reason",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "changed_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "changed_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "empresas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "status",
+        "tipo": "plant_status",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_company_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "equipos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "name",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "code",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "power_kw",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "description",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "status",
+        "tipo": "equipment_status",
+        "nuleable": false
+      },
+      {
+        "columna": "criticality",
+        "tipo": "criticality_level",
+        "nuleable": false
+      },
+      {
+        "columna": "notes",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "is_active",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo_equipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion_proceso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "marca",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "modelo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nro_serie",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "anio_fabricacion",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "anio_instalacion",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "tension_v",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "intensidad_nominal_a",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "rpm_motor",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "fp_cos_phi",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "relacion_reduccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rpm_salida",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_motor_de",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_motor_nde",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_carga",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_otro",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "ubicacion_fisica",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nivel_altura_m",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "origen_equipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "horas_marcha",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_repuesto_critico",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_ultimo_relevamiento",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "relevado_por",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "foto_registro_url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo_id",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "equipos_checklists": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "maintenance_type",
+        "tipo": "maintenance_type",
+        "nuleable": true
+      },
+      {
+        "columna": "version",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "items",
+        "tipo": "jsonb",
+        "nuleable": false
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "is_active",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "name",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "equipos_componentes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "componente_id",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "categoria",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "especificacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "material",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_critico",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "criticidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "foto_url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_relevamiento",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "relevado_por",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "equipos_repuestos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "name",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notes",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "equipos_status_log": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "old_status",
+        "tipo": "equipment_status",
+        "nuleable": true
+      },
+      {
+        "columna": "new_status",
+        "tipo": "equipment_status",
+        "nuleable": false
+      },
+      {
+        "columna": "changed_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "changed_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "reason",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "equipos_tipos": [
+      {
+        "columna": "tipo_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "categoria",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nombre_tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion_funcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "accionamiento",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "potencia_kw_tipica",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tension_v",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "velocidad_rpm_tipica",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tiene_reductor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "relacion_reduccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo_correa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cant_correas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_lado_motor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_lado_carga",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rodamiento_intermedio",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "lubricante_tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "lubricante_marca_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "frecuencia_lubricacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tiene_filtro_aceite",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tiene_filtro_aire",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tiene_filtro_hidraulico",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "insumo_especial_1",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "insumo_especial_2",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "temperatura_max_rodamiento_c",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vibracion_max_mm_s",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "amperaje_nominal_a",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "freq_inspeccion_visual",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "freq_lubricacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "freq_revision_mayor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas_tecnicas",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "facturas_proveedor": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cuit_emisor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo_comprobante",
+        "tipo": "int2",
+        "nuleable": true
+      },
+      {
+        "columna": "punto_venta",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "numero",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "importe_total",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "moneda",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cae",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "requerimiento_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "archivo_url",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "archivo_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "identificado_por",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_move_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_estado",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_conciliado_por",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_sincronizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "detalle_leido",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_attachment_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_partner_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_partner_nombre",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "facturas_proveedor_lineas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "factura_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int2",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "precio_unitario",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "total",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_product_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_account_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_account_nombre",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "analitica",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "analitica_detalle",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "producto_origen",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "feriados": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "tipo_feriado",
+        "nuleable": false
+      }
+    ],
+    "fichadas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_entrada",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_salida",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "origen_fichada",
+        "nuleable": false
+      },
+      {
+        "columna": "import_batch_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "francos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_generado",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "horas",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "estado",
+        "tipo": "estado_franco",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_tomado",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "hojas_ruta": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "remises_tipo_hoja",
+        "nuleable": false
+      },
+      {
+        "columna": "vehiculo_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "chofer_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "hora_salida",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "km",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "minutos",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "geometria",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "inventario_articulos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "ubicacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedores_ref",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "marcas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "stock_inicial",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_actual",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_seguridad",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "faltante",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "stock_sincronizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_planilla",
+        "tipo": "numeric",
+        "nuleable": true
+      }
+    ],
+    "inventario_destinos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "inventario_equipos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "destino_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "inventario_movimientos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "articulo_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "stock_anterior",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "stock_resultante",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "solicitante",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "ri",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_fila",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "requerimiento_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "solicitante_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "destino_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
+    "inventario_solicitantes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "destino_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "jornadas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_inicio",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_fin",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tolerancia_minutos",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "liquidaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "tipo_liquidacion",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_hasta",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_normales",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_extra_50",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_extra_100",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "monto_normal",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "monto_extra_50",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "monto_extra_100",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "total_bruto",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "estado",
+        "tipo": "estado_liquidacion",
+        "nuleable": false
+      },
+      {
+        "columna": "generado_por_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mantenimiento_tarifas_hora": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "valor",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "vigente_desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mantenimientos_ejecuciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "schedule_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "assigned_to",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "started_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "completed_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "checklist_responses",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "notes_start",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notes_end",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "synced_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "photo_urls",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "checklist_snapshot",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "execution_status",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "executed_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "duration_hours",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "observations",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "executed_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "work_order_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
+    "mantenimientos_programados": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "checklist_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "maintenance_type",
+        "tipo": "maintenance_type",
+        "nuleable": false
+      },
+      {
+        "columna": "schedule_type",
+        "tipo": "schedule_type",
+        "nuleable": false
+      },
+      {
+        "columna": "interval_days",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "next_date",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "assigned_to",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "status",
+        "tipo": "schedule_status",
+        "nuleable": false
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "last_executed_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "description",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "estimated_hours",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "reference_photos",
+        "tipo": "jsonb",
+        "nuleable": true
+      }
+    ],
+    "operarios": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "slot",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "ordenes_servicio": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "os_number",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "area",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_requerimiento",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "detalle_extra",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "imagen",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "prioridad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "empresa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "comparativa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_elegido",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tiene_orden_compra",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "costo",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_realizacion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "app_created",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_tab",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_row",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "synced_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_pedido",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "motivo_rechazo",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "ordenes_trabajo": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "ot_number",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "especialidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "quien",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "repuesto",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_ejecucion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_cierre",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "contratista",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "horas",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "operario_1",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "operario_2",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "operario_3",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "prioridad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "synced_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "app_created",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_row",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at_app",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "schedule_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "frecuencia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proxima_fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "reference_photos",
+        "tipo": "text[]",
+        "nuleable": true
+      },
+      {
+        "columna": "orden_manual",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "requiere_parada_sector",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "ordenes_trabajo_repuestos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "work_order_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "os_aprobadores": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "os_comparativas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "os_number",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "area",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proveedor",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "precio_unitario",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "iva",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "precio_total",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "vigencia_hasta",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "plazos",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "condiciones_pago",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "otras_especificaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "eleccion",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "sheets_tab",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_row",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "synced_at",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
+    "planificacion_diaria": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "titulo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "planificacion_diaria_items": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "plan_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "work_order_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_number",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "especialidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "repuesto",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_ejecucion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "assigned_to",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "assigned_name",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas_item",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "produccion_deposito": [
+      {
+        "columna": "parte_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "renglon_papel_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "numeric",
+        "nuleable": false
+      }
+    ],
+    "produccion_despachos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "parte_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "equipo_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cliente_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "renglon_papel_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "producto_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "kilos",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "bultos",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "envase_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "pallets_cantidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "pallets_tipo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rotura_bolsa",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "rotura_bolson",
+        "tipo": "numeric",
+        "nuleable": false
+      }
+    ],
+    "produccion_partes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno",
+        "tipo": "produccion_turno",
+        "nuleable": false
+      },
+      {
+        "columna": "capataz_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "capataz_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "tareas_limpieza",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "recuento_bolsones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "produccion_renglon_productos": [
+      {
+        "columna": "renglon_papel_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "producto_id",
+        "tipo": "uuid",
+        "nuleable": false
+      }
+    ],
+    "produccion_renglones_papel": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "familia",
+        "tipo": "produccion_familia",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre_planilla",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "produccion_semanal": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "week_start",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "days",
+        "tipo": "jsonb",
+        "nuleable": false
+      },
+      {
+        "columna": "note",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "updated_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "motivos",
+        "tipo": "jsonb",
+        "nuleable": false
+      },
+      {
+        "columna": "turnos",
+        "tipo": "jsonb",
+        "nuleable": false
+      },
+      {
+        "columna": "responsable",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "productos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_product_id",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_default_code",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "material",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "granulometria",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "envase",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "kg_por_unidad",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "proveedores": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "contacto",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "telefono",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rubro",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "es_contratista",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "direccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sitio_web",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "telefono_alt",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "plazo_pago_dias",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "forma_pago",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "condicion_pago",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cbu",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "alias_bancario",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "comentario",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "proveedores_odoo": [
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_partner_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "odoo_write_date",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "remises_asistencia": [
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      }
+    ],
+    "remises_config": [
+      {
+        "columna": "id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "fabrica_nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "fabrica_direccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fabrica_lat",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "fabrica_lng",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "velocidad_kmh",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "ciudad_referencia",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "remises_empleados_datos": [
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "direccion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "lat",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "lng",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "turno_default_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
+    "remises_plan_semana": [
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "remises_tipo_hoja",
+        "nuleable": false
+      }
+    ],
+    "remises_plantillas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "remises_tipo_hoja",
+        "nuleable": false
+      },
+      {
+        "columna": "turno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "remises_plantillas_grupos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "plantilla_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "vehiculo_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      }
+    ],
+    "remises_push_tokens": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "endpoint",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "p256dh",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "auth",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "updated_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "remises_turnos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_inicio",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "hora_fin",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "color",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "rrhh_empleados_datos": [
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "sindicato",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_nacimiento",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "genero",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "escala_vacaciones_override",
+        "tipo": "jsonb",
+        "nuleable": true
+      }
+    ],
+    "rrhh_import_batches": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre_archivo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad_registros",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad_errores",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "log_detalle",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "rrhh_import_staging": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "token",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "datos",
+        "tipo": "jsonb",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "expires_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "sectores": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "transversal",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "status",
+        "tipo": "plant_status",
+        "nuleable": false
+      },
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "es_de_planta",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "sectores_status_log": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "old_status",
+        "tipo": "plant_status",
+        "nuleable": true
+      },
+      {
+        "columna": "new_status",
+        "tipo": "plant_status",
+        "nuleable": false
+      },
+      {
+        "columna": "reason",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "changed_by",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "changed_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "sincronizaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "modulo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "recurso",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "ok",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "error",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "filas",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "usuario_areas_compras": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "area_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "usuario_modulos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "modulo",
+        "tipo": "modulo",
+        "nuleable": false
+      },
+      {
+        "columna": "nivel",
+        "tipo": "nivel_acceso",
+        "nuleable": false
+      }
+    ],
+    "usuarios": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "apellido",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "rol",
+        "tipo": "user_role",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "puede_usar_asistente",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
+    "vacaciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "anio_correspondiente",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_hasta",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "dias_tomados",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "ausencia_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
+    "vehiculos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "capacidad",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "chofer_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ]
+  },
+  "enums": {
+    "calidad_movimiento_tipo": [
+      "entrada",
+      "consumo",
+      "ajuste"
+    ],
+    "calidad_origen": [
+      "odoo",
+      "recepcion",
+      "manual",
+      "importacion"
+    ],
+    "calidad_tipo_carbon": [
+      "vegetal",
+      "residual",
+      "sin_separar"
+    ],
+    "compras_estado_aprobacion": [
+      "PENDIENTE",
+      "EN_REVISION",
+      "APROBADA",
+      "DENEGADA"
+    ],
+    "compras_estado_compra": [
+      "SIN_INICIAR",
+      "PARA_COMPRAR",
+      "EN_COMPARATIVA",
+      "PEDIDO",
+      "RECIBIDO",
+      "DENEGADO",
+      "APROBADO",
+      "EN_ESPERA"
+    ],
+    "compras_prioridad": [
+      "URGENTE",
+      "1 SEMANA",
+      "2 SEMANAS",
+      "NORMAL",
+      "LEVE"
+    ],
+    "criticality_level": [
+      "ALTA",
+      "MEDIA",
+      "BAJA"
+    ],
+    "equipment_status": [
+      "OPERATIVO",
+      "EN_MANTENIMIENTO",
+      "EN_REPARACION",
+      "STANDBY",
+      "FUERA_DE_SERVICIO",
+      "DADO_DE_BAJA"
+    ],
+    "estado_franco": [
+      "PENDIENTE",
+      "TOMADO"
+    ],
+    "estado_liquidacion": [
+      "BORRADOR",
+      "CERRADA"
+    ],
+    "maintenance_type": [
+      "Lubricacion",
+      "Inspeccion",
+      "Limpieza",
+      "Ajuste",
+      "Reemplazo",
+      "Revision_electrica",
+      "Otro"
+    ],
+    "modalidad_pago": [
+      "JORNAL",
+      "MENSUAL"
+    ],
+    "modulo": [
+      "rrhh",
+      "mantenimiento",
+      "remises",
+      "compras",
+      "inventario",
+      "produccion",
+      "despacho",
+      "facturacion",
+      "cantera",
+      "calidad"
+    ],
+    "nivel_acceso": [
+      "lectura",
+      "edicion",
+      "admin"
+    ],
+    "origen_fichada": [
+      "IMPORTADO",
+      "MANUAL"
+    ],
+    "plant_status": [
+      "ACTIVA",
+      "PARADA",
+      "EN_REPARACION"
+    ],
+    "produccion_envase": [
+      "bolsa",
+      "bolson"
+    ],
+    "produccion_familia": [
+      "filler",
+      "0_2",
+      "cal",
+      "otros"
+    ],
+    "produccion_turno": [
+      "4_12",
+      "12_20"
+    ],
+    "remises_tipo_hoja": [
+      "ida",
+      "vuelta"
+    ],
+    "schedule_status": [
+      "active",
+      "paused",
+      "cancelled",
+      "completed"
+    ],
+    "schedule_type": [
+      "DIARIO",
+      "SEMANAL",
+      "QUINCENAL",
+      "MENSUAL",
+      "TRIMESTRAL",
+      "SEMESTRAL",
+      "ANUAL",
+      "PERSONALIZADO",
+      "FECHA_FIJA"
+    ],
+    "tipo_ausencia": [
+      "LICENCIA_ART",
+      "VACACIONES",
+      "LICENCIA_GREMIAL",
+      "PERMISO_PERSONAL",
+      "ENFERMEDAD_ACCIDENTE_INCULPABLE",
+      "LICENCIA_SIN_GOCE_SUELDO",
+      "SUSPENSION",
+      "FALLECIMIENTO_FAMILIAR",
+      "EXAMEN_ESTUDIO",
+      "TARDANZA",
+      "INJUSTIFICADA",
+      "OTRA"
+    ],
+    "tipo_dia": [
+      "HABIL",
+      "SABADO",
+      "DOMINGO",
+      "FERIADO"
+    ],
+    "tipo_feriado": [
+      "NACIONAL",
+      "PROVINCIAL",
+      "PUENTE"
+    ],
+    "tipo_liquidacion": [
+      "QUINCENAL",
+      "MENSUAL"
+    ],
+    "user_role": [
+      "admin_sistema",
+      "admin",
+      "encargado",
+      "operario"
+    ]
+  }
+}

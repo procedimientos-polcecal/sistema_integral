@@ -11,7 +11,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migracion": "node scripts/nueva-migracion.mjs"
+    "migracion": "node scripts/nueva-migracion.mjs",
+    "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
