@@ -26,7 +26,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores, escribirCeldas } from "@/lib/core/sheets";
-import { filaDeSeguimiento, type DatosDeSeguimiento } from "@/lib/compras/seguimiento";
+import { entraEnElSeguimiento, filaDeSeguimiento, type DatosDeSeguimiento } from "@/lib/compras/seguimiento";
 import type { Cumplio } from "@/lib/compras/types";
 
 const HOJA = "COMPRAS CON RI";
@@ -101,6 +101,13 @@ export async function exportarSeguimiento(
     .single();
 
   if (!r) return null;
+
+  // Un RI que todavía no se compró no va al libro de seguimiento, y sin esto
+  // iba: esta función se llama desde el PATCH del requerimiento, por donde
+  // pasan también aprobar, asignar y cargar un presupuesto.
+  if (!entraEnElSeguimiento(r.estado_compra as string | null, r.seguimiento_fila != null)) {
+    return null;
+  }
 
   const datos: DatosDeSeguimiento = {
     nro_ri: r.nro_ri as number,

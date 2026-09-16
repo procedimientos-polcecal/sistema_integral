@@ -142,3 +142,24 @@ function laCantidad(r: {
   }
   return `recibió ${recibida} de ${esperada}`;
 }
+
+/**
+ * Si un requerimiento tiene que estar en el libro de seguimiento.
+ *
+ * El libro es de compras hechas: sus 1.757 filas son todas RI comprados. Un RI
+ * que todavía está en comparativa o esperando aprobación no va, y sin esta
+ * guarda iba: `exportarSeguimiento` se llama desde el PATCH del requerimiento,
+ * que es por donde pasan también aprobar, asignar y cargar un presupuesto.
+ *
+ * `yaTieneFila` es la excepción y no una concesión: si el RI ya ocupa una fila
+ * —porque se compró y después volvió a comparativa, por ejemplo— esa fila sigue
+ * existiendo, y dejar de escribirla la congelaría con datos viejos. Se sigue
+ * manteniendo al día; lo que no se hace nunca es CREARLA fuera de tiempo.
+ */
+export function entraEnElSeguimiento(
+  estadoCompra: string | null,
+  yaTieneFila: boolean
+): boolean {
+  if (estadoCompra === "PEDIDO" || estadoCompra === "RECIBIDO") return true;
+  return yaTieneFila;
+}
