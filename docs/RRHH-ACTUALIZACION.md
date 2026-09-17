@@ -267,7 +267,19 @@ generado, identificados por su `created_at`. **Moraleja: cualquier cambio al
 motor se valida con una comparación campo por campo contra un snapshot, no con
 los tests unitarios, que son de funciones puras y no ven la capa de base.**
 
-## Las faltas fantasma del futuro (limpiado el 27/08/2026)
+## El umbral de hora extra pasó de 15 a 30 minutos (17/09/2026)
+
+A pedido: `UMBRAL_EXTRA_MINUTOS` en `lib/rrhh/engine/recalcular-puro.ts` era 15
+y pasó a 30 (0,5 horas), y las comparaciones pasaron de estrictas (`>`, `<`) a
+inclusivas (`>=`, `<=`) para que el límite mismo cuente — un turno que termina
+a las 16 acredita hora extra desde que salió 16:30, no desde 16:15 ni recién
+en 16:31.
+
+**Esto es una divergencia deliberada con APPRRHH**, que es donde nació este
+umbral (fijo en 15, ver la pasada de agosto arriba) y que puede seguir en 15
+del otro lado. Si una futura pasada de sincronización ve el código de origen
+con 15, no es una regresión de acá: es un pedido posterior, y el valor de acá
+es el que rige.
 
 El recálculo del importador tomaba el rango de los datos, y las ausencias
 suelen estar cargadas hacia adelante: había una licencia que terminaba el

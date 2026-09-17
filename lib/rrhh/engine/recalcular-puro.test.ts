@@ -89,26 +89,34 @@ describe("ajustarFichadasPorTurno", () => {
     expect(retiroAnticipadoPorDia.get(dia.getTime())).toBe(false);
   });
 
-  it("el umbral de hora extra (15min) es fijo, no el margen del turno: se queda 18min con un turno de tolerancia 20 y SÍ se acredita extra", () => {
-    const turnoTolerancia20 = [{ id: "oficina", horaInicio: "08:00", horaFin: "16:00", toleranciaMinutos: 20 }];
+  it("el umbral de hora extra (30min) es fijo, no el margen del turno: se queda 35min con un turno de tolerancia 40 y SÍ se acredita extra", () => {
+    const turnoTolerancia40 = [{ id: "oficina", horaInicio: "08:00", horaFin: "16:00", toleranciaMinutos: 40 }];
     const dia = toUtcDateOnly(2026, 5, 5);
-    // se quedó 18min más: dentro de la tolerancia de 20 del turno, pero por
-    // encima del umbral fijo de 15 para hora extra
-    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 18) }];
-    const { ajustadas, retiroAnticipadoPorDia } = ajustarFichadasPorTurno(fichadas, turnoTolerancia20);
-    expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 18) }]);
+    // se quedó 35min más: dentro de la tolerancia de 40 del turno, pero por
+    // encima del umbral fijo de 30 para hora extra
+    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 35) }];
+    const { ajustadas, retiroAnticipadoPorDia } = ajustarFichadasPorTurno(fichadas, turnoTolerancia40);
+    expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 35) }]);
     expect(retiroAnticipadoPorDia.get(dia.getTime())).toBe(false);
   });
 
-  it("el umbral de hora extra (15min) es fijo: quedarse solo 10min de más NUNCA es hora extra, aunque el turno tenga tolerancia menor", () => {
+  it("el umbral de hora extra (30min) es fijo: quedarse solo 15min de más NUNCA es hora extra, aunque el turno tenga tolerancia menor", () => {
     const turnoTolerancia5 = [{ id: "estricto", horaInicio: "08:00", horaFin: "16:00", toleranciaMinutos: 5 }];
     const dia = toUtcDateOnly(2026, 5, 5);
-    // se quedó 10min más: más allá de la tolerancia de 5 del turno, pero por
-    // debajo del umbral fijo de 15 para hora extra -> no se acredita nada
-    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 10) }];
+    // se quedó 15min más: más allá de la tolerancia de 5 del turno, pero por
+    // debajo del umbral fijo de 30 para hora extra -> no se acredita nada
+    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 15) }];
     const { ajustadas, retiroAnticipadoPorDia } = ajustarFichadasPorTurno(fichadas, turnoTolerancia5);
     expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 0) }]);
     expect(retiroAnticipadoPorDia.get(dia.getTime())).toBe(false);
+  });
+
+  it("el umbral es inclusivo: quedarse exactamente 30min de más SÍ se acredita extra", () => {
+    const turnoTolerancia5 = [{ id: "estricto", horaInicio: "08:00", horaFin: "16:00", toleranciaMinutos: 5 }];
+    const dia = toUtcDateOnly(2026, 5, 5);
+    const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 30) }];
+    const { ajustadas } = ajustarFichadasPorTurno(fichadas, turnoTolerancia5);
+    expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 6, 5, 8, 0), horaSalida: d(2026, 6, 5, 16, 30) }]);
   });
 
   it("se retira más allá del margen antes de hora: marca retiro anticipado y se pierde el tiempo real", () => {

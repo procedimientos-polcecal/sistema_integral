@@ -56,8 +56,10 @@ export function anclaTurno(dia: Date, turno: TurnoLike): { inicio: Date; fin: Da
 // hora extra: es fijo, independiente del margen de tolerancia de cada turno
 // (ese margen sigue rigiendo tardanza/retiro anticipado sin cambios), para
 // evitar que una diferencia de pocos minutos (imprecisión del reloj o del
-// margen) aparezca como una hora extra que en realidad no existió.
-const UMBRAL_EXTRA_MINUTOS = 15;
+// margen) aparezca como una hora extra que en realidad no existió. En 30 (0,5
+// horas) a pedido: un turno que termina a las 16 acredita extra desde que
+// salió 16:30, no desde 16:15.
+const UMBRAL_EXTRA_MINUTOS = 30;
 
 /**
  * Ajusta las fichadas de cada día calendario según el turno del catálogo más
@@ -122,13 +124,13 @@ export function ajustarFichadasPorTurno(
       // entró a las 4 y matcheó "Oficina" 08-16 por ser el más cercano) le
       // recortaría silenciosamente todas las horas trabajadas antes del
       // inicio nominal del turno.
-      const llegoMuyTemprano = desvioEntrada < -UMBRAL_EXTRA_MINUTOS;
+      const llegoMuyTemprano = desvioEntrada <= -UMBRAL_EXTRA_MINUTOS;
       const horaEntrada = esPrimera ? (tarde || llegoMuyTemprano ? f.horaEntrada : anchorInicio) : f.horaEntrada;
       let horaSalida = f.horaSalida;
       if (esUltima && f.horaSalida) {
         const desvioSalida = (f.horaSalida.getTime() - anchorFin.getTime()) / 60_000;
         const retiroAnticipado = desvioSalida < -turno.toleranciaMinutos;
-        const seQuedoExtra = desvioSalida > UMBRAL_EXTRA_MINUTOS;
+        const seQuedoExtra = desvioSalida >= UMBRAL_EXTRA_MINUTOS;
         horaSalida = retiroAnticipado || seQuedoExtra ? f.horaSalida : anchorFin;
         retiroAnticipadoPorDia.set(key, retiroAnticipado);
       }
