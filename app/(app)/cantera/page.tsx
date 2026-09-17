@@ -212,6 +212,12 @@ export default async function CanteraInicioPage({
         <ResumenAnualSection anio={anio} />
       </Suspense>
 
+      <section className="mt-4 flex">
+        <div className="w-full sm:w-1/4">
+          <Acceso href="/cantera/cubicacion" label="Cubicación" />
+        </div>
+      </section>
+
       {permisos.esAdmin && (
         <section className="mt-6">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Más</h2>

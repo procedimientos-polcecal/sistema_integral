@@ -99,6 +99,7 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Cantera": IconMountain,
   "Registros": IconClipboard,
   "Acarreo": IconTruck,
+  "Cubicación": IconBox,
   "Informe mensual": IconChart,
   "Canteras": IconMountain,
   "Insumos": IconBox,

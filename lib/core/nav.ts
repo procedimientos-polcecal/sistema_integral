@@ -281,6 +281,7 @@ export const NAV: NavItem[] = [
     children: [
       { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
       { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
+      { label: "Cubicación", href: "/cantera/cubicacion", modulo: "cantera" },
       { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },

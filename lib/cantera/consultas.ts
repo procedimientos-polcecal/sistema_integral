@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -343,4 +343,21 @@ export async function traerPesadas(
     }
     return q.order("fecha").range(desde, hasta);
   });
+}
+
+/**
+ * Todos los cierres de cubicación cargados, de todos los yacimientos y
+ * meses — la tabla es chica (un yacimiento × un mes por fila) y
+ * `armarCierresCubicacion` (`./cubicacion.ts`) necesita el historial
+ * completo para encadenar la existencia inicial mes a mes, no sólo el mes
+ * que se está mirando.
+ */
+export async function traerCubicaciones(supabase: SupabaseClient): Promise<CubicacionDB[]> {
+  return traerTodo<CubicacionDB>((desde, hasta) =>
+    supabase
+      .from("cantera_cubicaciones")
+      .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+      .order("mes")
+      .range(desde, hasta)
+  );
 }
