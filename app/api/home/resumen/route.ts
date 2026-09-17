@@ -14,6 +14,7 @@ import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/
 import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
+import { filtrarDescartadas } from "@/lib/home/notificaciones";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -131,7 +132,15 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera, notificaciones });
+  const { data: descartes } = await supabase
+    .from("notificaciones_descartes")
+    .select("notificacion_id, cantidad_vista")
+    .eq("usuario_id", user.id);
+
+  return NextResponse.json({
+    rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera,
+    notificaciones: filtrarDescartadas(notificaciones, descartes ?? []),
+  });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {

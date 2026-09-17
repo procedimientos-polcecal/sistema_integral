@@ -30,6 +30,15 @@ export function NotificationsBell() {
     return () => document.removeEventListener("mousedown", onClickFuera);
   }, []);
 
+  function descartar(n: Notificacion) {
+    setNotificaciones((prev) => (prev ?? []).filter((x) => x.id !== n.id));
+    fetch("/api/home/resumen/descartar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: n.id, cantidad: n.cantidad }),
+    }).catch(() => {});
+  }
+
   const total = (notificaciones ?? []).reduce((acc, n) => acc + n.cantidad, 0);
 
   return (
@@ -65,17 +74,33 @@ export function NotificationsBell() {
           ) : (
             <div className="pb-1">
               {notificaciones.map((n) => (
-                <Link
+                <div
                   key={n.id}
-                  href={n.href}
-                  onClick={() => setAbierto(false)}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50"
+                  className="group flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50"
                 >
-                  <span className="text-gray-700">{n.titulo}</span>
-                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
-                    {n.cantidad}
-                  </span>
-                </Link>
+                  <Link
+                    href={n.href}
+                    onClick={() => setAbierto(false)}
+                    className="flex flex-1 items-center justify-between gap-2 overflow-hidden"
+                  >
+                    <span className="truncate text-gray-700">{n.titulo}</span>
+                    <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
+                      {n.cantidad}
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    title="Descartar"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      descartar(n);
+                    }}
+                    className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition hover:bg-gray-200 hover:text-gray-600 group-hover:opacity-100"
+                    style={{ background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    <IconX />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -90,6 +115,14 @@ function IconBell() {
     <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
       <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
