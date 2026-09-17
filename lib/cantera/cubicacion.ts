@@ -160,17 +160,24 @@ function rangoDeMeses(mesesConCierre: string[]): string[] {
  * de cada mes con la final del anterior. Si un mes no tiene cierre cargado,
  * el que sigue pierde la cadena —queda sin existencia inicial— en vez de
  * arrastrar un número de dos meses atrás como si nada hubiera pasado en el
- * medio. Por eso el rango de meses no sale de los que están cargados: sale
- * de **todos** los meses entre el primero y el último, cargados o no
+ * medio. Por eso el rango de meses no sale sólo de los que están cargados:
+ * sale de **todos** los meses entre el primero y el último, cargados o no
  * (`rangoDeMeses`), para no saltearse justo el mes que cortaría la cadena.
+ *
+ * `mesAIncluir` fuerza a que ese mes aparezca aunque todavía no tenga ningún
+ * cierre cargado —el mes en curso, típicamente—: las voladuras y el acarreo
+ * ya están y sirven para decidir qué existencia final cargar, así que no
+ * tiene sentido esperar a la primera carga para mostrarlos.
  */
 export function armarCierresCubicacion(
   yacimientos: string[],
   voladuras: VoladuraParaCubicacion[],
   acarreos: AcarreoPorYacimiento[],
-  cierresCargados: CierreCargado[]
+  cierresCargados: CierreCargado[],
+  mesAIncluir?: string
 ): FilaCierreCubicacion[] {
-  const meses = rangoDeMeses(cierresCargados.map((c) => c.mes));
+  const mesesConCierre = cierresCargados.map((c) => c.mes);
+  const meses = rangoDeMeses(mesAIncluir ? [...mesesConCierre, mesAIncluir] : mesesConCierre);
   const filas: FilaCierreCubicacion[] = [];
 
   for (const yacimientoCodigo of yacimientos) {

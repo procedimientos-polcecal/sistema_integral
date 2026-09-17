@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { armarCierresCubicacion, cerrarCubicacionDelMes, type CierreCargado, type VoladuraParaCubicacion } from "./cubicacion";
+import { armarCierresCubicacion, cerrarCubicacionDelMes, type AcarreoPorYacimiento, type CierreCargado, type VoladuraParaCubicacion } from "./cubicacion";
 
 describe("cerrarCubicacionDelMes", () => {
   it("sin cierre cargado todavía, no hay lectura ni residuo", () => {
@@ -126,5 +126,29 @@ describe("armarCierresCubicacion", () => {
     expect(filas).toHaveLength(4);
     const c1 = filas.find((f) => f.yacimientoCodigo === "C1")!;
     expect(c1.existenciaFinal).toBeNull();
+  });
+
+  it("mesAIncluir muestra el mes en curso con lo ya calculable, aunque nadie haya cargado ningún cierre todavía", () => {
+    const voladuras: VoladuraParaCubicacion[] = [
+      { yacimiento: "D1", perfFin: "2026-09-08", toneladas: 4000, metros: 214 },
+    ];
+    const acarreos: AcarreoPorYacimiento[] = [{ yacimientoCodigo: "D1", mes: "2026-09", toneladas: 3500 }];
+    const filas = armarCierresCubicacion(["D1"], voladuras, acarreos, [], "2026-09");
+    expect(filas).toHaveLength(1);
+    expect(filas[0].mes).toBe("2026-09");
+    expect(filas[0].voladuras).toBe(4000);
+    expect(filas[0].acarreo).toBe(3500);
+    expect(filas[0].existenciaFinal).toBeNull(); // todavía no se cargó
+    expect(filas[0].lectura).toBeNull(); // sin existencia final no hay de qué leer
+  });
+
+  it("mesAIncluir extiende el rango sin duplicar meses que ya estaban cargados", () => {
+    const cierres: CierreCargado[] = [
+      { yacimientoCodigo: "D1", mes: "2026-07", existenciaFinal: 2227, observaciones: null },
+      { yacimientoCodigo: "D1", mes: "2026-08", existenciaFinal: 2240, observaciones: null },
+    ];
+    const filas = armarCierresCubicacion(["D1"], [], [], cierres, "2026-09");
+    expect(filas.map((f) => f.mes)).toEqual(["2026-07", "2026-08", "2026-09"]);
+    expect(filas[2].existenciaInicial).toBe(2240); // septiembre encadena de agosto igual que siempre
   });
 });

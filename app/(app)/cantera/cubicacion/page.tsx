@@ -82,7 +82,9 @@ export default async function CubicacionPage() {
     })
     .filter((c): c is CierreCargado => c !== null);
 
-  const filas = armarCierresCubicacion(YACIMIENTOS_CUBICADOS, voladurasParaCubicacion, acarreos, cierresCargados);
+  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
+  const mesActual = new Date().toISOString().slice(0, 7);
+  const filas = armarCierresCubicacion(YACIMIENTOS_CUBICADOS, voladurasParaCubicacion, acarreos, cierresCargados, mesActual);
 
   const yacimientosCubicados = YACIMIENTOS_CUBICADOS
     .map((codigo) => yacimientos.find((y) => y.codigo === codigo))
