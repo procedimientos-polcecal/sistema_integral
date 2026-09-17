@@ -54,12 +54,61 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Ejecuciones": IconBolt,
   "Órdenes de trabajo": IconClipboard,
   "Planificación diaria": IconCalendar,
+  "Planificación": IconCalendar,
+  "Avisos": IconAlert,
   // Calidad. "Por período" ya está más arriba: el mismo concepto se reusa entre
   // módulos y la clave no se duplica.
-  "Calidad": IconCheck,
+  "Calidad": IconShield,
   "Stock": IconList,
   "Movimientos": IconBolt,
   "Proveedores": IconUsers,
+  // Compras.
+  "Compras": IconCart,
+  "Tablero": IconKanban,
+  "Requerimientos": IconFile,
+  "Seguimiento": IconChart,
+  "Aprobaciones": IconCheck,
+  "Para aprobar": IconCheck,
+  "Ubicaciones": IconMapPin,
+  // Inventario.
+  "Inventario": IconBox,
+  "Cargar movimiento": IconBolt,
+  "Artículos": IconBox,
+  "La lista del pañol": IconList,
+  // Producción.
+  "Producción": IconFactory,
+  "El día": IconCalendar,
+  "Resúmenes": IconChart,
+  "Renglones del parte": IconClipboard,
+  // Calidad: Carbonilla y Envases.
+  "Carbonilla": IconFlame,
+  "Carbonilleros": IconUsers,
+  "El stock": IconList,
+  "Envases": IconBox,
+  "Productos": IconBox,
+  // Despacho.
+  "Despacho": IconTruck,
+  "Movimientos diarios": IconTruck,
+  "Órdenes de carga": IconClipboard,
+  "Recepción de material": IconTruck,
+  // Facturación.
+  "Facturación": IconReceipt,
+  "El buzón": IconReceipt,
+  "Sin vincular": IconAlert,
+  // Cantera.
+  "Cantera": IconMountain,
+  "Registros": IconClipboard,
+  "Acarreo": IconTruck,
+  "Informe mensual": IconChart,
+  "Canteras": IconMountain,
+  "Insumos": IconBox,
+  "Fleteros": IconTruck,
+  "Tarifas de acarreo": IconTag,
+  // Órdenes de servicio (Mantenimiento y el atajo desde Compras).
+  "Órdenes de servicio": IconClipboard,
+  // Fuera de un módulo.
+  "Mis pedidos": IconCart,
+  "Empresas": IconFactory,
 };
 
 function iconForItem(item: NavItem) {
@@ -247,7 +296,7 @@ export function Sidebar({
                 className={`nav-link ${esRutaActiva(item.href, pathname, search) ? "active" : ""} ${colapsado ? "justify-center" : ""}`}
               >
                 <Icon />
-                {!colapsado && item.label}
+                {!colapsado && <span className="min-w-0 truncate">{item.label}</span>}
               </Link>
             );
           }
@@ -293,7 +342,7 @@ export function Sidebar({
                   className={`nav-link ${encabezadoActivo ? "active" : ""}`}
                 >
                   <Icon />
-                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   <ChevronIcon abierto={desplegado} />
                 </Link>
               ) : (
@@ -304,7 +353,7 @@ export function Sidebar({
                   className={`nav-link ${encabezadoActivo ? "active" : ""}`}
                 >
                   <Icon />
-                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   <ChevronIcon abierto={desplegado} />
                 </button>
               )}
@@ -316,7 +365,7 @@ export function Sidebar({
                       return (
                         <Link key={c.href} href={c.href} className={`nav-link-sub ${esRutaActiva(c.href, pathname, search) ? "active" : ""}`}>
                           <CIcon />
-                          {c.label}
+                          <span className="min-w-0 truncate">{c.label}</span>
                         </Link>
                       );
                     }
@@ -334,7 +383,7 @@ export function Sidebar({
                           style={{ background: "none", border: "none", cursor: "pointer" }}
                         >
                           <CIcon />
-                          <span style={{ flex: 1 }}>{c.label}</span>
+                          <span className="min-w-0 flex-1 truncate">{c.label}</span>
                           <ChevronIcon abierto={subDesplegado} small />
                         </button>
                         {subDesplegado && (
@@ -344,7 +393,7 @@ export function Sidebar({
                               return (
                                 <Link key={n.href} href={n.href} className={`nav-link-sub ${esRutaActiva(n.href, pathname, search) ? "active" : ""}`}>
                                   <NIcon />
-                                  {n.label}
+                                  <span className="min-w-0 truncate">{n.label}</span>
                                 </Link>
                               );
                             })}
@@ -512,6 +561,92 @@ function IconBolt() {
   return (
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconCart() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <circle cx="9" cy="20" r="1" /><circle cx="18" cy="20" r="1" />
+      <path d="M3 4h2l2.4 12.4a2 2 0 002 1.6h7.6a2 2 0 002-1.9L21 8H6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconBox() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M21 8L12 3 3 8m18 0l-9 5m9-5v10l-9 5m0-10L3 8m9 5v10M3 8v10l9 5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconFactory() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M3 21V10l6 4v-4l6 4v-4l6 4v11H3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 21v-4M12 21v-4M17 21v-4" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconTruck() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M3 7h11v9H3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 10h4l3 3v3h-7v-6z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7" cy="18" r="1.5" /><circle cx="17" cy="18" r="1.5" />
+    </svg>
+  );
+}
+function IconReceipt() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 8h6M9 12h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconMountain() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M3 20L9 8l4 6 2-3 6 9H3z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconShield() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconMapPin() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  );
+}
+function IconTag() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M20.59 13.41L11 3.83A2 2 0 009.59 3.2L3 3v6.59a2 2 0 00.59 1.41l9.59 9.59a2 2 0 002.82 0l4.59-4.59a2 2 0 000-2.82z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.5" cy="7.5" r="1" />
+    </svg>
+  );
+}
+function IconKanban() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16M15 4v16" />
+    </svg>
+  );
+}
+function IconFlame() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3s2 1 2 4a5 5 0 01-10 0c0-5 4-6 4-10z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
