@@ -156,47 +156,34 @@ export default async function TallerVialInicioPage() {
             {serviceProximos > 0 && <span className="font-medium text-amber-700">{serviceProximos} próximo{serviceProximos > 1 ? "s" : ""} a vencer</span>}
           </p>
         )}
-        <div className="mt-3 overflow-x-auto">
-          <table className="table-base">
-            <thead>
-              <tr>
-                <th>Equipo</th>
-                <th className="text-right">Horómetro actual</th>
-                <th className="text-right">Próximo vencimiento</th>
-                <th className="text-right">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {servicePorEquipo.map((r) => (
-                <tr key={r.equipoId}>
-                  <td className="font-medium text-slate-800">{r.equipo!.code} - {r.equipo!.name}</td>
-                  <td className="text-right font-mono tabular-nums">{r.horometroActual !== null ? num0.format(r.horometroActual) : "—"}</td>
-                  <td className="text-right font-mono tabular-nums">{r.de250.proximoVencimiento !== null ? num0.format(r.de250.proximoVencimiento) : "sin cargar"}</td>
-                  <td className="text-right">
-                    {r.de250.lectura === null ? (
-                      <span className="text-xs text-slate-400">—</span>
-                    ) : (
-                      <span
-                        className={
-                          r.de250.lectura === "VENCIDO"
-                            ? "text-xs font-semibold text-red-600"
-                            : r.de250.lectura === "PROXIMO"
-                              ? "text-xs font-semibold text-amber-700"
-                              : "text-xs text-emerald-700"
-                        }
-                      >
-                        {r.de250.lectura === "VENCIDO"
-                          ? `Vencido hace ${num0.format(Math.abs(r.de250.horasFaltantes!))} hs`
-                          : r.de250.lectura === "PROXIMO"
-                            ? `Faltan ${num0.format(r.de250.horasFaltantes!)} hs`
-                            : "Al día"}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4 space-y-3">
+          {servicePorEquipo.map((r) => {
+            const lectura = r.de250.lectura;
+            const color = lectura === "VENCIDO" ? "bg-red-500" : lectura === "PROXIMO" ? "bg-amber-500" : lectura === "AL_DIA" ? "bg-emerald-500" : "bg-slate-200";
+            const textoEstado =
+              lectura === "VENCIDO"
+                ? `Vencido hace ${num0.format(Math.abs(r.de250.horasFaltantes!))} hs`
+                : lectura === "PROXIMO"
+                  ? `Faltan ${num0.format(r.de250.horasFaltantes!)} hs`
+                  : lectura === "AL_DIA"
+                    ? `Faltan ${num0.format(r.de250.horasFaltantes!)} hs`
+                    : "Sin service cargado";
+            const colorTexto = lectura === "VENCIDO" ? "text-red-600" : lectura === "PROXIMO" ? "text-amber-700" : "text-slate-500";
+            // % del ciclo de 250 hs ya transcurrido desde el último service — se
+            // satura en 100% cuando está vencido, para que la barra no se salga.
+            const progreso = r.de250.horasFaltantes !== null ? Math.min(100, Math.max(0, ((250 - r.de250.horasFaltantes) / 250) * 100)) : 0;
+            return (
+              <div key={r.equipoId} className="flex items-center gap-3">
+                <span className="w-40 shrink-0 truncate text-sm font-medium text-slate-700">
+                  {r.equipo!.code} - {r.equipo!.name}
+                </span>
+                <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${color}`} style={{ width: `${progreso}%` }} />
+                </div>
+                <span className={`w-32 shrink-0 text-right text-xs font-medium tabular-nums ${colorTexto}`}>{textoEstado}</span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
