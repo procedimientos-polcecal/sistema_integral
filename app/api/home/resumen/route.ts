@@ -6,6 +6,14 @@ import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
 import { traerTodo } from "@/lib/core/paginado";
 import { sumarDias } from "@/lib/core/fechas";
+import {
+  traerAcarreos, traerBochones, traerConsumosDe, traerFleteros,
+  traerPesadas, traerTarifasAcarreo, traerVoladuras, traerYacimientos,
+} from "@/lib/cantera/consultas";
+import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
+import type { Consumo } from "@/lib/cantera/types";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -22,8 +30,9 @@ export async function GET() {
 
   const hoy = utcDateOnlyFrom(new Date());
   const hoyStr = hoy.toISOString().slice(0, 10);
+  const mesActual = hoyStr.slice(0, 7);
 
-  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion] =
+  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera] =
     await Promise.all([
       modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
       modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
@@ -33,6 +42,7 @@ export async function GET() {
       modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("despacho") ? resumenDespacho(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("facturacion") ? resumenFacturacion(supabase, hoyStr) : Promise.resolve(null),
+      modulos.has("cantera") ? resumenCantera(supabase, mesActual) : Promise.resolve(null),
     ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -112,7 +122,16 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, notificaciones });
+  if (cantera && cantera.sinConciliar > 0) {
+    notificaciones.push({
+      id: "cantera-sin-conciliar",
+      titulo: "Registros de cantera con factura sin conciliar o a revisar",
+      cantidad: cantera.sinConciliar,
+      href: "/cantera/registros",
+    });
+  }
+
+  return NextResponse.json({ rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera, notificaciones });
 }
 
 async function resumenRrhh(supabase: Awaited<ReturnType<typeof createClient>>, hoy: Date, hoyStr: string) {
@@ -342,6 +361,59 @@ async function resumenFacturacion(
     sinVincular: sinVincular ?? 0,
     sinProveedor: sinProveedor ?? 0,
   };
+}
+
+/**
+ * Lo que Cantera tiene sin resolver, más el volumen del mes.
+ *
+ * El titular es el mismo aviso que ordena el tablero de Registros
+ * (`contarAvisos` de `lib/cantera/tablero.ts`): facturas sin conciliar o a
+ * revisar. Las toneladas voladas y el acarreo a pagar del mes salen de las
+ * mismas cuentas que arma la página de inicio del módulo
+ * (`app/(app)/cantera/page.tsx`), reproducidas acá porque ninguna vive
+ * detrás de una vista liviana de sólo contar filas — piden los montos ya
+ * calculados.
+ */
+async function resumenCantera(supabase: Awaited<ReturnType<typeof createClient>>, mesActual: string) {
+  const [yacimientos, vs, bs, fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
+    traerYacimientos(supabase, true),
+    traerVoladuras(supabase, {}),
+    traerBochones(supabase, {}),
+    traerFleteros(supabase, true),
+    traerTarifasAcarreo(supabase),
+    traerAcarreos(supabase, { mes: mesActual }),
+    traerPesadas(supabase, { mes: mesActual }),
+  ]);
+  const porId = new Map(yacimientos.map((y) => [y.id, y]));
+
+  const consumos = await traerConsumosDe(supabase, vs.map((v) => v.codigo));
+  const consumosPorCodigo = new Map<string, Consumo[]>();
+  for (const c of consumos) {
+    const lista = consumosPorCodigo.get(c.voladura_codigo) ?? [];
+    lista.push(c);
+    consumosPorCodigo.set(c.voladura_codigo, lista);
+  }
+
+  const filasVoladura = vs.map((v) =>
+    armarFilaVoladura(v, porId.get(v.yacimiento_id) ?? null, consumosPorCodigo.get(v.codigo) ?? [])
+  );
+  const filasBochon = bs.map((b) => armarFilaBochon(b, porId.get(b.yacimiento_id) ?? null));
+  const { sinConciliar } = contarAvisos(filasVoladura, filasBochon);
+
+  const toneladasMes = filasVoladura
+    .filter((f) => (f.vol_fecha ?? "").startsWith(mesActual))
+    .reduce((s, f) => s + (f.toneladas ?? 0), 0);
+
+  const acarreosPlanos: AcarreoPlano[] = [
+    ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
+    ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
+  ];
+  const acarreoAPagarMes = fleteros.reduce(
+    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
+    0
+  );
+
+  return { sinConciliar, toneladasMes: Math.round(toneladasMes), acarreoAPagarMes: Math.round(acarreoAPagarMes) };
 }
 
 async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>>, hoyStr: string) {

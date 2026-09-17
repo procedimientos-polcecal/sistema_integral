@@ -17,11 +17,12 @@ interface Resumen {
     sinLlegarALaPlanilla: number;
   } | null;
   facturacion: { entraronHoy: number; sinVincular: number; sinProveedor: number } | null;
+  cantera: { sinConciliar: number; toneladasMes: number; acarreoAPagarMes: number } | null;
 }
 
 const VACIO: Resumen = {
   rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
-  despacho: null, facturacion: null,
+  despacho: null, facturacion: null, cantera: null,
 };
 
 /**
@@ -236,6 +237,33 @@ export default function InicioClient({
             }
           />
         )}
+
+        {/* El titular es la alarma, igual que Mantenimiento e Inventario:
+            una factura sin conciliar o a revisar es lo único de las tres que
+            pide hacer algo hoy. Las toneladas voladas y el acarreo a pagar
+            del mes van de secundarias, el mismo orden que tienen como
+            primeras dos tarjetas en la página de inicio del módulo. */}
+        {tiene("cantera") && (
+          <ModuloCard
+            titulo="Cantera"
+            href="/cantera"
+            color="#78716C"
+            icon={<IconMountain />}
+            hero={
+              resumen?.cantera
+                ? { label: "Facturas a conciliar o revisar", valor: resumen.cantera.sinConciliar }
+                : null
+            }
+            secundarias={
+              resumen?.cantera
+                ? [
+                    { label: "Toneladas voladas este mes", valor: new Intl.NumberFormat("es-AR").format(resumen.cantera.toneladasMes) },
+                    { label: "Acarreo a pagar este mes", valor: `$ ${new Intl.NumberFormat("es-AR").format(resumen.cantera.acarreoAPagarMes)}` },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
   );
@@ -359,6 +387,13 @@ function IconWrench() {
   return (
     <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
       <path d="M14.7 6.3a4 4 0 10-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.83 2.83a2 2 0 01-2.83-2.83L14.7 6.3z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconMountain() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 20 9.5 8l4 6.5L16 11l5 9H3Z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
