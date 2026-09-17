@@ -298,6 +298,7 @@ export const NAV: NavItem[] = [
       { label: "Cargas", href: "/taller-vial/cargas", modulo: "taller_vial" },
       { label: "Services", href: "/taller-vial/services", modulo: "taller_vial" },
       { label: "Reparaciones", href: "/taller-vial/reparaciones", modulo: "taller_vial" },
+      { label: "Informe mensual", href: "/taller-vial/informes", modulo: "taller_vial" },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

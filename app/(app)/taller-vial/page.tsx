@@ -284,7 +284,7 @@ export default async function TallerVialInicioPage() {
         )}
       </section>
 
-      <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Link
           href="/taller-vial/services"
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
@@ -297,6 +297,13 @@ export default async function TallerVialInicioPage() {
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Historial de reparaciones
+          <span className="text-slate-400">→</span>
+        </Link>
+        <Link
+          href="/taller-vial/informes"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+        >
+          Informe mensual
           <span className="text-slate-400">→</span>
         </Link>
       </section>
