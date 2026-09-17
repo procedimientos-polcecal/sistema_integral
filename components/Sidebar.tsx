@@ -75,6 +75,7 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Cargar movimiento": IconBolt,
   "Artículos": IconBox,
   "La lista del pañol": IconList,
+  "Reservas de Taller Vial": IconAlert,
   // Producción.
   "Producción": IconFactory,
   "El día": IconCalendar,

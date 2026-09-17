@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { ReparacionDB } from "@/lib/tallerVial/types";
+import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const TIPOS = ["Reparación", "Revisión"];
@@ -29,6 +30,7 @@ export default function ReparacionesClient({
   const [observaciones, setObservaciones] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filaAbierta, setFilaAbierta] = useState<string | null>(null);
 
   async function cargar() {
     if (!equipoId) { setError("Elegí un equipo"); return; }
@@ -62,6 +64,14 @@ export default function ReparacionesClient({
     } finally {
       setGuardando(false);
     }
+  }
+
+  async function borrar(id: string) {
+    if (!confirm("¿Borrar esta reparación?")) return;
+    const res = await fetch(`/api/taller-vial/reparaciones?id=${id}`, { method: "DELETE" });
+    const json = await res.json();
+    if (!res.ok) { setError(json.error ?? "No se pudo borrar"); return; }
+    router.refresh();
   }
 
   return (
@@ -125,24 +135,43 @@ export default function ReparacionesClient({
                 <th className="text-right">Horas</th>
                 <th className="text-right">Horómetro</th>
                 <th>Observaciones</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {reparaciones.length === 0 ? (
-                <tr><td colSpan={7} className="py-8 text-center text-slate-400">Todavía no hay ninguna reparación cargada.</td></tr>
+                <tr><td colSpan={8} className="py-8 text-center text-slate-400">Todavía no hay ninguna reparación cargada.</td></tr>
               ) : (
                 reparaciones.map((r) => {
                   const equipo = equipos.find((e) => e.id === r.equipo_id);
+                  const abierta = filaAbierta === r.id;
                   return (
-                    <tr key={r.id}>
-                      <td className="whitespace-nowrap">{r.fecha}</td>
-                      <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
-                      <td className="text-slate-500">{r.tipo}</td>
-                      <td className="text-slate-700">{r.descripcion}</td>
-                      <td className="text-right font-mono tabular-nums">{r.horas !== null ? num0.format(r.horas) : "—"}</td>
-                      <td className="text-right font-mono tabular-nums">{r.horometro !== null ? num0.format(r.horometro) : "—"}</td>
-                      <td className="text-slate-500">{r.observaciones ?? ""}</td>
-                    </tr>
+                    <Fragment key={r.id}>
+                      <tr>
+                        <td className="whitespace-nowrap">{r.fecha}</td>
+                        <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
+                        <td className="text-slate-500">{r.tipo}</td>
+                        <td className="text-slate-700">{r.descripcion}</td>
+                        <td className="text-right font-mono tabular-nums">{r.horas !== null ? num0.format(r.horas) : "—"}</td>
+                        <td className="text-right font-mono tabular-nums">{r.horometro !== null ? num0.format(r.horometro) : "—"}</td>
+                        <td className="text-slate-500">{r.observaciones ?? ""}</td>
+                        <td className="whitespace-nowrap text-right">
+                          <button className="text-xs text-slate-400 underline" onClick={() => setFilaAbierta(abierta ? null : r.id)}>
+                            {abierta ? "Ocultar" : "Repuestos"}
+                          </button>
+                          {puedeEditar && (
+                            <button className="ml-2 text-xs text-slate-400 underline hover:text-red-600" onClick={() => borrar(r.id)}>Borrar</button>
+                          )}
+                        </td>
+                      </tr>
+                      {abierta && (
+                        <tr>
+                          <td colSpan={8} className="bg-slate-50 p-3">
+                            <RepuestosDelTrabajo reparacionId={r.id} puedeEditar={puedeEditar} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })
               )}

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { compararCodigosEM } from "./equipos";
-import type { CargaDB, EstadoDiarioDB, ReparacionDB, ServiceDB } from "./types";
+import type { CargaDB, EstadoDiarioDB, ReparacionDB, RepuestoAsignadoConArticulo, ServiceDB } from "./types";
 
 /** Los equipos móviles: la tabla `equipos` de Mantenimiento, filtrada a los códigos EM* — Taller Vial no tiene catálogo propio. */
 export interface EquipoTallerVial {
@@ -80,4 +80,36 @@ export async function traerReparaciones(supabase: SupabaseClient, equipoId?: str
     if (equipoId) q = q.eq("equipo_id", equipoId);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
+}
+
+export interface FiltrosDeRepuestos {
+  serviceId?: string;
+  reparacionId?: string;
+}
+
+/** Los repuestos reservados/confirmados de un service o una reparación, con el código y la descripción del artículo ya resueltos. */
+export async function traerRepuestosAsignados(
+  supabase: SupabaseClient,
+  filtros: FiltrosDeRepuestos = {}
+): Promise<RepuestoAsignadoConArticulo[]> {
+  let q = supabase
+    .from("taller_vial_repuestos_asignados")
+    .select(
+      "id, service_id, reparacion_id, articulo_id, cantidad, estado, movimiento_id, cargado_por, cargado_en, confirmado_por, confirmado_en, inventario_articulos!articulo_id(codigo, descripcion)"
+    )
+    .order("cargado_en", { ascending: false });
+  if (filtros.serviceId) q = q.eq("service_id", filtros.serviceId);
+  if (filtros.reparacionId) q = q.eq("reparacion_id", filtros.reparacionId);
+
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+
+  type Fila = Omit<RepuestoAsignadoConArticulo, "articulo_codigo" | "articulo_descripcion"> & {
+    inventario_articulos: { codigo: string; descripcion: string } | null;
+  };
+  return ((data ?? []) as unknown as Fila[]).map(({ inventario_articulos, ...f }) => ({
+    ...f,
+    articulo_codigo: inventario_articulos?.codigo ?? "",
+    articulo_descripcion: inventario_articulos?.descripcion ?? "",
+  }));
 }

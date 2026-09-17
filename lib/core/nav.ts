@@ -181,6 +181,7 @@ export const NAV: NavItem[] = [
       // quien está cargando el movimiento, y hacerlo esperar termina en que lo
       // carga con otro nombre parecido.
       { label: "La lista del pañol", href: "/inventario/lista", modulo: "inventario" },
+      { label: "Reservas de Taller Vial", href: "/inventario/reservas-taller-vial", modulo: "inventario" },
     ],
   },
   {

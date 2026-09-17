@@ -69,3 +69,25 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ data });
 }
+
+/**
+ * Borrar una reparación se lleva puestas sus reservas de repuestos (`on
+ * delete cascade`) — mismo motivo que en /api/taller-vial/services: reservar
+ * nunca descontó stock, así que no hay nada que devolver.
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await puedeEditarTallerVial(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permiso para borrar una reparación" }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Falta el id" }, { status: 400 });
+
+  const { error } = await supabase.from("taller_vial_reparaciones").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ data: null });
+}

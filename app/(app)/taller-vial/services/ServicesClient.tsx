@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TIERS_DE_SERVICE, type EstadoDeServicePorTier, type LecturaDeService } from "@/lib/tallerVial/service";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { ServiceDB } from "@/lib/tallerVial/types";
+import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 
@@ -56,6 +57,7 @@ export default function ServicesClient({
   const [observaciones, setObservaciones] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filaAbierta, setFilaAbierta] = useState<string | null>(null);
 
   async function cargar() {
     const horometroNum = Number(horometro.replace(",", "."));
@@ -80,6 +82,14 @@ export default function ServicesClient({
     } finally {
       setGuardando(false);
     }
+  }
+
+  async function borrar(id: string) {
+    if (!confirm("¿Borrar este service?")) return;
+    const res = await fetch(`/api/taller-vial/services?id=${id}`, { method: "DELETE" });
+    const json = await res.json();
+    if (!res.ok) { setError(json.error ?? "No se pudo borrar"); return; }
+    router.refresh();
   }
 
   return (
@@ -169,22 +179,41 @@ export default function ServicesClient({
                 <th className="text-right">Escalón</th>
                 <th className="text-right">Horómetro</th>
                 <th>Observaciones</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {historial.length === 0 ? (
-                <tr><td colSpan={5} className="py-8 text-center text-slate-400">Todavía no hay ningún service cargado.</td></tr>
+                <tr><td colSpan={6} className="py-8 text-center text-slate-400">Todavía no hay ningún service cargado.</td></tr>
               ) : (
                 historial.map((s) => {
                   const equipo = equipos.find((e) => e.id === s.equipo_id);
+                  const abierta = filaAbierta === s.id;
                   return (
-                    <tr key={s.id}>
-                      <td className="whitespace-nowrap">{s.fecha}</td>
-                      <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
-                      <td className="text-right font-mono tabular-nums">{s.tier} hs</td>
-                      <td className="text-right font-mono tabular-nums">{num0.format(s.horometro)}</td>
-                      <td className="text-slate-500">{s.observaciones ?? ""}</td>
-                    </tr>
+                    <Fragment key={s.id}>
+                      <tr>
+                        <td className="whitespace-nowrap">{s.fecha}</td>
+                        <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
+                        <td className="text-right font-mono tabular-nums">{s.tier} hs</td>
+                        <td className="text-right font-mono tabular-nums">{num0.format(s.horometro)}</td>
+                        <td className="text-slate-500">{s.observaciones ?? ""}</td>
+                        <td className="whitespace-nowrap text-right">
+                          <button className="text-xs text-slate-400 underline" onClick={() => setFilaAbierta(abierta ? null : s.id)}>
+                            {abierta ? "Ocultar" : "Repuestos"}
+                          </button>
+                          {puedeEditar && (
+                            <button className="ml-2 text-xs text-slate-400 underline hover:text-red-600" onClick={() => borrar(s.id)}>Borrar</button>
+                          )}
+                        </td>
+                      </tr>
+                      {abierta && (
+                        <tr>
+                          <td colSpan={6} className="bg-slate-50 p-3">
+                            <RepuestosDelTrabajo serviceId={s.id} puedeEditar={puedeEditar} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })
               )}

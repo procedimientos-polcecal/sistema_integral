@@ -46,3 +46,28 @@ export interface ReparacionDB {
   cargado_por: string | null;
   cargado_en: string;
 }
+
+/**
+ * Un repuesto del pañol reservado para un service o una reparación.
+ * `estado: "reservado"` no descontó stock todavía; `"confirmado"` sí, y trae
+ * `movimiento_id` puesto — ver la migración 20260917105422.
+ */
+export interface RepuestoAsignadoDB {
+  id: string;
+  service_id: string | null;
+  reparacion_id: string | null;
+  articulo_id: string;
+  cantidad: number;
+  estado: "reservado" | "confirmado";
+  movimiento_id: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+  confirmado_por: string | null;
+  confirmado_en: string | null;
+}
+
+/** Un repuesto asignado, con los datos del artículo ya resueltos — lo que muestra la pantalla. */
+export interface RepuestoAsignadoConArticulo extends RepuestoAsignadoDB {
+  articulo_codigo: string;
+  articulo_descripcion: string;
+}
