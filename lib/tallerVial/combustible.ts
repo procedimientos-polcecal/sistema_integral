@@ -88,3 +88,37 @@ export function resumenMensualPorEquipo(cargas: CargaConTrabajo[], mes: string):
     consumoPromedio: acc.trabajado > 0 ? acc.litros / acc.trabajado : null,
   }));
 }
+
+export interface LitrosDelMes {
+  mes: string; // "YYYY-MM"
+  litrosTotal: number;
+  cargas: number;
+}
+
+/**
+ * Cuánto cargó toda la flota, mes a mes — para ver de un vistazo si el
+ * consumo general viene subiendo o bajando. `meses` va explícito y ordenado
+ * (de más viejo a más nuevo) porque un mes sin ninguna carga tiene que
+ * aparecer en cero, no desaparecer de la tabla.
+ */
+export function evolucionMensualDeLitros(cargas: CargaPlana[], meses: string[]): LitrosDelMes[] {
+  return meses.map((mes) => {
+    const delMes = cargas.filter((c) => c.fecha.startsWith(mes));
+    return {
+      mes,
+      litrosTotal: delMes.reduce((s, c) => s + c.litros, 0),
+      cargas: delMes.length,
+    };
+  });
+}
+
+/** Los últimos `cantidad` meses hasta `mesHasta` inclusive, de más viejo a más nuevo. */
+export function ultimosMeses(mesHasta: string, cantidad: number): string[] {
+  const [anio, m] = mesHasta.split("-").map(Number);
+  const meses: string[] = [];
+  for (let i = cantidad - 1; i >= 0; i--) {
+    const total = anio * 12 + (m - 1) - i;
+    meses.push(`${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`);
+  }
+  return meses;
+}

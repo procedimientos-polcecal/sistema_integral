@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { calcularTrabajoEntreCargas, resumenMensualPorEquipo, type CargaPlana } from "./combustible";
+import {
+  calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, ultimosMeses, type CargaPlana,
+} from "./combustible";
 
 function carga(p: Partial<CargaPlana>): CargaPlana {
   return { id: "x", equipoId: "EM5", fecha: "2026-09-01", litros: 100, lectura: null, ...p };
@@ -84,5 +86,32 @@ describe("resumenMensualPorEquipo", () => {
     const resumen = resumenMensualPorEquipo(conTrabajo, "2026-09");
     expect(resumen).toHaveLength(1);
     expect(resumen[0].litrosTotal).toBe(200);
+  });
+});
+
+describe("ultimosMeses", () => {
+  it("los últimos N meses hasta el dado, de más viejo a más nuevo", () => {
+    expect(ultimosMeses("2026-09", 3)).toEqual(["2026-07", "2026-08", "2026-09"]);
+  });
+
+  it("cruza el año hacia atrás sin romperse", () => {
+    expect(ultimosMeses("2026-02", 3)).toEqual(["2025-12", "2026-01", "2026-02"]);
+  });
+});
+
+describe("evolucionMensualDeLitros", () => {
+  it("un mes sin cargas aparece en cero, no desaparece", () => {
+    const cargas: CargaPlana[] = [
+      carga({ fecha: "2026-07-05", litros: 100 }),
+      // agosto sin cargas
+      carga({ fecha: "2026-09-01", litros: 200 }),
+      carga({ fecha: "2026-09-15", litros: 50 }),
+    ];
+    const evolucion = evolucionMensualDeLitros(cargas, ["2026-07", "2026-08", "2026-09"]);
+    expect(evolucion).toEqual([
+      { mes: "2026-07", litrosTotal: 100, cargas: 1 },
+      { mes: "2026-08", litrosTotal: 0, cargas: 0 },
+      { mes: "2026-09", litrosTotal: 250, cargas: 2 },
+    ]);
   });
 });

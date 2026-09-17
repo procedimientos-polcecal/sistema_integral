@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerCargas, traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
-import { calcularTrabajoEntreCargas, resumenMensualPorEquipo } from "@/lib/tallerVial/combustible";
+import { calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, ultimosMeses } from "@/lib/tallerVial/combustible";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -11,10 +11,11 @@ const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 
 /**
  * El inicio de Taller Vial: cuánto combustible se cargó este mes y a qué
- * consumo, equipo por equipo. Primera etapa del módulo (combustible +
- * horómetro/km) — el resto de lo que tiene la planilla real (estados
- * diarios, disponibilidad, checklist de lavado/engrase, choferes) queda para
- * etapas siguientes.
+ * consumo, equipo por equipo. Espejo de sólo lectura de la planilla real
+ * ("DATOS", vía `lib/tallerVial/importar.ts`) — se sigue cargando ahí, acá
+ * sólo se mira. Primera etapa del módulo (combustible + horómetro/km): el
+ * resto de lo que tiene la planilla (estados diarios, disponibilidad,
+ * checklist de lavado/engrase, choferes) queda para etapas siguientes.
  */
 export default async function TallerVialInicioPage() {
   const supabase = await createClient();
@@ -51,6 +52,13 @@ export default async function TallerVialInicioPage() {
 
   const litrosTotalDelMes = cargasDelMes.reduce((s, c) => s + c.litros, 0);
   const equiposConCargaEsteMes = new Set(cargasDelMes.map((c) => c.equipo_id).filter(Boolean)).size;
+
+  const meses = ultimosMeses(mesActual, 6);
+  const evolucion = evolucionMensualDeLitros(
+    todasLasCargas.map((c) => ({ id: c.id, equipoId: c.equipo_id ?? "sin-equipo", fecha: c.fecha, litros: c.litros, lectura: c.lectura })),
+    meses
+  );
+  const maxLitrosEvolucion = Math.max(1, ...evolucion.map((e) => e.litrosTotal));
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -111,11 +119,25 @@ export default async function TallerVialInicioPage() {
         )}
       </section>
 
-      {permisos.puedeEditar && (
-        <div className="mt-4 flex">
-          <Link href="/taller-vial/cargas" className="btn-primary">Cargar combustible</Link>
+      <section className="card mt-4 p-4">
+        <h2 className="font-semibold text-slate-900">Evolución del consumo, últimos 6 meses</h2>
+        <div className="mt-3 space-y-2">
+          {evolucion.map((e) => (
+            <div key={e.mes} className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-xs text-slate-500">{e.mes}</span>
+              <div className="h-4 flex-1 overflow-hidden rounded bg-slate-100">
+                <div
+                  className="h-full rounded bg-[#0891B2]"
+                  style={{ width: `${(e.litrosTotal / maxLitrosEvolucion) * 100}%` }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right font-mono text-xs tabular-nums text-slate-600">
+                {num0.format(e.litrosTotal)} L
+              </span>
+            </div>
+          ))}
         </div>
-      )}
+      </section>
     </div>
   );
 }
