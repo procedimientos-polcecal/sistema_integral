@@ -18,11 +18,12 @@ interface Resumen {
   } | null;
   facturacion: { entraronHoy: number; sinVincular: number; sinProveedor: number } | null;
   cantera: { sinConciliar: number; toneladasMes: number; acarreoAPagarMes: number } | null;
+  tallerVial: { litrosDelMes: number; equiposConCargaEsteMes: number; sinEquipoReconocido: number } | null;
 }
 
 const VACIO: Resumen = {
   rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
-  despacho: null, facturacion: null, cantera: null,
+  despacho: null, facturacion: null, cantera: null, tallerVial: null,
 };
 
 /**
@@ -264,6 +265,31 @@ export default function InicioClient({
             }
           />
         )}
+
+        {/* El titular es lo que pide atención (una carga sin equipo reconocido
+            no entra en ningún resumen hasta que alguien la corrija), las
+            secundarias el volumen del mes — mismo criterio que Cantera. */}
+        {tiene("taller_vial") && (
+          <ModuloCard
+            titulo="Taller Vial"
+            href="/taller-vial"
+            color="#0891B2"
+            icon={<IconGauge />}
+            hero={
+              resumen?.tallerVial
+                ? { label: "Cargas sin equipo reconocido", valor: resumen.tallerVial.sinEquipoReconocido }
+                : null
+            }
+            secundarias={
+              resumen?.tallerVial
+                ? [
+                    { label: "Combustible este mes", valor: `${new Intl.NumberFormat("es-AR").format(resumen.tallerVial.litrosDelMes)} L` },
+                    { label: "Equipos con carga este mes", valor: resumen.tallerVial.equiposConCargaEsteMes },
+                  ]
+                : null
+            }
+          />
+        )}
       </div>
     </div>
   );
@@ -394,6 +420,15 @@ function IconMountain() {
   return (
     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
       <path d="M3 20 9.5 8l4 6.5L16 11l5 9H3Z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconGauge() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M12 21a9 9 0 1 0-9-9c0 2.1.72 4.03 1.93 5.56" strokeLinecap="round" />
+      <path d="M12 12 16 8" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }

@@ -22,6 +22,7 @@ describe("modulosVisibles", () => {
       "facturacion",
       "cantera",
       "calidad",
+      "taller_vial",
     ]);
   });
 

@@ -15,6 +15,8 @@ import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { filtrarDescartadas } from "@/lib/home/notificaciones";
+import { traerCargas } from "@/lib/tallerVial/consultas";
+import { calcularTrabajoEntreCargas, resumenMensualPorEquipo } from "@/lib/tallerVial/combustible";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -33,7 +35,7 @@ export async function GET() {
   const hoyStr = hoy.toISOString().slice(0, 10);
   const mesActual = hoyStr.slice(0, 7);
 
-  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera] =
+  const [rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera, tallerVial] =
     await Promise.all([
       modulos.has("rrhh") ? resumenRrhh(supabase, hoy, hoyStr) : Promise.resolve(null),
       modulos.has("remises") ? resumenRemises(supabase, hoyStr) : Promise.resolve(null),
@@ -44,6 +46,7 @@ export async function GET() {
       modulos.has("despacho") ? resumenDespacho(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("facturacion") ? resumenFacturacion(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("cantera") ? resumenCantera(supabase, mesActual) : Promise.resolve(null),
+      modulos.has("taller_vial") ? resumenTallerVial(supabase, mesActual) : Promise.resolve(null),
     ]);
 
   // Notificaciones reales: solo lo que amerita atención, no un contador decorativo.
@@ -132,13 +135,22 @@ export async function GET() {
     });
   }
 
+  if (tallerVial && tallerVial.sinEquipoReconocido > 0) {
+    notificaciones.push({
+      id: "taller-vial-sin-equipo",
+      titulo: "Cargas de combustible sin un equipo reconocido",
+      cantidad: tallerVial.sinEquipoReconocido,
+      href: "/taller-vial/cargas",
+    });
+  }
+
   const { data: descartes } = await supabase
     .from("notificaciones_descartes")
     .select("notificacion_id, cantidad_vista")
     .eq("usuario_id", user.id);
 
   return NextResponse.json({
-    rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera,
+    rrhh, remises, mantenimiento, compras, inventario, produccion, despacho, facturacion, cantera, tallerVial,
     notificaciones: filtrarDescartadas(notificaciones, descartes ?? []),
   });
 }
@@ -440,5 +452,28 @@ async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>
     ordenesDeHoy: ordenesDeHoy ?? 0,
     abiertasDeDiasAnteriores: abiertas ?? 0,
     sinLlegarALaPlanilla: sinLlegar ?? 0,
+  };
+}
+
+/**
+ * El combustible cargado este mes en Taller Vial, y cuántas cargas quedaron
+ * sin un equipo reconocido (texto suelto como "empresa piparo" en vez de un
+ * código EM) — la alarma, porque esa carga no entra en ningún resumen por
+ * equipo hasta que alguien la corrija.
+ */
+async function resumenTallerVial(supabase: Awaited<ReturnType<typeof createClient>>, mesActual: string) {
+  const todasLasCargas = await traerCargas(supabase, {});
+  const cargasDelMes = todasLasCargas.filter((c) => c.fecha.startsWith(mesActual));
+  const conTrabajo = calcularTrabajoEntreCargas(
+    todasLasCargas
+      .filter((c) => c.equipo_id !== null)
+      .map((c) => ({ id: c.id, equipoId: c.equipo_id!, fecha: c.fecha, litros: c.litros, lectura: c.lectura }))
+  );
+  const resumen = resumenMensualPorEquipo(conTrabajo, mesActual);
+
+  return {
+    litrosDelMes: Math.round(cargasDelMes.reduce((s, c) => s + c.litros, 0)),
+    equiposConCargaEsteMes: resumen.length,
+    sinEquipoReconocido: todasLasCargas.filter((c) => c.equipo_id === null).length,
   };
 }

@@ -105,6 +105,9 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Insumos": IconBox,
   "Fleteros": IconTruck,
   "Tarifas de acarreo": IconTag,
+  // Taller Vial.
+  "Taller Vial": IconTruck,
+  "Cargas": IconBolt,
   // Órdenes de servicio (Mantenimiento y el atajo desde Compras).
   "Órdenes de servicio": IconClipboard,
   // Fuera de un módulo.
