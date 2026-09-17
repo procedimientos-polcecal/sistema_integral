@@ -298,7 +298,13 @@ button:focus-visible, a:focus-visible {
   background: var(--sidebar-active);
   border-left: 2px solid var(--primary-tint);
 }
-button.nav-link { width: 100%; text-align: left; font: inherit; cursor: pointer; background: transparent; border: none; border-left: 2px solid transparent; }
+/* Sólo la familia, no el `font` completo: ese shorthand también resetea
+   `font-size` a `inherit`, y como `body` no fija uno explícito, un botón de
+   sidebar (los módulos cuyo primer hijo repite el `href` del padre, como
+   Calidad) terminaba en el tamaño por defecto del navegador (16px) en vez
+   de los 14px de `.nav-link` — el único que se veía "más grande" que el
+   resto, que son todos `<a>` y no heredan esto. */
+button.nav-link { width: 100%; text-align: left; font-family: inherit; cursor: pointer; background: transparent; border: none; border-left: 2px solid transparent; }
 
 .nav-link-sub {
   display: flex;
