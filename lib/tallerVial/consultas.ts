@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { compararCodigosEM } from "./equipos";
-import type { CargaDB, EstadoDiarioDB, ServiceDB } from "./types";
+import type { CargaDB, EstadoDiarioDB, ReparacionDB, ServiceDB } from "./types";
 
 /** Los equipos móviles: la tabla `equipos` de Mantenimiento, filtrada a los códigos EM* — Taller Vial no tiene catálogo propio. */
 export interface EquipoTallerVial {
@@ -67,6 +67,16 @@ export async function traerEstadosDiarios(supabase: SupabaseClient, filtros: Fil
 export async function traerServices(supabase: SupabaseClient, equipoId?: string): Promise<ServiceDB[]> {
   return traerTodo<ServiceDB>((desde, hasta) => {
     let q = supabase.from("taller_vial_services").select("id, equipo_id, tier, fecha, horometro, observaciones, cargado_por, cargado_en");
+    if (equipoId) q = q.eq("equipo_id", equipoId);
+    return q.order("fecha", { ascending: false }).range(desde, hasta);
+  });
+}
+
+export async function traerReparaciones(supabase: SupabaseClient, equipoId?: string): Promise<ReparacionDB[]> {
+  return traerTodo<ReparacionDB>((desde, hasta) => {
+    let q = supabase
+      .from("taller_vial_reparaciones")
+      .select("id, equipo_id, tipo, fecha, descripcion, horas, horometro, observaciones, cargado_por, cargado_en");
     if (equipoId) q = q.eq("equipo_id", equipoId);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });

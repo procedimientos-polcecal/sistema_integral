@@ -60,3 +60,35 @@ export function resumenMensualDeEstados(estados: EstadoPlano[], mes: string): Re
     diasConFallas: acc.ocf,
   }));
 }
+
+/** El último estado registrado de cada equipo — no exige que sea "hoy": cada equipo puede tener su último dato en un día distinto. */
+export function estadoActualPorEquipo(estados: EstadoPlano[]): Map<string, EstadoDiario> {
+  const masReciente = new Map<string, { fecha: string; estado: EstadoDiario }>();
+  for (const e of estados) {
+    const actual = masReciente.get(e.equipoId);
+    if (!actual || e.fecha > actual.fecha) masReciente.set(e.equipoId, { fecha: e.fecha, estado: e.estado });
+  }
+  return new Map([...masReciente.entries()].map(([equipoId, v]) => [equipoId, v.estado]));
+}
+
+export interface ResumenDeEstadoActual {
+  operativos: number;
+  fueraDeServicio: number;
+  conFallas: number;
+  /** Equipos sin ningún estado cargado todavía — no cuentan para el %, pero hay que poder mostrarlo. */
+  sinDato: number;
+  total: number;
+}
+
+/** Cuántos equipos están, ahora mismo, en cada estado — para los indicadores en % del inicio del módulo. */
+export function resumenDeEstadoActual(estadoActual: Map<string, EstadoDiario>, equipoIds: string[]): ResumenDeEstadoActual {
+  let operativos = 0, fueraDeServicio = 0, conFallas = 0, sinDato = 0;
+  for (const id of equipoIds) {
+    const estado = estadoActual.get(id);
+    if (estado === "OPERATIVO") operativos++;
+    else if (estado === "FUERA_DE_SERVICIO") fueraDeServicio++;
+    else if (estado === "OPERATIVO_CON_FALLAS") conFallas++;
+    else sinDato++;
+  }
+  return { operativos, fueraDeServicio, conFallas, sinDato, total: equipoIds.length };
+}

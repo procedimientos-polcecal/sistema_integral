@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estadoDesdeCodigoSheet, resumenMensualDeEstados, type EstadoPlano } from "./estados";
+import {
+  estadoActualPorEquipo, estadoDesdeCodigoSheet, resumenDeEstadoActual, resumenMensualDeEstados, type EstadoPlano,
+} from "./estados";
 
 describe("estadoDesdeCodigoSheet", () => {
   it("mapea los tres códigos conocidos", () => {
@@ -48,5 +50,45 @@ describe("resumenMensualDeEstados", () => {
     const em2 = resumen.find((r) => r.equipoId === "EM2")!;
     expect(em2.diasFueraDeServicio).toBe(1);
     expect(em2.diasOperativo).toBe(0);
+  });
+});
+
+describe("estadoActualPorEquipo", () => {
+  it("toma el estado de la fecha más reciente de cada equipo", () => {
+    const mapa = estadoActualPorEquipo([
+      { equipoId: "EM1", fecha: "2026-09-01", estado: "OPERATIVO" },
+      { equipoId: "EM1", fecha: "2026-09-10", estado: "FUERA_DE_SERVICIO" },
+      { equipoId: "EM1", fecha: "2026-09-05", estado: "OPERATIVO_CON_FALLAS" },
+    ]);
+    expect(mapa.get("EM1")).toBe("FUERA_DE_SERVICIO");
+  });
+
+  it("cada equipo puede tener su último dato en una fecha distinta", () => {
+    const mapa = estadoActualPorEquipo([
+      { equipoId: "EM1", fecha: "2026-09-10", estado: "OPERATIVO" },
+      { equipoId: "EM2", fecha: "2026-09-05", estado: "FUERA_DE_SERVICIO" }, // EM2 no tiene dato del 10
+    ]);
+    expect(mapa.get("EM1")).toBe("OPERATIVO");
+    expect(mapa.get("EM2")).toBe("FUERA_DE_SERVICIO");
+  });
+});
+
+describe("resumenDeEstadoActual", () => {
+  it("cuenta cuántos equipos están en cada estado ahora mismo", () => {
+    const estadoActual = new Map([
+      ["EM1", "OPERATIVO" as const],
+      ["EM2", "OPERATIVO" as const],
+      ["EM3", "FUERA_DE_SERVICIO" as const],
+      ["EM4", "OPERATIVO_CON_FALLAS" as const],
+    ]);
+    const resumen = resumenDeEstadoActual(estadoActual, ["EM1", "EM2", "EM3", "EM4"]);
+    expect(resumen).toEqual({ operativos: 2, fueraDeServicio: 1, conFallas: 1, sinDato: 0, total: 4 });
+  });
+
+  it("un equipo sin ningún estado cargado cuenta como sinDato, no como operativo", () => {
+    const estadoActual = new Map([["EM1", "OPERATIVO" as const]]);
+    const resumen = resumenDeEstadoActual(estadoActual, ["EM1", "EM5"]);
+    expect(resumen.sinDato).toBe(1);
+    expect(resumen.total).toBe(2);
   });
 });

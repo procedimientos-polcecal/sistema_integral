@@ -296,6 +296,7 @@ export const NAV: NavItem[] = [
     children: [
       { label: "Cargas", href: "/taller-vial/cargas", modulo: "taller_vial" },
       { label: "Services", href: "/taller-vial/services", modulo: "taller_vial" },
+      { label: "Reparaciones", href: "/taller-vial/reparaciones", modulo: "taller_vial" },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

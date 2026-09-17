@@ -15,8 +15,9 @@ import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { filtrarDescartadas } from "@/lib/home/notificaciones";
-import { traerCargas } from "@/lib/tallerVial/consultas";
+import { traerCargas, traerEquiposTallerVial, traerServices } from "@/lib/tallerVial/consultas";
 import { calcularTrabajoEntreCargas, resumenMensualPorEquipo } from "@/lib/tallerVial/combustible";
+import { resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -141,6 +142,24 @@ export async function GET() {
       titulo: "Cargas de combustible sin un equipo reconocido",
       cantidad: tallerVial.sinEquipoReconocido,
       href: "/taller-vial/cargas",
+    });
+  }
+
+  if (tallerVial && tallerVial.serviceVencidos > 0) {
+    notificaciones.push({
+      id: "taller-vial-service-vencido",
+      titulo: "Equipos con el service de 250 hs vencido",
+      cantidad: tallerVial.serviceVencidos,
+      href: "/taller-vial/services",
+    });
+  }
+
+  if (tallerVial && tallerVial.serviceProximos > 0) {
+    notificaciones.push({
+      id: "taller-vial-service-proximo",
+      titulo: "Equipos por vencer el service de 250 hs",
+      cantidad: tallerVial.serviceProximos,
+      href: "/taller-vial/services",
     });
   }
 
@@ -456,13 +475,19 @@ async function resumenDespacho(supabase: Awaited<ReturnType<typeof createClient>
 }
 
 /**
- * El combustible cargado este mes en Taller Vial, y cuántas cargas quedaron
+ * El combustible cargado este mes en Taller Vial, cuántas cargas quedaron
  * sin un equipo reconocido (texto suelto como "empresa piparo" en vez de un
- * código EM) — la alarma, porque esa carga no entra en ningún resumen por
- * equipo hasta que alguien la corrija.
+ * código EM) y cuántos equipos tienen el service de 250 hs vencido — las tres
+ * son alarmas: la primera porque esa carga no entra en ningún resumen por
+ * equipo hasta que alguien la corrija, la segunda porque un service vencido
+ * es justamente lo que no hay que dejar pasar.
  */
 async function resumenTallerVial(supabase: Awaited<ReturnType<typeof createClient>>, mesActual: string) {
-  const todasLasCargas = await traerCargas(supabase, {});
+  const [todasLasCargas, equipos, todosLosServices] = await Promise.all([
+    traerCargas(supabase, {}),
+    traerEquiposTallerVial(supabase),
+    traerServices(supabase),
+  ]);
   const cargasDelMes = todasLasCargas.filter((c) => c.fecha.startsWith(mesActual));
   const conTrabajo = calcularTrabajoEntreCargas(
     todasLasCargas
@@ -471,9 +496,23 @@ async function resumenTallerVial(supabase: Awaited<ReturnType<typeof createClien
   );
   const resumen = resumenMensualPorEquipo(conTrabajo, mesActual);
 
+  const horometroActualPorEquipo = ultimaLecturaPorEquipo(
+    todasLasCargas
+      .filter((c) => c.equipo_id !== null)
+      .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura }))
+  );
+  const servicePorEquipo = resumenServicePorEquipo(
+    equipos.map((e) => e.id),
+    todosLosServices.map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro })),
+    horometroActualPorEquipo
+  );
+  const de250 = servicePorEquipo.map((r) => r.escalones.find((e) => e.tier === 250)!);
+
   return {
     litrosDelMes: Math.round(cargasDelMes.reduce((s, c) => s + c.litros, 0)),
     equiposConCargaEsteMes: resumen.length,
     sinEquipoReconocido: todasLasCargas.filter((c) => c.equipo_id === null).length,
+    serviceVencidos: de250.filter((e) => e.lectura === "VENCIDO").length,
+    serviceProximos: de250.filter((e) => e.lectura === "PROXIMO").length,
   };
 }

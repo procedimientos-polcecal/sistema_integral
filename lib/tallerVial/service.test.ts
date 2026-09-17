@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeServicePorEquipo, esTierDeServiceValido, ultimaLecturaPorEquipo, type ServicePlano,
+  estadoDeServicePorEquipo, esTierDeServiceValido, resumenServicePorEquipo, tierDesdeTipoSheet,
+  ultimaLecturaPorEquipo, type ServicePlano,
 } from "./service";
 
 function service(p: Partial<ServicePlano>): ServicePlano {
@@ -94,5 +95,35 @@ describe("ultimaLecturaPorEquipo", () => {
   it("un equipo sin ninguna lectura no aparece en el mapa", () => {
     const mapa = ultimaLecturaPorEquipo([{ equipoId: "EM1", fecha: "2026-09-01", lectura: null }]);
     expect(mapa.has("EM1")).toBe(false);
+  });
+});
+
+describe("tierDesdeTipoSheet", () => {
+  it("saca el escalón de un TIPO tipo 'Service 250h'", () => {
+    expect(tierDesdeTipoSheet("Service 250h")).toBe(250);
+    expect(tierDesdeTipoSheet("Service 2000h")).toBe(2000);
+    expect(tierDesdeTipoSheet(" service 1000h ")).toBe(1000);
+  });
+
+  it("null para una reparación o revisión común, o un número que no es un escalón válido", () => {
+    expect(tierDesdeTipoSheet(" Reparación")).toBeNull();
+    expect(tierDesdeTipoSheet("Revisión")).toBeNull();
+    expect(tierDesdeTipoSheet("")).toBeNull();
+    expect(tierDesdeTipoSheet("Service 300h")).toBeNull();
+  });
+});
+
+describe("resumenServicePorEquipo", () => {
+  it("arma el estado de cada equipo de la lista, aunque no tenga ningún service cargado", () => {
+    const services: ServicePlano[] = [{ id: "x", equipoId: "EM1", tier: 250, fecha: "2026-01-01", horometro: 1000 }];
+    const horometros = new Map([["EM1", 1100]]);
+    const resumen = resumenServicePorEquipo(["EM1", "EM2"], services, horometros);
+    expect(resumen).toHaveLength(2);
+    const em1 = resumen.find((r) => r.equipoId === "EM1")!;
+    expect(em1.horometroActual).toBe(1100);
+    expect(em1.escalones.find((e) => e.tier === 250)!.horasFaltantes).toBe(150);
+    const em2 = resumen.find((r) => r.equipoId === "EM2")!;
+    expect(em2.horometroActual).toBeNull();
+    expect(em2.escalones.every((e) => e.lectura === null)).toBe(true);
   });
 });

@@ -32,3 +32,17 @@ export interface ServiceDB {
   cargado_por: string | null;
   cargado_en: string;
 }
+
+/** Una fila de `taller_vial_reparaciones`: una intervención realizada a un equipo. */
+export interface ReparacionDB {
+  id: string;
+  equipo_id: string;
+  tipo: string;
+  fecha: string;
+  descripcion: string;
+  horas: number | null;
+  horometro: number | null;
+  observaciones: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+}

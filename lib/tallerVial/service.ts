@@ -18,6 +18,19 @@ export function esTierDeServiceValido(v: unknown): v is TierDeService {
   return typeof v === "number" && (TIERS_DE_SERVICE as readonly number[]).includes(v);
 }
 
+/**
+ * El escalón a partir del "TIPO" de una fila de "HISTORIAL REPARACIONES"
+ * ("Service 250h", "Service 1000h", ...) — sólo para el backfill único del
+ * histórico. Null si no matchea el patrón (una reparación o revisión común)
+ * o si el número no es uno de los cuatro escalones válidos.
+ */
+export function tierDesdeTipoSheet(tipo: string): TierDeService | null {
+  const m = tipo.trim().match(/^Service\s*(\d+)\s*h$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return esTierDeServiceValido(n) ? n : null;
+}
+
 export interface ServicePlano {
   id: string;
   equipoId: string;
@@ -65,6 +78,25 @@ export function estadoDeServicePorEquipo(
     }
 
     return { tier, ultimoHorometro, proximoVencimiento, horasFaltantes, lectura };
+  });
+}
+
+export interface ServiceDeEquipo {
+  equipoId: string;
+  horometroActual: number | null;
+  escalones: EstadoDeServicePorTier[];
+}
+
+/** El estado de service de cada equipo de una lista, en un solo llamado — para no repetir el filtrado en cada pantalla que lo necesita. */
+export function resumenServicePorEquipo(
+  equipoIds: string[],
+  todosLosServices: ServicePlano[],
+  horometroActualPorEquipo: Map<string, number>
+): ServiceDeEquipo[] {
+  return equipoIds.map((equipoId) => {
+    const servicesDelEquipo = todosLosServices.filter((s) => s.equipoId === equipoId);
+    const horometroActual = horometroActualPorEquipo.get(equipoId) ?? null;
+    return { equipoId, horometroActual, escalones: estadoDeServicePorEquipo(servicesDelEquipo, horometroActual) };
   });
 }
 

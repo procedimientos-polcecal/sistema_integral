@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
-import { traerCargas, traerEquiposTallerVial, traerEstadosDiarios } from "@/lib/tallerVial/consultas";
+import { traerCargas, traerEquiposTallerVial, traerEstadosDiarios, traerServices } from "@/lib/tallerVial/consultas";
 import { calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, ultimosMeses } from "@/lib/tallerVial/combustible";
-import { resumenMensualDeEstados } from "@/lib/tallerVial/estados";
+import { estadoActualPorEquipo, resumenDeEstadoActual, resumenMensualDeEstados, type EstadoDiario } from "@/lib/tallerVial/estados";
+import { resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -34,15 +35,15 @@ export default async function TallerVialInicioPage() {
   // falta el historial completo del equipo y no sólo las del mes — una carga
   // de este mes puede ser la primera con lectura después de una de agosto.
   // Se trae una sola vez y el resto de los números salen de filtrarla acá.
-  const [equipos, todasLasCargas, estadosDelMes] = await Promise.all([
+  const [equipos, todasLasCargas, todosLosEstados, todosLosServices] = await Promise.all([
     traerEquiposTallerVial(supabase),
     traerCargas(supabase, {}),
-    traerEstadosDiarios(supabase, { mes: mesActual }),
+    traerEstadosDiarios(supabase, {}),
+    traerServices(supabase),
   ]);
 
   const porCodigo = new Map(equipos.map((e) => [e.id, e]));
   const cargasDelMes = todasLasCargas.filter((c) => c.fecha.startsWith(mesActual));
-  const cargasSinEquipo = todasLasCargas.filter((c) => c.equipo_id === null);
   const conTrabajo = calcularTrabajoEntreCargas(
     todasLasCargas
       .filter((c) => c.equipo_id !== null)
@@ -63,14 +64,49 @@ export default async function TallerVialInicioPage() {
   );
   const maxLitrosEvolucion = Math.max(1, ...evolucion.map((e) => e.litrosTotal));
 
-  const resumenEstados = resumenMensualDeEstados(
-    estadosDelMes.map((e) => ({ equipoId: e.equipo_id, fecha: e.fecha, estado: e.estado as "OPERATIVO" | "FUERA_DE_SERVICIO" | "OPERATIVO_CON_FALLAS" })),
-    mesActual
-  )
+  const estadosPlanos = todosLosEstados.map((e) => ({
+    equipoId: e.equipo_id,
+    fecha: e.fecha,
+    estado: e.estado as EstadoDiario,
+  }));
+
+  const resumenEstados = resumenMensualDeEstados(estadosPlanos, mesActual)
     .map((r) => ({ ...r, equipo: porCodigo.get(r.equipoId) }))
     .filter((r) => r.equipo)
     .sort((a, b) => b.diasFueraDeServicio - a.diasFueraDeServicio);
-  const totalDiasFueraDeServicio = resumenEstados.reduce((s, r) => s + r.diasFueraDeServicio, 0);
+
+  const estadoActual = estadoActualPorEquipo(estadosPlanos);
+  const resumenActual = resumenDeEstadoActual(estadoActual, equipos.map((e) => e.id));
+  const pct = (n: number) => (resumenActual.total > 0 ? Math.round((n / resumenActual.total) * 100) : 0);
+
+  // El "service de 250 hs" es el que se repite todo el tiempo (por la
+  // cascada, siempre vence antes que el de 500/1000/2000): es la tabla que
+  // importa mirar seguido. El horómetro actual sale de la última lectura de
+  // combustible, no de un campo propio — ver el comentario de
+  // `ultimaLecturaPorEquipo`.
+  const horometroActualPorEquipo = ultimaLecturaPorEquipo(
+    todasLasCargas
+      .filter((c) => c.equipo_id !== null)
+      .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura }))
+  );
+  const servicePorEquipo = resumenServicePorEquipo(
+    equipos.map((e) => e.id),
+    todosLosServices.map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro })),
+    horometroActualPorEquipo
+  )
+    .map((r) => ({ ...r, equipo: porCodigo.get(r.equipoId), de250: r.escalones.find((e) => e.tier === 250)! }))
+    .filter((r) => r.equipo)
+    // Vencido primero (el más atrasado adelante), después próximo, después
+    // al día, y sin dato al final.
+    .sort((a, b) => {
+      const orden = { VENCIDO: 0, PROXIMO: 1, AL_DIA: 2 } as const;
+      const ra = a.de250.lectura ? orden[a.de250.lectura] : 3;
+      const rb = b.de250.lectura ? orden[b.de250.lectura] : 3;
+      if (ra !== rb) return ra - rb;
+      return (a.de250.horasFaltantes ?? Infinity) - (b.de250.horasFaltantes ?? Infinity);
+    });
+  const serviceVencidos = servicePorEquipo.filter((r) => r.de250.lectura === "VENCIDO").length;
+  const serviceProximos = servicePorEquipo.filter((r) => r.de250.lectura === "PROXIMO").length;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -78,21 +114,91 @@ export default async function TallerVialInicioPage() {
         <h1 className="text-xl font-semibold">Taller Vial</h1>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {/* ── Estado actual de la flota ── */}
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        <Metrica
+          color="#1E7D34"
+          valor={`${pct(resumenActual.operativos)}%`}
+          label={`Operativos (${resumenActual.operativos}/${resumenActual.total})`}
+        />
+        <Metrica
+          color={resumenActual.fueraDeServicio > 0 ? "#DC2626" : "#94A3B8"}
+          valor={`${pct(resumenActual.fueraDeServicio)}%`}
+          label={`Fuera de servicio (${resumenActual.fueraDeServicio}/${resumenActual.total})`}
+        />
+        <Metrica
+          color={resumenActual.conFallas > 0 ? "#D97706" : "#94A3B8"}
+          valor={`${pct(resumenActual.conFallas)}%`}
+          label={`Con fallas (${resumenActual.conFallas}/${resumenActual.total})`}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metrica color="#0891B2" valor={`${num0.format(litrosTotalDelMes)} L`} label="Combustible cargado este mes" href="/taller-vial/cargas" />
         <Metrica color="#1E7D34" valor={String(equiposConCargaEsteMes)} label="Equipos con carga este mes" />
         <Metrica color="#7E22CE" valor={String(cargasDelMes.length)} label="Cargas registradas este mes" href="/taller-vial/cargas" />
         <Metrica
-          color={cargasSinEquipo.length > 0 ? "#B45309" : "#1E7D34"}
-          valor={String(cargasSinEquipo.length)}
-          label="Cargas sin equipo reconocido"
-        />
-        <Metrica
-          color={totalDiasFueraDeServicio > 0 ? "#DC2626" : "#1E7D34"}
-          valor={String(totalDiasFueraDeServicio)}
-          label="Días fuera de servicio este mes (toda la flota)"
+          color={resumenActual.sinDato > 0 ? "#94A3B8" : "#1E7D34"}
+          valor={String(resumenActual.sinDato)}
+          label="Equipos sin estado cargado"
         />
       </div>
+
+      <section className="card mt-4 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Próximo service (250 hs)</h2>
+          <Link href="/taller-vial/services" className="text-xs text-slate-500 underline">Ver los 4 escalones →</Link>
+        </div>
+        {(serviceVencidos > 0 || serviceProximos > 0) && (
+          <p className="mt-1 text-xs text-slate-500">
+            {serviceVencidos > 0 && <span className="font-medium text-red-600">{serviceVencidos} vencido{serviceVencidos > 1 ? "s" : ""}</span>}
+            {serviceVencidos > 0 && serviceProximos > 0 && " · "}
+            {serviceProximos > 0 && <span className="font-medium text-amber-700">{serviceProximos} próximo{serviceProximos > 1 ? "s" : ""} a vencer</span>}
+          </p>
+        )}
+        <div className="mt-3 overflow-x-auto">
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>Equipo</th>
+                <th className="text-right">Horómetro actual</th>
+                <th className="text-right">Próximo vencimiento</th>
+                <th className="text-right">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {servicePorEquipo.map((r) => (
+                <tr key={r.equipoId}>
+                  <td className="font-medium text-slate-800">{r.equipo!.code} - {r.equipo!.name}</td>
+                  <td className="text-right font-mono tabular-nums">{r.horometroActual !== null ? num0.format(r.horometroActual) : "—"}</td>
+                  <td className="text-right font-mono tabular-nums">{r.de250.proximoVencimiento !== null ? num0.format(r.de250.proximoVencimiento) : "sin cargar"}</td>
+                  <td className="text-right">
+                    {r.de250.lectura === null ? (
+                      <span className="text-xs text-slate-400">—</span>
+                    ) : (
+                      <span
+                        className={
+                          r.de250.lectura === "VENCIDO"
+                            ? "text-xs font-semibold text-red-600"
+                            : r.de250.lectura === "PROXIMO"
+                              ? "text-xs font-semibold text-amber-700"
+                              : "text-xs text-emerald-700"
+                        }
+                      >
+                        {r.de250.lectura === "VENCIDO"
+                          ? `Vencido hace ${num0.format(Math.abs(r.de250.horasFaltantes!))} hs`
+                          : r.de250.lectura === "PROXIMO"
+                            ? `Faltan ${num0.format(r.de250.horasFaltantes!)} hs`
+                            : "Al día"}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="card mt-4 p-4">
         <div className="flex items-center justify-between">
@@ -157,45 +263,53 @@ export default async function TallerVialInicioPage() {
       </section>
 
       <section className="card mt-4 p-4">
-        <h2 className="font-semibold text-slate-900">Estados del mes, por equipo</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Estados del mes, por equipo</h2>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operativo</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Con fallas</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Fuera de servicio</span>
+          </div>
+        </div>
         {resumenEstados.length === 0 ? (
           <p className="mt-3 text-sm text-slate-400">Todavía no hay estados cargados este mes.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Equipo</th>
-                  <th className="text-right">Días operativo</th>
-                  <th className="text-right">Días fuera de servicio</th>
-                  <th className="text-right">Días con fallas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resumenEstados.map((r) => (
-                  <tr key={r.equipoId}>
-                    <td className="font-medium text-slate-800">{r.equipo!.code} - {r.equipo!.name}</td>
-                    <td className="text-right font-mono tabular-nums text-emerald-700">{r.diasOperativo}</td>
-                    <td className={`text-right font-mono tabular-nums ${r.diasFueraDeServicio > 0 ? "text-red-600 font-semibold" : "text-slate-500"}`}>
-                      {r.diasFueraDeServicio}
-                    </td>
-                    <td className={`text-right font-mono tabular-nums ${r.diasConFallas > 0 ? "text-amber-700 font-semibold" : "text-slate-500"}`}>
-                      {r.diasConFallas}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 space-y-3">
+            {resumenEstados.map((r) => {
+              const total = r.diasRegistrados || 1;
+              return (
+                <div key={r.equipoId} className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 truncate text-sm font-medium text-slate-700">
+                    {r.equipo!.code} - {r.equipo!.name}
+                  </span>
+                  <div className="flex h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    {r.diasOperativo > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(r.diasOperativo / total) * 100}%` }} />}
+                    {r.diasConFallas > 0 && <div className="h-full bg-amber-500" style={{ width: `${(r.diasConFallas / total) * 100}%` }} />}
+                    {r.diasFueraDeServicio > 0 && <div className="h-full bg-red-500" style={{ width: `${(r.diasFueraDeServicio / total) * 100}%` }} />}
+                  </div>
+                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-500">
+                    {r.diasFueraDeServicio > 0 ? `${r.diasFueraDeServicio}d FS` : "—"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <section className="mt-4">
+      <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Link
           href="/taller-vial/services"
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Services por horómetro (250 / 500 / 1000 / 2000 hs)
+          <span className="text-slate-400">→</span>
+        </Link>
+        <Link
+          href="/taller-vial/reparaciones"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+        >
+          Historial de reparaciones
           <span className="text-slate-400">→</span>
         </Link>
       </section>

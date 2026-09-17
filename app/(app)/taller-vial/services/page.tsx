@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerCargas, traerEquiposTallerVial, traerServices } from "@/lib/tallerVial/consultas";
-import { estadoDeServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
+import { resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 import ServicesClient from "./ServicesClient";
 
 /**
@@ -35,15 +35,14 @@ export default async function ServicesTallerVialPage() {
       .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura }))
   );
 
+  const porEquipo = resumenServicePorEquipo(
+    equipos.map((e) => e.id),
+    todosLosServices.map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro })),
+    horometroActualPorEquipo
+  );
   const estadoPorEquipo = equipos.map((eq) => {
-    const servicesDelEquipo = todosLosServices
-      .filter((s) => s.equipo_id === eq.id)
-      .map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro }));
-    return {
-      equipo: eq,
-      horometroActual: horometroActualPorEquipo.get(eq.id) ?? null,
-      escalones: estadoDeServicePorEquipo(servicesDelEquipo, horometroActualPorEquipo.get(eq.id) ?? null),
-    };
+    const r = porEquipo.find((p) => p.equipoId === eq.id)!;
+    return { equipo: eq, horometroActual: r.horometroActual, escalones: r.escalones };
   });
 
   const historial = [...todosLosServices]
