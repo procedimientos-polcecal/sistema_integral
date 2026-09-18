@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, ultimosMeses, type CargaPlana,
+  calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, tasaDeUsoDiaria, ultimosMeses,
+  type CargaPlana,
 } from "./combustible";
 
 function carga(p: Partial<CargaPlana>): CargaPlana {
@@ -113,5 +114,40 @@ describe("evolucionMensualDeLitros", () => {
       { mes: "2026-08", litrosTotal: 0, cargas: 0 },
       { mes: "2026-09", litrosTotal: 250, cargas: 2 },
     ]);
+  });
+});
+
+describe("tasaDeUsoDiaria", () => {
+  it("horas totales trabajadas sobre los días que separan la primera y la última lectura", () => {
+    // 200 horas trabajadas entre el 11 y el 21 (10 días de calendario) → 20 hs/día.
+    const tasa = tasaDeUsoDiaria([
+      { fecha: "2026-09-01", trabajado: null },
+      { fecha: "2026-09-11", trabajado: 100 },
+      { fecha: "2026-09-21", trabajado: 100 },
+    ]);
+    expect(tasa).toBe(20);
+  });
+
+  it("ignora las lecturas sin trabajado calculable o en cero", () => {
+    const tasa = tasaDeUsoDiaria([
+      { fecha: "2026-09-01", trabajado: null },
+      { fecha: "2026-09-11", trabajado: 0 },
+      { fecha: "2026-09-21", trabajado: 50 },
+      { fecha: "2026-10-01", trabajado: 50 },
+    ]);
+    // Sólo cuentan las dos con trabajado > 0: 100 horas en 10 días.
+    expect(tasa).toBe(10);
+  });
+
+  it("null con menos de dos lecturas válidas", () => {
+    expect(tasaDeUsoDiaria([])).toBeNull();
+    expect(tasaDeUsoDiaria([{ fecha: "2026-09-01", trabajado: 50 }])).toBeNull();
+  });
+
+  it("null si las lecturas válidas caen todas el mismo día", () => {
+    expect(tasaDeUsoDiaria([
+      { fecha: "2026-09-01", trabajado: 20 },
+      { fecha: "2026-09-01", trabajado: 30 },
+    ])).toBeNull();
   });
 });

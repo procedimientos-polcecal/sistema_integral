@@ -122,3 +122,32 @@ export function ultimosMeses(mesHasta: string, cantidad: number): string[] {
   }
   return meses;
 }
+
+/**
+ * Horas trabajadas promedio por día calendario, sobre todo el historial de
+ * lecturas del equipo — para estimar cuándo va a vencer el próximo service
+ * (`fechaEstimadaDeProximoService`, `lib/tallerVial/service.ts`) a partir de
+ * cómo viene usándose la máquina. Es el promedio de toda la vida registrada y
+ * no de una ventana reciente: con las cargas espaciadas que hay hoy, una
+ * ventana de 90 días se queda sin puntos para varios equipos.
+ *
+ * Null con menos de dos lecturas con `trabajado` calculable, o si las que hay
+ * caen todas el mismo día (no hay sobre qué dividir).
+ */
+export function tasaDeUsoDiaria(cargasDelEquipo: { fecha: string; trabajado: number | null }[]): number | null {
+  const validas = cargasDelEquipo.filter((c): c is { fecha: string; trabajado: number } => c.trabajado !== null && c.trabajado > 0);
+  if (validas.length < 2) return null;
+
+  const fechas = validas.map((c) => c.fecha).sort();
+  const dias = diasEntreIso(fechas[0], fechas[fechas.length - 1]);
+  if (dias <= 0) return null;
+
+  const horasTotal = validas.reduce((s, c) => s + c.trabajado, 0);
+  return horasTotal / dias;
+}
+
+function diasEntreIso(desde: string, hasta: string): number {
+  const [a1, m1, d1] = desde.split("-").map(Number);
+  const [a2, m2, d2] = hasta.split("-").map(Number);
+  return Math.round((Date.UTC(a2, m2 - 1, d2) - Date.UTC(a1, m1 - 1, d1)) / 86400000);
+}

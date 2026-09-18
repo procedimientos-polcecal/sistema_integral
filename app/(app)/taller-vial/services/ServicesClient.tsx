@@ -38,7 +38,7 @@ function BadgeLectura({ lectura }: { lectura: LecturaDeService | null }) {
 interface EstadoDeEquipo {
   equipo: EquipoTallerVial;
   horometroActual: number | null;
-  escalones: EstadoDeServicePorTier[];
+  escalones: (EstadoDeServicePorTier & { fechaEstimada: string | null })[];
 }
 
 interface RepuestoAUsar extends ArticuloOpcion {
@@ -328,18 +328,20 @@ export default function ServicesClient({
                     <BadgeLectura lectura={esc.lectura} />
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {esc.proximoVencimiento !== null ? (
-                      <>Próximo: {num0.format(esc.proximoVencimiento)}</>
-                    ) : (
-                      "Sin cargar todavía"
-                    )}
+                    {esc.ultimaFecha !== null ? <>Último service: {esc.ultimaFecha}</> : "Sin cargar todavía"}
                   </div>
+                  {esc.proximoVencimiento !== null && (
+                    <div className="text-xs text-slate-500">Próximo horómetro: {num0.format(esc.proximoVencimiento)}</div>
+                  )}
                   {esc.horasFaltantes !== null && (
                     <div className={`text-xs ${esc.horasFaltantes <= 0 ? "text-red-600" : "text-slate-500"}`}>
                       {esc.horasFaltantes <= 0
                         ? `${num0.format(Math.abs(esc.horasFaltantes))} hs pasado`
                         : `Faltan ${num0.format(esc.horasFaltantes)} hs`}
                     </div>
+                  )}
+                  {esc.fechaEstimada !== null && (
+                    <div className="text-xs text-slate-400">≈ {esc.fechaEstimada}, al ritmo de uso actual</div>
                   )}
                 </div>
               ))}

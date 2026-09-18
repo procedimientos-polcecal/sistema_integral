@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  descripcionDeTareas, estadoDeServicePorEquipo, esTierDeServiceValido, resumenServicePorEquipo, tierDesdeTipoSheet,
-  ultimaLecturaPorEquipo, type ServicePlano,
+  descripcionDeTareas, estadoDeServicePorEquipo, esTierDeServiceValido, fechaEstimadaDeProximoService,
+  resumenServicePorEquipo, tierDesdeTipoSheet, ultimaLecturaPorEquipo, type ServicePlano,
 } from "./service";
 
 function service(p: Partial<ServicePlano>): ServicePlano {
@@ -79,6 +79,47 @@ describe("estadoDeServicePorEquipo", () => {
     expect(de250.proximoVencimiento).toBe(1250); // esto sí se puede calcular
     expect(de250.horasFaltantes).toBeNull();
     expect(de250.lectura).toBeNull();
+  });
+
+  it("la fecha del último service es la del que fijó el horómetro más alto", () => {
+    const estado = estadoDeServicePorEquipo(
+      [service({ tier: 250, horometro: 500, fecha: "2026-05-01" }), service({ tier: 250, horometro: 1000, fecha: "2026-08-01" })],
+      1000
+    );
+    expect(estado.find((e) => e.tier === 250)!.ultimaFecha).toBe("2026-08-01");
+  });
+
+  it("con empate en el horómetro, se queda con la fecha más nueva", () => {
+    const estado = estadoDeServicePorEquipo(
+      [service({ tier: 250, horometro: 1000, fecha: "2026-05-01" }), service({ tier: 1000, horometro: 1000, fecha: "2026-08-01" })],
+      1000
+    );
+    expect(estado.find((e) => e.tier === 250)!.ultimaFecha).toBe("2026-08-01");
+  });
+
+  it("sin ningún service que cubra el escalón, la fecha queda null", () => {
+    const estado = estadoDeServicePorEquipo([service({ tier: 250, horometro: 1000 })], 1000);
+    expect(estado.find((e) => e.tier === 500)!.ultimaFecha).toBeNull();
+  });
+});
+
+describe("fechaEstimadaDeProximoService", () => {
+  it("suma los días que faltan al ritmo de uso, redondeando para arriba", () => {
+    // Faltan 100 horas, a 4 hs/día: 25 días exactos.
+    expect(fechaEstimadaDeProximoService(100, 4, "2026-09-01")).toBe("2026-09-26");
+    // Faltan 100 horas, a 3 hs/día: 33.33 → redondea a 34 días.
+    expect(fechaEstimadaDeProximoService(100, 3, "2026-09-01")).toBe("2026-10-05");
+  });
+
+  it("null si ya está vencido — no hay una fecha futura que estimar", () => {
+    expect(fechaEstimadaDeProximoService(0, 4, "2026-09-01")).toBeNull();
+    expect(fechaEstimadaDeProximoService(-50, 4, "2026-09-01")).toBeNull();
+  });
+
+  it("null si falta el ritmo de uso o las horas faltantes", () => {
+    expect(fechaEstimadaDeProximoService(100, null, "2026-09-01")).toBeNull();
+    expect(fechaEstimadaDeProximoService(null, 4, "2026-09-01")).toBeNull();
+    expect(fechaEstimadaDeProximoService(100, 0, "2026-09-01")).toBeNull();
   });
 });
 

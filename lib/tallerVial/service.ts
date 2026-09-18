@@ -11,6 +11,8 @@
  * un segundo horómetro que se pueda desincronizar del de combustible.
  */
 
+import { sumarDias } from "@/lib/core/fechas";
+
 export const TIERS_DE_SERVICE = [250, 500, 1000, 2000] as const;
 export type TierDeService = (typeof TIERS_DE_SERVICE)[number];
 
@@ -92,6 +94,8 @@ export interface EstadoDeServicePorTier {
   tier: TierDeService;
   /** Horómetro del último service que cubre este escalón (propio o de uno mayor). Null si nunca se cargó ninguno. */
   ultimoHorometro: number | null;
+  /** Fecha del service que fijó `ultimoHorometro` (la de mayor fecha, si hay empate en el horómetro). Null junto con `ultimoHorometro`. */
+  ultimaFecha: string | null;
   /** ultimoHorometro + tier. Null si nunca se cargó un service de este escalón (o mayor). */
   proximoVencimiento: number | null;
   /** proximoVencimiento − horómetro actual. Null si falta el vencimiento o el horómetro actual. */
@@ -112,6 +116,14 @@ export function estadoDeServicePorEquipo(
     // Cascada: un service de este escalón o de uno más grande lo cubre.
     const relevantes = servicesDelEquipo.filter((s) => s.tier >= tier);
     const ultimoHorometro = relevantes.length > 0 ? Math.max(...relevantes.map((s) => s.horometro)) : null;
+    // Si hay empate en el horómetro (dos escalones cargados el mismo día,
+    // por ejemplo), se queda con la fecha más nueva de los que empatan.
+    const ultimaFecha =
+      ultimoHorometro !== null
+        ? relevantes
+            .filter((s) => s.horometro === ultimoHorometro)
+            .reduce<string | null>((f, s) => (f === null || s.fecha > f ? s.fecha : f), null)
+        : null;
     const proximoVencimiento = ultimoHorometro !== null ? ultimoHorometro + tier : null;
     const horasFaltantes =
       proximoVencimiento !== null && horometroActual !== null ? proximoVencimiento - horometroActual : null;
@@ -121,8 +133,28 @@ export function estadoDeServicePorEquipo(
       lectura = horasFaltantes <= 0 ? "VENCIDO" : horasFaltantes <= UMBRAL_PROXIMO_HORAS ? "PROXIMO" : "AL_DIA";
     }
 
-    return { tier, ultimoHorometro, proximoVencimiento, horasFaltantes, lectura };
+    return { tier, ultimoHorometro, ultimaFecha, proximoVencimiento, horasFaltantes, lectura };
   });
+}
+
+/**
+ * Fecha aproximada del próximo vencimiento de un escalón, a partir de las
+ * horas que le faltan y el ritmo de uso del equipo (`tasaDeUsoDiaria`,
+ * `lib/tallerVial/combustible.ts`). Asume que sigue usándose al mismo ritmo
+ * que venía — es una aproximación a propósito, mismo motivo que la
+ * disponibilidad del informe mensual no usa un régimen de turnos: el SdG no
+ * lo tiene cargado (`lib/tallerVial/informe.ts`).
+ *
+ * Null si ya está vencido (no hay una fecha futura que estimar — ya pasó) o
+ * si falta el dato de horas faltantes o el ritmo de uso.
+ */
+export function fechaEstimadaDeProximoService(
+  horasFaltantes: number | null,
+  horasPorDia: number | null,
+  hoy: string
+): string | null {
+  if (horasFaltantes === null || horasFaltantes <= 0 || horasPorDia === null || horasPorDia <= 0) return null;
+  return sumarDias(hoy, Math.ceil(horasFaltantes / horasPorDia));
 }
 
 export interface ServiceDeEquipo {
