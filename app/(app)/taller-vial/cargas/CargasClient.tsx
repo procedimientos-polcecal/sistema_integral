@@ -106,9 +106,12 @@ export default function CargasClient({
   return (
     <div className="mx-auto max-w-4xl">
       <Link href="/taller-vial" className="text-xs text-slate-500 underline">← Taller Vial</Link>
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Cargas de combustible</h1>
-        <p className="page-subheader">Queda exportada a la planilla real al guardar.</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="page-header">Cargas de combustible</h1>
+          <p className="page-subheader">Queda exportada a la planilla real al guardar.</p>
+        </div>
+        <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
       </div>
 
       {puedeEditar && (
