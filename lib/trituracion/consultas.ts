@@ -86,12 +86,30 @@ export interface EmpleadoLiviano {
   apellido: string;
 }
 
-/** Para el selector de operario. Sin filtrar por sector: cualquier módulo comparte este catálogo del núcleo. */
-export async function traerEmpleadosActivos(supabase: SupabaseClient): Promise<EmpleadoLiviano[]> {
+/**
+ * Los operarios para el selector del parte: sólo los de los sectores de
+ * Cantera/Trituración (`Cantera y Planta de Trituración`, `Trituración 1/2/3`
+ * al 18/09/2026 — puede haber otros nombrados igual mañana), no el listado
+ * completo de `empleados` del núcleo. Se resuelve por nombre de sector en vez
+ * de un id fijo: `sectores` no tiene una columna que distinga "es de
+ * trituración", así que el texto es lo único con qué filtrar, y conviene que
+ * alcance un sector nuevo con "Trituración" en el nombre sin migrar nada.
+ */
+export async function traerOperariosDeTrituracion(supabase: SupabaseClient): Promise<EmpleadoLiviano[]> {
+  const { data: sectores, error: errSectores } = await supabase
+    .from("sectores")
+    .select("id, nombre")
+    .or("nombre.ilike.%cantera%,nombre.ilike.%tritura%");
+  if (errSectores) throw new Error(errSectores.message);
+
+  const sectorIds = (sectores ?? []).map((s) => s.id as string);
+  if (sectorIds.length === 0) return [];
+
   const { data, error } = await supabase
     .from("empleados")
     .select("id, nombre, apellido")
     .eq("activo", true)
+    .in("sector_id", sectorIds)
     .order("apellido", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as EmpleadoLiviano[];

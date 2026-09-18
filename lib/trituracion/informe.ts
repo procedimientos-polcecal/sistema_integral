@@ -57,3 +57,34 @@ export function ultimosMeses(mesHasta: string, cantidad: number): string[] {
   }
   return meses;
 }
+
+export interface ParteParaMaterial {
+  estado: "opero" | "no_opero";
+  material: string | null;
+  toneladasProcesadas: number | null;
+}
+
+export interface ToneladasPorMaterial {
+  material: string;
+  toneladas: number;
+}
+
+/**
+ * Toneladas procesadas por material, sólo días operativos — para el gráfico
+ * de reparto del mes en la página de inicio. Un `material` vacío (no
+ * cargado) o combinado por la importación del histórico ("Caliza +
+ * Chocolata", ver `lib/trituracion/importar.ts`) se agrupa aparte como "Sin
+ * clasificar" en vez de inventar a cuál de los dos asignarlo — mismo
+ * criterio que "enlazar al que se parece es peor que null".
+ */
+export function toneladasPorMaterial(partes: ParteParaMaterial[]): ToneladasPorMaterial[] {
+  const totales = new Map<string, number>();
+  for (const p of partes) {
+    if (p.estado !== "opero" || !p.toneladasProcesadas) continue;
+    const clave = p.material && !p.material.includes(" + ") ? p.material : "Sin clasificar";
+    totales.set(clave, (totales.get(clave) ?? 0) + p.toneladasProcesadas);
+  }
+  return [...totales.entries()]
+    .map(([material, toneladas]) => ({ material, toneladas }))
+    .sort((a, b) => b.toneladas - a.toneladas);
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
-import { traerEmpleadosActivos, traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
+import { traerOperariosDeTrituracion, traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
 import PartesClient from "./PartesClient";
 
 export default async function PartesTrituracionPage({
@@ -33,7 +33,7 @@ export default async function PartesTrituracionPage({
 
   const [partes, empleados] = await Promise.all([
     traerPartes(supabase, { plantaId, desde: primerDia, hasta: ultimoDia }),
-    traerEmpleadosActivos(supabase),
+    traerOperariosDeTrituracion(supabase),
   ]);
 
   return (
