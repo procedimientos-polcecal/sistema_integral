@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerCargas, traerEquiposTallerVial, traerEstadosDiarios, traerServices } from "@/lib/tallerVial/consultas";
-import { calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, ultimosMeses } from "@/lib/tallerVial/combustible";
+import { calcularTrabajoEntreCargas, evolucionMensualDeLitros, resumenMensualPorEquipo, tasaDeUsoDiaria, ultimosMeses } from "@/lib/tallerVial/combustible";
 import { estadoActualPorEquipo, resumenDeEstadoActual, resumenMensualDeEstados, type EstadoDiario } from "@/lib/tallerVial/estados";
-import { resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
+import { fechaEstimadaDeProximoService, resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -89,12 +90,21 @@ export default async function TallerVialInicioPage() {
       .filter((c) => c.equipo_id !== null)
       .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura }))
   );
+  const hoy = hoyEnArgentina();
   const servicePorEquipo = resumenServicePorEquipo(
     equipos.map((e) => e.id),
     todosLosServices.map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro })),
     horometroActualPorEquipo
   )
-    .map((r) => ({ ...r, equipo: porCodigo.get(r.equipoId), de250: r.escalones.find((e) => e.tier === 250)! }))
+    .map((r) => {
+      const de250 = r.escalones.find((e) => e.tier === 250)!;
+      // Mismo ritmo de uso que ya arma "Consumo del mes, por equipo" arriba
+      // (`conTrabajo`), sobre toda la cadena de lecturas y no sólo el mes.
+      const horasPorDia = tasaDeUsoDiaria(
+        conTrabajo.filter((c) => c.equipoId === r.equipoId).map((c) => ({ fecha: c.fecha, trabajado: c.trabajado }))
+      );
+      return { ...r, equipo: porCodigo.get(r.equipoId), de250, fechaEstimada250: fechaEstimadaDeProximoService(de250.horasFaltantes, horasPorDia, hoy) };
+    })
     .filter((r) => r.equipo)
     // Vencido primero (el más atrasado adelante), después próximo, después
     // al día, y sin dato al final.
@@ -156,7 +166,7 @@ export default async function TallerVialInicioPage() {
             {serviceProximos > 0 && <span className="font-medium text-amber-700">{serviceProximos} próximo{serviceProximos > 1 ? "s" : ""} a vencer</span>}
           </p>
         )}
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-4">
           {servicePorEquipo.map((r) => {
             const lectura = r.de250.lectura;
             const color = lectura === "VENCIDO" ? "bg-red-500" : lectura === "PROXIMO" ? "bg-amber-500" : lectura === "AL_DIA" ? "bg-emerald-500" : "bg-slate-200";
@@ -173,14 +183,20 @@ export default async function TallerVialInicioPage() {
             // satura en 100% cuando está vencido, para que la barra no se salga.
             const progreso = r.de250.horasFaltantes !== null ? Math.min(100, Math.max(0, ((250 - r.de250.horasFaltantes) / 250) * 100)) : 0;
             return (
-              <div key={r.equipoId} className="flex items-center gap-3">
-                <span className="w-40 shrink-0 truncate text-sm font-medium text-slate-700">
-                  {r.equipo!.code} - {r.equipo!.name}
-                </span>
-                <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
-                  <div className={`h-full rounded-full ${color}`} style={{ width: `${progreso}%` }} />
+              <div key={r.equipoId}>
+                <div className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 truncate text-sm font-medium text-slate-700">
+                    {r.equipo!.code} - {r.equipo!.name}
+                  </span>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div className={`h-full rounded-full ${color}`} style={{ width: `${progreso}%` }} />
+                  </div>
+                  <span className={`w-32 shrink-0 text-right text-xs font-medium tabular-nums ${colorTexto}`}>{textoEstado}</span>
                 </div>
-                <span className={`w-32 shrink-0 text-right text-xs font-medium tabular-nums ${colorTexto}`}>{textoEstado}</span>
+                <div className="mt-0.5 flex flex-wrap gap-x-3 pl-[172px] text-[11px] text-slate-400">
+                  <span>Último service: {r.de250.ultimaFecha ?? "sin cargar"}</span>
+                  {r.fechaEstimada250 !== null && <span>≈ próximo el {r.fechaEstimada250}, al ritmo de uso actual</span>}
+                </div>
               </div>
             );
           })}
