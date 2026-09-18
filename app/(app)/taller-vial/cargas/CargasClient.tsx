@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
@@ -29,25 +30,75 @@ interface CargaFila {
   litros: number;
   lectura: number | null;
   observaciones: string | null;
+  sheets_pendiente?: string | null;
   trabajado: number | null;
   consumoPorUnidad: number | null;
 }
 
 /**
- * Sólo lectura: las cargas se siguen tipeando en la planilla real, esto es un
- * espejo (`lib/tallerVial/importar.ts`, cada 20-30 min por
- * `/api/cron/taller-vial-sync`). Nada de esto tiene un formulario de carga a
- * propósito.
+ * Pivote del 18/09/2026: la carga vuelve a hacerse desde acá (antes era un
+ * espejo de sólo lectura de la planilla real, sincronizado por
+ * `lib/tallerVial/importar.ts`). Al guardar, `/api/taller-vial/cargas`
+ * además la exporta hacia "DATOS" de esa misma planilla — ver
+ * `lib/tallerVial/espejo.ts` — para que quien no entra al sistema la siga
+ * viendo al día.
  */
 export default function CargasClient({
-  mes, equipos, cargas,
+  mes, equipos, cargas, puedeEditar,
 }: {
   mes: string;
   equipos: EquipoTallerVial[];
   cargas: CargaFila[];
+  puedeEditar: boolean;
 }) {
   const router = useRouter();
   const irA = (m: string) => router.push(`/taller-vial/cargas?mes=${m}`);
+
+  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [equipoId, setEquipoId] = useState(equipos[0]?.id ?? "");
+  const [fecha, setFecha] = useState(hoy);
+  const [litros, setLitros] = useState("");
+  const [lectura, setLectura] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  async function cargar() {
+    const litrosNum = Number(litros.replace(",", "."));
+    if (!equipoId) { setError("Elegí un equipo"); return; }
+    if (!isFinite(litrosNum) || litrosNum <= 0) { setError("Los litros tienen que ser un número mayor a cero"); return; }
+
+    setGuardando(true);
+    setError(null);
+    setAviso(null);
+    try {
+      const res = await fetch("/api/taller-vial/cargas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          equipo_id: equipoId,
+          fecha,
+          litros: litrosNum,
+          lectura: lectura.trim() === "" ? null : Number(lectura.replace(",", ".")),
+          observaciones: observaciones.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "No se pudo guardar");
+      if (json.aviso) setAviso(json.aviso.mensaje);
+
+      setLitros("");
+      setLectura("");
+      setObservaciones("");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   const litrosTotal = cargas.reduce((s, c) => s + c.litros, 0);
   const sinEquipo = cargas.filter((c) => c.equipo_id === null);
@@ -57,8 +108,41 @@ export default function CargasClient({
       <Link href="/taller-vial" className="text-xs text-slate-500 underline">← Taller Vial</Link>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="page-header">Cargas de combustible</h1>
-        <p className="page-subheader">Se cargan en la planilla real; acá sólo se ven.</p>
+        <p className="page-subheader">Queda exportada a la planilla real al guardar.</p>
       </div>
+
+      {puedeEditar && (
+        <section className="card mt-4 p-4">
+          <h2 className="section-title">Cargar combustible</h2>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
+              {equipos.map((eq) => (
+                <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
+              ))}
+            </select>
+            <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            <input
+              className="input" inputMode="decimal" placeholder="Litros"
+              value={litros} onChange={(e) => setLitros(e.target.value)}
+            />
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <input
+              className="input" inputMode="decimal" placeholder="Horómetro o km (opcional)"
+              value={lectura} onChange={(e) => setLectura(e.target.value)}
+            />
+            <input
+              className="input sm:col-span-2" placeholder="Observaciones (opcional)"
+              value={observaciones} onChange={(e) => setObservaciones(e.target.value)}
+            />
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button className="btn-primary" disabled={guardando} onClick={cargar}>Cargar</button>
+          </div>
+          {aviso && <p className="mt-2 text-sm text-amber-700">{aviso}</p>}
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        </section>
+      )}
 
       {/* ── Navegador de mes ── */}
       <div className="card mt-4 flex items-center justify-between p-3">
@@ -119,7 +203,10 @@ export default function CargasClient({
                       <td className="text-right font-mono tabular-nums">
                         {c.consumoPorUnidad !== null && unidad ? `${num1.format(c.consumoPorUnidad)} L/${ETIQUETA_UNIDAD[unidad]}` : "—"}
                       </td>
-                      <td className="text-slate-500">{c.observaciones ?? ""}</td>
+                      <td className="text-slate-500">
+                        {c.observaciones ?? ""}
+                        {c.sheets_pendiente && <span className="ml-2 text-xs text-amber-600" title={c.sheets_pendiente}>⚠ sin exportar a la planilla</span>}
+                      </td>
                     </tr>
                   );
                 })

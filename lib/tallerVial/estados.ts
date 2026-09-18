@@ -18,6 +18,16 @@ export function estadoDesdeCodigoSheet(codigo: string): EstadoDiario | null {
   return CODIGO_A_ESTADO[codigo.trim().toUpperCase()] ?? null;
 }
 
+/** El sentido contrario: el código de la planilla para un estado cargado desde el SdG — ver `lib/tallerVial/espejo.ts`. */
+export function codigoSheetDesdeEstado(estado: EstadoDiario): string {
+  return { OPERATIVO: "OP", FUERA_DE_SERVICIO: "FS", OPERATIVO_CON_FALLAS: "OCF" }[estado];
+}
+
+/** Si el texto es uno de los tres estados válidos — para validar lo que llega por la API. */
+export function esEstadoDiarioValido(v: unknown): v is EstadoDiario {
+  return v === "OPERATIVO" || v === "FUERA_DE_SERVICIO" || v === "OPERATIVO_CON_FALLAS";
+}
+
 export const ETIQUETA_ESTADO: Record<EstadoDiario, string> = {
   OPERATIVO: "Operativo",
   FUERA_DE_SERVICIO: "Fuera de servicio",

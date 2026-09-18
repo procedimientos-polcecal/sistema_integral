@@ -31,7 +31,7 @@ export async function traerCargas(supabase: SupabaseClient, filtros: FiltrosDeCa
   return traerTodo<CargaDB>((desde, hasta) => {
     let q = supabase
       .from("taller_vial_cargas")
-      .select("id, equipo_id, equipo_raw, fecha, litros, lectura, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en");
+      .select("id, equipo_id, equipo_raw, fecha, litros, lectura, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en, sheets_pendiente");
     if (filtros.equipoId) q = q.eq("equipo_id", filtros.equipoId);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);
@@ -51,7 +51,9 @@ export interface FiltrosDeEstados {
 
 export async function traerEstadosDiarios(supabase: SupabaseClient, filtros: FiltrosDeEstados = {}): Promise<EstadoDiarioDB[]> {
   return traerTodo<EstadoDiarioDB>((desde, hasta) => {
-    let q = supabase.from("taller_vial_estados_diarios").select("id, equipo_id, fecha, estado");
+    let q = supabase
+      .from("taller_vial_estados_diarios")
+      .select("id, equipo_id, fecha, estado, observaciones, cargado_por, sheets_pendiente");
     if (filtros.equipoId) q = q.eq("equipo_id", filtros.equipoId);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);

@@ -109,6 +109,7 @@ const ICONOS: Record<string, () => ReactElement> = {
   // Taller Vial.
   "Taller Vial": IconTruck,
   "Cargas": IconBolt,
+  "Estados": IconAlert,
   "Services": IconClipboard,
   "Reparaciones": IconWrench,
   // Órdenes de servicio (Mantenimiento y el atajo desde Compras).

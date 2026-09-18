@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoActualPorEquipo, estadoDesdeCodigoSheet, resumenDeEstadoActual, resumenMensualDeEstados, type EstadoPlano,
+  codigoSheetDesdeEstado, esEstadoDiarioValido, estadoActualPorEquipo, estadoDesdeCodigoSheet,
+  resumenDeEstadoActual, resumenMensualDeEstados, type EstadoPlano,
 } from "./estados";
 
 describe("estadoDesdeCodigoSheet", () => {
@@ -18,6 +19,28 @@ describe("estadoDesdeCodigoSheet", () => {
   it("null para un código que no es ninguno de los tres — no se adivina", () => {
     expect(estadoDesdeCodigoSheet("")).toBeNull();
     expect(estadoDesdeCodigoSheet("XX")).toBeNull();
+  });
+});
+
+describe("codigoSheetDesdeEstado", () => {
+  it("es la vuelta exacta de estadoDesdeCodigoSheet", () => {
+    expect(codigoSheetDesdeEstado("OPERATIVO")).toBe("OP");
+    expect(codigoSheetDesdeEstado("FUERA_DE_SERVICIO")).toBe("FS");
+    expect(codigoSheetDesdeEstado("OPERATIVO_CON_FALLAS")).toBe("OCF");
+  });
+});
+
+describe("esEstadoDiarioValido", () => {
+  it("acepta los tres estados", () => {
+    expect(esEstadoDiarioValido("OPERATIVO")).toBe(true);
+    expect(esEstadoDiarioValido("FUERA_DE_SERVICIO")).toBe(true);
+    expect(esEstadoDiarioValido("OPERATIVO_CON_FALLAS")).toBe(true);
+  });
+
+  it("rechaza cualquier otra cosa", () => {
+    expect(esEstadoDiarioValido("OP")).toBe(false);
+    expect(esEstadoDiarioValido("")).toBe(false);
+    expect(esEstadoDiarioValido(null)).toBe(false);
   });
 });
 

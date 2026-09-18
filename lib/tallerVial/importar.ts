@@ -3,20 +3,37 @@ import { leerValores } from "@/lib/core/sheets";
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 import { codigoDesdeTextoLibre } from "./equipos";
 import { estadoDesdeCodigoSheet } from "./estados";
+import { esEcoDeCargaDelSistema } from "./planilla";
 
 /**
- * Espejo de dos pestañas de la planilla real de Taller Vial: "DATOS" (cargas
- * de combustible) y "HISTORIAL ESTADOS" (OP/FS/OCF por día). Pivote del
- * 17/09/2026: la primera versión de este módulo dejaba cargar desde una
- * pantalla del SdG ("de acá en adelante manda el SdG", como Producción o
- * Despacho); el usuario aclaró que quiere lo contrario — sigue cargando en la
- * planilla, y el SdG sólo espeja para mostrar tablas y verlas más fácil.
- * Mismo cambio de dirección que tuvieron Compras/Mantenimiento/Inventario
- * desde el principio.
+ * Trae de dos pestañas de la planilla real de Taller Vial ("DATOS" y
+ * "HISTORIAL ESTADOS") lo que se haya cargado ahí. Van dos pivotes:
  *
- * Los services por horómetro (`taller_vial_services`) NO están acá: esos sí
- * se cargan desde el SdG, a pedido del usuario — ver `lib/tallerVial/service.ts`
- * y `/api/taller-vial/services`.
+ * 17/09/2026 — de "se carga desde una pantalla del SdG" a "se carga en la
+ * planilla y el SdG espeja" (mismo lugar que Compras/Mantenimiento/Inventario).
+ *
+ * 18/09/2026 — el usuario cambió de opinión otra vez: quiere cargar desde el
+ * SdG (`/api/taller-vial/cargas`, `/api/taller-vial/estados`), pero sin
+ * dejar de leer la planilla por si alguien todavía anota ahí. Ver la
+ * migración 20260918101859 y `lib/tallerVial/espejo.ts` (el sentido
+ * contrario: el SdG escribe en la planilla al cargar).
+ *
+ * `sincronizarCargasDesdeSheets` sigue siendo un borrar-y-recargar porque
+ * `taller_vial_cargas` no tiene clave natural, pero ahora sólo toca las filas
+ * con `cargado_por is null` (las de la planilla) — nunca las que nacieron en
+ * el SdG. Y salta cualquier fila de la planilla que sea el eco de una carga
+ * del SdG (`esEcoDeCargaDelSistema`, columna H de "DATOS"): sin ese salto,
+ * la carga que el SdG ya escribió y también exportó a la planilla volvería a
+ * entrar como una fila nueva, duplicando litros.
+ *
+ * `sincronizarEstadosDesdeSheets` no necesita ningún truco parecido: como
+ * tiene clave natural (equipo_id, fecha) y ya hacía upsert, la fila que trae
+ * la planilla pisa con el mismo valor que el SdG acaba de escribir — no
+ * cambia nada en el caso normal.
+ *
+ * Los services por horómetro (`taller_vial_services`) NO están acá: esos ya
+ * se cargaban desde el SdG desde antes — ver `lib/tallerVial/service.ts` y
+ * `/api/taller-vial/services`.
  *
  * Reusa `scripts/importar-taller-vial-historico.mts`, que ahora es un
  * envoltorio de esto — mismo patrón que `cantera/importarAcarreo.ts` con su
@@ -31,6 +48,8 @@ export interface ResultadoSincronizacionCargas {
   sinFecha: number;
   sinLitros: number;
   sinEquipoReconocido: number;
+  /** Filas que son el eco de una carga que ya nació en el SdG — no se cuentan como error, se saltean a propósito. */
+  ecoDelSistema: number;
 }
 
 /**
@@ -51,6 +70,7 @@ export async function sincronizarCargasDesdeSheets(escribir: boolean): Promise<R
   let sinFecha = 0;
   let sinLitros = 0;
   let sinEquipoReconocido = 0;
+  let ecoDelSistema = 0;
   const paraInsertar: {
     equipo_id: string | null;
     equipo_raw: string;
@@ -60,6 +80,8 @@ export async function sincronizarCargasDesdeSheets(escribir: boolean): Promise<R
   }[] = [];
 
   for (const fila of filas) {
+    if (esEcoDeCargaDelSistema(fila)) { ecoDelSistema++; continue; }
+
     const [fechaRaw, equipoRaw, litrosRaw, lecturaRaw] = fila;
 
     const fecha = fechaDeSheets(fechaRaw);
@@ -91,13 +113,16 @@ export async function sincronizarCargasDesdeSheets(escribir: boolean): Promise<R
   let filasInsertadas = 0;
   if (escribir) {
     // Sin clave natural —un mismo equipo puede cargar combustible dos veces
-    // el mismo día— no hay con qué hacer upsert: se borra todo y se recarga
-    // entero cada vez, mismo criterio que `cantera_pesadas`. Es seguro porque
-    // la tabla es 100% reproducible desde "DATOS" —nada acá lo carga a
-    // mano—, pero deja una ventana corta entre el delete y el insert donde
-    // una lectura ve la tabla vacía. Asumido: corre cada 20-30 min por cron,
-    // así que la ventana es frecuente pero de segundos.
-    const { error: errDel } = await sb.from("taller_vial_cargas").delete().not("id", "is", null);
+    // el mismo día— no hay con qué hacer upsert: se borra y se recarga
+    // entero, mismo criterio que `cantera_pesadas`. Pero sólo las filas
+    // `cargado_por is null`: las que nacieron en el SdG (`cargado_por`
+    // puesto) no las escribió este import y no las borra tampoco — si las
+    // borrara, la única forma de recuperarlas sería que su eco en "DATOS"
+    // volviera a insertarlas, y ya se saltean más arriba (`ecoDelSistema`)
+    // para no duplicarlas. Deja una ventana corta entre el delete y el
+    // insert donde una lectura ve sólo las filas del SdG; asumido, igual que
+    // antes: corre cada 20-30 min por cron.
+    const { error: errDel } = await sb.from("taller_vial_cargas").delete().is("cargado_por", null);
     if (errDel) throw new Error(`cargas (borrando lo anterior): ${errDel.message}`);
 
     const TAMANO_LOTE = 500;
@@ -109,7 +134,7 @@ export async function sincronizarCargasDesdeSheets(escribir: boolean): Promise<R
     }
   }
 
-  return { filasLeidas: filas.length, filasInsertadas, sinFecha, sinLitros, sinEquipoReconocido };
+  return { filasLeidas: filas.length, filasInsertadas, sinFecha, sinLitros, sinEquipoReconocido, ecoDelSistema };
 }
 
 export interface ResultadoSincronizacionEstados {

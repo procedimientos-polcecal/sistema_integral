@@ -11,6 +11,8 @@ export interface CargaDB {
   cargado_en: string;
   actualizado_por: string | null;
   actualizado_en: string | null;
+  /** Lo que dijo Google si falló la exportación hacia la planilla al cargar esto desde el SdG. Null si no se intentó o si salió bien. */
+  sheets_pendiente: string | null;
 }
 
 /** Una fila de `taller_vial_estados_diarios`: el estado de un equipo en un día. */
@@ -19,6 +21,10 @@ export interface EstadoDiarioDB {
   equipo_id: string;
   fecha: string;
   estado: string;
+  observaciones: string | null;
+  cargado_por: string | null;
+  /** Lo que dijo Google si falló la exportación hacia la planilla al cargar esto desde el SdG. Null si no se intentó o si salió bien. */
+  sheets_pendiente: string | null;
 }
 
 /** Una fila de `taller_vial_services`: un service realizado a un equipo, a un horómetro y en un escalón. */

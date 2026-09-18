@@ -266,12 +266,13 @@ export default async function TallerVialInicioPage() {
       </section>
 
       <section className="card mt-4 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold text-slate-900">Estados del mes, por equipo</h2>
           <div className="flex items-center gap-3 text-xs text-slate-500">
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operativo</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Con fallas</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Fuera de servicio</span>
+            <Link href="/taller-vial/estados" className="underline">Cambiar estado →</Link>
           </div>
         </div>
         {resumenEstados.length === 0 ? (
@@ -300,7 +301,14 @@ export default async function TallerVialInicioPage() {
         )}
       </section>
 
-      <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Link
+          href="/taller-vial/estados"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+        >
+          Estado de los equipos
+          <span className="text-slate-400">→</span>
+        </Link>
         <Link
           href="/taller-vial/services"
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"

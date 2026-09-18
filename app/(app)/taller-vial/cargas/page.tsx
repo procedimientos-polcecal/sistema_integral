@@ -52,6 +52,7 @@ export default async function CargasTallerVialPage({
       mes={mes}
       equipos={equipos}
       cargas={cargasDelMes}
+      puedeEditar={permisos.puedeEditar}
     />
   );
 }
