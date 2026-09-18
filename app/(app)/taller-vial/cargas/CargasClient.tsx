@@ -84,7 +84,9 @@ export default function CargasClient({
         )}
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="mt-6">
+        <h2 className="section-title">Cargas del mes</h2>
+        <div className="card mt-2 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table-base">
             <thead>
@@ -102,11 +104,11 @@ export default function CargasClient({
               {cargas.length === 0 ? (
                 <tr><td colSpan={7} className="py-8 text-center text-slate-400">Sin cargas este mes.</td></tr>
               ) : (
-                cargas.map((c) => {
+                cargas.map((c, i) => {
                   const equipo = equipos.find((e) => e.id === c.equipo_id);
                   const unidad = equipo ? unidadDeUso(equipo.code) : null;
                   return (
-                    <tr key={c.id}>
+                    <tr key={c.id} style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
                       <td className="whitespace-nowrap">{c.fecha}</td>
                       <td className={equipo ? "text-slate-800" : "text-amber-700"}>{c.equipo_raw}</td>
                       <td className="text-right font-mono tabular-nums">{num0.format(c.litros)}</td>
@@ -124,6 +126,7 @@ export default function CargasClient({
               )}
             </tbody>
           </table>
+        </div>
         </div>
       </section>
     </div>

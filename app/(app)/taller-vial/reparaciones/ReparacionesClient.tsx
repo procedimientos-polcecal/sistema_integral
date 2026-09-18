@@ -204,7 +204,9 @@ export default function ReparacionesClient({
         </section>
       )}
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="mt-6">
+        <h2 className="section-title">Historial de reparaciones</h2>
+        <div className="card mt-2 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table-base">
             <thead>
@@ -223,15 +225,17 @@ export default function ReparacionesClient({
               {reparaciones.length === 0 ? (
                 <tr><td colSpan={8} className="py-8 text-center text-slate-400">Todavía no hay ninguna reparación cargada.</td></tr>
               ) : (
-                reparaciones.map((r) => {
+                reparaciones.map((r, i) => {
                   const equipo = equipos.find((e) => e.id === r.equipo_id);
                   const abierta = filaAbierta === r.id;
                   return (
                     <Fragment key={r.id}>
-                      <tr>
+                      <tr style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
                         <td className="whitespace-nowrap">{r.fecha}</td>
                         <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
-                        <td className="text-slate-500">{r.tipo}</td>
+                        <td>
+                          <span className={`badge ${r.tipo === "Revisión" ? "badge-mant" : "badge-fs"}`}>{r.tipo}</span>
+                        </td>
                         <td className="text-slate-700">{r.descripcion}</td>
                         <td className="text-right font-mono tabular-nums">{r.horas !== null ? num0.format(r.horas) : "—"}</td>
                         <td className="text-right font-mono tabular-nums">{r.horometro !== null ? num0.format(r.horometro) : "—"}</td>
@@ -258,6 +262,7 @@ export default function ReparacionesClient({
               )}
             </tbody>
           </table>
+        </div>
         </div>
       </section>
     </div>

@@ -366,15 +366,15 @@ export default function ServicesClient({
               {historial.length === 0 ? (
                 <tr><td colSpan={6} className="py-8 text-center text-slate-400">Todavía no hay ningún service cargado.</td></tr>
               ) : (
-                historial.map((s) => {
+                historial.map((s, i) => {
                   const equipo = equipos.find((e) => e.id === s.equipo_id);
                   const abierta = filaAbierta === s.id;
                   return (
                     <Fragment key={s.id}>
-                      <tr>
+                      <tr style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
                         <td className="whitespace-nowrap">{s.fecha}</td>
                         <td className="text-slate-800">{equipo ? `${equipo.code} - ${equipo.name}` : "—"}</td>
-                        <td className="text-right font-mono tabular-nums">{s.tier} hs</td>
+                        <td className="text-right"><span className="badge badge-st">{s.tier} hs</span></td>
                         <td className="text-right font-mono tabular-nums">{num0.format(s.horometro)}</td>
                         <td className="text-slate-500">{s.observaciones ?? ""}</td>
                         <td className="whitespace-nowrap">

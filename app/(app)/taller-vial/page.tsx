@@ -207,10 +207,10 @@ export default async function TallerVialInicioPage() {
                 </tr>
               </thead>
               <tbody>
-                {resumen.map((r) => {
+                {resumen.map((r, i) => {
                   const unidad = unidadDeUso(r.equipo!.code);
                   return (
-                    <tr key={r.equipoId}>
+                    <tr key={r.equipoId} style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
                       <td className="font-medium text-slate-800">{r.equipo!.code} - {r.equipo!.name}</td>
                       <td className="text-right">{r.cargas}</td>
                       <td className="text-right font-mono tabular-nums">{num0.format(r.litrosTotal)}</td>
