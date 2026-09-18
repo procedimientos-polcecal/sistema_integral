@@ -19,16 +19,23 @@ export function esTierDeServiceValido(v: unknown): v is TierDeService {
 }
 
 /**
- * Las tareas de rutina de un service, relevadas de "HISTORIAL REPARACIONES"
- * real: casi todas las descripciones de "Service 250h/500h/1000h/2000h" se
- * arman combinando este mismo puñado de tareas ("Cambio filtro de aire
- * primario y secundario", "se cambió aceite de motor y filtro de aceite...",
- * etc.). El usuario pidió una checklist en vez de escribir la descripción a
- * mano cada vez, con el repuesto del pañol al lado de la que corresponda.
+ * Las tareas de rutina de un service. El primer grupo (aire, aceite de
+ * motor, combustible) sale de "HISTORIAL REPARACIONES" real: casi todas las
+ * descripciones de "Service 250h/500h/1000h/2000h" se arman combinando ese
+ * puñado de tareas ("Cambio filtro de aire primario y secundario", "se
+ * cambió aceite de motor y filtro de aceite...", etc.). El segundo grupo
+ * (hidráulico, transmisión, correas) lo pidió el usuario después de ver la
+ * primera lista, buscado contra guías de mantenimiento de excavadoras,
+ * cargadoras y autoelevadores por horómetro (250/500/1000/2000 hs) — no
+ * está en el histórico relevado porque en esos meses todavía no les tocaba.
  *
- * Es una lista fija y no un catálogo en la base: son ocho tareas que no
- * cambian, mismo criterio que `TIERS_DE_SERVICE` — si el día de mañana se
- * agrega o saca una, es un cambio de una línea acá.
+ * "Engrase general" y "Control de niveles" SE SACARON a pedido del usuario:
+ * son revisiones, no repuestos que salen del pañol, y no tenía sentido
+ * ofrecerles un buscador de artículos al lado.
+ *
+ * Es una lista fija y no un catálogo en la base, mismo criterio que
+ * `TIERS_DE_SERVICE` — si el día de mañana se agrega o saca una tarea, es un
+ * cambio de una línea acá.
  */
 export interface TareaDeService {
   codigo: string;
@@ -39,11 +46,14 @@ export const TAREAS_DE_SERVICE: readonly TareaDeService[] = [
   { codigo: "filtro_aire_primario", etiqueta: "Filtro de aire primario" },
   { codigo: "filtro_aire_secundario", etiqueta: "Filtro de aire secundario" },
   { codigo: "aceite_motor", etiqueta: "Aceite de motor" },
-  { codigo: "filtro_aceite", etiqueta: "Filtro de aceite" },
+  { codigo: "filtro_aceite_motor", etiqueta: "Filtro de aceite de motor" },
   { codigo: "filtro_combustible", etiqueta: "Filtro de combustible" },
-  { codigo: "filtro_precombustible", etiqueta: "Filtro precombustible" },
-  { codigo: "engrase", etiqueta: "Engrase general" },
-  { codigo: "control_niveles", etiqueta: "Control de niveles (agua / aceite)" },
+  { codigo: "prefiltro_combustible", etiqueta: "Prefiltro de combustible" },
+  { codigo: "filtro_hidraulico", etiqueta: "Filtro hidráulico" },
+  { codigo: "aceite_hidraulico", etiqueta: "Aceite hidráulico" },
+  { codigo: "aceite_transmision", etiqueta: "Aceite de transmisión" },
+  { codigo: "filtro_transmision", etiqueta: "Filtro de transmisión" },
+  { codigo: "correas", etiqueta: "Correas" },
 ] as const;
 
 /** "Filtro de aire primario, Aceite de motor" — para armar la descripción sola a partir de lo tildado. */

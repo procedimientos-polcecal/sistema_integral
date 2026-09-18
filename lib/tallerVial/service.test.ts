@@ -138,6 +138,6 @@ describe("descripcionDeTareas", () => {
   });
 
   it("ignora un código que no es ninguna tarea conocida", () => {
-    expect(descripcionDeTareas(["no_existe", "engrase"])).toBe("Engrase general");
+    expect(descripcionDeTareas(["no_existe", "filtro_hidraulico"])).toBe("Filtro hidráulico");
   });
 });
