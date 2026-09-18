@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import BuscadorDeArticulo, { type ArticuloOpcion } from "./BuscadorDeArticulo";
 
 /**
- * Los repuestos del pañol reservados para un service o una reparación
- * puntual, con el buscador para reservar uno nuevo. Reservar no descuenta
- * stock — sólo Inventario, desde "Reservas de Taller Vial", confirma la baja
- * real. Compartido entre `/taller-vial/services` y `/taller-vial/reparaciones`
- * porque la lógica es idéntica, sólo cambia si el origen es un service o una
- * reparación.
+ * Los repuestos del pañol reservados para un service o una reparación ya
+ * cargados. Reservar no descuenta stock — sólo Inventario, desde "Reservas
+ * de Taller Vial", confirma la baja real. Compartido entre
+ * `/taller-vial/services` y `/taller-vial/reparaciones` porque la lógica es
+ * idéntica, sólo cambia si el origen es un service o una reparación.
+ *
+ * Para reservar repuestos AL MOMENTO de cargar el service o la reparación
+ * —lo más común—, el formulario de carga tiene su propio buscador
+ * (`BuscadorDeArticulo`) antes de que este componente exista siquiera. Esto
+ * es para agregar o revisar repuestos de un trabajo que ya está cargado.
  */
 
 interface RepuestoFila {
@@ -19,13 +24,6 @@ interface RepuestoFila {
   estado: "reservado" | "confirmado";
 }
 
-interface ArticuloOpcion {
-  id: string;
-  codigo: string;
-  descripcion: string;
-  stock_actual: number;
-}
-
 export default function RepuestosDelTrabajo({
   serviceId, reparacionId, puedeEditar,
 }: {
@@ -34,8 +32,6 @@ export default function RepuestosDelTrabajo({
   puedeEditar: boolean;
 }) {
   const [repuestos, setRepuestos] = useState<RepuestoFila[] | null>(null);
-  const [busqueda, setBusqueda] = useState("");
-  const [opciones, setOpciones] = useState<ArticuloOpcion[]>([]);
   const [seleccionado, setSeleccionado] = useState<ArticuloOpcion | null>(null);
   const [cantidad, setCantidad] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
@@ -52,16 +48,6 @@ export default function RepuestosDelTrabajo({
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- se busca una sola vez al montar, por origen
   useEffect(() => { cargar(); }, []);
-
-  useEffect(() => {
-    if (seleccionado || busqueda.trim().length < 3) { setOpciones([]); return; }
-    const t = setTimeout(async () => {
-      const res = await fetch(`/api/taller-vial/inventario?q=${encodeURIComponent(busqueda)}`);
-      const json = await res.json();
-      if (res.ok) setOpciones(json.data);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [busqueda, seleccionado]);
 
   async function reservar() {
     if (!seleccionado) { setError("Elegí un artículo del pañol"); return; }
@@ -86,7 +72,6 @@ export default function RepuestosDelTrabajo({
       if (!res.ok) throw new Error(json.error ?? "No se pudo reservar");
       if (json.aviso) setAviso(json.aviso.mensaje);
       setSeleccionado(null);
-      setBusqueda("");
       setCantidad("");
       await cargar();
     } catch (e) {
@@ -130,26 +115,14 @@ export default function RepuestosDelTrabajo({
 
       {puedeEditar && (
         <div className="mt-2 flex gap-2">
-          <div className="relative flex-1">
-            <input
-              className="input"
-              placeholder="Buscar artículo del pañol…"
-              value={seleccionado ? `${seleccionado.codigo} - ${seleccionado.descripcion}` : busqueda}
-              onChange={(e) => { setSeleccionado(null); setBusqueda(e.target.value); }}
-            />
-            {!seleccionado && opciones.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
-                {opciones.map((o) => (
-                  <li key={o.id}>
-                    <button
-                      className="block w-full px-3 py-1.5 text-left text-xs hover:bg-slate-50"
-                      onClick={() => { setSeleccionado(o); setOpciones([]); }}
-                    >
-                      {o.codigo} - {o.descripcion} <span className="text-slate-400">(quedan {o.stock_actual})</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+          <div className="flex-1">
+            {seleccionado ? (
+              <div className="input flex items-center justify-between">
+                <span>{seleccionado.codigo} - {seleccionado.descripcion}</span>
+                <button className="text-slate-400 hover:text-slate-700" onClick={() => setSeleccionado(null)}>✕</button>
+              </div>
+            ) : (
+              <BuscadorDeArticulo onElegir={setSeleccionado} />
             )}
           </div>
           <input className="input w-24" inputMode="decimal" placeholder="Cant." value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
