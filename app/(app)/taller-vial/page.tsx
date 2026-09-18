@@ -122,7 +122,10 @@ export default async function TallerVialInicioPage() {
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Taller Vial</h1>
-        <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/taller-vial/cargas" className="btn-primary">Cargar combustible</Link>
+          <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
+        </div>
       </div>
 
       {/* ── Estado actual de la flota ── */}
