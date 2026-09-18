@@ -1,7 +1,7 @@
 import type { Modulo, Rol, UsuarioModulo } from "./types";
 
 // Orden canónico en que se muestran los módulos en la navegación.
-export const MODULOS_ORDEN: Modulo[] = ["rrhh", "mantenimiento", "remises", "compras", "inventario", "produccion", "despacho", "facturacion", "cantera", "calidad", "taller_vial"];
+export const MODULOS_ORDEN: Modulo[] = ["rrhh", "mantenimiento", "remises", "compras", "inventario", "produccion", "despacho", "facturacion", "cantera", "calidad", "taller_vial", "trituracion"];
 
 /**
  * Devuelve los módulos que un usuario puede ver, en orden canónico.

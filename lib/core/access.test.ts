@@ -23,6 +23,7 @@ describe("modulosVisibles", () => {
       "cantera",
       "calidad",
       "taller_vial",
+      "trituracion",
     ]);
   });
 

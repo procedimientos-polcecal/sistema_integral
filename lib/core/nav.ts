@@ -302,6 +302,16 @@ export const NAV: NavItem[] = [
       { label: "Informe mensual", href: "/taller-vial/informes", modulo: "taller_vial" },
     ],
   },
+  {
+    label: "Trituración",
+    href: "/trituracion",
+    modulo: "trituracion",
+    children: [
+      { label: "Partes", href: "/trituracion/partes", modulo: "trituracion" },
+      { label: "Informe mensual", href: "/trituracion/informes", modulo: "trituracion" },
+      { label: "Plantas", href: "/trituracion/plantas", modulo: "trituracion", soloAdmin: true },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
