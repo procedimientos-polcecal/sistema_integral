@@ -8,6 +8,20 @@ import {
 // Verde, violeta, teal — mismo criterio que Cantera: nunca azul junto a amarillo.
 export const COLORES_TRITURACION = ["#1E7D34", "#7E22CE", "#0891B2", "#C2410C", "#B45309"];
 
+/**
+ * El tinte claro de cada color de arriba — para fondos de tarjeta y cebra de
+ * tabla, no sólo un borde de 3px que se puede pasar por alto. Mismo criterio
+ * que VERDE_CLARO/AMBAR_CLARO del informe de Taller Vial, con un tono por
+ * cada color de la paleta.
+ */
+export const COLOR_CLARO: Record<string, string> = {
+  "#1E7D34": "#F0F8F5",
+  "#7E22CE": "#F6F0FC",
+  "#0891B2": "#EDFAFD",
+  "#C2410C": "#FFF3EC",
+  "#B45309": "#FFF7ED",
+};
+
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const ejeNum = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : num.format(v));
 
@@ -40,10 +54,14 @@ export function EvolucionToneladasPorPlanta({
         <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
         <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={ejeNum} width={36} />
-        <Tooltip formatter={(v) => `${num.format(Number(v))} t`} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Tooltip
+          formatter={(v) => `${num.format(Number(v))} t`}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E2E8F0" }}
+          labelStyle={{ color: "#0F172A", fontWeight: 600 }}
+        />
+        <Legend wrapperStyle={{ fontSize: 11, color: "#475569" }} />
         {series.map((s, i) => (
-          <Bar key={s.key} dataKey={s.key} name={s.nombre} fill={s.color} radius={i === series.length - 1 ? [4, 4, 0, 0] : undefined} />
+          <Bar key={s.key} dataKey={s.key} name={s.nombre} fill={s.color} radius={[4, 4, 0, 0]} />
         ))}
       </BarChart>
     </ResponsiveContainer>
@@ -58,8 +76,12 @@ export function RepartoPorMaterial({ datos }: { datos: { material: string; tonel
         <Pie data={datos} dataKey="toneladas" nameKey="material" innerRadius={42} outerRadius={75} paddingAngle={2}>
           {datos.map((_, i) => <Cell key={i} fill={COLORES_TRITURACION[i % COLORES_TRITURACION.length]} />)}
         </Pie>
-        <Tooltip formatter={(v) => `${num.format(Number(v))} t`} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Tooltip
+          formatter={(v) => `${num.format(Number(v))} t`}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E2E8F0" }}
+          labelStyle={{ color: "#0F172A", fontWeight: 600 }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#475569" }} />
       </PieChart>
     </ResponsiveContainer>
   );

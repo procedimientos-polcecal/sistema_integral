@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas, type ParteDB } from "@/lib/trituracion/consultas";
 import { resumenMensual, toneladasPorMaterial, ultimosMeses, type ParteParaResumen } from "@/lib/trituracion/informe";
-import { COLORES_TRITURACION, type FilaEvolucion } from "./GraficosTrituracion";
+import { COLOR_CLARO, COLORES_TRITURACION, type FilaEvolucion } from "./GraficosTrituracion";
 import { GraficoEvolucion, GraficoMateriales } from "./InicioGraficos";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -120,7 +120,7 @@ export default async function TrituracionInicioPage() {
             key={planta.id}
             href={`/trituracion/partes?planta=${planta.id}`}
             className="card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg"
-            style={{ borderTop: `3px solid ${color}` }}
+            style={{ borderTop: `3px solid ${color}`, background: `linear-gradient(180deg, ${COLOR_CLARO[color] ?? "#FFF"} 0%, #FFFFFF 70%)` }}
           >
             <div className="flex items-center gap-2 font-semibold text-slate-900">
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -140,15 +140,19 @@ export default async function TrituracionInicioPage() {
 
       {/* ── Gráficos ── */}
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-5">
-        <section className="card p-4 lg:col-span-3">
-          <h2 className="section-title">Toneladas por planta, últimos 6 meses</h2>
-          <div className="mt-2 h-56">
+        <section className="card overflow-hidden lg:col-span-3">
+          <div style={{ backgroundColor: "#0891B2" }} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
+            Toneladas por planta, últimos 6 meses
+          </div>
+          <div className="h-56 p-4">
             <GraficoEvolucion datos={evolucion} series={seriePlantas} />
           </div>
         </section>
-        <section className="card p-4 lg:col-span-2">
-          <h2 className="section-title">Material procesado este mes</h2>
-          <div className="mt-2 h-56">
+        <section className="card overflow-hidden lg:col-span-2">
+          <div style={{ backgroundColor: "#7E22CE" }} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
+            Material procesado este mes
+          </div>
+          <div className="h-56 p-4">
             {materiales.length > 0 ? (
               <GraficoMateriales datos={materiales} />
             ) : (
@@ -166,12 +170,18 @@ export default async function TrituracionInicioPage() {
   );
 }
 
-/** Calcado de `app/(app)/cantera/page.tsx` y `app/(app)/taller-vial/page.tsx`: valor y borde superior con el mismo color, para que la tarjeta no quede en blanco y negro. */
+/**
+ * Calcado de `app/(app)/cantera/page.tsx` y `app/(app)/taller-vial/page.tsx`
+ * (valor + borde superior del mismo color), con un fondo tintado de más —a
+ * pedido explícito del usuario, que seguía viendo la tarjeta "en negro" con
+ * sólo el borde de 3px—, para que el color se note sin tener que mirar de
+ * cerca.
+ */
 function Metrica({ color, valor, label }: { color: string; valor: string; label: string }) {
   return (
-    <div className="card p-4" style={{ borderTop: `3px solid ${color}` }}>
+    <div className="card p-4" style={{ borderTop: `3px solid ${color}`, backgroundColor: COLOR_CLARO[color] ?? "#FFF" }}>
       <div className="text-2xl font-bold tabular-nums" style={{ color }}>{valor}</div>
-      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
+      <div className="mt-0.5 text-sm text-slate-600">{label}</div>
     </div>
   );
 }

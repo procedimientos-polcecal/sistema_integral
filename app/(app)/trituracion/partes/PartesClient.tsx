@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { despejarParte } from "@/lib/trituracion/horas";
 import { ESTADOS_PARTE, ETIQUETA_ESTADO, MATERIALES, ORIGENES_SIN_YACIMIENTO } from "@/lib/trituracion/vocabulario";
 import type { EmpleadoLiviano, ParteDB, PlantaDB } from "@/lib/trituracion/consultas";
-import { COLORES_TRITURACION } from "../GraficosTrituracion";
+import { COLOR_CLARO, COLORES_TRITURACION } from "../GraficosTrituracion";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -163,6 +163,9 @@ export default function PartesClient({
   const router = useRouter();
   const irA = (p: string, m: string) => router.push(`/trituracion/partes?planta=${p}&mes=${m}`);
 
+  const colorPlanta = COLORES_TRITURACION[Math.max(0, plantas.findIndex((p) => p.id === plantaId)) % COLORES_TRITURACION.length];
+  const claroPlanta = COLOR_CLARO[colorPlanta] ?? "#FFF";
+
   // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
   const hoy = new Date().toISOString().slice(0, 10);
   const fechaInicial = hoy.startsWith(mes) ? hoy : `${mes}-01`;
@@ -281,12 +284,13 @@ export default function PartesClient({
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
         {/* ── Calendario del mes ── */}
-        <div className="card p-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <button className="btn-ghost px-2 py-1 text-sm" onClick={() => irA(plantaId, moverMes(mes, -1))} aria-label="Mes anterior">←</button>
-            <span className="text-sm font-semibold text-slate-800">{nombreDeMes(mes)}</span>
-            <button className="btn-ghost px-2 py-1 text-sm" onClick={() => irA(plantaId, moverMes(mes, 1))} aria-label="Mes siguiente">→</button>
+        <div className="card overflow-hidden lg:col-span-2">
+          <div style={{ backgroundColor: colorPlanta }} className="flex items-center justify-between px-4 py-2">
+            <button className="rounded px-2 py-1 text-sm text-white/90 hover:bg-white/10" onClick={() => irA(plantaId, moverMes(mes, -1))} aria-label="Mes anterior">←</button>
+            <span className="text-sm font-semibold text-white">{nombreDeMes(mes)}</span>
+            <button className="rounded px-2 py-1 text-sm text-white/90 hover:bg-white/10" onClick={() => irA(plantaId, moverMes(mes, 1))} aria-label="Mes siguiente">→</button>
           </div>
+          <div className="p-4" style={{ backgroundColor: claroPlanta }}>
           <div className="mt-3">
             <CalendarioMes mes={mes} partes={partes} fechaSeleccionada={form.fecha} onElegir={elegirFecha} />
           </div>
@@ -310,14 +314,16 @@ export default function PartesClient({
           {pendientes > 0 && (
             <p className="mt-2 text-xs text-amber-700">⚠ {pendientes} sin exportar a la planilla</p>
           )}
+          </div>
         </div>
 
         {/* ── El formulario del día elegido ── */}
         {puedeEditar ? (
-          <section className="card p-4 lg:col-span-3">
-            <h2 className="section-title">
+          <section className="card overflow-hidden lg:col-span-3">
+            <div style={{ backgroundColor: colorPlanta }} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
               {form.fecha === hoy ? "Hoy" : new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${form.fecha}T00:00:00Z`))}
-            </h2>
+            </div>
+            <div className="p-4" style={{ backgroundColor: claroPlanta }}>
 
             <div className="mt-3 flex gap-2">
               {ESTADOS_PARTE.map((e) => (
@@ -443,6 +449,7 @@ export default function PartesClient({
             </div>
             {aviso && <p className="mt-2 text-sm text-amber-700">{aviso}</p>}
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            </div>
           </section>
         ) : (
           <div className="card flex items-center justify-center p-4 text-sm text-slate-400 lg:col-span-3">
