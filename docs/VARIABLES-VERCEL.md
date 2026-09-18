@@ -81,6 +81,7 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_CANTERA_TAB_PERF` | Pestaña de perforaciones | Por defecto `PERFORACIÓN` |
 | `GOOGLE_SHEETS_CANTERA_TAB_VOL` | Pestaña de voladuras | Por defecto `VOLADURAS` |
 | `GOOGLE_SHEETS_CANTERA_TAB_BOCH` | Pestaña de bochones | Por defecto `BOCHONES` |
+| `GOOGLE_SHEETS_TRITURACION_ID` | La planilla de las 3 plantas de trituración (pestañas `PLANTA 1`/`PLANTA 2`/`PLANTA 3`): `1QU1iDgcsTSwTe_RMzUs9DOJwfDV0H6ylR7ublMwcMdI`. Espejo de una sola vía: manda el SdG, y sin esta variable un parte se guarda igual pero queda con `sheets_pendiente`. **La cuenta de servicio necesita EDITOR**, no sólo lectora — se compartió como lectora el 18/09/2026 para relevar, hay que subirle el permiso antes de que el espejo pueda escribir | El tramo entre `/d/` y `/edit` de la URL |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
