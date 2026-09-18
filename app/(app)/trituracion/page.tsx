@@ -98,27 +98,19 @@ export default async function TrituracionInicioPage() {
       </p>
 
       {/* ── KPIs globales del mes ── */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="card p-4">
-          <div className="text-2xl font-bold tabular-nums text-slate-800">{num0.format(resumenGlobal.toneladasTotal)} t</div>
-          <div className="mt-0.5 text-sm text-slate-500">Procesadas en {nombreDeMes(mesActual)}</div>
-        </div>
-        <div className="card p-4">
-          <div className="text-2xl font-bold tabular-nums text-slate-800">{resumenGlobal.diasOperativos}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Días operativos (3 plantas)</div>
-        </div>
-        <div className="card p-4">
-          <div className="text-2xl font-bold tabular-nums text-slate-800">
-            {resumenGlobal.disponibilidadPromedio !== null ? pct.format(resumenGlobal.disponibilidadPromedio) : "—"}
-          </div>
-          <div className="mt-0.5 text-sm text-slate-500">Disponibilidad promedio</div>
-        </div>
-        <div className="card p-4" style={pendientesTotal > 0 ? { borderTop: "3px solid #B45309" } : undefined}>
-          <div className={`text-2xl font-bold tabular-nums ${pendientesTotal > 0 ? "text-amber-700" : "text-slate-800"}`}>
-            {pendientesTotal}
-          </div>
-          <div className="mt-0.5 text-sm text-slate-500">Sin exportar a la planilla</div>
-        </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Metrica color="#1E7D34" valor={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesActual)}`} />
+        <Metrica color="#7E22CE" valor={String(resumenGlobal.diasOperativos)} label="Días operativos (3 plantas)" />
+        <Metrica
+          color="#0891B2"
+          valor={resumenGlobal.disponibilidadPromedio !== null ? pct.format(resumenGlobal.disponibilidadPromedio) : "—"}
+          label="Disponibilidad promedio"
+        />
+        <Metrica
+          color={pendientesTotal > 0 ? "#B45309" : "#1E7D34"}
+          valor={String(pendientesTotal)}
+          label="Sin exportar a la planilla"
+        />
       </div>
 
       {/* ── Cada planta, con su color ── */}
@@ -127,15 +119,20 @@ export default async function TrituracionInicioPage() {
           <Link
             key={planta.id}
             href={`/trituracion/partes?planta=${planta.id}`}
-            className="card p-4 transition-colors hover:border-slate-300"
+            className="card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg"
             style={{ borderTop: `3px solid ${color}` }}
           >
-            <div className="font-semibold text-slate-800">{planta.nombre}</div>
-            <div className="mt-2 text-2xl font-bold tabular-nums" style={{ color }}>{num0.format(resumen.toneladasTotal)} t</div>
+            <div className="flex items-center gap-2 font-semibold text-slate-900">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+              {planta.nombre}
+            </div>
+            <div className="mt-2 text-3xl font-bold tabular-nums" style={{ color }}>{num0.format(resumen.toneladasTotal)} t</div>
             <div className="text-sm text-slate-500">procesadas este mes</div>
             <div className="mt-2 flex justify-between text-sm text-slate-600">
               <span>{resumen.diasOperativos} días operativos</span>
-              <span>{resumen.disponibilidadPromedio !== null ? pct.format(resumen.disponibilidadPromedio) : "—"} disp.</span>
+              <span className="font-medium" style={{ color: resumen.disponibilidadPromedio !== null ? color : undefined }}>
+                {resumen.disponibilidadPromedio !== null ? pct.format(resumen.disponibilidadPromedio) : "—"} disp.
+              </span>
             </div>
           </Link>
         ))}
@@ -165,6 +162,16 @@ export default async function TrituracionInicioPage() {
         <Link href="/trituracion/partes" className="btn-primary">Cargar un parte</Link>
         <Link href="/trituracion/informes" className="btn-ghost">Informe mensual</Link>
       </div>
+    </div>
+  );
+}
+
+/** Calcado de `app/(app)/cantera/page.tsx` y `app/(app)/taller-vial/page.tsx`: valor y borde superior con el mismo color, para que la tarjeta no quede en blanco y negro. */
+function Metrica({ color, valor, label }: { color: string; valor: string; label: string }) {
+  return (
+    <div className="card p-4" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="text-2xl font-bold tabular-nums" style={{ color }}>{valor}</div>
+      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
     </div>
   );
 }
