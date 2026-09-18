@@ -36,10 +36,11 @@ export default function EstadosClient({
   puedeEditar: boolean;
 }) {
   const router = useRouter();
-  const [guardando, setGuardando] = useState<string | null>(null); // equipoId en vuelo, para deshabilitar sólo esos botones
+  const [guardando, setGuardando] = useState<string | null>(null); // equipoId en vuelo, para deshabilitar sólo esa fila
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
+  const [mostrarFormFecha, setMostrarFormFecha] = useState(false);
   const [equipoId, setEquipoId] = useState(equipos[0]?.id ?? "");
   const [fecha, setFecha] = useState(hoy);
   const [estado, setEstado] = useState<EstadoDiario>("OPERATIVO");
@@ -88,64 +89,78 @@ export default function EstadosClient({
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {aviso && <p className="mt-3 text-sm text-amber-700">{aviso}</p>}
 
-      {puedeEditar && (
-        <section className="card mt-4 p-4">
-          <h2 className="section-title">Estado de hoy, por equipo</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Un toque cambia el estado de hoy — para darlo de baja cuando se rompe y de alta cuando se repara.
-          </p>
-          <div className="mt-3 space-y-2">
-            {equipos.map((eq) => (
-              <div key={eq.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-2">
-                <span className="text-sm font-medium text-slate-700">{eq.code} - {eq.name}</span>
-                <div className="flex items-center gap-2">
-                  <BadgeEstado estado={estadoActual[eq.id] ?? null} />
-                  <div className="flex gap-1">
-                    {ESTADOS.map((e) => (
-                      <button
-                        key={e}
-                        disabled={guardando === eq.id || estadoActual[eq.id] === e}
-                        onClick={() => cambioRapido(eq.id, e)}
-                        className="btn-ghost disabled:opacity-40"
-                        title={ETIQUETA_ESTADO[e]}
-                      >
-                        {ETIQUETA_ESTADO[e]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+      <section className="mt-4">
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Equipo</th>
+                  <th>Estado actual</th>
+                  {puedeEditar && <th>Cambiar a</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {equipos.map((eq, i) => (
+                  <tr key={eq.id} style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
+                    <td className="font-medium text-slate-800">{eq.code} - {eq.name}</td>
+                    <td><BadgeEstado estado={estadoActual[eq.id] ?? null} /></td>
+                    {puedeEditar && (
+                      <td>
+                        <select
+                          className="input"
+                          disabled={guardando === eq.id}
+                          value={estadoActual[eq.id] ?? ""}
+                          onChange={(e) => cambioRapido(eq.id, e.target.value as EstadoDiario)}
+                        >
+                          {!estadoActual[eq.id] && <option value="" disabled>Elegir…</option>}
+                          {ESTADOS.map((e) => (
+                            <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </section>
-      )}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">Cambiar acá pone la fecha de hoy. Queda exportado a la planilla real.</p>
+      </section>
 
       {puedeEditar && (
-        <section className="card mt-4 p-4">
-          <h2 className="section-title">Cargar un estado con otra fecha</h2>
-          <p className="mt-1 text-xs text-slate-500">Para corregir un día anterior — el de hoy se carga más rápido arriba.</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
-              {equipos.map((eq) => (
-                <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
-              ))}
-            </select>
-            <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} max={hoy} />
-            <select className="input" value={estado} onChange={(e) => setEstado(e.target.value as EstadoDiario)}>
-              {ESTADOS.map((e) => (
-                <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-2">
-            <input
-              className="input w-full" placeholder="Observaciones (opcional) — ej. qué se rompió"
-              value={observaciones} onChange={(e) => setObservaciones(e.target.value)}
-            />
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button className="btn-primary" disabled={guardandoForm} onClick={cargarConFecha}>Guardar</button>
-          </div>
+        <section className="mt-4">
+          <button className="text-xs text-slate-500 underline" onClick={() => setMostrarFormFecha((v) => !v)}>
+            {mostrarFormFecha ? "Ocultar" : "Cargar un estado con otra fecha, o con observaciones →"}
+          </button>
+          {mostrarFormFecha && (
+            <div className="card mt-2 p-4">
+              <p className="text-xs text-slate-500">Para corregir un día anterior, o anotar qué pasó (ej. "se rompió la bomba hidráulica").</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
+                  {equipos.map((eq) => (
+                    <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
+                  ))}
+                </select>
+                <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} max={hoy} />
+                <select className="input" value={estado} onChange={(e) => setEstado(e.target.value as EstadoDiario)}>
+                  {ESTADOS.map((e) => (
+                    <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2">
+                <input
+                  className="input w-full" placeholder="Observaciones (opcional) — ej. qué se rompió"
+                  value={observaciones} onChange={(e) => setObservaciones(e.target.value)}
+                />
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button className="btn-primary" disabled={guardandoForm} onClick={cargarConFecha}>Guardar</button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
