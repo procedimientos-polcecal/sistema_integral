@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-/** Buscar en el pañol, para elegir qué repuesto reservar — compartido entre el formulario de carga y `RepuestosDelTrabajo`. */
+/**
+ * Buscar en el pañol, para elegir qué repuesto reservar — compartido entre
+ * el formulario de carga y `RepuestosDelTrabajo`.
+ *
+ * Con `equipoId`, el servidor acota la búsqueda al modelo de ese equipo
+ * (`lib/tallerVial/equipos.ts`) — acá sólo importa que, cuando hay un
+ * equipo elegido, se puede buscar sin escribir nada todavía (el server
+ * decide si hay un término para acotar; si no lo hay, ahí sí hace falta
+ * escribir para no traer las 1.157 filas del pañol entero).
+ */
 
 export interface ArticuloOpcion {
   id: string;
@@ -12,23 +21,28 @@ export interface ArticuloOpcion {
 }
 
 export default function BuscadorDeArticulo({
-  onElegir, placeholder = "Buscar artículo del pañol…",
+  onElegir, equipoId, placeholder = "Buscar artículo del pañol…",
 }: {
   onElegir: (articulo: ArticuloOpcion) => void;
+  /** Acota la búsqueda al modelo de este equipo, si se conoce. */
+  equipoId?: string;
   placeholder?: string;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [opciones, setOpciones] = useState<ArticuloOpcion[]>([]);
 
   useEffect(() => {
-    if (busqueda.trim().length < 3) { setOpciones([]); return; }
+    if (!equipoId && busqueda.trim().length < 3) { setOpciones([]); return; }
     const t = setTimeout(async () => {
-      const res = await fetch(`/api/taller-vial/inventario?q=${encodeURIComponent(busqueda)}`);
+      const params = new URLSearchParams();
+      if (busqueda.trim()) params.set("q", busqueda.trim());
+      if (equipoId) params.set("equipo_id", equipoId);
+      const res = await fetch(`/api/taller-vial/inventario?${params}`);
       const json = await res.json();
       if (res.ok) setOpciones(json.data);
     }, 300);
     return () => clearTimeout(t);
-  }, [busqueda]);
+  }, [busqueda, equipoId]);
 
   return (
     <div className="relative">
@@ -47,7 +61,7 @@ export default function BuscadorDeArticulo({
           ))}
         </ul>
       )}
-      {busqueda.trim().length > 0 && busqueda.trim().length < 3 && (
+      {!equipoId && busqueda.trim().length > 0 && busqueda.trim().length < 3 && (
         <p className="mt-1 text-xs text-slate-400">Escribí al menos 3 letras.</p>
       )}
     </div>

@@ -59,3 +59,43 @@ export function compararCodigosEM(a: string, b: string): number {
   if (isFinite(na) && isFinite(nb)) return na - nb;
   return a.localeCompare(b);
 }
+
+/**
+ * El término para acotar el buscador del pañol a los repuestos de ESTE
+ * equipo puntual. Los artículos de Taller Vial en `inventario_articulos`
+ * traen la marca y el modelo escritos en la descripción ("FILTRO DOOSAN 225
+ * ACEITE MOTOR", "CORREA CAT 320B ALTERNADOR", "SELLO CAT 950G") — no hay
+ * una columna ni una FK a `equipos`, es texto libre en la misma tabla que ya
+ * usa el resto de Inventario. Verificado el 18/09/2026 contra los 125
+ * artículos reales con `ubicacion = 'TALLER VIAL'`, uno por uno — no es una
+ * lista adivinada desde el nombre del equipo.
+ *
+ * OJO CON LA NOTACIÓN: el pañol escribe el modelo sin el espacio que sí
+ * tiene el nombre del equipo ("320B", no "320 B") y con la marca abreviada
+ * ("CAT", "LIUGONG" en una palabra) — el término de acá es el del pañol, no
+ * el nombre de `equipos.name`.
+ *
+ * Los que faltan (EM13 camioneta, EM14 carretón sin motor, EM15 camión
+ * regador) no tienen ni un artículo con su modelo en el pañol relevado —
+ * capaz porque se service-an afuera. Quedan sin término a propósito: no
+ * tener uno mapeado no es lo mismo que "no tiene repuestos", así que quien
+ * llama tiene que mostrar el pañol completo en vez de una lista vacía.
+ */
+const TERMINO_DE_PANOL_POR_CODIGO: Record<string, string> = {
+  EM1: "CAT 320B",
+  EM2: "CAT 320C",
+  EM3: "DOOSAN 225",
+  EM4: "DOOSAN 225",
+  EM5: "DOOSAN 300",
+  EM6: "CAT 950G",
+  EM7: "LIUGONG 856",
+  EM8: "SCANIA",
+  EM9: "SCANIA",
+  EM10: "AUTOELEVADOR TOYOTA",
+  EM11: "AUTOELEVADOR TOYOTA",
+  EM12: "AUTOELEVADOR XCMG",
+};
+
+export function terminoDePanolDelEquipo(codigo: string): string | null {
+  return TERMINO_DE_PANOL_POR_CODIGO[codigo] ?? null;
+}

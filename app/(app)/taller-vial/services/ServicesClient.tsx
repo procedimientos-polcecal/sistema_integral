@@ -239,6 +239,7 @@ export default function ServicesClient({
                           ) : (
                             <BuscadorDeArticulo
                               placeholder="Repuesto usado…"
+                              equipoId={equipoId}
                               onElegir={(a) => elegirArticuloDeTarea(t.codigo, a)}
                             />
                           )}
@@ -288,7 +289,7 @@ export default function ServicesClient({
                     <button className="text-slate-400 hover:text-slate-700" onClick={() => setArticuloElegido(null)}>✕</button>
                   </div>
                 ) : (
-                  <BuscadorDeArticulo onElegir={setArticuloElegido} />
+                  <BuscadorDeArticulo onElegir={setArticuloElegido} equipoId={equipoId} />
                 )}
               </div>
               <div className="w-24 shrink-0">
@@ -388,7 +389,7 @@ export default function ServicesClient({
                       {abierta && (
                         <tr>
                           <td colSpan={6} className="bg-slate-50 p-3">
-                            <RepuestosDelTrabajo serviceId={s.id} puedeEditar={puedeEditar} />
+                            <RepuestosDelTrabajo serviceId={s.id} equipoId={s.equipo_id} puedeEditar={puedeEditar} />
                           </td>
                         </tr>
                       )}

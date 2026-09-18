@@ -182,7 +182,7 @@ export default function ReparacionesClient({
                     <button className="text-slate-400 hover:text-slate-700" onClick={() => setArticuloElegido(null)}>✕</button>
                   </div>
                 ) : (
-                  <BuscadorDeArticulo onElegir={setArticuloElegido} />
+                  <BuscadorDeArticulo onElegir={setArticuloElegido} equipoId={equipoId} />
                 )}
               </div>
               <div className="w-24 shrink-0">
@@ -248,7 +248,7 @@ export default function ReparacionesClient({
                       {abierta && (
                         <tr>
                           <td colSpan={8} className="bg-slate-50 p-3">
-                            <RepuestosDelTrabajo reparacionId={r.id} puedeEditar={puedeEditar} />
+                            <RepuestosDelTrabajo reparacionId={r.id} equipoId={r.equipo_id} puedeEditar={puedeEditar} />
                           </td>
                         </tr>
                       )}

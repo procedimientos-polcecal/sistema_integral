@@ -25,10 +25,12 @@ interface RepuestoFila {
 }
 
 export default function RepuestosDelTrabajo({
-  serviceId, reparacionId, puedeEditar,
+  serviceId, reparacionId, equipoId, puedeEditar,
 }: {
   serviceId?: string;
   reparacionId?: string;
+  /** Para acotar el buscador al modelo de este equipo — ver `BuscadorDeArticulo`. */
+  equipoId?: string;
   puedeEditar: boolean;
 }) {
   const [repuestos, setRepuestos] = useState<RepuestoFila[] | null>(null);
@@ -122,7 +124,7 @@ export default function RepuestosDelTrabajo({
                 <button className="text-slate-400 hover:text-slate-700" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
             ) : (
-              <BuscadorDeArticulo onElegir={setSeleccionado} />
+              <BuscadorDeArticulo onElegir={setSeleccionado} equipoId={equipoId} />
             )}
           </div>
           <div className="w-24 shrink-0">

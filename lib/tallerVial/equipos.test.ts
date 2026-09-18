@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { codigoDesdeTextoLibre, compararCodigosEM, tipoDeCombustible, unidadDeUso } from "./equipos";
+import { codigoDesdeTextoLibre, compararCodigosEM, terminoDePanolDelEquipo, tipoDeCombustible, unidadDeUso } from "./equipos";
 
 describe("tipoDeCombustible", () => {
   it("EM7 y EM9 cargan INFINIA", () => {
@@ -44,5 +44,20 @@ describe("compararCodigosEM", () => {
   it("ordena numéricamente, no alfabéticamente", () => {
     const codigos = ["EM10", "EM2", "EM1", "EM11"];
     expect([...codigos].sort(compararCodigosEM)).toEqual(["EM1", "EM2", "EM10", "EM11"]);
+  });
+});
+
+describe("terminoDePanolDelEquipo", () => {
+  it("dos equipos del mismo modelo comparten el término del pañol", () => {
+    expect(terminoDePanolDelEquipo("EM3")).toBe("DOOSAN 225");
+    expect(terminoDePanolDelEquipo("EM4")).toBe("DOOSAN 225");
+    expect(terminoDePanolDelEquipo("EM10")).toBe("AUTOELEVADOR TOYOTA");
+    expect(terminoDePanolDelEquipo("EM11")).toBe("AUTOELEVADOR TOYOTA");
+  });
+
+  it("un equipo sin ningún artículo relevado en el pañol no tiene término — no se inventa", () => {
+    expect(terminoDePanolDelEquipo("EM13")).toBeNull();
+    expect(terminoDePanolDelEquipo("EM14")).toBeNull();
+    expect(terminoDePanolDelEquipo("EM15")).toBeNull();
   });
 });
