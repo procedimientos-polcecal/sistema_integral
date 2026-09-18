@@ -3,7 +3,9 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TIERS_DE_SERVICE, type EstadoDeServicePorTier, type LecturaDeService } from "@/lib/tallerVial/service";
+import {
+  TAREAS_DE_SERVICE, TIERS_DE_SERVICE, descripcionDeTareas, type EstadoDeServicePorTier, type LecturaDeService,
+} from "@/lib/tallerVial/service";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { ServiceDB } from "@/lib/tallerVial/types";
 import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
@@ -65,8 +67,40 @@ export default function ServicesClient({
   const [aviso, setAviso] = useState<string | null>(null);
   const [filaAbierta, setFilaAbierta] = useState<string | null>(null);
 
-  // Repuestos elegidos antes de cargar el service: se reservan recién
-  // después de crearlo, porque la reserva necesita su id.
+  // La checklist de tareas de rutina: al tildar una, se puede elegir el
+  // repuesto del pañol que le corresponde ahí mismo. `repuestoPorTarea` sólo
+  // tiene entrada para las tareas tildadas.
+  const [tareasMarcadas, setTareasMarcadas] = useState<Set<string>>(new Set());
+  const [repuestoPorTarea, setRepuestoPorTarea] = useState<Record<string, { articulo: ArticuloOpcion | null; cantidad: string }>>({});
+
+  function alternarTarea(codigo: string) {
+    setTareasMarcadas((actual) => {
+      const nuevo = new Set(actual);
+      if (nuevo.has(codigo)) {
+        nuevo.delete(codigo);
+        setRepuestoPorTarea((r) => {
+          const { [codigo]: _quitada, ...resto } = r;
+          return resto;
+        });
+      } else {
+        nuevo.add(codigo);
+        setRepuestoPorTarea((r) => ({ ...r, [codigo]: { articulo: null, cantidad: "1" } }));
+      }
+      return nuevo;
+    });
+  }
+
+  function elegirArticuloDeTarea(codigo: string, articulo: ArticuloOpcion | null) {
+    setRepuestoPorTarea((r) => ({ ...r, [codigo]: { ...r[codigo], articulo } }));
+  }
+
+  function setCantidadDeTarea(codigo: string, cantidad: string) {
+    setRepuestoPorTarea((r) => ({ ...r, [codigo]: { ...r[codigo], cantidad } }));
+  }
+
+  // Repuestos sueltos, para algo que no está en la checklist (se reservan
+  // recién después de crear el service, porque la reserva necesita su id;
+  // mismo motivo para los de la checklist).
   const [repuestosAUsar, setRepuestosAUsar] = useState<RepuestoAUsar[]>([]);
   const [articuloElegido, setArticuloElegido] = useState<ArticuloOpcion | null>(null);
   const [cantidadRepuesto, setCantidadRepuesto] = useState("");
@@ -90,20 +124,37 @@ export default function ServicesClient({
     if (!equipoId) { setError("Elegí un equipo"); return; }
     if (!isFinite(horometroNum) || horometroNum < 0) { setError("El horómetro tiene que ser un número"); return; }
 
+    // Las tareas tildadas con repuesto elegido pero sin cantidad válida se
+    // avisan antes de guardar nada — mejor frenar acá que reservar a medias.
+    for (const codigo of tareasMarcadas) {
+      const r = repuestoPorTarea[codigo];
+      if (r?.articulo && !(Number(r.cantidad.replace(",", ".")) > 0)) {
+        setError(`Ponele una cantidad válida al repuesto de "${TAREAS_DE_SERVICE.find((t) => t.codigo === codigo)?.etiqueta}"`);
+        return;
+      }
+    }
+
     setGuardando(true);
     setError(null);
     setAviso(null);
     try {
+      const observacionesFinal = [descripcionDeTareas([...tareasMarcadas]), observaciones.trim()].filter(Boolean).join(" — ");
       const res = await fetch("/api/taller-vial/services", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ equipo_id: equipoId, tier, fecha, horometro: horometroNum, observaciones: observaciones.trim() || null }),
+        body: JSON.stringify({ equipo_id: equipoId, tier, fecha, horometro: horometroNum, observaciones: observacionesFinal || null }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo guardar");
 
       const avisos: string[] = [];
-      for (const r of repuestosAUsar) {
+      const todosLosRepuestos: { id: string; codigo: string; cantidad: number }[] = [
+        ...repuestosAUsar.map((r) => ({ id: r.id, codigo: r.codigo, cantidad: r.cantidad })),
+        ...Object.values(repuestoPorTarea)
+          .filter((r): r is { articulo: ArticuloOpcion; cantidad: string } => r.articulo !== null)
+          .map((r) => ({ id: r.articulo.id, codigo: r.articulo.codigo, cantidad: Number(r.cantidad.replace(",", ".")) })),
+      ];
+      for (const r of todosLosRepuestos) {
         const resRep = await fetch("/api/taller-vial/repuestos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -118,6 +169,8 @@ export default function ServicesClient({
       setHorometro("");
       setObservaciones("");
       setRepuestosAUsar([]);
+      setTareasMarcadas(new Set());
+      setRepuestoPorTarea({});
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar");
@@ -162,16 +215,61 @@ export default function ServicesClient({
               value={horometro} onChange={(e) => setHorometro(e.target.value)}
             />
           </div>
+          {/* ── Checklist de tareas de rutina ── */}
+          <div className="mt-3 rounded-lg border border-slate-200 p-3">
+            <p className="section-title">Qué se le hizo (tildá lo que corresponda)</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {TAREAS_DE_SERVICE.map((t) => {
+                const marcada = tareasMarcadas.has(t.codigo);
+                const r = repuestoPorTarea[t.codigo];
+                return (
+                  <div key={t.codigo} className={`rounded-lg border p-2 ${marcada ? "border-emerald-200 bg-emerald-50" : "border-slate-200"}`}>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" checked={marcada} onChange={() => alternarTarea(t.codigo)} />
+                      {t.etiqueta}
+                    </label>
+                    {marcada && (
+                      <div className="mt-2 flex gap-2">
+                        <div className="flex-1">
+                          {r?.articulo ? (
+                            <div className="input flex items-center justify-between text-xs">
+                              <span>{r.articulo.codigo} - {r.articulo.descripcion}</span>
+                              <button className="text-slate-400 hover:text-slate-700" onClick={() => elegirArticuloDeTarea(t.codigo, null)}>✕</button>
+                            </div>
+                          ) : (
+                            <BuscadorDeArticulo
+                              placeholder="Repuesto usado…"
+                              onElegir={(a) => elegirArticuloDeTarea(t.codigo, a)}
+                            />
+                          )}
+                        </div>
+                        <div className="w-16 shrink-0">
+                          <input
+                            className="input" inputMode="decimal" placeholder="Cant."
+                            value={r?.cantidad ?? ""} onChange={(e) => setCantidadDeTarea(t.codigo, e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Tildar arma la descripción sola; el repuesto es opcional por tarea — Inventario confirma la baja real después.
+            </p>
+          </div>
+
           <div className="mt-2">
             <input
-              className="input w-full" placeholder="Observaciones (opcional)"
+              className="input w-full" placeholder="Observaciones adicionales (opcional)"
               value={observaciones} onChange={(e) => setObservaciones(e.target.value)}
             />
           </div>
 
-          {/* ── Repuestos del pañol usados en este service ── */}
+          {/* ── Otros repuestos, fuera de la checklist ── */}
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="section-title">Repuestos del pañol usados (opcional)</p>
+            <p className="section-title">Otros repuestos usados, fuera de la checklist (opcional)</p>
             {repuestosAUsar.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {repuestosAUsar.map((r) => (

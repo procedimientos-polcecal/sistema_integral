@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeServicePorEquipo, esTierDeServiceValido, resumenServicePorEquipo, tierDesdeTipoSheet,
+  descripcionDeTareas, estadoDeServicePorEquipo, esTierDeServiceValido, resumenServicePorEquipo, tierDesdeTipoSheet,
   ultimaLecturaPorEquipo, type ServicePlano,
 } from "./service";
 
@@ -125,5 +125,19 @@ describe("resumenServicePorEquipo", () => {
     const em2 = resumen.find((r) => r.equipoId === "EM2")!;
     expect(em2.horometroActual).toBeNull();
     expect(em2.escalones.every((e) => e.lectura === null)).toBe(true);
+  });
+});
+
+describe("descripcionDeTareas", () => {
+  it("arma la descripción en el mismo orden de la checklist, no en el que se tildaron", () => {
+    expect(descripcionDeTareas(["aceite_motor", "filtro_aire_primario"])).toBe("Filtro de aire primario, Aceite de motor");
+  });
+
+  it("sin ninguna tarea tildada, la descripción queda vacía", () => {
+    expect(descripcionDeTareas([])).toBe("");
+  });
+
+  it("ignora un código que no es ninguna tarea conocida", () => {
+    expect(descripcionDeTareas(["no_existe", "engrase"])).toBe("Engrase general");
   });
 });

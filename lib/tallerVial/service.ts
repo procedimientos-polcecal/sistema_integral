@@ -19,6 +19,40 @@ export function esTierDeServiceValido(v: unknown): v is TierDeService {
 }
 
 /**
+ * Las tareas de rutina de un service, relevadas de "HISTORIAL REPARACIONES"
+ * real: casi todas las descripciones de "Service 250h/500h/1000h/2000h" se
+ * arman combinando este mismo puñado de tareas ("Cambio filtro de aire
+ * primario y secundario", "se cambió aceite de motor y filtro de aceite...",
+ * etc.). El usuario pidió una checklist en vez de escribir la descripción a
+ * mano cada vez, con el repuesto del pañol al lado de la que corresponda.
+ *
+ * Es una lista fija y no un catálogo en la base: son ocho tareas que no
+ * cambian, mismo criterio que `TIERS_DE_SERVICE` — si el día de mañana se
+ * agrega o saca una, es un cambio de una línea acá.
+ */
+export interface TareaDeService {
+  codigo: string;
+  etiqueta: string;
+}
+
+export const TAREAS_DE_SERVICE: readonly TareaDeService[] = [
+  { codigo: "filtro_aire_primario", etiqueta: "Filtro de aire primario" },
+  { codigo: "filtro_aire_secundario", etiqueta: "Filtro de aire secundario" },
+  { codigo: "aceite_motor", etiqueta: "Aceite de motor" },
+  { codigo: "filtro_aceite", etiqueta: "Filtro de aceite" },
+  { codigo: "filtro_combustible", etiqueta: "Filtro de combustible" },
+  { codigo: "filtro_precombustible", etiqueta: "Filtro precombustible" },
+  { codigo: "engrase", etiqueta: "Engrase general" },
+  { codigo: "control_niveles", etiqueta: "Control de niveles (agua / aceite)" },
+] as const;
+
+/** "Filtro de aire primario, Aceite de motor" — para armar la descripción sola a partir de lo tildado. */
+export function descripcionDeTareas(codigos: string[]): string {
+  const etiquetas = TAREAS_DE_SERVICE.filter((t) => codigos.includes(t.codigo)).map((t) => t.etiqueta);
+  return etiquetas.join(", ");
+}
+
+/**
  * El escalón a partir del "TIPO" de una fila de "HISTORIAL REPARACIONES"
  * ("Service 250h", "Service 1000h", ...) — sólo para el backfill único del
  * histórico. Null si no matchea el patrón (una reparación o revisión común)
