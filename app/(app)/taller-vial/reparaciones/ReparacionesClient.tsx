@@ -185,10 +185,12 @@ export default function ReparacionesClient({
                   <BuscadorDeArticulo onElegir={setArticuloElegido} />
                 )}
               </div>
-              <input
-                className="input w-24" inputMode="decimal" placeholder="Cant."
-                value={cantidadRepuesto} onChange={(e) => setCantidadRepuesto(e.target.value)}
-              />
+              <div className="w-24 shrink-0">
+                <input
+                  className="input" inputMode="decimal" placeholder="Cant."
+                  value={cantidadRepuesto} onChange={(e) => setCantidadRepuesto(e.target.value)}
+                />
+              </div>
               <button type="button" className="btn-secondary shrink-0" onClick={agregarRepuestoAUsar}>Agregar</button>
             </div>
             <p className="mt-1 text-xs text-slate-400">Esto reserva el repuesto — Inventario confirma la baja real después.</p>

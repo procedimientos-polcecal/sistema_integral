@@ -125,7 +125,9 @@ export default function RepuestosDelTrabajo({
               <BuscadorDeArticulo onElegir={setSeleccionado} />
             )}
           </div>
-          <input className="input w-24" inputMode="decimal" placeholder="Cant." value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+          <div className="w-24 shrink-0">
+            <input className="input" inputMode="decimal" placeholder="Cant." value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+          </div>
           <button className="btn-secondary shrink-0" disabled={guardando} onClick={reservar}>Reservar</button>
         </div>
       )}
