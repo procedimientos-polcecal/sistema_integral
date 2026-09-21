@@ -7,7 +7,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
-import { gastoAnaliticoDelEquipo, gastoDeCombustible } from "@/lib/odoo/costoDelEquipoMovil";
+import { gastoAnaliticoDeEquipos, gastoDeCombustible } from "@/lib/odoo/costoDelEquipoMovil";
 import { traerCargas, traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import { calcularTrabajoEntreCargas, resumenMensualPorEquipo } from "@/lib/tallerVial/combustible";
 import { tipoDeCombustible, type TipoDeCombustible } from "@/lib/tallerVial/equipos";
@@ -59,19 +59,20 @@ export async function costoHoraDeMaquinasDelMes(
     litrosPorTipo[tipoDeCombustible(codigo)] += r.litrosTotal;
   }
 
-  const gastoCombustiblePorTipo: Record<TipoDeCombustible, number> = {
-    DIESEL_500: await gastoDeCombustible(PRODUCTO_ODOO_DE_COMBUSTIBLE.DIESEL_500, desde, hasta),
-    INFINIA: await gastoDeCombustible(PRODUCTO_ODOO_DE_COMBUSTIBLE.INFINIA, desde, hasta),
-  };
+  const [gastoDiesel, gastoInfinia, gastoAnaliticoPorEquipo] = await Promise.all([
+    gastoDeCombustible(PRODUCTO_ODOO_DE_COMBUSTIBLE.DIESEL_500, desde, hasta),
+    gastoDeCombustible(PRODUCTO_ODOO_DE_COMBUSTIBLE.INFINIA, desde, hasta),
+    gastoAnaliticoDeEquipos(codigos, desde, hasta),
+  ]);
+  const gastoCombustiblePorTipo: Record<TipoDeCombustible, number> = { DIESEL_500: gastoDiesel, INFINIA: gastoInfinia };
 
   for (const codigo of codigos) {
     const equipoId = equipoIdPorCodigo.get(codigo);
     const resumenEquipo = equipoId ? resumenPorEquipoId.get(equipoId) : undefined;
     const tipo = tipoDeCombustible(codigo);
-    const { gasto: gastoAnaliticoOdoo } = await gastoAnaliticoDelEquipo(codigo, desde, hasta);
 
     resultado[codigo] = costoHoraDeMaquina({
-      gastoAnaliticoOdoo,
+      gastoAnaliticoOdoo: gastoAnaliticoPorEquipo[codigo]?.gasto ?? 0,
       litrosDelMes: resumenEquipo?.litrosTotal ?? 0,
       gastoCombustibleDelTipo: gastoCombustiblePorTipo[tipo],
       litrosDelTipo: litrosPorTipo[tipo],

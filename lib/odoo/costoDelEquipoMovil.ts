@@ -14,6 +14,12 @@
  * se resuelve afuera de acá, con `gastoDeCombustible` del período completo
  * dividido los litros que Taller Vial registró en ese período (el precio
  * implícito, no el de una entrega puntual).
+ *
+ * `gastoAnaliticoDeEquipos` pide TODOS los equipos del mes de una sola vez
+ * — antes era una consulta a cuentas analíticas y otra a líneas de factura
+ * POR equipo, y con varios equipos por mes la página de Destape tardaba
+ * varios segundos (Odoo Online no es rápido, ver `lib/odoo/client.ts`).
+ * Con esto son 4 llamadas a Odoo en total, no 4 por equipo.
  */
 
 import { buscarLeer, empresasDeOdoo } from "./client";
@@ -36,26 +42,6 @@ interface LineaConAnalitica {
   analytic_distribution: Record<string, number> | false;
 }
 
-async function sumarLineasDeAnaliticas(analyticIds: number[], desde: string, hasta: string): Promise<number> {
-  if (!analyticIds.length) return 0;
-  const claves = new Set(analyticIds.map(String));
-  const lineas = await buscarLeer<LineaConAnalitica>(
-    "account.move.line",
-    dominioBase(desde, hasta),
-    ["price_subtotal", "analytic_distribution"],
-    { limite: 3000 }
-  );
-
-  let total = 0;
-  for (const l of lineas) {
-    if (!l.analytic_distribution) continue;
-    for (const [clave, porcentaje] of Object.entries(l.analytic_distribution)) {
-      if (claves.has(clave)) total += l.price_subtotal * (porcentaje / 100);
-    }
-  }
-  return total;
-}
-
 export interface GastoDelEquipo {
   gasto: number;
   /** Nombres de empresa donde el código no resolvió a una única analítica (ambigua o inexistente) — ese lado queda sin contar, no adivinado. */
@@ -63,26 +49,55 @@ export interface GastoDelEquipo {
 }
 
 /**
- * Lo facturado (posteado) a la cuenta analítica de este equipo, sumando las
- * dos empresas, en el período. Si el código no resuelve a una analítica en
- * alguna empresa, esa empresa aporta $0 y se avisa — mismo criterio que
- * "enlazar al que se parece es peor que null" del resto del sistema.
+ * Lo facturado (posteado) a la cuenta analítica de cada equipo pedido,
+ * sumando las dos empresas, en el período. Si un código no resuelve a una
+ * analítica en alguna empresa, esa empresa aporta $0 para ese equipo y
+ * queda avisada — mismo criterio que "enlazar al que se parece es peor
+ * que null" del resto del sistema.
  */
-export async function gastoAnaliticoDelEquipo(codigoEquipo: string, desde: string, hasta: string): Promise<GastoDelEquipo> {
-  const empresas = await empresasDeOdoo();
-  const analyticIds: number[] = [];
-  const empresasSinResolver: string[] = [];
+export async function gastoAnaliticoDeEquipos(
+  codigosDeEquipo: string[],
+  desde: string,
+  hasta: string
+): Promise<Record<string, GastoDelEquipo>> {
+  const codigos = [...new Set(codigosDeEquipo)];
+  const resultado: Record<string, GastoDelEquipo> = {};
+  for (const codigo of codigos) resultado[codigo] = { gasto: 0, empresasSinResolver: [] };
+  if (!codigos.length) return resultado;
 
-  for (const empresa of empresas) {
-    const cuentas = await leerCuentasAnaliticas(empresa.id);
-    const deOdoo: AnaliticaDeOdoo[] = cuentas.map((c) => ({ id: c.id, nombre: c.nombre, empresa: empresa.id }));
-    const elegida = analiticaDelEquipo(codigoEquipo, deOdoo, empresa.id);
-    if (elegida.analitica) analyticIds.push(elegida.analitica.id);
-    else empresasSinResolver.push(empresa.name);
+  const empresas = await empresasDeOdoo();
+  const cuentasPorEmpresa = await Promise.all(empresas.map((e) => leerCuentasAnaliticas(e.id)));
+
+  // Cada cuenta analítica pertenece a lo sumo a un equipo — se resuelve una
+  // vez acá y después sólo se busca por id al recorrer las líneas.
+  const codigoDelAnalyticId = new Map<number, string>();
+  for (const codigo of codigos) {
+    empresas.forEach((empresa, i) => {
+      const deOdoo: AnaliticaDeOdoo[] = cuentasPorEmpresa[i].map((c) => ({ id: c.id, nombre: c.nombre, empresa: empresa.id }));
+      const elegida = analiticaDelEquipo(codigo, deOdoo, empresa.id);
+      if (elegida.analitica) codigoDelAnalyticId.set(elegida.analitica.id, codigo);
+      else resultado[codigo].empresasSinResolver.push(empresa.name);
+    });
   }
 
-  const gasto = await sumarLineasDeAnaliticas(analyticIds, desde, hasta);
-  return { gasto, empresasSinResolver };
+  if (codigoDelAnalyticId.size === 0) return resultado;
+
+  const lineas = await buscarLeer<LineaConAnalitica>(
+    "account.move.line",
+    dominioBase(desde, hasta),
+    ["price_subtotal", "analytic_distribution"],
+    { limite: 3000 }
+  );
+
+  for (const l of lineas) {
+    if (!l.analytic_distribution) continue;
+    for (const [clave, porcentaje] of Object.entries(l.analytic_distribution)) {
+      const codigo = codigoDelAnalyticId.get(Number(clave));
+      if (codigo) resultado[codigo].gasto += l.price_subtotal * (porcentaje / 100);
+    }
+  }
+
+  return resultado;
 }
 
 /**
