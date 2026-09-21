@@ -170,29 +170,18 @@ export interface PesadaDB {
 }
 
 /** Una fila de `cantera_acarreos`: el total mensual de un fletero en un tipo. */
+/** Una fila de `cantera_acarreo`: un fletero, un tipo, un día. `mes` es `date_trunc('month', fecha)`, para la tarifa vigente y los filtros mensuales. */
 export interface AcarreoDB {
   id: string;
   fletero_id: string;
   tipo: string;
+  fecha: string;
   mes: string;
   cantidad: number;
   observaciones: string | null;
   origen: string;
   sheets_pendiente: string | null;
   sheets_pendiente_en: string | null;
-  cargado_por: string | null;
-  cargado_en: string;
-  actualizado_por: string | null;
-  actualizado_en: string | null;
-}
-
-/** Una fila de `cantera_acarreo_diario`: lo mismo que `AcarreoDB` pero por fecha puntual, sin fletero — no participa del pago, es sólo para que otro módulo sepa cuánto llegó un día dado. */
-export interface AcarreoDiarioDB {
-  id: string;
-  tipo: string;
-  fecha: string;
-  cantidad: number;
-  observaciones: string | null;
   cargado_por: string | null;
   cargado_en: string;
   actualizado_por: string | null;

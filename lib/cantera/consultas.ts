@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, AcarreoDiarioDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -286,12 +286,14 @@ export async function traerTarifasAcarreo(supabase: SupabaseClient): Promise<Tar
 
 export interface FiltrosDeAcarreo {
   fleteroId?: string;
+  tipo?: string;
   /** "YYYY-MM": trae ese mes de calendario completo. */
   mes?: string;
   /** "YYYY": trae ese año calendario completo. Se ignora si también viene `mes`. */
   anio?: string;
 }
 
+/** Una fila por fletero+tipo+día (`unique(fletero_id, tipo, fecha)` desde el 21/09/2026) — puede haber varias del mismo fletero+tipo en un mes, una por día cargado. */
 export async function traerAcarreos(
   supabase: SupabaseClient,
   filtros: FiltrosDeAcarreo = {}
@@ -300,9 +302,10 @@ export async function traerAcarreos(
     let q = supabase
       .from("cantera_acarreos")
       .select(
-        "id, fletero_id, tipo, mes, cantidad, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
+        "id, fletero_id, tipo, fecha, mes, cantidad, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en"
       );
     if (filtros.fleteroId) q = q.eq("fletero_id", filtros.fleteroId);
+    if (filtros.tipo) q = q.eq("tipo", filtros.tipo);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);
       const primerDia = `${filtros.mes}-01`;
@@ -311,30 +314,7 @@ export async function traerAcarreos(
     } else if (filtros.anio) {
       q = q.gte("mes", `${filtros.anio}-01-01`).lte("mes", `${filtros.anio}-12-31`);
     }
-    return q.order("mes", { ascending: false }).order("tipo").range(desde, hasta);
-  });
-}
-
-export interface FiltrosDeAcarreoDiario {
-  tipo?: string;
-  /** "YYYY-MM-DD" */
-  desde?: string;
-  /** "YYYY-MM-DD" */
-  hasta?: string;
-}
-
-export async function traerAcarreoDiario(
-  supabase: SupabaseClient,
-  filtros: FiltrosDeAcarreoDiario = {}
-): Promise<AcarreoDiarioDB[]> {
-  return traerTodo<AcarreoDiarioDB>((desde, hasta) => {
-    let q = supabase
-      .from("cantera_acarreo_diario")
-      .select("id, tipo, fecha, cantidad, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en");
-    if (filtros.tipo) q = q.eq("tipo", filtros.tipo);
-    if (filtros.desde) q = q.gte("fecha", filtros.desde);
-    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
-    return q.order("fecha", { ascending: false }).range(desde, hasta);
+    return q.order("fecha", { ascending: false }).order("tipo").range(desde, hasta);
   });
 }
 

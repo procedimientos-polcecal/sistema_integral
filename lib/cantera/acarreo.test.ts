@@ -87,6 +87,19 @@ describe("resumenPorFletero", () => {
     expect(r.sinTarifa).toEqual(["arcilla"]);
     expect(r.totalMonto).toBe(0);
   });
+
+  it("varias filas del mismo fletero+tipo en el mes (una por día) se suman en una sola línea, no se duplican", () => {
+    const acarreos: AcarreoPlano[] = [
+      { fleteroId: "f1", tipo: "horas_destape", mes: "2026-08-01", cantidad: 3 },
+      { fleteroId: "f1", tipo: "horas_destape", mes: "2026-08-01", cantidad: 4 },
+      { fleteroId: "f1", tipo: "horas_destape", mes: "2026-08-01", cantidad: 2 },
+    ];
+    const tarifas: TarifaAcarreo[] = [{ tipo: "horas_destape", desde: "2026-07-01", hasta: null, tarifa: 100 }];
+    const r = resumenPorFletero(acarreos, tarifas, "f1", "2026-08");
+    expect(r.porTipo).toHaveLength(1);
+    expect(r.porTipo[0]).toEqual({ tipo: "horas_destape", cantidad: 9, monto: 900 });
+    expect(r.totalMonto).toBe(900);
+  });
 });
 
 describe("totalesPorTipo", () => {

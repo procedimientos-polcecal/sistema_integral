@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { traerAcarreoDiario, traerPesadas } from "@/lib/cantera/consultas";
+import { traerAcarreos, traerPesadas } from "@/lib/cantera/consultas";
 import { tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerOperariosDeTrituracion, traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
@@ -43,10 +43,11 @@ export default async function PartesTrituracionPage({
     traerOperariosDeTrituracion(supabase),
     traerPesadas(supabase, { mes }),
     // Planta 2 casi no tiene pesada propia con destino "PT 2" (9 en todo
-    // 2026): "viaje de bloques" es su indicador real de acarreo, cargado
-    // aparte en /cantera/acarreo/diario. Se trae para cualquier planta —es
-    // barato, un solo tipo, un mes— y se muestra sólo si corresponde.
-    traerAcarreoDiario(supabase, { tipo: "viaje_de_bloques", desde: primerDia, hasta: ultimoDia }),
+    // 2026): "viaje de bloques" (horas, ver lib/cantera/acarreo.ts) es su
+    // indicador real de acarreo, cargado por fletero y día en
+    // /cantera/acarreo/cargar. Se trae para cualquier planta —es barato, un
+    // solo tipo, un mes— y se muestra sólo si corresponde.
+    traerAcarreos(supabase, { tipo: "viaje_de_bloques", mes }),
   ]);
 
   const llegadasDelMes = llegadasPorDiaYPlanta(
@@ -67,8 +68,10 @@ export default async function PartesTrituracionPage({
     }
   }
 
+  // Suma por fecha: puede haber más de un fletero cargando horas de "viaje
+  // de bloques" el mismo día.
   const viajesDeBloquesPorFecha: Record<string, number> = {};
-  for (const v of viajesDeBloques) viajesDeBloquesPorFecha[v.fecha] = v.cantidad;
+  for (const v of viajesDeBloques) viajesDeBloquesPorFecha[v.fecha] = (viajesDeBloquesPorFecha[v.fecha] ?? 0) + v.cantidad;
 
   return (
     <PartesClient

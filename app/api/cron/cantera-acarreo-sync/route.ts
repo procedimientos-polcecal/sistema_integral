@@ -5,11 +5,17 @@ import { sincronizarAcarreoDesdeSheets } from "@/lib/cantera/importarAcarreo";
 export const maxDuration = 300;
 
 /**
- * Trae de la planilla de balanza/transporte las pesadas y las actividades
- * manuales de acarreo, cada 15-30 min — antes esto era sólo
+ * Trae de la planilla de balanza/transporte fleteros, tarifas y las pesadas
+ * de "Datos", cada 15-30 min — antes esto era sólo
  * `scripts/importar-acarreo-2026.mts` corrido a mano, así que "Toneladas por
  * yacimiento" y el resumen por fletero quedaban tan viejos como la última vez
  * que alguien se acordaba de correrlo.
+ *
+ * Ya NO trae las 5 actividades sin pesada de "Ingreso de Datos" (horas de
+ * destape, viaje de bloques, horas de bochones, viajes de estabilizado,
+ * materiales Pezzuchi) — el equipo dejó de cargarlas ahí el 21/09/2026, se
+ * cargan por día directo en el SdG. Ver el comentario grande de
+ * `lib/cantera/importarAcarreo.ts`.
  *
  * Lo llama el workflow de GitHub Actions (`cantera-acarreo-sync.yml`), igual
  * que Compras; el cron diario de `vercel.json` queda como red de seguridad

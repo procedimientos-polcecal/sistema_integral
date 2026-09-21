@@ -43,7 +43,10 @@ export const TIPOS_DE_ACARREO: readonly TipoDeAcarreo[] = [
   { codigo: "estabilizado_a_cantera", etiqueta: "Estabilizado a Cantera", unidad: "tonelada", yacimientoCodigo: null },
   { codigo: "viajes_estabilizado", etiqueta: "Viajes de estabilizado", unidad: "viaje", yacimientoCodigo: null },
   { codigo: "horas_destape", etiqueta: "Horas destape", unidad: "hora", yacimientoCodigo: null },
-  { codigo: "viaje_de_bloques", etiqueta: "Viaje de bloques", unidad: "viaje", yacimientoCodigo: null },
+  // Corregido el 21/09/2026 a pedido del usuario: "viaje_de_bloques" se
+  // carga en HORAS, no en cantidad de viajes — el nombre confunde. El monto
+  // (cantidad × tarifa) no cambia: la tarifa ya estaba pensada en $/hora.
+  { codigo: "viaje_de_bloques", etiqueta: "Viaje de bloques", unidad: "hora", yacimientoCodigo: null },
   { codigo: "hora_bochones", etiqueta: "Hora movimiento bochones pozo", unidad: "hora", yacimientoCodigo: null },
   { codigo: "materiales_pezzuchi", etiqueta: "Materiales Pezzuchi", unidad: "tonelada", yacimientoCodigo: null },
 ] as const;
@@ -112,7 +115,13 @@ export interface FilaResumenFletero {
   sinTarifa: string[];
 }
 
-/** El resumen mensual de un fletero: lo mismo que la columna de un mes en "Resumen". */
+/**
+ * El resumen mensual de un fletero: lo mismo que la columna de un mes en
+ * "Resumen". Suma por tipo antes de calcular el monto —desde que
+ * `cantera_acarreos` pasó a ser una fila por día (20260921092307), un mismo
+ * fletero+tipo+mes puede traer varias filas (una por día cargado), y ya no
+ * vale asumir una sola como antes.
+ */
 export function resumenPorFletero(
   acarreos: AcarreoPlano[],
   tarifas: TarifaAcarreo[],
@@ -121,9 +130,14 @@ export function resumenPorFletero(
 ): FilaResumenFletero {
   const deEsteFleteroYMes = acarreos.filter((a) => a.fleteroId === fleteroId && a.mes.slice(0, 7) === mes.slice(0, 7));
 
-  const porTipo = deEsteFleteroYMes.map((a) => {
-    const tarifa = tarifaVigente(tarifas, a.tipo, mes);
-    return { tipo: a.tipo, cantidad: a.cantidad, monto: montoAcarreo(a.cantidad, tarifa) };
+  const cantidadPorTipo = new Map<string, number>();
+  for (const a of deEsteFleteroYMes) {
+    cantidadPorTipo.set(a.tipo, (cantidadPorTipo.get(a.tipo) ?? 0) + a.cantidad);
+  }
+
+  const porTipo = [...cantidadPorTipo.entries()].map(([tipo, cantidad]) => {
+    const tarifa = tarifaVigente(tarifas, tipo, mes);
+    return { tipo, cantidad, monto: montoAcarreo(cantidad, tarifa) };
   });
 
   return {
