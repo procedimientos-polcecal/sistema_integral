@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { traerPesadas } from "@/lib/cantera/consultas";
+import { tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerOperariosDeTrituracion, traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
-import { toneladasLlegadasPorDiaYPlanta } from "@/lib/trituracion/cruceCantera";
+import { llegadasPorDiaYPlanta } from "@/lib/trituracion/cruceCantera";
 import PartesClient from "./PartesClient";
 
 export default async function PartesTrituracionPage({
@@ -43,15 +44,22 @@ export default async function PartesTrituracionPage({
     traerPesadas(supabase, { mes }),
   ]);
 
-  const llegadasDelMes = toneladasLlegadasPorDiaYPlanta(
-    pesadas.map((p) => ({ fecha: p.fecha, destino: p.destino, toneladas: p.toneladas }))
+  const llegadasDelMes = llegadasPorDiaYPlanta(
+    pesadas.map((p) => ({ fecha: p.fecha, destino: p.destino, toneladas: p.toneladas, tipo: p.tipo }))
   );
-  // Sólo lo de esta planta, como Record serializable (un Map no cruza el
-  // límite servidor→cliente): "codigo|fecha" -> "fecha" para esta planta.
-  const llegadoPorFecha: Record<string, number> = {};
-  for (const [clave, toneladas] of llegadasDelMes) {
+  // Sólo los días de esta planta, como objeto serializable (un Map no cruza
+  // el límite servidor→cliente), con el código de material ya resuelto a su
+  // etiqueta legible ("dolomita_d1" -> "Dolomita D1"). Cubre cualquier día
+  // del mes, no sólo los que ya tienen parte cargado en el SdG.
+  const llegadoPorFecha: Record<string, { total: number; porTipo: { etiqueta: string; toneladas: number }[] }> = {};
+  for (const [clave, llegada] of llegadasDelMes) {
     const [codigo, fecha] = clave.split("|");
-    if (codigo === planta.codigo) llegadoPorFecha[fecha] = toneladas;
+    if (codigo === planta.codigo && llegada.total > 0) {
+      llegadoPorFecha[fecha] = {
+        total: llegada.total,
+        porTipo: llegada.porTipo.map((m) => ({ etiqueta: tipoDeAcarreo(m.tipo)?.etiqueta ?? m.tipo, toneladas: m.toneladas })),
+      };
+    }
   }
 
   return (

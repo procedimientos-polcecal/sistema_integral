@@ -5,7 +5,7 @@ import { traerPesadas } from "@/lib/cantera/consultas";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
 import { resumenMensual, ultimosMeses, type ParteParaResumen } from "@/lib/trituracion/informe";
-import { llegadoEnElMes, toneladasLlegadasPorDiaYPlanta } from "@/lib/trituracion/cruceCantera";
+import { llegadasPorDiaYPlanta, llegadoEnElMes } from "@/lib/trituracion/cruceCantera";
 import { COLORES_TRITURACION } from "../GraficosTrituracion";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -70,8 +70,8 @@ export default async function InformesTrituracionPage() {
     // error) y la columna "Llegado" simplemente queda en "—".
     Promise.all(anios.map((anio) => traerPesadas(supabase, { anio }))),
   ]);
-  const llegadas = toneladasLlegadasPorDiaYPlanta(
-    pesadasPorAnio.flat().map((p) => ({ fecha: p.fecha, destino: p.destino, toneladas: p.toneladas }))
+  const llegadas = llegadasPorDiaYPlanta(
+    pesadasPorAnio.flat().map((p) => ({ fecha: p.fecha, destino: p.destino, toneladas: p.toneladas, tipo: p.tipo }))
   );
 
   const filas = plantas.map((planta, i) => {

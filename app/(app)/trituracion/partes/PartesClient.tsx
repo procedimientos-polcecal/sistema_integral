@@ -159,8 +159,8 @@ export default function PartesClient({
   partes: ParteDB[];
   empleados: EmpleadoLiviano[];
   puedeEditar: boolean;
-  /** Toneladas que Cantera registró llegadas a esta planta ese día ("YYYY-MM-DD" → t), de `lib/trituracion/cruceCantera.ts`. */
-  llegadoPorFecha: Record<string, number>;
+  /** Lo que Cantera registró llegado a esta planta ese día ("YYYY-MM-DD" → total + desglose por material), de `lib/trituracion/cruceCantera.ts`. Sólo trae los días con algo llegado. */
+  llegadoPorFecha: Record<string, { total: number; porTipo: { etiqueta: string; toneladas: number }[] }>;
 }) {
   const router = useRouter();
   const irA = (p: string, m: string) => router.push(`/trituracion/partes?planta=${p}&mes=${m}`);
@@ -328,13 +328,21 @@ export default function PartesClient({
             <div className="p-4" style={{ backgroundColor: claroPlanta }}>
 
             {/* Siempre visible, sea cual sea el estado del día: lo que Cantera ya sabe que llegó, antes de cargar nada. */}
-            <div className="flex items-center gap-2 rounded-lg border border-white bg-white/70 px-3 py-2 text-sm">
+            <div className="flex items-start gap-2 rounded-lg border border-white bg-white/70 px-3 py-2 text-sm">
               <span className="text-lg">📦</span>
-              {llegadoPorFecha[form.fecha] > 0 ? (
+              {llegadoPorFecha[form.fecha] ? (
                 <span>
                   Acarreo (Cantera) registró{" "}
-                  <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(llegadoPorFecha[form.fecha])} t</span>{" "}
-                  transportadas a esta planta ese día.
+                  <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(llegadoPorFecha[form.fecha].total)} t</span>{" "}
+                  transportadas a esta planta ese día
+                  {llegadoPorFecha[form.fecha].porTipo.length > 0 && (
+                    <>: {llegadoPorFecha[form.fecha].porTipo.map((m, i) => (
+                      <span key={m.etiqueta}>
+                        {i > 0 && ", "}
+                        {m.etiqueta} ({num0.format(m.toneladas)} t)
+                      </span>
+                    ))}</>
+                  )}.
                 </span>
               ) : (
                 <span className="text-slate-500">Acarreo (Cantera) no tiene toneladas transportadas a esta planta ese día.</span>
@@ -551,8 +559,11 @@ export default function PartesClient({
                         </td>
                         <td className="text-right font-mono tabular-nums">{p.camiones_llegados ?? "—"}</td>
                         <td className="text-right font-mono tabular-nums">{p.toneladas_procesadas !== null ? num0.format(p.toneladas_procesadas) : "—"}</td>
-                        <td className="text-right font-mono tabular-nums text-slate-500">
-                          {llegadoPorFecha[p.fecha] > 0 ? `${num0.format(llegadoPorFecha[p.fecha])} t` : "—"}
+                        <td
+                          className="text-right font-mono tabular-nums text-slate-500"
+                          title={llegadoPorFecha[p.fecha]?.porTipo.map((m) => `${m.etiqueta}: ${num0.format(m.toneladas)} t`).join(" · ")}
+                        >
+                          {llegadoPorFecha[p.fecha] ? `${num0.format(llegadoPorFecha[p.fecha].total)} t` : "—"}
                         </td>
                         <td className="text-right font-mono tabular-nums">{d.productividadReal !== null ? num1.format(d.productividadReal) : "—"}</td>
                       </tr>
