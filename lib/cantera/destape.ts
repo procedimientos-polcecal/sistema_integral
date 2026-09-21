@@ -4,8 +4,8 @@
  * la base. Relevado contra la planilla real
  * (1SvF0HK3Zu6Mi5Z_tTokJAypWvHHHp9oEomucqJudE3Y) el 21/09/2026.
  *
- * A pedido del usuario (21/09/2026) dos de las tres fuentes de costo dejaron
- * de ser una tarifa cargada a mano:
+ * A pedido del usuario (21/09/2026) ninguna de las tres fuentes de costo es
+ * ya una tarifa propia de destape cargada a mano:
  * - **Mano de obra propia** vale lo que cobra ESE operario
  *   (`empleados.valor_hora_normal`), no una tarifa "mo_propia" única — que
  *   además nunca se llegó a cargar en producción.
@@ -13,10 +13,16 @@
  *   Taller Vial, no es puro) en `lib/cantera/costoMaquinaOdoo.ts` y llega acá
  *   ya resuelto en $/h por equipo — `costoDeRegistro` sólo lo multiplica por
  *   las horas.
- *
- * Sólo "fletero externo" (por tipo de camión) sigue siendo una tarifa
- * cargada en `cantera_tarifas_destape`.
+ * - **Fletero externo** es la tarifa "horas_destape" de Acarreo
+ *   (`lib/cantera/acarreo.ts`, `cantera_tarifas_acarreo`) × 2 si el camión es
+ *   grande, × 1 si es chico. Verificado contra la pestaña "Tarifas" real: el
+ *   valor de "Camión grande" es EXACTAMENTE el doble de "Camión chico" en
+ *   las 4 vigencias cargadas (48017,64/24008,82, 51638,16/25819,08,
+ *   53754,52/26877,26, 55635,5/27817,75) — no una tarifa aparte, el doble de
+ *   la de siempre. `cantera_tarifas_destape` ya no existe.
  */
+
+import { tarifaVigente, type TarifaAcarreo } from "./acarreo";
 
 export const TIPOS_DE_RECURSO = ["operario_propio", "fletero_externo"] as const;
 export type TipoDeRecurso = (typeof TIPOS_DE_RECURSO)[number];
@@ -42,35 +48,11 @@ export function esTipoDeCamionValido(v: unknown): v is TipoDeCamion {
   return typeof v === "string" && (TIPOS_DE_CAMION as readonly string[]).includes(v);
 }
 
-export const CATEGORIAS_DE_TARIFA = ["fletero_externo"] as const;
-export type CategoriaDeTarifa = (typeof CATEGORIAS_DE_TARIFA)[number];
-
-export interface TarifaDestape {
-  categoria: CategoriaDeTarifa;
-  /** Tipo de camión ("camion_grande"/"camion_chico") — la única clave que existe hoy. */
-  clave: string;
-  desde: string; // "YYYY-MM-DD"
-  hasta: string | null;
-  tarifa: number;
-}
-
-/**
- * La tarifa vigente de una categoría+clave en una fecha — mismo criterio de
- * vigencia que `tarifaVigente` de `lib/cantera/acarreo.ts` (la más nueva
- * que ya empezó y no terminó). Null si no hay ninguna: no se inventa un
- * costo con una tarifa que no está cargada.
- */
-export function tarifaVigenteDestape(
-  tarifas: TarifaDestape[],
-  categoria: CategoriaDeTarifa,
-  clave: string,
-  fecha: string
-): number | null {
-  const candidatas = tarifas
-    .filter((t) => t.categoria === categoria && t.clave === clave && t.desde <= fecha && (t.hasta === null || t.hasta >= fecha))
-    .sort((a, b) => b.desde.localeCompare(a.desde));
-  return candidatas[0]?.tarifa ?? null;
-}
+/** El multiplicador de la tarifa "horas_destape" de Acarreo según el camión — verificado contra la planilla real, ver el comment de arriba del archivo. */
+const MULTIPLICADOR_POR_CAMION: Record<TipoDeCamion, number> = {
+  camion_grande: 2,
+  camion_chico: 1,
+};
 
 export interface RegistroDestape {
   fecha: string; // "YYYY-MM-DD"
@@ -108,7 +90,7 @@ export interface CostoDestape {
  */
 export function costoDeRegistro(
   r: RegistroDestape,
-  tarifas: TarifaDestape[],
+  tarifasAcarreo: TarifaAcarreo[],
   toneladasPromedioPorFletero: Record<string, number>,
   costoHoraPorEquipo: Record<string, number>
 ): CostoDestape {
@@ -119,8 +101,10 @@ export function costoDeRegistro(
     return { costoMaquina, costoMo, costoFletero: 0, costoTotal: costoMaquina + costoMo, toneladasEstimadas: null };
   }
 
-  const tarifaFletero = r.tipoCamion ? tarifaVigenteDestape(tarifas, "fletero_externo", r.tipoCamion, r.fecha) : null;
-  const costoFletero = tarifaFletero !== null ? r.horas * tarifaFletero : 0;
+  const tarifaBase = tarifaVigente(tarifasAcarreo, "horas_destape", r.fecha)?.tarifa ?? null;
+  const costoFletero = tarifaBase !== null && r.tipoCamion !== null
+    ? r.horas * tarifaBase * MULTIPLICADOR_POR_CAMION[r.tipoCamion]
+    : 0;
   const promedio = r.fleteroId ? toneladasPromedioPorFletero[r.fleteroId] : undefined;
   const toneladasEstimadas = r.viajes !== null && promedio !== undefined ? r.viajes * promedio : null;
   return { costoMaquina: 0, costoMo: 0, costoFletero, costoTotal: costoFletero, toneladasEstimadas };
@@ -221,7 +205,7 @@ export interface FilaResumenYacimiento {
 /** "Resumen → Por yacimiento" — junta todos los registros de un período. */
 export function resumenPorYacimiento(
   registros: (RegistroDestape & { yacimientoCodigo: string | null })[],
-  tarifas: TarifaDestape[],
+  tarifasAcarreo: TarifaAcarreo[],
   toneladasPromedioPorFletero: Record<string, number>,
   costoHoraPorEquipo: Record<string, number>
 ): FilaResumenYacimiento[] {
@@ -231,7 +215,7 @@ export function resumenPorYacimiento(
     const fila = porYacimiento.get(clave) ?? {
       yacimientoCodigo: clave, horasOperario: 0, horasFletero: 0, costoMaquina: 0, costoMo: 0, costoFletero: 0, costoTotal: 0,
     };
-    const costo = costoDeRegistro(r, tarifas, toneladasPromedioPorFletero, costoHoraPorEquipo);
+    const costo = costoDeRegistro(r, tarifasAcarreo, toneladasPromedioPorFletero, costoHoraPorEquipo);
     if (r.tipoRecurso === "operario_propio") fila.horasOperario += r.horas;
     else fila.horasFletero += r.horas;
     fila.costoMaquina += costo.costoMaquina;

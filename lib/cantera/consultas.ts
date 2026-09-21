@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, TarifaDestapeDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -383,18 +383,6 @@ export async function traerDestape(supabase: SupabaseClient, filtros: FiltrosDeD
     if (filtros.yacimientoCodigo) q = q.eq("yacimiento_codigo", filtros.yacimientoCodigo);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
-}
-
-/** Todas las tarifas de destape cargadas — tabla chica, se trae entera para que `tarifaVigenteDestape` resuelva cualquier fecha sin una consulta por período. */
-export async function traerTarifasDestape(supabase: SupabaseClient): Promise<TarifaDestapeDB[]> {
-  const { data, error } = await supabase
-    .from("cantera_tarifas_destape")
-    .select("id, categoria, clave, desde, hasta, tarifa")
-    .order("categoria")
-    .order("clave")
-    .order("desde");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as TarifaDestapeDB[];
 }
 
 export interface EmpleadoLiviano {

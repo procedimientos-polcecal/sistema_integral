@@ -213,16 +213,6 @@ export interface DestapeDB {
   actualizado_en: string | null;
 }
 
-/** Una fila de `cantera_tarifas_destape`: $/h de "fletero externo" (por tipo de camión), vigente por período. Máquina propia y mano de obra propia ya no son tarifa: se calculan (ver lib/cantera/costoMaquinaOdoo.ts y lib/cantera/destape.ts). */
-export interface TarifaDestapeDB {
-  id: string;
-  categoria: string;
-  clave: string;
-  desde: string;
-  hasta: string | null;
-  tarifa: number;
-}
-
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */
 export interface CubicacionDB {
   id: string;

@@ -1,0 +1,30 @@
+-- ============================================================
+-- SdG — Cantera/Destape: el costo de fletero externo sale de la tarifa de
+-- Acarreo, no de una tarifa propia
+--
+-- A pedido explícito del usuario (21/09/2026): "el costo del fletero está
+-- en la tarifa de fleteros [Acarreo] la hora de destape, lo único que
+-- cambia es que Orsatti y Schneider tienen camión grande por ende su
+-- tarifa se multiplica por dos, después los demás fleteros es el valor de
+-- destape normal".
+--
+-- Verificado contra la pestaña "Tarifas" real de la planilla de destape
+-- (1SvF0HK3Zu6Mi5Z_tTokJAypWvHHHp9oEomucqJudE3Y) para las 4 vigencias que
+-- tiene cargadas: "Camión grande" es EXACTAMENTE el doble de "Camión
+-- chico" en las cuatro (48017.64/24008.82, 51638.16/25819.08,
+-- 53754.52/26877.26, 55635.5/27817.75) — no es una coincidencia de un mes,
+-- es la regla. Y "Camión chico" ya coincidía exacto con la tarifa
+-- "horas_destape" de `cantera_tarifas_acarreo` (encontrado en la sesión
+-- anterior, cuando se vinculó el cruce Acarreo↔Destape).
+--
+-- Con esto, `cantera_tarifas_destape` se queda sin ninguna categoría que
+-- siga siendo tarifa propia (máquina propia y mano de obra ya se habían
+-- sacado en la migración 20260921103501) — se elimina entera. El costo de
+-- fletero externo en destape ahora se calcula en
+-- `lib/cantera/destape.ts` a partir de `cantera_tarifas_acarreo` (tipo
+-- 'horas_destape'), × 2 si el registro es de camión grande, × 1 si es
+-- camión chico. Verificado que la tabla estaba vacía en producción (nadie
+-- cargó nunca ninguna tarifa de destape), así que no hay datos que migrar.
+-- ============================================================
+
+drop table if exists cantera_tarifas_destape;

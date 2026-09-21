@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPesadas, traerTarifasDestape } from "@/lib/cantera/consultas";
+import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import { toneladasPromedioPorFletero } from "@/lib/cantera/destape";
 import { costoHoraDeMaquinasDelMes } from "@/lib/cantera/costoMaquinaOdoo";
 import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
@@ -21,14 +21,18 @@ import DestapeClient from "./DestapeClient";
  * doble sin darse cuenta — mismo patrón que ya usa Trituración con
  * "viaje_de_bloques" (lib/trituracion/cruceCantera.ts).
  *
- * A pedido del usuario (21/09/2026), dos de las tres fuentes de costo ya
- * no son una tarifa cargada a mano:
+ * A pedido del usuario (21/09/2026), ninguna de las tres fuentes de costo
+ * es ya una tarifa propia de destape cargada a mano:
  * - **Toneladas del fletero**: en vez de "capacidad" (se sacó del todo, no
  *   había forma de relevarla), se usa el promedio real de lo que ese
  *   fletero transportó en Acarreo (`lib/cantera/destape.ts`).
  * - **Máquina propia**: se calcula con Odoo y Taller Vial
  *   (`lib/cantera/costoMaquinaOdoo.ts`) — sólo para los equipos que
  *   aparecen en los registros de este mes, no toda la flota.
+ * - **Fletero externo**: es la tarifa "horas_destape" de
+ *   `cantera_tarifas_acarreo` (la misma que ya usa Acarreo, se trae con
+ *   `traerTarifasAcarreo`) × 2 si el camión es grande, × 1 si es chico —
+ *   `cantera_tarifas_destape` ya no existe.
  */
 export default async function DestapePage({
   searchParams,
@@ -71,8 +75,8 @@ export default async function DestapePage({
       .filter((c): c is string => Boolean(c))
   )];
 
-  const [tarifas, horasDestapeAcarreo, fleteros, pesadas, operarios, costos] = await Promise.all([
-    traerTarifasDestape(supabase),
+  const [tarifasAcarreo, horasDestapeAcarreo, fleteros, pesadas, operarios, costos] = await Promise.all([
+    traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { tipo: "horas_destape", mes }),
     traerFleteros(supabase),
     traerPesadas(supabase),
@@ -97,7 +101,7 @@ export default async function DestapePage({
     <DestapeClient
       mes={mes}
       registros={registrosDelMes}
-      tarifas={tarifas}
+      tarifasAcarreo={tarifasAcarreo}
       toneladasPromedioPorFletero={toneladasPromedio}
       costoHoraPorEquipo={costoHoraPorEquipo}
       codigoPorEquipoId={codigoPorEquipoId}

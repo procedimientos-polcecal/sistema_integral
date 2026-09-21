@@ -4,58 +4,60 @@ import {
   resolverFleteroDestape,
   resolverOperarioDestape,
   resumenPorYacimiento,
-  tarifaVigenteDestape,
   toneladasPromedioPorFletero,
   type EmpleadoLiviano,
   type FleteroLiviano,
   type RegistroDestape,
-  type TarifaDestape,
 } from "./destape";
+import type { TarifaAcarreo } from "./acarreo";
 
-// Tarifas reales de agosto 2026 (vigencia jul-ago), relevadas en vivo. Sólo
-// "fletero_externo" sigue siendo tarifa — máquina propia y mano de obra se
-// calculan (ver lib/cantera/costoMaquinaOdoo.ts y el valor_hora_normal del operario).
-const TARIFAS: TarifaDestape[] = [
-  { categoria: "fletero_externo", clave: "camion_grande", desde: "2026-07-01", hasta: null, tarifa: 55635.5 },
-  { categoria: "fletero_externo", clave: "camion_chico", desde: "2026-07-01", hasta: null, tarifa: 27817.75 },
+// La tarifa "horas_destape" real de Acarreo (vigencia jul-ago 2026, relevada
+// en vivo) — es la ÚNICA que hace falta: "Camión grande" no es una tarifa
+// aparte, es esta misma × 2 (verificado exacto contra la planilla real en
+// las 4 vigencias que tiene cargadas).
+const TARIFAS_ACARREO: TarifaAcarreo[] = [
+  { tipo: "horas_destape", desde: "2026-07-01", hasta: null, tarifa: 27817.75 },
 ];
 
 // Promedio de toneladas por viaje, medido sobre el historial real de Acarreo de cada fletero.
 const TONELADAS_PROMEDIO: Record<string, number> = { amaray: 16, schneider: 44 };
 const COSTO_HORA_MAQUINA: Record<string, number> = { EM3: 15000 };
 
-describe("tarifaVigenteDestape", () => {
-  it("resuelve la tarifa vigente en la fecha pedida", () => {
-    expect(tarifaVigenteDestape(TARIFAS, "fletero_externo", "camion_grande", "2026-08-15")).toBe(55635.5);
-  });
-
-  it("null si no hay ninguna tarifa cargada para esa clave — no inventa un costo", () => {
-    expect(tarifaVigenteDestape(TARIFAS, "fletero_externo", "camion_mediano", "2026-08-15")).toBeNull();
-  });
-});
-
 describe("costoDeRegistro — verificado contra la planilla real de agosto 2026", () => {
-  it("Orsatti, Camión grande, 8 h → $445.084 (8 × $55.635,50)", () => {
+  it("Orsatti, Camión grande, 8 h → $445.084 (8 × $27.817,75 × 2)", () => {
     const r: RegistroDestape = {
       fecha: "2026-08-15", tipoRecurso: "fletero_externo",
       equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande",
       horas: 8, viajes: 16,
     };
-    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    const c = costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.costoFletero).toBeCloseTo(445084, 0);
     expect(c.costoTotal).toBeCloseTo(445084, 0);
     // Orsatti no tiene ninguna pesada real resuelta en el fixture — sin promedio, toneladas da null, no se inventa.
     expect(c.toneladasEstimadas).toBeNull();
   });
 
+  it("camión grande cobra el doble que camión chico, misma tarifa base, mismas horas", () => {
+    const chico = costoDeRegistro(
+      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico", horas: 8, viajes: null },
+      TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
+    );
+    const grande = costoDeRegistro(
+      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande", horas: 8, viajes: null },
+      TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
+    );
+    expect(chico.costoFletero).toBeCloseTo(8 * 27817.75, 6);
+    expect(grande.costoFletero).toBeCloseTo(chico.costoFletero * 2, 6);
+  });
+
   it("Schneider, mismo camión y horas que Orsatti → el MISMO costo (la tarifa es por tipo de camión, no por fletero)", () => {
     const orsatti = costoDeRegistro(
       { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande", horas: 8, viajes: 16 },
-      TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
+      TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
     );
     const schneider = costoDeRegistro(
       { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "schneider", tipoCamion: "camion_grande", horas: 8, viajes: 12 },
-      TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
+      TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
     );
     expect(schneider.costoFletero).toBeCloseTo(orsatti.costoFletero, 6);
   });
@@ -66,8 +68,17 @@ describe("costoDeRegistro — verificado contra la planilla real de agosto 2026"
       equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico",
       horas: 8, viajes: 28,
     };
-    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    const c = costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.toneladasEstimadas).toBe(448);
+  });
+
+  it("sin tarifa 'horas_destape' vigente ese mes, costo fletero da 0 — no se inventa", () => {
+    const r: RegistroDestape = {
+      fecha: "2026-01-15", tipoRecurso: "fletero_externo",
+      equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico",
+      horas: 8, viajes: null,
+    };
+    expect(costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA).costoFletero).toBe(0);
   });
 
   it("operario propio: costo máquina = horas × $/h del equipo ese mes, costo MO = horas × valor_hora_normal del operario", () => {
@@ -76,7 +87,7 @@ describe("costoDeRegistro — verificado contra la planilla real de agosto 2026"
       equipoCodigo: "EM3", operarioValorHora: 5000, fleteroId: null, tipoCamion: null,
       horas: 8, viajes: null,
     };
-    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    const c = costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.costoMaquina).toBe(8 * 15000);
     expect(c.costoMo).toBe(8 * 5000);
     expect(c.toneladasEstimadas).toBeNull();
@@ -88,7 +99,7 @@ describe("costoDeRegistro — verificado contra la planilla real de agosto 2026"
       equipoCodigo: "EM9", operarioValorHora: null, fleteroId: null, tipoCamion: null,
       horas: 8, viajes: null,
     };
-    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    const c = costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.costoMaquina).toBe(0);
     expect(c.costoMo).toBe(0);
   });
@@ -99,7 +110,7 @@ describe("costoDeRegistro — verificado contra la planilla real de agosto 2026"
       equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico",
       horas: 8, viajes: null,
     };
-    expect(costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA).toneladasEstimadas).toBeNull();
+    expect(costoDeRegistro(r, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA).toneladasEstimadas).toBeNull();
   });
 });
 
@@ -182,7 +193,7 @@ describe("resumenPorYacimiento", () => {
       { fecha: "2026-08-15", tipoRecurso: "operario_propio" as const, equipoCodigo: "EM3", operarioValorHora: 5000, fleteroId: null, tipoCamion: null, horas: 8, viajes: null, yacimientoCodigo: "D1" },
       { fecha: "2026-08-16", tipoRecurso: "fletero_externo" as const, equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico" as const, horas: 8, viajes: 28, yacimientoCodigo: null },
     ];
-    const r = resumenPorYacimiento(registros, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    const r = resumenPorYacimiento(registros, TARIFAS_ACARREO, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     const d1 = r.find((f) => f.yacimientoCodigo === "D1")!;
     expect(d1.horasOperario).toBe(8);
     expect(d1.horasFletero).toBe(8);
