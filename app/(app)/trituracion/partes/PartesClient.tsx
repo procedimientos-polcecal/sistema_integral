@@ -327,6 +327,20 @@ export default function PartesClient({
             </div>
             <div className="p-4" style={{ backgroundColor: claroPlanta }}>
 
+            {/* Siempre visible, sea cual sea el estado del día: lo que Cantera ya sabe que llegó, antes de cargar nada. */}
+            <div className="flex items-center gap-2 rounded-lg border border-white bg-white/70 px-3 py-2 text-sm">
+              <span className="text-lg">📦</span>
+              {llegadoPorFecha[form.fecha] > 0 ? (
+                <span>
+                  Acarreo (Cantera) registró{" "}
+                  <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(llegadoPorFecha[form.fecha])} t</span>{" "}
+                  transportadas a esta planta ese día.
+                </span>
+              ) : (
+                <span className="text-slate-500">Acarreo (Cantera) no tiene toneladas transportadas a esta planta ese día.</span>
+              )}
+            </div>
+
             <div className="mt-3 flex gap-2">
               {ESTADOS_PARTE.map((e) => (
                 <button
@@ -395,12 +409,6 @@ export default function PartesClient({
                     <input className="input" inputMode="decimal" value={form.toneladasProcesadas} onChange={(e) => set("toneladasProcesadas", e.target.value)} />
                   </Campo>
                 </div>
-
-                {llegadoPorFecha[form.fecha] > 0 && (
-                  <p className="mt-1.5 text-xs text-slate-500">
-                    📦 Cantera registró <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(llegadoPorFecha[form.fecha])} t</span> llegadas a esta planta ese día (acarreo, no se carga acá).
-                  </p>
-                )}
 
                 <p className="mt-3 text-xs font-medium text-slate-500">Horas paradas (h)</p>
                 <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
