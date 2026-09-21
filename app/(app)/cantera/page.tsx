@@ -8,12 +8,14 @@ import {
   traerBochones,
   traerConsumosDe,
   traerDatosParaInforme,
+  traerDestape,
   traerFleteros,
   traerPesadas,
   traerTarifasAcarreo,
   traerVoladuras,
   traerYacimientos,
 } from "@/lib/cantera/consultas";
+import { ETIQUETA_TIPO_RECURSO } from "@/lib/cantera/destape";
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
 import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
@@ -93,11 +95,16 @@ export default async function CanteraInicioPage({
   const serieReciente = serie.slice(-6);
   const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
 
-  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes] = await Promise.all([
+  const [anioNum, mesNum] = mesActual.split("-").map(Number);
+  const primerDiaMesActual = `${mesActual}-01`;
+  const ultimoDiaMesActual = new Date(Date.UTC(anioNum, mesNum, 0)).toISOString().slice(0, 10);
+
+  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes, destapeDelMes] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { mes: mesActual }),
     traerPesadas(supabase, { mes: mesActual }),
+    traerDestape(supabase, { desde: primerDiaMesActual, hasta: ultimoDiaMesActual }),
   ]);
   const acarreosPlanos: AcarreoPlano[] = [
     ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
@@ -107,6 +114,9 @@ export default async function CanteraInicioPage({
     (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0
   );
+  // `traerDestape` ya viene ordenada por fecha descendente (consultas.ts).
+  const ultimosDestape = destapeDelMes.slice(0, 5);
+  const horasDestapeDelMes = destapeDelMes.reduce((s, r) => s + r.horas, 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -207,6 +217,32 @@ export default async function CanteraInicioPage({
           )}
         </section>
       </div>
+
+      {/* ── Adelanto de Destape ── */}
+      <section className="card mt-4 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Destape</h2>
+          <Link href="/cantera/destape" className="text-xs text-slate-500 underline">Ver destape →</Link>
+        </div>
+        {horasDestapeDelMes > 0 && (
+          <p className="mt-1 text-xs text-slate-500">{num1.format(horasDestapeDelMes)} hs cargadas en {nombreDeMes(mesActual)}.</p>
+        )}
+        <ul className="mt-3 divide-y divide-slate-100">
+          {ultimosDestape.map((r) => (
+            <li key={r.id}>
+              <Link href="/cantera/destape" className="flex items-center justify-between gap-2 py-2 text-sm hover:bg-slate-50">
+                <span className="text-xs text-slate-400">{r.fecha}</span>
+                <span>{r.yacimiento_codigo ?? "Sin yacimiento"}</span>
+                <span className="flex-1 text-right text-xs text-slate-500">{ETIQUETA_TIPO_RECURSO[r.tipo_recurso as "operario_propio" | "fletero_externo"]} · {r.recurso_raw}</span>
+                <span className="whitespace-nowrap font-mono tabular-nums">{num1.format(r.horas)} hs</span>
+              </Link>
+            </li>
+          ))}
+          {ultimosDestape.length === 0 && (
+            <li className="py-4 text-center text-sm text-slate-400">Todavía no hay destape cargado este mes.</li>
+          )}
+        </ul>
+      </section>
 
       <Suspense fallback={<CargandoResumenAnual />}>
         <ResumenAnualSection anio={anio} />
