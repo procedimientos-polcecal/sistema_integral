@@ -82,7 +82,10 @@ export default function AcarreoClient({
             </>
           )}
           {puedeEditar && (
-            <Link href={`/cantera/acarreo/cargar?mes=${mes}`} className="btn-primary">Cargar datos</Link>
+            <>
+              <Link href="/cantera/acarreo/diario" className="btn-secondary">Cargar por día</Link>
+              <Link href={`/cantera/acarreo/cargar?mes=${mes}`} className="btn-primary">Cargar datos</Link>
+            </>
           )}
         </div>
       </div>

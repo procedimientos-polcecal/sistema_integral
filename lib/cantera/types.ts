@@ -186,6 +186,19 @@ export interface AcarreoDB {
   actualizado_en: string | null;
 }
 
+/** Una fila de `cantera_acarreo_diario`: lo mismo que `AcarreoDB` pero por fecha puntual, sin fletero — no participa del pago, es sólo para que otro módulo sepa cuánto llegó un día dado. */
+export interface AcarreoDiarioDB {
+  id: string;
+  tipo: string;
+  fecha: string;
+  cantidad: number;
+  observaciones: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+}
+
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */
 export interface CubicacionDB {
   id: string;

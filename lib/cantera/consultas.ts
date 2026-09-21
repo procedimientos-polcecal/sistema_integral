@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, AcarreoDiarioDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -312,6 +312,29 @@ export async function traerAcarreos(
       q = q.gte("mes", `${filtros.anio}-01-01`).lte("mes", `${filtros.anio}-12-31`);
     }
     return q.order("mes", { ascending: false }).order("tipo").range(desde, hasta);
+  });
+}
+
+export interface FiltrosDeAcarreoDiario {
+  tipo?: string;
+  /** "YYYY-MM-DD" */
+  desde?: string;
+  /** "YYYY-MM-DD" */
+  hasta?: string;
+}
+
+export async function traerAcarreoDiario(
+  supabase: SupabaseClient,
+  filtros: FiltrosDeAcarreoDiario = {}
+): Promise<AcarreoDiarioDB[]> {
+  return traerTodo<AcarreoDiarioDB>((desde, hasta) => {
+    let q = supabase
+      .from("cantera_acarreo_diario")
+      .select("id, tipo, fecha, cantidad, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en");
+    if (filtros.tipo) q = q.eq("tipo", filtros.tipo);
+    if (filtros.desde) q = q.gte("fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
+    return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
 }
 

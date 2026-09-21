@@ -151,7 +151,7 @@ function CalendarioMes({
 }
 
 export default function PartesClient({
-  plantas, plantaId, mes, partes, empleados, puedeEditar, llegadoPorFecha,
+  plantas, plantaId, mes, partes, empleados, puedeEditar, llegadoPorFecha, viajesDeBloquesPorFecha,
 }: {
   plantas: PlantaDB[];
   plantaId: string;
@@ -161,6 +161,8 @@ export default function PartesClient({
   puedeEditar: boolean;
   /** Lo que Cantera registró llegado a esta planta ese día ("YYYY-MM-DD" → total + desglose por material), de `lib/trituracion/cruceCantera.ts`. Sólo trae los días con algo llegado. */
   llegadoPorFecha: Record<string, { total: number; porTipo: { etiqueta: string; toneladas: number }[] }>;
+  /** Sólo viene con datos en Planta 2 (`cantera_acarreo_diario`, tipo "viaje_de_bloques") — es su indicador de acarreo, porque casi no tiene pesada propia. "YYYY-MM-DD" → cantidad de viajes. */
+  viajesDeBloquesPorFecha: Record<string, number>;
 }) {
   const router = useRouter();
   const irA = (p: string, m: string) => router.push(`/trituracion/partes?planta=${p}&mes=${m}`);
@@ -245,6 +247,7 @@ export default function PartesClient({
     }
   }
 
+  const mostrarViajesDeBloques = Object.keys(viajesDeBloquesPorFecha).length > 0;
   const diasOperativos = partes.filter((p) => p.estado === "opero").length;
   const toneladasDelMes = partes.reduce((s, p) => s + (p.toneladas_procesadas ?? 0), 0);
   const pendientes = partes.filter((p) => p.sheets_pendiente).length;
@@ -348,6 +351,22 @@ export default function PartesClient({
                 <span className="text-slate-500">Acarreo (Cantera) no tiene toneladas transportadas a esta planta ese día.</span>
               )}
             </div>
+
+            {/* Sólo aparece en Planta 2: casi no tiene pesada propia, así que "viaje de bloques" es su indicador real de acarreo. */}
+            {Object.keys(viajesDeBloquesPorFecha).length > 0 && (
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-white bg-white/70 px-3 py-2 text-sm">
+                <span className="text-lg">🚚</span>
+                {viajesDeBloquesPorFecha[form.fecha] ? (
+                  <span>
+                    Acarreo (Cantera) registró{" "}
+                    <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(viajesDeBloquesPorFecha[form.fecha])} viajes de bloques</span>{" "}
+                    ese día.
+                  </span>
+                ) : (
+                  <span className="text-slate-500">Acarreo (Cantera) no tiene viajes de bloques cargados ese día.</span>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 flex gap-2">
               {ESTADOS_PARTE.map((e) => (
@@ -501,12 +520,13 @@ export default function PartesClient({
                 <th className="text-right">Camiones</th>
                 <th className="text-right">Toneladas</th>
                 <th className="text-right">Llegado (Cantera)</th>
+                {mostrarViajesDeBloques && <th className="text-right">Viajes de bloques</th>}
                 <th className="text-right">t/h real</th>
               </tr>
             </thead>
             <tbody>
               {partes.length === 0 ? (
-                <tr><td colSpan={13} className="py-8 text-center text-slate-400">Sin partes este mes.</td></tr>
+                <tr><td colSpan={mostrarViajesDeBloques ? 14 : 13} className="py-8 text-center text-slate-400">Sin partes este mes.</td></tr>
               ) : (
                 [...partes]
                   .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
@@ -565,6 +585,11 @@ export default function PartesClient({
                         >
                           {llegadoPorFecha[p.fecha] ? `${num0.format(llegadoPorFecha[p.fecha].total)} t` : "—"}
                         </td>
+                        {mostrarViajesDeBloques && (
+                          <td className="text-right font-mono tabular-nums text-slate-500">
+                            {viajesDeBloquesPorFecha[p.fecha] ? num0.format(viajesDeBloquesPorFecha[p.fecha]) : "—"}
+                          </td>
+                        )}
                         <td className="text-right font-mono tabular-nums">{d.productividadReal !== null ? num1.format(d.productividadReal) : "—"}</td>
                       </tr>
                     );
