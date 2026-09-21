@@ -6,11 +6,17 @@ import { espejarParte } from "@/lib/trituracion/espejo";
 import { esEstadoValido, esMaterialValido } from "@/lib/trituracion/vocabulario";
 
 /**
- * El parte de una planta, por día. Un `POST` con `(planta_id, fecha)` que ya
- * existe reemplaza ese parte (`unique(planta_id, fecha)` en la base) — no hay
- * un PATCH aparte, cargar el mismo día dos veces es corregirlo. Después
- * escribe (o reescribe) la fila correspondiente en `PLANTA {N}`, mismo
- * patrón que `lib/tallerVial/espejo.ts` y `lib/cantera/espejo.ts`.
+ * El parte de una planta, por día y turno. Un `POST` con `(planta_id,
+ * fecha, orden)` que ya existe reemplaza ese turno (`unique(planta_id,
+ * fecha, orden)` en la base, migración 20260921094643) — no hay un PATCH
+ * aparte, cargar el mismo turno dos veces es corregirlo. Sin `orden` en el
+ * body es un turno NUEVO: se le asigna el siguiente número libre para esa
+ * planta+fecha (1 si el día está vacío). Después escribe (o reescribe) la
+ * fila correspondiente en `PLANTA {N}`, mismo patrón que
+ * `lib/tallerVial/espejo.ts` y `lib/cantera/espejo.ts` — el espejo busca
+ * por fecha, no por turno, así que con dos turnos el mismo día el segundo
+ * guardado pisa en la planilla la fila que ya escribió el primero (ver la
+ * migración para el detalle; no afecta a la base, sólo al espejo).
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -38,7 +44,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const {
-    planta_id, fecha, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin,
+    planta_id, fecha, orden, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin,
     operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro,
     motivo_otro, camiones_llegados, toneladas_procesadas, observaciones,
   } = body;
@@ -61,12 +67,28 @@ export async function POST(request: Request) {
   if (errPlanta) return NextResponse.json({ error: errPlanta.message }, { status: 400 });
   if (!planta) return NextResponse.json({ error: "Planta no encontrada" }, { status: 404 });
 
+  // Sin `orden`: turno nuevo, se le asigna el siguiente número libre de ese
+  // día (1 si no hay ninguno todavía).
+  let ordenAGuardar = Number(orden);
+  if (!orden || !isFinite(ordenAGuardar) || ordenAGuardar < 1) {
+    const { data: existentes, error: errExistentes } = await supabase
+      .from("trituracion_partes")
+      .select("orden")
+      .eq("planta_id", planta_id)
+      .eq("fecha", fecha)
+      .order("orden", { ascending: false })
+      .limit(1);
+    if (errExistentes) return NextResponse.json({ error: errExistentes.message }, { status: 400 });
+    ordenAGuardar = (existentes?.[0]?.orden ?? 0) + 1;
+  }
+
   const { data, error } = await supabase
     .from("trituracion_partes")
     .upsert(
       {
         planta_id,
         fecha,
+        orden: ordenAGuardar,
         estado: estado ?? "opero",
         motivo_no_operativo: motivo_no_operativo || null,
         material: material || null,
@@ -87,9 +109,9 @@ export async function POST(request: Request) {
         actualizado_por: user.id,
         actualizado_en: new Date().toISOString(),
       },
-      { onConflict: "planta_id,fecha" }
+      { onConflict: "planta_id,fecha,orden" }
     )
-    .select("id, planta_id, fecha, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin, operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro, motivo_otro, camiones_llegados, toneladas_procesadas, observaciones, sheets_pendiente")
+    .select("id, planta_id, fecha, orden, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin, operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro, motivo_otro, camiones_llegados, toneladas_procesadas, observaciones, sheets_pendiente")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
@@ -121,4 +143,27 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data, aviso });
+}
+
+/**
+ * Borra un turno puntual — para cuando se agregó uno de más el mismo día.
+ * No toca la planilla: el espejo sólo sabe reescribir por fecha, no vaciar
+ * un turno específico (mismo límite que el guardado, ver el comentario de
+ * arriba).
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await puedeEditarTrituracion(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permiso para editar en Trituración" }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Falta el id del turno a borrar" }, { status: 400 });
+
+  const { error } = await supabase.from("trituracion_partes").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }

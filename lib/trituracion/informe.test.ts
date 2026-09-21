@@ -43,6 +43,27 @@ describe("resumenMensual", () => {
     expect(r.diasOperativos).toBe(0);
     expect(r.disponibilidadPromedio).toBeNull();
   });
+
+  it("dos turnos el mismo día cuentan como UN día operativo, pero suman las dos toneladas", () => {
+    const r = resumenMensual([
+      {
+        fecha: "2026-06-02", estado: "opero",
+        horaInicio: "04:00", horaFin: "08:00",
+        horasMantenimiento: 0, horasFaltaPiedra: 0, horasProduccion: 0, horasOtro: 0,
+        toneladasProcesadas: 300, camionesLlegados: 20,
+      },
+      {
+        fecha: "2026-06-02", estado: "opero",
+        horaInicio: "08:00", horaFin: "12:00",
+        horasMantenimiento: 0, horasFaltaPiedra: 0, horasProduccion: 0, horasOtro: 0,
+        toneladasProcesadas: 250, camionesLlegados: 18,
+      },
+    ]);
+    expect(r.diasOperativos).toBe(1);
+    expect(r.diasNoOperativos).toBe(0);
+    expect(r.toneladasTotal).toBe(550);
+    expect(r.horasTeoricasTotal).toBe(8);
+  });
 });
 
 describe("ultimosMeses", () => {

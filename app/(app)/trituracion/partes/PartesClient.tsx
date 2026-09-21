@@ -39,7 +39,10 @@ function colorDeDisponibilidad(d: number | null): string {
 
 function formVacio(fecha: string) {
   return {
+    id: null as string | null,
     fecha,
+    /** null: turno nuevo todavía sin guardar, el servidor le asigna el número. Un valor: se está editando ese turno existente. */
+    orden: null as number | null,
     estado: "opero" as (typeof ESTADOS_PARTE)[number],
     motivoNoOperativo: "",
     material: "",
@@ -62,7 +65,9 @@ type Form = ReturnType<typeof formVacio>;
 
 function formDeParte(p: ParteDB): Form {
   return {
+    id: p.id,
     fecha: p.fecha,
+    orden: p.orden,
     estado: (p.estado as Form["estado"]) ?? "opero",
     motivoNoOperativo: p.motivo_no_operativo ?? "",
     material: p.material ?? "",
@@ -104,7 +109,13 @@ function CalendarioMes({
   const [anio, mesNum] = mes.split("-").map(Number);
   const diasEnMes = new Date(Date.UTC(anio, mesNum, 0)).getUTCDate();
   const offset = (new Date(Date.UTC(anio, mesNum - 1, 1)).getUTCDay() + 6) % 7;
-  const porFecha = new Map(partes.map((p) => [p.fecha, p]));
+  // Puede haber más de un turno el mismo día: se agrupa, no se asume uno solo.
+  const porFecha = new Map<string, ParteDB[]>();
+  for (const p of partes) {
+    const lista = porFecha.get(p.fecha) ?? [];
+    lista.push(p);
+    porFecha.set(p.fecha, lista);
+  }
   // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
   const hoy = new Date().toISOString().slice(0, 10);
 
@@ -117,13 +128,21 @@ function CalendarioMes({
         {Array.from({ length: offset }, (_, i) => <div key={`o${i}`} />)}
         {Array.from({ length: diasEnMes }, (_, i) => i + 1).map((dia) => {
           const fecha = `${mes}-${String(dia).padStart(2, "0")}`;
-          const parte = porFecha.get(fecha);
+          const turnos = porFecha.get(fecha) ?? [];
           const seleccionado = fecha === fechaSeleccionada;
           const esHoy = fecha === hoy;
+          const algunoOpero = turnos.some((t) => t.estado === "opero");
+          const algunoNoOpero = turnos.some((t) => t.estado === "no_opero");
 
           let clases = "border border-dashed border-slate-200 text-slate-400 hover:border-slate-300";
-          if (parte?.estado === "opero") clases = "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
-          else if (parte?.estado === "no_opero") clases = "border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200";
+          if (algunoOpero) clases = "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+          else if (algunoNoOpero) clases = "border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200";
+
+          const tooltip = turnos.length === 0
+            ? "Sin parte cargado"
+            : turnos
+                .map((t) => `Turno ${t.orden}: ${ETIQUETA_ESTADO[t.estado as keyof typeof ETIQUETA_ESTADO] ?? t.estado}${t.toneladas_procesadas ? ` · ${num0.format(t.toneladas_procesadas)} t` : ""}`)
+                .join(" | ");
 
           return (
             <button
@@ -132,11 +151,16 @@ function CalendarioMes({
               onClick={() => onElegir(fecha)}
               className={`relative aspect-square rounded-md text-xs font-medium transition-colors ${clases} ${seleccionado ? "ring-2 ring-offset-1" : ""}`}
               style={seleccionado ? { boxShadow: "0 0 0 2px #0891B2" } : undefined}
-              title={parte ? `${ETIQUETA_ESTADO[parte.estado as keyof typeof ETIQUETA_ESTADO] ?? parte.estado}${parte.toneladas_procesadas ? ` · ${num0.format(parte.toneladas_procesadas)} t` : ""}` : "Sin parte cargado"}
+              title={tooltip}
             >
               {dia}
+              {turnos.length > 1 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-700 text-[9px] font-bold text-white">
+                  {turnos.length}
+                </span>
+              )}
               {esHoy && <span className="absolute inset-x-0 bottom-0.5 mx-auto block h-1 w-1 rounded-full bg-[#0891B2]" />}
-              {parte?.sheets_pendiente && <span className="absolute right-0.5 top-0.5 text-amber-600">⚠</span>}
+              {turnos.some((t) => t.sheets_pendiente) && <span className="absolute -left-0.5 -top-0.5 text-amber-600">⚠</span>}
             </button>
           );
         })}
@@ -173,9 +197,10 @@ export default function PartesClient({
   // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
   const hoy = new Date().toISOString().slice(0, 10);
   const fechaInicial = hoy.startsWith(mes) ? hoy : `${mes}-01`;
-  const parteInicial = partes.find((p) => p.fecha === fechaInicial);
-  const [form, setForm] = useState<Form>(parteInicial ? formDeParte(parteInicial) : formVacio(fechaInicial));
+  const turnosDelDiaInicial = partes.filter((p) => p.fecha === fechaInicial).sort((a, b) => a.orden - b.orden);
+  const [form, setForm] = useState<Form>(turnosDelDiaInicial[0] ? formDeParte(turnosDelDiaInicial[0]) : formVacio(fechaInicial));
   const [guardando, setGuardando] = useState(false);
+  const [borrando, setBorrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -183,11 +208,46 @@ export default function PartesClient({
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  const turnosDelDia = [...partes].filter((p) => p.fecha === form.fecha).sort((a, b) => a.orden - b.orden);
+
+  /** Elige un día del calendario: carga el primer turno que tenga, o un formulario en blanco si no tiene ninguno todavía. */
   function elegirFecha(fecha: string) {
     setError(null);
     setAviso(null);
-    const existente = partes.find((p) => p.fecha === fecha);
-    setForm(existente ? formDeParte(existente) : formVacio(fecha));
+    const delDia = partes.filter((p) => p.fecha === fecha).sort((a, b) => a.orden - b.orden);
+    setForm(delDia[0] ? formDeParte(delDia[0]) : formVacio(fecha));
+  }
+
+  /** Carga un turno puntual (de la tabla del mes, o del selector de turnos del día elegido). */
+  function elegirParte(p: ParteDB) {
+    setError(null);
+    setAviso(null);
+    setForm(formDeParte(p));
+  }
+
+  /** Un turno nuevo del mismo día: el servidor le asigna el número al guardar. */
+  function nuevoTurno() {
+    setError(null);
+    setAviso(null);
+    setForm(formVacio(form.fecha));
+  }
+
+  async function borrarTurno() {
+    if (!form.id) return;
+    if (!window.confirm(`¿Borrar el turno ${form.orden} del ${form.fecha}?`)) return;
+    setBorrando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/trituracion/partes?id=${form.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "No se pudo borrar");
+      const restantes = turnosDelDia.filter((p) => p.id !== form.id);
+      setForm(restantes[0] ? formDeParte(restantes[0]) : formVacio(form.fecha));
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo borrar");
+    } finally {
+      setBorrando(false);
+    }
   }
 
   const previewDespeje = useMemo(
@@ -216,6 +276,7 @@ export default function PartesClient({
         body: JSON.stringify({
           planta_id: plantaId,
           fecha: form.fecha,
+          orden: form.orden ?? undefined,
           estado: form.estado,
           motivo_no_operativo: form.motivoNoOperativo || null,
           material: form.material || null,
@@ -239,6 +300,10 @@ export default function PartesClient({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo guardar");
       if (json.aviso) setAviso(json.aviso.mensaje);
+      // Un turno nuevo pasa a ser "el turno guardado con id X": si se aprieta
+      // Guardar de nuevo sin cambiar de turno, corrige ese mismo en vez de
+      // crear otro.
+      setForm((f) => ({ ...f, id: json.data.id, orden: json.data.orden }));
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar");
@@ -248,7 +313,8 @@ export default function PartesClient({
   }
 
   const mostrarViajesDeBloques = Object.keys(viajesDeBloquesPorFecha).length > 0;
-  const diasOperativos = partes.filter((p) => p.estado === "opero").length;
+  // Fechas distintas, no filas: un día con dos turnos "opero" sigue siendo un solo día operativo.
+  const diasOperativos = new Set(partes.filter((p) => p.estado === "opero").map((p) => p.fecha)).size;
   const toneladasDelMes = partes.reduce((s, p) => s + (p.toneladas_procesadas ?? 0), 0);
   const pendientes = partes.filter((p) => p.sheets_pendiente).length;
   const disponibilidades = partes
@@ -274,7 +340,7 @@ export default function PartesClient({
       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="page-header">Partes de trituración</h1>
-          <p className="page-subheader">Un registro por planta y día. Queda exportado a la planilla real al guardar.</p>
+          <p className="page-subheader">Uno o más turnos por planta y día. Queda exportado a la planilla real al guardar.</p>
         </div>
         <select
           className="input w-auto"
@@ -329,6 +395,35 @@ export default function PartesClient({
               {form.fecha === hoy ? "Hoy" : new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${form.fecha}T00:00:00Z`))}
             </div>
             <div className="p-4" style={{ backgroundColor: claroPlanta }}>
+
+            {/* Más de un turno el mismo día: 4-8 con un material, 8-12 con otro, por ejemplo. */}
+            {(turnosDelDia.length > 0 || form.orden === null) && (
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                {turnosDelDia.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => elegirParte(t)}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                      form.id === t.id ? "text-white" : "bg-white text-slate-600 hover:bg-slate-100"
+                    }`}
+                    style={form.id === t.id ? { backgroundColor: colorPlanta } : undefined}
+                  >
+                    Turno {t.orden}{t.hora_inicio ? ` · ${t.hora_inicio.slice(0, 5)}` : ""}
+                  </button>
+                ))}
+                {form.orden === null && (
+                  <span className="rounded-full px-2.5 py-1 text-xs font-medium text-white" style={{ backgroundColor: colorPlanta }}>
+                    Turno nuevo
+                  </span>
+                )}
+                {turnosDelDia.length > 0 && (
+                  <button type="button" onClick={nuevoTurno} className="rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-xs text-slate-500 hover:border-slate-400">
+                    + Agregar otro turno
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Siempre visible, sea cual sea el estado del día: lo que Cantera ya sabe que llegó, antes de cargar nada. */}
             <div className="flex items-start gap-2 rounded-lg border border-white bg-white/70 px-3 py-2 text-sm">
@@ -485,10 +580,17 @@ export default function PartesClient({
             </div>
 
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">{form.fecha}</span>
-              <button className="btn-primary" disabled={guardando} onClick={guardar}>
-                {guardando ? "Guardando..." : "Guardar"}
-              </button>
+              <span className="text-xs text-slate-400">{form.fecha}{form.orden !== null && ` · turno ${form.orden}`}</span>
+              <div className="flex gap-2">
+                {form.id && (
+                  <button className="btn-ghost text-red-600" disabled={borrando} onClick={borrarTurno}>
+                    {borrando ? "Borrando..." : "Borrar este turno"}
+                  </button>
+                )}
+                <button className="btn-primary" disabled={guardando} onClick={guardar}>
+                  {guardando ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
             </div>
             {aviso && <p className="mt-2 text-sm text-amber-700">{aviso}</p>}
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -547,11 +649,14 @@ export default function PartesClient({
                       <tr
                         key={p.id}
                         className={puedeEditar ? "cursor-pointer" : undefined}
-                        style={{ backgroundColor: p.fecha === form.fecha ? "#ECFEFF" : i % 2 === 1 ? "#F8FAFC" : undefined }}
-                        onClick={() => puedeEditar && elegirFecha(p.fecha)}
+                        style={{ backgroundColor: p.id === form.id ? "#ECFEFF" : i % 2 === 1 ? "#F8FAFC" : undefined }}
+                        onClick={() => puedeEditar && elegirParte(p)}
                       >
                         <td className="whitespace-nowrap">
                           {p.fecha}
+                          {partes.filter((x) => x.fecha === p.fecha).length > 1 && (
+                            <span className="ml-1 rounded bg-slate-200 px-1 text-[10px] font-medium text-slate-600">T{p.orden}</span>
+                          )}
                           {p.sheets_pendiente && <span className="ml-1.5 text-amber-600" title={`Sin exportar a la planilla: ${p.sheets_pendiente}`}>⚠</span>}
                         </td>
                         <td>

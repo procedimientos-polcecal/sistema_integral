@@ -21,6 +21,8 @@ export interface ParteDB {
   id: string;
   planta_id: string;
   fecha: string;
+  /** Qué turno del día es (1, 2, 3…) — `unique(planta_id, fecha, orden)`, puede haber más de un parte por día. */
+  orden: number;
   estado: string;
   motivo_no_operativo: string | null;
   material: string | null;
@@ -57,27 +59,12 @@ export async function traerPartes(supabase: SupabaseClient, filtros: FiltrosDePa
   return traerTodo<ParteDB>((desde, hasta) => {
     let q = supabase
       .from("trituracion_partes")
-      .select("id, planta_id, fecha, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin, operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro, motivo_otro, camiones_llegados, toneladas_procesadas, observaciones, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en");
+      .select("id, planta_id, fecha, orden, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin, operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro, motivo_otro, camiones_llegados, toneladas_procesadas, observaciones, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en");
     if (filtros.plantaId) q = q.eq("planta_id", filtros.plantaId);
     if (filtros.desde) q = q.gte("fecha", filtros.desde);
     if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
-    return q.order("fecha", { ascending: false }).range(desde, hasta);
+    return q.order("fecha", { ascending: false }).order("orden", { ascending: true }).range(desde, hasta);
   });
-}
-
-export async function traerParte(
-  supabase: SupabaseClient,
-  plantaId: string,
-  fecha: string
-): Promise<ParteDB | null> {
-  const { data, error } = await supabase
-    .from("trituracion_partes")
-    .select("id, planta_id, fecha, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin, operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro, motivo_otro, camiones_llegados, toneladas_procesadas, observaciones, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en")
-    .eq("planta_id", plantaId)
-    .eq("fecha", fecha)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
 }
 
 export interface EmpleadoLiviano {

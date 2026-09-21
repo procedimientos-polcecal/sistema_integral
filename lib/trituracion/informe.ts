@@ -26,6 +26,13 @@ export interface ResumenMensual {
   productividadRealPromedio: number | null;
 }
 
+/**
+ * `diasOperativos`/`diasNoOperativos` cuentan **fechas distintas**, no
+ * filas: desde que un día puede tener más de un turno (migración
+ * 20260921094643), un día con dos partes "opero" sigue siendo UN día
+ * operativo, no dos. Todo lo demás (toneladas, horas) sí suma por fila —
+ * cada turno aporta lo suyo, sumarlos es correcto.
+ */
 export function resumenMensual(partes: ParteParaResumen[]): ResumenMensual {
   const operativos = partes.filter((p) => p.estado === "opero");
   const despejados: ParteDespejado[] = operativos.map((p) => despejarParte(p));
@@ -35,9 +42,12 @@ export function resumenMensual(partes: ParteParaResumen[]): ResumenMensual {
   const horasParadasTotal = despejados.reduce((s, d) => s + d.horasParadasTotal, 0);
   const toneladasTotal = operativos.reduce((s, p) => s + (p.toneladasProcesadas ?? 0), 0);
 
+  const fechasOperativas = new Set(operativos.map((p) => p.fecha));
+  const todasLasFechas = new Set(partes.map((p) => p.fecha));
+
   return {
-    diasOperativos: operativos.length,
-    diasNoOperativos: partes.length - operativos.length,
+    diasOperativos: fechasOperativas.size,
+    diasNoOperativos: todasLasFechas.size - fechasOperativas.size,
     toneladasTotal,
     horasTeoricasTotal,
     horasRealesTotal,
