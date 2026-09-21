@@ -50,20 +50,19 @@ export default async function DestapePage({
   const primerDia = `${mes}-01`;
   const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
 
-  const [registrosDelMes, tarifas, equipos, horasDestapeAcarreo, fleteros, pesadas, operarios] = await Promise.all([
+  /*
+   * `registrosDelMes` y `equipos` van primero porque hace falta saber qué
+   * equipos aparecen este mes antes de poder pedirle a Odoo el costo de
+   * cada uno. Todo lo demás —incluido ese pedido a Odoo, que es lo que más
+   * tarda— se pide junto después, en paralelo: antes iba secuencial
+   * (primero todo esto, después Odoo) y en un mes con máquina propia
+   * cargada (agosto) la página sumaba los dos tiempos en vez de solaparlos.
+   */
+  const [registrosDelMes, equipos] = await Promise.all([
     traerDestape(supabase, { desde: primerDia, hasta: ultimoDia }),
-    traerTarifasDestape(supabase),
     traerEquiposTallerVial(supabase),
-    traerAcarreos(supabase, { tipo: "horas_destape", mes }),
-    traerFleteros(supabase),
-    traerPesadas(supabase),
-    traerOperariosDeCantera(supabase),
   ]);
   const codigoPorEquipoId = Object.fromEntries(equipos.map((e) => [e.id, e.code]));
-  const nombrePorFleteroId = Object.fromEntries(fleteros.map((f) => [f.id, f.nombre]));
-  const valorHoraPorOperarioId = Object.fromEntries(operarios.map((o) => [o.id, o.valorHoraNormal]));
-
-  const toneladasPromedio = toneladasPromedioPorFletero(pesadas.map((p) => ({ fleteroId: p.fletero_id, toneladas: p.toneladas })));
 
   const codigosDeEquipoDelMes = [...new Set(
     registrosDelMes
@@ -71,8 +70,21 @@ export default async function DestapePage({
       .map((r) => codigoPorEquipoId[r.equipo_id as string])
       .filter((c): c is string => Boolean(c))
   )];
+
+  const [tarifas, horasDestapeAcarreo, fleteros, pesadas, operarios, costos] = await Promise.all([
+    traerTarifasDestape(supabase),
+    traerAcarreos(supabase, { tipo: "horas_destape", mes }),
+    traerFleteros(supabase),
+    traerPesadas(supabase),
+    traerOperariosDeCantera(supabase),
+    costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes),
+  ]);
+  const nombrePorFleteroId = Object.fromEntries(fleteros.map((f) => [f.id, f.nombre]));
+  const valorHoraPorOperarioId = Object.fromEntries(operarios.map((o) => [o.id, o.valorHoraNormal]));
+
+  const toneladasPromedio = toneladasPromedioPorFletero(pesadas.map((p) => ({ fleteroId: p.fletero_id, toneladas: p.toneladas })));
+
   const costoHoraPorEquipo: Record<string, number> = {};
-  const costos = await costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes);
   for (const [codigo, c] of Object.entries(costos)) {
     if (c.costoHora !== null) costoHoraPorEquipo[codigo] = c.costoHora;
   }
