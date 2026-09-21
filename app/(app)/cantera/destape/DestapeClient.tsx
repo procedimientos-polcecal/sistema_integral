@@ -33,13 +33,15 @@ function paraDespeje(r: DestapeDB, codigoPorEquipoId: Record<string, string>) {
 }
 
 export default function DestapeClient({
-  mes, registros, tarifas, capacidades, codigoPorEquipoId, puedeEditar, esAdmin,
+  mes, registros, tarifas, capacidades, codigoPorEquipoId, horasDestapeAcarreo, puedeEditar, esAdmin,
 }: {
   mes: string;
   registros: DestapeDB[];
   tarifas: TarifaDestapeDB[];
   capacidades: CapacidadFleteroDB[];
   codigoPorEquipoId: Record<string, string>;
+  /** "horas_destape" que ya están cargadas en Acarreo, por fletero — sólo para cruzar, no se suma al costo de acá. */
+  horasDestapeAcarreo: { fletero: string; horas: number; fecha: string }[];
   puedeEditar: boolean;
   esAdmin: boolean;
 }) {
@@ -138,6 +140,38 @@ export default function DestapeClient({
           </div>
         </div>
       </section>
+
+      {horasDestapeAcarreo.length > 0 && (
+        <section className="mt-6">
+          <h2 className="section-title">Horas de destape cargadas en Acarreo</h2>
+          <div className="card mt-2 overflow-hidden">
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-sm text-slate-500">
+              Ya están cargadas por fletero en Acarreo (tipo &quot;Horas destape&quot;) — es sólo
+              referencia para no cargarlas dos veces acá. No suman al costo de este tablero.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Fletero</th>
+                    <th>Fecha</th>
+                    <th className="text-right">Horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {horasDestapeAcarreo.map((h, i) => (
+                    <tr key={`${h.fletero}-${h.fecha}-${i}`}>
+                      <td className="font-medium text-slate-800">{h.fletero}</td>
+                      <td className="text-slate-500">{h.fecha}</td>
+                      <td className="text-right font-mono tabular-nums">{num.format(h.horas)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="section-title">Registros del mes</h2>
