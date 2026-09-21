@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, CapacidadFleteroDB, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, TarifaDestapeDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, TarifaDestapeDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -397,19 +397,12 @@ export async function traerTarifasDestape(supabase: SupabaseClient): Promise<Tar
   return (data ?? []) as TarifaDestapeDB[];
 }
 
-export async function traerCapacidadesFletero(supabase: SupabaseClient): Promise<CapacidadFleteroDB[]> {
-  const { data, error } = await supabase
-    .from("cantera_capacidades_fletero")
-    .select("id, fletero_id, tipo_camion, toneladas_por_viaje")
-    .order("tipo_camion");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as CapacidadFleteroDB[];
-}
-
 export interface EmpleadoLiviano {
   id: string;
   nombre: string;
   apellido: string;
+  /** `empleados.valor_hora_normal` — lo que vale la mano de obra propia de este operario en Destape (ya no es una tarifa "mo_propia" única). */
+  valorHoraNormal: number;
 }
 
 /**
@@ -432,10 +425,15 @@ export async function traerOperariosDeCantera(supabase: SupabaseClient): Promise
 
   const { data, error } = await supabase
     .from("empleados")
-    .select("id, nombre, apellido")
+    .select("id, nombre, apellido, valor_hora_normal")
     .eq("activo", true)
     .in("sector_id", sectorIds)
     .order("apellido", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as EmpleadoLiviano[];
+  return (data ?? []).map((e) => ({
+    id: e.id as string,
+    nombre: e.nombre as string,
+    apellido: e.apellido as string,
+    valorHoraNormal: e.valor_hora_normal as number,
+  }));
 }

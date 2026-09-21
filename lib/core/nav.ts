@@ -290,7 +290,6 @@ export const NAV: NavItem[] = [
       { label: "Fleteros", href: "/cantera/fleteros", modulo: "cantera", soloAdmin: true },
       { label: "Tarifas de acarreo", href: "/cantera/tarifas-acarreo", modulo: "cantera", soloAdmin: true },
       { label: "Tarifas de destape", href: "/cantera/tarifas-destape", modulo: "cantera", soloAdmin: true },
-      { label: "Capacidades de fletero", href: "/cantera/capacidades-fletero", modulo: "cantera", soloAdmin: true },
     ],
   },
   {

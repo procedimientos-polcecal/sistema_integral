@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { costoDeRegistro, resumenPorYacimiento, ETIQUETA_TIPO_RECURSO, ETIQUETA_TIPO_CAMION } from "@/lib/cantera/destape";
-import type { CapacidadFleteroDB, DestapeDB, TarifaDestapeDB } from "@/lib/cantera/types";
+import type { DestapeDB, TarifaDestapeDB } from "@/lib/cantera/types";
 
 const money = (v: number) => `$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v)}`;
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -20,11 +20,16 @@ function nombreDeMes(mes: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-function paraDespeje(r: DestapeDB, codigoPorEquipoId: Record<string, string>) {
+function paraDespeje(
+  r: DestapeDB,
+  codigoPorEquipoId: Record<string, string>,
+  valorHoraPorOperarioId: Record<string, number>
+) {
   return {
     fecha: r.fecha,
     tipoRecurso: r.tipo_recurso as "operario_propio" | "fletero_externo",
     equipoCodigo: r.equipo_id ? (codigoPorEquipoId[r.equipo_id] ?? null) : null,
+    operarioValorHora: r.operario_id ? (valorHoraPorOperarioId[r.operario_id] ?? null) : null,
     fleteroId: r.fletero_id,
     tipoCamion: r.tipo_camion as "camion_grande" | "camion_chico" | null,
     horas: r.horas,
@@ -33,13 +38,18 @@ function paraDespeje(r: DestapeDB, codigoPorEquipoId: Record<string, string>) {
 }
 
 export default function DestapeClient({
-  mes, registros, tarifas, capacidades, codigoPorEquipoId, horasDestapeAcarreo, puedeEditar, esAdmin,
+  mes, registros, tarifas, toneladasPromedioPorFletero, costoHoraPorEquipo, codigoPorEquipoId, valorHoraPorOperarioId, horasDestapeAcarreo, puedeEditar, esAdmin,
 }: {
   mes: string;
   registros: DestapeDB[];
   tarifas: TarifaDestapeDB[];
-  capacidades: CapacidadFleteroDB[];
+  /** Promedio de toneladas por viaje de cada fletero, medido sobre su historial real de Acarreo — reemplaza a la capacidad que se cargaba a mano. */
+  toneladasPromedioPorFletero: Record<string, number>;
+  /** $/h de cada equipo este mes, ya calculado (Odoo + combustible / horas de uso) — lib/cantera/costoMaquinaOdoo.ts. */
+  costoHoraPorEquipo: Record<string, number>;
   codigoPorEquipoId: Record<string, string>;
+  /** `empleados.valor_hora_normal` de cada operario — la mano de obra propia vale lo que cobra ESE operario. */
+  valorHoraPorOperarioId: Record<string, number>;
   /** "horas_destape" que ya están cargadas en Acarreo, por fletero — sólo para cruzar, no se suma al costo de acá. */
   horasDestapeAcarreo: { fletero: string; horas: number; fecha: string }[];
   puedeEditar: boolean;
@@ -48,10 +58,12 @@ export default function DestapeClient({
   const router = useRouter();
   const irA = (m: string) => router.push(`/cantera/destape?mes=${m}`);
 
-  const registrosParaResumen = registros.map((r) => ({ ...paraDespeje(r, codigoPorEquipoId), yacimientoCodigo: r.yacimiento_codigo }));
-  const capacidadesPlanas = capacidades.map((c) => ({ fleteroId: c.fletero_id, tipoCamion: c.tipo_camion, toneladasPorViaje: c.toneladas_por_viaje }));
-  const tarifasPlanas = tarifas.map((t) => ({ categoria: t.categoria as "maquina_propia" | "mo_propia" | "fletero_externo", clave: t.clave, desde: t.desde, hasta: t.hasta, tarifa: t.tarifa }));
-  const resumen = resumenPorYacimiento(registrosParaResumen, tarifasPlanas, capacidadesPlanas);
+  const registrosParaResumen = registros.map((r) => ({
+    ...paraDespeje(r, codigoPorEquipoId, valorHoraPorOperarioId),
+    yacimientoCodigo: r.yacimiento_codigo,
+  }));
+  const tarifasPlanas = tarifas.map((t) => ({ categoria: t.categoria as "fletero_externo", clave: t.clave, desde: t.desde, hasta: t.hasta, tarifa: t.tarifa }));
+  const resumen = resumenPorYacimiento(registrosParaResumen, tarifasPlanas, toneladasPromedioPorFletero, costoHoraPorEquipo);
 
   const costoTotal = resumen.reduce((s, r) => s + r.costoTotal, 0);
   const horasTotal = resumen.reduce((s, r) => s + r.horasOperario + r.horasFletero, 0);
@@ -65,12 +77,7 @@ export default function DestapeClient({
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-header">Destape</h1>
         <div className="flex items-center gap-2">
-          {esAdmin && (
-            <>
-              <Link href="/cantera/capacidades-fletero" className="btn-secondary">Capacidades</Link>
-              <Link href="/cantera/tarifas-destape" className="btn-secondary">Tarifas</Link>
-            </>
-          )}
+          {esAdmin && <Link href="/cantera/tarifas-destape" className="btn-secondary">Tarifas</Link>}
           {puedeEditar && (
             <Link href="/cantera/destape/cargar" className="btn-primary">Cargar</Link>
           )}
@@ -197,7 +204,12 @@ export default function DestapeClient({
                   [...registros]
                     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
                     .map((r) => {
-                      const costo = costoDeRegistro(paraDespeje(r, codigoPorEquipoId), tarifasPlanas, capacidadesPlanas);
+                      const costo = costoDeRegistro(
+                        paraDespeje(r, codigoPorEquipoId, valorHoraPorOperarioId),
+                        tarifasPlanas,
+                        toneladasPromedioPorFletero,
+                        costoHoraPorEquipo
+                      );
                       return (
                         <tr key={r.id}>
                           <td className="whitespace-nowrap">

@@ -10,24 +10,19 @@ const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm";
 
 const ETIQUETA_CATEGORIA: Record<CategoriaDeTarifa, string> = {
-  maquina_propia: "Máquina propia (por equipo)",
-  mo_propia: "Mano de obra propia",
   fletero_externo: "Fletero externo (por tipo de camión)",
 };
 
-interface EquipoLiviano { id: string; code: string; name: string }
-
 export default function TarifasDestapeClient({
-  tarifas, equipos,
+  tarifas,
 }: {
   tarifas: TarifaDestapeDB[];
-  equipos: EquipoLiviano[];
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [alta, setAlta] = useState<{ categoria: CategoriaDeTarifa; clave: string; desde: string; tarifa: string }>({
-    categoria: "maquina_propia", clave: "", desde: "", tarifa: "",
+    categoria: "fletero_externo", clave: "", desde: "", tarifa: "",
   });
 
   const porCategoriaClave = new Map<string, TarifaDestapeDB[]>();
@@ -73,7 +68,10 @@ export default function TarifasDestapeClient({
 
       <div className="mt-4 space-y-3">
         {gruposConHistorial.length === 0 && (
-          <p className="text-sm text-amber-700">Sin ninguna tarifa cargada todavía — el costo de destape va a dar $0.</p>
+          <p className="text-sm text-amber-700">
+            Sin ninguna tarifa cargada todavía — el costo de un fletero externo va a dar $0. (Mano de obra y máquina
+            propia no van acá: se calculan solas.)
+          </p>
         )}
         {gruposConHistorial.map(([clave, historial]) => {
           const [categoria, valorClave] = clave.split("|");
@@ -110,22 +108,10 @@ export default function TarifasDestapeClient({
           </label>
           <label className="text-xs text-slate-600">
             Clave
-            {alta.categoria === "maquina_propia" ? (
-              <select className={INPUT_CLS} value={alta.clave} onChange={(e) => setAlta({ ...alta, clave: e.target.value })}>
-                <option value="">Elegir equipo...</option>
-                {equipos.map((eq) => <option key={eq.id} value={eq.code}>{eq.code} - {eq.name}</option>)}
-              </select>
-            ) : alta.categoria === "fletero_externo" ? (
-              <select className={INPUT_CLS} value={alta.clave} onChange={(e) => setAlta({ ...alta, clave: e.target.value })}>
-                <option value="">Elegir tipo de camión...</option>
-                {TIPOS_DE_CAMION.map((t) => <option key={t} value={t}>{ETIQUETA_TIPO_CAMION[t]}</option>)}
-              </select>
-            ) : (
-              <input
-                className={INPUT_CLS} placeholder='"general" si es una sola tarifa'
-                value={alta.clave} onChange={(e) => setAlta({ ...alta, clave: e.target.value })}
-              />
-            )}
+            <select className={INPUT_CLS} value={alta.clave} onChange={(e) => setAlta({ ...alta, clave: e.target.value })}>
+              <option value="">Elegir tipo de camión...</option>
+              {TIPOS_DE_CAMION.map((t) => <option key={t} value={t}>{ETIQUETA_TIPO_CAMION[t]}</option>)}
+            </select>
           </label>
           <label className="text-xs text-slate-600">
             Vigente desde

@@ -1,42 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
-  capacidadDe,
   costoDeRegistro,
   resolverFleteroDestape,
   resolverOperarioDestape,
   resumenPorYacimiento,
   tarifaVigenteDestape,
-  type CapacidadFletero,
+  toneladasPromedioPorFletero,
   type EmpleadoLiviano,
   type FleteroLiviano,
   type RegistroDestape,
   type TarifaDestape,
 } from "./destape";
 
-// Tarifas reales de agosto 2026 (vigencia jul-ago), relevadas en vivo.
+// Tarifas reales de agosto 2026 (vigencia jul-ago), relevadas en vivo. Sólo
+// "fletero_externo" sigue siendo tarifa — máquina propia y mano de obra se
+// calculan (ver lib/cantera/costoMaquinaOdoo.ts y el valor_hora_normal del operario).
 const TARIFAS: TarifaDestape[] = [
   { categoria: "fletero_externo", clave: "camion_grande", desde: "2026-07-01", hasta: null, tarifa: 55635.5 },
   { categoria: "fletero_externo", clave: "camion_chico", desde: "2026-07-01", hasta: null, tarifa: 27817.75 },
-  { categoria: "maquina_propia", clave: "EM3", desde: "2026-05-01", hasta: "2026-05-31", tarifa: 3871845.26 },
 ];
 
-const CAPACIDADES: CapacidadFletero[] = [
-  { fleteroId: "orsatti", tipoCamion: "camion_grande", toneladasPorViaje: 0 },
-  { fleteroId: "amaray", tipoCamion: "camion_chico", toneladasPorViaje: 16 },
-  { fleteroId: "schneider", tipoCamion: "camion_grande", toneladasPorViaje: 44 },
-];
+// Promedio de toneladas por viaje, medido sobre el historial real de Acarreo de cada fletero.
+const TONELADAS_PROMEDIO: Record<string, number> = { amaray: 16, schneider: 44 };
+const COSTO_HORA_MAQUINA: Record<string, number> = { EM3: 15000 };
 
 describe("tarifaVigenteDestape", () => {
   it("resuelve la tarifa vigente en la fecha pedida", () => {
     expect(tarifaVigenteDestape(TARIFAS, "fletero_externo", "camion_grande", "2026-08-15")).toBe(55635.5);
   });
 
-  it("null si no hay ninguna tarifa cargada para esa categoría+clave — no inventa un costo", () => {
-    expect(tarifaVigenteDestape(TARIFAS, "mo_propia", "general", "2026-08-15")).toBeNull();
-  });
-
-  it("null fuera de la vigencia (una tarifa vieja que ya terminó)", () => {
-    expect(tarifaVigenteDestape(TARIFAS, "maquina_propia", "EM3", "2026-08-01")).toBeNull();
+  it("null si no hay ninguna tarifa cargada para esa clave — no inventa un costo", () => {
+    expect(tarifaVigenteDestape(TARIFAS, "fletero_externo", "camion_mediano", "2026-08-15")).toBeNull();
   });
 });
 
@@ -44,64 +38,91 @@ describe("costoDeRegistro — verificado contra la planilla real de agosto 2026"
   it("Orsatti, Camión grande, 8 h → $445.084 (8 × $55.635,50)", () => {
     const r: RegistroDestape = {
       fecha: "2026-08-15", tipoRecurso: "fletero_externo",
-      equipoCodigo: null, fleteroId: "orsatti", tipoCamion: "camion_grande",
+      equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande",
       horas: 8, viajes: 16,
     };
-    const c = costoDeRegistro(r, TARIFAS, CAPACIDADES);
+    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.costoFletero).toBeCloseTo(445084, 0);
     expect(c.costoTotal).toBeCloseTo(445084, 0);
-    // Orsatti tiene capacidad 0 relevada para Camión grande — toneladas da 0, no se inventa.
-    expect(c.toneladasEstimadas).toBe(0);
+    // Orsatti no tiene ninguna pesada real resuelta en el fixture — sin promedio, toneladas da null, no se inventa.
+    expect(c.toneladasEstimadas).toBeNull();
   });
 
   it("Schneider, mismo camión y horas que Orsatti → el MISMO costo (la tarifa es por tipo de camión, no por fletero)", () => {
     const orsatti = costoDeRegistro(
-      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, fleteroId: "orsatti", tipoCamion: "camion_grande", horas: 8, viajes: 16 },
-      TARIFAS, CAPACIDADES
+      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande", horas: 8, viajes: 16 },
+      TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
     );
     const schneider = costoDeRegistro(
-      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, fleteroId: "schneider", tipoCamion: "camion_grande", horas: 8, viajes: 12 },
-      TARIFAS, CAPACIDADES
+      { fecha: "2026-08-15", tipoRecurso: "fletero_externo", equipoCodigo: null, operarioValorHora: null, fleteroId: "schneider", tipoCamion: "camion_grande", horas: 8, viajes: 12 },
+      TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA
     );
     expect(schneider.costoFletero).toBeCloseTo(orsatti.costoFletero, 6);
   });
 
-  it("Amaray, Camión chico, 28 viajes → 448 t (28 × 16 t/viaje)", () => {
+  it("Amaray, Camión chico, 28 viajes → 448 t (28 × 16 t/viaje promedio)", () => {
     const r: RegistroDestape = {
       fecha: "2026-08-16", tipoRecurso: "fletero_externo",
-      equipoCodigo: null, fleteroId: "amaray", tipoCamion: "camion_chico",
+      equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico",
       horas: 8, viajes: 28,
     };
-    const c = costoDeRegistro(r, TARIFAS, CAPACIDADES);
+    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.toneladasEstimadas).toBe(448);
   });
 
-  it("operario propio con máquina sin tarifa vigente ese mes (agosto) da costo 0, no un error", () => {
+  it("operario propio: costo máquina = horas × $/h del equipo ese mes, costo MO = horas × valor_hora_normal del operario", () => {
     const r: RegistroDestape = {
       fecha: "2026-08-15", tipoRecurso: "operario_propio",
-      equipoCodigo: "EM3", fleteroId: null, tipoCamion: null,
+      equipoCodigo: "EM3", operarioValorHora: 5000, fleteroId: null, tipoCamion: null,
       horas: 8, viajes: null,
     };
-    const c = costoDeRegistro(r, TARIFAS, CAPACIDADES);
+    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
+    expect(c.costoMaquina).toBe(8 * 15000);
+    expect(c.costoMo).toBe(8 * 5000);
+    expect(c.toneladasEstimadas).toBeNull();
+  });
+
+  it("operario propio con equipo sin costo/hora calculado ese mes da costo máquina 0, no un error", () => {
+    const r: RegistroDestape = {
+      fecha: "2026-08-15", tipoRecurso: "operario_propio",
+      equipoCodigo: "EM9", operarioValorHora: null, fleteroId: null, tipoCamion: null,
+      horas: 8, viajes: null,
+    };
+    const c = costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     expect(c.costoMaquina).toBe(0);
     expect(c.costoMo).toBe(0);
-    expect(c.toneladasEstimadas).toBeNull();
   });
 
   it("sin viajes cargados, toneladas da null — no es lo mismo que 0 viajes", () => {
     const r: RegistroDestape = {
       fecha: "2026-08-15", tipoRecurso: "fletero_externo",
-      equipoCodigo: null, fleteroId: "amaray", tipoCamion: "camion_chico",
+      equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico",
       horas: 8, viajes: null,
     };
-    expect(costoDeRegistro(r, TARIFAS, CAPACIDADES).toneladasEstimadas).toBeNull();
+    expect(costoDeRegistro(r, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA).toneladasEstimadas).toBeNull();
   });
 });
 
-describe("capacidadDe", () => {
-  it("0 sin fletero o tipo de camión", () => {
-    expect(capacidadDe(CAPACIDADES, null, "camion_chico")).toBe(0);
-    expect(capacidadDe(CAPACIDADES, "amaray", null)).toBe(0);
+describe("toneladasPromedioPorFletero", () => {
+  it("promedia las toneladas de cada fletero sobre todas sus pesadas, sin filtrar por material", () => {
+    const pesadas = [
+      { fleteroId: "amaray", toneladas: 20 },
+      { fleteroId: "amaray", toneladas: 12 },
+      { fleteroId: "schneider", toneladas: 44 },
+    ];
+    const r = toneladasPromedioPorFletero(pesadas);
+    expect(r.amaray).toBe(16);
+    expect(r.schneider).toBe(44);
+  });
+
+  it("una pesada sin fletero resuelto no entra en ningún promedio", () => {
+    const r = toneladasPromedioPorFletero([{ fleteroId: null, toneladas: 30 }]);
+    expect(r).toEqual({});
+  });
+
+  it("un fletero sin ninguna pesada no aparece en el resultado — no se inventa un 0", () => {
+    const r = toneladasPromedioPorFletero([{ fleteroId: "amaray", toneladas: 10 }]);
+    expect(r.orsatti).toBeUndefined();
   });
 });
 
@@ -157,15 +178,17 @@ describe("resolverOperarioDestape — con los Becker/Farias reales", () => {
 describe("resumenPorYacimiento", () => {
   it("suma horas y costos por yacimiento, agrupa sin yacimiento aparte", () => {
     const registros = [
-      { fecha: "2026-08-15", tipoRecurso: "fletero_externo" as const, equipoCodigo: null, fleteroId: "orsatti", tipoCamion: "camion_grande" as const, horas: 8, viajes: 16, yacimientoCodigo: "D1" },
-      { fecha: "2026-08-15", tipoRecurso: "operario_propio" as const, equipoCodigo: "EM3", fleteroId: null, tipoCamion: null, horas: 8, viajes: null, yacimientoCodigo: "D1" },
-      { fecha: "2026-08-16", tipoRecurso: "fletero_externo" as const, equipoCodigo: null, fleteroId: "amaray", tipoCamion: "camion_chico" as const, horas: 8, viajes: 28, yacimientoCodigo: null },
+      { fecha: "2026-08-15", tipoRecurso: "fletero_externo" as const, equipoCodigo: null, operarioValorHora: null, fleteroId: "orsatti", tipoCamion: "camion_grande" as const, horas: 8, viajes: 16, yacimientoCodigo: "D1" },
+      { fecha: "2026-08-15", tipoRecurso: "operario_propio" as const, equipoCodigo: "EM3", operarioValorHora: 5000, fleteroId: null, tipoCamion: null, horas: 8, viajes: null, yacimientoCodigo: "D1" },
+      { fecha: "2026-08-16", tipoRecurso: "fletero_externo" as const, equipoCodigo: null, operarioValorHora: null, fleteroId: "amaray", tipoCamion: "camion_chico" as const, horas: 8, viajes: 28, yacimientoCodigo: null },
     ];
-    const r = resumenPorYacimiento(registros, TARIFAS, CAPACIDADES);
+    const r = resumenPorYacimiento(registros, TARIFAS, TONELADAS_PROMEDIO, COSTO_HORA_MAQUINA);
     const d1 = r.find((f) => f.yacimientoCodigo === "D1")!;
     expect(d1.horasOperario).toBe(8);
     expect(d1.horasFletero).toBe(8);
-    expect(d1.costoTotal).toBeCloseTo(445084, 0);
+    expect(d1.costoMaquina).toBe(8 * 15000);
+    expect(d1.costoMo).toBe(8 * 5000);
+    expect(d1.costoTotal).toBeCloseTo(445084 + 8 * 15000 + 8 * 5000, 0);
 
     const sinYacimiento = r.find((f) => f.yacimientoCodigo === "(sin yacimiento)")!;
     expect(sinYacimiento.horasFletero).toBe(8);

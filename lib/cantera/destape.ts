@@ -3,6 +3,19 @@
  * su operario) o de un fletero externo con camión, por día. Puro: no toca
  * la base. Relevado contra la planilla real
  * (1SvF0HK3Zu6Mi5Z_tTokJAypWvHHHp9oEomucqJudE3Y) el 21/09/2026.
+ *
+ * A pedido del usuario (21/09/2026) dos de las tres fuentes de costo dejaron
+ * de ser una tarifa cargada a mano:
+ * - **Mano de obra propia** vale lo que cobra ESE operario
+ *   (`empleados.valor_hora_normal`), no una tarifa "mo_propia" única — que
+ *   además nunca se llegó a cargar en producción.
+ * - **Máquina propia** se calcula afuera de este archivo (necesita Odoo y
+ *   Taller Vial, no es puro) en `lib/cantera/costoMaquinaOdoo.ts` y llega acá
+ *   ya resuelto en $/h por equipo — `costoDeRegistro` sólo lo multiplica por
+ *   las horas.
+ *
+ * Sólo "fletero externo" (por tipo de camión) sigue siendo una tarifa
+ * cargada en `cantera_tarifas_destape`.
  */
 
 export const TIPOS_DE_RECURSO = ["operario_propio", "fletero_externo"] as const;
@@ -29,12 +42,12 @@ export function esTipoDeCamionValido(v: unknown): v is TipoDeCamion {
   return typeof v === "string" && (TIPOS_DE_CAMION as readonly string[]).includes(v);
 }
 
-export const CATEGORIAS_DE_TARIFA = ["maquina_propia", "mo_propia", "fletero_externo"] as const;
+export const CATEGORIAS_DE_TARIFA = ["fletero_externo"] as const;
 export type CategoriaDeTarifa = (typeof CATEGORIAS_DE_TARIFA)[number];
 
 export interface TarifaDestape {
   categoria: CategoriaDeTarifa;
-  /** Código de equipo ("EM3") para maquina_propia; tipo de camión para fletero_externo; libre para mo_propia. */
+  /** Tipo de camión ("camion_grande"/"camion_chico") — la única clave que existe hoy. */
   clave: string;
   desde: string; // "YYYY-MM-DD"
   hasta: string | null;
@@ -59,23 +72,13 @@ export function tarifaVigenteDestape(
   return candidatas[0]?.tarifa ?? null;
 }
 
-export interface CapacidadFletero {
-  fleteroId: string;
-  tipoCamion: string;
-  toneladasPorViaje: number;
-}
-
-/** 0 si no hay capacidad relevada para ese fletero+tipo de camión — mismo criterio que la planilla real, que también parte de 0. */
-export function capacidadDe(capacidades: CapacidadFletero[], fleteroId: string | null, tipoCamion: string | null): number {
-  if (!fleteroId || !tipoCamion) return 0;
-  return capacidades.find((c) => c.fleteroId === fleteroId && c.tipoCamion === tipoCamion)?.toneladasPorViaje ?? 0;
-}
-
 export interface RegistroDestape {
   fecha: string; // "YYYY-MM-DD"
   tipoRecurso: TipoDeRecurso;
   /** Código de equipo ("EM3"), sólo con sentido si tipoRecurso = operario_propio. */
   equipoCodigo: string | null;
+  /** `empleados.valor_hora_normal` del operario, resuelto por quien llama — sólo con sentido si tipoRecurso = operario_propio. */
+  operarioValorHora: number | null;
   fleteroId: string | null;
   tipoCamion: TipoDeCamion | null;
   horas: number;
@@ -87,7 +90,7 @@ export interface CostoDestape {
   costoMo: number;
   costoFletero: number;
   costoTotal: number;
-  /** viajes × capacidad — null sin viajes cargados (no es lo mismo que 0 viajes). */
+  /** viajes × promedio de toneladas por viaje del fletero — null sin viajes cargados o sin historial de acarreo para estimar (no es lo mismo que 0 viajes). */
   toneladasEstimadas: number | null;
 }
 
@@ -98,25 +101,52 @@ export interface CostoDestape {
  * $445.084 = 8 × $55.635,50 (tarifa de "Camión grande" de agosto) — la
  * MISMA tarifa que Schneider con el mismo camión, confirmando que depende
  * del tipo de camión y no del fletero.
+ *
+ * `costoHoraPorEquipo` llega ya resuelto por equipo ("EM3" → $/h de ese mes,
+ * de `lib/cantera/costoMaquinaOdoo.ts`) — acá sólo se multiplica por las
+ * horas, no se calcula.
  */
 export function costoDeRegistro(
   r: RegistroDestape,
   tarifas: TarifaDestape[],
-  capacidades: CapacidadFletero[]
+  toneladasPromedioPorFletero: Record<string, number>,
+  costoHoraPorEquipo: Record<string, number>
 ): CostoDestape {
   if (r.tipoRecurso === "operario_propio") {
-    const tarifaMaquina = r.equipoCodigo ? tarifaVigenteDestape(tarifas, "maquina_propia", r.equipoCodigo, r.fecha) : null;
-    const tarifaMo = tarifaVigenteDestape(tarifas, "mo_propia", "general", r.fecha);
-    const costoMaquina = tarifaMaquina !== null ? r.horas * tarifaMaquina : 0;
-    const costoMo = tarifaMo !== null ? r.horas * tarifaMo : 0;
+    const costoHoraMaquina = r.equipoCodigo ? costoHoraPorEquipo[r.equipoCodigo] : undefined;
+    const costoMaquina = costoHoraMaquina !== undefined ? r.horas * costoHoraMaquina : 0;
+    const costoMo = r.operarioValorHora !== null ? r.horas * r.operarioValorHora : 0;
     return { costoMaquina, costoMo, costoFletero: 0, costoTotal: costoMaquina + costoMo, toneladasEstimadas: null };
   }
 
   const tarifaFletero = r.tipoCamion ? tarifaVigenteDestape(tarifas, "fletero_externo", r.tipoCamion, r.fecha) : null;
   const costoFletero = tarifaFletero !== null ? r.horas * tarifaFletero : 0;
-  const capacidad = capacidadDe(capacidades, r.fleteroId, r.tipoCamion);
-  const toneladasEstimadas = r.viajes !== null ? r.viajes * capacidad : null;
+  const promedio = r.fleteroId ? toneladasPromedioPorFletero[r.fleteroId] : undefined;
+  const toneladasEstimadas = r.viajes !== null && promedio !== undefined ? r.viajes * promedio : null;
   return { costoMaquina: 0, costoMo: 0, costoFletero, costoTotal: costoFletero, toneladasEstimadas };
+}
+
+/**
+ * Cuánto transporta en promedio un fletero por viaje, medido sobre TODAS sus
+ * pesadas reales de Acarreo (`cantera_pesadas`), sin filtrar por material —
+ * reemplaza a la "capacidad" que se cargaba a mano por fletero+tipo de
+ * camión (se sacó de destape: no había forma de relevarla, y en la práctica
+ * quedaba en 0 para casi todos). Un fletero sin ninguna pesada resuelta no
+ * aparece en el resultado — mismo criterio que el resto del sistema: no
+ * inventar un 0 donde no hay dato.
+ */
+export function toneladasPromedioPorFletero(
+  pesadas: { fleteroId: string | null; toneladas: number }[]
+): Record<string, number> {
+  const totales = new Map<string, { suma: number; cantidad: number }>();
+  for (const p of pesadas) {
+    if (!p.fleteroId) continue;
+    const acc = totales.get(p.fleteroId) ?? { suma: 0, cantidad: 0 };
+    acc.suma += p.toneladas;
+    acc.cantidad += 1;
+    totales.set(p.fleteroId, acc);
+  }
+  return Object.fromEntries([...totales.entries()].map(([id, { suma, cantidad }]) => [id, suma / cantidad]));
 }
 
 export interface FleteroLiviano {
@@ -192,7 +222,8 @@ export interface FilaResumenYacimiento {
 export function resumenPorYacimiento(
   registros: (RegistroDestape & { yacimientoCodigo: string | null })[],
   tarifas: TarifaDestape[],
-  capacidades: CapacidadFletero[]
+  toneladasPromedioPorFletero: Record<string, number>,
+  costoHoraPorEquipo: Record<string, number>
 ): FilaResumenYacimiento[] {
   const porYacimiento = new Map<string, FilaResumenYacimiento>();
   for (const r of registros) {
@@ -200,7 +231,7 @@ export function resumenPorYacimiento(
     const fila = porYacimiento.get(clave) ?? {
       yacimientoCodigo: clave, horasOperario: 0, horasFletero: 0, costoMaquina: 0, costoMo: 0, costoFletero: 0, costoTotal: 0,
     };
-    const costo = costoDeRegistro(r, tarifas, capacidades);
+    const costo = costoDeRegistro(r, tarifas, toneladasPromedioPorFletero, costoHoraPorEquipo);
     if (r.tipoRecurso === "operario_propio") fila.horasOperario += r.horas;
     else fila.horasFletero += r.horas;
     fila.costoMaquina += costo.costoMaquina;

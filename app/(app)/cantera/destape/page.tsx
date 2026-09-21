@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerAcarreos, traerCapacidadesFletero, traerDestape, traerFleteros, traerTarifasDestape } from "@/lib/cantera/consultas";
+import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPesadas, traerTarifasDestape } from "@/lib/cantera/consultas";
+import { toneladasPromedioPorFletero } from "@/lib/cantera/destape";
+import { costoHoraDeMaquinasDelMes } from "@/lib/cantera/costoMaquinaOdoo";
 import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import DestapeClient from "./DestapeClient";
 
@@ -18,6 +20,15 @@ import DestapeClient from "./DestapeClient";
  * módulo); acá es sólo una referencia cruzada para no cargar por partida
  * doble sin darse cuenta — mismo patrón que ya usa Trituración con
  * "viaje_de_bloques" (lib/trituracion/cruceCantera.ts).
+ *
+ * A pedido del usuario (21/09/2026), dos de las tres fuentes de costo ya
+ * no son una tarifa cargada a mano:
+ * - **Toneladas del fletero**: en vez de "capacidad" (se sacó del todo, no
+ *   había forma de relevarla), se usa el promedio real de lo que ese
+ *   fletero transportó en Acarreo (`lib/cantera/destape.ts`).
+ * - **Máquina propia**: se calcula con Odoo y Taller Vial
+ *   (`lib/cantera/costoMaquinaOdoo.ts`) — sólo para los equipos que
+ *   aparecen en los registros de este mes, no toda la flota.
  */
 export default async function DestapePage({
   searchParams,
@@ -39,16 +50,32 @@ export default async function DestapePage({
   const primerDia = `${mes}-01`;
   const ultimoDia = new Date(Date.UTC(anio, mesNum, 0)).toISOString().slice(0, 10);
 
-  const [registrosDelMes, tarifas, capacidades, equipos, horasDestapeAcarreo, fleteros] = await Promise.all([
+  const [registrosDelMes, tarifas, equipos, horasDestapeAcarreo, fleteros, pesadas, operarios] = await Promise.all([
     traerDestape(supabase, { desde: primerDia, hasta: ultimoDia }),
     traerTarifasDestape(supabase),
-    traerCapacidadesFletero(supabase),
     traerEquiposTallerVial(supabase),
     traerAcarreos(supabase, { tipo: "horas_destape", mes }),
     traerFleteros(supabase),
+    traerPesadas(supabase),
+    traerOperariosDeCantera(supabase),
   ]);
   const codigoPorEquipoId = Object.fromEntries(equipos.map((e) => [e.id, e.code]));
   const nombrePorFleteroId = Object.fromEntries(fleteros.map((f) => [f.id, f.nombre]));
+  const valorHoraPorOperarioId = Object.fromEntries(operarios.map((o) => [o.id, o.valorHoraNormal]));
+
+  const toneladasPromedio = toneladasPromedioPorFletero(pesadas.map((p) => ({ fleteroId: p.fletero_id, toneladas: p.toneladas })));
+
+  const codigosDeEquipoDelMes = [...new Set(
+    registrosDelMes
+      .filter((r) => r.tipo_recurso === "operario_propio" && r.equipo_id)
+      .map((r) => codigoPorEquipoId[r.equipo_id as string])
+      .filter((c): c is string => Boolean(c))
+  )];
+  const costoHoraPorEquipo: Record<string, number> = {};
+  const costos = await costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes);
+  for (const [codigo, c] of Object.entries(costos)) {
+    if (c.costoHora !== null) costoHoraPorEquipo[codigo] = c.costoHora;
+  }
 
   const horasDestapeAcarreoPorFletero = horasDestapeAcarreo
     .map((a) => ({ fletero: nombrePorFleteroId[a.fletero_id] ?? "(fletero desconocido)", horas: a.cantidad, fecha: a.fecha }))
@@ -59,8 +86,10 @@ export default async function DestapePage({
       mes={mes}
       registros={registrosDelMes}
       tarifas={tarifas}
-      capacidades={capacidades}
+      toneladasPromedioPorFletero={toneladasPromedio}
+      costoHoraPorEquipo={costoHoraPorEquipo}
       codigoPorEquipoId={codigoPorEquipoId}
+      valorHoraPorOperarioId={valorHoraPorOperarioId}
       horasDestapeAcarreo={horasDestapeAcarreoPorFletero}
       puedeEditar={permisos.puedeEditar}
       esAdmin={permisos.esAdmin}

@@ -2,14 +2,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelCanteraDe } from "@/lib/cantera/auth";
 import { traerTarifasDestape } from "@/lib/cantera/consultas";
-import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import TarifasDestapeClient from "./TarifasDestapeClient";
 
 /**
- * Las 3 tarifas de destape ($/h): máquina propia por equipo, mano de obra
- * propia y fletero externo por tipo de camión. Sólo `admin`: cambian el
- * costo de todo destape hacia adelante. Reusa `traerEquiposTallerVial`
- * (mismos EM2-EM9 de Mantenimiento) para no duplicar el catálogo.
+ * La tarifa de destape ($/h) que sigue siendo tarifa: fletero externo por
+ * tipo de camión. Máquina propia (Odoo + combustible / horas de uso) y
+ * mano de obra propia (`empleados.valor_hora_normal` del operario) se
+ * calculan, no se cargan acá. Sólo `admin`: cambia el costo de todo
+ * destape hacia adelante.
  */
 export default async function TarifasDestapePage() {
   const supabase = await createClient();
@@ -20,10 +20,7 @@ export default async function TarifasDestapePage() {
   if (!nivel) redirect("/");
   if (nivel !== "admin") redirect("/cantera/destape");
 
-  const [tarifas, equipos] = await Promise.all([
-    traerTarifasDestape(supabase),
-    traerEquiposTallerVial(supabase),
-  ]);
+  const tarifas = await traerTarifasDestape(supabase);
 
-  return <TarifasDestapeClient tarifas={tarifas} equipos={equipos} />;
+  return <TarifasDestapeClient tarifas={tarifas} />;
 }
