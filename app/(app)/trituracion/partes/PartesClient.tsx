@@ -151,7 +151,7 @@ function CalendarioMes({
 }
 
 export default function PartesClient({
-  plantas, plantaId, mes, partes, empleados, puedeEditar,
+  plantas, plantaId, mes, partes, empleados, puedeEditar, llegadoPorFecha,
 }: {
   plantas: PlantaDB[];
   plantaId: string;
@@ -159,6 +159,8 @@ export default function PartesClient({
   partes: ParteDB[];
   empleados: EmpleadoLiviano[];
   puedeEditar: boolean;
+  /** Toneladas que Cantera registró llegadas a esta planta ese día ("YYYY-MM-DD" → t), de `lib/trituracion/cruceCantera.ts`. */
+  llegadoPorFecha: Record<string, number>;
 }) {
   const router = useRouter();
   const irA = (p: string, m: string) => router.push(`/trituracion/partes?planta=${p}&mes=${m}`);
@@ -394,6 +396,12 @@ export default function PartesClient({
                   </Campo>
                 </div>
 
+                {llegadoPorFecha[form.fecha] > 0 && (
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    📦 Cantera registró <span className="font-semibold" style={{ color: colorPlanta }}>{num0.format(llegadoPorFecha[form.fecha])} t</span> llegadas a esta planta ese día (acarreo, no se carga acá).
+                  </p>
+                )}
+
                 <p className="mt-3 text-xs font-medium text-slate-500">Horas paradas (h)</p>
                 <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <Campo etiqueta="Mantenimiento">
@@ -476,12 +484,13 @@ export default function PartesClient({
                 <th className="text-right">Disp.</th>
                 <th className="text-right">Camiones</th>
                 <th className="text-right">Toneladas</th>
+                <th className="text-right">Llegado (Cantera)</th>
                 <th className="text-right">t/h real</th>
               </tr>
             </thead>
             <tbody>
               {partes.length === 0 ? (
-                <tr><td colSpan={12} className="py-8 text-center text-slate-400">Sin partes este mes.</td></tr>
+                <tr><td colSpan={13} className="py-8 text-center text-slate-400">Sin partes este mes.</td></tr>
               ) : (
                 [...partes]
                   .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
@@ -534,6 +543,9 @@ export default function PartesClient({
                         </td>
                         <td className="text-right font-mono tabular-nums">{p.camiones_llegados ?? "—"}</td>
                         <td className="text-right font-mono tabular-nums">{p.toneladas_procesadas !== null ? num0.format(p.toneladas_procesadas) : "—"}</td>
+                        <td className="text-right font-mono tabular-nums text-slate-500">
+                          {llegadoPorFecha[p.fecha] > 0 ? `${num0.format(llegadoPorFecha[p.fecha])} t` : "—"}
+                        </td>
                         <td className="text-right font-mono tabular-nums">{d.productividadReal !== null ? num1.format(d.productividadReal) : "—"}</td>
                       </tr>
                     );

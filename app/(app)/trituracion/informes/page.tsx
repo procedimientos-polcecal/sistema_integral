@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { traerPesadas } from "@/lib/cantera/consultas";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
 import { resumenMensual, ultimosMeses, type ParteParaResumen } from "@/lib/trituracion/informe";
+import { llegadoEnElMes, toneladasLlegadasPorDiaYPlanta } from "@/lib/trituracion/cruceCantera";
 import { COLORES_TRITURACION } from "../GraficosTrituracion";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -37,9 +39,12 @@ function iconoDisponibilidad(d: number | null): string {
  * pestañas `AGOSTO`/`Informe Mensual`/`julio` de la planilla, que hoy se
  * arman a mano. Mismo estilo de tabla que el informe de Taller Vial
  * (encabezado y cebra del color de la sección, fila de totales): acá cada
- * planta tiene su propio color en vez de "consumo"/"disponibilidad". El
- * cruce contra lo que Cantera registró como llegado a cada planta queda
- * pendiente (ver docs/superpowers/specs/2026-09-18-trituracion-design.md).
+ * planta tiene su propio color en vez de "consumo"/"disponibilidad".
+ *
+ * "Llegado (Cantera)" cruza contra `cantera_pesadas` (lib/trituracion/cruceCantera.ts):
+ * cuánto registró Cantera como acarreado con destino "PT {n}" ese mes. Es
+ * sólo un cruce para mirar, no corrige nada solo — el material puede llegar
+ * un mes y procesarse el siguiente, así que un desvío no es un error.
  */
 export default async function InformesTrituracionPage() {
   const supabase = await createClient();
@@ -58,8 +63,15 @@ export default async function InformesTrituracionPage() {
   const [anioHasta, mesHastaNum] = meses[meses.length - 1].split("-").map(Number);
   const hasta = new Date(Date.UTC(anioHasta, mesHastaNum, 0)).toISOString().slice(0, 10);
 
-  const partesPorPlanta = await Promise.all(
-    plantas.map((p) => traerPartes(supabase, { plantaId: p.id, desde, hasta }))
+  const anios = [...new Set(meses.map((m) => m.slice(0, 4)))];
+  const [partesPorPlanta, pesadasPorAnio] = await Promise.all([
+    Promise.all(plantas.map((p) => traerPartes(supabase, { plantaId: p.id, desde, hasta }))),
+    // Cantera es otro módulo: sin acceso ahí, RLS devuelve cero filas (no un
+    // error) y la columna "Llegado" simplemente queda en "—".
+    Promise.all(anios.map((anio) => traerPesadas(supabase, { anio }))),
+  ]);
+  const llegadas = toneladasLlegadasPorDiaYPlanta(
+    pesadasPorAnio.flat().map((p) => ({ fecha: p.fecha, destino: p.destino, toneladas: p.toneladas }))
   );
 
   const filas = plantas.map((planta, i) => {
@@ -78,8 +90,9 @@ export default async function InformesTrituracionPage() {
 
     const porMes = meses.map((mes) => resumenMensual(partes.filter((p) => p.fecha.startsWith(mes))));
     const totalSeisMeses = resumenMensual(partes);
+    const llegadoTotalSeisMeses = meses.reduce((s, mes) => s + llegadoEnElMes(llegadas, planta.codigo, mes), 0);
     const color = COLORES_TRITURACION[i % COLORES_TRITURACION.length];
-    return { planta, porMes, totalSeisMeses, color, claro: COLOR_CLARO[color] ?? "#F8FAFC" };
+    return { planta, porMes, totalSeisMeses, llegadoTotalSeisMeses, color, claro: COLOR_CLARO[color] ?? "#F8FAFC" };
   });
 
   return (
@@ -88,7 +101,7 @@ export default async function InformesTrituracionPage() {
       <h1 className="page-header mt-1">Informe mensual</h1>
       <p className="page-subheader">Últimos 6 meses, por planta. Sólo se cuentan los días operativos. 🔴 &lt;60% · 🟡 60-79% · 🟢 ≥80% disponibilidad.</p>
 
-      {filas.map(({ planta, porMes, totalSeisMeses, color, claro }) => (
+      {filas.map(({ planta, porMes, totalSeisMeses, llegadoTotalSeisMeses, color, claro }) => (
         <section key={planta.id} className="mt-6 overflow-hidden rounded-lg border border-slate-200">
           <div style={{ backgroundColor: color }} className="flex items-center justify-between px-4 py-2">
             <span className="text-sm font-semibold text-white">{planta.nombre.toUpperCase()}</span>
@@ -98,7 +111,7 @@ export default async function InformesTrituracionPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: color }}>
-                  {["Mes", "Días operativos", "Hs. teóricas", "Hs. paradas", "Disponibilidad", "Toneladas", "t/h real"].map((c, ci) => (
+                  {["Mes", "Días operativos", "Hs. teóricas", "Hs. paradas", "Disponibilidad", "Toneladas", "Llegado (Cantera)", "t/h real"].map((c, ci) => (
                     <th key={c} className={`px-3 py-2 text-xs font-semibold text-white ${ci === 0 ? "text-left" : "text-right"}`}>{c}</th>
                   ))}
                 </tr>
@@ -106,6 +119,7 @@ export default async function InformesTrituracionPage() {
               <tbody>
                 {meses.map((mes, i) => {
                   const r = porMes[i];
+                  const llegado = llegadoEnElMes(llegadas, planta.codigo, mes);
                   return (
                     <tr key={mes} style={{ backgroundColor: i % 2 === 1 ? claro : undefined }}>
                       <td className="px-3 py-2 font-medium text-slate-800">{nombreCorto(mes)}</td>
@@ -116,6 +130,7 @@ export default async function InformesTrituracionPage() {
                         {r.disponibilidadPromedio !== null ? <>{iconoDisponibilidad(r.disponibilidadPromedio)} {pct.format(r.disponibilidadPromedio)}</> : "—"}
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums font-medium" style={{ color }}>{num0.format(r.toneladasTotal)}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-500">{llegado > 0 ? `${num0.format(llegado)} t` : "—"}</td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums">
                         {r.productividadRealPromedio !== null ? num1.format(r.productividadRealPromedio) : "—"}
                       </td>
@@ -133,6 +148,7 @@ export default async function InformesTrituracionPage() {
                     {totalSeisMeses.disponibilidadPromedio !== null ? pct.format(totalSeisMeses.disponibilidadPromedio) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">{num0.format(totalSeisMeses.toneladasTotal)}</td>
+                  <td className="px-3 py-2 text-right">{llegadoTotalSeisMeses > 0 ? `${num0.format(llegadoTotalSeisMeses)} t` : "—"}</td>
                   <td className="px-3 py-2 text-right">
                     {totalSeisMeses.productividadRealPromedio !== null ? num1.format(totalSeisMeses.productividadRealPromedio) : "—"}
                   </td>
