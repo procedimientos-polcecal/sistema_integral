@@ -282,12 +282,15 @@ export const NAV: NavItem[] = [
     children: [
       { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
       { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
+      { label: "Destape", href: "/cantera/destape", modulo: "cantera" },
       { label: "Cubicación", href: "/cantera/cubicacion", modulo: "cantera" },
       { label: "Informe mensual", href: "/cantera/informes", modulo: "cantera" },
       { label: "Canteras", href: "/cantera/yacimientos", modulo: "cantera", soloAdmin: true },
       { label: "Insumos", href: "/cantera/insumos", modulo: "cantera", soloAdmin: true },
       { label: "Fleteros", href: "/cantera/fleteros", modulo: "cantera", soloAdmin: true },
       { label: "Tarifas de acarreo", href: "/cantera/tarifas-acarreo", modulo: "cantera", soloAdmin: true },
+      { label: "Tarifas de destape", href: "/cantera/tarifas-destape", modulo: "cantera", soloAdmin: true },
+      { label: "Capacidades de fletero", href: "/cantera/capacidades-fletero", modulo: "cantera", soloAdmin: true },
     ],
   },
   {

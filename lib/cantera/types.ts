@@ -188,6 +188,49 @@ export interface AcarreoDB {
   actualizado_en: string | null;
 }
 
+/** Una fila de `cantera_destape`: un recurso (máquina propia u operario, o fletero con camión) usado un día. Costo y toneladas se despejan en lib/cantera/destape.ts, no viven acá. */
+export interface DestapeDB {
+  id: string;
+  fecha: string;
+  yacimiento_codigo: string | null;
+  frente: string | null;
+  tipo_recurso: string;
+  operario_id: string | null;
+  fletero_id: string | null;
+  recurso_raw: string;
+  equipo_id: string | null;
+  equipo_o_vehiculo_raw: string;
+  tipo_camion: string | null;
+  horas: number;
+  viajes: number | null;
+  observaciones: string | null;
+  origen: string;
+  sheets_pendiente: string | null;
+  sheets_pendiente_en: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+}
+
+/** Una fila de `cantera_tarifas_destape`: $/h de una categoría (máquina propia por equipo, MO propia, fletero por tipo de camión), vigente por período. */
+export interface TarifaDestapeDB {
+  id: string;
+  categoria: string;
+  clave: string;
+  desde: string;
+  hasta: string | null;
+  tarifa: number;
+}
+
+/** Una fila de `cantera_capacidades_fletero`: toneladas por viaje de un fletero con un tipo de camión. */
+export interface CapacidadFleteroDB {
+  id: string;
+  fletero_id: string;
+  tipo_camion: string;
+  toneladas_por_viaje: number;
+}
+
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */
 export interface CubicacionDB {
   id: string;

@@ -4,7 +4,7 @@ import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, CubicacionDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, CapacidadFleteroDB, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, TarifaDestapeDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -363,4 +363,79 @@ export async function traerCubicaciones(supabase: SupabaseClient): Promise<Cubic
       .order("mes")
       .range(desde, hasta)
   );
+}
+
+export interface FiltrosDeDestape {
+  /** "YYYY-MM-DD" */
+  desde?: string;
+  /** "YYYY-MM-DD" */
+  hasta?: string;
+  yacimientoCodigo?: string;
+}
+
+export async function traerDestape(supabase: SupabaseClient, filtros: FiltrosDeDestape = {}): Promise<DestapeDB[]> {
+  return traerTodo<DestapeDB>((desde, hasta) => {
+    let q = supabase
+      .from("cantera_destape")
+      .select("id, fecha, yacimiento_codigo, frente, tipo_recurso, operario_id, fletero_id, recurso_raw, equipo_id, equipo_o_vehiculo_raw, tipo_camion, horas, viajes, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en");
+    if (filtros.desde) q = q.gte("fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
+    if (filtros.yacimientoCodigo) q = q.eq("yacimiento_codigo", filtros.yacimientoCodigo);
+    return q.order("fecha", { ascending: false }).range(desde, hasta);
+  });
+}
+
+/** Todas las tarifas de destape cargadas — tabla chica, se trae entera para que `tarifaVigenteDestape` resuelva cualquier fecha sin una consulta por período. */
+export async function traerTarifasDestape(supabase: SupabaseClient): Promise<TarifaDestapeDB[]> {
+  const { data, error } = await supabase
+    .from("cantera_tarifas_destape")
+    .select("id, categoria, clave, desde, hasta, tarifa")
+    .order("categoria")
+    .order("clave")
+    .order("desde");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TarifaDestapeDB[];
+}
+
+export async function traerCapacidadesFletero(supabase: SupabaseClient): Promise<CapacidadFleteroDB[]> {
+  const { data, error } = await supabase
+    .from("cantera_capacidades_fletero")
+    .select("id, fletero_id, tipo_camion, toneladas_por_viaje")
+    .order("tipo_camion");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CapacidadFleteroDB[];
+}
+
+export interface EmpleadoLiviano {
+  id: string;
+  nombre: string;
+  apellido: string;
+}
+
+/**
+ * Los operarios para el selector de Destape: sólo los del sector "Cantera y
+ * Planta de Trituración" (por nombre, no un id fijo — mismo criterio que
+ * `traerOperariosDeTrituracion` de `lib/trituracion/consultas.ts`, que
+ * filtra el mismo sector desde el otro módulo). No se comparte la función
+ * entre los dos: Trituración depender de Cantera tiene sentido (Cantera es
+ * upstream), al revés no.
+ */
+export async function traerOperariosDeCantera(supabase: SupabaseClient): Promise<EmpleadoLiviano[]> {
+  const { data: sectores, error: errSectores } = await supabase
+    .from("sectores")
+    .select("id, nombre")
+    .or("nombre.ilike.%cantera%,nombre.ilike.%tritura%");
+  if (errSectores) throw new Error(errSectores.message);
+
+  const sectorIds = (sectores ?? []).map((s) => s.id as string);
+  if (sectorIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("empleados")
+    .select("id, nombre, apellido")
+    .eq("activo", true)
+    .in("sector_id", sectorIds)
+    .order("apellido", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as EmpleadoLiviano[];
 }
