@@ -98,7 +98,11 @@ export default async function DestapePage({
     .sort((a, b) => a.fletero.localeCompare(b.fletero));
 
   return (
+    // `key={mes}` fuerza a remontar el cliente al cambiar de mes: si no, el
+    // día elegido en el calendario (estado local) sobrevive a la navegación
+    // entre meses y queda apuntando a una fecha que no es de este mes.
     <DestapeClient
+      key={mes}
       mes={mes}
       registros={registrosDelMes}
       tarifasAcarreo={tarifasAcarreo}

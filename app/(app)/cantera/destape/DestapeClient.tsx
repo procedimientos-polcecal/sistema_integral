@@ -1,15 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { costoDeRegistro, resumenPorYacimiento, ETIQUETA_TIPO_RECURSO, ETIQUETA_TIPO_CAMION } from "@/lib/cantera/destape";
 import type { DestapeDB, TarifaAcarreoDB } from "@/lib/cantera/types";
 
-/** Colores del módulo — mismos que las tarjetas KPI, reusados en las badges de "Recurso" para que el color siga significando lo mismo en toda la pantalla. */
-const COLOR_RECURSO: Record<"operario_propio" | "fletero_externo", { fg: string; bg: string }> = {
-  operario_propio: { fg: "#C2410C", bg: "#FFF1E9" },
-  fletero_externo: { fg: "#0891B2", bg: "#E6F7FA" },
+/** Colores del módulo — mismos que las tarjetas KPI, reusados en las badges de "Recurso" y en el calendario para que el color siga significando lo mismo en toda la pantalla. */
+const COLOR_RECURSO: Record<"operario_propio" | "fletero_externo", { fg: string; bg: string; border: string }> = {
+  operario_propio: { fg: "#C2410C", bg: "#FFF1E9", border: "#FED7AA" },
+  fletero_externo: { fg: "#0891B2", bg: "#E6F7FA", border: "#A5E4EE" },
 };
+
+const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
 
 const money = (v: number) => `$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v)}`;
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -41,6 +44,87 @@ function paraDespeje(
     horas: r.horas,
     viajes: r.viajes,
   };
+}
+
+const NOMBRE_DIA = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+
+/**
+ * Calendario del mes — reemplaza a la tabla plana de "Registros del mes".
+ * Cuando un día tiene varios recursos cargados (máquina + un par de
+ * fleteros, por ejemplo) la tabla vieja repetía la fecha 3 o 4 veces
+ * seguidas; acá un día es una sola celda y el detalle de ESE día se ve
+ * abajo, elegido — mismo patrón que ya usa el calendario de
+ * `/trituracion/partes`.
+ */
+function CalendarioDestape({
+  mes, porFecha, diaSeleccionado, onElegir,
+}: {
+  mes: string;
+  porFecha: Map<string, DestapeDB[]>;
+  diaSeleccionado: string | null;
+  onElegir: (fecha: string) => void;
+}) {
+  const [anio, mesNum] = mes.split("-").map(Number);
+  const diasEnMes = new Date(Date.UTC(anio, mesNum, 0)).getUTCDate();
+  const offset = (new Date(Date.UTC(anio, mesNum - 1, 1)).getUTCDay() + 6) % 7;
+  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-400">
+        {DIAS_SEMANA.map((d) => <div key={d}>{d}</div>)}
+      </div>
+      <div className="mt-1 grid grid-cols-7 gap-1">
+        {Array.from({ length: offset }, (_, i) => <div key={`o${i}`} />)}
+        {Array.from({ length: diasEnMes }, (_, i) => i + 1).map((dia) => {
+          const fecha = `${mes}-${String(dia).padStart(2, "0")}`;
+          const registrosDelDia = porFecha.get(fecha) ?? [];
+          const seleccionado = fecha === diaSeleccionado;
+          const esHoy = fecha === hoy;
+          const tieneOperario = registrosDelDia.some((r) => r.tipo_recurso === "operario_propio");
+          const tieneFletero = registrosDelDia.some((r) => r.tipo_recurso === "fletero_externo");
+
+          let estilo: { background?: string; borderColor?: string; color?: string; boxShadow?: string } | undefined;
+          if (tieneOperario && tieneFletero) {
+            estilo = {
+              background: `linear-gradient(135deg, ${COLOR_RECURSO.operario_propio.bg} 50%, ${COLOR_RECURSO.fletero_externo.bg} 50%)`,
+              borderColor: "#CBD5E1", color: "#334155",
+            };
+          } else if (tieneOperario) {
+            estilo = { background: COLOR_RECURSO.operario_propio.bg, borderColor: COLOR_RECURSO.operario_propio.border, color: COLOR_RECURSO.operario_propio.fg };
+          } else if (tieneFletero) {
+            estilo = { background: COLOR_RECURSO.fletero_externo.bg, borderColor: COLOR_RECURSO.fletero_externo.border, color: COLOR_RECURSO.fletero_externo.fg };
+          }
+          if (seleccionado) estilo = { ...estilo, boxShadow: "0 0 0 2px #1E7D34" };
+
+          const tooltip = registrosDelDia.length === 0
+            ? "Sin registros"
+            : registrosDelDia.map((r) => `${ETIQUETA_TIPO_RECURSO[r.tipo_recurso as "operario_propio" | "fletero_externo"]}: ${r.recurso_raw}`).join(" | ");
+
+          return (
+            <button
+              key={fecha}
+              type="button"
+              onClick={() => onElegir(fecha)}
+              title={tooltip}
+              style={estilo}
+              className={`relative aspect-square rounded-md border text-xs font-medium transition-colors ${
+                estilo?.background ? "hover:brightness-95" : "border-dashed border-slate-200 text-slate-400 hover:border-slate-300"
+              } ${seleccionado ? "ring-2 ring-offset-1" : ""} ${esHoy && !seleccionado ? "font-bold" : ""}`}
+            >
+              {dia}
+              {registrosDelDia.length > 1 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-700 text-[9px] font-bold text-white">
+                  {registrosDelDia.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function DestapeClient({
@@ -89,6 +173,23 @@ export default function DestapeClient({
       .map(([fletero, { horas, dias }]) => ({ fletero, horas, dias: dias.size }))
       .sort((a, b) => a.fletero.localeCompare(b.fletero));
   })();
+
+  const registrosPorFecha = new Map<string, DestapeDB[]>();
+  for (const r of registros) {
+    const lista = registrosPorFecha.get(r.fecha) ?? [];
+    lista.push(r);
+    registrosPorFecha.set(r.fecha, lista);
+  }
+  // Por defecto, el día con actividad más reciente del mes — así se ve algo apenas se entra, sin tener que elegir.
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(() => {
+    const fechas = [...registrosPorFecha.keys()].sort();
+    return fechas.length > 0 ? fechas[fechas.length - 1] : null;
+  });
+  const registrosDelDiaElegido = diaSeleccionado ? (registrosPorFecha.get(diaSeleccionado) ?? []) : [];
+  const costoDelDiaElegido = registrosDelDiaElegido.reduce(
+    (s, r) => s + costoDeRegistro(paraDespeje(r, codigoPorEquipoId, valorHoraPorOperarioId), tarifasAcarreo, toneladasPromedioPorFletero, costoHoraPorEquipo).costoTotal,
+    0
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -193,74 +294,77 @@ export default function DestapeClient({
 
       <section className="mt-6">
         <h2 className="section-title">Registros del mes</h2>
-        <div className="card mt-2 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Yacimiento</th>
-                  <th>Recurso</th>
-                  <th>Equipo / Vehículo</th>
-                  <th className="text-right">Horas</th>
-                  <th className="text-right">Viajes · Ton. est.</th>
-                  <th className="text-right">Costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {registros.length === 0 ? (
-                  <tr><td colSpan={7} className="py-8 text-center text-slate-400">Sin registros este mes.</td></tr>
-                ) : (
-                  [...registros]
-                    .sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
-                    .map((r, i) => {
-                      const tipoRecurso = r.tipo_recurso as "operario_propio" | "fletero_externo";
-                      const costo = costoDeRegistro(
-                        paraDespeje(r, codigoPorEquipoId, valorHoraPorOperarioId),
-                        tarifasAcarreo,
-                        toneladasPromedioPorFletero,
-                        costoHoraPorEquipo
-                      );
-                      return (
-                        <tr key={r.id} className={i % 2 === 1 ? "bg-slate-50/60" : undefined}>
-                          <td className="whitespace-nowrap">
-                            {r.fecha}
-                            {r.sheets_pendiente && <span className="ml-1.5 text-amber-600" title={r.sheets_pendiente}>⚠</span>}
-                          </td>
-                          <td>{r.yacimiento_codigo ?? "—"}{r.frente ? ` (${r.frente})` : ""}</td>
-                          <td>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="badge"
-                                style={{ color: COLOR_RECURSO[tipoRecurso].fg, background: COLOR_RECURSO[tipoRecurso].bg }}
-                              >
-                                {ETIQUETA_TIPO_RECURSO[tipoRecurso]}
-                              </span>
-                              <span>{r.recurso_raw}</span>
-                            </div>
-                          </td>
-                          <td>
-                            {r.equipo_o_vehiculo_raw}
-                            {r.tipo_camion && <span className="text-xs text-slate-400"> ({ETIQUETA_TIPO_CAMION[r.tipo_camion as "camion_grande" | "camion_chico"]})</span>}
-                          </td>
-                          <td className="text-right font-mono tabular-nums">{num.format(r.horas)}</td>
-                          <td className="text-right font-mono tabular-nums text-slate-500">
-                            {r.viajes !== null ? (
-                              <>
-                                {r.viajes} viajes
-                                {costo.toneladasEstimadas !== null && <> · ≈{num.format(costo.toneladasEstimadas)} t</>}
-                              </>
-                            ) : "—"}
-                          </td>
-                          <td className="text-right font-mono tabular-nums font-semibold" style={{ color: "#1E7D34" }}>
-                            {money(costo.costoTotal)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
+        <div className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <div className="card p-4 lg:col-span-2">
+            <CalendarioDestape mes={mes} porFecha={registrosPorFecha} diaSeleccionado={diaSeleccionado} onElegir={setDiaSeleccionado} />
+            <div className="mt-3 flex flex-wrap gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: COLOR_RECURSO.operario_propio.bg, border: `1px solid ${COLOR_RECURSO.operario_propio.border}` }} />
+                Operario propio
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: COLOR_RECURSO.fletero_externo.bg, border: `1px solid ${COLOR_RECURSO.fletero_externo.border}` }} />
+                Fletero externo
+              </span>
+            </div>
+          </div>
+
+          <div className="card overflow-hidden lg:col-span-3">
+            <div className="flex items-center justify-between bg-slate-50 px-4 py-2.5">
+              <span className="text-sm font-semibold text-slate-700">
+                {diaSeleccionado ? NOMBRE_DIA.format(new Date(`${diaSeleccionado}T00:00:00Z`)) : "Elegí un día"}
+              </span>
+              {registrosDelDiaElegido.length > 0 && (
+                <span className="font-mono text-sm font-semibold tabular-nums" style={{ color: "#1E7D34" }}>{money(costoDelDiaElegido)}</span>
+              )}
+            </div>
+            <div className="divide-y divide-slate-100">
+              {registrosDelDiaElegido.length === 0 ? (
+                <p className="p-6 text-center text-sm text-slate-400">
+                  {diaSeleccionado ? "Sin registros este día." : "Elegí un día del calendario para ver el detalle."}
+                </p>
+              ) : (
+                registrosDelDiaElegido.map((r) => {
+                  const tipoRecurso = r.tipo_recurso as "operario_propio" | "fletero_externo";
+                  const costo = costoDeRegistro(
+                    paraDespeje(r, codigoPorEquipoId, valorHoraPorOperarioId),
+                    tarifasAcarreo,
+                    toneladasPromedioPorFletero,
+                    costoHoraPorEquipo
+                  );
+                  return (
+                    <div key={r.id} className="p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="badge"
+                            style={{ color: COLOR_RECURSO[tipoRecurso].fg, background: COLOR_RECURSO[tipoRecurso].bg }}
+                          >
+                            {ETIQUETA_TIPO_RECURSO[tipoRecurso]}
+                          </span>
+                          <span className="text-sm font-medium text-slate-800">{r.recurso_raw}</span>
+                          {r.sheets_pendiente && <span className="text-amber-600" title={r.sheets_pendiente}>⚠</span>}
+                        </div>
+                        <span className="font-mono text-sm font-semibold tabular-nums" style={{ color: "#1E7D34" }}>{money(costo.costoTotal)}</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span>{r.yacimiento_codigo ?? "Sin yacimiento"}{r.frente ? ` (${r.frente})` : ""}</span>
+                        <span>
+                          {r.equipo_o_vehiculo_raw}
+                          {r.tipo_camion && ` (${ETIQUETA_TIPO_CAMION[r.tipo_camion as "camion_grande" | "camion_chico"]})`}
+                        </span>
+                        <span className="font-mono tabular-nums">{num.format(r.horas)} hs</span>
+                        {r.viajes !== null && (
+                          <span className="font-mono tabular-nums">
+                            {r.viajes} viajes{costo.toneladasEstimadas !== null && <> · ≈{num.format(costo.toneladasEstimadas)} t</>}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </section>
