@@ -437,6 +437,45 @@ export async function traerPesadasAgrupadasPorFleteroTipoMes(
   }));
 }
 
+interface FilaPesadaPorOrigenMesDB {
+  origen: string;
+  mes: string;
+  toneladas: number;
+}
+
+/**
+ * Las pesadas de TODA la historia, ya sumadas por yacimiento (D1/D6/C1/C3) +
+ * mes en la base (`cantera_pesadas_por_origen_mes()`, migración
+ * `20260922105016`) — reemplaza a `traerPesadas(supabase, {})` sin filtro
+ * para Cubicación (`/cantera/cubicacion`), que necesita el historial
+ * completo (no se puede acotar por año: `armarCierresCubicacion` encadena
+ * la existencia inicial de cada mes con la final del anterior). El usuario
+ * reportó no poder entrar a esa página — eran las mismas 8 páginas de
+ * `cantera_pesadas` que ya costaron en Destape y el Resumen anual.
+ *
+ * Mismo criterio de degradar sin romper: si la función no existe todavía o
+ * falla, devuelve `[]` — Cubicación queda sin acarreo calculado (el resto
+ * del balance sigue viéndose), no se cae la página.
+ */
+export async function traerPesadasAgrupadasPorOrigenMes(
+  supabase: SupabaseClient
+): Promise<{ yacimientoCodigo: string; mes: string; toneladas: number }[]> {
+  const { data, error } = await supabase.rpc("cantera_pesadas_por_origen_mes");
+  if (error) {
+    console.error("traerPesadasAgrupadasPorOrigenMes: no se pudo calcular, Cubicación queda sin acarreo para este período", error);
+    return [];
+  }
+  return ((data ?? []) as FilaPesadaPorOrigenMesDB[]).map((f) => ({
+    yacimientoCodigo: f.origen,
+    // La función SQL devuelve `date` ("YYYY-MM-01"): `AcarreoPorYacimiento.mes`
+    // es "YYYY-MM" y `armarCierresCubicacion` lo compara con `===` — sin este
+    // recorte, la comparación nunca matchea y el acarreo queda en 0 siempre,
+    // sin ningún error que lo avise.
+    mes: f.mes.slice(0, 7),
+    toneladas: f.toneladas,
+  }));
+}
+
 /**
  * Todos los cierres de cubicación cargados, de todos los yacimientos y
  * meses — la tabla es chica (un yacimiento × un mes por fila) y

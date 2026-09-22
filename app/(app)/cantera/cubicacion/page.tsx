@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerCubicaciones, traerPesadas, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
-import { toneladasPorYacimientoDesdePesadas } from "@/lib/cantera/pesadas";
+import { traerCubicaciones, traerPesadasAgrupadasPorOrigenMes, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
 import { metrosYPozos } from "@/lib/cantera/tramos";
 import { toneladasEstimadas } from "@/lib/cantera/toneladas";
 import { armarCierresCubicacion, type AcarreoPorYacimiento, type CierreCargado, type VoladuraParaCubicacion } from "@/lib/cantera/cubicacion";
@@ -23,7 +22,11 @@ const YACIMIENTOS_CUBICADOS = ["D1", "D6", "C1", "C3"];
  * Trae el historial completo de cierres (`traerCubicaciones`, sin filtro de
  * mes): `armarCierresCubicacion` necesita encadenar la existencia inicial de
  * cada mes con la final del anterior, no sólo con el mes que se está
- * mirando.
+ * mirando. Por lo mismo, el acarreo (pesadas por yacimiento) también
+ * necesita toda la historia — se pide ya agrupado por origen+mes
+ * (`traerPesadasAgrupadasPorOrigenMes`, calculado en SQL) en vez de traer
+ * `cantera_pesadas` entera a la app: son 7623+ filas (8 páginas) sólo para
+ * sumarlas acá, y el usuario reportó no poder entrar a esta página por eso.
  */
 export default async function CubicacionPage() {
   const supabase = await createClient();
@@ -33,10 +36,10 @@ export default async function CubicacionPage() {
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  const [yacimientos, voladuras, pesadas, cubicaciones] = await Promise.all([
+  const [yacimientos, voladuras, pesadasAgrupadas, cubicaciones] = await Promise.all([
     traerYacimientos(supabase, true),
     traerVoladuras(supabase, {}),
-    traerPesadas(supabase, {}),
+    traerPesadasAgrupadasPorOrigenMes(supabase),
     traerCubicaciones(supabase),
   ]);
 
@@ -61,13 +64,10 @@ export default async function CubicacionPage() {
     })
     .filter((v): v is VoladuraParaCubicacion => v !== null);
 
-  // Por origen real de la pesada, no por nombre de material — ver el
-  // comentario grande en `toneladasPorYacimientoDesdePesadas`.
-  const acarreos: AcarreoPorYacimiento[] = toneladasPorYacimientoDesdePesadas(pesadas).map((a) => ({
-    yacimientoCodigo: a.yacimientoCodigo,
-    mes: a.mes,
-    toneladas: a.toneladas,
-  }));
+  // Por origen real de la pesada, no por nombre de material — mismo
+  // criterio que `toneladasPorYacimientoDesdePesadas` (lib/cantera/pesadas.ts),
+  // que hace esta misma cuenta cuando no está la función SQL.
+  const acarreos: AcarreoPorYacimiento[] = pesadasAgrupadas;
 
   const cierresCargados: CierreCargado[] = cubicaciones
     .map((c): CierreCargado | null => {
