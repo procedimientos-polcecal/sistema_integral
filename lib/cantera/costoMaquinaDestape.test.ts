@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { costoHoraDeMaquina, esMesCerrado } from "./costoMaquinaDestape";
+import { costoHoraDeMaquina } from "./costoMaquinaDestape";
 
 describe("costoHoraDeMaquina", () => {
   it("combina gasto de Odoo + combustible estimado, dividido horas del mes", () => {
@@ -44,20 +44,5 @@ describe("costoHoraDeMaquina", () => {
       gastoAnaliticoOdoo: 0, litrosDelMes: 0, gastoCombustibleDelTipo: 0, litrosDelTipo: 0, horasDelMes: 30,
     });
     expect(r.costoHora).toBe(0);
-  });
-});
-
-describe("esMesCerrado", () => {
-  it("un mes anterior al actual está cerrado", () => {
-    expect(esMesCerrado("2026-08", "2026-09")).toBe(true);
-    expect(esMesCerrado("2025-12", "2026-01")).toBe(true);
-  });
-
-  it("el mes en curso no está cerrado", () => {
-    expect(esMesCerrado("2026-09", "2026-09")).toBe(false);
-  });
-
-  it("un mes futuro tampoco está cerrado", () => {
-    expect(esMesCerrado("2026-10", "2026-09")).toBe(false);
   });
 });

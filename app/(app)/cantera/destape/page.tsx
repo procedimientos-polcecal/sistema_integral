@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import { toneladasPromedioPorFletero } from "@/lib/cantera/destape";
-import { esMesCerrado } from "@/lib/cantera/costoMaquinaDestape";
 import { costoHoraDeMaquinasDelMes } from "@/lib/cantera/costoMaquinaOdoo";
 import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import DestapeClient from "./DestapeClient";
@@ -17,15 +16,6 @@ import DestapeClient from "./DestapeClient";
  * mitad antes de que Odoo conteste, y la página queda "cargando" para
  * siempre — el `try/catch` de `costoHoraDeMaquinasDelMes` nunca llega a
  * ejecutarse porque el timeout mata la función antes.
- *
- * A partir de acá esto sólo pasa la PRIMERA vez que alguien mira un mes ya
- * cerrado: `costoHoraDeMaquinasDelMes` guarda el resultado en
- * `cantera_costo_maquina_mensual` (migración
- * `20260922083700_cantera_destape_costo_maquina_mensual_cerrado.sql`, la
- * tiene que correr el usuario) y las visitas siguientes a ese mes leen de
- * ahí, sin tocar Odoo. El mes en curso sigue calculándose en vivo siempre
- * (puede seguir sumando facturas), así que el timeout largo sigue haciendo
- * falta para él.
  */
 export const maxDuration = 60;
 
@@ -103,7 +93,7 @@ export default async function DestapePage({
     traerFleteros(supabase),
     traerPesadas(supabase),
     traerOperariosDeCantera(supabase),
-    costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes, { mesCerrado: esMesCerrado(mes, mesActual) }),
+    costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes),
   ]);
   const nombrePorFleteroId = Object.fromEntries(fleteros.map((f) => [f.id, f.nombre]));
   const valorHoraPorOperarioId = Object.fromEntries(operarios.map((o) => [o.id, o.valorHoraNormal]));
