@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { traerTodo } from "@/lib/core/paginado";
+import { traerTodo, traerTodoEnParalelo } from "@/lib/core/paginado";
 import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
@@ -326,15 +326,27 @@ export interface FiltrosDePesadas {
   anio?: string;
 }
 
-/** Las pesadas de balanza, ya resueltas — de acá sale el material acarreado por fletero. */
+/**
+ * Las pesadas de balanza, ya resueltas — de acá sale el material acarreado
+ * por fletero.
+ *
+ * Sin filtro (Destape la trae entera para el promedio de toneladas por
+ * fletero de TODA la historia — `toneladasPromedioPorFletero`, a propósito,
+ * ver `lib/cantera/destape.ts`) va por `traerTodoEnParalelo` en vez de
+ * `traerTodo`: son 7623 filas al 22/09/2026 y creciendo, 8 páginas que en
+ * serie tardaban ~2s en cada visita a Destape — el usuario lo reportó como
+ * la causa de que cambiar de mes siguiera lento después de arreglar lo de
+ * Odoo. En paralelo, con el total exacto que PostgREST devuelve gratis en
+ * el mismo viaje (`count: "exact"`), es un viaje sólo y el resto juntos.
+ */
 export async function traerPesadas(
   supabase: SupabaseClient,
   filtros: FiltrosDePesadas = {}
 ): Promise<PesadaDB[]> {
-  return traerTodo<PesadaDB>((desde, hasta) => {
+  return traerTodoEnParalelo<PesadaDB>((desde, hasta) => {
     let q = supabase
       .from("cantera_pesadas")
-      .select("id, fecha, hora, bruto, tara, tipo, toneladas, origen, destino, fletero_raw, fletero_id");
+      .select("id, fecha, hora, bruto, tara, tipo, toneladas, origen, destino, fletero_raw, fletero_id", { count: "exact" });
     if (filtros.fleteroId) q = q.eq("fletero_id", filtros.fleteroId);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);
