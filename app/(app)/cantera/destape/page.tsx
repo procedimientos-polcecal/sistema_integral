@@ -8,6 +8,18 @@ import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import DestapeClient from "./DestapeClient";
 
 /**
+ * Un mes con máquina propia cargada (agosto, por ejemplo) dispara
+ * `costoHoraDeMaquinasDelMes`, que habla con Odoo Online — lento por
+ * naturaleza (`lib/odoo/client.ts` espera hasta 30s por llamada) y son
+ * varios viajes encadenados (sesión + 3 consultas). El límite por defecto de
+ * Vercel para una página (sin esto, 15s en Pro) corta la respuesta a la
+ * mitad antes de que Odoo conteste, y la página queda "cargando" para
+ * siempre — el `try/catch` de `costoHoraDeMaquinasDelMes` nunca llega a
+ * ejecutarse porque el timeout mata la función antes.
+ */
+export const maxDuration = 60;
+
+/**
  * El tablero de destape del mes: cuántas horas y cuánto costó, por
  * yacimiento — "Resumen → Por yacimiento" de la planilla real. Por defecto
  * el mes en curso.

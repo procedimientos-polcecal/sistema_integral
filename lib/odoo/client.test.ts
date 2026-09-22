@@ -151,6 +151,23 @@ describe("autenticación", () => {
     expect(sobreEnviado(fetchMock, 3).params.args[4]).toBe("search_count");
   });
 
+  it("dos llamadas concurrentes (Promise.all) autentican una sola vez, no dos en paralelo", async () => {
+    // Páginas como Destape piden varias cosas de Odoo con Promise.all: si
+    // ninguna ve todavía la sesión cacheada (se escribe recién al resolver
+    // la primera), cada una dispara su propio `authenticate` — el bug real
+    // que esto reproduce.
+    encolarSesion(fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(respuestaOk(3)) // search_count
+      .mockResolvedValueOnce(respuestaOk(5)); // search_count
+
+    await Promise.all([contar("res.partner"), contar("purchase.order")]);
+
+    // Dos de sesión + dos de ORM: no seis (dos sesiones completas en paralelo).
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(sobreEnviado(fetchMock, 0).params.method).toBe("authenticate");
+  });
+
   it("olvidar la sesión fuerza a autenticar de nuevo (rotación de la API key)", async () => {
     encolarSesion(fetchMock);
     encolarSesion(fetchMock);

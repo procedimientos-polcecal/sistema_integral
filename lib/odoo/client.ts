@@ -249,39 +249,63 @@ export interface SesionOdoo {
  */
 let sesionCacheada: SesionOdoo | null = null;
 
+/**
+ * La promesa en vuelo, para no autenticar dos veces.
+ *
+ * Páginas como Destape piden varias cosas de Odoo en paralelo
+ * (`Promise.all`) y todas pasan por `iniciarSesion()`. Sin esto, ninguna ve
+ * todavía `sesionCacheada` (se escribe recién al resolver la primera) y las
+ * tres disparan su propio `authenticate` + lectura de empresas al mismo
+ * tiempo — three logins en vez de uno, más lento que uno solo porque Odoo
+ * Online no los sirve más rápido por venir en paralelo. Guardar la promesa
+ * (no sólo el resultado) hace que la segunda y la tercera esperen a la
+ * primera en vez de repetirla.
+ */
+let sesionEnCurso: Promise<SesionOdoo> | null = null;
+
 export async function iniciarSesion(): Promise<SesionOdoo> {
   if (sesionCacheada) return sesionCacheada;
+  if (sesionEnCurso) return sesionEnCurso;
 
-  const { db, clave } = credenciales();
-  const uid = await autenticarSinCache();
+  sesionEnCurso = (async () => {
+    try {
+      const { db, clave } = credenciales();
+      const uid = await autenticarSinCache();
 
-  /*
-   * Este read va por `jsonrpc` crudo y no por `llamar()` a propósito: `llamar()`
-   * necesita la sesión para armar el contexto, y la sesión necesita este read.
-   * Leer el propio usuario no depende de qué empresas tenga habilitadas.
-   */
-  const [yo] = await jsonrpc<
-    { id: number; company_ids?: number[]; company_id?: Many2One }[]
-  >("object", "execute_kw", [
-    db,
-    uid,
-    clave,
-    "res.users",
-    "read",
-    [[uid], ["company_ids", "company_id"]],
-    { context: CONTEXTO_BASE },
-  ]);
+      /*
+       * Este read va por `jsonrpc` crudo y no por `llamar()` a propósito: `llamar()`
+       * necesita la sesión para armar el contexto, y la sesión necesita este read.
+       * Leer el propio usuario no depende de qué empresas tenga habilitadas.
+       */
+      const [yo] = await jsonrpc<
+        { id: number; company_ids?: number[]; company_id?: Many2One }[]
+      >("object", "execute_kw", [
+        db,
+        uid,
+        clave,
+        "res.users",
+        "read",
+        [[uid], ["company_ids", "company_id"]],
+        { context: CONTEXTO_BASE },
+      ]);
 
-  const porDefecto = idDeRelacion(yo?.company_id);
-  // Si por algún motivo no vinieran las habilitadas, al menos la por defecto.
-  const empresas = yo?.company_ids?.length
-    ? yo.company_ids
-    : porDefecto !== null
-      ? [porDefecto]
-      : [];
+      const porDefecto = idDeRelacion(yo?.company_id);
+      // Si por algún motivo no vinieran las habilitadas, al menos la por defecto.
+      const empresas = yo?.company_ids?.length
+        ? yo.company_ids
+        : porDefecto !== null
+          ? [porDefecto]
+          : [];
 
-  sesionCacheada = { uid, empresas, empresaPorDefecto: porDefecto };
-  return sesionCacheada;
+      sesionCacheada = { uid, empresas, empresaPorDefecto: porDefecto };
+      return sesionCacheada;
+    } finally {
+      // Si falló, que el próximo llamado lo reintente en vez de quedar colgado de un error viejo.
+      sesionEnCurso = null;
+    }
+  })();
+
+  return sesionEnCurso;
 }
 
 /** El `uid` del usuario bot. */
@@ -323,6 +347,7 @@ async function autenticarSinCache(): Promise<number> {
 /** Tirar la sesión cacheada. Hace falta al rotar la API key, y en los tests. */
 export function olvidarSesionOdoo(): void {
   sesionCacheada = null;
+  sesionEnCurso = null;
 }
 
 // ── Llamadas al ORM ──────────────────────────────────────────
