@@ -54,3 +54,14 @@ export function costoHoraDeMaquina(d: DatosParaCostoMaquina): CostoMaquinaDelMes
   const costoHora = d.horasDelMes !== null && d.horasDelMes > 0 ? total / d.horasDelMes : null;
   return { costoHora, gastoOdoo: d.gastoAnaliticoOdoo, precioImplicitoLitro, estimadoCombustible, horasDelMes: d.horasDelMes };
 }
+
+/**
+ * Un mes "cerrado" para el costo de máquina de Odoo: cualquiera antes del
+ * mes en curso. Las facturas de un mes cerrado no se vuelven a tocar, así
+ * que `costoHoraDeMaquinasDelMes` (`./costoMaquinaOdoo.ts`) lo cachea en vez
+ * de volver a pedírselo a Odoo en cada visita — el mes en curso, en cambio,
+ * puede seguir sumando facturas y se recalcula siempre en vivo.
+ */
+export function esMesCerrado(mes: string, mesActual: string): boolean {
+  return mes < mesActual;
+}
