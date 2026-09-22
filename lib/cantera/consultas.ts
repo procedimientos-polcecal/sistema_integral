@@ -175,15 +175,30 @@ export async function correlativosUsados(
   return (data ?? []).map((f) => (f as { correlativo: number }).correlativo);
 }
 
+export interface DatosParaInforme {
+  voladuras: VoladuraParaInforme[];
+  bochones: BochonParaInforme[];
+  /**
+   * Lo crudo, para el caller que además necesita otra vista de lo mismo (el
+   * adelanto de "Registros" en `app/(app)/cantera/page.tsx`) y así no tiene
+   * que volver a pedirlo — antes esa página traía voladuras, bochones y
+   * consumos DOS VECES cada uno (una directo, otra acá adentro), el doble
+   * de viajes de red de los que hacían falta.
+   */
+  voladurasCrudas: Voladura[];
+  bochonesCrudos: Bochon[];
+  /** Todos los yacimientos (no sólo los activos): un yacimiento desactivado no deja de tener voladuras históricas que mostrar. */
+  yacimientos: Yacimiento[];
+  consumos: Consumo[];
+}
+
 /**
  * Todo lo que necesita `lib/cantera/informe.ts`, ya armado desde la base: las
  * voladuras (con sus consumos) y los bochones, con los montos y las toneladas
  * despejados. La usan la pantalla del informe y su export a Excel — una sola
  * vez, para que las dos miren exactamente lo mismo.
  */
-export async function traerDatosParaInforme(
-  supabase: SupabaseClient
-): Promise<{ voladuras: VoladuraParaInforme[]; bochones: BochonParaInforme[] }> {
+export async function traerDatosParaInforme(supabase: SupabaseClient): Promise<DatosParaInforme> {
   const [yacimientos, insumos] = await Promise.all([traerYacimientos(supabase), traerInsumos(supabase)]);
   const porId = new Map(yacimientos.map((y) => [y.id, y]));
   const nombreInsumoPorId = new Map(insumos.map((i) => [i.id, i.nombre]));
@@ -261,7 +276,7 @@ export async function traerDatosParaInforme(
     };
   });
 
-  return { voladuras, bochones };
+  return { voladuras, bochones, voladurasCrudas: vs, bochonesCrudos: bs, yacimientos, consumos };
 }
 
 // ── Acarreo (fase 2) ─────────────────────────────────────────

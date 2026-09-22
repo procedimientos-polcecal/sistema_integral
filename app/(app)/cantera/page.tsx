@@ -5,15 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import {
   traerAcarreos,
-  traerBochones,
-  traerConsumosDe,
   traerDatosParaInforme,
   traerDestape,
   traerFleteros,
   traerPesadas,
   traerTarifasAcarreo,
-  traerVoladuras,
-  traerYacimientos,
 } from "@/lib/cantera/consultas";
 import { ETIQUETA_TIPO_RECURSO } from "@/lib/cantera/destape";
 import { serieMensual } from "@/lib/cantera/informe";
@@ -56,15 +52,45 @@ export default async function CanteraInicioPage({
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  const [yacimientos, vs, bs, { voladuras: vParaInforme, bochones: bParaInforme }] = await Promise.all([
-    traerYacimientos(supabase, true),
-    traerVoladuras(supabase, {}),
-    traerBochones(supabase, {}),
+  // "Hoy" en un componente de servidor se resuelve una vez por request: no es
+  // estado que pueda dar un resultado distinto a mitad de un mismo render, así
+  // que la regla de purity no aplica acá (mismo caso que
+  // compras/configuracion/page.tsx).
+  // eslint-disable-next-line react-hooks/purity
+  const hoy = new Date();
+  const mesActual = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`;
+  const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
+  const [anioNum, mesNum] = mesActual.split("-").map(Number);
+  const primerDiaMesActual = `${mesActual}-01`;
+  const ultimoDiaMesActual = new Date(Date.UTC(anioNum, mesNum, 0)).toISOString().slice(0, 10);
+
+  /*
+   * Todo en un solo `Promise.all`: nada de acá depende de otra cosa de acá
+   * (antes iba en dos tandas separadas por una `traerConsumosDe` en el
+   * medio que ya no hace falta — `traerDatosParaInforme` la hace adentro).
+   * Antes también traía voladuras, bochones, consumos y yacimientos DOS
+   * VECES cada uno: una vez directo para el adelanto de Registros, otra vez
+   * adentro de `traerDatosParaInforme` para la serie del informe. Ahora esa
+   * función devuelve también lo crudo, así que alcanza con pedirlo una vez.
+   */
+  const [datosInforme, fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes, destapeDelMes] = await Promise.all([
     traerDatosParaInforme(supabase),
+    traerFleteros(supabase, true),
+    traerTarifasAcarreo(supabase),
+    traerAcarreos(supabase, { mes: mesActual }),
+    traerPesadas(supabase, { mes: mesActual }),
+    traerDestape(supabase, { desde: primerDiaMesActual, hasta: ultimoDiaMesActual }),
   ]);
+  const {
+    voladuras: vParaInforme,
+    bochones: bParaInforme,
+    voladurasCrudas: vs,
+    bochonesCrudos: bs,
+    yacimientos,
+    consumos,
+  } = datosInforme;
   const porId = new Map(yacimientos.map((y) => [y.id, y]));
 
-  const consumos = await traerConsumosDe(supabase, vs.map((v) => v.codigo));
   const consumosPorCodigo = new Map<string, Consumo[]>();
   for (const c of consumos) {
     const lista = consumosPorCodigo.get(c.voladura_codigo) ?? [];
@@ -84,28 +110,9 @@ export default async function CanteraInicioPage({
   const ultimosBochones = filasBochon.slice(0, 3);
 
   const serie = serieMensual(vParaInforme, bParaInforme);
-  // "Hoy" en un componente de servidor se resuelve una vez por request: no es
-  // estado que pueda dar un resultado distinto a mitad de un mismo render, así
-  // que la regla de purity no aplica acá (mismo caso que
-  // compras/configuracion/page.tsx).
-  // eslint-disable-next-line react-hooks/purity
-  const hoy = new Date();
-  const mesActual = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}`;
   const delMesActual = serie.find((f) => f.mes === mesActual) ?? null;
   const serieReciente = serie.slice(-6);
-  const anio = anioParam && /^\d{4}$/.test(anioParam) ? anioParam : String(hoy.getUTCFullYear());
 
-  const [anioNum, mesNum] = mesActual.split("-").map(Number);
-  const primerDiaMesActual = `${mesActual}-01`;
-  const ultimoDiaMesActual = new Date(Date.UTC(anioNum, mesNum, 0)).toISOString().slice(0, 10);
-
-  const [fleteros, tarifasAcarreo, acarreosDelMes, pesadasDelMes, destapeDelMes] = await Promise.all([
-    traerFleteros(supabase, true),
-    traerTarifasAcarreo(supabase),
-    traerAcarreos(supabase, { mes: mesActual }),
-    traerPesadas(supabase, { mes: mesActual }),
-    traerDestape(supabase, { desde: primerDiaMesActual, hasta: ultimoDiaMesActual }),
-  ]);
   const acarreosPlanos: AcarreoPlano[] = [
     ...acarreosDelMes.map((a) => ({ fleteroId: a.fletero_id, tipo: a.tipo, mes: a.mes, cantidad: a.cantidad })),
     ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
