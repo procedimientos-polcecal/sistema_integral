@@ -3,6 +3,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
+import type { PesadaAgrupada } from "./pesadas";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
 import type { AcarreoDB, Bochon, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
@@ -396,6 +397,44 @@ export async function traerPromedioToneladasPorFletero(
   return Object.fromEntries(
     ((data ?? []) as FilaPromedioToneladas[]).map((f) => [f.fletero_id, f.promedio])
   );
+}
+
+interface FilaPesadaAgrupadaDB {
+  fletero_id: string | null;
+  tipo: string;
+  mes: string;
+  toneladas: number;
+}
+
+/**
+ * Las pesadas de un año, ya sumadas por fletero+tipo+mes en la base
+ * (`cantera_pesadas_por_fletero_tipo_mes()`, migración `20260922093520`) —
+ * reemplaza a `traerPesadas(supabase, { anio })` para el "Resumen anual" de
+ * Cantera (`ResumenAnualSection.tsx`): como TODAS las pesadas de la base son
+ * del año en curso (verificado el 22/09/2026), filtrar por año no achicaba
+ * nada — era traer la tabla entera (7623+ filas, 8 páginas) igual. Acá es
+ * un puñado de filas (fletero × tipo × mes).
+ *
+ * Igual que `traerPromedioToneladasPorFletero`: si la función no existe
+ * todavía o el pedido falla, devuelve `[]` en vez de romper la página — el
+ * Resumen anual queda en $0/vacío por ese año hasta que se pueda calcular
+ * de nuevo, no cae la página.
+ */
+export async function traerPesadasAgrupadasPorFleteroTipoMes(
+  supabase: SupabaseClient,
+  anio: string
+): Promise<PesadaAgrupada[]> {
+  const { data, error } = await supabase.rpc("cantera_pesadas_por_fletero_tipo_mes", { p_anio: anio });
+  if (error) {
+    console.error("traerPesadasAgrupadasPorFleteroTipoMes: no se pudo calcular, el Resumen anual queda vacío para este año", error);
+    return [];
+  }
+  return ((data ?? []) as FilaPesadaAgrupadaDB[]).map((f) => ({
+    fleteroId: f.fletero_id,
+    tipo: f.tipo,
+    mes: f.mes,
+    toneladas: f.toneladas,
+  }));
 }
 
 /**

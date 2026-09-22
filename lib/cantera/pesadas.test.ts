@@ -5,6 +5,8 @@ import {
   pesadaDeFilaCruda,
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
+  planasDesdePesadasAgrupadas,
+  sumarPesadasAgrupadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
   patentesParaMostrar,
 } from "./pesadas";
@@ -197,6 +199,38 @@ describe("agruparPesadasPorTipoMes", () => {
 
   it("sin tipo (destape) no entra", () => {
     expect(agruparPesadasPorTipoMes([pesada({ tipo: null })])).toEqual([]);
+  });
+});
+
+describe("planasDesdePesadasAgrupadas", () => {
+  it("convierte filas ya agrupadas por la base (fletero+tipo+mes) al formato de AcarreoPlano", () => {
+    const r = planasDesdePesadasAgrupadas([
+      { fleteroId: "f1", tipo: "dolomita_d1", mes: "2026-01-01", toneladas: 15 },
+    ]);
+    expect(r).toEqual([{ fleteroId: "f1", tipo: "dolomita_d1", mes: "2026-01-01", cantidad: 15 }]);
+  });
+
+  it("una fila con fleteroId null (sin resolver) no entra — mismo criterio que agruparPesadasPorFleteroTipoMes", () => {
+    const r = planasDesdePesadasAgrupadas([
+      { fleteroId: null, tipo: "dolomita_d1", mes: "2026-01-01", toneladas: 15 },
+    ]);
+    expect(r).toEqual([]);
+  });
+});
+
+describe("sumarPesadasAgrupadasPorTipoMes", () => {
+  it("suma por tipo y mes sin mirar el fletero — incluye las de fleteroId null", () => {
+    const r = sumarPesadasAgrupadasPorTipoMes([
+      { fleteroId: "f1", tipo: "dolomita_d1", mes: "2026-08-01", toneladas: 10 },
+      { fleteroId: null, tipo: "dolomita_d1", mes: "2026-08-01", toneladas: 5 },
+      { fleteroId: "f2", tipo: "caliza", mes: "2026-08-01", toneladas: 7 },
+    ]);
+    expect(r).toEqual(
+      expect.arrayContaining([
+        { tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 15 },
+        { tipo: "caliza", mes: "2026-08-01", cantidad: 7 },
+      ])
+    );
   });
 });
 

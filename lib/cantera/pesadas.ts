@@ -296,3 +296,43 @@ export function agruparPesadasPorTipoMes(pesadas: PesadaDB[]): { tipo: string; m
   });
 }
 
+/** Una fila de `cantera_pesadas_por_fletero_tipo_mes()` (SQL, migración `20260922093520`) — la base ya la suma, `fleteroId` puede venir `null`. */
+export interface PesadaAgrupada {
+  fleteroId: string | null;
+  tipo: string;
+  mes: string; // "YYYY-MM-01"
+  toneladas: number;
+}
+
+/**
+ * Igual que `agruparPesadasPorFleteroTipoMes`, pero a partir de filas que la
+ * base ya sumó por fletero+tipo+mes (`traerPesadasAgrupadasPorFleteroTipoMes`
+ * en `lib/cantera/consultas.ts`) en vez de una pesada cruda por fila —
+ * excluye las de fletero sin resolver, mismo criterio: acá el fin es el
+ * pago.
+ */
+export function planasDesdePesadasAgrupadas(agrupado: PesadaAgrupada[]): AcarreoPlano[] {
+  return agrupado
+    .filter((f): f is PesadaAgrupada & { fleteroId: string } => f.fleteroId !== null)
+    .map((f) => ({ fleteroId: f.fleteroId, tipo: f.tipo, mes: f.mes, cantidad: f.toneladas }));
+}
+
+/**
+ * Igual que `agruparPesadasPorTipoMes`, pero sumando filas que la base ya
+ * agrupó por fletero+tipo+mes en (tipo, mes) — sin mirar el fletero,
+ * incluye las no resueltas (mismo criterio que `agruparPesadasPorTipoMes`:
+ * el total de la empresa no depende de a quién se le pudo atribuir cada
+ * viaje).
+ */
+export function sumarPesadasAgrupadasPorTipoMes(agrupado: PesadaAgrupada[]): { tipo: string; mes: string; cantidad: number }[] {
+  const totales = new Map<string, number>();
+  for (const f of agrupado) {
+    const clave = `${f.tipo}|${f.mes}`;
+    totales.set(clave, (totales.get(clave) ?? 0) + f.toneladas);
+  }
+  return [...totales.entries()].map(([clave, cantidad]) => {
+    const [tipo, mes] = clave.split("|");
+    return { tipo, mes, cantidad };
+  });
+}
+
