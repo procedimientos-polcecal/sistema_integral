@@ -507,7 +507,8 @@ console.log(`Escrito en ${salida}`);
 npx tsx --env-file=.env.local scripts/mudanza/contar.mts docs/mudanza-antes.json
 ```
 
-Esperado: ~115 tablas, 11 usuarios en auth, y los dos buckets con sus objetos.
+Esperado: 115 tablas, 56.679 filas, 11 usuarios en auth, y los dos buckets
+(medido el 22/09/2026: `execution-photos` vacio, `facturas-proveedor` con 1).
 **Si dice 0 usuarios, parar**: la Auth Admin API no está contestando y sin ese
 número la mudanza no se puede verificar.
 
@@ -837,18 +838,36 @@ plata.
 que mirar cada paso.
 
 - [ ] **C1. Avisar** a la gente que entre tal y tal hora no se carga nada.
-- [ ] **C2. Congelar.** Son tres cosas, no una:
+- [ ] **C2. Congelar.** Son tres cosas, no una.
+
+      **Primero volver a listar, no confiar en esta lista:**
+      ```bash
+      grep -l "cron:" .github/workflows/*.yml
+      grep '"path"' vercel.json
+      ```
+      Al 22/09/2026 son **seis** workflows y **ocho** crons. La lista crece: ese
+      mismo día aparecieron `cantera-acarreo-sync` y `taller-vial-sync` que no
+      estaban cuando se diseñó esto.
+
       ```bash
       gh workflow disable compras-sync.yml
       gh workflow disable inventario-sync.yml
       gh workflow disable mantenimiento-sync.yml
+      gh workflow disable cantera-acarreo-sync.yml
+      gh workflow disable taller-vial-sync.yml
       gh workflow disable rrhh-recalculo.yml
       gh workflow disable backup.yml
       ```
-      Y sacar los 6 crons de `vercel.json` (o pausarlos en el dashboard).
-      **Esto es lo que más fácil se olvida y lo que más caro sale**: los tres
-      primeros corren cada 15 minutos y escribirían en la base vieja después del
-      dump, en verde, sin que nada avise.
+      Y sacar los 8 crons de `vercel.json` (o pausarlos en el dashboard).
+
+      **Esto es lo que más fácil se olvida y lo que más caro sale**: los cinco
+      de sincronización corren cada 15 o 20 minutos y escribirían en la base
+      vieja después del dump, en verde, sin que nada avise.
+
+      Comprobar que quedaron apagados antes de seguir:
+      ```bash
+      gh workflow list --all
+      ```
 - [ ] **C3. Contar de nuevo**, ya congelado — el `docs/mudanza-antes.json` de la
       Fase A quedó viejo:
       ```bash
@@ -905,10 +924,14 @@ que mirar cada paso.
       gh workflow enable compras-sync.yml
       gh workflow enable inventario-sync.yml
       gh workflow enable mantenimiento-sync.yml
+      gh workflow enable cantera-acarreo-sync.yml
+      gh workflow enable taller-vial-sync.yml
       gh workflow enable rrhh-recalculo.yml
       gh workflow enable backup.yml
       ```
-      Y devolver los crons a `vercel.json`.
+      Y devolver los 8 crons a `vercel.json`. Comprobar con
+      `gh workflow list --all` que no quedó ninguno apagado: uno que quedó en
+      off no avisa nunca, sólo deja de sincronizar.
 - [ ] **C13.** Actualizar `.env.local` y `docs/VARIABLES-VERCEL.md`.
 - [ ] **C14.** **No borrar el proyecto viejo.** Queda en pie unas semanas: es la
       vuelta atrás. Anotar en el calendario cuándo darlo de baja.
