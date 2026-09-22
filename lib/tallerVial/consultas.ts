@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { traerTodo, traerTodoEnParalelo } from "@/lib/core/paginado";
+import { traerTodo } from "@/lib/core/paginado";
 import { compararCodigosEM } from "./equipos";
 import type { CargaDB, EstadoDiarioDB, ReparacionDB, RepuestoAsignadoConArticulo, ServiceDB } from "./types";
 
@@ -27,18 +27,11 @@ export interface FiltrosDeCargas {
   mes?: string;
 }
 
-/**
- * Varias páginas de Taller Vial la traen entera para encadenar el delta de
- * horómetro contra la carga anterior — `traerTodoEnParalelo` (no
- * `traerTodo`): 765 filas al 22/09/2026, hoy entra en una página, pero
- * sigue creciendo (una fila por carga de combustible) y este mismo patrón
- * ya costó ~2s por visita en Cantera con `cantera_pesadas`.
- */
 export async function traerCargas(supabase: SupabaseClient, filtros: FiltrosDeCargas = {}): Promise<CargaDB[]> {
-  return traerTodoEnParalelo<CargaDB>((desde, hasta) => {
+  return traerTodo<CargaDB>((desde, hasta) => {
     let q = supabase
       .from("taller_vial_cargas")
-      .select("id, equipo_id, equipo_raw, fecha, litros, lectura, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en, sheets_pendiente", { count: "exact" });
+      .select("id, equipo_id, equipo_raw, fecha, litros, lectura, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en, sheets_pendiente");
     if (filtros.equipoId) q = q.eq("equipo_id", filtros.equipoId);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);
@@ -56,12 +49,11 @@ export interface FiltrosDeEstados {
   mes?: string;
 }
 
-/** 2190 filas al 22/09/2026 (3 páginas) — mismo motivo que `traerCargas` de acá arriba: `traerTodoEnParalelo`, no `traerTodo`. */
 export async function traerEstadosDiarios(supabase: SupabaseClient, filtros: FiltrosDeEstados = {}): Promise<EstadoDiarioDB[]> {
-  return traerTodoEnParalelo<EstadoDiarioDB>((desde, hasta) => {
+  return traerTodo<EstadoDiarioDB>((desde, hasta) => {
     let q = supabase
       .from("taller_vial_estados_diarios")
-      .select("id, equipo_id, fecha, estado, observaciones, cargado_por, sheets_pendiente", { count: "exact" });
+      .select("id, equipo_id, fecha, estado, observaciones, cargado_por, sheets_pendiente");
     if (filtros.equipoId) q = q.eq("equipo_id", filtros.equipoId);
     if (filtros.mes) {
       const [anio, mesNum] = filtros.mes.split("-").map(Number);
