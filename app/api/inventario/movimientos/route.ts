@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarInventario } from "@/lib/inventario/auth";
 import { espejarMovimiento } from "@/lib/inventario/espejo";
-import { loQueFalta, sectorDelMovimiento, type TipoMovimiento } from "@/lib/inventario/movimiento";
+import { loQueFalta, sectorDelMovimiento, avisoDeStockNegativo, type TipoMovimiento } from "@/lib/inventario/movimiento";
 
 /**
  * Registrar una entrada, una salida o un ajuste.
@@ -243,5 +243,16 @@ export async function POST(request: Request) {
     // Que la pantalla pueda decirlo. Sin esto, quien cargó se va convencido de
     // que quedó, y el stock vuelve atrás en la próxima sincronización.
     planilla_error: espejo.ok ? null : espejo.error,
+    // El stock quedó bajo cero. **Se informa, no se rechaza**, y el movimiento
+    // queda registrado igual: el material ya salió del pañol, y la planilla
+    // manda —su stock es una fórmula sobre el kardex—, así que negarse acá no
+    // arreglaría nada y sí escondería el error de carga que lo causó.
+    //
+    // El número sale del RPC, o sea del stock real después de bloquear la fila,
+    // y no del que el navegador tenía cargado. Es la diferencia que importa: el
+    // formulario ya avisaba, pero contra un número que podía estar viejo, y la
+    // comprobación no existía de este lado. Una pestaña abierta desde ayer, o
+    // un POST a mano, dejaban el stock negativo sin que nadie se enterara.
+    stock_negativo: avisoDeStockNegativo(mov.stock_resultante),
   });
 }

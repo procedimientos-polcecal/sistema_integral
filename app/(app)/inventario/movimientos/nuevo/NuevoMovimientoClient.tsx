@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { loQueFalta, sectorDelMovimiento } from "@/lib/inventario/movimiento";
+import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } from "@/lib/inventario/movimiento";
 import TraerDeLaPlanilla from "../../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
@@ -70,7 +70,7 @@ export default function NuevoMovimientoClient({
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
-  const [hecho, setHecho] = useState<{ stock: number; aviso: string | null } | null>(null);
+  const [hecho, setHecho] = useState<{ stock: number; aviso: string | null; negativo: string | null } | null>(null);
 
   // El buscador, sólo mientras no haya artículo elegido.
   useEffect(() => {
@@ -114,17 +114,16 @@ export default function NuevoMovimientoClient({
   const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId });
 
   /**
-   * En cuánto va a quedar. Un ajuste no suma ni resta: fija el número, que es
-   * lo que lo distingue de una entrada o una salida.
+   * En cuánto va a quedar. La cuenta vive en `lib/inventario/movimiento.ts`
+   * desde el 22/09/2026 y no acá: la ruta tiene que hacer la misma, porque
+   * nada obliga a pasar por este formulario y hasta entonces el servidor
+   * aceptaba un stock negativo sin decir una palabra.
    */
-  const stockQueQueda = useMemo(() => {
-    if (!articulo || cantidad === "") return null;
-    const c = Number(cantidad);
-    if (!Number.isFinite(c)) return null;
-    if (tipo === "entrada") return articulo.stock_actual + c;
-    if (tipo === "salida") return articulo.stock_actual - c;
-    return c;
-  }, [articulo, cantidad, tipo]);
+  const quedaEn = useMemo(
+    () => (articulo ? stockQueQueda(tipo, articulo.stock_actual, cantidad) : null),
+    [articulo, cantidad, tipo]
+  );
+  const avisoNegativo = avisoDeStockNegativo(quedaEn);
 
   /**
    * Después de traer de la planilla, el stock del artículo elegido cambió.
@@ -168,7 +167,14 @@ export default function NuevoMovimientoClient({
 
     if (!res.ok) { setError(body.error ?? "No se pudo registrar el movimiento."); return; }
 
-    setHecho({ stock: body.stock_resultante, aviso: body.planilla_error ?? null });
+    setHecho({
+      stock: body.stock_resultante,
+      aviso: body.planilla_error ?? null,
+      // Lo dice el servidor, sobre el stock real después de bloquear la fila.
+      // El aviso de antes de apretar se calculaba contra el número que este
+      // navegador tenía cargado, que puede ser de hace horas.
+      negativo: body.stock_negativo ?? null,
+    });
     setArticulo({ ...articulo, stock_actual: body.stock_resultante });
     setCantidad("");
     // El equipo no se arrastra al movimiento siguiente: el artículo y la persona
@@ -271,10 +277,10 @@ export default function NuevoMovimientoClient({
             />
           </label>
 
-          {stockQueQueda !== null && (
-            <p className={`text-sm ${stockQueQueda < 0 ? "text-red-600" : "text-slate-600"}`}>
-              Queda en <strong>{stockQueQueda}</strong>
-              {stockQueQueda < 0 && " — el stock quedaría negativo"}
+          {quedaEn !== null && (
+            <p className={`text-sm ${avisoNegativo ? "text-red-600" : "text-slate-600"}`}>
+              Queda en <strong>{quedaEn}</strong>
+              {avisoNegativo && " — el stock quedaría negativo"}
             </p>
           )}
 
@@ -391,9 +397,17 @@ export default function NuevoMovimientoClient({
 
           {hecho && (
             <div className={`rounded-lg px-3 py-2 text-sm ${
-              hecho.aviso ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-800"
+              hecho.aviso || hecho.negativo ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-800"
             }`}>
               Registrado. El stock quedó en <strong>{hecho.stock}</strong>.
+              {hecho.negativo && (
+                <>
+                  {" "}
+                  <strong>{hecho.negativo}</strong> El movimiento quedó registrado
+                  igual —el material ya salió—, pero hay algo que corregir en el
+                  kardex.
+                </>
+              )}
               {hecho.aviso && (
                 <>
                   {" "}

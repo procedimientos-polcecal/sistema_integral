@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loQueFalta, sectorDelMovimiento } from "./movimiento";
+import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } from "./movimiento";
 
 const completo = {
   articuloId: "a-1",
@@ -84,5 +84,62 @@ describe("de donde sale el destino", () => {
 
   it("alguien sin destino en la lista no impide elegirlo a mano", () => {
     expect(sectorDelMovimiento("s-panol", null)).toBe("s-panol");
+  });
+});
+
+describe("en cuanto queda el stock", () => {
+  it("una entrada suma y una salida resta", () => {
+    expect(stockQueQueda("entrada", 10, 4)).toBe(14);
+    expect(stockQueQueda("salida", 10, 4)).toBe(6);
+  });
+
+  /** Lo que distingue a un ajuste: no suma ni resta, fija el numero. */
+  it("un ajuste fija el numero, no lo suma", () => {
+    expect(stockQueQueda("ajuste", 10, 4)).toBe(4);
+    expect(stockQueQueda("ajuste", 10, 0)).toBe(0);
+  });
+
+  it("sin cantidad todavia no se puede decir nada", () => {
+    expect(stockQueQueda("salida", 10, "")).toBeNull();
+    expect(stockQueQueda("salida", 10, null)).toBeNull();
+    expect(stockQueQueda("salida", 10, undefined)).toBeNull();
+    expect(stockQueQueda("salida", 10, "dos")).toBeNull();
+  });
+
+  it("la cantidad llega como texto desde el formulario", () => {
+    expect(stockQueQueda("salida", 10, "4")).toBe(6);
+    expect(stockQueQueda("entrada", 10, "0.5")).toBe(10.5);
+  });
+
+  it("una salida mayor al stock da negativo, y se devuelve negativo", () => {
+    expect(stockQueQueda("salida", 3, 50)).toBe(-47);
+  });
+});
+
+describe("el aviso de stock negativo", () => {
+  /**
+   * El caso que motiva todo: hasta el 22/09/2026 el RPC restaba sin mirar el
+   * resultado y la ruta no decia nada. La comprobacion vivia solo en el
+   * formulario, con el stock que el navegador tenia cargado.
+   */
+  it("una salida mayor al stock avisa y dice en cuanto quedo", () => {
+    expect(avisoDeStockNegativo(-47)).toContain("-47");
+  });
+
+  it("cero no es negativo: no hay nada que avisar", () => {
+    expect(avisoDeStockNegativo(0)).toBeNull();
+  });
+
+  it("un stock que quedo bien no avisa", () => {
+    expect(avisoDeStockNegativo(6)).toBeNull();
+  });
+
+  it("sin cantidad cargada no avisa nada", () => {
+    expect(avisoDeStockNegativo(null)).toBeNull();
+  });
+
+  /** No recorta a cero: el numero negativo es justo lo que hay que ver. */
+  it("el aviso dice el numero de verdad y no un cero disimulado", () => {
+    expect(avisoDeStockNegativo(-0.5)).toContain("-0.5");
   });
 });

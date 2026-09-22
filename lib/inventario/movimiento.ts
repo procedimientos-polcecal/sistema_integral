@@ -56,6 +56,56 @@ export function loQueFalta(m: MovimientoEnCurso): string[] {
 }
 
 /**
+ * En cuánto queda el stock. `null` es "todavía no se puede decir".
+ *
+ * Un ajuste no suma ni resta: **fija** el número, que es lo que lo distingue de
+ * una entrada o una salida.
+ *
+ * Vive acá por lo mismo que `loQueFalta`: la cuenta la tienen que hacer los dos
+ * lados. El formulario la muestra en vivo mientras se escribe la cantidad, y la
+ * ruta la necesita para poder decir en qué quedó — con la diferencia de que la
+ * ruta ya tiene el número de verdad, el que devolvió el RPC después de bloquear
+ * la fila, y no el que el navegador tenía cargado.
+ */
+export function stockQueQueda(
+  tipo: TipoMovimiento,
+  stockActual: number,
+  cantidad: number | string | null | undefined
+): number | null {
+  const crudo = String(cantidad ?? "").trim();
+  if (crudo === "") return null;
+  const c = Number(crudo);
+  if (!Number.isFinite(c)) return null;
+
+  if (tipo === "entrada") return stockActual + c;
+  if (tipo === "salida") return stockActual - c;
+  return c;
+}
+
+/**
+ * El aviso de que el stock quedó (o quedaría) bajo cero. `null` si no hay nada
+ * que decir.
+ *
+ * **No bloquea, avisa.** Es la misma decisión que Producción tomó con la
+ * producción negativa y Calidad con el saldo de carbonilla: un stock bajo cero
+ * es un error de carga —una entrada que nunca se registró, un conteo viejo— y
+ * recortarlo a cero escondería justo lo que hay que corregir. Además la
+ * planilla manda: su stock es una fórmula sobre el kardex, así que rechazar la
+ * salida en la app no impediría que el material igual haya salido del pañol.
+ * Lo que sí hace falta es que se vea.
+ *
+ * Hasta el 22/09/2026 esto existía **sólo en el formulario**, calculado ahí
+ * mismo con el stock que el navegador tenía cargado. O sea: la comprobación no
+ * estaba del lado del servidor, y nada obliga a pasar por el formulario — una
+ * pestaña vieja, o un POST a mano, dejaban el stock en negativo sin que nadie
+ * se enterara. Es exactamente la asimetría que `loQueFalta` existe para evitar.
+ */
+export function avisoDeStockNegativo(stockResultante: number | null): string | null {
+  if (stockResultante === null || stockResultante >= 0) return null;
+  return `El stock queda en ${stockResultante}. Un stock negativo es un error de carga: falta registrar una entrada, o el conteo está viejo.`;
+}
+
+/**
  * Qué destino queda: el que se eligió a mano, y si no, el de quien retira.
  *
  * No se pregunta dos veces. Cada persona de la lista del pañol ya tiene el
