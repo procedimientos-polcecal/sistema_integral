@@ -31,12 +31,12 @@ misma región.
 
 La base **no es lenta**: contesta en 3-21 ms. Y la app **no está lejos de la
 base**: están en la misma región, así que las consultas del servidor cuestan
-unos pocos milisegundos. La pantalla de Compras hace 8 `await`, y los ocho
+unos pocos milisegundos. La pantalla de Compras hace 5 `await`, y los cinco
 juntos no llegan a 50 ms.
 
 Lo que está lejos es **la gente**. Cada viaje del navegador a la app cuesta
-**193 ms**, y el sistema hace muchos: 125 de las 227 pantallas son client
-components y hay **260 llamadas `fetch()` a `/api` desde el navegador**. Una
+**193 ms**, y el sistema hace muchos: 141 de las 262 pantallas son client
+components y hay **282 llamadas `fetch()` a `/api` desde el navegador**. Una
 pantalla que dispare cuatro paga ~800 ms de red pura antes de mostrar un dato.
 
 Esa es toda la lentitud. No es la base, no es el volumen, no es Sheets.
@@ -46,12 +46,12 @@ Esa es toda la lentitud. No es la base, no es el volumen, no es Sheets.
 | | |
 |---|---|
 | Tablas | 115 |
-| Filas en las 15 tablas más grandes | ~43.000 |
+| Filas, contadas una por una | **56.679** |
 | Usuarios | **11** |
 | Buckets de Storage | 2 (`execution-photos`, `facturas-proveedor`) |
 
 No hay ningún problema de escala. `calculos_diarios` es la tabla más grande con
-16.317 filas. Eso entra holgado en cualquier hardware.
+16.317 filas de las 56.679 totales. Eso entra holgado en cualquier hardware.
 
 ### Starlink no era el problema
 
@@ -87,8 +87,9 @@ busque la causa en el sistema.
 > **Vercel y Supabase se mueven juntas o no se mueve ninguna.**
 
 Hoy están las dos en Virginia y se consultan en ~5 ms. Si se moviera sólo Vercel
-a San Pablo, cada uno de los 8 `await` de la pantalla de Compras pasaría a costar
-193 ms: **+1,5 segundos por pantalla**. La mudanza sería un empeoramiento
+a San Pablo, cada uno de los 5 `await` de la pantalla de Compras pasaría a costar
+193 ms: **cerca de un segundo por pantalla**, y eso sólo en la carga del
+servidor — las 282 llamadas del navegador pagarían lo suyo aparte. La mudanza sería un empeoramiento
 grande, y del tipo que se descubre en producción.
 
 ## Lo que queda después
@@ -101,7 +102,7 @@ grande, y del tipo que se descubre en producción.
 | App ↔ base | ~5 ms | ~5 ms (siguen juntas) |
 | Dominio | `sistema-integral-one.vercel.app` | **igual** |
 
-Las 260 llamadas del navegador mejoran solas, sin tocar código. El dominio no
+Las 282 llamadas del navegador mejoran solas, sin tocar código. El dominio no
 cambia, así que **los Apps Script de las planillas no se tocan**: siguen
 apuntando al mismo `URL_APP`.
 
@@ -120,7 +121,7 @@ No se dio nada por sabido; esto se chequeó el 22/09/2026:
   conviene mirar si está disponible antes de la ventana.)
 - **El contenido estático ya se sirve desde el PoP de Buenos Aires.** Lo que se
   mueve es el cómputo. O sea que la mejora cae entera sobre las llamadas
-  dinámicas —que son justamente las 260—, y no sobre el HTML y el JS, que ya
+  dinámicas —que son justamente las 282—, y no sobre el HTML y el JS, que ya
   venían cerca.
 
 ### San Pablo cuesta más caro
@@ -135,7 +136,7 @@ Vercel cobra distinto por región, y `gru1` está entre las caras:
 | Fast Data Transfer | $0,15/GB | $0,22/GB | 1,5× |
 | Fast Origin Transfer | $0,06/GB | $0,41/GB | **6,8×** |
 
-Con 11 usuarios y 43.000 filas el volumen es chico, así que lo más probable es
+Con 11 usuarios y 56.679 filas el volumen es chico, así que lo más probable es
 que siga entrando en lo incluido del plan y la factura no se mueva. Pero las
 tarifas son ésas: **conviene mirar la primera factura después de la mudanza** en
 vez de suponer que no cambió. El que más salta es Fast Origin Transfer, que es
@@ -163,7 +164,7 @@ noche y **entrar con un usuario real**. No alcanza con que la app levante.
 El motivo está en `docs/BACKUPS.md`: el esquema `auth` —donde viven los
 usuarios— no entra en el dump por defecto, va en un cuarto dump aparte, y ese
 dump **"no es fatal si falla"**. O sea que hay un camino en el que el backup se
-da por bueno, se restauran los 43.000 registros, y **nadie puede entrar al
+da por bueno, se restauran los 56.679 registros, y **nadie puede entrar al
 sistema**. Si eso se descubre en la ventana real, la ventana se terminó.
 
 El ensayo también mide cuánto tarda de verdad el restore, que es lo que fija el
@@ -187,21 +188,30 @@ hora:
 | Hora ART | Qué corre |
 |---|---|
 | cada 15 min | `compras-sync`, `inventario-sync`, `mantenimiento-sync` (GitHub Actions) |
+| cada 20 min | `cantera-acarreo-sync`, `taller-vial-sync` (GitHub Actions) |
 | 19:00 | `remises-notificaciones` (Vercel) |
 | 21:00 / 03:00 / 09:00 / 15:00 | `rrhh-recalculo` (GitHub Actions, cada 6 h) |
 | 03:00 | `backup` (GitHub Actions) |
-| 03:00 a 06:30 | los cinco syncs de Vercel |
+| 03:00 a 06:30 | los siete syncs de Vercel |
 
 Entre las 22:00 y las 02:00 no hay nada programado.
 
-> **Pero no hay hora tranquila por sí sola.** Los tres workflows de 15 minutos
-> corren siempre. Si no se apagan a mano, siguen leyendo las planillas y
-> **escribiendo en la base vieja después del dump** — y esos datos se pierden en
-> silencio, porque el workflow termina en verde. Apagarlos es parte de congelar,
-> no un detalle operativo.
+> **Pero no hay hora tranquila por sí sola.** Los **cinco** workflows de
+> sincronización corren siempre, cada 15 o 20 minutos. Si no se apagan a mano,
+> siguen leyendo las planillas y **escribiendo en la base vieja después del
+> dump** — y esos datos se pierden en silencio, porque el workflow termina en
+> verde. Apagarlos es parte de congelar, no un detalle operativo.
 
-Congelar es entonces tres cosas: avisarle a la gente, apagar los tres workflows
-de 15 minutos, y apagar los crons de `vercel.json`.
+Congelar es entonces tres cosas: avisarle a la gente, apagar los **seis**
+workflows de GitHub (los cinco de sincronización y `rrhh-recalculo`), y apagar
+los **ocho** crons de `vercel.json`.
+
+> **La lista de arriba envejece.** Se armó el 22/09/2026 y ese mismo día ya
+> había crecido: entre el árbol donde se diseñó esto y `origin/main` aparecieron
+> `cantera-acarreo-sync` y `taller-vial-sync`, que no estaban. Antes de la
+> ventana hay que volver a mirar `.github/workflows/*.yml` y `vercel.json`, y no
+> confiar en esta tabla. Un sync que nadie apagó porque nadie sabía que existía
+> es exactamente la pérdida silenciosa que esta sección quiere evitar.
 
 ### Paso 4 — Dump, restore y verificación
 
@@ -280,13 +290,13 @@ proyecto C.
 
 **No toca Sheets.** El pedido original incluía que las planillas dejaran de ser
 la fuente y quedaran como backup. Eso es un proyecto aparte, más grande y de
-otra naturaleza: toca 171 archivos, 24 ids de planilla, 6 crons y los Apps
+otra naturaleza: toca 201 archivos, 32 ids de planilla, 8 crons y los Apps
 Script — pero sobre todo **cambia cómo trabaja la gente**. Se midió que los
 pedidos de compra nuevos entran por un **Google Form**, no por el SdG: sacar la
 planilla implica que esa gente cambie de herramienta. Se acordó que el Form
 convive en paralelo un tiempo, sin fecha técnica.
 
-**No baja las 260 llamadas del navegador** (el proyecto C). Después de esta
+**No baja las 282 llamadas del navegador** (el proyecto C). Después de esta
 mudanza cada una cuesta ~100 ms en vez de 193 ms, pero cuatro llamadas siguen
 siendo cuatro viajes. Ahí queda la mejora más grande que resta, y conviene
 medirla pantalla por pantalla antes de tocarla.
