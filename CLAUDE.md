@@ -179,8 +179,9 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
 - `npm run lint` **falla**, pero ya no por lo que decía acá: desde
-  `a7fd2f1` hay `eslint.config.mjs` y el lint corre. Lo que quedan son **14
-  errores reales**, casi todos `react-hooks/set-state-in-effect` en pantallas.
+  `a7fd2f1` hay `eslint.config.mjs` y el lint corre. Lo que quedan son **21
+  errores reales** (medido el 22/09/2026 sobre `origin/main`), casi todos
+  `react-hooks/set-state-in-effect` en pantallas.
   Por eso el lint **no** está en el CI: agregarlo lo dejaría rojo desde el primer
   push, y un CI siempre rojo no lo mira nadie. Cuando esos 14 se cierren, se
   agrega el paso.
@@ -200,8 +201,8 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
   **ESLint sí tenía el mismo problema** y se arregló el 22/09/2026: con un
   worktree abierto contaba seis errores duplicados y 1.900 avisos de más, y de
   paso linteaba el pdf.js minificado de `public/pdfjs/`. Las dos entradas están
-  ahora en el `ignores` de `eslint.config.mjs`; el lint pasó de 2.276 problemas
-  a 359 sin que se arreglara una sola línea de código.
+  ahora en el `ignores` de `eslint.config.mjs`; con un worktree abierto el lint
+  pasó de 2.276 problemas a 359 sin que se arreglara una sola línea de código.
 - **Casi todo está detrás del login**, así que no se puede comprobar en el
   navegador. Se verifica con tests sobre las funciones puras y, cuando hace falta
   ver datos reales, consultando la base con el `SUPABASE_SERVICE_ROLE_KEY` de
