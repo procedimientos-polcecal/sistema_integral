@@ -1,0 +1,498 @@
+{
+  "url": "https://sqfdqoxyqkaekxlluvpg.supabase.co",
+  "fecha": "2026-09-22T13:13:12.238Z",
+  "tablas": [
+    {
+      "tabla": "asientos",
+      "filas": 700
+    },
+    {
+      "tabla": "asistente_consultas",
+      "filas": 0
+    },
+    {
+      "tabla": "ausencias",
+      "filas": 128
+    },
+    {
+      "tabla": "avisos",
+      "filas": 152
+    },
+    {
+      "tabla": "calculos_diarios",
+      "filas": 16317
+    },
+    {
+      "tabla": "calidad_carbonilleros",
+      "filas": 13
+    },
+    {
+      "tabla": "calidad_conteos",
+      "filas": 13
+    },
+    {
+      "tabla": "calidad_envases_articulos",
+      "filas": 28
+    },
+    {
+      "tabla": "calidad_envases_movimientos",
+      "filas": 1404
+    },
+    {
+      "tabla": "calidad_envases_proveedores",
+      "filas": 16
+    },
+    {
+      "tabla": "calidad_envases_referencias",
+      "filas": 5
+    },
+    {
+      "tabla": "calidad_envases_referencias_historial",
+      "filas": 3
+    },
+    {
+      "tabla": "calidad_movimientos",
+      "filas": 1049
+    },
+    {
+      "tabla": "calidad_odoo_sin_reconocer",
+      "filas": 0
+    },
+    {
+      "tabla": "calidad_productos_odoo",
+      "filas": 10
+    },
+    {
+      "tabla": "cantera_acarreos",
+      "filas": 124
+    },
+    {
+      "tabla": "cantera_bochones",
+      "filas": 20
+    },
+    {
+      "tabla": "cantera_consumos",
+      "filas": 290
+    },
+    {
+      "tabla": "cantera_contratistas",
+      "filas": 2
+    },
+    {
+      "tabla": "cantera_costo_maquina_mensual",
+      "filas": 2
+    },
+    {
+      "tabla": "cantera_cubicaciones",
+      "filas": 12
+    },
+    {
+      "tabla": "cantera_destape",
+      "filas": 18
+    },
+    {
+      "tabla": "cantera_finanzas",
+      "filas": 1
+    },
+    {
+      "tabla": "cantera_fleteros",
+      "filas": 11
+    },
+    {
+      "tabla": "cantera_insumos",
+      "filas": 15
+    },
+    {
+      "tabla": "cantera_pesadas",
+      "filas": 7623
+    },
+    {
+      "tabla": "cantera_tarifas_acarreo",
+      "filas": 45
+    },
+    {
+      "tabla": "cantera_voladuras",
+      "filas": 42
+    },
+    {
+      "tabla": "cantera_yacimientos",
+      "filas": 4
+    },
+    {
+      "tabla": "choferes",
+      "filas": 0
+    },
+    {
+      "tabla": "compras_aprobadores",
+      "filas": 3
+    },
+    {
+      "tabla": "compras_areas",
+      "filas": 9
+    },
+    {
+      "tabla": "compras_cotizaciones",
+      "filas": 1066
+    },
+    {
+      "tabla": "compras_historial",
+      "filas": 2922
+    },
+    {
+      "tabla": "compras_odoo_ordenes",
+      "filas": 2
+    },
+    {
+      "tabla": "compras_producto_odoo",
+      "filas": 3
+    },
+    {
+      "tabla": "compras_requerimientos",
+      "filas": 2015
+    },
+    {
+      "tabla": "compras_resumen_por_estado",
+      "filas": 7
+    },
+    {
+      "tabla": "compras_sincronizaciones",
+      "filas": 867
+    },
+    {
+      "tabla": "compras_ubicaciones",
+      "filas": 44
+    },
+    {
+      "tabla": "config_liquidacion",
+      "filas": 1
+    },
+    {
+      "tabla": "cotizaciones_dolar",
+      "filas": 10
+    },
+    {
+      "tabla": "despacho_ordenes_carga",
+      "filas": 1704
+    },
+    {
+      "tabla": "despacho_recepcion_proveedores",
+      "filas": 0
+    },
+    {
+      "tabla": "despacho_recepciones",
+      "filas": 1
+    },
+    {
+      "tabla": "empleados",
+      "filas": 70
+    },
+    {
+      "tabla": "empresa_status_log",
+      "filas": 0
+    },
+    {
+      "tabla": "empresas",
+      "filas": 2
+    },
+    {
+      "tabla": "equipos",
+      "filas": 239
+    },
+    {
+      "tabla": "equipos_checklists",
+      "filas": 1
+    },
+    {
+      "tabla": "equipos_componentes",
+      "filas": 398
+    },
+    {
+      "tabla": "equipos_repuestos",
+      "filas": 0
+    },
+    {
+      "tabla": "equipos_status_log",
+      "filas": 628
+    },
+    {
+      "tabla": "equipos_tipos",
+      "filas": 26
+    },
+    {
+      "tabla": "facturas_proveedor",
+      "filas": 1
+    },
+    {
+      "tabla": "facturas_proveedor_lineas",
+      "filas": 4
+    },
+    {
+      "tabla": "feriados",
+      "filas": 16
+    },
+    {
+      "tabla": "fichadas",
+      "filas": 3962
+    },
+    {
+      "tabla": "francos",
+      "filas": 112
+    },
+    {
+      "tabla": "hojas_ruta",
+      "filas": 206
+    },
+    {
+      "tabla": "inventario_articulos",
+      "filas": 1157
+    },
+    {
+      "tabla": "inventario_destinos",
+      "filas": 27
+    },
+    {
+      "tabla": "inventario_equipos",
+      "filas": 255
+    },
+    {
+      "tabla": "inventario_movimientos",
+      "filas": 4204
+    },
+    {
+      "tabla": "inventario_solicitantes",
+      "filas": 64
+    },
+    {
+      "tabla": "jornadas",
+      "filas": 6
+    },
+    {
+      "tabla": "liquidaciones",
+      "filas": 0
+    },
+    {
+      "tabla": "mantenimiento_tarifas_hora",
+      "filas": 0
+    },
+    {
+      "tabla": "mantenimientos_ejecuciones",
+      "filas": 2
+    },
+    {
+      "tabla": "mantenimientos_programados",
+      "filas": 1
+    },
+    {
+      "tabla": "notificaciones_descartes",
+      "filas": 6
+    },
+    {
+      "tabla": "operarios",
+      "filas": 10
+    },
+    {
+      "tabla": "ordenes_servicio",
+      "filas": 240
+    },
+    {
+      "tabla": "ordenes_trabajo",
+      "filas": 1910
+    },
+    {
+      "tabla": "ordenes_trabajo_repuestos",
+      "filas": 0
+    },
+    {
+      "tabla": "os_aprobadores",
+      "filas": 1
+    },
+    {
+      "tabla": "os_comparativas",
+      "filas": 167
+    },
+    {
+      "tabla": "planificacion_diaria",
+      "filas": 0
+    },
+    {
+      "tabla": "planificacion_diaria_items",
+      "filas": 0
+    },
+    {
+      "tabla": "produccion_deposito",
+      "filas": 0
+    },
+    {
+      "tabla": "produccion_despachos",
+      "filas": 0
+    },
+    {
+      "tabla": "produccion_partes",
+      "filas": 0
+    },
+    {
+      "tabla": "produccion_renglon_productos",
+      "filas": 0
+    },
+    {
+      "tabla": "produccion_renglones_papel",
+      "filas": 17
+    },
+    {
+      "tabla": "produccion_semanal",
+      "filas": 1
+    },
+    {
+      "tabla": "productos",
+      "filas": 49
+    },
+    {
+      "tabla": "proveedores",
+      "filas": 384
+    },
+    {
+      "tabla": "proveedores_odoo",
+      "filas": 213
+    },
+    {
+      "tabla": "remises_asistencia",
+      "filas": 500
+    },
+    {
+      "tabla": "remises_config",
+      "filas": 1
+    },
+    {
+      "tabla": "remises_empleados_datos",
+      "filas": 25
+    },
+    {
+      "tabla": "remises_plan_semana",
+      "filas": 423
+    },
+    {
+      "tabla": "remises_plantillas",
+      "filas": 3
+    },
+    {
+      "tabla": "remises_plantillas_grupos",
+      "filas": 35
+    },
+    {
+      "tabla": "remises_push_tokens",
+      "filas": 0
+    },
+    {
+      "tabla": "remises_turnos",
+      "filas": 5
+    },
+    {
+      "tabla": "rrhh_empleados_datos",
+      "filas": 70
+    },
+    {
+      "tabla": "rrhh_import_batches",
+      "filas": 14
+    },
+    {
+      "tabla": "rrhh_import_staging",
+      "filas": 0
+    },
+    {
+      "tabla": "sectores",
+      "filas": 39
+    },
+    {
+      "tabla": "sectores_status_log",
+      "filas": 0
+    },
+    {
+      "tabla": "sincronizaciones",
+      "filas": 1226
+    },
+    {
+      "tabla": "taller_vial_cargas",
+      "filas": 765
+    },
+    {
+      "tabla": "taller_vial_estados_diarios",
+      "filas": 2190
+    },
+    {
+      "tabla": "taller_vial_reparaciones",
+      "filas": 0
+    },
+    {
+      "tabla": "taller_vial_repuestos_asignados",
+      "filas": 0
+    },
+    {
+      "tabla": "taller_vial_services",
+      "filas": 1
+    },
+    {
+      "tabla": "trituracion_partes",
+      "filas": 175
+    },
+    {
+      "tabla": "trituracion_plantas",
+      "filas": 3
+    },
+    {
+      "tabla": "ultima_sincronizacion",
+      "filas": 11
+    },
+    {
+      "tabla": "usuario_areas_compras",
+      "filas": 1
+    },
+    {
+      "tabla": "usuario_modulos",
+      "filas": 72
+    },
+    {
+      "tabla": "usuarios",
+      "filas": 11
+    },
+    {
+      "tabla": "vacaciones",
+      "filas": 22
+    },
+    {
+      "tabla": "vehiculos",
+      "filas": 7
+    }
+  ],
+  "usuarios": 11,
+  "buckets": [
+    {
+      "id": "execution-photos",
+      "public": false,
+      "file_size_limit": 10485760,
+      "allowed_mime_types": [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+        "image/heic"
+      ],
+      "objetos": 0,
+      "bytes": 0
+    },
+    {
+      "id": "facturas-proveedor",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+        "image/heic"
+      ],
+      "objetos": 1,
+      "bytes": 100669
+    }
+  ]
+}
