@@ -3,6 +3,7 @@ import { recalcularSectorPeriodo, getConfigLiquidacion } from "./engine/recalcul
 import { determinarTipoDia } from "./engine/calculo";
 import { addUtcDays, utcDateOnlyFrom } from "./dates";
 import { traerPaginado } from "./paginado";
+import { conValorHoraPlano } from "./valorHora";
 
 export type ModalidadPago = "JORNAL" | "MENSUAL";
 
@@ -129,18 +130,28 @@ export async function calcularPlanillaGeneral(
   // Todo se lee paginado: un mes de calculos_diarios del padron entero pasa las
   // 1000 filas que devuelve PostgREST, y una planilla de sueldos calculada
   // sobre la mitad de los dias no se nota hasta que alguien reclama el recibo.
-  const empleados = await traerPaginado<{
+  const empleadosCrudos = await traerPaginado<{
     id: string;
     legajo: string;
     nombre: string;
     apellido: string;
-    valor_hora_normal: number;
+    // El valor hora ya no es columna de `empleados` (migración
+    // 20260922101405): viene del embed y lo aplana `conValorHoraPlano` unas
+    // líneas más abajo, para que la cuenta del recibo siga leyéndolo plano.
+    //
+    // Va tipado como **arreglo** porque es lo que infiere supabase-js sobre un
+    // cliente sin tipos generados, y `traerPaginado` exige que el tipo case con
+    // el del builder. En ejecución PostgREST devuelve un **objeto**: la
+    // relación es de uno a uno, `empleado_id` es clave primaria y foránea a la
+    // vez. Las dos formas las resuelve `valorHoraDe`, que existe justamente
+    // por esta discrepancia y las tiene las dos en su test.
+    rrhh_empleados_datos: { valor_hora_normal: number }[];
     horas_teoricas_diarias: number;
     modalidad_pago: string | null;
   }>(() => {
     let q = supabase
       .from("empleados")
-      .select("id, legajo, nombre, apellido, valor_hora_normal, horas_teoricas_diarias, modalidad_pago")
+      .select("id, legajo, nombre, apellido, horas_teoricas_diarias, modalidad_pago, rrhh_empleados_datos(valor_hora_normal)")
       .eq("activo", true)
       .order("apellido")
       .order("nombre")
@@ -148,6 +159,8 @@ export async function calcularPlanillaGeneral(
     if (modalidadPago) q = q.eq("modalidad_pago", modalidadPago);
     return q;
   }, "empleados de la planilla");
+  // Aplanado una sola vez, antes de cualquier cuenta: ver lib/rrhh/valorHora.ts.
+  const empleados = conValorHoraPlano(empleadosCrudos);
   const config = await getConfigLiquidacion(supabase);
 
   await recalcularSectorPeriodo(supabase, null, fechaDesde, fechaHasta);

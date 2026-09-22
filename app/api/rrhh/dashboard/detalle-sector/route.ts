@@ -4,6 +4,7 @@ import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { idsOrDummy, rangoDesdeHasta } from "@/lib/rrhh/dashboardHelpers";
 import { getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
+import { conValorHoraPlano } from "@/lib/rrhh/valorHora";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -20,14 +21,17 @@ export async function GET(request: Request) {
   if (!sector) return NextResponse.json({ error: "Sector no encontrado" }, { status: 404 });
   const trabajaLunesAViernesNomas = SECTORES_LUNES_A_VIERNES.includes(sector.nombre);
 
+  // El valor hora sale del embed y se aplana apenas se lee: dejó de ser
+  // columna de `empleados` (migración 20260922101405). Ver `lib/rrhh/valorHora.ts`.
   let query = supabase
     .from("empleados")
-    .select("id, legajo, nombre, apellido, horas_teoricas_diarias, valor_hora_normal")
+    .select("id, legajo, nombre, apellido, horas_teoricas_diarias, rrhh_empleados_datos(valor_hora_normal)")
     .eq("sector_id", sectorId)
     .eq("activo", true);
   if (empresaId) query = query.eq("empresa_id", empresaId);
-  const { data: empleados } = await query;
-  const empleadoIds = (empleados ?? []).map((e) => e.id);
+  const { data } = await query;
+  const empleados = conValorHoraPlano(data ?? []);
+  const empleadoIds = empleados.map((e) => e.id);
 
   const [{ data: calculos }, config] = await Promise.all([
     supabase
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
     getConfigLiquidacion(supabase),
   ]);
 
-  const empleadosResultado = (empleados ?? [])
+  const empleadosResultado = empleados
     .map((e) => {
       const calcsEmpleado = (calculos ?? []).filter((c) => c.empleado_id === e.id);
       const horasNormales = calcsEmpleado.reduce((a, c) => a + Number(c.horas_normales), 0);

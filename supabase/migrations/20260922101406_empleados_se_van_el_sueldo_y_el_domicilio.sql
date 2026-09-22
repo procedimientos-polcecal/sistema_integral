@@ -1,0 +1,41 @@
+-- ============================================================
+-- SdG — Empleados: se van el sueldo y el domicilio
+--
+-- ESTA ES LA SEGUNDA DE DOS, Y VA DESPUÉS DEL DESPLIEGUE. La primera es
+-- `20260922101405_rrhh_el_valor_hora_se_muda_a_la_tabla_del_modulo.sql`, que
+-- explica por qué se muda el valor hora y por qué no alcanzaba con una policy.
+-- El orden:
+--
+--   1. correr la primera
+--   2. desplegar el código
+--   3. correr ÉSTA
+--
+-- Correrla antes del paso 2 rompe RRHH: el código desplegado todavía pide
+-- `empleados.valor_hora_normal` en el `select`, y PostgREST contesta 400 con
+-- `42703` a la pantalla de empleados, al tablero por sector, a la planilla
+-- general y a la generación de liquidaciones.
+--
+-- ── `valor_hora_normal` ─────────────────────────────────────
+--
+-- Ya está copiado en `rrhh_empleados_datos`, que está cerrada con
+-- `tiene_acceso_rrhh()`. Acá sólo se borra el original.
+--
+-- ── `domicilio`: está vacío, y hace rato ────────────────────
+--
+-- Es una columna muerta, y no es una impresión: medido contra producción el
+-- 22/09/2026, **0 de 70 filas** tienen algo. El domicilio de verdad vive en
+-- `remises_empleados_datos.direccion` —25 filas, las 25 con dato— y la app lo
+-- lee con un `d.direccion || e.domicilio` en cinco lugares, donde la mitad
+-- derecha nunca dio nada. El código de este mismo cambio saca esos cinco
+-- respaldos.
+--
+-- Que esté vacía no la hace inofensiva: `empleados` la lee cualquier
+-- autenticado, así que la columna era una filtración de domicilios particulares
+-- esperando a que alguien la empezara a cargar. Se borra en vez de dejarla.
+-- Si algún día hace falta el domicilio fuera de Remises, el lugar es
+-- `remises_empleados_datos` o una tabla nueva del módulo que lo necesite —no
+-- el catálogo que ven los diez módulos.
+-- ============================================================
+
+alter table empleados drop column if exists valor_hora_normal;
+alter table empleados drop column if exists domicilio;

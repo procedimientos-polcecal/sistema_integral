@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { es_admin_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo, getConfigLiquidacion } from "@/lib/rrhh/engine/recalcular";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { valorHoraDe } from "@/lib/rrhh/valorHora";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -16,12 +17,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
+  // El valor hora sale de `rrhh_empleados_datos` desde la migracion
+  // 20260922101405: en `empleados` lo podia leer cualquier autenticado.
   const { data: empleado } = await supabase
     .from("empleados")
-    .select("id, valor_hora_normal")
+    .select("id, rrhh_empleados_datos(valor_hora_normal)")
     .eq("id", employeeId)
     .single();
   if (!empleado) return NextResponse.json({ error: "Empleado no encontrado" }, { status: 404 });
+
+  // Sin valor hora la liquidacion saldria en cero sin decir por que, y un
+  // recibo en cero se firma igual que uno bien. Se corta aca.
+  const valorHora = valorHoraDe(empleado);
+  if (!(valorHora > 0)) {
+    return NextResponse.json(
+      { error: "El empleado no tiene valor hora cargado: revisalo en su ficha antes de liquidar" },
+      { status: 400 }
+    );
+  }
 
   await recalcularEmpleadoPeriodo(supabase, employeeId, new Date(fechaDesde), new Date(fechaHasta));
 
@@ -46,7 +59,6 @@ export async function POST(request: Request) {
   const horasExtra50SinValidar = diasSinValidar.reduce((a, d) => a + Number(d.horas_extra_50), 0);
   const horasExtra100SinValidar = diasSinValidar.reduce((a, d) => a + Number(d.horas_extra_100), 0);
 
-  const valorHora = Number(empleado.valor_hora_normal);
   const montoNormal = horasNormales * valorHora;
   const montoExtra50 = horasExtra50 * valorHora * config.multiplicadorExtra50;
   const montoExtra100 = horasExtra100 * valorHora * config.multiplicadorExtra100;

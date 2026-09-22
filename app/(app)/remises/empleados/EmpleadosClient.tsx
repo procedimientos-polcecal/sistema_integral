@@ -31,7 +31,7 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
   const faltantes = useMemo(
     () => empleados.filter((e) => {
       const d = datos(e);
-      return !d.lat && (d.direccion || e.domicilio);
+      return !d.lat && d.direccion;
     }),
     [empleados]
   );
@@ -40,7 +40,7 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
     setGeocodificandoTodos(true);
     setProgreso({ hecho: 0, total: faltantes.length });
     for (const emp of faltantes) {
-      const direccion = datos(emp).direccion || emp.domicilio;
+      const direccion = datos(emp).direccion;
       const res = await fetch("/api/remises/geocode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -99,7 +99,7 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
                 <tr key={e.id} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
                   <td className="py-2">{e.apellido}, {e.nombre}</td>
-                  <td className="py-2 text-gray-500">{d.direccion || e.domicilio || "-"}</td>
+                  <td className="py-2 text-gray-500">{d.direccion || "-"}</td>
                   <td className="py-2">
                     {d.lat ? (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">OK</span>
@@ -135,7 +135,7 @@ function EmpleadoModal({
 }: { empleado: any; turnos: any[]; onClose: () => void; onSaved: () => void }) {
   const d = datos(empleado);
   const [form, setForm] = useState({
-    direccion: d.direccion || empleado.domicilio || "",
+    direccion: d.direccion || "",
     lat: d.lat ?? null,
     lng: d.lng ?? null,
     turnoDefaultId: d.turno_default_id || "",

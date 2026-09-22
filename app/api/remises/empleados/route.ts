@@ -10,7 +10,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("empleados")
     .select(
-      "id, legajo, nombre, apellido, domicilio, activo, remises_empleados_datos(direccion, lat, lng, turno_default_id)"
+      "id, legajo, nombre, apellido, activo, remises_empleados_datos(direccion, lat, lng, turno_default_id)"
     )
     .eq("activo", true)
     .order("apellido")

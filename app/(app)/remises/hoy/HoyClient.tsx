@@ -198,7 +198,7 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
                           </span>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-gray-800">{e.apellido}, {e.nombre}</div>
-                            <div className="text-xs text-gray-400 truncate">{e.remises_empleados_datos?.direccion || e.domicilio || "Sin dirección"}</div>
+                            <div className="text-xs text-gray-400 truncate">{e.remises_empleados_datos?.direccion || "Sin dirección"}</div>
                           </div>
                           {!tieneCoords && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 shrink-0">Sin coords</span>}
                         </button>

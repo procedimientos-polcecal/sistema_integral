@@ -162,7 +162,6 @@ export async function POST(request: Request) {
     const data: Record<string, unknown> = {
       nombre,
       apellido,
-      valor_hora_normal: valorHoraNormal,
       fecha_ingreso: fechaIngresoStr,
       ...(empresaId ? { empresa_id: empresaId } : {}),
       ...(sectorId ? { sector_id: sectorId } : {}),
@@ -188,12 +187,27 @@ export async function POST(request: Request) {
       creados += 1;
     }
 
-    if (sindicato || fechaNacimiento || genero) {
-      await admin.from("rrhh_empleados_datos").upsert(
-        { empleado_id: empleadoId, ...(sindicato ? { sindicato } : {}), ...(fechaNacimiento ? { fecha_nacimiento: fechaNacimiento } : {}), ...(genero ? { genero } : {}) },
-        { onConflict: "empleado_id" }
-      );
-    }
+    // El upsert ya no es condicional: el valor hora se mudó acá desde
+    // `empleados` (migración 20260922101405) y es obligatorio en la planilla,
+    // así que toda fila importada tiene algo que escribir. Los otros tres
+    // siguen siendo opcionales y sólo viajan si la planilla los trae — omitir
+    // una columna del payload la deja como estaba, que es lo que hace que
+    // reimportar una planilla sin la columna de sindicato no borre el que ya
+    // había.
+    const { error: errorDatos } = await admin.from("rrhh_empleados_datos").upsert(
+      {
+        empleado_id: empleadoId,
+        valor_hora_normal: valorHoraNormal,
+        ...(sindicato ? { sindicato } : {}),
+        ...(fechaNacimiento ? { fecha_nacimiento: fechaNacimiento } : {}),
+        ...(genero ? { genero } : {}),
+      },
+      { onConflict: "empleado_id" }
+    );
+    // Antes no se miraba. Ahora adentro va el sueldo: una fila que no escribe
+    // deja al empleado liquidando a cero y hay que verlo en el informe de la
+    // importación, no descubrirlo en el recibo.
+    if (errorDatos) { errores.push(`Fila ${idx + 2} (${legajo}): ${errorDatos.message}`); continue; }
   }
 
   // Los sectores que la planilla nombra y el sistema no reconoce no son un

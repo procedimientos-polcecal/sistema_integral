@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addUtcDays, utcDateOnlyFrom } from "./dates";
+import { conValorHoraPlano } from "./valorHora";
 
 export interface EmpleadoDashboard {
   id: string;
@@ -16,14 +17,19 @@ export async function empleadosPermitidos(
   supabase: SupabaseClient,
   filtros: { empresaId?: string | null; sectorId?: string | null }
 ): Promise<EmpleadoDashboard[]> {
+  // El valor hora viene del embed porque dejó de ser columna de `empleados`
+  // (migración 20260922101405). Se aplana acá, en la única puerta por la que
+  // el tablero lee empleados, así que los cálculos de plata que vienen después
+  // —`horas-extra-por-sector` y los gráficos— siguen viendo un número plano y
+  // no se enteran del cambio.
   let query = supabase
     .from("empleados")
-    .select("id, sector_id, legajo, nombre, apellido, horas_teoricas_diarias, valor_hora_normal, sectores(nombre)")
+    .select("id, sector_id, legajo, nombre, apellido, horas_teoricas_diarias, sectores(nombre), rrhh_empleados_datos(valor_hora_normal)")
     .eq("activo", true);
   if (filtros.sectorId) query = query.eq("sector_id", filtros.sectorId);
   if (filtros.empresaId) query = query.eq("empresa_id", filtros.empresaId);
   const { data } = await query;
-  return (data ?? []) as unknown as EmpleadoDashboard[];
+  return conValorHoraPlano(data ?? []) as unknown as EmpleadoDashboard[];
 }
 
 export function periodoARango(periodo: string | null): { desde: Date; hasta: Date } {

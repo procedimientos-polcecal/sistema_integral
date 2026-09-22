@@ -31,7 +31,6 @@ export async function POST(request: Request) {
       nombre: nombre.trim(),
       apellido: apellido.trim(),
       fecha_ingreso: fechaIngreso,
-      valor_hora_normal: Number(valorHoraNormal),
       horas_teoricas_diarias: horasTeoricasDiarias ? Number(horasTeoricasDiarias) : 8,
       modalidad_pago: modalidadPago === "MENSUAL" ? "MENSUAL" : "JORNAL",
       empresa_id: empresaId,
@@ -41,9 +40,17 @@ export async function POST(request: Request) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (sindicato) {
-    await admin.from("rrhh_empleados_datos").insert({ empleado_id: empleado.id, sindicato });
-  }
+  // La fila satélite se crea **siempre**, no sólo cuando viene sindicato como
+  // hacía antes: ahí vive ahora el valor hora (ver la migración
+  // 20260922101405), y sin fila el empleado nuevo se liquidaría a cero. El
+  // sindicato sigue siendo opcional y viaja null si no vino.
+  const { error: errorDatos } = await admin
+    .from("rrhh_empleados_datos")
+    .upsert(
+      { empleado_id: empleado.id, sindicato: sindicato || null, valor_hora_normal: Number(valorHoraNormal) },
+      { onConflict: "empleado_id" }
+    );
+  if (errorDatos) return NextResponse.json({ error: errorDatos.message }, { status: 500 });
 
   return NextResponse.json({ data: empleado }, { status: 201 });
 }

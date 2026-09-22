@@ -12,7 +12,7 @@ export default async function RemisesEmpleadosPage() {
   const [{ data: empleados }, { data: turnos }] = await Promise.all([
     supabase
       .from("empleados")
-      .select("id, legajo, nombre, apellido, domicilio, remises_empleados_datos(direccion, lat, lng, turno_default_id)")
+      .select("id, legajo, nombre, apellido, remises_empleados_datos(direccion, lat, lng, turno_default_id)")
       .eq("activo", true)
       .order("apellido")
       .order("nombre"),

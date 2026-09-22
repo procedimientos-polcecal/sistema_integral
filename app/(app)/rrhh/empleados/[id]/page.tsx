@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
 import EmpleadoDetalle from "./EmpleadoDetalle";
+import { valorHoraDe } from "@/lib/rrhh/valorHora";
 
 export default async function EmpleadoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,7 +17,7 @@ export default async function EmpleadoPage({ params }: { params: Promise<{ id: s
   const [{ data: empleado }, { data: empresas }, { data: sectores }] = await Promise.all([
     supabase
       .from("empleados")
-      .select("*, empresas(id, nombre), sectores(id, nombre), rrhh_empleados_datos(sindicato)")
+      .select("*, empresas(id, nombre), sectores(id, nombre), rrhh_empleados_datos(sindicato, valor_hora_normal)")
       .eq("id", id)
       .single(),
     supabase.from("empresas").select("id, nombre").order("nombre"),
@@ -27,9 +28,13 @@ export default async function EmpleadoPage({ params }: { params: Promise<{ id: s
 
   if (!empleado) notFound();
 
+  // El valor hora dejo de ser columna de `empleados` (migracion 20260922101405).
+  // Se aplana aca para que la pantalla lo siga leyendo como antes.
+  const empleadoConValorHora = { ...empleado, valor_hora_normal: valorHoraDe(empleado) };
+
   return (
     <EmpleadoDetalle
-      empleado={empleado}
+      empleado={empleadoConValorHora}
       empresas={empresas ?? []}
       sectores={sectores ?? []}
       canEdit={canEdit}

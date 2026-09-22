@@ -12,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const { data: empleado, error } = await supabase
     .from("empleados")
-    .select("*, empresas(id, nombre), sectores(id, nombre), rrhh_empleados_datos(sindicato, fecha_nacimiento, genero, escala_vacaciones_override)")
+    .select("*, empresas(id, nombre), sectores(id, nombre), rrhh_empleados_datos(sindicato, fecha_nacimiento, genero, escala_vacaciones_override, valor_hora_normal)")
     .eq("id", id)
     .single();
   if (error || !empleado) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -35,7 +35,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (body.nombre !== undefined) empleadoData.nombre = body.nombre;
   if (body.apellido !== undefined) empleadoData.apellido = body.apellido;
   if (body.fechaIngreso !== undefined) empleadoData.fecha_ingreso = body.fechaIngreso;
-  if (body.valorHoraNormal !== undefined) empleadoData.valor_hora_normal = Number(body.valorHoraNormal);
   if (body.horasTeoricasDiarias !== undefined) empleadoData.horas_teoricas_diarias = Number(body.horasTeoricasDiarias);
   if (body.modalidadPago !== undefined) empleadoData.modalidad_pago = body.modalidadPago === "MENSUAL" ? "MENSUAL" : "JORNAL";
   if (body.empresaId !== undefined) empleadoData.empresa_id = body.empresaId;
@@ -47,11 +46,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (body.sindicato !== undefined) {
-    await admin.from("rrhh_empleados_datos").upsert(
-      { empleado_id: id, sindicato: body.sindicato || null },
-      { onConflict: "empleado_id" }
-    );
+  // El valor hora vive acá y no en `empleados`: la fila de `empleados` la lee
+  // cualquier autenticado y un sueldo no es dato de catálogo (ver la migración
+  // 20260922101405). Los dos campos comparten el upsert, y el payload se arma
+  // condicional a propósito: PostgREST sólo actualiza las columnas que van en
+  // el cuerpo, así que editar el sindicato no pisa el valor hora ni al revés.
+  const datosRrhh: Record<string, unknown> = {};
+  if (body.sindicato !== undefined) datosRrhh.sindicato = body.sindicato || null;
+  if (body.valorHoraNormal !== undefined) datosRrhh.valor_hora_normal = Number(body.valorHoraNormal);
+
+  if (Object.keys(datosRrhh).length > 0) {
+    const { error } = await admin
+      .from("rrhh_empleados_datos")
+      .upsert({ empleado_id: id, ...datosRrhh }, { onConflict: "empleado_id" });
+    // Antes este upsert no miraba el error. Con el sindicato adentro era
+    // molesto; con el valor hora adentro es una liquidación calculada sobre un
+    // número viejo, así que ahora se informa.
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   const { data: empleado } = await admin.from("empleados").select("*").eq("id", id).single();
