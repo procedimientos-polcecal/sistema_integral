@@ -171,9 +171,19 @@ local no podía reproducir. El script resuelve todos los imports del árbol de g
 contra sí mismo; sin argumento mira `origin/main`, y acepta una ref para revisar
 otra cosa.
 
+**Las cuatro también corren solas** en cada push y en cada PR, desde
+`.github/workflows/verificar.yml` (22/09/2026). Correrlas a mano sigue siendo lo
+que conviene —el CI tarda minutos y avisa tarde—, pero ya no es lo único que hay:
+antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
+
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
-- `npm run lint` **falla**: el repo no tiene config de ESLint. No es tu cambio.
+- `npm run lint` **falla**, pero ya no por lo que decía acá: desde
+  `a7fd2f1` hay `eslint.config.mjs` y el lint corre. Lo que quedan son **14
+  errores reales**, casi todos `react-hooks/set-state-in-effect` en pantallas.
+  Por eso el lint **no** está en el CI: agregarlo lo dejaría rojo desde el primer
+  push, y un CI siempre rojo no lo mira nadie. Cuando esos 14 se cierren, se
+  agrega el paso.
 - **Los worktrees de Claude Code viven adentro del repo** (`.claude/worktrees/`),
   así que vitest los recorría como código del proyecto y recogía cada
   `*.test.ts` una vez por worktree abierto — con dos abiertos, la suite corría
@@ -187,6 +197,11 @@ otra cosa.
   tiene el problema: TypeScript ignora los directorios que empiezan con punto,
   así que `--listFilesOnly` en el árbol principal no trae ni un archivo de
   `.claude/worktrees/`. No hay nada que arreglar en `tsconfig.json`.
+  **ESLint sí tenía el mismo problema** y se arregló el 22/09/2026: con un
+  worktree abierto contaba seis errores duplicados y 1.900 avisos de más, y de
+  paso linteaba el pdf.js minificado de `public/pdfjs/`. Las dos entradas están
+  ahora en el `ignores` de `eslint.config.mjs`; el lint pasó de 2.276 problemas
+  a 359 sin que se arreglara una sola línea de código.
 - **Casi todo está detrás del login**, así que no se puede comprobar en el
   navegador. Se verifica con tests sobre las funciones puras y, cuando hace falta
   ver datos reales, consultando la base con el `SUPABASE_SERVICE_ROLE_KEY` de

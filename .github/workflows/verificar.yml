@@ -1,0 +1,86 @@
+# Las cuatro verificaciones del CLAUDE.md, en cada push y en cada PR.
+#
+# POR QUÉ EXISTE
+#
+# Hasta hoy los cinco workflows del repo eran crons de sincronización y el
+# backup: **nada corría los tests**. Lo que decidía si un cambio estaba bien era
+# que alguien se acordara de correr las cuatro órdenes a mano antes de pushear,
+# y eso ya falló de la peor manera posible: el 14/09/2026 se cayeron **cuatro
+# deploys seguidos** con un `Module not found` que el build local no podía
+# reproducir, porque un archivo nuevo quedó *staged* y nunca se commiteó.
+#
+# EL ORDEN NO ES ALFABÉTICO
+#
+# `revisar-arbol-commiteado.mjs` va **primero, y antes del `npm ci`**. Es el
+# único que mira el árbol de git —lo que Vercel realmente construye— en vez del
+# disco, tarda un segundo y no necesita dependencias. Ponerlo al final sería
+# gastar cinco minutos de build para enterarse de algo que se sabía al toque.
+# Los otros tres van de más barato a más caro.
+#
+# `npm run lint` NO está acá, a propósito: hoy devuelve 14 errores
+# (`react-hooks/set-state-in-effect`, en su mayoría) y agregarlo dejaría el CI
+# rojo desde el primer push. Un CI que está siempre rojo no lo mira nadie, que
+# es exactamente el estado del que se viene. Cuando esos 14 se cierren, se
+# agrega un paso más acá y recién ahí el lint empieza a defender algo.
+#
+# SOBRE LAS VARIABLES DEL BUILD
+#
+# Son falsas y están a la vista. El código sólo lee `NEXT_PUBLIC_SUPABASE_URL`
+# adentro de funciones (`lib/supabase/*.ts`), así que hoy el build no las
+# necesita; se ponen igual para que el día que una página se prerenderice el CI
+# no empiece a fallar con "Falta NEXT_PUBLIC_SUPABASE_URL" en un cambio que no
+# tiene nada que ver. **No hace falta ningún secreto**: este workflow no habla
+# con Supabase, ni con Google, ni con Odoo. Si alguna vez hiciera falta uno de
+# verdad, conviene preguntarse primero por qué un build necesita credenciales.
+
+name: Verificar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Acá sí se cancela la corrida vieja, al revés que en los workflows de
+  # sincronización: dos pushes seguidos a la misma rama hacen que verificar el
+  # primero no le sirva a nadie. Allá se encolaba porque cada corrida escribe
+  # en una planilla; ésta no escribe en ningún lado.
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Antes de instalar nada: es git puro y node pelado, y es el que atrapa
+      # lo que los otros tres no pueden ver.
+      #
+      # Va `HEAD` y no el `origin/main` que el script toma por defecto, porque
+      # el checkout de Actions es superficial y en un pull_request `HEAD` es el
+      # merge commit — que es justamente el árbol que Vercel va a construir.
+      - name: El árbol commiteado resuelve sus propios imports
+        run: node scripts/revisar-arbol-commiteado.mjs HEAD
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-sin-proyecto.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: clave-falsa-de-ci
+          NEXT_PUBLIC_APP_URL: https://ci-sin-deploy.invalid
+        run: npm run build
