@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
-import { toneladasPromedioPorFletero } from "@/lib/cantera/destape";
+import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, traerPromedioToneladasPorFletero, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import { costoHoraDeMaquinasDelMes } from "@/lib/cantera/costoMaquinaOdoo";
 import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import DestapeClient from "./DestapeClient";
@@ -87,18 +86,16 @@ export default async function DestapePage({
       .filter((c): c is string => Boolean(c))
   )];
 
-  const [tarifasAcarreo, horasDestapeAcarreo, fleteros, pesadas, operarios, costos] = await Promise.all([
+  const [tarifasAcarreo, horasDestapeAcarreo, fleteros, toneladasPromedio, operarios, costos] = await Promise.all([
     traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { tipo: "horas_destape", mes }),
     traerFleteros(supabase),
-    traerPesadas(supabase),
+    traerPromedioToneladasPorFletero(supabase),
     traerOperariosDeCantera(supabase),
     costoHoraDeMaquinasDelMes(supabase, codigosDeEquipoDelMes, mes),
   ]);
   const nombrePorFleteroId = Object.fromEntries(fleteros.map((f) => [f.id, f.nombre]));
   const valorHoraPorOperarioId = Object.fromEntries(operarios.map((o) => [o.id, o.valorHoraNormal]));
-
-  const toneladasPromedio = toneladasPromedioPorFletero(pesadas.map((p) => ({ fleteroId: p.fletero_id, toneladas: p.toneladas })));
 
   const costoHoraPorEquipo: Record<string, number> = {};
   for (const [codigo, c] of Object.entries(costos)) {

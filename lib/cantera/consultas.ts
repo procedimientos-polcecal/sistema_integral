@@ -348,6 +348,41 @@ export async function traerPesadas(
   });
 }
 
+interface FilaPromedioToneladas {
+  fletero_id: string;
+  promedio: number;
+  cantidad: number;
+}
+
+/**
+ * Toneladas promedio por viaje, por fletero, sobre toda su historia de
+ * pesadas — mismo resultado que `toneladasPromedioPorFletero()`
+ * (`lib/cantera/destape.ts`) aplicada sobre `traerPesadas(supabase)` sin
+ * filtro, pero calculado en la base (`cantera_promedio_toneladas_por_fletero()`,
+ * migración `20260922092048`) en vez de traer las 7623+ filas a la app para
+ * promediarlas acá. Reemplaza ese camino en Destape, que es el único lugar
+ * que necesitaba el promedio de toda la historia.
+ *
+ * Si la función todavía no existe en la base (falta correr la migración) o
+ * el pedido falla, devuelve `{}` en vez de romper la página: Destape ya
+ * sabe mostrar "sin estimar" cuando un fletero no tiene promedio
+ * (`costoDeRegistro` en `lib/cantera/destape.ts`), así que un caché vacío es
+ * degradar, no romper — mismo criterio que `costoHoraDeMaquinasDelMes` con
+ * un hipo de Odoo.
+ */
+export async function traerPromedioToneladasPorFletero(
+  supabase: SupabaseClient
+): Promise<Record<string, number>> {
+  const { data, error } = await supabase.rpc("cantera_promedio_toneladas_por_fletero");
+  if (error) {
+    console.error("traerPromedioToneladasPorFletero: no se pudo calcular, Destape sigue sin toneladas estimadas", error);
+    return {};
+  }
+  return Object.fromEntries(
+    ((data ?? []) as FilaPromedioToneladas[]).map((f) => [f.fletero_id, f.promedio])
+  );
+}
+
 /**
  * Todos los cierres de cubicación cargados, de todos los yacimientos y
  * meses — la tabla es chica (un yacimiento × un mes por fila) y
