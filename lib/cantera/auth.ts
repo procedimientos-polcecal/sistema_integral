@@ -23,17 +23,13 @@ export async function nivelCanteraDe(
   supabase: SupabaseClient,
   userId: string
 ): Promise<UsuarioModulo["nivel"] | null> {
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("rol")
-    .eq("id", userId)
-    .single();
+  // Las dos consultas no dependen una de la otra — en paralelo, no en
+  // secuencia: esto se corre en cada carga de página del módulo.
+  const [{ data: usuario }, { data: grants }] = await Promise.all([
+    supabase.from("usuarios").select("rol").eq("id", userId).single(),
+    supabase.from("usuario_modulos").select("id, usuario_id, modulo, nivel").eq("usuario_id", userId),
+  ]);
   if (!usuario) return null;
-
-  const { data: grants } = await supabase
-    .from("usuario_modulos")
-    .select("id, usuario_id, modulo, nivel")
-    .eq("usuario_id", userId);
 
   return nivelEnModulo(usuario.rol as Rol, (grants ?? []) as UsuarioModulo[], "cantera");
 }
