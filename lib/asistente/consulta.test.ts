@@ -3,9 +3,25 @@ import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { correrConsulta } from "./consulta";
 
-for (const line of readFileSync(".env.local", "utf-8").split("\n")) {
-  const m = line.match(/^([A-Z_]+)=(.*)$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+/**
+ * Las credenciales salen de `.env.local` si está, y si no del entorno.
+ *
+ * El `try` no es decorativo: sin él este `readFileSync` tira `ENOENT` **al
+ * cargar el módulo**, o sea antes de que el `describe.skip` de abajo pueda
+ * saltear nada — y el archivo no existe en ningún lado que no sea la máquina
+ * de quien desarrolla. El guard de abajo ya estaba bien escrito y decía
+ * exactamente esta intención; esta línea lo anulaba.
+ *
+ * Lo encontró el CI en su primera corrida (22/09/2026), que es para lo que
+ * está: la suite pasaba local con 2.402 tests y moría en el runner en éste.
+ */
+try {
+  for (const line of readFileSync(".env.local", "utf-8").split("\n")) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+  }
+} catch {
+  // No hay `.env.local`. Es lo normal en CI y en una máquina recién clonada.
 }
 
 const email = process.env.ASISTENTE_TEST_EMAIL;
