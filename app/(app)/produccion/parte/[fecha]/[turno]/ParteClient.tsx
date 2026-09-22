@@ -474,7 +474,7 @@ export default function ParteClient({
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   {etiqueta}
                 </h3>
-                <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <div className="divide-y divide-slate-100 card">
                   {deEstaFamilia.map((p) => {
                     const prod = produccion[p.id];
                     const texto = depositoTexto[p.id] ?? "";
@@ -738,7 +738,7 @@ function RenglonDespacho({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+    <div className="space-y-3 card p-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-slate-400">Renglón {indice + 1}</span>
         {puedeEditar && (

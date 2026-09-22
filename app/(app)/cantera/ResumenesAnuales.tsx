@@ -83,7 +83,7 @@ function TablaAnual({
   }
 
   return (
-    <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+    <div className="mt-2 overflow-x-auto card">
       <table className="w-full text-xs">
         <thead className={`${colorCabecera} text-center text-white`}>
           <tr>

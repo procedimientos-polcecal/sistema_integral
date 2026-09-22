@@ -29,7 +29,7 @@ const AMBAR_CLARO = "#FFF7ED";
 
 function Grafico({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
+    <div className="card p-3">
       <h3 className="text-xs font-semibold text-slate-600">{titulo}</h3>
       <div className="mt-2 h-56">{children}</div>
     </div>
@@ -136,7 +136,7 @@ export default function InformeClient({
       </section>
 
       {/* ── Generar informe de un período ── */}
-      <section className="mt-8 rounded-lg border border-slate-200 p-4">
+      <section className="mt-8 card p-4">
         <h2 className="text-sm font-semibold text-slate-700">Generar informe por fecha</h2>
         <p className="mt-1 text-xs text-slate-500">
           Arma las tablas del período —las mismas que hoy armás en el Sheets— para exportarlas y escribir el informe.
@@ -169,7 +169,7 @@ export default function InformeClient({
       </section>
 
       {informe && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
+        <div className="mt-6 overflow-hidden card">
           {/* ── Título, como el de la planilla ── */}
           <div style={{ backgroundColor: VERDE }} className="px-4 py-2 text-sm font-semibold text-white">
             INFORME DE CANTERAS — {informe.desde} a {informe.hasta}
@@ -187,7 +187,7 @@ export default function InformeClient({
 
             {/* ── Resumen por cantera (junta los seis paneles chicos de la planilla) ── */}
             <h2 className="mt-6 text-sm font-semibold text-slate-700">Resumen por cantera</h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
                 <thead><Encabezado color={VERDE} columnas={["Cantera", "Toneladas", "Costo total USD", "Perf. USD", "Explosivo USD", "Accesorios USD", "Servicio USD", "Gr Expl./Ton", "USD/Ton", "Ton/m Perf."]} /></thead>
                 <tbody>
@@ -216,7 +216,7 @@ export default function InformeClient({
             <h2 className="mt-6 text-sm font-semibold text-slate-700">
               ▸ Perforaciones <span className="font-normal text-slate-400">(por fin de perforación)</span>
             </h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
                 <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fin Perf.", "Prof. (mts)", "Pozos", "Metros Perf.", "Total USD", "Total ARS"]} /></thead>
                 <tbody>
@@ -254,7 +254,7 @@ export default function InformeClient({
             <h2 className="mt-6 text-sm font-semibold text-slate-700">
               ▸ Voladuras <span className="font-normal text-slate-400">(por fecha de voladura)</span>
             </h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
                 <thead><Encabezado color={AMBAR} columnas={["Código", "Cantera", "Fecha Voladura", "Gr Detonador", "Toneladas", "Total USD", "Total ARS"]} /></thead>
                 <tbody>
@@ -291,7 +291,7 @@ export default function InformeClient({
             <h2 className="mt-6 text-sm font-semibold text-slate-700">
               ▸ Bochones <span className="font-normal text-slate-400">(por fecha de voladura)</span>
             </h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
                 <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fecha Voladura", "Cantidad", "Metros/bochón", "Total USD", "Total ARS"]} /></thead>
                 <tbody>
@@ -326,7 +326,7 @@ export default function InformeClient({
 
             {/* ── Consumos del período, con subtotal por tipo ── */}
             <h2 className="mt-6 text-sm font-semibold text-slate-700">▸ Consumos (detalle)</h2>
-            <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
                 <thead><Encabezado color={AMBAR} columnas={["Código", "Tipo", "Insumo", "Cantidad", "Precio USD", "Total USD", "Total ARS"]} /></thead>
                 <tbody>

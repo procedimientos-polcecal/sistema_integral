@@ -213,7 +213,7 @@ export default function NuevaOrden({
         )}
 
         {remitos !== null && remitos.length > 0 && (
-          <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+          <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto card">
             {visibles.length === 0 && (
               <p className="px-3 py-4 text-sm text-slate-400">
                 Ninguno de los {remitos.length} remitos coincide con “{buscar}”.

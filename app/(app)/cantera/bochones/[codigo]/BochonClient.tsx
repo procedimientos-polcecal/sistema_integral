@@ -126,7 +126,7 @@ export default function BochonClient({
         </p>
       )}
 
-      <section className="mt-5 rounded-lg border border-slate-200 p-4">
+      <section className="mt-5 card p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Bochón</h2>
           <span className="text-sm font-medium">{money(monto)}</span>

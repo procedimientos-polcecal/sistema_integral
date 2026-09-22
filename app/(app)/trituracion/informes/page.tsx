@@ -103,12 +103,12 @@ export default async function InformesTrituracionPage({
       <h1 className="mt-1 text-xl font-semibold">Informe mensual</h1>
       <p className="mt-1 text-sm text-slate-500">Las mismas tablas que hoy se arman a mano en el Sheets, para exportarlas y escribir el informe.</p>
 
-      <section className="mt-4 rounded-lg border border-slate-200 p-4">
+      <section className="mt-4 card p-4">
         <h2 className="text-sm font-semibold text-slate-700">Elegir mes</h2>
         <BuscadorInformeMensual mesGenerado={mesInforme} />
       </section>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
+      <div className="mt-6 overflow-hidden card">
         <div style={{ backgroundColor: VERDE }} className="px-4 py-2 text-sm font-semibold text-white">
           INFORME DE PLANTAS DE TRITURACIÓN — {nombreMes(mesInforme).toUpperCase()}
         </div>
@@ -124,7 +124,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°1 — KPIs operacionales por planta ── */}
           <h3 className="mt-4 text-sm font-semibold text-slate-700">Tabla N°1 — KPIs operacionales por planta</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: VERDE }}>
@@ -155,7 +155,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°2 — Datos operativos por planta ── */}
           <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°2 — Datos operativos por planta</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: AMBAR }}>
@@ -193,7 +193,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°3 — Horas improductivas por causa ── */}
           <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°3 — Horas improductivas por causa</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: VERDE }}>
@@ -225,7 +225,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°4 — Coeficientes de gestión del tiempo ── */}
           <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°4 — Coeficientes de gestión del tiempo</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: AMBAR }}>
@@ -252,7 +252,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°5 — Toneladas procesadas por material ── */}
           <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°5 — Toneladas procesadas por material</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: VERDE }}>
@@ -290,7 +290,7 @@ export default async function InformesTrituracionPage({
 
           {/* ── Tabla N°6 — Toneladas acarreadas por cantera/origen ── */}
           <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°6 — Toneladas acarreadas por cantera</h3>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: AMBAR }}>

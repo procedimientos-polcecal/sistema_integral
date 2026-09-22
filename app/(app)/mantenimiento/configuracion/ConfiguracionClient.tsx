@@ -588,7 +588,7 @@ function TarifaDeLaHora({
       </p>
 
       {tarifas.length > 0 && (
-        <ul className="mb-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
+        <ul className="mb-3 divide-y divide-slate-100 card">
           {tarifas.map((t) => (
             <li key={t.id} className="flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-slate-700">

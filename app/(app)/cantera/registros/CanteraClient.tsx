@@ -150,7 +150,7 @@ export default function CanteraClient({
 
       <section className="mt-6">
         <h2 className="text-sm font-semibold text-slate-700">Perforaciones y voladuras</h2>
-        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+        <div className="mt-2 overflow-x-auto card">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -197,7 +197,7 @@ export default function CanteraClient({
 
       <section className="mt-6">
         <h2 className="text-sm font-semibold text-slate-700">Bochones</h2>
-        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+        <div className="mt-2 overflow-x-auto card">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>

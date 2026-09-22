@@ -154,7 +154,7 @@ button:focus-visible, a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
+  background: var(--card);
   color: var(--text-secondary);
   font-weight: 500;
   font-size: 14px;
@@ -162,9 +162,10 @@ button:focus-visible, a:focus-visible {
   border-radius: 8px;
   border: 1.5px solid var(--border);
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow-sm);
 }
-.btn-secondary:hover { background: var(--bg); border-color: var(--border-dark); }
+.btn-secondary:hover { background: var(--bg); border-color: var(--border-dark); box-shadow: var(--shadow); }
 
 .btn-ghost {
   display: inline-flex;
@@ -184,7 +185,7 @@ button:focus-visible, a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
+  background: var(--card);
   color: var(--status-rep);
   font-weight: 500;
   font-size: 14px;
@@ -192,16 +193,23 @@ button:focus-visible, a:focus-visible {
   border-radius: 8px;
   border: 1.5px solid #FECACA;
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow-sm);
 }
-.btn-danger:hover { background: #FEF2F2; border-color: #FCA5A5; }
+.btn-danger:hover { background: #FEF2F2; border-color: #FCA5A5; box-shadow: var(--shadow); }
 
-/* ─── Card ─── */
+/* ─── Card ───
+   Sombra siempre visible, no sólo al pasar el mouse — el usuario lo pidió
+   explícitamente después de ver tarjetas de KPI que sólo se despegaban en
+   hover (`--shadow`, un escalón más marcado que `--shadow-sm`, que quedaba
+   casi imperceptible en reposo). Los `hover:shadow-lg` que ya tienen las
+   tarjetas de KPI de Cantera/Taller Vial siguen sumando el efecto de
+   "levantarse" al pasar el mouse, arriba de esta base. */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
 }
 
 /* ─── Page header ─── */

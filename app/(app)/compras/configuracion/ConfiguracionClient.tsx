@@ -287,7 +287,7 @@ export default function ConfiguracionClient({
             </div>
 
             {importacion.unidos.length > 0 && (
-              <div className="rounded-lg border border-slate-200 px-4 py-3 text-sm">
+              <div className="card px-4 py-3 text-sm">
                 <p className="font-semibold text-slate-700">
                   Se unieron {importacion.unidos.length} que estaban con otro nombre
                 </p>
@@ -948,7 +948,7 @@ function FilaAprobadorOS({
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 card px-3 py-2 text-sm">
       <span className="text-slate-900">{aprobador.nombre} {aprobador.apellido}</span>
       <span className="font-mono text-xs text-slate-500">{aprobador.email}</span>
       <button

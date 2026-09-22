@@ -115,7 +115,7 @@ export default function SelectorComparativa({
               {archivos.length === 0 ? "No hay archivos en la carpeta." : "Ningún archivo coincide."}
             </p>
           ) : (
-            <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+            <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto card">
               {visibles.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2">
                   <div className="min-w-0">

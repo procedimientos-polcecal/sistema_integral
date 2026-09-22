@@ -360,7 +360,7 @@ export default function VoladuraClient({
       )}
 
       {/* ── Perforación ── */}
-      <section className="mt-5 rounded-lg border border-slate-200 p-4">
+      <section className="mt-5 card p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Perforación</h2>
           <span className="text-sm font-medium">{money(montoPerf)}</span>
@@ -400,7 +400,7 @@ export default function VoladuraClient({
       </section>
 
       {/* ── Voladura ── */}
-      <section className="mt-4 rounded-lg border border-slate-200 p-4">
+      <section className="mt-4 card p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Voladura</h2>
           <span className="text-sm">
@@ -460,7 +460,7 @@ export default function VoladuraClient({
       </section>
 
       {/* ── Consumos ── */}
-      <section className="mt-4 rounded-lg border border-slate-200 p-4">
+      <section className="mt-4 card p-4">
         <h2 className="text-sm font-semibold">Consumos</h2>
         <p className="text-xs text-slate-500">
           De acá sale el monto de la voladura. El precio prellena del catálogo y se puede pisar.

@@ -126,7 +126,7 @@ export default function CargarDestapeClient({
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {aviso && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{aviso}</p>}
 
-      <div className="mt-4 rounded-lg border border-slate-200 p-4">
+      <div className="mt-4 card p-4">
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-slate-600">
             Fecha

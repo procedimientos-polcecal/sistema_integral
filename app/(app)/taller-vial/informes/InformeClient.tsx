@@ -108,7 +108,7 @@ export default function InformeClient({
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
+      <div className="mt-6 overflow-hidden card">
         {/* ── Título, como el de Cantera ── */}
         <div style={{ backgroundColor: VERDE }} className="px-4 py-2 text-sm font-semibold text-white">
           INFORME DE EQUIPOS MÓVILES — {nombreDeMes(mes).toUpperCase()}
@@ -123,7 +123,7 @@ export default function InformeClient({
           <p className="mt-1 text-xs text-slate-500">
             La referencia histórica es el consumo promedio de los 6 meses anteriores, calculado — no es la referencia manual de la planilla real, que el SdG no tiene cargada.
           </p>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <Encabezado color={VERDE} columnas={["Equipo", "Cargas", "Litros", "Consumo del mes", "Ref. histórica", "Desvío"]} />
@@ -170,7 +170,7 @@ export default function InformeClient({
           <p className="mt-1 text-xs text-slate-500">
             Días operativo sobre días con estado cargado — no es la cuenta de horas de la planilla real (depende del régimen de turnos, que el SdG no tiene). 🔴 &lt;70% · 🟡 70-84% · 🟢 ≥85%.
           </p>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
                 <Encabezado color={AMBAR} columnas={["Equipo", "Días operativo", "Días con dato", "Disponibilidad"]} />

@@ -191,7 +191,7 @@ function DatosDelProveedor({ p }: { p: Proveedor }) {
 
   if (cargados.length === 0 && !p.notas && !p.comentario) {
     return (
-      <p className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-400">
+      <p className="card bg-white px-3 py-2.5 text-xs text-slate-400">
         De este proveedor no hay más datos cargados. Los trae la base de datos de
         administración, y ahí todavía no figuran.
       </p>
@@ -199,7 +199,7 @@ function DatosDelProveedor({ p }: { p: Proveedor }) {
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+    <div className="space-y-2 card bg-white px-3 py-2.5">
       <dl className="grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2 lg:grid-cols-3">
         {cargados.map(([etiqueta, valor]) => (
           <div key={etiqueta} className="min-w-0">

@@ -246,7 +246,7 @@ export default function StockClient({
             Ver el libro entero
           </Link>
         </div>
-        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+        <div className="mt-2 overflow-x-auto card">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -321,7 +321,7 @@ function Saldo({
   desde: string | null;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-4">
+    <div className="card p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{titulo}</p>
       <p
         className={`mt-1 text-3xl font-bold tabular-nums ${

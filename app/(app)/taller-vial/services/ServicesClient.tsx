@@ -216,7 +216,7 @@ export default function ServicesClient({
             />
           </div>
           {/* ── Checklist de tareas de rutina ── */}
-          <div className="mt-3 rounded-lg border border-slate-200 p-3">
+          <div className="mt-3 card p-3">
             <p className="section-title">Qué se le hizo (tildá lo que corresponda)</p>
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {TAREAS_DE_SERVICE.map((t) => {
@@ -322,7 +322,7 @@ export default function ServicesClient({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {escalones.map((esc) => (
-                <div key={esc.tier} className="rounded-lg border border-slate-200 p-2">
+                <div key={esc.tier} className="card p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-600">{esc.tier} hs</span>
                     <BadgeLectura lectura={esc.lectura} />

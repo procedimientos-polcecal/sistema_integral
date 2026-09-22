@@ -63,7 +63,7 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
         {TIPOS_CON_TARIFA_PROPIA.map((t) => {
           const historial = (porTipo.get(t.codigo) ?? []).sort((a, b) => b.desde.localeCompare(a.desde));
           return (
-            <div key={t.codigo} className="rounded-lg border border-slate-200 p-3">
+            <div key={t.codigo} className="card p-3">
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-medium">{t.etiqueta}</span>
                 <span className="text-xs text-slate-400">$/{ETIQUETA_UNIDAD[t.unidad]}</span>
@@ -84,7 +84,7 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
         })}
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 p-4">
+      <div className="mt-6 card p-4">
         <h2 className="text-sm font-semibold">Cargar tarifa nueva</h2>
         <div className="mt-3 grid grid-cols-3 gap-3">
           <label className="text-xs text-slate-600">

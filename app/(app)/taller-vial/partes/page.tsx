@@ -39,7 +39,7 @@ export default async function PartesTallerVialPage() {
         Últimos 60 días, importados del formulario de partes diarios de equipos móviles. No se cargan desde acá.
       </p>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <div className="mt-4 overflow-x-auto card">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-100">

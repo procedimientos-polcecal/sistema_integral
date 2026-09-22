@@ -54,7 +54,7 @@ export default function FleterosClient({ fleteros }: { fleteros: Fletero[] }) {
 
       <div className="mt-4 space-y-2">
         {fleteros.map((f) => (
-          <div key={f.id} className={`flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm ${f.activo ? "" : "opacity-50"}`}>
+          <div key={f.id} className={`flex items-center justify-between card px-3 py-2 text-sm ${f.activo ? "" : "opacity-50"}`}>
             <div>
               <span className="font-medium">{f.nombre}</span>
               {f.patente && <span className="ml-2 font-mono text-xs text-slate-500">{f.patente}</span>}
@@ -67,7 +67,7 @@ export default function FleterosClient({ fleteros }: { fleteros: Fletero[] }) {
         {fleteros.length === 0 && <p className="text-sm text-slate-400">Sin fleteros cargados.</p>}
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 p-4">
+      <div className="mt-6 card p-4">
         <h2 className="text-sm font-semibold">Nuevo fletero</h2>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="text-xs text-slate-600">

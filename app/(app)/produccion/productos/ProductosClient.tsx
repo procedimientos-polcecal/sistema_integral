@@ -361,7 +361,7 @@ function ModalEnlaces({
         la suma sale bien.
       </p>
 
-      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto card">
         {catalogo.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-slate-400">
             El catálogo de productos está vacío.

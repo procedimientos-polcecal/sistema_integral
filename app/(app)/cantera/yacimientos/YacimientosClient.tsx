@@ -87,7 +87,7 @@ export default function YacimientosClient({ yacimientos }: { yacimientos: Yacimi
         <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <div className="mt-4 overflow-x-auto card">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
@@ -172,7 +172,7 @@ export default function YacimientosClient({ yacimientos }: { yacimientos: Yacimi
         </table>
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 p-4">
+      <div className="mt-6 card p-4">
         <h2 className="text-sm font-semibold">Nueva cantera</h2>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="text-xs text-slate-600">

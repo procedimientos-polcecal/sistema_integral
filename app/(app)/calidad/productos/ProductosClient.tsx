@@ -128,7 +128,7 @@ function Lista({
   return (
     <section>
       <h2 className="text-sm font-bold text-slate-900">{titulo}</h2>
-      <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+      <div className="mt-2 overflow-x-auto card">
         <table className="w-full text-sm">
           <tbody className="divide-y divide-slate-100">
             {productos.map((p) => (

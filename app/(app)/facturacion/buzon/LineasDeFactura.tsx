@@ -316,7 +316,7 @@ function Linea({
     JSON.stringify(analitica) !== JSON.stringify(linea.analitica ?? {});
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-2">
+    <li className="card bg-white p-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm font-medium text-slate-800">{linea.descripcion}</span>
         <span className="text-xs text-slate-500">
