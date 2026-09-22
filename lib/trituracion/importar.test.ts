@@ -1,25 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { serialDelDia } from "@/lib/core/fechaDeSheets";
-import { horaDeCelda, parteDeFilaCruda, partesDe2026 } from "./importar";
+import { parteDeFilaCruda, partesDe2026 } from "./importar";
 
 const SERIAL_2_JUN_2026 = serialDelDia("2026-06-02")!;
 const SERIAL_4_JUN_2026 = serialDelDia("2026-06-04")!;
 
-describe("horaDeCelda", () => {
-  it("convierte la fracción de día de las 04:40 (serial de Sheets)", () => {
-    expect(horaDeCelda(4 / 24 + 40 / (24 * 60))).toBe("04:40");
-  });
-
-  it("acepta un texto ya formateado HH:MM", () => {
-    expect(horaDeCelda("11:30")).toBe("11:30");
-  });
-
-  it("vacío o fuera de rango da null", () => {
-    expect(horaDeCelda("")).toBeNull();
-    expect(horaDeCelda(null)).toBeNull();
-    expect(horaDeCelda(1.5)).toBeNull();
-  });
-});
+// horaDeCelda se mudó a lib/core/horaDeCelda.ts (con sus tests) cuando Taller Vial la necesitó también.
 
 describe("parteDeFilaCruda", () => {
   it("parsea una fila real operativa (PLANTA 1, 2/6/2026, serial de fecha)", () => {

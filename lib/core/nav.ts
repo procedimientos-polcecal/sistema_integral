@@ -300,6 +300,7 @@ export const NAV: NavItem[] = [
       { label: "Estados", href: "/taller-vial/estados", modulo: "taller_vial" },
       { label: "Services", href: "/taller-vial/services", modulo: "taller_vial" },
       { label: "Reparaciones", href: "/taller-vial/reparaciones", modulo: "taller_vial" },
+      { label: "Partes diarios", href: "/taller-vial/partes", modulo: "taller_vial" },
       { label: "Informe mensual", href: "/taller-vial/informes", modulo: "taller_vial" },
     ],
   },

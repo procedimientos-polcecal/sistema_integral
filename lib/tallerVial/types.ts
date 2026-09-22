@@ -77,3 +77,28 @@ export interface RepuestoAsignadoConArticulo extends RepuestoAsignadoDB {
   articulo_codigo: string;
   articulo_descripcion: string;
 }
+
+/**
+ * Una fila de `taller_vial_partes`: un bloque de trabajo (equipo + sector +
+ * horario) de un parte diario, importado del Google Form "PARTE DIARIO
+ * EQUIPOS MÓVILES" — ver `lib/tallerVial/importarPartes.ts`.
+ */
+export interface ParteTallerVialDB {
+  id: string;
+  marca_temporal: string;
+  bloque: number;
+  fecha: string;
+  operario_raw: string;
+  operario_id: string | null;
+  equipo_raw: string;
+  equipo_id: string | null;
+  sector_raw: string;
+  yacimiento_destape_codigo: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  horas: number | null;
+  cargaste_todo: string | null;
+  observaciones: string | null;
+  destape_id: string | null;
+  cargado_en: string;
+}

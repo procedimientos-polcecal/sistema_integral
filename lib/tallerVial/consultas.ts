@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { compararCodigosEM } from "./equipos";
-import type { CargaDB, EstadoDiarioDB, ReparacionDB, RepuestoAsignadoConArticulo, ServiceDB } from "./types";
+import type { CargaDB, EstadoDiarioDB, ParteTallerVialDB, ReparacionDB, RepuestoAsignadoConArticulo, ServiceDB } from "./types";
 
 /** Los equipos móviles: la tabla `equipos` de Mantenimiento, filtrada a los códigos EM* — Taller Vial no tiene catálogo propio. */
 export interface EquipoTallerVial {
@@ -80,6 +80,25 @@ export async function traerReparaciones(supabase: SupabaseClient, equipoId?: str
       .from("taller_vial_reparaciones")
       .select("id, equipo_id, tipo, fecha, descripcion, horas, horometro, observaciones, cargado_por, cargado_en");
     if (equipoId) q = q.eq("equipo_id", equipoId);
+    return q.order("fecha", { ascending: false }).range(desde, hasta);
+  });
+}
+
+export interface FiltrosDePartes {
+  /** "YYYY-MM-DD" */
+  desde?: string;
+  /** "YYYY-MM-DD" */
+  hasta?: string;
+}
+
+/** Los partes diarios importados del Google Form — ver `lib/tallerVial/importarPartes.ts`. Sólo lectura: se escriben desde el cron, no desde una pantalla. */
+export async function traerPartesTallerVial(supabase: SupabaseClient, filtros: FiltrosDePartes = {}): Promise<ParteTallerVialDB[]> {
+  return traerTodo<ParteTallerVialDB>((desde, hasta) => {
+    let q = supabase
+      .from("taller_vial_partes")
+      .select("id, marca_temporal, bloque, fecha, operario_raw, operario_id, equipo_raw, equipo_id, sector_raw, yacimiento_destape_codigo, hora_inicio, hora_fin, horas, cargaste_todo, observaciones, destape_id, cargado_en");
+    if (filtros.desde) q = q.gte("fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
 }

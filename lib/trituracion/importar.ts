@@ -13,26 +13,12 @@
  * la búsqueda.
  *
  * La hora sí viaja distinto: una celda de hora es una fracción del día
- * (0,1944… para las 4:40), no un texto — `horaDeCelda` la convierte a
- * "HH:MM".
+ * (0,1944… para las 4:40), no un texto — `horaDeCelda` (`lib/core/horaDeCelda.ts`)
+ * la convierte a "HH:MM".
  */
 
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
-
-/** Fracción de día (0..1) → "HH:MM". Null si no es una fracción de día válida. */
-export function horaDeCelda(valor: unknown): string | null {
-  if (valor === null || valor === undefined || valor === "") return null;
-  if (typeof valor === "string" && /^\d{1,2}:\d{2}$/.test(valor)) {
-    const [h, m] = valor.split(":");
-    return `${h.padStart(2, "0")}:${m}`;
-  }
-  const n = Number(valor);
-  if (isNaN(n) || n < 0 || n >= 1) return null;
-  const minutosTotales = Math.round(n * 24 * 60);
-  const h = Math.floor(minutosTotales / 60);
-  const m = minutosTotales % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
+import { horaDeCelda } from "@/lib/core/horaDeCelda";
 
 function numeroOCero(valor: unknown): number {
   const n = Number(valor);
