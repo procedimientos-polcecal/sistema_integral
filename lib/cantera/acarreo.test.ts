@@ -21,9 +21,10 @@ const TARIFAS_D1: TarifaAcarreo[] = [
 ];
 
 describe("tipoDeAcarreo / esTipoDeAcarreoValido", () => {
-  it("reconoce los 19 tipos relevados y rechaza cualquier otro", () => {
+  it("reconoce los tipos relevados (y el agregado después) y rechaza cualquier otro", () => {
     expect(esTipoDeAcarreoValido("dolomita_d1")).toBe(true);
     expect(esTipoDeAcarreoValido("horas_destape")).toBe(true);
+    expect(esTipoDeAcarreoValido("horas_movimiento_interno")).toBe(true);
     expect(esTipoDeAcarreoValido("inventado")).toBe(false);
   });
 
@@ -50,6 +51,13 @@ describe("tarifaVigente", () => {
       { tipo: "x", desde: "2026-06-01", hasta: null, tarifa: 200 },
     ];
     expect(tarifaVigente(solapadas, "x", "2026-07")?.tarifa).toBe(200);
+  });
+
+  it("'horas_movimiento_interno' usa la tarifa de 'horas_destape' — no tiene la suya propia", () => {
+    const tarifas: TarifaAcarreo[] = [
+      { tipo: "horas_destape", desde: "2026-07-01", hasta: null, tarifa: 55_635.5 },
+    ];
+    expect(tarifaVigente(tarifas, "horas_movimiento_interno", "2026-08")?.tarifa).toBe(55_635.5);
   });
 });
 

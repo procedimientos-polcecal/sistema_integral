@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { TIPOS_DE_ACARREO, ETIQUETA_UNIDAD } from "@/lib/cantera/acarreo";
+import { TIPOS_DE_ACARREO, ETIQUETA_UNIDAD, tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import type { AcarreoDB, Fletero } from "@/lib/cantera/types";
 
 const INPUT_CLS = "w-28 rounded border border-slate-300 px-2 py-1 text-sm text-right disabled:bg-slate-50";
@@ -104,7 +104,14 @@ export default function CargarAcarreoClient({
       <div className="mt-4 space-y-1">
         {TIPOS_MANUALES.map((t) => (
           <div key={t.codigo} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
-            <span className="text-sm text-slate-700">{t.etiqueta}</span>
+            <span className="text-sm text-slate-700">
+              {t.etiqueta}
+              {t.tarifaDe && (
+                <span className="ml-1 text-xs text-slate-400">
+                  (misma tarifa que {tipoDeAcarreo(t.tarifaDe)?.etiqueta ?? t.tarifaDe})
+                </span>
+              )}
+            </span>
             <div className="flex items-center gap-2">
               <input
                 className={INPUT_CLS}

@@ -9,11 +9,16 @@ import type { TarifaAcarreoDB } from "@/lib/cantera/types";
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm";
 
+// Un tipo con `tarifaDe` (ej. "Horas de movimiento interno") no tiene
+// tarifa propia: usa la del tipo que declara, así que no tiene sentido
+// poder cargarle una acá — quedaría guardada y nunca se leería.
+const TIPOS_CON_TARIFA_PROPIA = TIPOS_DE_ACARREO.filter((t) => !t.tarifaDe);
+
 export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarreoDB[] }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
-  const [alta, setAlta] = useState({ tipo: TIPOS_DE_ACARREO[0].codigo, desde: "", tarifa: "" });
+  const [alta, setAlta] = useState({ tipo: TIPOS_CON_TARIFA_PROPIA[0].codigo, desde: "", tarifa: "" });
 
   const porTipo = new Map<string, TarifaAcarreoDB[]>();
   for (const t of tarifas) {
@@ -55,7 +60,7 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 space-y-3">
-        {TIPOS_DE_ACARREO.map((t) => {
+        {TIPOS_CON_TARIFA_PROPIA.map((t) => {
           const historial = (porTipo.get(t.codigo) ?? []).sort((a, b) => b.desde.localeCompare(a.desde));
           return (
             <div key={t.codigo} className="rounded-lg border border-slate-200 p-3">
@@ -85,7 +90,7 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
           <label className="text-xs text-slate-600">
             Tipo
             <select className={INPUT_CLS} value={alta.tipo} onChange={(e) => setAlta({ ...alta, tipo: e.target.value })}>
-              {TIPOS_DE_ACARREO.map((t) => (
+              {TIPOS_CON_TARIFA_PROPIA.map((t) => (
                 <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
               ))}
             </select>

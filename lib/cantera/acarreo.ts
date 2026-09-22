@@ -24,6 +24,13 @@ export interface TipoDeAcarreo {
   unidad: UnidadDeAcarreo;
   /** El código corto del yacimiento del que suele salir (`D1`, `D6`, `C1`, `C3`), o `null` si no es uno solo. Sólo informativo, ver el comentario de arriba. */
   yacimientoCodigo: string | null;
+  /**
+   * Si está, este tipo no tiene tarifa propia en `cantera_tarifas_acarreo`:
+   * `tarifaVigente()` usa la de `tarifaDe` en su lugar. Sirve para llevar la
+   * cantidad de una actividad por separado con el mismo $/hora que otra ya
+   * tarifada — ver "horas_movimiento_interno" más abajo.
+   */
+  tarifaDe?: string;
 }
 
 export const TIPOS_DE_ACARREO: readonly TipoDeAcarreo[] = [
@@ -49,6 +56,12 @@ export const TIPOS_DE_ACARREO: readonly TipoDeAcarreo[] = [
   { codigo: "viaje_de_bloques", etiqueta: "Viaje de bloques", unidad: "hora", yacimientoCodigo: null },
   { codigo: "hora_bochones", etiqueta: "Hora movimiento bochones pozo", unidad: "hora", yacimientoCodigo: null },
   { codigo: "materiales_pezzuchi", etiqueta: "Materiales Pezzuchi", unidad: "tonelada", yacimientoCodigo: null },
+  // Agregado el 22/09/2026 a pedido del usuario: actividad nueva, sin
+  // columna en la planilla real (no participa de ningún sync). Se paga al
+  // mismo $/hora que "Horas destape" — no tiene tarifa propia a propósito
+  // (`tarifaDe`), así que no aparece en /cantera/tarifas-acarreo para
+  // cargarle una.
+  { codigo: "horas_movimiento_interno", etiqueta: "Horas de movimiento interno", unidad: "hora", yacimientoCodigo: null, tarifaDe: "horas_destape" },
 ] as const;
 
 const POR_CODIGO = new Map(TIPOS_DE_ACARREO.map((t) => [t.codigo, t]));
@@ -84,9 +97,12 @@ export interface TarifaAcarreo {
  * más nueva, no la carga más vieja.
  */
 export function tarifaVigente(tarifas: TarifaAcarreo[], tipo: string, mes: string): TarifaAcarreo | null {
+  // Un tipo con `tarifaDe` (ej. "horas_movimiento_interno") no tiene tarifas
+  // propias cargadas: se busca la del tipo que declara.
+  const tipoDeLaTarifa = tipoDeAcarreo(tipo)?.tarifaDe ?? tipo;
   const fecha = mes.length === 7 ? `${mes}-01` : mes;
   const candidatas = tarifas
-    .filter((t) => t.tipo === tipo && t.desde <= fecha && (t.hasta === null || t.hasta >= fecha))
+    .filter((t) => t.tipo === tipoDeLaTarifa && t.desde <= fecha && (t.hasta === null || t.hasta >= fecha))
     .sort((a, b) => (a.desde < b.desde ? 1 : -1));
   return candidatas[0] ?? null;
 }
