@@ -308,28 +308,28 @@ export default async function TallerVialInicioPage() {
       <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/taller-vial/estados"
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Estado de los equipos
           <span className="text-slate-400">→</span>
         </Link>
         <Link
           href="/taller-vial/services"
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Services por horómetro (250 / 500 / 1000 / 2000 hs)
           <span className="text-slate-400">→</span>
         </Link>
         <Link
           href="/taller-vial/reparaciones"
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Historial de reparaciones
           <span className="text-slate-400">→</span>
         </Link>
         <Link
           href="/taller-vial/informes"
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
         >
           Informe mensual
           <span className="text-slate-400">→</span>

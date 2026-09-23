@@ -59,7 +59,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
           sobre={ind.cantidad - ind.sinTiempoEnPredio}
           de={ind.cantidad}
         />
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="card p-4">
           <div className="text-xs uppercase tracking-wide text-slate-500">Los que más tardaron</div>
           {ind.peoresEnPredio.length === 0 ? (
             <div className="mt-2 text-sm text-slate-400">Nada que mostrar todavía.</div>
@@ -81,7 +81,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 card p-4 sm:grid-cols-3 lg:grid-cols-6">
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Cliente</span>
           <input
@@ -159,7 +159,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -252,7 +252,7 @@ function Indicador({
   de: number;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <div className="text-xs uppercase tracking-wide text-slate-500">{titulo}</div>
       <div className="mt-1 text-2xl font-bold text-slate-900">
         {minutos === null ? "—" : comoSeLeenLosMinutos(Math.round(minutos))}

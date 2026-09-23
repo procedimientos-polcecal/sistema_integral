@@ -98,7 +98,7 @@ export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, pue
       </div>
 
       {/* ── Selector de fecha ─────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-3 card p-3">
         <Link
           href={`/produccion/dia?fecha=${sumarDias(fecha, -1)}`}
           aria-label="Día anterior"
@@ -189,13 +189,13 @@ export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, pue
 
       {/* ── La tabla del día ──────────────────────────────────── */}
       {renglonesDePapel.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+        <div className="card p-6 text-center text-sm text-slate-500">
           Todavía no hay renglonesDePapel en el catálogo, así que no hay nada que
           mostrar acá. Eso no impide cargar los partes del día: los avisos de
           arriba siguen valiendo.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-hidden card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

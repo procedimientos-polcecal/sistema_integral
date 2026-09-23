@@ -56,7 +56,7 @@ export default function ResumenesClient({ mes, renglonesDePapel, dias }: Props) 
       </div>
 
       {/* ── Selector de mes ───────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-3 card p-3">
         <Link
           href={`/produccion/resumenes?mes=${mesRelativo(mes, -1)}`}
           aria-label="Mes anterior"
@@ -85,7 +85,7 @@ export default function ResumenesClient({ mes, renglonesDePapel, dias }: Props) 
       </div>
 
       {renglonesDePapel.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+        <div className="card p-6 text-center text-sm text-slate-500">
           Todavía no hay renglonesDePapel en el catálogo, así que no hay ninguna
           columna que mostrar. En cuanto calidad defina la lista, este mes va a
           tener sus tablas — no hace falta volver a cargar nada de lo que ya se
@@ -129,7 +129,7 @@ function Envoltorio({
         {leyenda && <p className="text-xs text-slate-500">{leyenda}</p>}
         {nota && <p className="text-xs font-medium text-amber-700">{nota}</p>}
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden card">
         <div className="overflow-x-auto">{children}</div>
       </div>
     </div>

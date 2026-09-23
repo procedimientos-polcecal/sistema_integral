@@ -207,7 +207,7 @@ export default function NuevoMovimientoClient({
           {busqueda.trim().length > 0 && busqueda.trim().length < 3 && (
             <p className="text-xs text-slate-400">Escribí al menos tres letras.</p>
           )}
-          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <ul className="divide-y divide-slate-100 overflow-hidden card">
             {opciones.map((a) => (
               <li key={a.id}>
                 <button
@@ -225,7 +225,7 @@ export default function NuevoMovimientoClient({
           </ul>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="card p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-medium text-slate-900">{articulo.descripcion}</p>
@@ -247,7 +247,7 @@ export default function NuevoMovimientoClient({
 
       {/* ── Qué pasó con él ──────────────────────────────────── */}
       {articulo && (
-        <form onSubmit={guardar} className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+        <form onSubmit={guardar} className="space-y-4 card p-4">
           <div className="grid grid-cols-3 gap-2">
             {(["entrada", "salida", "ajuste"] as Tipo[]).map((t) => (
               <button

@@ -100,7 +100,7 @@ export default function ArticulosClient({
         className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm"
       />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

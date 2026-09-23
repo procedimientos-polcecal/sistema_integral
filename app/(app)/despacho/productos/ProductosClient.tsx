@@ -175,7 +175,7 @@ export default function ProductosClient({
       )}
 
       {abierto && (
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="space-y-3 card p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-semibold text-slate-900">

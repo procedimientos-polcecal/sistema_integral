@@ -99,7 +99,7 @@ export default function ProveedoresDeRecepcionClient({
         </div>
       )}
 
-      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="divide-y divide-slate-100 overflow-hidden card">
         {proveedores.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-slate-400">
             No hay proveedores con rubro CARBONILLA en el catálogo.

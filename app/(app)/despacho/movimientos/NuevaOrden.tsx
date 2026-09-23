@@ -137,7 +137,7 @@ export default function NuevaOrden({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+    <div className="card p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <h2 className="font-semibold text-slate-900">Nueva orden de carga</h2>
         <button onClick={onCerrar} className="text-sm text-slate-500 hover:text-slate-700">

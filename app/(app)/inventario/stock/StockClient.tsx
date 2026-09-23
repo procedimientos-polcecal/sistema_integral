@@ -120,7 +120,7 @@ export default function StockClient({
           {articulos.map((a) => {
             const falta = a.faltante > 0;
             return (
-              <li key={a.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <li key={a.id} className="card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">{a.descripcion}</p>

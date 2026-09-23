@@ -72,7 +72,7 @@ export default function ReservasTallerVialClient({ puedeEditar }: { puedeEditar:
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="mt-4 overflow-hidden card">
         <div className="overflow-x-auto">
           <table className="table-base">
             <thead>

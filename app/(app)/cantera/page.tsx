@@ -280,7 +280,7 @@ function Acceso({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+      className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
     >
       {label}
       <span className="text-slate-400">→</span>

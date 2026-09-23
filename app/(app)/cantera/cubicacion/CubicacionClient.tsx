@@ -143,7 +143,7 @@ export default function CubicacionClient({
           const color = COLOR_YACIMIENTO[yacimiento.codigo] ?? "#64748B";
           const enEdicion = editando === yacimiento.codigo;
           return (
-            <div key={yacimiento.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4">
+            <div key={yacimiento.id} className="relative overflow-hidden card p-4">
               <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

@@ -117,7 +117,7 @@ export default function ListaClient({
       </label>
 
       {/* ── Quién retira ──────────────────────────────────────── */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="overflow-hidden card">
         <header className="border-b border-slate-100 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">
             Quién retira <span className="font-normal text-slate-400">· {visibles(solicitantes).length}</span>
@@ -223,7 +223,7 @@ export default function ListaClient({
       </section>
 
       {/* ── A dónde va ────────────────────────────────────────── */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="overflow-hidden card">
         <header className="border-b border-slate-100 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">
             A dónde va <span className="font-normal text-slate-400">· {visibles(destinos).length}</span>

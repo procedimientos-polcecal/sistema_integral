@@ -417,7 +417,7 @@ export default function ParteClient({
       )}
 
       {/* ── 1. Cabecera y capataz ────────────────────────────── */}
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <section className="space-y-3 card p-4">
         <h2 className="text-sm font-semibold text-slate-700">Capataz de turno</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -450,7 +450,7 @@ export default function ParteClient({
       </section>
 
       {/* ── 2. Depósito, en el orden del papel ───────────────── */}
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+      <section className="space-y-4 card p-4">
         <div>
           <h2 className="text-sm font-semibold text-slate-700">Material en depósito</h2>
           <p className="text-xs text-slate-500">
@@ -536,7 +536,7 @@ export default function ParteClient({
       </section>
 
       {/* ── 3. Despachos, una tarjeta por camión ─────────────── */}
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+      <section className="space-y-4 card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-700">Material despachado</h2>
@@ -595,7 +595,7 @@ export default function ParteClient({
       </section>
 
       {/* ── 4. Los tres textos ────────────────────────────────── */}
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+      <section className="space-y-4 card p-4">
         <h2 className="text-sm font-semibold text-slate-700">Observaciones y cierre de turno</h2>
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Observaciones</span>
