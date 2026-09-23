@@ -20,7 +20,7 @@
 # `npm run lint` NO está acá, a propósito: hoy devuelve 21 errores
 # (`react-hooks/set-state-in-effect`, en su mayoría) y agregarlo dejaría el CI
 # rojo desde el primer push. Un CI que está siempre rojo no lo mira nadie, que
-# es exactamente el estado del que se viene. Cuando esos 14 se cierren, se
+# es exactamente el estado del que se viene. Cuando esos 21 se cierren, se
 # agrega un paso más acá y recién ahí el lint empieza a defender algo.
 #
 # SOBRE LAS VARIABLES DEL BUILD

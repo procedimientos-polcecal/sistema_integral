@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import { valorHoraDe } from "@/lib/rrhh/valorHora";
 import { montoBochon, montoPerforacion } from "./costos";
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
@@ -517,7 +518,7 @@ export interface EmpleadoLiviano {
   id: string;
   nombre: string;
   apellido: string;
-  /** `empleados.valor_hora_normal` — lo que vale la mano de obra propia de este operario en Destape (ya no es una tarifa "mo_propia" única). */
+  /** `rrhh_empleados_datos.valor_hora_normal` — lo que vale la mano de obra propia de este operario en Destape (ya no es una tarifa "mo_propia" única). */
   valorHoraNormal: number;
 }
 
@@ -539,9 +540,22 @@ export async function traerOperariosDeCantera(supabase: SupabaseClient): Promise
   const sectorIds = (sectores ?? []).map((s) => s.id as string);
   if (sectorIds.length === 0) return [];
 
+  // El valor hora sale de `rrhh_empleados_datos` y no de `empleados`: se mudó
+  // el 22/09/2026 porque `empleados` es un catálogo del núcleo con la lectura
+  // abierta a cualquier autenticado, y un sueldo por hora no es dato de
+  // catálogo (ver la migración 20260922101405 y `lib/rrhh/valorHora.ts`).
+  //
+  // Esto lee un dato de RRHH desde Cantera, así que **depende de que quien
+  // mire Destape tenga acceso a RRHH**: `rrhh_empleados_datos` está cerrada con
+  // `tiene_acceso_rrhh()` desde la 009. A quien no lo tenga, el embed le llega
+  // vacío y el valor hora es 0 — no rompe la pantalla, pero el costo de mano de
+  // obra propia le da cero. Queda anotado porque es una decisión de permisos
+  // que no se ve desde acá: si Destape tiene que mostrarle el costo a alguien
+  // sin RRHH, lo que hay que resolver es de dónde sale ese número, no aflojar
+  // la policy.
   const { data, error } = await supabase
     .from("empleados")
-    .select("id, nombre, apellido, valor_hora_normal")
+    .select("id, nombre, apellido, rrhh_empleados_datos(valor_hora_normal)")
     .eq("activo", true)
     .in("sector_id", sectorIds)
     .order("apellido", { ascending: true });
@@ -550,6 +564,6 @@ export async function traerOperariosDeCantera(supabase: SupabaseClient): Promise
     id: e.id as string,
     nombre: e.nombre as string,
     apellido: e.apellido as string,
-    valorHoraNormal: e.valor_hora_normal as number,
+    valorHoraNormal: valorHoraDe(e),
   }));
 }

@@ -101,6 +101,16 @@ Antes de escribir una, leer las ocho trampas del
 - **Los catálogos del núcleo los comparten los seis módulos**: `usuarios`,
   `sectores`, `equipos`, `empleados`, `proveedores`. Se leen; no se borran ni se
   rehacen desde un módulo.
+- **El valor hora NO está en `empleados`**: vive en `rrhh_empleados_datos` desde
+  el 22/09/2026, porque `empleados` tiene la lectura abierta a cualquier
+  autenticado y RLS no sabe tapar una columna sola. Se lee con
+  `valorHoraDe()`/`conValorHoraPlano()` de `lib/rrhh/valorHora.ts`, que resuelven
+  las dos formas del embed. Y ojo con esto: **cualquier módulo que lo lea depende
+  de que quien mire tenga acceso a RRHH**, porque esa tabla está cerrada con
+  `tiene_acceso_rrhh()`. A quien no lo tenga le llega 0, sin error. Hoy lo lee
+  Cantera, en Destape. `empleados.domicilio` directamente ya no existe: estaba
+  vacío en las 70 filas y el domicilio de verdad es
+  `remises_empleados_datos.direccion`.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
 
@@ -183,7 +193,7 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
   errores reales** (medido el 22/09/2026 sobre `origin/main`), casi todos
   `react-hooks/set-state-in-effect` en pantallas.
   Por eso el lint **no** está en el CI: agregarlo lo dejaría rojo desde el primer
-  push, y un CI siempre rojo no lo mira nadie. Cuando esos 14 se cierren, se
+  push, y un CI siempre rojo no lo mira nadie. Cuando esos 21 se cierren, se
   agrega el paso.
 - **Los worktrees de Claude Code viven adentro del repo** (`.claude/worktrees/`),
   así que vitest los recorría como código del proyecto y recogía cada
