@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import Indicador from "@/components/Indicador";
+import KpiCard from "@/components/KpiCard";
 import {
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, moneda, fecha, etiquetaEmpresa,
 } from "@/lib/compras/constants";
@@ -120,12 +120,12 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <Indicador titulo="Requerimientos" valor={contadores.total} href="/compras/requerimientos" />
-        <Indicador titulo="Esperando aprobación" valor={contadores.pendientes} href="/compras/aprobaciones" acento="text-amber-600" />
-        <Indicador titulo="Para comprar" valor={contadores.paraComprar} href="/compras/tablero" acento="text-amber-600" />
-        <Indicador titulo="En comparativa" valor={contadores.enComparativa} href="/compras/tablero" acento="text-blue-600" />
-        <Indicador titulo="Pedidos en curso" valor={contadores.pedidos} href="/compras/tablero" acento="text-indigo-600" />
-        <Indicador titulo="Urgentes sin cerrar" valor={contadores.urgentes} href="/compras/tablero" acento="text-red-600" />
+        <KpiCard label="Requerimientos" value={contadores.total} href="/compras/requerimientos" />
+        <KpiCard label="Esperando aprobación" value={contadores.pendientes} href="/compras/aprobaciones" color="var(--status-st)" />
+        <KpiCard label="Para comprar" value={contadores.paraComprar} href="/compras/tablero" color="var(--status-st)" />
+        <KpiCard label="En comparativa" value={contadores.enComparativa} href="/compras/tablero" color="var(--status-mant)" />
+        <KpiCard label="Pedidos en curso" value={contadores.pedidos} href="/compras/tablero" color="#4F46E5" />
+        <KpiCard label="Urgentes sin cerrar" value={contadores.urgentes} href="/compras/tablero" color="var(--status-rep)" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

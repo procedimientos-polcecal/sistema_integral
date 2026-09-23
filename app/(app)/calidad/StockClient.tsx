@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import KpiCard from "@/components/KpiCard";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
@@ -147,7 +148,7 @@ export default function StockClient({
         <Saldo titulo="Residual" valor={saldos.residual} desde={ultimoConsumo.residual} />
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{t(saldos.total)}</p>
+          <p className="mt-1 text-3xl font-bold text-slate-900">{t(saldos.total)}</p>
           <p className="text-xs text-slate-400">toneladas</p>
         </div>
       </div>
@@ -321,20 +322,12 @@ function Saldo({
   desde: string | null;
 }) {
   return (
-    <div className="card p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{titulo}</p>
-      <p
-        className={`mt-1 text-3xl font-bold tabular-nums ${
-          valor < 0 ? "text-red-600" : "text-slate-900"
-        }`}
-      >
-        {t(valor)}
-      </p>
-      <p className="text-xs text-slate-400">
-        toneladas
-        {desde && ` · último consumo ${comoSeLee(desde)}`}
-      </p>
-    </div>
+    <KpiCard
+      color={valor < 0 ? "var(--status-rep)" : "var(--primary)"}
+      label={titulo}
+      value={t(valor)}
+      sub={<>toneladas{desde && ` · último consumo ${comoSeLee(desde)}`}</>}
+    />
   );
 }
 

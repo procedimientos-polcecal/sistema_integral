@@ -83,5 +83,5 @@ export default function PinMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng]);
 
-  return <div ref={elRef} style={{ height }} className="rounded-lg overflow-hidden border border-gray-200" />;
+  return <div ref={elRef} style={{ height }} className="rounded-lg overflow-hidden border border-slate-200" />;
 }

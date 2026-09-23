@@ -96,7 +96,7 @@ export default function UsuariosClient({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Usuarios</h1>
+        <h1 className="text-xl font-bold text-slate-900">Usuarios</h1>
         <button onClick={() => setModalNuevo(true)} className="btn-primary">
           Nuevo usuario
         </button>
@@ -124,7 +124,7 @@ export default function UsuariosClient({
                 <td>{ROL_LABEL[u.rol]}</td>
                 <td>
                   {u.usuario_modulos.length === 0 ? (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-slate-400">—</span>
                   ) : (
                     <span className="flex flex-wrap gap-1">
                       {u.usuario_modulos.map((m) => (
@@ -143,7 +143,7 @@ export default function UsuariosClient({
               </tr>
             ))}
             {usuarios.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-gray-400">Todavía no hay usuarios</td></tr>
+              <tr><td colSpan={6} className="py-6 text-center text-slate-400">Todavía no hay usuarios</td></tr>
             )}
           </tbody>
         </table>
@@ -201,11 +201,11 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-gray-900 mb-4">Nuevo usuario</h2>
+        <h2 className="font-medium text-slate-900 mb-4">Nuevo usuario</h2>
 
         {resultado ? (
           <div className="space-y-3">
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-slate-700">
               Usuario creado. Pasale este link para que defina su contraseña:
             </p>
             <textarea
@@ -218,7 +218,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
             <p className="text-xs text-amber-700">
               Es de un solo uso y caduca. Tratalo como una contraseña temporal.
             </p>
-            {resultado.aviso && <p className="text-xs text-gray-500">{resultado.aviso}</p>}
+            {resultado.aviso && <p className="text-xs text-slate-500">{resultado.aviso}</p>}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -235,28 +235,28 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
         ) : (
         <form onSubmit={crear} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Email</label>
+            <label className="block text-xs text-slate-500 mb-1">Email</label>
             <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+              <label className="block text-xs text-slate-500 mb-1">Nombre</label>
               <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Apellido</label>
+              <label className="block text-xs text-slate-500 mb-1">Apellido</label>
               <input required value={form.apellido} onChange={(e) => setForm({ ...form, apellido: e.target.value })} className="input" />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Rol</label>
+            <label className="block text-xs text-slate-500 mb-1">Rol</label>
             <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
               {(Object.keys(ROL_LABEL) as Rol[]).map((r) => (
                 <option key={r} value={r}>{ROL_LABEL[r]}</option>
               ))}
             </select>
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             Se le va a mandar un email a esa dirección para que defina su propia contraseña.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -345,32 +345,32 @@ function EditarUsuarioModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-gray-900 mb-1">Editar usuario</h2>
-        <p className="text-xs text-gray-500 mb-4">{usuario.email}</p>
+        <h2 className="font-medium text-slate-900 mb-1">Editar usuario</h2>
+        <p className="text-xs text-slate-500 mb-4">{usuario.email}</p>
         <form onSubmit={guardar} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+              <label className="block text-xs text-slate-500 mb-1">Nombre</label>
               <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Apellido</label>
+              <label className="block text-xs text-slate-500 mb-1">Apellido</label>
               <input required value={form.apellido} onChange={(e) => setForm({ ...form, apellido: e.target.value })} className="input" />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Rol</label>
+            <label className="block text-xs text-slate-500 mb-1">Rol</label>
             <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
               {(Object.keys(ROL_LABEL) as Rol[]).map((r) => (
                 <option key={r} value={r}>{ROL_LABEL[r]}</option>
               ))}
             </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
             Activo
           </label>
-          <label className="flex items-start gap-2 text-sm text-gray-600">
+          <label className="flex items-start gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -379,18 +379,18 @@ function EditarUsuarioModal({
             />
             <span>
               Puede usar el asistente
-              <span className="block text-xs text-gray-400">
+              <span className="block text-xs text-slate-400">
                 Sólo ve lo que ya puede ver. Se concede de a poco porque cada pregunta cuesta.
               </span>
             </span>
           </label>
 
           <div className="pt-2 border-t">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Módulos</h3>
+            <h3 className="text-sm font-medium text-slate-700 mb-2">Módulos</h3>
             <div className="space-y-2">
               {MODULOS.map((m) => (
                 <div key={m} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-gray-600">{MODULO_LABEL[m]}</span>
+                  <span className="text-sm text-slate-600">{MODULO_LABEL[m]}</span>
                   <select
                     value={grants[m]}
                     onChange={(e) => setGrants({ ...grants, [m]: e.target.value as Nivel | "" })}
@@ -412,13 +412,13 @@ function EditarUsuarioModal({
               cubrir dos áreas —Mantenimiento y Taller Vial las mira la misma
               gente— y obligar a elegir una perdería la otra en silencio. */}
           <div className="pt-2 border-t">
-            <h3 className="text-sm font-medium text-gray-700">Áreas de Compras</h3>
-            <p className="mb-2 text-xs text-gray-500">
+            <h3 className="text-sm font-medium text-slate-700">Áreas de Compras</h3>
+            <p className="mb-2 text-xs text-slate-500">
               Qué requerimientos ve en Mis pedidos. No le da ni le quita acceso a nada.
             </p>
             <div className="grid grid-cols-2 gap-1">
               {areas.map((a) => (
-                <label key={a.id} className="flex items-center gap-2 text-sm text-gray-600">
+                <label key={a.id} className="flex items-center gap-2 text-sm text-slate-600">
                   <input
                     type="checkbox"
                     checked={areasElegidas.includes(a.id)}

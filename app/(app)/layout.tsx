@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="text-lg font-semibold">
             {desactivado ? "Tu cuenta está desactivada." : "Tu cuenta todavía no fue habilitada."}
           </p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-500">
             {desactivado
               ? "Un administrador dio de baja tu acceso. Si creés que es un error, avisale."
               : "Pedile a un administrador que te dé acceso."}

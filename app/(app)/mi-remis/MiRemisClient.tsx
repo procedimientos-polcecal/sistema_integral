@@ -57,32 +57,32 @@ export default function MiRemisClient({ nombre }: { nombre: string }) {
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Hola, {nombre}</h1>
-      <p className="text-gray-500 mb-6">Tu remis</p>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Hola, {nombre}</h1>
+      <p className="text-slate-500 mb-6">Tu remis</p>
 
       <div className="flex gap-2 mb-6">
         {(["manana", "hoy"] as const).map((d) => (
           <button key={d} onClick={() => setDia(d)}
-            className={`px-4 py-2 rounded-md text-sm ${dia === d ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"}`}>
+            className={`px-4 py-2 rounded-md text-sm ${dia === d ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"}`}>
             {d === "manana" ? "Mañana" : "Hoy"}
           </button>
         ))}
       </div>
 
       {!asignaciones ? (
-        <p className="text-sm text-gray-500">Cargando...</p>
+        <p className="text-sm text-slate-500">Cargando...</p>
       ) : asignaciones.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-gray-400">Sin remis asignado para {dia === "manana" ? "mañana" : "hoy"}.</div>
+        <div className="card p-6 text-center text-sm text-slate-400">Sin remis asignado para {dia === "manana" ? "mañana" : "hoy"}.</div>
       ) : (
         <div className="space-y-3">
           {asignaciones.map((a, i) => (
             <div key={i} className="card p-5">
-              <div className="text-xs text-gray-400 mb-1">{a.tipo === "ida" ? "Ida (búsqueda)" : "Vuelta (retorno)"}</div>
-              <div className="text-lg font-semibold text-gray-900">{a.vehiculo ?? "Vehículo sin nombre"}</div>
-              {a.chofer && <div className="text-sm text-gray-600 mt-1">Chofer: {a.chofer}{a.choferTelefono ? ` · ${a.choferTelefono}` : ""}</div>}
-              {a.horaSalida && <div className="text-sm text-gray-600">Salida: {a.horaSalida}</div>}
+              <div className="text-xs text-slate-400 mb-1">{a.tipo === "ida" ? "Ida (búsqueda)" : "Vuelta (retorno)"}</div>
+              <div className="text-lg font-semibold text-slate-900">{a.vehiculo ?? "Vehículo sin nombre"}</div>
+              {a.chofer && <div className="text-sm text-slate-600 mt-1">Chofer: {a.chofer}{a.choferTelefono ? ` · ${a.choferTelefono}` : ""}</div>}
+              {a.horaSalida && <div className="text-sm text-slate-600">Salida: {a.horaSalida}</div>}
               {a.companeros.length > 0 && (
-                <div className="text-xs text-gray-400 mt-2">Con vos: {a.companeros.join(", ")}</div>
+                <div className="text-xs text-slate-400 mt-2">Con vos: {a.companeros.join(", ")}</div>
               )}
             </div>
           ))}
@@ -93,7 +93,7 @@ export default function MiRemisClient({ nombre }: { nombre: string }) {
         {notifEstado === "activo" ? (
           <p className="text-xs text-emerald-600">Notificaciones activadas</p>
         ) : notifEstado === "no-soportado" ? (
-          <p className="text-xs text-gray-400">Tu navegador no soporta notificaciones push.</p>
+          <p className="text-xs text-slate-400">Tu navegador no soporta notificaciones push.</p>
         ) : notifEstado === "denegado" ? (
           <p className="text-xs text-amber-600">Permiso de notificaciones denegado. Activalo desde la configuración del navegador.</p>
         ) : (

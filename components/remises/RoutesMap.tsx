@@ -103,5 +103,5 @@ export default function RoutesMap({
     if (allPts.length) map.fitBounds(allPts, { padding: [30, 30] });
   }, [hojas, fabrica]);
 
-  return <div ref={elRef} className="w-full h-full rounded-xl overflow-hidden border border-gray-200" />;
+  return <div ref={elRef} className="w-full h-full rounded-xl overflow-hidden border border-slate-200" />;
 }

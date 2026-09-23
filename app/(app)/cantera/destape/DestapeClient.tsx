@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import KpiCard from "@/components/KpiCard";
 import { costoDeRegistro, resumenPorYacimiento, ETIQUETA_TIPO_RECURSO, ETIQUETA_TIPO_CAMION } from "@/lib/cantera/destape";
 import type { DestapeDB, TarifaAcarreoDB } from "@/lib/cantera/types";
 
@@ -212,22 +213,10 @@ export default function DestapeClient({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="card p-4" style={{ borderTop: "3px solid #1E7D34" }}>
-          <div className="text-2xl font-bold tabular-nums" style={{ color: "#1E7D34" }}>{money(costoTotal)}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Costo total del mes</div>
-        </div>
-        <div className="card p-4" style={{ borderTop: "3px solid #7E22CE" }}>
-          <div className="text-2xl font-bold tabular-nums" style={{ color: "#7E22CE" }}>{num.format(horasTotal)}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Horas totales</div>
-        </div>
-        <div className="card p-4" style={{ borderTop: "3px solid #0891B2" }}>
-          <div className="text-2xl font-bold tabular-nums" style={{ color: "#0891B2" }}>{money(costoFletero)}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Fletero externo</div>
-        </div>
-        <div className="card p-4" style={{ borderTop: "3px solid #C2410C" }}>
-          <div className="text-2xl font-bold tabular-nums" style={{ color: "#C2410C" }}>{money(costoMaquina + costoMo)}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Máquina + MO propia</div>
-        </div>
+        <KpiCard color="#1E7D34" value={money(costoTotal)} label="Costo total del mes" />
+        <KpiCard color="#7E22CE" value={num.format(horasTotal)} label="Horas totales" />
+        <KpiCard color="#0891B2" value={money(costoFletero)} label="Fletero externo" />
+        <KpiCard color="#C2410C" value={money(costoMaquina + costoMo)} label="Máquina + MO propia" />
       </div>
 
       <section className="mt-6">

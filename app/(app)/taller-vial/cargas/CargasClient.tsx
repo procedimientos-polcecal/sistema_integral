@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import KpiCard from "@/components/KpiCard";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 
@@ -155,19 +156,10 @@ export default function CargasClient({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="card p-4">
-          <div className="text-2xl font-bold tabular-nums text-[#0891B2]">{num0.format(litrosTotal)} L</div>
-          <div className="mt-0.5 text-sm text-slate-500">Total del mes</div>
-        </div>
-        <div className="card p-4">
-          <div className="text-2xl font-bold tabular-nums text-slate-700">{cargas.length}</div>
-          <div className="mt-0.5 text-sm text-slate-500">Cargas</div>
-        </div>
+        <KpiCard color="#0891B2" value={`${num0.format(litrosTotal)} L`} label="Total del mes" />
+        <KpiCard label="Cargas" value={cargas.length} />
         {sinEquipo.length > 0 && (
-          <div className="card p-4" style={{ borderTop: "3px solid #B45309" }}>
-            <div className="text-2xl font-bold tabular-nums text-amber-700">{sinEquipo.length}</div>
-            <div className="mt-0.5 text-sm text-slate-500">Sin equipo reconocido</div>
-          </div>
+          <KpiCard color="#B45309" value={sinEquipo.length} label="Sin equipo reconocido" />
         )}
       </div>
 

@@ -12,7 +12,7 @@ const TIPO_LABEL: Record<string, { label: string; color: string }> = {
   taller:  { label: "Taller",  color: "bg-amber-100 text-amber-800" },
   equipo:  { label: "Equipo",  color: "bg-purple-100 text-purple-800" },
   oficina: { label: "Oficina", color: "bg-slate-100 text-slate-600" },
-  otra:    { label: "Otra",    color: "bg-gray-100 text-gray-500" },
+  otra:    { label: "Otra",    color: "bg-slate-100 text-slate-500" },
 };
 
 type Opcion = { id: string; nombre: string; codigo?: string | null };

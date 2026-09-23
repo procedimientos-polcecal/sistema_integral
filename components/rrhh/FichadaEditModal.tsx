@@ -162,38 +162,38 @@ export default function FichadaEditModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-800 mb-1">Corregir fichada</h3>
-        <p className="text-sm text-gray-500 mb-4">
+        <h3 className="font-medium text-slate-800 mb-1">Corregir fichada</h3>
+        <p className="text-sm text-slate-500 mb-4">
           {empleadoNombre} · {new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
         </p>
 
         <div className="space-y-3 mb-4">
           {filas.map((fila, idx) => (
-            <div key={idx} className={`border rounded-md p-3 ${fila.eliminar ? "opacity-40 border-red-200 bg-red-50" : "border-gray-200"}`}>
+            <div key={idx} className={`border rounded-md p-3 ${fila.eliminar ? "opacity-40 border-red-200 bg-red-50" : "border-slate-200"}`}>
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Fecha de ingreso</label>
+                  <label className="block text-xs text-slate-500 mb-1">Fecha de ingreso</label>
                   <input type="date" disabled={fila.eliminar} value={fila.fechaEntrada}
                     onChange={(e) => actualizarFila(idx, { fechaEntrada: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm disabled:bg-gray-100" />
+                    className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Hora de ingreso</label>
+                  <label className="block text-xs text-slate-500 mb-1">Hora de ingreso</label>
                   <input type="time" disabled={fila.eliminar} value={fila.horaEntrada}
                     onChange={(e) => actualizarFila(idx, { horaEntrada: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm disabled:bg-gray-100" />
+                    className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Fecha de salida</label>
+                  <label className="block text-xs text-slate-500 mb-1">Fecha de salida</label>
                   <input type="date" disabled={fila.eliminar} value={fila.fechaSalida}
                     onChange={(e) => actualizarFila(idx, { fechaSalida: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm disabled:bg-gray-100" />
+                    className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Hora de salida</label>
+                  <label className="block text-xs text-slate-500 mb-1">Hora de salida</label>
                   <input type="time" disabled={fila.eliminar} value={fila.horaSalida}
                     onChange={(e) => actualizarFila(idx, { horaSalida: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm disabled:bg-gray-100" />
+                    className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
               </div>
               <button type="button" onClick={() => quitarFila(idx)} className="text-xs text-red-600 hover:underline">
@@ -207,33 +207,33 @@ export default function FichadaEditModal({
           + Agregar marcación
         </button>
 
-        <div className="border-t border-gray-200 pt-4 mb-2">
-          <label className="block text-xs text-gray-500 mb-1">Horas trabajadas</label>
+        <div className="border-t border-slate-200 pt-4 mb-2">
+          <label className="block text-xs text-slate-500 mb-1">Horas trabajadas</label>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">Normales</label>
+              <label className="block text-[11px] text-slate-400 mb-1">Normales</label>
               <input type="number" step="0.1" min="0" max="24" value={normalesInput}
                 onChange={(e) => setNormalesInput(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">Extra 50%</label>
+              <label className="block text-[11px] text-slate-400 mb-1">Extra 50%</label>
               <input type="number" step="0.1" min="0" max="24" value={extra50Input}
                 onChange={(e) => setExtra50Input(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">Extra 100%</label>
+              <label className="block text-[11px] text-slate-400 mb-1">Extra 100%</label>
               <input type="number" step="0.1" min="0" max="24" value={extra100Input}
                 onChange={(e) => setExtra100Input(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-2">
+          <p className="text-xs text-slate-400 mt-2">
             Total: {(Number(normalesInput || 0) + Number(extra50Input || 0) + Number(extra100Input || 0)).toFixed(1)}hs · Calculado
             automáticamente: {totalActual.toFixed(1)}hs
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Si cambiás estos valores, quedan fijados manualmente y no se recalculan solos con las marcaciones de arriba.
           </p>
           {horasManual && (
@@ -246,7 +246,7 @@ export default function FichadaEditModal({
         {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} type="button" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          <button onClick={onClose} type="button" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Cancelar
           </button>
           <button onClick={guardar} disabled={guardando} type="button" className="btn-primary disabled:opacity-50">

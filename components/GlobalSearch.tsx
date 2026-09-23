@@ -92,9 +92,9 @@ export function GlobalSearch() {
           style={{ borderColor: "var(--border)" }}
         >
           {cargando ? (
-            <div className="px-4 py-3 text-sm text-gray-400">Buscando...</div>
+            <div className="px-4 py-3 text-sm text-slate-400">Buscando...</div>
           ) : grupos.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-400">Sin resultados</div>
+            <div className="px-4 py-3 text-sm text-slate-400">Sin resultados</div>
           ) : (
             grupos.map((g) => (
               <div key={g.tipo}>
@@ -103,10 +103,10 @@ export function GlobalSearch() {
                   <button
                     key={`${r.tipo}-${r.id}`}
                     onClick={() => ir(r)}
-                    className="flex w-full flex-col items-start px-4 py-2 text-left text-sm hover:bg-gray-50"
+                    className="flex w-full flex-col items-start px-4 py-2 text-left text-sm hover:bg-slate-50"
                   >
-                    <span className="text-gray-900">{r.label}</span>
-                    <span className="text-xs text-gray-400">{r.sublabel}</span>
+                    <span className="text-slate-900">{r.label}</span>
+                    <span className="text-xs text-slate-400">{r.sublabel}</span>
                   </button>
                 ))}
               </div>

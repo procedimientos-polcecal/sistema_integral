@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
+import KpiCard from "@/components/KpiCard";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 
@@ -552,19 +553,19 @@ export default function DashboardClient({
       })()}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Total equipos"    value={total}           accent="var(--text-primary)" />
-        <KpiCard label="Operativos"       value={operativos}      accent="var(--status-op)" sub={`${pctOperativo}% del total`} />
-        <KpiCard label="Vencidos"         value={overdue.length}  accent={overdue.length > 0 ? "var(--status-rep)" : "var(--status-op)"} />
-        <KpiCard label="Próximos 7 días"  value={upcoming.length} accent="var(--accent)" />
+        <KpiCard label="Total equipos"    value={total}           color="var(--text-primary)" />
+        <KpiCard label="Operativos"       value={operativos}      color="var(--status-op)" sub={`${pctOperativo}% del total`} />
+        <KpiCard label="Vencidos"         value={overdue.length}  color={overdue.length > 0 ? "var(--status-rep)" : "var(--status-op)"} />
+        <KpiCard label="Próximos 7 días"  value={upcoming.length} color="var(--accent)" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <KpiCard label="Avisos sin OT"      value={avisosSinOT}  accent={avisosSinOT > 0 ? "var(--accent)" : "var(--status-op)"} />
-        <KpiCard label="OS sin terminar"    value={osPendientes} accent="var(--status-mant)" />
+        <KpiCard label="Avisos sin OT"      value={avisosSinOT}  color={avisosSinOT > 0 ? "var(--accent)" : "var(--status-op)"} />
+        <KpiCard label="OS sin terminar"    value={osPendientes} color="var(--status-mant)" />
         <KpiCard
           label="Sectores a parar"
           value={sectoresParados.length}
-          accent={sectoresParados.length > 0 ? "var(--status-rep)" : "var(--status-op)"}
+          color={sectoresParados.length > 0 ? "var(--status-rep)" : "var(--status-op)"}
           sub={sectoresParados.length > 0 ? nombresDeSectores(sectores, sectoresParados) : undefined}
         />
       </div>
@@ -817,16 +818,6 @@ function IndicatorGroup({ title, tally, colors }: {
   );
 }
 
-function KpiCard({ label, value, accent, sub }: { label: string; value: number; accent: string; sub?: string }) {
-  return (
-    <div className="card p-4 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: accent }} />
-      <div className="text-3xl font-bold text-slate-900">{value}</div>
-      <div className="text-xs text-slate-500 mt-1">{label}</div>
-      {sub && <div className="text-xs mt-0.5" style={{ color: accent }}>{sub}</div>}
-    </div>
-  );
-}
 
 function ScheduleRow({ schedule, overdue, last }: { schedule: any; overdue?: boolean; last?: boolean }) {
   return (

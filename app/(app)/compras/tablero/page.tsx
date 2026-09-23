@@ -4,7 +4,7 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { COMPRA_LABELS, moneda } from "@/lib/compras/constants";
 import { armarIndicadores } from "@/lib/compras/tablero";
-import Indicador from "@/components/Indicador";
+import KpiCard from "@/components/KpiCard";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -78,13 +78,13 @@ export default async function TableroPage() {
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {indicadores.map((i) => (
-          <Indicador
+          <KpiCard
             key={i.estado}
-            titulo={COMPRA_LABELS[i.estado].label}
-            valor={i.cantidad}
+            label={COMPRA_LABELS[i.estado].label}
+            value={i.cantidad}
             href={i.href}
-            acento={i.acento}
-            pie={i.monto > 0 ? moneda(i.monto) : null}
+            color={i.acento}
+            sub={i.monto > 0 ? moneda(i.monto) : null}
           />
         ))}
       </section>

@@ -10,16 +10,16 @@ import type { EstadoCompra } from "./types";
  * comprar" ya tiene la suya—.
  */
 
-/** Color de la cifra. Acompaña al del chip del estado, sin el fondo. */
+/** Color del punto y la franja de la tarjeta de KPI. Sin fondo, sólo acento. */
 const ACENTO: Record<EstadoCompra, string | undefined> = {
   SIN_INICIAR: undefined,
-  EN_COMPARATIVA: "text-blue-600",
-  PARA_COMPRAR: "text-amber-600",
-  APROBADO: "text-teal-600",
-  PEDIDO: "text-indigo-600",
-  RECIBIDO: "text-green-600",
-  DENEGADO: "text-red-600",
-  EN_ESPERA: "text-slate-500",
+  EN_COMPARATIVA: "var(--status-mant)",
+  PARA_COMPRAR: "var(--status-st)",
+  APROBADO: "#0D9488",
+  PEDIDO: "#4F46E5",
+  RECIBIDO: "var(--status-op)",
+  DENEGADO: "var(--status-rep)",
+  EN_ESPERA: "var(--text-muted)",
 };
 
 /**

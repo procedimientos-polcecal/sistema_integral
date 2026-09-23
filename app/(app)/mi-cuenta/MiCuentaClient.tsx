@@ -54,36 +54,36 @@ export default function MiCuentaClient({
 
   return (
     <div className="space-y-6 max-w-md">
-      <h1 className="text-xl font-bold text-gray-900">Mi cuenta</h1>
+      <h1 className="text-xl font-bold text-slate-900">Mi cuenta</h1>
 
       <div className="card p-5 space-y-2 text-sm">
         <div>
-          <span className="text-gray-500">Nombre: </span>
-          <span className="text-gray-900">{nombre} {apellido}</span>
+          <span className="text-slate-500">Nombre: </span>
+          <span className="text-slate-900">{nombre} {apellido}</span>
         </div>
         <div>
-          <span className="text-gray-500">Email: </span>
-          <span className="text-gray-900">{email}</span>
+          <span className="text-slate-500">Email: </span>
+          <span className="text-slate-900">{email}</span>
         </div>
         <div>
-          <span className="text-gray-500">Rol: </span>
-          <span className="text-gray-900">{rolLabel}</span>
+          <span className="text-slate-500">Rol: </span>
+          <span className="text-slate-900">{rolLabel}</span>
         </div>
       </div>
 
       <div className="card p-5">
-        <h2 className="font-medium text-gray-700 mb-3">Cambiar contraseña</h2>
+        <h2 className="font-medium text-slate-700 mb-3">Cambiar contraseña</h2>
         <form onSubmit={cambiarPassword} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Contraseña actual</label>
+            <label className="block text-xs text-slate-500 mb-1">Contraseña actual</label>
             <input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="input" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Contraseña nueva</label>
+            <label className="block text-xs text-slate-500 mb-1">Contraseña nueva</label>
             <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Confirmar contraseña nueva</label>
+            <label className="block text-xs text-slate-500 mb-1">Confirmar contraseña nueva</label>
             <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input" />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

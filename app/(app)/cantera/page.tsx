@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
 import {
@@ -133,25 +134,25 @@ export default async function CanteraInicioPage({
 
       {/* ── Lo que importa de un vistazo ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metrica
+        <KpiCard
           color="#1E7D34"
-          valor={delMesActual ? num1.format(delMesActual.toneladas) : "0"}
+          value={delMesActual ? num1.format(delMesActual.toneladas) : "0"}
           label={`Toneladas voladas · ${nombreDeMes(mesActual)}`}
         />
-        <Metrica
+        <KpiCard
           color="#7E22CE"
-          valor={delMesActual?.usdPorTon != null ? `US$ ${num1.format(delMesActual.usdPorTon)}` : "—"}
+          value={delMesActual?.usdPorTon != null ? `US$ ${num1.format(delMesActual.usdPorTon)}` : "—"}
           label="Costo por tonelada este mes"
         />
-        <Metrica
+        <KpiCard
           color={conteo.sinConciliar > 0 ? "#B45309" : "#1E7D34"}
-          valor={String(conteo.sinConciliar)}
+          value={String(conteo.sinConciliar)}
           label="Facturas a conciliar o revisar"
           href="/cantera/registros"
         />
-        <Metrica
+        <KpiCard
           color="#0891B2"
-          valor={`$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(totalAcarreoMes)}`}
+          value={`$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(totalAcarreoMes)}`}
           label="Acarreo a pagar este mes"
           href="/cantera/acarreo"
         />
@@ -297,20 +298,3 @@ function CargandoResumenAnual() {
   );
 }
 
-function Metrica({
-  color, valor, label, href,
-}: { color: string; valor: string; label: string; href?: string }) {
-  const contenido = (
-    <>
-      <div className="text-3xl font-bold tabular-nums" style={{ color }}>{valor}</div>
-      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
-    </>
-  );
-  const clases = "card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg";
-  const estilo = { borderTop: `3px solid ${color}` };
-  return href ? (
-    <Link href={href} className={clases} style={estilo}>{contenido}</Link>
-  ) : (
-    <div className={clases} style={estilo}>{contenido}</div>
-  );
-}

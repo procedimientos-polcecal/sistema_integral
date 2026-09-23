@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import KpiCard from "@/components/KpiCard";
 import {
   tipoDeAcarreo,
   ETIQUETA_UNIDAD,
@@ -111,10 +112,10 @@ export default function AcarreoClient({
 
       {/* ── KPIs del mes ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi color="#0891B2" label="Acarreo a pagar" value={money(totalGeneral)} />
-        <Kpi color="#1E7D34" label="Toneladas del mes" value={num.format(totalToneladas)} />
-        <Kpi color="#7E22CE" label="Fleteros con movimiento" value={String(resumenes.length)} />
-        <Kpi
+        <KpiCard color="#0891B2" label="Acarreo a pagar" value={money(totalGeneral)} />
+        <KpiCard color="#1E7D34" label="Toneladas del mes" value={num.format(totalToneladas)} />
+        <KpiCard color="#7E22CE" label="Fleteros con movimiento" value={String(resumenes.length)} />
+        <KpiCard
           color={sinFleteroResuelto > 0 ? "#B45309" : "#1E7D34"}
           label="Pesadas sin fletero"
           value={String(sinFleteroResuelto)}
@@ -254,19 +255,6 @@ export default function AcarreoClient({
           />
         )}
       </section>
-    </div>
-  );
-}
-
-function Kpi({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4">
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
-      </div>
-      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
     </div>
   );
 }

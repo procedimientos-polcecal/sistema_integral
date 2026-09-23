@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerCargas, traerEquiposTallerVial, traerEstadosDiarios, traerServices } from "@/lib/tallerVial/consultas";
@@ -130,30 +131,30 @@ export default async function TallerVialInicioPage() {
 
       {/* ── Estado actual de la flota ── */}
       <div className="mt-5 grid grid-cols-3 gap-3">
-        <Metrica
+        <KpiCard
           color="#1E7D34"
-          valor={`${pct(resumenActual.operativos)}%`}
+          value={`${pct(resumenActual.operativos)}%`}
           label={`Operativos (${resumenActual.operativos}/${resumenActual.total})`}
         />
-        <Metrica
+        <KpiCard
           color={resumenActual.fueraDeServicio > 0 ? "#DC2626" : "#94A3B8"}
-          valor={`${pct(resumenActual.fueraDeServicio)}%`}
+          value={`${pct(resumenActual.fueraDeServicio)}%`}
           label={`Fuera de servicio (${resumenActual.fueraDeServicio}/${resumenActual.total})`}
         />
-        <Metrica
+        <KpiCard
           color={resumenActual.conFallas > 0 ? "#D97706" : "#94A3B8"}
-          valor={`${pct(resumenActual.conFallas)}%`}
+          value={`${pct(resumenActual.conFallas)}%`}
           label={`Con fallas (${resumenActual.conFallas}/${resumenActual.total})`}
         />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metrica color="#0891B2" valor={`${num0.format(litrosTotalDelMes)} L`} label="Combustible cargado este mes" href="/taller-vial/cargas" />
-        <Metrica color="#1E7D34" valor={String(equiposConCargaEsteMes)} label="Equipos con carga este mes" />
-        <Metrica color="#7E22CE" valor={String(cargasDelMes.length)} label="Cargas registradas este mes" href="/taller-vial/cargas" />
-        <Metrica
+        <KpiCard color="#0891B2" value={`${num0.format(litrosTotalDelMes)} L`} label="Combustible cargado este mes" href="/taller-vial/cargas" />
+        <KpiCard color="#1E7D34" value={String(equiposConCargaEsteMes)} label="Equipos con carga este mes" />
+        <KpiCard color="#7E22CE" value={String(cargasDelMes.length)} label="Cargas registradas este mes" href="/taller-vial/cargas" />
+        <KpiCard
           color={resumenActual.sinDato > 0 ? "#94A3B8" : "#1E7D34"}
-          valor={String(resumenActual.sinDato)}
+          value={String(resumenActual.sinDato)}
           label="Equipos sin estado cargado"
         />
       </div>
@@ -339,20 +340,3 @@ export default async function TallerVialInicioPage() {
   );
 }
 
-function Metrica({
-  color, valor, label, href,
-}: { color: string; valor: string; label: string; href?: string }) {
-  const contenido = (
-    <>
-      <div className="text-3xl font-bold tabular-nums" style={{ color }}>{valor}</div>
-      <div className="mt-0.5 text-sm text-slate-500">{label}</div>
-    </>
-  );
-  const clases = "card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg";
-  const estilo = { borderTop: `3px solid ${color}` };
-  return href ? (
-    <Link href={href} className={clases} style={estilo}>{contenido}</Link>
-  ) : (
-    <div className={clases} style={estilo}>{contenido}</div>
-  );
-}

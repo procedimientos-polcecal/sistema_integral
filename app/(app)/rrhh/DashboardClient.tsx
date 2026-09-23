@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import KpiCard from "@/components/KpiCard";
 import type { ResumenHoy } from "@/lib/rrhh/resumenHoy";
 import { useCargar } from "@/lib/core/useCargar";
 
@@ -46,20 +47,6 @@ function buildQS(params: Record<string, string | undefined>) {
   for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
   const s = qs.toString();
   return s ? `?${s}` : "";
-}
-
-function StatCard({
-  titulo, cantidad, porcentaje, cargando, bg, onClick,
-}: { titulo: string; cantidad: number; porcentaje: number; cargando?: boolean; bg: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className={`rounded-xl p-5 flex items-center justify-between text-white text-left w-full transition hover:brightness-110 ${bg}`}>
-      <div>
-        <div className="text-sm opacity-90">{titulo}</div>
-        <div className="text-3xl font-bold">{cargando ? "…" : cantidad}</div>
-      </div>
-      <div className="text-lg font-semibold opacity-90">{cargando ? "" : `${porcentaje}%`}</div>
-    </button>
-  );
 }
 
 function Acceso({ href, label }: { href: string; label: string }) {
@@ -168,10 +155,10 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard titulo="Presentes" cargando={cargandoResumen} cantidad={resumen.presentes.cantidad} porcentaje={resumen.presentes.porcentaje} bg="bg-[var(--primary)]" onClick={() => setCategoriaHoy("presentes")} />
-        <StatCard titulo="Ausentes" cargando={cargandoResumen} cantidad={resumen.ausentes.cantidad} porcentaje={resumen.ausentes.porcentaje} bg="bg-[var(--status-rep)]" onClick={() => setCategoriaHoy("ausentes")} />
-        <StatCard titulo="Tardes" cargando={cargandoResumen} cantidad={resumen.tardes.cantidad} porcentaje={resumen.tardes.porcentaje} bg="bg-[var(--accent)]" onClick={() => setCategoriaHoy("tardes")} />
-        <StatCard titulo="Vacaciones" cargando={cargandoResumen} cantidad={resumen.vacaciones.cantidad} porcentaje={resumen.vacaciones.porcentaje} bg="bg-[#7E22CE]" onClick={() => setCategoriaHoy("vacaciones")} />
+        <KpiCard color="var(--primary)" label="Presentes" value={cargandoResumen ? "…" : resumen.presentes.cantidad} sub={cargandoResumen ? undefined : `${resumen.presentes.porcentaje}%`} onClick={() => setCategoriaHoy("presentes")} />
+        <KpiCard color="var(--status-rep)" label="Ausentes" value={cargandoResumen ? "…" : resumen.ausentes.cantidad} sub={cargandoResumen ? undefined : `${resumen.ausentes.porcentaje}%`} onClick={() => setCategoriaHoy("ausentes")} />
+        <KpiCard color="var(--accent)" label="Tardes" value={cargandoResumen ? "…" : resumen.tardes.cantidad} sub={cargandoResumen ? undefined : `${resumen.tardes.porcentaje}%`} onClick={() => setCategoriaHoy("tardes")} />
+        <KpiCard color="#7E22CE" label="Vacaciones" value={cargandoResumen ? "…" : resumen.vacaciones.cantidad} sub={cargandoResumen ? undefined : `${resumen.vacaciones.porcentaje}%`} onClick={() => setCategoriaHoy("vacaciones")} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

@@ -68,7 +68,7 @@ export function NotificationsBell() {
         >
           <div className="section-title px-4 pt-3 pb-2">Notificaciones</div>
           {!notificaciones || notificaciones.length === 0 ? (
-            <div className="px-4 pb-4 text-sm text-gray-400">
+            <div className="px-4 pb-4 text-sm text-slate-400">
               {notificaciones === null ? "Cargando..." : "Sin novedades por ahora."}
             </div>
           ) : (
@@ -76,14 +76,14 @@ export function NotificationsBell() {
               {notificaciones.map((n) => (
                 <div
                   key={n.id}
-                  className="group flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50"
+                  className="group flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50"
                 >
                   <Link
                     href={n.href}
                     onClick={() => setAbierto(false)}
                     className="flex flex-1 items-center justify-between gap-2 overflow-hidden"
                   >
-                    <span className="truncate text-gray-700">{n.titulo}</span>
+                    <span className="truncate text-slate-700">{n.titulo}</span>
                     <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
                       {n.cantidad}
                     </span>
@@ -95,7 +95,7 @@ export function NotificationsBell() {
                       e.stopPropagation();
                       descartar(n);
                     }}
-                    className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition hover:bg-gray-200 hover:text-gray-600 group-hover:opacity-100"
+                    className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition hover:bg-slate-200 hover:text-slate-600 group-hover:opacity-100"
                     style={{ background: "none", border: "none", cursor: "pointer" }}
                   >
                     <IconX />

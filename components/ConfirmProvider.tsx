@@ -60,20 +60,20 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 </svg>
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-bold text-gray-900">
+                <h3 className="text-base font-bold text-slate-900">
                   {opts.title ?? "¿Confirmás la acción?"}
                 </h3>
                 {/* `whitespace-pre-line` para que un mensaje que enumera cosas
                     —una por línea— no quede todo en un renglón. Los de una
                     sola línea se ven igual que antes. */}
-                <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{opts.message}</p>
+                <p className="text-sm text-slate-600 mt-1 whitespace-pre-line">{opts.message}</p>
               </div>
             </div>
 
             <div className="flex gap-2 justify-end mt-5">
               <button
                 onClick={() => close(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 {opts.cancelText ?? "Cancelar"}
               </button>

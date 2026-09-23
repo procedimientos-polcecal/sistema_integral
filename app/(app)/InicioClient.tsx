@@ -56,8 +56,8 @@ export default function InicioClient({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Hola, {nombreUsuario || "de nuevo"}</h1>
-        <p className="text-gray-600">Esto es lo que está pasando hoy en cada módulo.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Hola, {nombreUsuario || "de nuevo"}</h1>
+        <p className="text-slate-600">Esto es lo que está pasando hoy en cada módulo.</p>
       </div>
 
       {sinModulos && (
@@ -360,19 +360,19 @@ function ModuloCard({
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: color }}>
           {icon}
         </span>
-        <h2 className="flex-1 font-semibold text-gray-900">{titulo}</h2>
-        <span className="text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-gray-400">→</span>
+        <h2 className="flex-1 font-semibold text-slate-900">{titulo}</h2>
+        <span className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-400">→</span>
       </div>
 
       <div className="px-5 pb-3">
         {hero === null ? (
-          <div className="h-10 w-24 animate-pulse rounded bg-gray-100" />
+          <div className="h-10 w-24 animate-pulse rounded bg-slate-100" />
         ) : (
           <>
-            <div className="text-4xl font-bold tabular-nums" style={{ color }}>
+            <div className="text-4xl font-bold" style={{ color }}>
               {hero.valor}
             </div>
-            <div className="mt-0.5 text-sm text-gray-500">{hero.label}</div>
+            <div className="mt-0.5 text-sm text-slate-500">{hero.label}</div>
           </>
         )}
       </div>
@@ -381,13 +381,13 @@ function ModuloCard({
         {secundarias === null
           ? [0, 1].map((i) => (
               <div key={i} className="flex-1 px-5 py-3">
-                <div className="h-3 w-16 animate-pulse rounded bg-gray-100" />
+                <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
               </div>
             ))
           : secundarias.map((s) => (
               <div key={s.label} className="flex-1 px-5 py-3">
-                <div className="text-base font-semibold text-gray-900 tabular-nums">{s.valor}</div>
-                <div className="text-xs text-gray-500">{s.label}</div>
+                <div className="text-base font-semibold text-slate-900">{s.valor}</div>
+                <div className="text-xs text-slate-500">{s.label}</div>
               </div>
             ))}
       </div>

@@ -124,7 +124,7 @@ export default function EmpresasSectoresManager() {
     if (ok) setNuevoNombre("");
   }
 
-  if (!sectores || !empresas) return <p className="text-sm text-gray-500">Cargando…</p>;
+  if (!sectores || !empresas) return <p className="text-sm text-slate-500">Cargando…</p>;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -135,12 +135,12 @@ export default function EmpresasSectoresManager() {
       )}
 
       <section className="card p-5">
-        <h2 className="mb-3 font-medium text-gray-700">Empresas</h2>
+        <h2 className="mb-3 font-medium text-slate-700">Empresas</h2>
         <ul className="space-y-1">
           {empresas.map((e) => (
-            <li key={e.id} className="flex items-center justify-between text-sm text-gray-700">
+            <li key={e.id} className="flex items-center justify-between text-sm text-slate-700">
               <span>{e.nombre}</span>
-              <label className="flex items-center gap-2 text-gray-600">
+              <label className="flex items-center gap-2 text-slate-600">
                 <input type="checkbox" checked={e.activo} onChange={() => toggleEmpresa(e)} />
                 Activa
               </label>
@@ -151,26 +151,26 @@ export default function EmpresasSectoresManager() {
 
       <section className="card p-5">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-medium text-gray-700">Sectores</h2>
-          <p className="text-xs text-gray-500">
+          <h2 className="font-medium text-slate-700">Sectores</h2>
+          <p className="text-xs text-slate-500">
             {sectores.filter((s) => s.activo).length} activos de {sectores.length}
           </p>
         </div>
         {/* La distinción no es obvia y equivocarse cuesta caro: un sector
             organizativo entre los de planta aparece en los desplegables de
             Mantenimiento al lado de "Filler 2". */}
-        <p className="mb-4 text-xs text-gray-500">
+        <p className="mb-4 text-xs text-slate-500">
           Los organizativos son dónde trabaja una persona; los de planta, dónde está una máquina.
         </p>
 
         <div className="space-y-5">
           {grupos.map((g) => (
             <div key={g.clave}>
-              <h3 className="text-sm font-medium text-gray-800">{g.titulo}</h3>
-              <p className="mb-2 text-xs text-gray-500">{g.explicacion}</p>
+              <h3 className="text-sm font-medium text-slate-800">{g.titulo}</h3>
+              <p className="mb-2 text-xs text-slate-500">{g.explicacion}</p>
 
               {g.sectores.length === 0 ? (
-                <p className="pl-3 text-sm text-gray-400">Sin sectores</p>
+                <p className="pl-3 text-sm text-slate-400">Sin sectores</p>
               ) : (
                 <ul className="space-y-1">
                   {g.sectores.map((s) => (
@@ -188,24 +188,24 @@ export default function EmpresasSectoresManager() {
                               if (ev.key === "Enter") guardarNombre(s);
                               if (ev.key === "Escape") setEditando(null);
                             }}
-                            className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                            className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
                           />
                           <button onClick={() => guardarNombre(s)} className="btn-ghost">
                             Guardar
                           </button>
-                          <button onClick={() => setEditando(null)} className="text-xs text-gray-500 underline">
+                          <button onClick={() => setEditando(null)} className="text-xs text-slate-500 underline">
                             Cancelar
                           </button>
                         </>
                       ) : (
                         <>
                           {s.codigo && (
-                            <span className="font-mono text-xs text-gray-400">{s.codigo}</span>
+                            <span className="font-mono text-xs text-slate-400">{s.codigo}</span>
                           )}
-                          <span className={s.activo ? "text-gray-700" : "text-gray-400 line-through"}>
+                          <span className={s.activo ? "text-slate-700" : "text-slate-400 line-through"}>
                             {s.nombre}
                           </span>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-slate-400">
                             {s.usos > 0
                               ? `${s.usos.toLocaleString("es-AR")} ${s.usos === 1 ? "fila" : "filas"}`
                               : "sin uso"}
@@ -213,12 +213,12 @@ export default function EmpresasSectoresManager() {
                           {!loMantieneLaImportacion(s) && (
                             <button
                               onClick={() => { setEditando(s.id); setNombreEditado(s.nombre); }}
-                              className="text-xs text-gray-500 underline"
+                              className="text-xs text-slate-500 underline"
                             >
                               Renombrar
                             </button>
                           )}
-                          <label className="ml-auto flex items-center gap-2 text-gray-600">
+                          <label className="ml-auto flex items-center gap-2 text-slate-600">
                             <input
                               type="checkbox"
                               checked={s.activo}
@@ -238,10 +238,10 @@ export default function EmpresasSectoresManager() {
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-1 font-medium text-gray-700">Nuevo sector</h2>
+        <h2 className="mb-1 font-medium text-slate-700">Nuevo sector</h2>
         {/* Los de planta no se crean acá: los trae la importación del libro con
             su código, y uno hecho a mano quedaría sin código y fuera de ella. */}
-        <p className="mb-3 text-xs text-gray-500">
+        <p className="mb-3 text-xs text-slate-500">
           Organizativo. Los de planta los crea la importación del libro BD Equipos.
         </p>
         <form onSubmit={crear} className="flex flex-wrap gap-2">
@@ -249,12 +249,12 @@ export default function EmpresasSectoresManager() {
             placeholder="Nombre"
             value={nuevoNombre}
             onChange={(e) => setNuevoNombre(e.target.value)}
-            className="min-w-40 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="min-w-40 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
           />
           <select
             value={nuevoDonde}
             onChange={(e) => setNuevoDonde(e.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="rounded-md border border-slate-300 px-2 py-1 text-sm"
           >
             <option value="transversal">Transversal</option>
             {empresas.map((e) => (

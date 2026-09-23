@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas, type ParteDB } from "@/lib/trituracion/consultas";
@@ -99,16 +100,16 @@ export default async function TrituracionInicioPage() {
 
       {/* ── KPIs globales del mes ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metrica color="#1E7D34" valor={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesActual)}`} />
-        <Metrica color="#7E22CE" valor={String(resumenGlobal.diasOperativos)} label="Días operativos (3 plantas)" />
-        <Metrica
+        <KpiCard color="#1E7D34" value={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesActual)}`} />
+        <KpiCard color="#7E22CE" value={String(resumenGlobal.diasOperativos)} label="Días operativos (3 plantas)" />
+        <KpiCard
           color="#0891B2"
-          valor={resumenGlobal.disponibilidadPromedio !== null ? pct.format(resumenGlobal.disponibilidadPromedio) : "—"}
+          value={resumenGlobal.disponibilidadPromedio !== null ? pct.format(resumenGlobal.disponibilidadPromedio) : "—"}
           label="Disponibilidad promedio"
         />
-        <Metrica
+        <KpiCard
           color={pendientesTotal > 0 ? "#B45309" : "#1E7D34"}
-          valor={String(pendientesTotal)}
+          value={String(pendientesTotal)}
           label="Sin exportar a la planilla"
         />
       </div>
@@ -126,7 +127,7 @@ export default async function TrituracionInicioPage() {
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
               {planta.nombre}
             </div>
-            <div className="mt-2 text-3xl font-bold tabular-nums" style={{ color }}>{num0.format(resumen.toneladasTotal)} t</div>
+            <div className="mt-2 text-3xl font-bold" style={{ color }}>{num0.format(resumen.toneladasTotal)} t</div>
             <div className="text-sm text-slate-500">procesadas este mes</div>
             <div className="mt-2 flex justify-between text-sm text-slate-600">
               <span>{resumen.diasOperativos} días operativos</span>
@@ -177,11 +178,3 @@ export default async function TrituracionInicioPage() {
  * sólo el borde de 3px—, para que el color se note sin tener que mirar de
  * cerca.
  */
-function Metrica({ color, valor, label }: { color: string; valor: string; label: string }) {
-  return (
-    <div className="card p-4" style={{ borderTop: `3px solid ${color}`, backgroundColor: COLOR_CLARO[color] ?? "#FFF" }}>
-      <div className="text-2xl font-bold tabular-nums" style={{ color }}>{valor}</div>
-      <div className="mt-0.5 text-sm text-slate-600">{label}</div>
-    </div>
-  );
-}

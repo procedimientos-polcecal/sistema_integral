@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelInventarioDe } from "@/lib/inventario/auth";
@@ -72,15 +73,15 @@ export default async function InventarioDashboardPage() {
 
       {/* ── KPIs ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi color="#1E7D34" label="Artículos" value={num.format(total.count ?? 0)} href="/inventario/stock" />
-        <Kpi
+        <KpiCard color="#1E7D34" label="Artículos" value={num.format(total.count ?? 0)} href="/inventario/stock" />
+        <KpiCard
           color={(cantidadFaltantes ?? 0) > 0 ? "#B45309" : "#1E7D34"}
           label="Con faltante"
           value={num.format(cantidadFaltantes ?? 0)}
           href="/inventario/stock?faltantes=1"
         />
-        <Kpi color="#0891B2" label="Movimientos hoy" value={num.format(movimientosHoy ?? 0)} href="/inventario/movimientos" />
-        <Kpi
+        <KpiCard color="#0891B2" label="Movimientos hoy" value={num.format(movimientosHoy ?? 0)} href="/inventario/movimientos" />
+        <KpiCard
           color={(cantidadPendientes ?? 0) > 0 ? "#B45309" : "#1E7D34"}
           label="Sin sincronizar"
           value={num.format(cantidadPendientes ?? 0)}
@@ -183,21 +184,3 @@ function Acceso({ href, label }: { href: string; label: string }) {
   );
 }
 
-function Kpi({ color, label, value, href }: { color: string; label: string; value: string; href?: string }) {
-  const contenido = (
-    <>
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate text-xs font-medium text-[var(--text-muted)]">{label}</span>
-      </div>
-      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{value}</div>
-    </>
-  );
-  const clases = "relative block overflow-hidden rounded-xl border border-[var(--border)] bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md";
-  const franja = <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />;
-  return href ? (
-    <Link href={href} className={clases}>{franja}{contenido}</Link>
-  ) : (
-    <div className={clases}>{franja}{contenido}</div>
-  );
-}
