@@ -279,16 +279,16 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   return (
     <div>
       <div className="flex items-start justify-between mb-1">
-        <h1 className="text-xl font-bold text-gray-900">
+        <h1 className="text-xl font-bold text-slate-900">
           {empleado.apellido}, {empleado.nombre}
           {!empleado.activo && <span className="ml-2 text-sm font-normal text-red-600">(inactivo)</span>}
         </h1>
         {canEdit && (
           <div className="flex gap-2">
-            <button onClick={() => setEditando((v) => !v)} className="bg-white border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50">
+            <button onClick={() => setEditando((v) => !v)} className="bg-white border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-md hover:bg-slate-50">
               {editando ? "Cancelar" : "Editar"}
             </button>
-            <button onClick={toggleActivo} className="bg-white border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50">
+            <button onClick={toggleActivo} className="bg-white border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-md hover:bg-slate-50">
               {empleado.activo ? "Dar de baja" : "Reactivar"}
             </button>
             <button
@@ -309,7 +309,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           </div>
         )}
       </div>
-      <p className="text-gray-500 mb-4">
+      <p className="text-slate-500 mb-4">
         Legajo {empleado.legajo} · {empleado.empresas?.nombre ?? "Sin empresa"} · {empleado.sectores?.nombre ?? "Sin sector"}
         {empleado.rrhh_empleados_datos?.sindicato ? ` · ${empleado.rrhh_empleados_datos.sindicato}` : ""} · $
         {Number(empleado.valor_hora_normal).toLocaleString("es-AR")}/hora · {empleado.horas_teoricas_diarias}hs teóricas/día ·{" "}
@@ -320,45 +320,45 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       {editando && (
         <form onSubmit={guardarEdicion} className="card p-5 mb-6 grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Nombre</label>
+            <label className="block text-sm text-slate-600 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Apellido</label>
+            <label className="block text-sm text-slate-600 mb-1">Apellido</label>
             <input required value={form.apellido} onChange={(e) => setForm({ ...form, apellido: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Sindicato</label>
+            <label className="block text-sm text-slate-600 mb-1">Sindicato</label>
             <input value={form.sindicato} onChange={(e) => setForm({ ...form, sindicato: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Fecha de ingreso</label>
+            <label className="block text-sm text-slate-600 mb-1">Fecha de ingreso</label>
             <input type="date" required value={form.fechaIngreso} onChange={(e) => setForm({ ...form, fechaIngreso: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Valor hora normal ($)</label>
+            <label className="block text-sm text-slate-600 mb-1">Valor hora normal ($)</label>
             <input type="number" step="0.01" required value={form.valorHoraNormal} onChange={(e) => setForm({ ...form, valorHoraNormal: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Horas teóricas diarias</label>
+            <label className="block text-sm text-slate-600 mb-1">Horas teóricas diarias</label>
             <input type="number" step="0.5" required value={form.horasTeoricasDiarias} onChange={(e) => setForm({ ...form, horasTeoricasDiarias: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Modalidad de pago</label>
+            <label className="block text-sm text-slate-600 mb-1">Modalidad de pago</label>
             <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Empresa</label>
+            <label className="block text-sm text-slate-600 mb-1">Empresa</label>
             <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
               <option value="">Seleccionar...</option>
               {empresas.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Sector</label>
+            <label className="block text-sm text-slate-600 mb-1">Sector</label>
             <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
               <option value="">Sin asignar</option>
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -375,7 +375,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       <div className="flex gap-2 mb-4">
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-md text-sm capitalize ${tab === t ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+            className={`px-4 py-2 rounded-md text-sm capitalize ${tab === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             {t}
           </button>
         ))}
@@ -386,21 +386,21 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           <div>
             <div className="flex gap-3 items-end mb-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Desde</label>
-                <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-                <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
             </div>
             {cargandoDias ? (
-              <p className="text-gray-500 text-sm">Cargando...</p>
+              <p className="text-slate-500 text-sm">Cargando...</p>
             ) : (
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 border-b">
+                  <tr className="text-left text-slate-500 border-b">
                     <th className="pb-2">Fecha</th>
                     <th className="pb-2">Marcaciones</th>
                     <th className="pb-2">Hs. trabajadas</th>
@@ -442,13 +442,13 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                             ) : d.tipo_dia}
                           </td>
                           <td className="py-2 text-right whitespace-nowrap">
-                            <button onClick={() => setDiaEnEdicion(d)} className="text-gray-500 hover:text-blue-600 text-xs underline mr-3">Corregir</button>
+                            <button onClick={() => setDiaEnEdicion(d)} className="text-slate-500 hover:text-blue-600 text-xs underline mr-3">Corregir</button>
                             {tieneExtras && (
                               d.extras_validadas ? (
                                 <span className="text-green-700 text-xs">✓ Validado</span>
                               ) : (
                                 <button onClick={() => validar(d.fecha)} disabled={validando === d.fecha}
-                                  className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-md hover:bg-gray-700 disabled:opacity-50">
+                                  className="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-700 disabled:opacity-50">
                                   Validar
                                 </button>
                               )
@@ -466,31 +466,31 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
 
         {tab === "ausencias" && (
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
+            <h3 className="text-sm font-medium text-slate-700 mb-2">
               {editandoAusenciaId ? "Editar ausencia / incidencia" : "Registrar ausencia / incidencia"}
             </h3>
             <form onSubmit={crearAusencia} className="grid grid-cols-2 gap-3 mb-6">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Desde</label>
+                <label className="block text-xs text-slate-500 mb-1">Desde</label>
                 <input type="date" required value={nuevaAusencia.fechaDesde} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, fechaDesde: e.target.value })} className="input" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
                 <input type="date" value={nuevaAusencia.fechaHasta} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, fechaHasta: e.target.value })} placeholder="igual que Desde" className="input" />
               </div>
               <div className="col-span-2 flex gap-2">
                 <button type="button" onClick={() => setNuevaAusencia({ ...nuevaAusencia, justificada: true })}
-                  className={`flex-1 py-1.5 rounded-md text-sm ${nuevaAusencia.justificada ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                  className={`flex-1 py-1.5 rounded-md text-sm ${nuevaAusencia.justificada ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
                   Justificada
                 </button>
                 <button type="button" onClick={() => setNuevaAusencia({ ...nuevaAusencia, justificada: false })}
-                  className={`flex-1 py-1.5 rounded-md text-sm ${!nuevaAusencia.justificada ? "bg-red-600 text-white" : "bg-gray-100 text-gray-600"}`}>
+                  className={`flex-1 py-1.5 rounded-md text-sm ${!nuevaAusencia.justificada ? "bg-red-600 text-white" : "bg-slate-100 text-slate-600"}`}>
                   Injustificada
                 </button>
               </div>
               {nuevaAusencia.justificada && (
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">Motivo</label>
+                  <label className="block text-xs text-slate-500 mb-1">Motivo</label>
                   <select value={nuevaAusencia.tipo} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, tipo: e.target.value })} className="input">
                     {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
@@ -498,16 +498,16 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               )}
               {nuevaAusencia.justificada && nuevaAusencia.tipo === "VACACIONES" && (
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
+                  <label className="block text-xs text-slate-500 mb-1">Año correspondiente</label>
                   <input type="number" required value={nuevaAusencia.anioCorrespondiente}
                     onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, anioCorrespondiente: e.target.value })} className="input" />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     Se descuenta del balance de vacaciones de ese año (puede ser un año anterior, ej. vacaciones pendientes) y aparece en el historial de vacaciones.
                   </p>
                 </div>
               )}
               <div className="col-span-2">
-                <label className="block text-xs text-gray-500 mb-1">
+                <label className="block text-xs text-slate-500 mb-1">
                   Observaciones {nuevaAusencia.justificada && nuevaAusencia.tipo === "OTRA" ? "(obligatorio: aclarar el motivo)" : ""}
                 </label>
                 <textarea value={nuevaAusencia.observaciones} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, observaciones: e.target.value })} className="input" rows={2} />
@@ -518,18 +518,18 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                   className="btn-primary disabled:opacity-50">
                   {guardandoAusencia ? "Guardando..." : editandoAusenciaId ? "Guardar cambios" : "Registrar"}
                 </button>
-                {editandoAusenciaId && <button type="button" onClick={cancelarEdicionAusencia} className="text-sm text-gray-600 px-4 py-2">Cancelar edición</button>}
+                {editandoAusenciaId && <button type="button" onClick={cancelarEdicionAusencia} className="text-sm text-slate-600 px-4 py-2">Cancelar edición</button>}
               </div>
             </form>
 
-            <h3 className="text-sm font-medium text-gray-700 mb-1">Días sin fichada</h3>
-            <p className="text-xs text-gray-500 mb-3">
+            <h3 className="text-sm font-medium text-slate-700 mb-1">Días sin fichada</h3>
+            <p className="text-xs text-slate-500 mb-3">
               Días detectados como falta (sin marcación) entre el {new Date(`${desde}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })} y el {new Date(`${hasta}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })} (mismo rango que la pestaña Fichadas), estén o no clasificados todavía.
             </p>
             <div className="overflow-x-auto">
             <table className="w-full text-sm mb-6">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2">Fecha</th>
                   <th className="pb-2">Estado</th>
                   <th className="pb-2"></th>
@@ -537,7 +537,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </thead>
               <tbody>
                 {(dias ?? []).filter((d) => d.ausente).length === 0 && (
-                  <tr><td colSpan={3} className="py-3 text-center text-gray-400">Sin faltas en el período.</td></tr>
+                  <tr><td colSpan={3} className="py-3 text-center text-slate-400">Sin faltas en el período.</td></tr>
                 )}
                 {(dias ?? []).filter((d) => d.ausente).map((d) => (
                   <tr key={d.fecha} className="border-b last:border-0">
@@ -554,7 +554,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                     <td className="py-2 text-right">
                       {d.justificada === null && (
                         <button onClick={() => { setFaltaEnEdicion(d.fecha.slice(0, 10)); setClaseFalta({ tipo: "PERMISO_PERSONAL", justificada: true, observaciones: "", anioCorrespondiente: String(anioActual) }); }}
-                          className="text-gray-700 underline text-xs">
+                          className="text-slate-700 underline text-xs">
                           Clasificar
                         </button>
                       )}
@@ -565,11 +565,11 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             </table>
             </div>
 
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Ausencias registradas</h3>
+            <h3 className="text-sm font-medium text-slate-700 mb-2">Ausencias registradas</h3>
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Tipo</th>
@@ -601,7 +601,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                             anioCorrespondiente: String(anioDeAusencia(a) ?? anioActual),
                           });
                         }}
-                        className="text-gray-700 underline text-xs"
+                        className="text-slate-700 underline text-xs"
                       >
                         Editar
                       </button>
@@ -626,11 +626,11 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             </table>
             </div>
 
-            <h3 className="text-sm font-medium text-gray-700 mb-2 mt-6">Vacaciones tomadas</h3>
+            <h3 className="text-sm font-medium text-slate-700 mb-2 mt-6">Vacaciones tomadas</h3>
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Año correspondiente</th>
@@ -640,7 +640,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </thead>
               <tbody>
                 {(vacacionesTodas ?? []).length === 0 && (
-                  <tr><td colSpan={5} className="py-3 text-center text-gray-400">Sin vacaciones tomadas todavía.</td></tr>
+                  <tr><td colSpan={5} className="py-3 text-center text-slate-400">Sin vacaciones tomadas todavía.</td></tr>
                 )}
                 {(vacacionesTodas ?? []).map((p: any) => (
                   <tr key={p.id} className="border-b last:border-0">
@@ -654,67 +654,67 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </tbody>
             </table>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Para editar o eliminar un período, andá a la pestaña Vacaciones.</p>
+            <p className="text-xs text-slate-400 mt-1">Para editar o eliminar un período, andá a la pestaña Vacaciones.</p>
           </div>
         )}
 
         {tab === "vacaciones" && vacaciones && (
           <div>
             <div className="mb-4">
-              <label className="block text-xs text-gray-500 mb-1">Año</label>
+              <label className="block text-xs text-slate-500 mb-1">Año</label>
               <input type="number" value={anioVacaciones} onChange={(e) => setAnioVacaciones(Number(e.target.value))}
-                className="w-28 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
-              <p className="text-xs text-gray-400 mt-1">
+                className="w-28 border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
+              <p className="text-xs text-slate-400 mt-1">
                 Cambiá el año para ver o cargar vacaciones pendientes/adeudadas de años anteriores.
               </p>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div>
-                <div className="text-sm text-gray-500">Días correspondientes</div>
+                <div className="text-sm text-slate-500">Días correspondientes</div>
                 <div className="text-2xl font-semibold">{vacaciones.correspondientes}</div>
               </div>
               <div>
-                <div className="text-sm text-gray-500">Días tomados</div>
+                <div className="text-sm text-slate-500">Días tomados</div>
                 <div className="text-2xl font-semibold">{vacaciones.tomados}</div>
               </div>
               <div>
-                <div className="text-sm text-gray-500">Días restantes</div>
+                <div className="text-sm text-slate-500">Días restantes</div>
                 <div className="text-2xl font-semibold text-blue-600">{vacaciones.restantes}</div>
               </div>
             </div>
 
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
+            <h3 className="text-sm font-medium text-slate-700 mb-2">
               {editandoVacacionId ? "Editar período de vacaciones" : "Cargar período tomado"}
             </h3>
             <form onSubmit={guardarVacacion} className="flex gap-3 items-end mb-6">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Desde</label>
-                <input type="date" required value={nuevaVacacion.fechaDesde} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, fechaDesde: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                <input type="date" required value={nuevaVacacion.fechaDesde} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, fechaDesde: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-                <input type="date" required value={nuevaVacacion.fechaHasta} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, fechaHasta: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                <input type="date" required value={nuevaVacacion.fechaHasta} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, fechaHasta: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Días</label>
-                <input type="number" required min={1} value={nuevaVacacion.diasTomados} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, diasTomados: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-20" />
+                <label className="block text-xs text-slate-500 mb-1">Días</label>
+                <input type="number" required min={1} value={nuevaVacacion.diasTomados} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, diasTomados: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-20" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
-                <input type="number" required value={nuevaVacacion.anioCorrespondiente} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, anioCorrespondiente: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-24" />
+                <label className="block text-xs text-slate-500 mb-1">Año correspondiente</label>
+                <input type="number" required value={nuevaVacacion.anioCorrespondiente} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, anioCorrespondiente: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-24" />
               </div>
               <button type="submit" disabled={guardandoVacacion} className="btn-primary disabled:opacity-50">
                 {guardandoVacacion ? "Guardando..." : editandoVacacionId ? "Guardar cambios" : "Guardar"}
               </button>
-              {editandoVacacionId && <button type="button" onClick={cancelarEdicionVacacion} className="text-sm text-gray-600 px-2 py-2">Cancelar edición</button>}
+              {editandoVacacionId && <button type="button" onClick={cancelarEdicionVacacion} className="text-sm text-slate-600 px-2 py-2">Cancelar edición</button>}
             </form>
 
-            <p className="text-xs text-gray-400 mb-2">Todos los períodos de vacaciones cargados, de cualquier año.</p>
+            <p className="text-xs text-slate-400 mb-2">Todos los períodos de vacaciones cargados, de cualquier año.</p>
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Días</th>
@@ -735,7 +735,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                           setEditandoVacacionId(p.id);
                           setNuevaVacacion({ fechaDesde: p.fecha_desde.slice(0, 10), fechaHasta: p.fecha_hasta.slice(0, 10), diasTomados: String(p.dias_tomados), anioCorrespondiente: String(p.anio_correspondiente) });
                         }}
-                        className="text-gray-700 underline text-xs"
+                        className="text-slate-700 underline text-xs"
                       >
                         Editar
                       </button>
@@ -766,7 +766,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Generado</th>
                 <th className="pb-2">Horas</th>
                 <th className="pb-2">Estado</th>
@@ -804,24 +804,24 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       {faltaEnEdicion && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setFaltaEnEdicion(null)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-medium text-gray-800 mb-1">Clasificar falta</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <h3 className="font-medium text-slate-800 mb-1">Clasificar falta</h3>
+            <p className="text-sm text-slate-500 mb-4">
               {empleado.apellido}, {empleado.nombre} · {new Date(`${faltaEnEdicion}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
             </p>
-            <label className="block text-xs text-gray-500 mb-1">¿La falta está justificada?</label>
+            <label className="block text-xs text-slate-500 mb-1">¿La falta está justificada?</label>
             <div className="flex gap-2 mb-3">
               <button onClick={() => setClaseFalta({ ...claseFalta, justificada: true })}
-                className={`flex-1 py-1.5 rounded-md text-sm ${claseFalta.justificada ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                className={`flex-1 py-1.5 rounded-md text-sm ${claseFalta.justificada ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
                 Justificada
               </button>
               <button onClick={() => setClaseFalta({ ...claseFalta, justificada: false })}
-                className={`flex-1 py-1.5 rounded-md text-sm ${!claseFalta.justificada ? "bg-red-600 text-white" : "bg-gray-100 text-gray-600"}`}>
+                className={`flex-1 py-1.5 rounded-md text-sm ${!claseFalta.justificada ? "bg-red-600 text-white" : "bg-slate-100 text-slate-600"}`}>
                 Injustificada
               </button>
             </div>
             {claseFalta.justificada && (
               <div className="mb-3">
-                <label className="block text-xs text-gray-500 mb-1">Motivo</label>
+                <label className="block text-xs text-slate-500 mb-1">Motivo</label>
                 <select value={claseFalta.tipo} onChange={(e) => setClaseFalta({ ...claseFalta, tipo: e.target.value })} className="input">
                   {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
@@ -829,22 +829,22 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             )}
             {claseFalta.justificada && claseFalta.tipo === "VACACIONES" && (
               <div className="mb-3">
-                <label className="block text-xs text-gray-500 mb-1">Año correspondiente</label>
+                <label className="block text-xs text-slate-500 mb-1">Año correspondiente</label>
                 <input type="number" required value={claseFalta.anioCorrespondiente}
                   onChange={(e) => setClaseFalta({ ...claseFalta, anioCorrespondiente: e.target.value })} className="input" />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   Se descuenta del balance de vacaciones de ese año y aparece en el historial de vacaciones.
                 </p>
               </div>
             )}
             <div className="mb-4">
-              <label className="block text-xs text-gray-500 mb-1">
+              <label className="block text-xs text-slate-500 mb-1">
                 Observaciones {claseFalta.justificada && claseFalta.tipo === "OTRA" ? "(obligatorio: aclarar el motivo)" : ""}
               </label>
               <textarea value={claseFalta.observaciones} onChange={(e) => setClaseFalta({ ...claseFalta, observaciones: e.target.value })} className="input" rows={2} />
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setFaltaEnEdicion(null)} className="px-4 py-2 text-sm text-gray-600">Cancelar</button>
+              <button onClick={() => setFaltaEnEdicion(null)} className="px-4 py-2 text-sm text-slate-600">Cancelar</button>
               <button
                 onClick={clasificarFalta}
                 disabled={(claseFalta.justificada && claseFalta.tipo === "OTRA" && !claseFalta.observaciones.trim()) || clasificando}

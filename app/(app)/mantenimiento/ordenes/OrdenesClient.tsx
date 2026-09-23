@@ -307,7 +307,7 @@ export default function OrdenesClient({
     <div className="md:p-6 max-w-7xl mx-auto space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             Órdenes de Trabajo
             <InfoTip text="Listado de todas las órdenes de trabajo (OT). Podés verlas como lista o como tablero Kanban por estado, filtrarlas, crear nuevas y cambiar su estado (Por hacer, En proceso, Atrasado, Realizado)." />
           </h1>
@@ -320,31 +320,31 @@ export default function OrdenesClient({
         <div className="flex items-center gap-2 flex-wrap">
           {canEdit && (
             <button onClick={sincronizar} disabled={sincronizando}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
               {sincronizando ? "Trayendo…" : "Traer de la planilla"}
             </button>
           )}
           {canEdit && (
             <button onClick={() => setShowNew(true)}
-              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors">
+              className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Nueva OT
             </button>
           )}
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
             <button onClick={() => setView("list")}
-              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "list" ? "bg-gray-900 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "list" ? "bg-slate-900 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
               Lista
             </button>
             <button onClick={() => setView("kanban")}
-              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "kanban" ? "bg-gray-900 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "kanban" ? "bg-slate-900 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
               Kanban
             </button>
             <button onClick={() => setView("orden")}
               title="En qué orden hacer lo que está pendiente"
-              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "orden" ? "bg-gray-900 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+              className={`px-3 py-2 text-xs font-medium transition-colors ${view === "orden" ? "bg-slate-900 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
               Qué hacer primero
             </button>
           </div>
@@ -352,7 +352,7 @@ export default function OrdenesClient({
       </div>
 
       {avisoSync && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
           {avisoSync}
         </div>
       )}
@@ -401,13 +401,13 @@ export default function OrdenesClient({
 
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar equipo, sector, descripción..."
-              className="w-full sm:w-60 sm:ml-auto rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+              className="w-full sm:w-60 sm:ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
 
             {/* En teléfono el resto arranca cerrado: siete desplegables más
                 empujarían la tabla fuera de la pantalla. */}
             <button
               onClick={() => setFiltrosAbiertos((v) => !v)}
-              className="sm:hidden rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600"
+              className="sm:hidden rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
             >
               {filtrosAbiertos ? "Menos filtros" : "Más filtros"}
             </button>
@@ -439,7 +439,7 @@ export default function OrdenesClient({
             {hayFiltros && (
               <button
                 onClick={limpiarFiltros}
-                className="rounded-lg px-3 py-1.5 text-sm text-gray-500 underline hover:text-gray-900"
+                className="rounded-lg px-3 py-1.5 text-sm text-slate-500 underline hover:text-slate-900"
               >
                 Limpiar
               </button>
@@ -458,26 +458,26 @@ export default function OrdenesClient({
             <select
               value={campoFecha}
               onChange={(e) => setCampoFecha(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
             >
               {CAMPOS_DE_FECHA.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </select>
-            <span className="text-sm text-gray-400">del</span>
+            <span className="text-sm text-slate-400">del</span>
             <input
               type="date" value={desde} max={hasta || undefined}
               onChange={(e) => setDesde(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
             />
-            <span className="text-sm text-gray-400">al</span>
+            <span className="text-sm text-slate-400">al</span>
             <input
               type="date" value={hasta} min={desde || undefined}
               onChange={(e) => setHasta(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
             />
             {(desde || hasta) && (
               <button
                 onClick={() => { setDesde(""); setHasta(""); }}
-                className="text-sm text-gray-500 underline hover:text-gray-900"
+                className="text-sm text-slate-500 underline hover:text-slate-900"
               >
                 Sin fechas
               </button>
@@ -488,19 +488,19 @@ export default function OrdenesClient({
 
       {view === "kanban" ? (
         kanbanLoading ? (
-          <div className="text-center py-12 text-gray-400 text-sm">Cargando...</div>
+          <div className="text-center py-12 text-slate-400 text-sm">Cargando...</div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-start">
             {kanbanGroups.map((col) => (
               <div key={col.value}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full" style={{ background: col.dot }} />
-                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{col.label}</span>
-                  <span className="ml-auto text-xs font-mono text-gray-400">{col.count}</span>
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{col.label}</span>
+                  <span className="ml-auto text-xs font-mono text-slate-400">{col.count}</span>
                 </div>
                 <div className="space-y-2">
                   {col.count === 0 && (
-                    <div className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-xs text-gray-400">
+                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
                       Sin órdenes
                     </div>
                   )}
@@ -508,7 +508,7 @@ export default function OrdenesClient({
                     <KanbanCard key={o.id} order={o} canEdit={canEdit} onChangeEstado={changeEstado} />
                   ))}
                   {col.count > col.items.length && (
-                    <div className="text-center text-xs text-gray-400 py-1">
+                    <div className="text-center text-xs text-slate-400 py-1">
                       +{col.count - col.items.length} más — usá la vista Lista para ver todas
                     </div>
                   )}
@@ -518,10 +518,10 @@ export default function OrdenesClient({
           </div>
         )
       ) : loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">Cargando...</div>
+        <div className="text-center py-12 text-slate-400 text-sm">Cargando...</div>
       ) : (
         <>
-          <p className="text-xs text-gray-400">{count} órdenes</p>
+          <p className="text-xs text-slate-400">{count} órdenes</p>
           {orders.length === 0 ? (
             /* Decía "con esos filtros" incluso sin ninguno puesto, que es la
                forma más rápida de convencer a alguien de que la tabla está
@@ -529,8 +529,8 @@ export default function OrdenesClient({
                1.819 órdenes cargadas, la diferencia entre "no coincide" y "no
                hay" importa, y el botón de sacarlos es lo que hace que no haya
                que buscar cuál era. */
-            <div className="rounded-xl border border-dashed border-gray-200 py-16 text-center">
-              <p className="text-gray-400 text-sm">
+            <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
+              <p className="text-slate-400 text-sm">
                 {hayFiltros
                   ? "Ninguna orden coincide con los filtros."
                   : canEdit
@@ -538,25 +538,25 @@ export default function OrdenesClient({
                     : "Todavía no hay órdenes cargadas."}
               </p>
               {hayFiltros && (
-                <button onClick={limpiarFiltros} className="mt-2 text-sm text-gray-500 underline hover:text-gray-900">
+                <button onClick={limpiarFiltros} className="mt-2 text-sm text-slate-500 underline hover:text-slate-900">
                   Sacar los filtros
                 </button>
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
+            <div className="card divide-y divide-slate-100 overflow-hidden">
               {orders.map((o) => {
                 const meta   = estadoMeta(o.estado);
                 const isOpen = expanded === o.id;
                 return (
                   <div key={o.id}>
                     <button onClick={() => setExpanded(isOpen ? null : o.id)}
-                      className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors">
-                      <span className="text-xs font-mono font-bold text-gray-400 w-12 shrink-0">#{o.ot_number}</span>
+                      className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50 transition-colors">
+                      <span className="text-xs font-mono font-bold text-slate-400 w-12 shrink-0">#{o.ot_number}</span>
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{o.descripcion ?? "—"}</p>
-                        <p className="text-xs text-gray-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                        <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
+                        <p className="text-xs text-slate-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
                       </div>
                       <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
                         style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
@@ -572,10 +572,10 @@ export default function OrdenesClient({
                           Parar sector
                         </span>
                       )}
-                      <span className="text-xs text-gray-400 shrink-0 hidden md:block">
+                      <span className="text-xs text-slate-400 shrink-0 hidden md:block">
                         {o.fecha ? new Date(o.fecha).toLocaleDateString("es-AR") : "—"}
                       </span>
-                      <svg className={`w-4 h-4 text-gray-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
@@ -597,10 +597,10 @@ export default function OrdenesClient({
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40">← Anterior</button>
-              <span className="text-sm text-gray-500">{page} / {totalPages}</span>
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40">← Anterior</button>
+              <span className="text-sm text-slate-500">{page} / {totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40">Siguiente →</button>
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40">Siguiente →</button>
             </div>
           )}
         </>
@@ -666,7 +666,7 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
 }) {
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
-    <div className="px-4 pb-4 pt-2 bg-gray-50 border-t border-gray-100 space-y-3">
+    <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
         <D label="Especialidad"    value={o.especialidad} />
         <D label="Tipo"            value={o.tipo} />
@@ -704,14 +704,14 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
       )}
       {o.descripcion && (
         <div>
-          <p className="text-xs text-gray-500 font-medium mb-0.5">Descripción</p>
-          <p className="text-sm text-gray-800">{o.descripcion}</p>
+          <p className="text-xs text-slate-500 font-medium mb-0.5">Descripción</p>
+          <p className="text-sm text-slate-800">{o.descripcion}</p>
         </div>
       )}
       <div>
         <button
           onClick={onVerRepuestos}
-          className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Repuestos que hacen falta
         </button>
@@ -719,7 +719,7 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
 
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium">Cambiar estado:</span>
+          <span className="text-xs text-slate-500 font-medium">Cambiar estado:</span>
           {ESTADO_OPTIONS.map((e) => {
             const m = estadoMeta(e);
             return (
@@ -750,24 +750,24 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
   const nextOptions = NEXT[o.estado] ?? [];
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm space-y-2 relative">
+    <div className="card p-3 space-y-2 relative">
       <div className="flex items-start justify-between gap-1">
-        <span className="text-xs font-mono text-gray-400">#{o.ot_number}</span>
+        <span className="text-xs font-mono text-slate-400">#{o.ot_number}</span>
         {canEdit && nextOptions.length > 0 && (
           <div className="relative">
             <button onClick={() => setMenu(m => !m)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-400">
+              className="p-1 rounded hover:bg-slate-100 text-slate-400">
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" />
               </svg>
             </button>
             {menu && (
-              <div className="absolute right-0 top-6 z-10 bg-white rounded-xl border border-gray-200 shadow-lg py-1 min-w-[130px]">
+              <div className="absolute right-0 top-6 z-10 bg-white rounded-xl border border-slate-200 shadow-lg py-1 min-w-[130px]">
                 {nextOptions.map(e => {
                   const m = estadoMeta(e);
                   return (
                     <button key={e} onClick={() => { onChangeEstado(o.id, e); setMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-gray-50 flex items-center gap-2"
+                      className="w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-slate-50 flex items-center gap-2"
                       style={{ color: m.color }}>
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.dot }} />
                       {m.label}
@@ -779,9 +779,9 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
           </div>
         )}
       </div>
-      <p className="text-xs font-medium text-gray-800 leading-snug line-clamp-3">{o.descripcion ?? "—"}</p>
-      <p className="text-xs text-gray-400 truncate">{o.equipo_raw ?? o.sector_raw ?? "—"}</p>
-      {o.fecha && <p className="text-xs text-gray-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p>}
+      <p className="text-xs font-medium text-slate-800 leading-snug line-clamp-3">{o.descripcion ?? "—"}</p>
+      <p className="text-xs text-slate-400 truncate">{o.equipo_raw ?? o.sector_raw ?? "—"}</p>
+      {o.fecha && <p className="text-xs text-slate-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p>}
     </div>
   );
 }
@@ -790,8 +790,8 @@ function D({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
     <div>
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-sm text-gray-700">{value}</p>
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className="text-sm text-slate-700">{value}</p>
     </div>
   );
 }

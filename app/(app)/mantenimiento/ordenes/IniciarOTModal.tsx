@@ -92,12 +92,12 @@ export default function IniciarOTModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
       <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div>
-          <h2 className="text-base font-bold text-gray-900">Iniciar OT #{orden.ot_number ?? "—"}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
+          <h2 className="text-base font-bold text-slate-900">Iniciar OT #{orden.ot_number ?? "—"}</h2>
+          <p className="mt-0.5 text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
         </div>
 
         {estadoActual === null ? (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
             La OT pasa a <b>En proceso</b>. No tiene un equipo del sistema enlazado, así que no hay
             estado de equipo que cambiar.
           </p>
@@ -135,20 +135,20 @@ export default function IniciarOTModal({
 
             {pideMotivo && (
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-gray-600">
+                <label className="block text-xs font-medium text-slate-600">
                   Motivo <span className="text-red-500">*</span>
                 </label>
                 <input
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
                   placeholder="Por qué el equipo queda en ese estado…"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 />
               </div>
             )}
 
             {!cambiaElEquipo && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-slate-400">
                 El equipo queda como está ({LABEL[estadoActual] ?? estadoActual}).
               </p>
             )}
@@ -167,7 +167,7 @@ export default function IniciarOTModal({
           </button>
           <button
             onClick={onCerrar}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
           </button>

@@ -250,7 +250,7 @@ export default function ProduccionClient({
       {cargando ? (
         <p className="py-12 text-center text-sm text-slate-400">Trayendo la semana…</p>
       ) : sectores.length === 0 ? (
-        <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+        <p className="card px-5 py-8 text-center text-sm text-slate-400">
           No hay sectores de planta cargados. Vienen del libro BD Equipos: se importa desde
           Equipos.
         </p>
@@ -269,7 +269,7 @@ export default function ProduccionClient({
             const pendientesEmpresa = deLaEmpresa.reduce((a, s) => a + pendientes(s.id), 0);
 
             return (
-              <div key={empresa} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div key={empresa} className="overflow-hidden card">
                 <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
                   <h2 className="text-sm font-bold text-slate-800">{empresa}</h2>
                 </div>

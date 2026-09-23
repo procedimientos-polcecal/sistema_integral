@@ -207,7 +207,7 @@ export default function OrdenesServicioClient({
       </div>
 
       {ordenes.length === 0 ? (
-        <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+        <p className="card px-5 py-8 text-center text-sm text-slate-400">
           Todavía no hay órdenes de servicio.
           {puedeEditar && " Traelas de la planilla con el botón de arriba."}
         </p>
@@ -223,7 +223,7 @@ export default function OrdenesServicioClient({
               <article
                 key={o.id}
                 onClick={() => setAbierta(o)}
-                className="cursor-pointer rounded-xl border border-slate-200 bg-white p-3"
+                className="cursor-pointer card p-3"
               >
                 <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono text-[11px] text-slate-400">
@@ -261,7 +261,7 @@ export default function OrdenesServicioClient({
           })}
         </div>
 
-        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
+        <div className="hidden overflow-x-auto card md:block">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>

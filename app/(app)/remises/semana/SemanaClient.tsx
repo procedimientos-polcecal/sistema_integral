@@ -42,7 +42,7 @@ export default function SemanaClient({ turnos }: { turnos: any[] }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Semana
           <InfoTip text="Planificá con anticipación quién viaja cada día de la semana, sin afectar la asistencia real de Hoy hasta que generés las rutas para ese día." />
         </h1>
@@ -62,24 +62,24 @@ export default function SemanaClient({ turnos }: { turnos: any[] }) {
       )}
 
       <div className="flex items-center gap-3 mb-4">
-        <button onClick={() => setOffset((o) => o - 1)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">← Anterior</button>
-        <span className="text-sm font-medium text-gray-700">{fmt(dates[0])} – {fmt(dates[6])}</span>
-        <button onClick={() => setOffset((o) => o + 1)} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm hover:bg-gray-50">Siguiente →</button>
+        <button onClick={() => setOffset((o) => o - 1)} className="border border-slate-300 rounded-md px-3 py-1.5 text-sm hover:bg-slate-50">← Anterior</button>
+        <span className="text-sm font-medium text-slate-700">{fmt(dates[0])} – {fmt(dates[6])}</span>
+        <button onClick={() => setOffset((o) => o + 1)} className="border border-slate-300 rounded-md px-3 py-1.5 text-sm hover:bg-slate-50">Siguiente →</button>
       </div>
 
       <div className="grid grid-cols-7 gap-2 mb-6">
         {dates.map((d, i) => (
           <button key={d} onClick={() => setSelectedDate(d)}
-            className={`rounded-lg py-2 text-sm text-center ${d === selectedDate ? "bg-gray-900 text-white" : d === today ? "bg-amber-50 text-amber-700" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+            className={`rounded-lg py-2 text-sm text-center ${d === selectedDate ? "bg-slate-900 text-white" : d === today ? "bg-amber-50 text-amber-700" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
             {DAY_NAMES[(i + 1) % 7]}<br /><strong>{+d.split("-")[2]}</strong>
           </button>
         ))}
       </div>
 
       {!empleados ? (
-        <p className="text-sm text-gray-500">Cargando...</p>
+        <p className="text-sm text-slate-500">Cargando...</p>
       ) : empleados.length === 0 ? (
-        <p className="text-sm text-gray-500">Todavía no hay empleados con datos de Remises cargados.</p>
+        <p className="text-sm text-slate-500">Todavía no hay empleados con datos de Remises cargados.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <TripCard tipo="ida" fecha={selectedDate} turnoId={turnoId} empleados={empleados} />
@@ -152,12 +152,12 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-medium text-gray-700">{tipo === "ida" ? "IDA – Búsqueda" : "VUELTA – Retorno"}</h3>
-        <span className="text-xs text-gray-400">{cuenta}/{activos.length}</span>
+        <h3 className="font-medium text-slate-700">{tipo === "ida" ? "IDA – Búsqueda" : "VUELTA – Retorno"}</h3>
+        <span className="text-xs text-slate-400">{cuenta}/{activos.length}</span>
       </div>
       <div className="max-h-64 overflow-y-auto space-y-1 mb-3">
         {!plan ? (
-          <p className="text-sm text-gray-500">Cargando...</p>
+          <p className="text-sm text-slate-500">Cargando...</p>
         ) : (
           activos.map((e) => {
             const inc = plan.has(e.id);
@@ -166,7 +166,7 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
               <div key={e.id} className="flex items-center justify-between text-sm py-1">
                 <span className="truncate">{e.apellido}, {e.nombre}{sinCoords && <span className="text-amber-600 text-xs ml-1">sin coords</span>}</span>
                 <button onClick={() => toggle(e.id)}
-                  className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${inc ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                  className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${inc ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                   {inc ? "Va" : "No va"}
                 </button>
               </div>
@@ -179,8 +179,8 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
         <button onClick={generar} disabled={generando} className="btn-primary text-sm disabled:opacity-50">
           {generando ? "Generando..." : "▶ Generar rutas"}
         </button>
-        <button onClick={() => seleccionar(true)} className="text-xs text-gray-500 hover:underline">Todos</button>
-        <button onClick={() => seleccionar(false)} className="text-xs text-gray-500 hover:underline">Ninguno</button>
+        <button onClick={() => seleccionar(true)} className="text-xs text-slate-500 hover:underline">Todos</button>
+        <button onClick={() => seleccionar(false)} className="text-xs text-slate-500 hover:underline">Ninguno</button>
         {generado && <span className="text-xs text-emerald-600 ml-auto">Generado</span>}
       </div>
     </div>

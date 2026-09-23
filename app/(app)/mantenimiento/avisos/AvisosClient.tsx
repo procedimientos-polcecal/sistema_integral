@@ -220,7 +220,7 @@ export default function AvisosClient({
       </div>
 
       {avisos.length === 0 ? (
-        <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400">
+        <p className="card px-5 py-8 text-center text-sm text-slate-400">
           Todavía no hay avisos. {puedeEditar && "Traelos de la planilla con el botón de arriba."}
         </p>
       ) : (
@@ -230,7 +230,7 @@ export default function AvisosClient({
             dato con el que la persona reconoce si el aviso es el suyo. */}
         <div className="space-y-2 md:hidden">
           {visibles.map((a) => (
-            <article key={a.id} className="rounded-xl border border-slate-200 bg-white p-3">
+            <article key={a.id} className="card p-3">
               <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
                 <span className="text-sm font-semibold text-slate-900">
                   {a.equipos?.name ?? a.equipo_raw ?? "Sin equipo"}
@@ -273,7 +273,7 @@ export default function AvisosClient({
           ))}
         </div>
 
-        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
+        <div className="hidden overflow-x-auto card md:block">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>

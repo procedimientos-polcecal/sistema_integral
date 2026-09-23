@@ -81,7 +81,7 @@ export default function ConfiguracionClient({
 
       <SectoresDePlanta sectores={sectores} />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="card p-4">
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Lo que se administra en otro lado</h2>
         <div className="grid gap-2 sm:grid-cols-3">
           <Acceso
@@ -129,7 +129,7 @@ function Operarios({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <h2 className="text-sm font-semibold text-slate-700">
         Operarios
         <span className="ml-2 text-xs font-normal text-slate-400">{operarios.length}</span>
@@ -220,7 +220,7 @@ function Contratistas({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <h2 className="text-sm font-semibold text-slate-700">
         Contratistas
         <span className="ml-2 text-xs font-normal text-slate-400">{contratistas.length}</span>
@@ -329,7 +329,7 @@ function ProveedoresSueltos({ puedeEditar }: { puedeEditar: boolean }) {
   if (cargando) return null;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <h2 className="text-sm font-semibold text-slate-700">
         Proveedores sin reconocer
         <span className="ml-2 text-xs font-normal text-slate-400">{nombres.length}</span>
@@ -400,7 +400,7 @@ function TiposDeEquipo({ tipos, esAdmin }: { tipos: Tipo[]; esAdmin: boolean }) 
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-700">
@@ -481,7 +481,7 @@ function TiposDeEquipo({ tipos, esAdmin }: { tipos: Tipo[]; esAdmin: boolean }) 
 
 function SectoresDePlanta({ sectores }: { sectores: Sector[] }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <h2 className="text-sm font-semibold text-slate-700">
         Sectores de planta
         <span className="ml-2 text-xs font-normal text-slate-400">{sectores.length}</span>
@@ -567,7 +567,7 @@ function TarifaDeLaHora({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <h2 className="text-sm font-semibold text-slate-700">
         Tarifa de la hora
         {vigente && (

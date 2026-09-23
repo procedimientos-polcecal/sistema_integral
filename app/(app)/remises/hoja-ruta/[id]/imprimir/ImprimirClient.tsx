@@ -41,13 +41,13 @@ export default function ImprimirClient({ hoja, asientos }: { hoja: any; asientos
   return (
     <>
       <div className="no-print fixed top-4 right-4 z-10 flex gap-2">
-        <button onClick={() => window.print()} className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-gray-700">
+        <button onClick={() => window.print()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-slate-700">
           Imprimir
         </button>
-        <button onClick={savePDF} disabled={generating} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-gray-900 shadow-lg hover:bg-amber-600 disabled:opacity-50">
+        <button onClick={savePDF} disabled={generating} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-slate-900 shadow-lg hover:bg-amber-600 disabled:opacity-50">
           {generating ? "Generando PDF..." : "Guardar PDF"}
         </button>
-        <button onClick={() => window.close()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-lg hover:bg-gray-50">
+        <button onClick={() => window.close()} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50">
           Cerrar
         </button>
       </div>

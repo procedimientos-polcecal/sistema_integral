@@ -107,7 +107,7 @@ export default function ComponentesYRepuestos({
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="card p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-700">
           Componentes
           <span className="ml-2 text-xs font-normal text-slate-400">{componentes.length}</span>
@@ -155,7 +155,7 @@ export default function ComponentesYRepuestos({
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="card p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-700">
           Repuestos
           <span className="ml-2 text-xs font-normal text-slate-400">{repuestos.length}</span>

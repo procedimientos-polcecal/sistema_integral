@@ -111,17 +111,17 @@ export default function RepuestosOTModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Repuestos que hacen falta</h2>
-            <p className="mt-0.5 text-xs text-gray-400">
+            <h2 className="text-base font-bold text-slate-900">Repuestos que hacen falta</h2>
+            <p className="mt-0.5 text-xs text-slate-400">
               OT #{orden.ot_number ?? "—"} · {orden.descripcion ?? ""}
             </p>
           </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-gray-400 hover:text-gray-600">×</button>
+          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
         </div>
 
         {/* Lo que dice la planilla, que es una sola línea de texto libre. */}
         {orden.repuesto && (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
             La planilla dice: <span className="font-medium">{orden.repuesto}</span>
           </p>
         )}
@@ -146,23 +146,23 @@ export default function RepuestosOTModal({
         )}
 
         {cargando ? (
-          <p className="py-6 text-center text-sm text-gray-400">Cargando…</p>
+          <p className="py-6 text-center text-sm text-slate-400">Cargando…</p>
         ) : repuestos.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">
+          <p className="py-6 text-center text-sm text-slate-400">
             Todavía no se anotó ningún repuesto.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-slate-100">
             {repuestos.map((r) => {
               const d = disponibilidad[r.id];
               const estado = d ? ESTADO_DE_STOCK[d.estado] : null;
               return (
                 <li key={r.id} className="flex items-start justify-between gap-2 py-2">
                   <div className="min-w-0">
-                    <div className="text-sm text-gray-800">
+                    <div className="text-sm text-slate-800">
                       {r.nombre}
-                      {r.cantidad && <span className="text-gray-400"> ×{r.cantidad}</span>}
-                      {r.codigo && <span className="ml-1.5 font-mono text-xs text-gray-400">{r.codigo}</span>}
+                      {r.cantidad && <span className="text-slate-400"> ×{r.cantidad}</span>}
+                      {r.codigo && <span className="ml-1.5 font-mono text-xs text-slate-400">{r.codigo}</span>}
                     </div>
                     {estado && (
                       <div className={`text-xs ${estado.color}`}>
@@ -191,7 +191,7 @@ export default function RepuestosOTModal({
                   {puedeEditar && (
                     <button
                       onClick={() => sacar(r.id)}
-                      className="shrink-0 text-xs text-gray-400 hover:text-red-600"
+                      className="shrink-0 text-xs text-slate-400 hover:text-red-600"
                       title="Sacar de la lista"
                     >×</button>
                   )}
@@ -293,19 +293,19 @@ function Agregar({
   }
 
   return (
-    <div className="space-y-2 border-t border-gray-100 pt-3">
+    <div className="space-y-2 border-t border-slate-100 pt-3">
       <div className="relative">
         <input
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           placeholder="Rodamiento 6206, correa B-75…"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         {avisoBusqueda && (
           <p className="mt-1 text-xs text-amber-700">{avisoBusqueda}</p>
         )}
         {sugerencias.length > 0 && (
-          <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
             {sugerencias.map((s, i) => (
               <li key={i}>
                 <button
@@ -314,11 +314,11 @@ function Agregar({
                     setCodigo(s.codigo ?? "");
                     setSugerencias([]);
                   }}
-                  className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-50"
+                  className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50"
                 >
-                  <span className="text-gray-800">{s.descripcion}</span>
-                  {s.codigo && <span className="ml-1.5 font-mono text-xs text-gray-400">{s.codigo}</span>}
-                  {s.stock !== null && <span className="ml-1.5 text-xs text-gray-400">· {s.stock}</span>}
+                  <span className="text-slate-800">{s.descripcion}</span>
+                  {s.codigo && <span className="ml-1.5 font-mono text-xs text-slate-400">{s.codigo}</span>}
+                  {s.stock !== null && <span className="ml-1.5 text-xs text-slate-400">· {s.stock}</span>}
                 </button>
               </li>
             ))}
@@ -331,13 +331,13 @@ function Agregar({
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
           placeholder="Código"
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <input
           value={cantidad}
           onChange={(e) => setCantidad(e.target.value)}
           placeholder="Cantidad"
-          className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <button
           onClick={agregar}

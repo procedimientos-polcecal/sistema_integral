@@ -35,50 +35,50 @@ export default function GraficosPorSector({
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Horas trabajadas vs Teóricas por Sector</h2>
+          <h2 className="font-medium text-slate-700 mb-3">Horas trabajadas vs Teóricas por Sector</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={horasSector ?? []}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="horasTrabajadas" name="Trabajadas" fill="#0ea5e9" onClick={alClickear} cursor="pointer" />
+              <Bar dataKey="horasTrabajadas" name="Trabajadas" fill="var(--primary)" onClick={alClickear} cursor="pointer" />
               <Bar dataKey="horasTeoricas" name="Teóricas" fill="#94a3b8" onClick={alClickear} cursor="pointer" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Horas extra por Sector</h2>
+          <h2 className="font-medium text-slate-700 mb-3">Horas extra por Sector</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={horasExtraSector ?? []}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="horasExtra50" name="Extra 50%" fill="#f59e0b" onClick={alClickear} cursor="pointer" />
-              <Bar dataKey="horasExtra100" name="Extra 100%" fill="#ef4444" onClick={alClickear} cursor="pointer" />
+              <Bar dataKey="horasExtra50" name="Extra 50%" fill="var(--accent)" onClick={alClickear} cursor="pointer" />
+              <Bar dataKey="horasExtra100" name="Extra 100%" fill="var(--status-rep)" onClick={alClickear} cursor="pointer" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className="card p-5 mt-6">
-        <h2 className="font-medium text-gray-700 flex items-center gap-1.5 mb-3">
+        <h2 className="font-medium text-slate-700 flex items-center gap-1.5 mb-3">
           Costo de horas extra por Sector ($)
           <InfoTip text="Estimado a partir del valor hora normal de cada empleado y los multiplicadores configurados en Administración." />
         </h2>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={horasExtraSector ?? []}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
             <XAxis dataKey="sector" tick={{ fontSize: 12 }} />
             <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${Number(v).toLocaleString("es-AR")}`} />
             <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString("es-AR")}`} />
             <Legend />
-            <Bar dataKey="montoExtra50" name="Extra 50%" fill="#f59e0b" onClick={alClickear} cursor="pointer" />
-            <Bar dataKey="montoExtra100" name="Extra 100%" fill="#ef4444" onClick={alClickear} cursor="pointer" />
+            <Bar dataKey="montoExtra50" name="Extra 50%" fill="var(--accent)" onClick={alClickear} cursor="pointer" />
+            <Bar dataKey="montoExtra100" name="Extra 100%" fill="var(--status-rep)" onClick={alClickear} cursor="pointer" />
           </BarChart>
         </ResponsiveContainer>
       </div>

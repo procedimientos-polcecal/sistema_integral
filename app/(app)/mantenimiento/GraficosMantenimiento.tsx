@@ -15,10 +15,6 @@ import {
  * Un componente por gráfico y no un bloque único porque en el tablero están
  * repartidos entre varios subcomponentes: así el armado de la página queda
  * intacto y sólo se difiere el interior de cada uno.
- *
- * Todo el contenido está copiado tal cual del tablero. Es una mudanza de
- * archivo, no un rediseño: cualquier ajuste de colores, márgenes o formato
- * cambiaría lo que se ve.
  */
 
 const TOOLTIP = { borderRadius: 8, fontSize: 12, border: "1px solid #E2E8F0" } as const;
@@ -49,7 +45,7 @@ export function OtsPorMes({ datos }: { datos: { mes: string; cantidad: number }[
               y compararlo con los cerrados sin verlo distinto hace creer que la
               actividad cayó. */}
           {datos.map((_, i) => (
-            <Cell key={i} fill={i === datos.length - 1 ? "#1D4ED8" : "#93C5FD"} />
+            <Cell key={i} fill={i === datos.length - 1 ? "var(--primary)" : "rgba(30,125,52,0.35)"} />
           ))}
         </Bar>
       </BarChart>
@@ -106,7 +102,7 @@ export function EjecucionesPorSemana({ datos }: { datos: { semana: string; canti
         <XAxis dataKey="semana" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
         <Tooltip contentStyle={TOOLTIP} formatter={(v: any) => [`${v} ejecuciones`]} cursor={CURSOR} />
-        <Bar dataKey="cantidad" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Ejecuciones" />
+        <Bar dataKey="cantidad" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Ejecuciones" />
       </BarChart>
     </ResponsiveContainer>
   );

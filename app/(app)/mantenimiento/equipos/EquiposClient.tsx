@@ -6,19 +6,21 @@ import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { sectoresQueElLibroCrearia } from "@/lib/mantenimiento/inventario";
 
+// Las mismas clases .badge-* de globals.css que usa el resto del sistema para
+// estos estados de equipo, en vez de un par bg/text propio de esta pantalla.
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  OPERATIVO:          { label: "Operativo",        color: "bg-green-100 text-green-800" },
-  EN_MANTENIMIENTO:   { label: "En mantenimiento", color: "bg-blue-100 text-blue-800" },
-  EN_REPARACION:      { label: "En reparación",    color: "bg-red-100 text-red-800" },
-  STANDBY:            { label: "Standby",           color: "bg-yellow-100 text-yellow-800" },
-  FUERA_DE_SERVICIO:  { label: "Fuera de servicio", color: "bg-gray-100 text-gray-600" },
-  DADO_DE_BAJA:       { label: "Dado de baja",      color: "bg-slate-100 text-slate-500" },
+  OPERATIVO:          { label: "Operativo",        color: "badge-op" },
+  EN_MANTENIMIENTO:   { label: "En mantenimiento", color: "badge-mant" },
+  EN_REPARACION:      { label: "En reparación",    color: "badge-rep" },
+  STANDBY:            { label: "Standby",           color: "badge-st" },
+  FUERA_DE_SERVICIO:  { label: "Fuera de servicio", color: "badge-fs" },
+  DADO_DE_BAJA:       { label: "Dado de baja",      color: "badge-baja" },
 };
 
 const CRITICALITY_LABELS: Record<string, string> = {
   ALTA:  "text-red-600 font-semibold",
   MEDIA: "text-yellow-600",
-  BAJA:  "text-gray-400",
+  BAJA:  "text-slate-400",
 };
 
 export default function EquiposClient({ empresas, sectores, equipos, canEdit }: {
@@ -212,12 +214,12 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
   return (
     <div className="md:p-6 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Equipos
           <InfoTip text="Inventario de todos los equipos industriales de las plantas, con su estado, criticidad, sector y potencia. Podés buscarlos, filtrarlos, importarlos desde Excel y entrar a cada uno para ver su detalle e historial." />
         </h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-500 mr-1">{filtered.length} de {equipos.length}</span>
+          <span className="text-sm text-slate-500 mr-1">{filtered.length} de {equipos.length}</span>
 
           <button
             onClick={exportExcel}
@@ -270,7 +272,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
               {importResult.extra && `Además: ${importResult.extra}. `}
               {importResult.errors.length > 0 && `${importResult.errors.length} error(es).`}
             </span>
-            <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+            <button onClick={() => setImportResult(null)} className="text-slate-400 hover:text-slate-700 text-lg leading-none">×</button>
           </div>
           {importResult.errors.length > 0 && (
             <ul className="list-disc list-inside text-red-700 space-y-0.5">
@@ -286,12 +288,12 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           placeholder="Buscar nombre o código..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="col-span-2 md:col-span-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="col-span-2 md:col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <select
           value={filterEmpresa}
           onChange={(e) => { setFilterEmpresa(e.target.value); setFilterSector(""); }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         >
           <option value="">Todas las empresas</option>
           {empresas.map((p: any) => (
@@ -301,7 +303,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
         <select
           value={filterSector}
           onChange={(e) => setFilterSector(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         >
           <option value="">Todos los sectores</option>
           {filteredSectores.map((s: any) => (
@@ -311,7 +313,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         >
           <option value="">Todos los estados</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => (
@@ -320,36 +322,36 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
         </select>
       </div>
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="hidden md:block overflow-x-auto card">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Código</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Equipo</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Empresa</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Sector</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">kW</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Estado</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Criticidad</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Código</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Equipo</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Empresa</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Sector</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">kW</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Estado</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Criticidad</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {filtered.map((e: any) => {
-              const st = STATUS_LABELS[e.status] ?? { label: e.status, color: "bg-gray-100 text-gray-600" };
+              const st = STATUS_LABELS[e.status] ?? { label: e.status, color: "badge-fs" };
               return (
-                <tr key={e.id} onClick={() => router.push(`/mantenimiento/equipos/${e.id}`)} className="hover:bg-gray-50 transition-colors cursor-pointer">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{e.code}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">
+                <tr key={e.id} onClick={() => router.push(`/mantenimiento/equipos/${e.id}`)} className="hover:bg-slate-50 transition-colors cursor-pointer">
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{e.code}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">
                     {e.name}
                     {e.description && (
-                      <p className="text-xs text-gray-400 font-normal truncate max-w-xs">{e.description}</p>
+                      <p className="text-xs text-slate-400 font-normal truncate max-w-xs">{e.description}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{e.sectores?.empresas?.nombre ?? "Transversal"}</td>
-                  <td className="px-4 py-3 text-gray-600">{e.sectores?.nombre}</td>
-                  <td className="px-4 py-3 text-gray-500">{e.power_kw ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{e.sectores?.empresas?.nombre ?? "Transversal"}</td>
+                  <td className="px-4 py-3 text-slate-600">{e.sectores?.nombre}</td>
+                  <td className="px-4 py-3 text-slate-500">{e.power_kw ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${st.color}`}>
+                    <span className={`badge ${st.color}`}>
                       {st.label}
                     </span>
                   </td>
@@ -362,31 +364,31 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">Sin resultados.</div>
+          <div className="py-12 text-center text-sm text-slate-400">Sin resultados.</div>
         )}
       </div>
 
       <div className="md:hidden space-y-2">
         {filtered.map((e: any) => {
-          const st = STATUS_LABELS[e.status] ?? { label: e.status, color: "bg-gray-100 text-gray-600" };
+          const st = STATUS_LABELS[e.status] ?? { label: e.status, color: "badge-fs" };
           return (
-            <div key={e.id} onClick={() => router.push(`/mantenimiento/equipos/${e.id}`)} className="rounded-xl border border-gray-200 bg-white p-4 space-y-1 cursor-pointer active:bg-gray-50">
+            <div key={e.id} onClick={() => router.push(`/mantenimiento/equipos/${e.id}`)} className="card p-4 space-y-1 cursor-pointer active:bg-slate-50">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-gray-900">{e.name}</span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${st.color}`}>
+                <span className="font-medium text-slate-900">{e.name}</span>
+                <span className={`badge ${st.color}`}>
                   {st.label}
                 </span>
               </div>
-              <div className="text-xs text-gray-500 font-mono">{e.code}</div>
-              <div className="text-xs text-gray-500">{e.sectores?.empresas?.nombre ?? "Transversal"} · {e.sectores?.nombre}</div>
+              <div className="text-xs text-slate-500 font-mono">{e.code}</div>
+              <div className="text-xs text-slate-500">{e.sectores?.empresas?.nombre ?? "Transversal"} · {e.sectores?.nombre}</div>
               {e.description && (
-                <div className="text-xs text-gray-400 line-clamp-2">{e.description}</div>
+                <div className="text-xs text-slate-400 line-clamp-2">{e.description}</div>
               )}
             </div>
           );
         })}
         {filtered.length === 0 && (
-          <div className="py-8 text-center text-sm text-gray-400">Sin resultados.</div>
+          <div className="py-8 text-center text-sm text-slate-400">Sin resultados.</div>
         )}
       </div>
     </div>

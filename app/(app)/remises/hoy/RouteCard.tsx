@@ -111,15 +111,15 @@ export default function RouteCard({
   const pax = hoja.asientos.length;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 relative" style={{ opacity: busy ? 0.6 : 1 }}>
+    <div className="card p-4 relative" style={{ opacity: busy ? 0.6 : 1 }}>
       <div className="flex items-center gap-2 flex-wrap mb-3">
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: color }}>{index + 1}</span>
-        <h3 className="font-medium text-gray-900">{hoja.vehiculos?.nombre}</h3>
+        <h3 className="font-medium text-slate-900">{hoja.vehiculos?.nombre}</h3>
         <div className="flex items-center gap-1.5 flex-wrap ml-auto">
           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{hoja.km ?? "-"} km</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">~{hoja.minutos ?? "-"} min</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{pax}{hoja.vehiculos?.capacidad ? `/${hoja.vehiculos.capacidad}` : ""} pax</span>
-          <label className="text-xs px-2 py-0.5 rounded-full bg-gray-50 border border-gray-200 flex items-center gap-1">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{pax}{hoja.vehiculos?.capacidad ? `/${hoja.vehiculos.capacidad}` : ""} pax</span>
+          <label className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 flex items-center gap-1">
             Salida:
             <input type="time" value={horaSalida} onChange={(e) => setHoraSalida(e.target.value)} onBlur={guardarHoraSalida}
               className="bg-transparent outline-none w-16" />
@@ -129,11 +129,11 @@ export default function RouteCard({
 
       <div className="space-y-1 mb-3">
         {hoja.asientos.map((a: any, si: number) => (
-          <div key={a.empleado_id} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0">
-            <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{si + 1}</span>
+          <div key={a.empleado_id} className="flex items-start gap-2 py-1.5 border-b border-slate-50 last:border-0">
+            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{si + 1}</span>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-800">{empNombre(a)}</div>
-              <div className="text-xs text-gray-400 truncate">{a.empleados.remises_empleados_datos?.direccion ?? ""}</div>
+              <div className="text-sm font-medium text-slate-800">{empNombre(a)}</div>
+              <div className="text-xs text-slate-400 truncate">{a.empleados.remises_empleados_datos?.direccion ?? ""}</div>
               {moveMenuFor === a.empleado_id && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {hermanas.map((h, hi) => (
@@ -146,37 +146,37 @@ export default function RouteCard({
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <button disabled={si === 0} onClick={() => reordenar(si, si - 1)} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1">▲</button>
-              <button disabled={si === hoja.asientos.length - 1} onClick={() => reordenar(si, si + 1)} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1">▼</button>
+              <button disabled={si === 0} onClick={() => reordenar(si, si - 1)} className="text-slate-400 hover:text-slate-700 disabled:opacity-30 text-xs px-1">▲</button>
+              <button disabled={si === hoja.asientos.length - 1} onClick={() => reordenar(si, si + 1)} className="text-slate-400 hover:text-slate-700 disabled:opacity-30 text-xs px-1">▼</button>
               {hermanas.length > 0 && (
-                <button onClick={() => setMoveMenuFor(moveMenuFor === a.empleado_id ? null : a.empleado_id)} title="Mover a otro remis" className="text-gray-400 hover:text-gray-700 text-xs px-1">⇄</button>
+                <button onClick={() => setMoveMenuFor(moveMenuFor === a.empleado_id ? null : a.empleado_id)} title="Mover a otro remis" className="text-slate-400 hover:text-slate-700 text-xs px-1">⇄</button>
               )}
               <button onClick={() => quitarEmpleado(a.empleado_id)} title="Quitar" className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
             </div>
           </div>
         ))}
-        {hoja.asientos.length === 0 && <p className="text-xs text-gray-400 py-2">Sin pasajeros.</p>}
+        {hoja.asientos.length === 0 && <p className="text-xs text-slate-400 py-2">Sin pasajeros.</p>}
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
         <a href={gmapsLink(hojaTexto)} target="_blank" rel="noreferrer" className="btn-primary !text-xs !py-1.5 !px-3">Google Maps</a>
-        <a href={wazeLink(hojaTexto)} target="_blank" rel="noreferrer" className="border border-gray-300 rounded-md px-3 py-1.5 text-gray-700 hover:bg-gray-50">Waze</a>
-        <button onClick={() => setShareOpen(true)} className="border border-gray-300 rounded-md px-3 py-1.5 text-gray-700 hover:bg-gray-50">Compartir</button>
-        <a href={`/remises/hoja-ruta/${hoja.id}/imprimir`} target="_blank" rel="noreferrer" className="border border-gray-300 rounded-md px-3 py-1.5 text-gray-700 hover:bg-gray-50">Imprimir</a>
-        <button onClick={() => { navigator.clipboard.writeText(textoRuta(hojaTexto, fecha)); }} className="border border-gray-300 rounded-md px-3 py-1.5 text-gray-700 hover:bg-gray-50">Copiar</button>
+        <a href={wazeLink(hojaTexto)} target="_blank" rel="noreferrer" className="border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-50">Waze</a>
+        <button onClick={() => setShareOpen(true)} className="border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-50">Compartir</button>
+        <a href={`/remises/hoja-ruta/${hoja.id}/imprimir`} target="_blank" rel="noreferrer" className="border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-50">Imprimir</a>
+        <button onClick={() => { navigator.clipboard.writeText(textoRuta(hojaTexto, fecha)); }} className="border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-50">Copiar</button>
         {empleadosDisponibles.length > 0 && (
-          <button onClick={() => setAddOpen((v) => !v)} className="border border-gray-300 rounded-md px-3 py-1.5 text-gray-700 hover:bg-gray-50">+ Persona</button>
+          <button onClick={() => setAddOpen((v) => !v)} className="border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-50">+ Persona</button>
         )}
         <button onClick={quitarRemis} className="text-red-600 px-3 py-1.5 hover:underline ml-auto">Quitar remis</button>
       </div>
 
       {addOpen && (
-        <div className="mt-2 border border-gray-200 rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
+        <div className="mt-2 border border-slate-200 rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
           {empleadosDisponibles.map((e) => (
             <button key={e.id} onClick={() => agregarEmpleado(e.id)}
-              className="w-full text-left text-xs px-2 py-1 rounded hover:bg-gray-50 flex justify-between">
+              className="w-full text-left text-xs px-2 py-1 rounded hover:bg-slate-50 flex justify-between">
               <span>{e.apellido}, {e.nombre}</span>
-              <span className="text-gray-400">+ agregar</span>
+              <span className="text-slate-400">+ agregar</span>
             </button>
           ))}
         </div>
@@ -185,15 +185,15 @@ export default function RouteCard({
       {shareOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShareOpen(false)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-medium text-gray-800 mb-3">Compartir ruta — {hoja.vehiculos?.nombre}</h3>
+            <h3 className="font-medium text-slate-800 mb-3">Compartir ruta — {hoja.vehiculos?.nombre}</h3>
             <textarea readOnly value={textoRuta(hojaTexto, fecha)} rows={8}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs font-mono mb-3" />
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-xs font-mono mb-3" />
             <div className="flex gap-2 flex-wrap">
               <a href={whatsappLink(textoRuta(hojaTexto, fecha), hoja.choferes?.telefono)} target="_blank" rel="noreferrer" className="btn-primary text-sm">WhatsApp</a>
-              <a href={emailLink(`Ruta ${hoja.vehiculos?.nombre}`, textoRuta(hojaTexto, fecha))} className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Email</a>
+              <a href={emailLink(`Ruta ${hoja.vehiculos?.nombre}`, textoRuta(hojaTexto, fecha))} className="border border-slate-300 rounded-md px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Email</a>
               <button onClick={() => { navigator.clipboard.writeText(textoRuta(hojaTexto, fecha)); setShareOpen(false); }}
-                className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Copiar</button>
-              <button onClick={() => setShareOpen(false)} className="ml-auto text-sm text-gray-500 hover:underline">Cerrar</button>
+                className="border border-slate-300 rounded-md px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Copiar</button>
+              <button onClick={() => setShareOpen(false)} className="ml-auto text-sm text-slate-500 hover:underline">Cerrar</button>
             </div>
           </div>
         </div>

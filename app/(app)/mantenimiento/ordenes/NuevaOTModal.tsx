@@ -102,9 +102,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900">Nueva Orden de Trabajo</h2>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900">Nueva Orden de Trabajo</h2>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -243,13 +243,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-2 pt-1 border-t border-gray-100">
+          <div className="flex gap-2 pt-1 border-t border-slate-100">
             <button type="submit" disabled={saving}
               className="btn-primary disabled:opacity-50">
               {saving ? "Guardando..." : "Crear OT"}
             </button>
             <button type="button" onClick={onClose}
-              className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
           </div>
@@ -262,7 +262,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 function F({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-medium text-gray-600">
+      <label className="block text-xs font-medium text-slate-600">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}

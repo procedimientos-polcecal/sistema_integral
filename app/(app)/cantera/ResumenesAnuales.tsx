@@ -53,13 +53,13 @@ export default function ResumenesAnuales({
         colorFranja="even:bg-cyan-50/40"
       />
 
-      <p className="mt-6 text-sm font-semibold text-emerald-700">De materiales</p>
+      <p className="mt-6 text-sm font-semibold text-[var(--primary-dark)]">De materiales</p>
       <TablaAnual
         filas={filasMateriales.map((f) => ({ etiqueta: f.etiqueta, porMes: f.porMes, total: f.totalAnual, unidad: f.unidad }))}
         formato={(v, unidad) => cantidad(v, unidad ?? "tonelada")}
-        colorCabecera="bg-emerald-600"
-        colorTotal="bg-emerald-50 text-emerald-900"
-        colorFranja="even:bg-emerald-50/40"
+        colorCabecera="bg-[var(--primary)]"
+        colorTotal="bg-[var(--primary-light)] text-[var(--primary-dark)]"
+        colorFranja="even:bg-[var(--primary-light)]/40"
       />
     </section>
   );

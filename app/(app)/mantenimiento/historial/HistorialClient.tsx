@@ -84,15 +84,15 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
     <div className="md:p-6 max-w-5xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             Historial
             <InfoTip text="Registro completo de todos los mantenimientos ya ejecutados, con fecha, responsable, estado y observaciones. Podés filtrarlo y exportarlo a CSV para informes." />
           </h1>
-          <p className="text-sm text-gray-500">{filtered.length} registros</p>
+          <p className="text-sm text-slate-500">{filtered.length} registros</p>
         </div>
         <button
           onClick={exportCSV}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
         >
           Exportar CSV
         </button>
@@ -104,77 +104,77 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
           placeholder="Buscar equipo, código, observación..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="col-span-2 md:col-span-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="col-span-2 md:col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         />
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none">
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none">
           <option value="">Todos los estados</option>
           <option value="completado">Completado</option>
           <option value="parcial">Parcial</option>
           <option value="cancelado">Cancelado</option>
         </select>
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none">
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none">
           <option value="">Todos los tipos</option>
           {types.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="hidden md:block overflow-x-auto card">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Fecha</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Equipo</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Estado</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Duración</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Ejecutado por</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Observaciones</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Fecha</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Equipo</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Tipo</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Estado</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Duración</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Ejecutado por</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Observaciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {filtered.map((e: any) => (
-              <tr key={e.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+              <tr key={e.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                   {new Date(e.executed_at).toLocaleDateString("es-AR")}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="font-medium text-gray-900">{equipoDe(e)?.code ?? "—"}</span>
-                  <span className="text-gray-500 ml-1">{equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
+                  <span className="font-medium text-slate-900">{equipoDe(e)?.code ?? "—"}</span>
+                  <span className="text-slate-500 ml-1">{equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{motivoDe(e)}</td>
+                <td className="px-4 py-3 text-slate-500">{motivoDe(e)}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[e.execution_status] ?? ""}`}>
                     {e.execution_status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{e.duration_hours ? `${e.duration_hours} h` : "—"}</td>
-                <td className="px-4 py-3 text-gray-500">{nombreCompleto(e.executor)}</td>
-                <td className="px-4 py-3 text-gray-400 max-w-xs truncate">{e.observations ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{e.duration_hours ? `${e.duration_hours} h` : "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{nombreCompleto(e.executor)}</td>
+                <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{e.observations ?? "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">Sin resultados.</div>
+          <div className="py-12 text-center text-sm text-slate-400">Sin resultados.</div>
         )}
       </div>
 
       <div className="md:hidden space-y-2">
         {filtered.map((e: any) => (
-          <div key={e.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-1">
+          <div key={e.id} className="card p-4 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-gray-900 text-sm">{equipoDe(e)?.code ?? "—"} — {equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
+              <span className="font-medium text-slate-900 text-sm">{equipoDe(e)?.code ?? "—"} — {equipoDe(e)?.name ?? e.orden?.descripcion ?? ""}</span>
               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${STATUS_COLORS[e.execution_status] ?? ""}`}>
                 {e.execution_status}
               </span>
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               {new Date(e.executed_at).toLocaleDateString("es-AR")} · {motivoDe(e)}
               {e.duration_hours ? ` · ${e.duration_hours} h` : ""}
             </p>
-            {e.observations && <p className="text-xs text-gray-400 line-clamp-2">{e.observations}</p>}
+            {e.observations && <p className="text-xs text-slate-400 line-clamp-2">{e.observations}</p>}
           </div>
         ))}
       </div>

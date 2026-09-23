@@ -13,7 +13,7 @@ export default function VehiculosClient({ vehiculos, choferes }: { vehiculos: an
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Vehículos y choferes
           <InfoTip text="Los vehículos disponibles para remises y sus choferes. Cada vehículo tiene una capacidad de asientos, usada al generar rutas para no superar el cupo." />
         </h1>
@@ -21,7 +21,7 @@ export default function VehiculosClient({ vehiculos, choferes }: { vehiculos: an
       <div className="flex gap-2 mb-6">
         {(["vehiculos", "choferes"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             {t === "vehiculos" ? "Vehículos" : "Choferes"}
           </button>
         ))}
@@ -90,18 +90,18 @@ function VehiculosTab({ vehiculos, choferes, canEdit }: { vehiculos: any[]; chof
 
       <div className="card p-5">
         {vehiculos.length === 0 ? (
-          <p className="text-sm text-gray-500">Todavía no hay vehículos cargados.</p>
+          <p className="text-sm text-slate-500">Todavía no hay vehículos cargados.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {vehiculos.map((v) => (
-              <div key={v.id} className={`rounded-xl border p-4 ${v.activo ? "border-gray-200" : "border-gray-100 bg-gray-50 opacity-60"}`}>
-                <div className="font-medium text-gray-900">{v.nombre}</div>
-                <div className="text-sm text-gray-500 mt-1">Chofer: {v.choferes?.nombre ?? "-"}</div>
-                <div className="text-sm text-gray-500">Capacidad: {v.capacidad}</div>
-                {v.choferes?.telefono && <div className="text-sm text-gray-500">Tel: {v.choferes.telefono}</div>}
+              <div key={v.id} className={`rounded-xl border p-4 ${v.activo ? "border-slate-200" : "border-slate-100 bg-slate-50 opacity-60"}`}>
+                <div className="font-medium text-slate-900">{v.nombre}</div>
+                <div className="text-sm text-slate-500 mt-1">Chofer: {v.choferes?.nombre ?? "-"}</div>
+                <div className="text-sm text-slate-500">Capacidad: {v.capacidad}</div>
+                {v.choferes?.telefono && <div className="text-sm text-slate-500">Tel: {v.choferes.telefono}</div>}
                 {canEdit && (
                   <div className="mt-3 flex gap-3">
-                    <button onClick={() => setModal({ v })} className="text-gray-700 underline text-xs">Editar</button>
+                    <button onClick={() => setModal({ v })} className="text-slate-700 underline text-xs">Editar</button>
                     <button onClick={() => eliminar(v)} className="text-red-600 underline text-xs">Eliminar</button>
                   </div>
                 )}
@@ -142,32 +142,32 @@ function VehiculoModal({ v, choferes, onClose, onSaved }: { v: any | null; chofe
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-800 mb-4">{v ? "Editar vehículo" : "Nuevo vehículo"}</h3>
+        <h3 className="font-medium text-slate-800 mb-4">{v ? "Editar vehículo" : "Nuevo vehículo"}</h3>
         <form onSubmit={guardar} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+            <label className="block text-xs text-slate-500 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              placeholder="Remise 1 - Ford Transit" className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              placeholder="Remise 1 - Ford Transit" className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Chofer</label>
+            <label className="block text-xs text-slate-500 mb-1">Chofer</label>
             <select value={form.choferId} onChange={(e) => setForm({ ...form, choferId: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Sin asignar</option>
               {choferes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Capacidad</label>
+            <label className="block text-xs text-slate-500 mb-1">Capacidad</label>
             <input type="number" min={1} value={form.capacidad} onChange={(e) => setForm({ ...form, capacidad: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
           </div>
@@ -203,12 +203,12 @@ function ChoferesTab({ choferes, canEdit }: { choferes: any[]; canEdit: boolean 
       )}
       <div className="card p-5">
         {choferes.length === 0 ? (
-          <p className="text-sm text-gray-500">Todavía no hay choferes cargados.</p>
+          <p className="text-sm text-slate-500">Todavía no hay choferes cargados.</p>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Nombre</th><th className="pb-2">Teléfono</th><th className="pb-2"></th>
               </tr>
             </thead>
@@ -216,11 +216,11 @@ function ChoferesTab({ choferes, canEdit }: { choferes: any[]; canEdit: boolean 
               {choferes.map((c) => (
                 <tr key={c.id} className="border-b last:border-0">
                   <td className="py-2">{c.nombre}</td>
-                  <td className="py-2 text-gray-500">{c.telefono ?? "-"}</td>
+                  <td className="py-2 text-slate-500">{c.telefono ?? "-"}</td>
                   <td className="py-2 text-right">
                     {canEdit && (
                       <>
-                        <button onClick={() => setModal({ c })} className="text-gray-700 underline text-xs">Editar</button>
+                        <button onClick={() => setModal({ c })} className="text-slate-700 underline text-xs">Editar</button>
                         <button onClick={() => eliminar(c)} className="text-red-600 underline text-xs ml-3">Eliminar</button>
                       </>
                     )}
@@ -259,24 +259,24 @@ function ChoferModal({ c, onClose, onSaved }: { c: any | null; onClose: () => vo
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-800 mb-4">{c ? "Editar chofer" : "Nuevo chofer"}</h3>
+        <h3 className="font-medium text-slate-800 mb-4">{c ? "Editar chofer" : "Nuevo chofer"}</h3>
         <form onSubmit={guardar} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+            <label className="block text-xs text-slate-500 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Teléfono</label>
+            <label className="block text-xs text-slate-500 mb-1">Teléfono</label>
             <input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
           </div>

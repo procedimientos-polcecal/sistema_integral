@@ -87,14 +87,14 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
-      <Link href="/mantenimiento/planificacion" className="text-sm text-gray-400 hover:text-gray-700">← Planificación</Link>
+      <Link href="/mantenimiento/planificacion" className="text-sm text-slate-400 hover:text-slate-700">← Planificación</Link>
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-slate-900">
             {plan.titulo || planDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </h1>
-          <p className="text-sm text-gray-400 mt-0.5">
+          <p className="text-sm text-slate-400 mt-0.5">
             {planDate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
             {plan.created_by_user ? ` · Creado por ${nombreCompleto(plan.created_by_user)}` : ""}
           </p>
@@ -102,7 +102,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
         <div className="flex items-center gap-2">
           {items.length > 0 && (
             <Link href={`/mantenimiento/planificacion/${plan.id}/imprimir`} target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -123,8 +123,8 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 py-16 text-center">
-          <p className="text-gray-400 text-sm">Todavía no hay órdenes en este plan.</p>
+        <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
+          <p className="text-slate-400 text-sm">Todavía no hay órdenes en este plan.</p>
           {canEdit && (
             <button onClick={() => setShowAddOT(true)}
               className="mt-3 text-blue-500 text-sm hover:underline">
@@ -137,23 +137,23 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
           {items.map((item, idx) => {
             const assignee = nombreCompleto(item.assigned_user) || item.assigned_name || null;
             return (
-              <div key={item.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <div key={item.id} className="card overflow-hidden">
                 <div className="px-4 py-3 flex items-start gap-3">
-                  <span className="shrink-0 w-7 h-7 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center mt-0.5">
+                  <span className="shrink-0 w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-xs font-bold flex items-center justify-center mt-0.5">
                     {idx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-gray-400">#{item.ot_number}</span>
+                      <span className="text-xs font-mono text-slate-400">#{item.ot_number}</span>
                       {item.especialidad && (
-                        <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                        <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                           {item.especialidad}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 mt-0.5 leading-snug">{item.descripcion}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{item.sector_raw}{item.equipo_raw ? ` · ${item.equipo_raw}` : ""}</p>
-                    {item.repuesto && <p className="text-xs text-gray-500 mt-0.5">Repuesto: {item.repuesto}</p>}
+                    <p className="text-sm font-semibold text-slate-900 mt-0.5 leading-snug">{item.descripcion}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.sector_raw}{item.equipo_raw ? ` · ${item.equipo_raw}` : ""}</p>
+                    {item.repuesto && <p className="text-xs text-slate-500 mt-0.5">Repuesto: {item.repuesto}</p>}
                     {item.notas_item && <p className="text-xs text-blue-600 mt-0.5 italic">“{item.notas_item}”</p>}
                   </div>
                   <div className="shrink-0 text-right space-y-1.5">
@@ -164,20 +164,20 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                             {assignee.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
                           </span>
                         </div>
-                        <span className="text-xs font-medium text-gray-700">{assignee}</span>
+                        <span className="text-xs font-medium text-slate-700">{assignee}</span>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-300">Sin asignar</span>
+                      <span className="text-xs text-slate-300">Sin asignar</span>
                     )}
                     {canEdit && (
                       <div className="flex gap-1.5 justify-end">
                         <button onClick={() => setEditItem(item)}
-                          className="text-xs text-gray-400 hover:text-blue-600 transition-colors">
+                          className="text-xs text-slate-400 hover:text-blue-600 transition-colors">
                           Editar
                         </button>
-                        <span className="text-gray-200">·</span>
+                        <span className="text-slate-200">·</span>
                         <button onClick={() => removeItem(item.id)}
-                          className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+                          className="text-xs text-slate-400 hover:text-red-500 transition-colors">
                           Quitar
                         </button>
                       </div>
@@ -193,9 +193,9 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
       {showAddOT && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900">Agregar órdenes al plan</h2>
-              <button onClick={() => setShowAddOT(false)} className="p-1 text-gray-400 hover:text-gray-700">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">Agregar órdenes al plan</h2>
+              <button onClick={() => setShowAddOT(false)} className="p-1 text-slate-400 hover:text-slate-700">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -214,9 +214,9 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                   placeholder="Buscar OT..." className="input flex-1 text-sm" />
               </div>
 
-              <div className="max-h-96 overflow-y-auto divide-y divide-gray-100 rounded-xl border border-gray-200">
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200">
                 {availableOTs.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-gray-400">No hay OTs pendientes con esos filtros.</div>
+                  <div className="py-10 text-center text-sm text-slate-400">No hay OTs pendientes con esos filtros.</div>
                 ) : availableOTs.map(ot => {
                   const meta = ESTADO_META[ot.estado] ?? ESTADO_META.POR_HACER;
                   return (
@@ -226,12 +226,12 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                       <span className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ background: meta.dot }} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono text-gray-400">#{ot.ot_number}</span>
-                          {ot.especialidad && <span className="text-xs text-gray-500">{ot.especialidad}</span>}
+                          <span className="text-xs font-mono text-slate-400">#{ot.ot_number}</span>
+                          {ot.especialidad && <span className="text-xs text-slate-500">{ot.especialidad}</span>}
                           <span className="ml-auto text-xs font-semibold" style={{ color: meta.color }}>{meta.label}</span>
                         </div>
-                        <p className="text-sm font-medium text-gray-800 mt-0.5 leading-snug line-clamp-2">{ot.descripcion}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{ot.sector_raw}{ot.equipo_raw ? ` · ${ot.equipo_raw}` : ""}</p>
+                        <p className="text-sm font-medium text-slate-800 mt-0.5 leading-snug line-clamp-2">{ot.descripcion}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{ot.sector_raw}{ot.equipo_raw ? ` · ${ot.equipo_raw}` : ""}</p>
                       </div>
                       <svg className="w-4 h-4 text-blue-400 shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -275,11 +275,11 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-        <h2 className="text-sm font-bold text-gray-900">Asignar OT #{item.ot_number}</h2>
-        <p className="text-xs text-gray-500 -mt-2 leading-snug">{item.descripcion}</p>
+        <h2 className="text-sm font-bold text-slate-900">Asignar OT #{item.ot_number}</h2>
+        <p className="text-xs text-slate-500 -mt-2 leading-snug">{item.descripcion}</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
-            <label className="block text-xs font-medium text-gray-600">Asignar a (usuario del sistema)</label>
+            <label className="block text-xs font-medium text-slate-600">Asignar a (usuario del sistema)</label>
             <select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); if (e.target.value) setAssignedName(""); }}
               className="input w-full">
               <option value="">— Nombre libre —</option>
@@ -288,13 +288,13 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
           </div>
           {!assignedTo && (
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-600">O escribir nombre</label>
+              <label className="block text-xs font-medium text-slate-600">O escribir nombre</label>
               <input value={assignedName} onChange={e => setAssignedName(e.target.value)}
                 placeholder="Nombre del operario" className="input w-full" />
             </div>
           )}
           <div className="space-y-1">
-            <label className="block text-xs font-medium text-gray-600">Notas adicionales</label>
+            <label className="block text-xs font-medium text-slate-600">Notas adicionales</label>
             <textarea value={notas} onChange={e => setNotas(e.target.value)}
               rows={2} className="input resize-none w-full"
               placeholder="Ej: Llevar llave 32, coordinar con calcinación..." />
@@ -305,7 +305,7 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
               {saving ? "Guardando..." : "Guardar"}
             </button>
             <button type="button" onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
           </div>

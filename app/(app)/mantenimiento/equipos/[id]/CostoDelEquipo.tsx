@@ -40,7 +40,7 @@ export default function CostoDelEquipo({
   return (
     <section>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold text-gray-700">Costo de este equipo</h2>
+        <h2 className="text-sm font-semibold text-slate-700">Costo de este equipo</h2>
         {ubicaciones.length > 0 && (
           <Link
             href={`/compras/requerimientos?equipo=${equipoId}`}
@@ -51,16 +51,16 @@ export default function CostoDelEquipo({
         )}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="card overflow-hidden">
         {sinNada ? (
-          <p className="px-4 py-4 text-sm text-gray-500">
+          <p className="px-4 py-4 text-sm text-slate-500">
             Todavía no hay nada costeado para esta máquina.
           </p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-4 py-2 text-left font-medium">Año</th>
                     <th className="px-4 py-2 text-right font-medium">Materiales</th>
@@ -69,53 +69,53 @@ export default function CostoDelEquipo({
                     <th className="px-4 py-2 text-right font-medium">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {costo.anios.map((a) => (
                     <tr key={a.anio}>
-                      <td className="px-4 py-2 font-mono text-gray-500">{a.anio}</td>
-                      <td className="px-4 py-2 text-right text-gray-700">
+                      <td className="px-4 py-2 font-mono text-slate-500">{a.anio}</td>
+                      <td className="px-4 py-2 text-right text-slate-700">
                         {a.materiales ? pesos(a.materiales) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-700">
+                      <td className="px-4 py-2 text-right text-slate-700">
                         {a.terceros ? pesos(a.terceros) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-700">
+                      <td className="px-4 py-2 text-right text-slate-700">
                         {a.manoDeObra ? pesos(a.manoDeObra) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right font-semibold text-gray-900">
+                      <td className="px-4 py-2 text-right font-semibold text-slate-900">
                         {pesos(a.total)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="border-t border-gray-200 bg-gray-50">
+                <tfoot className="border-t border-slate-200 bg-slate-50">
                   <tr>
-                    <td className="px-4 py-2 text-gray-500">Acumulado</td>
-                    <td className="px-4 py-2 text-right text-gray-600">{pesos(costo.materiales)}</td>
-                    <td className="px-4 py-2 text-right text-gray-600">{pesos(costo.terceros)}</td>
-                    <td className="px-4 py-2 text-right text-gray-600">{pesos(costo.manoDeObra)}</td>
-                    <td className="px-4 py-2 text-right font-bold text-gray-900">{pesos(costo.total)}</td>
+                    <td className="px-4 py-2 text-slate-500">Acumulado</td>
+                    <td className="px-4 py-2 text-right text-slate-600">{pesos(costo.materiales)}</td>
+                    <td className="px-4 py-2 text-right text-slate-600">{pesos(costo.terceros)}</td>
+                    <td className="px-4 py-2 text-right text-slate-600">{pesos(costo.manoDeObra)}</td>
+                    <td className="px-4 py-2 text-right font-bold text-slate-900">{pesos(costo.total)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
             {ultimos.length > 0 && (
-              <div className="border-t border-gray-100 divide-y divide-gray-100">
+              <div className="border-t border-slate-100 divide-y divide-slate-100">
                 {ultimos.map((r) => (
                   <div key={r.id} className="px-4 py-2.5 flex items-start gap-3 text-sm">
-                    <span className="text-xs font-mono text-gray-400 w-12 shrink-0 pt-0.5">
+                    <span className="text-xs font-mono text-slate-400 w-12 shrink-0 pt-0.5">
                       #{r.nro_ri}
                     </span>
-                    <p className="flex-1 min-w-0 text-gray-800 leading-snug">{r.descripcion}</p>
+                    <p className="flex-1 min-w-0 text-slate-800 leading-snug">{r.descripcion}</p>
                     <div className="text-right shrink-0">
-                      <p className="text-gray-700">
+                      <p className="text-slate-700">
                         {r.costo_iva === null || r.costo_iva === ""
                           ? "—"
                           : pesos(Number(r.costo_iva))}
                       </p>
                       {(r.fecha_pedido ?? r.fecha) && (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-slate-400">
                           {new Date(r.fecha_pedido ?? (r.fecha as string)).toLocaleDateString("es-AR")}
                         </p>
                       )}
@@ -132,7 +132,7 @@ export default function CostoDelEquipo({
        * Un costo que se presenta como completo y no lo es, es peor que no
        * mostrarlo. Todo lo que quedó afuera se dice acá, con su tamaño.
        */}
-      <ul className="mt-2 space-y-0.5 text-xs text-gray-400">
+      <ul className="mt-2 space-y-0.5 text-xs text-slate-400">
         <li>
           Son pesos de cada momento, sin ajustar: el acumulado sirve para ordenar
           máquinas entre sí, no para comparar años.

@@ -114,7 +114,7 @@ export default function FichaTecnica({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="card p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-700">
           Ficha técnica

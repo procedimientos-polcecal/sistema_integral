@@ -169,8 +169,8 @@ export default function RegistrarOTModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <h2 className="text-base font-bold text-gray-900">Registrar el trabajo</h2>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <h2 className="text-base font-bold text-slate-900">Registrar el trabajo</h2>
+          <p className="mt-0.5 text-xs text-slate-400">
             OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
           </p>
         </div>
@@ -190,7 +190,7 @@ export default function RegistrarOTModal({
             <select
               value={resultado}
               onChange={(e) => setResultado(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               {RESULTADOS.map((r) => <option key={r.valor} value={r.valor}>{r.label}</option>)}
             </select>
@@ -201,7 +201,7 @@ export default function RegistrarOTModal({
               type="date"
               value={cuando}
               onChange={(e) => setCuando(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </Campo>
 
@@ -213,7 +213,7 @@ export default function RegistrarOTModal({
               value={horas}
               onChange={(e) => setHoras(e.target.value)}
               placeholder="—"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </Campo>
 
@@ -221,7 +221,7 @@ export default function RegistrarOTModal({
             <select
               value={contratista}
               onChange={(e) => setContratista(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               <option value="">Lo hizo personal propio</option>
               {/* Si la OT ya traía uno que no está en la lista, se suma para
@@ -249,7 +249,7 @@ export default function RegistrarOTModal({
                   key={i}
                   value={elegido}
                   onChange={(e) => (set as (v: string) => void)(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option value="">Operario {i + 1}</option>
                   {[...new Set([...suyos, ...(elegido ? [elegido] : [])])].sort().map((n) => (
@@ -267,7 +267,7 @@ export default function RegistrarOTModal({
             onChange={(e) => setObservaciones(e.target.value)}
             rows={3}
             placeholder="Se cambió el rodamiento del lado motor; el acople está gastado y va a haber que cambiarlo."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
 
@@ -284,7 +284,7 @@ export default function RegistrarOTModal({
               </a>
               <button
                 onClick={() => setFoto(null)}
-                className="shrink-0 text-xs text-gray-400 hover:text-red-600"
+                className="shrink-0 text-xs text-slate-400 hover:text-red-600"
                 title="Sacar la foto"
               >×</button>
             </div>
@@ -299,10 +299,10 @@ export default function RegistrarOTModal({
                 e.target.value = "";
                 if (archivo) subirFoto(archivo);
               }}
-              className="w-full text-sm text-gray-600 file:mr-2 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-700"
+              className="w-full text-sm text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700"
             />
           )}
-          {subiendo && <p className="text-xs text-gray-400">Subiendo…</p>}
+          {subiendo && <p className="text-xs text-slate-400">Subiendo…</p>}
         </Campo>
 
         <div className="flex gap-2 pt-1">
@@ -315,7 +315,7 @@ export default function RegistrarOTModal({
           </button>
           <button
             onClick={onCerrar}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
           </button>
@@ -328,7 +328,7 @@ export default function RegistrarOTModal({
 function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="block text-xs font-medium text-gray-600">{etiqueta}</span>
+      <span className="block text-xs font-medium text-slate-600">{etiqueta}</span>
       {children}
     </label>
   );

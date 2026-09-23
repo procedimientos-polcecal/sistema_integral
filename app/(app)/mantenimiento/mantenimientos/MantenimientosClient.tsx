@@ -32,7 +32,7 @@ const SCHEDULE_OPTIONS = [
 const STATUS_COLORS: Record<string, string> = {
   active:    "bg-green-100 text-green-800",
   paused:    "bg-yellow-100 text-yellow-800",
-  completed: "bg-gray-100 text-gray-600",
+  completed: "bg-slate-100 text-slate-600",
   cancelled: "bg-red-100 text-red-700",
 };
 
@@ -341,7 +341,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
   return (
     <div className="md:p-6 max-w-5xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Mantenimientos
           <InfoTip text="Acá programás los mantenimientos preventivos de cada equipo: qué tarea, cada cuánto se repite y quién la hace. El sistema avisa cuando se acercan o vencen, y desde cada uno podés generar o vincular una orden de trabajo (OT)." />
         </h1>
@@ -349,7 +349,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none"
           >
             <option value="">Todos</option>
             <option value="active">Activos</option>
@@ -370,7 +370,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
 
       <div className="space-y-2">
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">
+          <div className="py-12 text-center text-sm text-slate-400">
             Sin mantenimientos programados.
           </div>
         )}
@@ -384,20 +384,20 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
             <div
               key={s.id}
               className={`rounded-xl border bg-white p-4 ${
-                overdue ? "border-red-200 bg-red-50" : "border-gray-200"
+                overdue ? "border-red-200 bg-red-50" : "border-slate-200"
               }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-0.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 text-sm">
+                    <span className="font-medium text-slate-900 text-sm">
                       {s.equipos?.code} — {s.equipos?.name}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-slate-400">
                       {s.equipos?.sectores?.empresas?.nombre ?? "Transversal"} · {s.equipos?.sectores?.nombre}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
                     <span>{s.maintenance_type}</span>
                     <span>·</span>
                     <span>{SCHEDULE_OPTIONS.find((o) => o.value === s.schedule_type)?.label ?? s.schedule_type}</span>
@@ -410,13 +410,13 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                     )}
                   </div>
                   {s.description && (
-                    <p className="text-xs text-gray-400 mt-1">{s.description}</p>
+                    <p className="text-xs text-slate-400 mt-1">{s.description}</p>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-right">
-                    <div className={`text-xs font-semibold ${overdue ? "text-red-700" : soon ? "text-yellow-700" : "text-gray-700"}`}>
+                    <div className={`text-xs font-semibold ${overdue ? "text-red-700" : soon ? "text-yellow-700" : "text-slate-700"}`}>
                       {s.next_date ? new Date(s.next_date + "T00:00:00").toLocaleDateString("es-AR") : "—"}
                     </div>
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium mt-0.5 ${STATUS_COLORS[s.status] ?? ""}`}>
@@ -427,13 +427,13 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                     <div className="flex flex-col gap-1">
                       <button
                         onClick={() => openEdit(s)}
-                        className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 transition-colors"
+                        className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 transition-colors"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => toggleStatus(s)}
-                        className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 transition-colors"
+                        className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 transition-colors"
                       >
                         {s.status === "active" ? "Pausar" : "Activar"}
                       </button>
@@ -448,7 +448,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                 </div>
               </div>
 
-              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 flex-wrap">
                 {(otsBySchedule.get(s.id) ?? []).map((ot: any) => {
                   const m = OT_ESTADO_META[ot.estado] ?? { label: ot.estado, color: "#64748B", bg: "#F1F5F9" };
                   return (
@@ -458,13 +458,13 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                       OT #{ot.ot_number} · {m.label}
                       {canEdit && (
                         <button onClick={() => desvincularOT(ot.id)} title="Desvincular"
-                          className="ml-0.5 text-gray-400 hover:text-red-600 leading-none">×</button>
+                          className="ml-0.5 text-slate-400 hover:text-red-600 leading-none">×</button>
                       )}
                     </span>
                   );
                 })}
                 {(otsBySchedule.get(s.id)?.length ?? 0) === 0 && (
-                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
                     Sin OT vinculada
                     <InfoTip text="Una orden de trabajo (OT) es el documento concreto del trabajo a realizar. 'Crear OT' genera una nueva a partir de este mantenimiento; 'Vincular OT' asocia una que ya existe en el sistema." />
                   </span>
@@ -475,11 +475,11 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                       <span className={`text-xs ${otMsg.ok ? "text-green-600" : "text-red-600"}`}>{otMsg.text}</span>
                     )}
                     <button onClick={() => crearOT(s)} disabled={otBusy === s.id}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40">
+                      className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40">
                       {otBusy === s.id ? "..." : "+ Crear OT"}
                     </button>
                     <button onClick={() => setLinkModal(s)}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                      className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                       Vincular OT
                     </button>
                   </div>
@@ -493,7 +493,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-gray-900">
+            <h2 className="text-base font-bold text-slate-900">
               {editing ? "Editar mantenimiento" : "Nuevo mantenimiento"}
             </h2>
 
@@ -560,11 +560,11 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
               </Field>
 
               <Field label="Fotos de referencia (hasta 3)">
-                <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-gray-300 px-4 py-3 hover:border-blue-400 transition-colors">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-300 px-4 py-3 hover:border-blue-400 transition-colors">
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-slate-500">
                     {refPhotos.length === 0 ? "Adjuntar foto..." : `${refPhotos.length} foto(s) seleccionada(s)`}
                   </span>
                   <input type="file" accept="image/*" multiple className="hidden"
@@ -574,7 +574,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                   <div className="flex gap-2 mt-2 flex-wrap">
                     {refPreviews.map((src, i) => (
                       <div key={i} className="relative">
-                        <img src={src} alt="" className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                        <img src={src} alt="" className="w-16 h-16 rounded-lg object-cover border border-slate-200" />
                         <button type="button" onClick={() => removeRefPhoto(i)}
                           className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center leading-none">
                           ×
@@ -598,7 +598,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
               </button>
               <button
                 onClick={() => setShowForm(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 Cancelar
               </button>
@@ -646,24 +646,24 @@ function LinkOTModal({ schedule, busy, onClose, onPick }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-3 shadow-xl max-h-[85vh] flex flex-col">
-        <h2 className="text-base font-bold text-gray-900">Vincular OT existente</h2>
-        <p className="text-xs text-gray-400">
+        <h2 className="text-base font-bold text-slate-900">Vincular OT existente</h2>
+        <p className="text-xs text-slate-400">
           {schedule.equipos?.code} — {schedule.equipos?.name}
         </p>
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por N° OT, equipo, descripción..." className="input" />
         <div className="flex-1 overflow-y-auto space-y-1.5 -mx-1 px-1">
-          {loading && <p className="text-sm text-gray-400 py-4 text-center">Buscando...</p>}
+          {loading && <p className="text-sm text-slate-400 py-4 text-center">Buscando...</p>}
           {!loading && results.length === 0 && (
-            <p className="text-sm text-gray-400 py-4 text-center">Sin resultados.</p>
+            <p className="text-sm text-slate-400 py-4 text-center">Sin resultados.</p>
           )}
           {!loading && results.map((o) => {
             const m = OT_ESTADO_META[o.estado] ?? { label: o.estado, color: "#64748B", bg: "#F1F5F9" };
             return (
               <button key={o.id} onClick={() => onPick(o.id)} disabled={busy}
-                className="w-full text-left rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors disabled:opacity-40 flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-gray-500 shrink-0">#{o.ot_number}</span>
-                <span className="text-sm text-gray-800 truncate flex-1">{o.descripcion ?? "—"}</span>
+                className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 transition-colors disabled:opacity-40 flex items-center gap-2">
+                <span className="font-mono text-xs font-bold text-slate-500 shrink-0">#{o.ot_number}</span>
+                <span className="text-sm text-slate-800 truncate flex-1">{o.descripcion ?? "—"}</span>
                 <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
                   style={{ color: m.color, background: m.bg }}>{m.label}</span>
               </button>
@@ -672,7 +672,7 @@ function LinkOTModal({ schedule, busy, onClose, onPick }: {
         </div>
         <div className="flex justify-end pt-1">
           <button onClick={onClose}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Cerrar
           </button>
         </div>
@@ -684,7 +684,7 @@ function LinkOTModal({ schedule, busy, onClose, onPick }: {
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-medium text-gray-600">
+      <label className="block text-xs font-medium text-slate-600">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}

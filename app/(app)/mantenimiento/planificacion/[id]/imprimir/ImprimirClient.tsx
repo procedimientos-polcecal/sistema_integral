@@ -47,7 +47,7 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
       {/* Controls — hidden on print */}
       <div className="no-print fixed top-4 right-4 z-10 flex gap-2">
         <button onClick={() => window.print()}
-          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-gray-700 transition-colors">
+          className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-slate-700 transition-colors">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -55,7 +55,7 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
           Imprimir
         </button>
         <button onClick={savePDF} disabled={generating}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-gray-900 shadow-lg hover:bg-amber-600 disabled:opacity-50 transition-colors">
+          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-slate-900 shadow-lg hover:bg-amber-600 disabled:opacity-50 transition-colors">
           {generating ? (
             <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -69,7 +69,7 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
           {generating ? "Generando PDF..." : "Guardar PDF"}
         </button>
         <button onClick={() => window.close()}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-lg hover:bg-gray-50 transition-colors">
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50 transition-colors">
           Cerrar
         </button>
       </div>

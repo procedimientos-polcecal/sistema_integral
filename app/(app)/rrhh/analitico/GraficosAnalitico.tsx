@@ -22,7 +22,7 @@ export default function GraficosAnalitico({
   return (
     <>
   <div className="card p-5 mb-6">
-    <h2 className="font-medium text-gray-700 mb-3">Índice de ausentismo por mes</h2>
+    <h2 className="font-medium text-slate-700 mb-3">Índice de ausentismo por mes</h2>
     <ResponsiveContainer width="100%" height={260}>
       <LineChart data={ausentismoPorMes ?? []}>
         <CartesianGrid strokeDasharray="3 3" />
@@ -36,7 +36,7 @@ export default function GraficosAnalitico({
 
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
     <div className="card p-5">
-      <h2 className="font-medium text-gray-700 mb-3">Empleados por género</h2>
+      <h2 className="font-medium text-slate-700 mb-3">Empleados por género</h2>
       <ResponsiveContainer width="100%" height={260}>
         <PieChart>
           <Pie data={porGenero ?? []} dataKey="cantidad" nameKey="genero" cx="50%" cy="50%" outerRadius={90} label>
@@ -49,7 +49,7 @@ export default function GraficosAnalitico({
     </div>
 
     <div className="card p-5">
-      <h2 className="font-medium text-gray-700 mb-3">Empleados por empresa</h2>
+      <h2 className="font-medium text-slate-700 mb-3">Empleados por empresa</h2>
       <ResponsiveContainer width="100%" height={260}>
         <PieChart>
           <Pie data={porEmpresa ?? []} dataKey="cantidad" nameKey="empresa" cx="50%" cy="50%" outerRadius={90} label>
@@ -63,7 +63,7 @@ export default function GraficosAnalitico({
   </div>
 
   <div className="card p-5">
-    <h2 className="font-medium text-gray-700 mb-3">Empleados por antigüedad</h2>
+    <h2 className="font-medium text-slate-700 mb-3">Empleados por antigüedad</h2>
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={porAntiguedad ?? []}>
         <CartesianGrid strokeDasharray="3 3" />

@@ -127,13 +127,13 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Hola, {nombreUsuario}</h1>
-      <p className="text-gray-500 mb-6">Remises — asistencia y rutas del día</p>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Hola, {nombreUsuario}</h1>
+      <p className="text-slate-500 mb-6">Remises — asistencia y rutas del día</p>
 
       <div className="flex gap-4 mb-6 card p-4 flex-wrap items-end">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Fecha</label>
-          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className="block text-xs text-slate-500 mb-1">Fecha</label>
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
         </div>
         {turnos.length > 1 && (
           <div className="flex gap-1.5">
@@ -147,7 +147,7 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
           </div>
         )}
         <div className="ml-auto flex items-center gap-3">
-          <a href={`/api/remises/export?scope=day&fecha=${fecha}`} className="text-sm text-blue-600 hover:underline">Exportar</a>
+          <a href={`/api/remises/export?scope=day&fecha=${fecha}`} className="text-sm text-[var(--primary)] hover:underline">Exportar</a>
           <button onClick={() => generar("ida")} disabled={generando !== null} className="btn-primary disabled:opacity-50">
             {generando === "ida" ? "Generando..." : "Generar Ida"}
           </button>
@@ -162,7 +162,7 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
       <div className="flex gap-2 mb-4">
         {(["asistencia", "ida", "vuelta"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             {t === "asistencia" ? "Asistencia" : t === "ida" ? "Rutas Ida" : "Rutas Vuelta"}
           </button>
         ))}
@@ -173,32 +173,32 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
           {tab === "asistencia" && (
             <div className="card p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-medium text-gray-700 flex items-center gap-1.5">
+                <h2 className="font-medium text-slate-700 flex items-center gap-1.5">
                   Asistencia
                   <InfoTip text="Marcá qué empleados vienen hoy en este turno. Solo los presentes con coordenadas geocodificadas entran en la generación de rutas." />
                 </h2>
-                <button onClick={marcarSegunTurnoDefault} className="text-xs text-blue-600 hover:underline">Marcar según turno default</button>
+                <button onClick={marcarSegunTurnoDefault} className="text-xs text-[var(--primary)] hover:underline">Marcar según turno default</button>
               </div>
               {!empleados || !presentIds ? (
-                <p className="text-sm text-gray-500">Cargando...</p>
+                <p className="text-sm text-slate-500">Cargando...</p>
               ) : empleadosActivos.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no hay empleados con datos de Remises cargados.</p>
+                <p className="text-sm text-slate-500">Todavía no hay empleados con datos de Remises cargados.</p>
               ) : (
                 <>
-                  <p className="text-xs text-gray-400 mb-2">{presentSet.size} / {empleadosActivos.length} presentes</p>
+                  <p className="text-xs text-slate-400 mb-2">{presentSet.size} / {empleadosActivos.length} presentes</p>
                   <div className="space-y-1 max-h-[560px] overflow-y-auto">
                     {empleadosActivos.map((e) => {
                       const on = presentSet.has(e.id);
                       const tieneCoords = e.remises_empleados_datos?.lat != null;
                       return (
                         <button key={e.id} onClick={() => toggleAsistencia(e.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left ${on ? "bg-emerald-50" : "hover:bg-gray-50"}`}>
-                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${on ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-600"}`}>
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left ${on ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
+                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${on ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"}`}>
                             {on ? "✓" : e.nombre[0]}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-800">{e.apellido}, {e.nombre}</div>
-                            <div className="text-xs text-gray-400 truncate">{e.remises_empleados_datos?.direccion || "Sin dirección"}</div>
+                            <div className="text-sm font-medium text-slate-800">{e.apellido}, {e.nombre}</div>
+                            <div className="text-xs text-slate-400 truncate">{e.remises_empleados_datos?.direccion || e.domicilio || "Sin dirección"}</div>
                           </div>
                           {!tieneCoords && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 shrink-0">Sin coords</span>}
                         </button>
@@ -213,9 +213,9 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
           {(tab === "ida" || tab === "vuelta") && (
             <div className="space-y-4">
               {!hojasTab ? (
-                <p className="text-sm text-gray-500">Cargando...</p>
+                <p className="text-sm text-slate-500">Cargando...</p>
               ) : hojasTab.length === 0 ? (
-                <div className="card p-5 text-center text-sm text-gray-400">Sin rutas. Generalas desde el botón de arriba.</div>
+                <div className="card p-5 text-center text-sm text-slate-400">Sin rutas. Generalas desde el botón de arriba.</div>
               ) : (
                 hojasTab.map((h, i) => (
                   <RouteCard key={h.id} hoja={h} index={i} hermanas={hojasTab.filter((x) => x.id !== h.id)}
@@ -294,7 +294,7 @@ function AgregarRemisCard({
 
   if (!open) {
     return (
-      <button onClick={abrir} className="w-full border border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-500 hover:bg-gray-50">
+      <button onClick={abrir} className="w-full border border-dashed border-slate-300 rounded-xl py-3 text-sm text-slate-500 hover:bg-slate-50">
         + Agregar remis
       </button>
     );
@@ -302,19 +302,19 @@ function AgregarRemisCard({
 
   return (
     <div className="card p-5">
-      <h3 className="font-medium text-gray-800 mb-3">Agregar remis</h3>
+      <h3 className="font-medium text-slate-800 mb-3">Agregar remis</h3>
       <div className="mb-3">
-        <label className="block text-xs text-gray-500 mb-1">Vehículo</label>
-        <select value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+        <label className="block text-xs text-slate-500 mb-1">Vehículo</label>
+        <select value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
           {opcionesVehiculo.map((v) => <option key={v.id} value={v.id}>{v.nombre}{v.capacidad ? ` (${v.capacidad} pax)` : ""}</option>)}
         </select>
       </div>
       <div className="mb-3">
-        <label className="block text-xs text-gray-500 mb-1">Empleados</label>
+        <label className="block text-xs text-slate-500 mb-1">Empleados</label>
         {disponibles.length === 0 ? (
-          <p className="text-xs text-gray-400">No hay empleados disponibles (todos ya tienen remis o no tienen coordenadas).</p>
+          <p className="text-xs text-slate-400">No hay empleados disponibles (todos ya tienen remis o no tienen coordenadas).</p>
         ) : (
-          <div className="max-h-48 overflow-y-auto space-y-1 border border-gray-200 rounded-md p-2">
+          <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 rounded-md p-2">
             {disponibles.map((e) => (
               <label key={e.id} className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={seleccionados.has(e.id)} onChange={() => toggle(e.id)} />
@@ -329,7 +329,7 @@ function AgregarRemisCard({
         <button onClick={confirmar} disabled={guardando} className="btn-primary disabled:opacity-50">
           {guardando ? "Agregando..." : "Agregar"}
         </button>
-        <button onClick={() => setOpen(false)} className="border border-gray-300 px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+        <button onClick={() => setOpen(false)} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">Cancelar</button>
       </div>
     </div>
   );

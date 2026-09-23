@@ -155,42 +155,42 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-6">Liquidaciones</h1>
+      <h1 className="text-xl font-bold text-slate-900 mb-6">Liquidaciones</h1>
 
       <div className="card p-5 mb-6">
-        <h2 className="font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+        <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
           Generar liquidación
           <InfoTip text="Calcula el sueldo de un empleado para el período elegido: horas normales, extra 50% y 100%. Solo se incluyen las horas extra ya validadas desde la ficha del empleado." />
         </h2>
         <form onSubmit={onGenerar} className="flex gap-3 items-end flex-wrap">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Empleado</label>
+            <label className="block text-xs text-slate-500 mb-1">Empleado</label>
             <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm min-w-[200px]">
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[200px]">
               <option value="">Seleccionar...</option>
               {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+            <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
               Tipo
               <InfoTip text="Quincenal: del 1 al 15, o del 16 a fin de mes. Mensual: el mes completo. Define qué período abarca la liquidación." />
             </label>
             <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="QUINCENAL">Quincenal</option>
               <option value="MENSUAL">Mensual</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Desde</label>
+            <label className="block text-xs text-slate-500 mb-1">Desde</label>
             <input type="date" value={form.fechaDesde} onChange={(e) => setForm({ ...form, fechaDesde: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+            <label className="block text-xs text-slate-500 mb-1">Hasta</label>
             <input type="date" value={form.fechaHasta} onChange={(e) => setForm({ ...form, fechaHasta: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <button type="submit" disabled={generando} className="btn-primary disabled:opacity-50">
             {generando ? "Generando..." : "Generar"}
@@ -201,25 +201,25 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
       </div>
 
       <div className="card p-5 mb-6">
-        <h2 className="font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+        <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
           Planilla general (todo el personal)
           <InfoTip text="Resumen de horas y montos de TODO el personal para el período elegido, sin generar liquidaciones individuales. Incluye las horas de vacaciones y de enfermedad, que no salen del cálculo diario. Se puede ver en pantalla o bajar en Excel." />
         </h2>
         <div className="flex gap-3 items-end flex-wrap">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Desde</label>
+            <label className="block text-xs text-slate-500 mb-1">Desde</label>
             <input type="date" value={planilla.fechaDesde} onChange={(e) => setPlanilla({ ...planilla, fechaDesde: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+            <label className="block text-xs text-slate-500 mb-1">Hasta</label>
             <input type="date" value={planilla.fechaHasta} onChange={(e) => setPlanilla({ ...planilla, fechaHasta: e.target.value })}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Modalidad</label>
+            <label className="block text-xs text-slate-500 mb-1">Modalidad</label>
             <select value={modalidadPlanilla} onChange={(e) => setModalidadPlanilla(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              className="border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Todos</option>
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
@@ -229,7 +229,7 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
             {calculandoPlanilla ? "Calculando..." : "Ver planilla"}
           </button>
           <a href={`/api/rrhh/liquidaciones/export-planilla?${qsPlanilla()}`}
-            className="bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-md hover:bg-gray-50 inline-block">
+            className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-md hover:bg-slate-50 inline-block">
             Exportar a Excel
           </a>
         </div>
@@ -250,7 +250,7 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2 pr-3">Empleado</th>
                   <th className="pb-2 pr-3">Legajo</th>
                   <th className="pb-2 pr-3">Tipo</th>
@@ -265,7 +265,7 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
               </thead>
               <tbody>
                 {filasPlanilla.length === 0 && (
-                  <tr><td colSpan={10} className="py-3 text-center text-gray-400">No hay empleados activos.</td></tr>
+                  <tr><td colSpan={10} className="py-3 text-center text-slate-400">No hay empleados activos.</td></tr>
                 )}
                 {filasPlanilla.map((f) => (
                   <tr key={f.empleadoId} className="border-b last:border-0">
@@ -303,11 +303,11 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
 
       <div className="card p-5">
         {!liquidaciones ? (
-          <p className="text-gray-500 text-sm">Cargando...</p>
+          <p className="text-slate-500 text-sm">Cargando...</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Empleado</th>
                 <th className="pb-2">Tipo</th>
                 <th className="pb-2">Período</th>
@@ -336,14 +336,14 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                   <td className="py-2 text-right whitespace-nowrap">
                     <a href={`/api/rrhh/liquidaciones/${l.id}/export`} className="text-blue-600 underline text-sm">Exportar</a>
                     {l.estado === "BORRADOR" && (
-                      <button onClick={() => cerrar(l)} className="text-gray-700 underline text-sm ml-3">Cerrar</button>
+                      <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm ml-3">Cerrar</button>
                     )}
                     <button onClick={() => eliminar(l)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                   </td>
                 </tr>
               ))}
               {liquidaciones.length === 0 && (
-                <tr><td colSpan={9} className="py-4 text-center text-gray-400">Todavía no hay liquidaciones generadas</td></tr>
+                <tr><td colSpan={9} className="py-4 text-center text-slate-400">Todavía no hay liquidaciones generadas</td></tr>
               )}
             </tbody>
           </table>

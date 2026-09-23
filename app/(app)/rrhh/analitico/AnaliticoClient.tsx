@@ -17,10 +17,10 @@ const GraficosAnalitico = dynamic(() => import("./GraficosAnalitico"), {
 function StatCard({ titulo, valor, sufijo }: { titulo: string; valor: string | number; sufijo?: string }) {
   return (
     <div className="card p-5">
-      <div className="text-xs text-gray-500">{titulo}</div>
-      <div className="text-3xl font-bold text-gray-900 mt-2">
+      <div className="text-xs text-slate-500">{titulo}</div>
+      <div className="text-3xl font-bold text-slate-900 mt-2">
         {valor}
-        {sufijo && <span className="text-lg text-gray-400 ml-1">{sufijo}</span>}
+        {sufijo && <span className="text-lg text-slate-400 ml-1">{sufijo}</span>}
       </div>
     </div>
   );
@@ -44,7 +44,7 @@ export default function AnaliticoClient({ resumenInicial }: { resumenInicial: Re
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-6">Analítico de personal</h1>
+      <h1 className="text-xl font-bold text-slate-900 mb-6">Analítico de personal</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard titulo="Empleados" valor={resumen.cantidadEmpleados ?? "-"} />

@@ -64,7 +64,7 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Empleados
           <InfoTip text="Domicilio de recogida y turno habitual de cada empleado para el transporte. Necesitan coordenadas geocodificadas para poder incluirse en la generación de rutas." />
         </h1>
@@ -76,13 +76,13 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
       </div>
 
       <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por nombre o legajo..."
-        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-4 w-full max-w-sm" />
+        className="border border-slate-300 rounded-md px-3 py-1.5 text-sm mb-4 w-full max-w-sm" />
 
       <div className="card p-5">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b">
+            <tr className="text-left text-slate-500 border-b">
               <th className="pb-2">Legajo</th>
               <th className="pb-2">Nombre</th>
               <th className="pb-2">Dirección de recogida</th>
@@ -99,7 +99,7 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
                 <tr key={e.id} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
                   <td className="py-2">{e.apellido}, {e.nombre}</td>
-                  <td className="py-2 text-gray-500">{d.direccion || "-"}</td>
+                  <td className="py-2 text-slate-500">{d.direccion || e.domicilio || "-"}</td>
                   <td className="py-2">
                     {d.lat ? (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">OK</span>
@@ -107,15 +107,15 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
                       <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Falta geocodificar</span>
                     )}
                   </td>
-                  <td className="py-2 text-gray-500">{turno?.nombre ?? "-"}</td>
+                  <td className="py-2 text-slate-500">{turno?.nombre ?? "-"}</td>
                   <td className="py-2 text-right">
-                    {canEdit && <button onClick={() => setModal({ e })} className="text-gray-700 underline text-xs">Editar</button>}
+                    {canEdit && <button onClick={() => setModal({ e })} className="text-slate-700 underline text-xs">Editar</button>}
                   </td>
                 </tr>
               );
             })}
             {filtrados.length === 0 && (
-              <tr><td colSpan={6} className="py-4 text-center text-gray-400">Sin resultados</td></tr>
+              <tr><td colSpan={6} className="py-4 text-center text-slate-400">Sin resultados</td></tr>
             )}
           </tbody>
         </table>
@@ -203,22 +203,22 @@ function EmpleadoModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-800 mb-4">{empleado.apellido}, {empleado.nombre}</h3>
+        <h3 className="font-medium text-slate-800 mb-4">{empleado.apellido}, {empleado.nombre}</h3>
         <form onSubmit={guardar} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Dirección de recogida</label>
+            <label className="block text-xs text-slate-500 mb-1">Dirección de recogida</label>
             <div className="flex gap-2">
               <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-                className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="flex-1 border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               <button type="button" onClick={geocodificar} disabled={geocodificando} className="btn-primary disabled:opacity-50 whitespace-nowrap">
                 {geocodificando ? "..." : "Geocodificar"}
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Turno default</label>
+            <label className="block text-xs text-slate-500 mb-1">Turno default</label>
             <select value={form.turnoDefaultId} onChange={(e) => setForm({ ...form, turnoDefaultId: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Sin turno default</option>
               {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
@@ -230,31 +230,31 @@ function EmpleadoModal({
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
           </div>
         </form>
 
-        <div className="border-t border-gray-100 mt-4 pt-4">
-          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+        <div className="border-t border-slate-100 mt-4 pt-4">
+          <h4 className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1">
             Acceso “Mi remis”
             <InfoTip text="Da acceso al empleado para que vea desde su celular en qué remis viaja y active notificaciones. Se le manda un email para que defina su propia contraseña." />
           </h4>
           {cuentaEmail === undefined ? (
-            <p className="text-xs text-gray-400">Cargando...</p>
+            <p className="text-xs text-slate-400">Cargando...</p>
           ) : cuentaEmail ? (
             <p className="text-xs text-emerald-600">Tiene acceso con {cuentaEmail}</p>
           ) : (
             <div className="flex gap-2">
               <input type="email" value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} placeholder="email@ejemplo.com"
-                className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
-              <button type="button" onClick={darAcceso} disabled={creandoCuenta} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                className="flex-1 border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
+              <button type="button" onClick={darAcceso} disabled={creandoCuenta} className="border border-slate-300 rounded-md px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap">
                 {creandoCuenta ? "..." : "Dar acceso"}
               </button>
             </div>
           )}
-          {avisoCuenta && <p className="text-xs text-gray-500 mt-1">{avisoCuenta}</p>}
+          {avisoCuenta && <p className="text-xs text-slate-500 mt-1">{avisoCuenta}</p>}
         </div>
       </div>
     </div>

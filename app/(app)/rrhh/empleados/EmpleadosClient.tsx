@@ -197,12 +197,12 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Empleados
           <InfoTip text="Los operarios/trabajadores de la empresa (no confundir con los usuarios que entran al sistema). Podés cargarlos uno por uno o importar una planilla. Cada empleado tiene su legajo, valor hora, sector y empresa." />
         </h1>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" checked={mostrarInactivos} onChange={(e) => setMostrarInactivos(e.target.checked)} />
             Mostrar inactivos
           </label>
@@ -210,7 +210,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowImport((v) => !v); setShowForm(false); }}
-                className="bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-md hover:bg-gray-50"
+                className="bg-white border border-slate-300 text-slate-700 text-sm px-4 py-2 rounded-md hover:bg-slate-50"
               >
                 {showImport ? "Cancelar" : "Importar planilla"}
               </button>
@@ -237,11 +237,11 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
 
       {showImport && (
         <div className="card p-5 mb-6">
-          <h2 className="font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+          <h2 className="font-medium text-slate-700 mb-1 flex items-center gap-1.5">
             Importar planilla de empleados
             <InfoTip text="Subís un Excel/CSV con una fila por empleado y decís qué columna es cada dato (legajo, nombre, valor hora, etc.). Si el legajo ya existe se actualizan sus datos; si no, se crea. La empresa/sector se crean solos si no existían." />
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-sm text-slate-500 mb-3">
             Subí un Excel/CSV con una fila por empleado. Columnas necesarias: Legajo, Nombre, Apellido y Valor
             hora normal. Sindicato, Sector, horas teóricas diarias, fecha de nacimiento y género son opcionales.
             Si el legajo ya existe, se actualizan sus datos.
@@ -252,24 +252,24 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
             className="text-sm mb-3"
           />
-          {importing && <p className="text-sm text-gray-500">Procesando...</p>}
+          {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
 
           {preview && (
             <div className="mt-3">
               {preview.sheetNames.length > 1 && (
                 <div className="mb-3">
-                  <label className="block text-xs text-gray-500 mb-1">Hoja del archivo</label>
+                  <label className="block text-xs text-slate-500 mb-1">Hoja del archivo</label>
                   <select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
                     {preview.sheetNames.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               )}
-              <p className="text-sm text-gray-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
+              <p className="text-sm text-slate-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 {MAPPING_FIELDS.map(([field, label]) => (
                   <div key={field}>
-                    <label className="block text-xs text-gray-500 mb-1">{label}</label>
+                    <label className="block text-xs text-slate-500 mb-1">{label}</label>
                     <select
                       value={mapping[field]}
                       onChange={(e) => setMapping({ ...mapping, [field]: e.target.value })}
@@ -305,7 +305,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
               {importResult.errores.length > 0 && (
                 <details className="mt-2">
                   <summary className="text-amber-600 cursor-pointer">{importResult.errores.length} filas con observaciones</summary>
-                  <ul className="mt-1 text-gray-500 max-h-40 overflow-auto">
+                  <ul className="mt-1 text-slate-500 max-h-40 overflow-auto">
                     {importResult.errores.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </details>
@@ -371,49 +371,49 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
       {showForm && (
         <form onSubmit={crear} className="card p-5 mb-6 grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Legajo</label>
+            <label className="block text-sm text-slate-600 mb-1">Legajo</label>
             <input required value={form.legajo} onChange={(e) => setForm({ ...form, legajo: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Nombre</label>
+            <label className="block text-sm text-slate-600 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Apellido</label>
+            <label className="block text-sm text-slate-600 mb-1">Apellido</label>
             <input required value={form.apellido} onChange={(e) => setForm({ ...form, apellido: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Sindicato</label>
+            <label className="block text-sm text-slate-600 mb-1">Sindicato</label>
             <input value={form.sindicato} onChange={(e) => setForm({ ...form, sindicato: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Fecha de ingreso</label>
+            <label className="block text-sm text-slate-600 mb-1">Fecha de ingreso</label>
             <input type="date" required value={form.fechaIngreso} onChange={(e) => setForm({ ...form, fechaIngreso: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Valor hora normal ($)</label>
+            <label className="block text-sm text-slate-600 mb-1">Valor hora normal ($)</label>
             <input type="number" step="0.01" required value={form.valorHoraNormal} onChange={(e) => setForm({ ...form, valorHoraNormal: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Horas teóricas diarias</label>
+            <label className="block text-sm text-slate-600 mb-1">Horas teóricas diarias</label>
             <input type="number" step="0.5" required value={form.horasTeoricasDiarias} onChange={(e) => setForm({ ...form, horasTeoricasDiarias: e.target.value })} className="input" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Modalidad de pago</label>
+            <label className="block text-sm text-slate-600 mb-1">Modalidad de pago</label>
             <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Empresa</label>
+            <label className="block text-sm text-slate-600 mb-1">Empresa</label>
             <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
               <option value="">Seleccionar...</option>
               {empresas.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Sector</label>
+            <label className="block text-sm text-slate-600 mb-1">Sector</label>
             <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
               <option value="">Sin asignar</option>
               {sectores.filter((s) => s.activo).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -432,7 +432,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b">
+            <tr className="text-left text-slate-500 border-b">
               <th className="pb-2">Legajo</th>
               <th className="pb-2">Nombre</th>
               <th className="pb-2">Sindicato</th>
@@ -447,7 +447,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
               <tr key={e.id} className={`border-b last:border-0 ${!e.activo ? "opacity-50" : ""}`}>
                 <td className="py-2">{e.legajo}</td>
                 <td className="py-2">
-                  <Link href={`/rrhh/empleados/${e.id}`} className="text-gray-700 hover:underline">
+                  <Link href={`/rrhh/empleados/${e.id}`} className="text-slate-700 hover:underline">
                     {e.apellido}, {e.nombre}
                   </Link>
                   {!e.activo && <span className="ml-2 text-xs text-red-600">(inactivo)</span>}
@@ -460,7 +460,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
               </tr>
             ))}
             {empleadosFiltrados.length === 0 && (
-              <tr><td colSpan={7} className="py-4 text-center text-gray-400">No se encontraron empleados</td></tr>
+              <tr><td colSpan={7} className="py-4 text-center text-slate-400">No se encontraron empleados</td></tr>
             )}
           </tbody>
         </table>

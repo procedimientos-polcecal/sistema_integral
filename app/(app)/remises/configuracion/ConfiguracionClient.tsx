@@ -55,25 +55,25 @@ export default function ConfiguracionClient({ config, turnos }: { config: any; t
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-900">Configuración de Remises</h1>
+      <h1 className="text-xl font-bold text-slate-900">Configuración de Remises</h1>
 
       <div className="card p-5">
-        <h2 className="font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+        <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
           Fábrica
           <InfoTip text="Punto de origen/destino fijo de todas las rutas. Los empleados se recogen desde su domicilio hacia acá (ida) o se dejan desde acá hacia su domicilio (vuelta)." />
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+              <label className="block text-xs text-slate-500 mb-1">Nombre</label>
               <input value={form.fabricaNombre} onChange={(e) => setForm({ ...form, fabricaNombre: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Dirección</label>
+              <label className="block text-xs text-slate-500 mb-1">Dirección</label>
               <div className="flex gap-2">
                 <input value={form.fabricaDireccion} onChange={(e) => setForm({ ...form, fabricaDireccion: e.target.value })}
-                  className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                  className="flex-1 border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
                 <button type="button" onClick={geocodificar} disabled={geocodificando}
                   className="btn-primary disabled:opacity-50 whitespace-nowrap">
                   {geocodificando ? "..." : "Geocodificar"}
@@ -81,24 +81,24 @@ export default function ConfiguracionClient({ config, turnos }: { config: any; t
               </div>
               {errorGeo && <p className="text-xs text-red-600 mt-1">{errorGeo}</p>}
               {form.fabricaLat != null && (
-                <p className="text-xs text-gray-400 mt-1">{Number(form.fabricaLat).toFixed(5)}, {Number(form.fabricaLng).toFixed(5)}</p>
+                <p className="text-xs text-slate-400 mt-1">{Number(form.fabricaLat).toFixed(5)}, {Number(form.fabricaLng).toFixed(5)}</p>
               )}
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+              <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
                 Ciudad de referencia
                 <InfoTip text="Se agrega a cada búsqueda de dirección para evitar geocodificar en la ciudad equivocada. Dejalo vacío para usar el área alrededor de la fábrica en su lugar." />
               </label>
               <input value={form.ciudadReferencia} onChange={(e) => setForm({ ...form, ciudadReferencia: e.target.value })}
-                placeholder="Ej: Córdoba, Argentina" className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                placeholder="Ej: Córdoba, Argentina" className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+              <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
                 Velocidad promedio (km/h)
                 <InfoTip text="Se usa solo como respaldo para estimar tiempos de viaje cuando el servicio de ruteo no está disponible." />
               </label>
               <input type="number" min={1} value={form.velocidadKmh} onChange={(e) => setForm({ ...form, velocidadKmh: e.target.value })}
-                className="w-32 border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
           </div>
           <PinMap lat={form.fabricaLat} lng={form.fabricaLng} popup={form.fabricaNombre}
@@ -138,7 +138,7 @@ function TurnosCard({ turnos, onChange }: { turnos: any[]; onChange: () => void 
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="font-medium text-gray-700 flex items-center gap-1.5">
+        <h2 className="font-medium text-slate-700 flex items-center gap-1.5">
           Turnos
           <InfoTip text="Franjas horarias de transporte (ej. Mañana, Tarde, Noche). Cada asistencia, ruta y plan semanal está asociado a un turno." />
         </h2>
@@ -147,11 +147,11 @@ function TurnosCard({ turnos, onChange }: { turnos: any[]; onChange: () => void 
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
       <div className="space-y-2">
         {turnos.map((t) => (
-          <div key={t.id} className="flex items-center gap-3 border border-gray-200 rounded-md px-3 py-2">
+          <div key={t.id} className="flex items-center gap-3 border border-slate-200 rounded-md px-3 py-2">
             <span className="w-3 h-3 rounded-full shrink-0" style={{ background: t.color }} />
-            <span className="font-medium text-sm text-gray-800 flex-1">{t.nombre}</span>
-            <span className="text-sm text-gray-500">{t.hora_inicio} – {t.hora_fin}</span>
-            <button onClick={() => setModal({ t })} className="text-gray-700 underline text-xs">Editar</button>
+            <span className="font-medium text-sm text-slate-800 flex-1">{t.nombre}</span>
+            <span className="text-sm text-slate-500">{t.hora_inicio} – {t.hora_fin}</span>
+            <button onClick={() => setModal({ t })} className="text-slate-700 underline text-xs">Editar</button>
             {turnos.length > 1 && <button onClick={() => eliminar(t)} className="text-red-600 underline text-xs">Eliminar</button>}
           </div>
         ))}
@@ -188,36 +188,36 @@ function TurnoModal({ t, onClose, onSaved }: { t: any | null; onClose: () => voi
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-800 mb-4">{t ? "Editar turno" : "Nuevo turno"}</h3>
+        <h3 className="font-medium text-slate-800 mb-4">{t ? "Editar turno" : "Nuevo turno"}</h3>
         <form onSubmit={guardar} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nombre</label>
+            <label className="block text-xs text-slate-500 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+              className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hora inicio</label>
+              <label className="block text-xs text-slate-500 mb-1">Hora inicio</label>
               <input type="time" required value={form.horaInicio} onChange={(e) => setForm({ ...form, horaInicio: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hora fin</label>
+              <label className="block text-xs text-slate-500 mb-1">Hora fin</label>
               <input type="time" required value={form.horaFin} onChange={(e) => setForm({ ...form, horaFin: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Color</label>
+            <label className="block text-xs text-slate-500 mb-1">Color</label>
             <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })}
-              className="w-16 h-8 border border-gray-300 rounded-md" />
+              className="w-16 h-8 border border-slate-300 rounded-md" />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" onClick={onClose} className="border border-gray-300 px-4 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
           </div>

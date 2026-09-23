@@ -66,10 +66,10 @@ function Acceso({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+      className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
     >
       {label}
-      <span className="text-gray-400">→</span>
+      <span className="text-slate-400">→</span>
     </Link>
   );
 }
@@ -147,20 +147,20 @@ export default function DashboardClient({
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Hola, {nombreUsuario}</h1>
-      <p className="text-gray-500 mb-6">Resumen general</p>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Hola, {nombreUsuario}</h1>
+      <p className="text-slate-500 mb-6">Resumen general</p>
 
       <div className="flex gap-4 mb-6 card p-4">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Empresa</label>
-          <select value={empresaId} onChange={(e) => setEmpresaId(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
+          <label className="block text-xs text-slate-500 mb-1">Empresa</label>
+          <select value={empresaId} onChange={(e) => setEmpresaId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
             <option value="">Todas</option>
             {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Sector</label>
-          <select value={sectorId} onChange={(e) => setSectorId(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
+          <label className="block text-xs text-slate-500 mb-1">Sector</label>
+          <select value={sectorId} onChange={(e) => setSectorId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
             <option value="">Todos</option>
             {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
@@ -168,25 +168,25 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard titulo="Presentes" cargando={cargandoResumen} cantidad={resumen.presentes.cantidad} porcentaje={resumen.presentes.porcentaje} bg="bg-emerald-600" onClick={() => setCategoriaHoy("presentes")} />
-        <StatCard titulo="Ausentes" cargando={cargandoResumen} cantidad={resumen.ausentes.cantidad} porcentaje={resumen.ausentes.porcentaje} bg="bg-rose-500" onClick={() => setCategoriaHoy("ausentes")} />
-        <StatCard titulo="Tardes" cargando={cargandoResumen} cantidad={resumen.tardes.cantidad} porcentaje={resumen.tardes.porcentaje} bg="bg-amber-500" onClick={() => setCategoriaHoy("tardes")} />
-        <StatCard titulo="Vacaciones" cargando={cargandoResumen} cantidad={resumen.vacaciones.cantidad} porcentaje={resumen.vacaciones.porcentaje} bg="bg-violet-500" onClick={() => setCategoriaHoy("vacaciones")} />
+        <StatCard titulo="Presentes" cargando={cargandoResumen} cantidad={resumen.presentes.cantidad} porcentaje={resumen.presentes.porcentaje} bg="bg-[var(--primary)]" onClick={() => setCategoriaHoy("presentes")} />
+        <StatCard titulo="Ausentes" cargando={cargandoResumen} cantidad={resumen.ausentes.cantidad} porcentaje={resumen.ausentes.porcentaje} bg="bg-[var(--status-rep)]" onClick={() => setCategoriaHoy("ausentes")} />
+        <StatCard titulo="Tardes" cargando={cargandoResumen} cantidad={resumen.tardes.cantidad} porcentaje={resumen.tardes.porcentaje} bg="bg-[var(--accent)]" onClick={() => setCategoriaHoy("tardes")} />
+        <StatCard titulo="Vacaciones" cargando={cargandoResumen} cantidad={resumen.vacaciones.cantidad} porcentaje={resumen.vacaciones.porcentaje} bg="bg-[#7E22CE]" onClick={() => setCategoriaHoy("vacaciones")} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Top 10 ausencias (mes en curso)</h2>
-          {topAusencias?.length === 0 && <p className="text-sm text-gray-500">Sin ausencias registradas.</p>}
+          <h2 className="font-medium text-slate-700 mb-3">Top 10 ausencias (mes en curso)</h2>
+          {topAusencias?.length === 0 && <p className="text-sm text-slate-500">Sin ausencias registradas.</p>}
           {topAusencias && topAusencias.length > 0 && (
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Ausencias</th></tr></thead>
+              <thead><tr className="text-left text-slate-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Ausencias</th></tr></thead>
               <tbody>
                 {topAusencias.map((a) => (
                   <tr key={a.employeeId} className="border-b last:border-0">
                     <td className="py-2">{a.legajo}</td>
-                    <td className="py-2"><Link href={`/rrhh/empleados/${a.employeeId}`} className="text-gray-700 hover:underline">{a.nombre}</Link></td>
+                    <td className="py-2"><Link href={`/rrhh/empleados/${a.employeeId}`} className="text-slate-700 hover:underline">{a.nombre}</Link></td>
                     <td className="py-2 font-medium text-red-600">{a.ausencias}</td>
                   </tr>
                 ))}
@@ -197,17 +197,17 @@ export default function DashboardClient({
         </div>
 
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Top 10 llegadas tarde / salidas tempranas (mes en curso)</h2>
-          {topTardanzas?.length === 0 && <p className="text-sm text-gray-500">Sin tardanzas ni retiros anticipados registrados.</p>}
+          <h2 className="font-medium text-slate-700 mb-3">Top 10 llegadas tarde / salidas tempranas (mes en curso)</h2>
+          {topTardanzas?.length === 0 && <p className="text-sm text-slate-500">Sin tardanzas ni retiros anticipados registrados.</p>}
           {topTardanzas && topTardanzas.length > 0 && (
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Tarde</th><th className="pb-2">Retiro ant.</th></tr></thead>
+              <thead><tr className="text-left text-slate-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Tarde</th><th className="pb-2">Retiro ant.</th></tr></thead>
               <tbody>
                 {topTardanzas.map((t) => (
                   <tr key={t.employeeId} className="border-b last:border-0">
                     <td className="py-2">{t.legajo}</td>
-                    <td className="py-2"><Link href={`/rrhh/empleados/${t.employeeId}`} className="text-gray-700 hover:underline">{t.nombre}</Link></td>
+                    <td className="py-2"><Link href={`/rrhh/empleados/${t.employeeId}`} className="text-slate-700 hover:underline">{t.nombre}</Link></td>
                     <td className="py-2 font-medium text-amber-600">{t.tardanzas || "-"}</td>
                     <td className="py-2 font-medium text-orange-600">{t.retirosAnticipados || "-"}</td>
                   </tr>
@@ -221,14 +221,14 @@ export default function DashboardClient({
 
       <div className="flex gap-4 mb-6 card p-4 items-end">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Gráficos desde</label>
-          <input type="date" value={desdeGraficos} onChange={(e) => setDesdeGraficos(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className="block text-xs text-slate-500 mb-1">Gráficos desde</label>
+          <input type="date" value={desdeGraficos} onChange={(e) => setDesdeGraficos(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-          <input type="date" value={hastaGraficos} onChange={(e) => setHastaGraficos(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+          <input type="date" value={hastaGraficos} onChange={(e) => setHastaGraficos(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
         </div>
-        <p className="text-xs text-gray-400 pb-2">Aplica a los 3 gráficos de abajo.</p>
+        <p className="text-xs text-slate-400 pb-2">Aplica a los 3 gráficos de abajo.</p>
       </div>
 
       <GraficosPorSector
@@ -240,7 +240,7 @@ export default function DashboardClient({
       />
 
       <div>
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Más</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Más</h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Acceso href="/rrhh/empleados" label="Empleados" />
           <Acceso href="/rrhh/fichadas" label="Marcaciones" />
@@ -278,23 +278,23 @@ function ModalListaEmpleados({ titulo, empleados, onClose }: { titulo: string; e
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-800">{titulo}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          <h3 className="font-medium text-slate-800">{titulo}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
         </div>
         {!empleados ? (
-          <p className="text-sm text-gray-500">Cargando...</p>
+          <p className="text-sm text-slate-500">Cargando...</p>
         ) : empleados.length === 0 ? (
-          <p className="text-sm text-gray-500">Sin resultados.</p>
+          <p className="text-sm text-slate-500">Sin resultados.</p>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-gray-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Sector</th></tr></thead>
+            <thead><tr className="text-left text-slate-500 border-b"><th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Sector</th></tr></thead>
             <tbody>
               {empleados.map((e) => (
                 <tr key={e.employeeId} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
-                  <td className="py-2"><Link href={`/rrhh/empleados/${e.employeeId}`} className="text-gray-700 hover:underline" onClick={onClose}>{e.nombre}</Link></td>
-                  <td className="py-2 text-gray-500">{e.sector ?? "-"}</td>
+                  <td className="py-2"><Link href={`/rrhh/empleados/${e.employeeId}`} className="text-slate-700 hover:underline" onClick={onClose}>{e.nombre}</Link></td>
+                  <td className="py-2 text-slate-500">{e.sector ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -311,18 +311,18 @@ function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; deta
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-800">{titulo}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          <h3 className="font-medium text-slate-800">{titulo}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
         </div>
         {!detalle ? (
-          <p className="text-sm text-gray-500">Cargando...</p>
+          <p className="text-sm text-slate-500">Cargando...</p>
         ) : detalle.empleados.length === 0 ? (
-          <p className="text-sm text-gray-500">Sin datos en el período.</p>
+          <p className="text-sm text-slate-500">Sin datos en el período.</p>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Legajo</th><th className="pb-2">Nombre</th><th className="pb-2">Trabajadas</th>
                 <th className="pb-2">Teóricas</th><th className="pb-2">Extra 50%</th><th className="pb-2">Extra 100%</th><th className="pb-2">$ Extra</th>
               </tr>
@@ -331,9 +331,9 @@ function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; deta
               {detalle.empleados.map((e: any) => (
                 <tr key={e.employeeId} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
-                  <td className="py-2"><Link href={`/rrhh/empleados/${e.employeeId}`} className="text-gray-700 hover:underline" onClick={onClose}>{e.nombre}</Link></td>
+                  <td className="py-2"><Link href={`/rrhh/empleados/${e.employeeId}`} className="text-slate-700 hover:underline" onClick={onClose}>{e.nombre}</Link></td>
                   <td className="py-2">{e.horasTrabajadas}</td>
-                  <td className="py-2 text-gray-500">{e.horasTeoricas}</td>
+                  <td className="py-2 text-slate-500">{e.horasTeoricas}</td>
                   <td className="py-2">{e.horasExtra50 || "-"}</td>
                   <td className="py-2">{e.horasExtra100 || "-"}</td>
                   <td className="py-2">{e.montoExtra50 + e.montoExtra100 > 0 ? `$${(e.montoExtra50 + e.montoExtra100).toLocaleString("es-AR")}` : "-"}</td>

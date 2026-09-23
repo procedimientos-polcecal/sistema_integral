@@ -117,45 +117,45 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+      <h1 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
         Marcaciones
         <InfoTip text="Las entradas y salidas de cada empleado. Podés importarlas desde el archivo del reloj biométrico o cargarlas a mano. Con estas marcaciones el sistema calcula las horas trabajadas, extras y ausencias." />
       </h1>
 
       <div className="grid grid-cols-2 gap-6 mb-6">
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3 flex items-center gap-1.5">
+          <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
             Importar archivo del reloj
             <InfoTip text="Subí el Excel/CSV que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
           </h2>
           <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="text-sm mb-3" />
-          {importing && <p className="text-sm text-gray-500">Procesando...</p>}
+          {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
 
           {preview && (
             <div className="mt-3">
               {preview.sheetNames.length > 1 && (
                 <div className="mb-3">
-                  <label className="block text-xs text-gray-500 mb-1">Hoja del archivo</label>
+                  <label className="block text-xs text-slate-500 mb-1">Hoja del archivo</label>
                   <select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
                     {preview.sheetNames.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               )}
-              <p className="text-sm text-gray-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
+              <p className="text-sm text-slate-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
 
               <div className="mb-3">
-                <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
                   Formato de horarios
                   <InfoTip text="Depende de cómo viene tu archivo. 'Separadas': una columna para la hora de entrada y otra para la salida. 'Combinada': una sola columna con todo junto, ej. 'E 08:07 - S 15:56'." />
                 </label>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setMapping({ ...mapping, modo: "separado" })}
-                    className={`flex-1 py-1.5 rounded-md text-sm ${mapping.modo === "separado" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                    className={`flex-1 py-1.5 rounded-md text-sm ${mapping.modo === "separado" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
                     Entrada y salida en columnas separadas
                   </button>
                   <button type="button" onClick={() => setMapping({ ...mapping, modo: "combinado" })}
-                    className={`flex-1 py-1.5 rounded-md text-sm ${mapping.modo === "combinado" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>
+                    className={`flex-1 py-1.5 rounded-md text-sm ${mapping.modo === "combinado" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>
                     Una columna combinada (ej: &quot;E 08:07 - S 15:56&quot;)
                   </button>
                 </div>
@@ -163,14 +163,14 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
 
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Legajo</label>
+                  <label className="block text-xs text-slate-500 mb-1">Legajo</label>
                   <select value={mapping.legajo} onChange={(e) => setMapping({ ...mapping, legajo: e.target.value })} className="input">
                     <option value="">-</option>
                     {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Fecha</label>
+                  <label className="block text-xs text-slate-500 mb-1">Fecha</label>
                   <select value={mapping.fecha} onChange={(e) => setMapping({ ...mapping, fecha: e.target.value })} className="input">
                     <option value="">-</option>
                     {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -179,7 +179,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
 
                 {mapping.modo === "combinado" ? (
                   <div className="col-span-2">
-                    <label className="block text-xs text-gray-500 mb-1">Marcaciones (entrada y salida juntas)</label>
+                    <label className="block text-xs text-slate-500 mb-1">Marcaciones (entrada y salida juntas)</label>
                     <select value={mapping.marcaciones} onChange={(e) => setMapping({ ...mapping, marcaciones: e.target.value })} className="input">
                       <option value="">-</option>
                       {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -188,14 +188,14 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
                 ) : (
                   <>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Hora entrada</label>
+                      <label className="block text-xs text-slate-500 mb-1">Hora entrada</label>
                       <select value={mapping.horaEntrada} onChange={(e) => setMapping({ ...mapping, horaEntrada: e.target.value })} className="input">
                         <option value="">-</option>
                         {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Hora salida</label>
+                      <label className="block text-xs text-slate-500 mb-1">Hora salida</label>
                       <select value={mapping.horaSalida} onChange={(e) => setMapping({ ...mapping, horaSalida: e.target.value })} className="input">
                         <option value="">-</option>
                         {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -206,7 +206,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
               </div>
 
               {preview.sample[0] && mapping.modo === "combinado" && mapping.marcaciones && (
-                <p className="text-xs text-gray-400 mb-3">Ejemplo de la primera fila: &quot;{String(preview.sample[0][mapping.marcaciones])}&quot;</p>
+                <p className="text-xs text-slate-400 mb-3">Ejemplo de la primera fila: &quot;{String(preview.sample[0][mapping.marcaciones])}&quot;</p>
               )}
 
               <button
@@ -223,12 +223,12 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
             <div className="mt-4 text-sm">
               <p className="text-green-700">{importResult.insertados} fichadas importadas.</p>
               {importResult.reemplazados > 0 && (
-                <p className="text-gray-500">{importResult.reemplazados} fichadas de días ya cargados se actualizaron con los datos nuevos del archivo.</p>
+                <p className="text-slate-500">{importResult.reemplazados} fichadas de días ya cargados se actualizaron con los datos nuevos del archivo.</p>
               )}
               {importResult.errores.length > 0 && (
                 <details className="mt-2">
                   <summary className="text-red-600 cursor-pointer">{importResult.errores.length} filas con error</summary>
-                  <ul className="mt-1 text-gray-500 max-h-40 overflow-auto">
+                  <ul className="mt-1 text-slate-500 max-h-40 overflow-auto">
                     {importResult.errores.map((e, i) => <li key={i}>{e}</li>)}
                   </ul>
                 </details>
@@ -238,10 +238,10 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
         </div>
 
         <div className="card p-5">
-          <h2 className="font-medium text-gray-700 mb-3">Carga manual</h2>
+          <h2 className="font-medium text-slate-700 mb-3">Carga manual</h2>
           <form onSubmit={crearManual} className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Empleado</label>
+              <label className="block text-xs text-slate-500 mb-1">Empleado</label>
               <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
                 <option value="">Seleccionar...</option>
                 {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
@@ -249,15 +249,15 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Fecha</label>
+                <label className="block text-xs text-slate-500 mb-1">Fecha</label>
                 <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} className="input" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Entrada</label>
+                <label className="block text-xs text-slate-500 mb-1">Entrada</label>
                 <input type="time" required value={form.horaEntrada} onChange={(e) => setForm({ ...form, horaEntrada: e.target.value })} className="input" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Salida</label>
+                <label className="block text-xs text-slate-500 mb-1">Salida</label>
                 <input type="time" value={form.horaSalida} onChange={(e) => setForm({ ...form, horaSalida: e.target.value })} className="input" />
               </div>
             </div>
@@ -270,7 +270,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
 
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-medium text-gray-700">Últimas fichadas</h2>
+          <h2 className="font-medium text-slate-700">Últimas fichadas</h2>
           {/* Descarga, no pagina: ver el comentario en VehiculosClient. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/rrhh/fichadas/export" download className="text-sm text-blue-600 hover:underline">Exportar</a>
@@ -278,7 +278,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b">
+            <tr className="text-left text-slate-500 border-b">
               <th className="pb-2">Legajo</th>
               <th className="pb-2">Empleado</th>
               <th className="pb-2">Fecha</th>

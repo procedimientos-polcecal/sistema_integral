@@ -63,7 +63,7 @@ export default function FrancosClient() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Francos compensatorios
           <InfoTip text="Días de descanso que genera el sistema cuando un empleado trabaja un domingo o feriado. Podés marcarlos como tomados; los que no, se pagan en la liquidación." />
         </h1>
@@ -72,20 +72,20 @@ export default function FrancosClient() {
 
       <div className="mb-4 flex gap-2 items-end flex-wrap">
         {["", ...ESTADOS].map((e) => (
-          <button key={e} onClick={() => setEstado(e)} className={`px-3 py-1.5 rounded-md text-sm ${estado === e ? "bg-gray-900 text-white" : "bg-white text-gray-600"}`}>
+          <button key={e} onClick={() => setEstado(e)} className={`px-3 py-1.5 rounded-md text-sm ${estado === e ? "bg-slate-900 text-white" : "bg-white text-slate-600"}`}>
             {e || "Todos"}
           </button>
         ))}
         <div className="ml-4">
-          <label className="block text-xs text-gray-500 mb-1">Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className="block text-xs text-slate-500 mb-1">Desde</label>
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
         </div>
         {(desde || hasta) && (
-          <button onClick={() => { setDesde(""); setHasta(""); }} className="text-sm text-gray-500 hover:underline pb-1.5">
+          <button onClick={() => { setDesde(""); setHasta(""); }} className="text-sm text-slate-500 hover:underline pb-1.5">
             Quitar filtro de fecha
           </button>
         )}
@@ -93,12 +93,12 @@ export default function FrancosClient() {
 
       <div className="card p-5">
         {cargando || !francos ? (
-          <p className="text-gray-500 text-sm">Cargando...</p>
+          <p className="text-slate-500 text-sm">Cargando...</p>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Legajo</th>
                 <th className="pb-2">Empleado</th>
                 <th className="pb-2">Generado el</th>
@@ -109,7 +109,7 @@ export default function FrancosClient() {
             </thead>
             <tbody>
               {francos.length === 0 && (
-                <tr><td colSpan={6} className="py-3 text-center text-gray-400">No hay francos en el período elegido.</td></tr>
+                <tr><td colSpan={6} className="py-3 text-center text-slate-400">No hay francos en el período elegido.</td></tr>
               )}
               {francos.map((f) => (
                 <tr key={f.id} className="border-b last:border-0">
@@ -120,7 +120,7 @@ export default function FrancosClient() {
                   <td className="py-2">{f.estado}</td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {f.estado === "PENDIENTE" && (
-                      <button onClick={() => marcarTomado(f.id)} className="text-gray-700 underline text-sm">Marcar tomado</button>
+                      <button onClick={() => marcarTomado(f.id)} className="text-slate-700 underline text-sm">Marcar tomado</button>
                     )}
                     <button onClick={() => eliminar(f)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                   </td>

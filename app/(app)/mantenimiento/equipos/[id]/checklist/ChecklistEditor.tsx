@@ -86,13 +86,13 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Link href={`/mantenimiento/equipos/${equipo.id}`} className="text-sm text-gray-400 hover:text-gray-700">
+        <Link href={`/mantenimiento/equipos/${equipo.id}`} className="text-sm text-slate-400 hover:text-slate-700">
           ← {equipo.code} — {equipo.name}
         </Link>
       </div>
 
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900">Checklist</h1>
+        <h1 className="text-xl font-bold text-slate-900">Checklist</h1>
         {canEdit && (
           <button
             onClick={save}
@@ -106,7 +106,7 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
 
       {canEdit && (
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Nombre del checklist</label>
+          <label className="text-xs font-medium text-slate-600">Nombre del checklist</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -117,19 +117,19 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
 
       <div className="space-y-2">
         {items.length === 0 && (
-          <div className="py-8 text-center text-sm text-gray-400 border border-dashed border-gray-300 rounded-xl">
+          <div className="py-8 text-center text-sm text-slate-400 border border-dashed border-slate-300 rounded-xl">
             {canEdit ? "Agregá ítems al checklist." : "Sin ítems configurados."}
           </div>
         )}
         {items.map((item, idx) => (
-          <div key={item.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+          <div key={item.id} className="card p-4 space-y-3">
             <div className="flex items-start gap-2">
               {canEdit && (
                 <div className="flex flex-col gap-0.5 pt-1">
                   <button onClick={() => moveItem(idx, -1)} disabled={idx === 0}
-                    className="text-gray-300 hover:text-gray-600 disabled:opacity-20 text-xs leading-none">▲</button>
+                    className="text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs leading-none">▲</button>
                   <button onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1}
-                    className="text-gray-300 hover:text-gray-600 disabled:opacity-20 text-xs leading-none">▼</button>
+                    className="text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs leading-none">▼</button>
                 </div>
               )}
               <div className="flex-1 space-y-2">
@@ -141,32 +141,32 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
                     className="input"
                   />
                 ) : (
-                  <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                  <p className="text-sm font-medium text-slate-900">{item.label}</p>
                 )}
                 <div className="flex items-center gap-3 flex-wrap">
                   {canEdit ? (
                     <select
                       value={item.type}
                       onChange={(e) => updateItem(item.id, { type: e.target.value as ItemType })}
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:outline-none"
+                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none"
                     >
                       {Object.entries(TYPE_LABELS).map(([v, l]) => (
                         <option key={v} value={v}>{l}</option>
                       ))}
                     </select>
                   ) : (
-                    <span className="text-xs text-gray-500">{TYPE_LABELS[item.type]}</span>
+                    <span className="text-xs text-slate-500">{TYPE_LABELS[item.type]}</span>
                   )}
                   {item.type === "number" && canEdit && (
                     <input
                       value={item.unit ?? ""}
                       onChange={(e) => updateItem(item.id, { unit: e.target.value })}
                       placeholder="Unidad (ej: °C, rpm)"
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:outline-none w-32"
+                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none w-32"
                     />
                   )}
                   {canEdit && (
-                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={item.required}
@@ -184,7 +184,7 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
               {canEdit && (
                 <button
                   onClick={() => removeItem(item.id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors text-sm mt-1"
+                  className="text-slate-300 hover:text-red-500 transition-colors text-sm mt-1"
                 >
                   ✕
                 </button>
@@ -197,7 +197,7 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
       {canEdit && (
         <button
           onClick={addItem}
-          className="w-full rounded-xl border border-dashed border-gray-300 py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+          className="w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
         >
           + Agregar ítem
         </button>

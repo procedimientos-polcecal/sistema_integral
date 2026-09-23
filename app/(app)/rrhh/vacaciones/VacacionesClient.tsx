@@ -19,14 +19,14 @@ export default function VacacionesClient({ empleados }: { empleados: any[] }) {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+      <h1 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
         Vacaciones
         <InfoTip text="El balance de días de vacaciones de cada empleado según su antigüedad, y los períodos que ya se tomó." />
       </h1>
       <div className="flex gap-2 mb-6">
         {(["balance", "historial"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-100"}`}>
+            className={`px-4 py-2 rounded-md text-sm ${tab === t ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
             {t === "balance" ? "Balance por empleado" : "Historial"}
           </button>
         ))}
@@ -70,15 +70,15 @@ function Balance({ empleados }: { empleados: any[] }) {
     <div>
       <div className="flex gap-4 items-end mb-6 card p-4">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Empleado</label>
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm min-w-[220px]">
+          <label className="block text-xs text-slate-500 mb-1">Empleado</label>
+          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[220px]">
             <option value="">Seleccionar...</option>
             {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Año</label>
-          <input type="number" value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-24" />
+          <label className="block text-xs text-slate-500 mb-1">Año</label>
+          <input type="number" value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-24" />
         </div>
       </div>
 
@@ -86,33 +86,33 @@ function Balance({ empleados }: { empleados: any[] }) {
         <>
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="card p-5">
-              <div className="text-sm text-gray-500">Días correspondientes</div>
+              <div className="text-sm text-slate-500">Días correspondientes</div>
               <div className="text-3xl font-semibold mt-1">{balance.correspondientes}</div>
             </div>
             <div className="card p-5">
-              <div className="text-sm text-gray-500">Días tomados</div>
+              <div className="text-sm text-slate-500">Días tomados</div>
               <div className="text-3xl font-semibold mt-1">{balance.tomados}</div>
             </div>
             <div className="card p-5">
-              <div className="text-sm text-gray-500">Días restantes</div>
+              <div className="text-sm text-slate-500">Días restantes</div>
               <div className="text-3xl font-semibold text-blue-600 mt-1">{balance.restantes}</div>
             </div>
           </div>
 
           <div className="card p-5 mb-6">
-            <h2 className="font-medium text-gray-700 mb-3">Cargar período tomado</h2>
+            <h2 className="font-medium text-slate-700 mb-3">Cargar período tomado</h2>
             <form onSubmit={guardar} className="flex gap-3 items-end">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Desde</label>
-                <input type="date" required value={form.fechaDesde} onChange={(e) => setForm({ ...form, fechaDesde: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                <input type="date" required value={form.fechaDesde} onChange={(e) => setForm({ ...form, fechaDesde: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-                <input type="date" required value={form.fechaHasta} onChange={(e) => setForm({ ...form, fechaHasta: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+                <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                <input type="date" required value={form.fechaHasta} onChange={(e) => setForm({ ...form, fechaHasta: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Días</label>
-                <input type="number" required value={form.diasTomados} onChange={(e) => setForm({ ...form, diasTomados: e.target.value })} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-20" />
+                <label className="block text-xs text-slate-500 mb-1">Días</label>
+                <input type="number" required value={form.diasTomados} onChange={(e) => setForm({ ...form, diasTomados: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-20" />
               </div>
               <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
                 {guardando ? "Guardando..." : "Guardar"}
@@ -122,13 +122,13 @@ function Balance({ empleados }: { empleados: any[] }) {
 
           <div className="card p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-medium text-gray-700">Períodos tomados en {anio}</h2>
+              <h2 className="font-medium text-slate-700">Períodos tomados en {anio}</h2>
               <a href={`/api/rrhh/vacaciones/export?employeeId=${employeeId}`} className="text-sm text-blue-600 hover:underline">Exportar</a>
             </div>
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500 border-b">
+                <tr className="text-left text-slate-500 border-b">
                   <th className="pb-2">Desde</th>
                   <th className="pb-2">Hasta</th>
                   <th className="pb-2">Días</th>
@@ -160,14 +160,14 @@ function Historial() {
 
   return (
     <div className="card p-5">
-      <h2 className="font-medium text-gray-700 mb-3">Historial de vacaciones (todo el personal)</h2>
+      <h2 className="font-medium text-slate-700 mb-3">Historial de vacaciones (todo el personal)</h2>
       {!historial ? (
-        <p className="text-gray-500 text-sm">Cargando...</p>
+        <p className="text-slate-500 text-sm">Cargando...</p>
       ) : (
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500 border-b">
+            <tr className="text-left text-slate-500 border-b">
               <th className="pb-2">Legajo</th>
               <th className="pb-2">Empleado</th>
               <th className="pb-2">Año</th>
@@ -188,7 +188,7 @@ function Historial() {
               </tr>
             ))}
             {historial.length === 0 && (
-              <tr><td colSpan={6} className="py-4 text-center text-gray-400">Todavía no hay períodos de vacaciones cargados</td></tr>
+              <tr><td colSpan={6} className="py-4 text-center text-slate-400">Todavía no hay períodos de vacaciones cargados</td></tr>
             )}
           </tbody>
         </table>
