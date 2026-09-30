@@ -7,6 +7,7 @@ import {
   resumenAnualPorTipo,
   toneladasPorMaterialYDestino,
   detalleDiarioPorDestino,
+  normalizarDestino,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -176,7 +177,43 @@ describe("resumenAnualPorTipo", () => {
   });
 });
 
+describe("normalizarDestino", () => {
+  it("PT 1 y P T 1 son la misma planta — el espacio de más no cuenta", () => {
+    expect(normalizarDestino("PT 1")).toBe("PT 1");
+    expect(normalizarDestino("P T 1")).toBe("PT 1");
+    expect(normalizarDestino("pt 1")).toBe("PT 1");
+    expect(normalizarDestino("PT1")).toBe("PT 1");
+  });
+
+  it("lo mismo para PT 3 / P T 3", () => {
+    expect(normalizarDestino("P T 3")).toBe("PT 3");
+    expect(normalizarDestino("PT 3")).toBe("PT 3");
+  });
+
+  it("un destino que no es una planta se deja tal cual, sólo recortando espacios repetidos", () => {
+    expect(normalizarDestino("RESERVA A")).toBe("RESERVA A");
+    expect(normalizarDestino("GALPON  1")).toBe("GALPON 1");
+  });
+
+  it("null o vacío cae en \"(sin destino)\"", () => {
+    expect(normalizarDestino(null)).toBe("(sin destino)");
+    expect(normalizarDestino("   ")).toBe("(sin destino)");
+  });
+});
+
 describe("toneladasPorMaterialYDestino", () => {
+  it("PT 1 y P T 1 se juntan en una sola columna, no dos", () => {
+    const r = toneladasPorMaterialYDestino(
+      [
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 100 },
+        { tipo: "dolomita_d1", mes: "2026-08-01", destino: "P T 1", cantidad: 50 },
+      ],
+      "2026-08"
+    );
+    expect(r.destinos).toEqual(["PT 1"]);
+    expect(r.totalesPorDestino["PT 1"]).toBe(150);
+  });
+
   it("un material sin ningún movimiento este mes no aparece — no una fila de puros ceros", () => {
     const r = toneladasPorMaterialYDestino(
       [{ tipo: "dolomita_d1", mes: "2026-08-01", destino: "PT 1", cantidad: 100 }],
@@ -225,6 +262,18 @@ describe("toneladasPorMaterialYDestino", () => {
 });
 
 describe("detalleDiarioPorDestino", () => {
+  it("PT 1 y P T 1 se juntan en una sola columna, no dos", () => {
+    const r = detalleDiarioPorDestino(
+      [
+        { fecha: "2026-08-01", tipo: "dolomita_d1", destino: "PT 1", cantidad: 100 },
+        { fecha: "2026-08-01", tipo: "dolomita_d1", destino: "P T 1", cantidad: 50 },
+      ],
+      "2026-08"
+    );
+    expect(r.destinos).toEqual(["PT 1"]);
+    expect(r.filas[0].porDestino["PT 1"]).toBe(150);
+  });
+
   it("un renglón por fecha y tipo, cruzado por destino", () => {
     const r = detalleDiarioPorDestino(
       [

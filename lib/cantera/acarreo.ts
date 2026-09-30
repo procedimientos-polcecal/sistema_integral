@@ -264,13 +264,36 @@ export function resumenAnualPorTipo(
     .sort((a, b) => b.totalAnual - a.totalAnual);
 }
 
+/**
+ * Colapsa las variantes de texto libre de una planta de trituración a una
+ * sola forma canónica, antes de agrupar destinos en las tablas de acarreo.
+ * "PT 1" y "P T 1" son la misma planta tipeada con un espacio de más en el
+ * medio —4957 pesadas reales contra 463, medido— y lo mismo pasa con "PT 3"
+ * / "P T 3": sin esto, las dos quedaban como columnas separadas. Mismo
+ * problema que ya resolvió `plantaDelDestino` para el cruce con Trituración
+ * (`lib/trituracion/cruceCantera.ts`), pero acá no alcanza con reducir a un
+ * número: el resto de los destinos (RESERVA A, GALPÓN, un código de
+ * yacimiento) tienen que seguir siendo su propia columna, así que sólo se
+ * canonicaliza el patrón "P T <n>" y se recortan espacios repetidos en
+ * general — no se inventa una normalización más agresiva sin haberla visto
+ * en datos reales.
+ */
+const PATRON_PLANTA_CON_ESPACIOS = /^P\s*T\s*(\d)$/i;
+
+export function normalizarDestino(destinoRaw: string | null | undefined): string {
+  const colapsado = (destinoRaw ?? "").trim().replace(/\s+/g, " ");
+  if (!colapsado) return "(sin destino)";
+  const m = colapsado.match(PATRON_PLANTA_CON_ESPACIOS);
+  return m ? `PT ${m[1]}` : colapsado;
+}
+
 function construirPorDestino(
   entradas: { tipo: string; destino: string | null; cantidad: number }[]
 ): { destinos: string[]; porTipoDestino: Map<string, number> } {
   const porTipoDestino = new Map<string, number>();
   const totalesPorDestino = new Map<string, number>();
   for (const e of entradas) {
-    const destino = e.destino?.trim() || "(sin destino)";
+    const destino = normalizarDestino(e.destino);
     porTipoDestino.set(`${e.tipo}|${destino}`, (porTipoDestino.get(`${e.tipo}|${destino}`) ?? 0) + e.cantidad);
     totalesPorDestino.set(destino, (totalesPorDestino.get(destino) ?? 0) + e.cantidad);
   }
@@ -350,7 +373,7 @@ export function detalleDiarioPorDestino(
   const porFechaTipoDestino = new Map<string, number>();
   const fechasYTipos = new Map<string, { fecha: string; tipo: string }>();
   for (const e of delMes) {
-    const destino = e.destino?.trim() || "(sin destino)";
+    const destino = normalizarDestino(e.destino);
     const claveFT = `${e.fecha}|${e.tipo}`;
     fechasYTipos.set(claveFT, { fecha: e.fecha, tipo: e.tipo });
     const clave = `${claveFT}|${destino}`;
