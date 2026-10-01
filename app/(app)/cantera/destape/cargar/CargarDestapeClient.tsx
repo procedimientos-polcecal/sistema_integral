@@ -13,6 +13,19 @@ import type { EmpleadoLiviano } from "@/lib/cantera/consultas";
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm";
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
+/** El mes anterior/siguiente a "YYYY-MM", sin líos de zona horaria. */
+function moverMes(mes: string, delta: number): string {
+  const [anio, m] = mes.split("-").map(Number);
+  const d = new Date(Date.UTC(anio, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+const NOMBRE_MES = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric", timeZone: "UTC" });
+function nombreDeMes(mes: string): string {
+  const texto = NOMBRE_MES.format(new Date(`${mes}-01T00:00:00Z`));
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 interface EquipoLiviano { id: string; code: string; name: string }
 
 function formVacio() {
@@ -38,17 +51,19 @@ function formVacio() {
 }
 
 export default function CargarDestapeClient({
-  yacimientos, fleteros, operarios, equipos, recientes, pendientesAcarreo,
+  mes, yacimientos, fleteros, operarios, equipos, registrosDelMes, pendientesAcarreo,
 }: {
+  mes: string;
   yacimientos: Yacimiento[];
   fleteros: Fletero[];
   operarios: EmpleadoLiviano[];
   equipos: EquipoLiviano[];
-  recientes: DestapeDB[];
+  registrosDelMes: DestapeDB[];
   /** Horas de Acarreo ("horas_destape") sin yacimiento asignado todavía — el pool del que se elige en vez de cargar el fletero a mano. */
   pendientesAcarreo: AcarreoDeDestape[];
 }) {
   const router = useRouter();
+  const irA = (m: string) => router.push(`/cantera/destape/cargar?mes=${m}`);
   const [form, setForm] = useState(formVacio());
   // true mientras se edita un registro de fletero_externo que ya existía sin
   // `acarreo_id` (de antes del 01/10/2026) — ese caso sigue pidiendo el
@@ -343,12 +358,19 @@ export default function CargarDestapeClient({
         </div>
       </div>
 
-      <h2 className="mt-6 text-sm font-semibold text-slate-700">Últimos 7 días</h2>
-      {recientes.length === 0 ? (
-        <p className="mt-1 text-sm text-slate-400">Sin registros recientes.</p>
+      <div className="mt-6 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">Registros del mes</h2>
+        <div className="flex items-center gap-2">
+          <button onClick={() => irA(moverMes(mes, -1))} className="text-xs text-slate-500 hover:underline">← mes anterior</button>
+          <span className="text-xs font-medium text-slate-600">{nombreDeMes(mes)}</span>
+          <button onClick={() => irA(moverMes(mes, 1))} className="text-xs text-slate-500 hover:underline">mes siguiente →</button>
+        </div>
+      </div>
+      {registrosDelMes.length === 0 ? (
+        <p className="mt-1 text-sm text-slate-400">Sin registros este mes.</p>
       ) : (
         <ul className="mt-2 space-y-1">
-          {[...recientes].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((r) => (
+          {[...registrosDelMes].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((r) => (
             <li key={r.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${form.id === r.id ? "border-slate-400 bg-slate-50" : "border-slate-100"}`}>
               <span>
                 <span className="font-medium">{r.fecha}</span> — {r.yacimiento_codigo ?? "sin yacimiento"} — {r.recurso_raw} ({r.equipo_o_vehiculo_raw}) — {num.format(r.horas)} h
