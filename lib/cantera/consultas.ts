@@ -308,6 +308,10 @@ export interface FiltrosDeAcarreo {
   mes?: string;
   /** "YYYY": trae ese año calendario completo. Se ignora si también viene `mes`. */
   anio?: string;
+  /** "YYYY-MM-DD", por `fecha` y no por `mes` — para una ventana que no calza con un mes calendario (el selector de "horas sin clasificar" de Destape). */
+  desde?: string;
+  /** "YYYY-MM-DD" */
+  hasta?: string;
 }
 
 /** Una fila por fletero+tipo+día (`unique(fletero_id, tipo, fecha)` desde el 21/09/2026) — puede haber varias del mismo fletero+tipo en un mes, una por día cargado. */
@@ -331,6 +335,8 @@ export async function traerAcarreos(
     } else if (filtros.anio) {
       q = q.gte("mes", `${filtros.anio}-01-01`).lte("mes", `${filtros.anio}-12-31`);
     }
+    if (filtros.desde) q = q.gte("fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
     return q.order("fecha", { ascending: false }).order("tipo").range(desde, hasta);
   });
 }
@@ -506,12 +512,27 @@ export async function traerDestape(supabase: SupabaseClient, filtros: FiltrosDeD
   return traerTodo<DestapeDB>((desde, hasta) => {
     let q = supabase
       .from("cantera_destape")
-      .select("id, fecha, yacimiento_codigo, frente, tipo_recurso, operario_id, fletero_id, recurso_raw, equipo_id, equipo_o_vehiculo_raw, tipo_camion, horas, viajes, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en");
+      .select("id, fecha, yacimiento_codigo, frente, tipo_recurso, operario_id, fletero_id, recurso_raw, equipo_id, equipo_o_vehiculo_raw, tipo_camion, horas, viajes, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en, acarreo_id");
     if (filtros.desde) q = q.gte("fecha", filtros.desde);
     if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
     if (filtros.yacimientoCodigo) q = q.eq("yacimiento_codigo", filtros.yacimientoCodigo);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
+}
+
+/**
+ * Los `acarreo_id` que ya tiene asignado algún registro de Destape — para no
+ * volver a ofrecer esas horas en el selector de "horas de Acarreo sin
+ * clasificar" (`horasDeAcarreoSinClasificar`, `lib/cantera/destape.ts`). Sin
+ * filtro de fecha a propósito: un registro viejo de Destape podría apuntar a
+ * una fila de Acarreo que cae fuera de la ventana que se está mirando, y si
+ * no se la excluye igual vuelve a aparecer como si no estuviera clasificada.
+ */
+export async function traerAcarreoIdsClasificadosEnDestape(supabase: SupabaseClient): Promise<Set<string>> {
+  const filas = await traerTodo<{ acarreo_id: string }>((desde, hasta) =>
+    supabase.from("cantera_destape").select("acarreo_id").not("acarreo_id", "is", null).range(desde, hasta)
+  );
+  return new Set(filas.map((f) => f.acarreo_id));
 }
 
 export interface EmpleadoLiviano {

@@ -211,6 +211,8 @@ export interface DestapeDB {
   cargado_en: string;
   actualizado_por: string | null;
   actualizado_en: string | null;
+  /** La fila de `cantera_acarreos` (tipo "horas_destape") de la que salieron el fletero y las horas. Null en operario_propio y en lo cargado antes del 01/10/2026. */
+  acarreo_id: string | null;
 }
 
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */

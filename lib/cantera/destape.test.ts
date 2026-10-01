@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   costoDeRegistro,
+  horasDeAcarreoSinClasificar,
   resolverFleteroDestape,
   resolverOperarioDestape,
   resumenPorYacimiento,
@@ -203,5 +204,33 @@ describe("resumenPorYacimiento", () => {
 
     const sinYacimiento = r.find((f) => f.yacimientoCodigo === "(sin yacimiento)")!;
     expect(sinYacimiento.horasFletero).toBe(8);
+  });
+});
+
+describe("horasDeAcarreoSinClasificar", () => {
+  const ACARREOS = [
+    { id: "ac-1", fleteroId: "orsatti", fecha: "2026-08-15", cantidad: 8 },
+    { id: "ac-2", fleteroId: "amaray", fecha: "2026-08-16", cantidad: 6 },
+    { id: "ac-3", fleteroId: "schneider", fecha: "2026-08-16", cantidad: 4 },
+  ];
+
+  it("deja afuera las que ya tienen un registro de Destape", () => {
+    const r = horasDeAcarreoSinClasificar(ACARREOS, new Set(["ac-1"]));
+    expect(r.map((f) => f.acarreoId)).toEqual(["ac-2", "ac-3"]);
+  });
+
+  it("sin ninguna clasificada todavía, aparecen todas", () => {
+    const r = horasDeAcarreoSinClasificar(ACARREOS, new Set());
+    expect(r).toHaveLength(3);
+  });
+
+  it("ignora una fila de Acarreo sin fletero (no debería pasar, pero no se cae)", () => {
+    const r = horasDeAcarreoSinClasificar([...ACARREOS, { id: "ac-4", fleteroId: null, fecha: "2026-08-17", cantidad: 3 }], new Set());
+    expect(r.find((f) => f.acarreoId === "ac-4")).toBeUndefined();
+  });
+
+  it("ordena de fecha más nueva a más vieja, y por fletero dentro del mismo día", () => {
+    const r = horasDeAcarreoSinClasificar(ACARREOS, new Set());
+    expect(r.map((f) => f.acarreoId)).toEqual(["ac-2", "ac-3", "ac-1"]);
   });
 });
