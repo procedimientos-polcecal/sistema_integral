@@ -22,6 +22,12 @@ const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
 const n = (v: string) => (v.trim() === "" ? null : Number(v));
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
+/** Un color por tipo de consumo, para que la lista de insumos no sea un bloque gris — detonador en ámbar (material peligroso), otros insumos en celeste. */
+const ESTILO_TIPO_CONSUMO: Record<"detonador" | "otros_insumos", { texto: string; punto: string; zebra: string }> = {
+  detonador: { texto: "text-amber-700", punto: "bg-amber-500", zebra: "#FFFBEB" },
+  otros_insumos: { texto: "text-cyan-700", punto: "bg-cyan-500", zebra: "#ECFEFF" },
+};
+
 /** Fuera del componente: definido adentro, cada tecleo desmonta el input y se pierde el foco. */
 function Campo({
   label,
@@ -519,24 +525,32 @@ export default function VoladuraClient({
         {(["detonador", "otros_insumos"] as const).map((tipo) => {
           const delTipo = insumos.filter((ins) => ins.tipo === tipo);
           if (delTipo.length === 0) return null;
+          const estilo = ESTILO_TIPO_CONSUMO[tipo];
           return (
             <div key={tipo} className="mt-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{ETIQUETA_TIPO_CONSUMO[tipo]}</p>
-              <div className="mt-1 space-y-1.5">
-                {delTipo.map((ins) => {
+              <p className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${estilo.texto}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${estilo.punto}`} />
+                {ETIQUETA_TIPO_CONSUMO[tipo]}
+              </p>
+              <div className="mt-1 overflow-hidden rounded-lg border border-slate-100">
+                {delTipo.map((ins, i) => {
                   const fila = filasCatalogo[ins.id] ?? { cantidad: "", precio_usd: "" };
                   return (
-                    <div key={ins.id} className="grid grid-cols-12 items-center gap-2">
+                    <div
+                      key={ins.id}
+                      className="grid grid-cols-12 items-center gap-2 px-2 py-1.5"
+                      style={{ backgroundColor: i % 2 === 1 ? estilo.zebra : undefined }}
+                    >
                       <span className="col-span-7 text-sm text-slate-700">{ins.nombre}</span>
                       <input
-                        className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        className="col-span-2 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
                         disabled={dis}
                         placeholder="cant."
                         value={fila.cantidad}
                         onChange={(e) => actualizarFilaCatalogo(ins.id, { cantidad: e.target.value })}
                       />
                       <input
-                        className="col-span-3 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                        className="col-span-3 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
                         disabled={dis}
                         placeholder="USD"
                         value={fila.precio_usd}
@@ -552,7 +566,10 @@ export default function VoladuraClient({
 
         {/* ── Otros, fuera del catálogo ── */}
         <div className="mt-4 border-t border-slate-100 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Otros, fuera del catálogo</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-purple-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+            Otros, fuera del catálogo
+          </p>
           <div className="mt-2 space-y-2">
             {renglonesOtros.map((r, i) => (
               <div key={i} className="grid grid-cols-12 items-center gap-2">
