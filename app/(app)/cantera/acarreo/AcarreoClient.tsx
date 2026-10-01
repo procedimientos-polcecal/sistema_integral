@@ -13,6 +13,8 @@ import {
   type DetalleDiarioPorDestino,
 } from "@/lib/cantera/acarreo";
 import type { Fletero } from "@/lib/cantera/types";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import ActualizarAcarreo from "./ActualizarAcarreo";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -50,6 +52,7 @@ export default function AcarreoClient({
   sinFleteroResuelto,
   matrizMaterialDestino,
   detalleDiario,
+  sync,
 }: {
   mes: string;
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
@@ -62,6 +65,8 @@ export default function AcarreoClient({
   sinFleteroResuelto: number;
   matrizMaterialDestino: MatrizPorDestino;
   detalleDiario: DetalleDiarioPorDestino;
+  /** Cuándo se trajo "Datos" de la planilla de balanza por última vez. */
+  sync: UltimaSync | null;
 }) {
   const router = useRouter();
 
@@ -75,7 +80,8 @@ export default function AcarreoClient({
       <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-header">Acarreo</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ActualizarAcarreo sync={sync} />
           {esAdmin && (
             <>
               <Link href="/cantera/fleteros" className="btn-secondary">Fleteros</Link>

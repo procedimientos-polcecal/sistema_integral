@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import {
   resumenPorFletero,
@@ -45,11 +46,12 @@ export default async function AcarreoPage({
   const mesActual = new Date().toISOString().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
 
-  const [fleteros, tarifas, acarreosDelMes, pesadasDelMes] = await Promise.all([
+  const [fleteros, tarifas, acarreosDelMes, pesadasDelMes, sync] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { mes }),
     traerPesadas(supabase, { mes }),
+    ultimaSincronizacionDe(supabase, "cantera", "acarreo"),
   ]);
 
   const acarreosPlanos: AcarreoPlano[] = [
@@ -104,6 +106,7 @@ export default async function AcarreoPage({
       sinFleteroResuelto={sinFleteroResuelto}
       matrizMaterialDestino={matrizMaterialDestino}
       detalleDiario={detalleDiario}
+      sync={sync}
     />
   );
 }

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerValores } from "@/lib/core/sheets";
+import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { FLETEROS_CONOCIDOS, pesadaDeFilaCruda, patentesParaMostrar } from "./pesadas";
 import { TIPOS_DE_ACARREO } from "./acarreo";
 
@@ -57,9 +58,33 @@ export interface ResultadoImportacionAcarreo {
 
 /**
  * `escribir: false` sólo lee y cuenta —lo que usa el script a mano para
- * ensayar—; `true` además escribe. El cron siempre llama con `true`.
+ * ensayar—; `true` además escribe. El cron y el botón "Actualizar" de
+ * `/cantera/acarreo` siempre llaman con `true`.
+ *
+ * Registra la corrida en `sincronizaciones` (modulo "cantera", recurso
+ * "acarreo") sólo cuando `escribir` es `true` — un ensayo de lectura no es
+ * una actualización real y no tiene que mover el cartel de "Actualizado
+ * hace…". Se registra también si falla: una fecha vieja sin explicación no
+ * dice si la sincronización nunca corrió o si viene fallando.
  */
 export async function sincronizarAcarreoDesdeSheets(escribir: boolean): Promise<ResultadoImportacionAcarreo> {
+  try {
+    const resultado = await importar(escribir);
+    if (escribir) {
+      await registrarSincronizacion({ modulo: "cantera", recurso: "acarreo", ok: true, filas: resultado.pesadasInsertadas });
+    }
+    return resultado;
+  } catch (e) {
+    if (escribir) {
+      await registrarSincronizacion({
+        modulo: "cantera", recurso: "acarreo", ok: false, error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    throw e;
+  }
+}
+
+async function importar(escribir: boolean): Promise<ResultadoImportacionAcarreo> {
   const libro = LIBRO();
   if (!libro) throw new Error("Falta GOOGLE_SHEETS_ACARREO_ID");
 
