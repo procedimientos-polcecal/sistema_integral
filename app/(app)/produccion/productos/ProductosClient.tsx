@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { RenglonDePapel, Familia } from "@/lib/produccion/types";
 import type { Producto } from "@/lib/core/types";
 import { clasificacionDelProducto, textoDeClasificacion } from "@/lib/core/productos";
+import Select from "@/components/Select";
 
 const FAMILIAS: { valor: Familia; label: string }[] = [
   { valor: "filler", label: "Filler" },
@@ -261,7 +262,7 @@ function ModalRenglon({
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Familia</span>
-          <select
+          <Select
             value={familia}
             onChange={(e) => setFamilia(e.target.value as Familia)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -269,7 +270,7 @@ function ModalRenglon({
             {FAMILIAS.map((f) => (
               <option key={f.valor} value={f.valor}>{f.label}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Columna en la planilla</span>

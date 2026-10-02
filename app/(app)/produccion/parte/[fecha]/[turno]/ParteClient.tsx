@@ -8,6 +8,7 @@ import { comoSeLeeElTurno } from "@/lib/produccion/turnos";
 import type { Turno, RenglonDePapel, Familia, Parte, Despacho } from "@/lib/produccion/types";
 import { produccionDelTurno } from "@/lib/produccion/produccion";
 import { totalesDeDespacho, roturaTotal, desajustesDeKilos } from "@/lib/produccion/despachos";
+import Select from "@/components/Select";
 import {
   interpretarCantidadDeDeposito,
   interpretarCantidadOpcional,
@@ -432,7 +433,7 @@ export default function ParteClient({
           </label>
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Reconocido como</span>
-            <select
+            <Select
               value={capatazId}
               onChange={(e) => setCapatazId(e.target.value)}
               disabled={!puedeEditar}
@@ -444,7 +445,7 @@ export default function ParteClient({
                   {[e.apellido, e.nombre].filter(Boolean).join(", ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       </section>
@@ -757,7 +758,7 @@ function RenglonDespacho({
         {campo("Producto (como está escrito)", renglon.producto_raw, (v) => onCambiar({ producto_raw: v }))}
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Reconocido como</span>
-          <select
+          <Select
             value={renglon.renglon_papel_id}
             disabled={!puedeEditar}
             onChange={(e) => {
@@ -780,7 +781,7 @@ function RenglonDespacho({
                 {p.nombre}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
 
