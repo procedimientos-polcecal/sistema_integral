@@ -79,7 +79,12 @@ septiembre— no existe en el catálogo. Eso ya tiene parada la recepción de
 Despacho.
 
 La deuda **queda a la vista** en la columna *"En el núcleo"* de
-`/calidad/carbonilleros`, que dice `falta` en nueve de trece. El stock funciona
+`/calidad/carbonilleros`. Decía `falta` en nueve de trece; el 02/10/2026 se
+cargaron cinco CUIT leídos del `vat` del propio partner de Odoo y el enganche
+quedó hecho en nueve de trece (ver [DESPACHO.md](DESPACHO.md)). Los cuatro que
+siguen sueltos son **Sosa** —cuyo CUIT no está en ningún lado, tampoco en
+Odoo—, el registro viejo de Membranex (partner 2139) y **El Invencible,
+Santucho y Corralón Rojas**, que no existen en el catálogo del núcleo. El stock funciona
 igual; lo que no funciona sin ese enganche es cruzar ese carbón con Compras y con
 Facturación.
 
@@ -264,8 +269,14 @@ Dos cosas más que la importación dejó anotadas:
   `Listado articulos GRAL`, para que el espejo pueda escribir un ajuste.
 - **Los 21 camiones del 04 al 15/09 que no están en Odoo.** El stock ya los tiene
   desde la planilla, pero **sin orden de compra no se les puede facturar**.
-- **Los CUIT de nueve carbonilleros.** Bruzzone, Puricelli, Sosa y Fillia son los
-  que más traen.
+- **El CUIT de Sosa**, el único de los grandes que sigue sin enganche: 55 líneas
+  y 997 toneladas en el año. No se puede leer de Odoo porque el `Sosa Pablo`
+  (partner 1120) tiene el `vat` vacío. Los de Bruzzone, Puricelli, Fillia y
+  Moyano se cargaron el 02/10/2026.
+- **Declarar a Carbonella SRL como carbonillero.** Ya tiene CUIT y vínculo con
+  Odoo, así que su recepción cierra; lo que falta es el tipo de carbón, que es
+  lo único que no se deduce. Lo mismo para **La Invencible**, que trajo camiones
+  en septiembre y no está ni en el núcleo ni acá.
 
 ## Riesgos asumidos
 

@@ -201,21 +201,54 @@ no se movió y el picking que no validó pueden pasar juntos, y devolver sólo e
 
 El detalle está en [CALIDAD.md](CALIDAD.md).
 
-### Lo que falta de una persona
+### Lo que faltaba de una persona, y cómo se resolvió (02/10/2026)
 
-**Los CUIT de seis proveedores.** De los 10 con rubro `CARBONILLA`, sólo cuatro
-están vinculados a Odoo (`proveedores_odoo`), y el vínculo va **por CUIT**. Los
-que faltan son los que más traen: **Bruzzone (176 órdenes), Puricelli (105),
-Sosa (54) y Fillia (44)** — el 66% de los camiones. Sin vínculo, su recepción no
-se puede cerrar.
+Faltaban dos datos por carbonillero y los dos se sacaron de Odoo en vez de
+pedirlos, porque Odoo ya los tenía. **Quedan dos pendientes de verdad**, abajo.
 
-**El producto y el nombre de planilla de cada uno**, en
-`/despacho/recepciones/proveedores`. Ojo con el producto: en Odoo hay dos que se
-ven idénticos, `CARBONILLA` y `CARBONILLA ` con un espacio al final, y el de
-toneladas está archivado — las últimas 15 órdenes usan el id **6909**.
+**Los CUIT.** Eran seis sin CUIT y por lo tanto sin fila en `proveedores_odoo`,
+que es por donde `pushRecepcion` resuelve el partner. Cinco se leyeron del `vat`
+del `res.partner` que `calidad_carbonilleros` ya declaraba, con el dígito
+verificador validado y la identificación apoyada en las compras del año, no en el
+parecido del nombre: Bruzzone 179 líneas, Puricelli 109, Fillia 45, Moyano 2 —
+**todas de carbonilla y de ningún otro producto**. Eso es lo que distingue al
+`MOYANO SERGIO GUSTAVO` (954) del `MOYANO MIRYAM ADRIANA` (953), que también le
+vende a Polcecal y no trae carbonilla.
 
-**Cargar `GOOGLE_SHEETS_CARBONILLA_ID`.** Sin eso la recepción se cierra igual
-—la orden se crea— pero queda con `sheets_pendiente` y la planilla no se entera.
+| | |
+|---|---|
+| Bruzzone | `20-25886314-4` → partner 906 |
+| Puricelli | `30-54385692-0` → partner 984 |
+| Fillia | `20-11357350-4` → partner 1083 |
+| Moyano | `20-21574269-6` → partner 954 |
+| Carbonella SRL | `30-70824431-3` → partner 2625 |
+
+**El producto y el nombre de planilla**, en `despacho_recepcion_proveedores`.
+También medidos: el producto que usan **las órdenes más nuevas de cada uno**.
+`4419 CARBONILLA ` (con el espacio al final) dejó de usarse el 23/07/2026 y desde
+entonces va `6909 CARBONILLA`; Membranex va por `7111 CARBON RESIDUAL`, su
+producto desde el 18/08 y el único que coincide con el `residual` que Calidad le
+declara. **Ojo que esto corrige lo que decía la migración `20260911085244`**, que
+anotó `Carbonilla de coque` para Membranex: era cierto hasta el 23/04/2026.
+
+El `nombre_planilla` salió del texto que más usa el libro en sus renglones
+recientes. Uno sorprende y es el que la pantalla habría errado: **Rodríguez se
+escribe `El Tigre`** —8 renglones, el último del 30/09— y no `Rodriguez`, que no
+se usa desde enero.
+
+**Lo que sigue faltando, y necesita una persona:**
+
+- **El CUIT de Sosa.** No está en ninguna parte: el `Sosa Pablo` de Odoo
+  (partner 1120) tiene el `vat` vacío. Y no es menor — son **55 líneas y 997
+  toneladas** en el año, el tercero. Sin eso su recepción no cierra.
+- **Declarar a Carbonella como carbonillero** en `/calidad/carbonilleros`. Su
+  recepción ya cierra, pero no entra al stock: falta decir si su carbón es
+  vegetal o residual, que es lo único que no se deduce de ningún lado.
+
+**Verificar `GOOGLE_SHEETS_CARBONILLA_ID` en Vercel.** Está en `.env.local`; en
+Vercel no se puede comprobar leyéndola —las variables del proyecto son
+*sensitive* y `vercel env pull` las devuelve vacías—. Sin ella la recepción se
+cierra igual —la orden se crea— pero queda con `sheets_pendiente`.
 
 ## Cómo está armado
 
@@ -246,7 +279,7 @@ toneladas está archivado — las últimas 15 órdenes usan el id **6909**.
 | Comparar planilla contra base | `scripts/comparar-despacho.mts` |
 | Diagnóstico de punta a punta | `scripts/probar-despacho.mts` |
 | Migraciones (las cuatro **corridas**) | `20260908104728_despacho_enum_del_modulo.sql`, `20260908104729_despacho_schema.sql`, `20260909090003_despacho_la_planilla_es_una_pestana_por_mes.sql`, `20260909095546_despacho_la_planilla_no_dice_de_que_empresa_es.sql` |
-| Migración del catálogo único (**pendiente de correr**) | `20260910104534_productos_el_catalogo_unico_del_nucleo.sql` |
+| Migración del catálogo único (**corrida**) | `20260910104534_productos_el_catalogo_unico_del_nucleo.sql` |
 
 ## Lo que se relevó de la planilla (09/09/2026)
 
