@@ -255,7 +255,7 @@ describe("lo que ya esta pedido", () => {
     expect(r.paraPedir).toEqual([]);
     expect(r.yaPedidos).toHaveLength(1);
     expect(r.yaPedidos[0].ri.nro_ri).toBe(2015);
-    expect(r.yaPedidos[0].cuantos).toBe(1);
+    expect(r.yaPedidos[0].cuantosAbiertos).toBe(1);
     expect(r.yaPedidos[0].diasDelRi).toBe(10);
   });
 
@@ -296,7 +296,7 @@ describe("lo que ya esta pedido", () => {
       HOY
     );
     expect(r.yaPedidos[0].ri.nro_ri).toBe(1956);
-    expect(r.yaPedidos[0].cuantos).toBe(3);
+    expect(r.yaPedidos[0].cuantosAbiertos).toBe(3);
   });
 
   it("un RI de otro codigo no lo afecta", () => {
@@ -470,7 +470,7 @@ export interface ConPedido extends Candidato {
   /** El RI abierto más nuevo. */
   ri: RequerimientoConCodigo;
   /** Cuántos abiertos tiene ese código. Más de uno ya pasa: el 00666 tiene tres. */
-  cuantos: number;
+  cuantosAbiertos: number;
   /** Hace cuántos días se pidió. */
   diasDelRi: number;
 }
@@ -575,7 +575,7 @@ export function clasificarParaReponer(
     yaPedidos.push({
       ...base,
       ri,
-      cuantos: pedidos.length,
+      cuantosAbiertos: pedidos.length,
       diasDelRi: (ri.fecha ? diasEntre(ri.fecha, hoy) : null) ?? 0,
     });
   }
@@ -800,7 +800,7 @@ export default function ReponerClient({
                   </Link>
                   {" · "}
                   {c.diasDelRi === 0 ? "hoy" : `hace ${c.diasDelRi} días`}
-                  {c.cuantos > 1 && ` · ${c.cuantos} pedidos abiertos`}
+                  {c.cuantosAbiertos > 1 && ` · ${c.cuantosAbiertos} pedidos abiertos`}
                   {" "}
                   <span className={`rounded px-1.5 py-0.5 ${COMPRA_LABELS[c.ri.estado_compra as keyof typeof COMPRA_LABELS]?.color ?? "bg-gray-100 text-gray-600"}`}>
                     {COMPRA_LABELS[c.ri.estado_compra as keyof typeof COMPRA_LABELS]?.label ?? "Sin iniciar"}
@@ -881,7 +881,7 @@ for (const c of r.paraPedir.slice(0, 8))
   console.log(`  ${c.articulo.codigo}  ${String(c.salidas).padStart(2)} salidas  ultima hace ${String(c.diasDesdeLaUltima).padStart(3)}d  | ${String(c.articulo.descripcion).slice(0, 38)}`);
 console.log("\nlos ya pedidos:");
 for (const c of r.yaPedidos)
-  console.log(`  ${c.articulo.codigo}  RI ${c.ri.nro_ri} hace ${c.diasDelRi}d (${c.ri.estado_compra})${c.cuantos > 1 ? ` [${c.cuantos} abiertos]` : ""}`);
+  console.log(`  ${c.articulo.codigo}  RI ${c.ri.nro_ri} hace ${c.diasDelRi}d (${c.ri.estado_compra})${c.cuantosAbiertos > 1 ? ` [${c.cuantosAbiertos} abiertos]` : ""}`);
 ```
 
 Correrlo con `npx tsx <ruta>` **desde la raíz del repo**, para que `tsx` resuelva el alias `@/`.
