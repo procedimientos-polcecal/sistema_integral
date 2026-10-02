@@ -9,6 +9,7 @@ import {
   separarCodigoYNombre,
 } from "@/lib/core/productos";
 import type { FilaDeCatalogo, FueraDelCatalogo } from "./page";
+import Select from "@/components/Select";
 
 /**
  * Clasificar el catálogo de productos.
@@ -193,7 +194,7 @@ export default function ProductosClient({
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="text-xs font-medium text-slate-700">Material</span>
-              <select
+              <Select
                 value={material}
                 onChange={(e) => setMaterial(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -202,11 +203,11 @@ export default function ProductosClient({
                 {MATERIALES.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="block">
               <span className="text-xs font-medium text-slate-700">Granulometría</span>
-              <select
+              <Select
                 value={granulometria}
                 onChange={(e) => setGranulometria(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -215,11 +216,11 @@ export default function ProductosClient({
                 {GRANULOMETRIAS.map((g) => (
                   <option key={g} value={g}>{g}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="block">
               <span className="text-xs font-medium text-slate-700">Envase</span>
-              <select
+              <Select
                 value={envase}
                 onChange={(e) => setEnvase(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -228,7 +229,7 @@ export default function ProductosClient({
                 {ENVASES.map((x) => (
                   <option key={x} value={x}>{x}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 

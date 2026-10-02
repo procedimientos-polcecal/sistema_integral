@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { RemitoDeOdoo } from "@/lib/despacho/types";
+import Select from "@/components/Select";
 
 /**
  * Dar de alta una orden de carga, con el camión en la puerta.
@@ -270,7 +271,7 @@ export default function NuevaOrden({
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">Empresa</label>
-            <select
+            <Select
               value={empresaId}
               onChange={(e) => setEmpresaId(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -281,7 +282,7 @@ export default function NuevaOrden({
                   {e.nombre}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">Cliente</label>

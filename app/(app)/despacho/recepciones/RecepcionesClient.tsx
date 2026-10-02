@@ -12,6 +12,7 @@ import {
   proximoPaso,
 } from "@/lib/despacho/recepcion";
 import type { FilaDeRecepcion, ProveedorParaElAlta } from "./page";
+import Select from "@/components/Select";
 
 /**
  * La balanza.
@@ -325,7 +326,7 @@ function Alta({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Proveedor</span>
-          <select
+          <Select
             value={proveedorId}
             onChange={(e) => setProveedorId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -337,11 +338,11 @@ function Alta({
                 {p.producto ? "" : " (sin producto configurado)"}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Empresa</span>
-          <select
+          <Select
             value={empresaId}
             onChange={(e) => setEmpresaId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -349,11 +350,11 @@ function Alta({
             {empresas.map((e) => (
               <option key={e.id} value={e.id}>{e.nombre}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Dónde descarga</span>
-          <select
+          <Select
             value={lugar}
             onChange={(e) => setLugar(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -362,7 +363,7 @@ function Alta({
             {LUGARES_DE_DESCARGA.map((l) => (
               <option key={l} value={l}>{l}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Peso bruto (kg)</span>

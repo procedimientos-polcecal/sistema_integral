@@ -12,6 +12,7 @@ import {
 } from "@/lib/despacho/filtrosUrl";
 import type { FiltrosDeHistorico } from "@/lib/despacho/filtrosUrl";
 import type { DatosDelHistorico } from "./page";
+import Select from "@/components/Select";
 
 /**
  * El histórico y los indicadores.
@@ -94,7 +95,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Material</span>
-          <select
+          <Select
             value={f.material}
             onChange={(e) => aplicar({ ...f, material: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -103,11 +104,11 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
             {MATERIALES.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Envase</span>
-          <select
+          <Select
             value={f.envase}
             onChange={(e) => aplicar({ ...f, envase: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -116,11 +117,11 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
             {ENVASES.map((x) => (
               <option key={x} value={x}>{x}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Empresa</span>
-          <select
+          <Select
             value={f.empresa}
             onChange={(e) => aplicar({ ...f, empresa: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -129,7 +130,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
             {datos.empresas.map((e) => (
               <option key={e.id} value={e.nombre}>{e.nombre}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Desde</span>

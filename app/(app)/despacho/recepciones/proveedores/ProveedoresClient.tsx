@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProveedorDeRecepcion } from "@/lib/despacho/types";
+import Select from "@/components/Select";
 
 interface ProveedorBase {
   id: string;
@@ -139,7 +140,7 @@ export default function ProveedoresDeRecepcionClient({
                   <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="text-xs font-medium text-slate-700">Producto de Odoo</span>
-                      <select
+                      <Select
                         value={productoId}
                         onChange={(e) => setProductoId(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -148,7 +149,7 @@ export default function ProveedoresDeRecepcionClient({
                         {productos.map((x) => (
                           <option key={x.id} value={x.id}>{x.nombre}</option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     <label className="block">
                       <span className="text-xs font-medium text-slate-700">
