@@ -155,8 +155,36 @@ describe("lo que ya esta pedido", () => {
     expect(r.paraPedir).toEqual([]);
     expect(r.yaPedidos).toHaveLength(1);
     expect(r.yaPedidos[0].ri.nro_ri).toBe(2015);
-    expect(r.yaPedidos[0].cuantos).toBe(1);
+    expect(r.yaPedidos[0].cuantosAbiertos).toBe(1);
     expect(r.yaPedidos[0].diasDelRi).toBe(10);
+  });
+
+  /**
+   * Como llega de PostgREST: `fecha` es timestamptz, no date. El `slice(0,10)`
+   * es lo que hace andar la produccion y ningun test lo tocaba.
+   */
+  it("una fecha en forma de timestamp se lee igual", () => {
+    const r = clasificarParaReponer(
+      [art()],
+      [salida("00018", "2026-09-20")],
+      [ri({ fecha: "2026-09-22T00:00:00+00:00" })],
+      HOY
+    );
+    expect(r.yaPedidos[0].diasDelRi).toBe(10);
+  });
+
+  /**
+   * Un RI cargado a las 21:30 de Argentina cae en el dia UTC siguiente. Sin el
+   * clamp la pantalla diria "hace -1 dias".
+   */
+  it("un pedido cargado de noche no da una antiguedad negativa", () => {
+    const r = clasificarParaReponer(
+      [art()],
+      [salida("00018", "2026-09-20")],
+      [ri({ fecha: "2026-10-03T00:30:00+00:00" })],
+      HOY
+    );
+    expect(r.yaPedidos[0].diasDelRi).toBe(0);
   });
 
   it("si su unico RI esta recibido vuelve a paraPedir", () => {
@@ -196,7 +224,7 @@ describe("lo que ya esta pedido", () => {
       HOY
     );
     expect(r.yaPedidos[0].ri.nro_ri).toBe(1956);
-    expect(r.yaPedidos[0].cuantos).toBe(3);
+    expect(r.yaPedidos[0].cuantosAbiertos).toBe(3);
   });
 
   it("un RI de otro codigo no lo afecta", () => {

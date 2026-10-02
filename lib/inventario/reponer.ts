@@ -6,17 +6,23 @@
  * RI abierto. Quedan 497 "pendientes" que nadie cargó en años, así que esa
  * lista es una referencia y no una bandeja.
  *
- * Lo que la vuelve accionable no es el stock sino **el consumo**: 402 de esos
- * 497 no se movieron en seis meses. Con el corte de acá abajo quedan 92, que se
- * parten en 75 para pedir y 17 que ya tienen pedido — una lista que alguien
- * puede terminar.
+ * Lo que la vuelve accionable no es el stock sino **el consumo**: con una
+ * ventana de seis meses, 402 de esos 497 no se movieron. El corte de acá abajo
+ * es más corto (90 días) y deja 92 artículos, que no salen todos de los 497: son
+ * 75 de los que no tenían pedido, para pedir, más 17 de los 24 que ya tenían un
+ * RI abierto — una lista que alguien puede terminar.
  *
  * Esto vive aparte de la pantalla porque es la parte que decide. Un corte mal
  * puesto hace que se pida de más o que no se vea lo que se acabó, y ninguna de
  * las dos cosas se nota mirando la pantalla.
  */
 
-/** La ventana de consumo, en días. */
+/**
+ * La ventana de consumo, en días. Medido el 02/10/2026 sobre los 497 faltantes
+ * sin pedido: con 30 días quedan 28, con 90 quedan 75 y con 180 quedan 95. Se
+ * eligió un trimestre porque un repuesto que se usa cada dos meses tiene que
+ * entrar. Es un corte y no un hecho: si resulta corto o largo, se mueve acá.
+ */
 export const DIAS_DE_CONSUMO = 90;
 
 /**
@@ -71,7 +77,7 @@ export interface ConPedido extends Candidato {
   /** El RI abierto más nuevo. */
   ri: RequerimientoConCodigo;
   /** Cuántos abiertos tiene ese código. Más de uno ya pasa: el 00666 tiene tres. */
-  cuantos: number;
+  cuantosAbiertos: number;
   /** Hace cuántos días se pidió. */
   diasDelRi: number;
 }
@@ -176,8 +182,21 @@ export function clasificarParaReponer(
     yaPedidos.push({
       ...base,
       ri,
-      cuantos: pedidos.length,
-      diasDelRi: (ri.fecha ? diasEntre(ri.fecha, hoy) : null) ?? 0,
+      cuantosAbiertos: pedidos.length,
+      // `Math.max(0, …)` cubre dos cosas, y la segunda es la que importa.
+      //
+      // `compras_requerimientos.fecha` es `timestamptz`, no `date`. Los RI que
+      // vienen de la planilla guardan el día como medianoche UTC, así que su día
+      // UTC es el correcto; pero el alta del SdG toma el `now()` por defecto, y
+      // uno cargado a las 21:30 de Argentina cae en el día UTC siguiente y daría
+      // -1. Dura hasta la próxima sincronización, que le reescribe la fecha con
+      // el día de la planilla — o sea justo la ventana en la que este grupo
+      // existe para que nadie vuelva a pedir lo que se acaba de pedir.
+      //
+      // Y una fecha ausente o ilegible: hoy no se da —la columna es `not null` y
+      // el 02/10/2026 hay 0 RI con código sin fecha— pero si llegara saldría
+      // "hoy", que es la lectura más optimista y no inventa una antigüedad.
+      diasDelRi: Math.max(0, (ri.fecha ? diasEntre(ri.fecha, hoy) : null) ?? 0),
     });
   }
 
