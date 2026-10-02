@@ -86,6 +86,9 @@ export default async function ConfiguracionPage() {
 
   return (
     <ConfiguracionClient
+      // Mandar la cola entera a Odoo son 177 órdenes en la contabilidad real:
+      // es de admin, con el mismo criterio que confirmar una factura allá.
+      esAdmin={permisos.nivel === "admin"}
       cuentaDeServicio={cuentaDeServicio() ?? null}
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}

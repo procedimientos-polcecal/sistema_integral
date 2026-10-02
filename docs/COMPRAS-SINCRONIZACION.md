@@ -279,6 +279,57 @@ Las salidas posibles, que son una decisión y no un detalle técnico:
    orden en cero parece real y no lo es, pero es defendible: igual ahorra tipear
    el proveedor y los ítems.
 
+### Y el botón para los que quedaron de antes
+
+Arreglado el disparador, quedó el pasado: el arreglo mira transiciones, así que
+no toca a los que ya estaban en PEDIDO. Medido el 02/10/2026 son **119
+requerimientos** con proveedor, costo y empresa, y sin orden.
+
+Vive en **Configuración de Compras**, al lado de los pendientes de la planilla,
+porque las dos son colas de cosas que el sistema no pudo terminar y que alguien
+tiene que destrabar. La regla está en `lib/compras/pendientesDeOdoo.ts`.
+
+**No son 119 órdenes: son 177.** Cincuenta y ocho los pagan las dos empresas y
+ésos generan una orden en cada contabilidad. Suman **$103.890.769**. Ese número
+—órdenes, no pedidos— es el que muestra la pantalla y el que dice el botón,
+porque es el que va a aparecer en Odoo.
+
+Lo que hay antes del botón no es decoración:
+
+- **El resumen en órdenes, pedidos y plata**, más desde y hasta qué fecha van.
+- **Un corte por fecha.** No es un filtro de conveniencia: la orden se crea con
+  `date_order` de **hoy** (`fechaParaOdoo(contexto.ahora)` en
+  `ordenDeCompra.ts`), así que mandar un pedido de septiembre de 2025 le pone
+  fecha de hoy en Odoo. Quien manda decide desde cuándo.
+- **Una muestra de cuáles**, para ver *qué* se manda y no sólo cuántos.
+- **Es de admin de Compras.** El botón de una ficha crea una orden; éste crea
+  ciento setenta y siete. Mismo criterio con el que confirmar una factura en
+  Odoo quedó para admins.
+
+**Va de a tandas de cinco**, y no por rendimiento: son varios segundos por orden
+contra Odoo Online y un pedido AMBAS son dos órdenes, así que en una sola
+llamada no entra en ningún límite de función. La pantalla pide tanda tras tanda
+y muestra el avance. Se puede parar en el medio y lo hecho queda hecho, porque
+`empujarOrdenesDeRequerimiento` vincula cada orden apenas la crea — por eso
+apretar dos veces tampoco duplica nada: la cola se recalcula en cada tanda y los
+que ya tienen vínculo salen solos.
+
+**Se mandan del más nuevo al más viejo.** Si quien manda corta a la mitad, lo
+que quedó hecho es lo que más sirve: el pedido reciente cuya factura todavía no
+llegó. Uno de hace un año ya se facturó a mano.
+
+**Y la cola corta cuando una tanda no crea ninguna**, no cuando llega a cero.
+Los que fallan siguen en la cola porque no tienen vínculo, así que mirar sólo
+"cuántas quedan" pediría tandas para siempre sobre los mismos cinco. Cada uno
+que falla queda con su motivo en `odoo_pendiente`, visible en la ficha y con el
+botón para reintentar.
+
+### Los 1.559 en RECIBIDO quedan afuera
+
+Son 2.146 órdenes y **$911 millones**. Es otra decisión y de otro tamaño: ahí la
+mercadería ya llegó y, si la factura se cargó a mano, la orden no le ahorra
+trabajo a nadie.
+
 ## El equipo que solicita
 
 Desde el 15/09/2026 el formulario de Google pregunta **EQUIPO QUE SOLICITA**, con

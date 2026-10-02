@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fechaHora } from "@/lib/compras/constants";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
+import PendientesDeOdoo from "./PendientesDeOdoo";
 import type { Sincronizacion } from "@/lib/compras/types";
 
 /** Lo que devuelve la importación de proveedores. */
@@ -18,8 +19,10 @@ interface Importacion {
 }
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio
+  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio, esAdmin
 }: {
+  /** Admin de Compras: es quien puede mandar la cola entera a Odoo. */
+  esAdmin: boolean;
   sincronizaciones: Sincronizacion[];
   /** Con qué cuenta de Google escribe el sistema en la planilla. */
   cuentaDeServicio: string | null;
@@ -186,6 +189,12 @@ export default function ConfiguracionClient({
       </section>
 
       {pendientes.length > 0 && <PanelPendientes pendientes={pendientes} />}
+
+      {/*
+        Va acá, al lado de los pendientes de la planilla: las dos son colas de
+        cosas que el sistema no pudo terminar y que alguien tiene que destrabar.
+      */}
+      <PendientesDeOdoo esAdmin={esAdmin} />
 
       <VincularComparativas />
 
