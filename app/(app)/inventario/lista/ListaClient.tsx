@@ -8,6 +8,7 @@ import {
   leerFiltrosDeLista, escribirFiltrosDeLista,
 } from "@/lib/inventario/filtrosUrl";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import Select from "@/components/Select";
 
 interface Solicitante {
   id: string;
@@ -146,7 +147,7 @@ export default function ListaClient({
                 <td className="px-4 py-2">{s.nombre}</td>
                 <td className="px-4 py-2">
                   {puedeEditar ? (
-                    <select
+                    <Select
                       value={s.destino_id ?? ""}
                       disabled={ocupado}
                       onChange={(e) => editar("solicitante", s.id, { destino_id: e.target.value })}
@@ -156,7 +157,7 @@ export default function ListaClient({
                       {destinos.filter((d) => d.activo).map((d) => (
                         <option key={d.id} value={d.id}>{d.nombre}</option>
                       ))}
-                    </select>
+                    </Select>
                   ) : (
                     nombreDeDestino(s.destino_id) ?? "—"
                   )}
@@ -202,7 +203,7 @@ export default function ListaClient({
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <select
+            <Select
               value={nuevoDestino}
               onChange={(e) => setNuevoDestino(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -211,7 +212,7 @@ export default function ListaClient({
               {destinos.filter((d) => d.activo).map((d) => (
                 <option key={d.id} value={d.id}>{d.nombre}</option>
               ))}
-            </select>
+            </Select>
             <button
               disabled={ocupado || !nuevoNombre.trim()}
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -252,7 +253,7 @@ export default function ListaClient({
                 <td className="px-4 py-2 font-medium">{d.nombre}</td>
                 <td className="px-4 py-2">
                   {puedeEditar ? (
-                    <select
+                    <Select
                       value={d.sector_id ?? ""}
                       disabled={ocupado}
                       onChange={(e) => editar("destino", d.id, { sector_id: e.target.value })}
@@ -260,7 +261,7 @@ export default function ListaClient({
                     >
                       <option value="">— no es un sector</option>
                       {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                    </select>
+                    </Select>
                   ) : (
                     nombreDeSector(d.sector_id) ?? "—"
                   )}

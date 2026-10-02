@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } from "@/lib/inventario/movimiento";
 import TraerDeLaPlanilla from "../../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import Select from "@/components/Select";
 
 interface Articulo {
   id: string;
@@ -289,7 +290,7 @@ export default function NuevoMovimientoClient({
               {tipo === "ajuste" ? "Quién lo contó" : "Quién lo pidió"}
               {tipo !== "ajuste" && <span className="text-red-500"> *</span>}
             </span>
-            <select
+            <Select
               value={solicitanteId}
               onChange={(e) => setSolicitanteId(e.target.value)}
               required={tipo !== "ajuste"}
@@ -297,7 +298,7 @@ export default function NuevoMovimientoClient({
             >
               <option value="">—</option>
               {solicitantes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
+            </Select>
             <span className="mt-1 block text-xs text-slate-400">
               Es la lista del pañol, la misma que la planilla.{" "}
               <Link href="/inventario/lista" className="underline hover:text-slate-600">
@@ -312,7 +313,7 @@ export default function NuevoMovimientoClient({
               sabe quien está parado ahí. */}
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Para qué sector</span>
-            <select
+            <Select
               value={destinoElegido}
               onChange={(e) => setDestinoElegido(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
@@ -321,7 +322,7 @@ export default function NuevoMovimientoClient({
                 {solicitante ? "Según quién lo pidió" : "Según quién lo pidió — elegilo arriba"}
               </option>
               {destinos.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-            </select>
+            </Select>
             {!destinoElegido && solicitante && (
               <span className="mt-1 block text-xs text-slate-500">
                 {destino
@@ -346,7 +347,7 @@ export default function NuevoMovimientoClient({
               gris que no se sabe si está cargando o no aplica. */}
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Para qué equipo</span>
-            <select
+            <Select
               value={equipoId}
               onChange={(e) => setEquipoElegido(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
@@ -355,7 +356,7 @@ export default function NuevoMovimientoClient({
               {equiposDelDestino.map((e) => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
-            </select>
+            </Select>
             {!destinoId ? (
               <span className="mt-1 block text-xs text-slate-400">
                 Elegí primero para qué sector: los equipos son los de ese sector.
@@ -371,14 +372,14 @@ export default function NuevoMovimientoClient({
             <>
               <label className="block">
                 <span className="text-xs font-medium text-slate-600">Proveedor</span>
-                <select
+                <Select
                   value={proveedorId}
                   onChange={(e) => setProveedorId(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
                 >
                   <option value="">—</option>
                   {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                </Select>
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-slate-600">N° de requerimiento</span>

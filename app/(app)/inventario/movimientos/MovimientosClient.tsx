@@ -10,6 +10,7 @@ import {
 } from "@/lib/inventario/filtrosUrl";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import Desplegable from "@/components/Select";
 
 interface Movimiento {
   id: string;
@@ -286,6 +287,15 @@ export default function MovimientosClient({
   );
 }
 
+/**
+ * El filtro de esta pantalla: el desplegable compartido más el "cualquier cosa"
+ * de arriba y la clase, que se repetían en los tres.
+ *
+ * Se queda con su propia forma —`opciones` y un `onChange` que recibe el valor
+ * pelado— porque en estos tres usos se lee mejor que los `<option>` sueltos.
+ * Lo que cambió es el de adentro: era un `<select>` nativo, y el de sectores
+ * crece con la tabla.
+ */
 function Select({
   value, onChange, vacio, opciones,
 }: {
@@ -295,13 +305,13 @@ function Select({
   opciones: [string, string][];
 }) {
   return (
-    <select
+    <Desplegable
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
     >
       <option value="">{vacio}</option>
       {opciones.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-    </select>
+    </Desplegable>
   );
 }
