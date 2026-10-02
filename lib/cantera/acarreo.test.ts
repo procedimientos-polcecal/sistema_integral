@@ -9,6 +9,7 @@ import {
   detalleDiarioPorDestino,
   normalizarDestino,
   multiplicadorDeHoras,
+  variantePorOrigen,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -339,5 +340,46 @@ describe("multiplicadorDeHoras", () => {
   it("el resto cobra la tarifa tal cual", () => {
     expect(multiplicadorDeHoras("Amaray")).toBe(1);
     expect(multiplicadorDeHoras("Dumerauf 1")).toBe(1);
+  });
+});
+
+describe("variantePorOrigen — materiales con origen que se ve aparte", () => {
+  it("la caliza de origen L NEGRA es un renglón propio", () => {
+    expect(variantePorOrigen("caliza", "L NEGRA")?.sufijo).toBe("de Loma Negra");
+    expect(variantePorOrigen("caliza", "LNEGRA")?.sufijo).toBe("de Loma Negra");
+  });
+  it("la dolomita de PT 2 también, D1 y D6", () => {
+    expect(variantePorOrigen("dolomita_d1", "PT 2")?.sufijo).toBe("de PT 2");
+    expect(variantePorOrigen("dolomita_d6", "P T 2")?.sufijo).toBe("de PT 2");
+  });
+  it("cualquier otro origen deja el renglón de siempre", () => {
+    expect(variantePorOrigen("caliza", "C3")).toBeNull();
+    expect(variantePorOrigen("dolomita_d1", "D1")).toBeNull();
+    expect(variantePorOrigen("finos_caliza", "L NEGRA")).toBeNull();
+  });
+});
+
+describe("matrices material × destino con origen aparte", () => {
+  const entradas = [
+    { tipo: "caliza", origen: "C3", mes: "2026-08-01", destino: "PT 1", cantidad: 100 },
+    { tipo: "caliza", origen: "L NEGRA", mes: "2026-08-02", destino: "PT 1", cantidad: 30 },
+    { tipo: "dolomita_d1", origen: "D1", mes: "2026-08-03", destino: "PT 1", cantidad: 200 },
+    { tipo: "dolomita_d1", origen: "PT 2", mes: "2026-08-03", destino: "PT 3", cantidad: 50 },
+  ];
+
+  it("la caliza de Loma Negra y la dolomita de PT 2 salen en su propia fila, pegadas a su material", () => {
+    const r = toneladasPorMaterialYDestino(entradas, "2026-08");
+    expect(r.filas.map((f) => f.etiqueta)).toEqual([
+      "Dolomita D1", "Dolomita D1 de PT 2", "Caliza", "Caliza de Loma Negra",
+    ]);
+    expect(r.filas.find((f) => f.etiqueta === "Caliza")!.porDestino["PT 1"]).toBe(100);
+    expect(r.filas.find((f) => f.etiqueta === "Caliza de Loma Negra")!.porDestino["PT 1"]).toBe(30);
+    expect(r.totalesPorDestino["PT 1"]).toBe(330);
+  });
+
+  it("el detalle diario también las separa", () => {
+    const r = detalleDiarioPorDestino(entradas.map((e) => ({ ...e, fecha: e.mes })), "2026-08");
+    expect(r.filas.map((f) => f.etiqueta)).toContain("Caliza de Loma Negra");
+    expect(r.filas.map((f) => f.etiqueta)).toContain("Dolomita D1 de PT 2");
   });
 });

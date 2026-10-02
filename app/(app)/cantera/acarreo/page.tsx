@@ -86,11 +86,11 @@ export default async function AcarreoPage({
   // `toneladasPorMaterialYDestino`).
   const pesadasConTipo = pesadasDelMes.filter((p): p is typeof p & { tipo: string } => p.tipo !== null);
   const matrizMaterialDestino = toneladasPorMaterialYDestino(
-    pesadasConTipo.map((p) => ({ tipo: p.tipo, mes: p.fecha, destino: p.destino, cantidad: p.toneladas })),
+    pesadasConTipo.map((p) => ({ tipo: p.tipo, origen: p.origen, mes: p.fecha, destino: p.destino, cantidad: p.toneladas })),
     mes
   );
   const detalleDiario = detalleDiarioPorDestino(
-    pesadasConTipo.map((p) => ({ fecha: p.fecha, tipo: p.tipo, destino: p.destino, cantidad: p.toneladas })),
+    pesadasConTipo.map((p) => ({ fecha: p.fecha, tipo: p.tipo, origen: p.origen, destino: p.destino, cantidad: p.toneladas })),
     mes
   );
 
