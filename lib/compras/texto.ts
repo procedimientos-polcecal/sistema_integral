@@ -1,14 +1,11 @@
 /**
- * Normalización de textos que vienen de la planilla.
+ * Textos de Compras.
  *
- * Los encabezados y los valores llegan con acentos, grados, puntos y espacios
- * de más según quién los escribió. Comparar sin normalizar es la fuente más
- * común de "esa columna no existe" cuando existe.
+ * `norm` se mudó a `lib/core/texto.ts` cuando la necesitó el buscador de los
+ * desplegables, que no es de este módulo. Se reexporta desde acá para que los
+ * imports que ya existían sigan funcionando.
  */
-export const norm = (s: unknown) =>
-  String(s ?? "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .trim().toUpperCase().replace(/[°º.]/g, "").replace(/\s+/g, " ");
+export { norm } from "@/lib/core/texto";
 
 /**
  * Un motivo de la planilla, recortado para que entre en un cartel.

@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { norm } from "@/lib/compras/texto";
+import { CON_BUSCADOR_DESDE, coincide } from "./desplegables";
 
 /** Cada opción: el valor que viaja al filtro y cómo se lee en pantalla. */
 export type OpcionMulti = [valor: string, etiqueta: string];
-
-/** Desde cuántas opciones un desplegable deja de recorrerse con la vista. */
-const CON_BUSCADOR_DESDE = 10;
 
 /** Lo que mide la ventanita: 16rem. Hace falta saberlo para ver si entra. */
 const ANCHO_PANEL = 256;
@@ -52,14 +49,13 @@ export default function MultiSelect({
 
   const tildados = useMemo(() => new Set(valores), [valores]);
 
-  // La misma normalización que el resto del módulo: sin acentos ni mayúsculas,
-  // así que "olavarria" encuentra "Bolsas Olavarría".
+  // El mismo comparador que el desplegable de un valor: sin acentos, sin
+  // mayúsculas y con las palabras en cualquier orden, así que "olav bolsas"
+  // encuentra "Bolsas Olavarría".
   const coincidencias = useMemo(() => {
-    const q = norm(texto);
-    if (!q) return opciones;
     // Lo que ya está tildado no se esconde al escribir: si no, destildarlo
     // exige borrar la búsqueda primero, y no se ve cuántos quedan puestos.
-    return opciones.filter(([v, label]) => tildados.has(v) || norm(label).includes(q));
+    return opciones.filter(([v, label]) => tildados.has(v) || coincide(label, texto));
   }, [opciones, texto, tildados]);
 
   // Tocar fuera cierra. Los cambios ya se aplicaron —cada tilde filtra al
