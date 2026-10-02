@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
+import Select from "@/components/Select";
 
 type Rol = "admin_sistema" | "encargado" | "operario";
 type Nivel = "lectura" | "edicion" | "admin";
@@ -250,11 +251,11 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Rol</label>
-            <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
+            <Select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
               {(Object.keys(ROL_LABEL) as Rol[]).map((r) => (
                 <option key={r} value={r}>{ROL_LABEL[r]}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <p className="text-xs text-slate-500">
             Se le va a mandar un email a esa dirección para que defina su propia contraseña.
@@ -360,11 +361,11 @@ function EditarUsuarioModal({
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Rol</label>
-            <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
+            <Select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} className="input">
               {(Object.keys(ROL_LABEL) as Rol[]).map((r) => (
                 <option key={r} value={r}>{ROL_LABEL[r]}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
@@ -391,7 +392,7 @@ function EditarUsuarioModal({
               {MODULOS.map((m) => (
                 <div key={m} className="flex items-center justify-between gap-2">
                   <span className="text-sm text-slate-600">{MODULO_LABEL[m]}</span>
-                  <select
+                  <Select
                     value={grants[m]}
                     onChange={(e) => setGrants({ ...grants, [m]: e.target.value as Nivel | "" })}
                     className="input w-40"
@@ -400,7 +401,7 @@ function EditarUsuarioModal({
                     {(Object.keys(NIVEL_LABEL) as Nivel[]).map((n) => (
                       <option key={n} value={n}>{NIVEL_LABEL[n]}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ))}
             </div>

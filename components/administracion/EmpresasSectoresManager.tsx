@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { useConfirm } from "@/components/ConfirmProvider";
+import Select from "@/components/Select";
 import {
   agruparSectores, loMantieneLaImportacion, type SectorAdmin,
 } from "@/lib/core/sectores";
@@ -251,7 +252,7 @@ export default function EmpresasSectoresManager() {
             onChange={(e) => setNuevoNombre(e.target.value)}
             className="min-w-40 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
           />
-          <select
+          <Select
             value={nuevoDonde}
             onChange={(e) => setNuevoDonde(e.target.value)}
             className="rounded-md border border-slate-300 px-2 py-1 text-sm"
@@ -260,7 +261,7 @@ export default function EmpresasSectoresManager() {
             {empresas.map((e) => (
               <option key={e.id} value={e.id}>Sólo {e.nombre}</option>
             ))}
-          </select>
+          </Select>
           <button type="submit" className="btn-ghost">Agregar</button>
         </form>
       </section>
