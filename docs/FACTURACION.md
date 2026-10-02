@@ -364,6 +364,100 @@ importe cargado a mano que le gane al QR cuando el sistema detectó la
 discrepancia, y que quede anotado—. Es un cambio a la regla "el QR manda", así
 que no se hizo sin preguntar.
 
+## La bandeja del correo: lo que llegó por mail y falta cargar
+
+El lector llegó al 98% y el buzón tenía **una sola factura cargada en tres
+semanas**. El cuello no era el lector: las facturas llegan por mail y alguien
+tenía que bajar el PDF y arrastrarlo. Mientras ese paso dependiera de una
+persona, el 98% no valía nada.
+
+Ahora un Apps Script en la casilla de facturas va llenando una bandeja, y el
+buzón la muestra arriba de todo: *"Hay 3 adjuntos esperando"*, con un botón que
+baja el archivo y lo mete en la misma cola que si lo hubieran arrastrado.
+
+### El lector sigue corriendo en el navegador, y es a propósito
+
+Esto **no lee el QR**. El archivo se lee en la máquina de quien carga —así los
+datos aparecen en pantalla antes de subir nada y se corrigen ahí mismo—, que es
+la decisión que llevó la lectura automática al 98%. La bandeja sólo acerca el
+archivo: el botón lo baja del bucket, arma un `File` y lo entrega a la cola de
+siempre.
+
+Está verificado de punta a punta en un navegador con un PDF real: el adjunto se
+bajó, se convirtió en `File` con su nombre y sus 100.669 bytes exactos, y entró
+a la cola.
+
+### Por qué un Apps Script y no que el servidor lea el buzón
+
+**Se probó.** La cuenta de servicio (`sheets-reader@mantenimientopp`) pide un
+token de Gmail haciéndose pasar por un usuario del dominio y Google contesta
+`unauthorized_client`: la delegación a nivel dominio no está otorgada. Sí
+devuelve token para sí misma, pero una cuenta de servicio no tiene buzón — ese
+"OK" no sirve para nada.
+
+Otorgarla es una acción de un admin de Workspace y le daría al sistema permiso
+de leer **cualquier** buzón del dominio. El script lo instala el dueño de la
+casilla y sólo ve esa, y además es el mismo patrón que ya usan la planilla de
+Compras, la de Mantenimiento y el formulario: disparador por tiempo, POST con
+secreto compartido, y el trabajo de este lado.
+
+La instalación está en `docs/facturacion-correo-apps-script.gs`. Hace falta
+`FACTURACION_CORREO_SECRET` en Vercel y el mismo valor en las propiedades del
+script.
+
+### Cómo no trae dos veces lo mismo
+
+Dos redes, y hacen falta las dos:
+
+- **Una etiqueta de Gmail.** Lo que el script ya mandó queda con `SdG/cargado` y
+  la búsqueda la excluye, así que no vuelve a subir el mismo PDF cada quince
+  minutos. La etiqueta se pone **sólo si el SdG contestó que sí**: al revés, un
+  error del servidor dejaría el mail marcado como cargado y esa factura no se
+  cargaría nunca, sin que nadie se entere.
+- **Un UNIQUE (mensaje, adjunto) en la tabla.** Es el par y no sólo el mensaje
+  porque un mail puede traer varias facturas. Va como restricción entera y no
+  como índice parcial, para poder usarlo de destino de un `ON CONFLICT`.
+
+### Qué entra y qué se descarta
+
+Un mail no trae sólo la factura: trae el logo de la firma, el ícono de LinkedIn,
+a veces un remito. Si todo eso entrara, la lista sería mitad basura y nadie la
+miraría.
+
+| | |
+|---|---|
+| **Un PDF entra siempre** | Nadie adjunta un PDF decorativo. Y la factura electrónica argentina es un PDF casi siempre. |
+| **Una imagen, sólo si pesa** | El camino de la foto existe para WhatsApp, y una foto de una factura no baja de un par de cientos de KB; el logo de una firma son tres o cuatro. |
+
+El umbral de la imagen (25 KB) es **un supuesto, no una medición**: todavía no
+hay una casilla conectada para medirlo. Está en una constante con nombre
+—`MINIMO_DE_UNA_IMAGEN`— para ajustarlo en un solo lugar cuando haya datos, en
+vez de descubrirlo en una pantalla llena de logos.
+
+Lo descartado **no se tira**: queda en la tabla como `descartada` con su motivo.
+Sin eso el script lo volvería a traer en cada corrida y no se podría saber qué
+quedó afuera ni por qué. Lo mismo vale para el botón "No es una factura" de la
+pantalla, que pide el motivo y guarda quién y cuándo — porque "alguien la
+descartó el martes" es una respuesta muy distinta de "nunca llegó".
+
+### Dos copias del mismo PDF, a propósito
+
+La de la bandeja es **la evidencia de lo que llegó**, con su remitente y su
+fecha. La de la factura es lo que administración cargó. Pueden no ser el mismo
+archivo —alguien puede cargar otro adjunto del mismo mail— y tener las dos es lo
+que permite notarlo. Son unos cientos de KB por factura.
+
+### El orden de las escrituras
+
+La fila va **después** del archivo, nunca antes: una fila que apunta a un
+archivo que no está es una entrada rota que nadie puede cargar. Al revés, un
+archivo sin fila es un huérfano en el bucket que no molesta y que el próximo
+intento pisa.
+
+Y la entrada se marca `cargada` **después** de que la factura se guardó, no al
+apretar el botón: marcarla antes la sacaría de la bandeja aunque la carga
+fallara, y esa factura quedaría sin cargar y sin que nadie lo supiera.
+
 ## A quién se le facturó: el emisor sale de Odoo, no del padrón
 
 **Es lo que destrabó más de la mitad de las facturas.** El buzón resolvía el

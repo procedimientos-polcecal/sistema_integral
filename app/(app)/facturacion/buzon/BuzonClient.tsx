@@ -9,8 +9,10 @@ import type { EmpresaDelGrupo, ProveedorDelPadron } from "@/lib/facturacion/alta
 import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
 import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
+import BandejaDelCorreo from "./BandejaDelCorreo";
 import LineasDeFactura from "./LineasDeFactura";
 import BorradorEnOdoo from "./BorradorEnOdoo";
+import Select from "@/components/Select";
 
 /** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
 interface DondeApuntaOdoo {
@@ -61,6 +63,14 @@ interface Fila {
   nroRi: string;
   notas: string;
   mensaje: string | null;
+  /**
+   * De qué entrada de la bandeja del correo salió, cuando salió de ahí.
+   *
+   * Sirve para una sola cosa, y es la que hace que la bandeja no se llene: al
+   * guardarse la factura, esa entrada se marca `cargada` y deja de aparecer en
+   * la lista de pendientes.
+   */
+  correoId?: string;
 }
 
 const VACIO = {
@@ -131,10 +141,17 @@ export default function BuzonClient({
     setCola((antes) => antes.map((f) => (f.id === id ? { ...f, ...cambios } : f)));
   }, []);
 
-  async function agregar(archivos: FileList | null) {
+  /**
+   * `File[]` además de `FileList` porque la bandeja del correo no tiene un
+   * `<input type=file>`: baja el adjunto del bucket y arma el `File` a mano.
+   * De ahí para adelante es el mismo camino que arrastrar un PDF, que es el
+   * que está medido.
+   */
+  async function agregar(archivos: FileList | File[] | null, correoId?: string) {
     if (!archivos || archivos.length === 0) return;
 
     const nuevas: Fila[] = Array.from(archivos).map((archivo, i) => ({
+      correoId,
       id: `${Date.now()}-${i}-${archivo.name}`,
       archivo,
       estado: "leyendo",
@@ -230,6 +247,24 @@ export default function BuzonClient({
       estado: "guardada",
       mensaje: (datos.avisos ?? []).join(" ") || null,
     });
+
+    /*
+     * Si venía de un mail, esa entrada ya no está pendiente. Va después de
+     * guardar y no antes: marcarla primero la sacaría de la bandeja aunque la
+     * carga fallara, y nadie se enteraría de que esa factura quedó sin cargar.
+     *
+     * Un fallo acá no se le muestra a quien cargó: la factura **sí** entró, que
+     * es lo que importaba, y lo único que queda mal es que la entrada siga
+     * apareciendo en la bandeja. Molesta, no rompe.
+     */
+    if (fila.correoId) {
+      await fetch("/api/facturacion/correo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: fila.correoId, estado: "cargada", factura_id: datos.id ?? null }),
+      }).catch(() => {});
+    }
+
     if (refrescar) router.refresh();
   }
 
@@ -296,6 +331,13 @@ export default function BuzonClient({
         )}
       </div>
 
+      {/*
+        Lo que llegó por mail, arriba de la zona de arrastrar: es la lista de lo
+        que hay para hacer, y arrastrar un archivo pasa a ser lo que se hace
+        cuando la factura llegó en papel o por WhatsApp.
+      */}
+      {puedeEditar && <BandejaDelCorreo onCargar={(archivos, correoId) => agregar(archivos, correoId)} />}
+
       {puedeEditar && (
         <section className="card p-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -303,7 +345,7 @@ export default function BuzonClient({
               <label className="block text-xs uppercase tracking-wide text-slate-500">
                 Por dónde llegaron
               </label>
-              <select
+              <Select
                 value={origen}
                 onChange={(e) => setOrigen(e.target.value as OrigenDeFactura)}
                 className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -313,7 +355,7 @@ export default function BuzonClient({
                     {o}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div className="grow">
@@ -532,7 +574,7 @@ function FilaDeCarga({
               {/* Sólo se pide lo que el comprobante no dijo. */}
               {!empresa && (
                 <Campo etiqueta="Empresa">
-                  <select
+                  <Select
                     value={fila.aMano.empresaId}
                     onChange={(e) => set("empresaId", e.target.value)}
                     className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -543,13 +585,13 @@ function FilaDeCarga({
                         {e.nombre}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Campo>
               )}
 
               {!proveedor && (
                 <Campo etiqueta="Proveedor">
-                  <select
+                  <Select
                     value={fila.aMano.proveedorId}
                     onChange={(e) => set("proveedorId", e.target.value)}
                     className="max-w-56 rounded border border-slate-300 px-2 py-1 text-sm"
@@ -560,14 +602,14 @@ function FilaDeCarga({
                         {p.nombre}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Campo>
               )}
 
               {!c && (
                 <>
                   <Campo etiqueta="Tipo">
-                    <select
+                    <Select
                       value={fila.aMano.tipoComprobante}
                       onChange={(e) => set("tipoComprobante", e.target.value)}
                       className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -580,7 +622,7 @@ function FilaDeCarga({
                       <option value="8">NC B</option>
                       <option value="13">NC C</option>
                       <option value="2">ND A</option>
-                    </select>
+                    </Select>
                   </Campo>
                   <Campo etiqueta="Pto vta">
                     <input
@@ -818,7 +860,7 @@ function FilaDelBuzon({
             * la factura quedaba fuera de la cola para siempre.
             */}
           {puedeEditar ? (
-            <select
+            <Select
               value={factura.estado}
               disabled={ocupado}
               onChange={(e) => cambiarEstado(e.target.value)}
@@ -829,7 +871,7 @@ function FilaDelBuzon({
                   {ESTADO_ETIQUETA[e]}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
               {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}

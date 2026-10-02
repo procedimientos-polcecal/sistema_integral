@@ -47,6 +47,7 @@ Sin estas la app anda, pero el endpoint correspondiente responde 503 a propósit
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `CRON_SECRET` | Protege los crons (`/api/cron/*`). Vercel lo manda solo en el header al invocarlos | Lo inventás vos. Ver más abajo |
+| `FACTURACION_CORREO_SECRET` | Protege el webhook por el que entra lo que llega a la casilla de facturas. El mismo valor va en las propiedades del Apps Script de esa casilla (`docs/facturacion-correo-apps-script.gs`). **Sin esta variable el endpoint devuelve 503 y no escribe nada**: uno que acepta archivos no puede quedar abierto porque falte una variable | Lo inventás vos, como el de Sheets |
 | `SHEETS_WEBHOOK_SECRET` | Protege el webhook que dispara el Apps Script de la planilla | Lo inventás vos. El mismo valor va en las propiedades del script |
 
 ## Sincronización con la planilla (módulo Compras)
