@@ -114,6 +114,21 @@ export function montoAcarreo(cantidad: number | null, tarifa: TarifaAcarreo | nu
   return cantidad * tarifa.tarifa;
 }
 
+/**
+ * Los fleteros con camión grande cobran el DOBLE de la tarifa por hora —
+ * pedido del usuario (02/10/2026): Orsatti (1 y 2) y Schneider. Mismo
+ * criterio que Destape, donde "Camión grande" es la tarifa de horas × 2
+ * (`lib/cantera/destape.ts`). Aplica sólo a los renglones en horas; el
+ * material por tonelada no cambia. Por nombre y no por columna en la base:
+ * es una lista chica y estable, mismo criterio que `FLETEROS_CONOCIDOS`.
+ */
+const FLETEROS_CON_CAMION_GRANDE = ["orsatti", "schneider"];
+
+export function multiplicadorDeHoras(nombreFletero: string): number {
+  const n = nombreFletero.trim().toLowerCase();
+  return FLETEROS_CON_CAMION_GRANDE.some((f) => n === f || n.startsWith(`${f} `)) ? 2 : 1;
+}
+
 export interface AcarreoPlano {
   fleteroId: string;
   tipo: string;
@@ -142,7 +157,9 @@ export function resumenPorFletero(
   acarreos: AcarreoPlano[],
   tarifas: TarifaAcarreo[],
   fleteroId: string,
-  mes: string
+  mes: string,
+  /** `multiplicadorDeHoras(nombre)` del fletero: 2 si tiene camión grande. Sólo afecta a los tipos en horas. */
+  multiplicadorHoras = 1
 ): FilaResumenFletero {
   const deEsteFleteroYMes = acarreos.filter((a) => a.fleteroId === fleteroId && a.mes.slice(0, 7) === mes.slice(0, 7));
 
@@ -153,7 +170,9 @@ export function resumenPorFletero(
 
   const porTipo = [...cantidadPorTipo.entries()].map(([tipo, cantidad]) => {
     const tarifa = tarifaVigente(tarifas, tipo, mes);
-    return { tipo, cantidad, monto: montoAcarreo(cantidad, tarifa) };
+    const monto = montoAcarreo(cantidad, tarifa);
+    const factor = tipoDeAcarreo(tipo)?.unidad === "hora" ? multiplicadorHoras : 1;
+    return { tipo, cantidad, monto: monto === null ? null : monto * factor };
   });
 
   return {

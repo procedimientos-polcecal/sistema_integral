@@ -8,6 +8,7 @@ import {
   toneladasPorMaterialYDestino,
   detalleDiarioPorDestino,
   normalizarDestino,
+  multiplicadorDeHoras,
   tipoDeAcarreo,
   esTipoDeAcarreoValido,
   type TarifaAcarreo,
@@ -88,6 +89,19 @@ describe("resumenPorFletero", () => {
     expect(r.porTipo).toHaveLength(2);
     expect(r.totalMonto).toBeCloseTo(100 * 2266.74 + 5 * 27817.75, 2);
     expect(r.sinTarifa).toEqual([]);
+  });
+
+  it("camión grande (Orsatti, Schneider): las horas valen el doble, el material por tonelada no", () => {
+    const acarreos: AcarreoPlano[] = [
+      { fleteroId: "f1", tipo: "dolomita_d1", mes: "2026-08-01", cantidad: 100 },
+      { fleteroId: "f1", tipo: "horas_destape", mes: "2026-08-01", cantidad: 5 },
+    ];
+    const tarifas: TarifaAcarreo[] = [
+      ...TARIFAS_D1,
+      { tipo: "horas_destape", desde: "2026-07-01", hasta: null, tarifa: 27817.75 },
+    ];
+    const r = resumenPorFletero(acarreos, tarifas, "f1", "2026-08", multiplicadorDeHoras("Orsatti 1"));
+    expect(r.totalMonto).toBeCloseTo(100 * 2266.74 + 5 * 27817.75 * 2, 2);
   });
 
   it("un tipo cargado sin tarifa vigente se avisa, no se descarta del total en silencio", () => {
@@ -315,3 +329,15 @@ describe("detalleDiarioPorDestino", () => {
   });
 });
 
+
+describe("multiplicadorDeHoras", () => {
+  it("Orsatti y Schneider, con o sin número, cobran el doble", () => {
+    expect(multiplicadorDeHoras("Orsatti 1")).toBe(2);
+    expect(multiplicadorDeHoras("Orsatti 2")).toBe(2);
+    expect(multiplicadorDeHoras("Schneider")).toBe(2);
+  });
+  it("el resto cobra la tarifa tal cual", () => {
+    expect(multiplicadorDeHoras("Amaray")).toBe(1);
+    expect(multiplicadorDeHoras("Dumerauf 1")).toBe(1);
+  });
+});

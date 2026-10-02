@@ -4,7 +4,7 @@ import { permisosCanteraDe } from "@/lib/cantera/auth";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import {
-  resumenPorFletero,
+  resumenPorFletero, multiplicadorDeHoras,
   totalesPorTipo,
   toneladasPorMaterialYDestino,
   detalleDiarioPorDestino,
@@ -60,7 +60,7 @@ export default async function AcarreoPage({
   ];
 
   const resumenes = fleteros
-    .map((f) => ({ fletero: f, resumen: resumenPorFletero(acarreosPlanos, tarifas, f.id, mes) }))
+    .map((f) => ({ fletero: f, resumen: resumenPorFletero(acarreosPlanos, tarifas, f.id, mes, multiplicadorDeHoras(f.nombre)) }))
     .filter((r) => r.resumen.porTipo.length > 0);
 
   // Por origen real de la pesada, no por fletero ni por nombre de material —
