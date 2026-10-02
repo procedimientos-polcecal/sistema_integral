@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { comoLeLlego, ETIQUETA_CUMPLIO, tiempoEnStock } from "@/lib/compras/seguimiento";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 const OPCIONES: Cumplio[] = ["SI", "MAS_O_MENOS", "NO"];
 
@@ -139,25 +140,25 @@ export default function FormularioRecepcion({
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo label="¿Cumplió Compras?">
           {dato.demora && <p className="mb-1 text-xs text-slate-500">{dato.demora}</p>}
-          <select
+          <Select
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             value={campos.cumplio_compras}
             onChange={(e) => setCampos({ ...campos, cumplio_compras: e.target.value as Cumplio })}
           >
             <option value="">Sin responder</option>
             {OPCIONES.map((o) => <option key={o} value={o}>{ETIQUETA_CUMPLIO[o]}</option>)}
-          </select>
+          </Select>
         </Campo>
         <Campo label="¿Cumplió el proveedor?">
           {dato.cantidad && <p className="mb-1 text-xs text-slate-500">{dato.cantidad}</p>}
-          <select
+          <Select
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             value={campos.cumplio_proveedor}
             onChange={(e) => setCampos({ ...campos, cumplio_proveedor: e.target.value as Cumplio })}
           >
             <option value="">Sin responder</option>
             {OPCIONES.map((o) => <option key={o} value={o}>{ETIQUETA_CUMPLIO[o]}</option>)}
-          </select>
+          </Select>
         </Campo>
       </div>
 
@@ -177,7 +178,7 @@ export default function FormularioRecepcion({
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo label="¿Se aplicó?">
             {enStock && <p className="mb-1 text-xs text-slate-500">{enStock}</p>}
-            <select
+            <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={campos.se_aplico}
               onChange={(e) => setCampos({ ...campos, se_aplico: e.target.value as "SI" | "NO" })}
@@ -185,7 +186,7 @@ export default function FormularioRecepcion({
               <option value="">Sin responder</option>
               <option value="SI">Si</option>
               <option value="NO">No</option>
-            </select>
+            </Select>
           </Campo>
           <Campo label="Fecha de aplicación">
             <input

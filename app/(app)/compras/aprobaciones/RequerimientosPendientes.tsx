@@ -7,6 +7,7 @@ import {
   etiquetaPrioridad, pesoPrioridad, fecha, diasRestantes, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 /**
  * Los requerimientos que esperan decisión.
@@ -100,14 +101,14 @@ export default function RequerimientosPendientes({
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <select
+            <Select
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={area}
               onChange={(e) => setArea(e.target.value)}
             >
               <option value="">Todas las áreas</option>
               {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
+            </Select>
 
             {puedeAprobar && seleccion.size > 0 && (
               <button

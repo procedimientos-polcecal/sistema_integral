@@ -8,6 +8,7 @@ import {
 } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import MultiSelect from "@/components/MultiSelect";
+import Select from "@/components/Select";
 
 /**
  * Cargar un presupuesto, con los campos de la planilla.
@@ -142,7 +143,7 @@ export default function PresupuestoForm({
             <Texto valor={unitario} set={setUnitario} />
             {/* La moneda es del presupuesto entero: si el proveedor cotiza en
                 dólares, el envío también. */}
-            <select
+            <Select
               value={divisa}
               onChange={(e) => setDivisa(e.target.value as "ARS" | "USD")}
               aria-label="Moneda"
@@ -150,7 +151,7 @@ export default function PresupuestoForm({
             >
               <option value="ARS">$</option>
               <option value="USD">USD</option>
-            </select>
+            </Select>
           </div>
         </Campo>
         <Campo label="Cantidad"><Texto valor={cantidad} set={setCantidad} /></Campo>
@@ -189,14 +190,14 @@ export default function PresupuestoForm({
           />
         </Campo>
         <Campo label="Disponibilidad">
-          <select
+          <Select
             value={disponibilidad}
             onChange={(e) => setDisponibilidad(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
             <option value="">—</option>
             {DISPONIBILIDADES.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          </Select>
         </Campo>
 
         <Campo

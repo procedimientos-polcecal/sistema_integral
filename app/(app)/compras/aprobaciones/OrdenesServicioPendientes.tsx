@@ -6,6 +6,7 @@ import { fecha } from "@/lib/compras/constants";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { ordenarParaAprobar } from "@/lib/mantenimiento/aprobacion";
 import type { OrdenServicio } from "@/lib/mantenimiento/types";
+import Select from "@/components/Select";
 
 /**
  * Las órdenes de servicio que esperan decisión.
@@ -104,14 +105,14 @@ export default function OrdenesServicioPendientes({
       ) : (
         <>
           {areas.length > 1 && (
-            <select
+            <Select
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={area}
               onChange={(e) => setArea(e.target.value)}
             >
               <option value="">Todas las áreas</option>
               {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
+            </Select>
           )}
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">

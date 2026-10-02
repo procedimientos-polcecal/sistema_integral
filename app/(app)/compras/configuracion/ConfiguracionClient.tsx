@@ -7,6 +7,7 @@ import { fechaHora } from "@/lib/compras/constants";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import PendientesDeOdoo from "./PendientesDeOdoo";
 import type { Sincronizacion } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 /** Lo que devuelve la importación de proveedores. */
 interface Importacion {
@@ -632,7 +633,7 @@ function SumarAprobador({
   return (
     <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
           value={elegido}
           onChange={(e) => setElegido(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -641,7 +642,7 @@ function SumarAprobador({
           {usuarios.map((u) => (
             <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
           ))}
-        </select>
+        </Select>
         <button
           onClick={sumar}
           disabled={!elegido || guardando}
@@ -918,7 +919,7 @@ function SumarAprobadorOS({
   return (
     <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
           value={elegido}
           onChange={(e) => setElegido(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -927,7 +928,7 @@ function SumarAprobadorOS({
           {usuarios.map((u) => (
             <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
           ))}
-        </select>
+        </Select>
         <button
           onClick={sumar}
           disabled={!elegido || guardando}

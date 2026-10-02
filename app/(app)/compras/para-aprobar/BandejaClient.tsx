@@ -15,6 +15,7 @@ import ComparativaDecision from "../requerimientos/[id]/ComparativaDecision";
 import AprobarSinComparativa from "../AprobarSinComparativa";
 import { useConfirm } from "@/components/ConfirmProvider";
 import type { RequerimientoConRelaciones, Cotizacion } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 /**
  * La bandeja de quien aprueba compras.
@@ -324,7 +325,7 @@ export default function BandejaClient({
         </div>
 
         {requerimientos.length > 1 && (
-          <select
+          <Select
             aria-label="Ordenar la bandeja"
             value={orden}
             onChange={(e) => setOrden(e.target.value as OrdenTablero)}
@@ -333,7 +334,7 @@ export default function BandejaClient({
             {ORDENES_TABLERO.map((o) => (
               <option key={o.valor} value={o.valor}>{o.label}</option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 

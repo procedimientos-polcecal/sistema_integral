@@ -20,6 +20,7 @@ import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
+import Select from "@/components/Select";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
@@ -208,7 +209,7 @@ export default function RequerimientoDetalle({
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Campo label="Estado de la compra">
-                  <select
+                  <Select
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={estadoCompra}
                     onChange={(e) => setEstadoCompra(e.target.value as EstadoCompra)}
@@ -216,7 +217,7 @@ export default function RequerimientoDetalle({
                     {ESTADOS_COMPRA.filter((e) => e !== "DENEGADO").map((e) => (
                       <option key={e} value={e}>{COMPRA_LABELS[e].label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </Campo>
                 <Campo label="Proveedor elegido">
                   <SelectorProveedor
@@ -241,7 +242,7 @@ export default function RequerimientoDetalle({
                     value={ocNumero} onChange={(e) => setOcNumero(e.target.value)} placeholder="Opcional" />
                 </Campo>
                 <Campo label="A quién le toca aprobarla">
-                  <select
+                  <Select
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={asignadoA}
                     onChange={(e) => setAsignadoA(e.target.value)}
@@ -250,7 +251,7 @@ export default function RequerimientoDetalle({
                     {aprobadores.map((a) => (
                       <option key={a.id} value={a.id}>{a.nombre} {a.apellido}</option>
                     ))}
-                  </select>
+                  </Select>
                   <p className="mt-1 text-xs text-slate-500">
                     Es lo que va entre paréntesis en el estado de la planilla, y sólo esa
                     persona puede aprobar la compra.
@@ -343,7 +344,7 @@ export default function RequerimientoDetalle({
                     <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Prioridad
                     </span>
-                    <select
+                    <Select
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                       value={prioridad}
                       onChange={(e) => setPrioridad(e.target.value as Prioridad)}
@@ -352,14 +353,14 @@ export default function RequerimientoDetalle({
                       {PRIORIDADES.map((p) => (
                         <option key={p} value={p}>{PRIORIDAD_LABELS[p].label}</option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
 
                   <label className="block">
                     <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Quién paga
                     </span>
-                    <select
+                    <Select
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                       value={paga}
                       onChange={(e) => setPaga(e.target.value)}
@@ -369,7 +370,7 @@ export default function RequerimientoDetalle({
                         <option key={e2.id} value={e2.id}>{e2.nombre}</option>
                       ))}
                       <option value="AMBAS">Ambas</option>
-                    </select>
+                    </Select>
                   </label>
                 </div>
 

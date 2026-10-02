@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmProvider";
 import type { UbicacionCompras } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 const TIPOS = ["planta", "taller", "equipo", "oficina", "otra"] as const;
 
@@ -347,20 +348,20 @@ function ModalUbicacion({
           </Campo>
 
           <Campo label="Tipo">
-            <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            <Select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={tipo} onChange={(e) => setTipo(e.target.value)}>
               {TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t].label}</option>)}
-            </select>
+            </Select>
           </Campo>
 
           <Campo label="Enlazar a un equipo de Mantenimiento">
-            <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            <Select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
               <option value="">Sin enlazar</option>
               {equipos.map((e2) => (
                 <option key={e2.id} value={e2.id}>{etiquetaDeEquipo(e2)}</option>
               ))}
-            </select>
+            </Select>
             <p className="mt-1 text-xs text-slate-500">
               Enlazarla permite ver cuánto se gastó en esa máquina. Compras la
               nombra por marca y modelo —«Doosan 225 n°1»— y Mantenimiento por
@@ -370,7 +371,7 @@ function ModalUbicacion({
 
           {!equipoId && (
             <Campo label="O a un sector">
-              <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              <Select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
                 <option value="">Sin enlazar</option>
                 {sectores.map((s) => (
@@ -378,7 +379,7 @@ function ModalUbicacion({
                     {s.codigo ? `${s.codigo} — ${s.nombre}` : s.nombre}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Campo>
           )}
 
@@ -464,7 +465,7 @@ function ModalFusion({
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Conservar esta ubicación
             </span>
-            <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            <Select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
               <option value="">Elegir…</option>
               {ordenadas.map((c) => (
@@ -473,7 +474,7 @@ function ModalFusion({
                   {casiIgual(c.nombre, origen.nombre) ? "  ← parecida" : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {destino && (

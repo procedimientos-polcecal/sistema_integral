@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fecha, monedaExacta } from "@/lib/compras/constants";
 import type { Diferencia } from "@/lib/compras/divergenciaDeOrden";
 import type { OrdenLeida } from "@/lib/odoo/ordenEnOdoo";
+import Select from "@/components/Select";
 import {
   explicacionDeSugerencia,
   type MotivoDeSugerencia,
@@ -647,7 +648,7 @@ export default function OrdenEnOdoo({
           <label className="mb-1 block text-xs font-medium text-slate-600">
             Producto de Odoo para la línea
           </label>
-          <select
+          <Select
             value={productoId}
             onChange={(e) => setProductoId(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
@@ -660,7 +661,7 @@ export default function OrdenEnOdoo({
                   {p.nombre}
                 </option>
               ))}
-          </select>
+          </Select>
           <p className="mt-1 text-xs text-slate-500">
             {explicacionDeSugerencia(ensayo.producto.sugerencia)}
           </p>

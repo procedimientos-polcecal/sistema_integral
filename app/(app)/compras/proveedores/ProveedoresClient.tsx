@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { moneda } from "@/lib/compras/constants";
 import type { Proveedor } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 type Estadistica = { pedidos: number; monto: number };
 
@@ -67,14 +68,14 @@ export default function ProveedoresClient({
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
-        <select
+        <Select
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           value={orden}
           onChange={(e) => setOrden(e.target.value as typeof orden)}
         >
           <option value="monto">Ordenar por monto comprado</option>
           <option value="nombre">Ordenar por nombre</option>
-        </select>
+        </Select>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">

@@ -7,6 +7,7 @@ import { comoLeLlego, ETIQUETA_CUMPLIO } from "@/lib/compras/seguimiento";
 import { fecha } from "@/lib/compras/constants";
 import FormularioRecepcion from "./FormularioRecepcion";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
+import Select from "@/components/Select";
 
 const SIN_FILTRO = "TODAS";
 
@@ -112,7 +113,7 @@ export default function SeguimientoClient({
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
-          <select
+          <Select
             aria-label="Filtrar por área"
             value={area}
             onChange={(e) => setArea(e.target.value)}
@@ -120,8 +121,8 @@ export default function SeguimientoClient({
           >
             <option value={SIN_FILTRO}>Todas las áreas</option>
             {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Filtrar por proveedor"
             value={proveedor}
             onChange={(e) => setProveedor(e.target.value)}
@@ -129,7 +130,7 @@ export default function SeguimientoClient({
           >
             <option value={SIN_FILTRO}>Todos los proveedores</option>
             {proveedores.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 

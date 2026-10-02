@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SIGUIENTE_ESTADO, COMPRA_LABELS } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorProveedor from "../SelectorProveedor";
+import Select from "@/components/Select";
 
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
 
@@ -155,7 +156,7 @@ export default function ModalAvanzar({
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   A quien le toca aprobarla
                 </span>
-                <select
+                <Select
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   value={asignadoA}
                   onChange={(e) => setAsignadoA(e.target.value)}
@@ -164,7 +165,7 @@ export default function ModalAvanzar({
                   {aprobadores.map((a) => (
                     <option key={a.id} value={a.id}>{a.nombre} {a.apellido}</option>
                   ))}
-                </select>
+                </Select>
                 <p className="mt-1 text-xs text-slate-500">
                   Es lo que va entre parentesis en el estado de la planilla, y solo esa
                   persona va a poder aprobarla.

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 import { recortarParaPantalla } from "@/lib/compras/texto";
+import Select from "@/components/Select";
 
 type Opcion = { id: string; nombre: string };
 
@@ -232,7 +233,7 @@ export default function NuevoRequerimientoModal({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo label="Área que pide" requerido>
-              <select
+              <Select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={areaId}
                 onChange={(e) => setAreaId(e.target.value)}
@@ -240,7 +241,7 @@ export default function NuevoRequerimientoModal({
               >
                 <option value="">Elegir área…</option>
                 {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-              </select>
+              </Select>
             </Campo>
 
             <Campo label="Cantidad">
@@ -271,7 +272,7 @@ export default function NuevoRequerimientoModal({
             </Campo>
 
             <Campo label="Prioridad sugerida">
-              <select
+              <Select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={prioridad}
                 onChange={(e) => setPrioridad(e.target.value)}
@@ -280,11 +281,11 @@ export default function NuevoRequerimientoModal({
                 {PRIORIDADES.map((p) => (
                   <option key={p} value={p}>{PRIORIDAD_LABELS[p].label}</option>
                 ))}
-              </select>
+              </Select>
             </Campo>
 
             <Campo label="Quién paga (sugerido)">
-              <select
+              <Select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 value={paga}
                 onChange={(e) => setPaga(e.target.value)}
@@ -292,13 +293,13 @@ export default function NuevoRequerimientoModal({
                 <option value="">Sin definir</option>
                 {empresas.map((e2) => <option key={e2.id} value={e2.id}>{e2.nombre}</option>)}
                 <option value="AMBAS">Ambas</option>
-              </select>
+              </Select>
             </Campo>
           </div>
 
           {/* Dónde se necesita */}
           <Campo label="Dónde se necesita">
-            <select
+            <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
               onChange={(e) => setUbicacionId(e.target.value)}
@@ -307,7 +308,7 @@ export default function NuevoRequerimientoModal({
               {ubicaciones.map((u) => (
                 <option key={u.id} value={u.id}>{u.nombre}</option>
               ))}
-            </select>
+            </Select>
             <p className="mt-1 text-xs text-slate-500">
               ¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos
               lo escriben igual y se puede filtrar por ubicación.
@@ -316,7 +317,7 @@ export default function NuevoRequerimientoModal({
 
           {/* Para qué equipo */}
           <Campo label="Para qué equipo">
-            <select
+            <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
               value={equipoId}
               disabled={equipos.length === 0}
@@ -326,7 +327,7 @@ export default function NuevoRequerimientoModal({
               {equipos.map((e2) => (
                 <option key={e2.id} value={e2.id}>{e2.etiqueta}</option>
               ))}
-            </select>
+            </Select>
             <p className="mt-1 text-xs text-slate-500">
               {equiposError
                 ? `No se pudo traer la lista de equipos (${equiposError}). El pedido se ` +
