@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ETIQUETA_TIPO_CONSUMO, TIPOS_DE_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Insumo } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 /**
  * Alta y edición del catálogo de insumos.
@@ -133,10 +134,10 @@ export default function InsumosClient({ insumos }: { insumos: Insumo[] }) {
           </label>
           <label className="text-xs text-slate-600">
             Tipo
-            <select className="mt-1 w-full rounded border px-2 py-1 text-sm"
+            <Select className="mt-1 w-full rounded border px-2 py-1 text-sm"
               value={alta.tipo} onChange={(e) => setAlta({ ...alta, tipo: e.target.value })}>
               {TIPOS_DE_CONSUMO.map((t) => <option key={t} value={t}>{ETIQUETA_TIPO_CONSUMO[t]}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="text-xs text-slate-600">
             Precio USD

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cruce } from "@/lib/cantera/costos";
+import Select from "@/components/Select";
 
 /**
  * El cruce de una etapa (o de un bochón) contra una factura de Odoo.
@@ -173,7 +174,7 @@ export default function ConciliacionOdoo({
             </button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <select
+              <Select
                 className="rounded border border-slate-300 px-2 py-1 text-xs"
                 value={elegida}
                 onChange={(e) => setElegida(e.target.value)}
@@ -185,7 +186,7 @@ export default function ConciliacionOdoo({
                     {f.fecha ? ` · ${f.fecha}` : ""}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button onClick={vincular} disabled={!elegida || guardando} className="text-xs text-slate-800 underline disabled:opacity-50">
                 Vincular
               </button>

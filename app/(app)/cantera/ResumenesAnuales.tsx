@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ETIQUETA_UNIDAD, type FilaResumenAnualTipo, type UnidadDeAcarreo } from "@/lib/cantera/acarreo";
 import type { Fletero } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -32,7 +33,7 @@ export default function ResumenesAnuales({
     <section className="card mt-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold text-slate-900">Resumen anual</h2>
-        <select
+        <Select
           className="rounded border border-slate-300 px-2 py-1 text-sm"
           value={anio}
           onChange={(e) => router.push(`/cantera?anio=${e.target.value}`)}
@@ -41,7 +42,7 @@ export default function ResumenesAnuales({
             const a = String(Number(anio) - 1 + d);
             return <option key={a} value={a}>{a}</option>;
           })}
-        </select>
+        </Select>
       </div>
 
       <p className="mt-4 text-sm font-semibold text-cyan-700">Por fletero</p>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { armarCodigo, anioParaCodigo, proximoCorrelativo } from "@/lib/cantera/codigos";
 import type { Yacimiento } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 export default function NuevaVoladuraClient({
   yacimientos,
@@ -68,7 +69,7 @@ export default function NuevaVoladuraClient({
       <div className="mt-4 space-y-3">
         <label className="block text-sm">
           Cantera
-          <select
+          <Select
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             value={yacimientoId}
             onChange={(e) => setYacimientoId(e.target.value)}
@@ -78,7 +79,7 @@ export default function NuevaVoladuraClient({
                 {y.nombre} · {y.material}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="block text-sm">

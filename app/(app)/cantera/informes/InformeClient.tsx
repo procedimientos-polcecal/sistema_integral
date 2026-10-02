@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { FilaSerieMensual, Informe } from "@/lib/cantera/informe";
+import Select from "@/components/Select";
 
 const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />;
 const TendenciaToneladas = dynamic(() => import("./GraficosCantera").then((m) => m.TendenciaToneladas), { ssr: false, loading: esqueleto });
@@ -114,14 +115,14 @@ export default function InformeClient({
       <section className="mt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-700">Variación mes a mes</h2>
-          <select
+          <Select
             className="rounded border border-slate-300 px-2 py-1 text-sm"
             value={canteraGrafico}
             onChange={(e) => setCanteraGrafico(e.target.value)}
           >
             <option value="">Todas las canteras</option>
             {canteras.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </Select>
         </div>
         {serie.length === 0 ? (
           <p className="mt-2 text-sm text-slate-400">Todavía no hay datos suficientes para un histórico.</p>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TIPOS_DE_ACARREO, ETIQUETA_UNIDAD, tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import type { AcarreoDB, Fletero } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 const INPUT_CLS = "w-28 rounded border border-slate-300 px-2 py-1 text-sm text-right disabled:bg-slate-50";
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
@@ -91,11 +92,11 @@ export default function CargarAcarreoClient({
       <p className="mt-1 text-sm text-slate-500">Sólo lo que no pesa la balanza: horas y viajes, día por día. El material sale solo de las pesadas de balanza. Guardar en 0 (o vacío) borra ese día.</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-        <select className="rounded border border-slate-300 px-2 py-1" value={fleteroId} onChange={(e) => irCon({ fletero: e.target.value })}>
+        <Select className="rounded border border-slate-300 px-2 py-1" value={fleteroId} onChange={(e) => irCon({ fletero: e.target.value })}>
           {fleteros.map((f) => (
             <option key={f.id} value={f.id}>{f.nombre}</option>
           ))}
-        </select>
+        </Select>
         <input type="date" className="rounded border border-slate-300 px-2 py-1" value={fecha} onChange={(e) => e.target.value && irCon({ fecha: e.target.value })} />
       </div>
 

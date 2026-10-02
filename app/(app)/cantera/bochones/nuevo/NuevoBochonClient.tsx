@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Yacimiento } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 export default function NuevoBochonClient({
   yacimientos,
@@ -66,7 +67,7 @@ export default function NuevoBochonClient({
       <div className="mt-4 space-y-3">
         <label className="block text-sm">
           Cantera
-          <select
+          <Select
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             value={yacimientoId}
             onChange={(e) => setYacimientoId(e.target.value)}
@@ -74,7 +75,7 @@ export default function NuevoBochonClient({
             {yacimientos.map((y) => (
               <option key={y.id} value={y.id}>{y.nombre} · {y.material}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block text-sm">
           Fecha de voladura <span className="text-slate-400">(opcional)</span>

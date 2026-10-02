@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { LecturaDeCruce } from "@/lib/cantera/costos";
 import type { Yacimiento } from "@/lib/cantera/types";
 import { avisosDe, type FilaBochon, type FilaVoladura } from "@/lib/cantera/tablero";
+import Select from "@/components/Select";
 
 export type { FilaBochon, FilaVoladura };
 
@@ -100,7 +101,7 @@ export default function CanteraClient({
 
       {/* Filtros en una línea: cantera + rango de fecha de voladura. */}
       <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-        <select
+        <Select
           className="rounded border border-slate-300 px-2 py-1"
           value={yacimientoId}
           onChange={(e) => irCon({ y: e.target.value })}
@@ -109,7 +110,7 @@ export default function CanteraClient({
           {yacimientos.map((y) => (
             <option key={y.id} value={y.id}>{y.nombre} · {y.material}</option>
           ))}
-        </select>
+        </Select>
         <span className="text-slate-400">·</span>
         <input
           type="date"

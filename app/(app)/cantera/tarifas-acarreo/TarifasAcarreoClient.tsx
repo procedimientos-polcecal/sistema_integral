@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TIPOS_DE_ACARREO, ETIQUETA_UNIDAD, tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import type { TarifaAcarreoDB } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm";
@@ -89,11 +90,11 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
         <div className="mt-3 grid grid-cols-3 gap-3">
           <label className="text-xs text-slate-600">
             Tipo
-            <select className={INPUT_CLS} value={alta.tipo} onChange={(e) => setAlta({ ...alta, tipo: e.target.value })}>
+            <Select className={INPUT_CLS} value={alta.tipo} onChange={(e) => setAlta({ ...alta, tipo: e.target.value })}>
               {TIPOS_CON_TARIFA_PROPIA.map((t) => (
                 <option key={t.codigo} value={t.codigo}>{t.etiqueta}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="text-xs text-slate-600">
             Vigente desde

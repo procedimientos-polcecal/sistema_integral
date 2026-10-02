@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MATERIALES } from "@/lib/cantera/vocabulario";
 import type { Yacimiento } from "@/lib/cantera/types";
+import Select from "@/components/Select";
 
 /**
  * Alta y edición de canteras.
@@ -110,10 +111,10 @@ export default function YacimientosClient({ yacimientos }: { yacimientos: Yacimi
                       onChange={(e) => setEdicion({ ...edicion, nombre: e.target.value })} />
                   </td>
                   <td className="px-2 py-2">
-                    <select className="rounded border px-2 py-1" value={edicion.material}
+                    <Select className="rounded border px-2 py-1" value={edicion.material}
                       onChange={(e) => setEdicion({ ...edicion, material: e.target.value })}>
                       {MATERIALES.map((m) => <option key={m}>{m}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td className="px-2 py-2">
                     <input className="w-20 rounded border px-2 py-1" value={edicion.densidad_t_m3}
@@ -187,11 +188,11 @@ export default function YacimientosClient({ yacimientos }: { yacimientos: Yacimi
           </label>
           <label className="text-xs text-slate-600">
             Material
-            <select className="mt-1 w-full rounded border px-2 py-1 text-sm"
+            <Select className="mt-1 w-full rounded border px-2 py-1 text-sm"
               value={alta.material} onChange={(e) => setAlta({ ...alta, material: e.target.value })}>
               <option value="">—</option>
               {MATERIALES.map((m) => <option key={m}>{m}</option>)}
-            </select>
+            </Select>
           </label>
           <label className="text-xs text-slate-600">
             Densidad (t/m³)
