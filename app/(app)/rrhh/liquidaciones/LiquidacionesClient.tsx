@@ -4,6 +4,7 @@ import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 interface FilaPlanilla {
   empleadoId: string;
@@ -165,22 +166,22 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
         <form onSubmit={onGenerar} className="flex gap-3 items-end flex-wrap">
           <div>
             <label className="block text-xs text-slate-500 mb-1">Empleado</label>
-            <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+            <Select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
               className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[200px]">
               <option value="">Seleccionar...</option>
               {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
               Tipo
               <InfoTip text="Quincenal: del 1 al 15, o del 16 a fin de mes. Mensual: el mes completo. Define qué período abarca la liquidación." />
             </label>
-            <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+            <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}
               className="border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="QUINCENAL">Quincenal</option>
               <option value="MENSUAL">Mensual</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Desde</label>
@@ -218,12 +219,12 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Modalidad</label>
-            <select value={modalidadPlanilla} onChange={(e) => setModalidadPlanilla(e.target.value)}
+            <Select value={modalidadPlanilla} onChange={(e) => setModalidadPlanilla(e.target.value)}
               className="border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Todos</option>
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
-            </select>
+            </Select>
           </div>
           <button onClick={verPlanilla} disabled={calculandoPlanilla} className="btn-primary disabled:opacity-50">
             {calculandoPlanilla ? "Calculando..." : "Ver planilla"}

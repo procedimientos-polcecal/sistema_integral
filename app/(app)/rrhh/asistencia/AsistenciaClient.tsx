@@ -6,6 +6,7 @@ import InfoTip from "@/components/InfoTip";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 function firstOfMonth() {
   const d = new Date();
@@ -59,9 +60,9 @@ function ClasificarModal({ seleccion, onClose, onSaved }: {
         {justificada && (
           <div className="mb-3">
             <label className="block text-xs text-slate-500 mb-1">Motivo</label>
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="input">
+            <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="input">
               {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </Select>
           </div>
         )}
         <div className="mb-4">

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import KpiCard from "@/components/KpiCard";
 import type { ResumenHoy } from "@/lib/rrhh/resumenHoy";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 /**
  * Los gráficos se cargan aparte: `recharts` son ~350 KB y bloqueaban el primer
@@ -140,17 +141,17 @@ export default function DashboardClient({
       <div className="flex gap-4 mb-6 card p-4">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Empresa</label>
-          <select value={empresaId} onChange={(e) => setEmpresaId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
+          <Select value={empresaId} onChange={(e) => setEmpresaId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
             <option value="">Todas</option>
             {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Sector</label>
-          <select value={sectorId} onChange={(e) => setSectorId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
+          <Select value={sectorId} onChange={(e) => setSectorId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[160px]">
             <option value="">Todos</option>
             {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 

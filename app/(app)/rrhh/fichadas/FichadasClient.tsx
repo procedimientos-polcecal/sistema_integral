@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import Select from "@/components/Select";
 
 interface PreviewResult {
   token: string;
@@ -137,9 +138,9 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
               {preview.sheetNames.length > 1 && (
                 <div className="mb-3">
                   <label className="block text-xs text-slate-500 mb-1">Hoja del archivo</label>
-                  <select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
+                  <Select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
                     {preview.sheetNames.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  </Select>
                 </div>
               )}
               <p className="text-sm text-slate-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
@@ -164,42 +165,42 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Legajo</label>
-                  <select value={mapping.legajo} onChange={(e) => setMapping({ ...mapping, legajo: e.target.value })} className="input">
+                  <Select value={mapping.legajo} onChange={(e) => setMapping({ ...mapping, legajo: e.target.value })} className="input">
                     <option value="">-</option>
                     {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Fecha</label>
-                  <select value={mapping.fecha} onChange={(e) => setMapping({ ...mapping, fecha: e.target.value })} className="input">
+                  <Select value={mapping.fecha} onChange={(e) => setMapping({ ...mapping, fecha: e.target.value })} className="input">
                     <option value="">-</option>
                     {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                  </select>
+                  </Select>
                 </div>
 
                 {mapping.modo === "combinado" ? (
                   <div className="col-span-2">
                     <label className="block text-xs text-slate-500 mb-1">Marcaciones (entrada y salida juntas)</label>
-                    <select value={mapping.marcaciones} onChange={(e) => setMapping({ ...mapping, marcaciones: e.target.value })} className="input">
+                    <Select value={mapping.marcaciones} onChange={(e) => setMapping({ ...mapping, marcaciones: e.target.value })} className="input">
                       <option value="">-</option>
                       {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                    </select>
+                    </Select>
                   </div>
                 ) : (
                   <>
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Hora entrada</label>
-                      <select value={mapping.horaEntrada} onChange={(e) => setMapping({ ...mapping, horaEntrada: e.target.value })} className="input">
+                      <Select value={mapping.horaEntrada} onChange={(e) => setMapping({ ...mapping, horaEntrada: e.target.value })} className="input">
                         <option value="">-</option>
                         {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                      </select>
+                      </Select>
                     </div>
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Hora salida</label>
-                      <select value={mapping.horaSalida} onChange={(e) => setMapping({ ...mapping, horaSalida: e.target.value })} className="input">
+                      <Select value={mapping.horaSalida} onChange={(e) => setMapping({ ...mapping, horaSalida: e.target.value })} className="input">
                         <option value="">-</option>
                         {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   </>
                 )}
@@ -242,10 +243,10 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
           <form onSubmit={crearManual} className="space-y-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Empleado</label>
-              <select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
+              <Select required value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
                 <option value="">Seleccionar...</option>
                 {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
-              </select>
+              </Select>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>

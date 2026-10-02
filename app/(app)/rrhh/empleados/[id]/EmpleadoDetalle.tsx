@@ -6,6 +6,7 @@ import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
@@ -345,24 +346,24 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Modalidad de pago</label>
-            <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
+            <Select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Empresa</label>
-            <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
+            <Select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
               <option value="">Seleccionar...</option>
               {empresas.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Sector</label>
-            <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
+            <Select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
               <option value="">Sin asignar</option>
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <div className="col-span-3">
             <button type="submit" disabled={guardandoEdicion} className="btn-primary disabled:opacity-50">
@@ -491,9 +492,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               {nuevaAusencia.justificada && (
                 <div className="col-span-2">
                   <label className="block text-xs text-slate-500 mb-1">Motivo</label>
-                  <select value={nuevaAusencia.tipo} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, tipo: e.target.value })} className="input">
+                  <Select value={nuevaAusencia.tipo} onChange={(e) => setNuevaAusencia({ ...nuevaAusencia, tipo: e.target.value })} className="input">
                     {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
+                  </Select>
                 </div>
               )}
               {nuevaAusencia.justificada && nuevaAusencia.tipo === "VACACIONES" && (
@@ -822,9 +823,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
             {claseFalta.justificada && (
               <div className="mb-3">
                 <label className="block text-xs text-slate-500 mb-1">Motivo</label>
-                <select value={claseFalta.tipo} onChange={(e) => setClaseFalta({ ...claseFalta, tipo: e.target.value })} className="input">
+                <Select value={claseFalta.tipo} onChange={(e) => setClaseFalta({ ...claseFalta, tipo: e.target.value })} className="input">
                   {TIPOS_AUSENCIA.filter(([v]) => v !== "INJUSTIFICADA").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+                </Select>
               </div>
             )}
             {claseFalta.justificada && claseFalta.tipo === "VACACIONES" && (

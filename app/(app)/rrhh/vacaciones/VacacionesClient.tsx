@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 export default function VacacionesClient({ empleados }: { empleados: any[] }) {
   const searchParams = useSearchParams();
@@ -71,10 +72,10 @@ function Balance({ empleados }: { empleados: any[] }) {
       <div className="flex gap-4 items-end mb-6 card p-4">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Empleado</label>
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[220px]">
+          <Select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm min-w-[220px]">
             <option value="">Seleccionar...</option>
             {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Año</label>

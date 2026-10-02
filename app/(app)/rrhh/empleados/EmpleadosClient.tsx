@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
+import Select from "@/components/Select";
 
 interface Empleado {
   id: string;
@@ -260,9 +261,9 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
               {preview.sheetNames.length > 1 && (
                 <div className="mb-3">
                   <label className="block text-xs text-slate-500 mb-1">Hoja del archivo</label>
-                  <select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
+                  <Select value={preview.sheet} onChange={(e) => cambiarHoja(e.target.value)} className="input">
                     {preview.sheetNames.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  </Select>
                 </div>
               )}
               <p className="text-sm text-slate-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
@@ -270,14 +271,14 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
                 {MAPPING_FIELDS.map(([field, label]) => (
                   <div key={field}>
                     <label className="block text-xs text-slate-500 mb-1">{label}</label>
-                    <select
+                    <Select
                       value={mapping[field]}
                       onChange={(e) => setMapping({ ...mapping, [field]: e.target.value })}
                       className="input"
                     >
                       <option value="">-</option>
                       {preview.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-                    </select>
+                    </Select>
                   </div>
                 ))}
               </div>
@@ -400,24 +401,24 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Modalidad de pago</label>
-            <select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
+            <Select value={form.modalidadPago} onChange={(e) => setForm({ ...form, modalidadPago: e.target.value })} className="input">
               <option value="JORNAL">Jornal</option>
               <option value="MENSUAL">Mensual</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Empresa</label>
-            <select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
+            <Select required value={form.empresaId} onChange={(e) => setForm({ ...form, empresaId: e.target.value })} className="input">
               <option value="">Seleccionar...</option>
               {empresas.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Sector</label>
-            <select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
+            <Select value={form.sectorId} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className="input">
               <option value="">Sin asignar</option>
               {sectores.filter((s) => s.activo).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           {error && <p className="col-span-3 text-sm text-red-600">{error}</p>}
           <div className="col-span-3">
