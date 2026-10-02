@@ -7,6 +7,7 @@ import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { ReparacionDB } from "@/lib/tallerVial/types";
 import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 import BuscadorDeArticulo, { type ArticuloOpcion } from "../BuscadorDeArticulo";
+import Select from "@/components/Select";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const TIPOS = ["Reparación", "Revisión"];
@@ -128,16 +129,16 @@ export default function ReparacionesClient({
         <section className="card mt-4 p-4">
           <h2 className="section-title">Cargar una reparación</h2>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-5">
-            <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
+            <Select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
               {equipos.map((eq) => (
                 <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
               ))}
-            </select>
-            <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            </Select>
+            <Select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
               {TIPOS.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </Select>
             <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} />
             <input
               className="input" inputMode="decimal" placeholder="Horas de trabajo (opcional)"

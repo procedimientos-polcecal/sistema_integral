@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ETIQUETA_ESTADO, type EstadoDiario } from "@/lib/tallerVial/estados";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { EstadoDiarioDB } from "@/lib/tallerVial/types";
+import Select from "@/components/Select";
 
 const ESTILO_ESTADO: Record<EstadoDiario, string> = {
   OPERATIVO: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -107,7 +108,7 @@ export default function EstadosClient({
                     <td><BadgeEstado estado={estadoActual[eq.id] ?? null} /></td>
                     {puedeEditar && (
                       <td>
-                        <select
+                        <Select
                           className="input"
                           disabled={guardando === eq.id}
                           value={estadoActual[eq.id] ?? ""}
@@ -117,7 +118,7 @@ export default function EstadosClient({
                           {ESTADOS.map((e) => (
                             <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                     )}
                   </tr>
@@ -138,17 +139,17 @@ export default function EstadosClient({
             <div className="card mt-2 p-4">
               <p className="text-xs text-slate-500">Para corregir un día anterior, o anotar qué pasó (ej. "se rompió la bomba hidráulica").</p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
-                <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
+                <Select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
                   {equipos.map((eq) => (
                     <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
                   ))}
-                </select>
+                </Select>
                 <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} max={hoy} />
-                <select className="input" value={estado} onChange={(e) => setEstado(e.target.value as EstadoDiario)}>
+                <Select className="input" value={estado} onChange={(e) => setEstado(e.target.value as EstadoDiario)}>
                   {ESTADOS.map((e) => (
                     <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="mt-2">
                 <input

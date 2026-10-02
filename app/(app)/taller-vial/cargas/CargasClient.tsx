@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import KpiCard from "@/components/KpiCard";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
+import Select from "@/components/Select";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -119,11 +120,11 @@ export default function CargasClient({
         <section className="card mt-4 p-4">
           <h2 className="section-title">Cargar combustible</h2>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
+            <Select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
               {equipos.map((eq) => (
                 <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
               ))}
-            </select>
+            </Select>
             <input type="date" className="input" value={fecha} onChange={(e) => setFecha(e.target.value)} />
             <input
               className="input" inputMode="decimal" placeholder="Litros"
