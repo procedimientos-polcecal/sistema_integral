@@ -5,11 +5,17 @@ import { puedeEditarCompras, tieneAccesoCompras } from "@/lib/compras/auth";
 import { avisoDeCredencialesFaltantes, hayCredencialesOdoo } from "@/lib/odoo/client";
 import { confirmarLaOrden, estadosDeLasOrdenes } from "@/lib/odoo/pdfDeOrden";
 import { leerEstado } from "@/lib/odoo/estadoDeOrden";
+import { traerLasOrdenes } from "@/lib/odoo/ordenEnOdoo";
+import { diferenciasDeLaOrden } from "@/lib/compras/divergenciaDeOrden";
 
 /**
  * En qué estado están las órdenes de este requerimiento en Odoo, y confirmarlas.
  *
- * - `GET`  → el estado de cada una, leído de Odoo en el momento.
+ * - `GET`  → **qué dice** cada una, leído de Odoo en el momento: proveedor,
+ *   fecha, líneas con cantidad y precio, totales, y cuánto se recibió y se
+ *   facturó. Antes devolvía sólo el estado, que es una palabra; con eso no se
+ *   podía contestar qué se pidió ni en qué quedó sin abrir Odoo. Pedir quince
+ *   campos en vez de uno no cuesta otro viaje, que es lo que se paga.
  * - `POST` con `{ orden }` → la confirma (`button_confirm`) y devuelve el
  *   estado que quedó.
  *
@@ -63,13 +69,46 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const ids = await ordenesDelRequerimiento(id);
 
   try {
-    const estados = await estadosDeLasOrdenes(ids);
-    return NextResponse.json({
-      estados: ids.map((odooOrderId) => ({
-        odooOrderId,
-        ...leerEstado(estados.get(odooOrderId) ?? null),
-      })),
-    });
+    const leidas = await traerLasOrdenes(ids);
+
+    /*
+     * `estados` se mantiene con la forma de antes a propósito: es lo que decide
+     * si se ofrece el botón de confirmar, y cambiarle la forma al mismo tiempo
+     * que se agrega lo demás mezcla dos cosas. Una orden que ya no está en Odoo
+     * no vuelve en el mapa y `leerEstado(null)` la deja sin confirmar, que es
+     * lo que hacía antes.
+     */
+    const estados = ids.map((odooOrderId) => ({
+      odooOrderId,
+      ...(leidas.get(odooOrderId)?.estado ?? leerEstado(null)),
+    }));
+
+    /*
+     * La comparación va contra la **suma** de las órdenes. Un pedido que pagan
+     * las dos empresas son dos del 50%, y comparar una sola contra el costo
+     * entero sería un cartel permanente y falso en cada ficha compartida.
+     */
+    const todas = [...leidas.values()];
+    const { data: ri } = await createAdminClient()
+      .from("compras_requerimientos")
+      .select("costo_iva, cantidad")
+      .eq("id", id)
+      .maybeSingle();
+
+    const diferencias = ri
+      ? diferenciasDeLaOrden(
+          { costoConIva: ri.costo_iva as number | null, cantidad: ri.cantidad as number | null },
+          {
+            total: todas.reduce((a, o) => a + o.total, 0),
+            cantidad: todas.reduce(
+              (a, o) => a + o.lineas.reduce((b, l) => b + l.cantidad, 0),
+              0
+            ),
+          }
+        )
+      : [];
+
+    return NextResponse.json({ estados, ordenes: todas, diferencias });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

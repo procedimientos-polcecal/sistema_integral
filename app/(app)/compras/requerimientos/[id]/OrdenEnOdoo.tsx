@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fecha, monedaExacta } from "@/lib/compras/constants";
+import type { Diferencia } from "@/lib/compras/divergenciaDeOrden";
+import type { OrdenLeida } from "@/lib/odoo/ordenEnOdoo";
 import {
   explicacionDeSugerencia,
   type MotivoDeSugerencia,
@@ -31,6 +34,13 @@ interface EstadoEnPantalla {
   nombre: string;
   sePuedeConfirmar: boolean;
   estaConfirmada: boolean;
+  /**
+   * El estado tal como lo dice Odoo. Se usa para distinguir lo que **no está
+   * bien** —cancelada, o borrada del otro lado— de lo que simplemente todavía
+   * no se confirmó. Sin esto, una orden cancelada se veía igual que un
+   * borrador.
+   */
+  crudo?: string | null;
 }
 
 export interface OrdenDeOdoo {
@@ -70,6 +80,53 @@ function sinElCatalogo(ensayo: EnsayoDeOrden): unknown {
   return { ...ensayo, producto: { ...resto, catalogo: `${catalogo.length} productos comprables` } };
 }
 
+/**
+ * El producto que usa la orden cuando nadie eligió uno.
+ *
+ * Se resalta en la pantalla a propósito: una orden con `ART. VARIOS` llega a
+ * contabilidad sin decir qué se compró, y verlo acá es la única oportunidad de
+ * corregirlo antes. El nombre es el del catálogo de Odoo.
+ */
+const GENERICO = "ART. VARIOS";
+
+const numero = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+
+/**
+ * En qué quedó la orden, en una frase.
+ *
+ * Son dos hechos distintos y los dos importan: **si llegó** —que sale de las
+ * cantidades recibidas de cada línea— y **si se facturó**, que es el
+ * `invoice_status` de Odoo. El segundo es la razón de ser de crear la orden: si
+ * nunca llega a facturarse desde acá, contabilidad siguió tipeando la factura
+ * de cero y el circuito no sirvió para nada.
+ */
+function comoVa(o: OrdenLeida): string {
+  const pedido = o.lineas.reduce((a, l) => a + l.cantidad, 0);
+  const recibido = o.lineas.reduce((a, l) => a + l.recibido, 0);
+
+  const recepcion =
+    pedido === 0
+      ? "Sin líneas"
+      : recibido === 0
+        ? "Sin recibir"
+        : recibido >= pedido
+          ? "Recibida"
+          : `Recibida en parte (${numero(recibido)} de ${numero(pedido)})`;
+
+  // Los tres valores de `invoice_status` en Odoo 17. Uno que no conozcamos se
+  // muestra tal cual en vez de traducirse a una mentira.
+  const facturacion =
+    o.facturacion === "invoiced"
+      ? "Facturada"
+      : o.facturacion === "to invoice"
+        ? "Para facturar"
+        : o.facturacion === "no"
+          ? "Sin facturar"
+          : o.facturacion;
+
+  return facturacion ? `${recepcion} · ${facturacion}` : recepcion;
+}
+
 export default function OrdenEnOdoo({
   requerimientoId,
   ordenes,
@@ -99,6 +156,10 @@ export default function OrdenEnOdoo({
   const [ocupada, setOcupada] = useState<{ orden: number; que: "pdf" | "confirmar" } | null>(null);
   /** El estado de cada orden en Odoo, por id. Llega después del primer dibujo. */
   const [estados, setEstados] = useState<Record<number, EstadoEnPantalla>>({});
+  /** Lo que la orden **dice** allá: proveedor, líneas, totales, avance. */
+  const [detalles, setDetalles] = useState<Record<number, OrdenLeida>>({});
+  /** Lo que dejó de coincidir con el requerimiento. Vacío cuando cuadra. */
+  const [diferencias, setDiferencias] = useState<Diferencia[]>([]);
   // El producto elegido en el selector, como string porque así lo maneja un
   // <select>. Vacío es el genérico: lo mismo que no mandar nada en el POST.
   const [productoId, setProductoId] = useState("");
@@ -122,10 +183,17 @@ export default function OrdenEnOdoo({
       const res = await fetch(`/api/compras/requerimientos/${requerimientoId}/odoo/estado`);
       if (!res.ok) return;
 
-      const body: { estados?: ({ odooOrderId: number } & EstadoEnPantalla)[] } = await res.json();
+      const body: {
+        estados?: ({ odooOrderId: number } & EstadoEnPantalla)[];
+        ordenes?: OrdenLeida[];
+        diferencias?: Diferencia[];
+      } = await res.json();
+
       setEstados(
         Object.fromEntries((body.estados ?? []).map(({ odooOrderId, ...e }) => [odooOrderId, e]))
       );
+      setDetalles(Object.fromEntries((body.ordenes ?? []).map((o) => [o.odooOrderId, o])));
+      setDiferencias(body.diferencias ?? []);
     } catch {
       // Odoo no contestó. Se ve la orden, sin su estado.
     }
@@ -332,88 +400,183 @@ export default function OrdenEnOdoo({
       )}
 
       {yaEstan ? (
-        <ul className="space-y-2">
-          {ordenes.map((o) => (
-            <li key={o.odooOrderId} className="flex items-baseline justify-between gap-2 text-sm">
-              {/*
-                El número va enlazado porque solo no identifica nada: staging es
-                una copia y su secuencia quedó atrás, así que P02428 existe en
-                las dos bases y son órdenes distintas. El enlace lleva a la que
-                de verdad creó el sistema.
-              */}
-              {o.enlace ? (
-                <a
-                  href={o.enlace}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono font-semibold text-[var(--primary)] hover:underline"
-                >
-                  {o.odooNombre ?? `#${o.odooOrderId}`}
-                </a>
-              ) : (
-                <span className="font-mono font-semibold text-slate-900">
-                  {o.odooNombre ?? `#${o.odooOrderId}`}
-                </span>
-              )}
-              <span className="flex items-baseline gap-3 text-xs text-slate-500">
-                <span>
-                  {o.empresa}
-                  {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}
-                </span>
+        <ul className="space-y-3">
+          {ordenes.map((o) => {
+            const d = detalles[o.odooOrderId];
+            const estado = estados[o.odooOrderId];
+            const trabajandoAca = ocupada?.orden === o.odooOrderId;
 
-                {/*
-                  El estado sale de Odoo, no de una copia nuestra: allá lo puede
-                  cambiar cualquiera y una copia empezaría a mentir el primer
-                  día. Llega después de que la pantalla se dibujó, así que hasta
-                  entonces no se muestra nada en vez de suponer.
-                */}
-                {estados[o.odooOrderId] && (
-                  <span
-                    className={
-                      estados[o.odooOrderId].estaConfirmada
-                        ? "font-semibold text-emerald-700"
-                        : "text-slate-600"
-                    }
-                  >
-                    {estados[o.odooOrderId].nombre}
+            return (
+              <li key={o.odooOrderId} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <div className="flex items-baseline gap-2">
+                    {/*
+                      El número va enlazado porque solo no identifica nada:
+                      staging es una copia y su secuencia quedó atrás, así que
+                      P02428 existe en las dos bases y son órdenes distintas. El
+                      enlace lleva a la que de verdad creó el sistema.
+                    */}
+                    {o.enlace ? (
+                      <a
+                        href={o.enlace}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono font-semibold text-[var(--primary)] hover:underline"
+                      >
+                        {o.odooNombre ?? `#${o.odooOrderId}`}
+                      </a>
+                    ) : (
+                      <span className="font-mono font-semibold text-slate-900">
+                        {o.odooNombre ?? `#${o.odooOrderId}`}
+                      </span>
+                    )}
+
+                    {/*
+                      El estado sale de Odoo, no de una copia nuestra: allá lo
+                      puede cambiar cualquiera y una copia empezaría a mentir el
+                      primer día. Llega después de que la pantalla se dibujó,
+                      así que hasta entonces no se muestra nada en vez de
+                      suponer.
+                    */}
+                    {estado && (
+                      <span
+                        className={`badge ${
+                          estado.estaConfirmada
+                            ? "badge-op"
+                            : estado.crudo === "cancel" || estado.crudo === null
+                              ? "badge-rep"
+                              : "badge-fs"
+                        }`}
+                      >
+                        {estado.nombre}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="text-xs text-slate-500">
+                    {o.empresa}
+                    {o.porcentaje !== 100 && ` · ${o.porcentaje}%`}
                   </span>
+                </div>
+
+                {/*
+                  A quién se le pidió y cuándo. El proveedor es el de **Odoo**, y
+                  no tiene por qué llamarse igual que el del SdG: la misma firma
+                  está cargada como "PEDRO H. CAMINO S.R.L." en Polcecal y
+                  "PEDRO CAMINO SRL" en Polysan. Mostrar el de allá es lo único
+                  honesto — es el que va a recibir la orden.
+                */}
+                {d && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    {d.proveedor ?? "Sin proveedor en la orden"}
+                    {d.fecha && ` · ${fecha(d.fecha)}`}
+                  </p>
                 )}
 
                 {/*
-                  Confirmar lo aprieta una persona y no la generación de la
-                  orden: crea el remito de entrada y a partir de ahí la orden no
-                  se edita ni se borra en Odoo, sólo se cancela.
+                  Lo que la orden dice. Es la parte que antes no estaba y por la
+                  que había que abrir Odoo para saber qué se pidió.
                 */}
-                {puedeEditar && estados[o.odooOrderId]?.sePuedeConfirmar && (
-                  <button
-                    onClick={() => confirmar(o.odooOrderId, o.odooNombre)}
-                    disabled={ocupada !== null}
-                    className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
-                  >
-                    {ocupada?.orden === o.odooOrderId && ocupada.que === "confirmar"
-                      ? "Confirmando…"
-                      : "Confirmar en Odoo"}
-                  </button>
+                {d && d.lineas.length > 0 && (
+                  <ul className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                    {d.lineas.map((l) => (
+                      <li key={l.id}>
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <span className="min-w-0 text-slate-800">{l.descripcion || "—"}</span>
+                          <span className="shrink-0 whitespace-nowrap font-medium tabular-nums text-slate-900">
+                            {monedaExacta(l.subtotal)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {/*
+                            El producto de Odoo se muestra siempre, incluido el
+                            genérico: ART. VARIOS quiere decir que nadie eligió
+                            uno, y eso es justamente lo que conviene ver.
+                          */}
+                          <span className={l.producto === GENERICO ? "text-amber-700" : undefined}>
+                            {l.producto ?? "Sin producto"}
+                          </span>
+                          {" · "}
+                          {numero(l.cantidad)}
+                          {l.unidad ? ` ${l.unidad}` : ""} × {monedaExacta(l.precioUnitario)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
 
-                {/*
-                  El PDF es el de Odoo, generado en el momento: el mismo que
-                  sale de Imprimir → Orden de compra. Si la orden todavía está
-                  en borrador, Odoo lo titula "Solicitud de cotización" — es su
-                  regla, no un error nuestro.
-                */}
-                <button
-                  onClick={() => bajarPdf(o.odooOrderId, o.odooNombre)}
-                  disabled={ocupada !== null}
-                  className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
-                >
-                  {ocupada?.orden === o.odooOrderId && ocupada.que === "pdf"
-                    ? "Generando…"
-                    : "Bajar el PDF"}
-                </button>
-              </span>
-            </li>
-          ))}
+                {d && (
+                  <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-slate-100 pt-2">
+                    {/*
+                      Cada importe en su propio `nowrap`: en un teléfono la
+                      línea se parte, y conviene que se parta ENTRE el neto y el
+                      IVA y no en medio de uno de los dos.
+                    */}
+                    <span className="text-xs text-slate-500">
+                      <span className="whitespace-nowrap">Neto {monedaExacta(d.neto)}</span>
+                      {" · "}
+                      <span className="whitespace-nowrap">IVA {monedaExacta(d.iva)}</span>
+                    </span>
+                    {/*
+                      `whitespace-nowrap` porque en un teléfono el importe se
+                      partía entre el signo y el número: "$" en una línea y
+                      "19.511,25" en la siguiente.
+                    */}
+                    <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-slate-900">
+                      {monedaExacta(d.total)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  {/*
+                    En qué quedó: si llegó y si se facturó. Lo segundo es la
+                    razón de ser de crear la orden —que contabilidad arme la
+                    factura desde acá en vez de tipearla—, así que es el dato que
+                    dice si sirvió de algo.
+                  */}
+                  {d ? (
+                    <span className="text-xs text-slate-600">{comoVa(d)}</span>
+                  ) : (
+                    <span className="text-xs text-slate-400">Leyendo la orden en Odoo…</span>
+                  )}
+
+                  <span className="flex items-baseline gap-3 text-xs">
+                    {/*
+                      Confirmar lo aprieta una persona y no la generación de la
+                      orden: crea el remito de entrada y a partir de ahí la orden
+                      no se edita ni se borra en Odoo, sólo se cancela.
+                    */}
+                    {puedeEditar && estado?.sePuedeConfirmar && (
+                      <button
+                        onClick={() => confirmar(o.odooOrderId, o.odooNombre)}
+                        disabled={ocupada !== null}
+                        className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
+                      >
+                        {trabajandoAca && ocupada.que === "confirmar"
+                          ? "Confirmando…"
+                          : "Confirmar en Odoo"}
+                      </button>
+                    )}
+
+                    {/*
+                      El PDF es el de Odoo, generado en el momento: el mismo que
+                      sale de Imprimir → Orden de compra. Si la orden todavía
+                      está en borrador, Odoo lo titula "Solicitud de cotización"
+                      — es su regla, no un error nuestro.
+                    */}
+                    <button
+                      onClick={() => bajarPdf(o.odooOrderId, o.odooNombre)}
+                      disabled={ocupada !== null}
+                      className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-50"
+                    >
+                      {trabajandoAca && ocupada.que === "pdf" ? "Generando…" : "Bajar el PDF"}
+                    </button>
+                  </span>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-sm text-slate-500">
@@ -422,6 +585,37 @@ export default function OrdenEnOdoo({
         </p>
       )}
 
+      {/*
+        Lo que dejó de coincidir con el requerimiento.
+
+        La orden se crea desde acá y después se edita **del otro lado**: en Odoo
+        cualquiera le cambia el precio o la cantidad. Hasta ahora una orden que
+        ya no decía lo mismo que el RI se veía exactamente igual que una
+        intacta, que es la forma de error que este módulo persigue en todos
+        lados: el dato dejó de coincidir y nada avisa.
+
+        Va en ámbar y no en rojo porque **no es un error**: que contabilidad
+        corrija un precio en la orden es lo correcto. Lo que no puede pasar es
+        que nadie se entere.
+      */}
+      {diferencias.length > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <strong className="block">
+            La orden en Odoo ya no dice lo mismo que el requerimiento:
+          </strong>
+          <ul className="mt-1 space-y-0.5">
+            {diferencias.map((d) => (
+              <li key={d.campo}>
+                {d.campo}: acá <span className="font-medium">{d.enElSdg}</span>, en Odoo{" "}
+                <span className="font-medium">{d.enOdoo}</span>.
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 opacity-80">
+            Si el cambio es el bueno, el que hay que corregir es el requerimiento.
+          </p>
+        </div>
+      )}
       {pendiente && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <strong className="block">Quedó pendiente:</strong>

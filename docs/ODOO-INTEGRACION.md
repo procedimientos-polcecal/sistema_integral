@@ -380,7 +380,9 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 6. **Pull incremental** por cron: filtrar `[["write_date", ">", ultimo_sync]]` y
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.
-7. ~~Push de Compras~~ **hecho**: crea la OC en draft al aprobarse en el SdG,
+7. ~~Push de Compras~~ **hecho**: crea la OC en draft **al pasar el pedido a
+   PEDIDO** en el SdG —no al aprobarse, como decía acá: el disparador es
+   `nuevoEstado === "PEDIDO"` en la ruta del requerimiento—,
    con `crearEn`. Para un RI compartido, dos órdenes, con el reparto de
    `repartoAmbas.ts`. **La línea ya no lleva siempre el mismo producto
    genérico**: el catálogo comprable de Odoo (`lib/odoo/catalogo.ts`, 378
@@ -397,6 +399,70 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
 8. **Webhook** para lo urgente: Odoo 17 tiene la acción "Send Webhook
    Notification" en las reglas de automatización, con log de llamadas. Mismo
    patrón que el Apps Script de la planilla, protegido con un secreto propio.
+
+## La orden creada se ve entera, sin abrir Odoo
+
+Hasta el 02/10/2026 la ficha del requerimiento mostraba de cada orden tres
+cosas: el número, la empresa y una palabra de estado. Con eso no se podía
+contestar ninguna de las preguntas que alguien se hace mirando una orden ya
+creada —**qué se pidió, a quién, y en qué quedó**—, así que para saberlo había
+que abrir Odoo. Ahora se ve:
+
+| | De dónde sale |
+|---|---|
+| Proveedor y fecha | `partner_id`, `date_order` |
+| Cada línea: descripción, producto, cantidad × unitario, subtotal | `purchase.order.line` |
+| Neto, IVA y total | `amount_untaxed`, `amount_tax`, `amount_total` |
+| Si llegó y si se facturó | `qty_received` de cada línea, `invoice_status` |
+
+**No cuesta un viaje más.** El estado ya se leía con una llamada a
+`purchase.order` pidiendo **un solo campo**; pedir los once que hacen falta sale
+lo mismo, porque lo que se paga en Odoo Online es el viaje. Las líneas sí son
+una segunda llamada, pero una sola para todas las órdenes del requerimiento
+—una ficha compartida tiene dos—, por la misma razón por la que los estados ya
+se preguntaban juntos.
+
+**Nada de esto se guarda de este lado.** La orden vive en Odoo y ahí la edita
+cualquiera; una copia nuestra empezaría a mentir el primer día. Es el mismo
+argumento por el que el estado tampoco se guardaba. Vive en
+`lib/odoo/ordenEnOdoo.ts` y lo sirve la ruta `…/odoo/estado`.
+
+### Lo que el proveedor de la orden revela, y conviene mirar
+
+Se muestra el partner de **Odoo**, no el proveedor del SdG, y no tienen por qué
+llamarse igual: el RI 1933 generó dos órdenes para la misma firma y en Polcecal
+figura como `PEDRO H. CAMINO S.R.L.` y en Polysan como `PEDRO CAMINO SRL`. El
+SdG, por su lado, lo tiene cargado como `Casa Camino`. Mostrar el de allá es lo
+único honesto: es el que va a recibir la orden.
+
+Por lo mismo, el producto se muestra siempre, **incluido el genérico**, y
+`ART. VARIOS` va resaltado: quiere decir que nadie eligió un producto, la orden
+llega a contabilidad sin decir qué se compró, y la ficha es la única
+oportunidad de notarlo.
+
+### Y se avisa cuando la orden dejó de decir lo que dice el RI
+
+La orden se crea desde el SdG y **después se edita del otro lado**. Antes, una
+orden a la que le cambiaron el precio en Odoo se veía exactamente igual que una
+intacta — la forma de error que este sistema persigue en todos lados: el dato
+dejó de coincidir y nada avisa.
+
+`lib/compras/divergenciaDeOrden.ts` compara el costo y la cantidad del
+requerimiento contra la **suma** de sus órdenes. La suma importa: un pedido que
+pagan las dos empresas son dos órdenes del 50%, y comparar una sola contra el
+costo entero sería un cartel permanente y falso en cada ficha compartida.
+
+La tolerancia no es un número elegido a ojo. El total de Odoo **nunca** da
+exactamente igual, porque `price_unit` viaja con dos decimales y el subtotal
+arrastra ese redondeo multiplicado por la cantidad: en el RI 1933 son **dos
+centavos** —39.022,48 contra 39.022,50— y el peor descuadre medido sobre los
+1.678 RI con costo fue **$2,85 sobre $133.000**. El umbral es un milésimo del
+total con un piso de $10, cómodamente arriba de eso. Un precio cambiado a mano
+mueve el total mucho más, así que no se pierde nada por ser generoso: lo caro
+es un cartel que salta siempre y la gente aprende a ignorar.
+
+Va en **ámbar y no en rojo** porque no es un error. Que contabilidad corrija un
+precio en la orden es lo correcto; lo que no puede pasar es que nadie se entere.
 
 ## El PDF de un reporte: se puede, pero no por donde parece
 
