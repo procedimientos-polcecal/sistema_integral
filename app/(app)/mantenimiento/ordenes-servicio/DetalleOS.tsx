@@ -10,6 +10,7 @@ import { justificacionQueExplica } from "@/lib/core/justificacion";
 import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 import CotizacionForm from "./CotizacionForm";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 /**
  * Una orden de servicio abierta: cómo viene y qué se cotizó.
@@ -165,7 +166,7 @@ export default function DetalleOS({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo etiqueta="Estado">
-              <select
+              <Select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value)}
                 disabled={!puedeEditar}
@@ -177,7 +178,7 @@ export default function DetalleOS({
                 {[...new Set([...ESTADOS_OS, ...(estado ? [estado] : [])])].map((e) => (
                   <option key={e} value={e}>{e}</option>
                 ))}
-              </select>
+              </Select>
             </Campo>
             <Campo etiqueta="Proveedor">
               <input

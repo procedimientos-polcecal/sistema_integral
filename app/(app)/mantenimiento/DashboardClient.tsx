@@ -8,6 +8,7 @@ import InfoTip from "@/components/InfoTip";
 import KpiCard from "@/components/KpiCard";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
+import Select from "@/components/Select";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -437,11 +438,11 @@ export default function DashboardClient({
             ))}
           </div>
           {plantFilter !== "TODAS" && availableSectors.length > 0 && (
-            <select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)}
+            <Select value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)}
               className="card px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-300">
               <option value="TODOS">Todos los sectores</option>
               {availableSectors.map((s: any) => <option key={s.nombre} value={s.nombre}>{s.nombre}</option>)}
-            </select>
+            </Select>
           )}
         </div>
       </div>

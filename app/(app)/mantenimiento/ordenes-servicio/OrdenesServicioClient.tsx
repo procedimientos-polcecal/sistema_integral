@@ -8,6 +8,7 @@ import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { OrdenServicio } from "@/lib/mantenimiento/types";
 import DetalleOS from "./DetalleOS";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
+import Select from "@/components/Select";
 
 /**
  * Las órdenes de servicio.
@@ -180,22 +181,22 @@ export default function OrdenesServicioClient({
           placeholder="Buscar por N°, equipo, sector, descripción, proveedor…"
           className="min-w-56 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-        <select
+        <Select
           value={area}
           onChange={(e) => setArea(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">Cualquier área</option>
           {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select
+        </Select>
+        <Select
           value={estado}
           onChange={(e) => setEstado(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">Cualquier estado</option>
           {estados.map((e) => <option key={e} value={e}>{e}</option>)}
-        </select>
+        </Select>
         <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
           <input
             type="checkbox"

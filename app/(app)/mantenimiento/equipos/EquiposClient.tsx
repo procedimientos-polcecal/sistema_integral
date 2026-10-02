@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { sectoresQueElLibroCrearia } from "@/lib/mantenimiento/inventario";
+import Select from "@/components/Select";
 
 // Las mismas clases .badge-* de globals.css que usa el resto del sistema para
 // estos estados de equipo, en vez de un par bg/text propio de esta pantalla.
@@ -290,7 +291,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           onChange={(e) => setSearch(e.target.value)}
           className="col-span-2 md:col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
-        <select
+        <Select
           value={filterEmpresa}
           onChange={(e) => { setFilterEmpresa(e.target.value); setFilterSector(""); }}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
@@ -299,8 +300,8 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           {empresas.map((p: any) => (
             <option key={p.id} value={p.nombre}>{p.nombre}</option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={filterSector}
           onChange={(e) => setFilterSector(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
@@ -309,8 +310,8 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           {filteredSectores.map((s: any) => (
             <option key={s.id} value={s.nombre}>{s.nombre}</option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
@@ -319,7 +320,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
           {Object.entries(STATUS_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="hidden md:block overflow-x-auto card">

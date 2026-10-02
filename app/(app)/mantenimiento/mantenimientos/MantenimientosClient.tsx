@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
+import Select from "@/components/Select";
 
 const TYPE_OPTIONS = [
   { value: "Lubricacion",       label: "Lubricación" },
@@ -346,7 +347,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
           <InfoTip text="Acá programás los mantenimientos preventivos de cada equipo: qué tarea, cada cuánto se repite y quién la hace. El sistema avisa cuando se acercan o vencen, y desde cada uno podés generar o vincular una orden de trabajo (OT)." />
         </h1>
         <div className="flex items-center gap-2">
-          <select
+          <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none"
@@ -356,7 +357,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
             <option value="paused">Pausados</option>
             <option value="cancelled">Cancelados</option>
             <option value="completed">Completados</option>
-          </select>
+          </Select>
           {canEdit && (
             <button
               onClick={openNew}
@@ -499,30 +500,30 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
 
             <div className="space-y-3">
               <Field label="Equipo" required>
-                <select value={form.equipment_id} onChange={(e) => field("equipment_id", e.target.value)} className="input">
+                <Select value={form.equipment_id} onChange={(e) => field("equipment_id", e.target.value)} className="input">
                   <option value="">Seleccioná un equipo...</option>
                   {equipos.map((e: any) => (
                     <option key={e.id} value={e.id}>
                       {e.code} — {e.name} ({e.sectores?.empresas?.nombre ?? "Transversal"})
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Tipo">
-                  <select value={form.maintenance_type} onChange={(e) => field("maintenance_type", e.target.value)} className="input">
+                  <Select value={form.maintenance_type} onChange={(e) => field("maintenance_type", e.target.value)} className="input">
                     {TYPE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Frecuencia">
-                  <select value={form.schedule_type} onChange={(e) => field("schedule_type", e.target.value)} className="input">
+                  <Select value={form.schedule_type} onChange={(e) => field("schedule_type", e.target.value)} className="input">
                     {SCHEDULE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               </div>
 
@@ -546,12 +547,12 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
               </div>
 
               <Field label="Asignar a">
-                <select value={form.assigned_to} onChange={(e) => field("assigned_to", e.target.value)} className="input">
+                <Select value={form.assigned_to} onChange={(e) => field("assigned_to", e.target.value)} className="input">
                   <option value="">Sin asignar</option>
                   {users.map((u: any) => (
                     <option key={u.id} value={u.id}>{nombreCompleto(u)}</option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <Field label="Descripción / tarea">

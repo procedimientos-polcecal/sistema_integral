@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 /**
  * Registrar el trabajo de una orden.
@@ -187,13 +188,13 @@ export default function RegistrarOTModal({
 
         <div className="grid grid-cols-2 gap-3">
           <Campo etiqueta="Cómo salió">
-            <select
+            <Select
               value={resultado}
               onChange={(e) => setResultado(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               {RESULTADOS.map((r) => <option key={r.valor} value={r.valor}>{r.label}</option>)}
-            </select>
+            </Select>
           </Campo>
 
           <Campo etiqueta="Cuándo">
@@ -218,7 +219,7 @@ export default function RegistrarOTModal({
           </Campo>
 
           <Campo etiqueta="Contratista">
-            <select
+            <Select
               value={contratista}
               onChange={(e) => setContratista(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -230,7 +231,7 @@ export default function RegistrarOTModal({
                 ...contratistas.map((c) => c.nombre),
                 ...(contratista ? [contratista] : []),
               ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            </Select>
           </Campo>
         </div>
 
@@ -245,7 +246,7 @@ export default function RegistrarOTModal({
               const suyos = operarios.filter((o) => o.slot === i + 1).map((o) => o.nombre);
               const elegido = valor as string;
               return (
-                <select
+                <Select
                   key={i}
                   value={elegido}
                   onChange={(e) => (set as (v: string) => void)(e.target.value)}
@@ -255,7 +256,7 @@ export default function RegistrarOTModal({
                   {[...new Set([...suyos, ...(elegido ? [elegido] : [])])].sort().map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
-                </select>
+                </Select>
               );
             })}
           </div>

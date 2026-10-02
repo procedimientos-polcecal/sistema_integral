@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Select from "@/components/Select";
 
 const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
 const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
@@ -114,20 +115,20 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         <form onSubmit={submit} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <F label="Sector">
-              <select value={form.sector_id} onChange={e => f("sector_id", e.target.value)} className="input">
+              <Select value={form.sector_id} onChange={e => f("sector_id", e.target.value)} className="input">
                 <option value="">— Todos —</option>
                 {sectores.map((s: any) => (
                   <option key={s.id} value={s.id}>{s.empresas?.nombre ?? "Transversal"} · {s.nombre}</option>
                 ))}
-              </select>
+              </Select>
             </F>
             <F label="Equipo">
-              <select value={form.equipment_id} onChange={e => f("equipment_id", e.target.value)} className="input">
+              <Select value={form.equipment_id} onChange={e => f("equipment_id", e.target.value)} className="input">
                 <option value="">— Sin asignar —</option>
                 {filteredEquip.map((eq: any) => (
                   <option key={eq.id} value={eq.id}>{eq.code} – {eq.name}</option>
                 ))}
-              </select>
+              </Select>
             </F>
           </div>
 
@@ -138,20 +139,20 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
           <div className="grid grid-cols-3 gap-4">
             <F label="Especialidad">
-              <select value={form.especialidad} onChange={e => f("especialidad", e.target.value)} className="input">
+              <Select value={form.especialidad} onChange={e => f("especialidad", e.target.value)} className="input">
                 <option value="">—</option>
                 {ESPECIALIDADES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </Select>
             </F>
             <F label="Tipo">
-              <select value={form.tipo} onChange={e => f("tipo", e.target.value)} className="input">
+              <Select value={form.tipo} onChange={e => f("tipo", e.target.value)} className="input">
                 {TIPOS.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </Select>
             </F>
             <F label="Quién realiza">
-              <select value={form.quien} onChange={e => f("quien", e.target.value)} className="input">
+              <Select value={form.quien} onChange={e => f("quien", e.target.value)} className="input">
                 {QUIEN_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </Select>
             </F>
           </div>
 
@@ -174,14 +175,14 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
           <div className="grid grid-cols-3 gap-4">
             <F label="Estado inicial">
-              <select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
+              <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
                 {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              </Select>
             </F>
             <F label="Prioridad">
-              <select value={form.prioridad} onChange={e => f("prioridad", e.target.value)} className="input">
+              <Select value={form.prioridad} onChange={e => f("prioridad", e.target.value)} className="input">
                 {PRIORIDADES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </Select>
             </F>
             <F label="Horas estimadas">
               <input type="number" value={form.horas} onChange={e => f("horas", e.target.value)}
@@ -204,7 +205,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               const suyos = operarios.filter((o) => o.slot === slot).map((o) => o.nombre);
               return (
                 <F key={slot} label={`Operario ${slot}`}>
-                  <select
+                  <Select
                     value={elegido}
                     onChange={(e) => f(campo, e.target.value)}
                     className="input"
@@ -213,7 +214,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                     {[...new Set([...suyos, ...(elegido ? [elegido] : [])])].sort().map((n) => (
                       <option key={n} value={n}>{n}</option>
                     ))}
-                  </select>
+                  </Select>
                 </F>
               );
             })}

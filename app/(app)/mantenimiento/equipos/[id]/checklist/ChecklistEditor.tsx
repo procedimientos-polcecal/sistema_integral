@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import Select from "@/components/Select";
 
 type ItemType = "check" | "number" | "text" | "photo";
 
@@ -145,7 +146,7 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
                 )}
                 <div className="flex items-center gap-3 flex-wrap">
                   {canEdit ? (
-                    <select
+                    <Select
                       value={item.type}
                       onChange={(e) => updateItem(item.id, { type: e.target.value as ItemType })}
                       className="rounded-lg border border-slate-300 px-2 py-1 text-xs focus:outline-none"
@@ -153,7 +154,7 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
                       {Object.entries(TYPE_LABELS).map(([v, l]) => (
                         <option key={v} value={v}>{l}</option>
                       ))}
-                    </select>
+                    </Select>
                   ) : (
                     <span className="text-xs text-slate-500">{TYPE_LABELS[item.type]}</span>
                   )}

@@ -22,6 +22,7 @@ import OrdenarTrabajo from "./OrdenarTrabajo";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 const ESTADOS = [
   { value: "",           label: "Todos",      color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" },
@@ -455,13 +456,13 @@ export default function OrdenesClient({
               El `max` y el `min` cruzados son lo que evita el rango al revés,
               que devuelve cero y no dice por qué. */}
           <div className={`${filtrosAbiertos ? "flex" : "hidden"} sm:flex flex-wrap items-center gap-2`}>
-            <select
+            <Select
               value={campoFecha}
               onChange={(e) => setCampoFecha(e.target.value)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
             >
               {CAMPOS_DE_FECHA.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-            </select>
+            </Select>
             <span className="text-sm text-slate-400">del</span>
             <input
               type="date" value={desde} max={hasta || undefined}

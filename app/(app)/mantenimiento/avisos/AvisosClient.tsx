@@ -8,6 +8,7 @@ import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
+import Select from "@/components/Select";
 
 /**
  * Los avisos: lo que alguien reportó que necesita mantenimiento.
@@ -201,14 +202,14 @@ export default function AvisosClient({
           placeholder="Buscar por equipo, sector, descripción…"
           className="min-w-56 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-        <select
+        <Select
           value={urgencia}
           onChange={(e) => setUrgencia(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">Cualquier urgencia</option>
           {urgencias.map((u) => <option key={u} value={u}>{u}</option>)}
-        </select>
+        </Select>
         <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
           <input
             type="checkbox"

@@ -6,6 +6,7 @@ import Link from "next/link";
 import FichaTecnica from "./FichaTecnica";
 import ComponentesYRepuestos from "./ComponentesYRepuestos";
 import CostoDelEquipo, { type CostoDelEquipoProps } from "./CostoDelEquipo";
+import Select from "@/components/Select";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -236,18 +237,18 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
           </div>
 
           <Field label="Sector" required>
-            <select value={form.sector_id} onChange={(e) => field("sector_id", e.target.value)} className="input">
+            <Select value={form.sector_id} onChange={(e) => field("sector_id", e.target.value)} className="input">
               {sectores.map((s: any) => (
                 <option key={s.id} value={s.id}>{s.empresas?.nombre ?? "Transversal"} · {s.nombre}</option>
               ))}
-            </select>
+            </Select>
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Criticidad">
-              <select value={form.criticality} onChange={(e) => field("criticality", e.target.value)} className="input">
+              <Select value={form.criticality} onChange={(e) => field("criticality", e.target.value)} className="input">
                 {CRITICALITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              </Select>
             </Field>
             <Field label="Potencia (kW)">
               <input type="number" value={form.power_kw} onChange={(e) => field("power_kw", e.target.value)}

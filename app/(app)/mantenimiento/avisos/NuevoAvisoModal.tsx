@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
+import Select from "@/components/Select";
 
 /**
  * Con qué campos abre el formulario.
@@ -120,7 +121,7 @@ export default function NuevoAvisoModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block space-y-1">
             <span className="block text-xs font-medium text-slate-600">Equipo</span>
-            <select
+            <Select
               onChange={(e) => elegirEquipo(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
@@ -130,12 +131,12 @@ export default function NuevoAvisoModal({
                   {e.code ? `${e.code} — ` : ""}{e.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label className="block space-y-1">
             <span className="block text-xs font-medium text-slate-600">Sector</span>
-            <select
+            <Select
               value={campos.sector_id}
               onChange={(e) => {
                 set("sector_id", e.target.value);
@@ -149,18 +150,18 @@ export default function NuevoAvisoModal({
                   {s.codigo ? `${s.codigo} — ` : ""}{s.nombre}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label className="block space-y-1">
             <span className="block text-xs font-medium text-slate-600">Urgencia</span>
-            <select
+            <Select
               value={campos.urgencia}
               onChange={(e) => set("urgencia", e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               {URGENCIAS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
+            </Select>
           </label>
 
           <label className="block space-y-1">

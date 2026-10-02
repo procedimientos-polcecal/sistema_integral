@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import Select from "@/components/Select";
 
 const ESTADO_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -203,13 +204,13 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
             </div>
             <div className="p-4 space-y-3">
               <div className="flex gap-2">
-                <select value={filterSector} onChange={e => setFilterSector(e.target.value)}
+                <Select value={filterSector} onChange={e => setFilterSector(e.target.value)}
                   className="input flex-1 text-sm">
                   <option value="">Todos los sectores</option>
                   {sectores.map((s: any) => (
                     <option key={s.id} value={s.id}>{s.empresas?.nombre ?? "Transversal"} · {s.nombre}</option>
                   ))}
-                </select>
+                </Select>
                 <input value={filterQ} onChange={e => setFilterQ(e.target.value)}
                   placeholder="Buscar OT..." className="input flex-1 text-sm" />
               </div>
@@ -280,11 +281,11 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <label className="block text-xs font-medium text-slate-600">Asignar a (usuario del sistema)</label>
-            <select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); if (e.target.value) setAssignedName(""); }}
+            <Select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); if (e.target.value) setAssignedName(""); }}
               className="input w-full">
               <option value="">— Nombre libre —</option>
               {usuarios.map((u: any) => <option key={u.id} value={u.id}>{nombreCompleto(u)}</option>)}
-            </select>
+            </Select>
           </div>
           {!assignedTo && (
             <div className="space-y-1">

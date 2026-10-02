@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { monto } from "@/lib/mantenimiento/planilla";
 import { monedaExacta } from "@/lib/compras/constants";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 /**
  * Cargar una cotización a la comparativa de una OS.
@@ -126,7 +127,7 @@ export default function CotizacionForm({
               )}
             </div>
           ) : (
-            <select
+            <Select
               value={campos.proveedor}
               onChange={(e) => {
                 if (e.target.value === "__nuevo") { setNuevoProveedor(true); set("proveedor", ""); }
@@ -137,7 +138,7 @@ export default function CotizacionForm({
               <option value="">Elegir…</option>
               {contratistas.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
               <option value="__nuevo">Otro, no está en la lista…</option>
-            </select>
+            </Select>
           )}
         </label>
 

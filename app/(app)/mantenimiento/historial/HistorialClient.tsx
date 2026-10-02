@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import InfoTip from "@/components/InfoTip";
+import Select from "@/components/Select";
 
 const STATUS_COLORS: Record<string, string> = {
   completado: "bg-green-100 text-green-800",
@@ -106,18 +107,18 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
           onChange={(e) => setSearch(e.target.value)}
           className="col-span-2 md:col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         />
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+        <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none">
           <option value="">Todos los estados</option>
           <option value="completado">Completado</option>
           <option value="parcial">Parcial</option>
           <option value="cancelado">Cancelado</option>
-        </select>
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+        </Select>
+        <Select value={filterType} onChange={(e) => setFilterType(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none">
           <option value="">Todos los tipos</option>
           {types.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        </Select>
       </div>
 
       <div className="hidden md:block overflow-x-auto card">

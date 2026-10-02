@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 /**
  * Configuración de Mantenimiento: las listas de las que come el módulo.
@@ -179,13 +180,13 @@ function Operarios({
             placeholder="Nombre"
             className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           />
-          <select
+          <Select
             value={slot}
             onChange={(e) => setSlot(Number(e.target.value))}
             className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           >
             {SLOTS.map((s) => <option key={s} value={s}>Operario {s}</option>)}
-          </select>
+          </Select>
           <button
             onClick={sumar}
             disabled={guardando || !nombre.trim()}

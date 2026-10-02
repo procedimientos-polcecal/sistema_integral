@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
+import Select from "@/components/Select";
 
 const STATUS_COLORS: Record<string, string> = {
   completado: "bg-green-100 text-green-800",
@@ -270,21 +271,21 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
 
             <div className="space-y-3">
               <Field label="Mantenimiento" required>
-                <select value={form.schedule_id} onChange={(e) => { field("schedule_id", e.target.value); openFor(e.target.value); }} className="input">
+                <Select value={form.schedule_id} onChange={(e) => { field("schedule_id", e.target.value); openFor(e.target.value); }} className="input">
                   <option value="">Seleccioná...</option>
                   {schedules.map((s: any) => (
                     <option key={s.id} value={s.id}>{s.equipos?.code} — {s.equipos?.name} ({s.maintenance_type})</option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Estado">
-                  <select value={form.execution_status} onChange={(e) => field("execution_status", e.target.value)} className="input">
+                  <Select value={form.execution_status} onChange={(e) => field("execution_status", e.target.value)} className="input">
                     <option value="completado">Completado</option>
                     <option value="parcial">Parcial</option>
                     <option value="cancelado">Cancelado</option>
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Duración (horas)">
                   <input type="number" min="0" step="0.5" value={form.duration_hours}
