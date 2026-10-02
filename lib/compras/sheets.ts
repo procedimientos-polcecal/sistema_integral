@@ -21,6 +21,13 @@ import { norm } from "@/lib/compras/texto";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { equiposPorRi, resolverElEquipo } from "@/lib/compras/equipoDelFormulario";
+import {
+  lasQuePasaronAPedido,
+  repartirLasOrdenes,
+  type RequerimientoParaLaOrden,
+} from "@/lib/compras/ordenesDesdeLaPlanilla";
+import { hayCredencialesOdoo } from "@/lib/odoo/client";
+import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
 import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPlanilla";
 // Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
@@ -380,6 +387,19 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
    * `console.warn` por la misma razón que los demás motivos de este módulo.
    */
   equipos_error?: string;
+  /**
+   * Cuántas órdenes de compra se crearon en Odoo en esta corrida.
+   *
+   * Hasta el 02/10/2026 esto era siempre cero sin que nadie lo supiera: el
+   * disparador estaba en la ruta de la app y el estado llega a PEDIDO por acá.
+   */
+  ordenes_odoo: number;
+  /**
+   * El primer motivo por el que una orden no se pudo crear. La importación
+   * sigue igual —el alta de los requerimientos vale más que la orden— y cada
+   * RI queda con su `odoo_pendiente` y su botón de reintentar en la ficha.
+   */
+  ordenes_odoo_error?: string;
 }
 
 interface FilaPlanilla {
@@ -673,6 +693,73 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       if (error) throw new Error(error.message);
     }
 
+    // ── Las órdenes de compra de los que pasaron a PEDIDO ──
+    //
+    // **El disparador vivía donde el flujo no pasa.** La orden se creaba en la
+    // ruta `PATCH` del requerimiento, al mover el estado desde el sistema; y
+    // medido el 02/10/2026, de las 66 transiciones a PEDIDO que hubo desde que
+    // el push existe, **ninguna** vino por ahí: todas las escribió esta
+    // sincronización, que hasta hoy no sabía nada de Odoo. Las dos únicas
+    // órdenes que hay son de la prueba del 11/09.
+    //
+    // La evidencia, por si alguna vez hay que rehacerla: las 66 tienen
+    // `usuario_nombre` en null —las anotó el trigger de la base, que registra
+    // todo cambio venga de donde venga—, 65 no tienen `costo_iva` (la ruta de
+    // la app rechaza esa transición con un 409) y ninguna tiene `fecha_pedido`,
+    // que esa ruta escribe desde el 19/08.
+    //
+    // Mira **transiciones y no estados**, así que no manda el pasado: los 119
+    // requerimientos que hoy están en PEDIDO con todos los datos y sin orden
+    // quedan donde están. Eso es una decisión de alguien, no de un cron.
+    const pasaronAPedido = lasQuePasaronAPedido(aEscribir as { nro_ri: number }[], previo);
+    let ordenesCreadas = 0;
+    let errorDeOrdenes: string | undefined;
+
+    if (pasaronAPedido.length && hayCredencialesOdoo()) {
+      // Se releen después del upsert y no se usa lo que venía en memoria: la
+      // fusión con lo que ya había pudo cambiar el proveedor o el costo, y es
+      // con lo que quedó guardado con lo que se arma la orden.
+      const { data: recien } = await admin
+        .from("compras_requerimientos")
+        .select("id, nro_ri, estado_compra, proveedor_id, costo_iva, empresa_id, paga_ambas")
+        .in("nro_ri", pasaronAPedido.slice(0, 200));
+
+      const reparto = repartirLasOrdenes((recien ?? []) as RequerimientoParaLaOrden[]);
+      const porNro = new Map((recien ?? []).map((r) => [r.nro_ri as number, r.id as string]));
+
+      for (const nro of reparto.aCrear) {
+        const id = porNro.get(nro);
+        if (!id) continue;
+        try {
+          const r = await empujarOrdenesDeRequerimiento(admin, id);
+          if (r.ok) ordenesCreadas += r.ordenes.length;
+          else errorDeOrdenes ??= `RI ${nro}: ${r.motivos.join(" | ")}`;
+        } catch (e) {
+          // No corta la corrida: el alta de los requerimientos vale más que la
+          // orden, y el motivo queda en `odoo_pendiente` del RI —con su botón
+          // de reintentar en la ficha— porque eso lo escribe el propio push.
+          errorDeOrdenes ??= `RI ${nro}: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+
+      /*
+       * Las que el tope dejó afuera **no se pierden en silencio**: se les
+       * escribe el pendiente, que es lo que las hace visibles en la ficha y
+       * reintentables a mano. Sin esto, una edición masiva en la planilla
+       * dejaría diez órdenes creadas y el resto sin rastro.
+       */
+      for (const nro of reparto.postergadas) {
+        await admin
+          .from("compras_requerimientos")
+          .update({
+            odoo_pendiente:
+              "Pasó a PEDIDO junto con muchos otros y quedó fuera del tope de la " +
+              "sincronización. La orden no se creó: se puede crear desde acá.",
+          })
+          .eq("nro_ri", nro);
+      }
+    }
+
     // ── Dónde quedó la fila de los RI que no se pisaron ──
     //
     // `editado_en_app` protege **el dato** —el estado, el proveedor, los
@@ -746,6 +833,8 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       equipos: aEscribir.filter((f) => f.equipo_raw).length,
       equipos_enlazados: aEscribir.filter((f) => f.equipo_id).length,
       ...(errorDeEquipos ? { equipos_error: errorDeEquipos } : {}),
+      ordenes_odoo: ordenesCreadas,
+      ...(errorDeOrdenes ? { ordenes_odoo_error: errorDeOrdenes } : {}),
     };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);

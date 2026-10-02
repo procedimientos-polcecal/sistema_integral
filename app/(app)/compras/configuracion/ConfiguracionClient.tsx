@@ -95,7 +95,19 @@ export default function ConfiguracionClient({
         : `${body.comparativas} con su comparativa enlazada` +
           (body.comparativas_sin_planilla > 0
             ? `, y ${body.comparativas_sin_planilla} link(s) de comparativa que no son una planilla.`
-            : "."))
+            : ".")) +
+      /*
+        Las órdenes de compra que esta corrida creó en Odoo.
+        
+        Se dice **siempre**, incluso cuando son cero: la sincronización pasó a
+        escribir en la contabilidad real del grupo y eso no puede ser invisible.
+        Y un cero sostenido es un dato — fue exactamente lo que pasó durante tres
+        semanas sin que nadie lo notara.
+      */
+      (body.ordenes_odoo > 0
+        ? ` Se crearon ${body.ordenes_odoo} orden(es) de compra en Odoo.`
+        : " No hubo pedidos nuevos con proveedor y costo, así que no se creó ninguna orden en Odoo.") +
+      (body.ordenes_odoo_error ? ` Una quedó pendiente: ${body.ordenes_odoo_error}` : "")
     );
     router.refresh();
   }

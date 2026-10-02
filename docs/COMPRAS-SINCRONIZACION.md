@@ -44,6 +44,8 @@ porque ese bloque exige una pestaña de área de verdad. El porqué largo está 
   "El equipo que solicita", más abajo.
 - **Enlaza la planilla de comparativa** que anote la columna de cada hoja de
   área. Ver "La comparativa entra por acá", más abajo.
+- **Crea en Odoo la orden de compra** de los que pasaron a PEDIDO y tienen
+  proveedor, costo y empresa. Ver "La orden de compra se crea desde acá".
 - Omite los RI ya gestionados en el sistema.
 - Se dispara por: el webhook del Apps Script cuando alguien edita la planilla,
   el botón de `/compras/configuracion`, y un cron diario a las 9 UTC (6 de la
@@ -213,6 +215,69 @@ Para que la app también pueda escribir esas celdas hay que **agregar
 protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
 protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
 control de quién aprueba pasa a estar en los permisos de la app.
+
+## La orden de compra se crea desde acá, y por qué
+
+**El disparador estaba donde el flujo no pasa.** La orden en Odoo se creaba en
+la ruta `PATCH` del requerimiento, al mover el estado a PEDIDO desde el sistema.
+Medido el 02/10/2026 sobre el historial completo, eso no pasa nunca:
+
+| | |
+|---|---|
+| Transiciones a PEDIDO desde que el push existe (11/09) | **66** |
+| De ésas, que generaron orden | **0** |
+| Órdenes que hay en Odoo | 2, las dos de la prueba del 11/09 |
+
+La evidencia de que ninguna vino por la app, por si hay que rehacer el
+razonamiento:
+
+- Las 66 tienen `usuario_nombre` en **null**. No es que nadie estuviera logueado:
+  las anotó el trigger `compras_requerimientos_log_estado`, que registra **todo**
+  cambio de estado venga de la app o de acá. Eso invalida leer el historial como
+  si fuera un registro de acciones de usuario — error que ya cometí una vez.
+- **65 de las 66 no tienen `costo_iva`**, y la ruta de la app rechaza esa
+  transición con un 409 antes de tocar nada (`REQUISITOS.PEDIDO`).
+- Ninguna tiene `fecha_pedido`, que esa ruta escribe desde el 19/08.
+
+O sea: el estado llega a PEDIDO **por la sincronización**, que escribía
+`estado_compra` directo y no sabía nada de Odoo. Ahora sí sabe.
+
+### Qué manda y qué no
+
+Vive en `lib/compras/ordenesDesdeLaPlanilla.ts`, aparte y puro, porque la regla
+de "esto escribe en la contabilidad real del grupo" no puede estar metida dentro
+de un bucle de 2.000 filas sin poder probarla.
+
+- **Mira transiciones, no estados.** Un RI que ya estaba en PEDIDO no entra,
+  aunque no tenga orden. Por eso esto **no manda el pasado**: los 119 que hoy
+  están en PEDIDO con todos los datos y sin orden se quedan donde están.
+- **Sólo con proveedor, costo y empresa.** Sin costo la orden saldría en cero, y
+  una orden en cero en la contabilidad es peor que no tenerla.
+- **Tope de 10 por corrida.** Una edición masiva en la planilla no puede
+  volverse doscientas órdenes sin que nadie lo decida. El ritmo real son ~3
+  transiciones por día. Las que pasan el tope **no se pierden**: se les escribe
+  `odoo_pendiente`, que las deja visibles y reintentables desde la ficha.
+- **Un fallo no corta la importación.** El alta de los requerimientos vale más
+  que la orden; el motivo queda en `odoo_pendiente` y en el resultado de la
+  corrida.
+
+### Lo que esto NO arregla, y es lo que más pesa
+
+**El costo no se carga.** De las 66 transiciones, 65 siguen sin `costo_iva` tres
+semanas después — y **tampoco está en la planilla**: se miró la columna
+`COSTO + IVA` de todas las pestañas y sólo una de las 66 lo tiene. No es un
+problema de la sincronización: es que se marca PEDIDO sin registrar el precio.
+
+Así que el disparador ahora está en el lugar correcto, pero con los datos de hoy
+**dispararía para 1 de cada 66 pedidos**. Lo que limita no es el código.
+
+Las salidas posibles, que son una decisión y no un detalle técnico:
+
+1. Que se cargue el costo al marcar PEDIDO, en la planilla o en el sistema.
+2. Crear la orden **sin precio** —con proveedor, producto y cantidad— y que el
+   precio lo ponga contabilidad al facturar. Se descartó por ahora porque una
+   orden en cero parece real y no lo es, pero es defendible: igual ahorra tipear
+   el proveedor y los ítems.
 
 ## El equipo que solicita
 

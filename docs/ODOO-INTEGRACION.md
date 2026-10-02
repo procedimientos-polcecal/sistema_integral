@@ -381,8 +381,13 @@ Contabilidad; qué exactamente lo dice el ping, no la adivinanza.
    traer sólo el delta. Reusar `lib/core/cron.ts` y `lib/core/sincronizaciones.ts`,
    que ya llevan el registro de las corridas.
 7. ~~Push de Compras~~ **hecho**: crea la OC en draft **al pasar el pedido a
-   PEDIDO** en el SdG —no al aprobarse, como decía acá: el disparador es
-   `nuevoEstado === "PEDIDO"` en la ruta del requerimiento—,
+   PEDIDO**, por los dos caminos. Desde el 02/10/2026 también lo dispara la
+   **sincronización con la planilla**, que es por donde pasa de verdad: de las
+   66 transiciones a PEDIDO entre el 11/09 y el 02/10, las 66 vinieron de ahí y
+   ninguna de la ruta de la app. El detalle, con la evidencia y con lo que esto
+   **no** arregla —que el costo no se carga en 65 de 66—, está en
+   [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md). En la app sigue
+   siendo `nuevoEstado === "PEDIDO"` en la ruta del requerimiento,
    con `crearEn`. Para un RI compartido, dos órdenes, con el reparto de
    `repartoAmbas.ts`. **La línea ya no lleva siempre el mismo producto
    genérico**: el catálogo comprable de Odoo (`lib/odoo/catalogo.ts`, 378
