@@ -45,6 +45,7 @@ export default function AcarreoClient({
   mes,
   resumenes,
   toneladas,
+  origenesExternos,
   totalesDelMes,
   totalGeneral,
   puedeEditar,
@@ -57,6 +58,8 @@ export default function AcarreoClient({
   mes: string;
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
   toneladas: FilaToneladasPorYacimiento[];
+  /** Caliza de Loma Negra y piedra de Pavone del mes, que no son yacimientos propios pero se ven al lado. */
+  origenesExternos: { calizaLomaNegra: number; piedraPavone: number };
   totalesDelMes: FilaTotalPorTipo[];
   totalGeneral: number;
   puedeEditar: boolean;
@@ -207,19 +210,22 @@ export default function AcarreoClient({
       <section className="card mt-5 p-4">
         <h2 className="section-title">Toneladas por yacimiento</h2>
         <p className="mt-1 text-xs text-[var(--text-muted)]">Por el origen real de cada pesada — todos los materiales, incluida Caliza.</p>
-        {toneladasDelMes.length === 0 ? (
+        {toneladasDelMes.length === 0 && origenesExternos.calizaLomaNegra === 0 && origenesExternos.piedraPavone === 0 ? (
           <p className="empty-state mt-3">Sin datos este mes.</p>
         ) : (
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {toneladasDelMes.map((t) => {
-              const color = COLOR_YACIMIENTO[t.yacimientoCodigo] ?? "#64748B";
+            {[
+              ...toneladasDelMes.map((t) => ({ clave: t.yacimientoCodigo, etiqueta: t.yacimientoCodigo, toneladas: t.toneladas, color: COLOR_YACIMIENTO[t.yacimientoCodigo] ?? "#64748B" })),
+              { clave: "loma-negra", etiqueta: "Caliza de Loma Negra", toneladas: origenesExternos.calizaLomaNegra, color: "#0F766E" },
+              { clave: "pavone", etiqueta: "Piedra de Pavone", toneladas: origenesExternos.piedraPavone, color: "#BE185D" },
+            ].map((t) => {
               const pct = totalToneladas > 0 ? Math.round((t.toneladas / totalToneladas) * 100) : 0;
               return (
-                <div key={t.yacimientoCodigo} className="relative overflow-hidden rounded-xl border border-[var(--border)] p-3">
-                  <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+                <div key={t.clave} className="relative overflow-hidden rounded-xl border border-[var(--border)] p-3">
+                  <div className="absolute inset-x-0 top-0 h-1" style={{ background: t.color }} />
                   <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="text-xs font-medium text-[var(--text-muted)]">{t.yacimientoCodigo}</span>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.color }} />
+                    <span className="text-xs font-medium text-[var(--text-muted)]">{t.etiqueta}</span>
                   </div>
                   <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">{num.format(t.toneladas)}</div>
                   <div className="text-xs text-[var(--text-muted)]">{pct}% del total</div>

@@ -9,6 +9,7 @@ import {
   sumarPesadasAgrupadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
   patentesParaMostrar,
+  toneladasDeOrigenesExternos,
 } from "./pesadas";
 import type { PesadaDB } from "./types";
 
@@ -234,3 +235,29 @@ describe("sumarPesadasAgrupadasPorTipoMes", () => {
   });
 });
 
+
+describe("toneladasDeOrigenesExternos", () => {
+  const pesadas = [
+    { fecha: "2026-08-03", tipo: "caliza", origen: "L NEGRA", toneladas: 30 },
+    { fecha: "2026-08-04", tipo: "caliza", origen: "LNEGRA", toneladas: 10 },
+    { fecha: "2026-08-05", tipo: "caliza", origen: "C3", toneladas: 500 },
+    { fecha: "2026-08-06", tipo: "finos_caliza", origen: "L NEGRA", toneladas: 7 },
+    { fecha: "2026-08-07", tipo: "material_desde_pavone", origen: "PAVONE", toneladas: 12 },
+    { fecha: "2026-08-08", tipo: "material_desde_pavone", origen: "SERJEN", toneladas: 99 },
+    { fecha: "2026-07-30", tipo: "caliza", origen: "L NEGRA", toneladas: 1000 },
+  ];
+
+  it("suma la caliza de Loma Negra y la piedra de Pavone del mes pedido", () => {
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 12 });
+  });
+
+  it("no mezcla finos de caliza ni el origen SERJEN", () => {
+    const r = toneladasDeOrigenesExternos(pesadas, "2026-08");
+    expect(r.calizaLomaNegra).toBe(40); // sin los 7 de finos
+    expect(r.piedraPavone).toBe(12); // sin los 99 de Serjen
+  });
+
+  it("un mes sin nada da ceros", () => {
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-09")).toEqual({ calizaLomaNegra: 0, piedraPavone: 0 });
+  });
+});

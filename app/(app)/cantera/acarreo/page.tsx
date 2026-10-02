@@ -14,6 +14,7 @@ import {
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
+  toneladasDeOrigenesExternos,
 } from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
@@ -66,6 +67,7 @@ export default async function AcarreoPage({
   // Por origen real de la pesada, no por fletero ni por nombre de material —
   // ver el comentario grande en `toneladasPorYacimientoDesdePesadas`.
   const toneladas = toneladasPorYacimientoDesdePesadas(pesadasDelMes);
+  const origenesExternos = toneladasDeOrigenesExternos(pesadasDelMes, mes);
   const totalGeneral = resumenes.reduce((s, r) => s + r.resumen.totalMonto, 0);
   const sinFleteroResuelto = pesadasDelMes.filter((p) => !p.fletero_id).length;
 
@@ -99,6 +101,7 @@ export default async function AcarreoPage({
       mes={mes}
       resumenes={resumenes.map((r) => ({ fletero: r.fletero, resumen: r.resumen }))}
       toneladas={toneladas}
+      origenesExternos={origenesExternos}
       totalesDelMes={totalesDelMes}
       totalGeneral={totalGeneral}
       puedeEditar={permisos.puedeEditar}

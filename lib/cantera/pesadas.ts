@@ -248,6 +248,39 @@ export function toneladasPorYacimientoDesdePesadas(
     .sort((a, b) => (a.mes === b.mes ? a.yacimientoCodigo.localeCompare(b.yacimientoCodigo) : a.mes.localeCompare(b.mes)));
 }
 
+export interface ToneladasDeOrigenExterno {
+  /** Caliza que se compra en Loma Negra (origen "L NEGRA"), no la de cantera propia C1/C3. */
+  calizaLomaNegra: number;
+  /** Piedra que sale de Pavone (origen "PAVONE"), de cualquier material. */
+  piedraPavone: number;
+}
+
+/**
+ * Las toneladas del mes cuyo origen NO es un yacimiento propio pero que el
+ * usuario quiere ver junto a ellos (02/10/2026): la caliza de Loma Negra y la
+ * piedra de Pavone. Mismo criterio que `toneladasPorYacimientoDesdePesadas`:
+ * por el origen real de la pesada, sin depender de qué fletero hizo el viaje,
+ * y el origen se compara sin espacios ni mayúsculas ("L NEGRA", "LNEGRA").
+ *
+ * "Piedra de Pavone" es cualquier pesada con origen PAVONE (hoy casi toda
+ * "Material desde Pavone / Serjen", más una de dolomita D6) — SERJEN es otro
+ * origen y no entra. La caliza de Loma Negra es sólo `tipo = caliza`: los
+ * finos de caliza con ese origen son otro material y no se mezclan.
+ */
+export function toneladasDeOrigenesExternos(
+  pesadas: { fecha: string; tipo: string | null; origen: string | null; toneladas: number }[],
+  mes: string
+): ToneladasDeOrigenExterno {
+  const r = { calizaLomaNegra: 0, piedraPavone: 0 };
+  for (const p of pesadas) {
+    if (p.fecha.slice(0, 7) !== mes.slice(0, 7)) continue;
+    const origen = (p.origen ?? "").toUpperCase().replace(/\s+/g, "");
+    if (origen === "LNEGRA" && p.tipo === "caliza") r.calizaLomaNegra += p.toneladas;
+    else if (origen === "PAVONE") r.piedraPavone += p.toneladas;
+  }
+  return r;
+}
+
 /**
  * Las pesadas ya en la base, sumadas por fletero+tipo+mes — el mismo formato
  * (`AcarreoPlano`) que usa `resumenPorFletero` de `acarreo.ts`, para poder
