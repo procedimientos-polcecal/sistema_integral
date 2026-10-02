@@ -12,7 +12,6 @@ import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
 import BandejaDelCorreo from "./BandejaDelCorreo";
 import LineasDeFactura from "./LineasDeFactura";
 import BorradorEnOdoo from "./BorradorEnOdoo";
-import Select from "@/components/Select";
 
 /** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
 interface DondeApuntaOdoo {
@@ -345,7 +344,7 @@ export default function BuzonClient({
               <label className="block text-xs uppercase tracking-wide text-slate-500">
                 Por dónde llegaron
               </label>
-              <Select
+              <select
                 value={origen}
                 onChange={(e) => setOrigen(e.target.value as OrigenDeFactura)}
                 className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -355,7 +354,7 @@ export default function BuzonClient({
                     {o}
                   </option>
                 ))}
-              </Select>
+              </select>
             </div>
 
             <div className="grow">
@@ -574,7 +573,7 @@ function FilaDeCarga({
               {/* Sólo se pide lo que el comprobante no dijo. */}
               {!empresa && (
                 <Campo etiqueta="Empresa">
-                  <Select
+                  <select
                     value={fila.aMano.empresaId}
                     onChange={(e) => set("empresaId", e.target.value)}
                     className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -585,13 +584,13 @@ function FilaDeCarga({
                         {e.nombre}
                       </option>
                     ))}
-                  </Select>
+                  </select>
                 </Campo>
               )}
 
               {!proveedor && (
                 <Campo etiqueta="Proveedor">
-                  <Select
+                  <select
                     value={fila.aMano.proveedorId}
                     onChange={(e) => set("proveedorId", e.target.value)}
                     className="max-w-56 rounded border border-slate-300 px-2 py-1 text-sm"
@@ -602,14 +601,14 @@ function FilaDeCarga({
                         {p.nombre}
                       </option>
                     ))}
-                  </Select>
+                  </select>
                 </Campo>
               )}
 
               {!c && (
                 <>
                   <Campo etiqueta="Tipo">
-                    <Select
+                    <select
                       value={fila.aMano.tipoComprobante}
                       onChange={(e) => set("tipoComprobante", e.target.value)}
                       className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -622,7 +621,7 @@ function FilaDeCarga({
                       <option value="8">NC B</option>
                       <option value="13">NC C</option>
                       <option value="2">ND A</option>
-                    </Select>
+                    </select>
                   </Campo>
                   <Campo etiqueta="Pto vta">
                     <input
@@ -860,7 +859,7 @@ function FilaDelBuzon({
             * la factura quedaba fuera de la cola para siempre.
             */}
           {puedeEditar ? (
-            <Select
+            <select
               value={factura.estado}
               disabled={ocupado}
               onChange={(e) => cambiarEstado(e.target.value)}
@@ -871,7 +870,7 @@ function FilaDelBuzon({
                   {ESTADO_ETIQUETA[e]}
                 </option>
               ))}
-            </Select>
+            </select>
           ) : (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
               {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}
