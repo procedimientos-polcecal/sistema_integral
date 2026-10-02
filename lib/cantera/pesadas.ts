@@ -251,7 +251,7 @@ export function toneladasPorYacimientoDesdePesadas(
 export interface ToneladasDeOrigenExterno {
   /** Caliza que se compra en Loma Negra (origen "L NEGRA"), no la de cantera propia C1/C3. */
   calizaLomaNegra: number;
-  /** Piedra que sale de Pavone (origen "PAVONE"), de cualquier material. */
+  /** Piedra de Pavone: pesadas con origen PAVONE o SERJEN, de cualquier material. */
   piedraPavone: number;
 }
 
@@ -262,10 +262,12 @@ export interface ToneladasDeOrigenExterno {
  * por el origen real de la pesada, sin depender de qué fletero hizo el viaje,
  * y el origen se compara sin espacios ni mayúsculas ("L NEGRA", "LNEGRA").
  *
- * "Piedra de Pavone" es cualquier pesada con origen PAVONE (hoy casi toda
- * "Material desde Pavone / Serjen", más una de dolomita D6) — SERJEN es otro
- * origen y no entra. La caliza de Loma Negra es sólo `tipo = caliza`: los
- * finos de caliza con ese origen son otro material y no se mezclan.
+ * "Piedra de Pavone" es cualquier pesada con origen PAVONE **o SERJEN**
+ * (hoy casi toda "Material desde Pavone / Serjen", más una de dolomita D6):
+ * el usuario aclaró que las dos van juntas (02/10/2026) — Serjen es la misma
+ * piedra de la planta de Pavone. La caliza de Loma Negra es sólo `tipo =
+ * caliza`: los finos de caliza con ese origen son otro material y no se
+ * mezclan.
  */
 export function toneladasDeOrigenesExternos(
   pesadas: { fecha: string; tipo: string | null; origen: string | null; toneladas: number }[],
@@ -276,7 +278,7 @@ export function toneladasDeOrigenesExternos(
     if (p.fecha.slice(0, 7) !== mes.slice(0, 7)) continue;
     const origen = (p.origen ?? "").toUpperCase().replace(/\s+/g, "");
     if (origen === "LNEGRA" && p.tipo === "caliza") r.calizaLomaNegra += p.toneladas;
-    else if (origen === "PAVONE") r.piedraPavone += p.toneladas;
+    else if (origen === "PAVONE" || origen === "SERJEN") r.piedraPavone += p.toneladas;
   }
   return r;
 }

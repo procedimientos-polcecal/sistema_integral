@@ -248,13 +248,13 @@ describe("toneladasDeOrigenesExternos", () => {
   ];
 
   it("suma la caliza de Loma Negra y la piedra de Pavone del mes pedido", () => {
-    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 12 });
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 111 });
   });
 
-  it("no mezcla finos de caliza ni el origen SERJEN", () => {
+  it("Pavone suma lo que dice PAVONE y lo que dice SERJEN; Loma Negra no mezcla los finos", () => {
     const r = toneladasDeOrigenesExternos(pesadas, "2026-08");
     expect(r.calizaLomaNegra).toBe(40); // sin los 7 de finos
-    expect(r.piedraPavone).toBe(12); // sin los 99 de Serjen
+    expect(r.piedraPavone).toBe(12 + 99);
   });
 
   it("un mes sin nada da ceros", () => {
