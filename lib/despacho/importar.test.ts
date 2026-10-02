@@ -189,6 +189,36 @@ describe("ordenesDeLaPlanilla", () => {
 
   it("una pestaña cuyos encabezados no se reconocen no importa nada a medias", () => {
     const r = ordenesDeLaPlanilla([["Cosa", "Otra"], ["1", "2"]]);
-    expect(r).toEqual({ ordenes: [], filaDeEncabezados: null, salteadas: 0 });
+    expect(r).toEqual({
+      ordenes: [],
+      filaDeEncabezados: null,
+      salteadas: 0,
+      fechasImposibles: [],
+    });
+  });
+
+  /**
+   * Los diecisiete renglones del 02/10/2026 con el año tipeado `22026`.
+   *
+   * El serial 7351140 es lo que la planilla guarda cuando alguien escribe
+   * `25/09/22026`, y `fechaDeSheets` lo convierte fielmente en `+022026-09`.
+   * Escribir eso en un `date` de Postgres voltea el lote de mil filas entero,
+   * así que no entra — y se nombra con su fila para poder arreglarlo en el
+   * libro, que es de donde sale.
+   */
+  it("una fecha que no existe no se importa, y se devuelve con su fila", () => {
+    const r = ordenesDeLaPlanilla(
+      hoja([
+        [46289, "14114", "Coarco", "Filler a granel", "7:10", "7:40"],
+        [7351140, "14115", "concret coarco", "Filler a granel", "8:00", "8:30"],
+      ])
+    );
+
+    expect(r.ordenes.map((o) => o.numero)).toEqual(["14114"]);
+    expect(r.fechasImposibles).toEqual([
+      { fila: 3, numero: "14115", fecha: "+022026-09" },
+    ]);
+    // No es una fila ilegible: se pudo leer y se decidió dejarla afuera.
+    expect(r.salteadas).toBe(0);
   });
 });

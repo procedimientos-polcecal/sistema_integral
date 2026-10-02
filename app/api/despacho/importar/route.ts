@@ -100,6 +100,13 @@ export async function POST(request: Request) {
     error?: string;
   }[] = [];
   const todas: Leida[] = [];
+  /*
+   * Los renglones con una fecha que no existe. Se devuelven enteros —pestaña,
+   * fila y Nº— y no contados: son los que alguien tiene que ir a corregir al
+   * libro, y sin la fila no se encuentran. El 02/10/2026 eran diecisiete
+   * seguidos con el año `22026`.
+   */
+  const imposibles: { pestana: string; fila: number; numero: string; fecha: string }[] = [];
 
   for (const pestana of pestanas) {
     let valores: string[][];
@@ -113,7 +120,9 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const { ordenes, filaDeEncabezados, salteadas } = ordenesDeLaPlanilla(valores);
+    const { ordenes, filaDeEncabezados, salteadas, fechasImposibles } =
+      ordenesDeLaPlanilla(valores);
+    for (const f of fechasImposibles) imposibles.push({ pestana, ...f });
 
     if (filaDeEncabezados === null) {
       porPestana.push({
@@ -181,6 +190,7 @@ export async function POST(request: Request) {
     leidas: ordenes.length,
     repetidosEnLaPlanilla: repetidos,
     salteadas: porPestana.reduce((a, p) => a + p.salteadas, 0),
+    fechasImposibles: imposibles,
   };
 
   if (ensayo) {

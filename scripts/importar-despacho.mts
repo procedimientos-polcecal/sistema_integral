@@ -58,13 +58,20 @@ console.log(`Libro con ${pestanas.length} pestañas.\n`);
 const todas: Leida[] = [];
 /** Renglones cuya fecha no es del mes de la pestaña en la que están. */
 const desalineados: string[] = [];
+/** Renglones con una fecha que no existe: no se importan, hay que arreglarlos. */
+const imposibles: string[] = [];
 
 for (const pestana of pestanas) {
   // `sinFormato`: hay celdas de fecha con el dato adentro y un formato de
   // número que las muestra vacías. Leyendo el texto formateado, esas órdenes se
   // perderían por "no tienen fecha".
   const valores = await leerValores(LIBRO, pestana, { sinFormato: true });
-  const { ordenes, filaDeEncabezados, salteadas } = ordenesDeLaPlanilla(valores);
+  const { ordenes, filaDeEncabezados, salteadas, fechasImposibles } =
+    ordenesDeLaPlanilla(valores);
+
+  for (const f of fechasImposibles) {
+    imposibles.push(`  ${pestana} fila ${f.fila}: Nº ${f.numero}  fecha=${f.fecha}`);
+  }
 
   if (filaDeEncabezados === null) {
     console.log(`  ${pestana.padEnd(18)} ENCABEZADOS NO RECONOCIDOS — se saltea la pestaña`);
@@ -103,7 +110,8 @@ for (const pestana of pestanas) {
   console.log(
     `  ${pestana.padEnd(18)} encabezados=fila ${filaDeEncabezados + 1}` +
       `  ordenes=${String(ordenes.length).padStart(4)}` +
-      `  salteadas=${salteadas}  fechaDeOtroMes=${fueraDeMes}`
+      `  salteadas=${salteadas}  fechaDeOtroMes=${fueraDeMes}` +
+      `  fechaImposible=${fechasImposibles.length}`
   );
 }
 
@@ -128,6 +136,11 @@ if (desalineados.length) {
   console.log(`
 Renglones en la pestaña equivocada (${desalineados.length}):`);
   for (const d of desalineados) console.log(d);
+}
+if (imposibles.length) {
+  console.log(`
+Fechas que no existen (${imposibles.length}) — NO se importan, hay que arreglarlas en el libro:`);
+  for (const i of imposibles) console.log(i);
 }
 const fechas = ordenes.map((o) => o.fecha).sort();
 console.log(`Rango de fechas: ${fechas[0]} … ${fechas.at(-1)}`);

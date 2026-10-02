@@ -1,4 +1,4 @@
-import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
+import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
 import { parsearHoraDePlanilla } from "./planilla";
 
 /**
@@ -180,6 +180,8 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
   ordenes: (OrdenImportada & { fila: number })[];
   filaDeEncabezados: number | null;
   salteadas: number;
+  /** Las que tienen número y fecha, pero una fecha que no existe. */
+  fechasImposibles: { fila: number; numero: string; fecha: string }[];
 } {
   let idx: IndicesDeColumnas | null = null;
   let filaDeEncabezados: number | null = null;
@@ -194,10 +196,11 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
   }
 
   if (!idx || filaDeEncabezados === null) {
-    return { ordenes: [], filaDeEncabezados: null, salteadas: 0 };
+    return { ordenes: [], filaDeEncabezados: null, salteadas: 0, fechasImposibles: [] };
   }
 
   const ordenes: (OrdenImportada & { fila: number })[] = [];
+  const fechasImposibles: { fila: number; numero: string; fecha: string }[] = [];
   let salteadas = 0;
 
   for (let i = filaDeEncabezados + 1; i < valores.length; i++) {
@@ -210,7 +213,26 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
      *
      * `i + 1` porque Google cuenta las filas desde uno y el arreglo desde cero.
      */
-    if (orden) ordenes.push({ ...orden, fila: i + 1 });
+    /*
+     * Una fecha que no existe no entra, y se devuelve aparte con su fila.
+     *
+     * No es teórico: el 02/10/2026 el libro tenía diecisiete renglones
+     * seguidos con el año tipeado **22026**, todos con el mismo serial —una
+     * celda mal escrita y arrastrada hacia abajo—. `fechaDeSheets` los
+     * convierte fielmente en `+022026-09`, que Postgres rechaza, y como el
+     * importador escribe de a mil, esos diecisiete **voltean el lote entero**:
+     * no entra ninguna de las órdenes del mes.
+     *
+     * El año no se corrige acá: adivinarlo es inventar un dato, y el arreglo
+     * tiene que ir al libro, que es de donde sale. Lo que sí se hace es
+     * nombrarlas una por una —fila y Nº— porque sin eso no se encuentran.
+     * `serialDelDia` es la misma comprobación que usa el espejo para escribir:
+     * si una fecha no se puede volver a poner en la planilla, tampoco tiene
+     * sentido guardarla.
+     */
+    if (orden && serialDelDia(orden.fecha) === null) {
+      fechasImposibles.push({ fila: i + 1, numero: orden.numero, fecha: orden.fecha });
+    } else if (orden) ordenes.push({ ...orden, fila: i + 1 });
     /*
      * Sólo cuenta como salteada la que tiene algo **en las columnas que
      * importan**. `ABRIL 2026` devuelve mil filas vacías salvo el `0` que dejan
@@ -220,7 +242,7 @@ export function ordenesDeLaPlanilla(valores: unknown[][]): {
     else if (tieneAlgoQueImporta(valores[i] ?? [], idx)) salteadas++;
   }
 
-  return { ordenes, filaDeEncabezados, salteadas };
+  return { ordenes, filaDeEncabezados, salteadas, fechasImposibles };
 }
 
 function textoONull(valor: unknown): string | null {
