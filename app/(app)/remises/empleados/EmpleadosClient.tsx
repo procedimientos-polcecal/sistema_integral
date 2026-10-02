@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import InfoTip from "@/components/InfoTip";
 import { usePuedeEditarRemises } from "@/lib/remises/context";
+import Select from "@/components/Select";
 
 const PinMap = dynamic(() => import("@/components/remises/PinMap"), { ssr: false });
 
@@ -217,11 +218,11 @@ function EmpleadoModal({
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Turno default</label>
-            <select value={form.turnoDefaultId} onChange={(e) => setForm({ ...form, turnoDefaultId: e.target.value })}
+            <Select value={form.turnoDefaultId} onChange={(e) => setForm({ ...form, turnoDefaultId: e.target.value })}
               className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Sin turno default</option>
               {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <PinMap lat={form.lat} lng={form.lng} popup={`${empleado.apellido}, ${empleado.nombre}`}
             onChange={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))} />

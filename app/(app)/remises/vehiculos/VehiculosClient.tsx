@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { usePuedeEditarRemises } from "@/lib/remises/context";
+import Select from "@/components/Select";
 
 export default function VehiculosClient({ vehiculos, choferes }: { vehiculos: any[]; choferes: any[] }) {
   const [tab, setTab] = useState<"vehiculos" | "choferes">("vehiculos");
@@ -151,11 +152,11 @@ function VehiculoModal({ v, choferes, onClose, onSaved }: { v: any | null; chofe
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Chofer</label>
-            <select value={form.choferId} onChange={(e) => setForm({ ...form, choferId: e.target.value })}
+            <Select value={form.choferId} onChange={(e) => setForm({ ...form, choferId: e.target.value })}
               className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
               <option value="">Sin asignar</option>
               {choferes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Capacidad</label>

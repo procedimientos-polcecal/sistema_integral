@@ -6,6 +6,7 @@ import InfoTip from "@/components/InfoTip";
 import RouteCard from "./RouteCard";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { useCargar } from "@/lib/core/useCargar";
+import Select from "@/components/Select";
 
 const RoutesMap = dynamic(() => import("@/components/remises/RoutesMap"), { ssr: false });
 
@@ -305,9 +306,9 @@ function AgregarRemisCard({
       <h3 className="font-medium text-slate-800 mb-3">Agregar remis</h3>
       <div className="mb-3">
         <label className="block text-xs text-slate-500 mb-1">Vehículo</label>
-        <select value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
+        <Select value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm">
           {opcionesVehiculo.map((v) => <option key={v.id} value={v.id}>{v.nombre}{v.capacidad ? ` (${v.capacidad} pax)` : ""}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="mb-3">
         <label className="block text-xs text-slate-500 mb-1">Empleados</label>
