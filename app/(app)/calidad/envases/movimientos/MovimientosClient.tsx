@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Select from "@/components/Select";
 
 export interface ArticuloDelSelector {
   id: string;
@@ -120,7 +121,7 @@ export default function MovimientosClient({
   );
 
   const selectorDeArticulo = (valor: string, alCambiar: (v: string) => void, primera: string) => (
-    <select
+    <Select
       value={valor}
       onChange={(e) => alCambiar(e.target.value)}
       className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -129,7 +130,7 @@ export default function MovimientosClient({
       {articulos.map((a) => (
         <option key={a.id} value={a.id}>{a.codigo} — {a.descripcion}</option>
       ))}
-    </select>
+    </Select>
   );
 
   return (

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CORTE_DE_LOS_TIPOS } from "@/lib/calidad/movimientos";
 import type { FilaDelLibro } from "../StockClient";
+import Select from "@/components/Select";
 
 const ETIQUETA_DE_ORIGEN: Record<string, string> = {
   odoo: "Odoo",
@@ -86,7 +87,7 @@ export default function MovimientosClient({
           onChange={(e) => setMes(e.target.value)}
           className="rounded border border-slate-300 px-2 py-1 text-sm"
         />
-        <select
+        <Select
           value={tipo}
           onChange={(e) => setTipo(e.target.value)}
           className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -95,8 +96,8 @@ export default function MovimientosClient({
           <option value="entrada">Entradas</option>
           <option value="consumo">Consumos</option>
           <option value="ajuste">Ajustes</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={carbon}
           onChange={(e) => setCarbon(e.target.value)}
           className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -105,8 +106,8 @@ export default function MovimientosClient({
           <option value="vegetal">Vegetal</option>
           <option value="residual">Residual</option>
           <option value="sin_separar">Sin separar (historia)</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={origen}
           onChange={(e) => setOrigen(e.target.value)}
           className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -116,7 +117,7 @@ export default function MovimientosClient({
           <option value="recepcion">Balanza</option>
           <option value="manual">A mano</option>
           <option value="importacion">Importado</option>
-        </select>
+        </Select>
         {(mes || tipo || carbon || origen) && (
           <button
             onClick={() => {

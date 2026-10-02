@@ -8,6 +8,7 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { LineaSinReconocer, TipoDeCarbon, TipoDeMovimiento } from "@/lib/calidad/types";
+import Select from "@/components/Select";
 
 export interface FilaDelLibro {
   id: string;
@@ -386,7 +387,7 @@ function Formulario({
         {carbonilleros ? (
           <label className="text-xs text-slate-600">
             Carbonillero
-            <select
+            <Select
               value={carbonillero}
               onChange={(e) => setCarbonillero(e.target.value)}
               required
@@ -398,19 +399,19 @@ function Formulario({
                   {c.nombre} ({c.carbon})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : (
           <label className="text-xs text-slate-600">
             Carbón
-            <select
+            <Select
               value={carbon}
               onChange={(e) => setCarbon(e.target.value as "vegetal" | "residual")}
               className="mt-0.5 block rounded border border-slate-300 px-2 py-1 text-sm"
             >
               <option value="vegetal">Vegetal</option>
               <option value="residual">Residual</option>
-            </select>
+            </Select>
           </label>
         )}
 
@@ -502,14 +503,14 @@ function Conteo({
         </label>
         <label className="text-xs text-slate-600">
           Carbón
-          <select
+          <Select
             value={carbon}
             onChange={(e) => setCarbon(e.target.value as "vegetal" | "residual")}
             className="mt-0.5 block rounded border border-slate-300 px-2 py-1 text-sm"
           >
             <option value="vegetal">Vegetal</option>
             <option value="residual">Residual</option>
-          </select>
+          </Select>
         </label>
         <label className="text-xs text-slate-600">
           Contadas

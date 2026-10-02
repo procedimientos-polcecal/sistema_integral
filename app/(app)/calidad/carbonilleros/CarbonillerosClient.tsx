@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Carbonillero } from "@/lib/calidad/types";
+import Select from "@/components/Select";
 
 /**
  * El catálogo de carbonilleros.
@@ -135,7 +136,7 @@ export default function CarbonillerosClient({
             </label>
             <label className="text-xs text-slate-600">
               Empresa
-              <select
+              <Select
                 value={editando.empresa_id ?? ""}
                 onChange={(e) => setEditando({ ...editando, empresa_id: e.target.value })}
                 required
@@ -146,11 +147,11 @@ export default function CarbonillerosClient({
                     {e2.nombre}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs text-slate-600">
               Carbón
-              <select
+              <Select
                 value={editando.carbon ?? "vegetal"}
                 onChange={(e) =>
                   setEditando({ ...editando, carbon: e.target.value as "vegetal" | "residual" })
@@ -159,7 +160,7 @@ export default function CarbonillerosClient({
               >
                 <option value="vegetal">Vegetal</option>
                 <option value="residual">Residual</option>
-              </select>
+              </Select>
             </label>
             <label className="text-xs text-slate-600">
               Código de planilla
@@ -182,7 +183,7 @@ export default function CarbonillerosClient({
             </label>
             <label className="text-xs text-slate-600">
               Proveedor del núcleo (opcional)
-              <select
+              <Select
                 value={editando.proveedor_id ?? ""}
                 onChange={(e) =>
                   setEditando({ ...editando, proveedor_id: e.target.value || null })
@@ -195,7 +196,7 @@ export default function CarbonillerosClient({
                     {p.nombre}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 
