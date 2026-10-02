@@ -150,11 +150,36 @@ va en un commit:
 
 ### Lo que queda afuera de esta tanda
 
-Al empezar, otra sesión tenía **Cantera y Trituración** con cambios *staged* sin
-commitear, incluidos dos archivos con `<select>`
-(`cantera/destape/cargar/CargarDestapeClient.tsx` y
-`trituracion/partes/PartesClient.tsx`). Migrarlos sería pisar trabajo a medio
-hacer. Esos dos módulos se migran aparte, cuando esa sesión haya commiteado.
+Otra sesión estaba trabajando en el mismo árbol, con Cantera y Trituración a
+medio editar. Quedan sin migrar **las tres pantallas que esa sesión tenía
+tocadas**, y sólo ésas:
+
+- `app/(app)/cantera/destape/cargar/CargarDestapeClient.tsx` (5 desplegables)
+- `app/(app)/cantera/voladuras/[codigo]/VoladuraClient.tsx` (1)
+- `app/(app)/trituracion/partes/PartesClient.tsx` (3)
+
+Las otras diez pantallas de Cantera sí se migraron: no las estaba tocando nadie.
+Las tres de arriba se migran cuando esa sesión haya commiteado; hacerlo antes
+es pisarle el trabajo.
+
+### Lo que pasó mientras se implementaba, por si se repite
+
+A mitad de la migración, la otra sesión **rebasó `main` y los dos commits de
+esta tarea quedaron fuera de la rama** (seguían existiendo como objetos, se
+recuperaron del reflog). Peor: uno de sus commits se llevó, desde el disco, el
+`import Select from "@/components/Select"` que esta tarea le había puesto a
+`BuzonClient.tsx` —sin el archivo, que vivía en los commits descartados—, y
+`origin/main` quedó con un `Module not found` que ningún build local reproduce.
+Lo encontró `scripts/revisar-arbol-commiteado.mjs`.
+
+Dos cosas que conviene saber la próxima vez:
+
+- **Commitear por nombre no alcanza** cuando el archivo que se nombra tiene
+  además cambios de otra sesión adentro. Es la trampa de CLAUDE.md por el otro
+  lado: no es que uno se lleve lo ajeno, es que lo ajeno se lleva lo propio.
+- **Conviene pushear la pieza compartida apenas está verde**, antes de migrar a
+  sus consumidores. Un componente nuevo que vive sólo en un commit local es lo
+  que convierte un rebase ajeno en un build roto.
 
 ## Lo que no se puede verificar desde acá
 
