@@ -94,9 +94,21 @@ describe("lo que no se puede confirmar entra igual", () => {
     expect(r.es === "dudoso" && r.porque).toContain("escaneo");
   });
 
-  it("y uno del que no se pudo sacar el texto", () => {
-    expect(reconocerLaFactura(null, DEL_GRUPO).es).toBe("dudoso");
+  it("un PDF con texto en blanco también", () => {
     expect(reconocerLaFactura("   \n  ", DEL_GRUPO).es).toBe("dudoso");
+  });
+
+  /*
+   * Y éste es el que falta en la mitad de los sistemas: el PDF **no abrió**.
+   * Entra igual, pero con el motivo de verdad y no con el del escaneo. Durante
+   * una tarde los dos casos dijeron "es un escaneo" y eso tapó un bug real
+   * —pdf.js rechazando un `Buffer`— en tres facturas que sí tenían texto.
+   */
+  it("y uno que no se pudo abrir dice por qué, sin disfrazarlo de escaneo", () => {
+    const r = reconocerLaFactura({ fallo: "Invalid PDF structure." }, DEL_GRUPO);
+    expect(r.es).toBe("dudoso");
+    expect(r.es === "dudoso" && r.porque).toContain("Invalid PDF structure.");
+    expect(r.es === "dudoso" && r.porque).not.toContain("escaneo");
   });
 
   it("sin CUIT del grupo configurado no se inventa un rechazo", () => {

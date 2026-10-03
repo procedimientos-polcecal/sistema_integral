@@ -25,20 +25,30 @@
  * tercera el costo no se paga.
  */
 
+import type { TextoOFallo } from "./correoEntrante";
+
 const PAGINAS = 3;
 
 /**
- * Devuelve el texto, o `null` si el PDF no se pudo abrir.
+ * Devuelve el texto de las primeras páginas, o por qué no se pudo abrir.
  *
- * `null` y cadena vacía no son lo mismo y los dos importan: vacío es "se abrió
- * y no tiene capa de texto" —un escaneo—, y `null` es "no se pudo abrir". Los
- * dos terminan en `dudoso`, pero el motivo que se guarda es distinto.
+ * **Las dos ramas no son lo mismo y las dos importan.** Una cadena vacía es "se
+ * abrió y no tiene capa de texto" —un escaneo, que es normal y pasa veinte
+ * veces por mes—. `{ fallo }` es "no se pudo abrir", que es un defecto y hay
+ * que poder verlo.
+ *
+ * Antes esto devolvía `string | null` y las dos cosas caían en el mismo `null`,
+ * así que un bug real se mostraba en pantalla como "es un escaneo". Costó una
+ * tarde: las tres facturas de prueba decían ser escaneos y una de ellas tenía
+ * 1.718 caracteres de texto medidos. Un diagnóstico que no se distingue de la
+ * operación normal no es un diagnóstico.
  */
-export async function textoDelPdf(bytes: Uint8Array): Promise<string | null> {
+export async function textoDelPdf(bytes: Uint8Array): Promise<TextoOFallo> {
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    await prepararElWorker();
     const documento = await pdfjs.getDocument({
-      data: bytes,
+      data: copiaPlana(bytes),
       /*
        * Sin `standardFontDataUrl` ni `wasmUrl` a propósito: en Vercel esos
        * archivos no están servidos y para sacar texto no hacen falta. Lo único
@@ -56,9 +66,53 @@ export async function textoDelPdf(bytes: Uint8Array): Promise<string | null> {
     }
 
     return todo;
-  } catch {
-    // Un PDF roto, cifrado o que no es un PDF. No se grita: el adjunto entra
-    // como dudoso y lo mira una persona.
-    return null;
+  } catch (e) {
+    // Sin traducir: lo que dijo pdf.js es lo único que sirve para diagnosticar.
+    return { fallo: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Deja el worker de pdf.js donde la librería lo va a encontrar.
+ *
+ * En Node no hay `Worker`, así que pdf.js corre el suyo **en el mismo hilo** y
+ * lo carga con un `import()` relativo a su propio archivo. Dentro de Next eso
+ * no resuelve: el bundler reescribió `pdf.mjs` a un chunk en `.next/` y el
+ * worker quedó buscándose como `.next/dev/server/chunks/pdf.worker.mjs`, que no
+ * existe. El error textual, que vale más que cualquier paráfrasis:
+ *
+ *   Setting up fake worker failed: "Cannot find module
+ *   '...\.next\dev\server\chunks\pdf.worker.mjs'"
+ *
+ * La librería mira `globalThis.pdfjsWorker` **antes** de intentar ese import
+ * (`PDFWorker.#mainThreadWorkerMessageHandler`), así que alcanza con dejárselo
+ * puesto: el especificador acá es literal y el bundler sí lo resuelve.
+ *
+ * Esto no se nota en un script suelto —ahí el import relativo anda— y por eso
+ * el banco de pruebas pasaba en verde mientras la ruta fallaba en todas. Vale
+ * para cualquier módulo que quiera usar pdf.js del lado del servidor.
+ */
+async function prepararElWorker(): Promise<void> {
+  const global = globalThis as { pdfjsWorker?: unknown };
+  if (global.pdfjsWorker) return;
+  global.pdfjsWorker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+}
+
+/**
+ * Un `Uint8Array` de verdad, con su propio buffer.
+ *
+ * Dos razones, y cada una sola ya alcanza:
+ *
+ * 1. **pdf.js rechaza un `Buffer`** con un error explícito
+ *    (`Please provide binary data as Uint8Array, rather than Buffer`), y un
+ *    `Buffer` **es** un `Uint8Array` para TypeScript, así que `tsc` no puede
+ *    avisar. El webhook arma los bytes con `Buffer.from(base64)`: sin esto,
+ *    cada PDF que llega por mail tira ahí adentro.
+ * 2. **pdf.js se queda con el buffer** —lo puede dejar vacío al terminar— y el
+ *    webhook vuelve a usar los mismos bytes después, para subir el archivo al
+ *    bucket. Encima los `Buffer` de Node salen de un pool compartido. Copiar
+ *    unos cientos de KB cuesta nada al lado de los 20 ms que tarda el parseo.
+ */
+function copiaPlana(bytes: Uint8Array): Uint8Array {
+  return new Uint8Array(bytes);
 }

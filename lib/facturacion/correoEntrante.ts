@@ -157,11 +157,31 @@ const DICE_COMPROBANTE = /factura|nota\s*de\s*cr[eé]|nota\s*de\s*d[eé]|comprob
 /** `0006-00010192`: punto de venta y número, como lo imprime ARCA. */
 const TIENE_NUMERO = /\b\d{4,5}\s*-\s*\d{7,8}\b/;
 
+/**
+ * Lo que se le pasa: el texto del PDF, o el motivo por el que no se pudo abrir.
+ *
+ * Son dos cosas distintas y la pantalla tiene que poder distinguirlas. Un PDF
+ * sin texto es un escaneo, que es normal; un PDF que no abre es un defecto, y
+ * si los dos dicen "es un escaneo" el defecto no se ve nunca. Ya pasó.
+ */
+export type TextoOFallo = string | { fallo: string };
+
 export function reconocerLaFactura(
-  texto: string | null,
+  lectura: TextoOFallo,
   cuitsDelGrupo: string[]
 ): Reconocimiento {
-  if (texto === null || !texto.trim()) {
+  if (typeof lectura !== "string") {
+    return {
+      es: "dudoso",
+      porque:
+        `No se pudo abrir el PDF para revisarlo: ${lectura.fallo}. Se muestra igual para ` +
+        "no perderla.",
+    };
+  }
+
+  const texto = lectura;
+
+  if (!texto.trim()) {
     return {
       es: "dudoso",
       porque:

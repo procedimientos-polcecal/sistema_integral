@@ -29,9 +29,16 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // Endpoints que llama una máquina, no una persona: no hay cookie de sesión,
-  // y cada uno valida su propio secreto (CRON_SECRET / SHEETS_WEBHOOK_SECRET).
-  // Sin esta excepción, el middleware les devuelve un 307 al login y el cron de
-  // Vercel y el Apps Script de la planilla nunca llegan a ejecutarse.
+  // y cada uno valida su propio secreto (CRON_SECRET / SHEETS_WEBHOOK_SECRET /
+  // FACTURACION_CORREO_SECRET). Sin esta excepción, el middleware les devuelve
+  // un 307 al login y el cron de Vercel y los Apps Script nunca llegan a
+  // ejecutarse.
+  //
+  // **Agregar el endpoint acá es parte de escribir el webhook, no un detalle
+  // posterior.** El del correo se olvidó y no lo atrapó ni `tsc` ni los tests:
+  // apareció recién al mandarle un POST de verdad, que contestó con el HTML
+  // del login. Del lado de Gmail eso habría sido un 307 silencioso y la
+  // bandeja vacía para siempre.
   //
   // Se listan uno por uno a propósito. Dejar pasar todo /api abriría las ~54
   // rutas que no validan sesión por su cuenta y confían en este redirect: hoy
@@ -40,7 +47,8 @@ export async function updateSession(request: NextRequest) {
   const esEndpointDeMaquina =
     path.startsWith("/api/cron/") ||
     path === "/api/compras/sheets/webhook" ||
-    path === "/api/mantenimiento/sheets/webhook";
+    path === "/api/mantenimiento/sheets/webhook" ||
+    path === "/api/facturacion/correo/webhook";
 
   const isPublicPath =
     path === "/login" ||

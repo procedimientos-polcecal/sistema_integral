@@ -466,6 +466,42 @@ que es peor que mostrar de más. Entran con `sin_confirmar` cargado y la pantall
 los muestra en ámbar: no es lo mismo "esto es una factura" que "esto podría
 serlo y no la quiero perder".
 
+### Un PDF que no abre no es un escaneo: pdf.js del lado del servidor
+
+Dos trampas que costaron una tarde entera, y que valen para **cualquier módulo
+que quiera leer un PDF en el servidor**, no sólo para el buzón.
+
+La primera: **pdf.js rechaza un `Buffer` a propósito**, con un error explícito
+—`Please provide binary data as Uint8Array, rather than Buffer`—. Y un `Buffer`
+**es** un `Uint8Array` para TypeScript, así que `tsc` no puede avisar. El
+webhook arma los bytes con `Buffer.from(base64)`, que es lo natural, y fallaba
+en todas. Se copian con `new Uint8Array(bytes)`; la copia además hace falta
+porque pdf.js se queda con el buffer y los mismos bytes se suben al bucket
+después.
+
+La segunda: **el worker no resuelve dentro de Next.** En Node no hay `Worker`,
+así que pdf.js corre el suyo en el mismo hilo y lo carga con un `import()`
+relativo a su propio archivo. El bundler reescribió `pdf.mjs` a un chunk de
+`.next/` y el worker quedó buscándose ahí:
+
+```
+Setting up fake worker failed: "Cannot find module
+'...\.next\dev\server\chunks\pdf.worker.mjs'"
+```
+
+Se arregla dejándolo puesto en `globalThis.pdfjsWorker` antes de la primera
+llamada, que es lo que la librería mira antes de intentar ese import. **Esto no
+se nota en un script suelto**, donde el import relativo anda: el banco de
+pruebas pasaba en verde mientras la ruta fallaba en el 100% de los casos.
+
+Y la tercera cosa, que es de diseño y es la que hizo que las dos anteriores
+tardaran tanto en verse: `textoDelPdf` devolvía `string | null`, y **"no tiene
+capa de texto" y "no se pudo abrir" caían las dos en el mismo `null`**. Las tres
+facturas de prueba aparecían en pantalla como "es un escaneo" —incluida una con
+1.718 caracteres de texto ya medidos—. Hoy devuelve el texto o `{ fallo }`, y lo
+que se guarda es **lo que dijo pdf.js, sin traducir**. Un diagnóstico que no se
+distingue de la operación normal no es un diagnóstico.
+
 Lo descartado **no se tira**: queda en la tabla como `descartada` con su motivo.
 Sin eso el script lo volvería a traer en cada corrida y no se podría saber qué
 quedó afuera ni por qué. Lo mismo vale para el botón "No es una factura" de la
