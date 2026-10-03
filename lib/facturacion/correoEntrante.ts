@@ -112,3 +112,85 @@ function soloSeguro(texto: string): string {
 
 const enMegas = (b: number) => `${(b / 1024 / 1024).toFixed(1)} MB`;
 const enKilos = (b: number) => `${Math.round(b / 1024)} KB`;
+
+/**
+ * Si un adjunto es una factura **nuestra**, leído de su texto.
+ *
+ * ## Por qué hace falta además del filtro de arriba
+ *
+ * El Apps Script mira todos los mails con adjuntos, no una etiqueta. Con ese
+ * alcance, "un PDF entra siempre" trae presupuestos, remitos, contratos y
+ * extractos bancarios. La bandeja se llenaría de cosas que no son facturas y
+ * nadie la miraría.
+ *
+ * ## La regla, y por qué ésta
+ *
+ * Es la misma que ya usa el lector del buzón para separar al emisor del
+ * receptor: **una factura nuestra lleva el CUIT de Polcecal o el de Polysan**.
+ * No es una heurística sobre el nombre del archivo ni sobre el remitente: es un
+ * dato que está impreso en el comprobante porque la ley lo exige.
+ *
+ * Y además tiene que parecer un comprobante —decirlo, o traer el número con
+ * forma de `0001-00000001`—, porque nuestro CUIT también aparece en un contrato
+ * o en un remito.
+ *
+ * Medido sobre los **336 PDF** de `FACTURAS/SEPTIEMBRE 2026`: **316 (94%)** la
+ * cumplen.
+ *
+ * ## Los que no se pueden confirmar no se tiran
+ *
+ * Los otros 20 son **PDF sin capa de texto** —escaneos— y son facturas de
+ * verdad. Del texto no se puede saber nada de ellos; habría que renderizar y
+ * leer el QR, que es lo que hace el navegador y no el servidor.
+ *
+ * Descartarlos sería perder veinte facturas por mes sin que nadie se entere,
+ * que es peor que mostrar de más. Entran como `dudoso` y la pantalla los marca.
+ */
+
+export type Reconocimiento =
+  | { es: "factura" }
+  | { es: "dudoso"; porque: string }
+  | { es: "no"; porque: string };
+
+/** Lo que distingue un comprobante de un contrato que también lleva el CUIT. */
+const DICE_COMPROBANTE = /factura|nota\s*de\s*cr[eé]|nota\s*de\s*d[eé]|comprobante/i;
+/** `0006-00010192`: punto de venta y número, como lo imprime ARCA. */
+const TIENE_NUMERO = /\b\d{4,5}\s*-\s*\d{7,8}\b/;
+
+export function reconocerLaFactura(
+  texto: string | null,
+  cuitsDelGrupo: string[]
+): Reconocimiento {
+  if (texto === null || !texto.trim()) {
+    return {
+      es: "dudoso",
+      porque:
+        "El PDF no tiene texto, así que es un escaneo: no se pudo confirmar que sea una " +
+        "factura. Se muestra igual para no perderla.",
+    };
+  }
+
+  /*
+   * Se comparan sin separadores porque cada emisor escribe el CUIT como quiere:
+   * `30-64106801-9`, `30641068019`, y alguno le mete espacios.
+   */
+  const plano = texto.replace(/[-.\s]/g, "");
+  const esNuestra = cuitsDelGrupo.some((c) => c && plano.includes(c.replace(/[-.\s]/g, "")));
+
+  if (!esNuestra) {
+    return {
+      es: "no",
+      porque: "No figura el CUIT de Polcecal ni el de Polysan: no es una factura nuestra.",
+    };
+  }
+
+  if (!DICE_COMPROBANTE.test(texto) && !TIENE_NUMERO.test(texto)) {
+    return {
+      es: "no",
+      porque:
+        "Tiene el CUIT del grupo pero no dice ser una factura ni trae número de comprobante.",
+    };
+  }
+
+  return { es: "factura" };
+}

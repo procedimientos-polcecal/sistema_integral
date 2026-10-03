@@ -33,7 +33,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("facturacion_correo")
-    .select("id, mensaje_id, adjunto, remitente, asunto, recibido_en, archivo_url, tamano_bytes, tipo")
+    .select("id, mensaje_id, adjunto, remitente, asunto, recibido_en, archivo_url, tamano_bytes, tipo, sin_confirmar")
     .eq("estado", "pendiente")
     .order("recibido_en", { ascending: false, nullsFirst: false })
     .limit(100);

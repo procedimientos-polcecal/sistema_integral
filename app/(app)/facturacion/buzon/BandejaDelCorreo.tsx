@@ -34,6 +34,11 @@ interface Pendiente {
   tipo: string | null;
   /** Link firmado y corto: el bucket es privado. `null` si el archivo no está. */
   url: string | null;
+  /**
+   * Null cuando se confirmó que es una factura. Con texto, entró igual sin
+   * poder confirmarlo —casi siempre un PDF escaneado— y el texto dice por qué.
+   */
+  sin_confirmar: string | null;
 }
 
 export default function BandejaDelCorreo({
@@ -146,6 +151,15 @@ export default function BandejaDelCorreo({
                 {p.tamano_bytes !== null && ` · ${Math.round(p.tamano_bytes / 1024)} KB`}
               </div>
               {p.asunto && <div className="truncate text-xs text-slate-400">{p.asunto}</div>}
+              {/*
+                Los que no se pudieron confirmar entran igual —descartarlos
+                sería perder veinte facturas por mes sin que nadie se entere—
+                pero se ven distintos: no es lo mismo "esto es una factura" que
+                "esto podría serlo".
+              */}
+              {p.sin_confirmar && (
+                <div className="mt-1 text-xs text-amber-700">{p.sin_confirmar}</div>
+              )}
             </div>
 
             <span className="flex shrink-0 items-baseline gap-3 text-xs">

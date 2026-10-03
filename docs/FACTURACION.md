@@ -420,19 +420,51 @@ Dos redes, y hacen falta las dos:
 
 ### Qué entra y qué se descarta
 
-Un mail no trae sólo la factura: trae el logo de la firma, el ícono de LinkedIn,
-a veces un remito. Si todo eso entrara, la lista sería mitad basura y nadie la
-miraría.
+La búsqueda de Gmail es **ancha a propósito**: todos los mails con adjunto, no
+una etiqueta ni un remitente. Quién es una factura **no lo decide esa
+búsqueda** — se decide acá, en dos pasos.
+
+**Primero, por tipo y tamaño.** Un PDF pasa siempre: nadie adjunta uno
+decorativo. Una imagen sólo si pesa más de 25 KB, porque una foto de factura no
+baja de un par de cientos y el logo de una firma son tres o cuatro. Ese umbral
+es **un supuesto, no una medición** —no hay casilla conectada todavía— y vive en
+`MINIMO_DE_UNA_IMAGEN` para ajustarlo en un solo lugar.
+
+**Después, por el texto del PDF.** Con la búsqueda mirando todo, "un PDF entra
+siempre" traería presupuestos, remitos, contratos y extractos. La regla es la
+misma que usa el lector para separar emisor de receptor: **una factura nuestra
+lleva el CUIT de Polcecal o el de Polysan**, y además dice ser un comprobante
+—la palabra, o el número con forma de `0006-00010192`—. No es una heurística
+sobre el nombre del archivo ni sobre el remitente: es un dato que está impreso
+porque la ley lo exige.
+
+Medido con las funciones que se commitean, sobre los **336 PDF** de la carpeta
+de facturas:
 
 | | |
 |---|---|
-| **Un PDF entra siempre** | Nadie adjunta un PDF decorativo. Y la factura electrónica argentina es un PDF casi siempre. |
-| **Una imagen, sólo si pesa** | El camino de la foto existe para WhatsApp, y una foto de una factura no baja de un par de cientos de KB; el logo de una firma son tres o cuatro. |
+| Se reconocen como factura | **316 (94%)** |
+| Entran marcadas "sin confirmar" | **20 (6%)** |
+| Se descartan | **0** |
 
-El umbral de la imagen (25 KB) es **un supuesto, no una medición**: todavía no
-hay una casilla conectada para medirlo. Está en una constante con nombre
-—`MINIMO_DE_UNA_IMAGEN`— para ajustarlo en un solo lugar cuando haya datos, en
-vez de descubrirlo en una pantalla llena de logos.
+**Cero falsos negativos**: ninguna factura real se tira. A 13 ms por PDF.
+
+Lo que **no** está medido es el otro lado: cuántos adjuntos que *no* son
+facturas se cuelan. Para eso hace falta una casilla conectada; hasta entonces,
+el riesgo conocido es mostrar de más, no perder.
+
+### Los que no se pueden confirmar entran igual
+
+Los 20 son **PDF sin capa de texto** —escaneos de DON ALFREDO, LOGÍSTICA VW,
+TECNICOR, GIACOMASSO— y son facturas de verdad. Del texto no se puede saber
+nada de ellos: habría que renderizar y leer el QR, y eso necesita un canvas
+nativo en el servidor. El texto, en cambio, sale con `getTextContent()` sin
+ningún archivo extra.
+
+Descartarlos sería perder **veinte facturas por mes sin que nadie se entere**,
+que es peor que mostrar de más. Entran con `sin_confirmar` cargado y la pantalla
+los muestra en ámbar: no es lo mismo "esto es una factura" que "esto podría
+serlo y no la quiero perder".
 
 Lo descartado **no se tira**: queda en la tabla como `descartada` con su motivo.
 Sin eso el script lo volvería a traer en cada corrida y no se podría saber qué

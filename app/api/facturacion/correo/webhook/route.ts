@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rutaDelAdjunto, sirveComoFactura } from "@/lib/facturacion/correoEntrante";
+import {
+  reconocerLaFactura,
+  rutaDelAdjunto,
+  sirveComoFactura,
+} from "@/lib/facturacion/correoEntrante";
+import { textoDelPdf } from "@/lib/facturacion/textoDelPdfEnElServidor";
 
 /**
  * Lo que llegó por mail, que después alguien carga desde el buzón.
@@ -78,6 +83,15 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   /*
+   * Los CUIT de Polcecal y Polysan: es con lo que se decide si un adjunto es
+   * una factura NUESTRA. Se leen una vez por corrida y no por adjunto.
+   */
+  const { data: empresas } = await admin.from("empresas").select("cuit");
+  const cuitsDelGrupo = (empresas ?? [])
+    .map((e) => e.cuit as string | null)
+    .filter((c): c is string => Boolean(c));
+
+  /*
    * Lo que ya está, de una sola consulta. El script no debería mandar
    * repetidos —marca con una etiqueta lo que ya pasó— pero un reintento suyo o
    * una etiqueta que no se llegó a escribir lo haría, y re-subir el archivo en
@@ -142,6 +156,42 @@ export async function POST(request: Request) {
         continue;
       }
 
+      /*
+       * Y acá la pregunta que el filtro de arriba no contesta: ¿es una factura?
+       *
+       * Con la búsqueda mirando **todos** los mails, "un PDF entra siempre"
+       * trae presupuestos, remitos y contratos. Esto lo decide por el texto del
+       * PDF: una factura nuestra lleva el CUIT del grupo y dice ser un
+       * comprobante. 316 de los 336 PDF de la carpeta real la cumplen.
+       *
+       * Una imagen no tiene texto que leer, así que entra como dudosa: el
+       * camino de la foto existe para WhatsApp y ahí el QR lo lee el navegador.
+       */
+      const esPdf = tipo.toLowerCase().includes("pdf");
+      const reconocido = esPdf
+        ? reconocerLaFactura(await textoDelPdf(bytes), cuitsDelGrupo)
+        : ({ es: "dudoso", porque: "Es una imagen: el texto no se puede leer acá." } as const);
+
+      if (reconocido.es === "no") {
+        descartados.push({ adjunto: nombre, motivo: reconocido.porque });
+        await admin.from("facturacion_correo").upsert(
+          {
+            mensaje_id: mensajeId,
+            adjunto: nombre,
+            remitente: texto(m.remitente),
+            asunto: texto(m.asunto),
+            recibido_en: texto(m.fecha),
+            archivo_url: "",
+            tamano_bytes: bytes.byteLength,
+            tipo,
+            estado: "descartada",
+            motivo: reconocido.porque,
+          },
+          { onConflict: "mensaje_id,adjunto", ignoreDuplicates: true }
+        );
+        continue;
+      }
+
       const ruta = rutaDelAdjunto(mensajeId, nombre);
 
       const { error: errorArchivo } = await admin.storage
@@ -170,6 +220,10 @@ export async function POST(request: Request) {
           tamano_bytes: bytes.byteLength,
           tipo,
           estado: "pendiente",
+          // Null cuando se confirmó. Con texto, entró igual y la pantalla lo
+          // muestra distinto: es la diferencia entre "esto es una factura" y
+          // "esto podría serlo y no la quiero perder".
+          sin_confirmar: reconocido.es === "dudoso" ? reconocido.porque : null,
         },
         { onConflict: "mensaje_id,adjunto", ignoreDuplicates: true }
       );

@@ -39,8 +39,33 @@
  * Para reprocesar un mail, sacarle la etiqueta `SdG/cargado` a mano.
  */
 
-/** Qué mensajes mirar. Se puede cambiar por Propiedades del script. */
-var BUSQUEDA_POR_DEFECTO = 'has:attachment -label:SdG/cargado newer_than:30d';
+/**
+ * Qué mensajes mirar. Se puede cambiar por Propiedades del script.
+ *
+ * Es a propósito **ancha**: todos los mails con adjunto, no una etiqueta ni un
+ * remitente. Quién es una factura **no lo decide esta búsqueda** — lo decide el
+ * SdG leyendo el texto del PDF, que es donde está el dato bueno: una factura
+ * nuestra lleva el CUIT de Polcecal o de Polysan y dice ser un comprobante.
+ * Medido sobre los 336 PDF de la carpeta de facturas, 316 (94%) se reconocen
+ * así, y los 20 que no son escaneos sin capa de texto, que entran igual
+ * marcados como "sin confirmar".
+ *
+ * Qué hace cada parte:
+ *
+ *   has:attachment        sin adjunto no hay nada que traer.
+ *   -in:sent              lo que mandamos nosotros no es una factura que nos
+ *                         hagan: presupuestos reenviados, órdenes de compra.
+ *   -label:SdG/cargado    lo ya procesado. Es lo que evita subir el mismo PDF
+ *                         cada quince minutos.
+ *   newer_than:30d        un techo para la primera corrida. Sin esto, el script
+ *                         barrería años de correo y la bandeja arrancaría con
+ *                         cientos de facturas viejas ya cargadas a mano.
+ *
+ * Para traer más historia una vez, cambiar a `newer_than:90d`, dejar que corra,
+ * y volver a 30. Para una casilla dedicada sólo a facturas, se puede sacar
+ * `-in:sent` y agrandar `newer_than`.
+ */
+var BUSQUEDA_POR_DEFECTO = 'has:attachment -in:sent -label:SdG/cargado newer_than:30d';
 
 /** La etiqueta que marca lo ya mandado. */
 var ETIQUETA = 'SdG/cargado';
@@ -84,10 +109,13 @@ function revisarElCorreo() {
 
       /*
        * `getAttachments` sin opciones ya deja afuera las imágenes embebidas en
-       * el cuerpo del HTML, que son la mayoría de los logos de las firmas. Lo
-       * que igual pasa —un logo adjuntado de verdad— lo filtra el SdG por
-       * tamaño, así que acá no se decide qué es una factura: se manda y allá
-       * se resuelve, en un solo lugar y con tests.
+       * el cuerpo del HTML, que son la mayoría de los logos de las firmas.
+       *
+       * De lo que pasa, **acá no se decide nada**: el SdG descarta por tamaño
+       * lo que es decorativo y por el texto del PDF lo que no es una factura
+       * nuestra. Se manda y allá se resuelve, en un solo lugar y con tests —si
+       * la regla se dividiera entre el script y el servidor, en algún momento
+       * las dos mitades dirían cosas distintas.
        */
       var archivos = mensaje.getAttachments();
 
