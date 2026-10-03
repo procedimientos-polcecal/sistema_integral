@@ -174,6 +174,12 @@ export const NAV: NavItem[] = [
     // la barra lateral entra directo, en vez de sólo desplegar.
     children: [
       { label: "Stock", href: "/inventario/stock", modulo: "inventario" },
+      // Después del stock y no al final: es la lista corta que sale del stock
+      // —los que faltan **y** se usan— y quien entra a mirar si hay algo es el
+      // mismo que después pide. No lleva `soloAdmin`: pedir un material lo puede
+      // hacer cualquier usuario activo, que es como lo dejó la 018 a propósito,
+      // y quien nota que algo se acabó es el que está parado en el pañol.
+      { label: "Para reponer", href: "/inventario/reponer", modulo: "inventario" },
       { label: "Cargar movimiento", href: "/inventario/movimientos/nuevo", modulo: "inventario" },
       { label: "Movimientos", href: "/inventario/movimientos", modulo: "inventario" },
       { label: "Artículos", href: "/inventario/articulos", modulo: "inventario", soloAdmin: true },
