@@ -24,9 +24,14 @@
  *        URL_APP  = https://TU-DOMINIO/api/facturacion/correo/webhook
  *        SECRETO  = el mismo valor que FACTURACION_CORREO_SECRET en Vercel
  *        BUSQUEDA = (opcional) la búsqueda de Gmail; por defecto la de abajo
- *   3. Activadores -> Añadir activador:
+ *      **Hay que apretar "Guardar propiedades de la secuencia de comandos"**:
+ *      escribirlas y volver al editor no las guarda.
+ *   3. Correr `revisarLasPropiedades` y mirar el registro de ejecuciones. Tiene
+ *      que listar URL_APP y SECRETO; si dice "(ninguna)", se guardaron en otro
+ *      proyecto o no se guardaron.
+ *   4. Activadores -> Añadir activador:
  *        revisarElCorreo | Basado en tiempo | Cada 15 minutos
- *   4. Correr `revisarElCorreo` una vez a mano para aceptar los permisos.
+ *   5. Correr `revisarElCorreo` una vez a mano para aceptar los permisos.
  *
  * ## Cómo evita traer dos veces lo mismo
  *
@@ -83,14 +88,72 @@ var POR_CORRIDA = 10;
 /** Más que esto no entra en el bucket del SdG, así que no se manda. */
 var MAXIMO_BYTES = 20 * 1024 * 1024;
 
+/** Saca los espacios de los costados. Apps Script no tiene `String.trim` viejo. */
+function limpiar(valor) {
+  return valor ? valor.replace(/^\s+|\s+$/g, '') : '';
+}
+
+/**
+ * Qué ve el script. Correr esto cuando algo no cierra.
+ *
+ * No imprime el secreto —queda en el registro de ejecuciones, que lo ve
+ * cualquiera con acceso al proyecto—, sólo si está y cuánto mide: con eso
+ * alcanza para distinguir "no lo cargué" de "lo cargué con un espacio al final"
+ * de "lo cargué en otro proyecto".
+ */
+function revisarLasPropiedades() {
+  var props = PropertiesService.getScriptProperties().getProperties();
+  var claves = Object.keys(props);
+
+  Logger.log('Propiedades cargadas en ESTE proyecto: ' + (claves.length ? claves.join(', ') : '(ninguna)'));
+
+  ['URL_APP', 'SECRETO', 'BUSQUEDA'].forEach(function (clave) {
+    var valor = props[clave];
+    if (valor === undefined) {
+      Logger.log(clave + ': NO ESTÁ');
+      return;
+    }
+    var limpio = valor.replace(/^\s+|\s+$/g, '');
+    Logger.log(
+      clave + ': ' + limpio.length + ' caracteres' +
+      (limpio.length !== valor.length ? ' — OJO, tiene espacios alrededor' : '') +
+      (clave === 'SECRETO' ? '' : ' — ' + limpio)
+    );
+  });
+}
+
 function revisarElCorreo() {
   var props = PropertiesService.getScriptProperties();
-  var url = props.getProperty('URL_APP');
-  var secreto = props.getProperty('SECRETO');
-  var busqueda = props.getProperty('BUSQUEDA') || BUSQUEDA_POR_DEFECTO;
+  /*
+   * Con `trim`: copiar y pegar desde Vercel arrastra un espacio o un salto de
+   * línea más veces de las que uno creería, y un secreto con un espacio al
+   * final da un 401 que no se parece en nada a su causa.
+   */
+  var url = limpiar(props.getProperty('URL_APP'));
+  var secreto = limpiar(props.getProperty('SECRETO'));
+  var busqueda = limpiar(props.getProperty('BUSQUEDA')) || BUSQUEDA_POR_DEFECTO;
 
+  /*
+   * El mensaje dice **cuál** falta y **qué sí hay**. Decir sólo "faltan
+   * URL_APP o SECRETO" obliga a adivinar entre tres cosas distintas: que no se
+   * cargó, que se cargó con otro nombre, o que se cargó en otro proyecto de
+   * Apps Script. Las tres se ven de una con la lista de claves.
+   */
   if (!url || !secreto) {
-    throw new Error('Faltan URL_APP o SECRETO en las propiedades del script.');
+    var faltan = [];
+    if (!url) faltan.push('URL_APP');
+    if (!secreto) faltan.push('SECRETO');
+
+    var hay = Object.keys(PropertiesService.getScriptProperties().getProperties());
+
+    throw new Error(
+      'Falta ' + faltan.join(' y ') + ' en las propiedades del script. ' +
+      'Lo que hay cargado en este proyecto es: ' +
+      (hay.length ? hay.join(', ') : '(ninguna propiedad)') + '. ' +
+      'Se cargan en Configuración del proyecto -> Propiedades de la secuencia ' +
+      'de comandos, y hay que apretar Guardar; los nombres van en mayúsculas y ' +
+      'sin espacios.'
+    );
   }
 
   var etiqueta = GmailApp.getUserLabelByName(ETIQUETA) || GmailApp.createLabel(ETIQUETA);
