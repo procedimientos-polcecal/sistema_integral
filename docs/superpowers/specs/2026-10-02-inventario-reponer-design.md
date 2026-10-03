@@ -1,7 +1,8 @@
 # Inventario — pedir lo que falta, sin pedirlo dos veces
 
 **Fecha:** 2026-10-02
-**Estado:** acordado, sin implementar
+**Estado:** implementado y en producción el 3/10/2026 — `f066c2b` (la decisión),
+`2f00224` (la pantalla y el alta) y `251130f` (el ítem del menú)
 **Módulos:** Inventario (`app/(app)/inventario`, `lib/inventario`) leyendo Compras
 
 ## El problema

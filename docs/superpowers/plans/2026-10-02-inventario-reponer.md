@@ -1,5 +1,21 @@
 # Para reponer — plan de implementación
 
+> ## ✅ Terminado. No ejecutar este plan.
+>
+> Las cuatro tareas están implementadas y en producción desde el **3/10/2026**:
+> `f066c2b` (la función pura y sus 29 tests), `2f00224` (la pantalla, la página
+> y el botón «Pedir») y `251130f` (el ítem del menú). **Las casillas quedaron
+> sin tildar**, así que esta nota es lo único que impide que alguien lo vuelva a
+> hacer de cero.
+>
+> Medido contra producción el 3/10/2026, ya andando: **74 para pedir y 18 ya
+> pedidos**, contra los 75 y 17 que el spec había previsto el día anterior. El
+> `00800` (SECADORES) aparece con **2 RI abiertos**, que es exactamente el
+> problema que la pantalla existe para mostrar.
+>
+> Queda como registro de cómo se construyó. Para cambiarla, el documento que
+> manda es el [spec](../specs/2026-10-02-inventario-reponer-design.md).
+
 > **Para agentes:** SUB-SKILL OBLIGATORIA: usar `superpowers:subagent-driven-development` (recomendada) o `superpowers:executing-plans` para implementar tarea por tarea. Los pasos usan casillas (`- [ ]`).
 
 **Objetivo:** que Inventario tenga una pantalla con lo que hay que reponer —faltante *y* consumo reciente— y que desde ahí se abra el formulario de alta de Compras precargado, sin pedir dos veces lo mismo.
