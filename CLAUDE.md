@@ -160,6 +160,30 @@ es peor que dejar en null.** Cuando una planilla nombra algo en texto libre y no
 se lo reconoce con certeza, el enlace queda vacío y se informa. Un enlace
 equivocado no se nota nunca — el dato aparece en el lugar que no es.
 
+## Un desplegable se escribe `<Select>`, no `<select>`
+
+Desde el 02/10/2026 los 157 desplegables de 71 pantallas usan
+[`components/Select.tsx`](components/Select.tsx). Se usa **igual que el nativo**
+—mismas props, los `<option>` adentro— y decide solo: con menos de diez opciones
+renderiza un `<select>` nativo de verdad (la rueda del sistema en el teléfono,
+que es mejor que cualquier panel propio), y con diez o más abre un panel con
+buscador que ignora acentos y acepta las palabras en cualquier orden.
+
+**Escribir un `<select>` nativo a mano no rompe nada, y ése es el problema.** No
+hay error, no hay test que lo note: esa pantalla simplemente queda sin buscador,
+y la lista crece hasta que alguien tiene que recorrer 273 proveedores con la
+rueda del mouse. El umbral no se elige por pantalla; lo decide el componente con
+las opciones que le llegan, así que una lista que hoy tiene ocho y mañana doce se
+arregla sola.
+
+`MultiSelect` sigue siendo el de **varios** valores, para los filtros de los
+listados. Los dos comparten el umbral y el comparador en `components/desplegables.ts`.
+
+Quedan tres pantallas sin migrar, porque otra sesión las tenía tomadas en el
+árbol: `cantera/destape/cargar`, `cantera/voladuras/[codigo]` y
+`trituracion/partes`. El detalle está en
+[el spec](docs/superpowers/specs/2026-10-02-desplegables-con-buscador-design.md).
+
 ## Cómo se verifica
 
 ```bash
