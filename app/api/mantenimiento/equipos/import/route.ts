@@ -9,7 +9,7 @@ import {
   filaDeSector, filaDeEquipo, estadoDelLibro, esPlantaCompartida,
 } from "@/lib/mantenimiento/inventario";
 import { detectarFormato, buscarHoja, porQueNoSePuede } from "@/lib/mantenimiento/importacion";
-import * as XLSX from "xlsx";
+import { aFilas, leerLibro } from "@/lib/core/excel";
 
 export const maxDuration = 300;
 
@@ -40,19 +40,21 @@ export async function POST(request: Request) {
   const archivo = formulario.get("file") as File | null;
   if (!archivo) return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
 
-  const libro = XLSX.read(Buffer.from(await archivo.arrayBuffer()), { type: "buffer" });
-  const hojas = libro.SheetNames;
+  // `exceljs` desde el 03/10/2026, ver `lib/core/excel.ts`.
+  const libro = await leerLibro(Buffer.from(await archivo.arrayBuffer()));
+  const hojas = libro.map((h) => h.nombre);
+  const matrizDe = (nombre: string) => libro.find((h) => h.nombre === nombre)?.matriz ?? [];
 
   const leer = (nombre: string): FilaDelLibro[] => {
     const real = buscarHoja(hojas, nombre);
-    return real ? XLSX.utils.sheet_to_json<FilaDelLibro>(libro.Sheets[real], { defval: "" }) : [];
+    return real ? (aFilas(matrizDe(real)) as FilaDelLibro[]) : [];
   };
 
   // Las columnas de equipos, que son las que dicen de qué formato es. En una
   // planilla plana la hoja puede no llamarse "EQUIPOS": ahí vale la primera.
   const deEquipos = buscarHoja(hojas, "EQUIPOS")
     ? leer("EQUIPOS")
-    : XLSX.utils.sheet_to_json<FilaDelLibro>(libro.Sheets[hojas[0]], { defval: "" });
+    : (aFilas(libro[0]?.matriz ?? []) as FilaDelLibro[]);
   const columnas = Object.keys(deEquipos[0] ?? {});
 
   const formato = detectarFormato(hojas, columnas);

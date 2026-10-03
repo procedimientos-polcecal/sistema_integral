@@ -34,5 +34,5 @@ export async function GET(request: Request) {
       f.fecha_tomado ? new Date(f.fecha_tomado).toLocaleDateString("es-AR", { timeZone: "UTC" }) : "",
     ]),
   ];
-  return xlsxResponse("francos.xlsx", "Francos", rows);
+  return await xlsxResponse("francos.xlsx", "Francos", rows);
 }

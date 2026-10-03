@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   ]);
 
   const fecha = new Date().toISOString().slice(0, 10);
-  return xlsxMultiSheetResponse(`equipos_${fecha}.xlsx`, [
+  return await xlsxMultiSheetResponse(`equipos_${fecha}.xlsx`, [
     { name: "Equipos", rows: [ENCABEZADO, ...cuerpo], anchos: ANCHOS },
     { name: "Referencia", rows: REFERENCIA },
   ]);

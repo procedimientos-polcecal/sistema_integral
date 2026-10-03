@@ -38,5 +38,5 @@ export async function GET(request: Request) {
       f.origen,
     ]),
   ];
-  return xlsxResponse("fichadas.xlsx", "Fichadas", rows);
+  return await xlsxResponse("fichadas.xlsx", "Fichadas", rows);
 }

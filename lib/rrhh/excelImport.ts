@@ -1,11 +1,23 @@
-import * as XLSX from "xlsx";
+import { aFilas, leerLibro } from "@/lib/core/excel";
 import { localDateTime, toUtcDateOnly } from "./dates";
 import { numeroArgentino } from "@/lib/core/numeroArgentino";
 
-export function parseWorkbook(buffer: Buffer) {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+/**
+ * Las dos funciones que leen un archivo son `async` desde el 03/10/2026, que es
+ * cuando se dejó SheetJS por `exceljs` (ver `lib/core/excel.ts`: SheetJS tenía
+ * dos vulnerabilidades altas sin arreglo y acá se parsea lo que sube la gente).
+ *
+ * El cambio **arregla** las fechas además de la vulnerabilidad: SheetJS las
+ * corría por el huso local de quien desarrolla —tres horas en Buenos Aires— y
+ * sólo coincidía consigo mismo. La nota de `toDateOnlyFromCell`, más abajo,
+ * sigue valiendo palabra por palabra: los `Date` que llegan de una celda se
+ * leen con getters UTC. Lo que cambió es que ahora eso es cierto en todas las
+ * máquinas y no sólo en Vercel.
+ */
+export async function parseWorkbook(buffer: Buffer) {
+  const hojas = await leerLibro(buffer);
+  const matriz = hojas[0]?.matriz ?? [];
+  const rows = aFilas(matriz);
   const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
   return { rows, headers };
 }
@@ -40,18 +52,19 @@ function detectarFilaEncabezado(filasCrudas: unknown[][]): number {
 }
 
 /** Parsea TODAS las hojas de un archivo (los reportes reales suelen venir con varias, ej. una de parámetros y otra con los datos). */
-export function parseWorkbookAllSheets(buffer: Buffer): { sheetNames: string[]; sheets: Record<string, ParsedSheet> } {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+export async function parseWorkbookAllSheets(
+  buffer: Buffer
+): Promise<{ sheetNames: string[]; sheets: Record<string, ParsedSheet> }> {
+  const hojas = await leerLibro(buffer);
   const sheets: Record<string, ParsedSheet> = {};
-  for (const name of wb.SheetNames) {
-    const sheet = wb.Sheets[name];
-    const filasCrudas = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-    const filaEncabezado = detectarFilaEncabezado(filasCrudas);
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", range: filaEncabezado });
-    const headers = rows.length > 0 ? Object.keys(rows[0]) : (filasCrudas[filaEncabezado] ?? []).map((h) => String(h ?? ""));
-    sheets[name] = { rows, headers };
+  for (const { nombre, matriz } of hojas) {
+    const filaEncabezado = detectarFilaEncabezado(matriz);
+    const rows = aFilas(matriz, filaEncabezado);
+    const headers =
+      rows.length > 0 ? Object.keys(rows[0]) : (matriz[filaEncabezado] ?? []).map((h) => String(h ?? ""));
+    sheets[nombre] = { rows, headers };
   }
-  return { sheetNames: wb.SheetNames, sheets };
+  return { sheetNames: hojas.map((h) => h.nombre), sheets };
 }
 
 /** Elige la hoja cuyos encabezados mejor matchean las palabras clave esperadas (ej. "legajo", "nombre"). */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import * as XLSX from "xlsx";
+import { libroXlsx } from "@/lib/core/excel";
 import { parseDateString, parseMarcaciones, parseNumeroAR, parseWorkbookAllSheets } from "./excelImport";
 
 describe("parseDateString", () => {
@@ -47,35 +47,39 @@ describe("parseMarcaciones", () => {
   });
 });
 
-function bufferDeFilas(filas: unknown[][]): Buffer {
-  const sheet = XLSX.utils.aoa_to_sheet(filas);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, "Marcaciones y Horas");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+/**
+ * El .xlsx de prueba lo arma `exceljs`, igual que el que lee la app desde el
+ * 03/10/2026. Antes lo armaba SheetJS, y eso tapaba un problema: su escritor
+ * corría las fechas por el huso local y su lector lo compensaba, así que el
+ * test cerraba consigo mismo y nunca tocaba el caso real —un archivo escrito
+ * por Excel o por el reloj—. Ver `lib/core/excel.ts`.
+ */
+async function bufferDeFilas(filas: unknown[][]): Promise<Buffer> {
+  return libroXlsx([{ nombre: "Marcaciones y Horas", filas }]);
 }
 
 describe("parseWorkbookAllSheets", () => {
-  it("detecta el encabezado real cuando el reporte trae filas de filtros/título antes (caso reloj biométrico)", () => {
-    const buf = bufferDeFilas([
+  it("detecta el encabezado real cuando el reporte trae filas de filtros/título antes (caso reloj biométrico)", async () => {
+    const buf = await bufferDeFilas([
       ["Filtros", "", "Fecha Desde: 22/07/2026", "Fecha Hasta: 27/07/2026"],
       ["", "", "", ""],
       ["Empleado", "Legajo", "Fecha", "Marcaciones"],
       ["AGOSTA, HORACIO", "PC_233", "Mi 22/07/2026", "E 11:50 - S 19:46"],
       ["ROSSI, NICOLAS", "PS_019", "Ju 23/07/2026", "E 08:05 - S 16:02"],
     ]);
-    const { sheetNames, sheets } = parseWorkbookAllSheets(buf);
+    const { sheetNames, sheets } = await parseWorkbookAllSheets(buf);
     const sheet = sheets[sheetNames[0]];
     expect(sheet.headers).toEqual(["Empleado", "Legajo", "Fecha", "Marcaciones"]);
     expect(sheet.rows).toHaveLength(2);
     expect(sheet.rows[0]).toMatchObject({ Empleado: "AGOSTA, HORACIO", Legajo: "PC_233" });
   });
 
-  it("cuando el encabezado ya es la primera fila, se comporta igual que antes", () => {
-    const buf = bufferDeFilas([
+  it("cuando el encabezado ya es la primera fila, se comporta igual que antes", async () => {
+    const buf = await bufferDeFilas([
       ["Legajo", "Fecha", "Marcaciones"],
       ["PC_233", "Mi 22/07/2026", "E 11:50 - S 19:46"],
     ]);
-    const { sheetNames, sheets } = parseWorkbookAllSheets(buf);
+    const { sheetNames, sheets } = await parseWorkbookAllSheets(buf);
     const sheet = sheets[sheetNames[0]];
     expect(sheet.headers).toEqual(["Legajo", "Fecha", "Marcaciones"]);
     expect(sheet.rows).toHaveLength(1);

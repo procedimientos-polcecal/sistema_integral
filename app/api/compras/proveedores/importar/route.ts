@@ -47,7 +47,7 @@ export async function POST() {
 
   let delExcel;
   try {
-    delExcel = leerProveedores(await bajarPlanillaDeProveedores());
+    delExcel = await leerProveedores(await bajarPlanillaDeProveedores());
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

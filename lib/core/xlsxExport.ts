@@ -1,8 +1,19 @@
-import * as XLSX from "xlsx";
+import { libroXlsx, type HojaAEscribir } from "./excel";
 
-function xlsxBufferResponse(filename: string, wb: XLSX.WorkBook): Response {
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  return new Response(buffer, {
+/**
+ * Las descargas .xlsx del sistema.
+ *
+ * Desde el 03/10/2026 el archivo lo arma `exceljs` y no `xlsx` (SheetJS), que
+ * tenía dos vulnerabilidades altas sin arreglo posible. El porqué completo y lo
+ * que se midió está en `lib/core/excel.ts`.
+ *
+ * **Las dos funciones son `async`.** Es lo único que cambió para quien las usa:
+ * `exceljs` escribe asincrónico. Las nueve rutas que las llaman ya eran `async`,
+ * así que alcanzó con un `await`.
+ */
+
+function respuestaDeDescarga(filename: string, buffer: Buffer): Response {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
@@ -11,11 +22,12 @@ function xlsxBufferResponse(filename: string, wb: XLSX.WorkBook): Response {
 }
 
 /** Arma un .xlsx a partir de filas (array de arrays) y lo devuelve como Response de descarga. */
-export function xlsxResponse(filename: string, sheetName: string, rows: unknown[][]): Response {
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  return xlsxBufferResponse(filename, wb);
+export async function xlsxResponse(
+  filename: string,
+  sheetName: string,
+  rows: unknown[][]
+): Promise<Response> {
+  return respuestaDeDescarga(filename, await libroXlsx([{ nombre: sheetName, filas: rows }]));
 }
 
 /**
@@ -26,15 +38,14 @@ export function xlsxResponse(filename: string, sheetName: string, rows: unknown[
  * descripción larga se ve como `#####` hasta que quien abre el archivo arrastra
  * la columna a mano.
  */
-export function xlsxMultiSheetResponse(
+export async function xlsxMultiSheetResponse(
   filename: string,
   sheets: { name: string; rows: unknown[][]; anchos?: number[] }[]
-): Response {
-  const wb = XLSX.utils.book_new();
-  for (const { name, rows, anchos } of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    if (anchos?.length) ws["!cols"] = anchos.map((wch) => ({ wch }));
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); // Excel limita el nombre de hoja a 31 caracteres
-  }
-  return xlsxBufferResponse(filename, wb);
+): Promise<Response> {
+  const hojas: HojaAEscribir[] = sheets.map(({ name, rows, anchos }) => ({
+    nombre: name,
+    filas: rows,
+    anchos,
+  }));
+  return respuestaDeDescarga(filename, await libroXlsx(hojas));
 }

@@ -33,5 +33,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ["Total bruto", "", liquidacion.total_bruto],
   ];
 
-  return xlsxResponse(`liquidacion-${liquidacion.empleados?.legajo}-${liquidacion.id}.xlsx`, "Liquidación", rows);
+  return await xlsxResponse(`liquidacion-${liquidacion.empleados?.legajo}-${liquidacion.id}.xlsx`, "Liquidación", rows);
 }

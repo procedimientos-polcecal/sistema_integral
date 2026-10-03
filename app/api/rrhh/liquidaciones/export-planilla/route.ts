@@ -51,5 +51,5 @@ export async function GET(request: Request) {
     ]),
   ];
 
-  return xlsxResponse(`planilla-general-${desde}-a-${hasta}.xlsx`, "Planilla general", rows);
+  return await xlsxResponse(`planilla-general-${desde}-a-${hasta}.xlsx`, "Planilla general", rows);
 }

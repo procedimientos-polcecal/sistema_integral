@@ -12,5 +12,5 @@ export async function GET() {
     ["Remise 1 - Ford Transit", "Carlos Rodríguez", 8, "351-555-9876"],
     ["Remise 2 - VW Crafter", "Luis Martínez", 12, "351-555-4321"],
   ];
-  return xlsxResponse("plantilla_vehiculos.xlsx", "Vehículos", rows);
+  return await xlsxResponse("plantilla_vehiculos.xlsx", "Vehículos", rows);
 }

@@ -29,5 +29,5 @@ export async function GET(request: Request) {
       p.observaciones ?? "",
     ]),
   ];
-  return xlsxResponse("vacaciones.xlsx", "Vacaciones", rows);
+  return await xlsxResponse("vacaciones.xlsx", "Vacaciones", rows);
 }

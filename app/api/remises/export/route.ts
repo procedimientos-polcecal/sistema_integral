@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const fecha = url.searchParams.get("fecha");
     if (!fecha) return NextResponse.json({ error: "Falta fecha" }, { status: 400 });
     const rows = await filasParaFechas(supabase, [fecha]);
-    return xlsxResponse(`rutas_${fecha}.xlsx`, "Rutas", [EXPORT_HEADERS, ...rows]);
+    return await xlsxResponse(`rutas_${fecha}.xlsx`, "Rutas", [EXPORT_HEADERS, ...rows]);
   }
 
   if (scope === "week") {
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       if (rows.length) sheets.push({ name: `${nombreDia(fecha)} ${fecha.slice(8, 10)}/${fecha.slice(5, 7)}`, rows: [EXPORT_HEADERS, ...rows] });
     }
     if (!sheets.length) return NextResponse.json({ error: "No hay rutas en la semana actual" }, { status: 400 });
-    return xlsxMultiSheetResponse(`rutas_semana_${fechas[0]}.xlsx`, sheets);
+    return await xlsxMultiSheetResponse(`rutas_semana_${fechas[0]}.xlsx`, sheets);
   }
 
   // historial: últimos 90 días con rutas generadas.
@@ -40,5 +40,5 @@ export async function GET(request: Request) {
     .order("fecha", { ascending: false });
   const fechas = [...new Set((fechasConRutas ?? []).map((f) => f.fecha))];
   const rows = await filasParaFechas(supabase, fechas);
-  return xlsxResponse("historial_remises.xlsx", "Historial", [EXPORT_HEADERS, ...rows]);
+  return await xlsxResponse("historial_remises.xlsx", "Historial", [EXPORT_HEADERS, ...rows]);
 }

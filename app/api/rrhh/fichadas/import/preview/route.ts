@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   let sheetNames: string[], sheets: Record<string, ParsedSheet>;
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    ({ sheetNames, sheets } = parseWorkbookAllSheets(buffer));
+    ({ sheetNames, sheets } = await parseWorkbookAllSheets(buffer));
   } catch {
     return NextResponse.json({ error: "No se pudo leer el archivo. Verificá que sea .xlsx o .csv" }, { status: 400 });
   }

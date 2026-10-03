@@ -115,15 +115,21 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
    */
   async function sectoresNuevosDelArchivo(file: File) {
     try {
-      // `xlsx` se carga acá y no arriba: son ~400 KB que sólo hacen falta
-      // cuando alguien realmente elige un archivo para importar. Importado de
-      // forma estática lo pagaba todo el que abría la pantalla.
-      const XLSX = await import("xlsx");
-      const libro = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const hoja = (nombre: string) =>
-        libro.Sheets[nombre]
-          ? (XLSX.utils.sheet_to_json(libro.Sheets[nombre]) as Record<string, unknown>[])
-          : [];
+      // El lector se carga acá y no arriba: es peso que sólo hace falta cuando
+      // alguien realmente elige un archivo para importar. Importado de forma
+      // estática lo pagaba todo el que abría la pantalla.
+      //
+      // Desde el 03/10/2026 es `exceljs` y no `xlsx`, que tenía dos
+      // vulnerabilidades altas sin arreglo posible — y acá se parsea un archivo
+      // elegido por quien usa el sistema, en su propio navegador. Ver
+      // `lib/core/excel.ts`. Pesa más que la anterior, pero por el `await
+      // import` sigue sin tocar a quien no importa nada.
+      const { aFilas, leerLibro } = await import("@/lib/core/excel");
+      const libro = await leerLibro(await file.arrayBuffer());
+      const hoja = (nombre: string) => {
+        const encontrada = libro.find((h) => h.nombre === nombre);
+        return encontrada ? (aFilas(encontrada.matriz) as Record<string, unknown>[]) : [];
+      };
 
       // Sólo el libro BD Equipos trae sectores. La planilla plana no puede
       // crear ninguno, así que no hay de qué avisar.

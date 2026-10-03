@@ -35,5 +35,5 @@ export async function GET(request: Request) {
       a.usuarios?.nombre ?? "",
     ]),
   ];
-  return xlsxResponse("ausencias.xlsx", "Ausencias", rows);
+  return await xlsxResponse("ausencias.xlsx", "Ausencias", rows);
 }

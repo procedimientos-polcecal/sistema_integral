@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import { leerLibro } from "@/lib/core/excel";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 
@@ -17,9 +17,9 @@ export async function POST(request: Request) {
   let rows: unknown[][];
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const wb = XLSX.read(buffer, { type: "buffer" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    // `exceljs` desde el 03/10/2026, ver `lib/core/excel.ts`.
+    const hojas = await leerLibro(buffer);
+    rows = hojas[0]?.matriz ?? [];
   } catch {
     return NextResponse.json({ error: "No se pudo leer el archivo. Verificá que sea .xlsx" }, { status: 400 });
   }

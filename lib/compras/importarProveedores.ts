@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { aFilas, leerLibro } from "@/lib/core/excel";
 import { claveDeProveedor } from "@/lib/core/proveedores";
 import { obtenerToken, hayCredencialesGoogle, SCOPE_DRIVE_LECTURA } from "@/lib/core/google";
 
@@ -60,14 +60,17 @@ export function plazoDePago(v: unknown): number | null {
 }
 
 /** Lee las pestañas del Excel y devuelve un proveedor por nombre. */
-export function leerProveedores(archivo: ArrayBuffer): ProveedorDelExcel[] {
-  const wb = XLSX.read(archivo, { type: "array" });
+export async function leerProveedores(archivo: ArrayBuffer): Promise<ProveedorDelExcel[]> {
+  // `exceljs` desde el 03/10/2026, ver `lib/core/excel.ts`. Es `async` por eso.
+  //
+  // El lector anterior pedia `defval: null` y este deja `""`: da igual, porque
+  // todo lo que sale de una celda pasa por `texto()`, que manda las dos cosas
+  // al mismo `null`. Se comprobo antes de cambiarlo.
+  const hojas = await leerLibro(archivo);
   const porNombre = new Map<string, ProveedorDelExcel>();
 
-  for (const hoja of wb.SheetNames) {
-    const filas = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[hoja], {
-      defval: null,
-    });
+  for (const { nombre: hoja, matriz } of hojas) {
+    const filas = aFilas(matriz);
 
     for (const f of filas) {
       const nombre = texto(f["Proveedor"]);
