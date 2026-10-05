@@ -449,9 +449,29 @@ de facturas:
 
 **Cero falsos negativos**: ninguna factura real se tira. A 13 ms por PDF.
 
-Lo que **no** está medido es el otro lado: cuántos adjuntos que *no* son
-facturas se cuelan. Para eso hace falta una casilla conectada; hasta entonces,
-el riesgo conocido es mostrar de más, no perder.
+Lo que **no** estaba medido era el otro lado: cuántos adjuntos que *no* son
+facturas se cuelan. Para eso hacía falta una casilla conectada.
+
+### La primera corrida con correo de verdad (05/10/2026)
+
+La casilla quedó conectada y el script trajo **13 adjuntos de 10 mails**:
+
+| | |
+|---|---|
+| Reconocidos como factura | **11** (7 proveedores distintos) |
+| Entra sin confirmar | **1** — un `image.png` de 76 KB |
+| Descartados | **1** |
+
+El descartado es el caso que justificaba todo esto: un *"Legajo Impositivo"* que
+mandó Arcor, que no es una factura y que con el filtro viejo —"un PDF entra
+siempre"— se habría mezclado en la lista.
+
+**Es una muestra chica y no reemplaza la medición de los 336.** Lo que sí
+confirma es que el lado que no se podía medir existe y que la regla lo agarra.
+Falta saber si el umbral de 25 KB para imágenes sirve: el `image.png` vino en un
+mail con asunto "FACTURA SEPTIEMBRE" junto con un PDF del mismo proveedor, así
+que puede ser una foto de la factura o el logo de la firma. Es un dato, no una
+conclusión.
 
 ### Los que no se pueden confirmar entran igual
 
