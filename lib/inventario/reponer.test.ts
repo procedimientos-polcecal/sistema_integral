@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { clasificarParaReponer, estaAbierto, DIAS_DE_CONSUMO } from "./reponer";
+import {
+  clasificarParaReponer, estaAbierto, altaDeReposicion, pedidosAbiertosPorCodigo,
+  DIAS_DE_CONSUMO,
+} from "./reponer";
 import type { ArticuloConFaltante, MovimientoDelConsumo, RequerimientoConCodigo } from "./reponer";
 
 const HOY = "2026-10-02";
@@ -302,6 +305,87 @@ describe("el orden", () => {
       HOY
     );
     expect(r.yaPedidos.map((c) => c.articulo.codigo)).toEqual(["B", "A"]);
+  });
+});
+
+describe("con que valores se abre el alta", () => {
+  it("propone el stock de seguridad y no el faltante", () => {
+    // Se compra por lote y no por diferencia: de los pedidos reales que
+    // corresponden a un faltante -falta 2 pidio 4, falta 15 pidio 30- ninguno
+    // pidio la diferencia exacta. Proponer el faltante propondria de menos.
+    const a = altaDeReposicion(art({ stock_actual: 1, stock_seguridad: 5, faltante: 4 }));
+    expect(a.cantidad).toBe("5");
+  });
+
+  it("la cantidad va como texto, que es lo que espera el formulario", () => {
+    expect(typeof altaDeReposicion(art()).cantidad).toBe("string");
+  });
+
+  it("lleva la descripcion y el codigo del articulo", () => {
+    const a = altaDeReposicion(art({ codigo: "00600", descripcion: "MINI PLAFON LED 18 W" }));
+    expect(a.codigo).toBe("00600");
+    expect(a.descripcion).toBe("MINI PLAFON LED 18 W");
+  });
+
+  it("el detalle dice los numeros reales, para que quien aprueba no tenga que buscarlos", () => {
+    const a = altaDeReposicion(art({ stock_actual: 0, stock_seguridad: 4 }));
+    expect(a.detalle).toBe("Reposición de stock. Había 0 de un mínimo de 4.");
+  });
+});
+
+describe("los pedidos abiertos por codigo", () => {
+  it("un codigo sin RI no esta en el mapa", () => {
+    const m = pedidosAbiertosPorCodigo([ri({ codigo: "00018" })], HOY);
+    expect(m.has("00999")).toBe(false);
+  });
+
+  it("un RI cerrado no cuenta", () => {
+    const m = pedidosAbiertosPorCodigo([ri({ estado_compra: "RECIBIDO" })], HOY);
+    expect(m.size).toBe(0);
+  });
+
+  it("una aprobacion denegada tampoco", () => {
+    const m = pedidosAbiertosPorCodigo([ri({ estado_aprobacion: "DENEGADA" })], HOY);
+    expect(m.size).toBe(0);
+  });
+
+  it("con varios abiertos informa el mas nuevo y cuantos hay", () => {
+    // El caso real del 00666, que el 2/10/2026 tenia tres abiertos a la vez.
+    const m = pedidosAbiertosPorCodigo([
+      ri({ id: "v", nro_ri: 983, codigo: "00666", fecha: "2026-04-10" }),
+      ri({ id: "n", nro_ri: 1956, codigo: "00666", fecha: "2026-09-28" }),
+      ri({ id: "m", nro_ri: 984, codigo: "00666", fecha: "2026-04-11" }),
+    ], HOY);
+    const p = m.get("00666")!;
+    expect(p.ri.nro_ri).toBe(1956);
+    expect(p.cuantosAbiertos).toBe(3);
+    expect(p.diasDelRi).toBe(4);
+  });
+
+  it("los cerrados no inflan la cuenta de abiertos", () => {
+    const m = pedidosAbiertosPorCodigo([
+      ri({ id: "a", nro_ri: 1, fecha: "2026-09-30" }),
+      ri({ id: "b", nro_ri: 2, fecha: "2026-10-01", estado_compra: "RECIBIDO" }),
+    ], HOY);
+    expect(m.get("00018")!.cuantosAbiertos).toBe(1);
+    expect(m.get("00018")!.ri.nro_ri).toBe(1);
+  });
+
+  it("un RI cargado de noche no puede tener antiguedad negativa", () => {
+    // `fecha` es timestamptz: uno cargado 21:30 en Argentina cae en el dia UTC
+    // siguiente, y sin el clamp daria -1.
+    const m = pedidosAbiertosPorCodigo([ri({ fecha: "2026-10-03" })], HOY);
+    expect(m.get("00018")!.diasDelRi).toBe(0);
+  });
+
+  it("sin fecha dice hoy, que es lo que no inventa una antiguedad", () => {
+    const m = pedidosAbiertosPorCodigo([ri({ fecha: null })], HOY);
+    expect(m.get("00018")!.diasDelRi).toBe(0);
+  });
+
+  it("ignora el codigo vacio, que no se puede cruzar con nada", () => {
+    expect(pedidosAbiertosPorCodigo([ri({ codigo: null })], HOY).size).toBe(0);
+    expect(pedidosAbiertosPorCodigo([ri({ codigo: "  " })], HOY).size).toBe(0);
   });
 });
 

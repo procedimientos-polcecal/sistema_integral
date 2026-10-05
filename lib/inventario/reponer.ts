@@ -87,6 +87,23 @@ export interface Reposicion {
   yaPedidos: ConPedido[];
 }
 
+/** El pedido abierto más nuevo de un código, y cuántos hay. */
+export interface PedidoAbierto {
+  ri: RequerimientoConCodigo;
+  /** Cuántos abiertos tiene ese código. Más de uno ya pasa: el 00666 tiene tres. */
+  cuantosAbiertos: number;
+  /** Hace cuántos días se pidió. */
+  diasDelRi: number;
+}
+
+/** Los valores con los que se abre el formulario de alta, ya precargado. */
+export interface AltaDeReposicion {
+  descripcion: string;
+  codigo: string;
+  cantidad: string;
+  detalle: string;
+}
+
 /**
  * Si un pedido sigue en curso.
  *
@@ -109,6 +126,81 @@ function diasEntre(desde: string, hasta: string): number | null {
 }
 
 const clave = (v: string | null | undefined) => String(v ?? "").trim();
+
+/**
+ * Los pedidos en curso, por código de artículo.
+ *
+ * Lo usan las dos pantallas que pueden pedir: `/inventario/reponer`, para
+ * separar lo que ya está pedido de lo que no, y `/inventario/stock`, para
+ * avisar antes de pedir de nuevo. Vive acá y no en cada una porque el cálculo
+ * de la antigüedad tiene una trampa medida que no se puede reinventar bien dos
+ * veces — está en el comentario del clamp, abajo.
+ *
+ * Los abiertos de cada código vienen **del más nuevo al más viejo**: lo que
+ * interesa contestar es "¿esto se pidió recién?", no cuál fue el primero.
+ */
+export function pedidosAbiertosPorCodigo(
+  requerimientos: RequerimientoConCodigo[],
+  hoy: string
+): Map<string, PedidoAbierto> {
+  const abiertos = new Map<string, RequerimientoConCodigo[]>();
+  for (const r of requerimientos) {
+    const c = clave(r.codigo);
+    if (!c || !estaAbierto(r)) continue;
+    if (!abiertos.has(c)) abiertos.set(c, []);
+    abiertos.get(c)!.push(r);
+  }
+
+  const porCodigo = new Map<string, PedidoAbierto>();
+  for (const [c, lista] of abiertos) {
+    lista.sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? "")));
+    const ri = lista[0];
+    porCodigo.set(c, {
+      ri,
+      cuantosAbiertos: lista.length,
+      // `Math.max(0, …)` cubre dos cosas, y la segunda es la que importa.
+      //
+      // `compras_requerimientos.fecha` es `timestamptz`, no `date`. Los RI que
+      // vienen de la planilla guardan el día como medianoche UTC, así que su día
+      // UTC es el correcto; pero el alta del SdG toma el `now()` por defecto, y
+      // uno cargado a las 21:30 de Argentina cae en el día UTC siguiente y daría
+      // -1. Dura hasta la próxima sincronización, que le reescribe la fecha con
+      // el día de la planilla — o sea justo la ventana en la que esto existe
+      // para que nadie vuelva a pedir lo que se acaba de pedir.
+      //
+      // Y una fecha ausente o ilegible: hoy no se da —la columna es `not null` y
+      // el 02/10/2026 hay 0 RI con código sin fecha— pero si llegara saldría
+      // "hoy", que es la lectura más optimista y no inventa una antigüedad.
+      diasDelRi: Math.max(0, (ri.fecha ? diasEntre(ri.fecha, hoy) : null) ?? 0),
+    });
+  }
+  return porCodigo;
+}
+
+/**
+ * Con qué valores se abre el formulario de alta para reponer un artículo.
+ *
+ * **La cantidad es el stock de seguridad y no el faltante**, que es lo que ya
+ * hace el Apps Script de la planilla, y lo medido le da la razón: se compra por
+ * lote y no por diferencia —falta 2 pidió 4, falta 15 pidió 30, falta 1 pidió
+ * 10—. Ninguno de los pedidos reales pidió el faltante exacto, así que proponer
+ * la diferencia propondría sistemáticamente menos de lo que se termina
+ * comprando.
+ *
+ * Todo es editable antes de enviar: esto propone, no decide. Y vive acá porque
+ * lo arman dos pantallas: con una copia en cada una, este texto y esta regla se
+ * separan sin que nadie lo note.
+ */
+export function altaDeReposicion(articulo: ArticuloConFaltante): AltaDeReposicion {
+  return {
+    descripcion: articulo.descripcion,
+    codigo: articulo.codigo,
+    cantidad: String(articulo.stock_seguridad),
+    detalle:
+      `Reposición de stock. Había ${articulo.stock_actual} ` +
+      `de un mínimo de ${articulo.stock_seguridad}.`,
+  };
+}
 
 /**
  * Parte los artículos en los dos grupos de la pantalla.
@@ -147,17 +239,9 @@ export function clasificarParaReponer(
     });
   }
 
-  // Los pedidos abiertos, por código, del más nuevo al más viejo.
-  const abiertos = new Map<string, RequerimientoConCodigo[]>();
-  for (const r of requerimientos) {
-    const c = clave(r.codigo);
-    if (!c || !estaAbierto(r)) continue;
-    if (!abiertos.has(c)) abiertos.set(c, []);
-    abiertos.get(c)!.push(r);
-  }
-  for (const lista of abiertos.values()) {
-    lista.sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? "")));
-  }
+  // Los pedidos abiertos, por código. La misma función que usa el stock para
+  // avisar antes de pedir de nuevo: una sola definición de "ya está pedido".
+  const abiertos = pedidosAbiertosPorCodigo(requerimientos, hoy);
 
   const paraPedir: Candidato[] = [];
   const yaPedidos: ConPedido[] = [];
@@ -171,32 +255,18 @@ export function clasificarParaReponer(
     if (!uso) continue;
 
     const base: Candidato = { articulo, salidas: uso.salidas, diasDesdeLaUltima: uso.diasDesdeLaUltima };
-    const pedidos = abiertos.get(c);
+    const pedido = abiertos.get(c);
 
-    if (!pedidos || pedidos.length === 0) {
+    if (!pedido) {
       paraPedir.push(base);
       continue;
     }
 
-    const ri = pedidos[0];
     yaPedidos.push({
       ...base,
-      ri,
-      cuantosAbiertos: pedidos.length,
-      // `Math.max(0, …)` cubre dos cosas, y la segunda es la que importa.
-      //
-      // `compras_requerimientos.fecha` es `timestamptz`, no `date`. Los RI que
-      // vienen de la planilla guardan el día como medianoche UTC, así que su día
-      // UTC es el correcto; pero el alta del SdG toma el `now()` por defecto, y
-      // uno cargado a las 21:30 de Argentina cae en el día UTC siguiente y daría
-      // -1. Dura hasta la próxima sincronización, que le reescribe la fecha con
-      // el día de la planilla — o sea justo la ventana en la que este grupo
-      // existe para que nadie vuelva a pedir lo que se acaba de pedir.
-      //
-      // Y una fecha ausente o ilegible: hoy no se da —la columna es `not null` y
-      // el 02/10/2026 hay 0 RI con código sin fecha— pero si llegara saldría
-      // "hoy", que es la lectura más optimista y no inventa una antigüedad.
-      diasDelRi: Math.max(0, (ri.fecha ? diasEntre(ri.fecha, hoy) : null) ?? 0),
+      ri: pedido.ri,
+      cuantosAbiertos: pedido.cuantosAbiertos,
+      diasDelRi: pedido.diasDelRi,
     });
   }
 

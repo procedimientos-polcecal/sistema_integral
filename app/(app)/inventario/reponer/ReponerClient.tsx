@@ -3,7 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DIAS_DE_CONSUMO, type Candidato, type ConPedido } from "@/lib/inventario/reponer";
+// `altaDeReposicion` vive en el lib y no acá porque la arma también el stock,
+// que desde el 5/10/2026 puede pedir un faltante sin pasar por esta pantalla.
+import {
+  DIAS_DE_CONSUMO, altaDeReposicion, type Candidato, type ConPedido,
+} from "@/lib/inventario/reponer";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import NuevoRequerimientoModal, {
   type ValoresIniciales,
@@ -32,22 +36,6 @@ export default function ReponerClient({
   const [pidiendo, setPidiendo] = useState<ValoresIniciales | null>(null);
   const [pedido, setPedido] = useState("");
 
-  /**
-   * Qué se le propone al formulario.
-   *
-   * La cantidad es el **stock de seguridad** y no el faltante, que es lo que ya
-   * hace el Apps Script de la planilla, y lo medido le da la razón: se compra
-   * por lote y no por diferencia —falta 2 pidió 4, falta 15 pidió 30, falta 1
-   * pidió 10—. Ninguno de los pedidos reales pidió el faltante exacto.
-   *
-   * Todo es editable antes de enviar: esto propone, no decide.
-   */
-  const alta = (c: Candidato): ValoresIniciales => ({
-    descripcion: c.articulo.descripcion,
-    codigo: c.articulo.codigo,
-    cantidad: String(c.articulo.stock_seguridad),
-    detalle: `Reposición de stock. Había ${c.articulo.stock_actual} de un mínimo de ${c.articulo.stock_seguridad}.`,
-  });
 
   return (
     // `max-w-4xl` como `ListaClient`, la pantalla vecina con el mismo ritmo de
@@ -102,7 +90,7 @@ export default function ReponerClient({
                 {/* `min-h-10` (40px) y no el `py-1.5` de un botón de tabla: se
                     aprieta con el pulgar, de pie, a veces con guantes. */}
                 <button
-                  onClick={() => setPidiendo(alta(c))}
+                  onClick={() => setPidiendo(altaDeReposicion(c.articulo))}
                   className="min-h-10 shrink-0 rounded-lg bg-[var(--primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
                 >
                   Pedir
