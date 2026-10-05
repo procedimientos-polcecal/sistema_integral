@@ -174,7 +174,33 @@ verdad. Es la misma API key: la base de staging es una copia.
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
-| `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde |
+| `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde. **Desde el 05/10/2026 también está cargada explícitamente** en Production y Preview: no porque el OIDC no alcance, sino porque una variable que está es más fácil de mirar que una que se inyecta sola |
+| `ASISTENTE_MODELO` | Con qué modelo contesta el asistente. **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde | Sólo se carga para probar sin créditos (ver abajo). Borrarla vuelve al modelo bueno |
+
+### Probar el asistente sin comprar créditos
+
+El **tier gratuito del AI Gateway no incluye a Sonnet 5**. Una llamada devuelve
+403 con `RestrictedModelsError` y el texto *"Free tier users do not have access
+to this model"* — que no es un problema de la llave: autentica bien, lo que falta
+es saldo.
+
+Para probar gratis se carga `ASISTENTE_MODELO` con uno de los que sí entran.
+Medidos el 05/10/2026, de ocho probados andaban seis:
+
+| Anda gratis | No |
+|---|---|
+| `google/gemini-2.5-flash` · `openai/gpt-oss-120b` · `zai/glm-4.6` · `moonshotai/kimi-k2` · `alibaba/qwen-3-32b` · `mistral/mistral-small` | `deepseek/deepseek-v3.2` (403) · `xai/grok-4-fast` (404) |
+
+Dos cosas al elegir uno: **tiene que soportar `tool-use`**, porque sin la
+herramienta `consultar` el asistente no hace nada; y el tier gratuito tiene
+**límites de tasa más bajos**, así que devuelve 429 antes de lo que uno espera.
+
+Y lo que importa más: con un modelo gratuito se prueba **la cañería** —que
+autentica, que llama la herramienta, que la consulta corre con RLS, que la
+bitácora se escribe—. **La calidad de las respuestas no se juzga ahí.** El
+trabajo del asistente es leer un catálogo de 115 tablas y escribir `SELECT`
+correctos, que es justo donde más se nota la diferencia de modelo: si contesta
+flojo con Gemini Flash, eso no dice nada de cómo andaría con Sonnet 5.
 
 ## Que NO va en Vercel
 

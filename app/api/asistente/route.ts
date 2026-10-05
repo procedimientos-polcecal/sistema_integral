@@ -77,7 +77,29 @@ export async function POST(request: Request) {
   let ultimoError: string | null = null;
 
   const resultado = streamText({
-    model: "anthropic/claude-sonnet-5",
+    /*
+     * El modelo sale de una variable para poder cambiarlo sin tocar código.
+     *
+     * El tier gratuito del AI Gateway **no incluye a Sonnet 5**: devuelve un 403
+     * de `RestrictedModelsError` antes de llegar al modelo. Para probar sin
+     * créditos hay que pasar a uno de los que sí entran —medidos el 05/10/2026:
+     * `google/gemini-2.5-flash`, `openai/gpt-oss-120b`, `zai/glm-4.6`,
+     * `moonshotai/kimi-k2`, `alibaba/qwen-3-32b`, `mistral/mistral-small`—, y
+     * todos tienen que soportar `tool-use`, porque sin la herramienta
+     * `consultar` el asistente no hace nada.
+     *
+     * Con la variable, volver a Sonnet 5 al comprar créditos es **borrarla**:
+     * sin ella, cada ida y vuelta entre un modelo y otro era un commit y un
+     * deploy. El default es el modelo bueno a propósito, así que un entorno sin
+     * configurar queda en el que corresponde y no en el de prueba.
+     *
+     * Lo que se prueba con un modelo gratuito es la cañería —que autentica, que
+     * llama la herramienta, que la consulta corre con RLS, que la bitácora se
+     * escribe—. **La calidad de las respuestas no se juzga ahí**: el trabajo de
+     * este asistente es leer un catálogo de 115 tablas y escribir SELECT
+     * correctos, que es justo donde más se nota la diferencia de modelo.
+     */
+    model: process.env.ASISTENTE_MODELO ?? "anthropic/claude-sonnet-5",
     system: systemPrompt({
       catalogo: catalogoPara(modulos),
       pantalla,
