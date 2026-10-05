@@ -11,6 +11,7 @@ import {
 import { confirmarElBorrador, traerElBorrador } from "@/lib/odoo/borradorDeOdoo";
 import { actualizarElBorradorEnOdoo } from "@/lib/odoo/pushFactura";
 import { puedeEditarFacturacion } from "@/lib/facturacion/auth";
+import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 
 /**
  * El borrador de Odoo, visto y confirmado desde el SdG.
@@ -123,7 +124,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  return NextResponse.json(resultado);
+  /*
+   * El asiento quedó posteado y **eso no se deshace**. Hasta el 05/10/2026 acá
+   * terminaba la ruta y el id de quien lo confirmó no se guardaba en ningún
+   * lado: la comprobación de permiso de arriba sabía quién era y después se
+   * perdía. Ver `lib/core/auditoria.ts`.
+   *
+   * Va DESPUÉS de postear y no antes, a propósito. Antes registraría una
+   * intención y no un hecho —si Odoo rechaza, quedaría un asiento posteado en
+   * la auditoría que no existe—. El precio es que un fallo de la auditoría no
+   * puede deshacer nada, así que no se intenta: se informa.
+   */
+  const { data: quien } = await supabase
+    .from("usuarios")
+    .select("nombre, apellido, email")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const registro = await auditar(supabase, {
+    modulo: "facturacion",
+    entidad: "facturas_proveedor",
+    entidadId: id,
+    accion: "postear",
+    usuario: { id: user.id, nombre: nombreParaAuditoria(quien) },
+    valorNuevo: resultado.nombre,
+    contexto: { asiento: resultado.nombre, total: resultado.total },
+  });
+
+  // No se traga: quien posteó tiene que saber que el asiento salió pero que no
+  // quedó registrado quién fue. Mismo criterio que los fallos de escritura a la
+  // planilla — un fallo que no se distingue de un éxito no es un registro.
+  return NextResponse.json({
+    ...resultado,
+    auditoria_error: registro.ok ? null : registro.error,
+  });
 }
 
 export async function PUT(_request: Request, { params }: { params: Promise<{ id: string }> }) {

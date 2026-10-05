@@ -12,6 +12,7 @@ import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
+import { auditar } from "@/lib/core/auditoria";
 
 /**
  * Modificación de un requerimiento.
@@ -371,6 +372,46 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .is("usuario_id", null);
   }
 
+  /*
+   * Y la aprobación o la denegación, además, a la auditoría del núcleo.
+   *
+   * NO es duplicar `compras_historial`: ése guarda **todos** los cambios de
+   * estado, los de la app y los que entran por la sincronización de la
+   * planilla, y en el 97,6% de sus filas no sabe quién fue. Acá entran sólo las
+   * dos decisiones que una persona tomó a mano, con su autor garantizado y —en
+   * la denegación— con el motivo obligatorio. Son dos preguntas distintas:
+   * "cómo se movió este RI" la contesta el historial, "quién decidió esto" la
+   * contesta esto.
+   *
+   * El motivo de la denegación sale de `motivo_rechazo`, que la validación de
+   * arriba (`faltaLaJustificacion`) ya garantizó que está: sin él esta llamada
+   * devolvería error y no escribiría, que es la red por si esa validación
+   * cambia.
+   */
+  let avisoAuditoria: string | null = null;
+  const nuevoEstado = cambios.estado_aprobacion as string | undefined;
+  if (nuevoEstado === "APROBADO" || nuevoEstado === "DENEGADO") {
+    const motivo =
+      "motivo_rechazo" in cambios
+        ? (cambios.motivo_rechazo as string | null)
+        : (actual.motivo_rechazo as string | null);
+
+    const registro = await auditar(supabase, {
+      modulo: "compras",
+      entidad: "compras_requerimientos",
+      entidadId: id,
+      accion: nuevoEstado === "APROBADO" ? "aprobar" : "denegar",
+      usuario: { id: user.id, nombre: nombreUsuario },
+      valorAnterior: (actual.estado_aprobacion as string | null) ?? null,
+      valorNuevo: nuevoEstado,
+      motivo: nuevoEstado === "DENEGADO" ? motivo : (body.nota ?? null),
+      contexto: { nro_ri: actual.nro_ri ?? null },
+    });
+    // No rompe la operación —la decisión ya está guardada— pero se dice, que
+    // es la misma regla que la planilla y Odoo unas líneas más abajo.
+    if (!registro.ok) avisoAuditoria = registro.error ?? "no se pudo registrar en la auditoría";
+  }
+
   // Reflejar el cambio en la planilla mientras dure la transición. Si Sheets
   // falla, el cambio ya está guardado: se avisa sin romper la operación.
   //
@@ -456,6 +497,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}),
     ...(avisoOdoo ? { aviso_odoo: avisoOdoo } : {}),
     ...(ordenOdoo ? { orden_odoo: ordenOdoo } : {}),
+    ...(avisoAuditoria ? { auditoria_error: avisoAuditoria } : {}),
   });
 }
 

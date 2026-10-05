@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarInventario } from "@/lib/inventario/auth";
 import { espejarMovimiento } from "@/lib/inventario/espejo";
 import { loQueFalta, sectorDelMovimiento, avisoDeStockNegativo, type TipoMovimiento } from "@/lib/inventario/movimiento";
+import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 
 /**
  * Registrar una entrada, una salida o un ajuste.
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     tipo: tipo as TipoMovimiento,
     cantidad: b?.cantidad,
     solicitanteId: b?.solicitante_id,
+    motivo: b?.motivo,
   });
   if (faltan.length > 0) {
     return NextResponse.json({ error: faltan.join(" ") }, { status: 400 });
@@ -237,6 +239,40 @@ export async function POST(request: Request) {
     })
     .eq("id", mov.id);
 
+  /*
+   * Un **ajuste** va a la auditoría; una entrada y una salida no.
+   *
+   * No es que las otras dos no importen: ya tienen su registro. El kardex es
+   * append-only desde la 046 —"un kardex que se puede reescribir no es un
+   * kardex"— y guarda `creado_por`, el antes y el después. Lo que le falta es
+   * el **porqué**, y eso sólo hace falta cuando el movimiento contradice lo
+   * anotado, que es exactamente el ajuste. Duplicar entradas y salidas acá
+   * sería escribir dos veces lo mismo y ensuciar la tabla.
+   *
+   * Por eso también `loQueFalta` exige motivo sólo en el ajuste.
+   */
+  let auditoriaError: string | null = null;
+  if (tipo === "ajuste") {
+    const { data: quien } = await admin
+      .from("usuarios")
+      .select("nombre, apellido, email")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const registro = await auditar(supabase, {
+      modulo: "inventario",
+      entidad: "inventario_articulos",
+      entidadId: articulo_id,
+      accion: "ajustar",
+      usuario: { id: user.id, nombre: nombreParaAuditoria(quien) },
+      valorAnterior: String(mov.stock_anterior),
+      valorNuevo: String(mov.stock_resultante),
+      motivo: texto(b?.motivo),
+      contexto: { codigo: mov.codigo, movimiento_id: mov.id, conto: mov.solicitante ?? null },
+    });
+    if (!registro.ok) auditoriaError = registro.error ?? "no se pudo registrar en la auditoría";
+  }
+
   return NextResponse.json({
     data: { ...mov, sheets_fila: espejo.ok ? espejo.fila : null },
     stock_resultante: mov.stock_resultante,
@@ -254,5 +290,6 @@ export async function POST(request: Request) {
     // comprobación no existía de este lado. Una pestaña abierta desde ayer, o
     // un POST a mano, dejaban el stock negativo sin que nadie se enterara.
     stock_negativo: avisoDeStockNegativo(mov.stock_resultante),
+    ...(auditoriaError ? { auditoria_error: auditoriaError } : {}),
   });
 }

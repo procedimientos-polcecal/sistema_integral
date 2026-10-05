@@ -19,6 +19,8 @@ export interface MovimientoEnCurso {
   cantidad: number | string | null | undefined;
   /** Quién lo pidió, de la lista del pañol. */
   solicitanteId: string | null | undefined;
+  /** Por qué, obligatorio sólo en un ajuste. Ver `loQueFalta`. */
+  motivo?: string | null | undefined;
 }
 
 /**
@@ -50,6 +52,23 @@ export function loQueFalta(m: MovimientoEnCurso): string[] {
 
   if (m.tipo !== "ajuste" && !String(m.solicitanteId ?? "").trim()) {
     faltan.push("Falta quién lo pidió.");
+  }
+
+  /*
+   * **El motivo es obligatorio en un ajuste, y sólo ahí.**
+   *
+   * Un ajuste es la única de las tres que contradice lo que el sistema venía
+   * diciendo: el stock decía 40 y pasa a decir 12. Una entrada y una salida
+   * cuentan algo que pasó; un ajuste dice que lo anotado estaba mal, y sin el
+   * porqué queda un número nuevo sin manera de entenderlo después.
+   *
+   * Vive acá, con el resto, porque lo aplican los dos lados —el formulario para
+   * no dejar apretar Registrar, y la ruta porque nada obliga a pasar por el
+   * formulario—. El motivo se guarda en la auditoría (`lib/core/auditoria.ts`),
+   * que es la tabla que lo pide; el kardex no tiene columna para él.
+   */
+  if (m.tipo === "ajuste" && !String(m.motivo ?? "").trim()) {
+    faltan.push("Un ajuste necesita un motivo: qué se encontró al contar.");
   }
 
   return faltan;

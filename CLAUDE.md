@@ -111,6 +111,19 @@ Antes de escribir una, leer las ocho trampas del
   Cantera, en Destape. `empleados.domicilio` directamente ya no existe: estaba
   vacío en las 70 filas y el domicilio de verdad es
   `remises_empleados_datos.direccion`.
+- **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
+  `auditoria` en el núcleo y una función `auditar()` en
+  [lib/core/auditoria.ts](lib/core/auditoria.ts). Hoy la llaman seis rutas:
+  postear un asiento en Odoo, mover los permisos de un usuario, cerrar una
+  liquidación, ajustar stock y aprobar o denegar una compra. **Si agregás una
+  acción irreversible, agregá la llamada** — la escribe la aplicación y no un
+  trigger, así que es lo único que puede olvidarse. El porqué de esa decisión,
+  medido, está en el
+  [spec](docs/superpowers/specs/2026-09-22-auditoria-de-lo-irreversible-design.md)
+  y en el encabezado de la migración `20261005090646`. La tabla es inmutable de
+  verdad: no tiene policy de update ni de delete, y además un trigger las
+  rechaza, que es lo único que frena al cliente admin. La lee sólo
+  `admin_sistema`.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
 

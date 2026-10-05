@@ -30,7 +30,25 @@ describe("que le falta a un movimiento para poder registrarse", () => {
 
   /** Un ajuste no lo pide nadie: es alguien contando de nuevo. */
   it("un ajuste no pide quien lo pidio", () => {
-    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", solicitanteId: "" })).toEqual([]);
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", solicitanteId: "", motivo: "conteo del lunes" })).toEqual([]);
+  });
+
+  /**
+   * Un ajuste es la unica de las tres que CONTRADICE lo anotado: el stock
+   * decia 40 y pasa a decir 12. Sin el porque queda un numero nuevo que nadie
+   * puede entender despues. El motivo se guarda en la auditoria.
+   */
+  it("un ajuste sin motivo no se puede registrar", () => {
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", solicitanteId: "" }))
+      .toContain("Un ajuste necesita un motivo: qué se encontró al contar.");
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "7", solicitanteId: "", motivo: "   " }))
+      .toContain("Un ajuste necesita un motivo: qué se encontró al contar.");
+  });
+
+  /** Una entrada y una salida cuentan algo que paso: no necesitan explicacion. */
+  it("una entrada y una salida no piden motivo", () => {
+    expect(loQueFalta({ ...completo, tipo: "salida" })).toEqual([]);
+    expect(loQueFalta({ ...completo, tipo: "entrada" })).toEqual([]);
   });
 
   /** Vacio no es cero: "no puso nada" y "no hay" son cosas distintas. */
@@ -39,7 +57,7 @@ describe("que le falta a un movimiento para poder registrarse", () => {
     expect(loQueFalta({ ...completo, cantidad: null })).toContain("Poné la cantidad.");
     expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "" }))
       .toContain("Poné cuánto hay en realidad.");
-    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "0", solicitanteId: "" })).toEqual([]);
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "0", solicitanteId: "", motivo: "no quedaba ninguno" })).toEqual([]);
   });
 
   it("una salida de cero o negativa no es una salida", () => {

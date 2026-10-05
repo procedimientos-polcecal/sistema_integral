@@ -58,6 +58,8 @@ export default function NuevoMovimientoClient({
 
   const [tipo, setTipo] = useState<Tipo>("salida");
   const [cantidad, setCantidad] = useState(cantidadInicial);
+  // Sólo lo pide el ajuste: ver `loQueFalta` en lib/inventario/movimiento.ts.
+  const [motivo, setMotivo] = useState("");
   const [solicitanteId, setSolicitanteId] = useState("");
   // Vacío no es "sin destino": es "el que diga quien retira". Sólo se guarda
   // acá lo que alguien eligió a mano, para que cambiar de persona siga
@@ -112,7 +114,7 @@ export default function NuevoMovimientoClient({
   // si pertenece al destino vigente".
   const equipoId = equiposDelDestino.some((e) => e.id === equipoElegido) ? equipoElegido : "";
 
-  const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId });
+  const faltan = loQueFalta({ articuloId: articulo?.id, tipo, cantidad, solicitanteId, motivo });
 
   /**
    * En cuánto va a quedar. La cuenta vive en `lib/inventario/movimiento.ts`
@@ -161,6 +163,7 @@ export default function NuevoMovimientoClient({
         equipo_id: equipoId || null,
         proveedor_id: proveedorId || null,
         ri: ri ? Number(ri) : null,
+        motivo: motivo.trim() || null,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -277,6 +280,24 @@ export default function NuevoMovimientoClient({
               className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
             />
           </label>
+
+          {tipo === "ajuste" && (
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600">
+                Qué se encontró al contar<span className="text-red-500"> *</span>
+              </span>
+              <input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Ej.: faltaban 3, estaban en el otro estante"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
+              />
+              <span className="mt-1 block text-xs text-slate-400">
+                Un ajuste cambia el stock sin que haya entrado ni salido nada: queda
+                registrado quién lo hizo y por qué.
+              </span>
+            </label>
+          )}
 
           {quedaEn !== null && (
             <p className={`text-sm ${avisoNegativo ? "text-red-600" : "text-slate-600"}`}>
