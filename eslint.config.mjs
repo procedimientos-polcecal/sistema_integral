@@ -19,7 +19,7 @@ export default [
       // Los worktrees de Claude Code viven adentro del repo, así que ESLint
       // los recorría como código del proyecto: con uno abierto aparecían seis
       // errores duplicados, los mismos archivos contados dos veces. Es la
-      // misma trampa que ya está anotada en `vitest.config.ts` y por la misma
+      // misma trampa que ya está anotada en `vitest.config.mts` y por la misma
       // razón: el número deja de significar algo, y lo peor no es el ruido
       // sino que un error del worktree de otra sesión se lee como propio —y
       // uno arreglado allá tapa el que sigue roto acá.

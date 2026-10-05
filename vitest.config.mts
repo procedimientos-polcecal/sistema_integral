@@ -1,12 +1,22 @@
 import { defineConfig, configDefaults } from "vitest/config";
 import path from "node:path";
 
+/*
+ * El archivo es `.mts` y no `.ts` desde el 03/10/2026, cuando se pasó a
+ * vitest 4. Con `.ts` Vite lo carga como CommonJS y avisa en cada corrida que
+ * tiene sintaxis ESM — un aviso que va a ser un error cuando `configLoader:
+ * 'native'` pase a ser el default de Vite. La extensión lo resuelve, y es la
+ * misma que ya usan `postcss.config.mjs` y `eslint.config.mjs`.
+ *
+ * Como ESM no tiene `__dirname`, la raíz sale de `import.meta.dirname`, que
+ * existe desde Node 20.11 (el CI corre 22).
+ */
 export default defineConfig({
   // Mismo alias que tsconfig: sin esto, cualquier test que alcance un módulo
   // que importe con "@/..." falla al resolver, y termina obligando a mover
   // código sólo para poder testearlo.
   resolve: {
-    alias: { "@": path.resolve(__dirname, ".") },
+    alias: { "@": path.resolve(import.meta.dirname, ".") },
   },
   test: {
     environment: "node",

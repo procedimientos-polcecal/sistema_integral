@@ -225,7 +225,7 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
   tres veces lo mismo. Nada rompía, pero el número dejaba de significar algo y
   esas copias corrían contra el código del worktree, así que un verde podía
   estar tapando que el árbol principal estaba rojo. Ya está excluido en
-  `vitest.config.ts` (el comentario de ahí tiene los números); lo que hay que
+  `vitest.config.mts` (el comentario de ahí tiene los números); lo que hay que
   saber es que **si tocás ese `exclude`, `configDefaults.exclude` va sí o sí**:
   definirlo pisa el default de vitest en vez de sumarse, y sin él se cuelan dos
   archivos de test que vienen en `node_modules` — medido, no teórico. `tsc` no
