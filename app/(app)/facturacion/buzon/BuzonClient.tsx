@@ -977,6 +977,7 @@ function FilaDelBuzon({
       {verDetalle && (
         <LineasDeFactura
           facturaId={factura.id}
+          factura={factura}
           puedeEditar={puedeEditar}
           onCerrar={() => setVerDetalle(false)}
         />

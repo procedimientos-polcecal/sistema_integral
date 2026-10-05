@@ -13,6 +13,8 @@ import {
   type DistribucionAnalitica,
   type LineaDeFactura,
 } from "@/lib/facturacion/lineas";
+import { nombreDelComprobante, nombreDelTipo, numeroFormateado } from "@/lib/facturacion/comprobante";
+import type { FacturaEnPantalla } from "@/lib/facturacion/types";
 
 /**
  * El detalle de una factura: qué productos trae y cómo se imputa cada uno.
@@ -38,10 +40,16 @@ interface Catalogos {
 
 export default function LineasDeFactura({
   facturaId,
+  factura,
   puedeEditar,
   onCerrar,
 }: {
   facturaId: string;
+  /**
+   * La factura entera, para la ficha de arriba. Viene de la fila del buzón y
+   * no de una consulta nueva: son datos que la pantalla ya tiene en la mano.
+   */
+  factura: FacturaEnPantalla;
   puedeEditar: boolean;
   onCerrar: () => void;
 }) {
@@ -136,15 +144,15 @@ export default function LineasDeFactura({
   }
 
   return (
-    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          El detalle del comprobante
-          {lineas && <span className="ml-2 font-normal text-slate-400">{lineas.length} líneas</span>}
+    <div className="mt-2 overflow-hidden rounded-lg border border-slate-300 bg-white">
+      <FichaDelComprobante factura={factura} onCerrar={onCerrar} />
+
+      <div className="border-t border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-1">
+        <h4 className="border-b-2 border-slate-800 pb-1 text-xs font-semibold text-slate-800">
+          Líneas de factura
+          {lineas && <span className="ml-2 font-normal text-slate-400">{lineas.length}</span>}
         </h4>
-        <button onClick={onCerrar} className="text-xs text-slate-400 underline">
-          cerrar
-        </button>
       </div>
 
       {/*
@@ -172,7 +180,22 @@ export default function LineasDeFactura({
         <p className="text-xs text-slate-400">Esta factura no tiene detalle cargado.</p>
       ) : (
         <>
-          <ul className="space-y-2">
+          {/*
+            * Los encabezados de columna sólo en pantalla ancha. Abajo de `lg`
+            * cada celda lleva su propia etiqueta —las que trae el buscador— y
+            * una tabla de seis columnas no entra sin romperse; es la misma
+            * decisión que toma Odoo, que en el teléfono apila la línea.
+            */}
+          <div className="hidden lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2.3fr)_4rem_6.5rem_7rem] lg:gap-2 lg:border-b lg:border-slate-300 lg:px-2 lg:pb-1 lg:text-[10px] lg:font-medium lg:uppercase lg:tracking-wide lg:text-slate-500">
+            <span>Producto</span>
+            <span>Cuenta</span>
+            <span>Distribución analítica</span>
+            <span className="text-right">Cantidad</span>
+            <span className="text-right">Precio</span>
+            <span className="text-right">Subtotal</span>
+          </div>
+
+          <ul className="divide-y divide-slate-200 border-b border-slate-200 bg-white">
             {lineas.map((linea) => (
               <Linea
                 key={linea.id}
@@ -214,12 +237,207 @@ export default function LineasDeFactura({
             ) : (
               <span />
             )}
-            <p className="text-xs text-slate-500">
-              Suman {suma.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+            {/*
+              * El total abajo a la derecha, como en el formulario de Odoo. Se
+              * dice "suman" y no "total": es la suma de las líneas leídas, que
+              * puede no ser el total del comprobante — justamente el caso que
+              * el aviso de arriba explica.
+              */}
+            <p className="text-sm text-slate-700">
+              <span className="text-xs uppercase tracking-wide text-slate-500">Suman</span>{" "}
+              <strong>{suma.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</strong>
             </p>
           </div>
         </>
       )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Una celda numérica de la línea.
+ *
+ * La etiqueta se ve sólo cuando la tabla está apilada: en pantalla ancha la
+ * dice el encabezado de la columna, y repetirla en cada fila sería ruido.
+ */
+function Numero({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 lg:block lg:text-right">
+      <span className="text-[10px] uppercase tracking-wide text-slate-400 lg:hidden">
+        {etiqueta}
+      </span>
+      <span className="text-sm text-slate-700">{children}</span>
+    </div>
+  );
+}
+
+/** Un renglón de la ficha: etiqueta a la izquierda, dato subrayado a la derecha. */
+function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-36 shrink-0 text-xs text-slate-500">{etiqueta}</span>
+      <span className="min-w-0 grow border-b border-slate-200 pb-0.5 text-sm text-slate-800">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/** Cómo se dice en castellano el estado del asiento en Odoo. */
+const ESTADO_EN_ODOO: Record<string, string> = {
+  draft: "Borrador",
+  posted: "Publicado",
+  cancel: "Cancelado",
+};
+
+/**
+ * La cabecera del comprobante, con la forma del formulario de Odoo.
+ *
+ * Es **lo mismo que ya sabe el buzón**, puesto como lo pone Odoo: dos columnas
+ * de etiqueta y dato, y arriba el nombre grande con el estado al lado. No hay
+ * ningún campo nuevo ni ninguna columna nueva en la base — quien carga pasa el
+ * día entre esta pantalla y la de Odoo, y que las dos se lean igual ahorra la
+ * traducción mental en cada factura.
+ *
+ * **Nada de esto se edita acá, a propósito.** Lo que vino del QR está firmado
+ * por ARCA y corregirlo dejaría un registro que ya no es el comprobante; lo que
+ * hay que cambiar se cambia volviendo a cargar el archivo. Lo único editable de
+ * una factura ya cargada sigue siendo lo de la fila —estado y RI— y el detalle
+ * de abajo, que es lo que el papel no dice.
+ */
+function FichaDelComprobante({
+  factura,
+  onCerrar,
+}: {
+  factura: FacturaEnPantalla;
+  onCerrar: () => void;
+}) {
+  const proveedor =
+    factura.proveedor ??
+    factura.odoo_partner_nombre ??
+    (factura.cuit_emisor ? `CUIT ${factura.cuit_emisor}` : null);
+
+  const nombre = nombreDelComprobante({
+    tipoComprobante: factura.tipo_comprobante,
+    puntoVenta: factura.punto_venta,
+    numero: factura.numero,
+  });
+
+  return (
+    <div className="bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs text-slate-500">Factura de proveedor</p>
+          <h4 className="truncate text-xl font-semibold text-slate-900">{nombre}</h4>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {/*
+            * El estado del asiento, con la misma forma de dos pasos que usa
+            * Odoo. Si la factura todavía no llegó allá no se inventa un paso:
+            * se dice que no hay asiento, que es distinto de "borrador".
+            */}
+          {factura.odoo_move_id ? (
+            <span className="flex overflow-hidden rounded-full border border-slate-300 text-[11px]">
+              {["draft", "posted"].map((e) => (
+                <span
+                  key={e}
+                  className={`px-2 py-0.5 ${
+                    factura.odoo_estado === e
+                      ? "bg-slate-800 font-medium text-white"
+                      : "bg-slate-50 text-slate-500"
+                  }`}
+                >
+                  {ESTADO_EN_ODOO[e]}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+              Sin asiento en Odoo
+            </span>
+          )}
+
+          <button onClick={onCerrar} className="text-xs text-slate-400 underline">
+            cerrar
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-x-8 gap-y-2 md:grid-cols-2">
+        <Dato etiqueta="Proveedor">
+          {proveedor ?? <span className="text-slate-400">sin proveedor</span>}
+          {!factura.proveedor && factura.odoo_partner_nombre && (
+            <span className="ml-1 text-xs text-slate-400">(de Odoo)</span>
+          )}
+        </Dato>
+
+        <Dato etiqueta="Fecha de la factura">
+          {factura.fecha ?? <span className="text-slate-400">sin fecha</span>}
+        </Dato>
+
+        <Dato etiqueta="CUIT">
+          {factura.cuit_emisor ?? <span className="text-slate-400">—</span>}
+        </Dato>
+
+        <Dato etiqueta="Empresa">
+          {factura.empresa ?? <span className="text-slate-400">sin definir</span>}
+        </Dato>
+
+        <Dato etiqueta="Tipo de comprobante">{nombreDelTipo(factura.tipo_comprobante)}</Dato>
+
+        <Dato etiqueta="Importe total">
+          {Number(factura.importe_total ?? 0).toLocaleString("es-AR", {
+            minimumFractionDigits: 2,
+          })}
+          {factura.moneda !== "ARS" && ` ${factura.moneda}`}
+        </Dato>
+
+        <Dato etiqueta="Número documento">
+          {numeroFormateado(factura.punto_venta, factura.numero)}
+        </Dato>
+
+        <Dato etiqueta="Requerimiento">
+          {factura.requerimiento ? (
+            `RI ${factura.requerimiento}`
+          ) : (
+            <span className="text-slate-400">sin vincular</span>
+          )}
+        </Dato>
+
+        <Dato etiqueta="CAE">
+          {factura.cae ?? <span className="text-slate-400">—</span>}
+        </Dato>
+
+        <Dato etiqueta="Asiento en Odoo">
+          {factura.odoo_nombre && factura.odoo_nombre !== "/" ? (
+            factura.odoo_nombre
+          ) : factura.odoo_move_id ? (
+            // En borrador Odoo deja el nombre en "/": numera recién al postear.
+            <span className="text-slate-400">todavía sin numerar</span>
+          ) : (
+            <span className="text-slate-400">—</span>
+          )}
+        </Dato>
+
+        {/*
+          * De dónde salió el dato fiscal. No es decorativo: `qr` está firmado
+          * por ARCA, `texto` lo interpretó el lector del PDF y `a mano` lo
+          * tipeó alguien, y quien revisa decide distinto según cuál sea.
+          */}
+        <Dato etiqueta="Entró por">
+          {factura.origen}
+          <span className="ml-1 text-xs text-slate-400">
+            ·{" "}
+            {factura.identificado_por === "qr"
+              ? "leída del QR"
+              : factura.identificado_por === "texto"
+                ? "leída del texto"
+                : "cargada a mano"}
+          </span>
+        </Dato>
+      </div>
     </div>
   );
 }
@@ -316,43 +534,49 @@ function Linea({
     JSON.stringify(analitica) !== JSON.stringify(linea.analitica ?? {});
 
   return (
-    <li className="card bg-white p-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-sm font-medium text-slate-800">{linea.descripcion}</span>
-        <span className="text-xs text-slate-500">
-          {linea.cantidad} × {Number(linea.precio_unitario ?? 0).toLocaleString("es-AR")} ={" "}
-          <strong>{Number(linea.total ?? 0).toLocaleString("es-AR")}</strong>
-        </span>
-      </div>
-
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <Buscador
-          etiqueta={
-            <>
-              Producto
-              {/* De dónde salió: lo propuso una regla, lo aprendió de una
-                  corrección anterior, o lo eligió una persona. */}
-              {linea.producto_origen && (
-                <span className="ml-1 normal-case">· {linea.producto_origen}</span>
-              )}
-            </>
-          }
-          opciones={opcionesDeProducto}
-          valor={linea.odoo_product_id}
-          textoDelValor={linea.odoo_product_nombre}
-          deshabilitado={!puedeEditar || guardando || !catalogos}
-          vacio="— sin producto —"
-          onElegir={(o) =>
-            void guardar({
-              odoo_product_id: o?.id ?? null,
-              odoo_product_nombre: o?.texto ?? null,
-            })
-          }
-        />
-
-        <div>
+    <li className="px-2 py-3 lg:py-2">
+      {/*
+        * Las mismas seis columnas que el encabezado. Abajo de `lg` se apila y
+        * cada celda muestra su etiqueta: una línea tiene dos buscadores y una
+        * distribución con porcentajes editables, y eso en seis columnas
+        * angostas no se puede usar.
+        */}
+      <div className="grid gap-x-2 gap-y-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2.3fr)_4rem_6.5rem_7rem] lg:gap-y-0">
+        <div className="min-w-0">
+          {/* Lo que dice el papel. Arriba del producto porque es el dato que
+              se lee para decidir cuál producto corresponde. */}
+          <p className="text-sm font-medium text-slate-800">{linea.descripcion}</p>
           <Buscador
-            etiqueta="Cuenta"
+            etiqueta={
+              <>
+                <span className="lg:hidden">Producto</span>
+                {/* De dónde salió: lo propuso una regla, lo aprendió de una
+                    corrección anterior, o lo eligió una persona. */}
+                {linea.producto_origen && (
+                  <span className="normal-case lg:ml-0">
+                    <span className="lg:hidden"> · </span>
+                    {linea.producto_origen}
+                  </span>
+                )}
+              </>
+            }
+            opciones={opcionesDeProducto}
+            valor={linea.odoo_product_id}
+            textoDelValor={linea.odoo_product_nombre}
+            deshabilitado={!puedeEditar || guardando || !catalogos}
+            vacio="— sin producto —"
+            onElegir={(o) =>
+              void guardar({
+                odoo_product_id: o?.id ?? null,
+                odoo_product_nombre: o?.texto ?? null,
+              })
+            }
+          />
+        </div>
+
+        <div className="min-w-0">
+          <Buscador
+            etiqueta={<span className="lg:hidden">Cuenta</span>}
             opciones={opcionesDeCuenta}
             valor={linea.odoo_account_id}
             textoDelValor={linea.odoo_account_nombre}
@@ -384,10 +608,9 @@ function Linea({
             </div>
           )}
         </div>
-      </div>
 
-      <div className="mt-2">
-        <span className="block text-[10px] uppercase tracking-wide text-slate-400">
+      <div className="min-w-0">
+        <span className="block text-[10px] uppercase tracking-wide text-slate-400 lg:hidden">
           Distribución analítica
         </span>
 
@@ -479,6 +702,25 @@ function Linea({
             <span className="ml-1 opacity-70">— {sugerenciaDeAnalitica.porque}</span>
           </div>
         )}
+      </div>
+
+        {/*
+          * Cantidad, precio y subtotal: lo que dice el papel, alineado a la
+          * derecha como en Odoo. **No se editan**, igual que la descripción —
+          * si están mal leídos, la factura se vuelve a cargar; corregirlos acá
+          * dejaría un detalle que ya no es el comprobante.
+          */}
+        <Numero etiqueta="Cantidad">{Number(linea.cantidad ?? 0).toLocaleString("es-AR")}</Numero>
+        <Numero etiqueta="Precio">
+          {Number(linea.precio_unitario ?? 0).toLocaleString("es-AR", {
+            minimumFractionDigits: 2,
+          })}
+        </Numero>
+        <Numero etiqueta="Subtotal">
+          <strong>
+            {Number(linea.total ?? 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+          </strong>
+        </Numero>
       </div>
 
       {aviso && <p className="mt-1 rounded bg-rose-50 px-2 py-1 text-xs text-rose-800">{aviso}</p>}
