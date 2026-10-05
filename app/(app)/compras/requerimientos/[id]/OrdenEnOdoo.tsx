@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { fecha, monedaExacta } from "@/lib/compras/constants";
 import type { Diferencia } from "@/lib/compras/divergenciaDeOrden";
@@ -177,7 +178,9 @@ export default function OrdenEnOdoo({
    * nada, que es mejor que un cartel rojo por algo que no impide trabajar. El
    * PDF y el resto de la sección siguen andando.
    */
-  const traerEstados = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const traerEstados = useCargar(async (vigente) => {
     if (!ordenes.length) return;
 
     try {
@@ -193,16 +196,13 @@ export default function OrdenEnOdoo({
       setEstados(
         Object.fromEntries((body.estados ?? []).map(({ odooOrderId, ...e }) => [odooOrderId, e]))
       );
+      if (!vigente()) return;
       setDetalles(Object.fromEntries((body.ordenes ?? []).map((o) => [o.odooOrderId, o])));
       setDiferencias(body.diferencias ?? []);
     } catch {
       // Odoo no contestó. Se ve la orden, sin su estado.
     }
   }, [requerimientoId, ordenes.length]);
-
-  useEffect(() => {
-    void traerEstados();
-  }, [traerEstados]);
 
   async function crear() {
     setTrabajando(true);

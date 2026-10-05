@@ -17,11 +17,12 @@
 # gastar cinco minutos de build para enterarse de algo que se sabía al toque.
 # Los otros tres van de más barato a más caro.
 #
-# `npm run lint` NO está acá, a propósito: hoy devuelve 21 errores
-# (`react-hooks/set-state-in-effect`, en su mayoría) y agregarlo dejaría el CI
-# rojo desde el primer push. Un CI que está siempre rojo no lo mira nadie, que
-# es exactamente el estado del que se viene. Cuando esos 21 se cierren, se
-# agrega un paso más acá y recién ahí el lint empieza a defender algo.
+# `npm run lint` NO está acá todavía, a propósito. Eran 23 errores; el
+# 05/10/2026 se cerraron 20 y **quedan 3**, en dos archivos que ese día estaban
+# abiertos en otra sesión. Con uno solo el CI queda rojo, y un CI siempre rojo
+# no lo mira nadie — que es exactamente el estado del que se viene. Cuando esos
+# 3 se cierren se agrega el paso acá, y recién ahí el lint empieza a defender
+# algo. Ver CLAUDE.md.
 #
 # SOBRE LAS VARIABLES DEL BUILD
 #

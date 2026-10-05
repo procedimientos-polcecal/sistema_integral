@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import BuscadorDeArticulo, { type ArticuloOpcion } from "./BuscadorDeArticulo";
 
 /**
@@ -42,14 +43,18 @@ export default function RepuestosDelTrabajo({
 
   const paramOrigen = serviceId ? `service_id=${serviceId}` : `reparacion_id=${reparacionId}`;
 
-  async function cargar() {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`. Devuelve la función para recargar
+  // a mano después de reservar o soltar un repuesto.
+  //
+  // Las dependencias quedan vacías a propósito, como estaba: se busca una sola
+  // vez al montar. `paramOrigen` no cambia mientras el componente vive.
+  const cargar = useCargar(async (vigente) => {
     const res = await fetch(`/api/taller-vial/repuestos?${paramOrigen}`);
     const json = await res.json();
+    if (!vigente()) return;
     if (res.ok) setRepuestos(json.data);
-  }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- se busca una sola vez al montar, por origen
-  useEffect(() => { cargar(); }, []);
+  }, []);
 
   async function reservar() {
     if (!seleccionado) { setError("Elegí un artículo del pañol"); return; }
@@ -75,7 +80,7 @@ export default function RepuestosDelTrabajo({
       if (json.aviso) setAviso(json.aviso.mensaje);
       setSeleccionado(null);
       setCantidad("");
-      await cargar();
+      cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo reservar");
     } finally {
@@ -88,7 +93,7 @@ export default function RepuestosDelTrabajo({
     const res = await fetch(`/api/taller-vial/repuestos?id=${id}`, { method: "DELETE" });
     const json = await res.json();
     if (!res.ok) { setError(json.error ?? "No se pudo cancelar"); return; }
-    await cargar();
+    cargar();
   }
 
   return (

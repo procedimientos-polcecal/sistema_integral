@@ -75,11 +75,20 @@ export default function NuevoMovimientoClient({
   const [error, setError] = useState("");
   const [hecho, setHecho] = useState<{ stock: number; aviso: string | null; negativo: string | null } | null>(null);
 
-  // El buscador, sólo mientras no haya artículo elegido.
+  /*
+   * El buscador, sólo mientras no haya artículo elegido.
+   *
+   * Los dos cortes —ya hay artículo, o todavía no se escribieron tres letras—
+   * eran `setOpciones([])` sincrónicos adentro del efecto, que es justo lo que
+   * dispara renders en cascada. Y no hacían falta: que la lista esté vacía no
+   * es un estado nuevo, se deduce de lo que se escribió. Ahora el efecto sólo
+   * no pide nada, y lo que se muestra se deriva (`visibles`, abajo).
+   */
+  const buscando = !articulo && busqueda.trim().length >= 3;
+
   useEffect(() => {
-    if (articulo) { setOpciones([]); return; }
+    if (!buscando) return;
     const termino = busqueda.trim();
-    if (termino.length < 3) { setOpciones([]); return; }
 
     const t = setTimeout(async () => {
       const res = await fetch(`/api/inventario/articulos?q=${encodeURIComponent(termino)}`);
@@ -87,7 +96,10 @@ export default function NuevoMovimientoClient({
       setOpciones(body.data ?? []);
     }, 300);
     return () => clearTimeout(t);
-  }, [busqueda, articulo]);
+  }, [busqueda, articulo, buscando]);
+
+  // Derivado y no un estado aparte: ver el comentario del efecto.
+  const visibles = buscando ? opciones : [];
 
   const solicitante = solicitantes.find((s) => s.id === solicitanteId) ?? null;
   const destinoId = sectorDelMovimiento(destinoElegido, solicitante?.destinoId) ?? "";
@@ -212,7 +224,7 @@ export default function NuevoMovimientoClient({
             <p className="text-xs text-slate-400">Escribí al menos tres letras.</p>
           )}
           <ul className="divide-y divide-slate-100 overflow-hidden card">
-            {opciones.map((a) => (
+            {visibles.map((a) => (
               <li key={a.id}>
                 <button
                   onClick={() => setArticulo(a)}

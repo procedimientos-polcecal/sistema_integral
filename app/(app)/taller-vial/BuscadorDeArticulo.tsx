@@ -37,8 +37,20 @@ export default function BuscadorDeArticulo({
   const [opciones, setOpciones] = useState<ArticuloOpcion[]>([]);
   const [desplegado, setDesplegado] = useState(false);
 
+  /*
+   * Sin equipo, hasta la tercera letra no se busca.
+   *
+   * Antes eso era un `setOpciones([])` sincrónico adentro del efecto, que es
+   * justo lo que dispara renders en cascada: el efecto corre, pisa el estado y
+   * obliga a renderizar de nuevo. Y no hacía falta — que la lista esté vacía no
+   * es un estado nuevo, es algo que se deduce de lo que se escribió. Ahora el
+   * efecto sólo no pide nada, y lo que se muestra se deriva en el render
+   * (`visibles`, abajo).
+   */
+  const buscando = Boolean(equipoId) || busqueda.trim().length >= 3;
+
   useEffect(() => {
-    if (!equipoId && busqueda.trim().length < 3) { setOpciones([]); return; }
+    if (!buscando) return;
     const t = setTimeout(async () => {
       const params = new URLSearchParams();
       if (busqueda.trim()) params.set("q", busqueda.trim());
@@ -48,11 +60,13 @@ export default function BuscadorDeArticulo({
       if (res.ok) setOpciones(json.data);
     }, 300);
     return () => clearTimeout(t);
-  }, [busqueda, equipoId]);
+  }, [busqueda, equipoId, buscando]);
 
   // Sin equipo, escribir ya alcanza para ver la lista. Con equipo, la lista
   // se abre sólo si se pidió con la flechita o si se escribió algo.
-  const mostrarLista = opciones.length > 0 && (!equipoId || desplegado || busqueda.trim().length > 0);
+  // Derivado y no un estado aparte: ver el comentario del efecto.
+  const visibles = buscando ? opciones : [];
+  const mostrarLista = visibles.length > 0 && (!equipoId || desplegado || busqueda.trim().length > 0);
 
   return (
     <div className="relative">
@@ -75,7 +89,7 @@ export default function BuscadorDeArticulo({
       </div>
       {mostrarLista && (
         <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
-          {opciones.map((o) => (
+          {visibles.map((o) => (
             <li key={o.id}>
               <button
                 className="block w-full px-3 py-1.5 text-left text-xs hover:bg-slate-50"

@@ -225,13 +225,16 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
 
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
-- `npm run lint` **falla**, pero ya no por lo que decía acá: desde
-  `a7fd2f1` hay `eslint.config.mjs` y el lint corre. Lo que quedan son **21
-  errores reales** (medido el 22/09/2026 sobre `origin/main`), casi todos
-  `react-hooks/set-state-in-effect` en pantallas.
-  Por eso el lint **no** está en el CI: agregarlo lo dejaría rojo desde el primer
-  push, y un CI siempre rojo no lo mira nadie. Cuando esos 21 se cierren, se
-  agrega el paso.
+- `npm run lint` **casi pasa**. Desde `a7fd2f1` hay `eslint.config.mjs` y el
+  lint corre; el 05/10/2026 se cerraron 20 de los 23 errores que quedaban —los
+  `react-hooks/set-state-in-effect` pasaron a `useCargar` o a ajustarse durante
+  el render, y las comillas sueltas en JSX se escaparon—. **Quedan 3**, en
+  `cantera/acarreo/AcarreoClient.tsx` y `facturacion/buzon/LineasDeFactura.tsx`,
+  que estaban abiertos en otra sesión ese día y no se tocaron: arreglarlos
+  habría sido pisarle el trabajo.
+  Por eso el lint **todavía no** está en el CI: con un error rojo, un CI que
+  está siempre rojo no lo mira nadie. Cuando esos 3 se cierren, se agrega el
+  paso y el lint empieza a defender algo.
 - **Los worktrees de Claude Code viven adentro del repo** (`.claude/worktrees/`),
   así que vitest los recorría como código del proyecto y recogía cada
   `*.test.ts` una vez por worktree abierto — con dos abiertos, la suite corría

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 
 /**
  * Lo que llegó por mail y todavía nadie cargó.
@@ -52,7 +53,9 @@ export default function BandejaDelCorreo({
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const mirar = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const mirar = useCargar(async (vigente) => {
     try {
       const res = await fetch("/api/facturacion/correo");
       const body = await res.json().catch(() => ({}));
@@ -60,6 +63,7 @@ export default function BandejaDelCorreo({
         setError(body.error ?? "No se pudo leer la bandeja del correo.");
         return;
       }
+      if (!vigente()) return;
       setPendientes(body.pendientes ?? []);
       setError(null);
     } catch (e) {
@@ -68,10 +72,6 @@ export default function BandejaDelCorreo({
       setCargando(false);
     }
   }, []);
-
-  useEffect(() => {
-    void mirar();
-  }, [mirar]);
 
   /**
    * Baja el adjunto y lo manda a la cola.
@@ -94,7 +94,7 @@ export default function BandejaDelCorreo({
       const archivo = new File([blob], p.adjunto, { type: p.tipo ?? blob.type });
       await onCargar([archivo], p.id);
       // Y se refresca: si la carga anduvo, esta entrada ya no está pendiente.
-      setTimeout(() => void mirar(), 1500);
+      setTimeout(() => mirar(), 1500);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

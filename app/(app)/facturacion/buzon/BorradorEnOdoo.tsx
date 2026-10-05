@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import type { BorradorDeOdoo } from "@/lib/odoo/borradorDeOdoo";
 
 /**
@@ -44,7 +45,9 @@ export default function BorradorEnOdoo({
   const [actualizando, setActualizando] = useState(false);
   const [nota, setNota] = useState<string | null>(null);
 
-  const traer = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const traer = useCargar(async (vigente) => {
     setError(null);
     const r = await fetch(`/api/facturacion/facturas/${facturaId}/odoo/borrador`);
     const datos = await r.json().catch(() => ({}));
@@ -52,13 +55,10 @@ export default function BorradorEnOdoo({
       setError(datos.error ?? "No se pudo traer el borrador de Odoo.");
       return;
     }
+    if (!vigente()) return;
     setBorrador(datos.borrador);
     setDiferencia(datos.diferencia ?? 0);
   }, [facturaId]);
-
-  useEffect(() => {
-    void traer();
-  }, [traer]);
 
   /**
    * Reescribir el borrador con lo que dice el SdG ahora.
@@ -84,7 +84,7 @@ export default function BorradorEnOdoo({
     setNota(
       `El borrador quedó con ${datos.lineas || 1} línea${datos.lineas === 1 ? "" : "s"}, por ${plata(datos.totalEnOdoo ?? 0)}.`
     );
-    await traer();
+    traer();
   }
 
   async function confirmar() {

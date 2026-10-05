@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import Link from "next/link";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -21,15 +22,18 @@ export default function ReservasTallerVialClient({ puedeEditar }: { puedeEditar:
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
 
-  async function cargar() {
+  // `useCargar` y no un `useEffect` que llama y listo: descarta la respuesta
+  // que llega tarde. Ver `lib/core/useCargar.ts` — eran veintisiete pantallas
+  // con el mismo bug. Devuelve la función para recargar a mano después de
+  // confirmar o cancelar una reserva.
+  const cargar = useCargar(async (vigente) => {
     setError(null);
     const res = await fetch("/api/inventario/reservas-taller-vial");
     const json = await res.json();
+    if (!vigente()) return;
     if (!res.ok) { setError(json.error ?? "No se pudo cargar"); return; }
     setReservas(json.data);
-  }
-
-  useEffect(() => { cargar(); }, []);
+  }, []);
 
   async function confirmar(id: string) {
     setProcesando(id);
@@ -38,7 +42,7 @@ export default function ReservasTallerVialClient({ puedeEditar }: { puedeEditar:
       const res = await fetch(`/api/inventario/reservas-taller-vial/${id}`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo confirmar");
-      await cargar();
+      cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo confirmar");
     } finally {
@@ -54,7 +58,7 @@ export default function ReservasTallerVialClient({ puedeEditar }: { puedeEditar:
       const res = await fetch(`/api/inventario/reservas-taller-vial/${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo cancelar");
-      await cargar();
+      cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cancelar");
     } finally {

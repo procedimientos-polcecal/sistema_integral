@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import { createClient } from "@/lib/supabase/client";
 import { comoSeLee } from "@/lib/core/fechas";
 import { paginaDeArranque } from "@/lib/core/filtrosUrl";
@@ -101,7 +102,9 @@ export default function MovimientosClient({
   // cuanto alguien pasa de página.
   useEspejoEnLaUrl(escribirFiltrosDeMovimientos(filtros, pagina + 1));
 
-  const cargar = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     setError("");
     const supabase = createClient();
@@ -130,11 +133,11 @@ export default function MovimientosClient({
 
     setCargando(false);
     if (err) { setError(err.message); setFilas([]); return; }
+    if (!vigente()) return;
     setFilas((data ?? []) as Movimiento[]);
     setTotal(count ?? 0);
   }, [tipo, origen, sector, desde, hasta, busqueda, pagina]);
 
-  useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
   // Una `?pagina=40` escrita a mano —o guardada en un enlace de cuando el

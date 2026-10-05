@@ -76,7 +76,13 @@ export default function ColaClient({
 
   // Medio minuto: el dato se lee en minutos, así que refrescar más seguido es
   // gastar renders para mostrar el mismo número.
+  // El reloj **se queda en un efecto**, que es el caso para el que el efecto
+  // sigue siendo lo correcto: sincronizar con algo externo que en el servidor
+  // no existe. `ahora` arranca en `null` a propósito —la hora del servidor no
+  // es la del navegador y pintarla daría un desajuste de hidratación— y la
+  // primera lectura tiene que pasar después de montar, no durante el render.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- el reloj del navegador no existe en el servidor: ver arriba
     setAhora(new Date());
     const t = setInterval(() => setAhora(new Date()), 30_000);
     return () => clearInterval(t);
@@ -369,8 +375,20 @@ function CampoDeHora({
   guardando: boolean;
   onGuardar: (valor: string) => void;
 }) {
+  /*
+   * "Cuando cambia la prop, volvé el estado al principio" se ajusta **durante
+   * el render** comparando contra el valor previo, y no en un efecto.
+   *
+   * Además de dejar conforme a la regla, saca un commit intermedio: con el
+   * efecto, React pintaba una vez con la hora nueva en la celda y el texto
+   * viejo en el input, y recién después lo corregía.
+   */
   const [texto, setTexto] = useState(valor);
-  useEffect(() => setTexto(valor), [valor]);
+  const [valorPrevio, setValorPrevio] = useState(valor);
+  if (valor !== valorPrevio) {
+    setValorPrevio(valor);
+    setTexto(valor);
+  }
 
   if (!editable) {
     return <span className="text-sm text-slate-600">{valor || "—"}</span>;

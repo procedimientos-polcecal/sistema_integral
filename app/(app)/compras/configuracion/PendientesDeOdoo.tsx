@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { fecha as comoFecha, monedaExacta } from "@/lib/compras/constants";
 import type { ResumenDePendientes } from "@/lib/compras/pendientesDeOdoo";
@@ -58,7 +59,9 @@ export default function PendientesDeOdoo({ esAdmin }: { esAdmin: boolean }) {
   const [avance, setAvance] = useState<Avance | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const mirar = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const mirar = useCargar(async (vigente) => {
     setCargando(true);
     setError(null);
     try {
@@ -66,6 +69,7 @@ export default function PendientesDeOdoo({ esAdmin }: { esAdmin: boolean }) {
         `/api/compras/odoo/pendientes${desde ? `?desde=${desde}` : ""}`
       );
       const body = await res.json().catch(() => ({}));
+      if (!vigente()) return;
       if (!res.ok) {
         setError(body.error ?? "No se pudo leer la cola.");
         return;
@@ -78,10 +82,6 @@ export default function PendientesDeOdoo({ esAdmin }: { esAdmin: boolean }) {
       setCargando(false);
     }
   }, [desde]);
-
-  useEffect(() => {
-    void mirar();
-  }, [mirar]);
 
   /**
    * Manda tanda tras tanda hasta que no quede nada **o hasta que una tanda no
@@ -132,7 +132,7 @@ export default function PendientesDeOdoo({ esAdmin }: { esAdmin: boolean }) {
       }
     } finally {
       setMandando(false);
-      await mirar();
+      mirar();
       router.refresh();
     }
   }

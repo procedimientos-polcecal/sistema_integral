@@ -21,7 +21,9 @@ export default function PeriodoClient({
   articulos: ArticuloDelInforme[];
   movimientos: MovimientoDelInforme[];
 }) {
-  const inicial = useMemo(arranque, []);
+  // Inline y no `useMemo(arranque, [])`: la regla de hooks exige que el primer
+  // argumento sea una función escrita ahí, para poder verificar de qué depende.
+  const inicial = useMemo(() => arranque(), []);
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
 

@@ -137,7 +137,7 @@ export default function EstadosClient({
           </button>
           {mostrarFormFecha && (
             <div className="card mt-2 p-4">
-              <p className="text-xs text-slate-500">Para corregir un día anterior, o anotar qué pasó (ej. "se rompió la bomba hidráulica").</p>
+              <p className="text-xs text-slate-500">Para corregir un día anterior, o anotar qué pasó (ej. &ldquo;se rompió la bomba hidráulica&rdquo;).</p>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <Select className="input sm:col-span-2" value={equipoId} onChange={(e) => setEquipoId(e.target.value)}>
                   {equipos.map((eq) => (

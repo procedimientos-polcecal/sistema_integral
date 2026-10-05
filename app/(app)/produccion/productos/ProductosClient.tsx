@@ -179,7 +179,7 @@ export default function RenglonesClient({
       </div>
 
       <p className="text-xs text-slate-500">
-        Un renglón no se borra: los partes viejos lo referencian. "Desactivar" lo
+        Un renglón no se borra: los partes viejos lo referencian. &ldquo;Desactivar&rdquo; lo
         saca de la carga y de las pantallas activas sin tocar su historia, y se
         puede volver a activar en cualquier momento.
       </p>

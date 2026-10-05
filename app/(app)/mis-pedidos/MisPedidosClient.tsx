@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
@@ -74,9 +75,22 @@ export default function MisPedidosClient({
     return () => clearTimeout(t);
   }, [busqueda]);
 
-  useEffect(() => { setPagina(0); }, [alcance, busquedaAplicada]);
+  /*
+   * "Cuando cambia el filtro, volvé a la primera página" se ajusta **durante el
+   * render** comparando contra el valor previo, y no en un efecto. Además de
+   * dejar conforme a la regla, saca un commit intermedio en el que la lista ya
+   * era la del filtro nuevo y la página seguía siendo la vieja.
+   */
+  const filtro = `${alcance}|${busquedaAplicada}`;
+  const [filtroPrevio, setFiltroPrevio] = useState(filtro);
+  if (filtro !== filtroPrevio) {
+    setFiltroPrevio(filtro);
+    setPagina(0);
+  }
 
-  const cargar = useCallback(async () => {
+  // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
+  // llega tarde. Ver `lib/core/useCargar.ts`.
+  const cargar = useCargar(async (vigente) => {
     setCargando(true);
     setError("");
     const supabase = createClient();
@@ -111,11 +125,11 @@ export default function MisPedidosClient({
 
     setCargando(false);
     if (err) { setError(err.message); setPedidos([]); return; }
+    if (!vigente()) return;
     setPedidos((data ?? []) as RequerimientoConRelaciones[]);
     setTotal(count ?? 0);
   }, [alcance, busquedaAplicada, pagina, misAreas]);
 
-  useEffect(() => { cargar(); }, [cargar]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
   /** De mi área. Es lo que se marca al mirar todos. */

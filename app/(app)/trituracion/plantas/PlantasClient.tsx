@@ -34,7 +34,7 @@ export default function PlantasClient({ plantas }: { plantas: PlantaDB[] }) {
       <Link href="/trituracion" className="text-xs text-slate-500 underline">← Trituración</Link>
       <h1 className="page-header mt-1">Plantas</h1>
       <p className="page-subheader">
-        El código es el número de la pestaña en la planilla ("PLANTA {"{"}código{"}"}"); no se edita acá.
+        El código es el número de la pestaña en la planilla (&ldquo;PLANTA {"{"}código{"}"}&rdquo;); no se edita acá.
       </p>
 
       <div className="card mt-4 divide-y divide-slate-100">
