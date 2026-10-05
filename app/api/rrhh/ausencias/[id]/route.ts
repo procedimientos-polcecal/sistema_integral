@@ -4,6 +4,32 @@ import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { z } from "zod";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { TIPOS_AUSENCIA } from "@/lib/rrhh/tiposAusencia";
+
+/*
+ * Antes esta ruta no devolvía un solo 400: lo que llegara iba derecho a
+ * Postgres, que rechaza un `fecha_desde: 42` con `invalid input syntax for type
+ * date` — un mensaje que llega a la pantalla sin decir qué campo ni qué se
+ * esperaba. Ver `lib/core/validar.ts`.
+ *
+ * Todo opcional porque es un PUT parcial: lo que no viene no se toca, que es lo
+ * que ya hacía la lista blanca de abajo. Lo que cambia es que lo que SÍ viene
+ * ahora tiene que tener la forma correcta.
+ *
+ * Los tipos salen de `TIPOS_AUSENCIA`, la misma lista que llena el desplegable:
+ * una copia acá sería la que se olvida de actualizar.
+ */
+const Cuerpo = z.object({
+  employeeId: z.uuid().optional(),
+  fechaDesde: z.iso.date().optional(),
+  fechaHasta: z.iso.date().optional(),
+  tipo: z.enum(TIPOS_AUSENCIA.map(([v]) => v) as [string, ...string[]]).optional(),
+  justificada: z.boolean().optional(),
+  observaciones: z.string().nullable().optional(),
+  anioCorrespondiente: z.number().int().optional(),
+});
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,7 +37,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await cuerpoJson(request);
+  const validado = validar(Cuerpo, await cuerpoJson(request));
+  if (!validado.ok) return errorDeValidacion(validado.problemas);
+  const body = validado.datos;
+
   const data: Record<string, unknown> = {};
   if (body.employeeId !== undefined) data.empleado_id = body.employeeId;
   if (body.fechaDesde !== undefined) data.fecha_desde = body.fechaDesde;

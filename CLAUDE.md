@@ -124,6 +124,14 @@ Antes de escribir una, leer las ocho trampas del
   verdad: no tiene policy de update ni de delete, y además un trigger las
   rechaza, que es lo único que frena al cliente admin. La lee sólo
   `admin_sistema`.
+- **Un cuerpo que entra se valida con zod**, con `validar()` y
+  `errorDeValidacion()` de [lib/core/validar.ts](lib/core/validar.ts): informa
+  **todos** los problemas juntos y en castellano, no de a uno. Es para las rutas
+  que no tienen validación propia. **Las que ya validan a mano no se tocan**: sus
+  mensajes —"Falta quién lo pidió", "El ajuste no puede ser negativo"— son
+  mejores que cualquier cosa genérica, y ésa es la vara. De 144 rutas que leen
+  un cuerpo, las que no devolvían ni un 400 eran nueve; al 05/10/2026 quedan dos,
+  y las dos se protegen bien a mano.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
 

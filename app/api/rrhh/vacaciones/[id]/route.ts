@@ -3,6 +3,24 @@ import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { z } from "zod";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
+
+/*
+ * Antes esta ruta no devolvía un solo 400. Ver `lib/core/validar.ts` y el
+ * comentario de `app/api/rrhh/ausencias/[id]/route.ts`, que explica el porqué.
+ *
+ * Todo opcional porque es un PUT parcial. `diasTomados` lleva un piso de cero:
+ * unas vacaciones de −3 días no son un error de tipo y Postgres las aceptaría.
+ */
+const Cuerpo = z.object({
+  employeeId: z.uuid().optional(),
+  anioCorrespondiente: z.number().int().optional(),
+  fechaDesde: z.iso.date().optional(),
+  fechaHasta: z.iso.date().optional(),
+  diasTomados: z.number().min(0).optional(),
+  observaciones: z.string().nullable().optional(),
+});
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,7 +31,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { data: anterior } = await supabase.from("vacaciones").select("*").eq("id", id).single();
   if (!anterior) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-  const body = await cuerpoJson(request);
+  const validado = validar(Cuerpo, await cuerpoJson(request));
+  if (!validado.ok) return errorDeValidacion(validado.problemas);
+  const body = validado.datos;
+
   const data: Record<string, unknown> = {};
   if (body.employeeId !== undefined) data.empleado_id = body.employeeId;
   if (body.anioCorrespondiente !== undefined) data.anio_correspondiente = body.anioCorrespondiente;

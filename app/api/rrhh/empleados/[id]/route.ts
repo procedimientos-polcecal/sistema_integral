@@ -3,6 +3,34 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { z } from "zod";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
+
+/*
+ * Antes esta ruta no devolvía un solo 400. Ver `lib/core/validar.ts`.
+ *
+ * Todo opcional porque es un PUT parcial: lo que no viene no se toca. Dos
+ * campos llevan algo más que el tipo, y son los que podían entrar mal sin que
+ * nada se quejara:
+ *
+ * - `horasTeoricasDiarias` acotado a (0, 24]: la ruta hacía `Number(...)` sin
+ *   mirar, y un 0 o un 200 son números perfectamente válidos para Postgres que
+ *   después desarman el cálculo de horas.
+ * - `valorHoraNormal` con piso de cero, por lo mismo: un sueldo negativo no es
+ *   un error de tipo.
+ */
+const Cuerpo = z.object({
+  nombre: z.string().min(1).optional(),
+  apellido: z.string().min(1).optional(),
+  fechaIngreso: z.iso.date().optional(),
+  horasTeoricasDiarias: z.number().gt(0).max(24).optional(),
+  modalidadPago: z.enum(["JORNAL", "MENSUAL"]).optional(),
+  empresaId: z.uuid().optional(),
+  sectorId: z.uuid().nullable().optional(),
+  activo: z.boolean().optional(),
+  sindicato: z.string().nullable().optional(),
+  valorHoraNormal: z.number().min(0).optional(),
+});
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -28,7 +56,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
-  const body = await cuerpoJson(request);
+  const validado = validar(Cuerpo, await cuerpoJson(request));
+  if (!validado.ok) return errorDeValidacion(validado.problemas);
+  const body = validado.datos;
+
   const admin = createAdminClient();
 
   const empleadoData: Record<string, unknown> = {};

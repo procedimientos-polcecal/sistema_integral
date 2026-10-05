@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { cuerpoJson } from "@/lib/core/cuerpo";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { createClient } from "@/lib/supabase/server";
 import { traerTodo } from "@/lib/core/paginado";
 import { buscarEnInventario, type Insumo } from "@/lib/mantenimiento/stock";
@@ -96,8 +99,23 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const b = await request.json().catch(() => null);
-  const repuestos = Array.isArray(b?.repuestos) ? b.repuestos : [];
+  /*
+   * Antes era `Array.isArray(b?.repuestos) ? b.repuestos : []`, que protegía la
+   * forma de afuera pero no la de adentro: una lista con un número o un objeto
+   * entraba igual y llegaba hasta `buscarEnInventario`, que busca por texto.
+   * Ver `lib/core/validar.ts`.
+   *
+   * Una lista vacía sigue siendo válida —preguntar por nada devuelve nada—, así
+   * que el default se mantiene en lugar de exigirla.
+   */
+  const Cuerpo = z.object({
+    repuestos: z
+      .array(z.object({ codigo: z.string().nullable().optional(), nombre: z.string().nullable().optional() }))
+      .default([]),
+  });
+  const validado = validar(Cuerpo, await cuerpoJson(request));
+  if (!validado.ok) return errorDeValidacion(validado.problemas);
+  const { repuestos } = validado.datos;
 
   // El catálogo entero: `buscarEnInventario` busca por código, por nombre exacto
   // y por coincidencia parcial, así que necesita verlo completo. Son 2.800 filas

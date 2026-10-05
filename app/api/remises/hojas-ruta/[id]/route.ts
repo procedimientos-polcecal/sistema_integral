@@ -2,6 +2,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/remises/route-utils";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { z } from "zod";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
+
+/*
+ * Antes esta ruta no devolvía un solo 400. Ver `lib/core/validar.ts`.
+ *
+ * La hora va con forma `HH:MM` y no un texto cualquiera: es lo que después se
+ * imprime en la hoja de ruta y lo que ordena las salidas. Un `"a la tarde"`
+ * entraba y rompía el orden sin decir nada.
+ */
+const Cuerpo = z.object({
+  horaSalida: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "La hora de salida va como HH:MM.")
+    .nullable()
+    .optional(),
+});
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,7 +26,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
-  const body = await cuerpoJson(request);
+  const validado = validar(Cuerpo, await cuerpoJson(request));
+  if (!validado.ok) return errorDeValidacion(validado.problemas);
+  const body = validado.datos;
+
   const data: Record<string, unknown> = {};
   if (body.horaSalida !== undefined) data.hora_salida = body.horaSalida || null;
 
