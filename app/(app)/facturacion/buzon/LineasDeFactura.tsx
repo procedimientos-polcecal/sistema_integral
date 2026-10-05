@@ -186,8 +186,9 @@ export default function LineasDeFactura({
             * una tabla de seis columnas no entra sin romperse; es la misma
             * decisión que toma Odoo, que en el teléfono apila la línea.
             */}
-          <div className="hidden lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2.3fr)_4rem_6.5rem_7rem] lg:gap-2 lg:border-b lg:border-slate-300 lg:px-2 lg:pb-1 lg:text-[10px] lg:font-medium lg:uppercase lg:tracking-wide lg:text-slate-500">
+          <div className="hidden lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.7fr)_minmax(0,1.4fr)_minmax(0,1.9fr)_3.5rem_6rem_6.5rem] lg:gap-2 lg:border-b lg:border-slate-300 lg:px-2 lg:pb-1 lg:text-[10px] lg:font-medium lg:uppercase lg:tracking-wide lg:text-slate-500">
             <span>Producto</span>
+            <span>Etiqueta</span>
             <span>Cuenta</span>
             <span>Distribución analítica</span>
             <span className="text-right">Cantidad</span>
@@ -533,6 +534,10 @@ function Linea({
   const sinGuardar =
     JSON.stringify(analitica) !== JSON.stringify(linea.analitica ?? {});
 
+  /* Una distribución ya puesta gana sobre la sugerencia: no se propone lo que
+     alguien ya decidió. */
+  const mostrarLaAnalitica = !!sugerenciaDeAnalitica && !Object.keys(analitica).length;
+
   return (
     <li className="px-2 py-3 lg:py-2">
       {/*
@@ -541,11 +546,17 @@ function Linea({
         * distribución con porcentajes editables, y eso en seis columnas
         * angostas no se puede usar.
         */}
-      <div className="grid gap-x-2 gap-y-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2.3fr)_4rem_6.5rem_7rem] lg:gap-y-0">
+      <div className="grid gap-x-2 gap-y-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.7fr)_minmax(0,1.4fr)_minmax(0,1.9fr)_3.5rem_6rem_6.5rem] lg:gap-y-0">
+        {/*
+          * Producto y etiqueta son dos columnas, como en Odoo: el producto es
+          * la ficha del catálogo y la etiqueta es **lo que dice el papel**.
+          *
+          * El orden se da vuelta cuando la tabla se apila (`order-first` en la
+          * etiqueta): ahí no hay encabezados que guíen, y lo primero que se lee
+          * tiene que ser la descripción del comprobante, que es justamente el
+          * dato con el que se decide qué producto corresponde.
+          */}
         <div className="min-w-0">
-          {/* Lo que dice el papel. Arriba del producto porque es el dato que
-              se lee para decidir cuál producto corresponde. */}
-          <p className="text-sm font-medium text-slate-800">{linea.descripcion}</p>
           <Buscador
             etiqueta={
               <>
@@ -574,6 +585,15 @@ function Linea({
           />
         </div>
 
+        <div className="order-first min-w-0 lg:order-none">
+          <span className="block text-[10px] uppercase tracking-wide text-slate-400 lg:hidden">
+            Etiqueta
+          </span>
+          <p className="text-sm font-medium text-slate-800 lg:font-normal lg:text-slate-700">
+            {linea.descripcion}
+          </p>
+        </div>
+
         <div className="min-w-0">
           <Buscador
             etiqueta={<span className="lg:hidden">Cuenta</span>}
@@ -590,23 +610,6 @@ function Linea({
             }
           />
 
-          {/*
-            * La sugerencia va **con su antecedente a la vista**. Acierta el 89%
-            * de las veces: mucho para ahorrar trabajo, poco para decidir sola.
-            * Por eso no se pre-llena — hay que aplicarla.
-            */}
-          {sugerencia && puedeEditar && (
-            <div className="mt-1 rounded bg-white px-2 py-1 text-[11px] text-slate-600">
-              <button
-                disabled={guardando}
-                onClick={() => void onUsarLaCuenta(linea.id, sugerencia)}
-                className="font-medium text-teal-800 underline disabled:opacity-40"
-              >
-                Usar {sugerencia.nombre}
-              </button>
-              <span className="ml-1 text-slate-400">— {sugerencia.porque}</span>
-            </div>
-          )}
         </div>
 
       <div className="min-w-0">
@@ -678,30 +681,6 @@ function Linea({
           <p className="text-xs text-slate-500">{linea.analitica_detalle}</p>
         )}
 
-        {/*
-          * La sugerencia distingue **certeza de estadística**: cuando sale del
-          * equipo del requerimiento no es una probabilidad —el RI dice para qué
-          * se compró— y se muestra distinta de la que sale del historial, que
-          * acierta el 78% y por eso lleva su antecedente al lado.
-          */}
-        {sugerenciaDeAnalitica && puedeEditar && !Object.keys(analitica).length && (
-          <div
-            className={`mt-1 rounded px-2 py-1 text-[11px] ${
-              sugerenciaDeAnalitica.esCerteza
-                ? "bg-emerald-50 text-emerald-900"
-                : "bg-white text-slate-600"
-            }`}
-          >
-            <button
-              disabled={guardando}
-              onClick={() => void onUsarLaAnalitica(linea.id, sugerenciaDeAnalitica)}
-              className="font-medium underline disabled:opacity-40"
-            >
-              Usar {sugerenciaDeAnalitica.detalle}
-            </button>
-            <span className="ml-1 opacity-70">— {sugerenciaDeAnalitica.porque}</span>
-          </div>
-        )}
       </div>
 
         {/*
@@ -722,6 +701,61 @@ function Linea({
           </strong>
         </Numero>
       </div>
+
+      {/*
+        * Las dos sugerencias van **abajo de la línea y a todo el ancho**, no
+        * adentro de su celda.
+        *
+        * Cada una trae su antecedente —"las últimas 4 de este proveedor fueron
+        * ahí"— y esa frase es la que permite no aceptarla; metida en una
+        * columna de 180 px se partía en tres renglones y empujaba la fila a lo
+        * alto, que es lo que arruinaba la tabla. Acá se leen de corrido y las
+        * siete columnas quedan parejas.
+        *
+        * No se pre-llenan: la de cuenta acierta el 89% y la del historial el
+        * 78%. Mucho para ahorrar trabajo, poco para decidir solas.
+        */}
+      {puedeEditar && (sugerencia || mostrarLaAnalitica) && (
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+          {sugerencia && (
+            <p className="text-slate-600">
+              <button
+                disabled={guardando}
+                onClick={() => void onUsarLaCuenta(linea.id, sugerencia)}
+                className="font-medium text-teal-800 underline disabled:opacity-40"
+              >
+                Usar {sugerencia.nombre}
+              </button>
+              <span className="ml-1 text-slate-400">— {sugerencia.porque}</span>
+            </p>
+          )}
+
+          {/*
+            * La analítica distingue **certeza de estadística**: cuando sale del
+            * equipo del requerimiento no es una probabilidad —el RI dice para
+            * qué se compró— y por eso se muestra distinta de la que sale del
+            * historial.
+            */}
+          {mostrarLaAnalitica && (
+            <p
+              className={
+                sugerenciaDeAnalitica!.esCerteza
+                  ? "rounded bg-emerald-50 px-1.5 text-emerald-900"
+                  : "text-slate-600"
+              }
+            >
+              <button
+                disabled={guardando}
+                onClick={() => void onUsarLaAnalitica(linea.id, sugerenciaDeAnalitica!)}
+                className="font-medium underline disabled:opacity-40"
+              >
+                Usar {sugerenciaDeAnalitica!.detalle}
+              </button>
+              <span className="ml-1 opacity-70">— {sugerenciaDeAnalitica!.porque}</span>
+            </p>
+          )}
+        </div>
+      )}
 
       {aviso && <p className="mt-1 rounded bg-rose-50 px-2 py-1 text-xs text-rose-800">{aviso}</p>}
     </li>
