@@ -9,18 +9,26 @@ import { estadoActualPorEquipo, resumenDeEstadoActual, resumenMensualDeEstados, 
 import { fechaEstimadaDeProximoService, resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { armarInformeConsumo } from "@/lib/tallerVial/informe";
+import { alertasDeFlota, disponibilidadMensualDeLaFlota, fechaPlausible, revisarCargas, tarjetasDeFlota } from "@/lib/tallerVial/tablero";
+import AlertasDeTaller from "./AlertasDeTaller";
+import TarjetasDeFlota from "./TarjetasDeFlota";
+import CargasParaRevisar from "./CargasParaRevisar";
+import ConsumoPorEquipo, { type FilaDeConsumo } from "./ConsumoPorEquipo";
+import TendenciaDeDisponibilidad from "./TendenciaDeDisponibilidad";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 
 /**
- * El inicio de Taller Vial: cuánto combustible se cargó este mes y a qué
- * consumo, equipo por equipo, más los días fuera de servicio. Espejo de sólo
- * lectura de la planilla real ("DATOS" y "HISTORIAL ESTADOS", vía
- * `lib/tallerVial/importar.ts`) — se sigue cargando ahí, acá sólo se mira.
- * Lo que sí se carga desde acá son los services por horómetro
- * (`/taller-vial/services`). El resto de la planilla (disponibilidad,
- * checklist de lavado/engrase, choferes) queda para etapas siguientes.
+ * El inicio de Taller Vial: primero lo que pide acción hoy (alertas), después
+ * cómo está cada equipo, y debajo el detalle — consumo, services,
+ * disponibilidad. Las decisiones de qué merece atención están en
+ * `lib/tallerVial/tablero.ts`, con sus umbrales y sus tests; acá sólo se
+ * arman los datos y se dibuja.
+ *
+ * Las cargas y los estados se cargan acá o en la planilla real ("DATOS" y
+ * "HISTORIAL ESTADOS", sincronizadas por `lib/tallerVial/importar.ts`).
  */
 export default async function TallerVialInicioPage() {
   const supabase = await createClient();
@@ -46,9 +54,12 @@ export default async function TallerVialInicioPage() {
 
   const porCodigo = new Map(equipos.map((e) => [e.id, e]));
   const cargasDelMes = todasLasCargas.filter((c) => c.fecha.startsWith(mesActual));
+  // Sin las cargas de fecha imposible (2006, "0226"): ordenan primero y
+  // rompen el encadenado de lecturas — ver `fechaPlausible`.
+  const hoyAR = hoyEnArgentina();
   const conTrabajo = calcularTrabajoEntreCargas(
     todasLasCargas
-      .filter((c) => c.equipo_id !== null)
+      .filter((c) => c.equipo_id !== null && fechaPlausible(c.fecha, hoyAR))
       .map((c) => ({ id: c.id, equipoId: c.equipo_id!, fecha: c.fecha, litros: c.litros, lectura: c.lectura }))
   );
   const resumen = resumenMensualPorEquipo(conTrabajo, mesActual)
@@ -119,6 +130,41 @@ export default async function TallerVialInicioPage() {
   const serviceVencidos = servicePorEquipo.filter((r) => r.de250.lectura === "VENCIDO").length;
   const serviceProximos = servicePorEquipo.filter((r) => r.de250.lectura === "PROXIMO").length;
 
+  // ── Tablero: alertas, tarjetas, cargas a revisar, consumo y tendencia ──
+  const tarjetas = tarjetasDeFlota(
+    equipos.map((e) => e.id),
+    estadosPlanos,
+    todasLasCargas
+      .filter((c) => c.equipo_id !== null && fechaPlausible(c.fecha, hoy))
+      .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura })),
+    hoy
+  );
+  const alertas = alertasDeFlota({
+    tarjetas,
+    cargasConTrabajo: conTrabajo,
+    services: servicePorEquipo.map((r) => ({ equipoId: r.equipoId, lectura: r.de250.lectura, horasFaltantes: r.de250.horasFaltantes })),
+    unidadDe: (id) => ETIQUETA_UNIDAD[unidadDeUso(porCodigo.get(id)?.code ?? "")],
+    hoy,
+  });
+  const problemasDeCargas = revisarCargas(
+    todasLasCargas.map((c) => ({ id: c.id, equipoId: c.equipo_id, equipoRaw: c.equipo_raw, fecha: c.fecha, lectura: c.lectura })),
+    hoy
+  );
+  const referenciaPorEquipo = new Map(armarInformeConsumo(conTrabajo, mesActual).map((f) => [f.equipoId, f.referenciaHistorica]));
+  const filasDeConsumo: FilaDeConsumo[] = resumen.map((r) => ({
+    equipo: r.equipo!,
+    cargas: r.cargas,
+    litrosTotal: r.litrosTotal,
+    trabajadoTotal: r.trabajadoTotal,
+    consumoPromedio: r.consumoPromedio,
+    referencia: referenciaPorEquipo.get(r.equipoId) ?? null,
+  }));
+  // Desde el primer mes con datos, hasta 12: los meses de antes de que
+  // existiera el registro no son "0%", son "sin dato", y no se dibujan.
+  const disponibilidad = disponibilidadMensualDeLaFlota(estadosPlanos, ultimosMeses(mesActual, 12));
+  const primerMesConDatos = disponibilidad.findIndex((m) => m.pct !== null);
+  const disponibilidadVisible = primerMesConDatos === -1 ? [] : disponibilidad.slice(primerMesConDatos);
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -129,8 +175,10 @@ export default async function TallerVialInicioPage() {
         </div>
       </div>
 
+      <AlertasDeTaller alertas={alertas} equipos={equipos} />
+
       {/* ── Estado actual de la flota ── */}
-      <div className="mt-5 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-3 gap-3">
         <KpiCard
           color="#1E7D34"
           value={`${pct(resumenActual.operativos)}%`}
@@ -148,7 +196,9 @@ export default async function TallerVialInicioPage() {
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <TarjetasDeFlota tarjetas={tarjetas} equipos={equipos} />
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard color="#0891B2" value={`${num0.format(litrosTotalDelMes)} L`} label="Combustible cargado este mes" href="/taller-vial/cargas" />
         <KpiCard color="#1E7D34" value={String(equiposConCargaEsteMes)} label="Equipos con carga este mes" />
         <KpiCard color="#7E22CE" value={String(cargasDelMes.length)} label="Cargas registradas este mes" href="/taller-vial/cargas" />
@@ -208,47 +258,9 @@ export default async function TallerVialInicioPage() {
         </div>
       </section>
 
-      <section className="card mt-4 p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Consumo del mes, por equipo</h2>
-          <Link href="/taller-vial/cargas" className="text-xs text-slate-500 underline">Ver cargas →</Link>
-        </div>
-        {resumen.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">Todavía no hay cargas este mes.</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Equipo</th>
-                  <th className="text-right">Cargas</th>
-                  <th className="text-right">Litros</th>
-                  <th className="text-right">Trabajado</th>
-                  <th className="text-right">Consumo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resumen.map((r, i) => {
-                  const unidad = unidadDeUso(r.equipo!.code);
-                  return (
-                    <tr key={r.equipoId} style={{ backgroundColor: i % 2 === 1 ? "#F8FAFC" : undefined }}>
-                      <td className="font-medium text-slate-800">{r.equipo!.code} - {r.equipo!.name}</td>
-                      <td className="text-right">{r.cargas}</td>
-                      <td className="text-right font-mono tabular-nums">{num0.format(r.litrosTotal)}</td>
-                      <td className="text-right font-mono tabular-nums">
-                        {r.trabajadoTotal !== null ? `${num1.format(r.trabajadoTotal)} ${ETIQUETA_UNIDAD[unidad]}` : "—"}
-                      </td>
-                      <td className="text-right font-mono tabular-nums">
-                        {r.consumoPromedio !== null ? `${num1.format(r.consumoPromedio)} L/${ETIQUETA_UNIDAD[unidad]}` : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <CargasParaRevisar problemas={problemasDeCargas} />
+
+      <ConsumoPorEquipo filas={filasDeConsumo} />
 
       <section className="card mt-4 p-4">
         <h2 className="font-semibold text-slate-900">Evolución del consumo, últimos 6 meses</h2>
@@ -269,6 +281,8 @@ export default async function TallerVialInicioPage() {
           ))}
         </div>
       </section>
+
+      <TendenciaDeDisponibilidad meses={disponibilidadVisible} />
 
       <section className="card mt-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
