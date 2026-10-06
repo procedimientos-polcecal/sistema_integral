@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarConsulta } from "./validarConsulta";
+import { validarConsulta, sinPuntoYComaFinal } from "./validarConsulta";
 
 describe("lo que el asistente puede consultar", () => {
   it("deja pasar un select", () => {
@@ -74,5 +74,47 @@ describe("el espejo dice lo mismo que la base", () => {
 
   it("no se cuelga con un comentario de bloque sin cerrar", () => {
     expect(validarConsulta("/* sin cerrar select 1").ok).toBe(false);
+  });
+});
+
+/**
+ * El `;` final: lo permitimos, y despues lo tiene que sacar alguien.
+ *
+ * El 06/10/2026 el asistente fallo dos veces seguidas con
+ * `syntax error at or near ";"`. No era el modelo escribiendo mal: la funcion
+ * de la base envuelve la consulta en `select * from (%s) sub limit %s`, y un
+ * `;` adentro de ese parentesis es un error de sintaxis. Los dos validadores
+ * aceptaban el `;` final a proposito, pero ninguno lo sacaba.
+ *
+ * Reproducido contra la base: `select 1 as n` devuelve la fila, y
+ * `select 1 as n;` devuelve 42601. Terminar el SQL en `;` es lo idiomatico,
+ * asi que esto lo pisaba cualquier modelo.
+ */
+describe("sinPuntoYComaFinal", () => {
+  it("saca el punto y coma del final", () => {
+    expect(sinPuntoYComaFinal("select 1;")).toBe("select 1");
+  });
+
+  it("saca tambien los espacios que vengan despues", () => {
+    expect(sinPuntoYComaFinal("select 1 ;  \n")).toBe("select 1");
+  });
+
+  it("saca varios punto y coma seguidos", () => {
+    expect(sinPuntoYComaFinal("select 1;;")).toBe("select 1");
+  });
+
+  it("deja intacta una consulta que no termina en punto y coma", () => {
+    expect(sinPuntoYComaFinal("select 1")).toBe("select 1");
+  });
+
+  it("no toca un punto y coma que vive adentro de un literal", () => {
+    // Esta consulta la rechaza `validarConsulta`, pero si algun dia la
+    // aceptara, recortar por el `;` de adentro cambiaria lo que se consulta.
+    expect(sinPuntoYComaFinal("select ';' as x")).toBe("select ';' as x");
+  });
+
+  it("recorta el WITH largo que fallo en produccion", () => {
+    const sql = "with t as (select 1 as n) select * from t;";
+    expect(sinPuntoYComaFinal(sql)).toBe("with t as (select 1 as n) select * from t");
   });
 });

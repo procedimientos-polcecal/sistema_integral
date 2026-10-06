@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { validarConsulta } from "./validarConsulta";
+import { validarConsulta, sinPuntoYComaFinal } from "./validarConsulta";
 
 export type Resultado =
   | { ok: true; filas: Record<string, unknown>[] }
@@ -43,7 +43,9 @@ export async function correrConsulta(
 
   const { data, error } = await db.rpc(
     "asistente_consulta",
-    { consulta: sql, tope },
+    // El `;` final se saca acá: `asistente_consulta()` envuelve la consulta en
+    // `select * from (%s) sub`, y adentro de ese paréntesis un `;` es 42601.
+    { consulta: sinPuntoYComaFinal(sql), tope },
     { get: true }
   );
 

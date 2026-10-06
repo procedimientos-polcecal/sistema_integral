@@ -68,3 +68,30 @@ export function validarConsulta(sql: string): Veredicto {
 
   return { ok: true };
 }
+
+/**
+ * Saca el punto y coma final, que acá es obligatorio sacar y no cosmético.
+ *
+ * `asistente_consulta()` **envuelve** la consulta para poder paginarla:
+ *
+ *     select * from (%s) sub limit %s
+ *
+ * Un `;` adentro de ese paréntesis cierra la sentencia donde no va, y Postgres
+ * devuelve `42601 syntax error at or near ";"`. O sea que el `;` final, que
+ * `validarConsulta` acepta a propósito —es lo que cualquiera escribe—, hay que
+ * quitarlo antes de mandarlo.
+ *
+ * El 06/10/2026 eso hizo fallar dos consultas seguidas del asistente en
+ * producción, y el síntoma engañaba: parecía que el modelo escribía mal el SQL.
+ * No era eso. Medido contra la base: `select 1 as n` devuelve la fila y
+ * `select 1 as n;` devuelve 42601. Terminar en `;` es lo idiomático, así que
+ * esto lo pisaba cualquier modelo, no uno en particular.
+ *
+ * **Sólo recorta del final.** Un `;` en el medio ya lo rechazó `validarConsulta`
+ * —son dos sentencias—, y uno que vive adentro de un literal no se toca:
+ * distinguirlo pediría un parser, y cortar ahí cambiaría en silencio lo que se
+ * consulta, que es peor que el error que esto arregla.
+ */
+export function sinPuntoYComaFinal(sql: string): string {
+  return sql.replace(/[\s;]+$/, "");
+}
