@@ -219,7 +219,7 @@ fila — que es lo correcto, porque la tarjeta tampoco se le muestra.
 
 | Módulo | Antes | Ahora | Medido hoy |
 |---|---|---|---|
-| RRHH | Ausentes hoy · 1 | **Ausencias sin justificar (30 días)** | 332 |
+| RRHH | Ausentes hoy · 1 | **Ausentes del último día hábil con fichadas** | 7, del mié 30/09 |
 | Remises | Con turno hoy · 0 | **Días sin cargar** (no tiene cola real) | 70 |
 | Mantenimiento | Órdenes atrasadas | *se queda* | 20 |
 | Compras | Requerimientos en curso | *se queda* | 118 |
@@ -231,6 +231,54 @@ fila — que es lo correcto, porque la tarjeta tampoco se le muestra.
 | **Calidad** | *sin tarjeta* | **Envases bajo el mínimo** | 3 de 28 |
 | Taller Vial | Cargas sin equipo | *se queda* | 3 |
 | **Trituración** | *sin tarjeta* | **Partes sin exportar a la planilla** | 2 |
+
+### RRHH: los ausentes del último día hábil con fichadas
+
+El titular de RRHH no es una cola de trabajo sino un estado del día, y es una
+excepción deliberada a la regla de arriba: es lo que se mira a la mañana. Pero
+«hoy» no sirve y «ayer» tampoco alcanza. La regla es **el último día anterior a
+hoy que sea hábil y tenga fichadas importadas**, y el rótulo nombra ese día:
+*«Ausentes el mié 30/09»*.
+
+Las tres condiciones salen de tres mediciones, no de suponer.
+
+**Hoy no sirve.** El 06/10 a media mañana `calculos_diarios` tenía **2 filas de
+68**: el día no está cerrado. Por eso la tarjeta decía «1 ausente» mientras el
+día anterior había 66.
+
+**Los domingos no cuentan.** De 35 domingos de 2026, los **35** tienen
+exactamente 0 ausentes sobre 68 empleados. No es que no haya datos —las 68 filas
+están calculadas— es que nadie está ausente un domingo. Un lunes, «ayer» diría 0
+y no informaría nada. **El sábado sí cuenta**: tiene entre 4 y 9 ausentes todos
+los sábados, así que «día hábil» acá es *no domingo y no feriado*, no la semana
+de lunes a viernes.
+
+**Los feriados tampoco.** De los 11 feriados de 2026 con datos, **9 tienen 0
+ausentes**, igual que un domingo; los otros dos tienen 2 y 4 —gente que sí
+trabajaba ese día—. Promedio 0,5 contra 42,3 en días hábiles. Se usa la tabla
+`feriados` del núcleo, que tiene los 16 feriados nacionales de 2026 cargados.
+
+**Y el día tiene que tener fichadas**, que es la condición que más importa:
+
+| Mes de 2026 | Ausentes promedio (de 68) | Fichadas importadas |
+|---|---|---|
+| Febrero a junio | **65** | **0** |
+| Julio a septiembre | 6,1 · 6,8 · 6,7 | ~1.550 por mes |
+| Octubre | **49** | **0** |
+
+**La importación de fichadas funcionó tres meses de nueve.** Cuando no entra
+ninguna, `calculos_diarios` llena igual las 68 filas y marca a todos ausentes:
+el sistema tiene cinco meses de ausencias falsas guardadas, y otro tramo abierto
+desde el 01/10. Si la tarjeta mostrara el día hábil anterior sin más, hoy diría
+**66 de 68**, que es ruido del feed y no un dato de RRHH.
+
+Retrocediendo hasta el último día hábil con fichadas, hoy muestra **7 ausentes
+del miércoles 30/09** — verdadero, con la fecha a la vista, y con la señal de
+ritmo al lado avisando que esa fecha tiene seis días. El número grande nunca es
+inventado.
+
+La consulta es barata: la última fecha de `fichadas` anterior a hoy que no sea
+domingo ni esté en `feriados`, y después el conteo de ausentes de ese día.
 
 ### Lo que se midió y se descartó
 
@@ -312,6 +360,11 @@ Vitest sobre funciones puras, en `lib/home/ritmo.ts` y `lib/home/avisos.ts`:
   el caso de que descartarlo hoy no lo traiga mañana.
 - `avisosDeRitmo(ritmo, modulosDelUsuario)` — que sólo salgan los módulos a los
   que el usuario tiene acceso, y sólo pasado el doble del umbral.
+- `ultimoDiaHabilConFichadas(fechasDeFichadas, feriados, hoy)` en
+  `lib/rrhh/diaHabil.ts` — que saltee domingos, feriados y días sin fichadas;
+  que **no** saltee sábados; y el caso de hoy (06/10 ⇒ 30/09, salteando cuatro
+  días hábiles sin fichadas). Es la función que impide que la tarjeta muestre
+  un 66 falso, así que es la que más vale testear.
 
 La vista no se testea con vitest: se verifica corriéndola contra la base y
 comparando con la tabla de validación de arriba, que se midió con el mismo
@@ -328,6 +381,16 @@ criterio en `scripts/`.
 - **El Inicio va a abrir con ocho módulos en rojo.** No es un defecto del
   indicador: es el estado real del sistema hoy, que hasta ahora no se veía. Vale
   la pena decirlo antes de desplegarlo para que no parezca un error.
+- **Un día con fichadas parciales cuenta como día con fichadas.** Si una
+  importación trae 8 fichadas de 68, ese día califica y la tarjeta mostraría ~60
+  ausentes falsos. No se pone un umbral de completitud porque no hay forma
+  medida de distinguir «importación a medias» de «día con poca gente»: los
+  domingos tienen entre 8 y 20 fichadas legítimas. Queda anotado; si pasa, el
+  arreglo es exigir que el día tenga fichadas de al menos la mitad de los
+  empleados activos.
+- **Excluir los feriados esconde las ausencias reales de quien sí trabajó.** Son
+  2 y 4 en los dos feriados que las tuvieron. Se acepta: el otro camino —mostrar
+  0 ausentes en nueve feriados de cada once— confunde más.
 - **`inicio_ritmo_modulos` escanea 180 días de trece tablas.** Con los volúmenes
   de hoy (la más grande, `calculos_diarios`, no está entre las fuentes; la mayor
   es `inventario_movimientos` con 4.361) es una consulta barata, pero conviene
