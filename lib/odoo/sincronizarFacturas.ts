@@ -49,6 +49,17 @@ const DIAS_HACIA_ATRAS = 120;
 export interface ResumenDeLaSincronizacion {
   /** Facturas del buzón que ya tenían vínculo y se releyeron. */
   revisadas: number;
+  /**
+   * Las que **no** tenían vínculo y se salieron a buscar a Odoo por su número.
+   *
+   * Existe porque el resumen mentía por omisión. `revisadas` cuenta sólo la
+   * primera mitad del trabajo, así que una corrida que buscó una factura en
+   * Odoo y no la encontró devolvía todo en cero —idéntica a una corrida que no
+   * hizo nada y a una que ni llegó a Odoo—. Costó diez minutos de dudar de un
+   * resultado correcto el 06/10/2026, justo cuando lo que se estaba
+   * comprobando era si producción llegaba a Odoo.
+   */
+  buscadas: number;
   /** Pasaron a `contabilizada` porque Odoo las posteó. */
   contabilizadas: number;
   /** Encontradas en Odoo por el número del comprobante. */
@@ -102,6 +113,7 @@ export async function sincronizarFacturasConOdoo(
 ): Promise<ResumenDeLaSincronizacion> {
   const resumen: ResumenDeLaSincronizacion = {
     revisadas: 0,
+    buscadas: 0,
     contabilizadas: 0,
     vinculadas: 0,
     ambiguas: 0,
@@ -234,6 +246,7 @@ async function buscarLasQueFaltan(
     (f) => !f.odoo_move_id && f.cuit_emisor && f.punto_venta !== null && f.numero !== null
   );
   if (!sinVinculo.length) return;
+  resumen.buscadas = sinVinculo.length;
 
   const cuits = [...new Set(sinVinculo.map((f) => normalizarCuit(f.cuit_emisor)!).filter(Boolean))];
   if (!cuits.length) return;

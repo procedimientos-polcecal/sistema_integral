@@ -299,8 +299,14 @@ export default function BuzonClient({
       return;
     }
 
+    /*
+     * Las dos mitades del trabajo, por separado. Decir sólo "revisadas" —las
+     * que ya tenían vínculo— dejaba una corrida que salió a buscar en Odoo y
+     * no encontró nada indistinguible de una que no hizo nada.
+     */
     const partes = [
       `${datos.revisadas} revisadas`,
+      `${datos.buscadas ?? 0} buscadas en Odoo`,
       `${datos.vinculadas} reconocidas`,
       `${datos.contabilizadas} pasaron a contabilizadas`,
     ];
