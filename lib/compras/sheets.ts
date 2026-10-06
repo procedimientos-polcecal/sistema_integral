@@ -1154,6 +1154,38 @@ const ETIQUETA_ESTADO_COMPRA: Record<string, string | null> = {
   EN_ESPERA: "EN ESPERA",
 };
 
+/**
+ * Qué texto va en la celda de Estado, o `null` para **no tocarla**.
+ *
+ * La diferencia entre `""` y `null` es todo el punto de esta función, y
+ * confundirlas borra datos:
+ *
+ *   * `""` es una decisión — `SIN_INICIAR` no tiene etiqueta en el desplegable
+ *     y la celda corresponde que quede vacía;
+ *   * `null` es "el sistema no tiene nada que decir acá", y entonces la celda
+ *     **se deja como está**.
+ *
+ * Estaba escrito `ETIQUETA_ESTADO_COMPRA[estado] ?? ""`, y ese `??` no
+ * distingue el `null` deliberado del `undefined` de una clave que no existe:
+ * los aplastaba a los dos contra `""`. O sea que para un RI en `RECIBIDO`
+ * —cuyo mapa dice `null` con el comentario "así que no se escribe"— el sistema
+ * iba y **vaciaba** la celda.
+ *
+ * No es teórico: el 06/10/2026 le borró el "PEDIDO" al RI 1996. Pasó por el
+ * camino del reintento, que es el que vuelve a exportar un RI cuya escritura
+ * había quedado pendiente — para entonces el pedido ya estaba recibido. Los
+ * otros 1.645 RI en `RECIBIDO` conservan su "PEDIDO" porque nunca pasaron por
+ * ahí; era cuestión de tiempo.
+ *
+ * Un estado que no esté en el mapa tampoco se escribe. Es la dirección
+ * inofensiva del error: no decir nada deja el dato de la planilla intacto,
+ * mientras que escribir vacío lo pierde sin que nadie se entere.
+ */
+export function etiquetaDeEstadoCompra(estado: string): string | null {
+  const etiqueta = ETIQUETA_ESTADO_COMPRA[estado];
+  return etiqueta === undefined ? null : etiqueta;
+}
+
 /** "PARA COMPRAR (NICO)" según a quién se le asignó. */
 export function textoParaComprar(alias: string | null): { valor: string | null; motivo?: string } {
   if (!alias) {
@@ -1879,7 +1911,7 @@ export async function exportarRequerimiento(
         estadoTexto = valor;
         if (!valor && motivo) bloqueadas.push(`estado (${motivo})`);
       } else {
-        estadoTexto = ETIQUETA_ESTADO_COMPRA[r.estado_compra as string] ?? "";
+        estadoTexto = etiquetaDeEstadoCompra(r.estado_compra as string);
       }
 
       const valores: Record<string, string | null> = {
