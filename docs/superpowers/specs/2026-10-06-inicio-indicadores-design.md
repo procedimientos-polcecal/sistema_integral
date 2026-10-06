@@ -39,7 +39,7 @@ vista, así que algún hueco máximo no coincide: el de Inventario es 5 en el a�
 
 | Módulo | Días con carga | Hueco mediano | Hueco p90 | Hueco más largo | Sin cargar hoy |
 |---|---|---|---|---|---|
-| RRHH (`fichadas`) | 248 | 1 | 1 | 1 | **6** |
+| RRHH (`fichadas`) | 93 | 1 | 1 | 1 | **6** |
 | Inventario | 215 | 1 | 2 | 5 | 1 |
 | Despacho | 139 | 1 | 2 | 3 | **5** |
 | Taller Vial | 221 | 1 | 2 | 3 | **8** |
@@ -48,6 +48,12 @@ vista, así que algún hueco máximo no coincide: el de Inventario es 5 en el a�
 | Trituración | 84 | 1 | 1 | 3 | **36** |
 | Remises | 27 | 1 | 6 | 10 | **70** |
 | Producción | 0 | — | — | — | **nunca** |
+
+Las **93 fechas de `fichadas`** son de tres meses —entre el 30/06 y el 30/09—,
+no de todo el año: la importación de fichadas funcionó tres meses de nueve (ver
+la sección de RRHH). Un primer número de 248 salió de `calculos_diarios`, que es
+el derivado que la cuarta trampa de la migración dice que no hay que mirar, y
+se corrigió midiendo la fuente.
 
 **Ocho de trece fuentes están paradas ahora mismo y el Inicio no lo dice en
 ningún lado.** Muestra "Órdenes de carga hoy: 0" para Despacho, que es
@@ -87,7 +93,7 @@ se queda callada en los cinco que están al día, sin un falso positivo:
 | Compras | 1 | 5 | 6 | no ✔ |
 | Inventario | 1 | 4 | 5 | no ✔ |
 | Cantera | 5 | 6 | 7 | no ✔ |
-| Facturación | 4 | 22 | 23 | no ✔ |
+| Facturación | 1 | 24 | 25 | no ✔ |
 | RRHH | 6 | 1 | 3 | **sí** |
 | Despacho | 5 | 3 | 4 | **sí** |
 | Taller Vial | 8 | 3 | 4 | **sí** |
@@ -98,7 +104,9 @@ se queda callada en los cinco que están al día, sin un falso positivo:
 | Producción | nunca | — | 3 (piso) | **sí** |
 
 Facturación es la prueba de que calibrar solo vale la pena: tiene un hueco
-histórico de 22 días porque recién arranca, así que a los 4 días no grita. Un
+histórico de 24 días —medido sobre `created_at`, cuándo entró al buzón, no sobre
+la fecha del comprobante— porque recién arranca, así que no grita hasta los 25
+días sin cargar. Un
 umbral fijo de 7 la habría hecho sonar todos los días desde que existe.
 
 ### Las fuentes
@@ -171,23 +179,32 @@ por separado, y la tarjeta muestra **la peor de las dos**.
 
 ### La vista
 
+Lo que sigue es el **cuerpo de la migración, tal cual** (de `create or replace
+view` al `grant`). La cabecera de ~50 líneas con las seis trampas está en el
+archivo `20261006142229_inicio_ritmo_de_los_modulos.sql` y, resumida, en la
+prosa de arriba: **para copiar, usar la migración, no este bloque.**
+
 ```sql
 create or replace view inicio_ritmo_modulos
 with (security_invoker = true) as
 with fuentes as (
-             select 'rrhh'::text      as modulo, fecha              from fichadas
-  union all  select 'remises',             fecha                    from remises_asistencia
-  union all  select 'mantenimiento',       fecha                    from ordenes_trabajo
-  union all  select 'compras',             (fecha at time zone 'UTC')::date from compras_requerimientos
-  union all  select 'inventario',          fecha                    from inventario_movimientos
-  union all  select 'produccion',          fecha                    from produccion_partes
-  union all  select 'despacho',            fecha                    from despacho_ordenes_carga
-  union all  select 'facturacion',         (created_at at time zone 'America/Argentina/Buenos_Aires')::date from facturas_proveedor
-  union all  select 'cantera',             fecha                    from cantera_pesadas
-  union all  select 'calidad',             fecha                    from calidad_movimientos
-  union all  select 'calidad_envases',     fecha                    from calidad_envases_movimientos
-  union all  select 'taller_vial',         fecha                    from taller_vial_cargas
-  union all  select 'trituracion',         fecha                    from trituracion_partes
+             select 'rrhh'::text          as modulo, fecha            from fichadas
+  union all  select 'remises',                       fecha            from remises_asistencia
+  union all  select 'mantenimiento',                 fecha            from ordenes_trabajo
+  -- Un día guardado como `timestamptz` a medianoche UTC: va `'UTC'`. Ver la trampa 6.
+  union all  select 'compras',                       (fecha at time zone 'UTC')::date from compras_requerimientos
+  union all  select 'inventario',                    fecha            from inventario_movimientos
+  union all  select 'produccion',                    fecha            from produccion_partes
+  union all  select 'despacho',                      fecha            from despacho_ordenes_carga
+  -- `fecha` es la del comprobante y puede ser vieja; `created_at` es cuándo
+  -- entró al buzón, que es lo que mide si el módulo se usa. Es un instante real:
+  -- va con el huso de Argentina. Ver la trampa 6.
+  union all  select 'facturacion',                   (created_at at time zone 'America/Argentina/Buenos_Aires')::date from facturas_proveedor
+  union all  select 'cantera',                       fecha            from cantera_pesadas
+  union all  select 'calidad',                       fecha            from calidad_movimientos
+  union all  select 'calidad_envases',               fecha            from calidad_envases_movimientos
+  union all  select 'taller_vial',                   fecha            from taller_vial_cargas
+  union all  select 'trituracion',                   fecha            from trituracion_partes
 ),
 -- Sólo para el hueco máximo: los últimos 180 días. NO alimenta `ultima`.
 dias as (
@@ -202,10 +219,11 @@ huecos as (
   select modulo, fecha - lag(fecha) over (partition by modulo order by fecha) as hueco
     from dias
 ),
-hueco_max as (
-  select modulo, max(hueco)::int as hueco_max from huecos where hueco is not null group by modulo
+hueco_maximo as (
+  select modulo, max(hueco)::int as hueco_max
+    from huecos where hueco is not null group by modulo
 ),
--- Toda la historia, acotada sólo a `<= current_date`: ver la quinta trampa.
+-- Toda la historia, acotada sólo a `<= current_date`: ver la trampa 5.
 ultima as (
   select modulo, max(fecha) as ultima_fecha
     from fuentes
@@ -215,13 +233,20 @@ ultima as (
 )
 select m.modulo,
        u.ultima_fecha,
-       (current_date - u.ultima_fecha)::int                        as dias_sin_cargar,
-       coalesce(h.hueco_max, 0)                                    as hueco_max
+       (current_date - u.ultima_fecha)::int as dias_sin_cargar,
+       coalesce(h.hueco_max, 0)             as hueco_max
   from (values ('rrhh'),('remises'),('mantenimiento'),('compras'),('inventario'),
                ('produccion'),('despacho'),('facturacion'),('cantera'),('calidad'),
                ('calidad_envases'),('taller_vial'),('trituracion')) as m(modulo)
-  left join ultima    u on u.modulo = m.modulo
-  left join hueco_max h on h.modulo = m.modulo;
+  left join ultima        u on u.modulo = m.modulo
+  left join hueco_maximo  h on h.modulo = m.modulo;
+
+comment on view inicio_ritmo_modulos is
+  'Por fuente: la última fecha cargada, cuántos días hace y el hueco más largo '
+  'de los últimos 180 días. El umbral y la decisión de "atrasado" se calculan '
+  'en lib/home/ritmo.ts. Alimenta las tarjetas del Inicio y la campana.';
+
+grant select on inicio_ritmo_modulos to authenticated;
 ```
 
 `atrasado` **no se calcula en la vista**: la comparación vive en

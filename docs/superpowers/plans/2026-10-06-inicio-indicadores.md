@@ -71,12 +71,14 @@ describe("umbralDeRitmo", () => {
    * aparte, en `estaAtrasado` y en `ritmoPorModulo`. Si esta tabla deja de
    * pasar, cambió la regla, no el dato: los huecos son históricos.
    *
-   * Ojo con `facturacion`: es la única fila que se mide sobre `created_at::date`
-   * y no sobre `fecha`, así que su hueco depende del huso en que se corte el
-   * timestamp. Medido en UTC da 24 en vez de 22. La aserción no se cae —es
-   * autoconsistente, y con cualquiera de los dos el resultado es "no avisa"—
-   * pero la tabla es una medición, no una verdad: quien la rehaga en seis
-   * meses tiene que cortar el timestamp en el mismo huso para que dé 22.
+   * Ojo con `facturacion`: es una de las dos fuentes que no son `date`, y se
+   * mide sobre `created_at` —cuándo entró la factura al buzón— y no sobre
+   * `fecha`, que es la del comprobante y puede ser vieja. La vista la pasa a
+   * día en el huso de Argentina. Medida así, da hueco 24 y 1 día sin cargar;
+   * medida sobre `fecha` da 22 y 4, y quien rehaga la tabla de esa manera va a
+   * creer que ésta está mal. No lo está: mide otra columna. La aserción se
+   * sostiene con cualquiera de las dos ("no avisa"), pero la tabla es una
+   * medición, no una verdad.
    */
   it("reproduce la tabla de validación del spec", () => {
     const casos: [string, number, number, number, boolean][] = [
@@ -85,7 +87,7 @@ describe("umbralDeRitmo", () => {
       ["compras", 5, 1, 6, false],
       ["inventario", 4, 1, 5, false],
       ["cantera", 6, 5, 7, false],
-      ["facturacion", 22, 4, 23, false],
+      ["facturacion", 24, 1, 25, false],
       ["rrhh", 1, 6, 3, true],
       ["despacho", 3, 5, 4, true],
       ["taller_vial", 3, 8, 4, true],
@@ -390,7 +392,7 @@ Pegar esto en el archivo que creó el paso anterior:
 --
 -- El umbral no es fijo: se calcula contra la historia de cada fuente, el hueco
 -- más largo que tuvo en 180 días más uno. Un umbral fijo de 7 haría sonar a
--- Facturación todos los días —recién arranca y tiene huecos de 22— y un p90
+-- Facturación todos los días —recién arranca y tiene huecos de 24— y un p90
 -- dejaría escapar a Despacho. El detalle, con la tabla de validación, está en
 -- docs/superpowers/specs/2026-10-06-inicio-indicadores-design.md
 --
@@ -535,7 +537,7 @@ node -e "const{createClient}=require('@supabase/supabase-js');const fs=require('
 Esperado: trece filas. `produccion` con `ultima_fecha: null` y `dias_sin_cargar:
 null`. Ninguna con `dias_sin_cargar` negativo. Los `hueco_max` tienen que dar
 parecido a la tabla del spec (los días pasan, así que no van a ser idénticos):
-`rrhh` 1, `despacho` 3, `remises` 10, `facturacion` ~22.
+`rrhh` 1, `despacho` 3, `remises` 10, `facturacion` ~24.
 
 ---
 

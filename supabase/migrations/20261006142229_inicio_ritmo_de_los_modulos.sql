@@ -8,7 +8,7 @@
 --
 -- El umbral no es fijo: se calcula contra la historia de cada fuente, el hueco
 -- más largo que tuvo en 180 días más uno. Un umbral fijo de 7 haría sonar a
--- Facturación todos los días —recién arranca y tiene huecos de 22— y un p90
+-- Facturación todos los días —recién arranca y tiene huecos de 24— y un p90
 -- dejaría escapar a Despacho. El detalle, con la tabla de validación, está en
 -- docs/superpowers/specs/2026-10-06-inicio-indicadores-design.md
 --
