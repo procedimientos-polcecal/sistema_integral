@@ -33,6 +33,28 @@
  * protección. Correrla desde el dueño de la planilla —si no, las protecciones
  * que creó él salen en "no se pudieron tocar" y el problema queda igual—.
  *
+ * Y CUÁNTO CRECE (06/10/2026)
+ *
+ * Medido contra la planilla, leyendo `protectedRanges` de la API: de **1.117
+ * protecciones, 117 no incluyen a la cuenta**. La serie es 8 → 37 → 117, o sea
+ * unas tres por día. El parche de correr la función a mano ya no alcanza: cada
+ * semana que pasa son otras veinte filas que la app no va a poder actualizar.
+ *
+ * Dos cosas más que mostró esa medición:
+ *
+ *   - Las que faltan están **casi todas en la columna Estado** (`Q` de las
+ *     pestañas por área), que es exactamente la celda que la app necesita para
+ *     mover la compra de etapa. No es casualidad: es la que el script protege
+ *     al aprobar.
+ *   - Varias celdas tienen **dos protecciones sobre la misma celda** (`Q980`,
+ *     `Q972`, `Q992`, `Q995`… aparecen repetidas). El script las crea de nuevo
+ *     sin mirar si ya había una. No rompe nada, pero explica por qué hay 1.117
+ *     protecciones para unas mil filas, y conviene saberlo antes de contar.
+ *
+ * Y ninguna de las que faltan tiene **un solo editor** cargado (`editores: 0`),
+ * que es la forma en que las crea el script: sin editores explícitos, sólo el
+ * dueño puede escribir ahí.
+ *
  * Desde ese día la app ya no confunde los dos casos: cuando una escritura
  * vuelve con "celda protegida", le pregunta a la planilla si la cuenta figura
  * entre los editores de esa celda y lo dice en el pendiente. Así que el
