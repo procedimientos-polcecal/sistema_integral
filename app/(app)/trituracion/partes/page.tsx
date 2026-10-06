@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { traerAcarreos, traerFleteros, traerPesadas } from "@/lib/cantera/consultas";
+import { traerAcarreos, traerPesadas } from "@/lib/cantera/consultas";
 import { tipoDeAcarreo } from "@/lib/cantera/acarreo";
 import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerOperariosDeTrituracion, traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
@@ -38,7 +38,7 @@ export default async function PartesTrituracionPage({
   // Cantera es otro módulo: si el usuario no tiene acceso ahí, RLS devuelve
   // cero filas (no un error) y el cruce simplemente no muestra nada, sin
   // romper la pantalla de Trituración.
-  const [partes, empleados, pesadas, viajesDeBloques, fleteros] = await Promise.all([
+  const [partes, empleados, pesadas, viajesDeBloques] = await Promise.all([
     traerPartes(supabase, { plantaId, desde: primerDia, hasta: ultimoDia }),
     traerOperariosDeTrituracion(supabase),
     traerPesadas(supabase, { mes }),
@@ -48,7 +48,6 @@ export default async function PartesTrituracionPage({
     // /cantera/acarreo/cargar. Se trae para cualquier planta —es barato, un
     // solo tipo, un mes— y se muestra sólo si corresponde.
     traerAcarreos(supabase, { tipo: "viaje_de_bloques", mes }),
-    traerFleteros(supabase),
   ]);
 
   const llegadasDelMes = llegadasPorDiaYPlanta(
@@ -71,17 +70,8 @@ export default async function PartesTrituracionPage({
 
   // Suma por fecha: puede haber más de un fletero cargando horas de "viaje
   // de bloques" el mismo día.
-  const nombrePorFleteroId = new Map(fleteros.map((f) => [f.id, f.nombre]));
-  const viajesDeBloquesPorFecha: Record<string, { horas: number; fleteros: { nombre: string; horas: number }[] }> = {};
-  for (const v of viajesDeBloques) {
-    const dia = viajesDeBloquesPorFecha[v.fecha] ?? { horas: 0, fleteros: [] };
-    dia.horas += v.cantidad;
-    const nombre = nombrePorFleteroId.get(v.fletero_id) ?? "(fletero desconocido)";
-    const ya = dia.fleteros.find((f) => f.nombre === nombre);
-    if (ya) ya.horas += v.cantidad;
-    else dia.fleteros.push({ nombre, horas: v.cantidad });
-    viajesDeBloquesPorFecha[v.fecha] = dia;
-  }
+  const viajesDeBloquesPorFecha: Record<string, number> = {};
+  for (const v of viajesDeBloques) viajesDeBloquesPorFecha[v.fecha] = (viajesDeBloquesPorFecha[v.fecha] ?? 0) + v.cantidad;
 
   return (
     <PartesClient

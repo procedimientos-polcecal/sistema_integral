@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { traerAcarreos, traerFleteros, traerPesadas, traerTarifasAcarreo } from "@/lib/cantera/consultas";
 import {
-  resumenPorFletero, multiplicadorDeHoras,
+  resumenPorFletero,
   totalesPorTipo,
   toneladasPorMaterialYDestino,
   detalleDiarioPorDestino,
@@ -14,7 +13,6 @@ import {
   agruparPesadasPorFleteroTipoMes,
   agruparPesadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
-  toneladasDeOrigenesExternos,
 } from "@/lib/cantera/pesadas";
 import AcarreoClient from "./AcarreoClient";
 
@@ -47,12 +45,11 @@ export default async function AcarreoPage({
   const mesActual = new Date().toISOString().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
 
-  const [fleteros, tarifas, acarreosDelMes, pesadasDelMes, sync] = await Promise.all([
+  const [fleteros, tarifas, acarreosDelMes, pesadasDelMes] = await Promise.all([
     traerFleteros(supabase, true),
     traerTarifasAcarreo(supabase),
     traerAcarreos(supabase, { mes }),
     traerPesadas(supabase, { mes }),
-    ultimaSincronizacionDe(supabase, "cantera", "acarreo"),
   ]);
 
   const acarreosPlanos: AcarreoPlano[] = [
@@ -61,13 +58,12 @@ export default async function AcarreoPage({
   ];
 
   const resumenes = fleteros
-    .map((f) => ({ fletero: f, resumen: resumenPorFletero(acarreosPlanos, tarifas, f.id, mes, multiplicadorDeHoras(f.nombre)) }))
+    .map((f) => ({ fletero: f, resumen: resumenPorFletero(acarreosPlanos, tarifas, f.id, mes) }))
     .filter((r) => r.resumen.porTipo.length > 0);
 
   // Por origen real de la pesada, no por fletero ni por nombre de material —
   // ver el comentario grande en `toneladasPorYacimientoDesdePesadas`.
   const toneladas = toneladasPorYacimientoDesdePesadas(pesadasDelMes);
-  const origenesExternos = toneladasDeOrigenesExternos(pesadasDelMes, mes);
   const totalGeneral = resumenes.reduce((s, r) => s + r.resumen.totalMonto, 0);
   const sinFleteroResuelto = pesadasDelMes.filter((p) => !p.fletero_id).length;
 
@@ -88,11 +84,11 @@ export default async function AcarreoPage({
   // `toneladasPorMaterialYDestino`).
   const pesadasConTipo = pesadasDelMes.filter((p): p is typeof p & { tipo: string } => p.tipo !== null);
   const matrizMaterialDestino = toneladasPorMaterialYDestino(
-    pesadasConTipo.map((p) => ({ tipo: p.tipo, origen: p.origen, mes: p.fecha, destino: p.destino, cantidad: p.toneladas })),
+    pesadasConTipo.map((p) => ({ tipo: p.tipo, mes: p.fecha, destino: p.destino, cantidad: p.toneladas })),
     mes
   );
   const detalleDiario = detalleDiarioPorDestino(
-    pesadasConTipo.map((p) => ({ fecha: p.fecha, tipo: p.tipo, origen: p.origen, destino: p.destino, cantidad: p.toneladas })),
+    pesadasConTipo.map((p) => ({ fecha: p.fecha, tipo: p.tipo, destino: p.destino, cantidad: p.toneladas })),
     mes
   );
 
@@ -101,7 +97,6 @@ export default async function AcarreoPage({
       mes={mes}
       resumenes={resumenes.map((r) => ({ fletero: r.fletero, resumen: r.resumen }))}
       toneladas={toneladas}
-      origenesExternos={origenesExternos}
       totalesDelMes={totalesDelMes}
       totalGeneral={totalGeneral}
       puedeEditar={permisos.puedeEditar}
@@ -109,7 +104,6 @@ export default async function AcarreoPage({
       sinFleteroResuelto={sinFleteroResuelto}
       matrizMaterialDestino={matrizMaterialDestino}
       detalleDiario={detalleDiario}
-      sync={sync}
     />
   );
 }

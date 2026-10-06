@@ -1,0 +1,87 @@
+# Concilia el buzón de Facturación con Odoo, a pedido.
+#
+# **Sólo a mano: no tiene `schedule`.** Es la diferencia con los otros siete
+# workflows de sincronización, y es a propósito. Facturación ya corre todos los
+# días a las 9:30 desde `vercel.json`, que al plan Hobby le alcanza porque es
+# una frecuencia diaria; los otros necesitan cada quince minutos y por eso se
+# fueron a Actions. Si acá hubiera un `schedule`, la conciliación correría dos
+# veces y las dos escribirían las mismas filas.
+#
+# Lo que faltaba era poder dispararla **cuando hace falta**, sin esperar a la
+# mañana siguiente. Aparece seguido: se cambió a qué instancia de Odoo apunta
+# el sistema, se creó un borrador a mano allá, o se quiere confirmar que
+# producción llega a Odoo de verdad. Sin esto la única forma era esperar —o
+# pegarle al endpoint con el secreto en la mano, que es justo lo que no
+# queremos que ande circulando.
+#
+# Se corre desde la pestaña Actions -> Conciliar Facturación con Odoo ->
+# Run workflow, o con `gh workflow run facturacion-sync.yml`.
+#
+# El endpoint se protege solo: exige el mismo `CRON_SECRET` que el cron de
+# Vercel, y sin él responde 503 en vez de quedar abierto.
+
+name: Conciliar Facturación con Odoo
+
+on:
+  # Sin `schedule` a propósito: el diario lo hace Vercel. Ver el encabezado.
+  workflow_dispatch:
+
+concurrency:
+  # Si una corrida se demora, la siguiente espera en vez de pisarla: las dos
+  # escribirían el vínculo con Odoo sobre las mismas facturas.
+  group: facturacion-sync
+  cancel-in-progress: false
+
+jobs:
+  conciliar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que estén las variables
+        # Por `env:` y no interpolados en el comando, igual que en los otros:
+        # interpolar un secreto con la sintaxis de expresiones de Actions mete
+        # su VALOR dentro del script que corre el shell, así que un secreto con
+        # una comilla o un backtick rompe el test — o se ejecuta. Actions
+        # enmascara el valor en el log, no en la línea de comando.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # Sin esto, curl falla con "URL rejected: No host part in the URL" y
+          # hay que leer el log entero para entender que faltaba una variable.
+          faltan=""
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir la conciliación
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/facturacion-sync")
+
+          echo "HTTP $codigo"
+          cat respuesta.json
+          echo
+
+          # Que el workflow falle cuando la conciliación falla: si no, el tilde
+          # verde diría que todo anda mientras nada se actualiza.
+          #
+          # Ojo con un 200 que dice `omitido`: la ruta contesta eso cuando no
+          # hay credenciales de Odoo configuradas, y no es un error — pero
+          # tampoco concilió nada. Por eso la respuesta se imprime entera.
+          if [ "$codigo" != "200" ]; then
+            echo "::error::La conciliación devolvió $codigo"
+            exit 1
+          fi

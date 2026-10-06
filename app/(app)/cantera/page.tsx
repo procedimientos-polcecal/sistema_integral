@@ -15,7 +15,7 @@ import {
 import { ETIQUETA_TIPO_RECURSO } from "@/lib/cantera/destape";
 import { serieMensual } from "@/lib/cantera/informe";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
-import { resumenPorFletero, multiplicadorDeHoras, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
@@ -119,7 +119,7 @@ export default async function CanteraInicioPage({
     ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
   ];
   const totalAcarreoMes = fleteros.reduce(
-    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual, multiplicadorDeHoras(f.nombre)).totalMonto,
+    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0
   );
   // `traerDestape` ya viene ordenada por fecha descendente (consultas.ts).

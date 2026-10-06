@@ -6,7 +6,7 @@ import { traerCubicaciones } from "@/lib/cantera/consultas";
 
 /**
  * El cierre mensual de cubicación de un yacimiento: sólo la existencia final
- * medida —en el yacimiento y en el acopio por triturar, que suman— — lo demás (voladuras, acarreo, existencia inicial, lectura) se
+ * medida — lo demás (voladuras, acarreo, existencia inicial, lectura) se
  * calcula al leer, en `lib/cantera/cubicacion.ts`.
  *
  * `PATCH` es un upsert por (yacimiento, mes): cargar de nuevo el mismo
@@ -44,13 +44,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "La existencia final tiene que ser un número" }, { status: 400 });
   }
 
-  // Acopio por triturar: opcional, vacío es "sin medir" y no un cero.
-  const crudoAcopio = b?.existencia_acopio;
-  const existenciaAcopio = crudoAcopio === undefined || crudoAcopio === null || crudoAcopio === "" ? null : Number(crudoAcopio);
-  if (existenciaAcopio !== null && (!isFinite(existenciaAcopio) || existenciaAcopio < 0)) {
-    return NextResponse.json({ error: "La existencia del acopio por triturar tiene que ser un número" }, { status: 400 });
-  }
-
   const { data, error } = await supabase
     .from("cantera_cubicaciones")
     .upsert(
@@ -58,7 +51,6 @@ export async function PATCH(request: Request) {
         yacimiento_id: yacimientoId,
         mes: `${b.mes}-01`,
         existencia_final: existenciaFinal,
-        existencia_acopio: existenciaAcopio,
         observaciones: typeof b?.observaciones === "string" ? b.observaciones.trim() || null : null,
         actualizado_por: user.id,
         actualizado_en: new Date().toISOString(),
@@ -66,7 +58,7 @@ export async function PATCH(request: Request) {
       },
       { onConflict: "yacimiento_id,mes" }
     )
-    .select("id, yacimiento_id, mes, existencia_final, existencia_acopio, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+    .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

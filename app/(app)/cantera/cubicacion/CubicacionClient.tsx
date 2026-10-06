@@ -76,8 +76,7 @@ export default function CubicacionClient({
   }));
 
   const [editando, setEditando] = useState<string | null>(null); // yacimientoCodigo en edición
-  const [valor, setValor] = useState(""); // existencia final en el yacimiento
-  const [valorAcopio, setValorAcopio] = useState(""); // existencia final en el acopio por triturar
+  const [valor, setValor] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,13 +84,7 @@ export default function CubicacionClient({
     const yacimientoId = idPorCodigo.get(yacimientoCodigo);
     const n = Number(valor.replace(",", "."));
     if (!yacimientoId || !isFinite(n) || n < 0) {
-      setError("La existencia final del yacimiento tiene que ser un número");
-      return;
-    }
-    // Vacío es "sin medir", no un cero.
-    const acopio = valorAcopio.trim() === "" ? null : Number(valorAcopio.replace(",", "."));
-    if (acopio !== null && (!isFinite(acopio) || acopio < 0)) {
-      setError("La existencia del acopio por triturar tiene que ser un número");
+      setError("La existencia final tiene que ser un número");
       return;
     }
     setGuardando(true);
@@ -100,7 +93,7 @@ export default function CubicacionClient({
       const res = await fetch("/api/cantera/cubicacion", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yacimiento_id: yacimientoId, mes, existencia_final: n, existencia_acopio: acopio }),
+        body: JSON.stringify({ yacimiento_id: yacimientoId, mes, existencia_final: n }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo guardar");
@@ -122,7 +115,7 @@ export default function CubicacionClient({
       <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="page-header">Cubicación</h1>
-        <p className="page-subheader">Existencia inicial + voladuras − acarreo, contra la existencia medida (yacimiento + acopio por triturar).</p>
+        <p className="page-subheader">Existencia inicial + voladuras − acarreo, contra la existencia medida en el yacimiento.</p>
       </div>
 
       {/* ── Navegador de mes ── */}
@@ -172,64 +165,42 @@ export default function CubicacionClient({
                 <dd className="col-span-2 text-right font-mono tabular-nums font-medium text-slate-900">{t(fila?.stockTeorico ?? null)}</dd>
               </dl>
 
-              <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+              <div className="mt-3 border-t border-slate-100 pt-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Existencia final acopio por triturar</span>
-                  <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaAcopio ?? null)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Existencia final yacimiento</span>
-                  <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaYacimiento ?? null)}</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Existencia final total</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-semibold tabular-nums text-slate-900">{t(fila?.existenciaFinal ?? null)}</span>
-                    {puedeEditar && !enEdicion && (
-                      <button
-                        className="text-xs text-slate-400 underline hover:text-slate-700"
-                        onClick={() => {
-                          setEditando(yacimiento.codigo);
-                          setValor(fila?.existenciaYacimiento != null ? String(fila.existenciaYacimiento) : "");
-                          setValorAcopio(fila?.existenciaAcopio != null ? String(fila.existenciaAcopio) : "");
-                          setError(null);
-                        }}
-                      >
-                        {fila?.existenciaFinal != null ? "Editar" : "Cargar"}
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-slate-500">Existencia final</span>
+                  {!enEdicion && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold tabular-nums text-slate-900">{t(fila?.existenciaFinal ?? null)}</span>
+                      {puedeEditar && (
+                        <button
+                          className="text-xs text-slate-400 underline hover:text-slate-700"
+                          onClick={() => {
+                            setEditando(yacimiento.codigo);
+                            setValor(fila?.existenciaFinal != null ? String(fila.existenciaFinal) : "");
+                            setError(null);
+                          }}
+                        >
+                          {fila?.existenciaFinal != null ? "Editar" : "Cargar"}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {enEdicion && (
-                  <div className="mt-2 space-y-2">
-                    <label className="block text-xs text-slate-600">
-                      Existencia final acopio por triturar (opcional)
-                      <input
-                        autoFocus
-                        className="input mt-1"
-                        inputMode="decimal"
-                        value={valorAcopio}
-                        onChange={(e) => setValorAcopio(e.target.value)}
-                        placeholder="Toneladas en reservas"
-                      />
-                    </label>
-                    <label className="block text-xs text-slate-600">
-                      Existencia final yacimiento
-                      <input
-                        className="input mt-1"
-                        inputMode="decimal"
-                        value={valor}
-                        onChange={(e) => setValor(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && guardar(yacimiento.codigo)}
-                        placeholder="Toneladas medidas en el yacimiento"
-                      />
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button className="btn-primary shrink-0" disabled={guardando} onClick={() => guardar(yacimiento.codigo)}>
-                        Guardar
-                      </button>
-                      <button className="btn-ghost shrink-0" onClick={() => setEditando(null)}>Cancelar</button>
-                    </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      autoFocus
+                      className="input"
+                      inputMode="decimal"
+                      value={valor}
+                      onChange={(e) => setValor(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && guardar(yacimiento.codigo)}
+                      placeholder="Toneladas medidas"
+                    />
+                    <button className="btn-primary shrink-0" disabled={guardando} onClick={() => guardar(yacimiento.codigo)}>
+                      Guardar
+                    </button>
+                    <button className="btn-ghost shrink-0" onClick={() => setEditando(null)}>Cancelar</button>
                   </div>
                 )}
               </div>

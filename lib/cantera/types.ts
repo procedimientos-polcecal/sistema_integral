@@ -211,8 +211,6 @@ export interface DestapeDB {
   cargado_en: string;
   actualizado_por: string | null;
   actualizado_en: string | null;
-  /** La fila de `cantera_acarreos` (tipo "horas_destape") de la que salieron el fletero y las horas. Null en operario_propio y en lo cargado antes del 01/10/2026. */
-  acarreo_id: string | null;
 }
 
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */
@@ -220,10 +218,7 @@ export interface CubicacionDB {
   id: string;
   yacimiento_id: string;
   mes: string;
-  /** Existencia final en el YACIMIENTO. */
   existencia_final: number;
-  /** Existencia final en el acopio por triturar. Null: sin medir, o cierre anterior al 06/10/2026. */
-  existencia_acopio: number | null;
   observaciones: string | null;
   cargado_por: string | null;
   cargado_en: string;

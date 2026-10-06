@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerCubicaciones, traerPesadasAgrupadasPorOrigenMes, traerPesadasDolomitaD1DeOrigenPt2, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
-import { sumarAcarreosPorYacimiento, toneladasDolomitaD1DePlanta2PorMes } from "@/lib/cantera/pesadas";
+import { traerCubicaciones, traerPesadasAgrupadasPorOrigenMes, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
 import { metrosYPozos } from "@/lib/cantera/tramos";
 import { toneladasEstimadas } from "@/lib/cantera/toneladas";
 import { armarCierresCubicacion, type AcarreoPorYacimiento, type CierreCargado, type VoladuraParaCubicacion } from "@/lib/cantera/cubicacion";
@@ -37,11 +36,10 @@ export default async function CubicacionPage() {
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  const [yacimientos, voladuras, pesadasAgrupadas, pesadasDolomitaPt2, cubicaciones] = await Promise.all([
+  const [yacimientos, voladuras, pesadasAgrupadas, cubicaciones] = await Promise.all([
     traerYacimientos(supabase, true),
     traerVoladuras(supabase, {}),
     traerPesadasAgrupadasPorOrigenMes(supabase),
-    traerPesadasDolomitaD1DeOrigenPt2(supabase),
     traerCubicaciones(supabase),
   ]);
 
@@ -69,13 +67,7 @@ export default async function CubicacionPage() {
   // Por origen real de la pesada, no por nombre de material — mismo
   // criterio que `toneladasPorYacimientoDesdePesadas` (lib/cantera/pesadas.ts),
   // que hace esta misma cuenta cuando no está la función SQL.
-  //
-  // La dolomita D1 con origen PT 2 también es de D1: el acarreo de D1 es la
-  // suma de las dos (`toneladasDolomitaD1DePlanta2PorMes`).
-  const acarreos: AcarreoPorYacimiento[] = sumarAcarreosPorYacimiento(
-    pesadasAgrupadas,
-    toneladasDolomitaD1DePlanta2PorMes(pesadasDolomitaPt2)
-  );
+  const acarreos: AcarreoPorYacimiento[] = pesadasAgrupadas;
 
   const cierresCargados: CierreCargado[] = cubicaciones
     .map((c): CierreCargado | null => {
@@ -85,7 +77,6 @@ export default async function CubicacionPage() {
         yacimientoCodigo: codigo,
         mes: c.mes.slice(0, 7),
         existenciaFinal: c.existencia_final,
-        existenciaAcopio: c.existencia_acopio,
         observaciones: c.observaciones,
       };
     })

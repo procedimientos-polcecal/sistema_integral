@@ -11,7 +11,7 @@ import {
   traerPesadas, traerTarifasAcarreo, traerVoladuras, traerYacimientos,
 } from "@/lib/cantera/consultas";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
-import { resumenPorFletero, multiplicadorDeHoras, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { resumenPorFletero, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { agruparPesadasPorFleteroTipoMes } from "@/lib/cantera/pesadas";
 import type { Consumo } from "@/lib/cantera/types";
 import { filtrarDescartadas } from "@/lib/home/notificaciones";
@@ -449,7 +449,7 @@ async function resumenCantera(supabase: Awaited<ReturnType<typeof createClient>>
     ...agruparPesadasPorFleteroTipoMes(pesadasDelMes),
   ];
   const acarreoAPagarMes = fleteros.reduce(
-    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual, multiplicadorDeHoras(f.nombre)).totalMonto,
+    (s, f) => s + resumenPorFletero(acarreosPlanos, tarifasAcarreo, f.id, mesActual).totalMonto,
     0
   );
 

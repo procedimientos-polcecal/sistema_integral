@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { traerAcarreos, traerFleteros, traerPesadasAgrupadasPorFleteroTipoMes, traerTarifasAcarreo } from "@/lib/cantera/consultas";
-import { resumenPorFletero, multiplicadorDeHoras, resumenAnualPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
+import { resumenPorFletero, resumenAnualPorTipo, type AcarreoPlano } from "@/lib/cantera/acarreo";
 import { planasDesdePesadasAgrupadas, sumarPesadasAgrupadasPorTipoMes } from "@/lib/cantera/pesadas";
 import ResumenesAnuales from "./ResumenesAnuales";
 
@@ -33,7 +33,7 @@ export default async function ResumenAnualSection({ anio }: { anio: string }) {
   ];
   const MESES_DEL_ANIO = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, "0")}`);
   const filasFleteros = fleteros.map((f) => {
-    const porMes = MESES_DEL_ANIO.map((mes) => resumenPorFletero(acarreosDelAnioPlanos, tarifasAcarreo, f.id, mes, multiplicadorDeHoras(f.nombre)).totalMonto);
+    const porMes = MESES_DEL_ANIO.map((mes) => resumenPorFletero(acarreosDelAnioPlanos, tarifasAcarreo, f.id, mes).totalMonto);
     return { fletero: f, porMes, totalAnual: porMes.reduce((s, v) => s + v, 0) };
   });
   const filasMateriales = resumenAnualPorTipo(

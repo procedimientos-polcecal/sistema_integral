@@ -3,7 +3,6 @@ import { leerValores } from "@/lib/core/sheets";
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
 import { codigoDesdeTextoLibre } from "./equipos";
 import { estadoDesdeCodigoSheet } from "./estados";
-import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { esEcoDeCargaDelSistema } from "./planilla";
 
 /**
@@ -203,36 +202,4 @@ export async function sincronizarEstadosDesdeSheets(escribir: boolean): Promise<
   }
 
   return { filasLeidas: filas.length, celdasEscritas, sinFecha, columnasSinEquipo, codigosSinMapear };
-}
-
-export interface ResultadoSincronizacionTallerVial {
-  cargas: ResultadoSincronizacionCargas;
-  estados: ResultadoSincronizacionEstados;
-}
-
-/**
- * Trae de la planilla las cargas de combustible y los estados diarios, y deja
- * anotada la corrida en `sincronizaciones` (modulo "taller_vial", recurso
- * "cargas") para el cartel "Actualizado hace…" de `/taller-vial/cargas`. Es
- * lo que llaman el cron y el botón "Actualizar" — una sola puerta, para que
- * el cartel diga la verdad sin importar quién disparó.
- *
- * Se registra también si falla: una fecha vieja sin explicación no dice si
- * la sincronización nunca corrió o si viene fallando (el cron estuvo caído
- * desde el 05/10/2026 por una URL vieja y nada lo mostraba en pantalla).
- */
-export async function sincronizarTallerVialDesdeSheets(): Promise<ResultadoSincronizacionTallerVial> {
-  try {
-    const [cargas, estados] = await Promise.all([
-      sincronizarCargasDesdeSheets(true),
-      sincronizarEstadosDesdeSheets(true),
-    ]);
-    await registrarSincronizacion({ modulo: "taller_vial", recurso: "cargas", ok: true, filas: cargas.filasInsertadas });
-    return { cargas, estados };
-  } catch (e) {
-    await registrarSincronizacion({
-      modulo: "taller_vial", recurso: "cargas", ok: false, error: e instanceof Error ? e.message : String(e),
-    });
-    throw e;
-  }
 }

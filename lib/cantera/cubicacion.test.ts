@@ -152,35 +152,3 @@ describe("armarCierresCubicacion", () => {
     expect(filas[2].existenciaInicial).toBe(2240); // septiembre encadena de agosto igual que siempre
   });
 });
-
-describe("existencia final = yacimiento + acopio por triturar", () => {
-  const vol: VoladuraParaCubicacion[] = [{ yacimiento: "D1", perfFin: "2026-08-10", toneladas: 1000, metros: 50 }];
-
-  it("la existencia final es la suma de las dos mediciones, y es la que entra al residuo", () => {
-    const cierre: CierreCargado = { yacimientoCodigo: "D1", mes: "2026-08", existenciaFinal: 600, existenciaAcopio: 400, observaciones: null };
-    const f = cerrarCubicacionDelMes("2026-08", "D1", vol, 800, 500, cierre);
-    expect(f.existenciaYacimiento).toBe(600);
-    expect(f.existenciaAcopio).toBe(400);
-    expect(f.existenciaFinal).toBe(1000);
-    // stock teórico 500 + 1000 − 800 = 700; residuo = 700 − 1000
-    expect(f.residuo).toBe(-300);
-  });
-
-  it("un acopio sin medir cuenta como 0 y queda como null en pantalla", () => {
-    const cierre: CierreCargado = { yacimientoCodigo: "D1", mes: "2026-08", existenciaFinal: 600, observaciones: null };
-    const f = cerrarCubicacionDelMes("2026-08", "D1", vol, 800, 500, cierre);
-    expect(f.existenciaAcopio).toBeNull();
-    expect(f.existenciaFinal).toBe(600);
-  });
-
-  it("el mes siguiente arranca con la existencia TOTAL, no sólo la del yacimiento", () => {
-    const filas = armarCierresCubicacion(
-      ["D1"], vol, [],
-      [
-        { yacimientoCodigo: "D1", mes: "2026-08", existenciaFinal: 600, existenciaAcopio: 400, observaciones: null },
-        { yacimientoCodigo: "D1", mes: "2026-09", existenciaFinal: 100, observaciones: null },
-      ]
-    );
-    expect(filas.find((f) => f.mes === "2026-09")!.existenciaInicial).toBe(1000);
-  });
-});

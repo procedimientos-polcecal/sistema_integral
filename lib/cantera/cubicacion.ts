@@ -38,21 +38,11 @@ export interface AcarreoPorYacimiento {
   toneladas: number;
 }
 
-/**
- * Un cierre ya cargado a mano: sólo lo que no se puede calcular.
- *
- * La existencia final se mide en dos lugares (pedido del usuario,
- * 06/10/2026): `existenciaFinal` es la del YACIMIENTO (el campo de siempre) y
- * `existenciaAcopio` la del acopio por triturar. Lo que usa el balance es la
- * suma de las dos.
- */
+/** Un cierre ya cargado a mano: sólo lo que no se puede calcular. */
 export interface CierreCargado {
   yacimientoCodigo: string;
   mes: string; // "YYYY-MM"
-  /** La existencia final en el yacimiento. */
   existenciaFinal: number;
-  /** La existencia final en el acopio por triturar. Null: no se midió — cuenta como 0 en la suma. */
-  existenciaAcopio?: number | null;
   observaciones: string | null;
 }
 
@@ -64,12 +54,7 @@ export interface FilaCierreCubicacion {
   voladuras: number;
   acarreo: number;
   stockTeorico: number | null;
-  /** La existencia final TOTAL: yacimiento + acopio por triturar. Es la que entra al residuo, al factor y a la cadena. */
   existenciaFinal: number | null;
-  /** La parte medida en el yacimiento. */
-  existenciaYacimiento: number | null;
-  /** La parte medida en el acopio por triturar. Null si no se cargó. */
-  existenciaAcopio: number | null;
   observaciones: string | null;
   /** Stock teórico − existencia final. Positivo: sobra piedra sin explicar; negativo: falta. */
   residuo: number | null;
@@ -105,11 +90,7 @@ export function cerrarCubicacionDelMes(
   const toneladasVoladas = deEsteYacimientoYMes.reduce((s, v) => s + (v.toneladas ?? 0), 0);
   const metros = deEsteYacimientoYMes.reduce((s, v) => s + (v.metros ?? 0), 0);
 
-  const existenciaYacimiento = cierreCargado?.existenciaFinal ?? null;
-  const existenciaAcopio = cierreCargado?.existenciaAcopio ?? null;
-  // La suma de las dos; un acopio sin medir cuenta como 0 (no cambia lo que
-  // ya había cargado), pero sin la del yacimiento no hay existencia final.
-  const existenciaFinal = existenciaYacimiento === null ? null : existenciaYacimiento + (existenciaAcopio ?? 0);
+  const existenciaFinal = cierreCargado?.existenciaFinal ?? null;
   const stockTeorico = existenciaInicial == null ? null : existenciaInicial + toneladasVoladas - acarreoDelMes;
   const residuo = stockTeorico == null || existenciaFinal == null ? null : stockTeorico - existenciaFinal;
   const porcentajeSobreVoladuras =
@@ -140,8 +121,6 @@ export function cerrarCubicacionDelMes(
     acarreo: acarreoDelMes,
     stockTeorico,
     existenciaFinal,
-    existenciaYacimiento,
-    existenciaAcopio,
     observaciones: cierreCargado?.observaciones ?? null,
     residuo,
     porcentajeSobreVoladuras,
@@ -208,8 +187,7 @@ export function armarCierresCubicacion(
       const acarreoDelMes = acarreos.find((a) => a.yacimientoCodigo === yacimientoCodigo && a.mes === mes)?.toneladas ?? 0;
       const fila = cerrarCubicacionDelMes(mes, yacimientoCodigo, voladuras, acarreoDelMes, existenciaAnterior, cierreCargado);
       filas.push(fila);
-      // La del mes siguiente es la total, no sólo la del yacimiento.
-      existenciaAnterior = fila.existenciaFinal;
+      existenciaAnterior = cierreCargado?.existenciaFinal ?? null;
     }
   }
 
