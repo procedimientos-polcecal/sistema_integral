@@ -195,6 +195,72 @@ function darPermisoALaCuentaDeServicio() {
 }
 
 /**
+ * Deja la función de arriba corriendo sola, cada hora. **Para no volver a
+ * acordarse.**
+ *
+ * Es el parche automatizado, no la solución de fondo —ésa es una línea en el
+ * script que crea las protecciones, ver "OJO CON LAS PROTECCIONES NUEVAS"—,
+ * pero resuelve el problema práctico hoy y sin tocar ese script.
+ *
+ * Que haga falta se midió el 06/10/2026: después de correr
+ * `darPermisoALaCuentaDeServicio` a mano quedaban 4 protecciones sin la cuenta,
+ * y las 4 estaban **recién creadas** —de filas aprobadas en el rato que pasó
+ * entre la corrida y la medición—. O sea que el agujero no se cierra: se vuelve
+ * a abrir solo, a razón de unas tres por día. Una tarea que hay que acordarse
+ * de hacer cada semana, para siempre, es una tarea que en algún momento no se
+ * hace; y cuando no se hace, lo que pasa es que una compra no se puede mover de
+ * etapa y nadie se entera hasta que alguien lo intenta.
+ *
+ * **La tiene que crear la cuenta dueña de la planilla**, igual que la corrida a
+ * mano: un activador corre con los permisos de quien lo creó, así que uno
+ * creado por otra cuenta se va a topar con las mismas protecciones que no puede
+ * tocar.
+ *
+ * Correrla de nuevo no duplica nada: primero borra los activadores que ya haya
+ * para esta función. Y si algún día molesta, `quitarElActivador`.
+ *
+ * Una hora es a propósito. Las protecciones nuevas no bloquean nada hasta que
+ * alguien mueve esa compra de etapa, así que llegar una hora tarde no se nota;
+ * y cada corrida recorre las ~1.100 protecciones de la planilla, que no es
+ * gratis. Con tres por día, una hora deja el agujero abierto menos tiempo del
+ * que tarda cualquiera en aprobar y después gestionar el mismo RI.
+ */
+function instalarElActivador() {
+  if (!CUENTA_DE_SERVICIO) {
+    throw new Error("Falta completar CUENTA_DE_SERVICIO arriba, antes de instalar nada.");
+  }
+
+  quitarElActivador();
+
+  ScriptApp.newTrigger("darPermisoALaCuentaDeServicio")
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  // Se corre una vez ahora: si algo está mal —el mail equivocado, permisos que
+  // faltan— es mejor enterarse en este momento, mirando el registro, que dentro
+  // de una hora y sin nadie delante.
+  darPermisoALaCuentaDeServicio();
+
+  Logger.log(
+    "Activador instalado: darPermisoALaCuentaDeServicio va a correr cada hora." + SALTO +
+    "Lo de arriba es el resultado de la corrida de prueba."
+  );
+}
+
+/** Saca el activador por tiempo. No toca ninguna protección. */
+function quitarElActivador() {
+  var activadores = ScriptApp.getProjectTriggers();
+  var sacados = 0;
+  for (var i = 0; i < activadores.length; i++) {
+    if (activadores[i].getHandlerFunction() !== "darPermisoALaCuentaDeServicio") continue;
+    ScriptApp.deleteTrigger(activadores[i]);
+    sacados++;
+  }
+  Logger.log("Activadores quitados: " + sacados);
+}
+
+/**
  * Las pestañas donde la app escribe: el master y las de cada área.
  *
  * Empieza con guión bajo a propósito: Apps Script no ofrece esas funciones en
