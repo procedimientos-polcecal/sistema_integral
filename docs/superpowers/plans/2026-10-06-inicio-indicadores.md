@@ -394,7 +394,7 @@ Pegar esto en el archivo que creó el paso anterior:
 -- dejaría escapar a Despacho. El detalle, con la tabla de validación, está en
 -- docs/superpowers/specs/2026-10-06-inicio-indicadores-design.md
 --
--- Cinco cosas que parecen de más y no lo son:
+-- Seis cosas que parecen de más y no lo son:
 --
 --   1. `fecha <= current_date`. `calculos_diarios` tiene filas hasta el 18/11 y
 --      nada impide que otra tabla las tenga. Sin el tope, los días sin cargar
@@ -420,6 +420,26 @@ Pegar esto en el archivo que creó el paso anterior:
 --      lo haría al día 181—: falso, y encima pierde cuántos días lleva parado.
 --      Con la historia entera, `ultima_fecha is null` quiere decir justo eso:
 --      que esa fuente no tuvo nunca una fila.
+--   6. Dos de las trece fuentes no son `date`, y el `union all` las trata
+--      distinto a propósito. Sin ningún cast, el `union all` resuelve toda la
+--      columna `fecha` a `timestamptz` —`date` y `timestamptz` se unifican
+--      hacia el segundo—, `fecha - lag(fecha)` pasa a ser un `interval` y
+--      `max(hueco)::int` falla al aplicar la migración con `42846`. Ése es el
+--      motivo del cast, no la prolijidad. Pero los dos tipos no guardan lo
+--      mismo, y por eso los husos son distintos:
+--        · `compras_requerimientos.fecha` es un DÍA guardado en un
+--          `timestamptz`: 2.080 de 2.080 filas están a medianoche UTC exacta
+--          (medido el 06/10/2026), porque viene de la planilla. Se recupera
+--          con `at time zone 'UTC'`. Con el huso de Argentina esa medianoche
+--          caería a las 21:00 del día anterior y las 2.080 fechas se correrían
+--          un día — la misma familia del error que ya dio vuelta 885 fechas
+--          en Compras. Es lo que hace la `20260903081542` con Inventario.
+--        · `facturas_proveedor.created_at` es un INSTANTE real (llegan a media
+--          mañana, hora de Argentina). Lo que se quiere saber es en qué día
+--          ARGENTINO entró la factura al buzón: una que entra a las 22:00 de
+--          acá es la 01:00 UTC del día siguiente, y un `::date` pelado
+--          contaría el día que no es. Va `at time zone
+--          'America/Argentina/Buenos_Aires'`.
 --
 -- `atrasado` NO se calcula acá a propósito: la comparación vive en
 -- lib/home/ritmo.ts, que es donde se puede testear. La vista entrega los hechos.
@@ -436,13 +456,15 @@ with fuentes as (
              select 'rrhh'::text          as modulo, fecha            from fichadas
   union all  select 'remises',                       fecha            from remises_asistencia
   union all  select 'mantenimiento',                 fecha            from ordenes_trabajo
-  union all  select 'compras',                       fecha            from compras_requerimientos
+  -- Un día guardado como `timestamptz` a medianoche UTC: va `'UTC'`. Ver la trampa 6.
+  union all  select 'compras',                       (fecha at time zone 'UTC')::date from compras_requerimientos
   union all  select 'inventario',                    fecha            from inventario_movimientos
   union all  select 'produccion',                    fecha            from produccion_partes
   union all  select 'despacho',                      fecha            from despacho_ordenes_carga
   -- `fecha` es la del comprobante y puede ser vieja; `created_at` es cuándo
-  -- entró al buzón, que es lo que mide si el módulo se usa.
-  union all  select 'facturacion',                   created_at::date from facturas_proveedor
+  -- entró al buzón, que es lo que mide si el módulo se usa. Es un instante real:
+  -- va con el huso de Argentina. Ver la trampa 6.
+  union all  select 'facturacion',                   (created_at at time zone 'America/Argentina/Buenos_Aires')::date from facturas_proveedor
   union all  select 'cantera',                       fecha            from cantera_pesadas
   union all  select 'calidad',                       fecha            from calidad_movimientos
   union all  select 'calidad_envases',               fecha            from calidad_envases_movimientos

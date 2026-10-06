@@ -110,11 +110,11 @@ La fuente de cada módulo es **lo que carga una persona**, no un derivado:
 | `rrhh` | `fichadas` | `fecha` |
 | `remises` | `remises_asistencia` | `fecha` |
 | `mantenimiento` | `ordenes_trabajo` | `fecha` |
-| `compras` | `compras_requerimientos` | `fecha` |
+| `compras` | `compras_requerimientos` | `(fecha at time zone 'UTC')::date` |
 | `inventario` | `inventario_movimientos` | `fecha` |
 | `produccion` | `produccion_partes` | `fecha` |
 | `despacho` | `despacho_ordenes_carga` | `fecha` |
-| `facturacion` | `facturas_proveedor` | `created_at::date` |
+| `facturacion` | `facturas_proveedor` | `(created_at at time zone 'America/Argentina/Buenos_Aires')::date` |
 | `cantera` | `cantera_pesadas` | `fecha` |
 | `calidad` | `calidad_movimientos` | `fecha` |
 | `calidad_envases` | `calidad_envases_movimientos` | `fecha` |
@@ -140,7 +140,7 @@ Dos elecciones que no son obvias:
 Son **trece fuentes para doce módulos**: Calidad tiene dos mitades que se cargan
 por separado, y la tarjeta muestra **la peor de las dos**.
 
-### Las cinco trampas, que van comentadas en la migración
+### Las seis trampas, que van comentadas en la migración
 
 - **Acotar a `fecha <= current_date`.** `calculos_diarios` tiene filas hasta el
   18/11 y nada impide que otra tabla las tenga. Sin el tope, `días_sin_cargar`
@@ -159,6 +159,15 @@ por separado, y la tarjeta muestra **la peor de las dos**.
   pasaría a informarse como «nunca se cargó» —Remises, con 70 días hoy, lo haría
   al día 181—: falso, y además pierde cuántos días lleva parado. Con la historia
   entera, `ultima_fecha is null` significa que la fuente no tuvo nunca una fila.
+- **Dos fuentes no son `date`, y llevan husos distintos a propósito.** Sin ningún
+  cast, el `union all` resuelve toda la columna `fecha` a `timestamptz` y la
+  migración falla al aplicarse con `42846` (`max(hueco)::int` sobre un
+  `interval`): ése es el motivo del cast. `compras_requerimientos.fecha` es un
+  **día** guardado en un `timestamptz` —2.080 de 2.080 filas a medianoche UTC
+  exacta— y se recupera con `at time zone 'UTC'`; con el huso de Argentina las
+  2.080 fechas se correrían un día para atrás. `facturas_proveedor.created_at`
+  es un **instante** real y va con el huso de Argentina, porque lo que importa
+  es el día argentino en que entró la factura al buzón.
 
 ### La vista
 
@@ -169,11 +178,11 @@ with fuentes as (
              select 'rrhh'::text      as modulo, fecha              from fichadas
   union all  select 'remises',             fecha                    from remises_asistencia
   union all  select 'mantenimiento',       fecha                    from ordenes_trabajo
-  union all  select 'compras',             fecha                    from compras_requerimientos
+  union all  select 'compras',             (fecha at time zone 'UTC')::date from compras_requerimientos
   union all  select 'inventario',          fecha                    from inventario_movimientos
   union all  select 'produccion',          fecha                    from produccion_partes
   union all  select 'despacho',            fecha                    from despacho_ordenes_carga
-  union all  select 'facturacion',         created_at::date         from facturas_proveedor
+  union all  select 'facturacion',         (created_at at time zone 'America/Argentina/Buenos_Aires')::date from facturas_proveedor
   union all  select 'cantera',             fecha                    from cantera_pesadas
   union all  select 'calidad',             fecha                    from calidad_movimientos
   union all  select 'calidad_envases',     fecha                    from calidad_envases_movimientos
