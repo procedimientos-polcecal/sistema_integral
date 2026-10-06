@@ -18,6 +18,31 @@ import { traerRitmo, sinClasificarDelUltimoDiaHabil } from "@/lib/home/consultas
  * navegación aunque la campana sólo usara `notificaciones`. Acá no hay ningún
  * `select` que traiga filas salvo el de RRHH: todo lo demás es `count … head` y
  * una lectura de la vista de ritmo.
+ *
+ * TRES AVISOS DE `AVISOS` NO SE CALCULAN ACÁ, A PROPÓSITO
+ *
+ * `cantera-sin-conciliar`, `taller-vial-service-vencido` y
+ * `taller-vial-service-proximo` están definidos en `lib/home/avisos.ts` pero no
+ * tienen conteo en esta ruta, porque ninguno de los tres se puede contar barato:
+ *
+ *   - `sinConciliar` sale de `contarAvisos` (`lib/cantera/tablero.ts`), que
+ *     filtra por `cruce`, `crucePerf` y `cruceVol`. Ninguno de los tres es una
+ *     columna: los deriva `armarFilaVoladura` a partir de la voladura, su
+ *     yacimiento y sus consumos. Contarlo exige traer las tres tablas enteras.
+ *   - Los dos de service necesitan el último horómetro de cada equipo cruzado
+ *     con el último service por escalón. Es historia, no un conteo.
+ *
+ * Traerlos acá sería volver a poner en **cada página del sistema** justo lo que
+ * esta ruta existe para sacar.
+ *
+ * La información **no se pierde del sistema**: los tres se siguen viendo en las
+ * tarjetas del Inicio, que las arma `/api/home/resumen`. Lo que sí se pierde es
+ * la campana, y eso es una regresión real: a quien tenía un service de 250 hs
+ * vencido, el globo dejó de avisarle.
+ *
+ * El arreglo, si alguna vez se decide pagarlo, es una vista que precalcule el
+ * estado de service por equipo —y el cruce de Cantera—, igual que
+ * `inicio_ritmo_modulos`: entonces vuelven acá como un `count … head` más.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -49,7 +74,8 @@ export async function GET() {
   const [
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
-    facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla, filasRitmo,
+    facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla,
+    tallerVialSinEquipo, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -61,6 +87,12 @@ export async function GET() {
     contarSiTiene("facturacion", () => head("facturas_proveedor").is("requerimiento_id", null).eq("estado", "recibida")),
     contarSiTiene("calidad", () => head("calidad_envases_movimientos").not("sheets_pendiente", "is", null)),
     contarSiTiene("trituracion", () => head("trituracion_partes").not("sheets_pendiente", "is", null)),
+    // Una carga con `equipo_id` en null es un texto suelto —"empresa piparo" en
+    // vez de un código EM— que no entra en ningún resumen por equipo hasta que
+    // alguien la corrija. Es el único de los cuatro avisos de Cantera y Taller
+    // Vial que sí se cuenta con una columna, así que acá sale igual de barato
+    // que los otros diez.
+    contarSiTiene("taller_vial", () => head("taller_vial_cargas").is("equipo_id", null)),
     traerRitmo(supabase),
   ]);
 
@@ -68,6 +100,7 @@ export async function GET() {
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla,
+    tallerVialSinEquipo,
   };
 
   const { data: descartes } = await supabase
