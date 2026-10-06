@@ -484,6 +484,33 @@ export async function traerPesadasAgrupadasPorOrigenMes(
 }
 
 /**
+ * Las pesadas de dolomita D1 con origen PT 2 (unas 120 hoy) — para
+ * sumarlas al acarreo de D1 en Cubicación (`toneladasDolomitaD1DePlanta2PorMes`,
+ * `./pesadas.ts`). Se trae acotado a ese tipo y origen en vez de cambiar la
+ * función SQL de arriba, que habría pedido una migración: son pocas filas. El
+ * filtro `P%T%2` agarra "PT 2" y "P T 2"; la comparación estricta se hace en
+ * la función pura. Si la consulta falla, devuelve `[]`: Cubicación sigue
+ * con el acarreo de siempre en vez de caerse.
+ */
+export async function traerPesadasDolomitaD1DeOrigenPt2(
+  supabase: SupabaseClient
+): Promise<{ fecha: string; tipo: string | null; origen: string | null; toneladas: number }[]> {
+  try {
+    return await traerTodo((desde, hasta) =>
+      supabase
+        .from("cantera_pesadas")
+        .select("fecha, tipo, origen, toneladas")
+        .eq("tipo", "dolomita_d1")
+        .ilike("origen", "P%T%2")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    console.error("traerPesadasDolomitaD1DeOrigenPt2: no se pudo traer, Cubicación queda sin la dolomita de PT 2", e);
+    return [];
+  }
+}
+
+/**
  * Todos los cierres de cubicación cargados, de todos los yacimientos y
  * meses — la tabla es chica (un yacimiento × un mes por fila) y
  * `armarCierresCubicacion` (`./cubicacion.ts`) necesita el historial

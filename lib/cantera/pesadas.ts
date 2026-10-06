@@ -248,6 +248,47 @@ export function toneladasPorYacimientoDesdePesadas(
     .sort((a, b) => (a.mes === b.mes ? a.yacimientoCodigo.localeCompare(b.yacimientoCodigo) : a.mes.localeCompare(b.mes)));
 }
 
+/**
+ * La dolomita D1 que figura con origen PT 2 ("Dolomita D1 de PT 2") es de D1
+ * igual: es la piedra que se acopió en la planta y salió de ahí, no otro
+ * yacimiento — el usuario lo aclaró para Cubicación (06/10/2026), donde el
+ * acarreo de D1 es la suma de las dos. `cantera_pesadas_por_origen_mes()`
+ * agrupa por el origen tal cual y cuenta esas pesadas bajo "PT 2", así que
+ * esto las suma aparte, como acarreo de D1. Sólo `dolomita_d1`: una D6 con
+ * origen PT 2 (1 pesada hoy) no es de D1 y no entra.
+ *
+ * El origen se compara sin espacios ni mayúsculas ("PT 2", "P T 2").
+ */
+export function toneladasDolomitaD1DePlanta2PorMes(
+  pesadas: { fecha: string; tipo: string | null; origen: string | null; toneladas: number }[]
+): { yacimientoCodigo: string; mes: string; toneladas: number }[] {
+  const porMes = new Map<string, number>();
+  for (const p of pesadas) {
+    if (p.tipo !== "dolomita_d1") continue;
+    if ((p.origen ?? "").toUpperCase().replace(/\s+/g, "") !== "PT2") continue;
+    const mes = p.fecha.slice(0, 7);
+    porMes.set(mes, (porMes.get(mes) ?? 0) + p.toneladas);
+  }
+  return [...porMes.entries()].map(([mes, toneladas]) => ({ yacimientoCodigo: "D1", mes, toneladas }));
+}
+
+/** Junta dos listas de acarreo por yacimiento y mes, sumando lo que coincide. */
+export function sumarAcarreosPorYacimiento(
+  ...listas: { yacimientoCodigo: string; mes: string; toneladas: number }[][]
+): { yacimientoCodigo: string; mes: string; toneladas: number }[] {
+  const total = new Map<string, number>();
+  for (const l of listas) {
+    for (const a of l) {
+      const clave = `${a.yacimientoCodigo}|${a.mes}`;
+      total.set(clave, (total.get(clave) ?? 0) + a.toneladas);
+    }
+  }
+  return [...total.entries()].map(([clave, toneladas]) => {
+    const [yacimientoCodigo, mes] = clave.split("|");
+    return { yacimientoCodigo, mes, toneladas };
+  });
+}
+
 export interface ToneladasDeOrigenExterno {
   /** Caliza que se compra en Loma Negra (origen "L NEGRA"), no la de cantera propia C1/C3. */
   calizaLomaNegra: number;
