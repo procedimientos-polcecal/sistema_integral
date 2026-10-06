@@ -12,7 +12,7 @@ segundo proyecto de Supabase.
 
 Estado: **en producción, con el histórico cargado y la sincronización andando.**
 
-- Deploy: `https://sistema-integral-one.vercel.app`
+- Deploy: `https://www.polcecalpolysan.app`
 - Supabase: proyecto `sqfdqoxyqkaekxlluvpg`
 - 1.968 requerimientos, 293 proveedores, 42 ubicaciones, 9 áreas
   (medido el 14/09/2026)

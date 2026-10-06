@@ -22,6 +22,11 @@ así que la validación de verdad va del lado del servidor.
 
 Sin estos tres pasos el login no funciona, por más que el código esté bien.
 
+> **El dominio de producción es `https://www.polcecalpolysan.app`** (desde el
+> 06/10/2026; antes era `sistema-integral-one.vercel.app`). Donde abajo dice
+> `TU-DOMINIO`, va ése. Mientras queden links de correo sin usar del dominio
+> viejo, conviene dejar las dos entradas en *Redirect URLs*.
+
 ### 1. URL Configuration
 
 **Authentication → URL Configuration**:

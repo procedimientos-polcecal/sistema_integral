@@ -2,7 +2,7 @@
 
 Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
-https://sistema-integral-one.vercel.app
+https://www.polcecalpolysan.app
 
 Diez módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 **Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,

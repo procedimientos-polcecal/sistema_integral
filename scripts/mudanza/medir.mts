@@ -42,7 +42,7 @@ async function medir(nombre: string, url: string, headers: Record<string, string
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const app = process.env.NEXT_PUBLIC_APP_URL ?? "https://sistema-integral-one.vercel.app";
+const app = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.polcecalpolysan.app";
 
 if (!url || !key) {
   console.error("Faltan NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (usá --env-file=.env.local).");
