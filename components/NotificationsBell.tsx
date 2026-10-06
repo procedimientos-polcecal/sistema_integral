@@ -72,7 +72,13 @@ export function NotificationsBell() {
               {notificaciones === null ? "Cargando..." : "Sin novedades por ahora."}
             </div>
           ) : (
-            <div className="pb-1">
+            // El scroll va acá y no en el panel, que tiene `overflow-hidden`:
+            // sin esto, los avisos que pasan del alto de la pantalla quedan
+            // cortados y no hay forma de llegar a ellos. Dejándolo en la lista,
+            // el título "Notificaciones" queda fijo arriba. La lista creció
+            // cuando se sumaron los avisos de ritmo: de once como mucho a
+            // dieciocho para un admin_sistema.
+            <div className="max-h-[70vh] overflow-y-auto pb-1">
               {notificaciones.map((n) => (
                 <div
                   key={n.id}

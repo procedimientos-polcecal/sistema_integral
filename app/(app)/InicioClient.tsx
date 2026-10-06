@@ -173,12 +173,18 @@ export default function InicioClient({
 
         {/* Inventario no tenía tarjeta: quien sólo tiene ese módulo entraba al
             inicio y leía "no tenés acceso a ningún módulo". Lo que pide hacer
-            algo es lo que está bajo el stock de seguridad. */}
+            algo es lo que está bajo el stock de seguridad.
+
+            El color era #7C3AED, a un paso del #7E22CE de Trituración, y en la
+            grilla de tres columnas Inventario cae justo debajo de Remises, que
+            es azul. Ese violeta no salía de ningún lado —`app/(app)/inventario`
+            no tiene un solo hex propio—, así que se movió éste y no el de
+            Trituración, que sí es el color del módulo. */}
         {tiene("inventario") && (
           <ModuloCard
             titulo="Inventario"
             href="/inventario"
-            color="#7C3AED"
+            color="#334155"
             icon={<IconCajas />}
             ritmo={resumen?.ritmo.inventario}
             hero={resumen?.inventario ? { label: "Artículos bajo el mínimo", valor: resumen.inventario.faltantes } : null}
