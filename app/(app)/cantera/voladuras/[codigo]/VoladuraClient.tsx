@@ -22,6 +22,12 @@ const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
 const n = (v: string) => (v.trim() === "" ? null : Number(v));
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
+/** Un color por tipo de consumo, para que la lista de insumos no sea un bloque gris — detonador en ámbar (material peligroso), otros insumos en celeste. */
+const ESTILO_TIPO_CONSUMO: Record<"detonador" | "otros_insumos", { texto: string; punto: string; zebra: string }> = {
+  detonador: { texto: "text-amber-700", punto: "bg-amber-500", zebra: "#FFFBEB" },
+  otros_insumos: { texto: "text-cyan-700", punto: "bg-cyan-500", zebra: "#ECFEFF" },
+};
+
 /** Fuera del componente: definido adentro, cada tecleo desmonta el input y se pierde el foco. */
 function Campo({
   label,
@@ -49,22 +55,57 @@ interface TramoUI {
   pozos: string;
   metros: string;
 }
-interface RenglonUI {
-  insumo_id: string;
+
+/**
+ * Una fila del catálogo: cantidad y precio de UN insumo activo, ya resuelto
+ * por `insumo.id` — no hace falta elegirlo de un desplegable, aparecen los
+ * 15 de una. Vacío de cantidad es "no se usó", no un cero: se arma así a
+ * pedido del usuario ("no quiero apretar el + cada vez") en vez del
+ * esquema anterior de renglones dinámicos para TODO consumo.
+ */
+interface FilaCatalogoUI {
+  cantidad: string;
+  precio_usd: string;
+}
+
+/** Un consumo que no matchea ningún insumo activo del catálogo: texto libre nuevo, o uno viejo cuyo insumo se desactivó después. */
+interface RenglonOtroUI {
+  /** Si viene de un consumo viejo con insumo_id que ya no está activo, se preserva tal cual — no se reescribe a mano. */
+  insumo_id: string | null;
   insumo_raw: string;
   tipo: string;
   cantidad: string;
   precio_usd: string;
 }
 
-function aRenglon(c: Consumo): RenglonUI {
+function aRenglonOtro(c: Consumo): RenglonOtroUI {
   return {
-    insumo_id: c.insumo_id ?? "",
+    insumo_id: c.insumo_id,
     insumo_raw: c.insumo_raw ?? "",
     tipo: c.tipo ?? "otros_insumos",
     cantidad: c.cantidad == null ? "" : String(c.cantidad),
     precio_usd: c.precio_usd == null ? "" : String(c.precio_usd),
   };
+}
+
+/** Una fila por cada insumo activo, prellenada con lo que ya estaba cargado (si había) o el precio del catálogo. */
+function filasCatalogoIniciales(insumos: Insumo[], consumos: Consumo[]): Record<string, FilaCatalogoUI> {
+  const porInsumoId = new Map(consumos.filter((c) => c.insumo_id).map((c) => [c.insumo_id as string, c]));
+  const filas: Record<string, FilaCatalogoUI> = {};
+  for (const ins of insumos) {
+    const c = porInsumoId.get(ins.id);
+    filas[ins.id] = {
+      cantidad: c ? String(c.cantidad) : "",
+      precio_usd: c?.precio_usd != null ? String(c.precio_usd) : ins.precio_usd != null ? String(ins.precio_usd) : "",
+    };
+  }
+  return filas;
+}
+
+/** Los consumos que no son de ningún insumo activo — free-text o un insumo que se desactivó después de usarse. */
+function renglonesOtrosIniciales(insumos: Insumo[], consumos: Consumo[]): RenglonOtroUI[] {
+  const idsDelCatalogo = new Set(insumos.map((i) => i.id));
+  return consumos.filter((c) => !c.insumo_id || !idsDelCatalogo.has(c.insumo_id)).map(aRenglonOtro);
 }
 
 /** Los tramos guardados, o uno solo con el promedio escalar, para el estado inicial. */
@@ -206,7 +247,8 @@ export default function VoladuraClient({
   const [volFilas, setVolFilas] = useState<TramoUI[]>(
     tramosIniciales(voladura.vol_tramos, voladura.vol_pozos, voladura.vol_metros_por_pozo)
   );
-  const [renglones, setRenglones] = useState<RenglonUI[]>(consumos.map(aRenglon));
+  const [filasCatalogo, setFilasCatalogo] = useState<Record<string, FilaCatalogoUI>>(() => filasCatalogoIniciales(insumos, consumos));
+  const [renglonesOtros, setRenglonesOtros] = useState<RenglonOtroUI[]>(() => renglonesOtrosIniciales(insumos, consumos));
 
   const perfTramos = tramosLimpios(perfFilas);
   const volTramos = tramosLimpios(volFilas);
@@ -222,8 +264,14 @@ export default function VoladuraClient({
   });
 
   const consumoParaMonto = useMemo(
-    () => renglones.map((r) => ({ cantidad: n(r.cantidad), precio_usd: n(r.precio_usd), tipo: r.tipo })),
-    [renglones]
+    () => [
+      // Vacío de cantidad no cuenta — es "no se usó", no un cero.
+      ...insumos
+        .filter((ins) => filasCatalogo[ins.id]?.cantidad.trim() !== "")
+        .map((ins) => ({ cantidad: n(filasCatalogo[ins.id].cantidad), precio_usd: n(filasCatalogo[ins.id].precio_usd), tipo: ins.tipo })),
+      ...renglonesOtros.map((r) => ({ cantidad: n(r.cantidad), precio_usd: n(r.precio_usd), tipo: r.tipo })),
+    ],
+    [insumos, filasCatalogo, renglonesOtros]
   );
   const baseUsd = baseDeConsumosUsd(consumoParaMonto);
   const servicioUsd = baseUsd * TASA_SERVICIO_VOLADURA;
@@ -238,18 +286,13 @@ export default function VoladuraClient({
   });
   const desvio = desvioContraPlanilla(toneladas, voladura.toneladas_planilla);
 
-  function actualizarRenglon(i: number, cambios: Partial<RenglonUI>) {
-    setRenglones((prev) => prev.map((r, j) => (j === i ? { ...r, ...cambios } : r)));
+  function actualizarFilaCatalogo(insumoId: string, cambios: Partial<FilaCatalogoUI>) {
+    setFilasCatalogo((prev) => ({ ...prev, [insumoId]: { ...prev[insumoId], ...cambios } }));
     setOk(false);
   }
-  function elegirInsumo(i: number, insumoId: string) {
-    const ins = insumos.find((x) => x.id === insumoId);
-    actualizarRenglon(i, {
-      insumo_id: insumoId,
-      insumo_raw: "",
-      tipo: ins?.tipo ?? renglones[i].tipo,
-      precio_usd: ins?.precio_usd != null ? String(ins.precio_usd) : renglones[i].precio_usd,
-    });
+  function actualizarRenglonOtro(i: number, cambios: Partial<RenglonOtroUI>) {
+    setRenglonesOtros((prev) => prev.map((r, j) => (j === i ? { ...r, ...cambios } : r)));
+    setOk(false);
   }
 
   async function guardar() {
@@ -277,13 +320,25 @@ export default function VoladuraClient({
         vol_espaciamiento_m: f.vol_espaciamiento_m,
         vol_tc_usd: f.vol_tc_usd,
         observaciones: f.observaciones,
-        consumos: renglones.map((r) => ({
-          insumo_id: r.insumo_id || null,
-          insumo_raw: r.insumo_raw || null,
-          tipo: r.tipo,
-          cantidad: n(r.cantidad),
-          precio_usd: n(r.precio_usd),
-        })),
+        // El servidor descarta las que queden sin cantidad — acá se mandan
+        // las 15 del catálogo igual, vacías incluidas, así no hay que
+        // repetir ese filtro en dos lugares.
+        consumos: [
+          ...insumos.map((ins) => ({
+            insumo_id: ins.id,
+            insumo_raw: null,
+            tipo: ins.tipo,
+            cantidad: n(filasCatalogo[ins.id]?.cantidad ?? ""),
+            precio_usd: n(filasCatalogo[ins.id]?.precio_usd ?? ""),
+          })),
+          ...renglonesOtros.map((r) => ({
+            insumo_id: r.insumo_id,
+            insumo_raw: r.insumo_raw || null,
+            tipo: r.tipo,
+            cantidad: n(r.cantidad),
+            precio_usd: n(r.precio_usd),
+          })),
+        ],
       }),
     });
     setGuardando(false);
@@ -463,76 +518,120 @@ export default function VoladuraClient({
       <section className="mt-4 card p-4">
         <h2 className="text-sm font-semibold">Consumos</h2>
         <p className="text-xs text-slate-500">
-          De acá sale el monto de la voladura. El precio prellena del catálogo y se puede pisar.
+          De acá sale el monto de la voladura. El precio prellena del catálogo y se puede pisar. Lo que
+          se deja sin cantidad no se usó y no entra en el total.
         </p>
-        <div className="mt-3 space-y-2">
-          {renglones.map((r, i) => (
-            <div key={i} className="grid grid-cols-12 items-center gap-2">
-              <select
-                className="col-span-4 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                disabled={dis}
-                value={r.insumo_id}
-                onChange={(e) => elegirInsumo(i, e.target.value)}
-              >
-                <option value="">— insumo del catálogo —</option>
-                {insumos
-                  .filter((ins) => ins.tipo !== "voladura")
-                  .map((ins) => (
-                    <option key={ins.id} value={ins.id}>{ins.nombre}</option>
-                  ))}
-              </select>
-              {r.insumo_id === "" ? (
-                <input
-                  className="col-span-3 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                  disabled={dis}
-                  placeholder="o escribilo"
-                  value={r.insumo_raw}
-                  onChange={(e) => actualizarRenglon(i, { insumo_raw: e.target.value })}
-                />
-              ) : (
-                <span className="col-span-3 text-xs text-slate-400">
-                  {ETIQUETA_TIPO_CONSUMO[r.tipo as keyof typeof ETIQUETA_TIPO_CONSUMO] ?? r.tipo}
-                </span>
-              )}
-              <input
-                className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                disabled={dis}
-                placeholder="cant."
-                value={r.cantidad}
-                onChange={(e) => actualizarRenglon(i, { cantidad: e.target.value })}
-              />
-              <input
-                className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                disabled={dis}
-                placeholder="USD"
-                value={r.precio_usd}
-                onChange={(e) => actualizarRenglon(i, { precio_usd: e.target.value })}
-              />
-              {!dis && (
-                <button
-                  onClick={() => setRenglones((prev) => prev.filter((_, j) => j !== i))}
-                  className="col-span-1 text-slate-400 hover:text-red-600"
-                  aria-label="Quitar"
-                >
-                  ✕
-                </button>
-              )}
+
+        {(["detonador", "otros_insumos"] as const).map((tipo) => {
+          const delTipo = insumos.filter((ins) => ins.tipo === tipo);
+          if (delTipo.length === 0) return null;
+          const estilo = ESTILO_TIPO_CONSUMO[tipo];
+          return (
+            <div key={tipo} className="mt-3">
+              <p className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${estilo.texto}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${estilo.punto}`} />
+                {ETIQUETA_TIPO_CONSUMO[tipo]}
+              </p>
+              <div className="mt-1 overflow-hidden rounded-lg border border-slate-100">
+                {delTipo.map((ins, i) => {
+                  const fila = filasCatalogo[ins.id] ?? { cantidad: "", precio_usd: "" };
+                  return (
+                    <div
+                      key={ins.id}
+                      className="grid grid-cols-12 items-center gap-2 px-2 py-1.5"
+                      style={{ backgroundColor: i % 2 === 1 ? estilo.zebra : undefined }}
+                    >
+                      <span className="col-span-7 text-sm text-slate-700">{ins.nombre}</span>
+                      <input
+                        className="col-span-2 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
+                        disabled={dis}
+                        placeholder="cant."
+                        value={fila.cantidad}
+                        onChange={(e) => actualizarFilaCatalogo(ins.id, { cantidad: e.target.value })}
+                      />
+                      <input
+                        className="col-span-3 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
+                        disabled={dis}
+                        placeholder="USD"
+                        value={fila.precio_usd}
+                        onChange={(e) => actualizarFilaCatalogo(ins.id, { precio_usd: e.target.value })}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          ))}
+          );
+        })}
+
+        {/* ── Otros, fuera del catálogo ── */}
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-purple-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+            Otros, fuera del catálogo
+          </p>
+          <div className="mt-2 space-y-2">
+            {renglonesOtros.map((r, i) => (
+              <div key={i} className="grid grid-cols-12 items-center gap-2">
+                {r.insumo_id ? (
+                  <span className="col-span-4 text-xs text-slate-400" title="Era un insumo del catálogo que se desactivó después de cargarse">
+                    (insumo desactivado)
+                  </span>
+                ) : (
+                  <input
+                    className="col-span-4 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                    disabled={dis}
+                    placeholder="Nombre"
+                    value={r.insumo_raw}
+                    onChange={(e) => actualizarRenglonOtro(i, { insumo_raw: e.target.value })}
+                  />
+                )}
+                <select
+                  className="col-span-3 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  disabled={dis || r.insumo_id !== null}
+                  value={r.tipo}
+                  onChange={(e) => actualizarRenglonOtro(i, { tipo: e.target.value })}
+                >
+                  <option value="detonador">{ETIQUETA_TIPO_CONSUMO.detonador}</option>
+                  <option value="otros_insumos">{ETIQUETA_TIPO_CONSUMO.otros_insumos}</option>
+                </select>
+                <input
+                  className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  disabled={dis}
+                  placeholder="cant."
+                  value={r.cantidad}
+                  onChange={(e) => actualizarRenglonOtro(i, { cantidad: e.target.value })}
+                />
+                <input
+                  className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  disabled={dis}
+                  placeholder="USD"
+                  value={r.precio_usd}
+                  onChange={(e) => actualizarRenglonOtro(i, { precio_usd: e.target.value })}
+                />
+                {!dis && (
+                  <button
+                    onClick={() => setRenglonesOtros((prev) => prev.filter((_, j) => j !== i))}
+                    className="col-span-1 text-slate-400 hover:text-red-600"
+                    aria-label="Quitar"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {!dis && (
+            <button
+              onClick={() =>
+                setRenglonesOtros((prev) => [...prev, { insumo_id: null, insumo_raw: "", tipo: "otros_insumos", cantidad: "", precio_usd: "" }])
+              }
+              className="mt-2 text-sm text-slate-600 underline"
+            >
+              + agregar otro insumo
+            </button>
+          )}
         </div>
-        {!dis && (
-          <button
-            onClick={() =>
-              setRenglones((prev) => [
-                ...prev,
-                { insumo_id: "", insumo_raw: "", tipo: "otros_insumos", cantidad: "", precio_usd: "" },
-              ])
-            }
-            className="mt-2 text-sm text-slate-600 underline"
-          >
-            + agregar renglón
-          </button>
-        )}
 
         <div className="mt-3 flex justify-between border-t border-slate-100 pt-2 text-sm">
           <span className="text-slate-500">

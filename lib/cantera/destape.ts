@@ -202,6 +202,36 @@ export interface FilaResumenYacimiento {
   costoTotal: number;
 }
 
+export interface AcarreoDeDestape {
+  acarreoId: string;
+  fleteroId: string;
+  fecha: string;
+  horas: number;
+}
+
+/**
+ * Las horas "horas_destape" de Acarreo que todavía no tienen un registro de
+ * Destape que las clasifique con un yacimiento — el pool del que elige el
+ * formulario de carga en vez de pedir fletero y horas de nuevo (eso ya se
+ * cargó en Acarreo). Pivote del 01/10/2026: antes Destape pedía el fletero
+ * y las horas a mano, duplicando lo que ya estaba en Acarreo.
+ *
+ * Asume que `acarreosHorasDestape` ya viene filtrado a `tipo =
+ * "horas_destape"` (quien llama lo trae así de `traerAcarreos`) —
+ * "horas_movimiento_interno" comparte la tarifa pero es una actividad
+ * distinta y no entra acá, mismo criterio que ya usaba la referencia
+ * cruzada de la pantalla de Destape antes de este cambio.
+ */
+export function horasDeAcarreoSinClasificar(
+  acarreosHorasDestape: { id: string; fleteroId: string | null; fecha: string; cantidad: number }[],
+  acarreoIdsYaClasificados: ReadonlySet<string>
+): AcarreoDeDestape[] {
+  return acarreosHorasDestape
+    .filter((a) => a.fleteroId !== null && !acarreoIdsYaClasificados.has(a.id))
+    .map((a) => ({ acarreoId: a.id, fleteroId: a.fleteroId!, fecha: a.fecha, horas: a.cantidad }))
+    .sort((a, b) => (a.fecha === b.fecha ? a.fleteroId.localeCompare(b.fleteroId) : a.fecha < b.fecha ? 1 : -1));
+}
+
 /** "Resumen → Por yacimiento" — junta todos los registros de un período. */
 export function resumenPorYacimiento(
   registros: (RegistroDestape & { yacimientoCodigo: string | null })[],

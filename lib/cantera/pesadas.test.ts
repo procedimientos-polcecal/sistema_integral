@@ -9,6 +9,9 @@ import {
   sumarPesadasAgrupadasPorTipoMes,
   toneladasPorYacimientoDesdePesadas,
   patentesParaMostrar,
+  toneladasDeOrigenesExternos,
+  toneladasDolomitaD1DePlanta2PorMes,
+  sumarAcarreosPorYacimiento,
 } from "./pesadas";
 import type { PesadaDB } from "./types";
 
@@ -234,3 +237,59 @@ describe("sumarPesadasAgrupadasPorTipoMes", () => {
   });
 });
 
+
+describe("toneladasDeOrigenesExternos", () => {
+  const pesadas = [
+    { fecha: "2026-08-03", tipo: "caliza", origen: "L NEGRA", toneladas: 30 },
+    { fecha: "2026-08-04", tipo: "caliza", origen: "LNEGRA", toneladas: 10 },
+    { fecha: "2026-08-05", tipo: "caliza", origen: "C3", toneladas: 500 },
+    { fecha: "2026-08-06", tipo: "finos_caliza", origen: "L NEGRA", toneladas: 7 },
+    { fecha: "2026-08-07", tipo: "material_desde_pavone", origen: "PAVONE", toneladas: 12 },
+    { fecha: "2026-08-08", tipo: "material_desde_pavone", origen: "SERJEN", toneladas: 99 },
+    { fecha: "2026-07-30", tipo: "caliza", origen: "L NEGRA", toneladas: 1000 },
+    { fecha: "2026-08-10", tipo: "dolomita_d1", origen: "PT 2", toneladas: 15 },
+    { fecha: "2026-08-11", tipo: "dolomita_d1", origen: "P T 2", toneladas: 10 },
+    { fecha: "2026-08-12", tipo: "dolomita_d6", origen: "PT 2", toneladas: 33 }, // D6: no es D1
+  ];
+
+  it("suma la caliza de Loma Negra y la piedra de Pavone del mes pedido", () => {
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 111, dolomitaD1DePt2: 25 });
+  });
+
+  it("Pavone suma lo que dice PAVONE y lo que dice SERJEN; Loma Negra no mezcla los finos", () => {
+    const r = toneladasDeOrigenesExternos(pesadas, "2026-08");
+    expect(r.calizaLomaNegra).toBe(40); // sin los 7 de finos
+    expect(r.piedraPavone).toBe(12 + 99);
+  });
+
+  it("un mes sin nada da ceros", () => {
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-09")).toEqual({ calizaLomaNegra: 0, piedraPavone: 0, dolomitaD1DePt2: 0 });
+  });
+});
+
+describe("dolomita D1 de PT 2 cuenta como acarreo de D1 (Cubicación)", () => {
+  const pesadas = [
+    { fecha: "2026-08-03", tipo: "dolomita_d1", origen: "PT 2", toneladas: 30 },
+    { fecha: "2026-08-09", tipo: "dolomita_d1", origen: "P T 2", toneladas: 20 },
+    { fecha: "2026-09-01", tipo: "dolomita_d1", origen: "PT 2", toneladas: 5 },
+    { fecha: "2026-08-04", tipo: "dolomita_d6", origen: "PT 2", toneladas: 33 }, // D6: no es de D1
+    { fecha: "2026-08-05", tipo: "dolomita_d1", origen: "D1", toneladas: 999 }, // ya lo cuenta la función SQL
+  ];
+
+  it("suma por mes, con PT 2 y P T 2 juntos, sólo de dolomita D1", () => {
+    expect(toneladasDolomitaD1DePlanta2PorMes(pesadas)).toEqual([
+      { yacimientoCodigo: "D1", mes: "2026-08", toneladas: 50 },
+      { yacimientoCodigo: "D1", mes: "2026-09", toneladas: 5 },
+    ]);
+  });
+
+  it("se suma al acarreo de D1 que ya había, mes a mes, sin tocar los otros yacimientos", () => {
+    const r = sumarAcarreosPorYacimiento(
+      [{ yacimientoCodigo: "D1", mes: "2026-08", toneladas: 1000 }, { yacimientoCodigo: "D6", mes: "2026-08", toneladas: 400 }],
+      toneladasDolomitaD1DePlanta2PorMes(pesadas)
+    );
+    expect(r.find((a) => a.yacimientoCodigo === "D1" && a.mes === "2026-08")!.toneladas).toBe(1050);
+    expect(r.find((a) => a.yacimientoCodigo === "D6")!.toneladas).toBe(400);
+    expect(r.find((a) => a.yacimientoCodigo === "D1" && a.mes === "2026-09")!.toneladas).toBe(5);
+  });
+});

@@ -114,6 +114,21 @@ export function montoAcarreo(cantidad: number | null, tarifa: TarifaAcarreo | nu
   return cantidad * tarifa.tarifa;
 }
 
+/**
+ * Los fleteros con camión grande cobran el DOBLE de la tarifa por hora —
+ * pedido del usuario (02/10/2026): Orsatti (1 y 2) y Schneider. Mismo
+ * criterio que Destape, donde "Camión grande" es la tarifa de horas × 2
+ * (`lib/cantera/destape.ts`). Aplica sólo a los renglones en horas; el
+ * material por tonelada no cambia. Por nombre y no por columna en la base:
+ * es una lista chica y estable, mismo criterio que `FLETEROS_CONOCIDOS`.
+ */
+const FLETEROS_CON_CAMION_GRANDE = ["orsatti", "schneider"];
+
+export function multiplicadorDeHoras(nombreFletero: string): number {
+  const n = nombreFletero.trim().toLowerCase();
+  return FLETEROS_CON_CAMION_GRANDE.some((f) => n === f || n.startsWith(`${f} `)) ? 2 : 1;
+}
+
 export interface AcarreoPlano {
   fleteroId: string;
   tipo: string;
@@ -142,7 +157,9 @@ export function resumenPorFletero(
   acarreos: AcarreoPlano[],
   tarifas: TarifaAcarreo[],
   fleteroId: string,
-  mes: string
+  mes: string,
+  /** `multiplicadorDeHoras(nombre)` del fletero: 2 si tiene camión grande. Sólo afecta a los tipos en horas. */
+  multiplicadorHoras = 1
 ): FilaResumenFletero {
   const deEsteFleteroYMes = acarreos.filter((a) => a.fleteroId === fleteroId && a.mes.slice(0, 7) === mes.slice(0, 7));
 
@@ -153,7 +170,9 @@ export function resumenPorFletero(
 
   const porTipo = [...cantidadPorTipo.entries()].map(([tipo, cantidad]) => {
     const tarifa = tarifaVigente(tarifas, tipo, mes);
-    return { tipo, cantidad, monto: montoAcarreo(cantidad, tarifa) };
+    const monto = montoAcarreo(cantidad, tarifa);
+    const factor = tipoDeAcarreo(tipo)?.unidad === "hora" ? multiplicadorHoras : 1;
+    return { tipo, cantidad, monto: monto === null ? null : monto * factor };
   });
 
   return {
@@ -264,18 +283,85 @@ export function resumenAnualPorTipo(
     .sort((a, b) => b.totalAnual - a.totalAnual);
 }
 
+/**
+ * Colapsa las variantes de texto libre de una planta de trituración a una
+ * sola forma canónica, antes de agrupar destinos en las tablas de acarreo.
+ * "PT 1" y "P T 1" son la misma planta tipeada con un espacio de más en el
+ * medio —4957 pesadas reales contra 463, medido— y lo mismo pasa con "PT 3"
+ * / "P T 3": sin esto, las dos quedaban como columnas separadas. Mismo
+ * problema que ya resolvió `plantaDelDestino` para el cruce con Trituración
+ * (`lib/trituracion/cruceCantera.ts`), pero acá no alcanza con reducir a un
+ * número: el resto de los destinos (RESERVA A, GALPÓN, un código de
+ * yacimiento) tienen que seguir siendo su propia columna, así que sólo se
+ * canonicaliza el patrón "P T <n>" y se recortan espacios repetidos en
+ * general — no se inventa una normalización más agresiva sin haberla visto
+ * en datos reales.
+ */
+const PATRON_PLANTA_CON_ESPACIOS = /^P\s*T\s*(\d)$/i;
+
+export function normalizarDestino(destinoRaw: string | null | undefined): string {
+  const colapsado = (destinoRaw ?? "").trim().replace(/\s+/g, " ");
+  if (!colapsado) return "(sin destino)";
+  const m = colapsado.match(PATRON_PLANTA_CON_ESPACIOS);
+  return m ? `PT ${m[1]}` : colapsado;
+}
+
+/**
+ * Cuando el material tiene un origen que importa ver aparte, ese origen pasa
+ * a ser su propio renglón de las matrices material × destino: "Caliza" con
+ * origen L NEGRA es Caliza de Loma Negra (la compra, no la de cantera propia
+ * C1/C3), y la Dolomita que sale de PT 2 es otra cosa que la de D1/D6 que
+ * viene del yacimiento. Pedido del usuario (02/10/2026), medido sobre las
+ * pesadas reales: caliza|L NEGRA 106, dolomita_d1|PT 2 122, dolomita_d6|PT 2 1.
+ *
+ * El origen se compara sin espacios ni mayúsculas ("L NEGRA", "LNEGRA",
+ * "P T 2" son la misma cosa, igual que el destino). Cualquier otra
+ * combinación de tipo y origen sigue siendo el renglón de siempre: no se
+ * inventa una variante sin haberla visto en los datos.
+ */
+export function variantePorOrigen(tipo: string, origen: string | null | undefined): { clave: string; sufijo: string } | null {
+  const o = (origen ?? "").toUpperCase().replace(/\s+/g, "");
+  if (tipo === "caliza" && o === "LNEGRA") return { clave: `${tipo}:lnegra`, sufijo: "de Loma Negra" };
+  if ((tipo === "dolomita_d1" || tipo === "dolomita_d6") && o === "PT2") return { clave: `${tipo}:pt2`, sufijo: "de PT 2" };
+  return null;
+}
+
+/** La clave de renglón y su etiqueta, con el origen aparte si corresponde. */
+function renglonDeMaterial(tipo: string, origen: string | null | undefined): { clave: string; etiqueta: string } {
+  const base = tipoDeAcarreo(tipo)?.etiqueta ?? tipo;
+  const v = variantePorOrigen(tipo, origen);
+  return v ? { clave: v.clave, etiqueta: `${base} ${v.sufijo}` } : { clave: tipo, etiqueta: base };
+}
+
 function construirPorDestino(
-  entradas: { tipo: string; destino: string | null; cantidad: number }[]
-): { destinos: string[]; porTipoDestino: Map<string, number> } {
-  const porTipoDestino = new Map<string, number>();
+  entradas: { tipo: string; origen?: string | null; destino: string | null; cantidad: number }[]
+): { destinos: string[]; porRenglonDestino: Map<string, number> } {
+  const porRenglonDestino = new Map<string, number>();
   const totalesPorDestino = new Map<string, number>();
   for (const e of entradas) {
-    const destino = e.destino?.trim() || "(sin destino)";
-    porTipoDestino.set(`${e.tipo}|${destino}`, (porTipoDestino.get(`${e.tipo}|${destino}`) ?? 0) + e.cantidad);
+    const destino = normalizarDestino(e.destino);
+    const { clave } = renglonDeMaterial(e.tipo, e.origen);
+    porRenglonDestino.set(`${clave}|${destino}`, (porRenglonDestino.get(`${clave}|${destino}`) ?? 0) + e.cantidad);
     totalesPorDestino.set(destino, (totalesPorDestino.get(destino) ?? 0) + e.cantidad);
   }
   const destinos = [...totalesPorDestino.keys()].sort((a, b) => totalesPorDestino.get(b)! - totalesPorDestino.get(a)!);
-  return { destinos, porTipoDestino };
+  return { destinos, porRenglonDestino };
+}
+
+/** Los renglones de material que tuvieron algo, en el orden de `TIPOS_DE_ACARREO` y con cada variante por origen pegada a su material. */
+function renglonesConDatos(entradas: { tipo: string; origen?: string | null }[]): { clave: string; etiqueta: string }[] {
+  const vistos = new Map<string, string>();
+  for (const e of entradas) {
+    const r = renglonDeMaterial(e.tipo, e.origen);
+    vistos.set(r.clave, r.etiqueta);
+  }
+  const resultado: { clave: string; etiqueta: string }[] = [];
+  for (const t of TIPOS_DE_ACARREO) {
+    for (const [clave, etiqueta] of vistos) {
+      if (clave === t.codigo || clave.startsWith(`${t.codigo}:`)) resultado.push({ clave, etiqueta });
+    }
+  }
+  return resultado;
 }
 
 export interface FilaTipoPorDestino {
@@ -302,17 +388,16 @@ export interface MatrizPorDestino {
  * función no filtra por tipo de antemano.
  */
 export function toneladasPorMaterialYDestino(
-  entradas: { tipo: string; mes: string; destino: string | null; cantidad: number }[],
+  entradas: { tipo: string; origen?: string | null; mes: string; destino: string | null; cantidad: number }[],
   mes: string
 ): MatrizPorDestino {
   const delMes = entradas.filter((e) => e.mes.slice(0, 7) === mes.slice(0, 7));
-  const { destinos, porTipoDestino } = construirPorDestino(delMes);
-  const tiposConDatos = new Set(delMes.map((e) => e.tipo));
+  const { destinos, porRenglonDestino } = construirPorDestino(delMes);
 
-  const filas: FilaTipoPorDestino[] = TIPOS_DE_ACARREO.filter((t) => tiposConDatos.has(t.codigo)).map((t) => ({
-    tipo: t.codigo,
-    etiqueta: t.etiqueta,
-    porDestino: Object.fromEntries(destinos.map((d) => [d, porTipoDestino.get(`${t.codigo}|${d}`) ?? 0])),
+  const filas: FilaTipoPorDestino[] = renglonesConDatos(delMes).map((r) => ({
+    tipo: r.clave,
+    etiqueta: r.etiqueta,
+    porDestino: Object.fromEntries(destinos.map((d) => [d, porRenglonDestino.get(`${r.clave}|${d}`) ?? 0])),
   }));
 
   const totalesPorDestino = Object.fromEntries(
@@ -341,27 +426,28 @@ export interface DetalleDiarioPorDestino {
  * días del mes daría, casi siempre, una fila de puros "-".
  */
 export function detalleDiarioPorDestino(
-  entradas: { fecha: string; tipo: string; destino: string | null; cantidad: number }[],
+  entradas: { fecha: string; tipo: string; origen?: string | null; destino: string | null; cantidad: number }[],
   mes: string
 ): DetalleDiarioPorDestino {
   const delMes = entradas.filter((e) => e.fecha.slice(0, 7) === mes.slice(0, 7));
   const { destinos } = construirPorDestino(delMes);
 
   const porFechaTipoDestino = new Map<string, number>();
-  const fechasYTipos = new Map<string, { fecha: string; tipo: string }>();
+  const fechasYTipos = new Map<string, { fecha: string; tipo: string; etiqueta: string }>();
   for (const e of delMes) {
-    const destino = e.destino?.trim() || "(sin destino)";
-    const claveFT = `${e.fecha}|${e.tipo}`;
-    fechasYTipos.set(claveFT, { fecha: e.fecha, tipo: e.tipo });
+    const destino = normalizarDestino(e.destino);
+    const renglon = renglonDeMaterial(e.tipo, e.origen);
+    const claveFT = `${e.fecha}|${renglon.clave}`;
+    fechasYTipos.set(claveFT, { fecha: e.fecha, tipo: renglon.clave, etiqueta: renglon.etiqueta });
     const clave = `${claveFT}|${destino}`;
     porFechaTipoDestino.set(clave, (porFechaTipoDestino.get(clave) ?? 0) + e.cantidad);
   }
 
   const filas: FilaDiariaPorDestino[] = [...fechasYTipos.values()]
-    .map(({ fecha, tipo }) => ({
+    .map(({ fecha, tipo, etiqueta }) => ({
       fecha,
       tipo,
-      etiqueta: tipoDeAcarreo(tipo)?.etiqueta ?? tipo,
+      etiqueta,
       porDestino: Object.fromEntries(destinos.map((d) => [d, porFechaTipoDestino.get(`${fecha}|${tipo}|${d}`) ?? 0])),
     }))
     .sort((a, b) => (a.fecha === b.fecha ? a.etiqueta.localeCompare(b.etiqueta) : a.fecha.localeCompare(b.fecha)));

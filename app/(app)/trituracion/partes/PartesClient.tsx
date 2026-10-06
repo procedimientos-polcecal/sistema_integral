@@ -186,7 +186,7 @@ export default function PartesClient({
   /** Lo que Cantera registró llegado a esta planta ese día ("YYYY-MM-DD" → total + desglose por material), de `lib/trituracion/cruceCantera.ts`. Sólo trae los días con algo llegado. */
   llegadoPorFecha: Record<string, { total: number; porTipo: { etiqueta: string; toneladas: number }[] }>;
   /** Sólo viene con datos en Planta 2 (`cantera_acarreos`, tipo "viaje_de_bloques") — es su indicador de acarreo, porque casi no tiene pesada propia. "YYYY-MM-DD" → horas cargadas ese día (suma de todos los fleteros). */
-  viajesDeBloquesPorFecha: Record<string, number>;
+  viajesDeBloquesPorFecha: Record<string, { horas: number; fleteros: { nombre: string; horas: number }[] }>;
 }) {
   const router = useRouter();
   const irA = (p: string, m: string) => router.push(`/trituracion/partes?planta=${p}&mes=${m}`);
@@ -454,8 +454,11 @@ export default function PartesClient({
                 {viajesDeBloquesPorFecha[form.fecha] ? (
                   <span>
                     Acarreo (Cantera) registró{" "}
-                    <span className="font-semibold" style={{ color: colorPlanta }}>{num1.format(viajesDeBloquesPorFecha[form.fecha])} horas de viaje de bloques</span>{" "}
-                    ese día.
+                    <span className="font-semibold" style={{ color: colorPlanta }}>{num1.format(viajesDeBloquesPorFecha[form.fecha].horas)} horas de viaje de bloques</span>{" "}
+                    ese día:{" "}
+                    {viajesDeBloquesPorFecha[form.fecha].fleteros.map((f, i) => (
+                      <span key={f.nombre}>{i > 0 && ", "}{f.nombre} ({num1.format(f.horas)} h)</span>
+                    ))}.
                   </span>
                 ) : (
                   <span className="text-slate-500">Acarreo (Cantera) no tiene horas de viaje de bloques cargadas ese día.</span>
@@ -692,7 +695,7 @@ export default function PartesClient({
                         </td>
                         {mostrarViajesDeBloques && (
                           <td className="text-right font-mono tabular-nums text-slate-500">
-                            {viajesDeBloquesPorFecha[p.fecha] ? num1.format(viajesDeBloquesPorFecha[p.fecha]) : "—"}
+                            {viajesDeBloquesPorFecha[p.fecha] ? num1.format(viajesDeBloquesPorFecha[p.fecha].horas) : "—"}
                           </td>
                         )}
                         <td className="text-right font-mono tabular-nums">{d.productividadReal !== null ? num1.format(d.productividadReal) : "—"}</td>

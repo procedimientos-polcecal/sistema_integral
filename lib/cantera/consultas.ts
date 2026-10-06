@@ -308,6 +308,10 @@ export interface FiltrosDeAcarreo {
   mes?: string;
   /** "YYYY": trae ese año calendario completo. Se ignora si también viene `mes`. */
   anio?: string;
+  /** "YYYY-MM-DD", por `fecha` y no por `mes` — para una ventana que no calza con un mes calendario (el selector de "horas sin clasificar" de Destape). */
+  desde?: string;
+  /** "YYYY-MM-DD" */
+  hasta?: string;
 }
 
 /** Una fila por fletero+tipo+día (`unique(fletero_id, tipo, fecha)` desde el 21/09/2026) — puede haber varias del mismo fletero+tipo en un mes, una por día cargado. */
@@ -331,6 +335,8 @@ export async function traerAcarreos(
     } else if (filtros.anio) {
       q = q.gte("mes", `${filtros.anio}-01-01`).lte("mes", `${filtros.anio}-12-31`);
     }
+    if (filtros.desde) q = q.gte("fecha", filtros.desde);
+    if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
     return q.order("fecha", { ascending: false }).order("tipo").range(desde, hasta);
   });
 }
@@ -478,6 +484,33 @@ export async function traerPesadasAgrupadasPorOrigenMes(
 }
 
 /**
+ * Las pesadas de dolomita D1 con origen PT 2 (unas 120 hoy) — para
+ * sumarlas al acarreo de D1 en Cubicación (`toneladasDolomitaD1DePlanta2PorMes`,
+ * `./pesadas.ts`). Se trae acotado a ese tipo y origen en vez de cambiar la
+ * función SQL de arriba, que habría pedido una migración: son pocas filas. El
+ * filtro `P%T%2` agarra "PT 2" y "P T 2"; la comparación estricta se hace en
+ * la función pura. Si la consulta falla, devuelve `[]`: Cubicación sigue
+ * con el acarreo de siempre en vez de caerse.
+ */
+export async function traerPesadasDolomitaD1DeOrigenPt2(
+  supabase: SupabaseClient
+): Promise<{ fecha: string; tipo: string | null; origen: string | null; toneladas: number }[]> {
+  try {
+    return await traerTodo((desde, hasta) =>
+      supabase
+        .from("cantera_pesadas")
+        .select("fecha, tipo, origen, toneladas")
+        .eq("tipo", "dolomita_d1")
+        .ilike("origen", "P%T%2")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    console.error("traerPesadasDolomitaD1DeOrigenPt2: no se pudo traer, Cubicación queda sin la dolomita de PT 2", e);
+    return [];
+  }
+}
+
+/**
  * Todos los cierres de cubicación cargados, de todos los yacimientos y
  * meses — la tabla es chica (un yacimiento × un mes por fila) y
  * `armarCierresCubicacion` (`./cubicacion.ts`) necesita el historial
@@ -485,13 +518,29 @@ export async function traerPesadasAgrupadasPorOrigenMes(
  * que se está mirando.
  */
 export async function traerCubicaciones(supabase: SupabaseClient): Promise<CubicacionDB[]> {
-  return traerTodo<CubicacionDB>((desde, hasta) =>
-    supabase
-      .from("cantera_cubicaciones")
-      .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
-      .order("mes")
-      .range(desde, hasta)
-  );
+  try {
+    return await traerTodo<CubicacionDB>((desde, hasta) =>
+      supabase
+        .from("cantera_cubicaciones")
+        .select("id, yacimiento_id, mes, existencia_final, existencia_acopio, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+        .order("mes")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    // Mientras la migración 20261006100136 no corrió, `existencia_acopio` no
+    // existe y esta consulta entera falla — sin esto, Cubicación se caía
+    // por completo en vez de verse sin el acopio. Cualquier otro error se
+    // relanza.
+    if (!(e instanceof Error) || !e.message.includes("existencia_acopio")) throw e;
+    const filas = await traerTodo<Omit<CubicacionDB, "existencia_acopio">>((desde, hasta) =>
+      supabase
+        .from("cantera_cubicaciones")
+        .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+        .order("mes")
+        .range(desde, hasta)
+    );
+    return filas.map((f) => ({ ...f, existencia_acopio: null }));
+  }
 }
 
 export interface FiltrosDeDestape {
@@ -506,12 +555,27 @@ export async function traerDestape(supabase: SupabaseClient, filtros: FiltrosDeD
   return traerTodo<DestapeDB>((desde, hasta) => {
     let q = supabase
       .from("cantera_destape")
-      .select("id, fecha, yacimiento_codigo, frente, tipo_recurso, operario_id, fletero_id, recurso_raw, equipo_id, equipo_o_vehiculo_raw, tipo_camion, horas, viajes, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en");
+      .select("id, fecha, yacimiento_codigo, frente, tipo_recurso, operario_id, fletero_id, recurso_raw, equipo_id, equipo_o_vehiculo_raw, tipo_camion, horas, viajes, observaciones, origen, sheets_pendiente, sheets_pendiente_en, cargado_por, cargado_en, actualizado_por, actualizado_en, acarreo_id");
     if (filtros.desde) q = q.gte("fecha", filtros.desde);
     if (filtros.hasta) q = q.lte("fecha", filtros.hasta);
     if (filtros.yacimientoCodigo) q = q.eq("yacimiento_codigo", filtros.yacimientoCodigo);
     return q.order("fecha", { ascending: false }).range(desde, hasta);
   });
+}
+
+/**
+ * Los `acarreo_id` que ya tiene asignado algún registro de Destape — para no
+ * volver a ofrecer esas horas en el selector de "horas de Acarreo sin
+ * clasificar" (`horasDeAcarreoSinClasificar`, `lib/cantera/destape.ts`). Sin
+ * filtro de fecha a propósito: un registro viejo de Destape podría apuntar a
+ * una fila de Acarreo que cae fuera de la ventana que se está mirando, y si
+ * no se la excluye igual vuelve a aparecer como si no estuviera clasificada.
+ */
+export async function traerAcarreoIdsClasificadosEnDestape(supabase: SupabaseClient): Promise<Set<string>> {
+  const filas = await traerTodo<{ acarreo_id: string }>((desde, hasta) =>
+    supabase.from("cantera_destape").select("acarreo_id").not("acarreo_id", "is", null).range(desde, hasta)
+  );
+  return new Set(filas.map((f) => f.acarreo_id));
 }
 
 export interface EmpleadoLiviano {
