@@ -65,8 +65,11 @@ describe("umbralDeRitmo", () => {
   });
 
   /*
-   * Los trece casos medidos contra producción el 06/10/2026. Si esta tabla
-   * deja de pasar, cambió la regla, no el dato: los huecos son históricos.
+   * Los doce casos que se pueden escribir como fila, medidos contra producción
+   * el 06/10/2026. El decimotercero de la tabla del spec es Producción, que
+   * nunca se cargó y no tiene hueco ni días que poner en la tupla: se prueba
+   * aparte, en `estaAtrasado` y en `ritmoPorModulo`. Si esta tabla deja de
+   * pasar, cambió la regla, no el dato: los huecos son históricos.
    */
   it("reproduce la tabla de validación del spec", () => {
     const casos: [string, number, number, number, boolean][] = [
@@ -295,7 +298,7 @@ export function ritmoPorModulo(filas: FilaRitmo[]): Partial<Record<Modulo, Ritmo
 npx vitest run lib/home/ritmo.test.ts
 ```
 
-Esperado: PASS, 11 tests.
+Esperado: PASS, 13 tests.
 
 - [ ] **Paso 5: `tsc` y commit**
 
