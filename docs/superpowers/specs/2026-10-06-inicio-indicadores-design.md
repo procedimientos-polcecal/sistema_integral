@@ -140,7 +140,7 @@ Dos elecciones que no son obvias:
 Son **trece fuentes para doce módulos**: Calidad tiene dos mitades que se cargan
 por separado, y la tarjeta muestra **la peor de las dos**.
 
-### Las cuatro trampas, que van comentadas en la migración
+### Las cinco trampas, que van comentadas en la migración
 
 - **Acotar a `fecha <= current_date`.** `calculos_diarios` tiene filas hasta el
   18/11 y nada impide que otra tabla las tenga. Sin el tope, `días_sin_cargar`
@@ -153,6 +153,12 @@ por separado, y la tarjeta muestra **la peor de las dos**.
   umbral al módulo y lo deja mudo durante los 180 días siguientes.
 - **El piso de 3.** Sin él, un módulo con dos días de historia tiene hueco máximo
   0, umbral 1, y grita cada fin de semana.
+- **La última fecha no sale de la ventana de 180 días.** La ventana es sólo para
+  el hueco máximo, que es lo único que tiene sentido que sea móvil. Si
+  `ultima_fecha` se calculara sobre ella, un módulo parado hace más de medio año
+  pasaría a informarse como «nunca se cargó» —Remises, con 70 días hoy, lo haría
+  al día 181—: falso, y además pierde cuántos días lleva parado. Con la historia
+  entera, `ultima_fecha is null` significa que la fuente no tuvo nunca una fila.
 
 ### La vista
 
@@ -174,6 +180,7 @@ with fuentes as (
   union all  select 'taller_vial',         fecha                    from taller_vial_cargas
   union all  select 'trituracion',         fecha                    from trituracion_partes
 ),
+-- Sólo para el hueco máximo: los últimos 180 días. NO alimenta `ultima`.
 dias as (
   select modulo, fecha
     from fuentes
@@ -189,14 +196,18 @@ huecos as (
 hueco_max as (
   select modulo, max(hueco)::int as hueco_max from huecos where hueco is not null group by modulo
 ),
+-- Toda la historia, acotada sólo a `<= current_date`: ver la quinta trampa.
 ultima as (
-  select modulo, max(fecha) as ultima_fecha from dias group by modulo
+  select modulo, max(fecha) as ultima_fecha
+    from fuentes
+   where fecha is not null
+     and fecha <= current_date
+   group by modulo
 )
 select m.modulo,
        u.ultima_fecha,
        (current_date - u.ultima_fecha)::int                        as dias_sin_cargar,
-       coalesce(h.hueco_max, 0)                                    as hueco_max,
-       greatest(3, least(coalesce(h.hueco_max, 0) + 1, 30))        as umbral
+       coalesce(h.hueco_max, 0)                                    as hueco_max
   from (values ('rrhh'),('remises'),('mantenimiento'),('compras'),('inventario'),
                ('produccion'),('despacho'),('facturacion'),('cantera'),('calidad'),
                ('calidad_envases'),('taller_vial'),('trituracion')) as m(modulo)
@@ -206,7 +217,9 @@ select m.modulo,
 
 `atrasado` **no se calcula en la vista**: la comparación vive en
 `lib/home/ritmo.ts`, que es donde se puede testear. La vista entrega los hechos
-—última fecha, días, hueco máximo, umbral— y la decisión es código puro.
+—última fecha, días, hueco máximo— y la decisión es código puro. El umbral
+tampoco se calcula en la vista: vive en `umbralDeRitmo`, y tenerlo en dos lados
+sería dos fuentes de verdad para la misma fórmula.
 
 `security_invoker = true` porque una vista en Postgres corre por defecto con los
 permisos de quien la creó y **saltearía el RLS de las trece tablas**. Con

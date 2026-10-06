@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cantidadDelAviso, estaAtrasado, ritmoPorModulo, umbralDeRitmo } from "./ritmo";
+import { cantidadDelAviso, estaAtrasado, ritmoDeFila, ritmoPorModulo, umbralDeRitmo } from "./ritmo";
 
 describe("umbralDeRitmo", () => {
   it("es el hueco más largo más uno", () => {
@@ -28,6 +28,13 @@ describe("umbralDeRitmo", () => {
    * nunca se cargó y no tiene hueco ni días que poner en la tupla: se prueba
    * aparte, en `estaAtrasado` y en `ritmoPorModulo`. Si esta tabla deja de
    * pasar, cambió la regla, no el dato: los huecos son históricos.
+   *
+   * Ojo con `facturacion`: es la única fila que se mide sobre `created_at::date`
+   * y no sobre `fecha`, así que su hueco depende del huso en que se corte el
+   * timestamp. Medido en UTC da 24 en vez de 22. La aserción no se cae —es
+   * autoconsistente, y con cualquiera de los dos el resultado es "no avisa"—
+   * pero la tabla es una medición, no una verdad: quien la rehaga en seis
+   * meses tiene que cortar el timestamp en el mismo huso para que dé 22.
    */
   it("reproduce la tabla de validación del spec", () => {
     const casos: [string, number, number, number, boolean][] = [
@@ -89,6 +96,18 @@ describe("cantidadDelAviso", () => {
   });
 });
 
+describe("ritmoDeFila", () => {
+  it("calcula el umbral con el hueco de la propia fila", () => {
+    const r = ritmoDeFila({ modulo: "x", ultima_fecha: "2026-10-03", dias_sin_cargar: 3, hueco_max: 10 });
+    expect(r).toEqual({ ultimaFecha: "2026-10-03", diasSinCargar: 3, umbral: 11, atrasado: false });
+  });
+
+  it("una fuente que nunca se cargó está atrasada", () => {
+    const r = ritmoDeFila({ modulo: "produccion", ultima_fecha: null, dias_sin_cargar: null, hueco_max: 0 });
+    expect(r).toEqual({ ultimaFecha: null, diasSinCargar: null, umbral: 3, atrasado: true });
+  });
+});
+
 describe("ritmoPorModulo", () => {
   const fila = (modulo: string, dias: number | null, huecoMax: number) => ({
     modulo,
@@ -117,6 +136,15 @@ describe("ritmoPorModulo", () => {
   it("Calidad prefiere la mitad que nunca se cargó", () => {
     const r = ritmoPorModulo([fila("calidad", 20, 3), fila("calidad_envases", null, 0)]);
     expect(r.calidad?.diasSinCargar).toBeNull();
+    expect(r.calidad?.atrasado).toBe(true);
+  });
+
+  // Cada mitad tiene su propio umbral: la que más días lleva parada no es
+  // necesariamente la que está peor. Carbonilla, 20 días con umbral 26, está al
+  // día; envases, 5 días con umbral 4, no.
+  it("Calidad compara cada mitad contra su propio umbral, no por días crudos", () => {
+    const r = ritmoPorModulo([fila("calidad", 20, 25), fila("calidad_envases", 5, 3)]);
+    expect(r.calidad?.diasSinCargar).toBe(5);
     expect(r.calidad?.atrasado).toBe(true);
   });
 

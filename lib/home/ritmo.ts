@@ -82,11 +82,30 @@ const FUENTES_POR_MODULO: Record<Modulo, string[]> = {
   trituracion: ["trituracion"],
 };
 
-/** Null —nunca se cargó— es peor que cualquier cantidad de días. */
-function peor(a: FilaRitmo, b: FilaRitmo): FilaRitmo {
-  if (a.dias_sin_cargar === null) return a;
-  if (b.dias_sin_cargar === null) return b;
-  return b.dias_sin_cargar > a.dias_sin_cargar ? b : a;
+/** El ritmo de una sola fuente, con el umbral calculado sobre su propio hueco. */
+export function ritmoDeFila(fila: FilaRitmo): Ritmo {
+  const umbral = umbralDeRitmo(fila.hueco_max);
+  return {
+    ultimaFecha: fila.ultima_fecha,
+    diasSinCargar: fila.dias_sin_cargar,
+    umbral,
+    atrasado: estaAtrasado(fila.dias_sin_cargar, umbral),
+  };
+}
+
+/**
+ * Null —nunca se cargó— es lo peor; después, el que más umbrales lleva parado.
+ *
+ * Se compara por `días / umbral` y no por días crudos porque cada mitad tiene
+ * su propio umbral: una con 20 días y umbral 26 está al día, y otra con 5 días
+ * y umbral 4 no. Elegir por días crudos mostraría la primera y taparía a la
+ * segunda, un dato equivocado que no se nota nunca. Con umbrales iguales la
+ * razón ordena igual que los días.
+ */
+function peor(a: Ritmo, b: Ritmo): Ritmo {
+  if (a.diasSinCargar === null) return a;
+  if (b.diasSinCargar === null) return b;
+  return b.diasSinCargar / b.umbral > a.diasSinCargar / a.umbral ? b : a;
 }
 
 export function ritmoPorModulo(filas: FilaRitmo[]): Partial<Record<Modulo, Ritmo>> {
@@ -94,17 +113,13 @@ export function ritmoPorModulo(filas: FilaRitmo[]): Partial<Record<Modulo, Ritmo
   const resultado: Partial<Record<Modulo, Ritmo>> = {};
 
   for (const [modulo, fuentes] of Object.entries(FUENTES_POR_MODULO) as [Modulo, string[]][]) {
-    const presentes = fuentes.map((f) => porFuente.get(f)).filter((f): f is FilaRitmo => f !== undefined);
+    const presentes = fuentes
+      .map((f) => porFuente.get(f))
+      .filter((f): f is FilaRitmo => f !== undefined)
+      .map(ritmoDeFila);
     if (presentes.length === 0) continue;
 
-    const fila = presentes.reduce(peor);
-    const umbral = umbralDeRitmo(fila.hueco_max);
-    resultado[modulo] = {
-      ultimaFecha: fila.ultima_fecha,
-      diasSinCargar: fila.dias_sin_cargar,
-      umbral,
-      atrasado: estaAtrasado(fila.dias_sin_cargar, umbral),
-    };
+    resultado[modulo] = presentes.reduce(peor);
   }
   return resultado;
 }

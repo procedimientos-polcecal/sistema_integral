@@ -18,7 +18,7 @@ completa para el Inicio.
 
 **Spec:** [docs/superpowers/specs/2026-10-06-inicio-indicadores-design.md](../specs/2026-10-06-inicio-indicadores-design.md)
 
-**Antes de empezar, leer del spec:** las cuatro trampas de la vista, la sección
+**Antes de empezar, leer del spec:** las cinco trampas de la vista, la sección
 «RRHH: los ausentes del último día hábil con fichadas» y «La trampa del
 descarte». Ninguna de las tres se deduce del código.
 
@@ -351,7 +351,7 @@ Pegar esto en el archivo que creó el paso anterior:
 -- dejaría escapar a Despacho. El detalle, con la tabla de validación, está en
 -- docs/superpowers/specs/2026-10-06-inicio-indicadores-design.md
 --
--- Cuatro cosas que parecen de más y no lo son:
+-- Cinco cosas que parecen de más y no lo son:
 --
 --   1. `fecha <= current_date`. `calculos_diarios` tiene filas hasta el 18/11 y
 --      nada impide que otra tabla las tenga. Sin el tope, los días sin cargar
@@ -369,6 +369,14 @@ Pegar esto en el archivo que creó el paso anterior:
 --      parecería al día mientras marca 66 de 68 empleados ausentes por un
 --      archivo que dejó de importarse. Es exactamente el error que esta vista
 --      tiene que atrapar.
+--   5. La última fecha NO sale de la ventana de 180 días. Esa ventana existe
+--      sólo para el hueco máximo, que es lo único que tiene sentido que sea
+--      móvil. Si `ultima_fecha` también se calculara sobre ella, un módulo
+--      parado hace más de medio año quedaría sin filas dentro de la ventana y
+--      pasaría a informarse como "nunca se cargó" —Remises, con 70 días hoy,
+--      lo haría al día 181—: falso, y encima pierde cuántos días lleva parado.
+--      Con la historia entera, `ultima_fecha is null` quiere decir justo eso:
+--      que esa fuente no tuvo nunca una fila.
 --
 -- `atrasado` NO se calcula acá a propósito: la comparación vive en
 -- lib/home/ritmo.ts, que es donde se puede testear. La vista entrega los hechos.
@@ -398,6 +406,7 @@ with fuentes as (
   union all  select 'taller_vial',                   fecha            from taller_vial_cargas
   union all  select 'trituracion',                   fecha            from trituracion_partes
 ),
+-- Sólo para el hueco máximo: los últimos 180 días. NO alimenta `ultima`.
 dias as (
   select modulo, fecha
     from fuentes
@@ -414,8 +423,13 @@ hueco_maximo as (
   select modulo, max(hueco)::int as hueco_max
     from huecos where hueco is not null group by modulo
 ),
+-- Toda la historia, acotada sólo a `<= current_date`: ver la trampa 5.
 ultima as (
-  select modulo, max(fecha) as ultima_fecha from dias group by modulo
+  select modulo, max(fecha) as ultima_fecha
+    from fuentes
+   where fecha is not null
+     and fecha <= current_date
+   group by modulo
 )
 select m.modulo,
        u.ultima_fecha,
