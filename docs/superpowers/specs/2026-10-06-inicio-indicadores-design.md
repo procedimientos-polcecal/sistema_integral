@@ -367,6 +367,8 @@ Vitest sobre funciones puras, en `lib/home/ritmo.ts` y `lib/home/avisos.ts`:
 - `umbralDeRitmo(huecoMax)` — el piso de 3 y el tope de 30, y los casos de la
   tabla de validación.
 - `estaAtrasado(diasSinCargar, umbral)`, incluido el caso `ultimaFecha === null`.
+- `ritmoDeFila(fila)` — el ritmo de una sola fuente, con el umbral de su propio
+  hueco; incluido el caso de una fuente que nunca se cargó.
 - `ritmoPorModulo(filas)` — las trece fuentes contra los doce módulos, y que
   Calidad se quede con la peor de sus dos mitades.
 - `cantidadDelAviso(diasSinCargar, umbral, nuncaSeCargo)` — la del descarte, con
