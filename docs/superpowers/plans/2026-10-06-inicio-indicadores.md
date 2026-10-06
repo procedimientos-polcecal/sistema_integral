@@ -578,16 +578,16 @@ describe("ultimoDiaHabilConFichadas", () => {
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-10-05");
   });
 
-  // Los 35 domingos de 2026 tienen exactamente 0 ausentes de 68. Un lunes,
+  // Los 36 domingos que ya pasaron en 2026 tienen exactamente 0 ausentes de 68. Un lunes,
   // "ayer" diría 0 y no informaría nada. Pero los domingos sí tienen fichadas
-  // —entre 8 y 20— así que no alcanza con pedir que el día tenga fichadas.
+  // —entre 4 y 20— así que no alcanza con pedir que el día tenga fichadas.
   it("saltea el domingo aunque tenga fichadas", () => {
     // 2026-10-04 es domingo, 2026-10-03 sábado.
     const conFichadas = ["2026-10-03", "2026-10-04"];
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-05")).toBe("2026-10-03");
   });
 
-  // El sábado se trabaja: entre 4 y 9 ausentes todos los sábados. "Día hábil"
+  // El sábado se trabaja: entre 3 y 9 ausentes todos los sábados. "Día hábil"
   // acá es *no domingo y no feriado*, no la semana de lunes a viernes.
   it("no saltea el sábado", () => {
     const conFichadas = ["2026-10-02", "2026-10-03"];
@@ -604,6 +604,13 @@ describe("ultimoDiaHabilConFichadas", () => {
 
   it("nunca devuelve hoy, aunque hoy tenga fichadas", () => {
     const conFichadas = ["2026-09-30", "2026-10-06"];
+    expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-09-30");
+  });
+
+  // Un caller que se olvide del `.lt("fecha", hoy)` no tiene que poder colar un
+  // día que todavía no empezó.
+  it("nunca devuelve una fecha posterior a hoy", () => {
+    const conFichadas = ["2026-09-30", "2026-10-07", "2026-10-08"];
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-09-30");
   });
 
@@ -636,35 +643,42 @@ import { diaDeLaSemana } from "@/lib/core/fechas";
 /**
  * El último día anterior a `hoy` que sea hábil y tenga fichadas importadas.
  *
- * Es el día que mira la tarjeta de RRHH del Inicio, y las tres condiciones
+ * Es el día que mira la tarjeta de RRHH del Inicio, y las condiciones
  * salen de medir contra producción el 06/10/2026, no de suponer:
  *
  *   - **Hoy no sirve.** A media mañana `calculos_diarios` tenía 2 filas de 68:
  *     el día no está cerrado. Por eso la tarjeta decía "1 ausente" mientras el
  *     día anterior había 66.
- *   - **El domingo no cuenta.** De los 35 domingos de 2026, los 35 tienen
- *     exactamente 0 ausentes sobre 68 empleados. Un lunes, "ayer" diría 0 y no
+ *   - **El domingo no cuenta.** De los 36 domingos que ya pasaron en 2026, los
+ *     36 tienen exactamente 0 ausentes sobre 68 empleados. Un lunes, "ayer" diría 0 y no
  *     informaría nada. Y no alcanza con pedir que el día tenga fichadas: un
- *     domingo tiene entre 8 y 20, de gente que sí trabaja.
+ *     domingo tiene entre 4 y 20, de gente que sí trabaja.
  *   - **El feriado tampoco.** De los 11 feriados de 2026 con datos, 9 tienen 0
  *     ausentes; los otros dos tienen 2 y 4. Promedio 0,5 contra 42,3 en días
- *     hábiles.
- *   - **El sábado SÍ cuenta**: entre 4 y 9 ausentes todos los sábados. "Día
+ *     hábiles (medido el 06/10/2026).
+ *   - **El sábado SÍ cuenta**: entre 3 y 9 ausentes todos los sábados. "Día
  *     hábil" acá es *no domingo y no feriado*, no la semana de lunes a viernes.
  *
  * Y la condición que más importa: **el día tiene que tener fichadas**. La
- * importación funcionó tres meses de nueve en 2026 — de febrero a junio y otra
- * vez desde el 01/10 no entró ninguna— y `calculos_diarios` llena igual las 68
- * filas marcando a todos ausentes. Sin esta condición la tarjeta mostraría hoy
- * 66 de 68, que es ruido del feed y no un dato de RRHH.
+ * importación anda a ráfagas: en 2026 sólo entraron fichadas en julio, agosto
+ * y septiembre —unas 1.550 por mes—. De febrero a junio no entró ninguna
+ * (salvo 3 sueltas el 30/06, la primera prueba), y desde el 01/10 tampoco.
+ * En los meses sin fichadas `calculos_diarios` llena igual las 68 filas y
+ * marca a todos ausentes: el promedio de un día hábil pasa de 7 a 65. Sin
+ * esta condición la tarjeta mostraría hoy 66 de 68, que es ruido del feed y
+ * no un dato de RRHH.
  *
  * Riesgo asumido: un día con fichadas parciales califica igual. Si una
  * importación trae 8 de 68, ese día pasa y la tarjeta mostraría ~60 ausentes
- * falsos. No se pone umbral de completitud porque un domingo tiene entre 8 y 20
+ * falsos. No se pone umbral de completitud porque un domingo tiene entre 4 y 20
  * fichadas legítimas y no hay forma medida de distinguir las dos cosas.
  *
  * @param fechasConFichadas fechas "YYYY-MM-DD" que tienen al menos una fichada.
- *   Puede venir con repetidos y sin ordenar.
+ *   Puede venir con repetidos y sin ordenar. **Quien llame tiene que garantizar
+ *   que la lista incluya las fechas más recientes**: la función devuelve el
+ *   máximo de lo que le pasan y no tiene cómo saber que le llegó una lista
+ *   truncada (PostgREST corta en 1000 filas sin avisar; ver `diaDeReferenciaRrhh`
+ *   en `lib/home/consultas.ts`, que las pide de la más nueva a la más vieja).
  * @param feriados fechas "YYYY-MM-DD" de la tabla `feriados` del núcleo.
  * @param hoy "YYYY-MM-DD" en Argentina (`hoyEnArgentina()`).
  */
@@ -689,7 +703,7 @@ export function ultimoDiaHabilConFichadas(
 npx vitest run lib/rrhh/diaHabil.test.ts
 ```
 
-Esperado: PASS, 8 tests.
+Esperado: PASS, 9 tests.
 
 - [ ] **Paso 5: `tsc` y commit**
 
@@ -967,10 +981,18 @@ export async function traerRitmo(supabase: SupabaseClient): Promise<FilaRitmo[]>
 /**
  * Qué día mira RRHH: el último hábil con fichadas importadas.
  *
- * El porqué de las tres condiciones está en `lib/rrhh/diaHabil.ts`. Se mira una
+ * El porqué de las condiciones está en `lib/rrhh/diaHabil.ts`. Se mira una
  * ventana de 60 días hacia atrás y no toda la historia: alcanza de sobra —el
  * corte más largo medido fue de cinco meses, y después de 60 días sin fichadas
  * el problema no es qué muestra la tarjeta— y evita traer 17.000 filas.
+ *
+ * **El `order` de las fichadas no es cosmético.** PostgREST corta en 1000 filas
+ * y no avisa. Sin `order`, devuelve las primeras 1000 de la ventana, que son las
+ * más viejas: medido contra producción, 1000 de 2.795 filas y una fecha máxima
+ * de 2026-08-27 cuando la verdadera es 2026-09-30. La tarjeta diría «Ausentes el
+ * jue 27/08» con un número de cinco semanas atrás: plausible y falso. De la más
+ * nueva a la más vieja, las 1000 que llegan son las recientes (unos 15 días
+ * distintos, de sobra para saltear uno o dos domingos y un feriado).
  */
 export async function diaDeReferenciaRrhh(
   supabase: SupabaseClient,
@@ -978,7 +1000,12 @@ export async function diaDeReferenciaRrhh(
 ): Promise<string | null> {
   const desde = sumarDias(hoy, -60);
   const [{ data: fichadas }, { data: feriados }] = await Promise.all([
-    supabase.from("fichadas").select("fecha").gte("fecha", desde).lt("fecha", hoy),
+    supabase
+      .from("fichadas")
+      .select("fecha")
+      .gte("fecha", desde)
+      .lt("fecha", hoy)
+      .order("fecha", { ascending: false }),
     supabase.from("feriados").select("fecha").gte("fecha", desde).lte("fecha", hoy),
   ]);
   return ultimoDiaHabilConFichadas(
@@ -1202,8 +1229,8 @@ Borrar los imports que quedan sin uso: `filtrarDescartadas`, `traerTodo`,
  * cálculo marca ausente a todo el mundo cuando no hay con qué comparar.
  *
  * `ultimoDiaHabilConFichadas` esquiva las tres trampas: hoy, los domingos (los
- * 35 de 2026 tienen 0 ausentes) y los días sin fichadas importadas (la
- * importación funcionó tres meses de nueve). El rótulo nombra el día que
+ * 36 que ya pasaron en 2026 tienen 0 ausentes) y los días sin fichadas importadas
+ * (la importación anda a ráfagas). El rótulo nombra el día que
  * terminó eligiendo, así que mostrar uno viejo no engaña a nadie.
  */
 async function resumenRrhh(
@@ -1862,7 +1889,8 @@ indicador: es el estado real del sistema, que hasta ahora no se veía. Y la
 campana va a mostrar siete avisos de ritmo de golpe la primera vez.
 
 Aparte de esta tarea, queda sobre la mesa un problema real que apareció al
-medir: **la importación de fichadas funcionó tres meses de nueve en 2026**, y
+medir: **la importación de fichadas anduvo a ráfagas en 2026** (sólo entró en julio,
+agosto y septiembre), y
 `calculos_diarios` tiene cinco meses de ausencias falsas guardadas (65 de 68
 empleados en promedio, de febrero a junio, y otra vez desde el 01/10). La tarjeta
 ahora las esquiva, pero el dato guardado sigue mal.

@@ -50,7 +50,7 @@ vista, así que algún hueco máximo no coincide: el de Inventario es 5 en el a�
 | Producción | 0 | — | — | — | **nunca** |
 
 Las **93 fechas de `fichadas`** son de tres meses —entre el 30/06 y el 30/09—,
-no de todo el año: la importación de fichadas funcionó tres meses de nueve (ver
+no de todo el año: la importación de fichadas anda a ráfagas (ver
 la sección de RRHH). Un primer número de 248 salió de `calculos_diarios`, que es
 el derivado que la cuarta trampa de la migración dice que no hay que mirar, y
 se corrigió midiendo la fuente.
@@ -287,34 +287,36 @@ excepción deliberada a la regla de arriba: es lo que se mira a la mañana. Pero
 hoy que sea hábil y tenga fichadas importadas**, y el rótulo nombra ese día:
 *«Ausentes el mié 30/09»*.
 
-Las tres condiciones salen de tres mediciones, no de suponer.
+Las condiciones salen de mediciones, no de suponer.
 
 **Hoy no sirve.** El 06/10 a media mañana `calculos_diarios` tenía **2 filas de
 68**: el día no está cerrado. Por eso la tarjeta decía «1 ausente» mientras el
 día anterior había 66.
 
-**Los domingos no cuentan.** De 35 domingos de 2026, los **35** tienen
+**Los domingos no cuentan.** De los 36 domingos que ya pasaron en 2026, los **36** tienen
 exactamente 0 ausentes sobre 68 empleados. No es que no haya datos —las 68 filas
 están calculadas— es que nadie está ausente un domingo. Un lunes, «ayer» diría 0
-y no informaría nada. **El sábado sí cuenta**: tiene entre 4 y 9 ausentes todos
+y no informaría nada. **El sábado sí cuenta**: tiene entre 3 y 9 ausentes todos
 los sábados, así que «día hábil» acá es *no domingo y no feriado*, no la semana
 de lunes a viernes.
 
 **Los feriados tampoco.** De los 11 feriados de 2026 con datos, **9 tienen 0
 ausentes**, igual que un domingo; los otros dos tienen 2 y 4 —gente que sí
-trabajaba ese día—. Promedio 0,5 contra 42,3 en días hábiles. Se usa la tabla
+trabajaba ese día—. Promedio 0,5 contra 42,3 en días hábiles (medido el 06/10/2026). Se usa la tabla
 `feriados` del núcleo, que tiene los 16 feriados nacionales de 2026 cargados.
 
 **Y el día tiene que tener fichadas**, que es la condición que más importa:
 
 | Mes de 2026 | Ausentes promedio (de 68) | Fichadas importadas |
 |---|---|---|
-| Febrero a junio | **65** | **0** |
+| Febrero a junio | **65** | **0** (salvo 3 el 30/06) |
 | Julio a septiembre | 6,1 · 6,8 · 6,7 | ~1.550 por mes |
 | Octubre | **49** | **0** |
 
-**La importación de fichadas funcionó tres meses de nueve.** Cuando no entra
-ninguna, `calculos_diarios` llena igual las 68 filas y marca a todos ausentes:
+**La importación de fichadas anda a ráfagas**: en 2026 sólo entró en julio,
+agosto y septiembre, y febrero a junio no tuvo ninguna salvo 3 sueltas el 30/06,
+la primera prueba. Cuando no entra ninguna, `calculos_diarios` llena igual las
+68 filas y marca a todos ausentes (el promedio de un día hábil pasa de 7 a 65):
 el sistema tiene cinco meses de ausencias falsas guardadas, y otro tramo abierto
 desde el 01/10. Si la tarjeta mostrara el día hábil anterior sin más, hoy diría
 **66 de 68**, que es ruido del feed y no un dato de RRHH.
@@ -434,7 +436,7 @@ criterio en `scripts/`.
   importación trae 8 fichadas de 68, ese día califica y la tarjeta mostraría ~60
   ausentes falsos. No se pone un umbral de completitud porque no hay forma
   medida de distinguir «importación a medias» de «día con poca gente»: los
-  domingos tienen entre 8 y 20 fichadas legítimas. Queda anotado; si pasa, el
+  domingos tienen entre 4 y 20 fichadas legítimas. Queda anotado; si pasa, el
   arreglo es exigir que el día tenga fichadas de al menos la mitad de los
   empleados activos.
 - **Excluir los feriados esconde las ausencias reales de quien sí trabajó.** Son

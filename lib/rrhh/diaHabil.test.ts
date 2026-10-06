@@ -22,16 +22,16 @@ describe("ultimoDiaHabilConFichadas", () => {
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-10-05");
   });
 
-  // Los 35 domingos de 2026 tienen exactamente 0 ausentes de 68. Un lunes,
+  // Los 36 domingos que ya pasaron en 2026 tienen exactamente 0 ausentes de 68. Un lunes,
   // "ayer" diría 0 y no informaría nada. Pero los domingos sí tienen fichadas
-  // —entre 8 y 20— así que no alcanza con pedir que el día tenga fichadas.
+  // —entre 4 y 20— así que no alcanza con pedir que el día tenga fichadas.
   it("saltea el domingo aunque tenga fichadas", () => {
     // 2026-10-04 es domingo, 2026-10-03 sábado.
     const conFichadas = ["2026-10-03", "2026-10-04"];
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-05")).toBe("2026-10-03");
   });
 
-  // El sábado se trabaja: entre 4 y 9 ausentes todos los sábados. "Día hábil"
+  // El sábado se trabaja: entre 3 y 9 ausentes todos los sábados. "Día hábil"
   // acá es *no domingo y no feriado*, no la semana de lunes a viernes.
   it("no saltea el sábado", () => {
     const conFichadas = ["2026-10-02", "2026-10-03"];
@@ -48,6 +48,13 @@ describe("ultimoDiaHabilConFichadas", () => {
 
   it("nunca devuelve hoy, aunque hoy tenga fichadas", () => {
     const conFichadas = ["2026-09-30", "2026-10-06"];
+    expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-09-30");
+  });
+
+  // Un caller que se olvide del `.lt("fecha", hoy)` no tiene que poder colar un
+  // día que todavía no empezó.
+  it("nunca devuelve una fecha posterior a hoy", () => {
+    const conFichadas = ["2026-09-30", "2026-10-07", "2026-10-08"];
     expect(ultimoDiaHabilConFichadas(conFichadas, FERIADOS_2026, "2026-10-06")).toBe("2026-09-30");
   });
 
