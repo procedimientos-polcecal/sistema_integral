@@ -174,19 +174,26 @@ export default function ConciliacionOdoo({
             </button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Select
-                className="rounded border border-slate-300 px-2 py-1 text-xs"
-                value={elegida}
-                onChange={(e) => setElegida(e.target.value)}
-              >
-                <option value="">— elegir factura —</option>
-                {candidatas.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.proveedor} · {f.numero} · $ {ars.format(f.importeNeto)}
-                    {f.fecha ? ` · ${f.fecha}` : ""}
-                  </option>
-                ))}
-              </Select>
+              {/* Cada opción es "proveedor · número · importe · fecha", unos 60
+                  caracteres: con el ancho del contenido —lo que daba el
+                  desplegable sin clase de ancho— se cortaba el número de
+                  factura, que es justo lo que se está eligiendo. Ocupa la fila
+                  entera y los botones bajan debajo. */}
+              <div className="w-full">
+                <Select
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+                  value={elegida}
+                  onChange={(e) => setElegida(e.target.value)}
+                >
+                  <option value="">— elegir factura —</option>
+                  {candidatas.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.proveedor} · {f.numero} · $ {ars.format(f.importeNeto)}
+                      {f.fecha ? ` · ${f.fecha}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
               <button onClick={vincular} disabled={!elegida || guardando} className="text-xs text-slate-800 underline disabled:opacity-50">
                 Vincular
               </button>
