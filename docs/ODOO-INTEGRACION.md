@@ -37,6 +37,39 @@ Lo que eso implica:
   un `x_studio_...` en `purchase.order`.
 - **Sin acceso al Postgres de Odoo** y `db.list` bloqueado desde afuera.
 
+### Los builds de staging se borran, y el SdG no se entera
+
+Odoo.sh recicla los builds de staging. El que se usó para probar todo en
+septiembre —`polcecal-staging-37495859`— dejó de existir, y lo que se vio del
+lado del SdG fue esto, en la pantalla de quien carga una factura:
+
+```
+No se pudieron traer los catálogos de Odoo: No se pudo llegar a Odoo
+(https://polcecal-staging-37495859.dev.odoo.com/jsonrpc): fetch failed
+```
+
+**Nada avisa antes.** El dominio sigue resolviendo, así que no es un 404 claro
+sino un `fetch failed`, y mientras tanto los tres buscadores del detalle quedan
+vacíos y "Crear el borrador" no puede andar. Conviene reconocer el síntoma: si
+un día Odoo deja de contestar entero, lo primero que hay que mirar es si el
+build sigue vivo, no el código.
+
+Cuando pasa, mudarse es cambiar dos variables, y las dos salen del subdominio:
+
+| | |
+|---|---|
+| `ODOO_URL` | `https://polcecal-staging-<build>.dev.odoo.com` |
+| `ODOO_DB` | `polcecal-staging-<build>` — **en staging el nombre de la base sí es el subdominio**, al revés de lo que dice la sección siguiente para producción |
+
+**La API key no cambia**: la base de staging es una copia, y el mismo usuario de
+integración autentica igual. Verificado el 06/10/2026 al mudarse al build
+`39242521`: `authenticate` devolvió uid 17, las dos empresas con sus CUITs
+(Polcecal 30641068019, Polysan 30707285008) y los catálogos por el camino de la
+app —384 productos, 242 y 240 cuentas, 360 analíticas por empresa—.
+
+Y hay que acordarse de **Vercel**: cambiar `.env.local` arregla lo local y deja
+producción rota, que es lo que había pasado. Son las mismas dos variables.
+
 ### Cómo se averigua el nombre de la base
 
 El host resuelve la base solo —una petición sin base válida llega igual a la capa
