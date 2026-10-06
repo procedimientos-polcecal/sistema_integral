@@ -37,6 +37,13 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
   { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", href: "/compras/aprobaciones" },
   { clave: "inventarioSinPlanilla", id: "inv-sin-planilla", titulo: "Movimientos que no llegaron a la planilla", href: "/inventario/movimientos" },
   { clave: "produccionSinPlanilla", id: "produccion-sin-planilla", titulo: "Partes de producción que no llegaron a la planilla", href: "/produccion" },
+  /*
+   * Una orden sin cerrar es un camión que se fue sin que nadie marcara la
+   * salida. No es sólo un dato faltante: el espejo escribe **al cerrar**, así
+   * que esa orden todavía no está en la planilla, y la planilla es de donde lee
+   * quien no entra al sistema. Se avisa de las de días anteriores y no de las de
+   * hoy, que están abiertas porque el camión está ahí.
+   */
   { clave: "despachoAbiertas", id: "despacho-sin-cerrar", titulo: "Órdenes de carga sin cerrar de días anteriores", href: "/despacho" },
   { clave: "despachoSinPlanilla", id: "despacho-sin-planilla", titulo: "Órdenes de carga que no llegaron a la planilla", href: "/despacho/ordenes" },
   { clave: "facturacionSinVincular", id: "facturacion-sin-vincular", titulo: "Facturas en el buzón sin vincular a una compra", href: "/facturacion?estado=recibida" },
