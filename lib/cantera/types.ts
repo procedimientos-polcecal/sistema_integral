@@ -220,7 +220,10 @@ export interface CubicacionDB {
   id: string;
   yacimiento_id: string;
   mes: string;
+  /** Existencia final en el YACIMIENTO. */
   existencia_final: number;
+  /** Existencia final en el acopio por triturar. Null: sin medir, o cierre anterior al 06/10/2026. */
+  existencia_acopio: number | null;
   observaciones: string | null;
   cargado_por: string | null;
   cargado_en: string;

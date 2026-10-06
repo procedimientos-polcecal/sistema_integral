@@ -85,6 +85,7 @@ export default async function CubicacionPage() {
         yacimientoCodigo: codigo,
         mes: c.mes.slice(0, 7),
         existenciaFinal: c.existencia_final,
+        existenciaAcopio: c.existencia_acopio,
         observaciones: c.observaciones,
       };
     })

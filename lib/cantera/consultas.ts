@@ -518,13 +518,29 @@ export async function traerPesadasDolomitaD1DeOrigenPt2(
  * que se está mirando.
  */
 export async function traerCubicaciones(supabase: SupabaseClient): Promise<CubicacionDB[]> {
-  return traerTodo<CubicacionDB>((desde, hasta) =>
-    supabase
-      .from("cantera_cubicaciones")
-      .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
-      .order("mes")
-      .range(desde, hasta)
-  );
+  try {
+    return await traerTodo<CubicacionDB>((desde, hasta) =>
+      supabase
+        .from("cantera_cubicaciones")
+        .select("id, yacimiento_id, mes, existencia_final, existencia_acopio, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+        .order("mes")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    // Mientras la migración 20261006100136 no corrió, `existencia_acopio` no
+    // existe y esta consulta entera falla — sin esto, Cubicación se caía
+    // por completo en vez de verse sin el acopio. Cualquier otro error se
+    // relanza.
+    if (!(e instanceof Error) || !e.message.includes("existencia_acopio")) throw e;
+    const filas = await traerTodo<Omit<CubicacionDB, "existencia_acopio">>((desde, hasta) =>
+      supabase
+        .from("cantera_cubicaciones")
+        .select("id, yacimiento_id, mes, existencia_final, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+        .order("mes")
+        .range(desde, hasta)
+    );
+    return filas.map((f) => ({ ...f, existencia_acopio: null }));
+  }
 }
 
 export interface FiltrosDeDestape {
