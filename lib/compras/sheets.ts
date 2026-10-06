@@ -18,6 +18,7 @@ import { fechaDeTexto } from "@/lib/core/fechas";
 import { numeroArgentino } from "@/lib/core/numeroArgentino";
 import { indicePorClave } from "@/lib/core/proveedores";
 import { norm } from "@/lib/compras/texto";
+import { ubicacionesNuevas } from "@/lib/compras/ubicaciones";
 import { esFilaPlantilla } from "@/lib/compras/constants";
 import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { equiposPorRi, resolverElEquipo } from "@/lib/compras/equipoDelFormulario";
@@ -917,12 +918,27 @@ async function mapaEmpresas(admin: Admin) {
  * núcleo se administra desde el catálogo, no acá.
  */
 async function asegurarUbicaciones(admin: Admin, valores: unknown[]) {
-  const nombres = [...new Set(valores.filter(Boolean).map(String))];
-  if (nombres.length > 0) {
-    await admin
-      .from("compras_ubicaciones")
-      .upsert(nombres.map((nombre) => ({ nombre })), { onConflict: "nombre", ignoreDuplicates: true });
+  // Se lee ANTES de escribir: para saber qué es nuevo hay que saber qué hay.
+  // El `onConflict: "nombre"` que estaba acá deduplicaba por el texto exacto
+  // —es el unique de la tabla— mientras el mapa de abajo deduplica con `norm`,
+  // y esa asimetría creaba un gemelo por cada diferencia de mayúscula o tilde.
+  // El porqué, con los números, está en `ubicacionesNuevas`.
+  const { data: antes } = await admin.from("compras_ubicaciones").select("id, nombre");
+  const nuevas = ubicacionesNuevas(
+    (antes ?? []).map((u) => u.nombre as string),
+    valores
+  );
+
+  if (nuevas.length === 0) {
+    return new Map((antes ?? []).map((u) => [norm(u.nombre as string), u.id as string]));
   }
+
+  await admin
+    .from("compras_ubicaciones")
+    .upsert(nuevas.map((nombre) => ({ nombre })), { onConflict: "nombre", ignoreDuplicates: true });
+
+  // Se relee sólo cuando se dio de alta algo, que es lo que hace falta para
+  // tener el id de lo recién creado.
   const { data } = await admin.from("compras_ubicaciones").select("id, nombre");
   return new Map((data ?? []).map((u) => [norm(u.nombre as string), u.id as string]));
 }

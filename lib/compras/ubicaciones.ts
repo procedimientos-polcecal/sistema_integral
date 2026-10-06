@@ -11,6 +11,58 @@
  * 37 KB y PostgREST rechaza con un 400 sin decir por qué.
  */
 
+import { norm } from "@/lib/core/texto";
+
+/**
+ * Cuáles de las ubicaciones que trae la planilla son de verdad nuevas.
+ *
+ * Existe por un duplicado que se creaba solo. `asegurarUbicaciones` escribía
+ * con `onConflict: "nombre"` —el unique de la tabla, que es sobre el texto
+ * **exacto**— y después leía armando un `Map` con clave `norm`. O sea que
+ * deduplicaba **exacto al escribir y normalizado al leer**, y esa asimetría es
+ * todo el problema:
+ *
+ * - `"Taller eléctrico"` y `"Taller Eléctrico"` son distintos para el unique,
+ *   así que se daban de alta los dos.
+ * - Son iguales para `norm`, así que en el `Map` **ganaba el último** — y cuál
+ *   era el último dependía del orden en que PostgREST devolviera las filas.
+ *
+ * Resultado: los requerimientos quedaban repartidos entre los dos gemelos, de
+ * forma inestable, y nada avisaba. Medido en producción el 06/10/2026: 175 RI
+ * en un `Taller Eléctrico` y 0 en el otro, 92 y 25 en el par `OTRA`/`Otra`.
+ *
+ * Acá se compara con el mismo `norm` que usa la lectura, que es lo único que
+ * cierra el agujero: dos criterios distintos sobre el mismo nombre vuelven a
+ * abrirlo.
+ *
+ * **Devuelve el texto tal como vino**, no el normalizado: lo que se guarda es
+ * lo que la gente lee en el catálogo, y `norm` pasa a mayúsculas y saca tildes.
+ *
+ * Lo que esto NO arregla: dos nombres que difieren en una palabra —`"Molienda
+ * filler 1"` y `"Molienda de filler 1"`— normalizan distinto y siguen siendo
+ * dos. Eso es un tipeo en la planilla, y en Compras **manda la planilla**: se
+ * corrige allá.
+ */
+export function ubicacionesNuevas(existentes: string[], deLaPlanilla: unknown[]): string[] {
+  const conocidos = new Set(existentes.map(norm));
+  const nuevas: string[] = [];
+
+  for (const valor of deLaPlanilla) {
+    const nombre = String(valor ?? "").trim();
+    if (!nombre) continue;
+
+    const clave = norm(nombre);
+    if (conocidos.has(clave)) continue;
+
+    // Se agrega acá también para que la planilla no se duplique contra sí
+    // misma: "Pañol" y "PAÑOL" en dos filas son una sola ubicación.
+    conocidos.add(clave);
+    nuevas.push(nombre);
+  }
+
+  return nuevas;
+}
+
 /** Lo mínimo del catálogo para resolver un filtro. */
 export interface UbicacionEnlazada {
   id: string;

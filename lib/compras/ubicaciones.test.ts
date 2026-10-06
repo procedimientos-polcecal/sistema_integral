@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  ubicacionesNuevas,
   ubicacionesDelEquipo,
   ubicacionesDelSector,
   opcionesConUbicacion,
@@ -80,5 +81,54 @@ describe("que ofrece el desplegable", () => {
       { id: "PY-B1" },
       { id: "PO-B1" },
     ]);
+  });
+});
+
+/**
+ * El alta de ubicaciones desde la planilla: lo que creaba los duplicados.
+ *
+ * `asegurarUbicaciones` escribia con `onConflict: "nombre"` —el unique de la
+ * tabla, que es sobre el texto EXACTO— y despues leia armando un Map con clave
+ * `norm`. O sea: deduplicaba exacto al escribir y normalizado al leer.
+ *
+ * "Taller electrico" y "Taller Electrico" son distintos para el unique, asi que
+ * se creaban los dos; y son iguales para `norm`, asi que en el Map ganaba el
+ * ultimo —cual, dependia del orden en que PostgREST devolviera las filas—.
+ * Medido el 06/10/2026 en produccion: 175 RI en un gemelo y 0 en el otro, 92 y
+ * 25 en el par OTRA/Otra.
+ */
+describe("ubicacionesNuevas", () => {
+  it("no da de alta una que ya existe con otras mayusculas", () => {
+    expect(ubicacionesNuevas(["Taller eléctrico"], ["Taller Eléctrico"])).toEqual([]);
+  });
+
+  it("no da de alta una que ya existe con otros acentos", () => {
+    expect(ubicacionesNuevas(["Molienda de cal"], ["Molienda de cál"])).toEqual([]);
+  });
+
+  it("da de alta la que de verdad es nueva", () => {
+    expect(ubicacionesNuevas(["Cantera"], ["Cantera", "Pañol"])).toEqual(["Pañol"]);
+  });
+
+  it("no repite una que viene dos veces en la planilla con distinta caja", () => {
+    expect(ubicacionesNuevas([], ["Pañol", "PAÑOL"])).toEqual(["Pañol"]);
+  });
+
+  it("conserva el texto tal como vino, no el normalizado", () => {
+    // Lo que se guarda es lo que la gente lee en el catalogo: normalizar al
+    // escribir dejaria "PANOL" en pantalla.
+    expect(ubicacionesNuevas([], ["Pañol"])).toEqual(["Pañol"]);
+  });
+
+  it("ignora vacios, nulos y espacios sueltos", () => {
+    expect(ubicacionesNuevas([], ["", null, undefined, "   ", "Cantera"])).toEqual(["Cantera"]);
+  });
+
+  it("no da de alta una que solo difiere en espacios de mas", () => {
+    expect(ubicacionesNuevas(["Planta de trituración 1"], ["Planta  de  trituración 1"])).toEqual([]);
+  });
+
+  it("sin nada que dar de alta devuelve la lista vacia", () => {
+    expect(ubicacionesNuevas(["Cantera"], ["Cantera"])).toEqual([]);
   });
 });
