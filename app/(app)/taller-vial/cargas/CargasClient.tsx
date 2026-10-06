@@ -7,6 +7,8 @@ import KpiCard from "@/components/KpiCard";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import Select from "@/components/Select";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import ActualizarCargas from "./ActualizarCargas";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -46,12 +48,13 @@ interface CargaFila {
  * viendo al día.
  */
 export default function CargasClient({
-  mes, equipos, cargas, puedeEditar,
+  mes, equipos, cargas, puedeEditar, sync,
 }: {
   mes: string;
   equipos: EquipoTallerVial[];
   cargas: CargaFila[];
   puedeEditar: boolean;
+  sync: UltimaSync | null;
 }) {
   const router = useRouter();
   const irA = (m: string) => router.push(`/taller-vial/cargas?mes=${m}`);
@@ -111,9 +114,12 @@ export default function CargasClient({
       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="page-header">Cargas de combustible</h1>
-          <p className="page-subheader">Queda exportada a la planilla real al guardar.</p>
+          <p className="page-subheader">Queda exportada a la planilla real al guardar, y lo que se anote allá se trae solo.</p>
         </div>
         <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
+      </div>
+      <div className="mt-2">
+        <ActualizarCargas sync={sync} />
       </div>
 
       {puedeEditar && (

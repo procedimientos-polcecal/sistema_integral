@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerCargas, traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import { calcularTrabajoEntreCargas } from "@/lib/tallerVial/combustible";
+import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import CargasClient from "./CargasClient";
 
 export default async function CargasTallerVialPage({
@@ -22,9 +23,10 @@ export default async function CargasTallerVialPage({
   const mesActual = new Date().toISOString().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
 
-  const [equipos, todasLasCargas] = await Promise.all([
+  const [equipos, todasLasCargas, sync] = await Promise.all([
     traerEquiposTallerVial(supabase),
     traerCargas(supabase, {}),
+    ultimaSincronizacionDe(supabase, "taller_vial", "cargas"),
   ]);
 
   // El trabajado encadena contra la carga anterior CON lectura del mismo
@@ -53,6 +55,7 @@ export default async function CargasTallerVialPage({
       equipos={equipos}
       cargas={cargasDelMes}
       puedeEditar={permisos.puedeEditar}
+      sync={sync}
     />
   );
 }

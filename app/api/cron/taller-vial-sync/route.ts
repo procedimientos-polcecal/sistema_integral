@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
-import { sincronizarCargasDesdeSheets, sincronizarEstadosDesdeSheets } from "@/lib/tallerVial/importar";
+import { sincronizarTallerVialDesdeSheets } from "@/lib/tallerVial/importar";
 
 export const maxDuration = 300;
 
@@ -19,10 +19,7 @@ export async function GET(request: Request) {
   if (rechazo) return rechazo;
 
   try {
-    const [cargas, estados] = await Promise.all([
-      sincronizarCargasDesdeSheets(true),
-      sincronizarEstadosDesdeSheets(true),
-    ]);
+    const { cargas, estados } = await sincronizarTallerVialDesdeSheets();
     return NextResponse.json({ cargas, estados: { ...estados, codigosSinMapear: [...estados.codigosSinMapear] } });
   } catch (e) {
     return NextResponse.json(
