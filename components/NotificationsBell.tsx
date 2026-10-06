@@ -16,7 +16,7 @@ export function NotificationsBell() {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/home/resumen")
+    fetch("/api/home/avisos")
       .then((r) => r.json())
       .then((data) => setNotificaciones(data.notificaciones ?? []))
       .catch(() => setNotificaciones([]));
