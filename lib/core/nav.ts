@@ -244,6 +244,26 @@ export const NAV: NavItem[] = [
           { label: "Proveedores", href: "/calidad/envases/proveedores", modulo: "calidad" },
         ],
       },
+      {
+        label: "Ensayos",
+        href: "/calidad/ensayos",
+        modulo: "calidad",
+        // El tercer frente, y el único sin planilla: acá el SdG es el único
+        // lugar. Conviene saberlo antes de tocar una ruta, porque los otros dos
+        // espejan a Sheets y para lados contrarios.
+        //
+        // Las muestras primero: es la pantalla que se abre para ver si algo se
+        // fue de límite. Los productos y los límites son configuración y se
+        // miran una vez cada tanto, no durante.
+        //
+        // Ver docs/CALIDAD-ENSAYOS.md.
+        children: [
+          { label: "Las muestras", href: "/calidad/ensayos", modulo: "calidad" },
+          { label: "Cargar muestra", href: "/calidad/ensayos/nueva", modulo: "calidad" },
+          { label: "Productos", href: "/calidad/ensayos/productos", modulo: "calidad", soloAdmin: true },
+          { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
+        ],
+      },
     ],
   },
   {
