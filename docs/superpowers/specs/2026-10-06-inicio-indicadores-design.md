@@ -1,0 +1,342 @@
+# El Inicio deja de contar lo de hoy y empieza a decir qué falta hacer
+
+Acordado el 6 de octubre de 2026. Rehace los indicadores de la página de Inicio
+(`app/(app)/InicioClient.tsx` y `app/api/home/resumen/route.ts`), agrega las dos
+tarjetas que faltaban y parte la ruta en dos.
+
+## El problema, medido contra producción el 06/10/2026
+
+El Inicio mostraba diez tarjetas con un número grande cada una. Casi todos esos
+números eran **conteos del día**, y este sistema no se carga parejo: se carga a
+ráfagas. Un titular diario queda en cero la mayoría de los días aunque el módulo
+esté sano — y, lo que es peor, **no distingue "0 porque hoy no hubo" de "0 porque
+nadie carga esto hace cinco semanas"**.
+
+| Módulo | Titular que mostraba | Lo que medía de verdad |
+|---|---|---|
+| RRHH | Ausentes hoy · **1** | La última fichada es del **30/09**. Desde el 01/10 el cálculo marca **64, 65, 50 y 66 de 68** empleados como ausentes. El titular decía 1 porque hoy alcanzó a calcular 2 filas de 68. |
+| Remises | Con turno hoy · **0** | `remises_asistencia` no recibe una fila desde el **28/07**: diez semanas. |
+| Producción | Partes sin cargar (7 d) · **14** | `produccion_partes` tiene **0 filas**. Dice 14 desde que el módulo existe. |
+| Facturación | Entraron hoy · **0** | Hay **2 facturas en total**. Va a decir 0 casi siempre. |
+| Despacho | Órdenes de carga hoy · **0** | Es el módulo más vivo del sistema: **1.998 órdenes, 331 el último mes**. La última es del 01/10. |
+| Inventario | Bajo el mínimo · **524** | De **1.161 artículos activos**. No es una cola de trabajo: es un estado estructural que nadie va a bajar. |
+| Mantenimiento | Órdenes atrasadas · **20** | ✔ vivo y accionable. |
+| Compras | Requerimientos en curso · **118** | ✔ vivo y accionable. |
+| Taller Vial | Cargas sin equipo · **3** | ✔ accionable. |
+| Calidad | *sin tarjeta* | 1.049 movimientos de carbonilla y 1.404 de envases. Quien sólo tiene Calidad entra al Inicio y ve una grilla vacía — ni siquiera el cartel de "no tenés acceso", porque `modulos.length` no es 0. |
+| Trituración | *sin tarjeta* | 174 partes, **ninguno desde el 31/08**. Mismo problema de grilla vacía. |
+
+Y las alarmas secundarias: `Sin llegar a la planilla` está en **0 en los tres
+módulos** que la muestran, `esperandoAprobacion` en 0. Ocupan un lugar fijo en la
+tarjeta para no decir nada.
+
+### El ritmo real: todos los módulos se cargan a diario
+
+Sobre los días con carga **de todo 2026**, el hueco entre un día y el siguiente.
+(La tabla de validación de más abajo usa la ventana de **180 días** que mira la
+vista, así que algún hueco máximo no coincide: el de Inventario es 5 en el año y
+4 en los últimos 180 días.)
+
+| Módulo | Días con carga | Hueco mediano | Hueco p90 | Hueco más largo | Sin cargar hoy |
+|---|---|---|---|---|---|
+| RRHH (`fichadas`) | 248 | 1 | 1 | 1 | **6** |
+| Inventario | 215 | 1 | 2 | 5 | 1 |
+| Despacho | 139 | 1 | 2 | 3 | **5** |
+| Taller Vial | 221 | 1 | 2 | 3 | **8** |
+| Calidad carbonilla | 230 | 1 | 2 | 3 | **20** |
+| Calidad envases | 208 | 1 | 2 | 4 | **23** |
+| Trituración | 84 | 1 | 1 | 3 | **36** |
+| Remises | 27 | 1 | 6 | 10 | **70** |
+| Producción | 0 | — | — | — | **nunca** |
+
+**Ocho de trece fuentes están paradas ahora mismo y el Inicio no lo dice en
+ningún lado.** Muestra "Órdenes de carga hoy: 0" para Despacho, que es
+exactamente el mismo 0 que mostraría si todo estuviera bien.
+
+## Lo que se decide
+
+1. El número grande de cada tarjeta es **lo que hay que hacer**: una cola de
+   trabajo que alguien puede bajar.
+2. Aparte, chica, una señal de **si el módulo se está cargando**, con un umbral
+   calculado sobre la historia del propio módulo.
+3. Se agregan las tarjetas de **Calidad** y **Trituración**.
+4. Se parte la ruta en dos, porque hoy la cara cara corre en cada página.
+
+## 1. La señal de ritmo: una vista en la base
+
+Una vista `inicio_ritmo_modulos`, una fila por fuente, que calcula contra la
+historia de esa misma fuente:
+
+```
+umbral   = max(3, min(hueco_más_largo_de_los_últimos_180_días + 1, 30))
+atrasado = días_sin_cargar >= umbral
+```
+
+### Por qué el hueco máximo y no el p90
+
+Se probaron las dos. Con `p90 × 3`, que es la forma obvia, **se escapa
+Despacho**: lleva 5 días parado cuando su hueco más largo de todo el año fue de
+3, y el umbral le daría 6. El hueco máximo propio es el que separa bien.
+
+Validada contra la historia real, la regla avisa en los ocho módulos parados y
+se queda callada en los cinco que están al día, sin un falso positivo:
+
+| Módulo | Sin cargar | Hueco máx | Umbral | ¿Avisa? |
+|---|---|---|---|---|
+| Mantenimiento | 1 | 5 | 6 | no ✔ |
+| Compras | 1 | 5 | 6 | no ✔ |
+| Inventario | 1 | 4 | 5 | no ✔ |
+| Cantera | 5 | 6 | 7 | no ✔ |
+| Facturación | 4 | 22 | 23 | no ✔ |
+| RRHH | 6 | 1 | 3 | **sí** |
+| Despacho | 5 | 3 | 4 | **sí** |
+| Taller Vial | 8 | 3 | 4 | **sí** |
+| Calidad carbonilla | 20 | 3 | 4 | **sí** |
+| Calidad envases | 23 | 3 | 4 | **sí** |
+| Trituración | 36 | 3 | 4 | **sí** |
+| Remises | 70 | 10 | 11 | **sí** |
+| Producción | nunca | — | 3 (piso) | **sí** |
+
+Facturación es la prueba de que calibrar solo vale la pena: tiene un hueco
+histórico de 22 días porque recién arranca, así que a los 4 días no grita. Un
+umbral fijo de 7 la habría hecho sonar todos los días desde que existe.
+
+### Las fuentes
+
+La fuente de cada módulo es **lo que carga una persona**, no un derivado:
+
+| Módulo | Fuente | Columna |
+|---|---|---|
+| `rrhh` | `fichadas` | `fecha` |
+| `remises` | `remises_asistencia` | `fecha` |
+| `mantenimiento` | `ordenes_trabajo` | `fecha` |
+| `compras` | `compras_requerimientos` | `fecha` |
+| `inventario` | `inventario_movimientos` | `fecha` |
+| `produccion` | `produccion_partes` | `fecha` |
+| `despacho` | `despacho_ordenes_carga` | `fecha` |
+| `facturacion` | `facturas_proveedor` | `created_at::date` |
+| `cantera` | `cantera_pesadas` | `fecha` |
+| `calidad` | `calidad_movimientos` | `fecha` |
+| `calidad_envases` | `calidad_envases_movimientos` | `fecha` |
+| `taller_vial` | `taller_vial_cargas` | `fecha` |
+| `trituracion` | `trituracion_partes` | `fecha` |
+
+Dos elecciones que no son obvias:
+
+- **RRHH mira `fichadas`, no `calculos_diarios`.** El cálculo sigue escribiendo
+  filas aunque nadie fiche —hoy tiene filas hasta el 18/11— así que mirándolo a
+  él, RRHH parecería estar al día mientras marca 66 de 68 empleados ausentes por
+  un archivo que dejó de importarse. Es exactamente el error que este indicador
+  tiene que atrapar; si mira el derivado, lo tapa.
+- **Facturación mira `created_at`, no `fecha`.** `fecha` es la fecha del
+  comprobante, que puede ser vieja; `created_at` es cuándo entró al buzón, que es
+  lo que mide si el módulo se usa.
+- **Cantera mira sólo `cantera_pesadas`.** El módulo carga en cinco tablas
+  —voladuras, bochones, destape, acarreos y pesadas— pero las pesadas son lo
+  único que se carga a diario; las otras cuatro se mueven por evento y un hueco
+  de dos semanas en voladuras es normal. Si alguna vez se dejaran de cargar las
+  pesadas pero sí el resto, esta señal mentiría: queda anotado.
+
+Son **trece fuentes para doce módulos**: Calidad tiene dos mitades que se cargan
+por separado, y la tarjeta muestra **la peor de las dos**.
+
+### Las cuatro trampas, que van comentadas en la migración
+
+- **Acotar a `fecha <= current_date`.** `calculos_diarios` tiene filas hasta el
+  18/11 y nada impide que otra tabla las tenga. Sin el tope, `días_sin_cargar`
+  sale negativo y el módulo parece recién cargado.
+- **Un módulo sin ninguna fila no está al día.** Producción no aparecería en la
+  vista: con un `inner join` quedaría fuera y la tarjeta diría que todo bien. La
+  lista de módulos va del lado izquierdo de un `left join`, y sin filas ⇒
+  atrasado.
+- **El tope de 30.** Sin él, un parate largo —las vacaciones de enero— le sube el
+  umbral al módulo y lo deja mudo durante los 180 días siguientes.
+- **El piso de 3.** Sin él, un módulo con dos días de historia tiene hueco máximo
+  0, umbral 1, y grita cada fin de semana.
+
+### La vista
+
+```sql
+create or replace view inicio_ritmo_modulos
+with (security_invoker = true) as
+with fuentes as (
+             select 'rrhh'::text      as modulo, fecha              from fichadas
+  union all  select 'remises',             fecha                    from remises_asistencia
+  union all  select 'mantenimiento',       fecha                    from ordenes_trabajo
+  union all  select 'compras',             fecha                    from compras_requerimientos
+  union all  select 'inventario',          fecha                    from inventario_movimientos
+  union all  select 'produccion',          fecha                    from produccion_partes
+  union all  select 'despacho',            fecha                    from despacho_ordenes_carga
+  union all  select 'facturacion',         created_at::date         from facturas_proveedor
+  union all  select 'cantera',             fecha                    from cantera_pesadas
+  union all  select 'calidad',             fecha                    from calidad_movimientos
+  union all  select 'calidad_envases',     fecha                    from calidad_envases_movimientos
+  union all  select 'taller_vial',         fecha                    from taller_vial_cargas
+  union all  select 'trituracion',         fecha                    from trituracion_partes
+),
+dias as (
+  select modulo, fecha
+    from fuentes
+   where fecha is not null
+     and fecha <= current_date
+     and fecha >= current_date - 180
+   group by modulo, fecha
+),
+huecos as (
+  select modulo, fecha - lag(fecha) over (partition by modulo order by fecha) as hueco
+    from dias
+),
+hueco_max as (
+  select modulo, max(hueco)::int as hueco_max from huecos where hueco is not null group by modulo
+),
+ultima as (
+  select modulo, max(fecha) as ultima_fecha from dias group by modulo
+)
+select m.modulo,
+       u.ultima_fecha,
+       (current_date - u.ultima_fecha)::int                        as dias_sin_cargar,
+       coalesce(h.hueco_max, 0)                                    as hueco_max,
+       greatest(3, least(coalesce(h.hueco_max, 0) + 1, 30))        as umbral
+  from (values ('rrhh'),('remises'),('mantenimiento'),('compras'),('inventario'),
+               ('produccion'),('despacho'),('facturacion'),('cantera'),('calidad'),
+               ('calidad_envases'),('taller_vial'),('trituracion')) as m(modulo)
+  left join ultima    u on u.modulo = m.modulo
+  left join hueco_max h on h.modulo = m.modulo;
+```
+
+`atrasado` **no se calcula en la vista**: la comparación vive en
+`lib/home/ritmo.ts`, que es donde se puede testear. La vista entrega los hechos
+—última fecha, días, hueco máximo, umbral— y la decisión es código puro.
+
+`security_invoker = true` porque una vista en Postgres corre por defecto con los
+permisos de quien la creó y **saltearía el RLS de las trece tablas**. Con
+`security_invoker`, a quien no tiene acceso a un módulo le llegan nulos en esa
+fila — que es lo correcto, porque la tarjeta tampoco se le muestra.
+
+**Costo: una consulta para los trece**, resuelta en Postgres.
+
+## 2. Los titulares
+
+| Módulo | Antes | Ahora | Medido hoy |
+|---|---|---|---|
+| RRHH | Ausentes hoy · 1 | **Ausencias sin justificar (30 días)** | 332 |
+| Remises | Con turno hoy · 0 | **Días sin cargar** (no tiene cola real) | 70 |
+| Mantenimiento | Órdenes atrasadas | *se queda* | 20 |
+| Compras | Requerimientos en curso | *se queda* | 118 |
+| Inventario | Bajo el mínimo | *se queda* | 524 |
+| Producción | Partes sin cargar (7 d) | *se queda* | 14 de 14 |
+| Despacho | Órdenes de carga hoy · 0 | **Órdenes sin cerrar** | 0 |
+| Facturación | Entraron hoy · 0 | **Sin vincular a una compra** | 1 |
+| Cantera | Facturas a conciliar | *se queda* | (no medido) |
+| **Calidad** | *sin tarjeta* | **Envases bajo el mínimo** | 3 de 28 |
+| Taller Vial | Cargas sin equipo | *se queda* | 3 |
+| **Trituración** | *sin tarjeta* | **Partes sin exportar a la planilla** | 2 |
+
+### Lo que se midió y se descartó
+
+- **Inventario cruzado con Compras.** La idea era mostrar los artículos bajo el
+  mínimo que **todavía no se pidieron**, que sí sería una cola. Se midió: de los
+  524, sólo **30** tienen un requerimiento abierto. El cruce da 494 contra 524 —
+  agrega una consulta y un `join` por código de texto para mover el número un 6%.
+  Se descarta; queda 524, que es honesto aunque no sea accionable, y la señal de
+  ritmo es la que lleva la información útil de ese módulo.
+- **La bandeja de Odoo de Calidad** (`calidad_odoo_sin_reconocer`) está vacía, así
+  que no sirve de titular. El stock de envases bajo el mínimo —3 de 28— sí es una
+  cola corta y accionable.
+
+### Lo que se saca
+
+Las tres secundarias `Sin llegar a la planilla` (Inventario, Producción,
+Despacho), **las tres en 0**. El caso que cubren sigue vivo como notificación de
+la campana, que es donde corresponde: aparece cuando pasa y no ocupa lugar
+cuando no.
+
+Y las secundarias de volumen de **Cantera** (toneladas voladas, acarreo a pagar
+del mes) y **Taller Vial** (litros del mes, equipos con carga). Son las que
+obligan a traer `cantera_voladuras`, `cantera_consumos`, `cantera_acarreos`,
+`cantera_pesadas`, `cantera_tarifas_acarreo`, las 789 cargas de combustible y
+todos los services **enteros**, para calcular en memoria dos números que ya están
+en la página de inicio de cada módulo, a un clic. El Inicio queda con lo
+accionable y la señal de ritmo.
+
+## 3. Rendimiento: el problema no estaba en el Inicio
+
+`NotificationsBell` vive en el **layout**, así que `/api/home/resumen` —con los
+pulls completos de Cantera y Taller Vial— corre en **toda página del sistema**,
+no sólo en el Inicio. Y en el Inicio corre **dos veces**, porque la página lo
+pide por su cuenta.
+
+La campana sólo usa `data.notificaciones`, que son todas consultas de contar
+filas. Se parte en dos rutas:
+
+- **`GET /api/home/avisos`** — sólo las notificaciones. Consultas `count … head`
+  y una lectura de la vista de ritmo. Es la que consume el layout.
+- **`GET /api/home/resumen`** — los números de las tarjetas. Sólo el Inicio.
+
+Las dos comparten el armado de notificaciones, que se saca de la ruta a
+`lib/home/avisos.ts` para poder testearlo.
+
+## 4. Dónde avisa la señal de ritmo
+
+- **En la tarjeta, siempre que esté atrasado**: una línea chica, *«Hace 36 días
+  que no se carga»*, o *«Nunca se cargó»* cuando no hay ninguna fila.
+- **En la campana, sólo cuando pasa el doble del umbral.** Así Despacho con 5
+  días no hace ruido y Trituración con 36 sí. Hoy entrarían siete: RRHH (6,
+  umbral 3), Taller Vial (8, umbral 4), Calidad carbonilla (20), Calidad envases
+  (23), Trituración (36), Remises (70) y Producción (nunca). RRHH y Taller Vial
+  caen justo en el borde.
+
+### La trampa del descarte
+
+`filtrarDescartadas` vuelve a mostrar una notificación cuando su `cantidad`
+superó a la que tenía al descartarla. Si la cantidad de un aviso de ritmo fueran
+los días sin cargar, **descartarlo lo traería de vuelta al día siguiente, todos
+los días**: el número crece solo.
+
+La cantidad de un aviso de ritmo es `floor(días_sin_cargar / umbral)`: cuántos
+umbrales enteros lleva parado. Descartar Trituración hoy (36 días, umbral 4 ⇒ 9)
+la calla hasta los 40 días. Y un módulo que **nunca** se cargó manda `cantidad:
+1` fijo, así que descartarlo lo calla para siempre — "Producción nunca se cargó"
+no es novedad todos los días.
+
+## Qué se testea
+
+Vitest sobre funciones puras, en `lib/home/ritmo.ts` y `lib/home/avisos.ts`:
+
+- `umbralDeRitmo(huecoMax)` — el piso de 3 y el tope de 30, y los casos de la
+  tabla de validación.
+- `estaAtrasado(diasSinCargar, umbral)`, incluido el caso `ultimaFecha === null`.
+- `ritmoPorModulo(filas)` — las trece fuentes contra los doce módulos, y que
+  Calidad se quede con la peor de sus dos mitades.
+- `cantidadDelAviso(diasSinCargar, umbral, nuncaSeCargo)` — la del descarte, con
+  el caso de que descartarlo hoy no lo traiga mañana.
+- `avisosDeRitmo(ritmo, modulosDelUsuario)` — que sólo salgan los módulos a los
+  que el usuario tiene acceso, y sólo pasado el doble del umbral.
+
+La vista no se testea con vitest: se verifica corriéndola contra la base y
+comparando con la tabla de validación de arriba, que se midió con el mismo
+criterio en `scripts/`.
+
+## Riesgos asumidos
+
+- **El umbral se adapta a lo malo también.** Si un módulo se deja de cargar
+  tres semanas y después se retoma, su hueco máximo pasa a 21 y durante los 180
+  días siguientes tolera parates de tres semanas sin avisar. El tope de 30 acota
+  el daño; la alternativa —un umbral fijo— hace ruido en Facturación desde el día
+  uno. Se prefiere errar por callado en un módulo que ya demostró que trabaja a
+  ráfagas.
+- **El Inicio va a abrir con ocho módulos en rojo.** No es un defecto del
+  indicador: es el estado real del sistema hoy, que hasta ahora no se veía. Vale
+  la pena decirlo antes de desplegarlo para que no parezca un error.
+- **`inicio_ritmo_modulos` escanea 180 días de trece tablas.** Con los volúmenes
+  de hoy (la más grande, `calculos_diarios`, no está entre las fuentes; la mayor
+  es `inventario_movimientos` con 4.361) es una consulta barata, pero conviene
+  medirla antes de dar la tarea por buena, y agregar índice por `fecha` donde
+  falte.
+
+## Pendiente de una persona
+
+La vista es **DDL**, así que la migración la aplica el usuario a mano en el
+editor SQL de Supabase. Hasta entonces, las tarjetas se pueden implementar y la
+señal de ritmo queda sin datos — el mismo trato que hoy tiene un módulo al que no
+se tiene acceso.
