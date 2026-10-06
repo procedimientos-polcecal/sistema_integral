@@ -5,8 +5,8 @@ import Link from "next/link";
 import type { Alerta } from "@/lib/tallerVial/tablero";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 
-const CLAVE = "taller-vial:alertas-minimizadas";
-const EVENTO = "taller-vial:alertas-minimizadas-cambio";
+const CLAVE = "taller-vial:alertas-abierta";
+const EVENTO = "taller-vial:alertas-abierta-cambio";
 
 function suscribirse(aviso: () => void) {
   window.addEventListener("storage", aviso);
@@ -17,25 +17,25 @@ function suscribirse(aviso: () => void) {
   };
 }
 
-function leer(): string | null {
-  try { return window.localStorage.getItem(CLAVE); } catch { return null; }
+function leer(): boolean {
+  try { return window.localStorage.getItem(CLAVE) === "1"; } catch { return false; }
 }
 
 /**
  * Lo que pide acción hoy, arriba de todo. Si no hay nada lo dice igual: una
  * franja vacía no se distingue de una que no cargó.
  *
- * Se puede minimizar, porque ocupa media pantalla todo el tiempo y quien ya
- * lo vio no necesita seguir mirándolo. Pero minimizar no puede esconder lo
- * nuevo: se guarda cuántas alertas había (y cuántas urgentes), y si aparece
- * una más, o una urgente más, se vuelve a abrir sola. El estado vive en el
- * navegador de cada uno, no en la base.
+ * Arranca **minimizado**: la lista ocupa media pantalla y quien entra todos
+ * los días no necesita verla desplegada cada vez (la primera versión arrancaba
+ * abierta y había que minimizarla a mano, y se pidió al revés). Nada queda
+ * escondido por eso: la línea minimizada sigue diciendo en rojo cuántas son
+ * urgentes. Quien lo abre lo deja abierto en su navegador; la preferencia vive
+ * en el navegador de cada uno, no en la base.
  */
 export default function AlertasDeTaller({ alertas, equipos }: { alertas: Alerta[]; equipos: EquipoTallerVial[] }) {
   const criticas = alertas.filter((a) => a.nivel === "critica").length;
-  const guardado = useSyncExternalStore(suscribirse, leer, () => null);
-  const [n0, c0] = (guardado ?? "").split(":").map(Number);
-  const minimizada = guardado !== null && alertas.length <= n0 && criticas <= c0;
+  const abierta = useSyncExternalStore(suscribirse, leer, () => false);
+  const minimizada = !abierta;
 
   if (alertas.length === 0) {
     return (
@@ -52,8 +52,8 @@ export default function AlertasDeTaller({ alertas, equipos }: { alertas: Alerta[
 
   function alternar() {
     try {
-      if (minimizada) window.localStorage.removeItem(CLAVE);
-      else window.localStorage.setItem(CLAVE, `${alertas.length}:${criticas}`);
+      if (minimizada) window.localStorage.setItem(CLAVE, "1");
+      else window.localStorage.removeItem(CLAVE);
     } catch {
       // Sin almacenamiento (ventana privada, datos bloqueados) no se puede
       // recordar; el panel queda como estaba.
