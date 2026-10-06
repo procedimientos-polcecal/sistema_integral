@@ -3,27 +3,37 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Modulo } from "@/lib/core/types";
+import type { Ritmo } from "@/lib/home/ritmo";
 
+/**
+ * La forma exacta de `/api/home/resumen`. Se escribe a mano y **el compilador no
+ * la contrasta con la ruta**: por eso la pantalla puede mostrar `undefined` sin
+ * que nada falle —pasó con `presentesHoy`, `ordenesDeHoy` y cuatro campos más—.
+ * Tocar la ruta obliga a volver acá.
+ *
+ * `Ritmo` sí viene importado de `lib/home/ritmo`, que es de donde sale: ese
+ * pedazo del contrato lo revisa el compilador.
+ */
 interface Resumen {
-  rrhh: { empleadosActivos: number; presentesHoy: number; ausentesHoy: number } | null;
-  remises: { vehiculosActivos: number; empleadosConTurnoHoy: number } | null;
+  rrhh: { empleadosActivos: number; dia: string | null; diaLegible: string | null; ausentes: number; sinClasificar: number } | null;
+  remises: { vehiculosActivos: number } | null;
   mantenimiento: { atrasadas: number; otPendientes: number; avisosSinOrden: number } | null;
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
-  inventario: { faltantes: number; movimientosHoy: number; sinLlegarALaPlanilla: number } | null;
-  produccion: { partesFaltantes: number; sinLlegarALaPlanilla: number } | null;
-  despacho: {
-    ordenesDeHoy: number;
-    abiertasDeDiasAnteriores: number;
-    sinLlegarALaPlanilla: number;
-  } | null;
-  facturacion: { entraronHoy: number; sinVincular: number; sinProveedor: number } | null;
-  cantera: { sinConciliar: number; toneladasMes: number; acarreoAPagarMes: number } | null;
-  tallerVial: { litrosDelMes: number; equiposConCargaEsteMes: number; sinEquipoReconocido: number } | null;
+  inventario: { faltantes: number; movimientosHoy: number } | null;
+  produccion: { partesFaltantes: number } | null;
+  despacho: { abiertasDeDiasAnteriores: number; sinLlegarALaPlanilla: number } | null;
+  facturacion: { sinVincular: number; sinProveedor: number } | null;
+  cantera: { sinConciliar: number } | null;
+  calidad: { envasesBajoMinimo: number; sinLlegarALaPlanilla: number } | null;
+  tallerVial: { sinEquipoReconocido: number; serviceVencidos: number; serviceProximos: number } | null;
+  trituracion: { sinLlegarALaPlanilla: number; partesDelMes: number } | null;
+  ritmo: Partial<Record<Modulo, Ritmo>>;
 }
 
 const VACIO: Resumen = {
-  rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null, produccion: null,
-  despacho: null, facturacion: null, cantera: null, tallerVial: null,
+  rrhh: null, remises: null, mantenimiento: null, compras: null, inventario: null,
+  produccion: null, despacho: null, facturacion: null, cantera: null, calidad: null,
+  tallerVial: null, trituracion: null, ritmo: {},
 };
 
 /**
@@ -44,8 +54,11 @@ export default function InicioClient({
   const [resumen, setResumen] = useState<Resumen | null>(null);
 
   useEffect(() => {
+    // Un 401 o un 403 contestan `{ error }`, que no tiene `ritmo`: leerlo
+    // ahí adentro tiraba la pantalla entera. Un cuerpo que no es un resumen se
+    // trata como ninguno.
     fetch("/api/home/resumen")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : VACIO))
       .then(setResumen)
       .catch(() => setResumen(VACIO));
   }, []);
@@ -71,26 +84,43 @@ export default function InicioClient({
             href="/rrhh"
             color="#1E7D34"
             icon={<IconUsers />}
-            hero={resumen?.rrhh ? { label: "Ausentes hoy", valor: resumen.rrhh.ausentesHoy } : null}
+            ritmo={resumen?.ritmo.rrhh}
+            // El rótulo nombra el día, porque no siempre es ayer: se retrocede
+            // hasta el último día hábil con fichadas. Sin eso, el 06/10 la
+            // tarjeta mostraba 1 mientras el día anterior había 66 de 68.
+            hero={
+              resumen?.rrhh
+                ? {
+                    label: resumen.rrhh.diaLegible
+                      ? `Ausentes el ${resumen.rrhh.diaLegible}`
+                      : "Sin fichadas importadas",
+                    valor: resumen.rrhh.diaLegible ? resumen.rrhh.ausentes : "—",
+                  }
+                : null
+            }
             secundarias={
               resumen?.rrhh
                 ? [
                     { label: "Empleados activos", valor: resumen.rrhh.empleadosActivos },
-                    { label: "Presentes hoy", valor: resumen.rrhh.presentesHoy },
+                    { label: "Sin clasificar", valor: resumen.rrhh.sinClasificar },
                   ]
                 : null
             }
           />
         )}
 
+        {/* Remises no tiene cola de trabajo: lo único accionable es que se
+            cargue, y de eso avisa la línea de ritmo. La última asistencia
+            cargada es del 28/07. */}
         {tiene("remises") && (
           <ModuloCard
             titulo="Remises"
             href="/remises"
             color="#2563EB"
             icon={<IconCar />}
-            hero={resumen?.remises ? { label: "Empleados con turno hoy", valor: resumen.remises.empleadosConTurnoHoy } : null}
-            secundarias={resumen?.remises ? [{ label: "Vehículos activos", valor: resumen.remises.vehiculosActivos }] : null}
+            ritmo={resumen?.ritmo.remises}
+            hero={resumen?.remises ? { label: "Vehículos activos", valor: resumen.remises.vehiculosActivos } : null}
+            secundarias={resumen?.remises ? [] : null}
           />
         )}
 
@@ -100,6 +130,7 @@ export default function InicioClient({
             href="/mantenimiento"
             color="#D97706"
             icon={<IconWrench />}
+            ritmo={resumen?.ritmo.mantenimiento}
             // Lo que falta hacer, no lo que está bien. "Equipos operativos"
             // decía 237/239 y se movía una vez por mes; el titular anterior
             // salía de una tabla con una sola fila cargada.
@@ -121,6 +152,7 @@ export default function InicioClient({
             href="/compras"
             color="#1E7D34"
             icon={<IconCarrito />}
+            ritmo={resumen?.ritmo.compras}
             // Lo que hay que hacer, no lo que ya se hizo: el histórico de
             // pedidos cerrados es enorme y no dice nada acá.
             hero={
@@ -141,153 +173,127 @@ export default function InicioClient({
 
         {/* Inventario no tenía tarjeta: quien sólo tiene ese módulo entraba al
             inicio y leía "no tenés acceso a ningún módulo". Lo que pide hacer
-            algo es lo que está bajo el stock de seguridad; los movimientos que
-            no llegaron a la planilla son la alarma, porque la próxima
-            sincronización los revierte. */}
+            algo es lo que está bajo el stock de seguridad. */}
         {tiene("inventario") && (
           <ModuloCard
             titulo="Inventario"
             href="/inventario"
             color="#7C3AED"
             icon={<IconCajas />}
-            hero={
-              resumen?.inventario
-                ? { label: "Artículos bajo el mínimo", valor: resumen.inventario.faltantes }
-                : null
-            }
-            secundarias={
-              resumen?.inventario
-                ? [
-                    { label: "Movimientos hoy", valor: resumen.inventario.movimientosHoy },
-                    { label: "Sin llegar a la planilla", valor: resumen.inventario.sinLlegarALaPlanilla },
-                  ]
-                : null
-            }
+            ritmo={resumen?.ritmo.inventario}
+            hero={resumen?.inventario ? { label: "Artículos bajo el mínimo", valor: resumen.inventario.faltantes } : null}
+            secundarias={resumen?.inventario ? [{ label: "Movimientos hoy", valor: resumen.inventario.movimientosHoy }] : null}
           />
         )}
 
         {/* Lo que pide hacer algo es un parte que falta: la producción del turno
-            siguiente no se puede calcular hasta que esté. Los que no llegaron a la
-            planilla son la otra alarma: quien mira la planilla ve un día en blanco. */}
+            siguiente no se puede calcular hasta que esté. */}
         {tiene("produccion") && (
           <ModuloCard
             titulo="Producción"
             href="/produccion"
             color="#0E7490"
             icon={<IconFabrica />}
-            hero={
-              resumen?.produccion
-                ? { label: "Partes sin cargar (7 días)", valor: resumen.produccion.partesFaltantes }
-                : null
-            }
-            secundarias={
-              resumen?.produccion
-                ? [{ label: "Sin llegar a la planilla", valor: resumen.produccion.sinLlegarALaPlanilla }]
-                : null
-            }
+            ritmo={resumen?.ritmo.produccion}
+            hero={resumen?.produccion ? { label: "Partes sin cargar (7 días)", valor: resumen.produccion.partesFaltantes } : null}
+            secundarias={resumen?.produccion ? [] : null}
           />
         )}
 
-        {/* El titular es el volumen del día, que es lo que se mira de reojo. La
-            alarma son las órdenes abiertas de días anteriores: el espejo escribe
-            al cerrar, así que una orden que quedó abierta no está en la planilla
-            y nadie la va a corregir si no aparece acá. */}
+        {/* El titular era "órdenes de carga hoy" y marcaba 0 en el módulo más
+            vivo del sistema, porque la carga va a ráfagas. Lo que queda son las
+            dos alarmas de planilla. */}
         {tiene("despacho") && (
           <ModuloCard
             titulo="Despacho"
             href="/despacho"
             color="#B45309"
             icon={<IconCamion />}
-            hero={
-              resumen?.despacho
-                ? { label: "Órdenes de carga hoy", valor: resumen.despacho.ordenesDeHoy }
-                : null
-            }
-            secundarias={
-              resumen?.despacho
-                ? [
-                    { label: "Sin cerrar de días anteriores", valor: resumen.despacho.abiertasDeDiasAnteriores },
-                    { label: "Sin llegar a la planilla", valor: resumen.despacho.sinLlegarALaPlanilla },
-                  ]
-                : null
-            }
+            ritmo={resumen?.ritmo.despacho}
+            hero={resumen?.despacho ? { label: "Órdenes sin cerrar", valor: resumen.despacho.abiertasDeDiasAnteriores } : null}
+            secundarias={resumen?.despacho ? [{ label: "Sin llegar a la planilla", valor: resumen.despacho.sinLlegarALaPlanilla }] : null}
           />
         )}
 
-        {/* El titular es el ritmo del día. La alarma son las que quedaron sin
-            vincular: una factura en el buzón que nadie enganchó a una compra es
-            la que después aparece en Odoo sin que nadie sepa de qué era. */}
+        {/* La alarma son las que quedaron sin vincular: una factura en el buzón
+            que nadie enganchó a una compra es la que después aparece en Odoo sin
+            que nadie sepa de qué era. */}
         {tiene("facturacion") && (
           <ModuloCard
             titulo="Facturación"
             href="/facturacion"
             color="#0F766E"
             icon={<IconComprobante />}
-            hero={
-              resumen?.facturacion
-                ? { label: "Facturas que entraron hoy", valor: resumen.facturacion.entraronHoy }
-                : null
-            }
-            secundarias={
-              resumen?.facturacion
-                ? [
-                    { label: "Sin vincular a una compra", valor: resumen.facturacion.sinVincular },
-                    { label: "Con un CUIT que no está en el padrón", valor: resumen.facturacion.sinProveedor },
-                  ]
-                : null
-            }
+            ritmo={resumen?.ritmo.facturacion}
+            hero={resumen?.facturacion ? { label: "Sin vincular a una compra", valor: resumen.facturacion.sinVincular } : null}
+            secundarias={resumen?.facturacion ? [{ label: "Con un CUIT que no está en el padrón", valor: resumen.facturacion.sinProveedor }] : null}
           />
         )}
 
-        {/* El titular es la alarma, igual que Mantenimiento e Inventario:
-            una factura sin conciliar o a revisar es lo único de las tres que
-            pide hacer algo hoy. Las toneladas voladas y el acarreo a pagar
-            del mes van de secundarias, el mismo orden que tienen como
-            primeras dos tarjetas en la página de inicio del módulo. */}
+        {/* El titular es la alarma, igual que Mantenimiento e Inventario: una
+            factura sin conciliar o a revisar es lo único que pide hacer algo
+            hoy. Las toneladas voladas y el acarreo a pagar del mes se fueron:
+            obligaban a traer tres tablas enteras para calcular en memoria dos
+            números que ya están en la página del módulo, a un clic. */}
         {tiene("cantera") && (
           <ModuloCard
             titulo="Cantera"
             href="/cantera"
             color="#78716C"
             icon={<IconMountain />}
-            hero={
-              resumen?.cantera
-                ? { label: "Facturas a conciliar o revisar", valor: resumen.cantera.sinConciliar }
-                : null
-            }
-            secundarias={
-              resumen?.cantera
-                ? [
-                    { label: "Toneladas voladas este mes", valor: new Intl.NumberFormat("es-AR").format(resumen.cantera.toneladasMes) },
-                    { label: "Acarreo a pagar este mes", valor: `$ ${new Intl.NumberFormat("es-AR").format(resumen.cantera.acarreoAPagarMes)}` },
-                  ]
-                : null
-            }
+            ritmo={resumen?.ritmo.cantera}
+            hero={resumen?.cantera ? { label: "Facturas a conciliar o revisar", valor: resumen.cantera.sinConciliar } : null}
+            secundarias={resumen?.cantera ? [] : null}
           />
         )}
 
-        {/* El titular es lo que pide atención (una carga sin equipo reconocido
-            no entra en ningún resumen hasta que alguien la corrija), las
-            secundarias el volumen del mes — mismo criterio que Cantera. */}
+        {/* El titular es lo que pide atención: una carga sin equipo reconocido
+            no entra en ningún resumen hasta que alguien la corrija. Los litros
+            del mes se fueron —obligaban a traer las 789 cargas para sumar una
+            columna— y en su lugar van los services, que sí piden hacer algo. */}
         {tiene("taller_vial") && (
           <ModuloCard
             titulo="Taller Vial"
             href="/taller-vial"
             color="#0891B2"
             icon={<IconGauge />}
-            hero={
-              resumen?.tallerVial
-                ? { label: "Cargas sin equipo reconocido", valor: resumen.tallerVial.sinEquipoReconocido }
-                : null
-            }
+            ritmo={resumen?.ritmo.taller_vial}
+            hero={resumen?.tallerVial ? { label: "Cargas sin equipo reconocido", valor: resumen.tallerVial.sinEquipoReconocido } : null}
             secundarias={
               resumen?.tallerVial
                 ? [
-                    { label: "Combustible este mes", valor: `${new Intl.NumberFormat("es-AR").format(resumen.tallerVial.litrosDelMes)} L` },
-                    { label: "Equipos con carga este mes", valor: resumen.tallerVial.equiposConCargaEsteMes },
+                    { label: "Service de 250 hs vencido", valor: resumen.tallerVial.serviceVencidos },
+                    { label: "Service por vencer", valor: resumen.tallerVial.serviceProximos },
                   ]
                 : null
             }
+          />
+        )}
+
+        {/* Calidad y Trituración no tenían tarjeta: quien sólo tenía esos
+            módulos entraba y veía una grilla vacía, sin siquiera el cartel de
+            "no tenés acceso" —`modulos.length` no es 0—. */}
+        {tiene("calidad") && (
+          <ModuloCard
+            titulo="Calidad"
+            href="/calidad"
+            color="#BE185D"
+            icon={<IconMatraz />}
+            ritmo={resumen?.ritmo.calidad}
+            hero={resumen?.calidad ? { label: "Envases bajo el mínimo", valor: resumen.calidad.envasesBajoMinimo } : null}
+            secundarias={resumen?.calidad ? [{ label: "Sin llegar a la planilla", valor: resumen.calidad.sinLlegarALaPlanilla }] : null}
+          />
+        )}
+
+        {tiene("trituracion") && (
+          <ModuloCard
+            titulo="Trituración"
+            href="/trituracion"
+            color="#7E22CE"
+            icon={<IconTrituradora />}
+            ritmo={resumen?.ritmo.trituracion}
+            hero={resumen?.trituracion ? { label: "Partes sin exportar", valor: resumen.trituracion.sinLlegarALaPlanilla } : null}
+            secundarias={resumen?.trituracion ? [{ label: "Partes este mes", valor: resumen.trituracion.partesDelMes }] : null}
           />
         )}
       </div>
@@ -342,13 +348,21 @@ function ModuloCard({
   icon,
   hero,
   secundarias,
+  ritmo,
 }: {
   titulo: string;
   href: string;
   color: string;
   icon: React.ReactNode;
   hero: { label: string; valor: string | number } | null;
+  /**
+   * `null` es "todavía no llegó" y pinta el esqueleto; `[]` es "esta tarjeta no
+   * tiene secundarias" y no pinta nada. La diferencia importa: con un solo
+   * valor para las dos, las tarjetas sin secundarias —Remises, Producción,
+   * Cantera— quedarían con el esqueleto latiendo para siempre.
+   */
   secundarias: { label: string; valor: string | number }[] | null;
+  ritmo?: Ritmo;
 }) {
   return (
     <Link
@@ -377,21 +391,51 @@ function ModuloCard({
         )}
       </div>
 
-      <div className="mt-auto flex divide-x border-t" style={{ borderColor: "var(--border)" }}>
-        {secundarias === null
-          ? [0, 1].map((i) => (
-              <div key={i} className="flex-1 px-5 py-3">
-                <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
-              </div>
-            ))
-          : secundarias.map((s) => (
-              <div key={s.label} className="flex-1 px-5 py-3">
-                <div className="text-base font-semibold text-slate-900">{s.valor}</div>
-                <div className="text-xs text-slate-500">{s.label}</div>
-              </div>
-            ))}
-      </div>
+      <LineaDeRitmo ritmo={ritmo} />
+
+      {secundarias === null ? (
+        <div className="mt-auto flex divide-x border-t" style={{ borderColor: "var(--border)" }}>
+          {[0, 1].map((i) => (
+            <div key={i} className="flex-1 px-5 py-3">
+              <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+            </div>
+          ))}
+        </div>
+      ) : secundarias.length > 0 ? (
+        <div className="mt-auto flex divide-x border-t" style={{ borderColor: "var(--border)" }}>
+          {secundarias.map((s) => (
+            <div key={s.label} className="flex-1 px-5 py-3">
+              <div className="text-base font-semibold text-slate-900">{s.valor}</div>
+              <div className="text-xs text-slate-500">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Link>
+  );
+}
+
+/**
+ * La línea que dice cuánto hace que no se carga el módulo.
+ *
+ * Aparece apenas se pasa el umbral del propio módulo; en la campana recién al
+ * doble. Medido el 06/10/2026, ocho de trece fuentes estaban paradas y el Inicio
+ * no lo decía en ningún lado — mostraba "Órdenes de carga hoy: 0" para Despacho,
+ * que es el mismo 0 que si estuviera todo bien.
+ */
+function LineaDeRitmo({ ritmo }: { ritmo: Ritmo | undefined }) {
+  if (!ritmo || !ritmo.atrasado) return null;
+  const texto =
+    ritmo.diasSinCargar === null
+      ? "Nunca se cargó nada"
+      : `Hace ${ritmo.diasSinCargar} ${ritmo.diasSinCargar === 1 ? "día" : "días"} que no se carga`;
+  return (
+    <div className="flex items-center gap-1.5 px-5 pb-3 text-xs font-medium text-amber-700">
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
+        <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {texto}
+    </div>
   );
 }
 
@@ -438,6 +482,24 @@ function IconFabrica() {
       <path d="M3 21V11l5 3.5V11l5 3.5V11l5 3.5V21H3Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M17 11V6l2 2V6l2 2v3" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M3 21h18" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconMatraz() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M9 3v6.5L3.8 18A2 2 0 0 0 5.5 21h13a2 2 0 0 0 1.7-3L15 9.5V3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 3h8M6.8 15h10.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconTrituradora() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M4 4h16l-3 6H7L4 4Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 14h8M9.5 18h5" strokeLinecap="round" />
+      <path d="M12 10v2" strokeLinecap="round" />
     </svg>
   );
 }
