@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
+import { esAdminCantera, puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
 import { traerBochon, traerYacimientos } from "@/lib/cantera/consultas";
-import { espejarBochon } from "@/lib/cantera/espejo";
+import { desespejarBochon, espejarBochon, espejarBochonRenombrado } from "@/lib/cantera/espejo";
+import { reacomodarCorrelativos } from "@/lib/cantera/codigos";
 
 /**
  * Ver y editar un bochón. Los campos de conciliación (`odoo_*`, `conforme*`)
@@ -93,4 +94,88 @@ export async function PATCH(
   const conPlanilla = await traerBochon(supabase, codigo);
 
   return NextResponse.json({ bochon: conPlanilla ?? actualizado, planilla_error: espejo.ok ? null : espejo.error });
+}
+
+/**
+ * Borra un bochón cargado de más y **reacomoda los códigos** de los que quedan:
+ * si se borra el B03 de cinco, el B04 pasa a ser B03 y el B05 pasa a ser B04,
+ * así la próxima alta sigue sin huecos.
+ *
+ * Sólo admin de Cantera, igual que borrar una voladura: no se deshace. Y acá
+ * pesa más, porque reacomodar cambia el código de otros bochones — también en
+ * la planilla, donde cada fila se reescribe por su código viejo. Una factura de
+ * Odoo vinculada viaja con su bochón (se enlaza por id de Odoo, no por código);
+ * la del bochón borrado queda libre para vincularse a otro.
+ *
+ * Un fallo de la planilla no deshace nada en el sistema: el borrado y los
+ * renombres ya están hechos, y la respuesta trae lo que dijo Google para
+ * mostrarlo una vez. En los renombrados queda además `sheets_pendiente`.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ codigo: string }> }
+) {
+  const { codigo } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!(await esAdminCantera(supabase, user.id))) {
+    return NextResponse.json({ error: "Sólo un admin de Cantera puede borrar un bochón" }, { status: 403 });
+  }
+
+  const bochon = await traerBochon(supabase, codigo);
+  if (!bochon) return NextResponse.json({ error: "Ese bochón no existe" }, { status: 404 });
+
+  const yacimientos = await traerYacimientos(supabase);
+  const yacimiento = yacimientos.find((y) => y.id === bochon.yacimiento_id) ?? null;
+  if (!yacimiento) return NextResponse.json({ error: "La cantera de este bochón no existe" }, { status: 404 });
+
+  const { error: errDel } = await supabase.from("cantera_bochones").delete().eq("codigo", codigo);
+  if (errDel) return NextResponse.json({ error: errDel.message }, { status: 400 });
+
+  const { data: restantes, error: errRest } = await supabase
+    .from("cantera_bochones")
+    .select("codigo, correlativo")
+    .eq("yacimiento_id", bochon.yacimiento_id)
+    .eq("anio", bochon.anio);
+  if (errRest) {
+    return NextResponse.json({ error: `Se borró, pero no se pudieron reacomodar los códigos: ${errRest.message}` }, { status: 500 });
+  }
+
+  const cambios = reacomodarCorrelativos(restantes ?? [], "B", yacimiento.codigo, bochon.anio);
+  for (const c of cambios) {
+    const { error } = await supabase
+      .from("cantera_bochones")
+      .update({ codigo: c.a, correlativo: c.correlativo })
+      .eq("codigo", c.de);
+    if (error) {
+      return NextResponse.json(
+        { error: `Se borró, pero se cortó el reacomodo en ${c.de} → ${c.a}: ${error.message}. Los códigos quedaron a medias.` },
+        { status: 500 }
+      );
+    }
+  }
+
+  const errores: string[] = [];
+  const vaciada = await desespejarBochon(codigo);
+  if (!vaciada.ok) errores.push(vaciada.error ?? "no se pudo vaciar la fila");
+
+  for (const c of cambios) {
+    const movido = await traerBochon(supabase, c.a);
+    if (!movido) continue;
+    const espejo = await espejarBochonRenombrado(c.de, movido, yacimiento);
+    if (!espejo.ok) {
+      errores.push(`${c.de} → ${c.a}: ${espejo.error}`);
+      await supabase
+        .from("cantera_bochones")
+        .update({ sheets_pendiente: espejo.error ?? "no se pudo escribir", sheets_pendiente_en: new Date().toISOString() })
+        .eq("codigo", c.a);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    renombrados: cambios.map((c) => ({ de: c.de, a: c.a })),
+    planilla_error: errores.length ? errores.join(" · ") : null,
+  });
 }

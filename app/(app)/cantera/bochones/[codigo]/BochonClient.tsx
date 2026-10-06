@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { montoBochon } from "@/lib/cantera/costos";
 import type { Bochon, Yacimiento } from "@/lib/cantera/types";
+import { useConfirm } from "@/components/ConfirmProvider";
 import ConciliacionOdoo from "../../ConciliacionOdoo";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -46,13 +47,17 @@ export default function BochonClient({
   yacimiento,
   puedeEditar,
   puedeFacturar,
+  esAdmin,
 }: {
   bochon: Bochon;
   yacimiento: Yacimiento | null;
   puedeEditar: boolean;
   puedeFacturar: boolean;
+  esAdmin: boolean;
 }) {
   const router = useRouter();
+  const confirmar = useConfirm();
+  const [borrando, setBorrando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
@@ -104,6 +109,34 @@ export default function BochonClient({
     router.refresh();
   }
 
+  async function borrar() {
+    const confirmado = await confirmar({
+      title: "¿Borrar este bochón?",
+      message:
+        `Se borra ${bochon.codigo}. Los bochones de esta cantera y año con número más alto bajan un lugar ` +
+        `(el siguiente pasa a ocupar ${bochon.codigo}), en el sistema y en la planilla. ` +
+        (bochon.odoo_move_id != null ? "La factura de Odoo vinculada queda libre. " : "") +
+        "No se puede deshacer.",
+      confirmText: "Borrar",
+      danger: true,
+    });
+    if (!confirmado) return;
+
+    setBorrando(true);
+    setError("");
+    const res = await fetch(`/api/cantera/bochones/${bochon.codigo}`, { method: "DELETE" });
+    const json = await res.json();
+    if (!res.ok) {
+      setBorrando(false);
+      setError(json.error ?? "No se pudo borrar.");
+      return;
+    }
+    if (json.planilla_error) {
+      window.alert(`Se borró y se reacomodaron los códigos, pero la planilla no quedó al día: ${json.planilla_error}`);
+    }
+    router.push(`/cantera/registros?y=${bochon.yacimiento_id}`);
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center justify-between">
@@ -113,9 +146,20 @@ export default function BochonClient({
           </Link>
           <h1 className="font-mono text-xl font-semibold">{bochon.codigo}</h1>
         </div>
-        {bochon.origen === "importacion" && (
-          <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">de la planilla</span>
-        )}
+        <div className="flex items-center gap-2">
+          {bochon.origen === "importacion" && (
+            <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">de la planilla</span>
+          )}
+          {esAdmin && (
+            <button
+              onClick={borrar}
+              disabled={borrando}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {borrando ? "Borrando…" : "Borrar bochón"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -146,3 +146,40 @@ export async function desespejarVoladura(codigo: string): Promise<ResultadoEspej
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * Al borrar un bochón, vaciar su fila de BOCHONES (13 columnas, A a M). Mismo
+ * criterio que `desespejarVoladura`: se vacía y no se borra la fila, para no
+ * correr las de abajo.
+ */
+export async function desespejarBochon(codigo: string): Promise<ResultadoEspejo> {
+  if (!hayEspejoDeCantera()) return { ok: true };
+  try {
+    await limpiarFilaSiExiste(PLANILLA(), TAB_BOCHONES(), codigo, 13);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Un bochón cambió de código (se reacomodaron después de borrar otro): su fila
+ * se busca por el código **viejo** y se reescribe entera con el nuevo. Buscar
+ * por el nuevo, como hace `espejarBochon`, agregaría una fila duplicada y
+ * dejaría la vieja con un código que ya no es suyo.
+ */
+export async function espejarBochonRenombrado(
+  codigoViejo: string,
+  bochon: Bochon,
+  yacimiento: Yacimiento | null
+): Promise<ResultadoEspejo> {
+  if (!hayEspejoDeCantera()) {
+    return { ok: false, error: "Falta GOOGLE_SHEETS_CANTERA_ID o la credencial de Google: el bochón quedó sin escribir en la planilla." };
+  }
+  try {
+    await upsertFila(PLANILLA(), TAB_BOCHONES(), codigoViejo, filaBochon(bochon, yacimiento));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}

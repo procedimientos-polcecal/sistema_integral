@@ -30,6 +30,7 @@ export default async function BochonPage({
       yacimiento={yacimiento}
       puedeEditar={permisos.puedeEditar}
       puedeFacturar={permisos.puedeFacturar}
+      esAdmin={permisos.esAdmin}
     />
   );
 }

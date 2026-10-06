@@ -121,3 +121,41 @@ export function anioParaCodigo(
   }
   return ahora.getFullYear();
 }
+
+export interface CambioDeCodigo {
+  /** El código con el que se lo conocía hasta ahora. */
+  de: string;
+  /** El código que pasa a tener. */
+  a: string;
+  correlativo: number;
+}
+
+/**
+ * Cómo se reacomodan los códigos de un `(yacimiento, año)` después de borrar uno.
+ *
+ * Los correlativos que quedan pasan a ser 1, 2, 3… en el mismo orden que
+ * tenían, sin huecos. Devuelve **sólo los que cambian**, de menor a mayor: el
+ * orden importa porque `unique (yacimiento_id, anio, correlativo)` rechaza dos
+ * filas con el mismo número a la vez, y yendo de abajo hacia arriba cada una
+ * se muda a un lugar que la anterior ya dejó libre.
+ *
+ * Esto contradice a propósito `proximoCorrelativo`, que no rellena huecos: ahí
+ * se decidió que un código es un identificador y reusarlo confunde. Acá lo
+ * pidió el usuario para los bochones, y el costo asumido es que un código ya
+ * escrito en la planilla de Google (o dicho de palabra) apunta después a otro
+ * bochón — por eso el borrado avisa cuántos códigos se mueven antes de hacerlo.
+ */
+export function reacomodarCorrelativos(
+  restantes: { codigo: string; correlativo: number }[],
+  tipo: TipoDeCodigo,
+  yacimientoCodigo: string,
+  anio: number
+): CambioDeCodigo[] {
+  return [...restantes]
+    .sort((x, y) => x.correlativo - y.correlativo)
+    .flatMap((fila, i) => {
+      const correlativo = i + 1;
+      const a = armarCodigo(tipo, yacimientoCodigo, correlativo, anio);
+      return a === fila.codigo ? [] : [{ de: fila.codigo, a, correlativo }];
+    });
+}

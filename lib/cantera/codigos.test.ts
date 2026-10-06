@@ -4,6 +4,7 @@ import {
   parsearCodigo,
   proximoCorrelativo,
   anioParaCodigo,
+  reacomodarCorrelativos,
 } from "./codigos";
 
 const YAC = ["D1", "D6", "C1", "C3", "A"];
@@ -83,5 +84,34 @@ describe("anioParaCodigo", () => {
   it("usa el año en curso si la fecha de voladura falta", () => {
     expect(anioParaCodigo(null, AHORA)).toBe(2026);
     expect(anioParaCodigo("", AHORA)).toBe(2026);
+  });
+});
+
+describe("reacomodarCorrelativos", () => {
+  const fila = (n: number) => ({ codigo: armarCodigo("B", "D1", n, 2026), correlativo: n });
+
+  it("al borrar uno del medio, los de arriba bajan un lugar y los de abajo no se tocan", () => {
+    // Había 1..5 y se borró el 3.
+    const restantes = [fila(1), fila(2), fila(4), fila(5)];
+    expect(reacomodarCorrelativos(restantes, "B", "D1", 2026)).toEqual([
+      { de: "B04D126", a: "B03D126", correlativo: 3 },
+      { de: "B05D126", a: "B04D126", correlativo: 4 },
+    ]);
+  });
+
+  it("devuelve de menor a mayor aunque lleguen desordenados", () => {
+    const cambios = reacomodarCorrelativos([fila(5), fila(2), fila(4)], "B", "D1", 2026);
+    expect(cambios.map((c) => c.correlativo)).toEqual([1, 2, 3]);
+  });
+
+  it("cierra también los huecos que ya había", () => {
+    expect(reacomodarCorrelativos([fila(1), fila(2), fila(3), fila(4), fila(6)], "B", "D1", 2026)).toEqual([
+      { de: "B06D126", a: "B05D126", correlativo: 5 },
+    ]);
+  });
+
+  it("si borraron el último o no hay huecos, no cambia ninguno", () => {
+    expect(reacomodarCorrelativos([fila(1), fila(2), fila(3)], "B", "D1", 2026)).toEqual([]);
+    expect(reacomodarCorrelativos([], "B", "D1", 2026)).toEqual([]);
   });
 });
