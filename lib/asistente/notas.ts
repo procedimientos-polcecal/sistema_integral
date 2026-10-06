@@ -77,4 +77,20 @@ export const NOTAS_GENERALES = `
 - La consulta devuelve como mucho 200 filas, y el corte no avisa. Si el conteo
   puede pasarse, agregá (count, sum, group by) en vez de traer las filas: un
   resultado truncado se ve igual que uno completo.
+- Cuando el usuario nombre algo en texto libre —un lugar, una máquina, un
+  proveedor, un producto— NO supongas que no existe porque no lo ves acá: este
+  catálogo trae el esquema, no los datos. Buscalo con ILIKE en la tabla de
+  catálogo que corresponda, de las que figuran más abajo, y recién después
+  contestá. Preguntarle al usuario algo que podés averiguar con una consulta es
+  la respuesta equivocada.
+- Para esa búsqueda usá un FRAGMENTO CORTO, y cortalo antes de cualquier vocal
+  con tilde: '%tritura%' y no '%trituración%'. En esta base no están instaladas
+  unaccent ni pg_trgm —se comprobó—, así que ILIKE distingue tildes: buscar
+  'trituracion' no encuentra algo escrito "trituración". El fragmento sin tildes
+  encuentra las dos formas y no depende de cómo lo haya escrito quien pregunta.
+- Si esa búsqueda trae MÁS DE UNA fila, decí cuáles son y preguntá a cuál se
+  refiere. No elijas la que mejor se parece: hay nombres casi repetidos de
+  verdad, que difieren sólo en una mayúscula o en una palabra, y los registros
+  quedan repartidos entre los dos. Quedarse con uno da un número que parece bien
+  y está mal.
 `.trim();
