@@ -294,12 +294,14 @@ export interface ToneladasDeOrigenExterno {
   calizaLomaNegra: number;
   /** Piedra de Pavone: pesadas con origen PAVONE o SERJEN, de cualquier material. */
   piedraPavone: number;
+  /** Dolomita D1 que figura con origen PT 2: se trajo de la planta, sigue siendo de D1. */
+  dolomitaD1DePt2: number;
 }
 
 /**
  * Las toneladas del mes cuyo origen NO es un yacimiento propio pero que el
- * usuario quiere ver junto a ellos (02/10/2026): la caliza de Loma Negra y la
- * piedra de Pavone. Mismo criterio que `toneladasPorYacimientoDesdePesadas`:
+ * usuario quiere ver junto a ellos (02/10/2026): la caliza de Loma Negra, la
+ * piedra de Pavone y (06/10/2026) la dolomita D1 traída de PT 2. Mismo criterio que `toneladasPorYacimientoDesdePesadas`:
  * por el origen real de la pesada, sin depender de qué fletero hizo el viaje,
  * y el origen se compara sin espacios ni mayúsculas ("L NEGRA", "LNEGRA").
  *
@@ -314,12 +316,13 @@ export function toneladasDeOrigenesExternos(
   pesadas: { fecha: string; tipo: string | null; origen: string | null; toneladas: number }[],
   mes: string
 ): ToneladasDeOrigenExterno {
-  const r = { calizaLomaNegra: 0, piedraPavone: 0 };
+  const r = { calizaLomaNegra: 0, piedraPavone: 0, dolomitaD1DePt2: 0 };
   for (const p of pesadas) {
     if (p.fecha.slice(0, 7) !== mes.slice(0, 7)) continue;
     const origen = (p.origen ?? "").toUpperCase().replace(/\s+/g, "");
     if (origen === "LNEGRA" && p.tipo === "caliza") r.calizaLomaNegra += p.toneladas;
     else if (origen === "PAVONE" || origen === "SERJEN") r.piedraPavone += p.toneladas;
+    else if (origen === "PT2" && p.tipo === "dolomita_d1") r.dolomitaD1DePt2 += p.toneladas;
   }
   return r;
 }

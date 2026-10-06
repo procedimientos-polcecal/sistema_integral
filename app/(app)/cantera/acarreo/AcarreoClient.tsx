@@ -59,7 +59,7 @@ export default function AcarreoClient({
   resumenes: { fletero: Fletero; resumen: FilaResumenFletero }[];
   toneladas: FilaToneladasPorYacimiento[];
   /** Caliza de Loma Negra y piedra de Pavone del mes, que no son yacimientos propios pero se ven al lado. */
-  origenesExternos: { calizaLomaNegra: number; piedraPavone: number };
+  origenesExternos: { calizaLomaNegra: number; piedraPavone: number; dolomitaD1DePt2: number };
   totalesDelMes: FilaTotalPorTipo[];
   totalGeneral: number;
   puedeEditar: boolean;
@@ -210,7 +210,7 @@ export default function AcarreoClient({
       <section className="card mt-5 p-4">
         <h2 className="section-title">Toneladas por yacimiento</h2>
         <p className="mt-1 text-xs text-[var(--text-muted)]">Por el origen real de cada pesada — todos los materiales, incluida Caliza.</p>
-        {toneladasDelMes.length === 0 && origenesExternos.calizaLomaNegra === 0 && origenesExternos.piedraPavone === 0 ? (
+        {toneladasDelMes.length === 0 && origenesExternos.calizaLomaNegra === 0 && origenesExternos.piedraPavone === 0 && origenesExternos.dolomitaD1DePt2 === 0 ? (
           <p className="empty-state mt-3">Sin datos este mes.</p>
         ) : (
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -218,6 +218,7 @@ export default function AcarreoClient({
               ...toneladasDelMes.map((t) => ({ clave: t.yacimientoCodigo, etiqueta: t.yacimientoCodigo, toneladas: t.toneladas, color: COLOR_YACIMIENTO[t.yacimientoCodigo] ?? "#64748B" })),
               { clave: "loma-negra", etiqueta: "Caliza de Loma Negra", toneladas: origenesExternos.calizaLomaNegra, color: "#0F766E" },
               { clave: "pavone", etiqueta: "Piedra de Pavone", toneladas: origenesExternos.piedraPavone, color: "#BE185D" },
+              { clave: "d1-pt2", etiqueta: "Dolomita D1 traída de PT 2", toneladas: origenesExternos.dolomitaD1DePt2, color: "#B45309" },
             ].map((t) => {
               const pct = totalToneladas > 0 ? Math.round((t.toneladas / totalToneladas) * 100) : 0;
               return (

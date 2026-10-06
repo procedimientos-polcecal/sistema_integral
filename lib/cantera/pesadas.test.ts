@@ -247,10 +247,13 @@ describe("toneladasDeOrigenesExternos", () => {
     { fecha: "2026-08-07", tipo: "material_desde_pavone", origen: "PAVONE", toneladas: 12 },
     { fecha: "2026-08-08", tipo: "material_desde_pavone", origen: "SERJEN", toneladas: 99 },
     { fecha: "2026-07-30", tipo: "caliza", origen: "L NEGRA", toneladas: 1000 },
+    { fecha: "2026-08-10", tipo: "dolomita_d1", origen: "PT 2", toneladas: 15 },
+    { fecha: "2026-08-11", tipo: "dolomita_d1", origen: "P T 2", toneladas: 10 },
+    { fecha: "2026-08-12", tipo: "dolomita_d6", origen: "PT 2", toneladas: 33 }, // D6: no es D1
   ];
 
   it("suma la caliza de Loma Negra y la piedra de Pavone del mes pedido", () => {
-    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 111 });
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-08")).toEqual({ calizaLomaNegra: 40, piedraPavone: 111, dolomitaD1DePt2: 25 });
   });
 
   it("Pavone suma lo que dice PAVONE y lo que dice SERJEN; Loma Negra no mezcla los finos", () => {
@@ -260,7 +263,7 @@ describe("toneladasDeOrigenesExternos", () => {
   });
 
   it("un mes sin nada da ceros", () => {
-    expect(toneladasDeOrigenesExternos(pesadas, "2026-09")).toEqual({ calizaLomaNegra: 0, piedraPavone: 0 });
+    expect(toneladasDeOrigenesExternos(pesadas, "2026-09")).toEqual({ calizaLomaNegra: 0, piedraPavone: 0, dolomitaD1DePt2: 0 });
   });
 });
 
