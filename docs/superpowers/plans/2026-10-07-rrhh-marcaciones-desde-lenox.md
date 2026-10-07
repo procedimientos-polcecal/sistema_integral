@@ -2116,19 +2116,31 @@ export async function sincronizarMarcaciones(
     .single();
   if (batchErr) throw new Error(batchErr.message);
 
+  // `aplicarDias` se llama UNA sola vez con el rango entero, no una por
+  // ventana de 7 días. El partido en ventanas es un detalle del cliente HTTP
+  // y muere ahí: `traerMarcaciones` devuelve las filas de todo el rango.
+  // Llamarlo por ventana repetiría el aviso agregado de fichadas abiertas
+  // viejas —cada una con su propio "antes del" y su propia lista— y además
+  // rompería el encadenamiento entre ventanas.
   const resultado = await aplicarDias(admin, empleados, {
     batchId: batch.id,
     protegerCorregidos: true,
   });
 
+  // `pendientes` son fichadas abiertas viejas que alguien tiene que cerrar a
+  // mano. Es información, no un fallo: no cuenta como error de la corrida.
+
   const avisos = [...avisosPrevios, ...resultado.avisos, ...(await cotejarPadron(admin, empleadosData ?? []))];
+  const detalle = [...avisos, ...resultado.pendientes];
 
   await admin
     .from("rrhh_import_batches")
     .update({
       cantidad_registros: resultado.insertados,
+      // `pendientes` va al detalle pero NO al conteo de errores: un número de
+      // errores que incluye lo que no es un error es un número que nadie mira.
       cantidad_errores: avisos.length,
-      log_detalle: avisos.length ? avisos.join("\n") : null,
+      log_detalle: detalle.length ? detalle.join("\n") : null,
     })
     .eq("id", batch.id);
 
