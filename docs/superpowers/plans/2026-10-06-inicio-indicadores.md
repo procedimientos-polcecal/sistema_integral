@@ -1894,3 +1894,52 @@ agosto y septiembre), y
 `calculos_diarios` tiene cinco meses de ausencias falsas guardadas (65 de 68
 empleados en promedio, de febrero a junio, y otra vez desde el 01/10). La tarjeta
 ahora las esquiva, pero el dato guardado sigue mal.
+
+---
+
+## Addendum del 07/10/2026: las dos alarmas de service de Taller Vial se fueron
+
+**Este plan quedó parcialmente desactualizado y no se reescribió**: los fragmentos
+de código de las tareas 5, 7 y 9 muestran `tallerVialServiceVencidos`,
+`tallerVialServiceProximos`, `serviceVencidos` y `serviceProximos`, que **ya no
+existen**. Lo que vale es el código commiteado; esto explica por qué difiere.
+
+Midiendo con el criterio del propio rediseño —«un indicador tiene que medir algo
+que se mueva y que alguien pueda bajar»— las dos alarmas de service resultaron
+ser el mismo caso que los «mantenimientos vencidos» que este plan ya había
+sacado:
+
+```
+equipos (code EM%, activos):  16
+cargas de combustible:        805
+services registrados:          1
+```
+
+El escalón de 250 hs, equipo por equipo: **15 de 16 en `null` y 1 en VENCIDO**,
+o sea que `serviceVencidos` sólo podía decir 0 o 1 y `serviceProximos` estaba
+clavado en 0. Y los 15 `null` eran la noticia que nadie veía: a 15 de los 16
+equipos **nunca se les registró un service**, y 13 de ellos tienen horómetro
+conocido.
+
+Lo que cambió:
+
+- `resumenTallerVial` (`app/api/home/resumen/route.ts`) devuelve
+  `{ sinEquipoReconocido, equiposSinService, equiposTotal }`. Ya no trae las 805
+  cargas ni calcula horómetros: son todos conteos baratos.
+- El cruce vive en `equiposTallerVialSinService` (`lib/home/consultas.ts`),
+  porque lo necesitan las dos rutas del Inicio y un `route.ts` del App Router
+  sólo puede exportar los handlers HTTP. Usa `traerTodo()`.
+- En `lib/home/avisos.ts`, `tallerVialServiceVencidos` y
+  `tallerVialServiceProximos` se reemplazan por `tallerVialSinService`, con id
+  **nuevo** `taller-vial-sin-service`. Los dos ids viejos quedan huérfanos en
+  `notificaciones_descartes`: es inofensivo —nunca más coinciden con nada— y no
+  se limpian. Reusar uno sería peor: a quien lo hubiera descartado le llegaría ya
+  silenciado un aviso que nunca vio.
+- `/api/home/avisos` ahora sí calcula ese aviso, así que el párrafo de su
+  cabecera pasó de «tres avisos no se calculan acá» a **uno**: sólo queda
+  `cantera-sin-conciliar`.
+- La tarjeta del Inicio muestra una secundaria en vez de dos: **«Equipos sin
+  service registrado · 15 de 16»**.
+
+El «1 vencido» no se perdió del sistema: sigue en `/taller-vial/services`, que es
+donde se mira equipo por equipo.

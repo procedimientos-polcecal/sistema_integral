@@ -25,7 +25,7 @@ interface Resumen {
   facturacion: { sinVincular: number; sinProveedor: number } | null;
   cantera: { sinConciliar: number } | null;
   calidad: { envasesBajoMinimo: number; sinLlegarALaPlanilla: number } | null;
-  tallerVial: { sinEquipoReconocido: number; serviceVencidos: number; serviceProximos: number } | null;
+  tallerVial: { sinEquipoReconocido: number; equiposSinService: number; equiposTotal: number } | null;
   trituracion: { sinLlegarALaPlanilla: number; partesDelMes: number } | null;
   ritmo: Partial<Record<Modulo, Ritmo>>;
 }
@@ -254,9 +254,11 @@ export default function InicioClient({
         )}
 
         {/* El titular es lo que pide atención: una carga sin equipo reconocido
-            no entra en ningún resumen hasta que alguien la corrija. Los litros
-            del mes se fueron —obligaban a traer las 789 cargas para sumar una
-            columna— y en su lugar van los services, que sí piden hacer algo. */}
+            no entra en ningún resumen hasta que alguien la corrija. La
+            secundaria era el estado del service de 250 hs, en dos números que
+            sólo podían decir 0 o 1 porque hay **un** service cargado en todo el
+            sistema; lo que quedaba tapado es que a 15 de los 16 equipos nunca
+            se les anotó ninguno, y eso sí es una cola que alguien puede bajar. */}
         {tiene("taller_vial") && (
           <ModuloCard
             titulo="Taller Vial"
@@ -268,8 +270,7 @@ export default function InicioClient({
             secundarias={
               resumen?.tallerVial
                 ? [
-                    { label: "Service de 250 hs vencido", valor: resumen.tallerVial.serviceVencidos },
-                    { label: "Service por vencer", valor: resumen.tallerVial.serviceProximos },
+                    { label: "Equipos sin service registrado", valor: `${resumen.tallerVial.equiposSinService} de ${resumen.tallerVial.equiposTotal}` },
                   ]
                 : null
             }

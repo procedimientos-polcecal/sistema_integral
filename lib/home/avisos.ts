@@ -18,8 +18,7 @@ export interface ConteosParaAvisos {
   canteraSinConciliar: number;
   calidadEnvasesSinPlanilla: number;
   tallerVialSinEquipo: number;
-  tallerVialServiceVencidos: number;
-  tallerVialServiceProximos: number;
+  tallerVialSinService: number;
   trituracionSinPlanilla: number;
 }
 
@@ -50,8 +49,19 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
   { clave: "canteraSinConciliar", id: "cantera-sin-conciliar", titulo: "Registros de cantera con factura sin conciliar o a revisar", href: "/cantera/registros" },
   { clave: "calidadEnvasesSinPlanilla", id: "calidad-envases-sin-planilla", titulo: "Movimientos de envases que no llegaron a la planilla", href: "/calidad/envases/movimientos" },
   { clave: "tallerVialSinEquipo", id: "taller-vial-sin-equipo", titulo: "Cargas de combustible sin un equipo reconocido", href: "/taller-vial/cargas" },
-  { clave: "tallerVialServiceVencidos", id: "taller-vial-service-vencido", titulo: "Equipos con el service de 250 hs vencido", href: "/taller-vial/services" },
-  { clave: "tallerVialServiceProximos", id: "taller-vial-service-proximo", titulo: "Equipos por vencer el service de 250 hs", href: "/taller-vial/services" },
+  /*
+   * Reemplaza a "service de 250 hs vencido" y "service por vencer", que medían
+   * una tabla con **un solo service** en todo el sistema y por lo tanto sólo
+   * podían decir 0 o 1. Lo accionable son los 15 equipos de 16 a los que nunca
+   * se les anotó uno.
+   *
+   * El id es nuevo a propósito. Los dos viejos
+   * —`taller-vial-service-vencido` y `taller-vial-service-proximo`— quedan
+   * huérfanos en `notificaciones_descartes`, lo cual es inofensivo porque nunca
+   * más coinciden con nada. Reusar uno sería peor: a quien lo había descartado
+   * le llegaría ya silenciado un aviso que nunca vio.
+   */
+  { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", href: "/taller-vial/services" },
   { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", href: "/trituracion/partes" },
 ];
 

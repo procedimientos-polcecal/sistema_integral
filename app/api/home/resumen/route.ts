@@ -5,14 +5,12 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { traerTodo } from "@/lib/core/paginado";
 import { comoSeLee, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import { ritmoPorModulo } from "@/lib/home/ritmo";
-import { traerRitmo, diaDeReferenciaRrhh } from "@/lib/home/consultas";
+import { traerRitmo, diaDeReferenciaRrhh, equiposTallerVialSinService } from "@/lib/home/consultas";
 import {
   traerBochones, traerConsumosDe, traerVoladuras, traerYacimientos,
 } from "@/lib/cantera/consultas";
 import { armarFilaBochon, armarFilaVoladura, contarAvisos } from "@/lib/cantera/tablero";
 import type { Consumo } from "@/lib/cantera/types";
-import { traerCargas, traerEquiposTallerVial, traerServices } from "@/lib/tallerVial/consultas";
-import { resumenServicePorEquipo, ultimaLecturaPorEquipo } from "@/lib/tallerVial/service";
 
 /** Resumen liviano para la página de Inicio: solo los números de los módulos a los que el usuario tiene acceso. */
 export async function GET() {
@@ -376,38 +374,37 @@ async function resumenCalidad(supabase: Awaited<ReturnType<typeof createClient>>
  *
  * Una carga sin equipo reconocido —texto suelto como "empresa piparo" en vez de
  * un código EM— no entra en ningún resumen por equipo hasta que alguien la
- * corrija. Y un service de 250 hs vencido es justamente lo que no hay que dejar
- * pasar.
+ * corrija. Hoy son 3.
  *
- * Los litros del mes **se sacaron del Inicio**: eran lo que obligaba a traer las
- * 789 cargas enteras para sumar una columna, y están en la página del módulo.
- * Las cargas se siguen trayendo porque el cálculo de service necesita la última
- * lectura de horómetro de cada equipo, que es historia y no un conteo.
+ * LAS DOS ALARMAS DE SERVICE SE FUERON, Y POR QUÉ
+ *
+ * Eran "service de 250 hs vencido" y "service por vencer", y medido el
+ * 07/10/2026 son el mismo caso que los "mantenimientos vencidos" que ya se
+ * sacaron: 16 equipos activos, 805 cargas de combustible y **un solo service
+ * registrado en todo el sistema**. El escalón de 250 hs, equipo por equipo, da
+ * 15 de 16 en `null` y 1 en VENCIDO, así que `serviceVencidos` sólo podía decir
+ * 0 o 1 y `serviceProximos` estaba clavado en 0.
+ *
+ * Y los 15 `null` eran la información que se perdía: no significan "está todo
+ * bien", significan que a 15 de los 16 equipos **nunca se les anotó un
+ * service** —13 con horómetro conocido, o sea trabajando y acumulando horas—.
+ * Eso sí es una cola que alguien puede bajar, y es el indicador que quedó.
+ *
+ * El "1 vencido" no se perdió: sigue estando en `/taller-vial/services`, que es
+ * donde tiene sentido mirarlo equipo por equipo.
+ *
+ * El efecto colateral es que esta función pasa a ser todo conteos baratos: ya no
+ * hace falta traer las 805 cargas ni calcular el horómetro de cada equipo, que
+ * era lo único que obligaba a leer historia.
  */
 async function resumenTallerVial(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const [todasLasCargas, equipos, todosLosServices] = await Promise.all([
-    traerCargas(supabase, {}),
-    traerEquiposTallerVial(supabase),
-    traerServices(supabase),
+  const [{ count: sinEquipoReconocido }, { equiposSinService, equiposTotal }] = await Promise.all([
+    supabase.from("taller_vial_cargas")
+      .select("id", { count: "exact", head: true }).is("equipo_id", null),
+    equiposTallerVialSinService(supabase),
   ]);
 
-  const horometroActualPorEquipo = ultimaLecturaPorEquipo(
-    todasLasCargas
-      .filter((c) => c.equipo_id !== null)
-      .map((c) => ({ equipoId: c.equipo_id!, fecha: c.fecha, lectura: c.lectura }))
-  );
-  const servicePorEquipo = resumenServicePorEquipo(
-    equipos.map((e) => e.id),
-    todosLosServices.map((s) => ({ id: s.id, equipoId: s.equipo_id, tier: s.tier, fecha: s.fecha, horometro: s.horometro })),
-    horometroActualPorEquipo
-  );
-  const de250 = servicePorEquipo.map((r) => r.escalones.find((e) => e.tier === 250)!);
-
-  return {
-    sinEquipoReconocido: todasLasCargas.filter((c) => c.equipo_id === null).length,
-    serviceVencidos: de250.filter((e) => e.lectura === "VENCIDO").length,
-    serviceProximos: de250.filter((e) => e.lectura === "PROXIMO").length,
-  };
+  return { sinEquipoReconocido: sinEquipoReconocido ?? 0, equiposSinService, equiposTotal };
 }
 
 /**

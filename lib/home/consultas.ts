@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sumarDias } from "@/lib/core/fechas";
+import { traerTodo } from "@/lib/core/paginado";
 import { ultimoDiaHabilConFichadas } from "@/lib/rrhh/diaHabil";
 import type { FilaRitmo } from "./ritmo";
 
@@ -84,4 +85,39 @@ export async function sinClasificarDelUltimoDiaHabil(
     .eq("ausente", true)
     .is("justificada", null);
   return count ?? 0;
+}
+
+/**
+ * Cuántos equipos de Taller Vial no tienen **ningún** service registrado, y
+ * cuántos equipos hay en total.
+ *
+ * Vive acá porque lo necesitan las dos rutas del Inicio —`/api/home/resumen`
+ * para la tarjeta y `/api/home/avisos` para la campana—, y un `route.ts` del
+ * App Router sólo puede exportar los handlers HTTP: un helper exportado desde
+ * ahí rompe el build.
+ *
+ * Los equipos de Taller Vial son los de `equipos` con código EM* activos: el
+ * módulo no tiene catálogo propio (ver `traerEquiposTallerVial` en
+ * `lib/tallerVial/consultas.ts`).
+ *
+ * Los `equipo_id` de los services se traen con `traerTodo()` y no con un
+ * `select` pelado: hoy la tabla tiene una sola fila, pero si este indicador
+ * funciona va a crecer, y PostgREST corta en 1000 filas sin avisar.
+ */
+export async function equiposTallerVialSinService(
+  supabase: SupabaseClient
+): Promise<{ equiposSinService: number; equiposTotal: number }> {
+  const [{ data: equipos }, services] = await Promise.all([
+    supabase.from("equipos").select("id").ilike("code", "EM%").eq("is_active", true),
+    traerTodo<{ equipo_id: string | null }>((desde, hasta) =>
+      supabase.from("taller_vial_services").select("equipo_id").range(desde, hasta)
+    ),
+  ]);
+
+  const conService = new Set(services.map((s) => s.equipo_id).filter(Boolean));
+  const ids = (equipos ?? []).map((e) => e.id as string);
+  return {
+    equiposSinService: ids.filter((id) => !conService.has(id)).length,
+    equiposTotal: ids.length,
+  };
 }

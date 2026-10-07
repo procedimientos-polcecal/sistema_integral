@@ -277,6 +277,7 @@ fila — que es lo correcto, porque la tarjeta tampoco se le muestra.
 | Cantera | Facturas a conciliar | *se queda* | (no medido) |
 | **Calidad** | *sin tarjeta* | **Envases bajo el mínimo** | 3 de 28 |
 | Taller Vial | Cargas sin equipo | *se queda* | 3 |
+| Taller Vial *(secundaria, 07/10)* | Service de 250 hs vencido · Service por vencer | **Equipos sin service registrado** | 15 de 16 |
 | **Trituración** | *sin tarjeta* | **Partes sin exportar a la planilla** | 2 |
 
 ### RRHH: los ausentes del último día hábil con fichadas
@@ -340,6 +341,21 @@ domingo ni esté en `feriados`, y después el conteo de ausentes de ese día.
 - **La bandeja de Odoo de Calidad** (`calidad_odoo_sin_reconocer`) está vacía, así
   que no sirve de titular. El stock de envases bajo el mínimo —3 de 28— sí es una
   cola corta y accionable.
+- **Las dos alarmas de service de Taller Vial** (medido el 07/10/2026, después de
+  que el rediseño ya estuviera commiteado). Son el mismo caso que los
+  «mantenimientos vencidos»: 16 equipos EM activos, 805 cargas de combustible y
+  **un solo service registrado en todo el sistema**. El escalón de 250 hs, equipo
+  por equipo, da **15 de 16 en `null` y 1 en VENCIDO**, así que `serviceVencidos`
+  sólo podía decir 0 o 1 y `serviceProximos` estaba clavado en 0.
+  Pero acá el hallazgo es el otro: los 15 `null` **no significan «está todo
+  bien»**, significan que a 15 de los 16 equipos nunca se les anotó un service —y
+  13 de ellos tienen horómetro conocido, o sea que están trabajando y acumulando
+  horas—. Ésa sí es una cola que alguien puede bajar. Las dos secundarias se
+  reemplazan por una sola, **«Equipos sin service registrado: 15 de 16»**, y es
+  ése el aviso que va a la campana. El «1 vencido» no se pierde: sigue en
+  `/taller-vial/services`, que es donde se mira equipo por equipo.
+  De paso, `resumenTallerVial` deja de necesitar las 805 cargas y el cálculo de
+  horómetro, así que pasa a ser todo conteos baratos — ver «Lo que se saca».
 
 ### Lo que se saca
 
@@ -355,6 +371,16 @@ obligan a traer `cantera_voladuras`, `cantera_consumos`, `cantera_acarreos`,
 todos los services **enteros**, para calcular en memoria dos números que ya están
 en la página de inicio de cada módulo, a un clic. El Inicio queda con lo
 accionable y la señal de ritmo.
+
+**Addendum del 07/10/2026:** las cargas de combustible se seguían trayendo
+enteras —805 a esa fecha— porque el estado de service necesitaba la última
+lectura de horómetro de cada equipo. Al reemplazar las dos alarmas de service por
+«Equipos sin service registrado», eso también desaparece: `resumenTallerVial`
+pasa a ser un `count … head` sobre `taller_vial_cargas` más el cruce de los
+equipos EM activos contra los `equipo_id` de `taller_vial_services`. El cruce
+vive en `equiposTallerVialSinService` (`lib/home/consultas.ts`) porque lo usan
+las dos rutas, y usa `traerTodo()`: hoy la tabla tiene una fila, pero si el
+indicador funciona va a crecer y PostgREST corta en 1000 sin avisar.
 
 ## 3. Rendimiento: el problema no estaba en el Inicio
 

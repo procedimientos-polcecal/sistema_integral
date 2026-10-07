@@ -25,6 +25,34 @@ describe("avisosDeConteos", () => {
     const avisos = avisosDeConteos({ calidadEnvasesSinPlanilla: 2, trituracionSinPlanilla: 2 });
     expect(avisos.map((a) => a.id)).toEqual(["calidad-envases-sin-planilla", "trituracion-sin-planilla"]);
   });
+
+  /*
+   * El aviso que reemplazó a los dos de service de 250 hs, que medían una tabla
+   * con un solo service y sólo podían decir 0 o 1. El `id` se fija acá a
+   * propósito: tiene que ser **nuevo** y no reusar
+   * `taller-vial-service-vencido` ni `taller-vial-service-proximo`, porque a
+   * quien hubiera descartado alguno de esos le llegaría ya silenciado un aviso
+   * que nunca vio.
+   */
+  it("avisa de los equipos sin ningún service registrado, con un id propio", () => {
+    expect(avisosDeConteos({ tallerVialSinService: 15 })).toEqual([
+      {
+        id: "taller-vial-sin-service",
+        titulo: "Equipos sin ningún service registrado",
+        cantidad: 15,
+        href: "/taller-vial/services",
+      },
+    ]);
+  });
+
+  it("sale después del aviso de cargas sin equipo, como antes salían los de service", () => {
+    const avisos = avisosDeConteos({ tallerVialSinEquipo: 3, tallerVialSinService: 15, trituracionSinPlanilla: 1 });
+    expect(avisos.map((a) => a.id)).toEqual([
+      "taller-vial-sin-equipo",
+      "taller-vial-sin-service",
+      "trituracion-sin-planilla",
+    ]);
+  });
 });
 
 describe("avisosDeRitmo", () => {
