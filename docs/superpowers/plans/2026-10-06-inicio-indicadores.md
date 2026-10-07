@@ -1900,7 +1900,7 @@ ahora las esquiva, pero el dato guardado sigue mal.
 ## Addendum del 07/10/2026: las dos alarmas de service de Taller Vial se fueron
 
 **Este plan quedó parcialmente desactualizado y no se reescribió**: los fragmentos
-de código de las tareas 5, 7 y 9 muestran `tallerVialServiceVencidos`,
+de código de las tareas **4, 6 y 7** muestran `tallerVialServiceVencidos`,
 `tallerVialServiceProximos`, `serviceVencidos` y `serviceProximos`, que **ya no
 existen**. Lo que vale es el código commiteado; esto explica por qué difiere.
 
