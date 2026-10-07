@@ -717,24 +717,57 @@ async function pedir<T>(ruta: string, params: Record<string, string>): Promise<{
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url, { headers: { "LenoxBusinessAPI-Key": clave } });
+
+  // Un rango sin marcaciones devuelve 204 con el cuerpo VACÍO. `res.ok` es
+  // true para un 204, así que no cae en la rama de error de abajo, y
+  // `res.json()` sobre un cuerpo vacío lanza. Medido el 07/10/2026 contra la
+  // API real: un fin de semana largo habría roto el cron.
+  if (res.status === 204) return { resultado: [] };
+
   if (!res.ok) {
     // Sin traducir, a propósito: un diagnóstico que no se distingue de otro
     // no es un diagnóstico. Es la misma regla que con los errores de Google.
+    //
+    // El 429 merece su propio texto porque la respuesta NO trae `Retry-After`,
+    // ni headers de límite, ni cuerpo: `content-length: 0`. Sin eso, el error
+    // sería un "Lenox respondió 429: " pelado, que no le dice nada a nadie.
     const texto = await res.text();
+    if (res.status === 429) {
+      throw new Error(
+        "Lenox rechazó el pedido por exceso de llamadas (429). No dice cuánto hay que esperar; " +
+          "medido, la ventana es de varios minutos. Esperá un rato y volvé a intentar."
+      );
+    }
     throw new Error(`Lenox respondió ${res.status}: ${texto.slice(0, 300)}`);
   }
   const cuerpo = await res.json();
-  return { resultado: (cuerpo?.resultado ?? []) as T[] };
+  return { resultado: (cuerpo?.resultado ?? []) as T[], mensaje: cuerpo?.mensaje as string | undefined };
 }
 
-/** Todas las páginas de una ruta, hasta que una vuelve vacía. */
+/**
+ * Todas las filas de una ruta.
+ *
+ * Medido el 07/10/2026: la API **no pagina**. `FilasExcluidas` es un offset
+ * real —con 10 devuelve 725 de 735 y la fila 11 pasa a ser la 1— pero devuelve
+ * todo lo que queda, no una página. Con 70 empleados, 7 días dan 735 filas y
+ * nunca vamos a ver un corte.
+ *
+ * Por eso el camino rápido es el `mensaje`: si dice que están todos, se corta
+ * sin gastar una llamada de más — y las llamadas importan, porque hay un
+ * límite duro y la API no dice cuál. La paginación queda abajo como red por si
+ * algún día empieza a truncar, que es el único escenario en que ese mensaje
+ * diría otra cosa.
+ */
+const TODOS_LOS_RESULTADOS = "Se muestran todos los resultados";
+
 async function pedirTodo<T>(ruta: string, params: Record<string, string>): Promise<T[]> {
   const filas: T[] = [];
   let offset = 0;
   for (;;) {
-    const { resultado } = await pedir<T>(ruta, { ...params, FilasExcluidas: String(offset) });
+    const { resultado, mensaje } = await pedir<T>(ruta, { ...params, FilasExcluidas: String(offset) });
     filas.push(...resultado);
     if (resultado.length === 0) break;
+    if (mensaje?.trim() === TODOS_LOS_RESULTADOS) break;
     offset += resultado.length;
     // Cinturón: si la API ignorara FilasExcluidas devolvería siempre lo mismo
     // y esto no terminaría nunca.

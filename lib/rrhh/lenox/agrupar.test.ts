@@ -7,11 +7,15 @@ function dia(y: number, m: number, d: number) {
   return toUtcDateOnly(y, m - 1, d);
 }
 
+// Los valores son los que devuelve la API de verdad, medidos el 07/10/2026:
+// `tipoMarcacion` es "Por Reloj" o "GeoCerca", y `reloj` es "porteria" o null
+// según venga del lector o de una geocerca.
 function marca(legajo: string, fecha: string, hora: string): MarcacionLenox {
   return {
     nombre: "A", apellido: "B", legajo,
     marcacion: `${fecha} ${hora}`, marcacionFecha: fecha, marcacionHora: hora,
-    tipoMarcacion: "BIOMETRICO", comentario: null, reloj: "Reloj 1",
+    tipoMarcacion: "Por Reloj", comentario: null, reloj: "porteria",
+    longitud: null, latitud: null, codigoNovedad: null, justificada: "No",
   };
 }
 

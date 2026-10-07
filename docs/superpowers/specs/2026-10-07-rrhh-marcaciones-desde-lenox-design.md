@@ -317,27 +317,79 @@ bloquea escribir ni testear nada de lo puro.
   la clave, o hace falta cargar un período viejo largo de un tirón, el camino
   sigue estando.
 
-## Lo que falta medir, el día que llegue la clave
+## Lo que se midió contra la API real (07/10/2026)
 
-Es la primera tarea de la implementación, antes de escribir el cliente de
-verdad. Despacho se diseñó con dos supuestos sobre su libro y los dos eran
-falsos; la forma de no repetirlo es ir a mirar.
+Las cinco incógnitas que este spec dejó abiertas, contestadas contra
+producción. Tres de las respuestas cambian el código del cliente, y dos de ésas
+no se deducen de la documentación.
 
-1. **El tope de filas por respuesta** y qué dice exactamente `mensaje` cuando
-   se trunca.
-2. **Si `GetMarcaciones` sin `Legajo` devuelve a todos**, o hay que iterar
-   empleado por empleado (68 llamadas × ventana sería otra cosa).
-3. **Qué trae `tipoMarcacion`** en los datos reales de Polcecal — el ejemplo de
-   la doc dice `"Manual"` y `"GEOLOCALIZADA"`, pero el reloj físico debería
-   traer otra cosa. Interesa por si conviene distinguir una marca cargada a
-   mano en Lenox de una del lector.
-4. **Que el `legajo` que devuelve la API sea el mismo string** que trae el
-   Excel (`PC_204`) y no un id interno.
-5. **Si hay límite de llamadas por día.** La doc no lo menciona.
+| | Respuesta medida |
+|---|---|
+| ¿`GetMarcaciones` sin `Legajo` devuelve a todos? | **Sí.** 7 días = 735 filas de 62 legajos, en una sola llamada |
+| ¿Tope de filas por respuesta? | **No hay página.** Devuelve todo lo que queda desde el offset |
+| ¿El `legajo` es el string o un id interno? | **El string**: `EXT_001`, `PS_006`, `PC_077` |
+| ¿Qué trae `tipoMarcacion`? | **`"Por Reloj"` y `"GeoCerca"`** — no los de la doc |
+| ¿Hay límite de llamadas? | **Sí, y duro.** Ver abajo |
 
-Un día de datos reales comparado contra el Excel del mismo día, fichada por
-fichada, es la prueba que cierra esto — es lo que se hizo el 27/08/2026 con el
-desfasaje de 3 horas y lo que lo dejó resuelto de verdad.
+**El enganche por legajo funciona tal cual.** Era el supuesto del que colgaba
+todo y el único sin plan B.
+
+**El tope de 7 días lo impone el servidor**, no es una precaución nuestra: con
+8 devuelve `400` y el mensaje *"La cantidad de dias entre las fechas desde y
+hasta no debe superar los 7 días"*. Partir el rango es obligatorio.
+
+**`FilasExcluidas` es un offset real** —con `10` devuelve 725 de 735 y la fila
+11 pasa a ser la 1— pero devuelve **todo lo que queda**, no una página. Con 70
+empleados nunca vamos a ver un corte. La paginación queda igual como red, con
+el `mensaje` (`"Se muestran todos los resultados"`) como camino rápido para no
+gastar una llamada de más.
+
+### Las tres cosas que cambian el código
+
+**1. Un rango sin datos devuelve `204` con el cuerpo vacío.** `res.ok` es
+`true` para un 204, así que no cae en la rama de error, y `await res.json()`
+sobre un cuerpo vacío **lanza**. Un fin de semana largo lo habría roto. El
+cliente tiene que tratar el 204 como "cero filas" antes de intentar parsear.
+
+**2. Hay límite de llamadas, y la API no dice cuál.** Alcanzaron unas doce
+llamadas seguidas para recibir `429`. La respuesta **no trae `Retry-After`, ni
+ningún header de límite, ni cuerpo**: `content-length: 0`. Medido, la ventana
+no es de segundos — **a los 4 minutos seguía bloqueada**.
+
+Consecuencias de diseño:
+- El **cron** hace **una sola llamada** por corrida (7 días), más una de
+  `GetEmpleados` para el cotejo. Está muy lejos del límite.
+- El **botón** con un rango de un mes son 5 llamadas más la del cotejo. Es el
+  que puede tocarlo.
+- **No se reintenta un `429`**: sin `Retry-After` cualquier espera es inventada,
+  y reintentar sobre un límite que no se conoce lo empeora. Se corta, se
+  registra en `sincronizaciones` con el texto tal cual, y se le dice a la
+  persona que espere y vuelva a intentar. Es la misma regla que con Google: lo
+  que dijo el servicio, sin traducir.
+
+**3. El tipo `MarcacionLenox` de la doc está incompleto.** Los datos reales
+traen además `justificada`, `longitud` y `latitud`. Y `tipoMarcacion` no es
+`"Manual"`/`"GEOLOCALIZADA"` como en los ejemplos, sino **`"Por Reloj"`** y
+**`"GeoCerca"`**: hay gente fichando por geocerca desde el teléfono, no sólo en
+el reloj de portería. No cambia la reconciliación —una marca es una marca— pero
+conviene saberlo antes de que alguien pregunte por qué un fichaje no tiene
+reloj asociado (`reloj` es `"porteria"` o `null`).
+
+### Dos datos más, que no eran incógnitas
+
+**Latencia:** la primera llamada tardó 12 segundos; las siguientes entre 0,5 y
+5. Un mes son 5 llamadas, bien dentro del `maxDuration = 300` de los crons.
+
+**Lenox tiene 73 empleados y el SdG 70**, con 2 marcados con `fechaBaja`. El
+cotejo del padrón va a tener algo que decir desde el primer día, que es
+exactamente para lo que está.
+
+### Lo que falta probar, y no se puede todavía
+
+Un día de datos reales comparado contra el Excel del mismo día, **fichada por
+fichada**. Es la prueba que cierra esto —es lo que se hizo el 27/08/2026 con el
+desfasaje de 3 horas y lo que lo dejó resuelto de verdad— y necesita el cliente
+escrito, que es la tarea siguiente.
 
 ## Riesgos asumidos
 
