@@ -1820,6 +1820,47 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+### Lo que cambió respecto del bloque de arriba, al construirlo
+
+**El bloque de arriba tiene un error de diseño: hacía pasar el modo "separado"
+por la reconciliación de marcas** ("se arman tokens de a dos"). Eso está mal, y
+la consecuencia se vio recién al correrlo.
+
+`reconciliarTokens` existe para **inferir** qué marca es entrada y cuál salida
+a partir de una secuencia cruda. En el modo separado el emparejamiento **ya
+viene dado**: el archivo tiene una columna de entrada y otra de salida. Pasarlo
+por ahí tira información que el archivo entregó, y produjo dos regresiones
+medidas:
+
+- una fila con entrada y sin salida se cerraba con la entrada de **otra fila**
+  si caía entre 2 y 14 horas después — algo que el archivo nunca dijo;
+- una salida a ≤5 minutos de la entrada se descartaba como "marcación
+  fantasma". Ese filtro tiene sentido sobre marcas crudas del reloj, no sobre
+  dos columnas que ya dicen cuál es cuál.
+
+**La forma correcta** es una unión discriminada, `LoteAAplicar` en `decidir.ts`:
+
+```ts
+| { tipo: "marcas"; empleados: DiasDeEmpleado[] }   // Lenox y el Excel combinado
+| { tipo: "turnos"; turnos: TurnoNuevo[] }          // el Excel separado
+```
+
+Así el contrato se lee en la firma y no en un flag suelto. La vía `turnos` usa
+`turnosYaEmparejados`, que no reconcilia nada. **Desde la bifurcación todo es
+común**: dedup, día corregido, liquidación cerrada, aviso de divergencia,
+borrado, reinserción y rango de recálculo.
+
+El route quedó en **182 líneas** (eran 233) y conserva sus mensajes propios.
+
+**Las tres diferencias de comportamiento que quedan son buscadas:** sólo se
+encadena la fichada abierta del día anterior al primer día del archivo (las más
+viejas van al pendiente agregado); los avisos de reconciliación salen después
+de los errores de parseo en vez de intercalados; e `insertados` no cuenta los
+turnos de días dentro de una liquidación cerrada, que ahora también frena al
+Excel.
+
+---
+
 ## Tarea 9: Los tres verbos marcan el día como corregido
 
 **Requiere la Tarea 2 corrida.**
