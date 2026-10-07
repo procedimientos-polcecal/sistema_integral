@@ -25,6 +25,44 @@ nuevas — `fetch` nativo.
 
 ---
 
+## Estado al 07/10/2026
+
+**Siete de trece tareas hechas.** Lo que falta está bloqueado por una sola
+cosa: **`LENOX_API_KEY` no está cargada** en `.env.local` ni en Vercel.
+
+| | Tarea | Estado |
+|---|---|---|
+| 1 | Medir la API real | **bloqueada** — falta la clave |
+| 2 | Las dos migraciones | ✅ escritas **y aplicadas en la base** |
+| 3 | `reconciliarTokens` | ✅ |
+| 4 | El cliente HTTP | **bloqueada** — depende de la 1 |
+| 5 | El agrupador | ✅ |
+| 6 | La capa que decide | ✅ |
+| 7 | La capa que escribe | ✅ |
+| 8 | El Excel usa `aplicar.ts` | ✅ |
+| 9 | Marcar los días corregidos | ✅ |
+| 10 | La orquestación y el cotejo | **bloqueada** — importa el cliente |
+| 11 | El cron y la ruta del botón | **bloqueada** — importa la 10 |
+| 12 | La pantalla | pendiente — depende de la 11 |
+| 13 | Documentación y verificación | pendiente — va al final |
+
+**Lo construido:** `lib/rrhh/lenox/` (tipos y agrupador), `lib/rrhh/fichadas/`
+(decidir, aplicar, marcarDia) y los cambios en `excelImport.ts`, `dates.ts` y
+las tres rutas de fichadas. **105 tests** sobre lógica que antes vivía dentro
+de una ruta y no tenía ninguno.
+
+**Para retomar:** cargar la clave y empezar por la Tarea 1, que **no es
+opcional** — sus cinco mediciones cambian el código del cliente, y uno de sus
+pasos dice explícitamente que hay que parar si el legajo que devuelve la API
+no es el string (`PC_204`).
+
+**Cada tarea construida tiene una sección "Lo que cambió respecto del bloque de
+arriba, al construirlo"** justo después. Leela: el bloque de código de la tarea
+es lo que se planeó, y esa sección es lo que pasó. En tres casos el plan estaba
+mal y el código es lo correcto.
+
+---
+
 ## Mapa de archivos
 
 | Archivo | Responsabilidad |
