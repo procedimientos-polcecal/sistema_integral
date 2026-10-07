@@ -2513,6 +2513,18 @@ rápida de que nadie lea ninguno de los dos. Van **aparte y en otro tono**, y
 eso vale para **los dos bloques** de la pantalla —el de Lenox y el del import
 de Excel—, no sólo para el nuevo.
 
+**Y lo segundo, que salió de la revisión de la Tarea 9:** las tres rutas de
+fichadas (`POST`, `PUT`, `DELETE`) devuelven `diaSinProteger: true` cuando no
+se pudo anotar el día en `rrhh_dias_corregidos`. **Hay que mostrarlo.** Hoy
+nadie lee esa respuesta: el `DELETE` la ignora y `crearManual` ni mira el
+`res`. Si no se muestra, la persona cree que su corrección quedó protegida y
+no lo está, y el cron se la pisa a la mañana siguiente.
+
+Que el aviso diga qué hacer, no sólo que algo falló — algo del tipo "la
+corrección se guardó, pero el día no quedó protegido de la sincronización
+automática: avisá a sistemas". El fallo probable es sistemático (la migración
+sin correr, una policy mal armada), así que si aparece, va a aparecer siempre.
+
 - [ ] **Paso 1: Leer cómo lo resuelve una pantalla que ya lo hace**
 
 ```bash
