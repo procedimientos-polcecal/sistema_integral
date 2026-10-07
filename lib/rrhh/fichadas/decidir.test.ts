@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
+  rangoDeRecalculo, diasLiquidadosDe,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta,
 } from "./decidir";
-import { toUtcDateOnly, localDateTime } from "../dates";
+import { toUtcDateOnly, localDateTime, fechaArgentinaDe } from "../dates";
 
 function dia(y: number, m: number, d: number) {
   return toUtcDateOnly(y, m - 1, d);
@@ -425,5 +426,134 @@ describe("avisoDeAbiertasViejas", () => {
 
   it("un empleado fuera del lote no cuenta", () => {
     expect(avisoDeAbiertasViejas([abierta("a", "emp-9", "2026-08-01")], primerDia, legajos)).toBeNull();
+  });
+});
+
+describe("avisoDeAbiertasViejas: bordes", () => {
+  const abiertaDe = (empleadoId: string) => abierta(`id-${empleadoId}`, empleadoId, "2026-09-02");
+  const lote = (n: number) => {
+    const ids = Array.from({ length: n }, (_, i) => `emp-${i}`);
+    return {
+      abiertas: ids.map(abiertaDe),
+      primerDia: new Map(ids.map((e) => [e, "2026-10-01"])),
+      legajos: new Map(ids.map((e, i) => [e, `PC_${String(i).padStart(3, "0")}`])),
+    };
+  };
+
+  it("con exactamente maxLegajos legajos los lista todos, sin '… y 0 más'", () => {
+    const { abiertas, primerDia, legajos } = lote(3);
+    const aviso = avisoDeAbiertasViejas(abiertas, primerDia, legajos, 3);
+    expect(aviso).toContain("(legajos PC_000, PC_001, PC_002)");
+    expect(aviso).not.toMatch(/ y \d+ más/);
+  });
+
+  it("con un legajo de más que maxLegajos dice 'y 1 más'", () => {
+    const { abiertas, primerDia, legajos } = lote(4);
+    expect(avisoDeAbiertasViejas(abiertas, primerDia, legajos, 3)).toContain("(legajos PC_000, PC_001, PC_002 y 1 más)");
+  });
+
+  it("si no conoce el legajo de un empleado, nombra su id: nunca deja un hueco ni 'undefined'", () => {
+    const aviso = avisoDeAbiertasViejas([abierta("a", "emp-7", "2026-09-02")], new Map([["emp-7", "2026-10-01"]]), new Map());
+    expect(aviso).toContain("(legajo emp-7)");
+    expect(aviso).not.toContain("undefined");
+  });
+});
+
+describe("rangoDeRecalculo", () => {
+  const d = (m: number, dia: number) => toUtcDateOnly(2026, m - 1, dia);
+
+  it("sin tramos no hay nada que recalcular", () => {
+    expect(rangoDeRecalculo([]).size).toBe(0);
+  });
+
+  it("un turno que cruza medianoche suma su día de salida aunque ese día no tenga turnos propios", () => {
+    // Viernes de noche a sábado: es el único turno del empleado. Si el rango
+    // sólo mirara la entrada, el sábado quedaría sin recalcular.
+    const r = rangoDeRecalculo([{ empleadoId: "emp-1", fecha: d(10, 2), fechaSalida: d(10, 3) }]);
+    expect(r.get("emp-1")).toEqual({ min: d(10, 2), max: d(10, 3) });
+  });
+
+  it("un turno que no cruza cubre sólo su día", () => {
+    const r = rangoDeRecalculo([{ empleadoId: "emp-1", fecha: d(10, 2), fechaSalida: d(10, 2) }]);
+    expect(r.get("emp-1")).toEqual({ min: d(10, 2), max: d(10, 2) });
+  });
+
+  it("el rango va del primer al último día cubierto, sin importar el orden", () => {
+    const r = rangoDeRecalculo([
+      { empleadoId: "emp-1", fecha: d(10, 5), fechaSalida: d(10, 5) },
+      { empleadoId: "emp-1", fecha: d(10, 1), fechaSalida: d(10, 1) },
+      { empleadoId: "emp-1", fecha: d(10, 3), fechaSalida: d(10, 4) },
+    ]);
+    expect(r.get("emp-1")).toEqual({ min: d(10, 1), max: d(10, 5) });
+  });
+
+  it("el último turno de todos, si cruza, estira el máximo un día", () => {
+    const r = rangoDeRecalculo([
+      { empleadoId: "emp-1", fecha: d(10, 1), fechaSalida: d(10, 1) },
+      { empleadoId: "emp-1", fecha: d(10, 7), fechaSalida: d(10, 8) },
+    ]);
+    expect(r.get("emp-1")?.max).toEqual(d(10, 8));
+  });
+
+  it("cada empleado tiene su propio rango", () => {
+    const r = rangoDeRecalculo([
+      { empleadoId: "emp-1", fecha: d(10, 1), fechaSalida: d(10, 1) },
+      { empleadoId: "emp-2", fecha: d(10, 6), fechaSalida: d(10, 7) },
+    ]);
+    expect(r.get("emp-1")).toEqual({ min: d(10, 1), max: d(10, 1) });
+    expect(r.get("emp-2")).toEqual({ min: d(10, 6), max: d(10, 7) });
+  });
+});
+
+describe("diasLiquidadosDe", () => {
+  const liq = { empleadoId: "emp-1", desde: "2026-09-01", hasta: "2026-09-30" };
+  const fechas = (...f: string[]) => new Map([["emp-1", f]]);
+
+  it("un día dentro del rango queda protegido", () => {
+    expect(diasLiquidadosDe([liq], fechas("2026-09-15"))).toEqual(new Set([claveDia("emp-1", "2026-09-15")]));
+  });
+
+  it("fecha_desde es inclusiva", () => {
+    expect(diasLiquidadosDe([liq], fechas("2026-09-01")).has(claveDia("emp-1", "2026-09-01"))).toBe(true);
+  });
+
+  it("fecha_hasta es inclusiva", () => {
+    expect(diasLiquidadosDe([liq], fechas("2026-09-30")).has(claveDia("emp-1", "2026-09-30"))).toBe(true);
+  });
+
+  it("el día anterior al desde y el posterior al hasta quedan libres", () => {
+    expect(diasLiquidadosDe([liq], fechas("2026-08-31", "2026-10-01")).size).toBe(0);
+  });
+
+  it("la liquidación de otro empleado no contamina", () => {
+    const deOtro = { ...liq, empleadoId: "emp-2" };
+    expect(diasLiquidadosDe([deOtro], fechas("2026-09-15")).size).toBe(0);
+  });
+
+  it("un empleado sin días en juego no genera nada", () => {
+    expect(diasLiquidadosDe([liq], new Map()).size).toBe(0);
+  });
+
+  it("varias liquidaciones, cada una protege lo suyo", () => {
+    const octubre = { empleadoId: "emp-1", desde: "2026-10-01", hasta: "2026-10-31" };
+    const r = diasLiquidadosDe([liq, octubre], fechas("2026-09-30", "2026-10-01", "2026-11-01"));
+    expect([...r].sort()).toEqual([claveDia("emp-1", "2026-09-30"), claveDia("emp-1", "2026-10-01")]);
+  });
+});
+
+describe("fechaArgentinaDe", () => {
+  it("una salida de madrugada cae en el mismo día UTC y en el mismo día local", () => {
+    // 04:00 locales = 07:00 UTC
+    expect(fechaArgentinaDe(new Date("2026-10-03T07:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 3));
+  });
+
+  it("una salida a las 22:00 locales ya es el día siguiente en UTC y tiene que seguir siendo el de acá", () => {
+    // 22:00 locales del 2 = 01:00 UTC del 3
+    expect(fechaArgentinaDe(new Date("2026-10-03T01:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 2));
+  });
+
+  it("el borde: 00:00 locales es 03:00 UTC y ya es el día nuevo; 23:59 locales todavía es el viejo", () => {
+    expect(fechaArgentinaDe(new Date("2026-10-03T03:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 3));
+    expect(fechaArgentinaDe(new Date("2026-10-03T02:59:00Z"))).toEqual(toUtcDateOnly(2026, 9, 2));
   });
 });

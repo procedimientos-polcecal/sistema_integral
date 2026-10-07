@@ -55,3 +55,14 @@ export function minutosDelDiaArgentina(instante: Date): number {
   const utcMin = instante.getUTCHours() * 60 + instante.getUTCMinutes();
   return (((utcMin - OFFSET_ARGENTINA_HORAS * 60) % 1440) + 1440) % 1440;
 }
+
+/**
+ * El día calendario (medianoche UTC) en que cae un instante real, mirado en
+ * hora de Argentina. Es lo que dice en qué día terminó un turno: una salida a
+ * las 04:00 locales es 07:00 UTC del mismo día, pero una a las 22:00 locales es
+ * 01:00 UTC del día siguiente, y `toISOString().slice(0, 10)` daría el día
+ * equivocado.
+ */
+export function fechaArgentinaDe(instante: Date): Date {
+  return utcDateOnlyFrom(new Date(instante.getTime() - OFFSET_ARGENTINA_HORAS * 3_600_000));
+}

@@ -2,10 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { reconciliarTokens, horaStringToDate, type DiaMarcacionesTokens } from "../excelImport";
 import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
-import { formatHHMM } from "../dates";
+import { formatHHMM, fechaArgentinaDe } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  type TurnoNuevo, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
+  rangoDeRecalculo, diasLiquidadosDe,
+  type TurnoNuevo, type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
 } from "./decidir";
 
 /** Los días de un empleado, ya ordenados ascendente. */
@@ -51,7 +52,7 @@ interface Cierre {
  * Cuántas fechas van en un `.in()` de borrado. Una fecha ocupa ~11 caracteres
  * de la URL, así que 200 son ~2 KB: lejos del límite en el que PostgREST
  * responde un 400 sin decir por qué. Y 200 días por empleado dan, como mucho,
- * unas mil filas devueltas por el `.select("id")` del borrado: el corte de las
+ * unas mil filas devueltas por el `.select(...)` del borrado: el corte de las
  * 1000 filas no se alcanza con fichadas de verdad.
  */
 const FECHAS_POR_BORRADO = 200;
@@ -72,19 +73,40 @@ function fechaStr(d: Date): string {
  * `recalcularEmpleadoPeriodo` recibe también el admin (acepta cualquier
  * `SupabaseClient`), cuando la ruta vieja le pasaba el de sesión.
  *
- * RIESGO ASUMIDO, no resuelto: el borrado y el alta no son atómicos. PostgREST
- * no ofrece una transacción de varias sentencias, y meter una función de
- * Postgres sólo para esto sería desproporcionado. Si un `insert` falla a mitad
- * de las tandas, los días a reemplazar ya están borrados y quedan vacíos (o a
- * medias, si falló la segunda tanda y no la primera), y el recálculo no corrió,
- * así que `calculos_diarios` queda desfasado de las fichadas. Se acepta porque
- * se cura solo: la próxima corrida —el cron de mañana, el botón, o volver a
- * subir el Excel— vuelve a borrar esos días y a insertarlos completos, y el
- * recálculo los alcanza. Lo que no se cura solo es un día que salga del rango
- * de la próxima corrida; el cron mira siete días. Por eso el error se tira con
- * lo que dijo la base y diciendo que ya se había borrado, y es quien llama el
- * que tiene que dejarlo escrito en el lote (`log_detalle`): un `throw` que
- * nadie anota es un día vacío que nadie sabe que está vacío.
+ * RIESGOS ASUMIDOS, no resueltos: nada de esto es atómico. PostgREST no ofrece
+ * una transacción de varias sentencias, y meter una función de Postgres sólo
+ * para esto sería desproporcionado. Hay tres puntos donde un fallo deja el
+ * trabajo a medias, en este orden:
+ *
+ * 1. **Falla el borrado en el empleado N.** Los empleados 1 a N-1 ya tienen sus
+ *    días vacíos, sin alta y sin recálculo; el resto no se tocó.
+ * 2. **Falla una tanda del `insert`.** Los días a reemplazar ya están borrados
+ *    y quedan vacíos (o a medias, si la primera tanda entró y la segunda no).
+ *    El recálculo no corrió.
+ * 3. **Falla el `update` de un cierre, o el recálculo de un empleado.** Las
+ *    fichadas ya están confirmadas y `calculos_diarios` queda desfasado de
+ *    ellas para los empleados que no se alcanzaron a recalcular.
+ *
+ * Se aceptan porque se curan solos, cada uno por su razón verificable:
+ * - 1 y 2: `decidirQueAplicar` no omite los días que ya están idénticos, así
+ *   que la próxima corrida vuelve a borrar esos días y a insertarlos completos,
+ *   y el recálculo los alcanza. Funciona con el cron de mañana, con el botón, o
+ *   volviendo a subir el Excel.
+ * - 3, el recálculo: la corrida siguiente recalcula el rango de lo que inserta,
+ *   que cubre esos días salvo el más viejo, que sale de la ventana (ver abajo).
+ *
+ * Lo que NO se cura solo: un día que quede fuera del rango de la próxima
+ * corrida (el cron mira siete días), y el cierre de una fichada abierta cuyo
+ * `update` falló. Ese cierre sólo se reintenta si la próxima corrida arranca el
+ * mismo día; si el rango ya avanzó, esa fichada deja de ser la del "día
+ * anterior" y pasa a `pendientes` ("hay que cerrarlas a mano"), que es donde
+ * una persona la ve. Un día vacío por fuera del rango sólo se arregla con el
+ * botón.
+ *
+ * Por eso cada error se tira con lo que dijo la base, sin traducir, y diciendo
+ * qué quedó a medias; y es quien llama el que tiene que dejarlo escrito en el
+ * lote (`log_detalle`): un `throw` que nadie anota es un día vacío que nadie
+ * sabe que está vacío.
  *
  * No se invierte el orden (insertar primero, borrar después lo viejo) porque
  * cambia un riesgo por otro peor: un fallo del borrado dejaría el día
@@ -109,7 +131,8 @@ export async function aplicarDias(
   // `TurnoNuevo` no lleva `fechaSalida`, pero el recálculo la necesita: un
   // turno que arranca el viernes de noche y termina el sábado aporta horas al
   // sábado, y si el sábado no tiene turnos propios nadie lo recalcularía.
-  const imputados: { empleadoId: string; fecha: Date; fechaSalida: Date }[] = [];
+  const imputados: TramoImputado[] = [];
+  const legajoPorEmpleado = new Map(conDatos.map((e) => [e.empleadoId, e.legajo]));
 
   for (const emp of conDatos) {
     const abierto = abiertas.get(emp.empleadoId) ?? null;
@@ -174,6 +197,11 @@ export async function aplicarDias(
     else fechasPorEmpleado.set(d.empleadoId, [d.fecha]);
   }
   let reemplazados = 0;
+  let empleadosVaciados = 0;
+  // Lo borrado también cuenta para el recálculo: una fichada vieja que cruzaba
+  // medianoche deja de existir, y el día siguiente tiene que perder esas horas
+  // aunque la versión nueva ya no cruce y no traiga turnos propios ese día.
+  const borradas: TramoImputado[] = [];
   for (const [empleadoId, fechas] of fechasPorEmpleado) {
     for (let i = 0; i < fechas.length; i += FECHAS_POR_BORRADO) {
       const { data: borrados, error } = await admin
@@ -182,12 +210,29 @@ export async function aplicarDias(
         .eq("empleado_id", empleadoId)
         .eq("origen", "IMPORTADO")
         .in("fecha", fechas.slice(i, i + FECHAS_POR_BORRADO))
-        .select("id");
+        .select("id, fecha, hora_salida");
       // Sin esta guarda, un borrado que falla sigue de largo y el alta deja el
       // día duplicado: las horas duplicadas se pagan.
-      if (error) throw new Error(`Borrando las fichadas a reemplazar: ${error.message}`);
+      if (error) {
+        const hecho =
+          empleadosVaciados === 0 && i === 0
+            ? "todavía no se había borrado nada"
+            : `ya se habían vaciado los días de ${empleadosVaciados} de ${fechasPorEmpleado.size} empleados, sin alta ni recálculo`;
+        throw new Error(
+          `Borrando las fichadas a reemplazar del legajo ${legajoPorEmpleado.get(empleadoId) ?? empleadoId} (${hecho}): ${error.message}`
+        );
+      }
+      for (const b of (borrados ?? []) as { fecha: string; hora_salida: string | null }[]) {
+        const fecha = new Date(b.fecha);
+        borradas.push({
+          empleadoId,
+          fecha,
+          fechaSalida: b.hora_salida ? fechaArgentinaDe(new Date(b.hora_salida)) : fecha,
+        });
+      }
       reemplazados += borrados?.length ?? 0;
     }
+    empleadosVaciados++;
   }
 
   const filas = decision.aInsertar.map((t) => ({
@@ -203,30 +248,20 @@ export async function aplicarDias(
     const { error } = await admin.from("fichadas").insert(filas.slice(i, i + 500));
     if (error) {
       throw new Error(
-        `Insertando fichadas (tanda ${i / 500 + 1} de ${tandas}; los días a reemplazar ya estaban borrados): ${error.message}`
+        `Insertando fichadas (tanda ${i / 500 + 1} de ${tandas}, ${i} de ${filas.length} filas ya insertadas; ` +
+          `los días a reemplazar ya estaban borrados y el recálculo no corrió): ${error.message}`
       );
     }
   }
 
-  // Rango a recalcular por empleado. Sale de los turnos que de verdad se
-  // aplicaron —no de los de días salteados— y suma el día de salida de los que
-  // cruzaron medianoche y el de las fichadas cerradas.
+  // Lo que se recalcula: los turnos que de verdad se aplicaron —no los de días
+  // salteados— con su día de salida, las fichadas borradas con el suyo, y más
+  // abajo las cerradas. El rango sale de `rangoDeRecalculo`, que tiene tests.
   const salteadas = new Set(decision.salteados.map((s) => claveDia(s.empleadoId, s.fecha)));
-  const rangos = new Map<string, { min: Date; max: Date }>();
-  function marcarRango(empleadoId: string, ...fechas: Date[]) {
-    for (const f of fechas) {
-      const r = rangos.get(empleadoId);
-      if (!r) rangos.set(empleadoId, { min: f, max: f });
-      else {
-        if (f < r.min) r.min = f;
-        if (f > r.max) r.max = f;
-      }
-    }
-  }
-  for (const im of imputados) {
-    if (salteadas.has(claveDia(im.empleadoId, fechaStr(im.fecha)))) continue;
-    marcarRango(im.empleadoId, im.fecha, im.fechaSalida);
-  }
+  const aRecalcular: TramoImputado[] = [
+    ...imputados.filter((im) => !salteadas.has(claveDia(im.empleadoId, fechaStr(im.fecha)))),
+    ...borradas,
+  ];
 
   // Cerrar una fichada abierta cambia las horas de su día, así que pasa por la
   // misma protección que insertar. Si no, una liquidación cerrada con un turno
@@ -246,15 +281,31 @@ export async function aplicarDias(
       .update({ hora_salida: c.horaSalida.toISOString() })
       .eq("id", c.id)
       .is("hora_salida", null);
-    if (error) throw new Error(`Cerrando la fichada abierta del legajo ${c.legajo} (${fecha}): ${error.message}`);
-    marcarRango(c.empleadoId, c.fecha, c.fechaSalida);
+    if (error) {
+      throw new Error(
+        `Cerrando la fichada abierta del legajo ${c.legajo} (${fecha}); las ${decision.aInsertar.length} fichadas ya estaban ` +
+          `insertadas y los días borrados, pero el cierre y el recálculo no corrieron: ${error.message}`
+      );
+    }
+    aRecalcular.push({ empleadoId: c.empleadoId, fecha: c.fecha, fechaSalida: c.fechaSalida });
   }
 
   // Una sola vez por empleado, con su rango completo: tanto lo insertado como
   // lo cerrado. (El plan original recalculaba la fichada cerrada ahí mismo y
   // otra vez al final, dos veces las mismas ~10 consultas por empleado.)
+  const rangos = rangoDeRecalculo(aRecalcular);
+  let recalculados = 0;
   for (const [empleadoId, r] of rangos) {
-    await recalcularEmpleadoPeriodo(admin, empleadoId, r.min, r.max);
+    try {
+      await recalcularEmpleadoPeriodo(admin, empleadoId, r.min, r.max);
+    } catch (e) {
+      throw new Error(
+        `Recalculando al legajo ${legajoPorEmpleado.get(empleadoId) ?? empleadoId}: las fichadas ya estaban guardadas, ` +
+          `pero calculos_diarios queda desfasado para ${rangos.size - recalculados} de ${rangos.size} empleados ` +
+          `hasta la próxima corrida: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+    recalculados++;
   }
 
   for (const s of decision.salteados) {
@@ -377,12 +428,10 @@ async function contextoDe(admin: SupabaseClient, dias: DiaEnJuego[]): Promise<Co
     if (fechasPorEmpleado.has(c.empleado_id)) diasCorregidos.add(claveDia(c.empleado_id, c.fecha));
   }
 
-  const diasLiquidados = new Set<string>();
-  for (const l of liquidaciones) {
-    for (const f of fechasPorEmpleado.get(l.empleado_id) ?? []) {
-      if (f >= l.fecha_desde && f <= l.fecha_hasta) diasLiquidados.add(claveDia(l.empleado_id, f));
-    }
-  }
+  const diasLiquidados = diasLiquidadosDe(
+    liquidaciones.map((l) => ({ empleadoId: l.empleado_id, desde: l.fecha_desde, hasta: l.fecha_hasta })),
+    fechasPorEmpleado
+  );
 
   const guardadas = new Map<string, FichadaGuardada[]>();
   for (const f of existentes) {

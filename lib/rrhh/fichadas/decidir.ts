@@ -285,3 +285,65 @@ function divergenciaDe(guardadas: FichadaGuardada[], deLenox: TurnoNuevo[]): str
   const loGuardado = guardado.length === 0 ? "sin fichadas" : guardado.join(" · ");
   return `guardado ${loGuardado}, Lenox trae ${trae.join(" · ")}`;
 }
+
+/** Los días que cubre un turno: el de la entrada y el de la salida, que cruzando medianoche es el siguiente. */
+export interface TramoImputado {
+  empleadoId: string;
+  fecha: Date; // día calendario (UTC-medianoche) de la entrada
+  fechaSalida: Date; // día calendario de la salida; igual a `fecha` si no cruzó
+}
+
+/**
+ * El rango de días a recalcular por empleado: del primer al último día que
+ * cubre algún tramo, contando el día de salida.
+ *
+ * Que cuente el día de salida no es un detalle: el recálculo lee las fichadas
+ * desde un día antes y reparte un turno nocturno entre los dos días, así que un
+ * turno que arranca el viernes de noche y termina el sábado le aporta horas al
+ * sábado. Si el rango sólo mira la entrada y el sábado no tiene turnos propios,
+ * nadie lo recalcula y `calculos_diarios` queda con el sábado sin esas horas.
+ * Es el bug que tenía el plan original, y por eso está acá, con test.
+ */
+export function rangoDeRecalculo(tramos: TramoImputado[]): Map<string, { min: Date; max: Date }> {
+  const rangos = new Map<string, { min: Date; max: Date }>();
+  for (const t of tramos) {
+    for (const f of [t.fecha, t.fechaSalida]) {
+      const r = rangos.get(t.empleadoId);
+      if (!r) rangos.set(t.empleadoId, { min: f, max: f });
+      else {
+        if (f < r.min) r.min = f;
+        if (f > r.max) r.max = f;
+      }
+    }
+  }
+  return rangos;
+}
+
+/** Una liquidación cerrada, con sus dos extremos como "YYYY-MM-DD". */
+export interface LiquidacionCerrada {
+  empleadoId: string;
+  desde: string;
+  hasta: string;
+}
+
+/**
+ * Los (empleado, día) que caen dentro de una liquidación cerrada, de entre los
+ * días que el lote toca.
+ *
+ * Los dos extremos son inclusivos: el día en que empieza y el día en que
+ * termina la liquidación ya están pagados. Se compara como texto porque el
+ * formato "YYYY-MM-DD" ordena igual que las fechas. Una liquidación sólo
+ * protege a su empleado: la de otro no contamina.
+ */
+export function diasLiquidadosDe(
+  liquidaciones: LiquidacionCerrada[],
+  fechasPorEmpleado: Map<string, Iterable<string>>
+): Set<string> {
+  const diasLiquidados = new Set<string>();
+  for (const l of liquidaciones) {
+    for (const f of fechasPorEmpleado.get(l.empleadoId) ?? []) {
+      if (f >= l.desde && f <= l.hasta) diasLiquidados.add(claveDia(l.empleadoId, f));
+    }
+  }
+  return diasLiquidados;
+}
