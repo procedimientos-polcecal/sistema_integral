@@ -2501,6 +2501,18 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modificar: `app/(app)/rrhh/fichadas/page.tsx`
 - Modificar: `app/(app)/rrhh/fichadas/FichadasClient.tsx`
 
+**Lo que esta tarea tiene que arreglar además, y que salió de la revisión de la
+Tarea 8:** hoy `FichadasClient` tipa el resultado del import **sin** el campo
+`pendientes`, así que las fichadas abiertas viejas no se ven en ninguna
+pantalla: quedan sólo en el `log_detalle`. Y los avisos tampoco se distinguen
+de los errores — todo cae bajo "N filas con error", en rojo.
+
+Los `pendientes` no son un error: son un pendiente heredado que alguien tiene
+que cerrar a mano. Mostrarlos en rojo junto a los errores es la forma más
+rápida de que nadie lea ninguno de los dos. Van **aparte y en otro tono**, y
+eso vale para **los dos bloques** de la pantalla —el de Lenox y el del import
+de Excel—, no sólo para el nuevo.
+
 - [ ] **Paso 1: Leer cómo lo resuelve una pantalla que ya lo hace**
 
 ```bash
