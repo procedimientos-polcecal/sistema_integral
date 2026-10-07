@@ -204,14 +204,17 @@ export function decidirQueAplicar(
   ctx: ContextoDeDecision,
   protegerCorregidos: boolean
 ): Decision {
-  // Repetidos dentro del propio lote. Misma firma que usaba la ruta.
+  // Repetidos dentro del propio lote: dos turnos del mismo empleado, el mismo
+  // día, con la misma entrada y la misma salida (o los dos sin salida), al
+  // milisegundo. Un turno que sólo comparte la entrada NO es repetido: cambia
+  // la salida, y descartarlo escondería una marca real.
   const firma = (t: TurnoNuevo) =>
     `${t.empleadoId}|${t.fecha.getTime()}|${t.horaEntrada.getTime()}|${t.horaSalida?.getTime() ?? "null"}`;
-  const vistas = new Set<string>();
+  const firmasVistas = new Set<string>();
   const sinRepetir = turnos.filter((t) => {
     const f = firma(t);
-    if (vistas.has(f)) return false;
-    vistas.add(f);
+    if (firmasVistas.has(f)) return false;
+    firmasVistas.add(f);
     return true;
   });
 
@@ -228,7 +231,7 @@ export function decidirQueAplicar(
   const aInsertar: TurnoNuevo[] = [];
   const diasABorrar: { empleadoId: string; fecha: string }[] = [];
   const salteados: DiaSalteado[] = [];
-  const diasVistos = new Set<string>();
+  const diasYaMarcadosParaBorrar = new Set<string>();
   const diasYaSalteados = new Set<string>();
 
   for (const t of sinRepetir) {
@@ -252,8 +255,8 @@ export function decidirQueAplicar(
     }
 
     aInsertar.push(t);
-    if (!diasVistos.has(clave)) {
-      diasVistos.add(clave);
+    if (!diasYaMarcadosParaBorrar.has(clave)) {
+      diasYaMarcadosParaBorrar.add(clave);
       diasABorrar.push({ empleadoId: t.empleadoId, fecha });
     }
   }
