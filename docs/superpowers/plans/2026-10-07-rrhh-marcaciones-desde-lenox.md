@@ -1469,7 +1469,21 @@ export async function aplicarDias(
   return { insertados: decision.aInsertar.length, reemplazados, salteados: decision.salteados, avisos };
 }
 
-/** Los días protegidos y lo guardado hoy, para los turnos de este lote. */
+/**
+ * Los días protegidos y lo guardado hoy, para los turnos de este lote.
+ *
+ * OJO CON `guardadas`, QUE TIENE UN CONTRATO IMPLÍCITO: para `decidir.ts`,
+ * una clave ausente significa "ese día no tiene ninguna fichada", y con eso
+ * avisa `"guardado sin fichadas, Lenox trae …"` — que es el caso real de la
+ * marca fantasma que alguien borró y el cron recrearía. Si esta función no
+ * leyera de verdad lo guardado de **todos** los días protegidos, cada día
+ * salteado saldría con esa leyenda: una falsa alarma masiva que haría que
+ * nadie vuelva a leer los avisos.
+ *
+ * Se cumple porque un día sólo se saltea si trajo al menos un turno, así que
+ * su fecha cae dentro de `[desde, hasta]` y su empleado está en `delLote`.
+ * Si alguien cambia ese filtro, tiene que volver a comprobarlo.
+ */
 async function contextoDe(admin: SupabaseClient, turnos: TurnoNuevo[]): Promise<ContextoDeDecision> {
   const vacio: ContextoDeDecision = {
     diasCorregidos: new Set(), diasLiquidados: new Set(), guardadas: new Map(),
@@ -1969,12 +1983,17 @@ export async function sincronizarMarcaciones(
   // Lo que la API mandó y no se pudo leer. Nunca se descarta en silencio: si
   // un día volviera basura, sin esto la sincronización cargaría nada y
   // reportaría éxito — la divergencia que no avisa, que es la peor.
-  const { sinLegajo, fechaIlegible, horaIlegible } = descartadas;
-  if (sinLegajo + fechaIlegible + horaIlegible > 0) {
+  // `fueraDeRango` es el que más importa de los cuatro, por contraintuitivo:
+  // un desfase de huso o un filtro de fechas que la API interpreta distinto
+  // deja TODAS las marcas afuera, y sin contarlas esto cargaría cero y
+  // reportaría éxito.
+  const { sinLegajo, fechaIlegible, horaIlegible, fueraDeRango } = descartadas;
+  const perdidas = sinLegajo + fechaIlegible + horaIlegible + fueraDeRango;
+  if (perdidas > 0) {
     avisosPrevios.push(
-      `Lenox devolvió ${sinLegajo + fechaIlegible + horaIlegible} marcaciones que no se pudieron leer ` +
-        `(${sinLegajo} sin legajo, ${fechaIlegible} con fecha ilegible, ${horaIlegible} con hora ilegible) ` +
-        `de ${marcaciones.length} en total`
+      `Lenox devolvió ${perdidas} marcaciones que no se usaron, de ${marcaciones.length} en total ` +
+        `(${sinLegajo} sin legajo, ${fechaIlegible} con fecha ilegible, ` +
+        `${horaIlegible} con hora ilegible, ${fueraDeRango} fuera del rango pedido)`
     );
   }
 
