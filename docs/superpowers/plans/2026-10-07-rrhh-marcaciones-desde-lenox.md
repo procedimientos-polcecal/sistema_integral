@@ -255,9 +255,14 @@ create index if not exists rrhh_dias_corregidos_fecha_idx
 
 alter table rrhh_dias_corregidos enable row level security;
 
+-- `create policy` no acepta `if not exists`, y el README exige que una
+-- migración aguante correrse dos veces: sin el drop, la segunda corrida falla
+-- con 42710 y el editor de Supabase revierte el script entero.
+drop policy if exists rrhh_dias_corregidos_select on rrhh_dias_corregidos;
 create policy rrhh_dias_corregidos_select on rrhh_dias_corregidos
   for select to authenticated using (tiene_acceso_rrhh());
 
+drop policy if exists rrhh_dias_corregidos_write on rrhh_dias_corregidos;
 create policy rrhh_dias_corregidos_write on rrhh_dias_corregidos
   for all to authenticated using (puede_editar_rrhh()) with check (puede_editar_rrhh());
 
@@ -1812,6 +1817,22 @@ y después del update, además del marcado de arriba:
   }
 ```
 
+- [ ] **Paso 3 bis: Registrar la tabla en el guard de borrado de usuarios**
+
+En `app/api/administracion/usuarios/[id]/route.ts`, el arreglo
+`TABLAS_CON_HISTORIAL` (línea 44) lista las tablas que referencian
+`usuarios.id` **sin cascade**, para devolver un 409 limpio en vez de que el
+`delete` reviente con un `23503` y termine en un 500 con el mensaje crudo de
+Postgres. `rrhh_dias_corregidos.usuario_id` es exactamente ese caso. Agregar:
+
+```ts
+  { tabla: "rrhh_dias_corregidos", columna: "usuario_id" },
+```
+
+Es el mismo tipo de olvido silencioso que el CLAUDE.md describe para
+`auditar()`: lo escribe la aplicación, no hay nada que avise, y no se nota
+hasta que alguien borra un usuario.
+
 - [ ] **Paso 4: Verificar de punta a punta contra la base**
 
 ```bash
@@ -1847,7 +1868,7 @@ npx tsc --noEmit
 - [ ] **Paso 6: Commit**
 
 ```bash
-git add lib/rrhh/fichadas/marcarDia.ts app/api/rrhh/fichadas/route.ts "app/api/rrhh/fichadas/[id]/route.ts"
+git add lib/rrhh/fichadas/marcarDia.ts app/api/rrhh/fichadas/route.ts "app/api/rrhh/fichadas/[id]/route.ts" "app/api/administracion/usuarios/[id]/route.ts"
 git commit -m "feat(rrhh): tocar una fichada a mano marca el día como corregido
 
 Los tres verbos que significan 'esto lo decidió una persona' —alta manual,
