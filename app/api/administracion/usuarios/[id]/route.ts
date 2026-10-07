@@ -47,6 +47,7 @@ const TABLAS_CON_HISTORIAL: { tabla: string; columna: string }[] = [
   { tabla: "calculos_diarios", columna: "validado_por_id" },
   { tabla: "rrhh_import_batches", columna: "usuario_id" },
   { tabla: "rrhh_import_staging", columna: "usuario_id" },
+  { tabla: "rrhh_dias_corregidos", columna: "usuario_id" },
   { tabla: "empresa_status_log", columna: "changed_by" },
   { tabla: "sectores_status_log", columna: "changed_by" },
   { tabla: "equipos_checklists", columna: "created_by" },

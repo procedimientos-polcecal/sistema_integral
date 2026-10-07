@@ -23,15 +23,20 @@ create table if not exists rrhh_dias_corregidos (
   id          uuid primary key default gen_random_uuid(),
   empleado_id uuid not null references empleados(id) on delete cascade,
   fecha       date not null,
-  -- Quién lo tocó. No es decorativo: cuando alguien pregunte "¿por qué este
-  -- día no se actualiza?", la respuesta tiene que estar escrita.
+  -- El ÚLTIMO que lo tocó (ver los comment on column de abajo). No es
+  -- decorativo: cuando alguien pregunte "¿por qué este día no se actualiza?",
+  -- la respuesta tiene que estar escrita.
   usuario_id  uuid not null references usuarios(id),
   accion      text not null check (accion in ('creada', 'editada', 'borrada')),
   created_at  timestamptz not null default now(),
   unique (empleado_id, fecha)
 );
 
--- La sincronización pregunta por rango de fechas y por empleado.
+-- La sincronización trae el rango de fechas y después filtra los empleados en
+-- memoria. Ese rango por fecha es lo que el índice implícito del unique (que
+-- empieza por empleado_id) no puede resolver; por eso los dos índices no son
+-- redundantes: el unique sirve para el upsert y para buscar un empleado, éste
+-- para recorrer un período entero.
 create index if not exists rrhh_dias_corregidos_fecha_idx
   on rrhh_dias_corregidos (fecha, empleado_id);
 
@@ -48,3 +53,17 @@ create policy rrhh_dias_corregidos_write on rrhh_dias_corregidos
 comment on table rrhh_dias_corregidos is
   'Los (empleado, día) que tocó una persona a mano. La sincronización con '
   'Lenox los saltea y avisa si lo que trae el reloj difiere de lo guardado.';
+
+-- Las rutas escriben con upsert sobre (empleado_id, fecha): al segundo toque del
+-- mismo día, usuario_id y accion pasan a ser los del último toque, y created_at
+-- se queda en el del primero. Se deja dicho acá porque lo que se le contesta a
+-- quien pregunta "¿quién tocó este día?" depende de leer bien cuál es cuál.
+comment on column rrhh_dias_corregidos.usuario_id is
+  'Quién lo tocó POR ÚLTIMA VEZ. Si varias personas corrigieron el mismo día, '
+  'las anteriores no quedan registradas acá.';
+comment on column rrhh_dias_corregidos.accion is
+  'Qué hizo el último toque (creada, editada o borrada), no el primero. Un día '
+  'creado y después editado figura como editada.';
+comment on column rrhh_dias_corregidos.created_at is
+  'Cuándo se corrigió el día por PRIMERA vez. No se actualiza con los toques '
+  'siguientes: es desde cuándo la sincronización lo viene salteando.';
