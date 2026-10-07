@@ -1719,6 +1719,20 @@ import { aplicarDias, type DiasDeEmpleado, type ResultadoAplicar } from "@/lib/r
 Borrar los imports que quedan sin uso (`horaStringToDate`,
 `reconciliarMarcaciones`, `recalcularEmpleadoPeriodo`).
 
+- [ ] **Paso 2 bis: Cerrar los dos comentarios que esta migración vuelve falsos**
+
+En `lib/rrhh/fichadas/decidir.ts`, el comentario del dedup dice *"Misma firma
+que usaba la ruta"*. Deja de ser cierto en este mismo paso, porque la ruta
+pasa a usar esta función. Reemplazalo por una descripción de **qué cuenta
+como repetido** (mismo empleado, mismo día, misma entrada y misma salida), que
+es lo que alguien necesita saber.
+
+De paso, los tres `Set` de control de `decidirQueAplicar` se distinguen a
+medias: `vistas` guarda firmas de turnos, no días, y `diasVistos` suena
+general cuando sólo cubre los días que se van a borrar. Renombralos a
+`firmasVistas` y `diasYaMarcadosParaBorrar`. Es estético y por eso se hace
+acá, aprovechando que el archivo ya se toca.
+
 - [ ] **Paso 3: Verificar que compila y que la suite sigue verde**
 
 ```bash
