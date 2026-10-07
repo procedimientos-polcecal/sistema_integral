@@ -17,7 +17,7 @@ function marca(legajo: string, fecha: string, hora: string): MarcacionLenox {
 
 describe("agruparPorLegajo", () => {
   it("agrupa por legajo y por día, y arma los tokens en orden de hora", () => {
-    const porLegajo = agruparPorLegajo(
+    const { porLegajo } = agruparPorLegajo(
       [
         marca("PC_204", "2026-10-02", "16:03:00"),
         marca("PC_204", "2026-10-02", "07:58:00"),
@@ -34,7 +34,7 @@ describe("agruparPorLegajo", () => {
   });
 
   it("alterna E/S por posición: la letra la pone el agrupador, no Lenox", () => {
-    const porLegajo = agruparPorLegajo(
+    const { porLegajo } = agruparPorLegajo(
       [
         marca("PC_001", "2026-10-02", "08:00:00"),
         marca("PC_001", "2026-10-02", "12:00:00"),
@@ -48,7 +48,7 @@ describe("agruparPorLegajo", () => {
   });
 
   it("genera los días del rango que no tienen ninguna marcación", () => {
-    const porLegajo = agruparPorLegajo(
+    const { porLegajo } = agruparPorLegajo(
       [marca("PC_001", "2026-10-01", "08:00:00"), marca("PC_001", "2026-10-03", "08:00:00")],
       dia(2026, 10, 1),
       dia(2026, 10, 3)
@@ -59,7 +59,7 @@ describe("agruparPorLegajo", () => {
   });
 
   it("los días salen ordenados ascendente, que es lo que espera reconciliarTokens", () => {
-    const porLegajo = agruparPorLegajo(
+    const { porLegajo } = agruparPorLegajo(
       [marca("PC_001", "2026-10-03", "08:00:00"), marca("PC_001", "2026-10-01", "08:00:00")],
       dia(2026, 10, 1),
       dia(2026, 10, 3)
@@ -70,11 +70,79 @@ describe("agruparPorLegajo", () => {
   });
 
   it("descarta una marcación con fecha ilegible en vez de inventarle un día", () => {
-    const porLegajo = agruparPorLegajo(
+    const { porLegajo } = agruparPorLegajo(
       [{ ...marca("PC_001", "2026-10-01", "08:00:00"), marcacionFecha: "", marcacionHora: "" }],
       dia(2026, 10, 1),
       dia(2026, 10, 1)
     );
     expect(porLegajo.get("PC_001")).toEqual([{ fecha: dia(2026, 10, 1), tokens: [] }]);
+  });
+
+  it("normaliza la hora de un dígito a HH:MM: es lo único que defiende el orden del sort() de strings", () => {
+    // Sin el padStart, "7:05" ordenaría después de "10:00" y el orden
+    // cronológico que exige reconciliarTokens se rompería sin avisar.
+    const { porLegajo } = agruparPorLegajo(
+      [
+        marca("PC_001", "2026-10-02", "16:00:00"),
+        marca("PC_001", "2026-10-02", "10:00:00"),
+        marca("PC_001", "2026-10-02", "7:05:00"),
+      ],
+      dia(2026, 10, 2),
+      dia(2026, 10, 2)
+    );
+    expect(porLegajo.get("PC_001")![0].tokens.map((t) => t.hora)).toEqual(["07:05", "10:00", "16:00"]);
+  });
+
+  it("descarta una fecha que no existe en vez de moverla al día de al lado", () => {
+    // "2026-02-31" se convertía en el 3 de marzo, "2026-13-01" en el 1 de enero de 2027.
+    const { porLegajo, descartadas } = agruparPorLegajo(
+      [
+        marca("PC_001", "2026-02-31", "08:00:00"),
+        marca("PC_001", "2026-13-01", "08:00:00"),
+      ],
+      dia(2026, 2, 1),
+      dia(2026, 3, 5)
+    );
+    expect(porLegajo.get("PC_001")!.every((d) => d.tokens.length === 0)).toBe(true);
+    expect(descartadas.fechaIlegible).toBe(2);
+  });
+
+  it("descarta una hora que no existe en vez de arrastrarla", () => {
+    const { porLegajo, descartadas } = agruparPorLegajo(
+      [marca("PC_001", "2026-10-01", "25:99:00"), marca("PC_001", "2026-10-01", "24:00:00")],
+      dia(2026, 10, 1),
+      dia(2026, 10, 1)
+    );
+    expect(porLegajo.get("PC_001")).toEqual([{ fecha: dia(2026, 10, 1), tokens: [] }]);
+    expect(descartadas.horaIlegible).toBe(2);
+  });
+
+  it("cuenta las filas descartadas según el motivo, para que la sincronización no reporte éxito con basura", () => {
+    const { descartadas } = agruparPorLegajo(
+      [
+        marca("PC_001", "2026-10-01", "08:00:00"), // buena
+        marca("", "2026-10-01", "08:00:00"), // sin legajo
+        marca("   ", "2026-10-01", "09:00:00"), // sin legajo
+        marca("PC_001", "ayer", "08:00:00"), // fecha ilegible
+        marca("PC_001", "2026-10-01", "mediodía"), // hora ilegible
+        { ...marca("PC_001", "", ""), marcacionHora: "" }, // las dos: cuenta como fecha
+      ],
+      dia(2026, 10, 1),
+      dia(2026, 10, 1)
+    );
+    expect(descartadas).toEqual({ sinLegajo: 2, fechaIlegible: 2, horaIlegible: 1 });
+  });
+
+  it("una marca fuera del rango se descarta pero su legajo queda con los días vacíos", () => {
+    const { porLegajo, descartadas } = agruparPorLegajo(
+      [marca("PC_009", "2026-09-15", "08:00:00")],
+      dia(2026, 10, 1),
+      dia(2026, 10, 2)
+    );
+    expect(porLegajo.get("PC_009")).toEqual([
+      { fecha: dia(2026, 10, 1), tokens: [] },
+      { fecha: dia(2026, 10, 2), tokens: [] },
+    ]);
+    expect(descartadas).toEqual({ sinLegajo: 0, fechaIlegible: 0, horaIlegible: 0 });
   });
 });
