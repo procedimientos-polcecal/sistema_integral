@@ -394,6 +394,13 @@ Dos cosas quedaron de eso, y las dos valen para la próxima:
   orden. Hay dos funciones de apoyo en
   `docs/compras-permisos-apps-script.gs`: una agrega la cuenta a las
   protecciones y la otra sólo diagnostica, sin cambiar nada.
+- **Quien crea esas protecciones es un script de la planilla**, y hay una copia
+  suya en `docs/compras-protecciones-apps-script.gs`. Está ahí porque no estarlo
+  costó tres días: el 06 y el 07/10/2026 se diagnosticaron a ciegas dos fallas
+  cuyo origen era ese archivo —le revocaba el permiso a la cuenta en cada
+  edición, y dejaba protecciones sin ningún editor cuando quien editaba era el
+  dueño de la planilla—. Es una **copia**: el original lo edita gente, así que
+  si difieren manda la planilla.
 
 **Y el mismo cartel también sale cuando el permiso SÍ es el problema.** El
 11/09/2026 pasó la otra mitad de lo de arriba: el RI 1952 y el 1953 quedaron
