@@ -69,7 +69,7 @@ describe("agruparPorLegajo", () => {
     ]);
   });
 
-  it("descarta una marcación con fecha ilegible en vez de inventarle un día", () => {
+  it("una marca ilegible no hace desaparecer a su legajo, que queda con sus días vacíos", () => {
     const { porLegajo } = agruparPorLegajo(
       [{ ...marca("PC_001", "2026-10-01", "08:00:00"), marcacionFecha: "", marcacionHora: "" }],
       dia(2026, 10, 1),
@@ -130,10 +130,10 @@ describe("agruparPorLegajo", () => {
       dia(2026, 10, 1),
       dia(2026, 10, 1)
     );
-    expect(descartadas).toEqual({ sinLegajo: 2, fechaIlegible: 2, horaIlegible: 1 });
+    expect(descartadas).toEqual({ sinLegajo: 2, fechaIlegible: 2, horaIlegible: 1, fueraDeRango: 0 });
   });
 
-  it("una marca fuera del rango se descarta pero su legajo queda con los días vacíos", () => {
+  it("una marca fuera del rango se descarta y se cuenta, y su legajo queda con los días vacíos", () => {
     const { porLegajo, descartadas } = agruparPorLegajo(
       [marca("PC_009", "2026-09-15", "08:00:00")],
       dia(2026, 10, 1),
@@ -143,6 +143,71 @@ describe("agruparPorLegajo", () => {
       { fecha: dia(2026, 10, 1), tokens: [] },
       { fecha: dia(2026, 10, 2), tokens: [] },
     ]);
-    expect(descartadas).toEqual({ sinLegajo: 0, fechaIlegible: 0, horaIlegible: 0 });
+    expect(descartadas).toEqual({ sinLegajo: 0, fechaIlegible: 0, horaIlegible: 0, fueraDeRango: 1 });
+  });
+
+  it("si todas las marcas caen fuera del rango (desfase de huso) no se carga nada pero se nota", () => {
+    // Es el caso que `descartadas` existe para detectar: sin fueraDeRango
+    // quedaría todo en cero y la sincronización reportaría éxito sobre nada.
+    const marcas = [
+      marca("PC_001", "2026-10-09", "08:00:00"),
+      marca("PC_001", "2026-10-09", "16:00:00"),
+      marca("PC_002", "2026-10-10", "07:00:00"),
+    ];
+    const { porLegajo, descartadas } = agruparPorLegajo(marcas, dia(2026, 10, 1), dia(2026, 10, 2));
+    expect([...porLegajo.values()].every((dias) => dias.every((d) => d.tokens.length === 0))).toBe(true);
+    expect(porLegajo.get("PC_001")).toHaveLength(2);
+    expect(descartadas.fueraDeRango).toBe(marcas.length);
+  });
+
+  it("rechaza una hora con algo pegado detrás en vez de leerla a medias", () => {
+    const { descartadas } = agruparPorLegajo(
+      [marca("PC_001", "2026-10-01", "07:58 PM"), marca("PC_001", "2026-10-01", "07:581")],
+      dia(2026, 10, 1),
+      dia(2026, 10, 1)
+    );
+    expect(descartadas.horaIlegible).toBe(2);
+  });
+
+  it("acepta la hora en el límite (23:59), contraparte del 24:00 que se rechaza", () => {
+    const { porLegajo } = agruparPorLegajo(
+      [marca("PC_001", "2026-10-01", "23:59:59")],
+      dia(2026, 10, 1),
+      dia(2026, 10, 1)
+    );
+    expect(porLegajo.get("PC_001")![0].tokens).toEqual([{ tipo: "E", hora: "23:59" }]);
+  });
+
+  it("un legajo con espacios al borde se unifica con el mismo sin espacios", () => {
+    const { porLegajo } = agruparPorLegajo(
+      [marca(" PC_001 ", "2026-10-01", "08:00:00"), marca("PC_001", "2026-10-01", "16:00:00")],
+      dia(2026, 10, 1),
+      dia(2026, 10, 1)
+    );
+    expect([...porLegajo.keys()]).toEqual(["PC_001"]);
+    expect(porLegajo.get("PC_001")![0].tokens).toHaveLength(2);
+  });
+
+  it("un legajo null cuenta como sin legajo y no como el legajo \"null\"", () => {
+    // La API se parsea sin validar: el tipo dice string pero puede llegar null.
+    const sinLegajo = { ...marca("x", "2026-10-01", "08:00:00"), legajo: null } as unknown as MarcacionLenox;
+    const { porLegajo, descartadas } = agruparPorLegajo([sinLegajo], dia(2026, 10, 1), dia(2026, 10, 1));
+    expect(porLegajo.size).toBe(0);
+    expect(descartadas.sinLegajo).toBe(1);
+  });
+
+  it("un legajo numérico se lee como su texto", () => {
+    const numerico = { ...marca("x", "2026-10-01", "08:00:00"), legajo: 204 } as unknown as MarcacionLenox;
+    const { porLegajo } = agruparPorLegajo([numerico], dia(2026, 10, 1), dia(2026, 10, 1));
+    expect([...porLegajo.keys()]).toEqual(["204"]);
+  });
+
+  it("con desde > hasta cada legajo queda sin días, sin aviso (comportamiento fijado a propósito)", () => {
+    const { porLegajo } = agruparPorLegajo(
+      [marca("PC_001", "2026-10-02", "08:00:00")],
+      dia(2026, 10, 3),
+      dia(2026, 10, 1)
+    );
+    expect(porLegajo.get("PC_001")).toEqual([]);
   });
 });
