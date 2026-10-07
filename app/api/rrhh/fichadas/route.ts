@@ -74,8 +74,11 @@ export async function POST(request: Request) {
 
   // Con lo que devolvió la base y no con el cuerpo: `fichada.fecha` es el
   // "YYYY-MM-DD" de la columna `date`, venga como venga lo que mandó el cliente.
-  await marcarDiaCorregido(supabase, fichada.empleado_id, fichada.fecha, user.id, "creada");
+  const protegido = await marcarDiaCorregido(supabase, fichada.empleado_id, fichada.fecha, user.id, "creada");
 
   await recalcularEmpleadoPeriodo(supabase, employeeId, new Date(fecha), new Date(fecha));
-  return NextResponse.json(fichada, { status: 201 });
+  // La fichada se creó, así que no es un error: pero si el día no quedó marcado
+  // el cron lo va a pisar, y la persona tiene que enterarse. El campo viaja
+  // sólo cuando falla.
+  return NextResponse.json(protegido ? fichada : { ...fichada, diaSinProteger: true }, { status: 201 });
 }

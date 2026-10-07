@@ -39,25 +39,36 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
   if (body.observaciones !== undefined) data.observaciones = body.observaciones || null;
 
-  // Cómo estaba antes del update: si la edición la mueve de día o de empleado,
-  // el lugar de donde salió también hay que marcarlo. Si no existe, el update
-  // de abajo falla con el 500 de siempre y no se marca nada.
+  // Cómo estaba antes del update: para saber si algo cambió de verdad (el modal
+  // manda un PUT por fila aunque no se haya tocado) y, si la edición la mueve de
+  // día o de empleado, marcar también el lugar de donde salió. Si no existe, el
+  // update de abajo falla con el 500 de siempre y no se marca nada.
   const { data: previa } = await supabase
-    .from("fichadas").select("empleado_id, fecha").eq("id", id).maybeSingle();
+    .from("fichadas").select("empleado_id, fecha, hora_entrada, hora_salida, observaciones").eq("id", id).maybeSingle();
 
   const { data: fichada, error } = await supabase.from("fichadas").update(data).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const aMarcar = diasAMarcarAlEditar(
-    previa ? { empleadoId: previa.empleado_id, fecha: previa.fecha } : null,
-    { empleadoId: fichada.empleado_id, fecha: fichada.fecha }
+    previa ? {
+      empleadoId: previa.empleado_id, fecha: previa.fecha,
+      horaEntrada: previa.hora_entrada, horaSalida: previa.hora_salida, observaciones: previa.observaciones,
+    } : null,
+    {
+      empleadoId: fichada.empleado_id, fecha: fichada.fecha,
+      horaEntrada: fichada.hora_entrada, horaSalida: fichada.hora_salida, observaciones: fichada.observaciones,
+    }
   );
+  // Se marcan todos aunque el primero falle: no hay por qué dejar el segundo
+  // sin intentar. Si cualquiera falla, hay un día sin proteger.
+  let protegido = true;
   for (const dia of aMarcar) {
-    await marcarDiaCorregido(supabase, dia.empleadoId, dia.fecha, user.id, "editada");
+    if (!(await marcarDiaCorregido(supabase, dia.empleadoId, dia.fecha, user.id, "editada"))) protegido = false;
   }
 
   await recalcularEmpleadoPeriodo(supabase, fichada.empleado_id, new Date(fichada.fecha), new Date(fichada.fecha));
-  return NextResponse.json(fichada);
+  // Sólo viaja cuando falla: la edición funcionó, pero el cron va a pisar el día.
+  return NextResponse.json(protegido ? fichada : { ...fichada, diaSinProteger: true });
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -74,8 +85,11 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
   // El borrado es el verbo que no deja rastro: sin esta marca, una fichada
   // importada que alguien sacó a propósito vuelve con el próximo cron.
-  await marcarDiaCorregido(supabase, fichada.empleado_id, fichada.fecha, user.id, "borrada");
+  const protegido = await marcarDiaCorregido(supabase, fichada.empleado_id, fichada.fecha, user.id, "borrada");
 
   await recalcularEmpleadoPeriodo(supabase, fichada.empleado_id, new Date(fichada.fecha), new Date(fichada.fecha));
+  // Un 204 no puede llevar cuerpo, así que sólo cuando falla la marca se
+  // responde 200 con el aviso; el caso normal queda como estaba.
+  if (!protegido) return NextResponse.json({ diaSinProteger: true });
   return new NextResponse(null, { status: 204 });
 }
