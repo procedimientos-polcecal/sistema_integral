@@ -219,9 +219,26 @@ export interface DiaMarcacionesCrudo {
   raw: string; // celda "Marcaciones" cruda de ese día, puede venir vacía
 }
 
+/**
+ * Un día de marcaciones ya separadas en marcas sueltas. Es lo que consume
+ * `reconciliarTokens`. Lo que el núcleo supone de `tokens` —el Excel lo cumple
+ * por construcción, pero la API de Lenox no lo garantiza, así que quien arme
+ * esto desde ahí (`lib/rrhh/lenox/agrupar.ts`) tiene que cumplirlo:
+ *
+ * - Van en orden cronológico dentro del día: tanto el filtro de fantasmas
+ *   como el emparejamiento por posición dependen de eso.
+ * - `hora` es "H:MM" o "HH:MM", sin segundos. Lenox devuelve `marcacionHora`
+ *   como "07:00:00": hay que recortarlo antes, porque el cálculo desestructura
+ *   `[h, m]` y no revienta, pero `entradaStr` y `salidaStr` arrastrarían los
+ *   segundos hasta la fichada.
+ * - `tipo` no influye en el resultado: sólo cuenta la posición (la primera
+ *   marca abre, la segunda cierra, y así). Quien arma los tokens desde una
+ *   fuente que no distingue entrada de salida puede fabricar la letra
+ *   alternando, y está bien.
+ */
 export interface DiaMarcacionesTokens {
   fecha: Date; // día calendario (UTC-medianoche), ordenados ascendente por el llamador
-  tokens: TokenMarcacion[]; // crudos: el filtro de fantasmas se aplica acá adentro
+  tokens: TokenMarcacion[]; // sin filtrar: el filtro de fantasmas lo aplica `reconciliarTokens`
 }
 
 export interface TurnoResuelto {
@@ -241,8 +258,10 @@ const MAX_HORAS_TURNO_CRUCE = 14;
 const UMBRAL_REINGRESO_RAPIDO_MINUTOS = 30;
 
 /**
- * Reconstruye los turnos de un empleado a partir de sus celdas de
- * marcaciones día por día (ya ordenadas cronológicamente). Resuelve turnos
+ * Reconstruye los turnos de un empleado a partir de sus marcaciones día por
+ * día, ya separadas en marcas sueltas (`DiaMarcacionesTokens`, ordenadas
+ * cronológicamente). Descarta las marcaciones fantasma de cada día antes de
+ * reconciliar, así que quien llama pasa las marcas sin filtrar. Resuelve turnos
  * que cruzan la medianoche (ej. 20 a 4): si un día queda con una entrada sin
  * salida, se prueba cerrarla con la primera marca del día que sigue en los
  * datos. Si la duración resultante cae en un rango razonable de turno (2 a
@@ -339,10 +358,10 @@ export function reconciliarTokens(
 
 /**
  * La forma histórica: recibe la celda cruda "Marcaciones" de cada día y la
- * tokeniza. Es por donde entra el import de Excel, y la que cubren los tests
- * de `reconciliarMarcaciones.test.ts`. El camino de Lenox entra por
- * `reconciliarTokens`, porque la API devuelve las marcaciones sueltas y armar
- * un string para volver a parsearlo sería una ida y vuelta sin motivo.
+ * tokeniza. Es por donde entra el import de Excel. Se usa ésta si se tiene la
+ * celda de texto, y `reconciliarTokens` si ya se tienen las marcas: el camino
+ * de Lenox entra por esa, porque la API devuelve las marcaciones sueltas y
+ * armar un string para volver a parsearlo sería una ida y vuelta sin motivo.
  */
 export function reconciliarMarcaciones(
   dias: DiaMarcacionesCrudo[],

@@ -162,4 +162,24 @@ describe("reconciliarTokens", () => {
       { fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "16:00", fechaSalida: dia(2026, 6, 1) },
     ]);
   });
+
+  // Es el caso que va a llegar desde la API de Lenox y que un Excel no puede
+  // producir: la API no dice si una marca es entrada o salida, así que el
+  // agrupador fabrica la letra, y nada garantiza que alterne. Si alguien
+  // "arreglara" pairTokens para respetar la letra, este test lo atrapa.
+  it("la letra E/S no influye: sólo cuenta la posición", () => {
+    const { turnos, avisos } = reconciliarTokens([
+      {
+        fecha: dia(2026, 6, 1),
+        tokens: [
+          { tipo: "E", hora: "08:00" },
+          { tipo: "E", hora: "16:00" },
+        ],
+      },
+    ]);
+    expect(turnos).toEqual([
+      { fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "16:00", fechaSalida: dia(2026, 6, 1) },
+    ]);
+    expect(avisos).toEqual([]);
+  });
 });
