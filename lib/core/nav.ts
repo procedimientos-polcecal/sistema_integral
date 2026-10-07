@@ -261,6 +261,7 @@ export const NAV: NavItem[] = [
           { label: "Las muestras", href: "/calidad/ensayos", modulo: "calidad" },
           { label: "Cargar muestra", href: "/calidad/ensayos/nueva", modulo: "calidad" },
           { label: "Indicadores", href: "/calidad/ensayos/indicadores", modulo: "calidad" },
+          { label: "Reporte del día", href: "/calidad/ensayos/reporte", modulo: "calidad" },
           { label: "Productos", href: "/calidad/ensayos/productos", modulo: "calidad", soloAdmin: true },
           { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
         ],

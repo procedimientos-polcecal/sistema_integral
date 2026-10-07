@@ -61,6 +61,46 @@ export async function traerMuestras(
 }
 
 /**
+ * Las muestras de **un solo día**, para el reporte.
+ *
+ * Es una consulta aparte y no `traerMuestras` filtrado después: pedir un día de
+ * hace seis meses se traería todo lo cargado desde entonces para quedarse con
+ * tres filas.
+ */
+export async function traerMuestrasDelDia(
+  supabase: SupabaseClient,
+  fecha: string
+): Promise<Muestra[]> {
+  return traerTodo<Muestra>((desde, hasta) =>
+    supabase
+      .from("calidad_ensayos_muestras")
+      .select(
+        "id, fecha, producto_id, observaciones, humedad_p_recipiente, humedad_p_inicial, humedad_p_final, peso_vol_gramos, peso_vol_volumen_cc, cal_util_ml_acido, cal_util_peso_muestra_g, granulometria_peso_muestra_g, cargado_por, cargado_en, actualizado_por, actualizado_en"
+      )
+      .eq("fecha", fecha)
+      .order("cargado_en")
+      .range(desde, hasta)
+  );
+}
+
+/**
+ * El último día que tiene alguna muestra cargada.
+ *
+ * El reporte se abre parado ahí y no en hoy: a la mañana, antes del primer
+ * ensayo, "hoy" es una pantalla vacía que parece un error.
+ */
+export async function ultimoDiaConMuestras(supabase: SupabaseClient): Promise<string | null> {
+  const { data } = await supabase
+    .from("calidad_ensayos_muestras")
+    .select("fecha")
+    .order("fecha", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.fecha ?? null;
+}
+
+/**
  * Los retenidos de las muestras desde una fecha.
  *
  * **Filtra por la fecha de la muestra y no con un `.in()` de ids.** Un `.in()`
