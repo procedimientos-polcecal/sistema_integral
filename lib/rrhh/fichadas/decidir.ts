@@ -404,6 +404,19 @@ export interface Cierre {
 }
 
 /**
+ * Lo que sale de armar un lote, venga de donde venga: los turnos que se
+ * insertan, los cierres de fichadas ya abiertas, qué días cubre cada turno y
+ * los avisos de la reconciliación. Desde acá `aplicarDias` no sabe de qué forma
+ * entró el lote.
+ */
+export interface LoteArmado {
+  turnos: TurnoNuevo[];
+  cierres: Cierre[];
+  imputados: TramoImputado[];
+  avisos: string[];
+}
+
+/**
  * De los días con marcaciones a los turnos que se insertan y los cierres que
  * se aplican a fichadas ya abiertas.
  *
@@ -425,7 +438,7 @@ export interface Cierre {
 export function armarTurnos(
   empleados: DiasDeEmpleado[],
   abiertas: Map<string, FichadaAbierta>
-): { turnos: TurnoNuevo[]; cierres: Cierre[]; imputados: TramoImputado[]; avisos: string[] } {
+): LoteArmado {
   const turnos: TurnoNuevo[] = [];
   const cierres: Cierre[] = [];
   const imputados: TramoImputado[] = [];
@@ -488,9 +501,7 @@ export function armarTurnos(
  * entrada, para que el recálculo cubra el día correcto si algún origen trae
  * un turno que cruza medianoche.
  */
-export function turnosYaEmparejados(
-  turnos: TurnoNuevo[]
-): { turnos: TurnoNuevo[]; cierres: Cierre[]; imputados: TramoImputado[]; avisos: string[] } {
+export function turnosYaEmparejados(turnos: TurnoNuevo[]): LoteArmado {
   return {
     turnos,
     cierres: [],
@@ -501,4 +512,26 @@ export function turnosYaEmparejados(
     })),
     avisos: [],
   };
+}
+
+/**
+ * La bifurcación de `LoteAAplicar`, que es pura y está acá —y no en
+ * `aplicarDias`— porque es el único punto donde se decide si un lote se
+ * reconcilia o no: intercambiar las dos ramas no rompe ningún tipo ni da un
+ * error, sólo cierra turnos que el archivo nunca cerró (o deja abiertos los que
+ * el reloj sí cerró). Acá tiene quien la defienda.
+ *
+ * `abiertas` son las fichadas abiertas de antes que se pueden encadenar, y
+ * sólo cuentan para las marcas: un turno ya emparejado nunca cierra otra
+ * fichada.
+ */
+export function armarLote(lote: LoteAAplicar, abiertas: Map<string, FichadaAbierta>): LoteArmado {
+  return lote.tipo === "marcas" ? armarTurnos(lote.empleados, abiertas) : turnosYaEmparejados(lote.turnos);
+}
+
+/** Legajo de cada empleado del lote, para que los mensajes se puedan leer. */
+export function legajoPorEmpleadoDe(lote: LoteAAplicar): Map<string, string> {
+  return lote.tipo === "marcas"
+    ? new Map(lote.empleados.map((e) => [e.empleadoId, e.legajo]))
+    : new Map(lote.turnos.map((t) => [t.empleadoId, t.legajo]));
 }

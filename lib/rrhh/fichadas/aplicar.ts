@@ -4,7 +4,7 @@ import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
 import { diaIso, fechaArgentinaDe } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, textoDeMotivo,
+  rangoDeRecalculo, diasLiquidadosDe, armarLote, legajoPorEmpleadoDe, textoDeMotivo,
   type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
   type DiasDeEmpleado, type LoteAAplicar, type TurnoNuevo,
 } from "./decidir";
@@ -59,7 +59,8 @@ const FILAS_POR_TANDA = 500;
  *
  * `admin` y no un cliente de sesión: el cron no tiene sesión. Por eso mismo
  * `recalcularEmpleadoPeriodo` recibe también el admin (acepta cualquier
- * `SupabaseClient`).
+ * `SupabaseClient`). Para el Excel esto es un cambio: la ruta recalculaba con
+ * el cliente de la sesión del usuario, que además podía toparse con RLS.
  *
  * RIESGOS ASUMIDOS, no resueltos: nada de esto es atómico. PostgREST no ofrece
  * una transacción de varias sentencias, y meter una función de Postgres sólo
@@ -115,25 +116,18 @@ export async function aplicarDias(
   opciones: { batchId: string; protegerCorregidos: boolean }
 ): Promise<ResultadoAplicar> {
   // Dos formas de entrar, y el motivo está en `LoteAAplicar`: marcas crudas que
-  // hay que reconciliar, o turnos que el origen ya emparejó. Desde acá en
-  // adelante es todo lo mismo.
-  let armado: ReturnType<typeof armarTurnos>;
-  let legajoPorEmpleado: Map<string, string>;
-  let pendiente: string | null = null;
-  if (lote.tipo === "marcas") {
-    const conDatos = lote.empleados.filter((e) => e.dias.length > 0);
-    // Si de una carga anterior quedó un turno sin marcación de salida, se
-    // encadena para que el primer dato de este lote pueda cerrarlo en vez de
-    // quedar abierto para siempre. Una consulta para todos, no una por empleado.
-    const previas = await abiertasPrevias(admin, conDatos);
-    pendiente = previas.pendiente;
-    armado = armarTurnos(conDatos, previas.encadenables);
-    legajoPorEmpleado = new Map(conDatos.map((e) => [e.empleadoId, e.legajo]));
-  } else {
-    armado = turnosYaEmparejados(lote.turnos);
-    legajoPorEmpleado = new Map(lote.turnos.map((t) => [t.empleadoId, t.legajo]));
-  }
-  const { turnos, cierres, imputados, avisos } = armado;
+  // hay que reconciliar, o turnos que el origen ya emparejó. Sólo las marcas
+  // pueden cerrar una fichada abierta de antes; para los turnos no se busca.
+  // Si de una carga anterior quedó un turno sin marcación de salida, se
+  // encadena para que el primer dato de este lote pueda cerrarlo en vez de
+  // quedar abierto para siempre. Una consulta para todos, no una por empleado.
+  const { encadenables, pendiente } =
+    lote.tipo === "marcas"
+      ? await abiertasPrevias(admin, lote.empleados)
+      : { encadenables: new Map<string, FichadaAbierta>(), pendiente: null };
+
+  const { turnos, cierres, imputados, avisos } = armarLote(lote, encadenables);
+  const legajoPorEmpleado = legajoPorEmpleadoDe(lote);
 
   const ctx = await contextoDe(admin, [
     ...turnos.map((t) => ({ empleadoId: t.empleadoId, fecha: diaIso(t.fecha) })),
@@ -315,8 +309,10 @@ export async function aplicarDias(
  */
 async function abiertasPrevias(
   admin: SupabaseClient,
-  empleados: DiasDeEmpleado[]
+  todos: DiasDeEmpleado[]
 ): Promise<{ encadenables: Map<string, FichadaAbierta>; pendiente: string | null }> {
+  // Un empleado sin días no tiene primer día desde el cual mirar hacia atrás.
+  const empleados = todos.filter((e) => e.dias.length > 0);
   if (empleados.length === 0) return { encadenables: new Map(), pendiente: null };
 
   const primerDia = new Map(empleados.map((e) => [e.empleadoId, diaIso(e.dias[0].fecha)]));

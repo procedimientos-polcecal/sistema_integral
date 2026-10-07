@@ -140,14 +140,37 @@ export async function POST(request: Request) {
     // nadie anota es un día vacío que nadie sabe que está vacío: se deja en el
     // lote antes de contestar. El staging no se borra, así se puede reintentar.
     const mensaje = e instanceof Error ? e.message : String(e);
-    await admin
+
+    // Lo que ya quedó en la base se cuenta de la base y no se supone: si el
+    // fallo vino después de insertar algo, el lote tiene que decirlo, porque
+    // ese es el registro de qué hay con este `import_batch_id`.
+    const { count, error: countErr } = await admin
+      .from("fichadas")
+      .select("*", { count: "exact", head: true })
+      .eq("import_batch_id", batch.id);
+
+    const { error: updateErr } = await admin
       .from("rrhh_import_batches")
       .update({
+        ...(countErr ? {} : { cantidad_registros: count ?? 0 }),
         cantidad_errores: errores.length + 1,
-        log_detalle: [...errores, `La importación quedó a medias: ${mensaje}`].join("\n"),
+        log_detalle: [
+          ...errores,
+          `La importación quedó a medias: ${mensaje}`,
+          ...(countErr ? [`No se pudo contar las fichadas ya insertadas: ${countErr.message}`] : []),
+        ].join("\n"),
       })
       .eq("id", batch.id);
-    return NextResponse.json({ error: mensaje, batchId: batch.id }, { status: 500 });
+
+    // Si ni siquiera se puede anotar, se le dice a quien importó: es la única
+    // constancia que va a haber de lo que quedó a medias.
+    return NextResponse.json(
+      {
+        error: updateErr ? `${mensaje} (además no se pudo anotar en el lote ${batch.id}: ${updateErr.message})` : mensaje,
+        batchId: batch.id,
+      },
+      { status: 500 }
+    );
   }
 
   errores.push(...resultado.avisos);

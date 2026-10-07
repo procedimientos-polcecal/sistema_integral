@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, textoDeMotivo,
+  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, armarLote, legajoPorEmpleadoDe, textoDeMotivo,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta, type DiasDeEmpleado,
 } from "./decidir";
 import { toUtcDateOnly, localDateTime } from "../dates";
@@ -743,5 +743,79 @@ describe("turnosYaEmparejados", () => {
     const protegido = decidirQueAplicar(turnos, liquidado, false);
     expect(protegido.aInsertar).toEqual([]);
     expect(protegido.salteados.map((x) => x.motivo)).toEqual(["liquidado"]);
+  });
+});
+
+describe("armarLote", () => {
+  // La bifurcación de LoteAAplicar. Cada caso usa un dato que las dos ramas
+  // resuelven distinto, así que intercambiarlas hace fallar algo.
+  const E = (hora: string) => ({ tipo: "E" as const, hora });
+  const S = (hora: string) => ({ tipo: "S" as const, hora });
+  const d1 = dia(2026, 10, 1);
+  const d2 = dia(2026, 10, 2);
+  const abiertaDe = (id: string, empleadoId: string, f: Date, h: number, m: number): FichadaAbierta => ({
+    id, empleadoId, fecha: f.toISOString().slice(0, 10), horaEntrada: localDateTime(f, h, m).toISOString(),
+  });
+
+  it("las marcas se reconcilian: la entrada de la noche se cierra con la del día siguiente", () => {
+    const r = armarLote(
+      {
+        tipo: "marcas",
+        empleados: [{ empleadoId: "emp-1", legajo: "PC_204", dias: [
+          { fecha: d1, tokens: [E("22:00")] },
+          { fecha: d2, tokens: [E("08:00"), S("16:00")] },
+        ] }],
+      },
+      new Map()
+    );
+    expect(r.turnos[0].horaSalida).toEqual(localDateTime(d2, 8, 0));
+    expect(r.imputados[0]).toEqual({ empleadoId: "emp-1", fecha: d1, fechaSalida: d2 });
+  });
+
+  it("los turnos no se reconcilian: el mismo dato, ya emparejado, queda abierto", () => {
+    const abierto = turno("emp-1", d1, [22, 0], null);
+    const siguiente = turno("emp-1", d2, [8, 0], [16, 0]);
+    const r = armarLote({ tipo: "turnos", turnos: [abierto, siguiente] }, new Map());
+    expect(r.turnos).toEqual([abierto, siguiente]);
+    expect(r.avisos).toEqual([]);
+  });
+
+  it("las marcas sí cierran una fichada abierta de antes; los turnos nunca, aunque haya una que encadenar", () => {
+    const abiertas = new Map([["emp-1", abiertaDe("fich-1", "emp-1", dia(2026, 9, 30), 22, 0)]]);
+
+    const conMarcas = armarLote(
+      { tipo: "marcas", empleados: [{ empleadoId: "emp-1", legajo: "PC_204", dias: [{ fecha: d1, tokens: [S("04:00")] }] }] },
+      abiertas
+    );
+    expect(conMarcas.cierres.map((c) => c.id)).toEqual(["fich-1"]);
+
+    const conTurnos = armarLote({ tipo: "turnos", turnos: [turno("emp-1", d1, [8, 0], [16, 0])] }, abiertas);
+    expect(conTurnos.cierres).toEqual([]);
+    expect(conTurnos.avisos).toEqual([]);
+  });
+
+  it("una salida a 3 minutos se descarta como fantasma en marcas y se conserva en turnos", () => {
+    const comoMarcas = armarLote(
+      { tipo: "marcas", empleados: [{ empleadoId: "emp-1", legajo: "PC_204", dias: [{ fecha: d1, tokens: [E("08:00"), S("08:03")] }] }] },
+      new Map()
+    );
+    expect(comoMarcas.turnos[0].horaSalida).toBeNull();
+
+    const comoTurnos = armarLote({ tipo: "turnos", turnos: [turno("emp-1", d1, [8, 0], [8, 3])] }, new Map());
+    expect(comoTurnos.turnos[0].horaSalida).toEqual(localDateTime(d1, 8, 3));
+  });
+});
+
+describe("legajoPorEmpleadoDe", () => {
+  it("lee el legajo de los empleados en las marcas y de los turnos en los turnos", () => {
+    const f = dia(2026, 10, 1);
+    const deMarcas = legajoPorEmpleadoDe({
+      tipo: "marcas",
+      empleados: [{ empleadoId: "emp-1", legajo: "PC_204", dias: [] }, { empleadoId: "emp-2", legajo: "PC_122", dias: [] }],
+    });
+    expect([...deMarcas]).toEqual([["emp-1", "PC_204"], ["emp-2", "PC_122"]]);
+
+    const deTurnos = legajoPorEmpleadoDe({ tipo: "turnos", turnos: [turno("emp-3", f, [8, 0], [16, 0])] });
+    expect([...deTurnos]).toEqual([["emp-3", "PC_204"]]);
   });
 });
