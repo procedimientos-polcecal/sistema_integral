@@ -950,7 +950,7 @@ Esperado: PASA, 5 tests.
 - [ ] **Paso 5: Commit**
 
 ```bash
-git add lib/rrhh/lenox/agrupar.ts lib/rrhh/lenox/agrupar.test.ts
+git add lib/rrhh/lenox/tipos.ts lib/rrhh/lenox/agrupar.ts lib/rrhh/lenox/agrupar.test.ts
 git commit -m "feat(rrhh): agrupar las marcaciones sueltas de Lenox en días con tokens
 
 Es la pieza que permite reusar reconciliarMarcaciones entero en vez de
@@ -964,6 +964,29 @@ lo que va a permitir compararlos cuando algo no cierre.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
+
+---
+
+### Lo que cambió respecto del bloque de arriba, al construirlo
+
+Tres cosas salieron de la revisión y están en el código, no acá. Si volvés a
+leer este plan, la fuente de verdad es `lib/rrhh/lenox/agrupar.ts`:
+
+1. **`tipos.ts` se creó en esta tarea**, no en la 4: el agrupador lo necesita y
+   la 4 está bloqueada esperando la clave de la API.
+2. **El legajo se registra en el Map antes de leer fecha y hora.** El bloque de
+   arriba hace `continue` antes, con lo que un legajo cuya única marca viene
+   ilegible no entra al Map — y eso contradice el quinto test de este mismo
+   plan. Una marcación con fecha fuera de `[desde, hasta]` se descarta, pero su
+   legajo igual queda, con los días vacíos.
+3. **La firma devuelve `{ porLegajo, descartadas }`**, no un `Map` pelado.
+   `descartadas` cuenta las filas que no se pudieron leer, separadas por
+   motivo. Sin eso, un día en que la API devolviera basura se vería como una
+   sincronización exitosa que cargó cero.
+
+Y `fechaDe`/`horaDe` validan que la fecha y la hora **existan**, no sólo que
+tengan el formato: sin eso `"2026-02-31"` entraba como 3 de marzo, que es
+exactamente el día inventado que el quinto test dice evitar.
 
 ---
 
@@ -1936,12 +1959,25 @@ export async function sincronizarMarcaciones(
   usuarioId: string | null
 ): Promise<ResumenSincronizacion> {
   const marcaciones = await traerMarcaciones(desde, hasta);
-  const porLegajo = agruparPorLegajo(marcaciones, desde, hasta);
+  const { porLegajo, descartadas } = agruparPorLegajo(marcaciones, desde, hasta);
 
   const { data: empleadosData } = await admin.from("empleados").select("id, legajo, nombre, apellido, activo");
   const legajoToId = new Map((empleadosData ?? []).map((e) => [String(e.legajo).trim(), e.id]));
 
   const avisosPrevios: string[] = [];
+
+  // Lo que la API mandó y no se pudo leer. Nunca se descarta en silencio: si
+  // un día volviera basura, sin esto la sincronización cargaría nada y
+  // reportaría éxito — la divergencia que no avisa, que es la peor.
+  const { sinLegajo, fechaIlegible, horaIlegible } = descartadas;
+  if (sinLegajo + fechaIlegible + horaIlegible > 0) {
+    avisosPrevios.push(
+      `Lenox devolvió ${sinLegajo + fechaIlegible + horaIlegible} marcaciones que no se pudieron leer ` +
+        `(${sinLegajo} sin legajo, ${fechaIlegible} con fecha ilegible, ${horaIlegible} con hora ilegible) ` +
+        `de ${marcaciones.length} en total`
+    );
+  }
+
   const empleados: DiasDeEmpleado[] = [];
   const yaIncluidos = new Set<string>();
   for (const [legajo, dias] of porLegajo) {
