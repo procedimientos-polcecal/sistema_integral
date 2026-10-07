@@ -154,6 +154,25 @@ export type Reconocimiento =
 
 /** Lo que distingue un comprobante de un contrato que también lleva el CUIT. */
 const DICE_COMPROBANTE = /factura|nota\s*de\s*cr[eé]|nota\s*de\s*d[eé]|comprobante/i;
+
+/**
+ * Lo mismo, para un PDF que **no** trae el CUIT del grupo.
+ *
+ * Es deliberadamente más exigente que `DICE_COMPROBANTE`, y la diferencia
+ * importa. Cuando el CUIT está, la palabra suelta alcanza: ya sabemos que el
+ * papel nos nombra. Cuando no está, lo único que hay es el texto, y "factura"
+ * aparece de paso en cualquier lado —un comunicado del área de Compras que
+ * diga "las facturas se entregan los martes" entraría a la bandeja todos los
+ * meses—.
+ *
+ * Por eso acá la palabra tiene que **encabezar un documento**: ir seguida de
+ * un número, de un `Nº`, de dos puntos o de una fecha, que es como se titula
+ * un comprobante y no como se lo menciona. Se suman las formas de afuera
+ * —`invoice`, `receipt`, `fatura`— porque el caso que originó esto es un
+ * proveedor del exterior.
+ */
+const PARECE_COMPROBANTE =
+  /\b(factura|invoice|receipt|fatura|nota\s*fiscal|comprobante|nota\s*de\s*cr[eé]dito|nota\s*de\s*d[eé]bito)\b[\s:#]{0,4}(n[°ºo]\.?|number|num\.?|#)?[\s:]{0,6}[A-Z0-9][A-Z0-9-]{0,14}\d/i;
 /** `0006-00010192`: punto de venta y número, como lo imprime ARCA. */
 const TIENE_NUMERO = /\b\d{4,5}\s*-\s*\d{7,8}\b/;
 
@@ -198,6 +217,35 @@ export function reconocerLaFactura(
   const esNuestra = cuitsDelGrupo.some((c) => c && plano.includes(c.replace(/[-.\s]/g, "")));
 
   if (!esNuestra) {
+    /*
+     * Sin el CUIT del grupo, pero **parece un comprobante igual**: entra como
+     * dudosa en vez de tirarse.
+     *
+     * Es el agujero que la medición de los 336 PDF no podía encontrar, porque
+     * esa carpeta son todas facturas argentinas. El 07/10/2026, con correo de
+     * verdad, aparecieron las dos primeras: las facturas de **Vercel**, que es
+     * un proveedor del exterior y por lo tanto **no imprime un CUIT
+     * argentino**. La regla las descartó, y eran facturas que hay que pagar.
+     *
+     * No alcanza con mirar las palabras en castellano: una factura de afuera
+     * dice `Invoice` o `Receipt`, y su número —`W5ZSX4TZ-0002`— no tiene la
+     * forma que imprime ARCA.
+     *
+     * Entra como `dudoso` y no como `factura` a propósito: que un PDF diga
+     * "invoice" no prueba que nos la hayan hecho a nosotros. Es la misma
+     * decisión que ya se tomó para los veinte escaneos por mes —mostrar de más
+     * es recuperable, perder no—, y por eso la pantalla las pinta en ámbar.
+     */
+    if (PARECE_COMPROBANTE.test(texto) || TIENE_NUMERO.test(texto)) {
+      return {
+        es: "dudoso",
+        porque:
+          "No figura el CUIT de Polcecal ni el de Polysan, pero parece un comprobante: " +
+          "puede ser de un proveedor del exterior, que no lleva CUIT. Se muestra para " +
+          "que la revises.",
+      };
+    }
+
     return {
       es: "no",
       porque: "No figura el CUIT de Polcecal ni el de Polysan: no es una factura nuestra.",

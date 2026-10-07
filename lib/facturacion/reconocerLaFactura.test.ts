@@ -61,6 +61,19 @@ describe("lo que no es una factura nuestra", () => {
     expect(r.es === "no" && r.porque).toContain("CUIT de Polcecal");
   });
 
+  /*
+   * Lo que separa esto de una factura del exterior: la palabra "factura"
+   * aparece **de paso**, no encabezando el documento. Sin esta distinción, un
+   * comunicado del área de Compras entraría a la bandeja todos los meses.
+   */
+  it("un comunicado interno que menciona facturas al pasar", () => {
+    const r = reconocerLaFactura(
+      "COMUNICADO ÁREA DE COMPRAS. Se recuerda que las facturas se entregan los martes.",
+      DEL_GRUPO
+    );
+    expect(r.es).toBe("no");
+  });
+
   it("un documento que lleva nuestro CUIT pero no es un comprobante", () => {
     const r = reconocerLaFactura(
       "CONTRATO DE LOCACIÓN entre POLCECAL S.A., CUIT 30-64106801-9, y el locador",
@@ -104,6 +117,38 @@ describe("lo que no se puede confirmar entra igual", () => {
    * una tarde los dos casos dijeron "es un escaneo" y eso tapó un bug real
    * —pdf.js rechazando un `Buffer`— en tres facturas que sí tenían texto.
    */
+  /*
+   * El caso de verdad, y el primer falso negativo que se encontró: el
+   * 07/10/2026 el buzón descartó dos facturas de **Vercel**. Son facturas que
+   * hay que pagar, y un proveedor del exterior no imprime un CUIT argentino ni
+   * un número con la forma de ARCA.
+   */
+  it("una factura del exterior, sin CUIT argentino, entra sin confirmar", () => {
+    const r = reconocerLaFactura(
+      "Vercel Inc. Invoice W5ZSX4TZ-0002 Date Oct 1, 2026 Amount due USD 20.00 Bill to Polcecal",
+      DEL_GRUPO
+    );
+    expect(r.es).toBe("dudoso");
+    expect(r.es === "dudoso" && r.porque).toContain("exterior");
+  });
+
+  it("y un receipt también", () => {
+    expect(
+      reconocerLaFactura("Receipt 2508-2283-4988 Paid October 1, 2026 Total USD 20.00", DEL_GRUPO).es
+    ).toBe("dudoso");
+  });
+
+  /*
+   * Una factura argentina hecha a otra empresa también entra como dudosa: el
+   * número con forma de ARCA es una señal fuerte, y el CUIT pudo haberse leído
+   * mal. Mostrar de más es recuperable.
+   */
+  it("y una factura argentina cuyo CUIT no se llegó a leer", () => {
+    expect(reconocerLaFactura("FACTURA B 0003-00001234 TOTAL 45.000,00", DEL_GRUPO).es).toBe(
+      "dudoso"
+    );
+  });
+
   it("y uno que no se pudo abrir dice por qué, sin disfrazarlo de escaneo", () => {
     const r = reconocerLaFactura({ fallo: "Invalid PDF structure." }, DEL_GRUPO);
     expect(r.es).toBe("dudoso");
@@ -111,9 +156,20 @@ describe("lo que no se puede confirmar entra igual", () => {
     expect(r.es === "dudoso" && r.porque).not.toContain("escaneo");
   });
 
-  it("sin CUIT del grupo configurado no se inventa un rechazo", () => {
-    // Si la lista viniera vacía, todo caería como "no es nuestra" y la bandeja
-    // quedaría muda. Mejor que se note acá que en producción.
-    expect(reconocerLaFactura(ALMENTA, []).es).toBe("no");
+  /*
+   * Si la lista de CUITs viniera vacía —la tabla `empresas` sin cargar, o la
+   * consulta fallando— **antes la bandeja quedaba muda**: todo caía como "no
+   * es nuestra" y se descartaba en silencio. Era el peor modo de fallar que
+   * tenía este módulo.
+   *
+   * Desde que una factura sin el CUIT del grupo entra como dudosa, ese fallo
+   * cambió de forma: ya no se pierde nada, entra todo en ámbar. Sigue siendo
+   * un problema —nadie puede revisar cien facturas por mes a ojo— pero es uno
+   * que se ve, y eso es otra cosa.
+   */
+  it("sin CUIT del grupo configurado no se descarta: entra sin confirmar", () => {
+    const r = reconocerLaFactura(ALMENTA, []);
+    expect(r.es).toBe("dudoso");
+    expect(r.es === "dudoso" && r.porque).toContain("exterior");
   });
 });

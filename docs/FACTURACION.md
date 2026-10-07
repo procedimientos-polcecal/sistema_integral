@@ -488,7 +488,49 @@ de facturas:
 | Entran marcadas "sin confirmar" | **20 (6%)** |
 | Se descartan | **0** |
 
-**Cero falsos negativos**: ninguna factura real se tira. A 13 ms por PDF.
+**Cero falsos negativos** sobre esa carpeta. Y ahí está el límite de la
+medición, que tardó dos días en aparecer: **son 336 facturas argentinas**. La
+regla pedía el CUIT del grupo, todas lo tenían, y por construcción no podía
+descubrir el caso en que ese CUIT no existe. Ver más abajo.
+
+### El primer falso negativo: el proveedor del exterior (07/10/2026)
+
+Con correo de verdad, el buzón descartó dos facturas de **Vercel** con el
+motivo *"No figura el CUIT de Polcecal ni el de Polysan"*. Y es cierto: **un
+proveedor del exterior no imprime un CUIT argentino**, ni un número con la
+forma que da ARCA — el de Vercel es `W5ZSX4TZ-0002`. Eran facturas que hay que
+pagar.
+
+Ahora, cuando no está el CUIT del grupo pero el PDF **parece un comprobante**,
+entra como `dudoso` en vez de descartarse. Es la misma decisión que ya se había
+tomado para los veinte escaneos por mes: **mostrar de más es recuperable,
+perder no**.
+
+Entra como `dudoso` y no como `factura` a propósito: que un PDF diga "invoice"
+no prueba que nos la hayan hecho a nosotros.
+
+**El patrón de esa rama es más exigente que el otro, y la diferencia importa.**
+Cuando el CUIT está, la palabra suelta alcanza: ya sabemos que el papel nos
+nombra. Cuando no está, lo único que hay es el texto, y "factura" aparece de
+paso en cualquier lado — un comunicado del área de Compras que diga *"las
+facturas se entregan los martes"* entraría a la bandeja todos los meses. Por
+eso ahí la palabra tiene que **encabezar un documento**: ir seguida de un
+número. Se suman las formas de afuera (`invoice`, `receipt`, `fatura`).
+
+Medido con la regla nueva sobre los mismos 336 PDF: **316 factura, 20 dudoso,
+0 descartadas** — idéntico a antes, y ninguno de los 336 cayó por la rama
+nueva. El informe mensual de Compras, que no es una factura, sigue cayendo
+afuera.
+
+Lo que queda asumido: una factura argentina hecha a **otra** empresa ahora
+entra como dudosa en vez de descartarse. Es aceptable por la misma razón, y
+porque el CUIT pudo haberse leído mal.
+
+**Una cosa que no se puede auditar:** lo descartado se guarda con su motivo
+pero **sin el archivo**, así que no hay forma de releer después qué decían esos
+PDF. Es lo que impidió medir esta regla contra las descartadas reales y hubo
+que medirla contra la carpeta. Si vuelve a hacer falta, guardar el archivo
+también en las descartadas es un cambio chico.
 
 Lo que **no** estaba medido era el otro lado: cuántos adjuntos que *no* son
 facturas se cuelan. Para eso hacía falta una casilla conectada.
