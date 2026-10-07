@@ -34,6 +34,10 @@
     {
       "path": "/api/cron/taller-vial-sync",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/rrhh-lenox-sync",
+      "schedule": "30 10 * * *"
     }
   ]
 }
