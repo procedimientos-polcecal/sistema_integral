@@ -83,6 +83,47 @@ Es la regla de la producción negativa en Producción: **recortar esconde justo 
 que hay que corregir.** Por eso `ValorEvaluado` tiene `valor` y `problema` a la
 vez, y `problema` acompaña al valor en vez de reemplazarlo.
 
+## Cuántos tamices muestra el listado (07/10/2026)
+
+El listado tiene cuatro columnas de acumulado —**#50, #100, #200 y #325**— y
+cuáles de ellas se llenan **lo decide el producto**:
+
+| Mallas declaradas | Productos | Qué muestra |
+|---|---|---|
+| `[50, 100, 200, 325]` | Filler 1, Filler 2, Cal, Despacho a Emapi, Despacho a Kartonsec | las cuatro |
+| `[6, 7, 10, 12, 20, 50, 100, 200]` | Calcio 0-1, 0-2, 1-2 | **sólo #200** |
+| `[]` | los de grupo `proceso` | ninguna |
+
+**Los Calcios tienen #50 y #100 medidos y aun así no se muestran.** Es a
+propósito: su juego arranca en #6 y lo que interesa de un Calcio es cuánto quedó
+retenido en total, no el reparto entre los tamices finos. Mostrarle cuatro
+columnas sería dar a entender que esos cuatro números significan lo mismo que en
+un Filler, y no es así: el acumulado a #200 de un Filler es la suma de tres
+tamices, y el de un Calcio es la de ocho.
+
+**La regla se deduce de las mallas declaradas y no de una lista de nombres.** Un
+producto que se tamiza hasta #325 es un fino y muestra las cuatro; el resto
+muestra una. Si mañana se le agrega la #325 a un Calcio, el listado le abre las
+cuatro columnas solo, que es lo que corresponde — si alguien se tomó el trabajo
+de tamizarlo a 325, el reparto fino pasó a ser la pregunta.
+
+Dos detalles que están en los tests y conviene no romper:
+
+- **Lo decide el producto, no la muestra.** A una muestra de Filler a la que le
+  falte cargar la #325 se le siguen mostrando las cuatro columnas, con el hueco
+  a la vista. Decidirlo por lo medido convertiría una muestra incompleta en otro
+  producto.
+- **Nunca cae a la malla de al lado.** Si a un Calcio le falta la #200, la
+  columna queda vacía en vez de mostrar la #100. Un número en la columna que no
+  es, es el error que no se nota — la misma regla que *enlazar al que se le
+  parece*.
+
+De paso, esto arregla algo que el listado no podía mostrar: antes sólo se veía
+el acumulado de la última malla, así que **un desvío en el acumulado de #100 no
+se veía**, aunque el contador de "fuera de límite" sí lo contara. Los límites ya
+se evalúan malla por malla (`evaluarMuestra`), así que ahora cada columna marca
+su propio rojo.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*

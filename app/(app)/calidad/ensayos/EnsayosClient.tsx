@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { MALLAS_DEL_LISTADO } from "@/lib/calidad/ensayos/granulometria";
 import type { ValorEvaluado } from "@/lib/calidad/ensayos/types";
 
 export interface FilaDeEnsayo {
@@ -14,8 +15,14 @@ export interface FilaDeEnsayo {
   humedad: ValorEvaluado;
   pesoVolumetrico: ValorEvaluado;
   calUtilVial: ValorEvaluado;
-  ultimaMalla: number | null;
-  acumuladoFinal: ValorEvaluado;
+  /**
+   * El acumulado de cada columna, alineado con `MALLAS_DEL_LISTADO`.
+   *
+   * Siempre cuatro lugares; `null` es que ahí no va número — porque el producto
+   * no muestra esa malla, o porque no se midió. Lo decide
+   * `acumuladosDelListado`, en el servidor.
+   */
+  acumulados: (ValorEvaluado | null)[];
   problemaDeGranulometria?: string;
   hayFueraDeLimite: boolean;
 }
@@ -137,13 +144,29 @@ export default function EnsayosClient({
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Fecha</th>
-                  <th className="px-3 py-2">Producto</th>
-                  <th className="px-3 py-2 text-right">Humedad (%)</th>
-                  <th className="px-3 py-2 text-right">P. vol. (g/l)</th>
-                  <th className="px-3 py-2 text-right">Cal útil (%)</th>
-                  <th className="px-3 py-2 text-right">Acumulado (%)</th>
-                  <th className="px-3 py-2">Observaciones</th>
+                  <th className="px-3 pt-2" rowSpan={2}>Fecha</th>
+                  <th className="px-3 pt-2" rowSpan={2}>Producto</th>
+                  <th className="px-3 pt-2 text-right" rowSpan={2}>Humedad (%)</th>
+                  <th className="px-3 pt-2 text-right" rowSpan={2}>P. vol. (g/l)</th>
+                  <th className="px-3 pt-2 text-right" rowSpan={2}>Cal útil (%)</th>
+                  {/* Las cuatro van bajo un solo título: son la misma medición
+                      en cuatro tamices, no cuatro determinaciones distintas. */}
+                  <th className="border-x border-slate-200 px-3 pt-2 text-center" colSpan={MALLAS_DEL_LISTADO.length}>
+                    Acumulado (%)
+                  </th>
+                  <th className="px-3 pt-2" rowSpan={2}>Observaciones</th>
+                </tr>
+                <tr>
+                  {MALLAS_DEL_LISTADO.map((malla, i) => (
+                    <th
+                      key={malla}
+                      className={`px-3 pb-2 text-right font-normal normal-case tracking-normal text-slate-400 ${
+                        i === 0 ? "border-l border-slate-200" : ""
+                      } ${i === MALLAS_DEL_LISTADO.length - 1 ? "border-r border-slate-200" : ""}`}
+                    >
+                      #{malla}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -164,12 +187,18 @@ export default function EnsayosClient({
                     <td className="px-3 py-1.5 text-right">
                       <Celda v={f.calUtilVial} />
                     </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <Celda v={f.acumuladoFinal} decimales={1} />
-                      {f.ultimaMalla !== null && (
-                        <span className="ml-1 text-xs text-slate-400">#{f.ultimaMalla}</span>
-                      )}
-                    </td>
+                    {/* En blanco cuando el producto no muestra esa malla o
+                        cuando no se midió. Un cero ahí diría "no quedó nada". */}
+                    {f.acumulados.map((v, i) => (
+                      <td
+                        key={MALLAS_DEL_LISTADO[i]}
+                        className={`px-3 py-1.5 text-right tabular-nums ${
+                          i === 0 ? "border-l border-slate-100" : ""
+                        } ${i === f.acumulados.length - 1 ? "border-r border-slate-100" : ""}`}
+                      >
+                        {v ? <Celda v={v} decimales={1} /> : null}
+                      </td>
+                    ))}
                     <td className="max-w-48 truncate px-3 py-1.5 text-slate-500" title={f.observaciones ?? ""}>
                       {f.observaciones}
                     </td>
@@ -206,15 +235,25 @@ export default function EnsayosClient({
                       <Celda v={f.calUtilVial} />
                     </dd>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">
-                      Ac. {f.ultimaMalla !== null && `#${f.ultimaMalla}`}
-                    </dt>
-                    <dd>
-                      <Celda v={f.acumuladoFinal} decimales={1} />
-                    </dd>
-                  </div>
                 </dl>
+
+                {/* El acumulado va en su propia fila y no en la grilla de dos
+                    columnas: son hasta cuatro números y comparten título. */}
+                {f.acumulados.some((v) => v) && (
+                  <div className="mt-1 border-t border-slate-100 pt-1">
+                    <p className="text-xs text-slate-500">Acumulado (%)</p>
+                    <div className="flex flex-wrap gap-x-4 text-sm">
+                      {f.acumulados.map((v, i) =>
+                        v ? (
+                          <span key={MALLAS_DEL_LISTADO[i]} className="tabular-nums">
+                            <span className="text-slate-400">#{MALLAS_DEL_LISTADO[i]}</span>{" "}
+                            <Celda v={v} decimales={1} />
+                          </span>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
+                )}
                 {f.observaciones && (
                   <p className="mt-1 text-xs text-slate-500">{f.observaciones}</p>
                 )}

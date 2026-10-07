@@ -82,3 +82,83 @@ describe("granulometria", () => {
     expect(r.problema).toContain("supera");
   });
 });
+
+import { MALLAS_DEL_LISTADO, acumuladosDelListado } from "./granulometria";
+import type { FilaDeGranulometria } from "./granulometria";
+
+/** Una fila ya calculada, que es lo que `acumuladosDelListado` recibe. */
+const fila = (malla: number, acumulado: number, fuera?: "alto" | "bajo"): FilaDeGranulometria => ({
+  malla,
+  retenido: { valor: 0 },
+  acumulado: fuera ? { valor: acumulado, fuera } : { valor: acumulado },
+});
+
+/** Los cinco finos tienen este juego; los Calcios llegan hasta #200. */
+const FINO = [50, 100, 200, 325];
+const CALCIO = [6, 7, 10, 12, 20, 50, 100, 200];
+
+describe("acumuladosDelListado", () => {
+  it("las columnas son siempre las mismas cuatro, en orden", () => {
+    expect(MALLAS_DEL_LISTADO).toEqual([50, 100, 200, 325]);
+  });
+
+  it("un producto fino muestra las cuatro", () => {
+    const r = acumuladosDelListado(FINO, [
+      fila(50, 1.2),
+      fila(100, 8.4),
+      fila(200, 30.1),
+      fila(325, 51.6),
+    ]);
+    expect(r.map((v) => v?.valor ?? null)).toEqual([1.2, 8.4, 30.1, 51.6]);
+  });
+
+  it("un Calcio muestra el acumulado en #200 y nada más", () => {
+    // Tiene #50 y #100 medidos y aun así no se muestran: en un Calcio lo que
+    // interesa es cuánto quedó retenido en total, no el reparto fino.
+    const r = acumuladosDelListado(CALCIO, [
+      fila(6, 2),
+      fila(20, 40),
+      fila(50, 70),
+      fila(100, 85),
+      fila(200, 97.3),
+    ]);
+    expect(r.map((v) => v?.valor ?? null)).toEqual([null, null, 97.3, null]);
+  });
+
+  it("un producto de proceso, sin mallas, no muestra ninguna", () => {
+    expect(acumuladosDelListado([], [])).toEqual([null, null, null, null]);
+  });
+
+  it("no pierde el desvío de una malla del medio", () => {
+    // Es lo que el listado no podía mostrar antes: sólo se veía la última.
+    const r = acumuladosDelListado(FINO, [
+      fila(50, 1.2),
+      fila(100, 8.4, "alto"),
+      fila(200, 30.1),
+      fila(325, 51.6),
+    ]);
+    expect(r[1]?.fuera).toBe("alto");
+    expect(r[3]?.fuera).toBeUndefined();
+  });
+
+  it("a un fino al que le falta una malla medida le queda ese hueco y nada más", () => {
+    const r = acumuladosDelListado(FINO, [fila(50, 1.2), fila(200, 30.1), fila(325, 51.6)]);
+    expect(r.map((v) => v?.valor ?? null)).toEqual([1.2, null, 30.1, 51.6]);
+  });
+
+  it("el orden de las columnas no depende del orden en que vengan las filas", () => {
+    const r = acumuladosDelListado(FINO, [
+      fila(325, 51.6),
+      fila(50, 1.2),
+      fila(200, 30.1),
+      fila(100, 8.4),
+    ]);
+    expect(r.map((v) => v?.valor ?? null)).toEqual([1.2, 8.4, 30.1, 51.6]);
+  });
+
+  it("un Calcio sin la #200 medida no cae a otra malla", () => {
+    // Mostrar la #100 en la columna de la #200 sería el error que no se nota.
+    const r = acumuladosDelListado(CALCIO, [fila(6, 2), fila(50, 70), fila(100, 85)]);
+    expect(r).toEqual([null, null, null, null]);
+  });
+});

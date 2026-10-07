@@ -9,6 +9,7 @@ import {
   traerRetenidos,
 } from "@/lib/calidad/ensayos/consultas";
 import { evaluarMuestra } from "@/lib/calidad/ensayos/limites";
+import { acumuladosDelListado } from "@/lib/calidad/ensayos/granulometria";
 import EnsayosClient, { type FilaDeEnsayo } from "./EnsayosClient";
 
 /** Cuántos días para atrás trae la pantalla por defecto. */
@@ -39,24 +40,26 @@ export default async function EnsayosPage() {
     traerRetenidos(supabase, desde),
   ]);
 
-  const nombreDelProducto = new Map(productos.map((p) => [p.id, p.nombre]));
+  const porId = new Map(productos.map((p) => [p.id, p]));
 
   const filas: FilaDeEnsayo[] = muestras.map((m) => {
     const suyos = retenidos.filter((r) => r.muestra_id === m.id);
     const ev = evaluarMuestra(m, suyos, limites);
-    const ultima = ev.granulometria.filas.at(-1);
+    const producto = porId.get(m.producto_id);
 
     return {
       id: m.id,
       fecha: m.fecha,
       producto_id: m.producto_id,
-      producto: nombreDelProducto.get(m.producto_id) ?? "—",
+      producto: producto?.nombre ?? "—",
       observaciones: m.observaciones,
       humedad: ev.humedad,
       pesoVolumetrico: ev.pesoVolumetrico,
       calUtilVial: ev.calUtilVial,
-      ultimaMalla: ultima?.malla ?? null,
-      acumuladoFinal: ultima?.acumulado ?? { valor: null },
+      // Las cuatro columnas del listado, alineadas con MALLAS_DEL_LISTADO. Cuál
+      // de ellas va lo decide el producto, no la muestra: ver el comentario de
+      // `acumuladosDelListado`.
+      acumulados: acumuladosDelListado(producto?.mallas ?? [], ev.granulometria.filas),
       problemaDeGranulometria: ev.granulometria.problema,
       hayFueraDeLimite: ev.hayFueraDeLimite,
     };
