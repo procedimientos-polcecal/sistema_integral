@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { decidirQueAplicar, claveDia, type TurnoNuevo, type ContextoDeDecision } from "./decidir";
+import {
+  decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio,
+  type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta,
+} from "./decidir";
 import { toUtcDateOnly, localDateTime } from "../dates";
 
 function dia(y: number, m: number, d: number) {
@@ -276,5 +279,78 @@ describe("decidirQueAplicar", () => {
     expect(d.salteados[0].divergencia).toBe(
       "guardado 06:00–10:00 · 14:00–18:00, Lenox trae 06:00–10:00 · 14:00–19:00"
     );
+  });
+});
+
+describe("motivoDeProteccion", () => {
+  const clave = claveDia("emp-1", "2026-10-02");
+
+  it("un día sin marcas no está protegido", () => {
+    expect(motivoDeProteccion(clave, vacio, true)).toBeNull();
+  });
+
+  it("el día corregido se protege sólo si se pide (el Excel no lo pide)", () => {
+    const ctx = { ...vacio, diasCorregidos: new Set([clave]) };
+    expect(motivoDeProteccion(clave, ctx, true)).toBe("corregido");
+    expect(motivoDeProteccion(clave, ctx, false)).toBeNull();
+  });
+
+  it("el día liquidado se protege siempre, y gana sobre el corregido", () => {
+    const ctx = { ...vacio, diasLiquidados: new Set([clave]), diasCorregidos: new Set([clave]) };
+    expect(motivoDeProteccion(clave, ctx, true)).toBe("liquidado");
+    expect(motivoDeProteccion(clave, ctx, false)).toBe("liquidado");
+  });
+
+  it("no confunde a otro empleado ni a otro día", () => {
+    const ctx = { ...vacio, diasLiquidados: new Set([clave]) };
+    expect(motivoDeProteccion(claveDia("emp-2", "2026-10-02"), ctx, true)).toBeNull();
+    expect(motivoDeProteccion(claveDia("emp-1", "2026-10-03"), ctx, true)).toBeNull();
+  });
+});
+
+describe("elegirAbiertoPrevio", () => {
+  function abierta(id: string, empleadoId: string, fecha: string, horaUtc = "22:00"): FichadaAbierta {
+    return { id, empleadoId, fecha, horaEntrada: `${fecha}T${horaUtc}:00+00:00` };
+  }
+
+  it("elige, por empleado, la más reciente anterior a su primer día", () => {
+    const abiertas = [
+      abierta("a", "emp-1", "2026-09-10"),
+      abierta("b", "emp-1", "2026-09-30"),
+      abierta("c", "emp-2", "2026-09-29"),
+    ];
+    const r = elegirAbiertoPrevio(abiertas, new Map([["emp-1", "2026-10-01"], ["emp-2", "2026-10-01"]]));
+    expect(r.get("emp-1")?.id).toBe("b");
+    expect(r.get("emp-2")?.id).toBe("c");
+  });
+
+  it("ignora las del propio primer día o posteriores: esas las reemplaza el lote", () => {
+    const abiertas = [abierta("a", "emp-1", "2026-10-01"), abierta("b", "emp-1", "2026-10-03")];
+    const r = elegirAbiertoPrevio(abiertas, new Map([["emp-1", "2026-10-01"]]));
+    expect(r.has("emp-1")).toBe(false);
+  });
+
+  it("cada empleado se mide contra su propio primer día", () => {
+    const abiertas = [abierta("a", "emp-1", "2026-09-30"), abierta("b", "emp-2", "2026-09-30")];
+    const r = elegirAbiertoPrevio(abiertas, new Map([["emp-1", "2026-10-01"], ["emp-2", "2026-09-25"]]));
+    expect(r.get("emp-1")?.id).toBe("a");
+    expect(r.has("emp-2")).toBe(false);
+  });
+
+  it("un empleado que no está en el lote no se elige", () => {
+    const r = elegirAbiertoPrevio([abierta("a", "emp-9", "2026-09-30")], new Map([["emp-1", "2026-10-01"]]));
+    expect(r.size).toBe(0);
+  });
+
+  it("con dos el mismo día, gana la de entrada más tarde, sin importar el orden de llegada", () => {
+    const temprana = abierta("t", "emp-1", "2026-09-30", "10:00");
+    const tardia = abierta("d", "emp-1", "2026-09-30", "22:00");
+    const primerDia = new Map([["emp-1", "2026-10-01"]]);
+    expect(elegirAbiertoPrevio([temprana, tardia], primerDia).get("emp-1")?.id).toBe("d");
+    expect(elegirAbiertoPrevio([tardia, temprana], primerDia).get("emp-1")?.id).toBe("d");
+  });
+
+  it("sin abiertas, no hay nada que encadenar", () => {
+    expect(elegirAbiertoPrevio([], new Map([["emp-1", "2026-10-01"]])).size).toBe(0);
   });
 });

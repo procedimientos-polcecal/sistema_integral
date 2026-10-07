@@ -70,6 +70,71 @@ function tramo(entrada: string, salida: string | null): string {
 }
 
 /**
+ * Por qué un (empleado, día) no se puede tocar, o null si se puede.
+ *
+ * Se separó de `decidirQueAplicar` porque la pregunta no es sólo de los turnos
+ * que se insertan: cerrar con un `update` una fichada que había quedado sin
+ * salida también cambia las horas de un día, y tiene que pasar por la misma
+ * puerta. Dos lugares que responden "¿esto está protegido?" cada uno a su
+ * manera es como se desarma una protección.
+ *
+ * Si el día está en los dos, se informa "liquidado": el motivo le dice a quien
+ * lee qué puede hacer. Un día corregido se libera sacándole la marca; uno
+ * liquidado no se toca sin reabrir antes la liquidación. Decir "corregido"
+ * mandaría a probar lo primero cuando lo segundo es lo que lo está frenando.
+ */
+export function motivoDeProteccion(
+  clave: string,
+  ctx: ContextoDeDecision,
+  protegerCorregidos: boolean
+): MotivoSalteo | null {
+  if (ctx.diasLiquidados.has(clave)) return "liquidado";
+  if (protegerCorregidos && ctx.diasCorregidos.has(clave)) return "corregido";
+  return null;
+}
+
+/** Una fichada que quedó sin hora de salida. */
+export interface FichadaAbierta {
+  id: string;
+  empleadoId: string;
+  fecha: string; // "YYYY-MM-DD"
+  horaEntrada: string; // ISO
+}
+
+/**
+ * Para cada empleado, la fichada abierta más reciente anterior a su primer día
+ * del lote: la que `reconciliarTokens` recibe como `abiertoPrevio` para poder
+ * cerrarla con la primera marca nueva.
+ *
+ * Es lo que antes hacía una consulta por empleado (`order fecha desc limit 1`).
+ * Se trae todo junto y se elige acá: las abiertas son pocas (54 al 07/10/2026,
+ * todas errores de carga) y 68 viajes secuenciales a la base dentro de un
+ * cron no tienen razón de ser.
+ *
+ * Con dos abiertas el mismo día gana la de entrada más tarde: es la última
+ * marca sin pareja, que es lo que el emparejamiento por posición deja
+ * pendiente. La consulta vieja no definía ese caso.
+ */
+export function elegirAbiertoPrevio(
+  abiertas: FichadaAbierta[],
+  primerDiaPorEmpleado: Map<string, string>
+): Map<string, FichadaAbierta> {
+  const elegidas = new Map<string, FichadaAbierta>();
+  for (const a of abiertas) {
+    const primerDia = primerDiaPorEmpleado.get(a.empleadoId);
+    if (primerDia === undefined || a.fecha >= primerDia) continue;
+
+    const actual = elegidas.get(a.empleadoId);
+    const gana =
+      !actual ||
+      a.fecha > actual.fecha ||
+      (a.fecha === actual.fecha && new Date(a.horaEntrada).getTime() > new Date(actual.horaEntrada).getTime());
+    if (gana) elegidas.set(a.empleadoId, a);
+  }
+  return elegidas;
+}
+
+/**
  * Qué se inserta, qué día se reemplaza, qué se saltea y qué se avisa.
  *
  * Es puro a propósito: toda esta lógica vivía adentro de
@@ -119,22 +184,16 @@ export function decidirQueAplicar(
     const fecha = fechaStr(t.fecha);
     const clave = claveDia(t.empleadoId, fecha);
 
-    const liquidado = ctx.diasLiquidados.has(clave);
-    const corregido = protegerCorregidos && ctx.diasCorregidos.has(clave);
+    const motivo = motivoDeProteccion(clave, ctx, protegerCorregidos);
 
-    if (liquidado || corregido) {
+    if (motivo) {
       if (!diasYaSalteados.has(clave)) {
         diasYaSalteados.add(clave);
         salteados.push({
           empleadoId: t.empleadoId,
           legajo: t.legajo,
           fecha,
-          // Si el día está en los dos, se informa "liquidado": el motivo le
-          // dice a quien lee qué puede hacer. Un día corregido se libera
-          // sacándole la marca; uno liquidado no se toca sin reabrir antes la
-          // liquidación. Decir "corregido" mandaría a probar lo primero
-          // cuando lo segundo es lo que lo está frenando.
-          motivo: liquidado ? "liquidado" : "corregido",
+          motivo,
           divergencia: divergenciaDe(ctx.guardadas.get(clave) ?? [], turnosPorDia.get(clave) ?? []),
         });
       }
