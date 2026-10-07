@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerMarcaciones, traerEmpleados } from "./cliente";
 import { agruparPorLegajo } from "./agrupar";
-import { cotejarPadron } from "./cotejo";
-import { avisoDeDescartadas, nombreDelLote, resolverEmpleados, sumarConAbiertasPrevias } from "./preparar";
+import { cotejarPadron, type ResultadoDelCotejo } from "./cotejo";
+import { avisoDeDescartadas, avisoDeRangoVacio, nombreDelLote, resolverEmpleados, sumarConAbiertasPrevias } from "./preparar";
 import { aplicarDias } from "../fichadas/aplicar";
 import { diaIso } from "../dates";
 import { traerTodo } from "@/lib/core/paginado";
@@ -67,6 +67,10 @@ export async function sincronizarMarcaciones(
   const avisosPrevios: string[] = [];
   const descartes = avisoDeDescartadas(descartadas, marcaciones.length);
   if (descartes) avisosPrevios.push(descartes);
+  // Cero marcaciones en un rango largo es casi seguro una falla de Lenox, y sin
+  // este aviso se cargaría nada y se reportaría éxito.
+  const rangoVacio = avisoDeRangoVacio(desde, hasta, marcaciones.length);
+  if (rangoVacio) avisosPrevios.push(rangoVacio);
 
   const resueltos = resolverEmpleados(porLegajo, legajoToId);
   avisosPrevios.push(...resueltos.avisos);
@@ -129,11 +133,18 @@ export async function sincronizarMarcaciones(
 
   // El cotejo es lo último: que falle no puede voltear una sincronización de
   // marcaciones que sí funcionó (ver `cotejarElPadron`).
-  const avisos = [...avisosPrevios, ...resultado.avisos, ...(await cotejarElPadron(empleadosData))];
+  const cotejo = await cotejarElPadron(empleadosData);
+
+  // Un error es algo que hizo que un dato no se cargara. Una alta sin cargar
+  // lo es —las marcaciones de esa persona no entraron—; una baja sin cargar o
+  // un activo sin reloj no: es un dato maestro por actualizar, y probablemente
+  // permanente y legítimo.
+  const avisos = [...avisosPrevios, ...resultado.avisos, ...cotejo.errores];
 
   // `pendientes` va al detalle pero NO al conteo de errores: un número de
   // errores que incluye lo que no es un error es un número que nadie mira.
-  const detalle = [...avisos, ...resultado.pendientes];
+  const pendientes = [...resultado.pendientes, ...cotejo.pendientes];
+  const detalle = [...avisos, ...pendientes];
   const { error: updateErr } = await admin
     .from("rrhh_import_batches")
     .update({
@@ -156,7 +167,7 @@ export async function sincronizarMarcaciones(
     reemplazados: resultado.reemplazados,
     salteados: resultado.salteados.length,
     avisos,
-    pendientes: resultado.pendientes,
+    pendientes,
     batchId: batch.id,
   };
 }
@@ -164,13 +175,19 @@ export async function sincronizarMarcaciones(
 /** Compara el padrón de Lenox con el del SdG. Informa; no toca nada. */
 async function cotejarElPadron(
   delSdG: { legajo: string | null; nombre: string; apellido: string; activo: boolean }[]
-): Promise<string[]> {
+): Promise<ResultadoDelCotejo> {
   try {
     return cotejarPadron(delSdG, await traerEmpleados());
   } catch (e) {
     // El cotejo es accesorio: que falle no puede voltear una sincronización
-    // de marcaciones que sí funcionó.
-    return [`No se pudo cotejar el padrón con Lenox: ${e instanceof Error ? e.message : String(e)}`];
+    // de marcaciones que sí funcionó. Es un pendiente y no un error: no hizo
+    // que ningún dato dejara de cargarse. Una alta que se nos pase por esto
+    // igual aparece como error cuando sus marcaciones lleguen ("el legajo no
+    // existe en el SdG").
+    return {
+      errores: [],
+      pendientes: [`No se pudo cotejar el padrón con Lenox: ${e instanceof Error ? e.message : String(e)}`],
+    };
   }
 }
 

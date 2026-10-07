@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  avisoDeDescartadas, diasVacios, nombreDelLote, resolverEmpleados, sumarConAbiertasPrevias,
+  avisoDeDescartadas, avisoDeRangoVacio, diasVacios, nombreDelLote, resolverEmpleados, sumarConAbiertasPrevias,
 } from "./preparar";
 import { toUtcDateOnly } from "../dates";
 import type { DiaMarcacionesTokens } from "../excelImport";
@@ -46,6 +46,31 @@ describe("avisoDeDescartadas", () => {
 
   it("un solo motivo alcanza para avisar", () => {
     expect(avisoDeDescartadas({ ...nada, horaIlegible: 1 }, 50)).toContain("1 marcaciones");
+  });
+});
+
+describe("avisoDeRangoVacio", () => {
+  it("más de dos días sin una sola marcación avisa, con el largo y las fechas", () => {
+    expect(avisoDeRangoVacio(dia(2026, 10, 1), dia(2026, 10, 7), 0)).toBe(
+      "Lenox no devolvió ninguna marcación para el rango pedido (7 días, del 2026-10-01 al 2026-10-07): conviene revisar"
+    );
+  });
+
+  it("tres días es el mínimo que avisa", () => {
+    expect(avisoDeRangoVacio(dia(2026, 10, 1), dia(2026, 10, 3), 0)).toContain("3 días");
+  });
+
+  it("hasta dos días, un cero es legítimo (un fin de semana, un feriado): no avisa", () => {
+    expect(avisoDeRangoVacio(dia(2026, 10, 4), dia(2026, 10, 4), 0)).toBeNull();
+    expect(avisoDeRangoVacio(dia(2026, 10, 3), dia(2026, 10, 4), 0)).toBeNull();
+  });
+
+  it("con una sola marcación ya no avisa, por largo que sea el rango", () => {
+    expect(avisoDeRangoVacio(dia(2026, 8, 1), dia(2026, 10, 1), 1)).toBeNull();
+  });
+
+  it("cuenta bien a través del cambio de mes", () => {
+    expect(avisoDeRangoVacio(dia(2026, 9, 30), dia(2026, 10, 2), 0)).toContain("3 días");
   });
 });
 

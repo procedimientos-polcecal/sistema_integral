@@ -1,4 +1,4 @@
-import { addUtcDays } from "../dates";
+import { addUtcDays, diaIso } from "../dates";
 import type { DiaMarcacionesTokens } from "../excelImport";
 import type { DiasDeEmpleado } from "../fichadas/decidir";
 import type { Agrupadas } from "./agrupar";
@@ -34,6 +34,30 @@ export function avisoDeDescartadas(descartadas: Agrupadas["descartadas"], total:
     `Lenox devolvió ${perdidas} marcaciones que no se usaron, de ${total} en total ` +
     `(${sinLegajo} sin legajo, ${fechaIlegible} con fecha ilegible, ` +
     `${horaIlegible} con hora ilegible, ${fueraDeRango} fuera del rango pedido)`
+  );
+}
+
+/**
+ * El aviso de un rango que volvió sin una sola marcación, o null.
+ *
+ * Cargar cero y reportar éxito es la falla que no avisa: si la API devolviera
+ * vacío para una semana entera —un cambio de su lado, una cuenta suspendida,
+ * un filtro que dejó de funcionar— el cron correría en silencio todos los días
+ * y nadie se enteraría hasta la liquidación. Es un error y no un pendiente:
+ * con más de dos días, un cero es casi seguro una falla.
+ *
+ * La regla es el largo del rango y nada más. No se mira qué días son hábiles
+ * ni cuáles son feriados, que sería adivinar; por eso hasta dos días se deja
+ * pasar (un fin de semana, un feriado largo es un cero legítimo). `desde` y
+ * `hasta` son medianoche UTC, inclusivos.
+ */
+export function avisoDeRangoVacio(desde: Date, hasta: Date, total: number): string | null {
+  if (total > 0) return null;
+  const dias = Math.round((hasta.getTime() - desde.getTime()) / 86_400_000) + 1;
+  if (dias <= 2) return null;
+  return (
+    `Lenox no devolvió ninguna marcación para el rango pedido (${dias} días, ` +
+    `del ${diaIso(desde)} al ${diaIso(hasta)}): conviene revisar`
   );
 }
 
