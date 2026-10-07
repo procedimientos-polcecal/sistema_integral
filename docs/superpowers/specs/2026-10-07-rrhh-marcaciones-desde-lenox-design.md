@@ -353,8 +353,12 @@ cliente tiene que tratar el 204 como "cero filas" antes de intentar parsear.
 
 **2. Hay límite de llamadas, y la API no dice cuál.** Alcanzaron unas doce
 llamadas seguidas para recibir `429`. La respuesta **no trae `Retry-After`, ni
-ningún header de límite, ni cuerpo**: `content-length: 0`. Medido, la ventana
-no es de segundos — **a los 4 minutos seguía bloqueada**.
+ningún header de límite, ni cuerpo**: `content-length: 0`.
+
+Se midió la recuperación sondeando cada 20 segundos: **a los 7 minutos seguía
+bloqueada**. Lo más probable es que **sondear mantenga vivo el bloqueo**, y eso
+convierte "no reintentar" de preferencia en obligación: un reintento automático
+sobre esta API no se recuperaría nunca, se quedaría girando.
 
 Consecuencias de diseño:
 - El **cron** hace **una sola llamada** por corrida (7 días), más una de
