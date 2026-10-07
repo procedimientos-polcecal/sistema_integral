@@ -1581,6 +1581,49 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+### Lo que cambió respecto del bloque de arriba, al construirlo
+
+Cinco cosas. La fuente de verdad es `lib/rrhh/fichadas/aplicar.ts`.
+
+1. **El rango del recálculo incluye `fechaSalida`, no sólo `fecha`.** Era un
+   **bug del plan**: un turno que cruza la medianoche aporta horas al día
+   siguiente, y si ese día no tenía turnos propios, nadie lo recalculaba. La
+   ruta vieja sí marcaba las dos fechas. Además se difieren los cierres para
+   que haya **un solo** recálculo por empleado en vez de dos.
+2. **El cierre de una fichada abierta pasa por las protecciones.** En el bloque
+   de arriba el `update` corría antes de `decidir.ts` y sin protección, así que
+   una liquidación cerrada con un turno nocturno sin salida **se movía sola**
+   cuando entraba la marca del día siguiente. Ahora el cierre se aplica después
+   de conocer el contexto; si el día está protegido no se cierra y sale un
+   aviso. El `update` lleva además `.is("hora_salida", null)` para no pisar una
+   salida que alguien cargó a mano mientras tanto.
+3. **`abiertoPrevio` es una sola consulta, no una por empleado.** Eran 68
+   consultas secuenciales. Ahora se traen todas las abiertas anteriores al lote
+   —con `traerTodo` y `.order("id")`— y la elección por empleado la hace
+   `elegirAbiertoPrevio`, que es pura y está testeada en `decidir.ts`.
+4. **El borrado se agrupa por empleado**, con las fechas en un `.in()` cortado
+   en tandas de 200 (unos 2 KB de URL, bien lejos del límite que hace que
+   PostgREST devuelva un 400 mudo). Pasa de 476 consultas a 68. Y **se chequea
+   el `error` del borrado**, que el bloque de arriba ignoraba: un borrado
+   fallido seguía de largo y dejaba el día duplicado, con horas que se pagan
+   dos veces.
+5. **Las fichadas abiertas viejas se ignoran para el encadenamiento y se
+   informan una sola vez.** Bajo la guarda de 2 a 14 horas, una abierta de más
+   de un día antes del lote **no puede cerrarse** con esos datos: pasarla sólo
+   produce un aviso que no lleva a ninguna acción. Con 23 empleados con una
+   abierta vieja eso eran hasta 23 líneas fijas en cada `log_detalle`, todos
+   los días. Ahora salen en un aviso agregado que dice cuántas son, desde
+   cuándo y qué hacer. Vale para los dos caminos de carga.
+
+**Riesgo asumido, escrito en el código:** si el `insert` falla a mitad de los
+lotes de 500, el día ya fue borrado y queda vacío o a medias. Se cura en la
+próxima corrida —el cron, el botón, o volver a subir el Excel—, salvo que el
+día quede fuera de la ventana de 7 días. Invertir el orden (insertar antes de
+borrar) se descartó: un fallo del borrado dejaría el día duplicado, que es
+peor, porque esas horas se pagan.
+
+---
+
 ## Tarea 8: El import de Excel pasa a usar `aplicar.ts`
 
 **Requiere la Tarea 7.** El objetivo es que el comportamiento del Excel **no
