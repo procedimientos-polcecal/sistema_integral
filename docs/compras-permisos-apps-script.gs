@@ -55,6 +55,36 @@
  * que es la forma en que las crea el script: sin editores explícitos, sólo el
  * dueño puede escribir ahí.
  *
+ * POR QUÉ ALGUNAS "NO SE PUEDEN TOCAR" (07/10/2026) — el misterio de agosto
+ *
+ * Arriba decía, desde el 27/08, que 8 protecciones no se habían podido tocar y
+ * que eran "de filas que no son las que fallan". Eran la misma cosa que las 4
+ * que quedaron hoy, y ahora se entiende de dónde salen.
+ *
+ * El `onEdit` de la planilla, al proteger la celda, hacía esto:
+ *
+ *     proteccion = celda.protect();              // el que edita queda de editor
+ *     proteccion.removeEditors(getEditors());    // ← si ése es el DUEÑO, falla
+ *     proteccion.addEditors(MAILS_PERMITIDOS);   // ← nunca llega
+ *
+ * Cuando quien toca el Estado en el master es el **dueño** de la planilla,
+ * `protect()` lo deja como único editor, y sacar al dueño de su propia
+ * protección no se puede: la función muere ahí y la protección queda **sin
+ * ningún editor**. Cuando el que edita es cualquier otro, sale bien. Por eso
+ * son pocas y aparecen salteadas.
+ *
+ * Y una protección sin editores sólo la puede cambiar el dueño: ni la cuenta de
+ * servicio ni la cuenta con la que se corra esta función. Medido — la API
+ * contesta `400: You don't have permission to change who can edit this
+ * protected range`. Así que para ésas, `darPermisoALaCuentaDeServicio` hay que
+ * correrla **desde la cuenta dueña**, y no es una recomendación de prolijidad:
+ * es la única que puede.
+ *
+ * El arreglo de fondo, que ya está en el `onEdit` de la planilla desde hoy, es
+ * invertir el orden: **primero dar los permisos y después sacar lo que sobre**.
+ * Así una falla en el medio deja la celda con permisos de más —molesto pero
+ * inofensivo— en vez de con ninguno, que es la que deja a todo el mundo afuera.
+ *
  * Desde ese día la app ya no confunde los dos casos: cuando una escritura
  * vuelve con "celda protegida", le pregunta a la planilla si la cuenta figura
  * entre los editores de esa celda y lo dice en el pendiente. Así que el
