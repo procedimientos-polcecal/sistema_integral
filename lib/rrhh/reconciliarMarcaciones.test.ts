@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reconciliarMarcaciones } from "./excelImport";
+import { reconciliarMarcaciones, reconciliarTokens, tokenizeMarcaciones } from "./excelImport";
 import { toUtcDateOnly } from "./dates";
 
 function dia(y: number, m: number, d: number) {
@@ -130,6 +130,36 @@ describe("reconciliarMarcaciones", () => {
     expect(turnos).toEqual([
       { fecha: dia(2026, 7, 1), entradaStr: "08:00", salidaStr: "12:00", fechaSalida: dia(2026, 7, 1) },
       { fecha: dia(2026, 7, 1), entradaStr: "13:00", salidaStr: "17:10", fechaSalida: dia(2026, 7, 1) },
+    ]);
+  });
+});
+
+describe("reconciliarTokens", () => {
+  it("da exactamente lo mismo que el envoltorio que tokeniza", () => {
+    const crudos = [
+      { fecha: dia(2026, 6, 1), raw: " E 19:40" },
+      { fecha: dia(2026, 6, 2), raw: " E 03:40 - S 19:37" },
+    ];
+    const porRaw = reconciliarMarcaciones(crudos);
+    const porTokens = reconciliarTokens(
+      crudos.map((d) => ({ fecha: d.fecha, tokens: tokenizeMarcaciones(d.raw) }))
+    );
+    expect(porTokens).toEqual(porRaw);
+  });
+
+  it("filtra las marcaciones fantasma también cuando entra por tokens", () => {
+    const { turnos } = reconciliarTokens([
+      {
+        fecha: dia(2026, 6, 1),
+        tokens: [
+          { tipo: "E", hora: "08:00" },
+          { tipo: "E", hora: "08:03" }, // fantasma: ≤5 min de la anterior
+          { tipo: "S", hora: "16:00" },
+        ],
+      },
+    ]);
+    expect(turnos).toEqual([
+      { fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "16:00", fechaSalida: dia(2026, 6, 1) },
     ]);
   });
 });

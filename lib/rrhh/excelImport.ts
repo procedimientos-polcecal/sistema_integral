@@ -219,6 +219,11 @@ export interface DiaMarcacionesCrudo {
   raw: string; // celda "Marcaciones" cruda de ese día, puede venir vacía
 }
 
+export interface DiaMarcacionesTokens {
+  fecha: Date; // día calendario (UTC-medianoche), ordenados ascendente por el llamador
+  tokens: TokenMarcacion[]; // crudos: el filtro de fantasmas se aplica acá adentro
+}
+
 export interface TurnoResuelto {
   fecha: Date; // día al que se imputa la entrada (y las horas trabajadas)
   entradaStr: string;
@@ -251,8 +256,8 @@ const UMBRAL_REINGRESO_RAPIDO_MINUTOS = 30;
  * siguiente, subido después): se trata como si fuera el turno pendiente del
  * "día anterior" a este lote, para que el primer dato nuevo pueda cerrarlo.
  */
-export function reconciliarMarcaciones(
-  dias: DiaMarcacionesCrudo[],
+export function reconciliarTokens(
+  dias: DiaMarcacionesTokens[],
   abiertoPrevio?: { fecha: Date; entradaStr: string } | null
 ): {
   turnos: TurnoResuelto[];
@@ -270,7 +275,7 @@ export function reconciliarMarcaciones(
   }
 
   for (const dia of dias) {
-    let tokens = filtrarMarcacionesFantasma(tokenizeMarcaciones(dia.raw));
+    let tokens = filtrarMarcacionesFantasma(dia.tokens);
 
     if (pendiente) {
       if (tokens.length === 0) {
@@ -330,6 +335,23 @@ export function reconciliarMarcaciones(
   cerrarPendienteComoAbierto("Turno sin marcación de salida (fin de los datos importados)");
 
   return { turnos, avisos };
+}
+
+/**
+ * La forma histórica: recibe la celda cruda "Marcaciones" de cada día y la
+ * tokeniza. Es por donde entra el import de Excel, y la que cubren los tests
+ * de `reconciliarMarcaciones.test.ts`. El camino de Lenox entra por
+ * `reconciliarTokens`, porque la API devuelve las marcaciones sueltas y armar
+ * un string para volver a parsearlo sería una ida y vuelta sin motivo.
+ */
+export function reconciliarMarcaciones(
+  dias: DiaMarcacionesCrudo[],
+  abiertoPrevio?: { fecha: Date; entradaStr: string } | null
+): { turnos: TurnoResuelto[]; avisos: AvisoReconciliacion[] } {
+  return reconciliarTokens(
+    dias.map((d) => ({ fecha: d.fecha, tokens: tokenizeMarcaciones(d.raw) })),
+    abiertoPrevio
+  );
 }
 
 /**
