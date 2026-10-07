@@ -405,6 +405,47 @@ La instalación está en `docs/facturacion-correo-apps-script.gs`. Hace falta
 `FACTURACION_CORREO_SECRET` en Vercel y el mismo valor en las propiedades del
 script.
 
+### El tope de 4,5 MB es de Vercel, y no se puede subir
+
+El script mandaba los diez mails de la corrida en **un solo POST**, con los
+adjuntos en base64. El 07/10/2026 eso empezó a fallar:
+
+```
+El SdG contestó 413: Request Entity Too Large FUNCTION_PAYLOAD_TOO_LARGE
+```
+
+**4,5 MB por request es un límite de la plataforma**, no de la ruta: no se
+arregla desde el código del SdG. Y base64 infla un 33%, así que el techo real
+son unos 3 MB de archivo por envío.
+
+Lo que se hizo, en el script:
+
+- **Un hilo por vez, etiquetando apenas entró.** El envío único fallaba de dos
+  formas a la vez: se pasaba del tope, y si algo fallaba no entraba ninguno
+  aunque nueve estuvieran bien.
+- **Las tandas se cortan por bytes acumulados, no por cantidad.** Diez mails
+  livianos entran juntos; uno con un escaneo de 3 MB va solo. Un mensaje nunca
+  se parte: sus adjuntos viajan juntos para que el UNIQUE (mensaje, adjunto)
+  siga valiendo si una tanda se reintenta.
+- **El tope por adjunto bajó de 20 MB a 3.** Los 20 eran el límite del bucket,
+  que es una medida del lugar equivocado: un adjunto que no entra en un POST no
+  llega nunca, por grande que sea el bucket.
+
+**Medido sobre los 71 adjuntos que ya entraron** del correo real: mediana
+84 KB, p90 388 KB, el más pesado 2,2 MB —y ése ni siquiera es una factura, es
+el legajo impositivo de Arcor que el reconocedor ya descarta—. **Ninguno pasa
+de 3 MB**, así que el tope nuevo no deja afuera nada de lo visto.
+
+Lo que no entra **no se pierde en silencio**: el script avisa por mail con el
+nombre del archivo y quién lo mandó, y esa factura se carga a mano. El aviso va
+*después* de etiquetar, a propósito — si cortara antes, ese hilo volvería en
+cada corrida y mandaría el mismo error cada quince minutos para siempre, que
+termina siendo lo mismo que no avisar.
+
+Si algún día un escaneo de verdad pasa los 3 MB, el arreglo no es subir el
+tope: es que el script suba el archivo **directo al bucket** con una URL
+firmada y le mande al SdG sólo la ruta. Es más trabajo y hoy no hace falta.
+
 ### Cómo no trae dos veces lo mismo
 
 Dos redes, y hacen falta las dos:

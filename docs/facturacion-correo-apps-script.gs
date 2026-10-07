@@ -85,8 +85,27 @@ var ETIQUETA = 'SdG/cargado';
  */
 var POR_CORRIDA = 10;
 
-/** Más que esto no entra en el bucket del SdG, así que no se manda. */
-var MAXIMO_BYTES = 20 * 1024 * 1024;
+/**
+ * Cuánto puede pesar un POST, en bytes **crudos** —antes de base64—.
+ *
+ * El tope no lo pone el SdG sino **Vercel: 4,5 MB por request**, y no se puede
+ * subir desde el código. Pasarse da un `413 FUNCTION_PAYLOAD_TOO_LARGE`, que
+ * es lo que empezó a fallar el 07/10/2026 cuando una corrida junto diez mails
+ * con adjuntos pesados en un solo envío.
+ *
+ * Base64 infla un 33%, así que 3 MB crudos son unos 4,1 MB de cuerpo: entra
+ * con margen para el asunto, el remitente y las llaves del JSON.
+ */
+var MAXIMO_POR_ENVIO = 3 * 1024 * 1024;
+
+/**
+ * Cuánto puede pesar **un adjunto**.
+ *
+ * Decía 20 MB —el límite del bucket del SdG— y era una medida del lugar
+ * equivocado: un adjunto que no entra en un POST no llega nunca, por grande
+ * que sea el bucket. El techo real es el del envío.
+ */
+var MAXIMO_BYTES = MAXIMO_POR_ENVIO;
 
 /** Saca los espacios de los costados. Apps Script no tiene `String.trim` viejo. */
 function limpiar(valor) {
@@ -160,78 +179,173 @@ function revisarElCorreo() {
   var hilos = GmailApp.search(busqueda, 0, POR_CORRIDA);
   if (!hilos.length) return;
 
-  var mensajes = [];
-  var procesados = [];
+  var muyGrandes = [];
 
+  /*
+   * **Un hilo por vez, y se etiqueta apenas entró.**
+   *
+   * Antes se juntaban los diez hilos en un solo POST, y eso fallaba de dos
+   * formas a la vez: el cuerpo se pasaba del tope de Vercel, y si algo fallaba
+   * no entraba ninguno aunque nueve estuvieran bien. Así, lo que entró queda
+   * etiquetado y la corrida siguiente arranca donde quedó ésta.
+   */
   for (var h = 0; h < hilos.length; h++) {
-    var deEsteHilo = hilos[h].getMessages();
+    var mensajes = mensajesDelHilo(hilos[h], muyGrandes);
+    if (mensajes.length) enviarPorTandas(url, secreto, mensajes);
 
-    for (var m = 0; m < deEsteHilo.length; m++) {
-      var mensaje = deEsteHilo[m];
-      var adjuntos = [];
+    // Los hilos sin nada que mandar se etiquetan igual: un hilo con adjuntos
+    // que no sirven no tiene que volver a mirarse en cada corrida.
+    hilos[h].addLabel(etiqueta);
+  }
 
-      /*
-       * `getAttachments` sin opciones ya deja afuera las imágenes embebidas en
-       * el cuerpo del HTML, que son la mayoría de los logos de las firmas.
-       *
-       * De lo que pasa, **acá no se decide nada**: el SdG descarta por tamaño
-       * lo que es decorativo y por el texto del PDF lo que no es una factura
-       * nuestra. Se manda y allá se resuelve, en un solo lugar y con tests —si
-       * la regla se dividiera entre el script y el servidor, en algún momento
-       * las dos mitades dirían cosas distintas.
-       */
-      var archivos = mensaje.getAttachments();
+  /*
+   * Lo que no entra no se pierde en silencio: se avisa.
+   *
+   * El aviso va **después** de etiquetar, a propósito. Si cortara antes, ese
+   * hilo volvería en cada corrida y mandaría un mail de error cada quince
+   * minutos para siempre, que termina siendo lo mismo que no avisar. Así se
+   * avisa una vez, con el nombre del archivo y de quién lo mandó, y esa
+   * factura se carga a mano desde el mail.
+   */
+  if (muyGrandes.length) {
+    throw new Error(
+      'Entró todo lo demás, pero ' + muyGrandes.length + ' adjunto(s) pesan más de ' +
+      Math.round(MAXIMO_BYTES / (1024 * 1024)) + ' MB y no se pueden mandar ' +
+      '(el tope es de Vercel, no del SdG). Hay que cargarlos a mano desde el ' +
+      'mail: ' + muyGrandes.join(' · ')
+    );
+  }
+}
 
-      for (var a = 0; a < archivos.length; a++) {
-        var archivo = archivos[a];
-        if (archivo.getSize() > MAXIMO_BYTES) continue;
+/**
+ * Los mensajes de un hilo, con sus adjuntos en base64.
+ *
+ * `getAttachments` sin opciones ya deja afuera las imágenes embebidas en el
+ * cuerpo del HTML, que son la mayoría de los logos de las firmas.
+ *
+ * De lo que pasa, **acá no se decide nada**: el SdG descarta por tamaño lo que
+ * es decorativo y por el texto del PDF lo que no es una factura nuestra. Se
+ * manda y allá se resuelve, en un solo lugar y con tests —si la regla se
+ * dividiera entre el script y el servidor, en algún momento las dos mitades
+ * dirían cosas distintas—. Lo único que se decide acá es lo que **no entra en
+ * un POST**, que no es un criterio sino un límite físico.
+ */
+function mensajesDelHilo(hilo, muyGrandes) {
+  var mensajes = [];
+  var deEsteHilo = hilo.getMessages();
 
-        adjuntos.push({
-          nombre: archivo.getName(),
-          tipo: archivo.getContentType(),
-          contenido: Utilities.base64Encode(archivo.getBytes()),
-        });
+  for (var m = 0; m < deEsteHilo.length; m++) {
+    var mensaje = deEsteHilo[m];
+    var adjuntos = [];
+    var archivos = mensaje.getAttachments();
+
+    for (var a = 0; a < archivos.length; a++) {
+      var archivo = archivos[a];
+
+      if (archivo.getSize() > MAXIMO_BYTES) {
+        muyGrandes.push(
+          archivo.getName() + ' (' + Math.round(archivo.getSize() / (1024 * 1024)) +
+          ' MB, de ' + mensaje.getFrom() + ')'
+        );
+        continue;
       }
 
-      if (!adjuntos.length) continue;
-
-      mensajes.push({
-        id: mensaje.getId(),
-        remitente: mensaje.getFrom(),
-        asunto: mensaje.getSubject(),
-        fecha: mensaje.getDate().toISOString(),
-        adjuntos: adjuntos,
+      adjuntos.push({
+        nombre: archivo.getName(),
+        tipo: archivo.getContentType(),
+        contenido: Utilities.base64Encode(archivo.getBytes()),
+        bytes: archivo.getSize(),
       });
     }
 
-    procesados.push(hilos[h]);
+    if (!adjuntos.length) continue;
+
+    mensajes.push({
+      id: mensaje.getId(),
+      remitente: mensaje.getFrom(),
+      asunto: mensaje.getSubject(),
+      fecha: mensaje.getDate().toISOString(),
+      adjuntos: adjuntos,
+    });
   }
 
-  if (!mensajes.length) {
-    // Igual se etiqueta: un hilo con adjuntos que no sirven no tiene que
-    // volver a mirarse en cada corrida.
-    for (var p = 0; p < procesados.length; p++) procesados[p].addLabel(etiqueta);
-    return;
+  return mensajes;
+}
+
+/**
+ * Manda los mensajes en varios POST, para no pasarse del tope de Vercel.
+ *
+ * Se corta por **bytes acumulados**, no por cantidad: diez mails livianos
+ * entran juntos y uno solo con una factura escaneada de 3 MB va solo. Un
+ * mensaje nunca se parte: sus adjuntos viajan juntos para que el UNIQUE por
+ * (mensaje, adjunto) del SdG siga valiendo igual si una tanda se reintenta.
+ */
+function enviarPorTandas(url, secreto, mensajes) {
+  var tanda = [];
+  var acumulado = 0;
+
+  for (var i = 0; i < mensajes.length; i++) {
+    var pesa = pesoDelMensaje(mensajes[i]);
+
+    if (tanda.length && acumulado + pesa > MAXIMO_POR_ENVIO) {
+      enviar(url, secreto, tanda);
+      tanda = [];
+      acumulado = 0;
+    }
+
+    tanda.push(mensajes[i]);
+    acumulado += pesa;
+  }
+
+  if (tanda.length) enviar(url, secreto, tanda);
+}
+
+/** Los bytes crudos de un mensaje. El `bytes` de cada adjunto es el del archivo. */
+function pesoDelMensaje(mensaje) {
+  var total = 0;
+  for (var a = 0; a < mensaje.adjuntos.length; a++) total += mensaje.adjuntos[a].bytes || 0;
+  return total;
+}
+
+function enviar(url, secreto, mensajes) {
+  var limpios = [];
+  for (var i = 0; i < mensajes.length; i++) {
+    var m = mensajes[i];
+    var adjuntos = [];
+    for (var a = 0; a < m.adjuntos.length; a++) {
+      // `bytes` es de acá: sirve para armar las tandas y no tiene que viajar.
+      adjuntos.push({
+        nombre: m.adjuntos[a].nombre,
+        tipo: m.adjuntos[a].tipo,
+        contenido: m.adjuntos[a].contenido,
+      });
+    }
+    limpios.push({
+      id: m.id,
+      remitente: m.remitente,
+      asunto: m.asunto,
+      fecha: m.fecha,
+      adjuntos: adjuntos,
+    });
   }
 
   var respuesta = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-webhook-secret': secreto },
-    payload: JSON.stringify({ mensajes: mensajes }),
+    payload: JSON.stringify({ mensajes: limpios }),
     muteHttpExceptions: true,
   });
 
   var codigo = respuesta.getResponseCode();
 
   /*
-   * La etiqueta se pone **sólo si el SdG contestó que sí**. Al revés, un error
-   * del servidor dejaría el mail marcado como cargado y esa factura no se
-   * cargaría nunca — y nadie se enteraría, que es la peor forma de fallar.
+   * Se corta en el primer error, y por eso el hilo de esta tanda no se
+   * etiqueta: un error del servidor que dejara el mail marcado como cargado
+   * haría que esa factura no se cargue nunca — y nadie se enteraría, que es la
+   * peor forma de fallar.
    */
   if (codigo < 200 || codigo >= 300) {
     throw new Error('El SdG contestó ' + codigo + ': ' + respuesta.getContentText().slice(0, 300));
   }
-
-  for (var i = 0; i < procesados.length; i++) procesados[i].addLabel(etiqueta);
 }
