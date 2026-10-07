@@ -4,6 +4,7 @@ import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { marcarDiaCorregido, diasAMarcarAlEditar } from "@/lib/rrhh/fichadas/marcarDia";
 
 function parseHoraDePared(value: string): Date | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
@@ -18,6 +19,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const supabase = await createClient();
   const check = await puede_editar_check(supabase);
   if (check) return check;
+
+  // Antes de escribir y no después: ver el POST de ../route.ts.
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const body = await cuerpoJson(request);
   const data: Record<string, unknown> = {};
@@ -34,8 +39,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
   if (body.observaciones !== undefined) data.observaciones = body.observaciones || null;
 
+  // Cómo estaba antes del update: si la edición la mueve de día o de empleado,
+  // el lugar de donde salió también hay que marcarlo. Si no existe, el update
+  // de abajo falla con el 500 de siempre y no se marca nada.
+  const { data: previa } = await supabase
+    .from("fichadas").select("empleado_id, fecha").eq("id", id).maybeSingle();
+
   const { data: fichada, error } = await supabase.from("fichadas").update(data).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const aMarcar = diasAMarcarAlEditar(
+    previa ? { empleadoId: previa.empleado_id, fecha: previa.fecha } : null,
+    { empleadoId: fichada.empleado_id, fecha: fichada.fecha }
+  );
+  for (const dia of aMarcar) {
+    await marcarDiaCorregido(supabase, dia.empleadoId, dia.fecha, user.id, "editada");
+  }
 
   await recalcularEmpleadoPeriodo(supabase, fichada.empleado_id, new Date(fichada.fecha), new Date(fichada.fecha));
   return NextResponse.json(fichada);
@@ -47,8 +66,15 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const check = await puede_editar_check(supabase);
   if (check) return check;
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
   const { data: fichada, error } = await supabase.from("fichadas").delete().eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // El borrado es el verbo que no deja rastro: sin esta marca, una fichada
+  // importada que alguien sacó a propósito vuelve con el próximo cron.
+  await marcarDiaCorregido(supabase, fichada.empleado_id, fichada.fecha, user.id, "borrada");
 
   await recalcularEmpleadoPeriodo(supabase, fichada.empleado_id, new Date(fichada.fecha), new Date(fichada.fecha));
   return new NextResponse(null, { status: 204 });
