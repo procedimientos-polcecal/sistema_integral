@@ -211,5 +211,70 @@ describe("decidirQueAplicar", () => {
       { empleadoId: "emp-2", fecha: "2026-10-01" },
     ]);
     expect(d.salteados.map((s) => s.fecha)).toEqual(["2026-10-01"]);
+    // Y la divergencia sólo habla de ese día y de ese empleado: no se cuelan
+    // los turnos de emp-1 del 2 ni los de emp-2, que están en el mismo lote.
+    expect(d.salteados[0].divergencia).toBe("guardado sin fichadas, Lenox trae 08:00–16:00");
+  });
+
+  it("la divergencia se calcula sólo con los turnos de ese día y ese empleado", () => {
+    const f1 = dia(2026, 10, 1);
+    const f2 = dia(2026, 10, 2);
+    const clave1 = claveDia("emp-1", "2026-10-01");
+    const clave2 = claveDia("emp-2", "2026-10-02");
+    // Dos días salteados de dos empleados distintos, con contenidos distintos,
+    // más un día libre de emp-1 en el medio. Si el mensaje de uno mezclara los
+    // turnos de otro día u otro empleado, los dos textos dejarían de coincidir.
+    const turnos = [
+      turno("emp-1", f1, [8, 0], [16, 0]),
+      turno("emp-1", f2, [6, 0], [14, 0]),
+      turno("emp-2", f2, [10, 0], [18, 0]),
+    ];
+    const ctx: ContextoDeDecision = {
+      ...vacio,
+      diasCorregidos: new Set([clave1, clave2]),
+      guardadas: new Map([
+        [clave1, [{ horaEntrada: localDateTime(f1, 7, 0).toISOString(), horaSalida: localDateTime(f1, 15, 0).toISOString() }]],
+        [clave2, [{ horaEntrada: localDateTime(f2, 9, 0).toISOString(), horaSalida: localDateTime(f2, 17, 0).toISOString() }]],
+      ]),
+    };
+    const d = decidirQueAplicar(turnos, ctx, true);
+    expect(d.salteados.map((s) => [s.empleadoId, s.divergencia])).toEqual([
+      ["emp-1", "guardado 07:00–15:00, Lenox trae 08:00–16:00"],
+      ["emp-2", "guardado 09:00–17:00, Lenox trae 10:00–18:00"],
+    ]);
+  });
+
+  it("dos turnos con la misma entrada y distinta salida son dos turnos, no un repetido", () => {
+    // Una entrada con dos salidas distintas en el mismo día es lo que produce
+    // una marcación mal leída: tiene que llegar a la base y verse, no
+    // fusionarse en silencio con la primera.
+    const f = dia(2026, 10, 2);
+    const a = turno("emp-1", f, [8, 0], [16, 0]);
+    const b = turno("emp-1", f, [8, 0], [17, 30]);
+    const d = decidirQueAplicar([a, b], vacio, true);
+    expect(d.aInsertar).toEqual([a, b]);
+    expect(d.diasABorrar).toEqual([{ empleadoId: "emp-1", fecha: "2026-10-02" }]);
+  });
+
+  it("con varios turnos de un día, el mensaje los separa con · y respeta el orden por hora", () => {
+    const f = dia(2026, 10, 2);
+    const clave = claveDia("emp-1", "2026-10-02");
+    const ctx: ContextoDeDecision = {
+      ...vacio,
+      diasCorregidos: new Set([clave]),
+      guardadas: new Map([[clave, [
+        // Guardados en desorden a propósito: el mensaje sale ordenado.
+        { horaEntrada: localDateTime(f, 14, 0).toISOString(), horaSalida: localDateTime(f, 18, 0).toISOString() },
+        { horaEntrada: localDateTime(f, 6, 0).toISOString(), horaSalida: localDateTime(f, 10, 0).toISOString() },
+      ]]]),
+    };
+    const turnos = [
+      turno("emp-1", f, [6, 0], [10, 0]),
+      turno("emp-1", f, [14, 0], [19, 0]),
+    ];
+    const d = decidirQueAplicar(turnos, ctx, true);
+    expect(d.salteados[0].divergencia).toBe(
+      "guardado 06:00–10:00 · 14:00–18:00, Lenox trae 06:00–10:00 · 14:00–19:00"
+    );
   });
 });
