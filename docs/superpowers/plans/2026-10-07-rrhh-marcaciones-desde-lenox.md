@@ -1897,6 +1897,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerMarcaciones, traerEmpleados } from "./cliente";
 import { agruparPorLegajo } from "./agrupar";
 import { aplicarDias, type DiasDeEmpleado } from "../fichadas/aplicar";
+import type { DiaMarcacionesTokens } from "../excelImport";
+import { addUtcDays } from "../dates";
+import { traerTodo } from "@/lib/core/paginado";
 
 export interface ResumenSincronizacion {
   desde: string;
@@ -1940,6 +1943,7 @@ export async function sincronizarMarcaciones(
 
   const avisosPrevios: string[] = [];
   const empleados: DiasDeEmpleado[] = [];
+  const yaIncluidos = new Set<string>();
   for (const [legajo, dias] of porLegajo) {
     const empleadoId = legajoToId.get(legajo);
     if (!empleadoId) {
@@ -1948,6 +1952,41 @@ export async function sincronizarMarcaciones(
       continue;
     }
     empleados.push({ empleadoId, legajo, dias });
+    yaIncluidos.add(empleadoId);
+  }
+
+  // Los que NO tienen ninguna marcación en el rango pero sí una fichada
+  // abierta de antes.
+  //
+  // El agrupador sólo devuelve legajos que aparecen en la respuesta de la
+  // API, y ahí está la diferencia con el Excel: el reporte del Excel trae una
+  // fila por día para TODOS, así que un turno que quedó sin salida se cierra
+  // —o al menos se avisa— aunque la persona no haya vuelto a fichar. Por la
+  // API, si alguien dejó una fichada abierta y después se tomó dos semanas de
+  // vacaciones, no aparece en ninguna ventana de 7 días y esa fichada queda
+  // abierta para siempre, sin que nada avise.
+  //
+  // Se resuelve sumando sólo a los que tienen una fichada abierta anterior al
+  // rango, con días vacíos. Es equivalente a recorrer los 68 empleados —para
+  // alguien sin marcas y sin fichada abierta, reconciliar días vacíos no
+  // produce nada— pero cuesta una consulta en vez de 68.
+  //
+  // Va con traerTodo aunque al 07/10/2026 sean 54 filas de 23 empleados: cada
+  // aviso de "turno sin marcación de salida" deja una, y son del orden de 50
+  // a 80 por lote. PostgREST corta en 1000 y no avisa, y acá un corte mudo se
+  // vería como "esa fichada abierta no existe" en vez de como un error.
+  const abiertas = await traerTodo<{ empleado_id: string; empleados: { legajo: string } | null }>((d, h) =>
+    admin.from("fichadas").select("empleado_id, empleados(legajo)")
+      .is("hora_salida", null).lt("fecha", fechaStr(desde)).range(d, h)
+  );
+  for (const f of abiertas) {
+    if (yaIncluidos.has(f.empleado_id)) continue;
+    yaIncluidos.add(f.empleado_id);
+    const dias: DiaMarcacionesTokens[] = [];
+    for (let d = desde; d.getTime() <= hasta.getTime(); d = addUtcDays(d, 1)) {
+      dias.push({ fecha: d, tokens: [] });
+    }
+    empleados.push({ empleadoId: f.empleado_id, legajo: f.empleados?.legajo ?? "?", dias });
   }
 
   const { data: batch, error: batchErr } = await admin
