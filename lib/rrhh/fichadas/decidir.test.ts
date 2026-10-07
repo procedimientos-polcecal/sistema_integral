@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio,
+  decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta,
 } from "./decidir";
 import { toUtcDateOnly, localDateTime } from "../dates";
@@ -308,20 +308,31 @@ describe("motivoDeProteccion", () => {
   });
 });
 
-describe("elegirAbiertoPrevio", () => {
-  function abierta(id: string, empleadoId: string, fecha: string, horaUtc = "22:00"): FichadaAbierta {
-    return { id, empleadoId, fecha, horaEntrada: `${fecha}T${horaUtc}:00+00:00` };
-  }
 
-  it("elige, por empleado, la más reciente anterior a su primer día", () => {
+function abierta(id: string, empleadoId: string, fecha: string, horaUtc = "22:00"): FichadaAbierta {
+  return { id, empleadoId, fecha, horaEntrada: `${fecha}T${horaUtc}:00+00:00` };
+}
+
+describe("elegirAbiertoPrevio", () => {
+  it("elige, por empleado, la del día anterior a su primer día", () => {
     const abiertas = [
       abierta("a", "emp-1", "2026-09-10"),
       abierta("b", "emp-1", "2026-09-30"),
-      abierta("c", "emp-2", "2026-09-29"),
+      abierta("c", "emp-2", "2026-09-30"),
     ];
     const r = elegirAbiertoPrevio(abiertas, new Map([["emp-1", "2026-10-01"], ["emp-2", "2026-10-01"]]));
     expect(r.get("emp-1")?.id).toBe("b");
     expect(r.get("emp-2")?.id).toBe("c");
+  });
+
+  it("una abierta de más de un día antes no se encadena: la guarda de 2 a 14 horas no la dejaría cerrar", () => {
+    const r = elegirAbiertoPrevio([abierta("a", "emp-1", "2026-09-29")], new Map([["emp-1", "2026-10-01"]]));
+    expect(r.has("emp-1")).toBe(false);
+  });
+
+  it("el día anterior se calcula bien cruzando el cambio de mes", () => {
+    const r = elegirAbiertoPrevio([abierta("a", "emp-1", "2026-02-28")], new Map([["emp-1", "2026-03-01"]]));
+    expect(r.get("emp-1")?.id).toBe("a");
   });
 
   it("ignora las del propio primer día o posteriores: esas las reemplaza el lote", () => {
@@ -352,5 +363,67 @@ describe("elegirAbiertoPrevio", () => {
 
   it("sin abiertas, no hay nada que encadenar", () => {
     expect(elegirAbiertoPrevio([], new Map([["emp-1", "2026-10-01"]])).size).toBe(0);
+  });
+});
+
+describe("avisoDeAbiertasViejas", () => {
+  const primerDia = new Map([["emp-1", "2026-10-01"], ["emp-2", "2026-10-01"], ["emp-3", "2026-10-01"]]);
+  const legajos = new Map([["emp-1", "PC_204"], ["emp-2", "PC_122"], ["emp-3", "PS_010"]]);
+
+  it("sin abiertas viejas no hay aviso", () => {
+    expect(avisoDeAbiertasViejas([], primerDia, legajos)).toBeNull();
+  });
+
+  it("la del día anterior no es vieja: ésa se encadena y se resuelve sola", () => {
+    expect(avisoDeAbiertasViejas([abierta("a", "emp-1", "2026-09-30")], primerDia, legajos)).toBeNull();
+  });
+
+  it("las de dentro del lote no cuentan: las reemplaza el lote", () => {
+    expect(avisoDeAbiertasViejas([abierta("a", "emp-1", "2026-10-02")], primerDia, legajos)).toBeNull();
+  });
+
+  it("una sola fichada, en singular", () => {
+    expect(avisoDeAbiertasViejas([abierta("a", "emp-1", "2026-09-17")], primerDia, legajos)).toBe(
+      "1 fichada quedó abierta de antes del 2026-10-01 (la más vieja, del 2026-09-17) y no se puede cerrar con estos datos (legajo PC_204). Hay que cerrarlas a mano."
+    );
+  });
+
+  it("varias fichadas se resumen en una línea con cuántas, desde cuándo y qué hacer", () => {
+    const aviso = avisoDeAbiertasViejas(
+      [abierta("a", "emp-1", "2026-09-17"), abierta("b", "emp-1", "2026-08-04"), abierta("c", "emp-2", "2026-09-02")],
+      primerDia, legajos
+    );
+    expect(aviso).toBe(
+      "3 fichadas quedaron abiertas de antes del 2026-10-01 (la más vieja, del 2026-08-04) y no se pueden cerrar con estos datos (legajos PC_122, PC_204). Hay que cerrarlas a mano."
+    );
+  });
+
+  it("un legajo con varias abiertas aparece una sola vez en la lista", () => {
+    const aviso = avisoDeAbiertasViejas(
+      [abierta("a", "emp-1", "2026-09-17"), abierta("b", "emp-1", "2026-09-02")], primerDia, legajos
+    );
+    expect(aviso).toContain("(legajo PC_204)");
+    expect(aviso).toContain("2 fichadas");
+  });
+
+  it("si son muchos legajos corta la lista y dice cuántos más", () => {
+    const muchos = Array.from({ length: 12 }, (_, i) => `emp-${i}`);
+    const pd = new Map(muchos.map((e) => [e, "2026-10-01"]));
+    const lg = new Map(muchos.map((e, i) => [e, `PC_${String(i).padStart(3, "0")}`]));
+    const aviso = avisoDeAbiertasViejas(muchos.map((e) => abierta(`id-${e}`, e, "2026-09-02")), pd, lg, 3);
+    expect(aviso).toContain("12 fichadas");
+    expect(aviso).toContain("(legajos PC_000, PC_001, PC_002 y 9 más)");
+  });
+
+  it("'antes del' vale para todas: usa el primer día más tardío de los afectados", () => {
+    const pd = new Map([["emp-1", "2026-10-01"], ["emp-2", "2026-10-05"]]);
+    const aviso = avisoDeAbiertasViejas(
+      [abierta("a", "emp-1", "2026-09-17"), abierta("b", "emp-2", "2026-09-30")], pd, legajos
+    );
+    expect(aviso).toContain("de antes del 2026-10-05");
+  });
+
+  it("un empleado fuera del lote no cuenta", () => {
+    expect(avisoDeAbiertasViejas([abierta("a", "emp-9", "2026-08-01")], primerDia, legajos)).toBeNull();
   });
 });

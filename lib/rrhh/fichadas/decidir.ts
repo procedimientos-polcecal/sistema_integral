@@ -1,4 +1,4 @@
-import { formatHHMM } from "../dates";
+import { addUtcDays, formatHHMM } from "../dates";
 
 export interface TurnoNuevo {
   empleadoId: string;
@@ -101,10 +101,19 @@ export interface FichadaAbierta {
   horaEntrada: string; // ISO
 }
 
+function diaAnterior(fecha: string): string {
+  return fechaStr(addUtcDays(new Date(fecha), -1));
+}
+
 /**
- * Para cada empleado, la fichada abierta más reciente anterior a su primer día
- * del lote: la que `reconciliarTokens` recibe como `abiertoPrevio` para poder
- * cerrarla con la primera marca nueva.
+ * Para cada empleado, la fichada abierta que `reconciliarTokens` recibe como
+ * `abiertoPrevio` para poder cerrarla con la primera marca nueva: la del día
+ * inmediatamente anterior al primer día de su lote.
+ *
+ * Sólo ésa, porque el encadenamiento existe para el turno nocturno cuyo cierre
+ * cae en el lote siguiente, y la guarda de 2 a 14 horas del cruce de medianoche
+ * no deja cerrar con estos datos una abierta más vieja: pasarla sólo produce un
+ * aviso que no lleva a ninguna acción. Esas las resume `avisoDeAbiertasViejas`.
  *
  * Es lo que antes hacía una consulta por empleado (`order fecha desc limit 1`).
  * Se trae todo junto y se elige acá: las abiertas son pocas (54 al 07/10/2026,
@@ -122,16 +131,59 @@ export function elegirAbiertoPrevio(
   const elegidas = new Map<string, FichadaAbierta>();
   for (const a of abiertas) {
     const primerDia = primerDiaPorEmpleado.get(a.empleadoId);
-    if (primerDia === undefined || a.fecha >= primerDia) continue;
+    if (primerDia === undefined || a.fecha !== diaAnterior(primerDia)) continue;
 
     const actual = elegidas.get(a.empleadoId);
-    const gana =
-      !actual ||
-      a.fecha > actual.fecha ||
-      (a.fecha === actual.fecha && new Date(a.horaEntrada).getTime() > new Date(actual.horaEntrada).getTime());
-    if (gana) elegidas.set(a.empleadoId, a);
+    if (!actual || new Date(a.horaEntrada).getTime() > new Date(actual.horaEntrada).getTime()) {
+      elegidas.set(a.empleadoId, a);
+    }
   }
   return elegidas;
+}
+
+/**
+ * Un solo aviso para las fichadas que quedaron abiertas de antes y que este
+ * lote ya no puede cerrar, o null si no hay ninguna.
+ *
+ * Son un pendiente real —alguien las tiene que cerrar a mano—, pero no un
+ * error de la corrida: por eso es un texto aparte y no un aviso por fichada.
+ * Con 23 empleados en esa situación (07/10/2026), uno por fichada eran hasta
+ * 23 líneas fijas en cada corrida diaria, todas iguales y ninguna diciendo qué
+ * hacer; ese ruido tapa los avisos que sí importan. Una línea dice cuántas,
+ * desde cuándo y qué hacer.
+ *
+ * Son las anteriores al día previo al primer día de su empleado: las que
+ * `elegirAbiertoPrevio` descarta. Las de dentro del lote no cuentan, porque el
+ * propio lote las reemplaza.
+ */
+export function avisoDeAbiertasViejas(
+  abiertas: FichadaAbierta[],
+  primerDiaPorEmpleado: Map<string, string>,
+  legajoPorEmpleado: Map<string, string>,
+  maxLegajos = 8
+): string | null {
+  const viejas = abiertas.filter((a) => {
+    const primerDia = primerDiaPorEmpleado.get(a.empleadoId);
+    return primerDia !== undefined && a.fecha < diaAnterior(primerDia);
+  });
+  if (viejas.length === 0) return null;
+
+  // "Antes del" tiene que ser verdad para todas: se toma el primer día más
+  // tardío entre los empleados afectados.
+  const corte = viejas.map((a) => primerDiaPorEmpleado.get(a.empleadoId)!).sort().at(-1)!;
+  const masVieja = viejas.map((a) => a.fecha).sort()[0];
+  const legajos = [...new Set(viejas.map((a) => legajoPorEmpleado.get(a.empleadoId) ?? a.empleadoId))].sort();
+  const lista =
+    legajos.length > maxLegajos
+      ? `${legajos.slice(0, maxLegajos).join(", ")} y ${legajos.length - maxLegajos} más`
+      : legajos.join(", ");
+
+  const cuantas = viejas.length === 1 ? "1 fichada quedó abierta" : `${viejas.length} fichadas quedaron abiertas`;
+  const noSePuede = viejas.length === 1 ? "no se puede cerrar" : "no se pueden cerrar";
+  return (
+    `${cuantas} de antes del ${corte} (la más vieja, del ${masVieja}) y ${noSePuede} con estos datos ` +
+    `(${legajos.length === 1 ? "legajo" : "legajos"} ${lista}). Hay que cerrarlas a mano.`
+  );
 }
 
 /**

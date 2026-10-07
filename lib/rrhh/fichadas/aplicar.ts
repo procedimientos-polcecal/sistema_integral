@@ -4,7 +4,7 @@ import { reconciliarTokens, horaStringToDate, type DiaMarcacionesTokens } from "
 import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
 import { formatHHMM } from "../dates";
 import {
-  decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio,
+  decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
   type TurnoNuevo, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
 } from "./decidir";
 
@@ -20,6 +20,15 @@ export interface ResultadoAplicar {
   reemplazados: number;
   salteados: DiaSalteado[];
   avisos: string[];
+  /**
+   * Cosas que una persona tiene que hacer y que no son un error de la corrida:
+   * hoy, las fichadas que quedaron abiertas de antes y no se pueden cerrar con
+   * estos datos. Van aparte de `avisos` para que quien llama pueda mostrarlas
+   * sin contarlas como errores ni hacer fallar la sincronización. Si el mismo
+   * lote se parte en varias llamadas (la ventana de 7 días de Lenox), el mismo
+   * texto sale en cada una: quien orquesta tiene que deduplicar.
+   */
+  pendientes: string[];
 }
 
 /** Un (empleado, día) que este lote toca o quiere tocar. */
@@ -91,7 +100,7 @@ export async function aplicarDias(
   // Si de una carga anterior quedó un turno sin marcación de salida, se
   // encadena para que el primer dato de este lote pueda cerrarlo en vez de
   // quedar abierto para siempre. Una consulta para todos, no una por empleado.
-  const abiertas = await abiertasPrevias(admin, conDatos);
+  const { encadenables: abiertas, pendiente } = await abiertasPrevias(admin, conDatos);
 
   const turnos: TurnoNuevo[] = [];
   const cierres: Cierre[] = [];
@@ -265,34 +274,39 @@ export async function aplicarDias(
     reemplazados,
     salteados: [...decision.salteados, ...cierresOmitidos],
     avisos,
+    pendientes: pendiente ? [pendiente] : [],
   };
 }
 
 /**
- * Por empleado, la fichada abierta que `reconciliarTokens` puede encadenar.
+ * Las fichadas abiertas de antes del lote: cuáles se encadenan y el aviso de
+ * las que ya no se pueden cerrar.
  *
  * La consulta trae todas las abiertas anteriores al día más tardío de los
  * primeros días del lote, sin filtrar por empleado —no con un `.in()` de ids—,
- * y `elegirAbiertoPrevio` se queda con la que corresponde a cada uno.
+ * y la capa pura reparte: `elegirAbiertoPrevio` se queda con la que se puede
+ * encadenar de cada uno y `avisoDeAbiertasViejas` resume el resto en una línea.
  */
 async function abiertasPrevias(
   admin: SupabaseClient,
   empleados: DiasDeEmpleado[]
-): Promise<Map<string, FichadaAbierta>> {
-  if (empleados.length === 0) return new Map();
+): Promise<{ encadenables: Map<string, FichadaAbierta>; pendiente: string | null }> {
+  if (empleados.length === 0) return { encadenables: new Map(), pendiente: null };
 
   const primerDia = new Map(empleados.map((e) => [e.empleadoId, fechaStr(e.dias[0].fecha)]));
+  const legajos = new Map(empleados.map((e) => [e.empleadoId, e.legajo]));
   const tope = [...primerDia.values()].sort().at(-1)!;
 
   const filas = await traerTodo<{ id: string; empleado_id: string; fecha: string; hora_entrada: string }>((d, h) =>
     admin.from("fichadas").select("id, empleado_id, fecha, hora_entrada")
       .is("hora_salida", null).lt("fecha", tope).order("id").range(d, h)
   );
+  const abiertas = filas.map((f) => ({ id: f.id, empleadoId: f.empleado_id, fecha: f.fecha, horaEntrada: f.hora_entrada }));
 
-  return elegirAbiertoPrevio(
-    filas.map((f) => ({ id: f.id, empleadoId: f.empleado_id, fecha: f.fecha, horaEntrada: f.hora_entrada })),
-    primerDia
-  );
+  return {
+    encadenables: elegirAbiertoPrevio(abiertas, primerDia),
+    pendiente: avisoDeAbiertasViejas(abiertas, primerDia, legajos),
+  };
 }
 
 /**
