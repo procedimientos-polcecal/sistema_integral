@@ -214,11 +214,6 @@ export function horaStringToDate(fecha: Date, hhmm: string): Date {
   return localDateTime(fecha, h, m);
 }
 
-export interface DiaMarcacionesCrudo {
-  fecha: Date; // día calendario (UTC-medianoche), ordenados ascendente por el llamador
-  raw: string; // celda "Marcaciones" cruda de ese día, puede venir vacía
-}
-
 /**
  * Un día de marcaciones ya separadas en marcas sueltas. Es lo que consume
  * `reconciliarTokens`. Lo que el núcleo supone de `tokens` —el Excel lo cumple
@@ -354,23 +349,6 @@ export function reconciliarTokens(
   cerrarPendienteComoAbierto("Turno sin marcación de salida (fin de los datos importados)");
 
   return { turnos, avisos };
-}
-
-/**
- * La forma histórica: recibe la celda cruda "Marcaciones" de cada día y la
- * tokeniza. Es por donde entra el import de Excel. Se usa ésta si se tiene la
- * celda de texto, y `reconciliarTokens` si ya se tienen las marcas: el camino
- * de Lenox entra por esa, porque la API devuelve las marcaciones sueltas y
- * armar un string para volver a parsearlo sería una ida y vuelta sin motivo.
- */
-export function reconciliarMarcaciones(
-  dias: DiaMarcacionesCrudo[],
-  abiertoPrevio?: { fecha: Date; entradaStr: string } | null
-): { turnos: TurnoResuelto[]; avisos: AvisoReconciliacion[] } {
-  return reconciliarTokens(
-    dias.map((d) => ({ fecha: d.fecha, tokens: tokenizeMarcaciones(d.raw) })),
-    abiertoPrevio
-  );
 }
 
 /**

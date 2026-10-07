@@ -1,14 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { reconciliarMarcaciones, reconciliarTokens, tokenizeMarcaciones } from "./excelImport";
+import { reconciliarTokens, tokenizeMarcaciones } from "./excelImport";
 import { toUtcDateOnly } from "./dates";
 
 function dia(y: number, m: number, d: number) {
   return toUtcDateOnly(y, m - 1, d);
 }
 
-describe("reconciliarMarcaciones", () => {
+// Los casos de abajo están escritos como la celda "Marcaciones" que trae el
+// Excel, que es como se leen los datos reales; este helper la tokeniza y llama
+// a la reconciliación de verdad.
+const reconciliar = (dias: { fecha: Date; raw: string }[], abiertoPrevio?: { fecha: Date; entradaStr: string } | null) =>
+  reconciliarTokens(dias.map((d) => ({ fecha: d.fecha, tokens: tokenizeMarcaciones(d.raw) })), abiertoPrevio);
+
+describe("reconciliarTokens, desde la celda cruda", () => {
   it("turnos normales sin cruce de medianoche quedan igual", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([
+    const { turnos, avisos } = reconciliar([
       { fecha: dia(2026, 6, 1), raw: "E 08:07 - S 15:56" },
       { fecha: dia(2026, 6, 2), raw: "E 08:01 - S 16:07" },
     ]);
@@ -20,7 +26,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("turno 20 a 4 real (caso PC_002): cierra cruzando medianoche con el primer token del día siguiente", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([
+    const { turnos, avisos } = reconciliar([
       { fecha: dia(2026, 6, 1), raw: " E 19:40" },
       { fecha: dia(2026, 6, 2), raw: " E 03:40 - S 19:37" },
     ]);
@@ -33,7 +39,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("marcación realmente faltante (caso PC_002 real: 32hs de diferencia) NO se fuerza a cerrar", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([
+    const { turnos, avisos } = reconciliar([
       { fecha: dia(2026, 6, 7), raw: " E 03:33" },
       { fecha: dia(2026, 6, 8), raw: " E 11:40 - S 19:41" },
     ]);
@@ -46,7 +52,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("día sin marcaciones después de una entrada abierta: se avisa y queda abierta", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([
+    const { turnos, avisos } = reconciliar([
       { fecha: dia(2026, 6, 1), raw: "E 20:00" },
       { fecha: dia(2026, 6, 2), raw: "" },
     ]);
@@ -55,13 +61,13 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("entrada abierta al final de los datos importados se avisa", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([{ fecha: dia(2026, 6, 30), raw: "E 20:00" }]);
+    const { turnos, avisos } = reconciliar([{ fecha: dia(2026, 6, 30), raw: "E 20:00" }]);
     expect(avisos).toHaveLength(1);
     expect(turnos).toEqual([{ fecha: dia(2026, 6, 30), entradaStr: "20:00", salidaStr: null, fechaSalida: dia(2026, 6, 30) }]);
   });
 
   it("turno abierto de una importación anterior se cierra con el primer dato de la nueva (abiertoPrevio)", () => {
-    const { turnos, avisos } = reconciliarMarcaciones(
+    const { turnos, avisos } = reconciliar(
       [{ fecha: dia(2026, 6, 2), raw: "E 03:40 - S 19:37" }],
       { fecha: dia(2026, 6, 1), entradaStr: "19:40" }
     );
@@ -72,7 +78,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("turno abierto de una importación anterior que sigue sin cerrar queda como aviso, no se fuerza", () => {
-    const { turnos, avisos } = reconciliarMarcaciones(
+    const { turnos, avisos } = reconciliar(
       [{ fecha: dia(2026, 6, 10), raw: "E 11:40 - S 19:41" }],
       { fecha: dia(2026, 6, 1), entradaStr: "03:33" }
     );
@@ -83,7 +89,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("corte de almuerzo se mantiene igual (varios pares en un mismo día)", () => {
-    const { turnos } = reconciliarMarcaciones([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - S 12:00  E 13:00 - S 17:00" }]);
+    const { turnos } = reconciliar([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - S 12:00  E 13:00 - S 17:00" }]);
     expect(turnos).toEqual([
       { fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "12:00", fechaSalida: dia(2026, 6, 1) },
       { fecha: dia(2026, 6, 1), entradaStr: "13:00", salidaStr: "17:00", fechaSalida: dia(2026, 6, 1) },
@@ -91,7 +97,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("caso ROSSI: salida y vuelta del almuerzo con 12min de diferencia se toman como dos tramos reales", () => {
-    const { turnos } = reconciliarMarcaciones([{ fecha: dia(2026, 7, 6), raw: "E 08:05 - S 12:50  E 13:02 - S 16:02" }]);
+    const { turnos } = reconciliar([{ fecha: dia(2026, 7, 6), raw: "E 08:05 - S 12:50  E 13:02 - S 16:02" }]);
     expect(turnos).toEqual([
       { fecha: dia(2026, 7, 6), entradaStr: "08:05", salidaStr: "12:50", fechaSalida: dia(2026, 7, 6) },
       { fecha: dia(2026, 7, 6), entradaStr: "13:02", salidaStr: "16:02", fechaSalida: dia(2026, 7, 6) },
@@ -99,22 +105,22 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("marcación fantasma (≤5min de la anterior) se descarta, quedando un turno normal", () => {
-    const { turnos } = reconciliarMarcaciones([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - E 08:03 - S 16:00" }]);
+    const { turnos } = reconciliar([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - E 08:03 - S 16:00" }]);
     expect(turnos).toEqual([{ fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "16:00", fechaSalida: dia(2026, 6, 1) }]);
   });
 
   it("marcación fantasma pegada a la salida también se descarta", () => {
-    const { turnos } = reconciliarMarcaciones([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - S 16:00 - S 16:02" }]);
+    const { turnos } = reconciliar([{ fecha: dia(2026, 6, 1), raw: "E 08:00 - S 16:00 - S 16:02" }]);
     expect(turnos).toEqual([{ fecha: dia(2026, 6, 1), entradaStr: "08:00", salidaStr: "16:00", fechaSalida: dia(2026, 6, 1) }]);
   });
 
   it("caso AGOSTA: entrada colgada a 18min de la última salida se funde con ese tramo (reingreso rápido)", () => {
-    const { turnos } = reconciliarMarcaciones([{ fecha: dia(2026, 7, 17), raw: "E 07:59 - S 15:43 E 16:01" }]);
+    const { turnos } = reconciliar([{ fecha: dia(2026, 7, 17), raw: "E 07:59 - S 15:43 E 16:01" }]);
     expect(turnos).toEqual([{ fecha: dia(2026, 7, 17), entradaStr: "07:59", salidaStr: "16:01", fechaSalida: dia(2026, 7, 17) }]);
   });
 
   it("caso PC_204: entrada colgada a varias horas de la última salida es un turno realmente distinto, no se funde", () => {
-    const { turnos, avisos } = reconciliarMarcaciones([{ fecha: dia(2026, 7, 11), raw: "E 11:50 - S 16:25 E 19:34" }]);
+    const { turnos, avisos } = reconciliar([{ fecha: dia(2026, 7, 11), raw: "E 11:50 - S 16:25 E 19:34" }]);
     // el tramo de la mañana queda intacto, y la entrada de la tarde/noche queda pendiente de cierre
     expect(turnos).toEqual([
       { fecha: dia(2026, 7, 11), entradaStr: "11:50", salidaStr: "16:25", fechaSalida: dia(2026, 7, 11) },
@@ -124,7 +130,7 @@ describe("reconciliarMarcaciones", () => {
   });
 
   it("entrada colgada tras un almuerzo con reingreso rápido después: solo se funde el último tramo, el almuerzo queda intacto", () => {
-    const { turnos } = reconciliarMarcaciones([
+    const { turnos } = reconciliar([
       { fecha: dia(2026, 7, 1), raw: "E 08:00 - S 12:00 E 13:00 - S 17:00 E 17:10" },
     ]);
     expect(turnos).toEqual([
@@ -135,18 +141,6 @@ describe("reconciliarMarcaciones", () => {
 });
 
 describe("reconciliarTokens", () => {
-  it("da exactamente lo mismo que el envoltorio que tokeniza", () => {
-    const crudos = [
-      { fecha: dia(2026, 6, 1), raw: " E 19:40" },
-      { fecha: dia(2026, 6, 2), raw: " E 03:40 - S 19:37" },
-    ];
-    const porRaw = reconciliarMarcaciones(crudos);
-    const porTokens = reconciliarTokens(
-      crudos.map((d) => ({ fecha: d.fecha, tokens: tokenizeMarcaciones(d.raw) }))
-    );
-    expect(porTokens).toEqual(porRaw);
-  });
-
   it("filtra las marcaciones fantasma también cuando entra por tokens", () => {
     const { turnos } = reconciliarTokens([
       {
