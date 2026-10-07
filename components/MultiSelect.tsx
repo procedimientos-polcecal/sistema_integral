@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CON_BUSCADOR_DESDE, coincide } from "./desplegables";
+import { CON_BUSCADOR_DESDE, coincide, teclaQueAbre } from "./desplegables";
 
 /** Cada opción: el valor que viaja al filtro y cómo se lee en pantalla. */
 export type OpcionMulti = [valor: string, etiqueta: string];
@@ -79,9 +79,16 @@ export default function MultiSelect({
    * de la derecha se salía de la pantalla: quedaba la mitad de cada nombre y no
    * había forma de traerla. Se mide al abrir y se ancla del otro lado.
    */
-  function abrir() {
+  /**
+   * `desde` es la letra con la que alguien empezó a buscar sin haber abierto el
+   * panel: se abre ya filtrado en vez de hacerle repetirla. Sin buscador no se
+   * usa — filtrar por un texto que no se ve en ningún lado es peor que no
+   * filtrar.
+   */
+  function abrir(desde = "") {
     const r = caja.current?.getBoundingClientRect();
     if (r) setHaciaLaIzquierda(r.left + ANCHO_PANEL > window.innerWidth - 8);
+    setTexto(conBuscador ? desde : "");
     setAbierto(true);
   }
 
@@ -108,6 +115,15 @@ export default function MultiSelect({
         aria-expanded={abierto}
         aria-haspopup="true"
         onClick={() => (abierto ? cerrar() : abrir())}
+        onKeyDown={(e) => {
+          if (abierto) return;
+          // Escribir sobre el desplegable cerrado lo abre ya filtrado, igual
+          // que en `Select`. El `preventDefault` evita que la barra scrollee.
+          const desde = teclaQueAbre(e);
+          if (desde === null) return;
+          e.preventDefault();
+          abrir(desde);
+        }}
         className={`flex w-full items-center gap-1 rounded-lg border px-2 py-2 text-left text-sm ${
           valores.length > 0
             ? "border-[var(--primary)] bg-[var(--primary)]/5 text-slate-900"

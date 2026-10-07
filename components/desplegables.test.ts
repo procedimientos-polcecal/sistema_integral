@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createElement, Fragment, type ReactNode } from "react";
-import { coincide, opcionesDeLosHijos } from "./desplegables";
+import { coincide, opcionesDeLosHijos, teclaQueAbre } from "./desplegables";
 
 /**
  * Los hijos se arman con `createElement` y no con JSX porque vitest acá levanta
@@ -133,5 +133,36 @@ describe("opcionesDeLosHijos", () => {
   it("sin hijos, no hay opciones", () => {
     expect(opcionesDeLosHijos(null)).toEqual([]);
     expect(opcionesDeLosHijos([])).toEqual([]);
+  });
+});
+
+describe("teclaQueAbre", () => {
+  it("una letra abre y arranca la búsqueda con ella, en vez de perderse", () => {
+    expect(teclaQueAbre({ key: "f" })).toBe("f");
+    expect(teclaQueAbre({ key: "F" })).toBe("F");
+    expect(teclaQueAbre({ key: "ñ" })).toBe("ñ");
+    expect(teclaQueAbre({ key: "3" })).toBe("3");
+  });
+
+  it("las flechas y la barra abren sin escribir, como el nativo", () => {
+    expect(teclaQueAbre({ key: "ArrowDown" })).toBe("");
+    expect(teclaQueAbre({ key: "ArrowUp" })).toBe("");
+    expect(teclaQueAbre({ key: " " })).toBe("");
+  });
+
+  /**
+   * Sin esto, `Ctrl+C` sobre un desplegable abriría el panel y escribiría una
+   * "c" en el buscador en vez de copiar.
+   */
+  it("con un modificador no abre: es un atajo, no algo que alguien escriba", () => {
+    expect(teclaQueAbre({ key: "c", ctrlKey: true })).toBeNull();
+    expect(teclaQueAbre({ key: "c", metaKey: true })).toBeNull();
+    expect(teclaQueAbre({ key: "c", altKey: true })).toBeNull();
+  });
+
+  it("las teclas con nombre no abren", () => {
+    for (const key of ["Enter", "Tab", "Escape", "Shift", "F3", "Backspace", "Home"]) {
+      expect(teclaQueAbre({ key })).toBeNull();
+    }
   });
 });

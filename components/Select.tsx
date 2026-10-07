@@ -4,7 +4,13 @@ import {
   useEffect, useLayoutEffect, useMemo, useRef, useState,
   type ReactNode, type SelectHTMLAttributes,
 } from "react";
-import { CON_BUSCADOR_DESDE, coincide, opcionesDeLosHijos, type Opcion } from "./desplegables";
+import {
+  CON_BUSCADOR_DESDE,
+  coincide,
+  opcionesDeLosHijos,
+  teclaQueAbre,
+  type Opcion,
+} from "./desplegables";
 
 /**
  * Lo que recibe el `onChange`.
@@ -127,16 +133,26 @@ function SelectBuscable({
    * la derecha se salía de la pantalla: quedaba la mitad de cada nombre y no
    * había forma de traerlo. Se mide al abrir y se ancla del otro lado.
    */
-  function abrir() {
+  /**
+   * `desde` es lo que ya se escribió: la letra con la que alguien empezó a
+   * buscar sin haber abierto el panel. Esa letra no se pierde — abrir vacío y
+   * pedirle que la repita es exactamente lo que hacía lento al desplegable.
+   */
+  function abrir(desde = "") {
     if (disabled) return;
     const r = caja.current?.getBoundingClientRect();
     if (r) {
       setHaciaLaIzquierda(r.left + Math.max(ANCHO_MINIMO, r.width) > window.innerWidth - 8);
     }
+    setTexto(desde);
+
     // Se abre parado en lo que ya estaba elegido, no en el principio: si no,
-    // bajar una posición desde el valor actual exige volver a buscarlo.
-    const actual = coincidencias.findIndex((o) => o.valor === valorActual);
-    setResaltado(actual >= 0 ? actual : primeroElegible(coincidencias));
+    // bajar una posición desde el valor actual exige volver a buscarlo. Pero si
+    // ya se escribió algo, el valor actual probablemente no esté entre lo
+    // filtrado, así que ahí manda la primera coincidencia.
+    const filtradas = desde ? opciones.filter((o) => coincide(o.etiqueta, desde)) : coincidencias;
+    const actual = desde ? -1 : filtradas.findIndex((o) => o.valor === valorActual);
+    setResaltado(actual >= 0 ? actual : primeroElegible(filtradas));
     setAbierto(true);
   }
 
@@ -184,10 +200,14 @@ function SelectBuscable({
         aria-label={etiquetaAria}
         onClick={() => (abierto ? cerrar() : abrir())}
         onKeyDown={(e) => {
-          if (!abierto && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-            e.preventDefault();
-            abrir();
-          }
+          if (abierto) return;
+          // Escribir sobre el desplegable cerrado abre el panel y arranca la
+          // búsqueda con esa letra, como salta un `<select>` nativo. El
+          // `preventDefault` es para que la barra no scrollee la página.
+          const desde = teclaQueAbre(e);
+          if (desde === null) return;
+          e.preventDefault();
+          abrir(desde);
         }}
         // `inline-flex` y no `flex`: un `<select>` se dimensiona al contenido, y
         // varias pantallas lo tienen adentro de un div sin ancho —los filtros

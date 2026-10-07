@@ -109,3 +109,38 @@ function textoDe(nodo: ReactNode): string {
   if (isValidElement(nodo)) return textoDe((nodo.props as { children?: ReactNode }).children);
   return "";
 }
+
+/**
+ * Qué hacer con una tecla apretada sobre un desplegable **cerrado**.
+ *
+ * Devuelve `null` si esa tecla no abre nada, o el texto con el que arrancar la
+ * búsqueda —`""` cuando abre sin escribir nada—.
+ *
+ * Existe porque abrir y recién después poder escribir es lo que hacía lento al
+ * panel: con el campo enfocado había que apretar una flecha o dar un clic antes
+ * de tipear la primera letra, y el `<select>` nativo que este componente
+ * reemplaza sí salta escribiendo. Acá además la letra **no se pierde**: arranca
+ * la búsqueda en vez de sólo abrir.
+ *
+ * Es una función aparte y no un `if` adentro del componente para poder probarla:
+ * las pantallas no tienen tests, y decidir esto mal deja un desplegable donde
+ * `Ctrl+C` escribe una "c" en el buscador.
+ */
+export function teclaQueAbre(e: {
+  key: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+}): string | null {
+  // Con un modificador la tecla es un atajo del navegador o del sistema, no
+  // algo que alguien quiera escribir.
+  if (e.ctrlKey || e.metaKey || e.altKey) return null;
+
+  // Las flechas y la barra abren el panel sin escribir, como el nativo.
+  if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ") return "";
+
+  // Un caracter imprimible arranca la búsqueda con él. Las teclas con nombre
+  // —"Enter", "Tab", "Escape", "F3"— tienen `key` de más de un caracter, así
+  // que esto las deja pasar de largo sin enumerarlas.
+  return e.key.length === 1 ? e.key : null;
+}
