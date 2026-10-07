@@ -1,4 +1,4 @@
-import { addUtcDays, diaIso, formatHHMM } from "../dates";
+import { addUtcDays, diaIso, fechaArgentinaDe, formatHHMM } from "../dates";
 import { reconciliarTokens, horaStringToDate, type DiaMarcacionesTokens } from "../excelImport";
 
 export interface TurnoNuevo {
@@ -363,6 +363,36 @@ export interface DiasDeEmpleado {
   dias: DiaMarcacionesTokens[];
 }
 
+/**
+ * Lo que se le pasa a `aplicarDias`. Hay dos formas de entrar y la diferencia
+ * es si el emparejamiento de las marcas lo sabe el origen o hay que inferirlo:
+ *
+ * - **`marcas`: una secuencia cruda para reconciliar.** El reloj y la celda
+ *   "Marcaciones" del Excel combinado dan marcas sueltas, y no se sabe cuál es
+ *   entrada y cuál salida (el reloj etiqueta mal la primera marca de un día
+ *   que cierra un turno nocturno). `reconciliarTokens` las empareja por
+ *   posición, descarta los fantasmas y cierra los turnos que cruzan
+ *   medianoche. Es el camino de Lenox y del Excel combinado.
+ *
+ * - **`turnos`: turnos ya emparejados.** El Excel en modo separado tiene una
+ *   columna "hora entrada" y otra "hora salida": el archivo ya dijo qué
+ *   marca es cuál. Pasarlo por la reconciliación tira esa información y
+ *   hace dos daños: una fila con entrada y sin salida se cierra con la
+ *   entrada de OTRA fila si cae a 2-14 horas, y una salida a 5 minutos o menos
+ *   de la entrada se descarta como "fantasma" y deja la fichada abierta. Un
+ *   filtro de fantasmas tiene sentido sobre marcas crudas del reloj, no sobre
+ *   dos columnas que ya dicen cuál es cuál: si el archivo dice 08:00 y 08:03,
+ *   eso es lo que hay que guardar.
+ *
+ * Los dos terminan en turnos y desde ahí comparten todo: dedup, protección de
+ * días corregidos y de liquidaciones cerradas, borrado y reinserción, y rango
+ * de recálculo. Lo único que se saltea la vía `turnos` es lo que sólo tiene
+ * sentido con marcas crudas: encadenar fichadas abiertas de antes y reconciliar.
+ */
+export type LoteAAplicar =
+  | { tipo: "marcas"; empleados: DiasDeEmpleado[] }
+  | { tipo: "turnos"; turnos: TurnoNuevo[] };
+
 /** Una fichada abierta de un lote anterior que este lote cierra con un `update`. */
 export interface Cierre {
   id: string;
@@ -444,4 +474,31 @@ export function armarTurnos(
   }
 
   return { turnos, cierres, imputados, avisos };
+}
+
+/**
+ * La otra mitad de `armarTurnos`, para los turnos que ya vienen emparejados
+ * (ver `LoteAAplicar`): devuelve la misma forma, sin reconciliar nada.
+ *
+ * Un turno entra tal cual: lo que el archivo dijo es lo que se guarda, con su
+ * salida si la tiene y sin ella si no. Nunca hay cierres —no se encadena con
+ * fichadas abiertas de antes— ni avisos: no hay nada que inferir ni que dudar.
+ *
+ * El día de salida sale de la hora de salida y no se supone igual a la
+ * entrada, para que el recálculo cubra el día correcto si algún origen trae
+ * un turno que cruza medianoche.
+ */
+export function turnosYaEmparejados(
+  turnos: TurnoNuevo[]
+): { turnos: TurnoNuevo[]; cierres: Cierre[]; imputados: TramoImputado[]; avisos: string[] } {
+  return {
+    turnos,
+    cierres: [],
+    imputados: turnos.map((t) => ({
+      empleadoId: t.empleadoId,
+      fecha: t.fecha,
+      fechaSalida: t.horaSalida ? fechaArgentinaDe(t.horaSalida) : t.fecha,
+    })),
+    avisos: [],
+  };
 }

@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { leerStaging, borrarStaging } from "@/lib/rrhh/staging";
-import { tokenizeMarcaciones, toDateOnlyFromCell, type ParsedSheet, type TokenMarcacion } from "@/lib/rrhh/excelImport";
-import { localDateTime, formatHHMM } from "@/lib/rrhh/dates";
-import { aplicarDias, type DiasDeEmpleado, type ResultadoAplicar } from "@/lib/rrhh/fichadas/aplicar";
+import { tokenizeMarcaciones, toDateOnlyFromCell, type ParsedSheet } from "@/lib/rrhh/excelImport";
+import { localDateTime } from "@/lib/rrhh/dates";
+import { aplicarDias, type DiasDeEmpleado, type LoteAAplicar, type ResultadoAplicar, type TurnoNuevo } from "@/lib/rrhh/fichadas/aplicar";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 
 interface Mapping {
@@ -74,48 +74,50 @@ export async function POST(request: Request) {
     filasValidas.push({ idx, legajo: legajoRaw, employeeId, fecha, row });
   });
 
-  // Los días de cada empleado, ordenados ascendente: es lo que pide la capa de
-  // alta, y `armarTurnos` toma el primero como el arranque de su lote. Un
-  // empleado va una sola vez en la lista aunque tenga muchas filas.
-  const porEmpleado = new Map<string, FilaValida[]>();
-  for (const f of filasValidas) {
-    const filas = porEmpleado.get(f.employeeId);
-    if (filas) filas.push(f);
-    else porEmpleado.set(f.employeeId, [f]);
-  }
+  // Cada modo entra por su vía (ver `LoteAAplicar`): el combinado trae marcas
+  // crudas que hay que reconciliar, y el separado ya trae el emparejamiento
+  // dicho por las dos columnas, así que no se reconcilia nada.
+  let lote: LoteAAplicar;
+  if (mapping.modo === "combinado") {
+    // Los días de cada empleado, ordenados ascendente: es lo que pide la
+    // reconciliación, y `armarTurnos` toma el primero como el arranque de su
+    // lote. Un empleado va una sola vez en la lista aunque tenga muchas filas.
+    const porEmpleado = new Map<string, FilaValida[]>();
+    for (const f of filasValidas) {
+      const filas = porEmpleado.get(f.employeeId);
+      if (filas) filas.push(f);
+      else porEmpleado.set(f.employeeId, [f]);
+    }
 
-  const empleados: DiasDeEmpleado[] = [];
-  for (const [employeeId, filas] of porEmpleado) {
-    // El sort de JS es estable: dos filas del mismo día conservan el orden del archivo.
-    filas.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
-    const legajo = filas[0].legajo;
-    const dias: DiasDeEmpleado["dias"] = [];
-
-    for (const f of filas) {
-      if (mapping.modo === "combinado") {
+    const empleados: DiasDeEmpleado[] = [];
+    for (const [employeeId, filas] of porEmpleado) {
+      filas.sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+      const legajo = filas[0].legajo;
+      const dias = filas.map((f) => {
         const raw = String(f.row[mapping.marcaciones ?? ""] ?? "").trim();
         const tokens = tokenizeMarcaciones(raw);
         if (raw && tokens.length === 0) {
           errores.push(`Fila ${f.idx + 2} (legajo ${legajo}): no se pudieron interpretar las marcaciones "${raw}"`);
         }
-        dias.push({ fecha: f.fecha, tokens });
-      } else {
-        // Modo "separado": la entrada y la salida ya vienen emparejadas en dos
-        // columnas, así que cada fila es un día con un par de marcas. Una fila
-        // por día y no una sola con todas, para que dos filas del mismo día
-        // sigan siendo dos turnos independientes.
-        const horaEntrada = combineFechaHora(f.fecha, f.row[mapping.horaEntrada ?? ""]);
-        if (!horaEntrada) {
-          errores.push(`Fila ${f.idx + 2}: hora de entrada inválida`);
-          continue;
-        }
-        const horaSalida = mapping.horaSalida ? combineFechaHora(f.fecha, f.row[mapping.horaSalida]) : null;
-        const tokens: TokenMarcacion[] = [{ tipo: "E", hora: formatHHMM(horaEntrada) }];
-        if (horaSalida) tokens.push({ tipo: "S", hora: formatHHMM(horaSalida) });
-        dias.push({ fecha: f.fecha, tokens });
-      }
+        return { fecha: f.fecha, tokens };
+      });
+      empleados.push({ empleadoId: employeeId, legajo, dias });
     }
-    empleados.push({ empleadoId: employeeId, legajo, dias });
+    lote = { tipo: "marcas", empleados };
+  } else {
+    // Una fila es un turno, tal como lo dice el archivo: una entrada sin salida
+    // queda abierta y una salida a pocos minutos de la entrada se conserva.
+    const turnos: TurnoNuevo[] = [];
+    for (const f of filasValidas) {
+      const horaEntrada = combineFechaHora(f.fecha, f.row[mapping.horaEntrada ?? ""]);
+      if (!horaEntrada) {
+        errores.push(`Fila ${f.idx + 2}: hora de entrada inválida`);
+        continue;
+      }
+      const horaSalida = mapping.horaSalida ? combineFechaHora(f.fecha, f.row[mapping.horaSalida]) : null;
+      turnos.push({ empleadoId: f.employeeId, legajo: f.legajo, fecha: f.fecha, horaEntrada, horaSalida });
+    }
+    lote = { tipo: "turnos", turnos };
   }
 
   // El lote se crea antes de aplicar porque las fichadas llevan su id; los
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
   // se respeta igual; eso lo decide `aplicarDias`.
   let resultado: ResultadoAplicar;
   try {
-    resultado = await aplicarDias(admin, empleados, { batchId: batch.id, protegerCorregidos: false });
+    resultado = await aplicarDias(admin, lote, { batchId: batch.id, protegerCorregidos: false });
   } catch (e) {
     // `aplicarDias` avisa qué quedó a medias en el mensaje, y un día vacío que
     // nadie anota es un día vacío que nadie sabe que está vacío: se deja en el

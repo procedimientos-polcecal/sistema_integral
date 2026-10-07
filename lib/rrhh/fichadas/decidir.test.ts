@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, textoDeMotivo,
+  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, textoDeMotivo,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta, type DiasDeEmpleado,
 } from "./decidir";
 import { toUtcDateOnly, localDateTime } from "../dates";
@@ -658,5 +658,90 @@ describe("armarTurnos", () => {
     const abiertas = new Map([["emp-1", abiertaDe("fich-1", "emp-1", dia(2026, 9, 30), 22, 0)]]);
     const r = armarTurnos([emp("emp-1", "PC_204", [])], abiertas);
     expect(r).toEqual({ turnos: [], cierres: [], imputados: [], avisos: [] });
+  });
+});
+
+describe("turnosYaEmparejados", () => {
+  // El modo separado del Excel: la entrada y la salida vienen en dos columnas,
+  // así que el archivo ya dijo cuál marca es cuál y no hay nada que inferir.
+  const E = (hora: string) => ({ tipo: "E" as const, hora });
+  const S = (hora: string) => ({ tipo: "S" as const, hora });
+
+  it("un turno ya emparejado entra tal cual, sin cierres ni avisos", () => {
+    const t = turno("emp-1", dia(2026, 10, 1), [8, 0], [16, 0]);
+    const r = turnosYaEmparejados([t]);
+    expect(r.turnos).toEqual([t]);
+    expect(r.cierres).toEqual([]);
+    expect(r.avisos).toEqual([]);
+    expect(r.imputados).toEqual([{ empleadoId: "emp-1", fecha: t.fecha, fechaSalida: t.fecha }]);
+  });
+
+  it("una entrada sin salida queda abierta y no se cierra con la entrada de otra fila", () => {
+    // La entrada del día 2 cae 10 horas después de la del día 1: dentro de la
+    // ventana de 2 a 14 horas con la que la reconciliación cerraría el turno.
+    const d1 = dia(2026, 10, 1);
+    const d2 = dia(2026, 10, 2);
+    const abierta = turno("emp-1", d1, [22, 0], null);
+    const siguiente = turno("emp-1", d2, [8, 0], [16, 0]);
+
+    const r = turnosYaEmparejados([abierta, siguiente]);
+    expect(r.turnos).toEqual([abierta, siguiente]);
+    expect(r.turnos[0].horaSalida).toBeNull();
+    expect(r.cierres).toEqual([]);
+    expect(r.avisos).toEqual([]);
+
+    // Y con el mismo dato como marcas crudas, la reconciliación sí lo cierra:
+    // por eso el modo separado no puede pasar por ahí.
+    const reconciliado = armarTurnos(
+      [{ empleadoId: "emp-1", legajo: "PC_204", dias: [{ fecha: d1, tokens: [E("22:00")] }, { fecha: d2, tokens: [E("08:00"), S("16:00")] }] }],
+      new Map()
+    );
+    expect(reconciliado.turnos[0].horaSalida).not.toBeNull();
+  });
+
+  it("una salida a 3 minutos de la entrada se conserva tal cual", () => {
+    const t = turno("emp-1", dia(2026, 10, 1), [8, 0], [8, 3]);
+    expect(turnosYaEmparejados([t]).turnos).toEqual([t]);
+
+    // Como marcas crudas, la salida es un "fantasma" y se descarta.
+    const reconciliado = armarTurnos(
+      [{ empleadoId: "emp-1", legajo: "PC_204", dias: [{ fecha: dia(2026, 10, 1), tokens: [E("08:00"), S("08:03")] }] }],
+      new Map()
+    );
+    expect(reconciliado.turnos[0].horaSalida).toBeNull();
+  });
+
+  it("los segundos del archivo se conservan", () => {
+    const f = dia(2026, 10, 1);
+    const t: TurnoNuevo = {
+      empleadoId: "emp-1", legajo: "PC_204", fecha: f,
+      horaEntrada: localDateTime(f, 8, 0, 30), horaSalida: localDateTime(f, 16, 0, 45),
+    };
+    expect(turnosYaEmparejados([t]).turnos[0]).toEqual(t);
+  });
+
+  it("el día de salida sale de la hora de salida, no se supone el de la entrada", () => {
+    const f = dia(2026, 10, 1);
+    const t: TurnoNuevo = {
+      empleadoId: "emp-1", legajo: "PC_204", fecha: f,
+      horaEntrada: localDateTime(f, 22, 0), horaSalida: localDateTime(dia(2026, 10, 2), 6, 0),
+    };
+    expect(turnosYaEmparejados([t]).imputados).toEqual([
+      { empleadoId: "emp-1", fecha: f, fechaSalida: dia(2026, 10, 2) },
+    ]);
+  });
+
+  it("después sigue pasando por la decisión: dedup y protección aplican igual", () => {
+    const f = dia(2026, 10, 1);
+    const t = turno("emp-1", f, [8, 0], [16, 0]);
+    const { turnos } = turnosYaEmparejados([t, { ...t }]);
+
+    const sinProteger = decidirQueAplicar(turnos, vacio, false);
+    expect(sinProteger.aInsertar).toEqual([t]);
+
+    const liquidado: ContextoDeDecision = { ...vacio, diasLiquidados: new Set([claveDia("emp-1", "2026-10-01")]) };
+    const protegido = decidirQueAplicar(turnos, liquidado, false);
+    expect(protegido.aInsertar).toEqual([]);
+    expect(protegido.salteados.map((x) => x.motivo)).toEqual(["liquidado"]);
   });
 });

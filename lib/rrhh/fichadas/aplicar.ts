@@ -4,12 +4,12 @@ import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
 import { diaIso, fechaArgentinaDe } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, textoDeMotivo,
+  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, textoDeMotivo,
   type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
-  type DiasDeEmpleado,
+  type DiasDeEmpleado, type LoteAAplicar, type TurnoNuevo,
 } from "./decidir";
 
-export type { DiasDeEmpleado };
+export type { DiasDeEmpleado, TurnoNuevo, LoteAAplicar };
 
 export interface ResultadoAplicar {
   insertados: number;
@@ -102,24 +102,38 @@ const FILAS_POR_TANDA = 500;
  * lote (`log_detalle`): un `throw` que nadie anota es un día vacío que nadie
  * sabe que está vacío.
  *
+ * Recibe un `LoteAAplicar`: marcas crudas a reconciliar o turnos ya
+ * emparejados. Por qué hay dos está explicado en ese tipo.
+ *
  * No se invierte el orden (insertar primero, borrar después lo viejo) porque
  * cambia un riesgo por otro peor: un fallo del borrado dejaría el día
  * duplicado, y las horas duplicadas se pagan.
  */
 export async function aplicarDias(
   admin: SupabaseClient,
-  empleados: DiasDeEmpleado[],
+  lote: LoteAAplicar,
   opciones: { batchId: string; protegerCorregidos: boolean }
 ): Promise<ResultadoAplicar> {
-  const conDatos = empleados.filter((e) => e.dias.length > 0);
-
-  // Si de una carga anterior quedó un turno sin marcación de salida, se
-  // encadena para que el primer dato de este lote pueda cerrarlo en vez de
-  // quedar abierto para siempre. Una consulta para todos, no una por empleado.
-  const { encadenables: abiertas, pendiente } = await abiertasPrevias(admin, conDatos);
-
-  const { turnos, cierres, imputados, avisos } = armarTurnos(conDatos, abiertas);
-  const legajoPorEmpleado = new Map(conDatos.map((e) => [e.empleadoId, e.legajo]));
+  // Dos formas de entrar, y el motivo está en `LoteAAplicar`: marcas crudas que
+  // hay que reconciliar, o turnos que el origen ya emparejó. Desde acá en
+  // adelante es todo lo mismo.
+  let armado: ReturnType<typeof armarTurnos>;
+  let legajoPorEmpleado: Map<string, string>;
+  let pendiente: string | null = null;
+  if (lote.tipo === "marcas") {
+    const conDatos = lote.empleados.filter((e) => e.dias.length > 0);
+    // Si de una carga anterior quedó un turno sin marcación de salida, se
+    // encadena para que el primer dato de este lote pueda cerrarlo en vez de
+    // quedar abierto para siempre. Una consulta para todos, no una por empleado.
+    const previas = await abiertasPrevias(admin, conDatos);
+    pendiente = previas.pendiente;
+    armado = armarTurnos(conDatos, previas.encadenables);
+    legajoPorEmpleado = new Map(conDatos.map((e) => [e.empleadoId, e.legajo]));
+  } else {
+    armado = turnosYaEmparejados(lote.turnos);
+    legajoPorEmpleado = new Map(lote.turnos.map((t) => [t.empleadoId, t.legajo]));
+  }
+  const { turnos, cierres, imputados, avisos } = armado;
 
   const ctx = await contextoDe(admin, [
     ...turnos.map((t) => ({ empleadoId: t.empleadoId, fecha: diaIso(t.fecha) })),
