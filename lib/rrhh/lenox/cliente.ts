@@ -13,12 +13,25 @@ const BASE = "https://empresas.api.lenoxhr.com/api/v1";
 export const DIAS_MAX_POR_PEDIDO = 7;
 
 /**
- * Cinturón del bucle de paginación, no un número de la API: si Lenox ignorara
- * `FilasExcluidas` devolvería siempre lo mismo y el bucle no terminaría nunca.
- * 100.000 filas son más de 130 veces lo que da una semana de toda la planta
- * (735 filas el 07/10/2026).
+ * Cinturón del bucle de paginación, medido en LLAMADAS y no en filas: lo que
+ * cuesta acá son los pedidos, porque hay un límite duro y la API no dice cuál
+ * (el 07/10/2026 bastaron unas doce seguidas para recibir un 429). Si Lenox
+ * ignorara `FilasExcluidas` y devolviera siempre lo mismo, un tope en filas
+ * saltaría recién después de más de cien llamadas y lo que se vería sería un
+ * 429, no el diagnóstico correcto.
+ *
+ * Con 10 sobra: una semana de toda la planta entra en una sola página (735
+ * filas el 07/10/2026).
  */
-const TOPE_DE_FILAS = 100_000;
+const MAX_PAGINAS = 10;
+
+/**
+ * Cuánto se espera una respuesta. La primera llamada medida tardó 12 segundos
+ * (07/10/2026), así que 60 deja holgura de sobra. Sin tope, un pedido colgado
+ * se comería los 300 segundos del cron y Vercel lo cortaría por timeout sin
+ * decir nada útil; con él, el fallo llega con un mensaje que nombra a Lenox.
+ */
+const TIMEOUT_MS = 60_000;
 
 /** Lo que dice el `mensaje` cuando la respuesta ya trae todo lo que queda. */
 const TODOS_LOS_RESULTADOS = "se muestran todos los resultados";
@@ -54,7 +67,20 @@ async function pedir<T>(
   const url = new URL(BASE + ruta);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url, { headers: { "LenoxBusinessAPI-Key": clave } });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "LenoxBusinessAPI-Key": clave },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    // `AbortSignal.timeout` rechaza con un `TimeoutError`: pelado, no dice
+    // quién no respondió ni cuánto se esperó.
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      throw new Error(`Lenox no respondió en ${TIMEOUT_MS / 1000} segundos. Probá de nuevo en unos minutos.`);
+    }
+    throw e;
+  }
 
   // Un rango sin marcaciones devuelve 204 con el cuerpo VACÍO. `res.ok` es
   // true para un 204, así que no cae en la rama de error de abajo, y
@@ -74,9 +100,9 @@ async function pedir<T>(
     // El texto existe porque el error pelado sería "Lenox respondió 429: ",
     // que no le dice nada a nadie.
     throw new Error(
-      "Lenox rechazó el pedido por exceso de llamadas (429). No dice cuánto hay que esperar y " +
-        "volver a intentar antes de tiempo parece prolongar el bloqueo: dejá pasar un buen rato " +
-        "(medido, más de 7 minutos) sin tocar nada y recién entonces probá de nuevo."
+      "Lenox no atendió el pedido porque se hicieron demasiadas consultas seguidas. " +
+        "Esperá al menos 15 minutos antes de volver a intentar, y no aprietes el botón " +
+        "mientras tanto: cada intento prolonga la espera. (429)"
     );
   }
 
@@ -111,14 +137,17 @@ async function pedir<T>(
 async function pedirTodo<T>(ruta: string, params: Record<string, string>): Promise<T[]> {
   const filas: T[] = [];
   let offset = 0;
-  for (;;) {
+  for (let pagina = 1; ; pagina++) {
     const { resultado, mensaje } = await pedir<T>(ruta, { ...params, FilasExcluidas: String(offset) });
     filas.push(...resultado);
     if (resultado.length === 0) break;
     if (mensaje?.trim().toLowerCase().startsWith(TODOS_LOS_RESULTADOS)) break;
     offset += resultado.length;
-    if (offset > TOPE_DE_FILAS) {
-      throw new Error("Lenox devolvió más filas de las razonables; ¿está ignorando FilasExcluidas?");
+    if (pagina >= MAX_PAGINAS) {
+      throw new Error(
+        `Lenox siguió devolviendo filas después de ${MAX_PAGINAS} pedidos seguidos. ` +
+          "Se sospecha que FilasExcluidas no se está respetando; se corta para no agotar el límite de llamadas."
+      );
     }
   }
   return filas;

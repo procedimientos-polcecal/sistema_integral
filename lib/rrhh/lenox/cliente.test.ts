@@ -132,16 +132,18 @@ describe("traerMarcaciones", () => {
     expect(llamadas).toBe(3);
   });
 
-  it("si la API ignora FilasExcluidas, el bucle se corta en vez de girar para siempre", async () => {
+  it("si la API ignora FilasExcluidas, el bucle se corta y el error lo sospecha", async () => {
     vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
     const pagina = Array.from({ length: 1000 }, () => filaFalsa(1));
     const fetchFalso = vi.fn(async () => ok({ resultado: pagina }));
     vi.stubGlobal("fetch", fetchFalso);
 
     await expect(traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1))).rejects.toThrow(
-      /FilasExcluidas/
+      /FilasExcluidas no se está respetando/
     );
-    expect(fetchFalso.mock.calls.length).toBeLessThan(500);
+    // Se corta por cantidad de pedidos, no de filas: el límite duro de Lenox
+    // está en unas doce llamadas y hay que frenar antes.
+    expect(fetchFalso).toHaveBeenCalledTimes(10);
   });
 
   it("un 204 con el cuerpo vacío es cero filas y no lanza", async () => {
@@ -201,6 +203,74 @@ describe("traerMarcaciones", () => {
     expect(urls[0]).toContain("Hasta=2026-10-01");
     expect(urls[0]).toContain("FilasExcluidas=0");
     expect(urls[1]).toContain("FilasExcluidas=1");
+    // Con `true` las bajas dejan de aparecer y nadie se entera: quien se fue
+    // ficha hasta su último día, y esas marcaciones simplemente faltarían.
+    expect(urls[0]).toContain("ExcluirDadosDeBaja=false");
+  });
+
+  it("una fila sin legajo llega tal cual: filtrarla borraría el aviso que cuenta agrupar", async () => {
+    vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
+    const sinLegajo = { ...filaFalsa(1), legajo: "" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        ok({ mensaje: "Se muestran todos los resultados", resultado: [sinLegajo, filaFalsa(2)] })
+      )
+    );
+
+    const filas = await traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1));
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toEqual(sinLegajo);
+  });
+
+  it("un 200 sin campo resultado es cero filas y no explota", async () => {
+    vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
+    const fetchFalso = vi.fn(async () => ok({ mensaje: "sin datos" }));
+    vi.stubGlobal("fetch", fetchFalso);
+
+    await expect(traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1))).resolves.toEqual([]);
+    expect(fetchFalso).toHaveBeenCalledTimes(1);
+  });
+
+  it("manda una señal de timeout en cada pedido", async () => {
+    vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
+    const señales: (AbortSignal | null | undefined)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init: RequestInit) => {
+        señales.push(init.signal);
+        return ok({ mensaje: "Se muestran todos los resultados", resultado: [filaFalsa(1)] });
+      })
+    );
+
+    await traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1));
+    expect(señales[0]).toBeInstanceOf(AbortSignal);
+  });
+
+  it("si Lenox no responde a tiempo, el error lo dice y no es un TimeoutError pelado", async () => {
+    vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      })
+    );
+
+    await expect(traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1))).rejects.toThrow(
+      /Lenox no respondió en 60 segundos/
+    );
+  });
+
+  it("un fallo de red que no es timeout se propaga como vino", async () => {
+    vi.stubEnv("LENOX_API_KEY", "clave-de-prueba");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      })
+    );
+
+    await expect(traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1))).rejects.toThrow("fetch failed");
   });
 
   it("devuelve las filas tal como vienen, sin interpretarlas", async () => {
@@ -231,7 +301,8 @@ describe("traerMarcaciones", () => {
     const error = await traerMarcaciones(dia(2026, 10, 1), dia(2026, 10, 1)).catch((e: Error) => e);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toMatch(/429/);
-    expect((error as Error).message).toMatch(/Esperá|dejá pasar/i);
+    expect((error as Error).message).toMatch(/15 minutos/);
+    expect((error as Error).message).not.toMatch(/medido|Retry-After/i);
     expect(fetchFalso).toHaveBeenCalledTimes(1);
   });
 
