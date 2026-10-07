@@ -1504,17 +1504,25 @@ async function contextoDe(admin: SupabaseClient, turnos: TurnoNuevo[]): Promise<
   // traduce en días que se pisan porque "no estaban protegidos".
   // traerTodo recibe una función (desde, hasta) y le pasa .range() — ver la
   // firma en lib/core/paginado.ts:13.
+  //
+  // El `.order("id")` NO es decorativo. `.range()` es LIMIT/OFFSET, y sin un
+  // orden determinístico Postgres no garantiza que dos páginas consecutivas
+  // no repitan ni saltean filas. Acá eso no daría un error: daría una
+  // divergencia falsa, o un "guardado sin fichadas" falso, en días que no
+  // cambiaron — y entonces nadie vuelve a leer los avisos. `fichadas` ya
+  // tiene 4.700 filas y crece todos los días, así que pasar las 1000 de una
+  // página es cuestión de tiempo.
   const corregidos = await traerTodo<{ empleado_id: string; fecha: string }>((d, h) =>
     admin.from("rrhh_dias_corregidos").select("empleado_id, fecha")
-      .gte("fecha", desde).lte("fecha", hasta).range(d, h)
+      .gte("fecha", desde).lte("fecha", hasta).order("id").range(d, h)
   );
   const liquidaciones = await traerTodo<{ empleado_id: string; fecha_desde: string; fecha_hasta: string }>((d, h) =>
     admin.from("liquidaciones").select("empleado_id, fecha_desde, fecha_hasta")
-      .eq("estado", "CERRADA").lte("fecha_desde", hasta).gte("fecha_hasta", desde).range(d, h)
+      .eq("estado", "CERRADA").lte("fecha_desde", hasta).gte("fecha_hasta", desde).order("id").range(d, h)
   );
   const existentes = await traerTodo<{ empleado_id: string; fecha: string; hora_entrada: string; hora_salida: string | null }>((d, h) =>
     admin.from("fichadas").select("empleado_id, fecha, hora_entrada, hora_salida")
-      .gte("fecha", desde).lte("fecha", hasta).range(d, h)
+      .gte("fecha", desde).lte("fecha", hasta).order("id").range(d, h)
   );
 
   const delLote = new Set(empleadoIds);
@@ -2032,7 +2040,7 @@ export async function sincronizarMarcaciones(
   // vería como "esa fichada abierta no existe" en vez de como un error.
   const abiertas = await traerTodo<{ empleado_id: string; empleados: { legajo: string } | null }>((d, h) =>
     admin.from("fichadas").select("empleado_id, empleados(legajo)")
-      .is("hora_salida", null).lt("fecha", fechaStr(desde)).range(d, h)
+      .is("hora_salida", null).lt("fecha", fechaStr(desde)).order("id").range(d, h)
   );
   for (const f of abiertas) {
     if (yaIncluidos.has(f.empleado_id)) continue;
