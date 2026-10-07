@@ -356,3 +356,22 @@ que el sistema le pise el trabajo a quien corrigió.
 **Dos caminos de carga.** El Excel se queda, y un camino que no se usa
 envejece. Lo que lo acota es que los dos comparten `aplicar.ts`: lo que puede
 envejecer es el parseo del archivo, no el alta.
+
+**Las protecciones miran el día de entrada, no el de salida.** Un turno que
+entra en un día libre y **sale** en un día que cae dentro de una liquidación
+`CERRADA` se aplica igual, y el recálculo reescribe las horas de ese día
+cerrado. Se evaluó y se decidió **no cerrarlo**, por tres razones:
+
+- Para que ocurra hace falta que el período posterior se haya liquidado
+  **antes** que el anterior. Con las liquidaciones cerradas en orden, el borde
+  mensual no lo dispara: si el día de entrada es el último del mes anterior y
+  ese mes ya está cerrado, ese día queda protegido por la regla que ya existe.
+- La semántica no tiene una respuesta buena. Si el día de salida está
+  protegido, saltear el turno entero deja el día de entrada sin reemplazar —y
+  ése no estaba protegido—. Elegir entre las dos sin un caso real es adivinar.
+- Cerrarlo cuesta unas 25 líneas y seis tests, y toca el contrato de
+  `TurnoNuevo`, de `contextoDe` y de `decidirQueAplicar`.
+
+Queda escrito acá para que se encuentre si alguna vez aparece: el síntoma
+serían horas que cambian en un mes ya liquidado, en un empleado con turno
+nocturno, el día siguiente a un día no liquidado.
