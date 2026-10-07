@@ -1,20 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
-import { reconciliarTokens, horaStringToDate, type DiaMarcacionesTokens } from "../excelImport";
 import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
-import { formatHHMM, fechaArgentinaDe } from "../dates";
+import { diaIso, fechaArgentinaDe } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe,
-  type TurnoNuevo, type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
+  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, textoDeMotivo,
+  type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
+  type DiasDeEmpleado,
 } from "./decidir";
 
-/** Los días de un empleado, ya ordenados ascendente. */
-export interface DiasDeEmpleado {
-  empleadoId: string;
-  legajo: string;
-  dias: DiaMarcacionesTokens[];
-}
+export type { DiasDeEmpleado };
 
 export interface ResultadoAplicar {
   insertados: number;
@@ -25,9 +20,13 @@ export interface ResultadoAplicar {
    * Cosas que una persona tiene que hacer y que no son un error de la corrida:
    * hoy, las fichadas que quedaron abiertas de antes y no se pueden cerrar con
    * estos datos. Van aparte de `avisos` para que quien llama pueda mostrarlas
-   * sin contarlas como errores ni hacer fallar la sincronización. Si el mismo
-   * lote se parte en varias llamadas (la ventana de 7 días de Lenox), el mismo
-   * texto sale en cada una: quien orquesta tiene que deduplicar.
+   * sin contarlas como errores ni hacer fallar la sincronización.
+   *
+   * El texto depende del primer día del lote —el "antes del" y cuáles fichadas
+   * cuentan como viejas—, así que dos llamadas con rangos distintos dan textos
+   * distintos y no se pueden deduplicar comparándolos. Hoy `aplicarDias` se
+   * llama una vez por corrida y el caso no se da; quien parta un lote en varias
+   * llamadas tiene que decidir cuál conservar.
    */
   pendientes: string[];
 }
@@ -36,16 +35,6 @@ export interface ResultadoAplicar {
 interface DiaEnJuego {
   empleadoId: string;
   fecha: string; // "YYYY-MM-DD"
-}
-
-/** Una fichada abierta de un lote anterior que este lote cierra con un `update`. */
-interface Cierre {
-  id: string;
-  empleadoId: string;
-  legajo: string;
-  fecha: Date; // el día de la entrada: es al que se imputan las horas
-  fechaSalida: Date;
-  horaSalida: Date;
 }
 
 /**
@@ -57,9 +46,8 @@ interface Cierre {
  */
 const FECHAS_POR_BORRADO = 200;
 
-function fechaStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+/** Filas por `insert`, para no armar un request gigante. */
+const FILAS_POR_TANDA = 500;
 
 /**
  * El alta de fichadas, compartida por los dos caminos de carga: el import de
@@ -69,9 +57,9 @@ function fechaStr(d: Date): string {
  * caminos de escritura separados se van separando — y el que casi no se usa
  * es el que se pudre sin que nadie lo note.
  *
- * `admin` y no el cliente de sesión: el cron no tiene sesión. Por eso mismo
+ * `admin` y no un cliente de sesión: el cron no tiene sesión. Por eso mismo
  * `recalcularEmpleadoPeriodo` recibe también el admin (acepta cualquier
- * `SupabaseClient`), cuando la ruta vieja le pasaba el de sesión.
+ * `SupabaseClient`).
  *
  * RIESGOS ASUMIDOS, no resueltos: nada de esto es atómico. PostgREST no ofrece
  * una transacción de varias sentencias, y meter una función de Postgres sólo
@@ -85,18 +73,24 @@ function fechaStr(d: Date): string {
  *    El recálculo no corrió.
  * 3. **Falla el `update` de un cierre, o el recálculo de un empleado.** Las
  *    fichadas ya están confirmadas y `calculos_diarios` queda desfasado de
- *    ellas para los empleados que no se alcanzaron a recalcular.
+ *    ellas. Un cierre que falla frena ahí. Un recálculo que falla NO frena a
+ *    los demás: se intenta con todos los empleados, se juntan los fallos y se
+ *    tira un solo error al final con los legajos que fallaron.
  *
  * Se aceptan porque se curan solos, cada uno por su razón verificable:
  * - 1 y 2: `decidirQueAplicar` no omite los días que ya están idénticos, así
  *   que la próxima corrida vuelve a borrar esos días y a insertarlos completos,
  *   y el recálculo los alcanza. Funciona con el cron de mañana, con el botón, o
  *   volviendo a subir el Excel.
- * - 3, el recálculo: la corrida siguiente recalcula el rango de lo que inserta,
- *   que cubre esos días salvo el más viejo, que sale de la ventana (ver abajo).
+ * - 3, el recálculo, si el fallo fue transitorio: la corrida siguiente
+ *   recalcula el rango de lo que inserta, que cubre esos días salvo el más
+ *   viejo, que sale de la ventana (ver abajo).
  *
- * Lo que NO se cura solo: un día que quede fuera del rango de la próxima
- * corrida (el cron mira siete días), y el cierre de una fichada abierta cuyo
+ * Lo que NO se cura solo: un recálculo que falla por los datos de un empleado
+ * y no por la red, que se repite todos los días hasta que alguien mira ese
+ * dato —por eso no puede frenar a los que siguen en la lista, y por eso el
+ * error nombra los legajos—; un día que quede fuera del rango de la próxima
+ * corrida (el cron mira siete días); y el cierre de una fichada abierta cuyo
  * `update` falló. Ese cierre sólo se reintenta si la próxima corrida arranca el
  * mismo día; si el rango ya avanzó, esa fichada deja de ser la del "día
  * anterior" y pasa a `pendientes` ("hay que cerrarlas a mano"), que es donde
@@ -124,64 +118,14 @@ export async function aplicarDias(
   // quedar abierto para siempre. Una consulta para todos, no una por empleado.
   const { encadenables: abiertas, pendiente } = await abiertasPrevias(admin, conDatos);
 
-  const turnos: TurnoNuevo[] = [];
-  const cierres: Cierre[] = [];
-  const avisos: string[] = [];
-  // Qué días cubre cada turno, incluido el día de salida si cruzó medianoche.
-  // `TurnoNuevo` no lleva `fechaSalida`, pero el recálculo la necesita: un
-  // turno que arranca el viernes de noche y termina el sábado aporta horas al
-  // sábado, y si el sábado no tiene turnos propios nadie lo recalcularía.
-  const imputados: TramoImputado[] = [];
+  const { turnos, cierres, imputados, avisos } = armarTurnos(conDatos, abiertas);
   const legajoPorEmpleado = new Map(conDatos.map((e) => [e.empleadoId, e.legajo]));
 
-  for (const emp of conDatos) {
-    const abierto = abiertas.get(emp.empleadoId) ?? null;
-    const abiertoFecha = abierto ? new Date(abierto.fecha) : null;
-    const abiertoPrevio = abierto
-      ? { fecha: abiertoFecha!, entradaStr: formatHHMM(new Date(abierto.horaEntrada)) }
-      : null;
-
-    const { turnos: resueltos, avisos: avisosDelEmpleado } = reconciliarTokens(emp.dias, abiertoPrevio);
-
-    for (const t of resueltos) {
-      // El turno que cierra una fichada ya abierta se completa con un update:
-      // esa fila ya existe y no entra por el camino de borrar-e-insertar. Acá
-      // sólo se anota; se aplica más abajo, después de saber si ese día está
-      // protegido. (Los días del lote son todos posteriores a la abierta, así
-      // que un turno con su misma fecha sólo puede ser ella.)
-      if (abierto && abiertoFecha && t.fecha.getTime() === abiertoFecha.getTime()) {
-        if (t.salidaStr) {
-          cierres.push({
-            id: abierto.id,
-            empleadoId: emp.empleadoId,
-            legajo: emp.legajo,
-            fecha: t.fecha,
-            fechaSalida: t.fechaSalida,
-            horaSalida: horaStringToDate(t.fechaSalida, t.salidaStr),
-          });
-        }
-        continue;
-      }
-      turnos.push({
-        empleadoId: emp.empleadoId,
-        legajo: emp.legajo,
-        fecha: t.fecha,
-        horaEntrada: horaStringToDate(t.fecha, t.entradaStr),
-        horaSalida: t.salidaStr ? horaStringToDate(t.fechaSalida, t.salidaStr) : null,
-      });
-      imputados.push({ empleadoId: emp.empleadoId, fecha: t.fecha, fechaSalida: t.fechaSalida });
-    }
-
-    for (const a of avisosDelEmpleado) {
-      avisos.push(`Legajo ${emp.legajo}, ${fechaStr(a.fecha)}: ${a.mensaje}`);
-    }
-  }
-
   const ctx = await contextoDe(admin, [
-    ...turnos.map((t) => ({ empleadoId: t.empleadoId, fecha: fechaStr(t.fecha) })),
+    ...turnos.map((t) => ({ empleadoId: t.empleadoId, fecha: diaIso(t.fecha) })),
     // El día de una fichada que se va a cerrar también se mira: cerrarla le
     // cambia las horas a ese día igual que insertar.
-    ...cierres.map((c) => ({ empleadoId: c.empleadoId, fecha: fechaStr(c.fecha) })),
+    ...cierres.map((c) => ({ empleadoId: c.empleadoId, fecha: diaIso(c.fecha) })),
   ]);
   const decision = decidirQueAplicar(turnos, ctx, opciones.protegerCorregidos);
 
@@ -237,18 +181,18 @@ export async function aplicarDias(
 
   const filas = decision.aInsertar.map((t) => ({
     empleado_id: t.empleadoId,
-    fecha: fechaStr(t.fecha),
+    fecha: diaIso(t.fecha),
     hora_entrada: t.horaEntrada.toISOString(),
     hora_salida: t.horaSalida ? t.horaSalida.toISOString() : null,
     origen: "IMPORTADO",
     import_batch_id: opciones.batchId,
   }));
-  const tandas = Math.ceil(filas.length / 500);
-  for (let i = 0; i < filas.length; i += 500) {
-    const { error } = await admin.from("fichadas").insert(filas.slice(i, i + 500));
+  const tandas = Math.ceil(filas.length / FILAS_POR_TANDA);
+  for (let i = 0; i < filas.length; i += FILAS_POR_TANDA) {
+    const { error } = await admin.from("fichadas").insert(filas.slice(i, i + FILAS_POR_TANDA));
     if (error) {
       throw new Error(
-        `Insertando fichadas (tanda ${i / 500 + 1} de ${tandas}, ${i} de ${filas.length} filas ya insertadas; ` +
+        `Insertando fichadas (tanda ${i / FILAS_POR_TANDA + 1} de ${tandas}, ${i} de ${filas.length} filas ya insertadas; ` +
           `los días a reemplazar ya estaban borrados y el recálculo no corrió): ${error.message}`
       );
     }
@@ -259,7 +203,7 @@ export async function aplicarDias(
   // abajo las cerradas. El rango sale de `rangoDeRecalculo`, que tiene tests.
   const salteadas = new Set(decision.salteados.map((s) => claveDia(s.empleadoId, s.fecha)));
   const aRecalcular: TramoImputado[] = [
-    ...imputados.filter((im) => !salteadas.has(claveDia(im.empleadoId, fechaStr(im.fecha)))),
+    ...imputados.filter((im) => !salteadas.has(claveDia(im.empleadoId, diaIso(im.fecha)))),
     ...borradas,
   ];
 
@@ -268,8 +212,9 @@ export async function aplicarDias(
   // nocturno sin salida se movería sola cuando entra la marca del día
   // siguiente: justo lo que la protección está para impedir.
   const cierresOmitidos: DiaSalteado[] = [];
+  let cierresAplicados = 0;
   for (const c of cierres) {
-    const fecha = fechaStr(c.fecha);
+    const fecha = diaIso(c.fecha);
     const motivo = motivoDeProteccion(claveDia(c.empleadoId, fecha), ctx, opciones.protegerCorregidos);
     if (motivo) {
       cierresOmitidos.push({ empleadoId: c.empleadoId, legajo: c.legajo, fecha, motivo, divergencia: null });
@@ -284,40 +229,56 @@ export async function aplicarDias(
     if (error) {
       throw new Error(
         `Cerrando la fichada abierta del legajo ${c.legajo} (${fecha}); las ${decision.aInsertar.length} fichadas ya estaban ` +
-          `insertadas y los días borrados, pero el cierre y el recálculo no corrieron: ${error.message}`
+          `insertadas y los días borrados; ${
+            cierresAplicados === 0
+              ? "ningún cierre anterior se había aplicado"
+              : `${cierresAplicados} cierres anteriores sí se aplicaron`
+          }, y ni ellos ni nada de lo insertado se recalculó: ${error.message}`
       );
     }
+    cierresAplicados++;
     aRecalcular.push({ empleadoId: c.empleadoId, fecha: c.fecha, fechaSalida: c.fechaSalida });
   }
 
   // Una sola vez por empleado, con su rango completo: tanto lo insertado como
-  // lo cerrado. (El plan original recalculaba la fichada cerrada ahí mismo y
-  // otra vez al final, dos veces las mismas ~10 consultas por empleado.)
+  // lo cerrado.
+  //
+  // Un fallo no frena a los que siguen: si viene de los datos de un empleado se
+  // repite todos los días, y cortar acá dejaría sin recalcular, en cada corrida
+  // y sin que nada lo note, a todos los que vienen después en la lista.
   const rangos = rangoDeRecalculo(aRecalcular);
-  let recalculados = 0;
+  const fallos = new Map<string, string[]>(); // mensaje de la base -> legajos
   for (const [empleadoId, r] of rangos) {
     try {
       await recalcularEmpleadoPeriodo(admin, empleadoId, r.min, r.max);
     } catch (e) {
-      throw new Error(
-        `Recalculando al legajo ${legajoPorEmpleado.get(empleadoId) ?? empleadoId}: las fichadas ya estaban guardadas, ` +
-          `pero calculos_diarios queda desfasado para ${rangos.size - recalculados} de ${rangos.size} empleados ` +
-          `hasta la próxima corrida: ${e instanceof Error ? e.message : String(e)}`
-      );
+      const mensaje = e instanceof Error ? e.message : String(e);
+      const legajo = legajoPorEmpleado.get(empleadoId) ?? empleadoId;
+      const legajos = fallos.get(mensaje);
+      if (legajos) legajos.push(legajo);
+      else fallos.set(mensaje, [legajo]);
     }
-    recalculados++;
+  }
+  if (fallos.size > 0) {
+    const cuantos = [...fallos.values()].reduce((n, l) => n + l.length, 0);
+    throw new Error(
+      `Recalculando: las fichadas ya estaban guardadas, pero calculos_diarios queda desfasado para ` +
+        `${cuantos} de ${rangos.size} empleados (los demás sí se recalcularon). ` +
+        // Agrupado por mensaje: si es la base la que cayó, son 68 veces el mismo texto.
+        [...fallos].map(([mensaje, legajos]) => `Legajos ${legajos.join(", ")}: ${mensaje}`).join(" | ")
+    );
   }
 
   for (const s of decision.salteados) {
-    const motivo = s.motivo === "liquidado" ? "liquidación cerrada" : "corregido a mano";
     avisos.push(
-      `Legajo ${s.legajo}, ${s.fecha}: no se tocó (${motivo})` +
+      `Legajo ${s.legajo}, ${s.fecha}: no se tocó (${textoDeMotivo(s.motivo)})` +
         (s.divergencia ? ` — ${s.divergencia}` : "")
     );
   }
   for (const s of cierresOmitidos) {
-    const motivo = s.motivo === "liquidado" ? "liquidación cerrada" : "corregido a mano";
-    avisos.push(`Legajo ${s.legajo}, ${s.fecha}: no se cerró el turno que había quedado sin salida (${motivo})`);
+    avisos.push(
+      `Legajo ${s.legajo}, ${s.fecha}: no se cerró el turno que había quedado sin salida (${textoDeMotivo(s.motivo)})`
+    );
   }
 
   return {
@@ -344,7 +305,7 @@ async function abiertasPrevias(
 ): Promise<{ encadenables: Map<string, FichadaAbierta>; pendiente: string | null }> {
   if (empleados.length === 0) return { encadenables: new Map(), pendiente: null };
 
-  const primerDia = new Map(empleados.map((e) => [e.empleadoId, fechaStr(e.dias[0].fecha)]));
+  const primerDia = new Map(empleados.map((e) => [e.empleadoId, diaIso(e.dias[0].fecha)]));
   const legajos = new Map(empleados.map((e) => [e.empleadoId, e.legajo]));
   const tope = [...primerDia.values()].sort().at(-1)!;
 

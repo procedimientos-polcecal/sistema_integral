@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe,
-  type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta,
+  rangoDeRecalculo, diasLiquidadosDe, armarTurnos, textoDeMotivo,
+  type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta, type DiasDeEmpleado,
 } from "./decidir";
-import { toUtcDateOnly, localDateTime, fechaArgentinaDe } from "../dates";
+import { toUtcDateOnly, localDateTime } from "../dates";
 
 function dia(y: number, m: number, d: number) {
   return toUtcDateOnly(y, m - 1, d);
@@ -541,19 +541,122 @@ describe("diasLiquidadosDe", () => {
   });
 });
 
-describe("fechaArgentinaDe", () => {
-  it("una salida de madrugada cae en el mismo día UTC y en el mismo día local", () => {
-    // 04:00 locales = 07:00 UTC
-    expect(fechaArgentinaDe(new Date("2026-10-03T07:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 3));
+
+describe("textoDeMotivo", () => {
+  it("dice lo que se puede hacer: la liquidación se reabre, la corrección se libera", () => {
+    expect(textoDeMotivo("liquidado")).toBe("liquidación cerrada");
+    expect(textoDeMotivo("corregido")).toBe("corregido a mano");
+  });
+});
+
+describe("armarTurnos", () => {
+  const E = (hora: string) => ({ tipo: "E" as const, hora });
+  const S = (hora: string) => ({ tipo: "S" as const, hora });
+  const emp = (empleadoId: string, legajo: string, dias: DiasDeEmpleado["dias"]): DiasDeEmpleado => ({ empleadoId, legajo, dias });
+  const sinAbiertas = new Map<string, FichadaAbierta>();
+  const abiertaDe = (id: string, empleadoId: string, f: Date, h: number, m: number): FichadaAbierta => ({
+    id, empleadoId, fecha: f.toISOString().slice(0, 10), horaEntrada: localDateTime(f, h, m).toISOString(),
   });
 
-  it("una salida a las 22:00 locales ya es el día siguiente en UTC y tiene que seguir siendo el de acá", () => {
-    // 22:00 locales del 2 = 01:00 UTC del 3
-    expect(fechaArgentinaDe(new Date("2026-10-03T01:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 2));
+  it("un día común da un turno con su legajo, y su día de salida es el mismo", () => {
+    const f = dia(2026, 10, 1);
+    const r = armarTurnos([emp("emp-1", "PC_204", [{ fecha: f, tokens: [E("08:00"), S("16:00")] }])], sinAbiertas);
+    expect(r.turnos).toEqual([{
+      empleadoId: "emp-1", legajo: "PC_204", fecha: f,
+      horaEntrada: localDateTime(f, 8, 0), horaSalida: localDateTime(f, 16, 0),
+    }]);
+    expect(r.imputados).toEqual([{ empleadoId: "emp-1", fecha: f, fechaSalida: f }]);
+    expect(r.cierres).toEqual([]);
+    expect(r.avisos).toEqual([]);
   });
 
-  it("el borde: 00:00 locales es 03:00 UTC y ya es el día nuevo; 23:59 locales todavía es el viejo", () => {
-    expect(fechaArgentinaDe(new Date("2026-10-03T03:00:00Z"))).toEqual(toUtcDateOnly(2026, 9, 3));
-    expect(fechaArgentinaDe(new Date("2026-10-03T02:59:00Z"))).toEqual(toUtcDateOnly(2026, 9, 2));
+  it("un turno nocturno dentro del lote sale el día siguiente, y los imputados lo dicen", () => {
+    const d1 = dia(2026, 10, 2);
+    const d2 = dia(2026, 10, 3);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_204", [{ fecha: d1, tokens: [E("22:00")] }, { fecha: d2, tokens: [S("06:00")] }])],
+      sinAbiertas
+    );
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].horaSalida).toEqual(localDateTime(d2, 6, 0));
+    expect(r.imputados).toEqual([{ empleadoId: "emp-1", fecha: d1, fechaSalida: d2 }]);
+  });
+
+  it("la salida de una fichada abierta de un lote anterior es un cierre, no un turno nuevo", () => {
+    const antes = dia(2026, 9, 30);
+    const d1 = dia(2026, 10, 1);
+    const abiertas = new Map([["emp-1", abiertaDe("fich-1", "emp-1", antes, 22, 0)]]);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_204", [{ fecha: d1, tokens: [S("04:00"), E("08:00"), S("16:00")] }])],
+      abiertas
+    );
+    expect(r.cierres).toEqual([{
+      id: "fich-1", empleadoId: "emp-1", legajo: "PC_204",
+      fecha: antes, fechaSalida: d1, horaSalida: localDateTime(d1, 4, 0),
+    }]);
+    // Insertar también el turno de la abierta duplicaría la fila que ya existe.
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].fecha).toEqual(d1);
+    expect(r.imputados).toEqual([{ empleadoId: "emp-1", fecha: d1, fechaSalida: d1 }]);
+  });
+
+  it("si la abierta no se puede cerrar, no hay cierre ni turno nuevo para ella, y se avisa", () => {
+    const antes = dia(2026, 9, 30);
+    const d1 = dia(2026, 10, 1);
+    const abiertas = new Map([["emp-1", abiertaDe("fich-1", "emp-1", antes, 8, 37)]]);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_204", [{ fecha: d1, tokens: [E("08:00"), S("16:00")] }])],
+      abiertas
+    );
+    expect(r.cierres).toEqual([]);
+    expect(r.turnos.map((t) => t.fecha)).toEqual([d1]);
+    expect(r.avisos).toHaveLength(1);
+    expect(r.avisos[0]).toContain("Legajo PC_204, 2026-09-30: Turno sin marcación de salida");
+  });
+
+  it("la abierta de un empleado no se aplica a otro", () => {
+    const antes = dia(2026, 9, 30);
+    const d1 = dia(2026, 10, 1);
+    const abiertas = new Map([["emp-2", abiertaDe("fich-2", "emp-2", antes, 22, 0)]]);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_204", [{ fecha: d1, tokens: [S("04:00"), E("08:00"), S("16:00")] }])],
+      abiertas
+    );
+    expect(r.cierres).toEqual([]);
+  });
+
+  it("con dos empleados, cada cierre lleva su propia fichada", () => {
+    const antes = dia(2026, 9, 30);
+    const d1 = dia(2026, 10, 1);
+    const abiertas = new Map([
+      ["emp-1", abiertaDe("fich-1", "emp-1", antes, 22, 0)],
+      ["emp-2", abiertaDe("fich-2", "emp-2", antes, 21, 0)],
+    ]);
+    const r = armarTurnos(
+      [
+        emp("emp-1", "PC_204", [{ fecha: d1, tokens: [S("04:00")] }]),
+        emp("emp-2", "PC_122", [{ fecha: d1, tokens: [S("05:30")] }]),
+      ],
+      abiertas
+    );
+    expect(r.cierres.map((c) => [c.empleadoId, c.id, c.legajo])).toEqual([
+      ["emp-1", "fich-1", "PC_204"],
+      ["emp-2", "fich-2", "PC_122"],
+    ]);
+  });
+
+  it("el último turno del lote, sin salida, queda abierto con su aviso", () => {
+    const d1 = dia(2026, 10, 3);
+    const r = armarTurnos([emp("emp-1", "PC_204", [{ fecha: d1, tokens: [E("22:00")] }])], sinAbiertas);
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].horaSalida).toBeNull();
+    expect(r.imputados).toEqual([{ empleadoId: "emp-1", fecha: d1, fechaSalida: d1 }]);
+    expect(r.avisos[0]).toBe("Legajo PC_204, 2026-10-03: Turno sin marcación de salida (fin de los datos importados)");
+  });
+
+  it("un empleado sin días no genera nada, ni siquiera con una abierta pendiente", () => {
+    const abiertas = new Map([["emp-1", abiertaDe("fich-1", "emp-1", dia(2026, 9, 30), 22, 0)]]);
+    const r = armarTurnos([emp("emp-1", "PC_204", [])], abiertas);
+    expect(r).toEqual({ turnos: [], cierres: [], imputados: [], avisos: [] });
   });
 });

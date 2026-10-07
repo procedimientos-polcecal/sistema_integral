@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
 import { ajustarFichadasPorTurno, intervalsParaDia, type FichadaLike, type TurnoLike } from "./recalcular-puro";
-import { addUtcDays, dayOfWeekUtc, utcDateOnlyFrom } from "../dates";
+import { addUtcDays, dayOfWeekUtc, diaIso, utcDateOnlyFrom } from "../dates";
 import { SECTORES_LUNES_A_VIERNES } from "../constants";
 import { traerPaginado } from "../paginado";
 
@@ -26,10 +26,6 @@ function eachDay(from: Date, to: Date): Date[] {
     cur = addUtcDays(cur, 1);
   }
   return days;
-}
-
-function fechaStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }
 
 function agrupar<T>(items: T[], clave: (item: T) => string): Map<string, T[]> {
@@ -108,9 +104,9 @@ async function recalcularLote(
 
   // Las fichadas se leen desde un día antes: un turno que arrancó la noche
   // anterior aporta horas al primer día del rango.
-  const desdeStr = fechaStr(addUtcDays(startOfDay(desde), -1));
-  const hastaStr = fechaStr(startOfDay(hasta));
-  const desdeDia = fechaStr(startOfDay(desde));
+  const desdeStr = diaIso(addUtcDays(startOfDay(desde), -1));
+  const hastaStr = diaIso(startOfDay(hasta));
+  const desdeDia = diaIso(startOfDay(desde));
   const dias = eachDay(desde, hasta);
 
   const [config, { data: feriados }, { data: turnosActivos }] = await Promise.all([
@@ -266,11 +262,11 @@ async function recalcularLote(
           mismasHoras(Number(existente.horas_extra_50), calc.horasExtra50) &&
           mismasHoras(Number(existente.horas_extra_100), calc.horasExtra100);
 
-        if (calc.francoGenerado) francosAGenerar.push({ empleado_id: empleadoId, fecha: fechaStr(dia) });
+        if (calc.francoGenerado) francosAGenerar.push({ empleado_id: empleadoId, fecha: diaIso(dia) });
 
         rows.push({
           empleado_id: empleadoId,
-          fecha: fechaStr(dia),
+          fecha: diaIso(dia),
           tipo_dia: calc.tipoDia,
           horas_normales: calc.horasNormales,
           horas_extra_50: calc.horasExtra50,
@@ -311,7 +307,7 @@ async function recalcularLote(
           .order("id")
       );
       const yaTiene = new Set(
-        existentesFranco.map((f) => `${f.empleado_id}|${fechaStr(startOfDay(new Date(f.fecha_generado)))}`)
+        existentesFranco.map((f) => `${f.empleado_id}|${diaIso(startOfDay(new Date(f.fecha_generado)))}`)
       );
       const nuevos = francosAGenerar
         .filter((f) => !yaTiene.has(`${f.empleado_id}|${f.fecha}`))

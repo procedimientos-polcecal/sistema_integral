@@ -1,4 +1,5 @@
-import { addUtcDays, formatHHMM } from "../dates";
+import { addUtcDays, diaIso, formatHHMM } from "../dates";
+import { reconciliarTokens, horaStringToDate, type DiaMarcacionesTokens } from "../excelImport";
 
 export interface TurnoNuevo {
   empleadoId: string;
@@ -51,10 +52,6 @@ export function claveDia(empleadoId: string, fecha: string): string {
   return `${empleadoId}|${fecha}`;
 }
 
-function fechaStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * Un tramo de trabajo como lo lee una persona: "08:00–16:00".
  *
@@ -102,7 +99,7 @@ export interface FichadaAbierta {
 }
 
 function diaAnterior(fecha: string): string {
-  return fechaStr(addUtcDays(new Date(fecha), -1));
+  return diaIso(addUtcDays(new Date(fecha), -1));
 }
 
 /**
@@ -115,14 +112,14 @@ function diaAnterior(fecha: string): string {
  * no deja cerrar con estos datos una abierta más vieja: pasarla sólo produce un
  * aviso que no lleva a ninguna acción. Esas las resume `avisoDeAbiertasViejas`.
  *
- * Es lo que antes hacía una consulta por empleado (`order fecha desc limit 1`).
- * Se trae todo junto y se elige acá: las abiertas son pocas (54 al 07/10/2026,
- * todas errores de carga) y 68 viajes secuenciales a la base dentro de un
- * cron no tienen razón de ser.
+ * Se elige acá, sobre todas las abiertas traídas juntas, y no con una consulta
+ * por empleado: las abiertas son pocas (54 fichadas al 07/10/2026, todas
+ * errores de carga) y ~70 viajes secuenciales a la base dentro de un cron no
+ * tienen razón de ser.
  *
  * Con dos abiertas el mismo día gana la de entrada más tarde: es la última
  * marca sin pareja, que es lo que el emparejamiento por posición deja
- * pendiente. La consulta vieja no definía ese caso.
+ * pendiente.
  */
 export function elegirAbiertoPrevio(
   abiertas: FichadaAbierta[],
@@ -147,10 +144,12 @@ export function elegirAbiertoPrevio(
  *
  * Son un pendiente real —alguien las tiene que cerrar a mano—, pero no un
  * error de la corrida: por eso es un texto aparte y no un aviso por fichada.
- * Con 23 empleados en esa situación (07/10/2026), uno por fichada eran hasta
- * 23 líneas fijas en cada corrida diaria, todas iguales y ninguna diciendo qué
- * hacer; ese ruido tapa los avisos que sí importan. Una línea dice cuántas,
- * desde cuándo y qué hacer.
+ * Al 07/10/2026 había 54 fichadas abiertas repartidas en 23 empleados; como
+ * `reconciliarTokens` avisa una vez por cada abierta que se le encadena, y
+ * se encadenaba la más reciente de cada empleado, eran hasta 23 líneas fijas
+ * en cada corrida diaria, todas iguales y ninguna diciendo qué hacer. Ese ruido
+ * tapa los avisos que sí importan. Una línea dice cuántas, desde cuándo y qué
+ * hacer.
  *
  * Son las anteriores al día previo al primer día de su empleado: las que
  * `elegirAbiertoPrevio` descarta. Las de dentro del lote no cuentan, porque el
@@ -220,7 +219,7 @@ export function decidirQueAplicar(
   // filtrar el lote entero por cada día salteado lo volvía cuadrático.
   const turnosPorDia = new Map<string, TurnoNuevo[]>();
   for (const t of sinRepetir) {
-    const clave = claveDia(t.empleadoId, fechaStr(t.fecha));
+    const clave = claveDia(t.empleadoId, diaIso(t.fecha));
     const delDia = turnosPorDia.get(clave);
     if (delDia) delDia.push(t);
     else turnosPorDia.set(clave, [t]);
@@ -233,7 +232,7 @@ export function decidirQueAplicar(
   const diasYaSalteados = new Set<string>();
 
   for (const t of sinRepetir) {
-    const fecha = fechaStr(t.fecha);
+    const fecha = diaIso(t.fecha);
     const clave = claveDia(t.empleadoId, fecha);
 
     const motivo = motivoDeProteccion(clave, ctx, protegerCorregidos);
@@ -302,7 +301,8 @@ export interface TramoImputado {
  * turno que arranca el viernes de noche y termina el sábado le aporta horas al
  * sábado. Si el rango sólo mira la entrada y el sábado no tiene turnos propios,
  * nadie lo recalcula y `calculos_diarios` queda con el sábado sin esas horas.
- * Es el bug que tenía el plan original, y por eso está acá, con test.
+ * Por eso esta cuenta está acá y no suelta dentro de `aplicarDias`: es una
+ * regla fácil de romper sin que nada falle, y tiene que tener quién la defienda.
  */
 export function rangoDeRecalculo(tramos: TramoImputado[]): Map<string, { min: Date; max: Date }> {
   const rangos = new Map<string, { min: Date; max: Date }>();
@@ -346,4 +346,99 @@ export function diasLiquidadosDe(
     }
   }
   return diasLiquidados;
+}
+
+/** El motivo de un salteo, como lo lee quien mira el log. */
+export function textoDeMotivo(motivo: MotivoSalteo): string {
+  return motivo === "liquidado" ? "liquidación cerrada" : "corregido a mano";
+}
+
+/** Los días de un empleado, ya ordenados ascendente. */
+export interface DiasDeEmpleado {
+  empleadoId: string;
+  legajo: string;
+  dias: DiaMarcacionesTokens[];
+}
+
+/** Una fichada abierta de un lote anterior que este lote cierra con un `update`. */
+export interface Cierre {
+  id: string;
+  empleadoId: string;
+  legajo: string;
+  fecha: Date; // el día de la entrada: es al que se imputan las horas
+  fechaSalida: Date;
+  horaSalida: Date;
+}
+
+/**
+ * De los días con marcaciones a los turnos que se insertan y los cierres que
+ * se aplican a fichadas ya abiertas.
+ *
+ * La bifurcación es ésta: cuando `reconciliarTokens` devuelve el turno que
+ * corresponde a la fichada abierta de un lote anterior, ese turno NO se
+ * inserta —esa fila ya existe, y insertarla la duplicaría— sino que se
+ * convierte en un cierre (un `update` de su hora de salida). Todo lo demás es
+ * un turno nuevo. Confundir las dos cosas duplica horas o pierde una salida, y
+ * ninguna da un error.
+ *
+ * `imputados` dice qué días cubre cada turno nuevo, incluido el de salida si
+ * cruzó medianoche: `TurnoNuevo` no lleva la fecha de salida y el recálculo la
+ * necesita (ver `rangoDeRecalculo`).
+ *
+ * Una abierta cuyo cierre no es plausible vuelve de `reconciliarTokens` como un
+ * turno sin salida en su misma fecha, con su aviso: no genera cierre ni turno,
+ * porque la fila ya existe tal como está.
+ */
+export function armarTurnos(
+  empleados: DiasDeEmpleado[],
+  abiertas: Map<string, FichadaAbierta>
+): { turnos: TurnoNuevo[]; cierres: Cierre[]; imputados: TramoImputado[]; avisos: string[] } {
+  const turnos: TurnoNuevo[] = [];
+  const cierres: Cierre[] = [];
+  const imputados: TramoImputado[] = [];
+  const avisos: string[] = [];
+
+  for (const emp of empleados) {
+    if (emp.dias.length === 0) continue;
+
+    const abierto = abiertas.get(emp.empleadoId) ?? null;
+    const abiertoFecha = abierto ? new Date(abierto.fecha) : null;
+    const abiertoPrevio = abierto
+      ? { fecha: abiertoFecha!, entradaStr: formatHHMM(new Date(abierto.horaEntrada)) }
+      : null;
+
+    const { turnos: resueltos, avisos: avisosDelEmpleado } = reconciliarTokens(emp.dias, abiertoPrevio);
+
+    for (const t of resueltos) {
+      // Los días del lote son todos posteriores a la abierta, así que un turno
+      // con su misma fecha sólo puede ser ella.
+      if (abierto && abiertoFecha && t.fecha.getTime() === abiertoFecha.getTime()) {
+        if (t.salidaStr) {
+          cierres.push({
+            id: abierto.id,
+            empleadoId: emp.empleadoId,
+            legajo: emp.legajo,
+            fecha: t.fecha,
+            fechaSalida: t.fechaSalida,
+            horaSalida: horaStringToDate(t.fechaSalida, t.salidaStr),
+          });
+        }
+        continue;
+      }
+      turnos.push({
+        empleadoId: emp.empleadoId,
+        legajo: emp.legajo,
+        fecha: t.fecha,
+        horaEntrada: horaStringToDate(t.fecha, t.entradaStr),
+        horaSalida: t.salidaStr ? horaStringToDate(t.fechaSalida, t.salidaStr) : null,
+      });
+      imputados.push({ empleadoId: emp.empleadoId, fecha: t.fecha, fechaSalida: t.fechaSalida });
+    }
+
+    for (const a of avisosDelEmpleado) {
+      avisos.push(`Legajo ${emp.legajo}, ${diaIso(a.fecha)}: ${a.mensaje}`);
+    }
+  }
+
+  return { turnos, cierres, imputados, avisos };
 }

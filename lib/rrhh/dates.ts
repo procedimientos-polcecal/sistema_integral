@@ -66,3 +66,15 @@ export function minutosDelDiaArgentina(instante: Date): number {
 export function fechaArgentinaDe(instante: Date): Date {
   return utcDateOnlyFrom(new Date(instante.getTime() - OFFSET_ARGENTINA_HORAS * 3_600_000));
 }
+
+/**
+ * Un día calendario (medianoche UTC) como "YYYY-MM-DD", que es como lo guardan
+ * y lo comparan las columnas `date`.
+ *
+ * Sólo vale para días calendario. Un instante real (una hora de entrada o de
+ * salida) no se pasa por acá: cerca de la medianoche el día UTC no es el día de
+ * Argentina, y para eso está `fechaArgentinaDe`.
+ */
+export function diaIso(fecha: Date): string {
+  return fecha.toISOString().slice(0, 10);
+}
