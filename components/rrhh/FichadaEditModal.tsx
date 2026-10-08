@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 
 interface Fichada {
   id: string;
@@ -61,6 +62,10 @@ export default function FichadaEditModal({
   const [extra100Input, setExtra100Input] = useState(horasExtra100.toFixed(1));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // La corrección se guardó pero algún día no quedó marcado como corregido: la
+  // sincronización con Lenox lo va a pisar. El modal no se cierra solo, porque
+  // un aviso que desaparece junto con la ventana no lo lee nadie.
+  const [diaSinProteger, setDiaSinProteger] = useState(false);
 
   function actualizarFila(idx: number, cambios: Partial<FilaFichada>) {
     setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
@@ -79,10 +84,12 @@ export default function FichadaEditModal({
   async function guardar() {
     setGuardando(true);
     setError(null);
+    let sinProteger = false;
     try {
       for (const fila of filas) {
         if (fila.id && fila.eliminar) {
-          await fetch(`/api/rrhh/fichadas/${fila.id}`, { method: "DELETE" });
+          const resBorrado = await fetch(`/api/rrhh/fichadas/${fila.id}`, { method: "DELETE" });
+          if (await traeDiaSinProteger(resBorrado)) sinProteger = true;
           continue;
         }
         if (fila.eliminar || !fila.horaEntrada) continue;
@@ -101,6 +108,7 @@ export default function FichadaEditModal({
           const data = await res.json();
           throw new Error(data.error ?? "No se pudo guardar la fichada");
         }
+        if (await traeDiaSinProteger(res)) sinProteger = true;
       }
 
       const nuevoNormales = Number(normalesInput);
@@ -129,8 +137,15 @@ export default function FichadaEditModal({
       }
 
       onSaved();
+      if (sinProteger) {
+        setDiaSinProteger(true);
+        return;
+      }
       onClose();
     } catch (err) {
+      // Si alguna fila ya se había guardado antes del fallo, el aviso de
+      // protección también vale: se muestra junto al error.
+      if (sinProteger) setDiaSinProteger(true);
       setError(err instanceof Error ? err.message : "No se pudo guardar la corrección");
     } finally {
       setGuardando(false);
@@ -244,14 +259,27 @@ export default function FichadaEditModal({
         </div>
 
         {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+        {diaSinProteger && (
+          <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {AVISO_DIA_SIN_PROTEGER}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} type="button" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            Cancelar
-          </button>
-          <button onClick={guardar} disabled={guardando} type="button" className="btn-primary disabled:opacity-50">
-            {guardando ? "Guardando..." : "Guardar cambios"}
-          </button>
+          {diaSinProteger && !error ? (
+            <button onClick={onClose} type="button" className="btn-primary">
+              Entendido
+            </button>
+          ) : (
+            <>
+              <button onClick={onClose} type="button" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                {diaSinProteger ? "Cerrar" : "Cancelar"}
+              </button>
+              <button onClick={guardar} disabled={guardando} type="button" className="btn-primary disabled:opacity-50">
+                {guardando ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

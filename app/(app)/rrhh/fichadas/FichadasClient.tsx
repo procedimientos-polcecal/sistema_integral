@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import Select from "@/components/Select";
+import type { UltimaSync } from "@/lib/core/sincronizaciones";
+import { haceCuanto } from "@/lib/core/haceCuanto";
+import { fechaHora } from "@/lib/compras/constants";
+import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
+import { DIAS_MAX_RANGO } from "@/lib/rrhh/lenox/rango";
+import { bloqueoPorUltimaSync, rangoPorDefecto, segundosDeEspera, textoDeEspera } from "@/lib/rrhh/lenox/pantalla";
+import AvisosDeCarga from "./AvisosDeCarga";
 
 interface PreviewResult {
   token: string;
@@ -15,21 +22,118 @@ interface PreviewResult {
   totalRows: number;
 }
 
+/** Lo que contesta `POST /api/rrhh/fichadas/lenox/sincronizar` cuando sincronizó. */
+interface ResumenSync {
+  desde: string;
+  hasta: string;
+  marcacionesTraidas: number;
+  insertados: number;
+  reemplazados: number;
+  salteados: number;
+  /** Algo que no se cargó. */
+  avisos: string[];
+  /** Trabajo heredado a mano: no es un error de la corrida. */
+  pendientes: string[];
+}
+
 function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
 }
 
-export default function FichadasClient({ empleados, fichadasIniciales }: { empleados: any[]; fichadasIniciales: any[] }) {
+export default function FichadasClient({ empleados, fichadasIniciales, ultimaSync }: {
+  empleados: any[];
+  fichadasIniciales: any[];
+  ultimaSync: UltimaSync | null;
+}) {
   const router = useRouter();
   const confirmar = useConfirm();
   const [fichadas, setFichadas] = useState(fichadasIniciales);
+
+  // --- lenox ---
+  const [rango, setRango] = useState(() => rangoPorDefecto(new Date()));
+  const [sincronizando, setSincronizando] = useState(false);
+  // Un ref además del estado: entre el clic y el `setSincronizando` hay una
+  // confirmación de por medio, y cada llamada que se gasta de más es de un
+  // límite escaso.
+  const enCurso = useRef(false);
+  const [resumenSync, setResumenSync] = useState<ResumenSync | null>(null);
+  const [errorSync, setErrorSync] = useState("");
+  // Hasta cuándo no se puede volver a apretar, tras un 429. Arranca ya puesto si
+  // la última corrida anotada fue un 429 reciente: recargar la página no puede
+  // destrabar el botón, porque el bloqueo es de la cuenta de Lenox y no de la
+  // pestaña.
+  const [bloqueadoHasta, setBloqueadoHasta] = useState<number | null>(() => bloqueoPorUltimaSync(ultimaSync, Date.now()));
+  const [mensajeEspera, setMensajeEspera] = useState("");
+  const [ahora, setAhora] = useState(() => Date.now());
+  const esperando = bloqueadoHasta !== null && ahora < bloqueadoHasta;
+
+  useEffect(() => {
+    if (bloqueadoHasta === null) return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setAhora(t);
+      if (t >= bloqueadoHasta) setBloqueadoHasta(null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [bloqueadoHasta]);
+
+  async function sincronizarConLenox() {
+    if (enCurso.current || esperando) return;
+    enCurso.current = true;
+    try {
+      const ok = await confirmar({
+        title: "Traer de Lenox",
+        message: `Se van a traer las marcaciones del ${rango.desde} al ${rango.hasta}. Los días corregidos a mano y los de una liquidación cerrada no se tocan. ¿Confirmás?`,
+        confirmText: "Traer",
+      });
+      if (!ok) return;
+
+      setSincronizando(true);
+      setErrorSync("");
+      setMensajeEspera("");
+      setResumenSync(null);
+      try {
+        const res = await fetch("/api/rrhh/fichadas/lenox/sincronizar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(rango),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 429) {
+          // No es un error y no se arregla reintentando: se arregla esperando.
+          // Cada intento prolonga el bloqueo, así que el botón queda trabado.
+          const t = Date.now();
+          setAhora(t);
+          setBloqueadoHasta(t + segundosDeEspera(res.headers.get("Retry-After")) * 1000);
+          setMensajeEspera(data.error ?? "Lenox pidió esperar antes de volver a consultar.");
+          return;
+        }
+        if (!res.ok) {
+          // Lo que dijo la ruta, sin traducir: es la diferencia entre un
+          // diagnóstico y un cartel genérico.
+          setErrorSync(data.error ?? `No se pudo sincronizar (HTTP ${res.status})`);
+          return;
+        }
+        setResumenSync({ ...data, avisos: data.avisos ?? [], pendientes: data.pendientes ?? [] });
+        router.refresh();
+        fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
+      } catch {
+        setErrorSync("No se pudo comunicar con el servidor. Mirá el cartel de última sincronización antes de volver a intentar: puede que la corrida haya llegado a empezar.");
+      } finally {
+        setSincronizando(false);
+      }
+    } finally {
+      enCurso.current = false;
+    }
+  }
 
   // --- import ---
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [mapping, setMapping] = useState({
     legajo: "", fecha: "", modo: "separado" as "separado" | "combinado", horaEntrada: "", horaSalida: "", marcaciones: "",
   });
-  const [importResult, setImportResult] = useState<{ insertados: number; reemplazados: number; errores: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ insertados: number; reemplazados: number; errores: string[]; pendientes: string[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
 
@@ -89,7 +193,7 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
     const data = await res.json();
     setImporting(false);
     if (!res.ok) { setImportError(data.error ?? "No se pudo importar el archivo"); return; }
-    setImportResult(data);
+    setImportResult({ ...data, errores: data.errores ?? [], pendientes: data.pendientes ?? [] });
     setPreview(null);
     router.refresh();
     fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
@@ -98,10 +202,14 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
   // --- manual ---
   const [form, setForm] = useState({ employeeId: "", fecha: "", horaEntrada: "", horaSalida: "" });
   const [guardandoManual, setGuardandoManual] = useState(false);
+  const [errorManual, setErrorManual] = useState("");
+  const [diaSinProteger, setDiaSinProteger] = useState(false);
   async function crearManual(e: React.FormEvent) {
     e.preventDefault();
     setGuardandoManual(true);
-    await fetch("/api/rrhh/fichadas", {
+    setErrorManual("");
+    setDiaSinProteger(false);
+    const res = await fetch("/api/rrhh/fichadas", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         employeeId: form.employeeId,
@@ -111,6 +219,15 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
       }),
     });
     setGuardandoManual(false);
+    if (!res.ok) {
+      // El formulario queda como estaba: no se pierde lo que se tipeó.
+      const data = await res.json().catch(() => ({}));
+      setErrorManual(data.error ?? "No se pudo guardar la fichada");
+      return;
+    }
+    // La fichada se guardó, pero si el día no quedó marcado la próxima
+    // sincronización con Lenox lo pisa.
+    setDiaSinProteger(await traeDiaSinProteger(res));
     setForm({ employeeId: "", fecha: "", horaEntrada: "", horaSalida: "" });
     router.refresh();
     fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
@@ -120,15 +237,92 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
     <div>
       <h1 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
         Marcaciones
-        <InfoTip text="Las entradas y salidas de cada empleado. Podés importarlas desde el archivo del reloj biométrico o cargarlas a mano. Con estas marcaciones el sistema calcula las horas trabajadas, extras y ausencias." />
+        <InfoTip text="Las entradas y salidas de cada empleado. Se traen del reloj a través de Lenox; si eso no alcanza, podés importar el archivo del reloj o cargarlas a mano. Con estas marcaciones el sistema calcula las horas trabajadas, extras y ausencias." />
       </h1>
 
-      <div className="grid grid-cols-2 gap-6 mb-6">
-        <div className="card p-5">
-          <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
-            Importar archivo del reloj
-            <InfoTip text="Subí el Excel/CSV que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
+      <div className="card p-5 mb-6">
+        <div className="mb-3">
+          <h2 className="font-medium text-slate-700 flex items-center gap-1.5">
+            Traer de Lenox
+            <InfoTip text="Trae las marcaciones del reloj directamente de Lenox para el rango que elijas. Los días que corregiste a mano y los de una liquidación cerrada no se tocan. Además, el sistema trae los últimos 7 días solo, una vez por día." />
           </h2>
+          {/* Cuándo fue, y si falló, por qué: una fecha vieja sin explicación es
+              lo que hace que nadie sepa si está mirando datos al día. */}
+          {ultimaSync ? (
+            ultimaSync.ok ? (
+              <p className="text-xs text-slate-400 mt-1" title={fechaHora(ultimaSync.created_at)}>
+                Última sincronización: {haceCuanto(ultimaSync.created_at)}
+              </p>
+            ) : (
+              <p className="text-sm text-red-600 mt-1">
+                La última sincronización falló ({haceCuanto(ultimaSync.created_at)}): {ultimaSync.error}
+              </p>
+            )
+          ) : (
+            <p className="text-xs text-slate-400 mt-1">Sin sincronizar todavía</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Desde</label>
+            <input type="date" value={rango.desde} max={rango.hasta}
+              onChange={(e) => setRango((r) => ({ ...r, desde: e.target.value }))} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+            <input type="date" value={rango.hasta} min={rango.desde}
+              onChange={(e) => setRango((r) => ({ ...r, hasta: e.target.value }))} className="input" />
+          </div>
+          <button type="button" onClick={sincronizarConLenox}
+            disabled={sincronizando || esperando || !rango.desde || !rango.hasta}
+            className="btn-primary disabled:opacity-50">
+            {sincronizando
+              ? "Trayendo..."
+              : esperando && bloqueadoHasta !== null
+                ? <>Disponible en <span suppressHydrationWarning>{textoDeEspera(bloqueadoHasta - ahora)}</span></>
+                : "Traer de Lenox"}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mt-2">Hasta {DIAS_MAX_RANGO} días por vez.</p>
+
+        {/* El 429 no es un error y no es un pendiente: es "esperá". Va aparte, en
+            azul, y el botón no se destraba solo hasta que pasa la espera. */}
+        {esperando && bloqueadoHasta !== null && (
+          <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            <p className="font-medium">Lenox pidió esperar antes de volver a consultar</p>
+            {mensajeEspera && <p className="mt-1">{mensajeEspera}</p>}
+            <p className="mt-1 text-xs">
+              No se arregla reintentando: cada intento alarga la espera. El botón se habilita solo en{" "}
+              <span suppressHydrationWarning>{textoDeEspera(bloqueadoHasta - ahora)}</span>.
+            </p>
+          </div>
+        )}
+
+        {errorSync && (
+          <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorSync}</p>
+        )}
+
+        {resumenSync && (
+          <div className="mt-3 text-sm">
+            <p className="text-slate-700">
+              {resumenSync.marcacionesTraidas} marcaciones del {resumenSync.desde} al {resumenSync.hasta}:{" "}
+              <strong>{resumenSync.insertados}</strong> cargadas
+              {resumenSync.reemplazados > 0 && <>, {resumenSync.reemplazados} reemplazadas</>}
+              {resumenSync.salteados > 0 && <>, {resumenSync.salteados} {resumenSync.salteados === 1 ? "día sin tocar" : "días sin tocar"}</>}.
+            </p>
+            <AvisosDeCarga errores={resumenSync.avisos} pendientes={resumenSync.pendientes} />
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-6 mb-6 items-start">
+        <details className="card p-5">
+          <summary className="font-medium text-slate-700 cursor-pointer flex items-center gap-1.5">
+            Importar archivo del reloj (respaldo)
+            <InfoTip text="Respaldo para cuando Lenox no está disponible. Subí el Excel/CSV que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
+          </summary>
+          <div className="mt-3">
           <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="text-sm mb-3" />
           {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
@@ -226,17 +420,11 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
               {importResult.reemplazados > 0 && (
                 <p className="text-slate-500">{importResult.reemplazados} fichadas de días ya cargados se actualizaron con los datos nuevos del archivo.</p>
               )}
-              {importResult.errores.length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-red-600 cursor-pointer">{importResult.errores.length} filas con error</summary>
-                  <ul className="mt-1 text-slate-500 max-h-40 overflow-auto">
-                    {importResult.errores.map((e, i) => <li key={i}>{e}</li>)}
-                  </ul>
-                </details>
-              )}
+              <AvisosDeCarga errores={importResult.errores} pendientes={importResult.pendientes} />
             </div>
           )}
-        </div>
+          </div>
+        </details>
 
         <div className="card p-5">
           <h2 className="font-medium text-slate-700 mb-3">Carga manual</h2>
@@ -266,6 +454,12 @@ export default function FichadasClient({ empleados, fichadasIniciales }: { emple
               {guardandoManual ? "Guardando..." : "Guardar fichada"}
             </button>
           </form>
+          {errorManual && <p className="mt-3 text-sm text-red-600">{errorManual}</p>}
+          {diaSinProteger && (
+            <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {AVISO_DIA_SIN_PROTEGER}
+            </p>
+          )}
         </div>
       </div>
 
