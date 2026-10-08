@@ -636,3 +636,80 @@ motor con tests por uno sin tests, para resolver algo ya resuelto), `precioHora`
 no se revisa acá), y `GetLicencias`, `GetVacaciones` y `GetFeriados` (el SdG ya
 tiene `/rrhh/ausencias`, `/rrhh/vacaciones` y `/rrhh/feriados` con datos propios,
 y traerlos abre la pregunta de cuál de los dos manda).
+
+---
+
+## El margen de tolerancia pasó de 20 a 30 minutos (08/10/2026)
+
+Las seis jornadas del catálogo (`jornadas`) tenían `tolerancia_minutos = 20` y
+ahora tienen 30. Es un cambio de **configuración**, no de código: se hace desde
+`/rrhh/turnos` y se deshace igual.
+
+### Qué hace ese número, que no es obvio
+
+El margen no es sólo para marcar tardanza. `ajustarFichadasPorTurno`
+(`lib/rrhh/engine/recalcular-puro.ts`) **acredita desde el horario pactado
+cuando la marca cae dentro del margen**: una entrada a las 19:46 en el turno
+20–04 se acredita 20:00, y una salida a las 03:42 se acredita 04:00. La
+marcación real **no se toca** — lo que cambia es lo que se liquida.
+
+Pasado el margen, se cuenta el horario real y se marca tardanza o retiro
+anticipado. Y para el lado del empleado hay un umbral aparte y fijo,
+`UMBRAL_EXTRA_MINUTOS = 30`: quedarse menos de media hora de más no acredita
+hora extra, porque puede ser imprecisión del reloj.
+
+Con el margen en 30, el comportamiento es exactamente éste:
+
+| Turno de 8 horas, real | Se liquida | Señal |
+|---|---|---|
+| 7h31 (salió 29' antes) | **8h** | — |
+| 8h29 (salió 29' después) | **8h** | — |
+| 7h25 (salió 35' antes) | 7h25 | retiro anticipado |
+| 8h35 (salió 35' después) | 8h35 | hora extra |
+
+### Por qué se subió
+
+RRHH venía **editando a mano** las salidas de los turnos nocturnos para que
+cerraran en 04:00, convencida de que si no lo hacía se pagaban 7h53. **No era
+cierto**: se midió el 08/10/2026 contra el 29/09 y de los cuatro turnos
+nocturnos de ese día, tres estaban editados a mano y uno no — y los cuatro
+liquidaban 8 horas iguales. El trabajo manual no cambiaba nada, salvo
+falsificar la marcación real del reloj.
+
+Lo que faltaba de verdad era que **la pantalla mostrara lo acreditado**, porque
+sin eso nadie podía saber que el día ya cerraba solo. Eso se agregó en la misma
+fecha: la lista de fichadas y el modal de edición muestran, al lado de la marca
+real, lo que se acredita y el total.
+
+### Lo que costó, medido antes de aplicarlo
+
+Simulado sobre las 4.637 fichadas cerradas que había:
+
+| | |
+|---|---|
+| Tramos que cambian | **690 de 4.637** (15%) |
+| Horas acreditadas de más | **+283,5 horas** |
+| Horas acreditadas de menos | **0** — todo a favor del empleado |
+| Días con tardanza | 311 → 225 |
+| Días con retiro anticipado | **826 → 218** |
+
+El salto de los retiros anticipados es el que explica casi todo: había 826 días
+marcados por gente que se iba entre 20 y 30 minutos antes.
+
+### El riesgo asumido, y lo que NO se hizo
+
+**No se recalculó nada de lo viejo**, a pedido. El criterio nuevo rige para lo
+que se calcule de acá en adelante; ninguna liquidación cerrada se movió.
+
+La consecuencia hay que tenerla presente: **un día calculado antes del
+08/10/2026 tiene sus horas computadas con el margen de 20**, y si alguien
+recalcula ese período ahora, el número va a cambiar. No es un error del
+sistema: es el cambio de criterio llegando a un día viejo. Si eso aparece en
+una liquidación cerrada, lo que vale es lo que se pagó.
+
+Y la otra, que es del diseño y no de este cambio: **el margen se aplica a cada
+punta por separado**, no al total. Alguien que entra 29 minutos tarde y se va
+29 minutos antes trabaja 7h02 y se le acreditan 8h, sin ninguna señal. Con el
+margen en 20 el regalo máximo era de 40 minutos; con 30 es de una hora. Si eso
+molesta, lo que hay que cambiar es la regla —pasar el margen al total— y no el
+número.
