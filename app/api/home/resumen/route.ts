@@ -5,7 +5,8 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { traerTodo } from "@/lib/core/paginado";
 import { comoSeLee, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import { ritmoPorModulo } from "@/lib/home/ritmo";
-import { traerRitmo, diaDeReferenciaRrhh, equiposTallerVialSinService } from "@/lib/home/consultas";
+import { traerRitmo, diaDeReferenciaRrhh, equiposTallerVialSinService, traerPresentesDeHoy } from "@/lib/home/consultas";
+import type { ResumenRrhh } from "@/lib/home/tarjetaRrhh";
 import {
   traerBochones, traerConsumosDe, traerVoladuras, traerYacimientos,
 } from "@/lib/cantera/consultas";
@@ -59,7 +60,8 @@ export async function GET() {
 }
 
 /**
- * Los ausentes del último día hábil con fichadas, no los de hoy.
+ * Los ausentes del último día hábil con fichadas, no los de hoy. Y, aparte, los
+ * presentes de hoy.
  *
  * El titular era "Ausentes hoy" y el 06/10 decía **1**: a media mañana
  * `calculos_diarios` tenía 2 filas de 68 porque el día no está cerrado. El día
@@ -70,18 +72,39 @@ export async function GET() {
  * 36 que ya pasaron en 2026 tienen 0 ausentes) y los días sin fichadas importadas
  * (la importación anda a ráfagas). El rótulo nombra el día que
  * terminó eligiendo, así que mostrar uno viejo no engaña a nadie.
+ *
+ * "PRESENTES HOY" ES EL CASO OPUESTO, Y POR ESO SÍ SE PUEDE DE MAÑANA
+ *
+ * "Ausente" es una conclusión: sólo existe cuando el día cerró, porque hasta
+ * entonces nadie sabe si el que no marcó todavía va a llegar. "Presente" es un
+ * hecho que se **suma**: alguien marcó o no marcó, y cada marca lo hace crecer.
+ * A las 7 dice 12 y a las 9 dice 55, y ninguno de los dos es falso: es cuánta
+ * gente marcó hasta ese momento. Por eso sale de `fichadas` —que tiene filas
+ * desde la primera marca— y no de `calculos_diarios`, que es justo lo que no
+ * está listo. Si alguien ve "hoy" en esta tarjeta y desconfía, con razón: la
+ * diferencia es ésa.
+ *
+ * Lo que sí hay que cuidar es el cero. Sin marcaciones de hoy —antes de que
+ * llegue la primera, o mientras la integración con Lenox no esté activada—
+ * "0 presentes" se leería como "no vino nadie", y no se sabe eso. Ahí
+ * `presentesHoy` es 0 y la pantalla no lo muestra como titular
+ * (`armarTarjetaRrhh`, en `lib/home/tarjetaRrhh.ts`); y si ni siquiera se pudo
+ * leer `fichadas`, es `null`.
  */
 async function resumenRrhh(
   supabase: Awaited<ReturnType<typeof createClient>>,
   hoyStr: string
-) {
-  const dia = await diaDeReferenciaRrhh(supabase, hoyStr);
-  const { data: empleados } = await supabase.from("empleados").select("id").eq("activo", true);
-  const ids = (empleados ?? []).map((e) => e.id);
+): Promise<ResumenRrhh> {
+  const [dia, { data: empleados }] = await Promise.all([
+    diaDeReferenciaRrhh(supabase, hoyStr),
+    supabase.from("empleados").select("id").eq("activo", true),
+  ]);
+  const ids = (empleados ?? []).map((e) => e.id as string);
   const empleadosActivos = ids.length;
+  const presentesHoy = empleadosActivos === 0 ? 0 : await traerPresentesDeHoy(supabase, hoyStr, ids);
 
   if (!dia || empleadosActivos === 0) {
-    return { empleadosActivos, dia: null, diaLegible: null, ausentes: 0, sinClasificar: 0 };
+    return { empleadosActivos, dia: null, diaLegible: null, ausentes: 0, sinClasificar: 0, presentesHoy };
   }
 
   const { data: calculos } = await supabase
@@ -96,6 +119,7 @@ async function resumenRrhh(
     diaLegible: comoSeLee(dia),
     ausentes: (calculos ?? []).filter((c) => c.ausente).length,
     sinClasificar: (calculos ?? []).filter((c) => c.ausente && c.justificada === null).length,
+    presentesHoy,
   };
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Modulo } from "@/lib/core/types";
 import type { Ritmo } from "@/lib/home/ritmo";
+import { armarTarjetaRrhh, type ResumenRrhh } from "@/lib/home/tarjetaRrhh";
 
 /**
  * La forma exacta de `/api/home/resumen`. Se escribe a mano y **el compilador no
@@ -11,11 +12,11 @@ import type { Ritmo } from "@/lib/home/ritmo";
  * que nada falle —pasó con `presentesHoy`, `ordenesDeHoy` y cuatro campos más—.
  * Tocar la ruta obliga a volver acá.
  *
- * `Ritmo` sí viene importado de `lib/home/ritmo`, que es de donde sale: ese
- * pedazo del contrato lo revisa el compilador.
+ * `Ritmo` y `ResumenRrhh` sí vienen importados de `lib/home`, que es de donde
+ * salen: esos pedazos del contrato los revisa el compilador.
  */
 interface Resumen {
-  rrhh: { empleadosActivos: number; dia: string | null; diaLegible: string | null; ausentes: number; sinClasificar: number } | null;
+  rrhh: ResumenRrhh | null;
   remises: { vehiculosActivos: number } | null;
   mantenimiento: { atrasadas: number; otPendientes: number; avisosSinOrden: number } | null;
   compras: { enCurso: number; esperandoAprobacion: number; paraComprar: number } | null;
@@ -85,27 +86,15 @@ export default function InicioClient({
             color="#1E7D34"
             icon={<IconUsers />}
             ritmo={resumen?.ritmo.rrhh}
-            // El rótulo nombra el día, porque no siempre es ayer: se retrocede
-            // hasta el último día hábil con fichadas. Sin eso, el 06/10 la
-            // tarjeta mostraba 1 mientras el día anterior había 66 de 68.
-            hero={
-              resumen?.rrhh
-                ? {
-                    label: resumen.rrhh.diaLegible
-                      ? `Ausentes el ${resumen.rrhh.diaLegible}`
-                      : "Sin fichadas importadas",
-                    valor: resumen.rrhh.diaLegible ? resumen.rrhh.ausentes : "—",
-                  }
-                : null
-            }
-            secundarias={
-              resumen?.rrhh
-                ? [
-                    { label: "Empleados activos", valor: resumen.rrhh.empleadosActivos },
-                    { label: "Sin clasificar", valor: resumen.rrhh.sinClasificar },
-                  ]
-                : null
-            }
+            // El titular es adaptativo: con marcaciones de hoy son los presentes
+            // ("42 de 68", un conteo que crece desde la primera marca); sin
+            // ninguna, vuelve a ser "Ausentes el <día>", que mira un día ya
+            // cerrado. El rótulo nombra el día, porque no siempre es ayer: se
+            // retrocede hasta el último día hábil con fichadas. Sin eso, el 06/10
+            // la tarjeta mostraba 1 mientras el día anterior había 66 de 68. Por
+            // qué cada uno: `armarTarjetaRrhh` y `resumenRrhh`.
+            hero={resumen?.rrhh ? armarTarjetaRrhh(resumen.rrhh).hero : null}
+            secundarias={resumen?.rrhh ? armarTarjetaRrhh(resumen.rrhh).secundarias : null}
           />
         )}
 

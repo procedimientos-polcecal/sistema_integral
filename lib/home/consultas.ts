@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sumarDias } from "@/lib/core/fechas";
 import { traerTodo } from "@/lib/core/paginado";
 import { ultimoDiaHabilConFichadas } from "@/lib/rrhh/diaHabil";
+import { contarPresentes } from "./tarjetaRrhh";
 import type { FilaRitmo } from "./ritmo";
 
 /**
@@ -58,6 +59,43 @@ export async function diaDeReferenciaRrhh(
     (feriados ?? []).map((f) => f.fecha as string),
     hoy
   );
+}
+
+/**
+ * Cuántos empleados activos tienen al menos una fichada de **hoy**, o `null` si
+ * no se pudo leer.
+ *
+ * Sale de `fichadas` y no de `calculos_diarios`: el cálculo del día se llena
+ * recién cuando el día cierra, y las fichadas existen desde la primera marca.
+ * Por qué acá "hoy" sí sirve —y para "ausentes" no— está en `resumenRrhh`.
+ *
+ * Un día son del orden de 120 filas, pero se pagina igual: PostgREST corta en
+ * 1000 sin avisar y la tabla no tiene por qué seguir siendo chica. Y con
+ * `.range()` el `order` no es cosmético: sin un orden determinístico, las
+ * páginas pueden repetir o saltear filas. `id` es único, así que alcanza.
+ *
+ * Un error devuelve `null` y no tira: esta función corre dentro del `Promise.all`
+ * del Inicio, y un rechazo apagaría todas las tarjetas, no sólo ésta.
+ */
+export async function traerPresentesDeHoy(
+  supabase: SupabaseClient,
+  hoy: string,
+  idsActivos: readonly string[]
+): Promise<number | null> {
+  try {
+    const filas = await traerTodo<{ empleado_id: string }>((desde, hasta) =>
+      supabase
+        .from("fichadas")
+        .select("empleado_id")
+        .eq("fecha", hoy)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    );
+    return contarPresentes(filas.map((f) => f.empleado_id), idsActivos);
+  } catch (e) {
+    console.error("inicio: no se pudieron leer las fichadas de hoy:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 /**
