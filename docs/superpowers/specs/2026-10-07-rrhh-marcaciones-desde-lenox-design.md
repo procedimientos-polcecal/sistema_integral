@@ -388,12 +388,54 @@ reloj asociado (`reloj` es `"porteria"` o `null`).
 cotejo del padrón va a tener algo que decir desde el primer día, que es
 exactamente para lo que está.
 
-### Lo que falta probar, y no se puede todavía
+## El cotejo contra el Excel, y lo que encontró (08/10/2026)
 
-Un día de datos reales comparado contra el Excel del mismo día, **fichada por
-fichada**. Es la prueba que cierra esto —es lo que se hizo el 27/08/2026 con el
-desfasaje de 3 horas y lo que lo dejó resuelto de verdad— y necesita el cliente
-escrito, que es la tarea siguiente.
+Se hizo la prueba que cierra el diseño: traer de la API los siete días que
+terminan el 30/09, reconciliarlos con el mismo motor que usa la carga, y
+comparar las fichadas resultantes del **29/09** contra las que el Excel cargó
+ese día. Sin escribir nada.
+
+**54 de 57 legajos dan idéntico**, al segundo. El motor reproduce el Excel.
+
+**Los 3 que difieren son todos turnos nocturnos, y el patrón no es aleatorio:**
+
+| Legajo | Entrada (coincide) | Salida en la base | Única marca de Lenox |
+|---|---|---|---|
+| PC_125 | 19:50 | **04:00** | 03:43 |
+| PC_147 | 19:36 | **03:59** | 03:42 |
+| PS_012 | 19:53 | **04:00** | 03:42 |
+
+Las entradas coinciden al segundo. Las salidas difieren unos 17 minutos, y
+**siempre en la misma dirección**: lo guardado cae en el horario de fin del
+turno noche (las 4) y lo que Lenox devuelve hoy es una marca anterior. Se
+verificó que esas tres fichadas son `IMPORTADO`, del mismo lote, **sin edición
+manual** y sin día corregido, así que la diferencia está en los datos y no en
+algo que hicimos.
+
+**Lo que descarta la explicación fácil:** ese día hubo **cuatro** turnos
+nocturnos, y el cuarto (PC_052, salida 03:42) **coincide exactamente**. O sea
+que no hay un redondeo general al fin del turno: pasa en algunos y en otros no.
+
+### Lo que esto significa, y por qué no se resuelve adivinando
+
+Hay dos explicaciones posibles y **llevan a decisiones opuestas**:
+
+1. **El reporte de Excel muestra algo distinto de `GetMarcaciones`** —la
+   "jornada" de Lenox, con su propio ajuste— mientras la API devuelve la marca
+   cruda. Si es así, **pasar al cron cambia las horas pagadas** de algunos
+   turnos nocturnos, unos 17 minutos menos cada vez.
+2. **El dato cambió en Lenox** entre el 30/09, cuando se exportó el Excel, y
+   hoy. Si es así, la API trae lo más actual y el cambio es una mejora.
+
+**No se decide desde acá**: es una pregunta sobre el producto de Lenox, no
+sobre este código. Lo que hay que hacer es abrir uno de esos tres legajos en la
+plataforma de Lenox, mirar qué muestra para la madrugada del 30/09, y
+comparar con las dos columnas de la tabla de arriba.
+
+**Hasta que eso se responda, el cron no debería quedar activo en producción**:
+17 minutos por turno nocturno, acumulados, son horas que se pagan o no se
+pagan. El botón sí se puede usar, porque lo dispara una persona que mira el
+resultado.
 
 ## Riesgos asumidos
 
