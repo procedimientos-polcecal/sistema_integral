@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
   rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, armarLote, legajoPorEmpleadoDe, textoDeMotivo,
+  avisosDeSalteados,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta, type DiasDeEmpleado,
 } from "./decidir";
 import { toUtcDateOnly, localDateTime } from "../dates";
@@ -817,5 +818,48 @@ describe("legajoPorEmpleadoDe", () => {
 
     const deTurnos = legajoPorEmpleadoDe({ tipo: "turnos", turnos: [turno("emp-3", f, [8, 0], [16, 0])] });
     expect([...deTurnos]).toEqual([["emp-3", "PC_204"]]);
+  });
+});
+
+describe("avisosDeSalteados", () => {
+  const salteado = (legajo: string, fecha: string, divergencia: string | null) => ({
+    empleadoId: `emp-${legajo}`,
+    legajo,
+    fecha,
+    motivo: "corregido" as const,
+    divergencia,
+  });
+
+  // La regla: un día corregido a mano se saltea en CADA corrida, para siempre.
+  // Si avisara igual cuando no cambió nada, serían N renglones por día que
+  // nunca dejan de salir y tapan a los que sí importan.
+  it("un día salteado que coincide con lo guardado NO genera aviso", () => {
+    expect(avisosDeSalteados([salteado("PC_204", "2026-10-02", null)])).toEqual([]);
+  });
+
+  it("un día salteado que difiere SÍ genera aviso, con el motivo y la diferencia", () => {
+    const avisos = avisosDeSalteados([
+      salteado("PC_204", "2026-10-02", "guardado 07:58–16:03, Lenox trae 08:12–16:03"),
+    ]);
+    expect(avisos).toEqual([
+      "Legajo PC_204, 2026-10-02: no se tocó (corregido a mano) — guardado 07:58–16:03, Lenox trae 08:12–16:03",
+    ]);
+  });
+
+  it("de una tanda mezclada sólo salen los que difieren", () => {
+    const avisos = avisosDeSalteados([
+      salteado("PC_001", "2026-10-01", null),
+      salteado("PC_002", "2026-10-02", "guardado 08:00–16:00, Lenox trae 09:00–17:00"),
+      salteado("PC_003", "2026-10-03", null),
+    ]);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toContain("PC_002");
+  });
+
+  it("el motivo liquidado se nombra como liquidación cerrada", () => {
+    const avisos = avisosDeSalteados([
+      { ...salteado("PC_009", "2026-09-30", "guardado sin fichadas, Lenox trae 08:00–16:00"), motivo: "liquidado" },
+    ]);
+    expect(avisos[0]).toContain("liquidación cerrada");
   });
 });

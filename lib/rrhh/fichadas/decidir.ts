@@ -356,6 +356,31 @@ export function textoDeMotivo(motivo: MotivoSalteo): string {
   return motivo === "liquidado" ? "liquidación cerrada" : "corregido a mano";
 }
 
+/**
+ * Los avisos de los días que no se tocaron — **sólo los que difieren** de lo
+ * guardado.
+ *
+ * Si el día se salteó y lo que trae el reloj coincide con lo que hay, la
+ * protección hizo su trabajo y no hay nada que decidir. Avisar igual sería
+ * ruido, y del peor tipo: un día corregido a mano se saltea en CADA corrida,
+ * para siempre, así que serían N renglones por día que nunca dejan de salir y
+ * que nadie puede hacer desaparecer. En una semana tapan a los que sí
+ * importan.
+ *
+ * Los días salteados se siguen contando aparte —la pantalla muestra "N días
+ * sin tocar"—, así que el número no se pierde: lo que no sale es el renglón
+ * que no lleva a ninguna acción.
+ *
+ * Está acá, y no dentro del armado de avisos de `aplicar.ts`, porque es una
+ * regla y no una línea de formato: ya se perdió cuatro veces en este módulo
+ * por vivir suelta en un lugar sin tests.
+ */
+export function avisosDeSalteados(salteados: DiaSalteado[]): string[] {
+  return salteados
+    .filter((s) => s.divergencia)
+    .map((s) => `Legajo ${s.legajo}, ${s.fecha}: no se tocó (${textoDeMotivo(s.motivo)}) — ${s.divergencia}`);
+}
+
 /** Los días de un empleado, ya ordenados ascendente. */
 export interface DiasDeEmpleado {
   empleadoId: string;

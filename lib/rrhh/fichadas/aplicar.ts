@@ -4,7 +4,7 @@ import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
 import { diaIso, fechaArgentinaDe } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
-  rangoDeRecalculo, diasLiquidadosDe, armarLote, legajoPorEmpleadoDe, textoDeMotivo,
+  rangoDeRecalculo, diasLiquidadosDe, armarLote, legajoPorEmpleadoDe, textoDeMotivo, avisosDeSalteados,
   type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
   type DiasDeEmpleado, type LoteAAplicar, type TurnoNuevo,
 } from "./decidir";
@@ -277,12 +277,9 @@ export async function aplicarDias(
     );
   }
 
-  for (const s of decision.salteados) {
-    avisos.push(
-      `Legajo ${s.legajo}, ${s.fecha}: no se tocó (${textoDeMotivo(s.motivo)})` +
-        (s.divergencia ? ` — ${s.divergencia}` : "")
-    );
-  }
+  // Sólo los días salteados que DIFIEREN de lo guardado. El porqué está en
+  // `avisosDeSalteados`, que es donde vive la regla y donde la cubren tests.
+  avisos.push(...avisosDeSalteados(decision.salteados));
   for (const s of cierresOmitidos) {
     avisos.push(
       `Legajo ${s.legajo}, ${s.fecha}: no se cerró el turno que había quedado sin salida (${textoDeMotivo(s.motivo)})`
