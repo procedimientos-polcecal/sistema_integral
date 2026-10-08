@@ -124,6 +124,42 @@ se veía**, aunque el contador de "fuera de límite" sí lo contara. Los límite
 se evalúan malla por malla (`evaluarMuestra`), así que ahora cada columna marca
 su propio rojo.
 
+## El reporte del día: una tabla por juego de tamices (08/10/2026)
+
+`/calidad/ensayos/reporte` arma la planilla que calidad reparte —encabezados
+verdes, una columna por muestra, los acumulados resaltados— y la baja en PDF.
+
+**Una columna por muestra y no un promedio.** Los únicos que legítimamente
+tienen dos muestras en un día son los despachos: puede entrar un camión al
+mediodía y otro a la tarde. Promediar 0,5% con 3% da 1,75% y esconde que una se
+fue — la dispersión es el dato. Las dos se distinguen por la observación de cada
+muestra (*despacho mañana*, *despacho tarde*), que es donde eso ya se escribe.
+
+**Y una tabla por juego de tamices.** Un Calcio tamiza desde #6 y un Filler
+desde #50: meterlos en la misma tabla obliga a elegir entre perder las mallas de
+uno o llenar de guiones las del otro. La primera tabla es la del formato de
+siempre —sus cuatro mallas fijas— y después va una por cada juego distinto, con
+sus propias filas. Medido contra el 07/10/2026: Filler 1, Filler 2 y Cal en la
+primera, y el Calcio 0-2 en la suya con sus ocho mallas.
+
+Dos detalles que no se deducen del código:
+
+- **El corte lo decide lo que la muestra midió, no lo que el producto declara**,
+  y es la diferencia con `acumuladosDelListado`. El listado muestra un producto
+  por fila y le corresponde la forma del producto; el reporte muestra
+  mediciones, y una medición con tamices que la tabla no tiene perdería números.
+  A una muestra fina a la que le falte la #325 su juego le sigue cabiendo en el
+  formato, así que entra ahí y esa fila queda con el guión a la vista.
+- **En las tablas propias va un retenido por malla y un solo acumulado, al
+  final.** No es una invención: es lo que calidad ya escribe cuando el juego es
+  otro — los once bloques de la hoja `Calcio` y la tabla de `Otros` del 02/10
+  anotan el retenido de cada tamiz y cierran con un `Ac #200`.
+
+**Falta el envío por correo.** El repo no tiene con qué mandar un mail propio:
+lo único que manda correos es Supabase Auth, y sólo sus plantillas de acceso.
+Hace falta un proveedor (Resend, o el SMTP de la casilla corporativa) y esa
+decisión es del usuario.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
