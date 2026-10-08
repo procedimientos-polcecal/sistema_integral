@@ -36,7 +36,7 @@ código.
 |---|---|
 | Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) |
-| RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) |
+| RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
@@ -181,6 +181,15 @@ Tres reglas que costaron caro, y que valen para las cuatro:
   con `serialDelDia()` y los números como número; `escribirCeldas()` y
   `agregarFila()` aceptan los dos tipos. Un número no se interpreta.
 
+**RRHH tiene además una integración por API con el reloj biométrico, que no es
+una planilla** y donde **manda Lenox**: las marcaciones entran solas por un cron
+diario y un botón, y el SdG lee y **nunca escribe del otro lado**. Se parece a
+las planillas en una sola cosa, y es la regla que más importa: la sincronización
+corre sola, así que **no pisa lo que una persona corrigió** — protege por día, y
+si el reloj discrepa, avisa en vez de sobrescribir. El Excel quedó de respaldo.
+Lo que hay que saber antes de tocarla (el límite de llamadas, que un `429` no se
+reintenta) está en [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md).
+
 Y una de diseño que se repite en todo el sistema: **enlazar al que se le parece
 es peor que dejar en null.** Cuando una planilla nombra algo en texto libre y no
 se lo reconoce con certeza, el enlace queda vacío y se informa. Un enlace
@@ -248,6 +257,11 @@ antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
   Por eso el lint **todavía no** está en el CI: con un error rojo, un CI que
   está siempre rojo no lo mira nadie. Cuando esos 3 se cierren, se agrega el
   paso y el lint empieza a defender algo.
+- **El tamaño de la suite, medido el 08/10/2026 sin worktrees abiertos: 215
+  archivos y 3.004 tests.** Los 95 archivos y 1.357 tests que menciona el
+  comentario de `vitest.config.mts` no son un error: son de cuando se midió el
+  problema de abajo, y ahí dicen lo que tienen que decir. El número de hoy
+  cambia con cada tarea, así que si importa, correr `npm test`.
 - **Los worktrees de Claude Code viven adentro del repo** (`.claude/worktrees/`),
   así que vitest los recorría como código del proyecto y recogía cada
   `*.test.ts` una vez por worktree abierto — con dos abiertos, la suite corría

@@ -170,6 +170,40 @@ existe. El síntoma es que todo falla junto y de golpe; el mensaje del SdG lo di
 Conviene para validar las primeras órdenes sin escribir en la contabilidad de
 verdad. Es la misma API key: la base de staging es una copia.
 
+## Reloj biométrico (RRHH · marcaciones desde Lenox)
+
+Si falta, el cron `rrhh-lenox-sync` responde `{ "omitido": "Lenox no está
+configurado" }` y **no es un error**: la app sigue andando y las marcaciones se
+pueden cargar subiendo el Excel, que quedó de respaldo. Es la misma regla que
+Odoo en `calidad-sync`. El botón "Traer de Lenox" de `/rrhh/fichadas`, en
+cambio, contesta `503` diciendo que falta la clave: ahí hay una persona
+esperando una respuesta. El detalle de la integración está en
+[RRHH-ACTUALIZACION.md](RRHH-ACTUALIZACION.md).
+
+| Variable | Para qué | De dónde sale |
+|---|---|---|
+| `LENOX_API_KEY` | La clave de empresa para la API de Lenox, el servicio del reloj biométrico. **Viaja en el header `LenoxBusinessAPI-Key`** de cada pedido, contra `https://empresas.api.lenoxhr.com/api/v1`. El SdG sólo **lee**: pide marcaciones y empleados, nunca escribe del otro lado | Se **activa desde la plataforma de Lenox, sección API**. La API en sí está documentada en [postman.lenoxhr.com](https://postman.lenoxhr.com/) |
+
+**Al 08/10/2026 está cargada en `.env.local` y falta en Vercel.** Hasta que se
+cargue, en producción el cron no hace nada (y no avisa: omitir no es un error).
+Va en *Production* y *Preview*, y como cualquier variable nueva **pide un
+redeploy**.
+
+Dos cosas que conviene saber antes de tocarla:
+
+**No hay forma de probarla sin gastar llamadas, y el límite es duro.** Lenox no
+documenta cuántos pedidos aguanta, y el 07/10/2026 bastaron unas doce seguidas
+para recibir un `429` que tardó más de veinte minutos en levantarse. Por eso no
+hay un "probar conexión": la primera prueba razonable es el botón con un rango
+de un día, que son dos llamadas (marcaciones y padrón).
+
+**Es una clave de empresa, no de usuario.** Si se cambia desde la plataforma de
+Lenox hay que cargar la nueva acá y redeployar. El síntoma de una clave vieja no
+está medido —no se probó con una inválida, para no gastar llamadas—, pero el
+cliente no traduce nada: lo que conteste Lenox queda anotado tal cual en la
+última sincronización (`Lenox respondió <status>: …`), que es lo primero que hay
+que mirar si el cartel de "actualizado hace…" se queda viejo.
+
 ## Asistente de IA
 
 | Variable | Para qué | De dónde sale |

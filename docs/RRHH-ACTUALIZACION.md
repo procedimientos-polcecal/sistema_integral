@@ -360,3 +360,279 @@ legítimamente trabajan fines de semana.
 **Ojo con esto para adelante:** cualquier sector que se renombre desde
 Administración deja de aplicar la regla sin que nadie se entere. El
 acoplamiento por nombre viene del original y sigue siendo frágil.
+
+## Las marcaciones entran por la API de Lenox (07/10/2026)
+
+Hasta esta fecha las marcaciones del reloj llegaban así: alguien bajaba un
+`.xlsx` del servicio de Lenox, lo subía a `/rrhh/fichadas`, mapeaba columnas y
+confirmaba. Medido el 06/10/2026 contra producción, **la fichada más reciente
+era del 30/09**: seis días sin cargar, y una numeración de archivos
+(`Reporte_Marcaciones (63)`, `(69)`, `(71)`) que contaba sola que la carga iba a
+los tirones. La liquidación dependía de que alguien se acordara.
+
+Desde ahora entran solas, por la API de Lenox, con un **cron diario** y un
+botón **"Traer de Lenox"** en la misma pantalla. **El Excel se quedó, plegado,
+como respaldo**: si Lenox se cae, cambia la clave, o hace falta cargar un
+período viejo largo de un tirón, el camino sigue estando.
+
+Los porqués del diseño están en el
+[spec](superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) y
+el paso a paso en el
+[plan](superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md); lo que
+sigue es lo que hay que saber antes de tocar esto, que no se deduce del código.
+
+### Qué hay y dónde
+
+| | |
+|---|---|
+| `lib/rrhh/lenox/cliente.ts` | HTTP puro y tonto: la clave, el tope de 7 días por pedido, el `204`, el `429`. No interpreta nada |
+| `lib/rrhh/lenox/agrupar.ts` | Marcaciones sueltas → días por legajo, **incluidos los días vacíos** del rango |
+| `lib/rrhh/lenox/sincronizar.ts` | Orquesta: trae, agrupa, aplica, coteja el padrón y deja el lote anotado |
+| `lib/rrhh/fichadas/decidir.ts` | **Puro**: qué insertar, qué borrar, qué saltear y por qué. Donde viven las tres protecciones |
+| `lib/rrhh/fichadas/aplicar.ts` | La capa que escribe. **La usan los dos caminos de carga** |
+| `app/api/cron/rrhh-lenox-sync` | El cron, `30 10 * * *` (7:30 de acá) |
+| `POST /api/rrhh/fichadas/lenox/sincronizar` | El botón |
+
+**Lo único que cambió es de dónde salen las marcaciones.** La lógica que las
+interpreta —`reconciliarTokens`: la marca fantasma, el turno que cruza la
+medianoche, la fichada que quedó abierta en un lote y se cierra con el
+siguiente— es la misma de siempre, con sus 4.672 fichadas de kilometraje, y no
+se reescribió. Lo que sí se hizo fue sacar el alta de dentro de la ruta de
+import (233 líneas, sin un solo test) a `aplicar.ts`, para que Lenox y el Excel
+no tuvieran dos altas que se fueran separando. El que casi no se usa es el que
+se pudre sin que nadie lo note.
+
+La clave se carga como `LENOX_API_KEY`: ver
+[VARIABLES-VERCEL.md](VARIABLES-VERCEL.md). **Al 08/10/2026 está en
+`.env.local` y falta en Vercel**, así que en producción el cron responde
+"omitido" hasta que se cargue.
+
+### Las tres protecciones, y por qué la unidad es el día
+
+La sincronización corre sola, y eso vuelve peligroso algo que antes era
+inofensivo: **editar una fichada no cambia su `origen`**. El `PUT` toca las horas
+y deja la fila en `IMPORTADO`, y la carga borra todas las `IMPORTADO` del día
+antes de insertar. Con el Excel casi no mordía, porque quien lo sube sabe que
+está pisando un período. Un cron pisa sin que nadie se entere, que es la peor
+forma de todas.
+
+La primera idea fue un tercer valor `CORREGIDO` en el enum `origen_fichada`, y
+**no alcanza**, por dos razones:
+
+1. **La sincronización no reemplaza fichadas: reemplaza días.** Si se protege la
+   fila corregida pero se reinserta el día, queda la corregida *y* vuelve la
+   importada: el día duplicado.
+2. **Borrar no deja rastro.** El caso concreto: una marca fantasma a 40 minutos
+   de la anterior (el filtro sólo descarta las de 5 minutos o menos) arma un
+   turno falso de 40 minutos. Alguien lo borra, y mañana el cron lo vuelve a
+   crear. Todos los días, para siempre. Con el enum no se arregla, porque la fila
+   que lo probaría ya no existe.
+
+Por eso la protección es por **(empleado, día)** y se guarda aparte, en
+`rrhh_dias_corregidos`. Son tres, y las tres miran el día de entrada:
+
+- **El día que tocó una persona.** Lo escriben los tres verbos que significan
+  "alguien tocó este día": el alta manual (`POST /api/rrhh/fichadas`) y la
+  edición y el borrado (`PUT` y `DELETE` de `fichadas/[id]`). Cubre los tres con
+  un solo mecanismo, y el campo `accion` (`creada`, `editada`, `borrada`) no
+  decide nada: está para que cuando alguien pregunte "¿por qué este día no se
+  actualiza?" la respuesta esté escrita. **Se libera sacándole la marca** a ese
+  día.
+- **El período ya liquidado.** Un día dentro de una `liquidaciones` en estado
+  `CERRADA` no se toca. Protege otra cosa: que un cambio tardío en Lenox le mueva
+  las horas a un mes ya pagado. Se libera reabriendo la liquidación.
+- **El aviso de divergencia.** Saltear en silencio es casi tan malo como pisar.
+  Cuando un día se saltea por cualquiera de las dos razones, se compara lo
+  guardado contra lo que trae Lenox y, **si difieren**, sale un aviso:
+
+  ```
+  Legajo PC_204, 2026-10-02: corregido a mano (07:58–16:03),
+  Lenox ahora trae 08:12–16:03
+  ```
+
+  **Nunca pisa.** Es la misma regla que gobierna los enlaces por texto libre en
+  las planillas: cuando no hay certeza, se informa y decide una persona.
+
+**La corrección manual gana siempre**, y eso es un riesgo asumido, no un olvido:
+si alguien corrige un día a mano y después se arregla la marcación en Lenox, la
+local sigue tapando a la buena hasta que una persona lea el aviso y actúe. La
+alternativa es que el sistema le pise el trabajo a quien corrigió.
+
+**Otro riesgo asumido: las protecciones miran el día de entrada, no el de
+salida.** Un turno que entra en un día libre y sale en un día dentro de una
+liquidación cerrada se aplica igual, y el recálculo reescribe las horas de ese
+día cerrado. Para que ocurra hace falta que el período posterior se haya
+liquidado **antes** que el anterior; con las liquidaciones cerradas en orden, el
+borde mensual no lo dispara. Se evaluó cerrarlo y se descartó: no tiene una
+respuesta buena (si el día de salida está protegido, saltear el turno entero deja
+el día de entrada sin reemplazar, y ése no estaba protegido) y cuesta unas 25
+líneas y seis tests. El síntoma, si alguna vez aparece, serían horas que cambian
+en un mes ya liquidado, en alguien con turno nocturno, el día siguiente a un día
+no liquidado.
+
+### La ventana del cron es de 7 días
+
+El cron mira **los últimos 7 días contando hoy**, que es también el tope por
+pedido de la API: una sola llamada de marcaciones. El tope lo impone el servidor
+—con 8 días devuelve `400` y *"La cantidad de dias entre las fechas desde y hasta
+no debe superar los 7 días"*—, no es una precaución nuestra.
+
+**Riesgo asumido:** si nadie mira durante más de una semana, **lo más viejo que 7
+días no se recupera solo**: hay que usar el botón. Se eligió 7 sobre 14 a pedido,
+y como el hueco medido al escribir esto era de seis días, el margen es de uno. Si
+vuelve a pasar, subir `DIAS_DEL_CRON` en `lib/rrhh/lenox/rango.ts` es cambiar una
+constante y sumar una llamada por corrida.
+
+Hay un segundo riesgo del mismo tamaño y más callado: **si el `insert` falla a
+mitad de los lotes de 500, el día ya fue borrado y queda vacío o a medias.** Se
+cura en la próxima corrida —el cron, el botón o el Excel—, salvo que el día ya
+haya salido de la ventana de 7. Invertir el orden (insertar antes de borrar) se
+descartó: un borrado que falla dejaría el día duplicado, que es peor, porque esas
+horas se pagan. El error dice cuántas filas quedaron insertadas, y el lote queda
+anotado con eso.
+
+### El límite de llamadas de Lenox
+
+**Lenox limita las llamadas y no dice cuál es el límite.** Midiéndolo el
+07/10/2026 bastaron **unas doce seguidas** para recibir un `429`. La respuesta
+no trae `Retry-After`, ni ningún header de límite, ni cuerpo
+(`content-length: 0`), y **tardó más de veinte minutos en levantarse**: sondeando
+cada 20 segundos, a los 7 minutos seguía bloqueada.
+
+De ahí salen tres decisiones que conviene no deshacer sin haberlo medido de nuevo:
+
+- **No se reintenta un `429`, nunca.** Sin `Retry-After` cualquier espera sería
+  inventada, y lo más probable es que **sondear mantenga vivo el bloqueo**. Un
+  reintento automático sobre esta API no se recuperaría nunca: se quedaría
+  girando. Se corta, se anota en `sincronizaciones` con el texto de Lenox, y se
+  le dice a la persona que espere. El botón además **queda bloqueado aunque se
+  recargue la página** (lo decide `bloqueoPorUltimaSync` en
+  `lib/rrhh/lenox/pantalla.ts`, mirando la última corrida anotada), porque el
+  bloqueo es de la cuenta y no de quien apretó, y una corrida del cron que
+  recibe un `429` también lo deja bloqueado. **El bloqueo del botón es de 15
+  minutos y lo medido fue más de veinte**: se eligió 15 porque no hay un número
+  mejor, y si Lenox sigue rechazando al terminar, el botón se vuelve a bloquear
+  con el siguiente `429`. Es un riesgo asumido, y la señal para subirlo es que
+  eso pase seguido.
+- **El botón acepta como máximo 31 días.** El cliente ya parte el rango en
+  ventanas de 7, así que no es un límite de la API: es para que un clic no gaste
+  de golpe las llamadas que hay. **Cada 7 días de rango es una llamada**, más una
+  fija de `GetEmpleados`: 31 días son 5 ventanas más el padrón, seis llamadas.
+  Estuvo en 62 un rato (diez llamadas, demasiado cerca de las doce que ya
+  bastaron para el bloqueo) y se bajó. El caso de uso real es traer un mes; para
+  algo más largo, en dos veces.
+- **El cron hace dos llamadas por corrida**, una de marcaciones y una de
+  empleados para el cotejo. Está muy lejos del límite. El cotejo no suma una
+  tercera: reusa el padrón del SdG que ya se leyó para enlazar los legajos.
+
+Otras dos cosas de la API que **no estaban en la documentación** y que rompen el
+cliente si se olvidan:
+
+- **Un rango sin marcaciones devuelve `204` con el cuerpo vacío.** `res.ok` es
+  `true` para un 204 y `res.json()` sobre un cuerpo vacío lanza: un fin de semana
+  largo habría roto el cron. El cliente trata el 204 como "cero filas" antes de
+  intentar parsear.
+- **No hay paginación real.** `FilasExcluidas` es un offset, pero devuelve todo lo
+  que queda, no una página: 7 días son 735 filas de 62 legajos en una sola
+  llamada (medido el 07/10/2026). La paginación del cliente queda como red, con
+  el `mensaje` de la respuesta (`"Se muestran todos los resultados"`) como
+  camino rápido para no gastar una llamada de más.
+
+Y una de contexto: `tipoMarcacion` trae `"Por Reloj"` y `"GeoCerca"`, no los
+valores de la doc. **Hay gente fichando por geocerca desde el teléfono**, así que
+una fichada sin reloj asociado (`reloj` es `"porteria"` o `null`) no es un error.
+
+### Dos caminos de carga, y no se comportan igual
+
+Los dos pasan por `aplicarDias`, así que dedup, recálculo y borrado son los
+mismos. **Lo que difiere es a propósito:**
+
+| | Lenox (cron y botón) | Excel |
+|---|---|---|
+| Día corregido a mano | **Lo protege**: no lo toca y avisa si difiere | **Lo pisa** |
+| Liquidación `CERRADA` | Frena | Frena |
+| Quién decide | Nadie: corre solo | Quien sube el archivo |
+
+El Excel no protege los días corregidos porque quien sube un archivo **elige
+pisar un período**: es un gesto deliberado, con el archivo a la vista. El cron no
+elige nada, así que tiene que ser él quien se frene. Es `protegerCorregidos` en
+`aplicarDias`: `false` en la ruta del Excel y `true` en la sincronización.
+
+La **liquidación cerrada frena a los dos**, y eso es un cambio de
+comportamiento del Excel: antes no miraba si el período estaba liquidado y podía
+mover las horas de un mes ya pagado. Efecto secundario buscado: `insertados` ya no cuenta los
+turnos de días dentro de una liquidación cerrada.
+
+**Un modo del Excel no pasa por la reconciliación de marcas.** El archivo
+"separado" trae una columna de entrada y otra de salida: el emparejamiento ya
+viene dado, y pasarlo por `reconciliarTokens` —que existe para *inferir* cuál es
+cuál— tiraba información que el archivo entregaba. Se vio al correrlo: una
+entrada sin salida se cerraba con la entrada de otra fila, y una salida a 5
+minutos de la entrada se descartaba como fantasma. Por eso `decidir.ts` recibe
+una unión (`{ tipo: "marcas" }` / `{ tipo: "turnos" }`) y no un flag suelto, y
+desde la bifurcación todo es común.
+
+### Qué es un error y qué es un pendiente
+
+Un lote de Lenox (`rrhh_import_batches`, con `Lenox API · 30/09 → 06/10` como
+nombre y `usuario_id` nulo cuando lo corrió el cron) lleva dos listas, y el
+criterio que las separa es uno solo:
+
+> **Un error es algo que hizo que un dato no se cargara.** Todo lo demás es un
+> pendiente.
+
+Es lo que evita que la pantalla arranque cada día con cincuenta y pico de
+"errores" que nadie puede hacer desaparecer. Ya pasó cuatro veces en este módulo,
+y es la razón por la que existe el aviso agregado de fichadas abiertas viejas:
+
+- **Error**, y cuenta en `cantidad_errores`: un legajo de Lenox que el SdG no
+  tiene (el alta que no se cargó: las marcaciones de esa persona no entraron),
+  filas ilegibles que se descartaron, un rango de más de dos días sin una sola marcación
+  (casi seguro una falla de Lenox, que sin este aviso se reportaría como éxito), un día
+  salteado cuyo contenido **difiere** de lo que trae Lenox.
+- **Pendiente**, va al detalle y **no** al conteo: las fichadas abiertas viejas
+  (al 07/10/2026 son 54, de 23 empleados, todas errores de carga históricos, y
+  sin el agregado eran hasta 23 líneas fijas en cada corrida); una baja de Lenox
+  que el SdG tiene activa; un activo del SdG que no existe en Lenox
+  (gerencia, probablemente de forma permanente y legítima); y que el cotejo del
+  padrón no haya podido correr.
+
+El último caso es el que más enseña: **un día salteado que no cambió nada deja de
+ser un aviso.** Un día corregido a mano se saltea en *cada* corrida, para siempre,
+así que si cada una sumara un renglón por cada día corregido que exista, serían
+avisos que nunca dejan de salir. Sólo se avisa cuando lo que trae el reloj
+**difiere** de lo guardado, que es el único caso en que hay algo para decidir. El
+conteo de días sin tocar sigue estando en el resumen.
+
+`ok: true` en la corrida **también cuando hay avisos o pendientes**: son cosas
+que alguien tiene que mirar, no una corrida que falló. Mezclarlos haría que un día
+con una fichada abierta se vea igual que un día con Lenox caído. Lo que sí es un
+fallo se anota en `sincronizaciones` (`modulo: "rrhh"`,
+`recurso: "lenox-marcaciones"`) **con lo que dijo Lenox sin traducir**, que es lo
+que alimenta el cartel de "actualizado hace…".
+
+### Qué falta verificar
+
+**Un día de datos reales de Lenox comparado contra el Excel del mismo día,
+fichada por fichada.** Es la prueba que cierra esto —es lo que se hizo el
+27/08/2026 con el desfasaje de 3 horas, y lo que lo dejó resuelto de verdad— y
+**no se hizo** al escribir esto: el 07/10/2026 se agotó el límite de llamadas
+midiendo la API, y el código del cliente se escribió sobre esas mediciones, no
+sobre una corrida completa. Lo que hay son 204 tests sobre las funciones puras
+de `lib/rrhh/lenox/` y `lib/rrhh/fichadas/` (08/10/2026), y esos no prueban que
+la API siga contestando lo que contestó.
+
+La primera corrida real conviene que sea el botón con **un solo día** y con el
+Excel de ese día a mano: dos llamadas, y una comparación que se puede hacer a
+ojo. Sólo después tiene sentido dejar correr al cron.
+
+Lenox tiene 73 empleados y el SdG 70 (con 2 marcados con `fechaBaja` en Lenox,
+al 07/10/2026), así que el cotejo del padrón va a tener algo que decir desde la
+primera corrida: es lo que se espera, no una falla.
+
+**Queda fuera, a propósito:** `FechaJornada` y `GetDiasTrabajados` (cambiaría un
+motor con tests por uno sin tests, para resolver algo ya resuelto), `precioHora`
+(el valor hora vive en `rrhh_empleados_datos` desde el 22/09/2026 y esa decisión
+no se revisa acá), y `GetLicencias`, `GetVacaciones` y `GetFeriados` (el SdG ya
+tiene `/rrhh/ausencias`, `/rrhh/vacaciones` y `/rrhh/feriados` con datos propios,
+y traerlos abre la pregunta de cuál de los dos manda).

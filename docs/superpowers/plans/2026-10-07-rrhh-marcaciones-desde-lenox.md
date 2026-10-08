@@ -25,41 +25,61 @@ nuevas — `fetch` nativo.
 
 ---
 
-## Estado al 07/10/2026
+## Estado al 08/10/2026
 
-**Siete de trece tareas hechas.** Lo que falta está bloqueado por una sola
-cosa: **`LENOX_API_KEY` no está cargada** en `.env.local` ni en Vercel.
+**Las trece tareas están hechas.** Lo que queda no es de código: es cargar la
+clave en Vercel y la primera corrida real, que dependen de una persona.
 
 | | Tarea | Estado |
 |---|---|---|
-| 1 | Medir la API real | **bloqueada** — falta la clave |
+| 1 | Medir la API real | ✅ — las cinco incógnitas están en el spec, en "Lo que se midió contra la API real (07/10/2026)" |
 | 2 | Las dos migraciones | ✅ escritas **y aplicadas en la base** |
 | 3 | `reconciliarTokens` | ✅ |
-| 4 | El cliente HTTP | **bloqueada** — depende de la 1 |
+| 4 | El cliente HTTP | ✅ |
 | 5 | El agrupador | ✅ |
 | 6 | La capa que decide | ✅ |
 | 7 | La capa que escribe | ✅ |
 | 8 | El Excel usa `aplicar.ts` | ✅ |
 | 9 | Marcar los días corregidos | ✅ |
-| 10 | La orquestación y el cotejo | **bloqueada** — importa el cliente |
-| 11 | El cron y la ruta del botón | **bloqueada** — importa la 10 |
-| 12 | La pantalla | pendiente — depende de la 11 |
-| 13 | Documentación y verificación | pendiente — va al final |
+| 10 | La orquestación y el cotejo | ✅ |
+| 11 | El cron y la ruta del botón | ✅ |
+| 12 | La pantalla | ✅ |
+| 13 | Documentación y verificación | ✅ — las cuatro verificaciones, y los documentos de RRHH, `VARIABLES-VERCEL.md` y `CLAUDE.md` |
 
-**Lo construido:** `lib/rrhh/lenox/` (tipos y agrupador), `lib/rrhh/fichadas/`
-(decidir, aplicar, marcarDia) y los cambios en `excelImport.ts`, `dates.ts` y
-las tres rutas de fichadas. **105 tests** sobre lógica que antes vivía dentro
-de una ruta y no tenía ninguno.
+**Lo que falta, y es de una persona:**
 
-**Para retomar:** cargar la clave y empezar por la Tarea 1, que **no es
-opcional** — sus cinco mediciones cambian el código del cliente, y uno de sus
-pasos dice explícitamente que hay que parar si el legajo que devuelve la API
-no es el string (`PC_204`).
+1. **Cargar `LENOX_API_KEY` en Vercel** (Production y Preview) y redeployar. Está
+   en `.env.local` pero no en Vercel, así que en producción el cron responde
+   `omitido` y **no avisa**: omitir no es un error. Es el paso 6 de la Tarea 13.
+2. **La primera corrida real, con un solo día.** Es el botón con un rango de un
+   día —dos llamadas— y el Excel de ese mismo día al lado, comparando **fichada
+   por fichada**. Es la prueba que cierra el diseño, y **no se hizo**: la cuenta
+   de Lenox quedó bloqueada el 07/10/2026 por medir la API, y el cliente se
+   escribió sobre esas mediciones. Hasta entonces lo que hay son tests sobre las
+   funciones puras, que no prueban que la API siga contestando lo mismo.
+3. **Esperar a que levante el bloqueo** antes de llamar a la API. No hay forma
+   de saber si ya levantó sin gastar una llamada, y sondear parece prolongarlo.
+
+**Lo construido:** `lib/rrhh/lenox/` (cliente, agrupador, orquestación, cotejo,
+y las funciones puras de la pantalla y de los errores), `lib/rrhh/fichadas/`
+(decidir, aplicar, marcarDia, diaSinProteger), el cron
+`app/api/cron/rrhh-lenox-sync` y la ruta del botón, la pantalla de
+`/rrhh/fichadas` y los cambios en `excelImport.ts`, `dates.ts` y las rutas de
+fichadas. **204 tests** sobre lógica que antes vivía dentro de una ruta y no
+tenía ninguno (medido el 08/10/2026). El "Mapa de archivos" de abajo es lo que
+se planeó: se crearon además `errores.ts`, `rango.ts`, `corrida.ts`, `cotejo.ts`,
+`preparar.ts`, `pantalla.ts` y `diaSinProteger.ts` —todos con test salvo
+`corrida.ts`, que es IO—, porque
+la lógica que se iba a quedar dentro de una ruta o de un componente se sacó a
+`lib/` para poder probarla.
 
 **Cada tarea construida tiene una sección "Lo que cambió respecto del bloque de
-arriba, al construirlo"** justo después. Leela: el bloque de código de la tarea
-es lo que se planeó, y esa sección es lo que pasó. En tres casos el plan estaba
-mal y el código es lo correcto.
+arriba, al construirlo"** justo después (las tareas 5, 7 y 8), y para las demás
+la fuente de verdad es el código y el mensaje de su commit. El bloque de código
+de cada tarea es lo que se planeó, y esa sección es lo que pasó. En tres casos el
+plan estaba mal y el código es lo correcto. Lo que hay que saber para **operar**
+esto —las tres protecciones, el límite de llamadas, qué es un error— no está en
+este plan: está en [docs/RRHH-ACTUALIZACION.md](../../RRHH-ACTUALIZACION.md).
 
 ---
 
