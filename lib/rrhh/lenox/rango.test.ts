@@ -41,12 +41,12 @@ describe("problemaDelRango", () => {
     expect(problemaDelRango(dia(2026, 10, 7), dia(2026, 10, 1))).toMatch(/anterior/);
   });
 
-  it("el tope se cuenta en días inclusive: 62 pasan y 63 no", () => {
+  it("el tope se cuenta en días inclusive: DIAS_MAX_RANGO pasa y uno más no", () => {
     const desde = dia(2026, 8, 1);
-    const hasta62 = new Date(desde.getTime() + (DIAS_MAX_RANGO - 1) * 86_400_000);
-    const hasta63 = new Date(desde.getTime() + DIAS_MAX_RANGO * 86_400_000);
-    expect(problemaDelRango(desde, hasta62)).toBeNull();
-    expect(problemaDelRango(desde, hasta63)).toMatch(/62 días/);
+    const hastaTope = new Date(desde.getTime() + (DIAS_MAX_RANGO - 1) * 86_400_000);
+    const hastaUnoMas = new Date(desde.getTime() + DIAS_MAX_RANGO * 86_400_000);
+    expect(problemaDelRango(desde, hastaTope)).toBeNull();
+    expect(problemaDelRango(desde, hastaUnoMas)).toMatch(new RegExp(`${DIAS_MAX_RANGO} días`));
   });
 
   it("el mensaje dice cuántos días se pidieron", () => {

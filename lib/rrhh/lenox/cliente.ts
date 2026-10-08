@@ -4,6 +4,30 @@ import type { MarcacionLenox, EmpleadoLenox } from "./tipos";
 const BASE = "https://empresas.api.lenoxhr.com/api/v1";
 
 /**
+ * Un error que vino de Lenox, con el status que lo causó.
+ *
+ * Existe por un caso concreto: el `429`. No es un error nuestro y se resuelve
+ * esperando, así que la pantalla tiene que poder tratarlo distinto de un fallo
+ * del servidor — si lo muestra como "error del servidor", la persona vuelve a
+ * apretar, y cada intento prolonga el bloqueo.
+ *
+ * Antes eso se reconocía buscando el `"(429)"` con que termina el mensaje.
+ * Funcionaba, pero fallaba en la dirección peligrosa: alguien reescribe el
+ * texto, el 429 pasa a salir como un 500 genérico, y nadie se entera hasta que
+ * alguien se queja de que el botón "se rompe sin motivo". Con el status en el
+ * error, lo que se mira es el dato y no la redacción.
+ */
+export class ErrorDeLenox extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ErrorDeLenox";
+  }
+}
+
+/**
  * El tope es de la API, no nuestro: "la diferencia entre las fechas desde y
  * hasta no puede superar los 7 días". Medido el 07/10/2026: lo impone el
  * servidor, con 8 días devuelve 400 ("La cantidad de dias entre las fechas
@@ -99,10 +123,11 @@ async function pedir<T>(
     //
     // El texto existe porque el error pelado sería "Lenox respondió 429: ",
     // que no le dice nada a nadie.
-    throw new Error(
+    throw new ErrorDeLenox(
       "Lenox no atendió el pedido porque se hicieron demasiadas consultas seguidas. " +
         "Esperá al menos 15 minutos antes de volver a intentar, y no aprietes el botón " +
-        "mientras tanto: cada intento prolonga la espera. (429)"
+        "mientras tanto: cada intento prolonga la espera. (429)",
+      429
     );
   }
 
@@ -110,7 +135,7 @@ async function pedir<T>(
     // Sin traducir, a propósito: un diagnóstico que no se distingue de otro
     // no es un diagnóstico. Es la misma regla que con los errores de Google.
     const texto = await res.text();
-    throw new Error(`Lenox respondió ${res.status}: ${texto.slice(0, 300)}`);
+    throw new ErrorDeLenox(`Lenox respondió ${res.status}: ${texto.slice(0, 300)}`, res.status);
   }
 
   const cuerpo = await res.json();

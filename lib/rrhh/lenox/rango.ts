@@ -5,11 +5,17 @@ import { addUtcDays } from "../dates";
  *
  * El cliente ya parte el rango en ventanas de 7 días, así que esto no es un
  * límite de la API: es para que un clic no gaste de golpe las llamadas que hay.
- * 62 días son 9 ventanas más la del padrón, diez llamadas — y el 07/10/2026
- * bastaron unas doce seguidas para que Lenox bloqueara la cuenta con un 429.
- * Si el bloqueo se repite con rangos largos, es el primer número a bajar.
+ * **Cada 7 días de rango es una llamada**, más una fija del padrón.
+ *
+ * 31 días son 5 ventanas más el padrón: seis llamadas. El 07/10/2026 bastaron
+ * unas doce seguidas para que Lenox bloqueara la cuenta con un 429 que tardó
+ * más de veinte minutos en levantarse, así que seis deja margen de verdad.
+ *
+ * Estuvo en 62 un rato y se bajó: eran diez llamadas, demasiado cerca del
+ * límite medido. Y el caso de uso real del botón es traer **un mes**, no dos —
+ * para algo más largo, se hace en dos veces.
  */
-export const DIAS_MAX_RANGO = 62;
+export const DIAS_MAX_RANGO = 31;
 
 /** Los 7 días que mira el cron, contando hoy: una sola llamada de marcaciones. */
 export const DIAS_DEL_CRON = 7;
@@ -32,7 +38,12 @@ export function problemaDelRango(desde: Date, hasta: Date): string | null {
   }
   const dias = Math.round((hasta.getTime() - desde.getTime()) / 86_400_000) + 1;
   if (dias > DIAS_MAX_RANGO) {
-    return `El rango no puede superar los ${DIAS_MAX_RANGO} días (pediste ${dias}).`;
+    // El mensaje dice el porqué porque si no parece un capricho, y quien lo
+    // lee tiene que saber que la salida es partirlo, no insistir.
+    return (
+      `El rango no puede superar los ${DIAS_MAX_RANGO} días (pediste ${dias}), ` +
+      "porque Lenox limita la cantidad de pedidos seguidos. Traelo en dos veces."
+    );
   }
   return null;
 }

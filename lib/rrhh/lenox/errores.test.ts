@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { esExcesoDeLlamadas } from "./errores";
-import { traerEmpleados } from "./cliente";
+import { traerEmpleados, ErrorDeLenox } from "./cliente";
 
 describe("esExcesoDeLlamadas", () => {
   afterEach(() => {
@@ -38,9 +38,17 @@ describe("esExcesoDeLlamadas", () => {
     expect(esExcesoDeLlamadas(new Error("Lenox respondió 400: el id 429 no existe"))).toBe(false);
   });
 
-  it("toma un error con status 429, que es el día que el cliente tenga uno propio", () => {
+  // Lo que se mira es el status y no el texto: el mensaje acá es cualquier
+  // cosa a propósito, para que el test falle si alguien vuelve a atar esto a
+  // la redacción.
+  it("se reconoce por el status del ErrorDeLenox, no por el texto", () => {
+    expect(esExcesoDeLlamadas(new ErrorDeLenox("cualquier texto", 429))).toBe(true);
+    expect(esExcesoDeLlamadas(new ErrorDeLenox("algo que termina en (429)", 500))).toBe(false);
+  });
+
+  it("un Error común con un status pegado encima no alcanza", () => {
     const e = Object.assign(new Error("cualquier texto"), { status: 429 });
-    expect(esExcesoDeLlamadas(e)).toBe(true);
+    expect(esExcesoDeLlamadas(e)).toBe(false);
   });
 
   it("lo que no es un Error no es un exceso de llamadas", () => {
