@@ -59,6 +59,10 @@ export async function GET(request: Request) {
         horasExtra50: c ? Number(c.horas_extra_50) : 0,
         horasExtra100: c ? Number(c.horas_extra_100) : 0,
         horasManual: c?.horas_manual ?? false,
+        // Lo que el motor decidió para el día, para que la pantalla lo muestre y no lo deduzca.
+        tarde: c?.tarde ?? false,
+        retiroAnticipado: c?.retiro_anticipado ?? false,
+        diaCalculado: !!c,
         horasTrabajadas,
         ausente: c?.ausente ?? false,
         justificada: c?.justificada ?? null,

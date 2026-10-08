@@ -312,6 +312,9 @@ function AsistenciaDia() {
           horasExtra50={Number(empleadoEnEdicion.horasExtra50)}
           horasExtra100={Number(empleadoEnEdicion.horasExtra100)}
           horasManual={empleadoEnEdicion.horasManual}
+          tarde={empleadoEnEdicion.tarde}
+          retiroAnticipado={empleadoEnEdicion.retiroAnticipado}
+          diaCalculado={empleadoEnEdicion.diaCalculado}
           onClose={() => setEmpleadoEnEdicion(null)}
           onSaved={cargar}
         />

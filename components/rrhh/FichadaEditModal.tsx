@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
+import { acreditarDia, instanteDePared, type CalculoDelDia } from "@/lib/rrhh/fichadas/acreditado";
+import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
+import { useCargar } from "@/lib/core/useCargar";
+import AcreditadoDeFichada from "./AcreditadoDeFichada";
 
 interface Fichada {
   id: string;
@@ -27,6 +31,14 @@ interface Props {
   horasExtra50: number;
   horasExtra100: number;
   horasManual: boolean;
+  /**
+   * Lo que el motor guardó para el día en `calculos_diarios`. El modal lo
+   * muestra, no lo deduce. Si la pantalla que lo abre no lo trae, no se dice nada.
+   */
+  tarde?: boolean;
+  retiroAnticipado?: boolean;
+  /** Hay fila en `calculos_diarios` para este día; false = todavía no se recalculó. */
+  diaCalculado?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -41,7 +53,7 @@ function toLocalTimeStr(iso: string): string {
 
 export default function FichadaEditModal({
   employeeId, empleadoNombre, fecha, fichadas,
-  horasNormales, horasExtra50, horasExtra100, horasManual, onClose, onSaved,
+  horasNormales, horasExtra50, horasExtra100, horasManual, tarde, retiroAnticipado, diaCalculado, onClose, onSaved,
 }: Props) {
   const totalActual = horasNormales + horasExtra50 + horasExtra100;
 
@@ -66,6 +78,58 @@ export default function FichadaEditModal({
   // sincronización con Lenox lo va a pisar. El modal no se cierra solo, porque
   // un aviso que desaparece junto con la ventana no lo lee nadie.
   const [diaSinProteger, setDiaSinProteger] = useState(false);
+
+  // Los turnos activos, para mostrar lo que se acredita. null mientras cargan o
+  // si no se pudieron leer: sin ellos no se muestra nada, porque mostrar la
+  // marca como si fuera lo acreditado es justo el error que esto evita.
+  const [turnos, setTurnos] = useState<TurnoLike[] | null>(null);
+  useCargar(async (vigente) => {
+    try {
+      const res = await fetch("/api/rrhh/jornadas");
+      if (!res.ok) return;
+      const data: { id: string; hora_inicio: string; hora_fin: string; tolerancia_minutos: number; activo: boolean }[] = await res.json();
+      if (!vigente()) return;
+      setTurnos(
+        data
+          .filter((t) => t.activo)
+          .map((t) => ({ id: t.id, horaInicio: t.hora_inicio, horaFin: t.hora_fin, toleranciaMinutos: t.tolerancia_minutos }))
+      );
+    } catch {
+      // Sin turnos no se muestra lo acreditado; guardar no depende de esto.
+    }
+  }, []);
+
+  // Se calcula sobre lo que hay en el formulario y no sobre lo guardado: al
+  // tipear una salida 03:42 se ve al instante que se acredita como 04:00, y no
+  // hace falta "arreglarla" a mano para que pague las 8 horas. La marca guardada
+  // no se toca; esto es sólo un cálculo al lado.
+  const acreditadoPorFila = useMemo(() => {
+    if (!turnos) return null;
+    const crudas = filas.flatMap((fila, idx) => {
+      if (fila.eliminar) return [];
+      const entrada = instanteDePared(fila.fechaEntrada, fila.horaEntrada);
+      if (!entrada) return [];
+      const salida = instanteDePared(fila.fechaSalida, fila.horaSalida);
+      // Una salida anterior a la entrada es un tipeo a medias, no una marcación.
+      return [{ id: String(idx), hora_entrada: entrada, hora_salida: salida && salida > entrada ? salida : null }];
+    });
+    return acreditarDia(crudas, fecha, turnos);
+  }, [filas, turnos, fecha]);
+  const hayAcreditado = !!acreditadoPorFila && acreditadoPorFila.size > 0;
+
+  // En una fila sólo cuenta lo de las horas fijadas a mano: tardanza y retiro
+  // son del día guardado y, mientras se tipea, quedarían desactualizados al
+  // lado de lo que se está editando. Esas van aparte, abajo.
+  const calculoParaFila: CalculoDelDia | undefined = horasManual
+    ? {
+        horas_normales: horasNormales,
+        horas_extra_50: horasExtra50,
+        horas_extra_100: horasExtra100,
+        tarde: false,
+        retiro_anticipado: false,
+        horas_manual: true,
+      }
+    : undefined;
 
   function actualizarFila(idx: number, cambios: Partial<FilaFichada>) {
     setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
@@ -211,6 +275,11 @@ export default function FichadaEditModal({
                     className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
               </div>
+              {!fila.eliminar && acreditadoPorFila?.get(String(idx)) && (
+                <p className="text-xs mb-2">
+                  <AcreditadoDeFichada acreditado={acreditadoPorFila.get(String(idx))!} calculo={calculoParaFila} prefijo="Se acredita: " />
+                </p>
+              )}
               <button type="button" onClick={() => quitarFila(idx)} className="text-xs text-red-600 hover:underline">
                 {fila.id ? (fila.eliminar ? "Deshacer eliminación" : "Eliminar esta marcación") : "Quitar"}
               </button>
@@ -218,9 +287,31 @@ export default function FichadaEditModal({
           ))}
         </div>
 
-        <button type="button" onClick={agregarFila} className="text-sm text-blue-600 hover:underline mb-5">
+        <button type="button" onClick={agregarFila} className={`text-sm text-blue-600 hover:underline ${hayAcreditado || diaCalculado !== undefined ? "mb-2" : "mb-5"}`}>
           + Agregar marcación
         </button>
+        {hayAcreditado && (
+          <p className="text-xs text-slate-400 mb-2">
+            Dentro del margen del turno se acredita desde el horario pactado: no hace falta corregir una marca para que
+            sume las horas del turno. La marca del reloj conviene dejarla como está.
+          </p>
+        )}
+        {diaCalculado !== undefined && (
+          <p className="text-xs text-slate-500 mb-5">
+            Cálculo guardado de este día:{" "}
+            {!diaCalculado ? (
+              <span className="italic text-slate-400">todavía sin calcular</span>
+            ) : horasManual || tarde || retiroAnticipado ? (
+              <>
+                {horasManual && <span className="mr-1">horas fijadas a mano (se liquidan esas, no lo que se acredita arriba)</span>}
+                {tarde && <span className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Tardanza</span>}
+                {retiroAnticipado && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">Retiro anticipado</span>}
+              </>
+            ) : (
+              "sin tardanza ni retiro anticipado"
+            )}
+          </p>
+        )}
 
         <div className="border-t border-slate-200 pt-4 mb-2">
           <label className="block text-xs text-slate-500 mb-1">Horas trabajadas</label>

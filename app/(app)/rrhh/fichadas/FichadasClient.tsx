@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -11,6 +11,9 @@ import { fechaHora } from "@/lib/compras/constants";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 import { DIAS_MAX_RANGO } from "@/lib/rrhh/lenox/rango";
 import { bloqueoPorUltimaSync, rangoPorDefecto, segundosDeEspera, textoDeEspera } from "@/lib/rrhh/lenox/pantalla";
+import AcreditadoDeFichada from "@/components/rrhh/AcreditadoDeFichada";
+import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
+import { acreditarLista } from "@/lib/rrhh/fichadas/acreditado";
 import AvisosDeCarga from "./AvisosDeCarga";
 
 interface PreviewResult {
@@ -40,14 +43,24 @@ function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
 }
 
-export default function FichadasClient({ empleados, fichadasIniciales, ultimaSync }: {
+export default function FichadasClient({ empleados, fichadasIniciales, turnos, ultimaSync }: {
   empleados: any[];
   fichadasIniciales: any[];
+  /** Turnos activos del catálogo; null si no se pudieron leer. */
+  turnos: TurnoLike[] | null;
   ultimaSync: UltimaSync | null;
 }) {
   const router = useRouter();
   const confirmar = useConfirm();
   const [fichadas, setFichadas] = useState(fichadasIniciales);
+
+  // Lo que se acredita sale de la lista que hay en pantalla y no se guarda
+  // aparte: cuando una carga refresca `fichadas` con otra lista, esto se
+  // recalcula solo. Calculado en el servidor se perdería en ese refresco.
+  const acreditadoPorId = useMemo(
+    () => (turnos ? acreditarLista(fichadas, turnos) : null),
+    [fichadas, turnos]
+  );
 
   // --- lenox ---
   const [rango, setRango] = useState(() => rangoPorDefecto(new Date()));
@@ -76,6 +89,17 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
     }, 1000);
     return () => clearInterval(id);
   }, [bloqueadoHasta]);
+
+  // Trae la lista de nuevo, ya con el cálculo del día pegado (es la misma
+  // función del servidor que arma la carga inicial). Si la ruta falla se deja
+  // la lista como estaba: antes una respuesta de error se guardaba como si
+  // fuera la lista y la pantalla se rompía.
+  function recargarFichadas() {
+    fetch("/api/rrhh/fichadas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((lista) => { if (Array.isArray(lista)) setFichadas(lista); })
+      .catch(() => {});
+  }
 
   async function sincronizarConLenox() {
     if (enCurso.current || esperando) return;
@@ -117,7 +141,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
         }
         setResumenSync({ ...data, avisos: data.avisos ?? [], pendientes: data.pendientes ?? [] });
         router.refresh();
-        fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
+        recargarFichadas();
       } catch {
         setErrorSync("No se pudo comunicar con el servidor. Mirá el cartel de última sincronización antes de volver a intentar: puede que la corrida haya llegado a empezar.");
       } finally {
@@ -196,7 +220,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
     setImportResult({ ...data, errores: data.errores ?? [], pendientes: data.pendientes ?? [] });
     setPreview(null);
     router.refresh();
-    fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
+    recargarFichadas();
   }
 
   // --- manual ---
@@ -230,7 +254,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
     setDiaSinProteger(await traeDiaSinProteger(res));
     setForm({ employeeId: "", fecha: "", horaEntrada: "", horaSalida: "" });
     router.refresh();
-    fetch("/api/rrhh/fichadas").then((r) => r.json()).then(setFichadas).catch(() => {});
+    recargarFichadas();
   }
 
   return (
@@ -470,6 +494,12 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/rrhh/fichadas/export" download className="text-sm text-blue-600 hover:underline">Exportar</a>
         </div>
+        {fichadas.slice(0, 50).some((f: any) => f.calculo_dia === undefined) && (
+          <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No se pudo leer el cálculo diario: no se muestran las horas fijadas a mano, la tardanza ni el retiro anticipado.
+            El rango acreditado de cada marcación sí se ve, porque sale del turno y no de esa tabla.
+          </p>
+        )}
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -479,6 +509,12 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
               <th className="pb-2">Fecha</th>
               <th className="pb-2">Entrada</th>
               <th className="pb-2">Salida</th>
+              <th className="pb-2">
+                <span className="inline-flex items-center gap-1">
+                  Acreditado
+                  <InfoTip text="Lo que el sistema suma a la liquidación. Dentro del margen del turno se acredita desde el horario pactado y no desde la marca, así que no hace falta corregir una marca que ya cierra bien: la marca del reloj queda como está. Si coincide con la marca, sólo se ven las horas. La tardanza, el retiro anticipado y las horas fijadas a mano salen del cálculo diario ya guardado; un día que todavía no se recalculó lo dice." />
+                </span>
+              </th>
               <th className="pb-2">Origen</th>
             </tr>
           </thead>
@@ -490,6 +526,9 @@ export default function FichadasClient({ empleados, fichadasIniciales, ultimaSyn
                 <td className="py-2">{new Date(f.fecha).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                 <td className="py-2">{formatHora(f.hora_entrada)}</td>
                 <td className="py-2">{f.hora_salida ? formatHora(f.hora_salida) : "-"}</td>
+                <td className="py-2">
+                  {acreditadoPorId?.get(f.id) && <AcreditadoDeFichada acreditado={acreditadoPorId.get(f.id)!} calculo={f.calculo_dia} />}
+                </td>
                 <td className="py-2">{f.origen}</td>
               </tr>
             ))}

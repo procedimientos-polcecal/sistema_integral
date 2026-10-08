@@ -5,6 +5,7 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido } from "@/lib/rrhh/fichadas/marcarDia";
+import { conCalculoDelDia } from "@/lib/rrhh/fichadas/calculoDelDia";
 
 // El frontend manda la hora como "YYYY-MM-DDTHH:MM:SS" sin zona horaria (hora
 // de pared en Argentina) — se parsea a mano con localDateTime(), que siempre
@@ -38,7 +39,9 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  // Con el cálculo del día pegado, igual que la página: el refresco de la lista
+  // tiene que traer lo mismo que la carga inicial (ver conCalculoDelDia).
+  return NextResponse.json(await conCalculoDelDia(supabase, data ?? []));
 }
 
 export async function POST(request: Request) {

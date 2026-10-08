@@ -797,6 +797,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
           horasExtra50={Number(diaEnEdicion.horas_extra_50)}
           horasExtra100={Number(diaEnEdicion.horas_extra_100)}
           horasManual={diaEnEdicion.horas_manual}
+          tarde={!!diaEnEdicion.tarde}
+          retiroAnticipado={!!diaEnEdicion.retiro_anticipado}
+          diaCalculado
           onClose={() => setDiaEnEdicion(null)}
           onSaved={() => fetch(`/api/rrhh/asistencia/empleado/${empleado.id}?desde=${desde}&hasta=${hasta}`).then((r) => r.json()).then(setDias)}
         />
