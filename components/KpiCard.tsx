@@ -12,7 +12,7 @@ import Link from "next/link";
  * una tarjeta — es la inconsistencia que el usuario notó primero en Cantera.
  */
 export default function KpiCard({
-  color = "var(--text-primary)", label, value, href, onClick, sub,
+  color = "var(--text-primary)", label, value, href, onClick, sub, icon,
 }: {
   /** Color del punto y la franja superior. Sin especificar, queda neutro. */
   color?: string;
@@ -21,12 +21,30 @@ export default function KpiCard({
   href?: string;
   onClick?: () => void;
   sub?: React.ReactNode;
+  /**
+   * Un ícono que **ocupa el lugar del punto**, no que se suma a él.
+   *
+   * Dos marcas de color en la misma línea compiten y ninguna significa nada; el
+   * punto está justamente para teñir esa esquina, así que cuando hay un ícono
+   * el ícono hace ese trabajo y además dice de qué es la tarjeta. Toma el color
+   * por `currentColor`, igual que los íconos del menú y del inicio.
+   *
+   * Opcional a propósito: las dieciséis pantallas que ya usan esta tarjeta
+   * siguen viéndose igual sin tocar una línea.
+   */
+  icon?: React.ReactNode;
 }) {
   const contenido = (
     <>
       <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        {icon ? (
+          <span className="shrink-0" style={{ color }}>
+            {icon}
+          </span>
+        ) : (
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        )}
         <span className="truncate text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
       </div>
       <div className="text-2xl font-bold" style={{ color: color === "var(--text-primary)" ? undefined : color }}>

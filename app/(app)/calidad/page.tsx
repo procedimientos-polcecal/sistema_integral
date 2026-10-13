@@ -52,6 +52,49 @@ function diasDesde(iso: string, hoy: string): number {
   return Math.max(0, Math.round(ms / 86_400_000));
 }
 
+/**
+ * Un ícono por frente, al molde de los del inicio y el menú lateral: SVG en
+ * línea de 20×20, `currentColor` y trazo 1,8. Van repetidos en cada tarjeta del
+ * frente y no una sola vez en el título de la sección, porque lo que se mira de
+ * un tablero es la tarjeta suelta: al volver de una pantalla uno busca la que
+ * tocó, no la sección que la contiene.
+ */
+
+/** Carbonilla: una llama. Es combustible, y lo que se carga a diario es cuánto se quemó. */
+function IconLlama() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path
+        d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Envases: un saco con el cuello atado, que es lo que se cuenta — bolsas y bolsones. */
+function IconBolsa() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M7 10h10a1 1 0 0 1 1 1.1l-1 7.4a2 2 0 0 1-2 1.7H9a2 2 0 0 1-2-1.7l-1-7.4A1 1 0 0 1 7 10Z" strokeLinejoin="round" />
+      <path d="M9.6 10 10 6h4l.4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9.2 6h5.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Ensayos: un tamiz de costado, con la malla colgando del aro. La granulometría es el corazón del frente. */
+function IconTamiz() {
+  return (
+    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 9h18" strokeLinecap="round" />
+      <path d="M5 9c0 4.2 3.1 7.5 7 7.5S19 13.2 19 9" strokeLinecap="round" />
+      <path d="M8 9.5v2.5M12 9.5v3.6M16 9.5v2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const CARBONILLA = "#B45309";
 const ENVASES = "#0891B2";
 const ENSAYOS = "#BE185D";
@@ -136,6 +179,7 @@ export default async function CalidadPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <KpiCard
             color={CARBONILLA}
+            icon={<IconLlama />}
             label="El stock"
             // El número que dice si hay trabajo: el consumo se carga a la tarde
             // 224 de 256 días, así que dos días sin cargar es la señal.
@@ -149,6 +193,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={CARBONILLA}
+            icon={<IconLlama />}
             label="Movimientos"
             value={n(movimientosCarbonilla)}
             sub="el libro entero"
@@ -157,6 +202,7 @@ export default async function CalidadPage() {
           {esAdmin && (
             <KpiCard
               color={CARBONILLA}
+            icon={<IconLlama />}
               label="Carbonilleros"
               value={n(carbonilleros)}
               sub="activos"
@@ -166,6 +212,7 @@ export default async function CalidadPage() {
           {esAdmin && (
             <KpiCard
               color={CARBONILLA}
+            icon={<IconLlama />}
               label="Productos"
               value={n(productosOdoo)}
               sub="de Odoo que cuentan"
@@ -182,6 +229,7 @@ export default async function CalidadPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <KpiCard
             color={envasesFaltantes ? "#B91C1C" : ENVASES}
+            icon={<IconBolsa />}
             label="Stock"
             value={n(envasesFaltantes)}
             sub={`bajo el mínimo, de ${n(envasesActivos)} artículos`}
@@ -189,6 +237,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENVASES}
+            icon={<IconBolsa />}
             label="Movimientos"
             value={n(movimientosEnvases)}
             sub="el kardex entero"
@@ -196,6 +245,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENVASES}
+            icon={<IconBolsa />}
             label="Por período"
             value={n(envasesActivos)}
             sub="artículos a resumir"
@@ -203,6 +253,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENVASES}
+            icon={<IconBolsa />}
             label="Proveedores"
             value={n(proveedoresEnvases)}
             sub="de la planilla"
@@ -218,6 +269,7 @@ export default async function CalidadPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <KpiCard
             color={ENSAYOS}
+            icon={<IconTamiz />}
             label="Las muestras"
             value={n(muestras30)}
             sub="en los últimos 30 días"
@@ -225,6 +277,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENSAYOS}
+            icon={<IconTamiz />}
             label="Cargar muestra"
             value={n(muestrasHoy)}
             sub="cargadas hoy"
@@ -232,6 +285,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENSAYOS}
+            icon={<IconTamiz />}
             label="Reporte del día"
             value={fechaUltimoEnsayo ? comoSeLee(fechaUltimoEnsayo) : "—"}
             sub={fechaUltimoEnsayo ? "último día con muestras" : "todavía no hay muestras"}
@@ -239,6 +293,7 @@ export default async function CalidadPage() {
           />
           <KpiCard
             color={ENSAYOS}
+            icon={<IconTamiz />}
             label="Indicadores"
             value={n(muestras30)}
             sub="muestras del período corto"
@@ -247,6 +302,7 @@ export default async function CalidadPage() {
           {esAdmin && (
             <KpiCard
               color={ENSAYOS}
+            icon={<IconTamiz />}
               label="Productos"
               value={n(productosEnsayo)}
               sub="que se muestrean"
@@ -256,6 +312,7 @@ export default async function CalidadPage() {
           {esAdmin && (
             <KpiCard
               color={limites === 0 ? "#B45309" : ENSAYOS}
+              icon={<IconTamiz />}
               label="Límites"
               value={n(limites)}
               // Cero límites no es un error pero tampoco es neutro: significa
