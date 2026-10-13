@@ -253,3 +253,90 @@ export function filaDeProveedor(
     sheets_fila: numeroFila,
   };
 }
+
+/** Un rango combinado de la API de Sheets. Índices base 0, el final no entra. */
+export interface RangoCombinado {
+  startRowIndex?: number;
+  endRowIndex?: number;
+  startColumnIndex?: number;
+  endColumnIndex?: number;
+}
+
+/** Un bloque de filas que comparten una celda. Base 1, los dos extremos entran. */
+export interface Bloque {
+  primeraFila: number;
+  ultimaFila: number;
+}
+
+/**
+ * Los bloques combinados que tocan una columna, en filas base 1.
+ *
+ * La API los da en base 0 con el final afuera; el resto del parser trabaja con
+ * el número de fila que se ve en la planilla, así que se traducen una vez acá y
+ * no en cada uso.
+ */
+export function bloquesDeLaColumna(
+  combinaciones: RangoCombinado[],
+  columna: number
+): Bloque[] {
+  return combinaciones
+    .filter(
+      (c) =>
+        columna >= (c.startColumnIndex ?? 0) && columna < (c.endColumnIndex ?? Infinity)
+    )
+    .map((c) => ({
+      primeraFila: (c.startRowIndex ?? 0) + 1,
+      ultimaFila: c.endRowIndex ?? Infinity,
+    }))
+    .sort((a, b) => a.primeraFila - b.primeraFila);
+}
+
+/** Un artículo con su grupo de seguridad resuelto. */
+export type ArticuloConGrupo = ArticuloLeido & { grupo_seguridad: string };
+
+/**
+ * A qué grupo de seguridad pertenece cada artículo, y cuál es el mínimo del
+ * grupo.
+ *
+ * En el listado, `STOCK DE SEGURIDAD` está en **celdas combinadas** que abarcan
+ * varias filas: el mínimo es del conjunto —cuántos bolsones de 1,20 hay, no de
+ * qué proveedor— y se compara contra la suma de todos ellos. Una celda
+ * combinada **sólo trae valor en su primera fila**, así que sin esto el mínimo
+ * caía en el primer artículo del bloque y los demás quedaban en cero.
+ *
+ * El grupo se nombra con el **código del primer artículo del bloque**, y el
+ * mínimo de ese primero se copia a todos sus miembros: así cada fila sabe contra
+ * qué se la mide sin tener que volver a mirar la planilla.
+ *
+ * **Un artículo sin combinar es un grupo de uno.** Las bolsas no están
+ * combinadas y cada una tiene su mínimo; tratarlas como grupo de uno hace que la
+ * cuenta sea una sola y no haya caso especial.
+ *
+ * El grupo NO sale de `grupo` —la columna K del kardex—, aunque hoy casi
+ * coincidan: el `00011` no tiene movimientos, así que no tiene K, y sin embargo
+ * está adentro del bloque de 2,10. Usar la K lo habría dejado afuera de su
+ * propia suma.
+ */
+export function agruparPorSeguridad(
+  articulos: ArticuloLeido[],
+  bloques: Bloque[]
+): ArticuloConGrupo[] {
+  const porFila = new Map(articulos.map((a) => [a.sheets_fila, a]));
+
+  return articulos.map((a) => {
+    const bloque = bloques.find(
+      (b) => a.sheets_fila >= b.primeraFila && a.sheets_fila <= b.ultimaFila
+    );
+    // Sin bloque, o con un bloque cuya primera fila no es un artículo —una
+    // combinación que empieza en el encabezado, por ejemplo—, se cae a grupo de
+    // uno. Inventar un grupo sería peor: mezclaría stocks que nadie quiso sumar.
+    const cabeza = bloque ? porFila.get(bloque.primeraFila) : undefined;
+    if (!cabeza) return { ...a, grupo_seguridad: a.codigo };
+
+    return {
+      ...a,
+      grupo_seguridad: cabeza.codigo,
+      stock_seguridad: cabeza.stock_seguridad,
+    };
+  });
+}

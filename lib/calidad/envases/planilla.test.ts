@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   mapearListado, mapearKardex, filaDeArticulo, filaDeMovimiento,
   grupoDeLaFila, filaDeProveedor, cantidad,
+  bloquesDeLaColumna, agruparPorSeguridad,
 } from "./planilla";
 
 // Los encabezados reales de la planilla, copiados tal cual. "STOCK INICAL" está
@@ -164,5 +165,70 @@ describe("los proveedores", () => {
 
   it("descarta la fila sin nombre", () => {
     expect(filaDeProveedor(["", "", ""], ENCABEZADO, 20)).toBeNull();
+  });
+});
+
+describe("las celdas combinadas del stock de seguridad", () => {
+  // Las combinaciones reales del listado, medidas el 13/10/2026. La API las da
+  // en base 0 con el final afuera: G10:G18 es startRow 9, endRow 18.
+  const COMBINACIONES = [
+    { startRowIndex: 9, endRowIndex: 18, startColumnIndex: 6, endColumnIndex: 7 },
+    { startRowIndex: 9, endRowIndex: 18, startColumnIndex: 7, endColumnIndex: 8 },
+    { startRowIndex: 18, endRowIndex: 25, startColumnIndex: 6, endColumnIndex: 7 },
+    { startRowIndex: 25, endRowIndex: 27, startColumnIndex: 6, endColumnIndex: 7 },
+  ];
+
+  it("traduce a filas de planilla y se queda con las de su columna", () => {
+    const b = bloquesDeLaColumna(COMBINACIONES, 6);
+    expect(b).toEqual([
+      { primeraFila: 10, ultimaFila: 18 },
+      { primeraFila: 19, ultimaFila: 25 },
+      { primeraFila: 26, ultimaFila: 27 },
+    ]);
+    // La de la columna 7 es la del FALTANTE: no es de esta columna.
+    expect(bloquesDeLaColumna(COMBINACIONES, 6)).toHaveLength(3);
+  });
+
+  const art = (codigo: string, fila: number, seguridad: number) => ({
+    codigo, descripcion: codigo, ubicacion: null, proveedores_ref: null,
+    stock_inicial: 0, stock_actual: 0, stock_seguridad: seguridad, sheets_fila: fila,
+  });
+
+  it("copia el mínimo del bloque a todos sus miembros", () => {
+    // En la planilla sólo la primera fila del bloque trae el número; las demás
+    // llegan en cero porque la celda está combinada.
+    const r = agruparPorSeguridad(
+      [art("00013", 19, 1500), art("00014", 20, 0), art("00022", 25, 0)],
+      [{ primeraFila: 19, ultimaFila: 25 }]
+    );
+    expect(r.map((a) => a.stock_seguridad)).toEqual([1500, 1500, 1500]);
+    expect(r.map((a) => a.grupo_seguridad)).toEqual(["00013", "00013", "00013"]);
+  });
+
+  it("un artículo fuera de todo bloque es un grupo de uno", () => {
+    // Las bolsas no están combinadas: cada una tiene su propio mínimo.
+    const r = agruparPorSeguridad(
+      [art("00002", 3, 5000)],
+      [{ primeraFila: 19, ultimaFila: 25 }]
+    );
+    expect(r[0]).toMatchObject({ grupo_seguridad: "00002", stock_seguridad: 5000 });
+  });
+
+  it("incluye al que no tiene movimientos, que la columna K deja afuera", () => {
+    // El 00011 no tiene un solo movimiento, así que no tiene grupo de la K — y
+    // sin embargo está adentro del bloque de 2,10. Si el grupo saliera de la K,
+    // quedaría afuera de su propia suma.
+    const r = agruparPorSeguridad(
+      [art("00009", 10, 2000), art("00011", 12, 0)],
+      [{ primeraFila: 10, ultimaFila: 18 }]
+    );
+    expect(r[1]).toMatchObject({ grupo_seguridad: "00009", stock_seguridad: 2000 });
+  });
+
+  it("si la cabeza del bloque no es un artículo, cae a grupo de uno", () => {
+    // Una combinación que arranca en el encabezado. Inventar un grupo mezclaría
+    // stocks que nadie quiso sumar.
+    const r = agruparPorSeguridad([art("00013", 19, 1500)], [{ primeraFila: 1, ultimaFila: 25 }]);
+    expect(r[0].grupo_seguridad).toBe("00013");
   });
 });

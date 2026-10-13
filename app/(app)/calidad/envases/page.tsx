@@ -25,11 +25,15 @@ export default async function EnvasesPage() {
   // La cadena del select va literal y no armada en una variable: con una
   // variable, Supabase pierde la inferencia y todo lo que sale queda como error
   // de string.
+  //
+  // Ordena por código y no por faltante: el faltante es del **grupo** —el
+  // mínimo vive en una celda combinada del listado y se compara contra la suma
+  // de sus filas—, así que no es una columna que la base pueda ordenar. La
+  // pantalla arma los grupos y los ordena por lo que falta.
   const { data } = await supabase
     .from("calidad_envases_articulos")
-    .select("id, codigo, descripcion, grupo, stock_actual, stock_seguridad, faltante")
+    .select("id, codigo, descripcion, grupo, grupo_seguridad, stock_actual, stock_seguridad")
     .eq("activo", true)
-    .order("faltante", { ascending: false })
     .order("codigo");
 
   // Cuándo se leyó la planilla. Es parte de lo que hay que saber para leer el

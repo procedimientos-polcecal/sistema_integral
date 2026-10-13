@@ -239,6 +239,48 @@ export async function agregarFila(
   return fila;
 }
 
+/** Un rango combinado, como lo da la API: base 0 y el final no entra. */
+export interface RangoCombinado {
+  startRowIndex?: number;
+  endRowIndex?: number;
+  startColumnIndex?: number;
+  endColumnIndex?: number;
+}
+
+/**
+ * Las celdas combinadas de una pestaña.
+ *
+ * **Una celda combinada sólo trae su valor en la primera fila del bloque**, así
+ * que `leerValores` deja en vacío a todas las demás y no hay forma de
+ * distinguirlo de una celda que de verdad está vacía. Esto dice dónde están los
+ * bloques, para poder repartir el valor entre sus filas.
+ *
+ * Lo necesitó el listado de envases, donde el stock de seguridad de los
+ * bolsones es uno solo para todo el grupo y vive en una celda que abarca nueve
+ * filas.
+ */
+export async function leerCombinaciones(
+  planillaId: string,
+  pestana: string
+): Promise<RangoCombinado[]> {
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+    `?fields=${encodeURIComponent("sheets(properties(title),merges)")}`;
+
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
+
+  const json = (await res.json()) as {
+    sheets?: { properties?: { title?: string }; merges?: RangoCombinado[] }[];
+  };
+  const hoja = (json.sheets ?? []).find((h) => h.properties?.title === pestana);
+  return hoja?.merges ?? [];
+}
+
 /**
  * Las fórmulas de una pestaña, en vez de sus valores.
  *

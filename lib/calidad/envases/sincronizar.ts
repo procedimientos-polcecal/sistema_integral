@@ -20,12 +20,13 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { leerValores } from "@/lib/core/sheets";
+import { leerValores, leerCombinaciones, type RangoCombinado } from "@/lib/core/sheets";
 import { traerTodo } from "@/lib/core/paginado";
 import { indiceDeProveedores, buscarProveedor } from "@/lib/core/proveedores";
 import { normalizarCuit } from "@/lib/core/cuit";
 import {
   mapearListado, mapearKardex, filaDeArticulo, filaDeMovimiento, filaDeProveedor,
+  bloquesDeLaColumna, agruparPorSeguridad,
   type ArticuloLeido, type MovimientoLeido, type ProveedorLeido,
 } from "@/lib/calidad/envases/planilla";
 
@@ -161,10 +162,36 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     return [...s][0];
   };
 
+  // ── El stock de seguridad, que es del grupo ────────────────
+  //
+  // En el listado, `STOCK DE SEGURIDAD` está en celdas combinadas que abarcan
+  // varias filas: el mínimo es del conjunto —cuántos bolsones de 1,20 hay, sin
+  // importar el proveedor— y se compara contra la suma de todos. Una celda
+  // combinada sólo trae valor en su primera fila, así que sin esto el mínimo
+  // caía en el primer artículo del bloque y el resto quedaba en cero.
+  //
+  // Un fallo leyendo las combinaciones **no corta la sincronización**: se sigue
+  // con cada artículo como grupo de uno —que es exactamente lo que hacía antes—
+  // y se informa. Perder el agrupamiento es peor que antes sólo si nadie se
+  // entera.
+  let combinaciones: RangoCombinado[] = [];
+  let combinacionesError: string | null = null;
+  try {
+    combinaciones = await leerCombinaciones(planilla, TAB_LISTADO());
+  } catch (e) {
+    combinacionesError = mensaje(e);
+  }
+  const conGrupo = agruparPorSeguridad(
+    articulos,
+    idxListado.stockSeguridad >= 0
+      ? bloquesDeLaColumna(combinaciones, idxListado.stockSeguridad)
+      : []
+  );
+
   const ahora = new Date().toISOString();
   let guardadosArticulos = 0;
-  for (let i = 0; i < articulos.length; i += 500) {
-    const lote = articulos.slice(i, i + 500).map((a) => ({
+  for (let i = 0; i < conGrupo.length; i += 500) {
+    const lote = conGrupo.slice(i, i + 500).map((a) => ({
       ...a,
       grupo: grupoDe(a.codigo),
       stock_sincronizado_en: ahora,
@@ -304,6 +331,9 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     // Los códigos y no el conteo: dar de baja un artículo es un cambio que
     // alguien tiene que poder revisar, sobre todo si no fue a propósito.
     articulos_dados_de_baja: dadosDeBaja,
+    // Si esto no es null, el stock de seguridad quedó por artículo y no por
+    // grupo: los faltantes de los bolsones van a estar mal hasta la próxima.
+    combinaciones_error: combinacionesError,
     movimientos: guardadosMovimientos,
     movimientos_sin_articulo: sinArticulo,
     proveedores: guardadosProveedores,

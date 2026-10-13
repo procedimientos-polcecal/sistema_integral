@@ -46,6 +46,33 @@ Cuatro cosas que no se deducen del código:
   una lista de códigos: un `.not("codigo", "in", …)` arma una URL que PostgREST
   rechaza sin decir por qué cuando la lista crece.
 
+- **El stock de seguridad es de un GRUPO, no de un artículo.** En el listado esa
+  columna está en **celdas combinadas** que abarcan varias filas, y el faltante
+  compara el mínimo contra la **suma** de todas ellas: lo que importa es cuántos
+  bolsones de 1,20 hay, sin importar de qué proveedor sea cada uno. Medido el
+  13/10/2026, los tres bloques y lo que dice la planilla:
+
+  | bloque | artículos | suma | mínimo | falta |
+  |---|---|---|---|---|
+  | `G10:G18` | 2,10 + 1,90 | 905 | 2000 | 1095 |
+  | `G19:G25` | 1,20 + 1,40 | 1192 | 1500 | 308 |
+  | `G26:G27` | 1,20 nuevos | 600 | 500 | 0 |
+
+  Las bolsas (filas 2–9) **no** están combinadas: cada una tiene su mínimo. Por
+  eso la regla no es "todo va por grupo" sino que **el grupo lo define la
+  combinación**, y un artículo suelto es un grupo de uno — así la cuenta es una
+  sola y no hay caso especial.
+
+  El grupo se guarda en `grupo_seguridad` (el código del primer artículo del
+  bloque) y **no sale de `grupo`**, la columna K del kardex, aunque hoy casi
+  coincidan: el `00011` no tiene movimientos, así que no tiene K, y sin embargo
+  está adentro del bloque de 2,10. Usar la K lo habría dejado afuera de su propia
+  suma.
+
+  La cuenta vive en `lib/calidad/envases/seguridad.ts` y no en una columna
+  generada, porque una columna generada sólo ve su propia fila. La pantalla lo
+  muestra con `rowSpan`, que es lo mismo que la celda combinada.
+
 - **El espejo escribe la fecha en ISO**, y eso se decidió midiendo las tres
   formas contra la planilla real el 16/09/2026:
 
