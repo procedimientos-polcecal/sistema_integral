@@ -274,7 +274,17 @@ function AsistenciaDia() {
                   <td className="py-2">{e.nombre}</td>
                   <td className="py-2">
                     {!e.ausente ? (
-                      <span className="text-green-700">Presente</span>
+                      <>
+                        <span className="text-green-700">Presente</span>
+                        {(e.fichadas ?? []).some((f: any) => f.observaciones) && (
+                          <span
+                            className="ml-1 cursor-help"
+                            title={(e.fichadas as any[]).filter((f) => f.observaciones).map((f) => `Comentario: ${f.observaciones}`).join("\n")}
+                          >
+                            💬
+                          </span>
+                        )}
+                      </>
                     ) : e.justificada === true ? (
                       <span className="text-slate-600">Ausente · {labelTipoAusencia(e.tipoAusencia ?? "")}</span>
                     ) : e.justificada === false ? (
@@ -307,7 +317,7 @@ function AsistenciaDia() {
           employeeId={empleadoEnEdicion.employeeId}
           empleadoNombre={empleadoEnEdicion.nombre}
           fecha={dia}
-          fichadas={empleadoEnEdicion.fichadas.map((f: any) => ({ id: f.id, hora_entrada: f.hora_entrada, hora_salida: f.hora_salida }))}
+          fichadas={empleadoEnEdicion.fichadas.map((f: any) => ({ id: f.id, hora_entrada: f.hora_entrada, hora_salida: f.hora_salida, observaciones: f.observaciones ?? null }))}
           horasNormales={Number(empleadoEnEdicion.horasNormales)}
           horasExtra50={Number(empleadoEnEdicion.horasExtra50)}
           horasExtra100={Number(empleadoEnEdicion.horasExtra100)}

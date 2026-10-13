@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       .order("fecha", { ascending: true }),
     supabase
       .from("fichadas")
-      .select("id, fecha, hora_entrada, hora_salida")
+      .select("id, fecha, hora_entrada, hora_salida, observaciones")
       .eq("empleado_id", id)
       .gte("fecha", desdeStr)
       .lte("fecha", hastaStr)
