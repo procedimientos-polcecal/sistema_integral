@@ -68,7 +68,7 @@ function clienteFalso(datos: Record<string, Record<string, unknown>[]>) {
 }
 
 const CONFIG = {
-  horas_normales_por_dia: 8, hora_corte_sabado: "12:00", multiplicador_extra_50: 1.5,
+  horas_normales_por_dia: 8, multiplicador_extra_50: 1.5,
   multiplicador_extra_100: 2, horas_franco_compensatorio: 8, feriado_como_domingo: true,
 };
 

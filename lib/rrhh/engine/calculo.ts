@@ -1,4 +1,4 @@
-import { dayOfWeekUtc, localDateTime } from "../dates";
+import { dayOfWeekUtc } from "../dates";
 
 export type TipoDia = "HABIL" | "SABADO" | "DOMINGO" | "FERIADO";
 
@@ -9,7 +9,6 @@ export interface TimeInterval {
 
 export interface PayrollConfigLike {
   horasNormalesPorDia: number;
-  horaCorteSabado: string; // "HH:MM"
   feriadoComoDomingo: boolean;
 }
 
@@ -42,11 +41,6 @@ function sumHoras(intervals: TimeInterval[]): number {
     const ms = i.end.getTime() - i.start.getTime();
     return acc + (ms > 0 ? ms / 3_600_000 : 0);
   }, 0);
-}
-
-function parseHoraCorte(fecha: Date, horaCorteSabado: string): Date {
-  const [h, m] = horaCorteSabado.split(":").map(Number);
-  return localDateTime(fecha, h, m);
 }
 
 export function determinarTipoDia(fecha: Date, esFeriado: boolean): TipoDia {
@@ -85,22 +79,17 @@ export function calcularDia(
   }
 
   if (tipoDia === "SABADO") {
-    const cutoff = parseHoraCorte(fecha, config.horaCorteSabado);
-    let antes = 0;
-    let despues = 0;
-    for (const i of intervals) {
-      const antesEnd = i.end < cutoff ? i.end : cutoff;
-      if (antesEnd > i.start) antes += (antesEnd.getTime() - i.start.getTime()) / 3_600_000;
-      const despuesStart = i.start > cutoff ? i.start : cutoff;
-      if (i.end > despuesStart) despues += (i.end.getTime() - despuesStart.getTime()) / 3_600_000;
-    }
-    const horasNormales = Math.min(antes, config.horasNormalesPorDia);
-    const horasExtra50 = Math.max(0, antes - config.horasNormalesPorDia);
+    // Todo el día cuenta como hora normal hasta completar la jornada; recién lo
+    // que pasa de `horasNormalesPorDia` es extra, y al 100%. Antes el sábado se
+    // partía en una hora de corte (lo de antes: normal y 50%; lo de después:
+    // 100%), regla que se dejó el 13/10/2026 a pedido de RRHH. Acá no hay extra
+    // al 50% en ningún caso.
+    const total = sumHoras(intervals);
     return {
       tipoDia,
-      horasNormales,
-      horasExtra50,
-      horasExtra100: despues,
+      horasNormales: Math.min(total, config.horasNormalesPorDia),
+      horasExtra50: 0,
+      horasExtra100: Math.max(0, total - config.horasNormalesPorDia),
       francoGenerado: false,
     };
   }
