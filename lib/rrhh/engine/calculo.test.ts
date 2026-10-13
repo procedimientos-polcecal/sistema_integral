@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
+import { calcularDia, mismasHoras, SABADO_NORMAL_DESDE, type PayrollConfigLike } from "./calculo";
 
 const config: PayrollConfigLike = {
   horasNormalesPorDia: 8,
+  horaCorteSabado: "12:00",
   feriadoComoDomingo: true,
 };
 
@@ -31,42 +32,31 @@ describe("calcularDia", () => {
     expect(r.horasExtra50).toBe(0);
   });
 
-  it("sábado de hasta 8 horas: todo normal, sin importar a qué hora", () => {
+  it("sábado que cruza el mediodía: normales + extra50 antes de las 12, extra100 después", () => {
+    // 2026-07-11 es sábado. Entrada 02:00, salida 13:00 -> 10h antes de las 12, 1h después
     const fecha = d(2026, 7, 11, 0, 0);
-    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 7), end: d(2026, 7, 11, 15) }], false, config);
+    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 2), end: d(2026, 7, 11, 13) }], false, config);
     expect(r.tipoDia).toBe("SABADO");
     expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra50).toBe(0);
-    expect(r.horasExtra100).toBe(0);
+    expect(r.horasExtra50).toBe(2);
+    expect(r.horasExtra100).toBe(1);
     expect(r.francoGenerado).toBe(false);
   });
 
-  it("sábado a la tarde, pasado el mediodía: también es hora normal", () => {
+  it("sábado con jornada corta antes del mediodía: solo normales", () => {
     const fecha = d(2026, 7, 11, 0, 0);
-    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 13), end: d(2026, 7, 11, 17) }], false, config);
-    expect(r.horasNormales).toBe(4);
+    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 7), end: d(2026, 7, 11, 12) }], false, config);
+    expect(r.horasNormales).toBe(5);
     expect(r.horasExtra50).toBe(0);
     expect(r.horasExtra100).toBe(0);
   });
 
-  it("sábado de más de 8 horas: lo que pasa de 8 es extra al 100%, nunca al 50%", () => {
+  it("sábado con trabajo solo después del mediodía: todo extra100", () => {
     const fecha = d(2026, 7, 11, 0, 0);
-    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 2), end: d(2026, 7, 11, 13) }], false, config);
-    expect(r.horasNormales).toBe(8);
+    const r = calcularDia(fecha, [{ start: d(2026, 7, 11, 13), end: d(2026, 7, 11, 17) }], false, config);
+    expect(r.horasNormales).toBe(0);
     expect(r.horasExtra50).toBe(0);
-    expect(r.horasExtra100).toBe(3);
-  });
-
-  it("sábado con dos tramos: las 8 horas se cuentan sobre el total del día", () => {
-    const fecha = d(2026, 7, 11, 0, 0);
-    const r = calcularDia(
-      fecha,
-      [{ start: d(2026, 7, 11, 6), end: d(2026, 7, 11, 11) }, { start: d(2026, 7, 11, 14), end: d(2026, 7, 11, 19) }],
-      false,
-      config
-    );
-    expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra100).toBe(2);
+    expect(r.horasExtra100).toBe(4);
   });
 
   it("domingo trabajado: todo extra100 y genera franco compensatorio", () => {
@@ -159,5 +149,55 @@ describe("mismasHoras", () => {
   it("el limite son 18 segundos: menos es lo mismo, mas no", () => {
     expect(mismasHoras(1, 1.004)).toBe(true);
     expect(mismasHoras(1, 1.006)).toBe(false);
+  });
+});
+
+describe("sábado desde el 13/10/2026: todo normal hasta las 8 horas", () => {
+  // 2026-10-17 es sábado, posterior a la fecha de inicio.
+  const nuevo = (h1: number, h2: number) => calcularDia(d(2026, 10, 17, 0), [{ start: d(2026, 10, 17, h1), end: d(2026, 10, 17, h2) }], false, config);
+
+  it("la fecha de inicio es la que se pidió", () => {
+    expect(SABADO_NORMAL_DESDE).toBe("2026-10-13");
+  });
+
+  it("hasta 8 horas: todo normal, sin importar a qué hora", () => {
+    const r = nuevo(7, 15);
+    expect(r.tipoDia).toBe("SABADO");
+    expect(r.horasNormales).toBe(8);
+    expect(r.horasExtra50).toBe(0);
+    expect(r.horasExtra100).toBe(0);
+  });
+
+  it("a la tarde, pasado el corte: también es normal", () => {
+    const r = nuevo(13, 17);
+    expect(r.horasNormales).toBe(4);
+    expect(r.horasExtra100).toBe(0);
+  });
+
+  it("más de 8 horas: el excedente es extra al 100%, nunca al 50%", () => {
+    const r = nuevo(2, 13);
+    expect(r.horasNormales).toBe(8);
+    expect(r.horasExtra50).toBe(0);
+    expect(r.horasExtra100).toBe(3);
+  });
+
+  it("dos tramos: las 8 horas se cuentan sobre el total del día", () => {
+    const fecha = d(2026, 10, 17, 0);
+    const r = calcularDia(
+      fecha,
+      [{ start: d(2026, 10, 17, 6), end: d(2026, 10, 17, 11) }, { start: d(2026, 10, 17, 14), end: d(2026, 10, 17, 19) }],
+      false,
+      config
+    );
+    expect(r.horasNormales).toBe(8);
+    expect(r.horasExtra100).toBe(2);
+  });
+
+  it("el último sábado anterior (10/10) sigue con la regla vieja", () => {
+    // 10h de 2 a 12 -> 8 normales + 2 extra 50%; nada al 100% (corte 12:00).
+    const r = calcularDia(d(2026, 10, 10, 0), [{ start: d(2026, 10, 10, 2), end: d(2026, 10, 10, 13) }], false, config);
+    expect(r.horasNormales).toBe(8);
+    expect(r.horasExtra50).toBe(2);
+    expect(r.horasExtra100).toBe(1);
   });
 });

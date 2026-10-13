@@ -1,4 +1,16 @@
-import { dayOfWeekUtc } from "../dates";
+import { dayOfWeekUtc, localDateTime } from "../dates";
+
+/**
+ * Desde qué día el sábado entero cuenta como hora normal (hasta las
+ * `horasNormalesPorDia`) y sólo el excedente es extra al 100%.
+ *
+ * Los sábados anteriores se siguen calculando con la hora de corte: RRHH pidió
+ * el 13/10/2026 que la regla corra "a partir de ahora" y no toque lo ya
+ * cargado. Como el recálculo vuelve a pasar por días viejos (la ventana de 45
+ * días, o el cambio de una fichada), la fecha tiene que vivir en el cálculo y
+ * no en quién lo dispara: si no, la regla nueva se colaría hacia atrás.
+ */
+export const SABADO_NORMAL_DESDE = "2026-10-13";
 
 export type TipoDia = "HABIL" | "SABADO" | "DOMINGO" | "FERIADO";
 
@@ -9,6 +21,7 @@ export interface TimeInterval {
 
 export interface PayrollConfigLike {
   horasNormalesPorDia: number;
+  horaCorteSabado: string; // "HH:MM"
   feriadoComoDomingo: boolean;
 }
 
@@ -41,6 +54,11 @@ function sumHoras(intervals: TimeInterval[]): number {
     const ms = i.end.getTime() - i.start.getTime();
     return acc + (ms > 0 ? ms / 3_600_000 : 0);
   }, 0);
+}
+
+function parseHoraCorte(fecha: Date, horaCorteSabado: string): Date {
+  const [h, m] = horaCorteSabado.split(":").map(Number);
+  return localDateTime(fecha, h, m);
 }
 
 export function determinarTipoDia(fecha: Date, esFeriado: boolean): TipoDia {
@@ -78,18 +96,36 @@ export function calcularDia(
     };
   }
 
-  if (tipoDia === "SABADO") {
-    // Todo el día cuenta como hora normal hasta completar la jornada; recién lo
-    // que pasa de `horasNormalesPorDia` es extra, y al 100%. Antes el sábado se
-    // partía en una hora de corte (lo de antes: normal y 50%; lo de después:
-    // 100%), regla que se dejó el 13/10/2026 a pedido de RRHH. Acá no hay extra
-    // al 50% en ningún caso.
+  if (tipoDia === "SABADO" && fecha.toISOString().slice(0, 10) >= SABADO_NORMAL_DESDE) {
+    // Todo el día es hora normal hasta completar la jornada; lo que pasa de
+    // `horasNormalesPorDia` es extra al 100%. En este régimen no hay extra al 50%.
     const total = sumHoras(intervals);
     return {
       tipoDia,
       horasNormales: Math.min(total, config.horasNormalesPorDia),
       horasExtra50: 0,
       horasExtra100: Math.max(0, total - config.horasNormalesPorDia),
+      francoGenerado: false,
+    };
+  }
+
+  if (tipoDia === "SABADO") {
+    const cutoff = parseHoraCorte(fecha, config.horaCorteSabado);
+    let antes = 0;
+    let despues = 0;
+    for (const i of intervals) {
+      const antesEnd = i.end < cutoff ? i.end : cutoff;
+      if (antesEnd > i.start) antes += (antesEnd.getTime() - i.start.getTime()) / 3_600_000;
+      const despuesStart = i.start > cutoff ? i.start : cutoff;
+      if (i.end > despuesStart) despues += (i.end.getTime() - despuesStart.getTime()) / 3_600_000;
+    }
+    const horasNormales = Math.min(antes, config.horasNormalesPorDia);
+    const horasExtra50 = Math.max(0, antes - config.horasNormalesPorDia);
+    return {
+      tipoDia,
+      horasNormales,
+      horasExtra50,
+      horasExtra100: despues,
       francoGenerado: false,
     };
   }

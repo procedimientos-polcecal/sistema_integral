@@ -75,6 +75,7 @@ export async function getConfigLiquidacion(supabase: SupabaseClient): Promise<Co
   if (error || !data) throw new Error(`No se pudo leer config_liquidacion: ${error?.message}`);
   return {
     horasNormalesPorDia: Number(data.horas_normales_por_dia),
+    horaCorteSabado: data.hora_corte_sabado,
     feriadoComoDomingo: data.feriado_como_domingo,
     horasFrancoCompensatorio: Number(data.horas_franco_compensatorio),
     multiplicadorExtra50: Number(data.multiplicador_extra_50),
