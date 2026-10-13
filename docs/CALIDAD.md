@@ -217,7 +217,7 @@ El stock arranca en lo que la planilla quedó mostrando después de veinte meses
 correcciones a mano, que es un valor **no verificado**.
 
 La recomendación era un conteo físico, y sigue en pie: cuando alguien mida, el
-conteo de `/calidad` calcula el desvío contra estos 204,24 y 55,647 y deja su
+conteo de `/calidad/carbonilla` calcula el desvío contra estos 204,24 y 55,647 y deja su
 propio ajuste. Recién ahí el stock va a estar parado sobre una medición.
 
 Un detalle de la planilla que quedó a la vista al hacer esa cuenta: **su propio
@@ -253,7 +253,7 @@ Dos cosas más que la importación dejó anotadas:
 | Los tres niveles de permiso | `lib/calidad/auth.ts` |
 | Rutas | `app/api/calidad/{movimientos,movimientos/[id],conteos,carbonilleros,productos,sincronizar}` |
 | El cron diario, 8 UTC | `app/api/cron/calidad-sync` |
-| Pantallas | `app/(app)/calidad/{,movimientos,carbonilleros,productos}` |
+| Pantallas | `app/(app)/calidad/{carbonilla,movimientos,carbonilleros,productos}` |
 | La importación, una sola vez | `scripts/importar-stock-carbonilla.mts` |
 
 ## Lo que falta de una persona

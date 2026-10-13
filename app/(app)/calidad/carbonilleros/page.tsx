@@ -18,7 +18,7 @@ export default async function CarbonillerosPage() {
 
   const user = await usuarioActual();
   if (!user) redirect("/login");
-  if (!(await esAdminCalidad(supabase, user.id))) redirect("/calidad");
+  if (!(await esAdminCalidad(supabase, user.id))) redirect("/calidad/carbonilla");
 
   const [carbonilleros, bandeja, empresas, proveedores] = await Promise.all([
     traerCarbonilleros(supabase),

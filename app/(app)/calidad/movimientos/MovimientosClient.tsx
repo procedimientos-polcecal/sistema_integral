@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CORTE_DE_LOS_TIPOS } from "@/lib/calidad/movimientos";
-import type { FilaDelLibro } from "../StockClient";
+import type { FilaDelLibro } from "../carbonilla/StockClient";
 import Select from "@/components/Select";
 
 const ETIQUETA_DE_ORIGEN: Record<string, string> = {

@@ -2,26 +2,60 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelCalidadDe } from "@/lib/calidad/auth";
-import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
-import {
-  saldoCorrido,
-  traerBandeja,
-  traerCarbonilleros,
-  traerElStock,
-} from "@/lib/calidad/consultas";
-import StockClient from "./StockClient";
+import { diaEnArgentina, hoyEnArgentina } from "@/lib/core/fechas";
+import KpiCard from "@/components/KpiCard";
 
 /**
- * El stock de carbonilla: los dos saldos, el consumo del día y el libro reciente.
+ * El tablero de Calidad: la puerta del módulo.
  *
- * Es la pantalla que se abre a la tarde para cargar lo que se quemó, que es lo
- * que se hace **224 de 256 días**. Todo lo demás está, pero más chico.
+ * Calidad son **tres frentes que no se parecen** —el stock de carbonilla, el de
+ * envases y los ensayos del laboratorio—, y hasta acá la raíz del módulo era
+ * directamente uno de ellos. Quien entraba por el menú caía en el stock de
+ * carbonilla y los otros dos sólo existían si se desplegaba el submenú.
  *
- * El saldo corrido se calcula acá y no en el cliente: es una pasada sobre el
- * libro entero, y el libro arranca con veinte meses importados.
+ * Por eso el stock de carbonilla se mudó a `/calidad/carbonilla` y esta
+ * pantalla ocupa la raíz, con las pestañas como tarjetas — el mismo molde que
+ * el tablero de Compras.
  *
- * Spec: docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md
+ * **Todos los números salen de consultas de conteo**, con `head: true`: cuentan
+ * en la base y no traen una sola fila. Entrar al módulo no puede costar leer el
+ * libro de carbonilla entero, que arranca con veinte meses importados y es
+ * justamente lo que hace la pantalla del stock.
  */
+
+/**
+ * Cuenta filas sin traerlas: recibe la consulta ya armada, con su `select`
+ * literal.
+ *
+ * Un error devuelve `null` y no cero. Un cero en una tarjeta se lee como "no
+ * hay ninguno", y "no se pudo contar" es otra cosa — la misma distinción que el
+ * guión del reporte.
+ */
+async function contar(
+  consulta: PromiseLike<{ count: number | null; error: unknown }>
+): Promise<number | null> {
+  const { count, error } = await consulta;
+  return error ? null : (count ?? 0);
+}
+
+/** Lo que va en cada consulta de conteo. */
+const SOLO_CONTAR = { count: "exact", head: true } as const;
+
+function comoSeLee(iso: string): string {
+  const [a, m, d] = iso.split("-");
+  return `${d}/${m}/${a.slice(2)}`;
+}
+
+/** Cuántos días pasaron desde esa fecha hasta hoy. */
+function diasDesde(iso: string, hoy: string): number {
+  const ms = Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`);
+  return Math.max(0, Math.round(ms / 86_400_000));
+}
+
+const CARBONILLA = "#B45309";
+const ENVASES = "#0891B2";
+const ENSAYOS = "#BE185D";
+
 export default async function CalidadPage() {
   const supabase = await createClient();
 
@@ -31,41 +65,207 @@ export default async function CalidadPage() {
   const nivel = await nivelCalidadDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const [stock, bandeja, carbonilleros, sync] = await Promise.all([
-    traerElStock(supabase),
-    traerBandeja(supabase),
-    traerCarbonilleros(supabase),
-    ultimaSincronizacionDe(supabase, "calidad", "carbonilla-odoo"),
+  const esAdmin = nivel === "admin";
+  const hoy = hoyEnArgentina();
+  const hace30 = diaEnArgentina(-30);
+
+  const [
+    ultimoConsumo,
+    movimientosCarbonilla,
+    carbonilleros,
+    productosOdoo,
+    envasesActivos,
+    envasesFaltantes,
+    movimientosEnvases,
+    proveedoresEnvases,
+    muestras30,
+    muestrasHoy,
+    ultimoDia,
+    productosEnsayo,
+    limites,
+  ] = await Promise.all([
+    supabase
+      .from("calidad_movimientos")
+      .select("fecha")
+      .eq("tipo", "consumo")
+      .order("fecha", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    contar(supabase.from("calidad_movimientos").select("id", SOLO_CONTAR)),
+    contar(supabase.from("calidad_carbonilleros").select("id", SOLO_CONTAR).eq("activo", true)),
+    contar(supabase.from("calidad_productos_odoo").select("odoo_product_id", SOLO_CONTAR).eq("cuenta", true)),
+    contar(supabase.from("calidad_envases_articulos").select("id", SOLO_CONTAR).eq("activo", true)),
+    // `faltante` es una columna generada numérica —cuánto falta para el
+    // mínimo—, no un booleano: bajo el mínimo es > 0.
+    contar(
+      supabase.from("calidad_envases_articulos").select("id", SOLO_CONTAR).eq("activo", true).gt("faltante", 0)
+    ),
+    contar(supabase.from("calidad_envases_movimientos").select("id", SOLO_CONTAR)),
+    contar(supabase.from("calidad_envases_proveedores").select("id", SOLO_CONTAR)),
+    contar(supabase.from("calidad_ensayos_muestras").select("id", SOLO_CONTAR).gte("fecha", hace30)),
+    contar(supabase.from("calidad_ensayos_muestras").select("id", SOLO_CONTAR).eq("fecha", hoy)),
+    supabase
+      .from("calidad_ensayos_muestras")
+      .select("fecha")
+      .order("fecha", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    contar(supabase.from("calidad_ensayos_productos").select("id", SOLO_CONTAR).eq("activo", true)),
+    contar(supabase.from("calidad_ensayos_limites").select("id", SOLO_CONTAR)),
   ]);
 
-  const libro = saldoCorrido(stock.movimientos).slice(-60).reverse();
+  const fechaUltimoConsumo = ultimoConsumo.data?.fecha ?? null;
+  const fechaUltimoEnsayo = ultimoDia.data?.fecha ?? null;
+
+  /** Un número que no se pudo contar se dice, no se muestra como cero. */
+  const n = (v: number | null) => (v === null ? "—" : v);
 
   return (
-    <StockClient
-      puedeEditar={nivel === "edicion" || nivel === "admin"}
-      saldos={stock.saldos}
-      ultimaFecha={stock.ultimaFecha}
-      ultimoConsumo={stock.ultimoConsumo}
-      libro={libro.map((f) => ({
-        id: f.movimiento.id,
-        fecha: f.fecha,
-        tipo: f.movimiento.tipo,
-        carbon: f.movimiento.carbon,
-        toneladas: Number(f.movimiento.toneladas),
-        motivo: f.movimiento.motivo,
-        origen: f.movimiento.origen,
-        orden: f.movimiento.odoo_purchase_name,
-        carbonillero_id: f.movimiento.carbonillero_id,
-        sheets_pendiente: f.movimiento.sheets_pendiente,
-        saldoVegetal: f.saldoVegetal,
-        saldoResidual: f.saldoResidual,
-        saldoTotal: f.saldoTotal,
-      }))}
-      carbonilleros={carbonilleros
-        .filter((c) => c.activo)
-        .map((c) => ({ id: c.id, nombre: c.nombre_planilla, carbon: c.carbon }))}
-      bandeja={bandeja}
-      sync={sync}
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Calidad</h1>
+        <p className="text-sm text-slate-500">
+          Los tres frentes del sector. Tocá una tarjeta para trabajarla.
+        </p>
+      </div>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Carbonilla
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <KpiCard
+            color={CARBONILLA}
+            label="El stock"
+            // El número que dice si hay trabajo: el consumo se carga a la tarde
+            // 224 de 256 días, así que dos días sin cargar es la señal.
+            value={fechaUltimoConsumo ? diasDesde(fechaUltimoConsumo, hoy) : "—"}
+            sub={
+              fechaUltimoConsumo
+                ? `días desde el último consumo (${comoSeLee(fechaUltimoConsumo)})`
+                : "todavía no se cargó ningún consumo"
+            }
+            href="/calidad/carbonilla"
+          />
+          <KpiCard
+            color={CARBONILLA}
+            label="Movimientos"
+            value={n(movimientosCarbonilla)}
+            sub="el libro entero"
+            href="/calidad/movimientos"
+          />
+          {esAdmin && (
+            <KpiCard
+              color={CARBONILLA}
+              label="Carbonilleros"
+              value={n(carbonilleros)}
+              sub="activos"
+              href="/calidad/carbonilleros"
+            />
+          )}
+          {esAdmin && (
+            <KpiCard
+              color={CARBONILLA}
+              label="Productos"
+              value={n(productosOdoo)}
+              sub="de Odoo que cuentan"
+              href="/calidad/productos"
+            />
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Envases
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <KpiCard
+            color={envasesFaltantes ? "#B91C1C" : ENVASES}
+            label="Stock"
+            value={n(envasesFaltantes)}
+            sub={`bajo el mínimo, de ${n(envasesActivos)} artículos`}
+            href="/calidad/envases"
+          />
+          <KpiCard
+            color={ENVASES}
+            label="Movimientos"
+            value={n(movimientosEnvases)}
+            sub="el kardex entero"
+            href="/calidad/envases/movimientos"
+          />
+          <KpiCard
+            color={ENVASES}
+            label="Por período"
+            value={n(envasesActivos)}
+            sub="artículos a resumir"
+            href="/calidad/envases/periodo"
+          />
+          <KpiCard
+            color={ENVASES}
+            label="Proveedores"
+            value={n(proveedoresEnvases)}
+            sub="de la planilla"
+            href="/calidad/envases/proveedores"
+          />
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Ensayos
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <KpiCard
+            color={ENSAYOS}
+            label="Las muestras"
+            value={n(muestras30)}
+            sub="en los últimos 30 días"
+            href="/calidad/ensayos"
+          />
+          <KpiCard
+            color={ENSAYOS}
+            label="Cargar muestra"
+            value={n(muestrasHoy)}
+            sub="cargadas hoy"
+            href="/calidad/ensayos/nueva"
+          />
+          <KpiCard
+            color={ENSAYOS}
+            label="Reporte del día"
+            value={fechaUltimoEnsayo ? comoSeLee(fechaUltimoEnsayo) : "—"}
+            sub={fechaUltimoEnsayo ? "último día con muestras" : "todavía no hay muestras"}
+            href="/calidad/ensayos/reporte"
+          />
+          <KpiCard
+            color={ENSAYOS}
+            label="Indicadores"
+            value={n(muestras30)}
+            sub="muestras del período corto"
+            href="/calidad/ensayos/indicadores"
+          />
+          {esAdmin && (
+            <KpiCard
+              color={ENSAYOS}
+              label="Productos"
+              value={n(productosEnsayo)}
+              sub="que se muestrean"
+              href="/calidad/ensayos/productos"
+            />
+          )}
+          {esAdmin && (
+            <KpiCard
+              color={limites === 0 ? "#B45309" : ENSAYOS}
+              label="Límites"
+              value={n(limites)}
+              // Cero límites no es un error pero tampoco es neutro: significa
+              // que ninguna muestra se va a marcar, y eso tiene que decirse.
+              sub={limites === 0 ? "ninguno: nada se marca" : "cargados"}
+              href="/calidad/ensayos/limites"
+            />
+          )}
+        </div>
+      </section>
+    </div>
   );
 }

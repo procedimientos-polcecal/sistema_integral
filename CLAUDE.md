@@ -152,7 +152,9 @@ el SdG no se entera y la pisa.
 
 **Calidad tiene las dos direcciones a la vez, y además un frente sin planilla**,
 así que conviene mirar en cuál de los tres se está parado antes de tocar una
-ruta. En **Envases**
+ruta. La raíz `/calidad` es un **tablero** con las tres mitades como tarjetas;
+el stock de carbonilla, que vivía ahí, se mudó a `/calidad/carbonilla` el
+13/10/2026. En **Envases**
 (`/calidad/envases`, el stock de bolsas y bolsones) **manda la planilla**, como
 en Compras, Mantenimiento e Inventario: es la planilla del almacén clonada, su
 stock es una fórmula sobre el kardex, y un movimiento cargado en la app que no

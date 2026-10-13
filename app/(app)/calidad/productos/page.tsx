@@ -16,7 +16,7 @@ export default async function ProductosPage() {
 
   const user = await usuarioActual();
   if (!user) redirect("/login");
-  if (!(await esAdminCalidad(supabase, user.id))) redirect("/calidad");
+  if (!(await esAdminCalidad(supabase, user.id))) redirect("/calidad/carbonilla");
 
   const [productos, bandeja] = await Promise.all([
     traerProductosDeOdoo(supabase),

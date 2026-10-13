@@ -213,21 +213,26 @@ export const NAV: NavItem[] = [
     // lee—; en carbonilla la planilla se va, porque las entradas salen de Odoo
     // y de la balanza y acá manda el sistema.
     //
-    // Por eso van como dos subgrupos y no como ocho hijos planos: con ocho el
-    // menú deja de leerse, y dos mitades que funcionan al revés puestas una al
-    // lado de la otra invitan a suponer que funcionan igual.
+    // Por eso van como subgrupos y no como hijos planos: con catorce el menú
+    // deja de leerse, y dos mitades que funcionan al revés puestas una al lado
+    // de la otra invitan a suponer que funcionan igual.
     //
-    // Ver docs/CALIDAD.md y docs/CALIDAD-ENVASES.md.
+    // La raíz del módulo es el tablero y queda fuera de esta lista — mismo caso
+    // que Cantera y Facturación. Antes la raíz era directamente el stock de
+    // carbonilla, así que quien entraba por el menú caía en uno de los tres
+    // frentes y los otros dos sólo existían si se desplegaba el submenú.
+    //
+    // Ver docs/CALIDAD.md, docs/CALIDAD-ENVASES.md y docs/CALIDAD-ENSAYOS.md.
     children: [
       {
         label: "Carbonilla",
-        href: "/calidad",
+        href: "/calidad/carbonilla",
         modulo: "calidad",
         // El stock primero: es la pantalla que se abre a la tarde para cargar
         // el consumo del día, que es lo que se hace 224 de 256 días. El libro
         // entero y los catálogos se miran después, no durante.
         children: [
-          { label: "El stock", href: "/calidad", modulo: "calidad" },
+          { label: "El stock", href: "/calidad/carbonilla", modulo: "calidad" },
           { label: "Movimientos", href: "/calidad/movimientos", modulo: "calidad" },
           { label: "Carbonilleros", href: "/calidad/carbonilleros", modulo: "calidad", soloAdmin: true },
           { label: "Productos", href: "/calidad/productos", modulo: "calidad", soloAdmin: true },
