@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { addUtcDays, utcDateOnlyFrom } from "./dates";
+import { addUtcDays, utcDateOnlyFrom, hoyComoDiaArgentina } from "./dates";
 import { conValorHoraPlano } from "./valorHora";
 
 export interface EmpleadoDashboard {
@@ -33,7 +33,7 @@ export async function empleadosPermitidos(
 }
 
 export function periodoARango(periodo: string | null): { desde: Date; hasta: Date } {
-  const hoy = utcDateOnlyFrom(new Date());
+  const hoy = hoyComoDiaArgentina();
   if (periodo === "7" || periodo === "15" || periodo === "30") {
     return { desde: addUtcDays(hoy, -(Number(periodo) - 1)), hasta: hoy };
   }
@@ -47,7 +47,7 @@ export function periodoARango(periodo: string | null): { desde: Date; hasta: Dat
 export function rangoDesdeHasta(params: URLSearchParams): { desde: Date; hasta: Date } {
   const desde = params.get("desde");
   const hasta = params.get("hasta");
-  const hoy = utcDateOnlyFrom(new Date());
+  const hoy = hoyComoDiaArgentina();
   return {
     desde: desde ? utcDateOnlyFrom(new Date(`${desde}T00:00:00Z`)) : utcDateOnlyFrom(new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1))),
     hasta: hasta ? utcDateOnlyFrom(new Date(`${hasta}T00:00:00Z`)) : hoy,

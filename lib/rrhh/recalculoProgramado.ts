@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recalcularSectorPeriodo } from "./engine/recalcular";
-import { addUtcDays, utcDateOnlyFrom } from "./dates";
+import { addUtcDays, hoyComoDiaArgentina } from "./dates";
 
 /**
  * Cuántos días hacia atrás recalcula la corrida programada.
@@ -30,7 +30,7 @@ export async function recalcularVentana(supabase: SupabaseClient): Promise<{
   hasta: string;
   ms: number;
 }> {
-  const hasta = utcDateOnlyFrom(new Date());
+  const hasta = hoyComoDiaArgentina();
   const desde = addUtcDays(hasta, -DIAS_VENTANA_RECALCULO);
   const inicio = Date.now();
   const empleados = await recalcularSectorPeriodo(supabase, null, desde, hasta);

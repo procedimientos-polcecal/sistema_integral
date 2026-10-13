@@ -1,3 +1,4 @@
+import { hoyEnArgentina } from "@/lib/core/fechas";
 /**
  * Convención de fechas en todo el módulo RRHH:
  * - Un campo "fecha" (calendario, sin hora) siempre se representa como
@@ -77,4 +78,23 @@ export function fechaArgentinaDe(instante: Date): Date {
  */
 export function diaIso(fecha: Date): string {
   return fecha.toISOString().slice(0, 10);
+}
+
+/**
+ * Hoy en Argentina, como día calendario (medianoche UTC), que es la forma que
+ * usa todo este módulo.
+ *
+ * Existe porque `utcDateOnlyFrom(new Date())` **no es hoy**: lee la fecha del
+ * instante en UTC, y Vercel corre en UTC. Después de las 21:00 de acá ya
+ * devuelve el día siguiente. Medido el 13/10/2026: el recálculo nocturno corre
+ * a las 00:28 UTC —21:28 de Argentina— y con esa cuenta recalculaba el día de
+ * mañana, creando 68 filas de `calculos_diarios` que marcaban ausente a toda
+ * la planta para un día que todavía no había empezado.
+ *
+ * La cuenta de qué día es en Argentina vive en `lib/core/fechas.ts` y es la
+ * misma que usan Calidad y Compras; acá sólo se la pasa a la forma `Date`.
+ */
+export function hoyComoDiaArgentina(): Date {
+  const [y, m, d] = hoyEnArgentina().split("-").map(Number);
+  return toUtcDateOnly(y, m - 1, d);
 }
