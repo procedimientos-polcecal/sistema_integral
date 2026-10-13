@@ -33,6 +33,19 @@ Cuatro cosas que no se deducen del código:
   La planilla agrupa con comodines sobre la descripción y cuenta los bolsones
   nuevos dos veces; el SdG agrupa por la K. La diferencia está explicada en la
   pantalla para que no se lea como un bug propio.
+- **Sacar un artículo de la planilla lo da de baja en el SdG.** Hasta el
+  13/10/2026 no: la sincronización sólo hacía `upsert`, así que un renglón
+  borrado del listado seguía apareciendo en Stock para siempre y no había forma
+  de darlo de baja desde ninguna pantalla. Ahora se marca `activo = false` lo
+  que la planilla ya no trae, y el botón de traer dice **qué códigos** se dieron
+  de baja. Se desactiva y no se borra: un artículo con kardex no se puede borrar
+  —`on delete restrict`— y tampoco conviene, porque el movimiento viejo perdería
+  de qué era. Si el artículo vuelve a la planilla, vuelve solo.
+
+  Al que sobra se lo reconoce por la **marca de tiempo** de la corrida y no por
+  una lista de códigos: un `.not("codigo", "in", …)` arma una URL que PostgREST
+  rechaza sin decir por qué cuando la lista crece.
+
 - **El espejo escribe la fecha en ISO**, y eso se decidió midiendo las tres
   formas contra la planilla real el 16/09/2026:
 

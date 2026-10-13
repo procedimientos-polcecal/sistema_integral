@@ -168,6 +168,10 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
       ...a,
       grupo: grupoDe(a.codigo),
       stock_sincronizado_en: ahora,
+      // Vuelve de la baja solo. Un artículo que se sacó de la planilla y después
+      // se repuso tiene que reaparecer en la pantalla sin que nadie toque nada:
+      // la planilla manda también para esto.
+      activo: true,
     }));
     const { error } = await admin
       .from("calidad_envases_articulos")
@@ -179,6 +183,48 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
       return falla(400, error.message);
     }
     guardadosArticulos += lote.length;
+  }
+
+  // ── Lo que ya no está en la planilla se da de baja ─────────
+  //
+  // Sin esto, **sacar una fila del listado no la saca del SdG**: la
+  // sincronización sólo hacía `upsert`, así que un artículo borrado allá seguía
+  // apareciendo en Stock para siempre y no había forma de darlo de baja desde
+  // ninguna pantalla. Lo encontró el usuario el 13/10/2026 mirando dos renglones
+  // que no son envases —`00966` y `00967`, restos del almacén que quedaron al
+  // clonar la planilla—: estaban bien traídos, pero borrarlos de la planilla no
+  // los habría hecho desaparecer.
+  //
+  // Se **desactiva y no se borra**: `calidad_envases_movimientos.articulo_id` es
+  // `on delete restrict`, así que un artículo con kardex no se puede borrar — y
+  // tampoco conviene, porque el movimiento viejo perdería de qué era. Las tres
+  // pantallas ya filtran por `activo`.
+  //
+  // Es seguro frente a una lectura a medias: más arriba se corta con 502 si la
+  // pestaña vino vacía o sin columna de código, así que acá la lista siempre es
+  // una lectura buena.
+  //
+  // Se reconoce al que sobra **por la marca de tiempo y no por una lista de
+  // códigos**: el upsert de arriba le puso `ahora` a todos los que la planilla
+  // trajo, así que lo que quedó con una marca vieja es justamente lo que ya no
+  // está. Un `.not("codigo", "in", …)` con los códigos arma una URL que
+  // PostgREST rechaza con un 400 sin decir por qué cuando la lista crece —hoy
+  // son 28, pero la del almacén tiene 2.800—; una condición no tiene ese techo.
+  let dadosDeBaja: string[] = [];
+  if (articulos.length > 0) {
+    const { data, error } = await admin
+      .from("calidad_envases_articulos")
+      .update({ activo: false })
+      .eq("activo", true)
+      .or(`stock_sincronizado_en.is.null,stock_sincronizado_en.lt.${ahora}`)
+      .select("codigo");
+    if (error) {
+      await registrarSincronizacion({
+        modulo: "calidad", recurso: "envases_articulos", ok: false, error: error.message,
+      });
+      return falla(400, error.message);
+    }
+    dadosDeBaja = (data ?? []).map((f) => f.codigo as string);
   }
 
   // ── Los proveedores y las referencias ──────────────────────
@@ -255,6 +301,9 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
   return logra({
     articulos: guardadosArticulos,
     articulos_repetidos: repetidos,
+    // Los códigos y no el conteo: dar de baja un artículo es un cambio que
+    // alguien tiene que poder revisar, sobre todo si no fue a propósito.
+    articulos_dados_de_baja: dadosDeBaja,
     movimientos: guardadosMovimientos,
     movimientos_sin_articulo: sinArticulo,
     proveedores: guardadosProveedores,

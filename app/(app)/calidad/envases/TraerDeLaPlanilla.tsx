@@ -47,6 +47,8 @@ export default function TraerDeLaPlanilla({ sync }: { sync: UltimaSync | null })
         `${body.movimientos_sin_articulo} movimientos de un código que no está en el listado`
       );
     }
+    const deBaja = (body.articulos_dados_de_baja ?? []) as string[];
+    if (deBaja.length) partes.push(`dados de baja (ya no están en la planilla): ${deBaja.join(", ")}`);
     const enDisputa = (body.articulos_con_grupo_en_disputa ?? []) as string[];
     if (enDisputa.length) partes.push(`grupo en disputa: ${enDisputa.join("; ")}`);
     const sinEnlazar = (body.proveedores_sin_enlazar ?? []) as string[];
