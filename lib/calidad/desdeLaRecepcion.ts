@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer } from "@/lib/odoo/client";
-import { CALIDAD_DESDE } from "./sincronizar";
+import { exportarMovimiento } from "./espejo";
 
 /**
  * El camión que Despacho acaba de pesar, anotado en el stock de Calidad.
@@ -40,10 +40,6 @@ export async function anotarLaRecepcionEnElStock(
   d: RecepcionParaElStock
 ): Promise<{ aviso: string | null }> {
   try {
-    // Antes del corte manda la importación: si alguien cierra una recepción con
-    // fecha vieja, el libro ya la tiene desde la planilla.
-    if (d.fecha < CALIDAD_DESDE) return { aviso: null };
-
     // Quién es este proveedor para Calidad. Primero por el enganche con el
     // núcleo; si no está —y son nueve de trece— por el partner de Odoo, que es
     // la identidad de verdad del carbonillero.
@@ -120,6 +116,30 @@ export async function anotarLaRecepcionEnElStock(
     );
     if (error) {
       return { aviso: `La recepción se cerró, pero el stock de Calidad no se movió: ${error.message}` };
+    }
+
+    // HAY QUE ESCRIBIRLO EN LA PLANILLA EN EL MISMO PASO, o el camión entra dos
+    // veces. Desde el 13/10/2026 la planilla manda sobre el libro: un
+    // movimiento sin `sheets_fila` lo vuelve a crear la próxima lectura cuando
+    // alguien anote ese mismo camión allá.
+    const { data: guardado } = await admin
+      .from("calidad_movimientos")
+      .select("id, sheets_fila")
+      .eq("odoo_purchase_line_id", lineas[0].id)
+      .maybeSingle<{ id: string; sheets_fila: number | null }>();
+
+    if (!guardado) {
+      return { aviso: "La recepción se cerró, pero no se encontró el movimiento para exportarlo." };
+    }
+    if (guardado.sheets_fila !== null) return { aviso: null };
+
+    const { aviso } = await exportarMovimiento(admin, guardado.id);
+    if (aviso) {
+      return {
+        aviso:
+          `${aviso} Hasta que se escriba, ese camión puede entrar dos veces: ` +
+          "la planilla manda y este movimiento todavía no tiene su fila.",
+      };
     }
 
     return { aviso: null };

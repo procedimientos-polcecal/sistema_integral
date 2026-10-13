@@ -2,95 +2,50 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer } from "@/lib/odoo/client";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import { movimientoDesdeLaLineaDeOdoo, type Catalogos, type LineaDeOdoo } from "./reconocer";
-import { traerCarbonilleros, traerProductosDeOdoo } from "./consultas";
+import { traerCarbonilleros, traerMovimientos, traerProductosDeOdoo } from "./consultas";
+import {
+  desviosContraOdoo,
+  type CamionDelLibro,
+  type Desvios,
+  type LineaDeOdooParaControl,
+} from "./conciliacion";
 
 /**
- * Traer de Odoo las entradas de carbonilla que todavía no están en el libro.
+ * El libro contra Odoo: qué camión no tiene orden de compra.
  *
- * LA VENTANA VA SOBRE `create_date`, NO SOBRE `date_order`, y es la decisión que
- * importa de este archivo. Se midió: 1.053 de 1.055 órdenes del año se cargan el
- * mismo día, pero el máximo son 3 días — y al 16/09/2026 hay once días sin
- * cargar. Una orden fechada el 05/09 y cargada el 20/09 **la ventana de
- * `date_order` no la ve nunca**: se la pasa por atrás mientras el cron avanza.
- * Con `create_date` eso no puede pasar.
+ * **Odoo dejó de crear movimientos el 13/10/2026.** La planilla manda sobre el
+ * libro —ver `desdeLaPlanilla.ts`— y esto pasó a ser el único lugar que avisa
+ * que un camión entró sin orden de compra, que es plata que después no se puede
+ * facturar.
  *
- * El margen es fijo contra hoy y no contra la última corrida: una corrida que se
- * saltó no abre un hueco.
+ * LA VENTANA SIGUE SIENDO `create_date` Y NO `date_order`, por la misma razón
+ * de siempre: una orden fechada el 05/09 y cargada el 20/09 la ventana por
+ * fecha de orden no la ve nunca. Se midió sobre un año: 1.053 de 1.055 órdenes
+ * se cargan el mismo día, pero el máximo son 3 y el 16/09 Odoo llevaba once sin
+ * cargar.
  *
- * NUNCA PISA. Si una orden que ya entró cambia de cantidad en Odoo, el
- * movimiento no se reescribe: va a la bandeja y una persona decide. Un saldo que
- * se mueve solo hacia atrás no se nota hasta el conteo.
+ * **No inserta ni borra nada.** Devuelve los desvíos y quien llama decide qué
+ * mostrar. Guardarlos sería el error que este módulo ya tiene escrito para los
+ * saldos: un derivado guardado se desincroniza y nada avisa.
  *
- * Spec: docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md
+ * Spec: docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md
  */
 
 const DIAS_DE_MARGEN = 30;
 
-/**
- * El cron nunca mira antes de esto: es lo único que evita que el histórico
- * importado se duplique cuando la sincronización pase por las mismas órdenes.
- * Se pone el día en que corrió `scripts/importar-stock-carbonilla.mts`.
- */
-export const CALIDAD_DESDE = process.env.CALIDAD_DESDE ?? "2026-09-16";
-
-/**
- * De a cuántos ids se consulta Supabase.
- *
- * Un `.in()` con muchos ids arma una URL que PostgREST rechaza con un 400 sin
- * decir por qué. Doscientos es el número que usa el resto del repo.
- */
-const LOTE = 200;
-
-export interface ResumenDeSincronizacion {
+export interface ResumenDelControl extends Desvios {
+  /** Cuántas líneas de Odoo se miraron. */
   leidas: number;
-  nuevas: number;
-  yaEstaban: number;
-  descartadas: number;
-  aLaBandeja: number;
-  cambiadasEnOdoo: number;
 }
 
-interface LineaCruda {
-  id: number;
-  order_id: [number, string];
-  product_id: [number, string];
-  partner_id: [number, string];
-  product_qty: number;
-}
-
-interface YaGuardado {
-  odoo_purchase_line_id: number;
-  odoo_purchase_name: string | null;
-  toneladas: number;
-}
-
-/** Las líneas del libro que ya tienen alguno de estos ids de Odoo, por lotes. */
-async function traerLoQueYaEsta(
-  supabase: SupabaseClient,
-  ids: number[]
-): Promise<Map<number, YaGuardado>> {
-  const encontradas = new Map<number, YaGuardado>();
-
-  for (let i = 0; i < ids.length; i += LOTE) {
-    const { data, error } = await supabase
-      .from("calidad_movimientos")
-      .select("odoo_purchase_line_id, odoo_purchase_name, toneladas")
-      .in("odoo_purchase_line_id", ids.slice(i, i + LOTE));
-    if (error) throw new Error(error.message);
-
-    for (const m of (data ?? []) as YaGuardado[]) {
-      encontradas.set(m.odoo_purchase_line_id, m);
-    }
-  }
-
-  return encontradas;
-}
-
-export async function sincronizarCarbonillaConOdoo(
+export async function controlarContraOdoo(
   supabase: SupabaseClient
-): Promise<ResumenDeSincronizacion> {
-  const vacio: ResumenDeSincronizacion = {
-    leidas: 0, nuevas: 0, yaEstaban: 0, descartadas: 0, aLaBandeja: 0, cambiadasEnOdoo: 0,
+): Promise<ResumenDelControl> {
+  const vacio: ResumenDelControl = {
+    leidas: 0,
+    sinOrden: [],
+    sinCamion: [],
+    cantidadDistinta: [],
   };
 
   const [carbonilleros, productos] = await Promise.all([
@@ -99,7 +54,7 @@ export async function sincronizarCarbonillaConOdoo(
   ]);
 
   // Sin carbonilleros declarados no hay a quién buscarle órdenes. No es un
-  // error: es el catálogo vacío, y la pantalla de carbonilleros lo dice.
+  // error: es el catálogo sin cargar.
   const activos = carbonilleros.filter((c) => c.activo);
   if (activos.length === 0) return vacio;
 
@@ -115,7 +70,13 @@ export async function sincronizarCarbonillaConOdoo(
 
   const desde = sumarDias(hoyEnArgentina(), -DIAS_DE_MARGEN);
 
-  const crudas = await buscarLeer<LineaCruda>(
+  const crudas = await buscarLeer<{
+    id: number;
+    order_id: [number, string];
+    product_id: [number, string];
+    partner_id: [number, string];
+    product_qty: number;
+  }>(
     "purchase.order.line",
     [
       ["order_id.state", "=", "purchase"],
@@ -127,8 +88,6 @@ export async function sincronizarCarbonillaConOdoo(
   );
   if (crudas.length === 0) return vacio;
 
-  // La fecha del movimiento es la del papel (`date_order`), no la de carga. La
-  // de carga sólo decide qué se mira, arriba.
   const ordenIds = [...new Set(crudas.map((l) => l.order_id[0]))];
   const ordenes = await buscarLeer<{ id: number; date_order: string }>(
     "purchase.order",
@@ -138,91 +97,49 @@ export async function sincronizarCarbonillaConOdoo(
   );
   const fechaDeOrden = new Map(ordenes.map((o) => [o.id, String(o.date_order).slice(0, 10)]));
 
-  const lineas: LineaDeOdoo[] = crudas.map((l) => ({
-    id: l.id,
-    ordenNombre: l.order_id[1],
-    fecha: fechaDeOrden.get(l.order_id[0]) ?? "",
-    partnerId: l.partner_id[0],
-    partnerNombre: l.partner_id[1],
-    productoId: l.product_id[0],
-    productoNombre: l.product_id[1],
-    cantidad: l.product_qty,
-  }));
-
-  // La fecha de corte: el histórico importado no se vuelve a traer. Una línea
-  // sin fecha de orden tampoco entra — no hay dónde ponerla en el libro.
-  const delLadoNuevo = lineas.filter((l) => l.fecha && l.fecha >= CALIDAD_DESDE);
-  if (delLadoNuevo.length === 0) return { ...vacio, leidas: lineas.length };
-
-  const guardadas = await traerLoQueYaEsta(supabase, delLadoNuevo.map((l) => l.id));
-
-  const resumen: ResumenDeSincronizacion = { ...vacio, leidas: lineas.length };
-
-  for (const linea of delLadoNuevo) {
-    const guardada = guardadas.get(linea.id);
-
-    if (guardada) {
-      resumen.yaEstaban++;
-      // El movimiento guarda el signo; la cantidad de Odoo es siempre positiva.
-      const guardado = Math.abs(Number(guardada.toneladas));
-      if (Math.abs(guardado - linea.cantidad) > 0.0005) {
-        resumen.cambiadasEnOdoo++;
-        await aLaBandeja(
-          supabase,
-          linea,
-          `La ${linea.ordenNombre} pasó de ${guardado} a ${linea.cantidad} toneladas después de haber entrado al stock. El movimiento NO se cambió: decidilo vos.`
-        );
-      }
-      continue;
-    }
-
-    const r = movimientoDesdeLaLineaDeOdoo(linea, catalogos);
-
-    if (r.resultado === "descartado") {
-      resumen.descartadas++;
-      continue;
-    }
-
-    if (r.resultado === "a_la_bandeja") {
-      resumen.aLaBandeja++;
-      await aLaBandeja(supabase, linea, r.motivo);
-      continue;
-    }
-
-    // `ignoreDuplicates` y no un update: si la recepción de Despacho ya guardó
-    // esta misma línea con su propio origen, la sincronización no la toca. Ése
-    // es todo el mecanismo anti-duplicado.
-    const { error } = await supabase
-      .from("calidad_movimientos")
-      .upsert(r.movimiento, { onConflict: "odoo_purchase_line_id", ignoreDuplicates: true });
-    if (error) throw new Error(error.message);
-
-    resumen.nuevas++;
-    await supabase
-      .from("calidad_odoo_sin_reconocer")
-      .delete()
-      .eq("odoo_purchase_line_id", linea.id);
+  // `movimientoDesdeLaLineaDeOdoo` se usa SÓLO para separar los camiones de los
+  // fletes y de lo que no se reconoce. Lo que devuelve ya no se guarda: su
+  // `movimiento` se descarta.
+  const deOdoo: LineaDeOdooParaControl[] = [];
+  for (const l of crudas) {
+    const linea: LineaDeOdoo = {
+      id: l.id,
+      ordenNombre: l.order_id[1],
+      fecha: fechaDeOrden.get(l.order_id[0]) ?? "",
+      partnerId: l.partner_id[0],
+      partnerNombre: l.partner_id[1],
+      productoId: l.product_id[0],
+      productoNombre: l.product_id[1],
+      cantidad: l.product_qty,
+    };
+    if (!linea.fecha) continue;
+    if (movimientoDesdeLaLineaDeOdoo(linea, catalogos).resultado !== "entra") continue;
+    deOdoo.push({
+      ordenNombre: linea.ordenNombre,
+      fecha: linea.fecha,
+      partnerId: linea.partnerId,
+      partnerNombre: linea.partnerNombre,
+      cantidad: linea.cantidad,
+    });
   }
 
-  return resumen;
-}
+  // Los camiones del libro del mismo período. Salen de la planilla, que es
+  // ahora la fuente.
+  const partnerDelCarbonillero = new Map(activos.map((c) => [c.id, c.odoo_partner_id]));
+  const camiones: CamionDelLibro[] = (await traerMovimientos(supabase))
+    .filter(
+      (m) =>
+        m.tipo === "entrada" &&
+        m.fecha >= desde &&
+        m.carbonillero_id !== null &&
+        partnerDelCarbonillero.has(m.carbonillero_id)
+    )
+    .map((m) => ({
+      id: m.id,
+      fecha: m.fecha,
+      odooPartnerId: partnerDelCarbonillero.get(m.carbonillero_id as string) as number,
+      toneladas: Math.abs(Number(m.toneladas)),
+    }));
 
-/** Dejar la línea a la vista, con el motivo escrito y sin tocar el stock. */
-async function aLaBandeja(
-  supabase: SupabaseClient,
-  linea: LineaDeOdoo,
-  motivo: string
-): Promise<void> {
-  const { error } = await supabase.from("calidad_odoo_sin_reconocer").upsert({
-    odoo_purchase_line_id: linea.id,
-    odoo_purchase_name: linea.ordenNombre,
-    odoo_partner_id: linea.partnerId,
-    odoo_partner_nombre: linea.partnerNombre,
-    odoo_product_id: linea.productoId,
-    odoo_product_nombre: linea.productoNombre,
-    fecha: linea.fecha,
-    toneladas: linea.cantidad,
-    motivo,
-  });
-  if (error) throw new Error(error.message);
+  return { leidas: crudas.length, ...desviosContraOdoo(camiones, deOdoo) };
 }

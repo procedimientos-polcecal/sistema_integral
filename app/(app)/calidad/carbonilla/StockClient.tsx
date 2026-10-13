@@ -104,12 +104,23 @@ export default function StockClient({
   async function sincronizar() {
     const body = await mandar("/api/calidad/sincronizar", {});
     if (body) {
-      setAviso(
-        `Leídas ${body.leidas} líneas de Odoo · ${body.nuevas} entradas nuevas · ` +
-          `${body.yaEstaban} ya estaban · ${body.descartadas} descartadas · ` +
-          `${body.aLaBandeja} sin reconocer` +
-          (body.cambiadasEnOdoo ? ` · ${body.cambiadasEnOdoo} cambiaron en Odoo` : "")
-      );
+      // Lo que devuelve se muestra entero, incluido lo que no reconoció: un
+      // resumen que sólo dice "listo" esconde justo lo que hay que arreglar.
+      const l = body.lectura;
+      const partes = [`${l.nuevos} movimientos nuevos de la planilla`];
+      if (l.cambiadas) partes.push(`${l.cambiadas} filas cambiaron en la planilla`);
+      if (l.ambiguas) partes.push(`${l.ambiguas} con entrada y salida a la vez`);
+      if (l.desaparecidas) partes.push(`${l.desaparecidas} filas ya no están`);
+
+      const c = body.control;
+      if (c) {
+        partes.push(`${c.sinOrden.length} camiones sin orden en Odoo`);
+        if (c.sinCamion.length) partes.push(`${c.sinCamion.length} órdenes sin camión`);
+        if (c.cantidadDistinta.length) partes.push(`${c.cantidadDistinta.length} con otra cantidad`);
+      }
+      if (body.aviso) partes.push(body.aviso);
+
+      setAviso(partes.join(" · "));
     }
   }
 
