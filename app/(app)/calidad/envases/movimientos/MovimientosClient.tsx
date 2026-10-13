@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { comoSeLee } from "@/lib/core/fechas";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -237,7 +238,14 @@ export default function MovimientosClient({
                 key={m.id}
                 className={`border-t border-slate-100 ${m.sheets_pendiente ? "bg-amber-50" : ""}`}
               >
-                <td className="whitespace-nowrap px-3 py-2 text-slate-500">{m.fecha ?? "—"}</td>
+                {/* `comoSeLee` y no la fecha cruda: la tabla mostraba
+                    "2026-09-16". Es el mismo helper que usan carbonilla y
+                    ensayos, así que las tres pantallas del módulo escriben la
+                    fecha igual. El filtro de arriba sigue comparando en ISO,
+                    que es lo que ordena bien. */}
+                <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                  {m.fecha ? comoSeLee(m.fecha) : "—"}
+                </td>
                 <td className="px-3 py-2 text-slate-900">
                   {descripcionDe.get(m.articulo_id) ?? m.codigo}
                   {m.sheets_pendiente && (
