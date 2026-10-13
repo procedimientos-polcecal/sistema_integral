@@ -425,7 +425,6 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                             {d.fichadas.map((f: any, i: number) => (
                               <span key={f.id} className="mr-2 whitespace-nowrap">
                                 {formatHora(f.hora_entrada)}-{f.hora_salida ? formatHora(f.hora_salida) : "?"}
-                                {f.observaciones && <span className="ml-1 cursor-help" title={`Comentario: ${f.observaciones}`}>💬</span>}
                                 {i < d.fichadas.length - 1 ? "," : ""}
                               </span>
                             ))}

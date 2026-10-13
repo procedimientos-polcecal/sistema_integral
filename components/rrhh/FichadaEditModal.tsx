@@ -5,15 +5,12 @@ import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/
 import { acreditarDia, instanteDePared, type CalculoDelDia } from "@/lib/rrhh/fichadas/acreditado";
 import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
 import { useCargar } from "@/lib/core/useCargar";
-import { MAX_COMENTARIO } from "@/lib/rrhh/fichadas/comentario";
 import AcreditadoDeFichada from "./AcreditadoDeFichada";
 
 interface Fichada {
   id: string;
   hora_entrada: string;
   hora_salida: string | null;
-  /** El comentario guardado. Si la pantalla que abre el modal no lo trae, no se muestra ni se toca. */
-  observaciones?: string | null;
 }
 
 interface FilaFichada {
@@ -23,10 +20,6 @@ interface FilaFichada {
   fechaSalida: string;
   horaSalida: string;
   eliminar: boolean;
-  /** Por qué se corrige. Va a `fichadas.observaciones`. */
-  comentario: string;
-  /** Lo que había al abrir, para mandar sólo si cambió. */
-  comentarioOriginal: string;
 }
 
 interface Props {
@@ -73,10 +66,8 @@ export default function FichadaEditModal({
           fechaSalida: f.hora_salida ? toLocalDateStr(f.hora_salida) : toLocalDateStr(f.hora_entrada),
           horaSalida: f.hora_salida ? toLocalTimeStr(f.hora_salida) : "",
           eliminar: false,
-          comentario: f.observaciones ?? "",
-          comentarioOriginal: f.observaciones ?? "",
         }))
-      : [{ id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false, comentario: "", comentarioOriginal: "" }]
+      : [{ id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false }]
   );
   const [normalesInput, setNormalesInput] = useState(horasNormales.toFixed(1));
   const [extra50Input, setExtra50Input] = useState(horasExtra50.toFixed(1));
@@ -144,7 +135,7 @@ export default function FichadaEditModal({
     setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
   }
   function agregarFila() {
-    setFilas((prev) => [...prev, { id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false, comentario: "", comentarioOriginal: "" }]);
+    setFilas((prev) => [...prev, { id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false }]);
   }
   function quitarFila(idx: number) {
     setFilas((prev) => {
@@ -171,9 +162,6 @@ export default function FichadaEditModal({
           fecha: fila.fechaEntrada,
           horaEntrada: `${fila.fechaEntrada}T${fila.horaEntrada}:00`,
           horaSalida: fila.horaSalida ? `${fila.fechaSalida}T${fila.horaSalida}:00` : null,
-          // Sólo si lo tocaron: se manda un PUT por fila aunque no cambie nada, y
-          // un comentario que esta pantalla no trajo no se puede pisar con "".
-          ...(fila.comentario.trim() !== fila.comentarioOriginal.trim() ? { observaciones: fila.comentario } : {}),
         };
         const res = await fetch(fila.id ? `/api/rrhh/fichadas/${fila.id}` : "/api/rrhh/fichadas", {
           method: fila.id ? "PUT" : "POST",
@@ -287,15 +275,6 @@ export default function FichadaEditModal({
                     className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm disabled:bg-slate-100" />
                 </div>
               </div>
-              {!fila.eliminar && (
-                <div className="mb-2">
-                  <label className="block text-xs text-slate-500 mb-1">Comentario (opcional)</label>
-                  <input type="text" value={fila.comentario} maxLength={MAX_COMENTARIO}
-                    onChange={(e) => actualizarFila(idx, { comentario: e.target.value })}
-                    placeholder="Por qué se corrige: ej. no fichó la salida, falla del reloj…"
-                    className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
-                </div>
-              )}
               {!fila.eliminar && acreditadoPorFila?.get(String(idx)) && (
                 <p className="text-xs mb-2">
                   <AcreditadoDeFichada acreditado={acreditadoPorFila.get(String(idx))!} calculo={calculoParaFila} prefijo="Se acredita: " />

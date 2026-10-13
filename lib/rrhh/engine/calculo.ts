@@ -1,17 +1,5 @@
 import { dayOfWeekUtc, localDateTime } from "../dates";
 
-/**
- * Desde qué día el sábado entero cuenta como hora normal (hasta las
- * `horasNormalesPorDia`) y sólo el excedente es extra al 100%.
- *
- * Los sábados anteriores se siguen calculando con la hora de corte: RRHH pidió
- * el 13/10/2026 que la regla corra "a partir de ahora" y no toque lo ya
- * cargado. Como el recálculo vuelve a pasar por días viejos (la ventana de 45
- * días, o el cambio de una fichada), la fecha tiene que vivir en el cálculo y
- * no en quién lo dispara: si no, la regla nueva se colaría hacia atrás.
- */
-export const SABADO_NORMAL_DESDE = "2026-10-13";
-
 export type TipoDia = "HABIL" | "SABADO" | "DOMINGO" | "FERIADO";
 
 export interface TimeInterval {
@@ -93,19 +81,6 @@ export function calcularDia(
       horasExtra50: 0,
       horasExtra100: total,
       francoGenerado: total > 0,
-    };
-  }
-
-  if (tipoDia === "SABADO" && fecha.toISOString().slice(0, 10) >= SABADO_NORMAL_DESDE) {
-    // Todo el día es hora normal hasta completar la jornada; lo que pasa de
-    // `horasNormalesPorDia` es extra al 100%. En este régimen no hay extra al 50%.
-    const total = sumHoras(intervals);
-    return {
-      tipoDia,
-      horasNormales: Math.min(total, config.horasNormalesPorDia),
-      horasExtra50: 0,
-      horasExtra100: Math.max(0, total - config.horasNormalesPorDia),
-      francoGenerado: false,
     };
   }
 

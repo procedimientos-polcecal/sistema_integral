@@ -491,13 +491,11 @@ function IconMatraz() {
 }
 
 function IconTrituradora() {
-  // Dos quijadas que aprietan una piedra, y tres ya partidas abajo. El anterior
-  // era un embudo con rayas y se leía como un trofeo.
   return (
     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M3 3 9 12.5M21 3l-6 9.5" strokeLinecap="round" />
-      <path d="m9.2 6.8 1.9-2 3.1.7.8 2.4-2 2.2-2.9-.3z" strokeLinejoin="round" />
-      <path d="m4 21.5 1.2-3.2 3-.4 1.2 3.6zM10.8 21.5l.2-2.2 2.7-.7 1.2 2.9zM16.2 21.5l.8-2.9 2.8.5v2.4z" strokeLinejoin="round" />
+      <path d="M4 4h16l-3 6H7L4 4Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 14h8M9.5 18h5" strokeLinecap="round" />
+      <path d="M12 10v2" strokeLinecap="round" />
     </svg>
   );
 }

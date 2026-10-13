@@ -35,7 +35,7 @@ export default function ConfiguracionClient() {
         <div className="card p-5 max-w-3xl">
           <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
             Reglas de cálculo de horas
-            <InfoTip text="Definen cómo se calculan las horas y su valor: cuántas horas son 'normales' por día, desde qué hora del sábado se paga extra (sólo para sábados hasta el 12/10/2026: desde el 13/10/2026 el sábado entero es hora normal hasta completar las horas del día, y lo que pasa es extra al 100%), y los multiplicadores de las horas extra al 50% y 100%. Estos valores se usan en cada liquidación." />
+            <InfoTip text="Definen cómo se calculan las horas y su valor: cuántas horas son 'normales' por día, desde qué hora del sábado se paga extra, y los multiplicadores de las horas extra al 50% y 100%. Estos valores se usan en cada liquidación." />
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
             <div>
@@ -44,7 +44,7 @@ export default function ConfiguracionClient() {
                 className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Corte sábado (hasta el 12/10/2026)</label>
+              <label className="block text-xs text-slate-500 mb-1">Corte sábado (hora)</label>
               <input type="time" value={config.horaCorteSabado} onChange={(e) => setConfig({ ...config, horaCorteSabado: e.target.value })}
                 className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
             </div>

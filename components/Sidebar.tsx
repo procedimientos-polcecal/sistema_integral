@@ -114,10 +114,6 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Reparaciones": IconWrench,
   // Órdenes de servicio (Mantenimiento y el atajo desde Compras).
   "Órdenes de servicio": IconClipboard,
-  // Trituración. "Informe mensual" ya está arriba, en Cantera.
-  "Trituración": IconTrituradora,
-  "Partes": IconClipboard,
-  "Plantas": IconFactory,
   // Fuera de un módulo.
   "Mis pedidos": IconCart,
   "Empresas": IconFactory,
@@ -613,16 +609,6 @@ function IconReceipt() {
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M9 8h6M9 12h6" strokeLinecap="round" />
-    </svg>
-  );
-}
-/** Dos quijadas que aprietan una piedra y tres ya partidas: el mismo dibujo que la tarjeta del inicio. */
-function IconTrituradora() {
-  return (
-    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
-      <path d="M3 3 9 12.5M21 3l-6 9.5" strokeLinecap="round" />
-      <path d="m9.2 6.8 1.9-2 3.1.7.8 2.4-2 2.2-2.9-.3z" strokeLinejoin="round" />
-      <path d="m4 21.5 1.2-3.2 3-.4 1.2 3.6zM10.8 21.5l.2-2.2 2.7-.7 1.2 2.9zM16.2 21.5l.8-2.9 2.8.5v2.4z" strokeLinejoin="round" />
     </svg>
   );
 }

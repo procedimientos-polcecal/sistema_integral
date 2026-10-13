@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcularDia, mismasHoras, SABADO_NORMAL_DESDE, type PayrollConfigLike } from "./calculo";
+import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
 
 const config: PayrollConfigLike = {
   horasNormalesPorDia: 8,
@@ -149,55 +149,5 @@ describe("mismasHoras", () => {
   it("el limite son 18 segundos: menos es lo mismo, mas no", () => {
     expect(mismasHoras(1, 1.004)).toBe(true);
     expect(mismasHoras(1, 1.006)).toBe(false);
-  });
-});
-
-describe("sábado desde el 13/10/2026: todo normal hasta las 8 horas", () => {
-  // 2026-10-17 es sábado, posterior a la fecha de inicio.
-  const nuevo = (h1: number, h2: number) => calcularDia(d(2026, 10, 17, 0), [{ start: d(2026, 10, 17, h1), end: d(2026, 10, 17, h2) }], false, config);
-
-  it("la fecha de inicio es la que se pidió", () => {
-    expect(SABADO_NORMAL_DESDE).toBe("2026-10-13");
-  });
-
-  it("hasta 8 horas: todo normal, sin importar a qué hora", () => {
-    const r = nuevo(7, 15);
-    expect(r.tipoDia).toBe("SABADO");
-    expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra50).toBe(0);
-    expect(r.horasExtra100).toBe(0);
-  });
-
-  it("a la tarde, pasado el corte: también es normal", () => {
-    const r = nuevo(13, 17);
-    expect(r.horasNormales).toBe(4);
-    expect(r.horasExtra100).toBe(0);
-  });
-
-  it("más de 8 horas: el excedente es extra al 100%, nunca al 50%", () => {
-    const r = nuevo(2, 13);
-    expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra50).toBe(0);
-    expect(r.horasExtra100).toBe(3);
-  });
-
-  it("dos tramos: las 8 horas se cuentan sobre el total del día", () => {
-    const fecha = d(2026, 10, 17, 0);
-    const r = calcularDia(
-      fecha,
-      [{ start: d(2026, 10, 17, 6), end: d(2026, 10, 17, 11) }, { start: d(2026, 10, 17, 14), end: d(2026, 10, 17, 19) }],
-      false,
-      config
-    );
-    expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra100).toBe(2);
-  });
-
-  it("el último sábado anterior (10/10) sigue con la regla vieja", () => {
-    // 10h de 2 a 12 -> 8 normales + 2 extra 50%; nada al 100% (corte 12:00).
-    const r = calcularDia(d(2026, 10, 10, 0), [{ start: d(2026, 10, 10, 2), end: d(2026, 10, 10, 13) }], false, config);
-    expect(r.horasNormales).toBe(8);
-    expect(r.horasExtra50).toBe(2);
-    expect(r.horasExtra100).toBe(1);
   });
 });

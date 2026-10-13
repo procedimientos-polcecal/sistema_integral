@@ -5,7 +5,6 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido, diasAMarcarAlEditar } from "@/lib/rrhh/fichadas/marcarDia";
-import { normalizarComentario } from "@/lib/rrhh/fichadas/comentario";
 
 function parseHoraDePared(value: string): Date | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
@@ -38,11 +37,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const salida = body.horaSalida ? parseHoraDePared(body.horaSalida) : null;
     data.hora_salida = salida ? salida.toISOString() : null;
   }
-  // Sólo si vino: el modal manda un PUT por fila aunque no se haya tocado, y un
-  // comentario que la pantalla no trajo no se puede pisar con un vacío.
-  const comentario = normalizarComentario(body.observaciones);
-  if (!comentario.ok) return NextResponse.json({ error: comentario.error }, { status: 400 });
-  if (comentario.valor !== undefined) data.observaciones = comentario.valor;
+  if (body.observaciones !== undefined) data.observaciones = body.observaciones || null;
 
   // Cómo estaba antes del update: para saber si algo cambió de verdad (el modal
   // manda un PUT por fila aunque no se haya tocado) y, si la edición la mueve de

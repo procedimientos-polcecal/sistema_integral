@@ -6,7 +6,6 @@ import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido } from "@/lib/rrhh/fichadas/marcarDia";
 import { conCalculoDelDia } from "@/lib/rrhh/fichadas/calculoDelDia";
-import { normalizarComentario } from "@/lib/rrhh/fichadas/comentario";
 
 // El frontend manda la hora como "YYYY-MM-DDTHH:MM:SS" sin zona horaria (hora
 // de pared en Argentina) — se parsea a mano con localDateTime(), que siempre
@@ -61,8 +60,6 @@ export async function POST(request: Request) {
   const entrada = parseHoraDePared(horaEntrada);
   if (!employeeId || !fecha || !entrada) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   const salida = horaSalida ? parseHoraDePared(horaSalida) : null;
-  const comentario = normalizarComentario(observaciones);
-  if (!comentario.ok) return NextResponse.json({ error: comentario.error }, { status: 400 });
 
   const { data: fichada, error } = await supabase
     .from("fichadas")
@@ -72,7 +69,7 @@ export async function POST(request: Request) {
       hora_entrada: entrada.toISOString(),
       hora_salida: salida ? salida.toISOString() : null,
       origen: "MANUAL",
-      observaciones: comentario.valor ?? null,
+      observaciones: observaciones || null,
     })
     .select()
     .single();
