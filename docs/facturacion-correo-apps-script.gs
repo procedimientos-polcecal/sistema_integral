@@ -273,38 +273,69 @@ function mensajesDelHilo(hilo, muyGrandes) {
 }
 
 /**
- * Manda los mensajes en varios POST, para no pasarse del tope de Vercel.
+ * Manda los adjuntos en varios POST, para no pasarse del tope de Vercel.
  *
  * Se corta por **bytes acumulados**, no por cantidad: diez mails livianos
- * entran juntos y uno solo con una factura escaneada de 3 MB va solo. Un
- * mensaje nunca se parte: sus adjuntos viajan juntos para que el UNIQUE por
- * (mensaje, adjunto) del SdG siga valiendo igual si una tanda se reintenta.
+ * entran juntos y una factura escaneada de 3 MB va sola.
+ *
+ * ## La unidad es el adjunto, no el mensaje
+ *
+ * La primera versión de esto cortaba por mensaje y **nunca partía uno**, con
+ * el argumento de que sus adjuntos tenían que viajar juntos para que el UNIQUE
+ * por (mensaje, adjunto) del SdG siguiera valiendo. **Ese argumento estaba
+ * mal**: la clave es el par, así que cada adjunto es una fila independiente y
+ * mandar la mitad en un POST y la otra mitad en el siguiente da exactamente el
+ * mismo resultado, y reintentar también.
+ *
+ * Y el costo de esa regla inventada fue un 413 el 13/10/2026, seis días
+ * después de arreglar el primero. Un mensaje con **dos adjuntos de 2 MB** pasa
+ * el filtro por adjunto —ninguno llega al tope de 3 MB— y arma un cuerpo de
+ * 5,33 MB. Uno con doce de 400 KB arma 6,25 MB. Medido con los dos casos, que
+ * quedaron en el banco de pruebas.
+ *
+ * Cortando por adjunto, un POST no puede pasarse salvo que un solo adjunto lo
+ * haga, y para eso está el tope de `MAXIMO_BYTES`, que es el mismo número.
  */
 function enviarPorTandas(url, secreto, mensajes) {
   var tanda = [];
   var acumulado = 0;
 
   for (var i = 0; i < mensajes.length; i++) {
-    var pesa = pesoDelMensaje(mensajes[i]);
+    var mensaje = mensajes[i];
 
-    if (tanda.length && acumulado + pesa > MAXIMO_POR_ENVIO) {
-      enviar(url, secreto, tanda);
-      tanda = [];
-      acumulado = 0;
+    for (var a = 0; a < mensaje.adjuntos.length; a++) {
+      var adjunto = mensaje.adjuntos[a];
+      var pesa = adjunto.bytes || 0;
+
+      if (tanda.length && acumulado + pesa > MAXIMO_POR_ENVIO) {
+        enviar(url, secreto, tanda);
+        tanda = [];
+        acumulado = 0;
+      }
+
+      /*
+       * El mismo mensaje puede aparecer en dos tandas, cada vez con los
+       * adjuntos que le tocaron. Del lado del SdG son filas distintas y la
+       * cabecera —remitente, asunto, fecha— se repite igual en las dos.
+       */
+      var ultimo = tanda.length ? tanda[tanda.length - 1] : null;
+      if (!ultimo || ultimo.id !== mensaje.id) {
+        ultimo = {
+          id: mensaje.id,
+          remitente: mensaje.remitente,
+          asunto: mensaje.asunto,
+          fecha: mensaje.fecha,
+          adjuntos: [],
+        };
+        tanda.push(ultimo);
+      }
+
+      ultimo.adjuntos.push(adjunto);
+      acumulado += pesa;
     }
-
-    tanda.push(mensajes[i]);
-    acumulado += pesa;
   }
 
   if (tanda.length) enviar(url, secreto, tanda);
-}
-
-/** Los bytes crudos de un mensaje. El `bytes` de cada adjunto es el del archivo. */
-function pesoDelMensaje(mensaje) {
-  var total = 0;
-  for (var a = 0; a < mensaje.adjuntos.length; a++) total += mensaje.adjuntos[a].bytes || 0;
-  return total;
 }
 
 function enviar(url, secreto, mensajes) {

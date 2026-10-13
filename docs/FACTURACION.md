@@ -424,9 +424,7 @@ Lo que se hizo, en el script:
   formas a la vez: se pasaba del tope, y si algo fallaba no entraba ninguno
   aunque nueve estuvieran bien.
 - **Las tandas se cortan por bytes acumulados, no por cantidad.** Diez mails
-  livianos entran juntos; uno con un escaneo de 3 MB va solo. Un mensaje nunca
-  se parte: sus adjuntos viajan juntos para que el UNIQUE (mensaje, adjunto)
-  siga valiendo si una tanda se reintenta.
+  livianos entran juntos; un escaneo de 3 MB va solo.
 - **El tope por adjunto bajó de 20 MB a 3.** Los 20 eran el límite del bucket,
   que es una medida del lugar equivocado: un adjunto que no entra en un POST no
   llega nunca, por grande que sea el bucket.
@@ -445,6 +443,33 @@ termina siendo lo mismo que no avisar.
 Si algún día un escaneo de verdad pasa los 3 MB, el arreglo no es subir el
 tope: es que el script suba el archivo **directo al bucket** con una URL
 firmada y le mande al SdG sólo la ruta. Es más trabajo y hoy no hace falta.
+
+#### El segundo 413, seis días después: la unidad es el adjunto
+
+El arreglo de arriba cortaba por **mensaje** y **nunca partía uno**, con el
+argumento de que sus adjuntos tenían que viajar juntos para que el UNIQUE
+(mensaje, adjunto) siguiera valiendo al reintentar. **Ese argumento era falso**
+—la clave es el par, así que cada adjunto es una fila independiente y mandar la
+mitad en un POST y el resto en el siguiente da el mismo resultado— y la regla
+inventada dejó un agujero del tamaño del problema original:
+
+> **Un mensaje con dos adjuntos de 2 MB pasa el filtro por adjunto** —ninguno
+> llega al tope de 3 MB— y arma un cuerpo de **5,33 MB**. Uno con doce de
+> 400 KB arma **6,25 MB**.
+
+Volvió a fallar el 13/10/2026 con el mismo `FUNCTION_PAYLOAD_TOO_LARGE`. Desde
+entonces se corta por **adjunto**: el mismo mensaje puede aparecer en dos
+tandas, cada vez con los que le tocaron y repitiendo su cabecera. Así un POST
+no puede pasarse salvo que un solo adjunto lo haga, y para eso está
+`MAXIMO_BYTES`, que es el mismo número.
+
+Los dos casos quedaron en el banco de pruebas del script, con otro que
+comprueba lo que el tamaño no mira: que al partir un mensaje **no se pierda ni
+se duplique ningún adjunto** y que los dos pedazos lleven su remitente, asunto
+y fecha.
+
+La lección que vale más que el arreglo: **la regla que lo rompió no venía de
+una medición, venía de un razonamiento sobre el UNIQUE que nunca se comprobó.**
 
 ### Cómo no trae dos veces lo mismo
 
