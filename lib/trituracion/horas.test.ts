@@ -6,6 +6,10 @@ describe("horasTeoricas", () => {
     expect(horasTeoricas("04:40", "11:30")).toBeCloseTo(6.8333, 3);
   });
 
+  it("acepta la hora con segundos, que es como la devuelve la base", () => {
+    expect(horasTeoricas("04:45:00", "11:30:00")).toBeCloseTo(6.75, 5);
+  });
+
   it("da null si falta un horario", () => {
     expect(horasTeoricas(null, "11:30")).toBeNull();
     expect(horasTeoricas("04:40", null)).toBeNull();

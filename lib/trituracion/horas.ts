@@ -36,9 +36,15 @@ export interface ParteDespejado {
   productividadReal: number | null;
 }
 
-/** Minutos desde medianoche de "HH:MM". Null si el formato no matchea. */
+/**
+ * Minutos desde medianoche de "HH:MM". Null si el formato no matchea.
+ *
+ * Acepta también "HH:MM:SS": la columna es `time` y Postgres la devuelve con
+ * segundos ("04:45:00"). Sin esto, todo parte leído de la base quedaba sin
+ * horas teóricas y la planilla recibía las columnas calculadas vacías.
+ */
 function minutosDelDia(hhmm: string): number | null {
-  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
   const h = Number(m[1]);
   const min = Number(m[2]);
