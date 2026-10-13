@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
 import { leerStaging, borrarStaging } from "@/lib/rrhh/staging";
 import { parseNumeroAR, toDateOnlyFromCell, type ParsedSheet } from "@/lib/rrhh/excelImport";
-import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { indiceDeCatalogo, elQueNombra } from "@/lib/core/catalogo";
 
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     return null;
   }
 
-  const hoy = utcDateOnlyFrom(new Date()).toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
 
   const errores: string[] = [];
   let creados = 0;

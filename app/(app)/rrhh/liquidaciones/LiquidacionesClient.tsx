@@ -5,6 +5,7 @@ import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 interface FilaPlanilla {
   empleadoId: string;
@@ -40,11 +41,10 @@ function pendientesDe(filas: FilaPlanilla[]) {
 }
 
 function firstOfMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return `${hoyEnArgentina().slice(0, 7)}-01`;
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyEnArgentina();
 }
 
 export default function LiquidacionesClient({ empleados }: { empleados: any[] }) {

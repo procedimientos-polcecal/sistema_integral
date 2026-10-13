@@ -9,6 +9,7 @@ import {
 } from "@/lib/mantenimiento/comparativas";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_COMPARATIVAS_ID ?? "";
 
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
 
   const cotizacion = {
     os_number: osNumber,
-    fecha: b.fecha || new Date().toISOString().slice(0, 10),
+    fecha: b.fecha || hoyEnArgentina(),
     area: os?.area ?? null,
     sector,
     equipo_raw: os?.equipo_raw ?? null,

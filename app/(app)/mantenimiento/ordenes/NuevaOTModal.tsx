@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
 const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
@@ -46,7 +47,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     quien:          "INTERNO",
     descripcion:    "",
     repuesto:       "",
-    fecha:          new Date().toISOString().slice(0, 10),
+    fecha:          hoyEnArgentina(),
     fecha_ejecucion: "",
     fecha_cierre:   "",
     estado:         "POR_HACER",

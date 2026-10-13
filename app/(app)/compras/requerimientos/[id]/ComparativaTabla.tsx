@@ -3,6 +3,7 @@
 import { monedaExacta, fecha } from "@/lib/compras/constants";
 import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * La comparativa mientras Compras la arma.
@@ -24,7 +25,7 @@ export default function ComparativaTabla({
   puedeBorrar: boolean;
   onBorrar: (c: Cotizacion) => void;
 }) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
 
   return (
     <div className="overflow-x-auto">

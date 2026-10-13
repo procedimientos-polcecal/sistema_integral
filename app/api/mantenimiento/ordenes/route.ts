@@ -12,6 +12,7 @@ import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -147,7 +148,7 @@ export async function POST(request: Request) {
 
   const record = {
     ot_number,
-    fecha:           fecha || new Date().toISOString().slice(0, 10),
+    fecha:           fecha || hoyEnArgentina(),
     sector_id:       sector_id || null,
     sector_raw:      sector_raw || null,
     equipo_raw:      equipo_raw || null,

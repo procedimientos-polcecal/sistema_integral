@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
 import { idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
 import { traerPaginado } from "@/lib/rrhh/paginado";
-import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { utcDateOnlyFrom, hoyComoDiaArgentina } from "@/lib/rrhh/dates";
 import { SECTORES_LUNES_A_VIERNES } from "@/lib/rrhh/constants";
 
 function esDiaEsperado(tipoDia: string, trabajaLunesAViernesNomas: boolean): boolean {
@@ -23,7 +23,7 @@ export async function GET() {
   const empleadoIds = lista.map((e) => e.id);
   const empleadoById = new Map(lista.map((e) => [e.id, e]));
 
-  const hoy = utcDateOnlyFrom(new Date());
+  const hoy = hoyComoDiaArgentina();
   const meses: { desde: Date; hasta: Date; label: string }[] = [];
   for (let i = 5; i >= 0; i--) {
     const base = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() - i, 1));

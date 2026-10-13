@@ -7,6 +7,7 @@ import KpiCard from "@/components/KpiCard";
 import { armarTarjetasHoy, tituloDeDetalle, type ClaveTarjeta, type ResumenHoy } from "@/lib/rrhh/tarjetasHoy";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Los gráficos se cargan aparte: `recharts` son ~350 KB y bloqueaban el primer
@@ -34,11 +35,10 @@ const COLOR_TARJETA: Record<ClaveTarjeta, string> = {
 };
 
 function firstOfMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return `${hoyEnArgentina().slice(0, 7)}-01`;
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyEnArgentina();
 }
 
 function buildQS(params: Record<string, string | undefined>) {

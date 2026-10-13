@@ -4,6 +4,7 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { nivelCalidadDe } from "@/lib/calidad/auth";
 import { traerLimites, traerProductos } from "@/lib/calidad/ensayos/consultas";
 import CargarClient from "./CargarClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /** La carga de una muestra. Hace falta `edicion` o `admin`. */
 export default async function CargarMuestraPage() {
@@ -25,7 +26,7 @@ export default async function CargarMuestraPage() {
     <CargarClient
       productos={productos.filter((p) => p.activo)}
       limites={limites}
-      hoy={new Date().toISOString().slice(0, 10)}
+      hoy={hoyEnArgentina()}
     />
   );
 }

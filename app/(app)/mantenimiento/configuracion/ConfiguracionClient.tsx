@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Configuración de Mantenimiento: las listas de las que come el módulo.
@@ -548,7 +549,7 @@ function TarifaDeLaHora({
 
   // Vienen ordenadas de la más nueva a la más vieja: la primera es la que rige
   // hoy, salvo que alguien haya cargado una con fecha futura.
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
   const vigente = tarifas.find((t) => t.vigente_desde <= hoy) ?? null;
 
   const pesos = (v: number | string) =>

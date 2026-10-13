@@ -6,6 +6,7 @@ import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { proximoNumeroDeAviso, filaParaLaPlanilla } from "@/lib/mantenimiento/avisos";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
 const PESTANA = () => process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   const aviso = {
     oa_number,
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: hoyEnArgentina(),
     sector_raw: sectorRaw,
     equipo_raw: equipoRaw,
     descripcion,

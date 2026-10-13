@@ -3,6 +3,7 @@
 import { monedaExacta, fecha } from "@/lib/compras/constants";
 import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * La comparativa en el momento de decidir.
@@ -59,7 +60,7 @@ export default function ComparativaDecision({
   /** Los totales ya convertidos a pesos, por id de presupuesto. */
   enPesos: Record<string, number | null>;
 }) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
   const vencido = (c: Cotizacion) => c.precio_hasta !== null && c.precio_hasta < hoy;
 
   const Boton = ({ c, ancho }: { c: Cotizacion; ancho?: boolean }) => (

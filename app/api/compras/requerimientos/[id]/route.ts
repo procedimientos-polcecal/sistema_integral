@@ -13,6 +13,7 @@ import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 import { auditar } from "@/lib/core/auditoria";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Modificación de un requerimiento.
@@ -326,10 +327,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Fechas automáticas al avanzar de etapa, si no vinieron explícitas.
     if (nuevoEstado === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {
-      cambios.fecha_pedido = new Date().toISOString().slice(0, 10);
+      cambios.fecha_pedido = hoyEnArgentina();
     }
     if (nuevoEstado === "RECIBIDO" && !actual.fecha_recepcion && !("fecha_recepcion" in cambios)) {
-      cambios.fecha_recepcion = new Date().toISOString().slice(0, 10);
+      cambios.fecha_recepcion = hoyEnArgentina();
     }
   }
 

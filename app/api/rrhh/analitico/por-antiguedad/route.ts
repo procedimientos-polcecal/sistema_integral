@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { hoyComoDiaArgentina } from "@/lib/rrhh/dates";
 
 const MS_POR_ANIO = 365.25 * 86_400_000;
 function edadEnAnios(desde: Date, hasta: Date): number {
@@ -22,7 +22,7 @@ export async function GET() {
   if (check) return check;
 
   const { data: empleados } = await supabase.from("empleados").select("fecha_ingreso").eq("activo", true);
-  const hoy = utcDateOnlyFrom(new Date());
+  const hoy = hoyComoDiaArgentina();
   const conteo = new Map(BUCKETS_ANTIGUEDAD.map((b) => [b.label, 0]));
   for (const e of empleados ?? []) {
     const anios = edadEnAnios(new Date(e.fecha_ingreso), hoy);

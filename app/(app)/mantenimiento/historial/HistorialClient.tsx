@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import InfoTip from "@/components/InfoTip";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const STATUS_COLORS: Record<string, string> = {
   completado: "bg-green-100 text-green-800",
@@ -74,7 +75,7 @@ export default function HistorialClient({ executions }: { executions: any[] }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `historial-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `historial-${hoyEnArgentina()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

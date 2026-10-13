@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 export interface ArticuloDelSelector {
   id: string;
@@ -25,7 +26,7 @@ export interface MovimientoEnPantalla {
   sheets_pendiente: string | null;
 }
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = () => hoyEnArgentina();
 
 /**
  * El kardex de envases y el alta de un movimiento.

@@ -9,6 +9,7 @@ import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import Select from "@/components/Select";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import ActualizarCargas from "./ActualizarCargas";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -59,8 +60,7 @@ export default function CargasClient({
   const router = useRouter();
   const irA = (m: string) => router.push(`/taller-vial/cargas?mes=${m}`);
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
   const [equipoId, setEquipoId] = useState(equipos[0]?.id ?? "");
   const [fecha, setFecha] = useState(hoy);
   const [litros, setLitros] = useState("");

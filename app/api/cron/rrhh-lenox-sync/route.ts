@@ -33,7 +33,11 @@ export async function GET(request: Request) {
   }
 
   // A las 10:30 UTC el día UTC y el de Argentina son el mismo, así que acá no
-  // hace falta `fechaArgentinaDe`.
+  // hace falta `fechaArgentinaDe`. Deliberado: se deja `utcDateOnlyFrom(new Date())`
+  // y no `hoyComoDiaArgentina()` para no tocar el comportamiento de un cron que
+  // anda; si el horario de `vercel.json` pasa a caer entre las 00:00 y las 03:00
+  // UTC, el día UTC ya no es el de Argentina y hay que cambiarlo.
+  // eslint-disable-next-line no-restricted-syntax -- ver el comentario de arriba
   const { desde, hasta } = ventanaDelCron(utcDateOnlyFrom(new Date()));
 
   // usuarioId null: lo corrió el cron, no una persona.

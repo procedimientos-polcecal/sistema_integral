@@ -11,6 +11,7 @@ import { systemPrompt } from "@/lib/asistente/prompt";
 import { correrConsulta } from "@/lib/asistente/consulta";
 import { documentosPara, rutaDelDocumento } from "@/lib/asistente/documentos";
 import { urlDeCarga, type TipoDeCarga } from "@/lib/asistente/urlDeCarga";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Cuántas preguntas por día y por persona.
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     system: systemPrompt({
       catalogo: catalogoPara(modulos),
       pantalla,
-      hoy: new Date().toISOString().slice(0, 10),
+      hoy: hoyEnArgentina(),
     }),
     // En esta versión de `ai` (v7), `convertToModelMessages` es async: en v6
     // devolvía el arreglo directo.

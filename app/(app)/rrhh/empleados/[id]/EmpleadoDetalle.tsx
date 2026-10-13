@@ -7,16 +7,16 @@ import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
 
 function firstOfMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return `${hoyEnArgentina().slice(0, 7)}-01`;
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyEnArgentina();
 }
 /**
  * Año al que se le descuentan los días de una ausencia tipo "Vacaciones", que

@@ -15,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import { leerValores } from "../lib/core/sheets.ts";
 import { fechaDeSheets } from "../lib/core/fechaDeSheets.ts";
+import { hoyEnArgentina } from "../lib/core/fechas.ts";
 import { createAdminClient } from "../lib/supabase/admin.ts";
 import { buscarLeer } from "../lib/odoo/client.ts";
 import { CORTE_DE_LOS_TIPOS, saldosDelLibro } from "../lib/calidad/movimientos.ts";
@@ -287,6 +288,6 @@ if (conteos.length) {
 }
 
 console.log(
-  `\nListo. Ahora poné CALIDAD_DESDE=${new Date().toISOString().slice(0, 10)} en Vercel y en .env.local:\n` +
+  `\nListo. Ahora poné CALIDAD_DESDE=${hoyEnArgentina()} en Vercel y en .env.local:\n` +
     "el cron no tiene que volver a mirar nada de lo que acaba de entrar."
 );

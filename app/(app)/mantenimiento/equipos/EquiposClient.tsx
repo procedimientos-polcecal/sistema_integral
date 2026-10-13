@@ -6,6 +6,7 @@ import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { sectoresQueElLibroCrearia } from "@/lib/mantenimiento/inventario";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 // Las mismas clases .badge-* de globals.css que usa el resto del sistema para
 // estos estados de equipo, en vez de un par bg/text propio de esta pantalla.
@@ -90,7 +91,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
-      a.download = `equipos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `equipos_${hoyEnArgentina()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {

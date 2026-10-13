@@ -6,6 +6,7 @@ import Link from "next/link";
 import KpiCard from "@/components/KpiCard";
 import { costoDeRegistro, resumenPorYacimiento, ETIQUETA_TIPO_RECURSO, ETIQUETA_TIPO_CAMION } from "@/lib/cantera/destape";
 import type { DestapeDB, TarifaAcarreoDB } from "@/lib/cantera/types";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /** Colores del módulo — mismos que las tarjetas KPI, reusados en las badges de "Recurso" y en el calendario para que el color siga significando lo mismo en toda la pantalla. */
 const COLOR_RECURSO: Record<"operario_propio" | "fletero_externo", { fg: string; bg: string; border: string }> = {
@@ -68,8 +69,7 @@ function CalendarioDestape({
   const [anio, mesNum] = mes.split("-").map(Number);
   const diasEnMes = new Date(Date.UTC(anio, mesNum, 0)).getUTCDate();
   const offset = (new Date(Date.UTC(anio, mesNum - 1, 1)).getUTCDay() + 6) % 7;
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
 
   return (
     <div>

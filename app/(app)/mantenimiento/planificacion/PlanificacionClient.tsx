@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
   if (!u) return "—";
@@ -15,7 +16,7 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
   const router = useRouter();
   const confirm = useConfirm();
   const [showNew, setShowNew]   = useState(false);
-  const [fecha, setFecha]       = useState(new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha]       = useState(hoyEnArgentina());
   const [titulo, setTitulo]     = useState("");
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState("");
@@ -82,7 +83,7 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
           {plans.map((p) => {
             const fecha = new Date(p.fecha + "T12:00:00");
             const itemCount = p.planificacion_diaria_items?.length ?? 0;
-            const isToday = p.fecha === new Date().toISOString().slice(0, 10);
+            const isToday = p.fecha === hoyEnArgentina();
             return (
               <div key={p.id} className="flex items-center gap-2 px-4 py-3 hover:bg-slate-50 transition-colors">
               <Link href={`/mantenimiento/planificacion/${p.id}`} className="flex items-center gap-4 flex-1 min-w-0">

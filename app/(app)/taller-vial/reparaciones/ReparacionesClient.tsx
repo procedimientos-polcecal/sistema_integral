@@ -8,6 +8,7 @@ import type { ReparacionDB } from "@/lib/tallerVial/types";
 import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 import BuscadorDeArticulo, { type ArticuloOpcion } from "../BuscadorDeArticulo";
 import Select from "@/components/Select";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const TIPOS = ["Reparación", "Revisión"];
@@ -24,8 +25,7 @@ export default function ReparacionesClient({
   puedeEditar: boolean;
 }) {
   const router = useRouter();
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
 
   const [equipoId, setEquipoId] = useState(equipos[0]?.id ?? "");
   const [tipo, setTipo] = useState(TIPOS[0]);

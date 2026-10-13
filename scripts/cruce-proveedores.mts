@@ -25,6 +25,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { hoyEnArgentina } from "../lib/core/fechas.ts";
 
 for (const l of readFileSync(new URL("../.env.local", import.meta.url), "utf-8").split(/\r?\n/)) {
   const m = l.match(/^([A-Z_0-9]+)=(.*)$/);
@@ -131,7 +132,7 @@ const p = (s = "") => md.push(s);
 
 p("# Cruce de proveedores con Odoo — qué destraba las órdenes de compra");
 p();
-p(`Medido el ${new Date().toISOString().slice(0, 10)} contra \`${dondeApuntaOdoo().base}\`.`);
+p(`Medido el ${hoyEnArgentina()} contra \`${dondeApuntaOdoo().base}\`.`);
 p();
 p("> El padrón de Odoo que se leyó es el de **staging**, que es una copia del 03/09.");
 p("> Los CUIT de acá sirven para decidir, pero antes de enlazar en serio conviene");

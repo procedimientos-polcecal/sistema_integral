@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { nivelCanteraDe } from "@/lib/cantera/auth";
 import { traerAcarreos, traerFleteros } from "@/lib/cantera/consultas";
 import CargarAcarreoClient from "./CargarAcarreoClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Cargar el acarreo de un fletero, día por día: los 5 tipos sin pesada, con
@@ -24,8 +25,7 @@ export default async function CargarAcarreoPage({
   if (!nivel) redirect("/");
   if (nivel === "lectura") redirect("/cantera/acarreo");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
   const fecha = fechaParam && /^\d{4}-\d{2}-\d{2}$/.test(fechaParam) ? fechaParam : hoy;
   const mes = fecha.slice(0, 7);
 

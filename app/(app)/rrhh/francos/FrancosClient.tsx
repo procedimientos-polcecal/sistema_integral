@@ -4,15 +4,15 @@ import { useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const ESTADOS = ["PENDIENTE", "TOMADO"] as const;
 
 function firstOfMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  return `${hoyEnArgentina().slice(0, 7)}-01`;
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyEnArgentina();
 }
 
 export default function FrancosClient() {
@@ -43,7 +43,7 @@ export default function FrancosClient() {
     await fetch(`/api/rrhh/francos/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado: "TOMADO", fechaTomado: new Date().toISOString().slice(0, 10) }),
+      body: JSON.stringify({ estado: "TOMADO", fechaTomado: hoyEnArgentina() }),
     });
     cargar();
   }

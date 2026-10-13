@@ -16,6 +16,7 @@ import {
   traerElBuzon,
 } from "@/lib/facturacion/consultas";
 import { nombreDelComprobante } from "@/lib/facturacion/comprobante";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Cargar una factura al buzón.
@@ -169,7 +170,7 @@ export async function POST(request: Request) {
   if (archivo) {
     const admin = createAdminClient();
     const extension = archivo.name.split(".").pop()?.toLowerCase() || "pdf";
-    const carpeta = (alta.fila.fecha ?? new Date().toISOString().slice(0, 10)).slice(0, 7);
+    const carpeta = (alta.fila.fecha ?? hoyEnArgentina()).slice(0, 7);
     const base = alta.clave
       ? `${alta.clave.cuit_emisor}-${alta.clave.tipo_comprobante}-${alta.clave.punto_venta}-${alta.clave.numero}`
       : `sin-clave-${Date.now()}`;

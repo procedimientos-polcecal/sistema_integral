@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { idsOrDummy } from "./dashboardHelpers";
-import { utcDateOnlyFrom } from "./dates";
+import { utcDateOnlyFrom, hoyComoDiaArgentina } from "./dates";
 import { SECTORES_LUNES_A_VIERNES } from "./constants";
 import { traerPaginado } from "./paginado";
 
@@ -40,7 +40,7 @@ export async function calcularResumenAnalitico(supabase: SupabaseClient): Promis
   const empleadoIds = idsOrDummy(lista.map((e) => e.id));
   const empleadoById = new Map(lista.map((e) => [e.id, e]));
 
-  const hoy = utcDateOnlyFrom(new Date());
+  const hoy = hoyComoDiaArgentina();
   const desde = utcDateOnlyFrom(new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1)));
   const desdeStr = desde.toISOString().slice(0, 10);
   const hoyStr = hoy.toISOString().slice(0, 10);

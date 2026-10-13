@@ -10,6 +10,7 @@ import {
   type FacturaParaConciliar,
   type MovimientoDeOdoo,
 } from "@/lib/facturacion/conciliacion";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Averiguar cuáles facturas del buzón ya están cargadas en Odoo.
@@ -264,7 +265,7 @@ async function buscarLasQueFaltan(
   const fechas = sinVinculo.map((f) => f.fecha).filter((f): f is string => !!f);
   const desde = fechas.length
     ? restarDias(fechas.sort()[0], DIAS_DE_MARGEN)
-    : restarDias(new Date().toISOString().slice(0, 10), 120);
+    : restarDias(hoyEnArgentina(), 120);
 
   const crudos = await buscarLeer<{
     id: number;
@@ -429,7 +430,7 @@ export async function candidatosEnOdoo(
     return { candidatos: [], motivo: `Ningún proveedor de Odoo tiene el CUIT ${cuit}.` };
   }
 
-  const fecha = (data.fecha as string | null) ?? new Date().toISOString().slice(0, 10);
+  const fecha = (data.fecha as string | null) ?? hoyEnArgentina();
   const desde = restarDias(fecha, DIAS_HACIA_ATRAS);
   const crudos = await buscarLeer<{
     id: number;

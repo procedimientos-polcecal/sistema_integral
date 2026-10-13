@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { xlsxMultiSheetResponse } from "@/lib/core/xlsxExport";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Arma el Excel del listado de equipos.
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     f.estado, f.criticidad, f.descripcion, f.notas,
   ]);
 
-  const fecha = new Date().toISOString().slice(0, 10);
+  const fecha = hoyEnArgentina();
   return await xlsxMultiSheetResponse(`equipos_${fecha}.xlsx`, [
     { name: "Equipos", rows: [ENCABEZADO, ...cuerpo], anchos: ANCHOS },
     { name: "Referencia", rows: REFERENCIA },

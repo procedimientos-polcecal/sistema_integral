@@ -12,6 +12,7 @@ import { evaluarMuestra } from "@/lib/calidad/ensayos/limites";
 import { armarReporte, type MuestraDelDia } from "@/lib/calidad/ensayos/reporte";
 import type { Retenido } from "@/lib/calidad/ensayos/types";
 import ReporteClient from "./ReporteClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * El reporte del día: la planilla que calidad reparte.
@@ -33,7 +34,7 @@ export default async function ReportePage({
   const nivel = await nivelCalidadDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnArgentina();
   const fecha = /^\d{4}-\d{2}-\d{2}$/.test(pedida ?? "")
     ? pedida!
     : (await ultimoDiaConMuestras(supabase)) ?? hoy;
