@@ -61,6 +61,22 @@ describe("instanteDeArgentina", () => {
     expect(instanteDeArgentina("2026-09-01T14:30")).toBe("2026-09-01T17:30:00.000Z");
   });
 
+  /**
+   * El caso de `RegistrarOTModal`: el campo es un `type="date"`, así que sólo
+   * hay día, y se le pega "T00:00" para mandarlo como medianoche de acá. Sin
+   * esto la fecha pelada llegaba a una columna `timestamptz` y Postgres la
+   * leía como medianoche UTC, o sea las 21:00 del día ANTERIOR — que es como
+   * dos ejecuciones del 31/8 terminaron mostrándose como del 30.
+   */
+  it("una fecha sola a medianoche queda en el mismo día, no en el anterior", () => {
+    const iso = instanteDeArgentina("2026-08-31T00:00");
+    expect(iso).toBe("2026-08-31T03:00:00.000Z");
+    const comoSeVe = (tz: string) =>
+      new Date(iso).toLocaleDateString("es-AR", { timeZone: tz });
+    expect(comoSeVe("America/Argentina/Buenos_Aires")).toBe("31/8/2026");
+    expect(comoSeVe("UTC")).toBe("31/8/2026");
+  });
+
   it("es la inversa de ahoraEnArgentina", () => {
     const ahora = ART("2026-09-30T23:45:00");
     expect(instanteDeArgentina(ahoraEnArgentina(ahora))).toBe(ahora.toISOString());

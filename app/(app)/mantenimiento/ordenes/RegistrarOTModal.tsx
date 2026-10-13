@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { instanteDeArgentina } from "@/lib/core/fechas";
 
 /**
  * Registrar el trabajo de una orden.
@@ -118,7 +119,13 @@ export default function RegistrarOTModal({
       body: JSON.stringify({
         work_order_id: orden.id,
         execution_status: resultado,
-        executed_at: cuando,
+        // `cuando` es sólo la fecha ("YYYY-MM-DD") porque el campo es un
+        // `type="date"`, pero `executed_at` es `timestamptz`: mandarla pelada
+        // hace que Postgres la lea como medianoche UTC, o sea las 21:00 del
+        // día ANTERIOR acá, y la pantalla muestra un día menos. Se manda como
+        // medianoche de Argentina. (`fecha_cierre`, más abajo, sí es una
+        // columna `date` y va tal cual.)
+        executed_at: instanteDeArgentina(`${cuando}T00:00`),
         duration_hours: horas ? Number(horas) : null,
         observations: observaciones.trim() || null,
       }),
