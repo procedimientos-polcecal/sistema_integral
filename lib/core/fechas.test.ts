@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  fechaEnArgentina, hoyEnArgentina, diaEnArgentina,
+  fechaEnArgentina, hoyEnArgentina, diaEnArgentina, ahoraEnArgentina, instanteDeArgentina,
   sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
   rangoDelMes, mesRelativo, esMesValido,
 } from "./fechas";
@@ -43,6 +43,31 @@ describe("fechaEnArgentina", () => {
 
   it("hoyEnArgentina sin argumento no revienta y da una fecha", () => {
     expect(hoyEnArgentina()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("ahoraEnArgentina", () => {
+  it("da la hora de pared de Argentina, no la UTC", () => {
+    expect(ahoraEnArgentina(ART("2026-09-01T14:30:00"))).toBe("2026-09-01T14:30");
+  });
+
+  it("a las 22:15 sigue siendo el mismo día", () => {
+    expect(ahoraEnArgentina(ART("2026-09-30T22:15:00"))).toBe("2026-09-30T22:15");
+  });
+});
+
+describe("instanteDeArgentina", () => {
+  it("14:30 de acá es 17:30 UTC", () => {
+    expect(instanteDeArgentina("2026-09-01T14:30")).toBe("2026-09-01T17:30:00.000Z");
+  });
+
+  it("es la inversa de ahoraEnArgentina", () => {
+    const ahora = ART("2026-09-30T23:45:00");
+    expect(instanteDeArgentina(ahoraEnArgentina(ahora))).toBe(ahora.toISOString());
+  });
+
+  it("un texto que no se entiende vuelve igual, para que lo rechace el servidor", () => {
+    expect(instanteDeArgentina("")).toBe("");
   });
 });
 

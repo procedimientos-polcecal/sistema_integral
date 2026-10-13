@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import InfoTip from "@/components/InfoTip";
-import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
+import { ahoraEnArgentina, hoyEnArgentina, instanteDeArgentina, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -13,14 +13,18 @@ const STATUS_COLORS: Record<string, string> = {
   cancelado:  "bg-red-100 text-red-800",
 };
 
-const EMPTY_FORM = {
-  schedule_id:        "",
-  execution_status:   "completado",
-  executed_at:        new Date().toISOString().slice(0, 16),
-  duration_hours:     "",
-  observations:       "",
-  next_date_override: "",
-};
+// Una función y no una constante: la constante fijaba la hora al cargar el
+// módulo, y una pestaña abierta desde la mañana ofrecía esa hora a la tarde.
+function formularioVacio() {
+  return {
+    schedule_id:        "",
+    execution_status:   "completado",
+    executed_at:        ahoraEnArgentina(),
+    duration_hours:     "",
+    observations:       "",
+    next_date_override: "",
+  };
+}
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
   if (!u) return "—";
@@ -35,7 +39,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [form, setForm] = useState(formularioVacio);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"pendientes" | "recientes">("pendientes");
@@ -52,7 +56,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
   }
 
   async function openFor(scheduleId: string) {
-    setForm({ ...EMPTY_FORM, schedule_id: scheduleId });
+    setForm({ ...formularioVacio(), schedule_id: scheduleId });
     setChecklistResponses({});
     setPhotos([]);
     setPhotoPreview([]);
@@ -133,7 +137,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
     const payload = {
       schedule_id:         form.schedule_id,
       execution_status:    form.execution_status,
-      executed_at:         form.executed_at,
+      executed_at:         instanteDeArgentina(form.executed_at),
       duration_hours:      form.duration_hours ? Number(form.duration_hours) : null,
       observations:        form.observations.trim() || null,
       checklist_snapshot:  checklist ?? null,
@@ -178,7 +182,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
         </h1>
         {canExecute && (
           <button
-            onClick={() => { setForm({ ...EMPTY_FORM }); setChecklist(null); setPhotos([]); setPhotoPreview([]); setShowForm(true); setError(""); }}
+            onClick={() => { setForm(formularioVacio()); setChecklist(null); setPhotos([]); setPhotoPreview([]); setShowForm(true); setError(""); }}
             className="btn-primary"
           >
             + Registrar

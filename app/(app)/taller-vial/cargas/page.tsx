@@ -5,6 +5,7 @@ import { traerCargas, traerEquiposTallerVial } from "@/lib/tallerVial/consultas"
 import { calcularTrabajoEntreCargas } from "@/lib/tallerVial/combustible";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import CargasClient from "./CargasClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 export default async function CargasTallerVialPage({
   searchParams,
@@ -19,8 +20,7 @@ export default async function CargasTallerVialPage({
   const permisos = await permisosTallerVialDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
 
   const [equipos, todasLasCargas, sync] = await Promise.all([

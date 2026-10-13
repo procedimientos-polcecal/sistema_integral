@@ -7,6 +7,7 @@ import { metrosYPozos } from "@/lib/cantera/tramos";
 import { toneladasEstimadas } from "@/lib/cantera/toneladas";
 import { armarCierresCubicacion, type AcarreoPorYacimiento, type CierreCargado, type VoladuraParaCubicacion } from "@/lib/cantera/cubicacion";
 import CubicacionClient from "./CubicacionClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /** Los cuatro yacimientos que la planilla real "CUBICACIÓN CANTERA" cierra. */
 const YACIMIENTOS_CUBICADOS = ["D1", "D6", "C1", "C3"];
@@ -91,8 +92,7 @@ export default async function CubicacionPage() {
     })
     .filter((c): c is CierreCargado => c !== null);
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const filas = armarCierresCubicacion(YACIMIENTOS_CUBICADOS, voladurasParaCubicacion, acarreos, cierresCargados, mesActual);
 
   const yacimientosCubicados = YACIMIENTOS_CUBICADOS

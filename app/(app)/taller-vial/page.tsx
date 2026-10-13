@@ -38,8 +38,7 @@ export default async function TallerVialInicioPage() {
   const permisos = await permisosTallerVialDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
 
   // El cálculo de trabajado encadena contra la carga anterior, así que hace
   // falta el historial completo del equipo y no sólo las del mes — una carga

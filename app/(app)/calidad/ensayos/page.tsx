@@ -11,6 +11,7 @@ import {
 import { evaluarMuestra } from "@/lib/calidad/ensayos/limites";
 import { acumuladosDelListado } from "@/lib/calidad/ensayos/granulometria";
 import EnsayosClient, { type FilaDeEnsayo } from "./EnsayosClient";
+import { diaEnArgentina } from "@/lib/core/fechas";
 
 /** Cuántos días para atrás trae la pantalla por defecto. */
 const DIAS = 90;
@@ -31,7 +32,7 @@ export default async function EnsayosPage() {
   const nivel = await nivelCalidadDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const desde = diaEnArgentina(-DIAS);
 
   const [productos, limites, muestras, retenidos] = await Promise.all([
     traerProductos(supabase),

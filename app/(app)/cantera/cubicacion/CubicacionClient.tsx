@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FilaCierreCubicacion, LecturaDeCubicacion } from "@/lib/cantera/cubicacion";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -65,8 +66,7 @@ export default function CubicacionClient({
 }) {
   const router = useRouter();
   const meses = useMemo(() => [...new Set(filas.map((f) => f.mes))].sort(), [filas]);
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const [mes, setMes] = useState(() => (meses.includes(mesActual) ? mesActual : meses[meses.length - 1] ?? mesActual));
 
   const idPorCodigo = new Map(yacimientos.map((y) => [y.codigo, y.id]));

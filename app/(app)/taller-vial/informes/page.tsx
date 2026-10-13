@@ -6,6 +6,7 @@ import { calcularTrabajoEntreCargas } from "@/lib/tallerVial/combustible";
 import { resumenMensualDeEstados, type EstadoDiario } from "@/lib/tallerVial/estados";
 import { armarInformeConsumo, armarInformeDisponibilidad } from "@/lib/tallerVial/informe";
 import InformeClient from "./InformeClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * El informe mensual de Taller Vial — reemplaza los tabs "INFORME OCUPACIÓN
@@ -28,8 +29,7 @@ export default async function InformesTallerVialPage({
   const permisos = await permisosTallerVialDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
 
   const [equipos, todasLasCargas, todosLosEstados] = await Promise.all([

@@ -16,15 +16,36 @@ import nextTypescript from "eslint-config-next/typescript";
 // argumento es "ahora", y recortar "ahora" en UTC es el bug.
 const NUEVA_FECHA_AHORA =
   "callee.object.callee.object.type='NewExpression'][callee.object.callee.object.callee.name='Date'][callee.object.callee.object.arguments.length=0]";
-const HOY_EN_UTC_SLICE =
-  "CallExpression[callee.property.name='slice'][callee.object.callee.property.name='toISOString'][arguments.0.value=0][arguments.1.value=10][" +
+// Los tres recortes de "ahora en UTC": el día (0, 10), el mes (0, 7) y el
+// `datetime-local` (0, 16). Es la misma trampa con tres anchos.
+const recorteDeAhoraEnUtc = (hasta) =>
+  "CallExpression[callee.property.name='slice'][callee.object.callee.property.name='toISOString'][arguments.0.value=0][arguments.1.value=" +
+  hasta +
+  "][" +
   NUEVA_FECHA_AHORA;
+const HOY_EN_UTC_SLICE = recorteDeAhoraEnUtc(10);
+const MES_EN_UTC_SLICE = recorteDeAhoraEnUtc(7);
+const AHORA_EN_UTC_SLICE = recorteDeAhoraEnUtc(16);
 const HOY_EN_UTC_SPLIT =
   "MemberExpression[computed=true][property.value=0][object.callee.property.name='split'][object.arguments.0.value='T'][object.callee.object.callee.property.name='toISOString'][object.callee.object.callee.object.type='NewExpression'][object.callee.object.callee.object.callee.name='Date'][object.callee.object.callee.object.arguments.length=0]";
 const HOY_EN_UTC_DE_RRHH =
   "CallExpression[callee.name='utcDateOnlyFrom'][arguments.length=1][arguments.0.type='NewExpression'][arguments.0.callee.name='Date'][arguments.0.arguments.length=0]";
 const MENSAJE_HOY_EN_UTC =
   "Esto es 'hoy en UTC', no 'hoy': desde las 21:00 de Argentina ya devuelve el día siguiente (Vercel corre en UTC, y toISOString() convierte a UTC también en el navegador). Usá hoyEnArgentina() de lib/core/fechas.ts (\"YYYY-MM-DD\"), diaEnArgentina(n) para un día relativo, o hoyComoDiaArgentina() de lib/rrhh/dates.ts si necesitás un Date.";
+const MENSAJE_MES_EN_UTC =
+  "Esto es 'el mes en UTC', no 'el mes en curso': la última noche del mes (desde las 21:00 de Argentina) ya devuelve el siguiente, y la pantalla arranca en un mes vacío. Usá hoyEnArgentina().slice(0, 7) de lib/core/fechas.ts.";
+const MENSAJE_AHORA_EN_UTC =
+  "Esto es 'ahora en UTC': un datetime-local queda con la hora tres horas adelantada, y pasadas las 21:00 también con el día siguiente. Usá ahoraEnArgentina() de lib/core/fechas.ts, y instanteDeArgentina() al guardarlo en una columna timestamptz.";
+
+// Una sola lista para el `error` general y para el `warn` de los archivos que
+// todavía no se pueden tocar, así no se desparejan.
+const REGLAS_HOY_EN_UTC = [
+  { selector: HOY_EN_UTC_SLICE, message: MENSAJE_HOY_EN_UTC },
+  { selector: HOY_EN_UTC_SPLIT, message: MENSAJE_HOY_EN_UTC },
+  { selector: HOY_EN_UTC_DE_RRHH, message: MENSAJE_HOY_EN_UTC },
+  { selector: MES_EN_UTC_SLICE, message: MENSAJE_MES_EN_UTC },
+  { selector: AHORA_EN_UTC_SLICE, message: MENSAJE_AHORA_EN_UTC },
+];
 
 export default [
   {
@@ -98,27 +119,17 @@ export default [
        * relativo, y `hoyComoDiaArgentina()` de `lib/rrhh/dates.ts` si el código
        * trabaja con `Date`.
        *
-       * Sólo caza "hoy": `new Date(x).toISOString().slice(0, 10)` sobre una fecha
+       * También caza el mes (`.slice(0, 7)`) y el `datetime-local` (`.slice(0, 16)`)
+       * de `new Date()`: es la misma trampa con otro ancho, y el mes en curso se
+       * equivoca la última noche de cada mes.
+       *
+       * Sólo caza "ahora": `new Date(x).toISOString().slice(0, 10)` sobre una fecha
        * que ya se tiene en la mano no se toca, y las dos implementaciones
        * correctas (`lib/core/fechas.ts`, `lib/rrhh/dates.ts`) quedan afuera más
        * abajo. Si alguna vez el UTC es lo que se quiere —un cron a las 10:30 UTC,
        * por ejemplo—, va un `eslint-disable-next-line` con el motivo al lado.
        */
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: HOY_EN_UTC_SLICE,
-          message: MENSAJE_HOY_EN_UTC,
-        },
-        {
-          selector: HOY_EN_UTC_SPLIT,
-          message: MENSAJE_HOY_EN_UTC,
-        },
-        {
-          selector: HOY_EN_UTC_DE_RRHH,
-          message: MENSAJE_HOY_EN_UTC,
-        },
-      ],
+      "no-restricted-syntax": ["error", ...REGLAS_HOY_EN_UTC],
     },
   },
   // Dónde vive la implementación correcta: ahí `toISOString()` es la mitad de
@@ -127,24 +138,23 @@ export default [
     files: ["lib/core/fechas.ts", "lib/rrhh/dates.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
-  // Tres archivos con el patrón que siguen abiertos porque están en un stash
+  // Cinco archivos con el patrón que siguen abiertos porque están en un stash
   // de Cantera (`stash@{0}`) que modifica esas mismas líneas: arreglarlos acá
-  // sería un conflicto el día que lo recuperen. En `warn` y no en `error` para
-  // que el lint no se ponga rojo por archivos que nadie puede tocar todavía.
-  // Cuando se recupere el stash y se arreglen, borrar este bloque.
+  // sería un conflicto el día que lo recuperen. Los dos últimos tienen el mes en
+  // curso (`toISOString().slice(0, 7)`), que se sumó a la regla el 13/10/2026.
+  // En `warn` y no en `error` para que el lint no se ponga rojo por archivos
+  // que nadie puede tocar todavía. Cuando se recupere el stash y se arreglen,
+  // borrar este bloque.
   {
     files: [
       "app/(app)/cantera/destape/cargar/CargarDestapeClient.tsx",
       "app/(app)/cantera/destape/cargar/page.tsx",
       "app/(app)/trituracion/partes/PartesClient.tsx",
+      "app/(app)/cantera/acarreo/page.tsx",
+      "app/(app)/trituracion/partes/page.tsx",
     ],
     rules: {
-      "no-restricted-syntax": [
-        "warn",
-        { selector: HOY_EN_UTC_SLICE, message: MENSAJE_HOY_EN_UTC },
-        { selector: HOY_EN_UTC_SPLIT, message: MENSAJE_HOY_EN_UTC },
-        { selector: HOY_EN_UTC_DE_RRHH, message: MENSAJE_HOY_EN_UTC },
-      ],
+      "no-restricted-syntax": ["warn", ...REGLAS_HOY_EN_UTC],
     },
   },
 ];

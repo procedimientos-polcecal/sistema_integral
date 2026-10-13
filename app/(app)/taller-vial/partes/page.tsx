@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerPartesTallerVial } from "@/lib/tallerVial/consultas";
+import { diaEnArgentina } from "@/lib/core/fechas";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -25,9 +26,7 @@ export default async function PartesTallerVialPage() {
   const permisos = await permisosTallerVialDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const hoy = new Date();
-  const desde = new Date(hoy.getTime() - 60 * 86400000).toISOString().slice(0, 10);
+  const desde = diaEnArgentina(-60);
 
   const partes = await traerPartesTallerVial(supabase, { desde });
 

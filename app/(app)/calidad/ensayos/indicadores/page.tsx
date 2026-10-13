@@ -11,6 +11,7 @@ import {
 import { evaluarMuestra } from "@/lib/calidad/ensayos/limites";
 import { resolver, type MuestraResuelta } from "@/lib/calidad/ensayos/indicadores";
 import IndicadoresClient from "./IndicadoresClient";
+import { diaEnArgentina } from "@/lib/core/fechas";
 
 /** Un año: es el período en el que una serie de ensayos empieza a decir algo. */
 const DIAS = 365;
@@ -33,7 +34,7 @@ export default async function IndicadoresPage() {
   const nivel = await nivelCalidadDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const desde = diaEnArgentina(-DIAS);
 
   const [productos, limites, muestras, retenidos] = await Promise.all([
     traerProductos(supabase),

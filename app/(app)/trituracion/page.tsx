@@ -7,6 +7,7 @@ import { traerPartes, traerPlantas, type ParteDB } from "@/lib/trituracion/consu
 import { resumenMensual, toneladasPorMaterial, ultimosMeses, type ParteParaResumen } from "@/lib/trituracion/informe";
 import { COLOR_CLARO, COLORES_TRITURACION, type FilaEvolucion } from "./GraficosTrituracion";
 import { GraficoEvolucion, GraficoMateriales } from "./InicioGraficos";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const pct = new Intl.NumberFormat("es-AR", { style: "percent", maximumFractionDigits: 0 });
@@ -63,8 +64,7 @@ export default async function TrituracionInicioPage({
   const plantas = await traerPlantas(supabase);
   const colorDePlanta = new Map(plantas.map((p, i) => [p.id, COLORES_TRITURACION[i % COLORES_TRITURACION.length]]));
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
 
   // Los partes se cargan al cierre del mes, así que el mes corriente suele estar
   // vacío hasta el final: por defecto se muestra el último mes que tiene partes,

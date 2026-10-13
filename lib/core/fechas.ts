@@ -49,6 +49,34 @@ export function hoyEnArgentina(instante?: Date): string {
 }
 
 /**
+ * Ahora en Argentina como lo espera un `<input type="datetime-local">`:
+ * "YYYY-MM-DDTHH:mm", en hora de pared, sin huso.
+ *
+ * `new Date().toISOString().slice(0, 16)` llena ese campo con la hora UTC, o
+ * sea tres horas adelantada: no sólo cambia el día pasadas las 21:00, el reloj
+ * del campo está mal a toda hora.
+ */
+export function ahoraEnArgentina(instante: Date = new Date()): string {
+  return new Date(instante.getTime() - OFFSET_ARGENTINA_MS).toISOString().slice(0, 16);
+}
+
+/**
+ * Lo que devuelve un `datetime-local` ("YYYY-MM-DDTHH:mm", hora de pared de
+ * Argentina) convertido a un instante ISO sin ambigüedad, para mandarlo a una
+ * columna `timestamptz`.
+ *
+ * Sin esto Postgres lee el texto en el huso de la sesión, que en Supabase es
+ * UTC: lo que alguien tipeó como 14:30 quedaba guardado como 11:30 de acá.
+ */
+export function instanteDeArgentina(local: string): string {
+  // V8 es permisivo con los textos raros (`new Date(":00-03:00")` da el año
+  // 2000), así que se valida la forma antes de dejarle la cuenta.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return local;
+  const t = new Date(`${local}:00-03:00`);
+  return Number.isNaN(t.getTime()) ? local : t.toISOString();
+}
+
+/**
  * Un día relativo a hoy en Argentina: `1` es mañana, `-1` ayer.
  *
  * Se corre sobre la fecha ya resuelta y no sobre el instante, así el resultado

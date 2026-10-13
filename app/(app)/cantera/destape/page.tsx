@@ -5,6 +5,7 @@ import { traerAcarreos, traerDestape, traerFleteros, traerOperariosDeCantera, tr
 import { costoHoraDeMaquinasDelMes } from "@/lib/cantera/costoMaquinaOdoo";
 import { traerEquiposTallerVial } from "@/lib/tallerVial/consultas";
 import DestapeClient from "./DestapeClient";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * Un mes con máquina propia cargada (agosto, por ejemplo) dispara
@@ -58,8 +59,7 @@ export default async function DestapePage({
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
   const [anio, mesNum] = mes.split("-").map(Number);
   const primerDia = `${mes}-01`;

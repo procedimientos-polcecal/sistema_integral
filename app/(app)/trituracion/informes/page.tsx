@@ -5,6 +5,7 @@ import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
 import { informeMensualPorPlanta, toneladasPorOrigen, type ParteParaInformeMensual } from "@/lib/trituracion/informeMensual";
 import BuscadorInformeMensual from "./BuscadorInformeMensual";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -63,8 +64,7 @@ export default async function InformesTrituracionPage({
 
   const plantas = await traerPlantas(supabase);
 
-  // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = hoyEnArgentina().slice(0, 7);
   const mesInforme = mesParam && /^\d{4}-\d{2}$/.test(mesParam) ? mesParam : mesActual;
   const desdeInforme = `${mesInforme}-01`;
   const [anioInforme, mesInformeNum] = mesInforme.split("-").map(Number);
