@@ -1000,3 +1000,60 @@ fechas en null leyendo Sheets sin formatear. Este ERP tiene su propio lector en
 `lib/compras/sheets.ts` y ya se le corrigieron dos cosas parecidas —el día y el
 mes dados vuelta, y las celdas ilegibles pisando estados—; conviene mirar los
 dos lados antes de portar el de mantenimiento.
+
+---
+
+## El `datetime-local` de Ejecuciones guardaba tres horas antes (13/10/2026)
+
+El formulario de `/mantenimiento/ejecuciones` es **el único `datetime-local` del
+sistema**, y tenía dos problemas encadenados que se tapaban entre sí.
+
+**Lo que se mostraba.** El campo se prellenaba con
+`new Date().toISOString().slice(0, 16)`, o sea la hora **UTC**: a las 14:30 de
+acá ofrecía las 17:30. Tres horas adelantada siempre, no sólo de noche.
+
+**Lo que se guardaba.** El texto del campo viaja sin huso, y `executed_at` es
+`timestamptz`: Postgres lo lee como UTC. Una hora tipeada como 14:30 quedaba
+guardada como 11:30 de Argentina.
+
+**Por qué nadie lo notó.** Los dos errores se cancelan **cuando la persona
+acepta el valor por defecto**: el campo ofrece la hora UTC, se guarda como UTC,
+y el instante termina siendo el correcto. El daño aparece sólo cuando alguien
+**tipea** una hora — y las listas muestran `toLocaleDateString`, o sea sólo el
+día, así que un corrimiento de tres horas sólo se ve si cruza la medianoche.
+
+### Lo que había que arreglar en los datos, y por qué fueron dos filas
+
+La tabla tenía **dos ejecuciones en total**, las dos con la hora tipeada:
+
+| | Antes | Después |
+|---|---|---|
+| `executed_at` crudo | `2026-08-31T00:00:00+00:00` | `2026-08-31T03:00:00+00:00` |
+| La lista mostraba | **30/8/2026** | **31/8/2026** |
+
+Las dos tenían el instante exactamente en medianoche UTC, que es lo que queda
+cuando alguien **elige la fecha en el selector y no toca la hora**. Las dos se
+habían cargado la mañana del 31/8 (`created_at` 11:20 y 11:39). Eligieron el
+31 y la lista decía 30: se les sumaron tres horas y quedó el día que
+corresponde.
+
+**El testigo que permite distinguir una fila sana de una corrida es
+`created_at`**, que el formulario nunca escribe. Si `executed_at` está a menos
+de dos minutos de `created_at`, la persona aceptó el valor por defecto y el
+instante es correcto. Si difiere, tipeó algo — y eso es lo que estaba corrido.
+Con esa regla, de las dos filas las dos eran candidatas y ninguna estaba sana.
+
+### Si hay que deshacerlo
+
+```sql
+update mantenimientos_ejecuciones
+   set executed_at = executed_at - interval '3 hours'
+ where executed_at = '2026-08-31T03:00:00+00:00';
+```
+
+### Lo que impide que vuelva
+
+`lib/core/fechas.ts` tiene ahora `ahoraEnArgentina()` —para prellenar un
+`datetime-local`— e `instanteDeArgentina()` —para mandarlo con huso `-03:00`—,
+las dos con tests. Y `eslint.config.mjs` tiene una regla que rechaza
+`new Date().toISOString().slice(0, 16)`, que es la forma exacta que causó esto.
