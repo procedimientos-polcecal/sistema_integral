@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import KpiCard from "@/components/KpiCard";
-import type { ResumenHoy } from "@/lib/rrhh/resumenHoy";
+import { armarTarjetasHoy, tituloDeDetalle, type ClaveTarjeta, type ResumenHoy } from "@/lib/rrhh/tarjetasHoy";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 
@@ -26,13 +26,11 @@ const GraficosPorSector = dynamic(() => import("./GraficosPorSector"), {
   ),
 });
 
-type CategoriaHoy = "presentes" | "ausentes" | "tardes" | "vacaciones";
-
-const TITULOS_CATEGORIA: Record<CategoriaHoy, string> = {
-  presentes: "Presentes hoy",
-  ausentes: "Ausentes hoy",
-  tardes: "Tardanzas hoy",
-  vacaciones: "Vacaciones hoy",
+const COLOR_TARJETA: Record<ClaveTarjeta, string> = {
+  presentes: "var(--primary)",
+  ausentes: "var(--status-rep)",
+  tardes: "var(--accent)",
+  vacaciones: "#7E22CE",
 };
 
 function firstOfMonth() {
@@ -79,7 +77,7 @@ export default function DashboardClient({
   const [horasSector, setHorasSector] = useState<any[] | null>(null);
   const [horasExtraSector, setHorasExtraSector] = useState<any[] | null>(null);
 
-  const [categoriaHoy, setCategoriaHoy] = useState<CategoriaHoy | null>(null);
+  const [categoriaHoy, setCategoriaHoy] = useState<ClaveTarjeta | null>(null);
   const [detalleHoy, setDetalleHoy] = useState<any | null>(null);
   const [sectorSeleccionado, setSectorSeleccionado] = useState<{ sectorId: string; desde: string; hasta: string } | null>(null);
   const [detalleSector, setDetalleSector] = useState<any | null>(null);
@@ -156,10 +154,16 @@ export default function DashboardClient({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard color="var(--primary)" label="Presentes" value={cargandoResumen ? "…" : resumen.presentes.cantidad} sub={cargandoResumen ? undefined : `${resumen.presentes.porcentaje}%`} onClick={() => setCategoriaHoy("presentes")} />
-        <KpiCard color="var(--status-rep)" label="Ausentes" value={cargandoResumen ? "…" : resumen.ausentes.cantidad} sub={cargandoResumen ? undefined : `${resumen.ausentes.porcentaje}%`} onClick={() => setCategoriaHoy("ausentes")} />
-        <KpiCard color="var(--accent)" label="Tardes" value={cargandoResumen ? "…" : resumen.tardes.cantidad} sub={cargandoResumen ? undefined : `${resumen.tardes.porcentaje}%`} onClick={() => setCategoriaHoy("tardes")} />
-        <KpiCard color="#7E22CE" label="Vacaciones" value={cargandoResumen ? "…" : resumen.vacaciones.cantidad} sub={cargandoResumen ? undefined : `${resumen.vacaciones.porcentaje}%`} onClick={() => setCategoriaHoy("vacaciones")} />
+        {armarTarjetasHoy(resumen).map((t) => (
+          <KpiCard
+            key={t.clave}
+            color={COLOR_TARJETA[t.clave]}
+            label={t.label}
+            value={cargandoResumen ? "…" : t.valor}
+            sub={cargandoResumen ? undefined : t.sub}
+            onClick={() => setCategoriaHoy(t.clave)}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -248,7 +252,7 @@ export default function DashboardClient({
       </div>
 
       {categoriaHoy && (
-        <ModalListaEmpleados titulo={TITULOS_CATEGORIA[categoriaHoy]} empleados={detalleHoy?.[categoriaHoy]} onClose={() => setCategoriaHoy(null)} />
+        <ModalListaEmpleados titulo={tituloDeDetalle(categoriaHoy, resumen)} empleados={detalleHoy?.[categoriaHoy]} onClose={() => setCategoriaHoy(null)} />
       )}
       {sectorSeleccionado && (
         <ModalDetalleSector

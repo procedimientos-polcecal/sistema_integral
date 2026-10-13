@@ -1,33 +1,30 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check } from "@/lib/rrhh/route-utils";
-import { empleadosPermitidos, idsOrDummy } from "@/lib/rrhh/dashboardHelpers";
-import { utcDateOnlyFrom } from "@/lib/rrhh/dates";
+import { calcularHoy } from "@/lib/rrhh/resumenHoy";
 
+/**
+ * Las personas detrás de cada una de las cuatro tarjetas.
+ *
+ * Sale de `calcularHoy`, la misma lectura y la misma clasificación que arma los
+ * números: así la lista que abre una tarjeta tiene exactamente tantas filas como
+ * dice la tarjeta. Antes esta ruta hacía su propia cuenta (con la fecha en UTC y
+ * `presentes` como "todos los que no están ausentes"), y apenas la tarjeta
+ * cambió de criterio las dos habrían dejado de coincidir.
+ *
+ * Los ausentes son los del día de referencia, no los de hoy — el título del
+ * modal lo dice, a partir del resumen de la pantalla.
+ */
 export async function GET(request: Request) {
   const supabase = await createClient();
   const check = await tiene_acceso_check(supabase);
   if (check) return check;
 
   const url = new URL(request.url);
-  const empresaId = url.searchParams.get("empresaId");
-  const sectorId = url.searchParams.get("sectorId");
-  const hoy = utcDateOnlyFrom(new Date());
-  const hoyStr = hoy.toISOString().slice(0, 10);
-
-  const empleados = await empleadosPermitidos(supabase, { empresaId, sectorId });
-  const empleadoIds = empleados.map((e) => e.id);
-
-
-  const [{ data: calculos }, { data: tardanzasManuales }, { data: vacaciones }] = await Promise.all([
-    supabase.from("calculos_diarios").select("empleado_id, ausente, tarde").in("empleado_id", idsOrDummy(empleadoIds)).eq("fecha", hoyStr),
-    supabase.from("ausencias").select("empleado_id").in("empleado_id", idsOrDummy(empleadoIds)).eq("tipo", "TARDANZA").lte("fecha_desde", hoyStr).gte("fecha_hasta", hoyStr),
-    supabase.from("vacaciones").select("empleado_id").in("empleado_id", idsOrDummy(empleadoIds)).lte("fecha_desde", hoyStr).gte("fecha_hasta", hoyStr),
-  ]);
-
-  const calculoPorEmpleado = new Map((calculos ?? []).map((c) => [c.empleado_id, c]));
-  const tardanzaManualIds = new Set((tardanzasManuales ?? []).map((a) => a.empleado_id));
-  const vacacionIds = new Set((vacaciones ?? []).map((v) => v.empleado_id));
+  const { empleados, clasificacion } = await calcularHoy(supabase, {
+    empresaId: url.searchParams.get("empresaId"),
+    sectorId: url.searchParams.get("sectorId"),
+  });
 
   const info = (e: (typeof empleados)[number]) => ({
     employeeId: e.id,
@@ -35,11 +32,12 @@ export async function GET(request: Request) {
     nombre: `${e.apellido}, ${e.nombre}`,
     sector: e.sectores?.nombre ?? null,
   });
+  const de = (ids: Set<string> | null) => (ids ? empleados.filter((e) => ids.has(e.id)).map(info) : []);
 
   return NextResponse.json({
-    presentes: empleados.filter((e) => !calculoPorEmpleado.get(e.id)?.ausente).map(info),
-    ausentes: empleados.filter((e) => calculoPorEmpleado.get(e.id)?.ausente).map(info),
-    tardes: empleados.filter((e) => calculoPorEmpleado.get(e.id)?.tarde || tardanzaManualIds.has(e.id)).map(info),
-    vacaciones: empleados.filter((e) => vacacionIds.has(e.id)).map(info),
+    presentes: de(clasificacion.presentes),
+    ausentes: de(clasificacion.ausentes),
+    tardes: de(clasificacion.tardes),
+    vacaciones: de(clasificacion.vacaciones),
   });
 }
