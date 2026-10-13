@@ -25,7 +25,7 @@ export default function CarbonillerosClient({
   proveedores,
 }: {
   carbonilleros: Carbonillero[];
-  sinDeclarar: { id: number; nombre: string }[];
+  sinDeclarar: { codigo: string; nombre: string }[];
   empresas: { id: string; nombre: string }[];
   proveedores: { id: string; nombre: string }[];
 }) {
@@ -83,16 +83,16 @@ export default function CarbonillerosClient({
       {sinDeclarar.length > 0 && (
         <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
           <h2 className="text-sm font-bold text-amber-900">
-            Trajeron carbonilla y no están declarados
+            Aparecieron en la planilla y no están declarados
           </h2>
           <ul className="mt-2 space-y-1">
             {sinDeclarar.map((p) => (
-              <li key={p.id} className="text-sm text-amber-900">
-                {p.nombre} <span className="font-mono text-xs">({p.id})</span>{" "}
+              <li key={p.codigo} className="text-sm text-amber-900">
+                <span className="font-mono text-xs">{p.codigo}</span> {p.nombre}{" "}
                 <button
                   onClick={() =>
                     setEditando({
-                      odoo_partner_id: p.id,
+                      codigo_planilla: p.codigo,
                       nombre_planilla: p.nombre,
                       carbon: "vegetal",
                       activo: true,

@@ -4,7 +4,7 @@ import { saldosDelLibro, saldoCorrido, type Saldos } from "./movimientos";
 import type {
   Carbonillero,
   CarbonReal,
-  LineaSinReconocer,
+  FilaSinReconocer,
   Movimiento,
   ProductoDeOdoo,
 } from "./types";
@@ -61,14 +61,18 @@ export async function traerMovimientos(supabase: SupabaseClient): Promise<Movimi
   );
 }
 
-export async function traerBandeja(supabase: SupabaseClient): Promise<LineaSinReconocer[]> {
-  return traerTodo<LineaSinReconocer>((desde, hasta) =>
+/**
+ * Las filas de la planilla que no se pudieron convertir en movimiento.
+ *
+ * Ordenadas por fila descendente, que es por fecha descendente: la planilla se
+ * escribe siempre al final, así que lo último es lo de abajo.
+ */
+export async function traerBandeja(supabase: SupabaseClient): Promise<FilaSinReconocer[]> {
+  return traerTodo<FilaSinReconocer>((desde, hasta) =>
     supabase
-      .from("calidad_odoo_sin_reconocer")
-      .select(
-        "odoo_purchase_line_id, odoo_purchase_name, odoo_partner_id, odoo_partner_nombre, odoo_product_id, odoo_product_nombre, fecha, toneladas, motivo, visto_en"
-      )
-      .order("fecha", { ascending: false })
+      .from("calidad_planilla_sin_reconocer")
+      .select("fila, fecha, codigo, descripcion, entradas, salidas, motivo, visto_en")
+      .order("fila", { ascending: false })
       .range(desde, hasta)
   );
 }

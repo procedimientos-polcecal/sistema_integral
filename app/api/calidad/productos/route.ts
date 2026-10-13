@@ -29,19 +29,10 @@ export async function GET() {
     traerBandeja(supabase),
   ]);
 
-  const resueltos = new Set(productos.map((p) => p.odoo_product_id));
-  const sinResolver = [
-    ...new Map(
-      bandeja
-        .filter((l) => !resueltos.has(l.odoo_product_id))
-        .map((l) => [
-          l.odoo_product_id,
-          { odoo_product_id: l.odoo_product_id, odoo_product_nombre: l.odoo_product_nombre },
-        ])
-    ).values(),
-  ];
-
-  return NextResponse.json({ productos, sinResolver });
+  // "Sin resolver" perdió su fuente el 13/10/2026: la bandeja es de filas de la
+  // planilla y Odoo ya no crea movimientos. Se devuelve vacía para no romper a
+  // quien la consuma; lo que Odoo no reconoce se ve en la conciliación.
+  return NextResponse.json({ productos, sinResolver: [] });
 }
 
 export async function POST(request: Request) {

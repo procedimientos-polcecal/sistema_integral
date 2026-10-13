@@ -7,7 +7,7 @@ import KpiCard from "@/components/KpiCard";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
-import type { LineaSinReconocer, TipoDeCarbon, TipoDeMovimiento } from "@/lib/calidad/types";
+import type { FilaSinReconocer, TipoDeCarbon, TipoDeMovimiento } from "@/lib/calidad/types";
 import Select from "@/components/Select";
 
 export interface FilaDelLibro {
@@ -69,7 +69,7 @@ export default function StockClient({
   ultimoConsumo: { vegetal: string | null; residual: string | null };
   libro: FilaDelLibro[];
   carbonilleros: { id: string; nombre: string; carbon: "vegetal" | "residual" }[];
-  bandeja: LineaSinReconocer[];
+  bandeja: FilaSinReconocer[];
   sync: UltimaSync | null;
 }) {
   const router = useRouter();
@@ -216,24 +216,24 @@ export default function StockClient({
       {bandeja.length > 0 && (
         <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
           <h2 className="text-sm font-bold text-amber-900">
-            {bandeja.length} {bandeja.length === 1 ? "línea de Odoo sin reconocer" : "líneas de Odoo sin reconocer"}
+            {bandeja.length}{" "}
+            {bandeja.length === 1
+              ? "fila de la planilla sin reconocer"
+              : "filas de la planilla sin reconocer"}
           </h2>
           <p className="mt-0.5 text-xs text-amber-800">
-            No entraron al stock. Se resuelven en{" "}
+            No entraron al stock. Un código que no está declarado se resuelve en{" "}
             <Link href="/calidad/carbonilleros" className="underline">
               Carbonilleros
-            </Link>{" "}
-            o en{" "}
-            <Link href="/calidad/productos" className="underline">
-              Productos
             </Link>
-            .
+            ; lo demás se arregla en la planilla y entra solo en la próxima lectura.
           </p>
           <ul className="mt-2 space-y-1 text-xs text-amber-900">
-            {bandeja.map((l) => (
-              <li key={l.odoo_purchase_line_id}>
-                <span className="font-mono">{l.odoo_purchase_name}</span> · {comoSeLee(l.fecha)} ·{" "}
-                {t(Number(l.toneladas))} t — {l.motivo}
+            {bandeja.map((f) => (
+              <li key={f.fila}>
+                <span className="font-mono">fila {f.fila}</span>
+                {f.fecha && <> · {comoSeLee(f.fecha)}</>}
+                {f.codigo && <> · {f.codigo}</>} — {f.motivo}
               </li>
             ))}
           </ul>

@@ -1,4 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fechaDeSheets } from "@/lib/core/fechaDeSheets";
+import { leerValores } from "@/lib/core/sheets";
+import { movimientoDesdeElRenglon, type CatalogoDeLaPlanilla } from "./importar";
+import { traerCarbonilleros, traerMovimientos } from "./consultas";
 
 /**
  * Qué filas de la planilla hay que convertir en movimientos.
@@ -132,4 +136,119 @@ export function filasPorLeer(ocupadas: Map<number, FilaOcupada>, filas: unknown[
   const desaparecidas = [...ocupadas.keys()].filter((f) => f > filas.length).sort((a, b) => a - b);
 
   return { nuevas, cambiadas, ambiguas, desaparecidas };
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** La pestaña de datos. Lleva dos espacios en el medio, y no es un error. */
+export const PESTANA = "Entradas  Salidas";
+
+const PLANILLA = () => process.env.GOOGLE_SHEETS_STOCK_CARBONILLA_ID ?? "";
+
+export interface ResumenDeLectura {
+  filasLeidas: number;
+  nuevos: number;
+  cambiadas: number;
+  ambiguas: number;
+  desaparecidas: number;
+  sinReconocer: number;
+}
+
+/**
+ * Traer de la planilla los movimientos que el libro todavía no tiene.
+ *
+ * **Lee la planilla entera**, no los últimos N días: son 3.399 filas y una sola
+ * lectura, y `sheets_fila` resuelve mejor que una fecha qué hace falta. De paso,
+ * así se ve si alguien corrigió una fila vieja.
+ *
+ * **Lanza si Google falla, y eso es a propósito.** Quien la llama tiene que
+ * anotarse como `ok: false` en `sincronizaciones` y no correr el control contra
+ * Odoo: una corrida que falla a mitad y se anota bien deja el libro incompleto
+ * sin que nada avise, y el control sobre un libro a medias inventa desvíos.
+ *
+ * Spec: docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md
+ */
+export async function leerLaPlanilla(supabase: SupabaseClient): Promise<ResumenDeLectura> {
+  if (!PLANILLA()) {
+    throw new Error(
+      "Falta GOOGLE_SHEETS_STOCK_CARBONILLA_ID: sin eso no se puede leer la planilla de stock."
+    );
+  }
+
+  const [carbonilleros, movimientos] = await Promise.all([
+    traerCarbonilleros(supabase),
+    traerMovimientos(supabase),
+  ]);
+
+  const catalogo: CatalogoDeLaPlanilla = new Map(
+    carbonilleros.map((c) => [c.codigo_planilla, { id: c.id, carbon: c.carbon }])
+  );
+
+  // Lo que el SdG ya leyó de cada fila. El signo se devuelve a positivo para
+  // poder compararlo con las columnas de la planilla, que no lo tienen.
+  const ocupadas = new Map<number, FilaOcupada>();
+  for (const m of movimientos) {
+    if (m.sheets_fila === null) continue;
+    const t = Number(m.toneladas);
+    ocupadas.set(m.sheets_fila, {
+      fecha: m.fecha,
+      entradas: t > 0 ? t : null,
+      salidas: t < 0 ? -t : null,
+    });
+  }
+
+  const filas = await leerValores(PLANILLA(), PESTANA, { sinFormato: true });
+  const r = filasPorLeer(ocupadas, filas);
+
+  const nuevos: Record<string, unknown>[] = [];
+  const problemas: FilaConProblema[] = [...r.cambiadas, ...r.ambiguas];
+
+  for (const n of r.nuevas) {
+    const conv = movimientoDesdeElRenglon(n.celdas, n.fila, catalogo);
+    if (conv.clase === "vacia") continue;
+    if (conv.clase === "sin_importar") {
+      problemas.push(describir(n.fila, n.celdas, conv.motivo));
+      continue;
+    }
+    // `origen` queda en 'importacion', que es lo que dice de dónde vino: de la
+    // planilla, igual que los 1.047 de septiembre.
+    nuevos.push({ ...conv.movimiento, cargado_por: null });
+  }
+
+  for (let i = 0; i < nuevos.length; i += 500) {
+    const { error } = await supabase.from("calidad_movimientos").insert(nuevos.slice(i, i + 500));
+    if (error) throw new Error(error.message);
+  }
+
+  // La bandeja se rehace entera en cada corrida: lo que se arregló en la
+  // planilla deja de figurar solo, sin que nadie tenga que ir a borrarlo.
+  const { error: errorAlLimpiar } = await supabase
+    .from("calidad_planilla_sin_reconocer")
+    .delete()
+    .gte("fila", 0);
+  if (errorAlLimpiar) throw new Error(errorAlLimpiar.message);
+
+  if (problemas.length) {
+    const { error } = await supabase.from("calidad_planilla_sin_reconocer").insert(
+      problemas.map((p) => ({
+        fila: p.fila,
+        fecha: p.fecha,
+        codigo: p.codigo,
+        descripcion: p.descripcion,
+        entradas: p.entradas,
+        salidas: p.salidas,
+        motivo: p.motivo,
+      }))
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  return {
+    filasLeidas: filas.length,
+    nuevos: nuevos.length,
+    cambiadas: r.cambiadas.length,
+    ambiguas: r.ambiguas.length,
+    desaparecidas: r.desaparecidas.length,
+    sinReconocer: problemas.length,
+  };
 }

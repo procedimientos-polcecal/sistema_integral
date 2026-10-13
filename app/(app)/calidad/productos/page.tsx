@@ -23,17 +23,8 @@ export default async function ProductosPage() {
     traerBandeja(supabase),
   ]);
 
-  const resueltos = new Set(productos.map((p) => p.odoo_product_id));
-  const sinResolver = [
-    ...new Map(
-      bandeja
-        .filter((l) => !resueltos.has(l.odoo_product_id))
-        .map((l) => [
-          l.odoo_product_id,
-          { odoo_product_id: l.odoo_product_id, odoo_product_nombre: l.odoo_product_nombre },
-        ])
-    ).values(),
-  ];
-
-  return <ProductosClient productos={productos} sinResolver={sinResolver} />;
+  // La lista de "sin resolver" perdió su fuente el 13/10/2026: la bandeja pasó
+  // a ser de filas de la planilla, y Odoo ya no crea movimientos. Un producto
+  // sin resolver ahora se ve en la conciliación, que es donde Odoo se mira.
+  return <ProductosClient productos={productos} sinResolver={[]} />;
 }

@@ -36,12 +36,12 @@ export default async function CarbonillerosPage() {
 
   // Los partners que aparecieron en la bandeja sin estar declarados: se dan de
   // alta desde acá, sin ir a buscar el id a Odoo.
-  const declarados = new Set(carbonilleros.map((c) => c.odoo_partner_id));
+  const declarados = new Set(carbonilleros.map((c) => c.codigo_planilla));
   const sinDeclarar = [
     ...new Map(
       bandeja
-        .filter((l) => !declarados.has(l.odoo_partner_id))
-        .map((l) => [l.odoo_partner_id, { id: l.odoo_partner_id, nombre: l.odoo_partner_nombre }])
+        .filter((f) => f.codigo && !declarados.has(f.codigo))
+        .map((f) => [f.codigo, { codigo: f.codigo as string, nombre: f.descripcion ?? "" }])
     ).values(),
   ];
 

@@ -69,15 +69,21 @@ export interface Conteo {
   cargado_en: string;
 }
 
-export interface LineaSinReconocer {
-  odoo_purchase_line_id: number;
-  odoo_purchase_name: string;
-  odoo_partner_id: number;
-  odoo_partner_nombre: string;
-  odoo_product_id: number;
-  odoo_product_nombre: string;
-  fecha: string;
-  toneladas: number;
+/**
+ * Una fila de la planilla que no se pudo convertir en movimiento.
+ *
+ * Reemplazó a `LineaSinReconocer` el 13/10/2026, cuando la planilla pasó a
+ * mandar sobre el libro: Odoo dejó de crear movimientos, así que ya no hay
+ * líneas de Odoo sin reconocer — lo que hay que mirar son filas de la planilla.
+ * Por eso la clave es el número de fila y no el id de una línea de compra.
+ */
+export interface FilaSinReconocer {
+  fila: number;
+  fecha: string | null;
+  codigo: string | null;
+  descripcion: string | null;
+  entradas: number | null;
+  salidas: number | null;
   motivo: string;
   visto_en: string;
 }
