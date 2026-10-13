@@ -21,6 +21,12 @@ function corto(mes: string): string {
   return NOMBRE_MES_CORTO.format(new Date(`${mes}-01T00:00:00Z`)).replace(".", "");
 }
 
+function sumarMes(mes: string, delta: number): string {
+  const [anio, m] = mes.split("-").map(Number);
+  const total = anio * 12 + (m - 1) + delta;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
 function aResumen(partes: ParteDB[]): ParteParaResumen[] {
   return partes.map((p) => ({
     fecha: p.fecha,
@@ -41,7 +47,12 @@ function aResumen(partes: ParteDB[]): ParteParaResumen[] {
  * las 3 plantas juntas), después cada planta con su propio acento de color,
  * y dos gráficos para ver la tendencia sin tener que ir al informe completo.
  */
-export default async function TrituracionInicioPage() {
+export default async function TrituracionInicioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string }>;
+}) {
+  const { mes: mesParam } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -54,7 +65,23 @@ export default async function TrituracionInicioPage() {
 
   // eslint-disable-next-line react-hooks/purity -- se resuelve una vez por request, no en cada render
   const mesActual = new Date().toISOString().slice(0, 7);
-  const meses = ultimosMeses(mesActual, 6);
+
+  // Los partes se cargan al cierre del mes, así que el mes corriente suele estar
+  // vacío hasta el final: por defecto se muestra el último mes que tiene partes,
+  // no el calendario. `?mes=` fija uno a mano (incluido uno vacío).
+  const { data: ultimoParte } = await supabase
+    .from("trituracion_partes")
+    .select("fecha")
+    .order("fecha", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const mesConDatos = ultimoParte?.fecha ? ultimoParte.fecha.slice(0, 7) : null;
+  const mesElegido = mesParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(mesParam) ? mesParam : null;
+  const mesVista = mesElegido ?? mesConDatos ?? mesActual;
+  const mesAnterior = sumarMes(mesVista, -1);
+  const mesSiguiente = sumarMes(mesVista, 1);
+  const hayMesSiguiente = mesVista < mesActual;
+  const meses = ultimosMeses(mesVista, 6);
   const desde = `${meses[0]}-01`;
   const [anioHasta, mesHastaNum] = meses[meses.length - 1].split("-").map(Number);
   const hasta = new Date(Date.UTC(anioHasta, mesHastaNum, 0)).toISOString().slice(0, 10);
@@ -62,10 +89,17 @@ export default async function TrituracionInicioPage() {
   // Se trae una sola vez el rango de 6 meses por planta y el mes corriente sale de filtrar acá —evita una segunda tanda de queries.
   const partesPorPlanta = await Promise.all(plantas.map((p) => traerPartes(supabase, { plantaId: p.id, desde, hasta })));
 
-  const partesDelMesPorPlanta = partesPorPlanta.map((partes) => partes.filter((p) => p.fecha.startsWith(mesActual)));
+  const partesDelMesPorPlanta = partesPorPlanta.map((partes) => partes.filter((p) => p.fecha.startsWith(mesVista)));
   const todosLosPartesDelMes = partesDelMesPorPlanta.flat();
   const resumenGlobal = resumenMensual(aResumen(todosLosPartesDelMes));
-  const pendientesTotal = todosLosPartesDelMes.filter((p) => p.sheets_pendiente).length;
+
+  // Los pendientes son de todos los meses: uno de hace tres meses sigue sin estar
+  // en la planilla, y contar sólo el mes en pantalla lo escondía (decía 0 con 91).
+  const { count: pendientesCount } = await supabase
+    .from("trituracion_partes")
+    .select("id", { count: "exact", head: true })
+    .not("sheets_pendiente", "is", null);
+  const pendientesTotal = pendientesCount ?? 0;
   const materiales = toneladasPorMaterial(
     todosLosPartesDelMes.map((p) => ({ estado: p.estado as "opero" | "no_opero", material: p.material, toneladasProcesadas: p.toneladas_procesadas }))
   );
@@ -98,9 +132,25 @@ export default async function TrituracionInicioPage() {
         Las 3 plantas de trituración: cuándo operó cada una, qué material procesó, de qué hora a qué hora y quién estuvo a cargo.
       </p>
 
+      {/* ── Mes en pantalla ── */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+        <Link href={`/trituracion?mes=${mesAnterior}`} className="btn-ghost" aria-label="Mes anterior">←</Link>
+        <span className="min-w-36 text-center font-semibold text-slate-800">{nombreDeMes(mesVista)}</span>
+        {hayMesSiguiente ? (
+          <Link href={`/trituracion?mes=${mesSiguiente}`} className="btn-ghost" aria-label="Mes siguiente">→</Link>
+        ) : (
+          <span className="btn-ghost pointer-events-none opacity-40" aria-hidden>→</span>
+        )}
+        {!mesElegido && mesVista !== mesActual && (
+          <span className="text-xs text-slate-500">
+            {nombreDeMes(mesActual)} todavía no tiene partes: se muestra el último mes cargado.
+          </span>
+        )}
+      </div>
+
       {/* ── KPIs globales del mes ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard color="#1E7D34" value={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesActual)}`} />
+        <KpiCard color="#1E7D34" value={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesVista)}`} />
         <KpiCard color="#7E22CE" value={String(resumenGlobal.diasOperativos)} label="Días operativos (3 plantas)" />
         <KpiCard
           color="#0891B2"
@@ -110,7 +160,7 @@ export default async function TrituracionInicioPage() {
         <KpiCard
           color={pendientesTotal > 0 ? "#B45309" : "#1E7D34"}
           value={String(pendientesTotal)}
-          label="Sin exportar a la planilla"
+          label="Partes sin exportar a la planilla"
         />
       </div>
 
@@ -128,7 +178,7 @@ export default async function TrituracionInicioPage() {
               {planta.nombre}
             </div>
             <div className="mt-2 text-3xl font-bold" style={{ color }}>{num0.format(resumen.toneladasTotal)} t</div>
-            <div className="text-sm text-slate-500">procesadas este mes</div>
+            <div className="text-sm text-slate-500">procesadas en el mes</div>
             <div className="mt-2 flex justify-between text-sm text-slate-600">
               <span>{resumen.diasOperativos} días operativos</span>
               <span className="font-medium" style={{ color: resumen.disponibilidadPromedio !== null ? color : undefined }}>
@@ -151,13 +201,13 @@ export default async function TrituracionInicioPage() {
         </section>
         <section className="card overflow-hidden lg:col-span-2">
           <div style={{ backgroundColor: "#7E22CE" }} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
-            Material procesado este mes
+            Material procesado en el mes
           </div>
           <div className="h-56 p-4">
             {materiales.length > 0 ? (
               <GraficoMateriales datos={materiales} />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-slate-400">Sin toneladas cargadas este mes.</div>
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">Sin toneladas cargadas en este mes.</div>
             )}
           </div>
         </section>
