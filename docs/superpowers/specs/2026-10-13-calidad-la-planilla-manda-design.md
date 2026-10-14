@@ -142,13 +142,32 @@ Lo que trae de nuevo, y por eso se informa en vez de resolverse solo:
   no se relee —volvería a entrar con otro id y el camión quedaría dos veces— y
   se informa con el texto de qué hacer: borrar la celda `K`.
 
-Y una del otro lado del alambre: **la columna `K` no existía**, no es que
-estuviera vacía. La pestaña tenía 10 columnas de verdad, y escribir afuera de la
-grilla hace que Google rechace el `batchUpdate` entero con `exceeds grid
-limits`. Ensancharla tampoco se puede desde el SdG: la pestaña está protegida
-("ACTUALIZACIÓN DE STOCK") y la cuenta de servicio puede escribir celdas pero no
-cambiar la estructura. **La agregó una persona**, y es un paso que hay que
-repetir si alguna vez se rehace el libro.
+Y dos del otro lado del alambre, que aparecieron recién al ejercitar la
+escritura de verdad y no al razonar sobre ella.
+
+**La columna `K` no existía**, no es que estuviera vacía. La pestaña tenía 10
+columnas de verdad, y escribir afuera de la grilla hace que Google rechace el
+`batchUpdate` entero con `exceeds grid limits`. La agregó una persona, y es un
+paso que hay que repetir si alguna vez se rehace el libro.
+
+**Y la mitad escritora del espejo nunca había escrito nada.** La pestaña entera
+está protegida con el rango `ACTUALIZACIÓN DE STOCK`, sin rangos liberados, y la
+cuenta de servicio no está entre sus editores: tiene permiso de edición sobre el
+documento, que es lo que la protección pisa. Escribir un vacío en la `J` —una
+columna que el espejo usa desde el 16/09— da el mismo `protected cell or object`
+que la `K`.
+
+Lo que lo escondió durante un mes es que **nadie cargó todavía un movimiento
+desde la app**: los 1.128 entraron por el script de importación, por el cron de
+Odoo o por la lectura de la planilla, y ninguno de esos tres escribe. Por eso
+`sheets_pendiente` está en 0 en las 1.128 filas, que leído de apuro parece
+"ninguna escritura falló" y en realidad es "ninguna escritura ocurrió". El
+primer consumo cargado a mano habría fallado, con su aviso, y recién ahí se
+habría visto.
+
+Es exactamente la lección de ejercitar la operación final en vez de leer el
+modelo: el diseño decía "acá el SdG también escribe" y el permiso para hacerlo
+nunca existió.
 
 El escritor también cambia: `filaDeLaPlanilla` devuelve **once** celdas y no
 diez. Una fila que el SdG agrega sin su marca la vuelve a importar la lectura
