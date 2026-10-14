@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 
 /**
  * Leer y escribir .xlsx, con `exceljs`.
@@ -138,23 +139,128 @@ export function recortarAlRango(matriz: unknown[][]): unknown[][] {
 }
 
 /**
+ * Las partes del .xlsx a las que `exceljs` les mira el nombre del tag.
+ *
+ * Es una lista y no "todos los .xml" a propósito. `docProps/core.xml` usa
+ * `dc:creator` y `cp:coreProperties` —ahí el prefijo es **la** forma estándar,
+ * no una rareza— y sacárselo rompe un archivo que hoy se lee bien; lo mismo el
+ * tema, que es DrawingML con prefijo `a:` y que `exceljs` ni parsea. Medido:
+ * sin esta lista, destildar arreglaba los reportes del reloj y rompía un
+ * .xlsx normal de Excel.
+ */
+const PARTES_CON_TAGS_LITERALES =
+  /^(xl\/workbook\.xml|xl\/sharedStrings\.xml|xl\/styles\.xml|xl\/worksheets\/sheet\d+\.xml|docProps\/app\.xml|.*\.rels)$/;
+
+/**
+ * El mismo XML con los prefijos de namespace sacados de los nombres de tag.
+ *
+ * `<x:workbook xmlns:x="…">` pasa a `<workbook xmlns="…">`. Sólo se toca el
+ * prefijo que trae el elemento raíz: los demás quedan declarados y sin usar,
+ * que es inocuo, y así no aparecen dos `xmlns=` en el mismo elemento.
+ *
+ * Los **atributos** no se tocan, y eso es deliberado: `r:id` es como `exceljs`
+ * busca la relación entre el workbook y cada hoja, y destildarlo sería romper
+ * lo que vinimos a arreglar.
+ *
+ * Es seguro hacerlo con texto y no con un parser: un `<` crudo no puede
+ * aparecer ni en el contenido de un elemento ni en el valor de un atributo
+ * —va escapado como `&lt;`—, así que un `<x:` dentro del XML es siempre un
+ * tag. La excepción teórica es un CDATA, que SpreadsheetML no usa.
+ */
+export function sinPrefijoDeNamespace(xml: string): string {
+  // El PRIMER elemento, que es el raíz: ni `<?xml …?>` ni `<!-- … -->`
+  // empiezan con una letra. Mirar el raíz y no "el primer tag con prefijo que
+  // aparezca" no es un detalle: el `docProps/app.xml` que escribe `exceljs`
+  // tiene el raíz sin prefijo y un `<vt:vector>` adentro, y tomar ese `vt`
+  // dejaba dos `xmlns=` en el mismo elemento — XML inválido, y un archivo que
+  // se leía bien pasaba a no leerse.
+  const raiz = xml.match(/<([A-Za-z_][\w.-]*)(?::([\w.-]+))?[\s/>]/);
+  // Sin la segunda mitad el raíz no tiene prefijo: lo que matcheó es el nombre
+  // pelado y no hay nada que sacar.
+  const prefijo = raiz?.[2] ? raiz[1] : null;
+  if (!prefijo) return xml;
+  return xml
+    // `split`/`join` y no un `RegExp` armado con el prefijo: un prefijo puede
+    // llevar `.` o `-`, que en una expresión regular significan otra cosa.
+    .split(` xmlns:${prefijo}=`)
+    .join(" xmlns=")
+    .replace(/<([A-Za-z_][\w.-]*):/g, "<")
+    .replace(/<\/([A-Za-z_][\w.-]*):/g, "</");
+}
+
+/** El mismo .xlsx con los prefijos sacados de las partes que `exceljs` lee por nombre. */
+async function destildarLibro(datos: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(datos);
+  for (const [nombre, entrada] of Object.entries(zip.files)) {
+    if (entrada.dir || !PARTES_CON_TAGS_LITERALES.test(nombre)) continue;
+    const xml = await entrada.async("string");
+    const destildado = sinPrefijoDeNamespace(xml);
+    if (destildado !== xml) zip.file(nombre, destildado);
+  }
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+async function cargarLibro(entrada: Buffer | ArrayBuffer): Promise<ExcelJS.Workbook> {
+  const libro = new ExcelJS.Workbook();
+  await libro.xlsx.load(entrada as ArrayBuffer);
+  return libro;
+}
+
+/** El segundo intento, ya sin prefijos. `null` si tampoco se pudo. */
+async function cargarDestildado(entrada: Buffer): Promise<ExcelJS.Workbook | null> {
+  try {
+    const libro = await cargarLibro(await destildarLibro(entrada));
+    return libro.worksheets.length > 0 ? libro : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Todas las hojas de un .xlsx, en orden.
  *
  * Es `async` porque `exceljs` lo es — SheetJS leía sincrónico. Las cinco
  * llamadas que se migraron ya estaban adentro de funciones `async`, así que el
  * cambio no se propaga más allá de un `await`.
+ *
+ * ── EL SEGUNDO INTENTO ──
+ *
+ * `exceljs` compara el nombre de cada tag **letra por letra** y no resuelve
+ * prefijos de namespace. Un .xlsx que declara SpreadsheetML en un prefijo
+ * —`<x:workbook>` en vez de `<workbook>`, que es lo que escriben las librerías
+ * .NET de OpenXML y lo que exporta el reloj biométrico de RRHH— es XML válido
+ * y Excel lo abre sin chistar, pero `exceljs` lo parsea a `undefined` y tira
+ * un `Cannot read properties of undefined`. SheetJS sí los resolvía: esto se
+ * rompió el 03/10/2026 al migrar y se descubrió el 14/10, cuando hizo falta
+ * el respaldo por Excel de las marcaciones.
+ *
+ * El reintento va en el `catch` y no antes a propósito: el camino feliz queda
+ * exactamente como estaba —ni un desempaquetado de más para los archivos que
+ * ya se leían bien— y lo que se destilda es sólo lo que de otro modo iba a
+ * fallar. Si el segundo intento tampoco puede, se tira **el error original**,
+ * que es el que describe el archivo de verdad.
+ *
+ * Un libro que carga pero no trae ninguna hoja también reintenta: cargar cero
+ * y reportar éxito es la falla que más caro salió en este repo.
  */
 export async function leerLibro(datos: ArrayBuffer | Buffer | Uint8Array): Promise<HojaLeida[]> {
-  const libro = new ExcelJS.Workbook();
   // `exceljs` pide un ArrayBuffer o un Buffer; un Uint8Array que no sea Buffer
   // hay que desenvolverlo o lo rechaza.
-  const entrada =
-    datos instanceof ArrayBuffer
-      ? datos
-      : Buffer.isBuffer(datos)
-        ? datos
-        : Buffer.from(datos as Uint8Array);
-  await libro.xlsx.load(entrada as ArrayBuffer);
+  const entrada = Buffer.isBuffer(datos)
+    ? datos
+    : datos instanceof ArrayBuffer
+      ? Buffer.from(datos)
+      : Buffer.from(datos as Uint8Array);
+
+  let libro: ExcelJS.Workbook;
+  try {
+    libro = await cargarLibro(entrada);
+    if (libro.worksheets.length === 0) libro = (await cargarDestildado(entrada)) ?? libro;
+  } catch (e) {
+    const destildado = await cargarDestildado(entrada);
+    if (!destildado) throw e;
+    libro = destildado;
+  }
 
   return libro.worksheets.map((hoja) => {
     const ancho = hoja.columnCount;

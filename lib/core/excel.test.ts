@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFilas, clavesDeEncabezado, leerLibro, libroXlsx, leerPrimeraHoja } from "./excel";
+import JSZip from "jszip";
 
 /**
  * Los valores esperados de `clavesDeEncabezado` y `aFilas` **no se inventaron**:
@@ -158,5 +159,68 @@ describe("leer y escribir un archivo de verdad", () => {
     const buffer = await libroXlsx([{ nombre: "F", filas: [["A", "B"], [1, null]] }]);
     const [hoja] = await leerLibro(buffer);
     expect(hoja.matriz[1][1]).toBe("");
+  });
+});
+
+/**
+ * EL ARCHIVO DEL RELOJ BIOMÉTRICO.
+ *
+ * El exportador de Lenox —y cualquier otro escrito con las librerías .NET de
+ * OpenXML— no declara SpreadsheetML como namespace por defecto sino en un
+ * **prefijo**: escribe `<x:workbook>` y `<x:sheet>` donde Excel escribe
+ * `<workbook>` y `<sheet>`. Las dos formas son el mismo XML y las dos son
+ * válidas; lo que cambia es que `exceljs` compara el nombre del tag **letra
+ * por letra** y no resuelve prefijos, así que `xl/workbook.xml` le parsea a
+ * `undefined` y revienta con un `Cannot read properties of undefined (reading
+ * 'sheets')` — que la pantalla muestra como "No se pudo leer el archivo".
+ *
+ * SheetJS sí los resolvía, así que esto se rompió el 03/10/2026 al migrar y no
+ * lo notó nadie hasta que alguien necesitó el respaldo: la última importación
+ * de marcaciones por Excel es del 01/10/2026.
+ *
+ * El libro de acá se arma prefijando uno normal, que es exactamente la
+ * diferencia medida contra los seis reportes reales del reloj el 14/10/2026.
+ */
+async function conPrefijo(buffer: Buffer, p = "x"): Promise<Buffer> {
+  const NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const zip = await JSZip.loadAsync(buffer);
+  for (const [nombre, entrada] of Object.entries(zip.files)) {
+    if (entrada.dir || !nombre.endsWith(".xml")) continue;
+    const xml = await entrada.async("string");
+    if (!xml.includes(`xmlns="${NS}"`)) continue;
+    zip.file(
+      nombre,
+      xml
+        .replace(new RegExp(` xmlns="${NS}"`, "g"), ` xmlns:${p}="${NS}"`)
+        .replace(/<([A-Za-z_][\w.-]*)/g, `<${p}:$1`)
+        .replace(/<\/([A-Za-z_][\w.-]*)/g, `</${p}:$1`)
+    );
+  }
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+describe("leerLibro con el namespace en un prefijo", () => {
+  it("lee un libro que escribe <x:workbook> igual que uno que escribe <workbook>", async () => {
+    const normal = await libroXlsx([
+      { nombre: "Marcaciones y Horas", filas: [["Legajo", "Fecha", "Marcaciones"], ["PC_233", "Ma 02/06/2026", " E 08:01 - S 16:07"]] },
+    ]);
+    const esperado = await leerLibro(normal);
+
+    const [hoja] = await leerLibro(await conPrefijo(normal));
+
+    expect(hoja.nombre).toBe("Marcaciones y Horas");
+    expect(hoja.matriz).toEqual(esperado[0].matriz);
+  });
+
+  /** Las fechas son lo que ya se dio vuelta una vez en este repo: el prefijo no las puede correr. */
+  it("una fecha se lee igual con prefijo que sin prefijo", async () => {
+    const normal = await libroXlsx([{ nombre: "F", filas: [["Fecha"], [new Date(Date.UTC(2026, 5, 1))]] }]);
+    const [hoja] = await leerLibro(await conPrefijo(normal));
+    expect((hoja.matriz[1][0] as Date).toISOString()).toBe("2026-06-01T00:00:00.000Z");
+  });
+
+  /** Un archivo roto de verdad tiene que seguir fallando, y con su error, no con el del reintento. */
+  it("un archivo que no es un .xlsx sigue fallando", async () => {
+    await expect(leerLibro(Buffer.from("esto no es un xlsx"))).rejects.toThrow();
   });
 });
