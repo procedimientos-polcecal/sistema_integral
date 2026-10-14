@@ -106,6 +106,72 @@ export async function listarPestanas(planillaId: string): Promise<string[]> {
 }
 
 /**
+ * Ensanchar una pestaña hasta que tenga al menos `cantidad` columnas.
+ *
+ * **Una pestaña tiene un ancho de verdad, y escribir afuera no agranda nada.**
+ * Google contesta `400 … exceeds grid limits. Max rows: 3400, max columns: 10`
+ * y rechaza el `batchUpdate` entero, no la celda que sobra. Eso es lo que pasó
+ * el 14/10/2026 al querer escribir la `K` del libro de carbonilla: la columna
+ * se veía vacía en la planilla porque **no existía**, que no es lo mismo.
+ *
+ * Devuelve cuántas columnas se agregaron. Si ya alcanzaban, no llama a Google
+ * para escribir y devuelve 0.
+ */
+export async function asegurarColumnas(
+  planillaId: string,
+  pestana: string,
+  cantidad: number
+): Promise<number> {
+  const token = await obtenerToken([SCOPE_SHEETS]);
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+    `?fields=sheets.properties(sheetId,title,gridProperties.columnCount)`;
+
+  const res = await pedir(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
+
+  type Hoja = {
+    properties: { sheetId: number; title: string; gridProperties?: { columnCount?: number } };
+  };
+  const hoja = ((await res.json()).sheets ?? ([] as Hoja[])).find(
+    (s: Hoja) => s.properties.title === pestana
+  ) as Hoja | undefined;
+
+  if (!hoja) throw new Error(`La planilla no tiene una pestaña llamada "${pestana}".`);
+
+  const tiene = hoja.properties.gridProperties?.columnCount ?? 0;
+  if (tiene >= cantidad) return 0;
+
+  const faltan = cantidad - tiene;
+  const esc = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [
+          {
+            appendDimension: {
+              sheetId: hoja.properties.sheetId,
+              dimension: "COLUMNS",
+              length: faltan,
+            },
+          },
+        ],
+      }),
+    }
+  );
+  if (!esc.ok) {
+    throw new Error(mensajeDeGoogle(esc.status, await esc.text(), cuentaDeServicio(), "escribir"));
+  }
+
+  return faltan;
+}
+
+/**
  * Escribe celdas sueltas de una planilla, todas de una.
  *
  * Una llamada por celda gastaría una cuota que no hace falta gastar, y dejaría
@@ -167,6 +233,70 @@ export function filaSiguienteSegunLaColumna(columna: string[][]): number {
   }
   // Ni encabezado: se empieza en la 2 y la 1 queda para los títulos.
   return 2;
+}
+
+/**
+ * Si la planilla trae mucho menos de lo que ya sabíamos que tenía.
+ *
+ * ESTO PASÓ, Y COSTÓ UNA PLANILLA. El 13/10/2026 la pestaña `OT` quedó vacía
+ * —alguien la borró a las 11:22 y la restauró recién a las 12:13—. A las 12:09,
+ * en el medio, se creó una OT desde la app: leyó la columna A, encontró **dos
+ * filas**, concluyó que la siguiente libre era la 3 y escribió ahí, encima de
+ * donde vive la OT 623. La app hizo exactamente lo que le pedía su cuenta; lo
+ * que faltaba era que se diera cuenta de que la planilla no estaba en
+ * condiciones de recibir nada.
+ *
+ * El número de OT se salvó de casualidad: `proximoNumeroDeOT` se cae al máximo
+ * de la base cuando la planilla dice menos, así que salió 2777 y no 623. La
+ * fila no tenía esa red.
+ *
+ * La regla no lleva umbral inventado: **cada `sheets_row` que tenemos guardado
+ * es la promesa de que esa fila existe.** Si la planilla devuelve menos filas
+ * que la mayor que anotamos, esa promesa ya está rota y cualquier cosa que
+ * escribamos cae sobre datos de otro. Se niega y se dice por qué, que es lo
+ * único que convierte una pérdida silenciosa en un problema que alguien mira.
+ */
+export function laPlanillaEncogio(filasLeidas: number, filaMasAltaConocida: number): boolean {
+  if (filaMasAltaConocida <= 0) return false;
+  return filasLeidas < filaMasAltaConocida;
+}
+
+/**
+ * Los tramos contiguos de una fila, salteando lo que no hay que tocar.
+ *
+ * Un `null` es "esta celda no se escribe". Hacía falta porque escribir la fila
+ * entera como un solo rango obliga a mandar **algo** en cada columna, y ese
+ * algo era `""`: en la planilla de OT, la columna L es una fórmula que calcula
+ * atrasado/al día, y el comentario del código decía que se dejaba vacía "porque
+ * la planilla la completa sola al agregarse la fila". No se agrega ninguna
+ * fila: se hace un PUT sobre un rango que ya existe, así que ese `""` no la
+ * dejaba vacía — la borraba.
+ *
+ * Se devuelven tramos y no celdas sueltas para no mandar veintitrés rangos de
+ * una celda cuando alcanzan dos.
+ */
+export function tramosDeLaFila(
+  valores: readonly (string | number | null)[]
+): { desde: number; hasta: number; valores: (string | number)[] }[] {
+  const tramos: { desde: number; hasta: number; valores: (string | number)[] }[] = [];
+  let actual: { desde: number; valores: (string | number)[] } | null = null;
+
+  for (let i = 0; i < valores.length; i++) {
+    const v = valores[i];
+    if (v === null) {
+      if (actual) {
+        tramos.push({ desde: actual.desde, hasta: i - 1, valores: actual.valores });
+        actual = null;
+      }
+      continue;
+    }
+    if (!actual) actual = { desde: i, valores: [] };
+    actual.valores.push(v);
+  }
+  if (actual) {
+    tramos.push({ desde: actual.desde, hasta: valores.length - 1, valores: actual.valores });
+  }
+  return tramos;
 }
 
 /**

@@ -2,9 +2,15 @@ import { serialDelDia } from "@/lib/core/fechaDeSheets";
 import type { CarbonReal, TipoDeMovimiento, TipoDeCarbon } from "./types";
 
 /**
- * Las diez celdas de una fila de `Entradas  Salidas` —con los dos espacios—.
+ * Las once celdas de una fila de `Entradas  Salidas` —con los dos espacios—.
  *
  * Función pura: no habla con Google. La escritura vive en `espejo.ts`.
+ *
+ * **LA ONCEAVA, LA `K`, ES EL ID DEL MOVIMIENTO**, y no es decorativa: desde el
+ * 14/10/2026 es el ancla con la que la lectura reconoce una fila que el SdG ya
+ * conoce. Una fila escrita sin ella no tiene marca, y la próxima lectura de la
+ * planilla la importa como si fuera de otro — el mismo consumo, dos veces. La
+ * `K` estaba vacía en las 3.399 filas, y de la `K` a la `P` también.
  *
  * **SE ESCRIBEN LAS DIEZ, FÓRMULAS INCLUIDAS.** Es una excepción deliberada a
  * "pisar una fórmula la convierte en dato muerto", con tres razones medidas:
@@ -52,6 +58,8 @@ export const CODIGOS_DE_AJUSTE: Record<CarbonReal, string> = {
 export type CeldaDePlanilla = string | number;
 
 export interface MovimientoParaLaPlanilla {
+  /** El del SdG. Va a la columna `K` y es con lo que la lectura lo reconoce. */
+  id: string;
   tipo: TipoDeMovimiento;
   carbon: TipoDeCarbon;
   /** Con signo, como está guardado. */
@@ -114,5 +122,6 @@ export function filaDeLaPlanilla(
     serial,
     ctx.conteo ? ctx.conteo.contadas : "",
     ctx.conteo ? ctx.conteo.desvio : "",
+    m.id,
   ];
 }

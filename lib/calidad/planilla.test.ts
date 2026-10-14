@@ -7,7 +7,7 @@ const saldos = { saldoTotal: 345.997, saldoVegetal: 269.9, saldoResidual: 76.097
 describe("filaDeLaPlanilla", () => {
   it("una entrada: código y nombre del carbonillero, y las toneladas en ENTRADAS", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "entrada", carbon: "vegetal", toneladas: 19.58, fecha: "2026-09-04" },
+      { id: "mov-1", tipo: "entrada", carbon: "vegetal", toneladas: 19.58, fecha: "2026-09-04" },
       { carbonillero, ...saldos }
     );
     expect(fila).toEqual([
@@ -21,12 +21,25 @@ describe("filaDeLaPlanilla", () => {
       46269,
       "",
       "",
+      "mov-1",
     ]);
+  });
+
+  it("la columna K lleva el id del movimiento, que es el ancla de la lectura", () => {
+    // Sin esta celda, la fila que el SdG acaba de agregar no tiene marca y la
+    // próxima lectura de la planilla la importa como si fuera de otro: el mismo
+    // consumo entraría dos veces.
+    const fila = filaDeLaPlanilla(
+      { id: "f7c0…", tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-04" },
+      saldos
+    );
+    expect(fila[10]).toBe("f7c0…");
+    expect(fila).toHaveLength(11);
   });
 
   it("un consumo vegetal: el código 00015 y las toneladas en SALIDAS, en positivo", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-04" },
+      { id: "mov-1", tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-04" },
       saldos
     );
     expect(fila[0]).toBe(CODIGOS_DE_CONSUMO.vegetal);
@@ -37,7 +50,7 @@ describe("filaDeLaPlanilla", () => {
 
   it("un consumo residual usa el 00016", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "consumo", carbon: "residual", toneladas: -12, fecha: "2026-09-04" },
+      { id: "mov-1", tipo: "consumo", carbon: "residual", toneladas: -12, fecha: "2026-09-04" },
       saldos
     );
     expect(fila[0]).toBe(CODIGOS_DE_CONSUMO.residual);
@@ -46,7 +59,7 @@ describe("filaDeLaPlanilla", () => {
 
   it("un ajuste en menos cae en SALIDAS", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "ajuste", carbon: "vegetal", toneladas: -46, fecha: "2026-04-20" },
+      { id: "mov-1", tipo: "ajuste", carbon: "vegetal", toneladas: -46, fecha: "2026-04-20" },
       saldos
     );
     expect(fila[0]).toBe(CODIGOS_DE_AJUSTE.vegetal);
@@ -58,7 +71,7 @@ describe("filaDeLaPlanilla", () => {
 
   it("un ajuste en más cae en ENTRADAS — lo que la fórmula vieja no sabía hacer", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "ajuste", carbon: "vegetal", toneladas: 232.5, fecha: "2026-05-02" },
+      { id: "mov-1", tipo: "ajuste", carbon: "vegetal", toneladas: 232.5, fecha: "2026-05-02" },
       saldos
     );
     expect(fila[2]).toBe(232.5);
@@ -68,7 +81,7 @@ describe("filaDeLaPlanilla", () => {
 
   it("la fecha va como serial y nunca como texto", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-09" },
+      { id: "mov-1", tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-09-09" },
       saldos
     );
     expect(typeof fila[7]).toBe("number");
@@ -78,7 +91,7 @@ describe("filaDeLaPlanilla", () => {
 
   it("el conteo físico y su desvío, cuando el movimiento los trae", () => {
     const fila = filaDeLaPlanilla(
-      { tipo: "consumo", carbon: "vegetal", toneladas: -29, fecha: "2026-09-11" },
+      { id: "mov-1", tipo: "consumo", carbon: "vegetal", toneladas: -29, fecha: "2026-09-11" },
       { ...saldos, conteo: { contadas: 298, desvio: -28.857 } }
     );
     expect(fila[8]).toBe(298);
@@ -88,7 +101,7 @@ describe("filaDeLaPlanilla", () => {
   it("una entrada sin su carbonillero no se escribe a medias: falla", () => {
     expect(() =>
       filaDeLaPlanilla(
-        { tipo: "entrada", carbon: "vegetal", toneladas: 19.58, fecha: "2026-09-04" },
+        { id: "mov-1", tipo: "entrada", carbon: "vegetal", toneladas: 19.58, fecha: "2026-09-04" },
         saldos
       )
     ).toThrow();
@@ -97,7 +110,7 @@ describe("filaDeLaPlanilla", () => {
   it("un sin_separar no se escribe: la planilla ya lo tiene", () => {
     expect(() =>
       filaDeLaPlanilla(
-        { tipo: "consumo", carbon: "sin_separar", toneladas: -46, fecha: "2025-09-30" },
+        { id: "mov-1", tipo: "consumo", carbon: "sin_separar", toneladas: -46, fecha: "2025-09-30" },
         saldos
       )
     ).toThrow();
@@ -106,7 +119,7 @@ describe("filaDeLaPlanilla", () => {
   it("una fecha imposible no se escribe en silencio", () => {
     expect(() =>
       filaDeLaPlanilla(
-        { tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-02-30" },
+        { id: "mov-1", tipo: "consumo", carbon: "vegetal", toneladas: -37, fecha: "2026-02-30" },
         saldos
       )
     ).toThrow();

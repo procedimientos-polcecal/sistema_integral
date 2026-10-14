@@ -48,11 +48,15 @@ export function hayEspejoDeStock(): boolean {
 /**
  * Agrega la fila si es nueva, o reescribe la que ya tiene.
  *
- * **Se escriben las diez columnas en los dos caminos, fórmulas incluidas.** La
+ * **Se escriben las once columnas en los dos caminos, fórmulas incluidas.** La
  * excepción a "no pises una fórmula" está justificada en `planilla.ts`: la de
  * `RESIDUAL` está cableada a un solo proveedor y ninguna sabe representar un
  * ajuste en más. Sostener la fórmula viva sería sostener dos saldos que
  * discrepan.
+ *
+ * La onceava es la `K`, el id del movimiento. Se escribe acá y no en la lectura
+ * porque es el mismo paso: una fila que el SdG agrega sin su marca la vuelve a
+ * importar la próxima lectura, y el consumo entra dos veces.
  */
 export async function escribirMovimiento(
   movimiento: MovimientoParaLaPlanilla,
@@ -131,7 +135,7 @@ export async function exportarMovimiento(
     : undefined;
 
   const r = await escribirMovimiento(
-    { tipo: m.tipo, carbon: m.carbon, toneladas: m.toneladas, fecha: m.fecha },
+    { id: m.id, tipo: m.tipo, carbon: m.carbon, toneladas: m.toneladas, fecha: m.fecha },
     {
       carbonillero,
       saldoTotal: fila.saldoTotal,

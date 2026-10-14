@@ -110,6 +110,9 @@ export default function StockClient({
       const partes = [`${l.nuevos} movimientos nuevos de la planilla`];
       if (l.cambiadas) partes.push(`${l.cambiadas} filas cambiaron en la planilla`);
       if (l.ambiguas) partes.push(`${l.ambiguas} con entrada y salida a la vez`);
+      if (l.duplicadas) partes.push(`${l.duplicadas} filas con el mismo id (una es copia)`);
+      if (l.huerfanas) partes.push(`${l.huerfanas} filas con un id que no es de nadie`);
+      if (l.reubicadas) partes.push(`${l.reubicadas} filas se corrieron de lugar`);
       if (l.desaparecidas) partes.push(`${l.desaparecidas} filas ya no están`);
 
       const c = body.control;

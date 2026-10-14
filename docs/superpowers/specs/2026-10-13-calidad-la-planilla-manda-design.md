@@ -72,7 +72,12 @@ que un código sin declarar se informa en vez de enlazarse al que se le parece.
 Lo único que cambia es que deja de correr una vez y pasa a correr todos los
 días.
 
-### `sheets_fila` es lo único que evita el lazo
+### ~~`sheets_fila` es lo único que evita el lazo~~ — corregido el 14/10/2026
+
+> **Lo que sigue en esta sección estaba mal, y se deja escrito porque el error
+> es la parte que enseña.** El ancla pasó a ser el id del movimiento, escrito en
+> la columna `K` de la planilla. El porqué está abajo, en "Lo que el número de
+> fila no sabía hacer".
 
 Cuando alguien carga un consumo en la app, `exportarMovimiento` escribe la fila
 en la planilla y guarda el número que Google devolvió. La próxima lectura ve esa
@@ -88,16 +93,66 @@ concurrente leería esa fila como nueva. El cron corre una vez por día a las
 cinco de la mañana, así que no se cruzan; si alguna vez molesta, se cierra
 escribiendo la fila y exportándola en la misma transacción lógica.
 
-### Que la fila sirva como clave está medido
+### ~~Que la fila sirva como clave está medido~~
 
 - **0 filas fuera de orden cronológico** en 3.399: la planilla se escribe
   siempre al final, nunca en el medio.
-- **1.000 de 1.000 filas importadas siguen diciendo lo mismo** que el SdG
-  guardó de ellas.
+- ~~**1.000 de 1.000 filas importadas siguen diciendo lo mismo** que el SdG
+  guardó de ellas.~~ **Esta medición era falsa.** La consulta no usaba
+  `traerTodo()`, así que PostgREST devolvió 1.000 de 1.122 y cortó sin avisar
+  —exactamente la trampa que el `CLAUDE.md` documenta en su primera regla de
+  base—, y el tramo que quedó afuera era justo donde estaba el problema. El
+  número real: **1.092 de 1.122**, o sea **30 desalineadas**.
 
-Si algún día alguien insertara una fila en el medio, los números se correrían y
+~~Si algún día alguien insertara una fila en el medio, los números se correrían y
 la lectura traería duplicados. No se diseña contra eso porque no pasó nunca en
-veinte meses; lo que sí hay que hacer es dejarlo escrito, y queda acá.
+veinte meses; lo que sí hay que hacer es dejarlo escrito, y queda acá.~~
+
+Pasó. Pasó antes de que yo lo escribiera, y pasó tres veces.
+
+### Lo que el número de fila no sabía hacer
+
+Con las 1.122 a la vista, las 30 desalineadas se explican por **dos costumbres
+distintas, y las dos son normales**:
+
+- Entre el 04 y el 08/09 se insertaron **tres filas en el medio** —un camión
+  que se había olvidado, puesto en su lugar cronológico— y todo lo de abajo se
+  corrió. Los desfasajes son +1, +2 y +3, uno por inserción.
+- A **cinco consumos ya escritos** les cambiaron la cantidad en el lugar.
+
+Una clave por número de fila se rompe con lo primero. Una clave por contenido se
+rompe con lo segundo. No hay forma de elegir bien entre las dos: hacen falta las
+dos cosas, y para tenerlas hace falta una marca que viaje con la fila.
+
+**El ancla es el id del movimiento, en la columna `K`.** Al leer una fila y
+crear su movimiento, el SdG escribe ahí el id. En la corrida siguiente esa fila
+ya no es nueva porque lleva su marca, esté en el número que esté, y
+`sheets_fila` pasa a ser lo que de verdad es —dónde está hoy— y se refresca en
+cada corrida en vez de ser una promesa que se rompe.
+
+El guard de contenido **no se va, cambia de significado**: ya no decide si es la
+misma fila, sino que avisa que a una fila conocida le cambiaron el número. Es un
+aviso y no una adivinanza.
+
+Lo que trae de nuevo, y por eso se informa en vez de resolverse solo:
+
+- **Copiar y pegar una fila duplica su id.** Las dos filas van a la bandeja y no
+  se toca ninguna mientras estén en disputa.
+- **Borrar un movimiento del SdG deja el id huérfano** en la planilla. Esa fila
+  no se relee —volvería a entrar con otro id y el camión quedaría dos veces— y
+  se informa con el texto de qué hacer: borrar la celda `K`.
+
+Y una del otro lado del alambre: **la columna `K` no existía**, no es que
+estuviera vacía. La pestaña tenía 10 columnas de verdad, y escribir afuera de la
+grilla hace que Google rechace el `batchUpdate` entero con `exceeds grid
+limits`. Ensancharla tampoco se puede desde el SdG: la pestaña está protegida
+("ACTUALIZACIÓN DE STOCK") y la cuenta de servicio puede escribir celdas pero no
+cambiar la estructura. **La agregó una persona**, y es un paso que hay que
+repetir si alguna vez se rehace el libro.
+
+El escritor también cambia: `filaDeLaPlanilla` devuelve **once** celdas y no
+diez. Una fila que el SdG agrega sin su marca la vuelve a importar la lectura
+siguiente, y el consumo entra dos veces.
 
 ### Tres decisiones más
 
