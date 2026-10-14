@@ -10,8 +10,24 @@ type ConfirmOptions = {
   danger?: boolean;
 };
 
+/**
+ * Sin proveedor, esto **rompe en vez de contestar que no**.
+ *
+ * Antes devolvía `async () => false`, que se lee como "el usuario canceló" y es
+ * mentira: lo que pasó es que nadie montó el proveedor. Un `if (await
+ * confirm(…))` queda entonces en un botón que no hace nada —sin error, sin
+ * aviso— y eso vivió nueve días en `/inventario/stock` sin que lo notara ni el
+ * build ni la suite. Al 14/10/2026 los siete módulos que usan el hook tienen su
+ * `<ConfirmProvider>`; el día que alguien agregue el octavo y se olvide, se va
+ * a enterar en el primer click y no nueve días después.
+ */
 const ConfirmContext = createContext<(o: ConfirmOptions) => Promise<boolean>>(
-  async () => false
+  async () => {
+    throw new Error(
+      "useConfirm() sin <ConfirmProvider>. Envolvé el layout del módulo, " +
+      "como hacen app/(app)/<modulo>/layout.tsx en los demás."
+    );
+  }
 );
 
 // Hook para pedir confirmación: const confirm = useConfirm();
