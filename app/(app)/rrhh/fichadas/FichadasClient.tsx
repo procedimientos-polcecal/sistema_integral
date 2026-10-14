@@ -9,6 +9,7 @@ import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { fechaHora } from "@/lib/compras/constants";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
+import { rangoQueIncluye } from "@/lib/rrhh/fichadas/rangoDeLista";
 import { DIAS_MAX_RANGO } from "@/lib/rrhh/lenox/rango";
 import { bloqueoPorUltimaSync, rangoPorDefecto, segundosDeEspera, textoDeEspera } from "@/lib/rrhh/lenox/pantalla";
 import AcreditadoDeFichada from "@/components/rrhh/AcreditadoDeFichada";
@@ -43,9 +44,13 @@ function formatHora(iso: string) {
   return new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
 }
 
-export default function FichadasClient({ empleados, fichadasIniciales, turnos, ultimaSync }: {
+export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLista, rangoInicial, turnos, ultimaSync }: {
   empleados: any[];
   fichadasIniciales: any[];
+  /** La lista no se pudo leer: distinto de una semana sin fichadas. */
+  fallaLaLista: boolean;
+  /** El rango con el que la página trajo la lista; el filtro arranca ahí. */
+  rangoInicial: { desde: string; hasta: string };
   /** Turnos activos del catálogo; null si no se pudieron leer. */
   turnos: TurnoLike[] | null;
   ultimaSync: UltimaSync | null;
@@ -53,6 +58,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
   const router = useRouter();
   const confirmar = useConfirm();
   const [fichadas, setFichadas] = useState(fichadasIniciales);
+  const [errorLista, setErrorLista] = useState(fallaLaLista);
 
   // Lo que se acredita sale de la lista que hay en pantalla y no se guarda
   // aparte: cuando una carga refresca `fichadas` con otra lista, esto se
@@ -90,15 +96,44 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
     return () => clearInterval(id);
   }, [bloqueadoHasta]);
 
+  // --- filtro de la lista ---
+  // Ojo con no confundirlo con `rango`, que es el de la sincronización con
+  // Lenox: aquél dice qué días se van a TRAER del reloj, éste dice qué días se
+  // están MIRANDO. Son dos cosas distintas y estaban a dos tarjetas de
+  // distancia, así que cada uno lleva su rótulo.
+  const [filtro, setFiltro] = useState<{ desde: string; hasta: string; employeeId: string }>(
+    () => ({ ...rangoInicial, employeeId: "" })
+  );
+  const [cargandoLista, setCargandoLista] = useState(false);
+
   // Trae la lista de nuevo, ya con el cálculo del día pegado (es la misma
   // función del servidor que arma la carga inicial). Si la ruta falla se deja
   // la lista como estaba: antes una respuesta de error se guardaba como si
   // fuera la lista y la pantalla se rompía.
-  function recargarFichadas() {
-    fetch("/api/rrhh/fichadas")
+  //
+  // El filtro se puede pasar por parámetro porque quien lo acaba de cambiar
+  // todavía no lo tiene en el estado: `setFiltro` no es inmediato, y recargar
+  // con el filtro viejo mostraría la lista anterior como si fuera la nueva.
+  function recargarFichadas(con: { desde: string; hasta: string; employeeId: string } = filtro) {
+    const params = new URLSearchParams();
+    if (con.desde) params.set("desde", con.desde);
+    if (con.hasta) params.set("hasta", con.hasta);
+    if (con.employeeId) params.set("employeeId", con.employeeId);
+    setCargandoLista(true);
+    fetch(`/api/rrhh/fichadas?${params}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((lista) => { if (Array.isArray(lista)) setFichadas(lista); })
-      .catch(() => {});
+      .then((lista) => {
+        if (Array.isArray(lista)) { setFichadas(lista); setErrorLista(false); }
+        else setErrorLista(true);
+      })
+      .catch(() => setErrorLista(true))
+      .finally(() => setCargandoLista(false));
+  }
+
+  function cambiarFiltro(cambio: Partial<typeof filtro>) {
+    const nuevo = { ...filtro, ...cambio };
+    setFiltro(nuevo);
+    recargarFichadas(nuevo);
   }
 
   async function sincronizarConLenox() {
@@ -257,9 +292,14 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
     // La fichada se guardó, pero si el día no quedó marcado la próxima
     // sincronización con Lenox lo pisa.
     setDiaSinProteger(await traeDiaSinProteger(res));
+    // El rango se corre para que la fichada recién cargada se vea. Guardarla
+    // fuera del rango que está mirando y no mostrarla se lee igual que "no se
+    // guardó", y lo siguiente que hace la persona es cargarla de nuevo.
+    const conLaFecha = { ...filtro, ...rangoQueIncluye(filtro, form.fecha) };
+    setFiltro(conLaFecha);
     setForm({ employeeId: "", fecha: "", horaEntrada: "", horaSalida: "" });
     router.refresh();
-    recargarFichadas();
+    recargarFichadas(conLaFecha);
   }
 
   return (
@@ -520,12 +560,47 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
 
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-medium text-slate-700">Últimas fichadas</h2>
+          <h2 className="font-medium text-slate-700 flex items-center gap-1.5">
+            Fichadas cargadas
+            <InfoTip text="Las marcaciones que ya están en el sistema, del período que elijas acá abajo. Ojo: este rango es el que MIRÁS; el de la tarjeta de Lenox es el que se TRAE del reloj." />
+          </h2>
           {/* Descarga, no pagina: ver el comentario en VehiculosClient. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/rrhh/fichadas/export" download className="text-sm text-blue-600 hover:underline">Exportar</a>
         </div>
-        {fichadas.slice(0, 50).some((f: any) => f.calculo_dia === undefined) && (
+
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Desde</label>
+            <input type="date" value={filtro.desde} max={filtro.hasta}
+              onChange={(e) => cambiarFiltro({ desde: e.target.value })} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+            <input type="date" value={filtro.hasta} min={filtro.desde}
+              onChange={(e) => cambiarFiltro({ hasta: e.target.value })} className="input" />
+          </div>
+          <div className="min-w-56">
+            <label className="block text-xs text-slate-500 mb-1">Empleado</label>
+            <Select value={filtro.employeeId} onChange={(e) => cambiarFiltro({ employeeId: e.target.value })} className="input">
+              <option value="">Todos</option>
+              {empleados.map((e: any) => (
+                <option key={e.id} value={e.id}>{e.legajo} — {e.apellido}, {e.nombre}</option>
+              ))}
+            </Select>
+          </div>
+          <p className="text-sm text-slate-500 pb-2">
+            {cargandoLista ? "Buscando..." : `${fichadas.length} ${fichadas.length === 1 ? "fichada" : "fichadas"}`}
+          </p>
+        </div>
+
+        {errorLista && (
+          <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            No se pudo leer la lista de fichadas. Lo que se ve abajo puede estar incompleto o viejo: probá de nuevo antes de
+            concluir que un día no se cargó.
+          </p>
+        )}
+        {fichadas.some((f: any) => f.calculo_dia === undefined) && (
           <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             No se pudo leer el cálculo diario: no se muestran las horas fijadas a mano, la tardanza ni el retiro anticipado.
             El rango acreditado de cada marcación sí se ve, porque sale del turno y no de esa tabla.
@@ -550,7 +625,10 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
             </tr>
           </thead>
           <tbody>
-            {fichadas.slice(0, 50).map((f: any) => (
+            {/* Sin `slice`: el rango ya acota cuánto hay. Un tope ciego de 50
+                filas era justo lo que tapaba días enteros — con 60 o 70
+                personas fichando no llegaba a cubrir dos jornadas. */}
+            {fichadas.map((f: any) => (
               <tr key={f.id} className="border-b last:border-0">
                 <td className="py-2">{f.empleados?.legajo}</td>
                 <td className="py-2">{f.empleados?.apellido}, {f.empleados?.nombre}</td>

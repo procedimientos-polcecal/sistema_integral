@@ -6,6 +6,7 @@ import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido } from "@/lib/rrhh/fichadas/marcarDia";
 import { conCalculoDelDia } from "@/lib/rrhh/fichadas/calculoDelDia";
+import { traerTodo } from "@/lib/core/paginado";
 
 // El frontend manda la hora como "YYYY-MM-DDTHH:MM:SS" sin zona horaria (hora
 // de pared en Argentina) — se parsea a mano con localDateTime(), que siempre
@@ -28,17 +29,27 @@ export async function GET(request: Request) {
   const desde = url.searchParams.get("desde");
   const hasta = url.searchParams.get("hasta");
 
-  let query = supabase
-    .from("fichadas")
-    .select("*, empleados(id, legajo, nombre, apellido)")
-    .order("fecha", { ascending: false })
-    .limit(500);
-  if (employeeId) query = query.eq("empleado_id", employeeId);
-  if (desde) query = query.gte("fecha", desde);
-  if (hasta) query = query.lte("fecha", hasta);
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // `traerTodo` y no un `.limit(500)`: la pantalla ahora pide un rango de días
+  // entero, y una semana de toda la planta son unas 450 filas — el tope de
+  // antes estaba a un día de quedarse corto. PostgREST además corta en 1000 y
+  // no avisa, así que un tope más alto tampoco habría alcanzado: lo que se
+  // vería es un día recortado por la mitad, sin ningún indicio.
+  //
+  // El `.order("id")` después del de fecha NO es decorativo: `.range()` es
+  // LIMIT/OFFSET y `fecha` se repite decenas de veces, así que sin un
+  // desempate dos tandas consecutivas pueden repetir o saltear filas.
+  let data: { empleado_id: string; fecha: string }[];
+  try {
+    data = await traerTodo((d, h) => {
+      let q = supabase.from("fichadas").select("*, empleados(id, legajo, nombre, apellido)");
+      if (employeeId) q = q.eq("empleado_id", employeeId);
+      if (desde) q = q.gte("fecha", desde);
+      if (hasta) q = q.lte("fecha", hasta);
+      return q.order("fecha", { ascending: false }).order("id").range(d, h);
+    });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
   // Con el cálculo del día pegado, igual que la página: el refresco de la lista
   // tiene que traer lo mismo que la carga inicial (ver conCalculoDelDia).
   return NextResponse.json(await conCalculoDelDia(supabase, data ?? []));
