@@ -413,3 +413,41 @@ describe("la fila que ya tiene este RI en la pestana de altas del sistema", () =
     expect(filaConEsteRi(altas(), 1960, MARCA)).toBeNull();
   });
 });
+
+/**
+ * El codigo es un identificador, no un numero.
+ *
+ * Medido el 14/10/2026 contra la planilla: el RI 2143 escribio el codigo
+ * "00345" del ELECTRODO 7018 y en "Altas del sistema" quedo guardado como el
+ * **numero 345**. Las filas que carga el formulario de Google, en cambio,
+ * conservan "00571" como texto.
+ *
+ * Importa mas de lo que parece: el enlace con Inventario se hace por codigo
+ * exacto, asi que ese RI no cuenta como "ya pedido" y el articulo vuelve a
+ * ofrecerse para pedir de nuevo — justo lo que /inventario/reponer existe para
+ * evitar.
+ */
+describe("el codigo no se escribe como numero", () => {
+  const codigoDe = (codigo: string | null) => {
+    const r = celdasDelAlta(ENCABEZADO, { ...DATOS, codigo }, 1957);
+    if (!r.ok) throw new Error(`no armo las celdas: ${r.motivos.join(", ")}`);
+    return porColumna(r.celdas).get(6); // G, CODIGO
+  };
+
+  it("un codigo con ceros adelante va forzado a texto", () => {
+    expect(codigoDe("00345")).toBe("'00345");
+  });
+
+  it("uno que no empieza con cero tambien, porque la regla no depende del valor", () => {
+    expect(codigoDe("1234")).toBe("'1234");
+  });
+
+  it("uno que ya tiene letras va igual", () => {
+    expect(codigoDe("AB-12")).toBe("'AB-12");
+  });
+
+  /** Sin codigo se escribe vacio, y un apostrofo solo seria una celda con nada. */
+  it("sin codigo la celda queda vacia, no un apostrofo", () => {
+    expect(codigoDe(null)).toBe("");
+  });
+});
