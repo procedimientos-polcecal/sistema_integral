@@ -160,6 +160,11 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
   const [importResult, setImportResult] = useState<{ insertados: number; reemplazados: number; errores: string[]; pendientes: string[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  // El `<input type="file">` va escondido detrás de un botón, así que el nombre
+  // del archivo —lo único útil que mostraba el control nativo— hay que
+  // guardarlo a mano o se pierde.
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const [nombreArchivo, setNombreArchivo] = useState("");
 
   function guessMapping(headers: string[]) {
     const guess = (needle: string) => headers.find((h) => h.toLowerCase().includes(needle)) ?? "";
@@ -344,10 +349,36 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
         <details className="card p-5">
           <summary className="font-medium text-slate-700 cursor-pointer flex items-center gap-1.5">
             Importar archivo del reloj (respaldo)
-            <InfoTip text="Respaldo para cuando Lenox no está disponible. Subí el Excel/CSV que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
+            <InfoTip text="Respaldo para cuando Lenox no está disponible. Subí el Excel (.xlsx) que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
           </summary>
           <div className="mt-3">
-          <input type="file" accept=".xlsx" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="text-sm mb-3" />
+          <div className="flex items-center gap-3 mb-3">
+            <button type="button" onClick={() => archivoRef.current?.click()} disabled={importing}
+              className="btn-secondary disabled:opacity-50">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12" />
+              </svg>
+              {nombreArchivo ? "Elegir otro archivo" : "Elegir archivo"}
+            </button>
+            <span className="text-sm text-slate-500 truncate">
+              {nombreArchivo || "Ningún archivo elegido"}
+            </span>
+          </div>
+          <input
+            ref={archivoRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              // Se limpia el valor para que volver a elegir EL MISMO archivo
+              // dispare el `change`: sin esto, corregir el Excel y subirlo de
+              // nuevo con el mismo nombre no hace nada y no se entiende por qué.
+              e.target.value = "";
+              if (f) { setNombreArchivo(f.name); handleFile(f); }
+            }}
+          />
           {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
 
