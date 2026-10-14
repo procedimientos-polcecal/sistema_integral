@@ -133,6 +133,28 @@ Antes de escribir una, leer las ocho trampas del
   mejores que cualquier cosa genérica, y ésa es la vara. De 144 rutas que leen
   un cuerpo, las que no devolvían ni un 400 eran nueve; al 05/10/2026 quedan dos,
   y las dos se protegen bien a mano.
+- **Una policy nueva llama a su función envuelta: `using ((select tiene_acceso_x()))`
+  y no `using (tiene_acceso_x())`.** Postgres evalúa el `USING` **una vez por
+  fila** aunque la función sea `STABLE`; el subselect lo convierte en un
+  InitPlan que se evalúa una sola vez. Escribirla pelada no rompe nada y no
+  avisa: esa tabla simplemente empieza a costar proporcional a sus filas —pedir
+  50 cuesta como leerlas todas— y se nota recién cuando crece. El 14/10/2026
+  eso tenía a `calculos_diarios` **en timeout** y a `cantera_pesadas` en 6,5
+  segundos; después de envolver las 249 policies, todo quedó entre ×1,0 y ×1,3
+  contra la misma consulta sin RLS. Las migraciones son `20261014090512` y
+  `20261014104956`, y el porqué medido está en sus encabezados.
+  - Se comprueba con `node scripts/medir-rls.mjs` (mide) y
+    `node scripts/simular-rls.mjs` (dice qué cambiaría, sin tocar nada).
+  - **La excepción**: una función que **recibe una columna de la fila**
+    —`es_mi_hoja_ruta(hoja_ruta_id)`— no se envuelve nunca. Depende de la fila,
+    así que evaluarla una sola vez le mostraría a cada uno los asientos del
+    primero. Son 4 policies y es el único error de este tema que es un agujero
+    de permisos y no una lentitud.
+  - Y la trampa que ya mordió: **el filtro no es "sin argumentos"**.
+    `mant_puede_ver(uid uuid DEFAULT auth.uid())` declara uno, se llama con
+    `()` y hay que envolverla. Lo que decide es que la llamada tenga los
+    paréntesis vacíos, no lo que diga `pronargs` — buscar por `pronargs = 0`
+    dejó 22 policies de Mantenimiento afuera en la primera pasada.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
 
