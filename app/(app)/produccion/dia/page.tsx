@@ -49,15 +49,44 @@ export default async function ProduccionPage({
   const nivel = await nivelProduccionDe(supabase, user.id);
   if (!nivel) redirect("/");
 
-  const renglonesDePapel = await traerRenglonesDePapel(supabase);
+  /*
+   * Todo lo que falta se pide **de una vez**, no en cascada.
+   *
+   * Antes esta pantalla hacía siete idas y vueltas esperando una a la otra: el
+   * nivel, los renglones, y después por cada turno el parte y el depósito
+   * anterior, uno atrás del otro. Ninguna de esas cuatro últimas depende del
+   * resultado de las anteriores —`traerDepositoDe` sólo necesita la fecha y el
+   * turno, que ya se conocen— así que esperar era gratis para el servidor y
+   * caro para quien abre la pantalla.
+   *
+   * El chequeo de permiso **queda arriba y no entra acá**: primero se decide si
+   * esta persona puede ver el día, y después se pide. Meterlo en el paralelo
+   * ahorraría una ida más, pero dejaría consultas saliendo para alguien que va
+   * a ser redirigido, y eso se lee como un bug aunque RLS no devuelva nada.
+   *
+   * `traerDepositoDe` se pide también para un turno que puede no estar
+   * cargado. Es una consulta de más en ese caso, pero sale en paralelo con las
+   * otras: no agrega espera, y la alternativa —pedirla recién después de saber
+   * si el parte existe— es justamente la cascada que se está sacando.
+   */
+  const [renglonesDePapel, porTurno] = await Promise.all([
+    traerRenglonesDePapel(supabase),
+    Promise.all(
+      TURNOS.map(async (turno) => {
+        const [completo, anterior] = await Promise.all([
+          traerParte(supabase, { fecha, turno }),
+          traerDepositoDe(supabase, parteAnterior({ fecha, turno })),
+        ]);
+        return { turno, completo, anterior };
+      })
+    ),
+  ]);
 
   // Las dos ramas empujan la **misma forma**: un turno sin cargar no es un
   // objeto distinto, es el mismo con todo en vacío. Si las formas difieren, el
   // tipo que infiere TS es una unión y el cliente termina lleno de `in`.
   const turnos: TurnoDelDia[] = [];
-  for (const turno of TURNOS) {
-    const completo = await traerParte(supabase, { fecha, turno });
-
+  for (const { turno, completo, anterior } of porTurno) {
     if (!completo) {
       turnos.push({
         turno, cargado: false, parte: null, despachos: [],
@@ -68,7 +97,6 @@ export default async function ProduccionPage({
     }
 
     const totales = totalesDeDespacho(completo.despachos);
-    const anterior = await traerDepositoDe(supabase, parteAnterior({ fecha, turno }));
 
     turnos.push({
       turno,
