@@ -65,8 +65,21 @@
  *      Activadores -> Añadir activador:
  *        alEnviarFormulario | De la hoja de cálculo -> Al enviarse el formulario
  *
- *   4. **UN SOLO ACTIVADOR, y la numeración va primero.** En
- *      `mantenimiento-apps-script.gs` `alEnviarFormulario` hoy es esto:
+ *   4. **DÓNDE ENGANCHARLO DEPENDE DE QUÉ HAYA EN ESE PROYECTO**, y hay que
+ *      mirarlo: `mantenimiento-apps-script.gs` está instalado en las cuatro
+ *      planillas de Mantenimiento, y **la de respuestas no es ninguna de esas**
+ *      — es la planilla del formulario, que es otra cosa. Puede estar o no.
+ *
+ *      **Si NO está** (no existe `alEnviarFormulario` en el proyecto): el
+ *      activador va directo a esta función y listo.
+ *
+ *        numerarAlEnviarElFormulario | De la hoja de cálculo -> Al enviarse el formulario
+ *
+ *      La regla de "llamarla desde adentro" existe para no tener dos
+ *      activadores del mismo evento; con uno solo no hay nada que ordenar.
+ *
+ *      **Si SÍ está**, entonces un solo activador y la numeración va primero.
+ *      `alEnviarFormulario` hoy es esto:
  *
  *        function alEnviarFormulario(e) {
  *          alEditar(e);
