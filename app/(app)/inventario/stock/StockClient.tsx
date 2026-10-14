@@ -6,19 +6,14 @@ import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
 import {
   leerFiltrosDeStock, escribirFiltrosDeStock,
 } from "@/lib/inventario/filtrosUrl";
-import { altaDeReposicion, type AltaDeReposicion } from "@/lib/inventario/reponer";
+import {
+  altaDeReposicion, avisoDePedidoAbierto,
+  type AltaDeReposicion, type RiAbierto,
+} from "@/lib/inventario/reponer";
 import { useConfirm } from "@/components/ConfirmProvider";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
-
-/** El RI en curso de un artículo, cuando la búsqueda lo pidió con `pedidos=1`. */
-interface RiAbierto {
-  id: string;
-  nro_ri: number;
-  diasDelRi: number;
-  cuantosAbiertos: number;
-}
 
 interface Articulo {
   id: string;
@@ -99,32 +94,11 @@ export default function StockClient({
   }, []);
 
   /**
-   * Pedir un faltante.
-   *
-   * Si ya hay un RI abierto **no se bloquea, se avisa**: desde acá el caso
-   * legítimo existe —el pedido viejo quedó trabado, o hace falta más cantidad—
-   * y la persona eligió este artículo a propósito. Lo que no puede pasar es
-   * pedir de nuevo sin enterarse, que es lo que hace hoy el Apps Script de la
-   * planilla y por lo que seis códigos acumulan más de un RI abierto.
-   *
-   * En `/inventario/reponer` la regla es la otra —lo ya pedido va a un grupo
-   * sin botón— y la diferencia es deliberada: esa lista propone, ésta no.
+   * Pedir un faltante. El cartel de "esto ya está pedido" lo arma el lib,
+   * porque lo usa también el catálogo: dos copias se separan.
    */
   async function pedir(a: Articulo) {
-    const ri = a.riAbierto;
-    if (ri) {
-      const cuantos = ri.cuantosAbiertos > 1 ? ` (y hay ${ri.cuantosAbiertos} abiertos en total)` : "";
-      const cuando = ri.diasDelRi === 0 ? "hoy" : `hace ${ri.diasDelRi} día${ri.diasDelRi === 1 ? "" : "s"}`;
-      const sigue = await confirmar({
-        title: "Esto ya está pedido",
-        message:
-          `El RI ${ri.nro_ri} se pidió ${cuando} y sigue abierto${cuantos}. ` +
-          `Si pedís de nuevo vas a crear un segundo pedido del mismo artículo.`,
-        confirmText: "Pedir igual",
-        cancelText: "No pedir",
-      });
-      if (!sigue) return;
-    }
+    if (a.riAbierto && !(await confirmar(avisoDePedidoAbierto(a.riAbierto)))) return;
     setPidiendo(altaDeReposicion(a));
   }
 

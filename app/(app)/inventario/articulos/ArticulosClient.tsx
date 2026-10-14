@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import { useArranqueDeLaUrl, useEspejoEnLaUrl } from "@/lib/core/usarLaUrl";
 import {
   leerFiltrosDeArticulos, escribirFiltrosDeArticulos,
 } from "@/lib/inventario/filtrosUrl";
+import {
+  altaDeReposicion, avisoDePedidoAbierto,
+  type AltaDeReposicion, type RiAbierto,
+} from "@/lib/inventario/reponer";
+import { useConfirm } from "@/components/ConfirmProvider";
+import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
 interface Articulo {
@@ -17,7 +24,11 @@ interface Articulo {
   stock_seguridad: number;
   faltante: number;
   stock_sincronizado_en: string | null;
+  /** `null` es "no tiene pedido"; `undefined`, que no se preguntó. */
+  riAbierto?: RiAbierto | null;
 }
+
+type Opcion = { id: string; nombre: string };
 
 /**
  * El catálogo de artículos.
@@ -31,11 +42,18 @@ interface Articulo {
  * de donde salen los códigos.
  */
 export default function ArticulosClient({
-  esAdmin, sync,
+  esAdmin, sync, areas, empresas, ubicaciones,
 }: {
   esAdmin: boolean;
   sync: UltimaSync | null;
+  /** Catálogos del alta de Compras. Los usa el modal de «Pedir». */
+  areas: Opcion[];
+  empresas: Opcion[];
+  ubicaciones: Opcion[];
 }) {
+  const confirmar = useConfirm();
+  const [pidiendo, setPidiendo] = useState<AltaDeReposicion | null>(null);
+  const [pedido, setPedido] = useState("");
   // El buscador también va en la URL: acá se viene a buscar un artículo
   // puntual, y `?q=rodamiento` es lo que se recarga o se pasa por chat.
   const arranque = useArranqueDeLaUrl(leerFiltrosDeArticulos);
@@ -48,12 +66,35 @@ export default function ArticulosClient({
 
   const buscar = useCallback(async (termino: string) => {
     setCargando(true);
-    const res = await fetch(`/api/inventario/articulos?q=${encodeURIComponent(termino)}`);
+    // `pedidos=1` para que cada fila sepa si ya tiene un RI en curso: el botón
+    // está en todas, así que la pregunta vale para todas.
+    const res = await fetch(
+      `/api/inventario/articulos?q=${encodeURIComponent(termino)}&pedidos=1`
+    );
     const body = await res.json().catch(() => ({}));
     setCargando(false);
     if (!res.ok) { setError(body.error ?? "No se pudo buscar."); return; }
+    // El catálogo se leyó pero no se pudo saber qué tiene pedido. Se dice: una
+    // fila que calla el pedido se lee igual que una sin pedido, y ésa es la
+    // lectura que hace pedir dos veces.
+    if (body.errorPedidos) {
+      setError(`El catálogo está bien, pero no se pudo saber qué tiene pedido: ${body.errorPedidos}`);
+    }
     setArticulos(body.data ?? []);
   }, []);
+
+  /**
+   * Pedir un artículo, tenga faltante o no.
+   *
+   * A diferencia del stock, acá el botón está en todas las filas: desde el
+   * catálogo se pide lo que se sabe que va a hacer falta, no sólo lo que ya se
+   * acabó. La precarga es la misma —el stock de seguridad como cantidad— y es
+   * editable, que es donde se ajusta cuando el artículo está bien de stock.
+   */
+  async function pedir(a: Articulo) {
+    if (a.riAbierto && !(await confirmar(avisoDePedidoAbierto(a.riAbierto)))) return;
+    setPidiendo(altaDeReposicion(a));
+  }
 
   useEffect(() => {
     const t = setTimeout(() => buscar(q.trim()), 300);
@@ -89,6 +130,15 @@ export default function ArticulosClient({
           que los hace aparecer acá. */}
       <TraerDeLaPlanilla sync={sync} onListo={() => buscar(q.trim())} />
 
+      {/* Arriba: la lista se recarga al guardar y la fila que se pidió puede
+          quedar fuera de la pantalla. */}
+      {pedido && (
+        <p role="status" className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+          {pedido} Lo vas a ver en{" "}
+          <Link href="/mis-pedidos" className="underline">Mis pedidos</Link>.
+        </p>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
@@ -111,18 +161,19 @@ export default function ArticulosClient({
                 <th className="px-3 py-2 text-right">Stock</th>
                 <th className="px-3 py-2 text-right">Seguridad</th>
                 {esAdmin && <th className="px-3 py-2"></th>}
+                <th className="sticky right-0 bg-slate-50 px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
-                <tr><td colSpan={esAdmin ? 6 : 5} className="px-3 py-10 text-center text-slate-400">Cargando…</td></tr>
+                <tr><td colSpan={esAdmin ? 7 : 6} className="px-3 py-10 text-center text-slate-400">Cargando…</td></tr>
               ) : articulos.length === 0 ? (
-                <tr><td colSpan={esAdmin ? 6 : 5} className="px-3 py-10 text-center text-slate-400">
+                <tr><td colSpan={esAdmin ? 7 : 6} className="px-3 py-10 text-center text-slate-400">
                   Ningún artículo coincide.
                 </td></tr>
               ) : (
                 articulos.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50">
+                  <tr key={a.id} className="group hover:bg-slate-50">
                     <td className="px-3 py-2 font-mono text-slate-700">{a.codigo}</td>
                     <td className="px-3 py-2 text-slate-900">{a.descripcion}</td>
                     <td className="px-3 py-2 text-slate-600">{a.ubicacion ?? "—"}</td>
@@ -140,6 +191,37 @@ export default function ArticulosClient({
                         </button>
                       </td>
                     )}
+                    {/*
+                      Fija al borde derecho. La tabla tiene seis columnas y a
+                      375px scrollea: maquetado, el botón quedaba fuera de la
+                      pantalla y había que arrastrar la tabla para encontrarlo.
+                      Lo que se esconda que sea la ubicación, no la acción.
+                      El fondo se repite acá porque una celda fija no hereda el
+                      de la fila: sin esto, al pasar el mouse la fila se pinta
+                      y esta columna queda blanca.
+                    */}
+                    <td className="sticky right-0 whitespace-nowrap bg-white px-3 py-2 text-right shadow-[-6px_0_6px_-4px_rgba(0,0,0,.08)] group-hover:bg-slate-50">
+                      {/* La marca va antes del botón y no sólo en el cartel: el
+                          cartel sorprende, esto deja decidir sin tocar. */}
+                      {a.riAbierto && (
+                        <Link
+                          href={`/compras/requerimientos/${a.riAbierto.id}`}
+                          className="mr-2 text-[11px] text-slate-500 underline hover:text-slate-900"
+                        >
+                          RI {a.riAbierto.nro_ri}
+                        </Link>
+                      )}
+                      {/* En todas las filas, haya faltante o no: desde el
+                          catálogo se pide lo que se sabe que va a hacer falta.
+                          Y sin mirar `esAdmin`, que gobierna Editar. */}
+                      <button
+                        type="button"
+                        onClick={() => pedir(a)}
+                        className="rounded-lg border border-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--primary-light)]"
+                      >
+                        Pedir
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -153,6 +235,23 @@ export default function ArticulosClient({
         cuánto hay se carga un ajuste, que además deja constancia de quién lo
         contó.
       </p>
+
+      {pidiendo && (
+        <NuevoRequerimientoModal
+          areas={areas}
+          empresas={empresas}
+          ubicaciones={ubicaciones}
+          inicial={pidiendo}
+          onClose={() => setPidiendo(null)}
+          onSaved={() => {
+            setPidiendo(null);
+            setPedido("El pedido se cargó.");
+            // Se recarga para que la fila pase a mostrar su RI: si no, queda
+            // ofreciendo pedir lo que se acaba de pedir.
+            buscar(q.trim());
+          }}
+        />
+      )}
 
       {editando && (
         <ModalArticulo

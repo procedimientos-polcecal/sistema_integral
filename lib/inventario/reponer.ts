@@ -178,6 +178,77 @@ export function pedidosAbiertosPorCodigo(
 }
 
 /**
+ * El pedido abierto **tal como viaja a la pantalla**, aplanado.
+ *
+ * `PedidoAbierto` lleva el RI entero, que del otro lado nadie usa; esto es lo
+ * único que la fila necesita para dibujarse y para armar el cartel. Vive acá y
+ * no en cada pantalla porque lo arman la ruta y lo leen dos clientes: escrito
+ * tres veces a mano, basta que uno agregue un campo para que se separen.
+ */
+export interface RiAbierto {
+  id: string;
+  nro_ri: number;
+  diasDelRi: number;
+  cuantosAbiertos: number;
+}
+
+/** Lo que de un pedido abierto le sirve a la pantalla. */
+export function riAbiertoDe(pedido: PedidoAbierto): RiAbierto {
+  return {
+    id: pedido.ri.id,
+    nro_ri: pedido.ri.nro_ri,
+    diasDelRi: pedido.diasDelRi,
+    cuantosAbiertos: pedido.cuantosAbiertos,
+  };
+}
+
+/** Lo que muestra el cartel antes de pedir algo que ya tiene pedido. */
+export interface AvisoDePedido {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+}
+
+/**
+ * El cartel que sale al pedir algo que ya tiene un RI abierto.
+ *
+ * **Avisa, no bloquea.** Desde el stock y desde el catálogo el caso legítimo
+ * existe —el pedido viejo quedó trabado, o hace falta más cantidad— y la
+ * persona eligió ese artículo a propósito. Y bloquear sería peor que inútil:
+ * hay RI abiertos de hace más de 350 días (el `00004`, el `00244`), así que
+ * esos artículos quedarían imposibles de pedir para siempre. Lo que no puede
+ * pasar es pedir de nuevo **sin enterarse**, que es lo que hace hoy el Apps
+ * Script de la planilla y por lo que seis códigos acumulan más de un RI.
+ *
+ * En `/inventario/reponer` la regla es la otra —lo ya pedido va a un grupo sin
+ * botón— y la diferencia es deliberada: esa lista propone, las otras dos no.
+ *
+ * Vive acá y no en la pantalla porque lo arman dos, y un cartel duplicado es un
+ * cartel que se separa. Los botones dicen qué hace cada uno en vez de «Sí» y
+ * «No»: lo que se está confirmando no es una pregunta de sí o no, es una
+ * acción con consecuencia.
+ */
+export function avisoDePedidoAbierto(pedido: RiAbierto): AvisoDePedido {
+  const cuando =
+    pedido.diasDelRi === 0
+      ? "hoy"
+      : `hace ${pedido.diasDelRi} día${pedido.diasDelRi === 1 ? "" : "s"}`;
+  // Con uno solo la cuenta no agrega nada; con tres cambia la decisión.
+  const cuantos =
+    pedido.cuantosAbiertos > 1 ? ` (y hay ${pedido.cuantosAbiertos} abiertos en total)` : "";
+
+  return {
+    title: "Esto ya está pedido",
+    message:
+      `El RI ${pedido.nro_ri} se pidió ${cuando} y sigue abierto${cuantos}. ` +
+      `Si pedís de nuevo vas a crear un segundo pedido del mismo artículo.`,
+    confirmText: "Pedir igual",
+    cancelText: "No pedir",
+  };
+}
+
+/**
  * Con qué valores se abre el formulario de alta para reponer un artículo.
  *
  * **La cantidad es el stock de seguridad y no el faltante**, que es lo que ya

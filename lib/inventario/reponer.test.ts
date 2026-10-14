@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clasificarParaReponer, estaAbierto, altaDeReposicion, pedidosAbiertosPorCodigo,
+  avisoDePedidoAbierto,
   DIAS_DE_CONSUMO,
 } from "./reponer";
 import type { ArticuloConFaltante, MovimientoDelConsumo, RequerimientoConCodigo } from "./reponer";
@@ -386,6 +387,49 @@ describe("los pedidos abiertos por codigo", () => {
   it("ignora el codigo vacio, que no se puede cruzar con nada", () => {
     expect(pedidosAbiertosPorCodigo([ri({ codigo: null })], HOY).size).toBe(0);
     expect(pedidosAbiertosPorCodigo([ri({ codigo: "  " })], HOY).size).toBe(0);
+  });
+});
+
+describe("el aviso de que ya esta pedido", () => {
+  const abierto = (p = {}) => ({ id: "r1", nro_ri: 2015, cuantosAbiertos: 1, diasDelRi: 3, ...p });
+
+  it("dice cual es el pedido y hace cuanto", () => {
+    const a = avisoDePedidoAbierto(abierto({ nro_ri: 2051, diasDelRi: 3 }));
+    expect(a.message).toContain("El RI 2051");
+    expect(a.message).toContain("hace 3 días");
+  });
+
+  it("en singular dice un dia, no 1 dias", () => {
+    expect(avisoDePedidoAbierto(abierto({ diasDelRi: 1 })).message).toContain("hace 1 día");
+    expect(avisoDePedidoAbierto(abierto({ diasDelRi: 1 })).message).not.toContain("1 días");
+  });
+
+  it("el mismo dia dice hoy y no hace 0 dias", () => {
+    const m = avisoDePedidoAbierto(abierto({ diasDelRi: 0 })).message;
+    expect(m).toContain("hoy");
+    expect(m).not.toContain("0 día");
+  });
+
+  it("con varios abiertos lo dice, porque cambia la decision", () => {
+    // El caso del 00666: con tres abiertos, pedir un cuarto casi nunca es lo
+    // que alguien quiere, y sin este dato el cartel se lee igual que con uno.
+    expect(avisoDePedidoAbierto(abierto({ cuantosAbiertos: 3 })).message)
+      .toContain("3 abiertos en total");
+  });
+
+  it("con uno solo no habla de la cantidad, que seria ruido", () => {
+    expect(avisoDePedidoAbierto(abierto({ cuantosAbiertos: 1 })).message)
+      .not.toContain("en total");
+  });
+
+  it("los botones dicen que hace cada uno, no si y no", () => {
+    const a = avisoDePedidoAbierto(abierto());
+    expect(a.confirmText).toBe("Pedir igual");
+    expect(a.cancelText).toBe("No pedir");
+  });
+
+  it("avisa que el resultado es un segundo pedido, que es la consecuencia real", () => {
+    expect(avisoDePedidoAbierto(abierto()).message).toContain("segundo pedido");
   });
 });
 

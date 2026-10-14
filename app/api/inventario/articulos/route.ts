@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
-  pedidosAbiertosPorCodigo, type RequerimientoConCodigo,
+  pedidosAbiertosPorCodigo, riAbiertoDe, type RequerimientoConCodigo,
 } from "@/lib/inventario/reponer";
 
 /**
@@ -15,8 +15,8 @@ import {
  *
  * Sin `q` devuelve los primeros por código, que es lo que se ve al abrir.
  *
- * Con `pedidos=1` cada fila **con faltante** trae además si ya tiene un RI
- * abierto, que es lo que el stock necesita para avisar antes de pedir de nuevo.
+ * Con `pedidos=1` cada fila trae además si ya tiene un RI abierto, que es lo
+ * que el stock y el catálogo necesitan para avisar antes de pedir de nuevo.
  * Va detrás de un parámetro y no siempre porque el otro llamador —el buscador
  * del formulario de movimiento— no lo usa, y sería una consulta por tecla
  * tirada a la basura.
@@ -50,11 +50,12 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!conPedidos || !data?.length) return NextResponse.json({ data });
 
-  // Sólo los que faltan: en los demás el botón no existe, así que preguntar por
-  // su pedido sería traer algo que nadie mira. De las 50 filas que como mucho
-  // devuelve la consulta de arriba, hoy unas pocas tienen faltante.
+  // Todas las filas, no sólo las que faltan. Hasta el 14/10/2026 esto filtraba
+  // por faltante, porque en los demás el botón no existía; desde que el
+  // catálogo deja pedir cualquier artículo, esa premisa caducó. Siguen siendo
+  // como mucho las 50 que devolvió la consulta de arriba.
   const codigos = [...new Set(
-    data.filter((a) => Number(a.faltante) > 0).map((a) => String(a.codigo).trim())
+    data.map((a) => String(a.codigo).trim())
   )].filter(Boolean);
 
   if (codigos.length === 0) return NextResponse.json({ data });
@@ -81,19 +82,8 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     data: data.map((a) => {
-      if (!(Number(a.faltante) > 0)) return a;
       const p = abiertos.get(String(a.codigo).trim());
-      return {
-        ...a,
-        riAbierto: p
-          ? {
-              id: p.ri.id,
-              nro_ri: p.ri.nro_ri,
-              diasDelRi: p.diasDelRi,
-              cuantosAbiertos: p.cuantosAbiertos,
-            }
-          : null,
-      };
+      return { ...a, riAbierto: p ? riAbiertoDe(p) : null };
     }),
   });
 }
