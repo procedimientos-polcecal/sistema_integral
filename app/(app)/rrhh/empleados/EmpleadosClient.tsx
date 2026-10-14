@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
@@ -133,6 +133,11 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
   } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+  // El `<input type="file">` va escondido detrás de un botón, así que el nombre
+  // del archivo —lo único útil que mostraba el control nativo— hay que
+  // guardarlo a mano o se pierde.
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const [nombreArchivo, setNombreArchivo] = useState("");
 
   function guessMapping(headers: string[]) {
     const guess = (needle: string) => headers.find((h) => h.toLowerCase().includes(needle)) ?? "";
@@ -240,18 +245,39 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
         <div className="card p-5 mb-6">
           <h2 className="font-medium text-slate-700 mb-1 flex items-center gap-1.5">
             Importar planilla de empleados
-            <InfoTip text="Subís un Excel/CSV con una fila por empleado y decís qué columna es cada dato (legajo, nombre, valor hora, etc.). Si el legajo ya existe se actualizan sus datos; si no, se crea. La empresa/sector se crean solos si no existían." />
+            <InfoTip text="Subís un Excel (.xlsx) con una fila por empleado y decís qué columna es cada dato (legajo, nombre, valor hora, etc.). Si el legajo ya existe se actualizan sus datos; si no, se crea. La empresa/sector se crean solos si no existían." />
           </h2>
           <p className="text-sm text-slate-500 mb-3">
-            Subí un Excel/CSV con una fila por empleado. Columnas necesarias: Legajo, Nombre, Apellido y Valor
+            Subí un Excel (.xlsx) con una fila por empleado. Columnas necesarias: Legajo, Nombre, Apellido y Valor
             hora normal. Sindicato, Sector, horas teóricas diarias, fecha de nacimiento y género son opcionales.
             Si el legajo ya existe, se actualizan sus datos.
           </p>
+          <div className="flex items-center gap-3 mb-3">
+            <button type="button" onClick={() => archivoRef.current?.click()} disabled={importing}
+              className="btn-secondary disabled:opacity-50">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12" />
+              </svg>
+              {nombreArchivo ? "Elegir otro archivo" : "Elegir archivo"}
+            </button>
+            <span className="text-sm text-slate-500 truncate">
+              {nombreArchivo || "Ningún archivo elegido"}
+            </span>
+          </div>
           <input
+            ref={archivoRef}
             type="file"
             accept=".xlsx"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-            className="text-sm mb-3"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              // Se limpia el valor para que volver a elegir EL MISMO archivo
+              // dispare el `change`: sin esto, corregir el Excel y subirlo de
+              // nuevo con el mismo nombre no hace nada y no se entiende por qué.
+              e.target.value = "";
+              if (f) { setNombreArchivo(f.name); handleFile(f); }
+            }}
           />
           {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
