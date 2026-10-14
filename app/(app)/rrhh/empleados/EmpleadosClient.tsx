@@ -249,7 +249,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
           </p>
           <input
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
             className="text-sm mb-3"
           />

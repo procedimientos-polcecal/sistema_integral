@@ -257,7 +257,7 @@ export default function EquiposClient({ empresas, sectores, equipos, canEdit }: 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx"
                 className="hidden"
                 onChange={handleImport}
               />

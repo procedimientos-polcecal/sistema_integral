@@ -84,7 +84,7 @@ function VehiculosTab({ vehiculos, choferes, canEdit }: { vehiculos: any[]; chof
             className="text-sm text-blue-600 hover:underline disabled:opacity-50">
             {importando ? "Importando..." : "Importar Excel"}
           </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importar} />
+          <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={importar} />
         </div>
       )}
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}

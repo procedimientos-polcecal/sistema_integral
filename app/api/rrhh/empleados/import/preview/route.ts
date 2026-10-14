@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     ({ sheetNames, sheets } = await parseWorkbookAllSheets(buffer));
   } catch {
-    return NextResponse.json({ error: "No se pudo leer el archivo. Verificá que sea .xlsx o .csv" }, { status: 400 });
+    return NextResponse.json({ error: "No se pudo leer el archivo. Verificá que sea un .xlsx: hoy no se leen ni .xls ni .csv" }, { status: 400 });
   }
 
   const nonEmpty = sheetNames.filter((n) => sheets[n].rows.length > 0);

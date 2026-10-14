@@ -347,7 +347,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, turnos, u
             <InfoTip text="Respaldo para cuando Lenox no está disponible. Subí el Excel/CSV que exporta el reloj biométrico. Elegí qué columna es el legajo, la fecha y los horarios, y el sistema carga todas las marcaciones de una." />
           </summary>
           <div className="mt-3">
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="text-sm mb-3" />
+          <input type="file" accept=".xlsx" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="text-sm mb-3" />
           {importing && <p className="text-sm text-slate-500">Procesando...</p>}
           {importError && <p className="text-sm text-red-600">{importError}</p>}
 
