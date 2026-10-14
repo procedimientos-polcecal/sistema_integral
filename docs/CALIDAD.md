@@ -367,12 +367,14 @@ Dos cosas más que la importación dejó anotadas:
 
 - **El conteo físico.** Ya no bloquea —el saldo se igualó a la planilla— pero es
   lo único que va a poner el stock sobre un número medido en vez de uno heredado.
-- **Borrar `CALIDAD_DESDE` de Vercel.** Ya no la lee nadie desde el 13/10/2026.
-- **`GOOGLE_SHEETS_STOCK_CARBONILLA_ID` en Vercel**, en los tres entornos. En
-  `.env.local` ya está, pero el 14/10 a las 08:21 una corrida falló con
-  *"Falta GOOGLE_SHEETS_STOCK_CARBONILLA_ID"*, así que en al menos uno de allá
-  no está. **Sin eso la lectura no corre y el stock se queda quieto sin que se
-  note**, porque el libro sigue mostrando lo último que leyó.
+- ~~Borrar `CALIDAD_DESDE` de Vercel.~~ **Hecho, y no había nada que borrar:** nunca llegó a cargarse allá. Comprobado el 14/10/2026 con `vercel env ls` sobre las 45 variables del proyecto. Sólo estaba en `.env.local` y se sacó.
+- **`GOOGLE_SHEETS_STOCK_CARBONILLA_ID` en Development.** Ya está en Production
+  y en Preview desde la mañana del 14/10, después de que una corrida fallara a
+  las 08:21 con *"Falta GOOGLE_SHEETS_STOCK_CARBONILLA_ID"*. Falta sólo en
+  Development, que es `vercel dev` y no el cron. **Sin eso la lectura no corre y
+  el stock se queda quieto sin que se note**, porque el libro sigue mostrando lo
+  último que leyó — y una variable nueva **la toma el próximo deploy, no el que
+  está corriendo**.
 - **`00019 AJUSTE VEGETAL` y `00020 AJUSTE RESIDUAL`** en
   `Listado articulos GRAL`, para que el espejo pueda escribir un ajuste.
 - **Los 21 camiones del 04 al 15/09 que no están en Odoo.** El stock ya los tiene
