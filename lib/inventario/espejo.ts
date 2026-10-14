@@ -13,7 +13,7 @@
  * de OT, OS y comparativas.
  */
 
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
 
 /**
  * Las columnas del kardex `Entradas  Salidas`, en base 0.
@@ -112,7 +112,11 @@ export function celdasDelMovimiento(
 
   return [
     celda(COL.ri, m.ri === null ? "" : String(m.ri)),
-    celda(COL.codigo, m.codigo),
+    // Forzado a texto: el codigo tiene ceros adelante y `USER_ENTERED` los
+    // come. Hoy la B del kardex es `numberFormat: TEXT` y por eso sobrevive,
+    // pero eso es una propiedad de la planilla y no del codigo. Ver
+    // `comoTexto` en el nucleo, que trae el caso medido.
+    celda(COL.codigo, comoTexto(m.codigo)),
     celda(COL.descripcion, m.descripcion ?? ""),
     celda(COL.entrada, entrada),
     celda(COL.salida, salida),

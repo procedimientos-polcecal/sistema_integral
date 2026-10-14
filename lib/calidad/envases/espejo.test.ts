@@ -38,7 +38,7 @@ describe("celdasDelMovimiento", () => {
     const celdas = celdasDelMovimiento(MOV, 1404, "Entradas  Salidas");
     const valor = (col: number) => celdas.find((c) => c.columna === col)!.valor;
 
-    expect(valor(COL.codigo)).toBe("00001");
+    expect(valor(COL.codigo)).toBe("'00001");
     // Entrada en cero: la celda va vacía, como las escribe la gente. Un "0"
     // escrito se lee como "se contó y dio cero", que es otra cosa.
     expect(valor(COL.entrada)).toBe("");
@@ -49,11 +49,18 @@ describe("celdasDelMovimiento", () => {
     expect(valor(COL.proveedor)).toBe("");
   });
 
-  it("el código va como texto, con sus ceros a la izquierda", () => {
+  it("el código va forzado a texto, con sus ceros a la izquierda", () => {
     // Si se perdieran los ceros, la fórmula del listado —un SUMIF contra la
     // columna A— dejaría de encontrar el artículo y su stock se congelaría.
+    //
+    // El apóstrofo es lo que se lo pide a la planilla y no queda guardado: la
+    // celda termina con el texto "00009". Hasta el 14/10/2026 se mandaba crudo y
+    // lo único que lo salvaba era que la columna A tuviera `numberFormat: TEXT`
+    // —heredado al clonar la planilla del almacén—, o sea una propiedad de la
+    // planilla y no una garantía del código. En Compras, donde esa columna no
+    // tenía formato, el mismo descuido guardó "00345" como el número 345.
     const celdas = celdasDelMovimiento({ ...MOV, codigo: "00009" }, 1404, "x");
-    expect(celdas.find((c) => c.columna === COL.codigo)!.valor).toBe("00009");
+    expect(celdas.find((c) => c.columna === COL.codigo)!.valor).toBe("'00009");
   });
 });
 

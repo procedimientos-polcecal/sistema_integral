@@ -86,7 +86,11 @@ describe("que celdas se escriben", () => {
 
   it("cada dato en su columna", () => {
     expect(porColumna.get(COL.ri)).toBe("1865");
-    expect(porColumna.get(COL.codigo)).toBe("00469");
+    // Con apóstrofo: se lo pide a la planilla como texto y no queda guardado.
+    // El kardex cruza con Compras y con el listado **por código exacto**, así
+    // que un "00469" convertido en 469 no es el mismo artículo. Ver `comoTexto`
+    // en el núcleo, con los dos escenarios medidos.
+    expect(porColumna.get(COL.codigo)).toBe("'00469");
     expect(porColumna.get(COL.descripcion)).toBe("GUANTES DE DESCARNE");
     expect(porColumna.get(COL.salida)).toBe("5");
     expect(porColumna.get(COL.entrada)).toBe("");

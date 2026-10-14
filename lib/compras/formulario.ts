@@ -20,7 +20,7 @@
 import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
 import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
 import { maximoDeLaColumna } from "@/lib/compras/serieDeRi";
 
@@ -210,32 +210,6 @@ function indexar(encabezado: string[], borde: number): Record<Clave, number> {
  * ENVIADA` la escribe el Apps Script de los avisos, y ponerle algo sería decir
  * que se avisó cuando no se avisó.
  */
-/**
- * Un valor que la planilla no puede leer como número.
- *
- * Las dos funciones de escritura del núcleo usan `USER_ENTERED`, así que la
- * planilla interpreta lo que llega igual que si alguien lo tipeara. Para un
- * **código** eso es destructivo y no cosmético: el 14/10/2026 el RI 2143 mandó
- * `"00345"` —el ELECTRODO 7018— y en `Altas del sistema` quedó guardado como el
- * número `345`. Las filas que carga el formulario de Google no tienen el
- * problema: Google las escribe como texto, y ahí `"00571"` sigue siendo
- * `"00571"`.
- *
- * Y el daño no se ve en la planilla sino en el sistema: **el enlace con
- * Inventario se hace por código exacto**, así que un RI con `345` no cuenta
- * como "ya pedido" para el `00345`, el artículo vuelve a aparecer en
- * `/inventario/reponer` y alguien lo pide de nuevo — que es justo lo que esa
- * pantalla existe para evitar.
- *
- * El apóstrofo es la forma que entiende Sheets para "esto es literal". **No
- * queda guardado**: la celda termina con el texto `00345` y eso es lo que
- * `IMPORTRANGE` lleva al master. Se comprobó escribiendo y volviendo a leer.
- *
- * Va sólo en el código a propósito. La descripción y el detalle son prosa, y
- * forzarlos a texto cambiaría lo que ve quien lee la planilla sin resolver
- * ningún problema medido.
- */
-const comoTexto = (valor: string): string => `'${valor}`;
 
 export function celdasDelAlta(
   encabezado: string[],

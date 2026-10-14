@@ -7,7 +7,7 @@
  * y cuando falla queda anotado en vez de perderse en un log.
  */
 
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
 import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
 /**
@@ -116,7 +116,11 @@ export function celdasDelMovimiento(
   const celda = (columna: number, valor: string): Celda => ({ pestana, columna, fila, valor });
 
   return [
-    celda(COL.codigo, m.codigo),
+    // Forzado a texto, igual que en el kardex del almacen: los codigos de
+    // envases son `00001`, `00010`, `00014`, y `USER_ENTERED` los convertiria
+    // en 1, 10 y 14. Que hoy no pase depende del formato de la columna A, que
+    // esta planilla heredo al clonarse. Ver `comoTexto` en el nucleo.
+    celda(COL.codigo, comoTexto(m.codigo)),
     celda(COL.entrada, numero(m.entrada)),
     celda(COL.salida, numero(m.salida)),
     celda(COL.rotura, numero(m.rotura)),

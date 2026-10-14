@@ -230,6 +230,41 @@ export async function asegurarColumnas(
  * Una llamada por celda gastaría una cuota que no hace falta gastar, y dejaría
  * la planilla a medio escribir si falla la tercera de cinco.
  */
+/**
+ * Un identificador, escrito para que la planilla no lo lea como un número.
+ *
+ * Las dos funciones de escritura usan `USER_ENTERED`, así que la planilla
+ * interpreta lo que llega igual que si alguien lo tipeara. Para un **código con
+ * ceros adelante** eso es destructivo: el 14/10/2026 el RI 2143 mandó `"00345"`
+ * y en la pestaña de altas de Compras quedó guardado como el número `345`.
+ *
+ * Y el daño no se ve en la planilla sino en el sistema: los módulos se cruzan
+ * **por código exacto**, así que un `345` no es el `00345` de Inventario. El RI
+ * dejó de contar como "ya pedido", el artículo volvió a ofrecerse en
+ * `/inventario/reponer` y la pantalla que existe para que nadie pida dos veces
+ * lo mismo habría hecho pedirlo de nuevo.
+ *
+ * **Lo que salvaba a Inventario y a Envases no era su código sino el formato de
+ * la columna destino.** Medido: la `B` del kardex del almacén y la `A` del de
+ * envases son `numberFormat: TEXT`, y por eso ahí `"00803"` sobrevive. El día
+ * que alguien cambie ese formato —o clone la pestaña sin él, que es justo lo
+ * que Envases es, una copia de la del almacén— se rompen las dos en silencio.
+ * Esto saca la garantía de la planilla y la trae al código.
+ *
+ * El apóstrofo es la forma que entiende Sheets para "esto es literal" y **no
+ * queda guardado**. Comprobado contra la planilla en los dos escenarios, que es
+ * lo que hace que se pueda usar en todos lados sin mirar el formato:
+ *
+ * ```
+ * columna sin formato + apóstrofo : TEXTO "00345"   (antes: NUMERO 345)
+ * columna TEXT        + apóstrofo : TEXTO "00803"   (igual que sin él)
+ * ```
+ *
+ * Va sólo en identificadores. La prosa —una descripción, una observación— no se
+ * fuerza: cambiaría lo que ve quien lee la planilla sin resolver nada medido.
+ */
+export const comoTexto = (valor: string): string => `'${valor}`;
+
 /*
  * `valor` acepta número desde el 16/09/2026, y conviene usarlo.
  *
