@@ -61,6 +61,30 @@ vegetal contra los 260,34 que mostraba la planilla.
 `CORTE_DE_LOS_TIPOS` en `lib/calidad/movimientos.ts` y el `CHECK`
 `calidad_mov_sin_separar` (migración `20260916101523`) son espejo uno del otro.
 
+## El `TOTAL` de la planilla está 0,450 t arriba, y así se queda
+
+La planilla no cuadra consigo misma: su columna `TOTAL` es 0,450 t más alta que
+`VEGETAL + RESIDUAL`. **No es un error del SdG ni hay nada que arreglar**, y
+conviene saberlo antes de salir a buscarlo, porque la diferencia aparece cada
+vez que alguien compara los dos sistemas por el total.
+
+Nace en un solo lugar, medido sobre las 3.399 filas: la fila 386, la misma del
+corte. Ahí el `TOTAL` venía en 377,450 y el saldo por tipo se escribió a mano en
+números redondos —`VEGETAL` 208, `RESIDUAL` 169—, que suman 377. Los 450 kg que
+sobraban no se asignaron a ningún tipo, y esa diferencia viene viajando desde
+entonces sin un solo salto más.
+
+**Mandan las cantidades por tipo, no el total.** El SdG coincide **exacto** con
+`VEGETAL` y con `RESIDUAL` de la última fila; lo que no coincide es un total que
+hace diez meses dejó de ser la suma de sus partes y se fue acomodando a mano.
+Pasarle los 450 kg a vegetal para emparejar el total rompería justamente lo que
+sí está bien.
+
+Y por eso `Saldos.total` es **despejado y no guardado**: es `vegetal + residual`
+y no puede no serlo. Un total guardado aparte es exactamente lo que pasó allá —
+una tercera columna que deriva de las otras dos hasta que alguien la pisa, y
+después nadie sabe cuál de las tres tiene razón.
+
 ## El carbonillero se identifica por el partner de Odoo
 
 `calidad_carbonilleros` tiene clave `(odoo_partner_id, empresa_id)` y el
