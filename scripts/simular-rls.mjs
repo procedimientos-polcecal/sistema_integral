@@ -53,13 +53,33 @@ const consultar = async (sql) => {
 };
 
 /**
- * Las mismas que agarra la migración: booleanas, del esquema `public`, sin
- * argumentos. Se leen del catálogo y no de una lista escrita acá, por lo mismo
- * que allá: una lista a mano es la que se olvida de la función nueva.
+ * Las mismas que agarra la migración: booleanas, del esquema `public`, y
+ * `STABLE` o `IMMUTABLE` —una `VOLATILE` no se puede evaluar una sola vez—.
+ *
+ * **No se filtra por cantidad de argumentos, y ésa es la correción del
+ * 14/10/2026.** La primera versión pedía `pronargs = 0` y por eso se le
+ * escaparon `mant_puede_ver()`, `mant_puede_editar()` y `mant_es_admin()`, que
+ * declaran un argumento `uid uuid DEFAULT auth.uid()`: en las policies se las
+ * llama con paréntesis vacíos y *parecen* de cero argumentos, pero el catálogo
+ * dice `pronargs = 1`. Fueron 22 policies de Mantenimiento que quedaron sin
+ * envolver y que nadie vio hasta medir después.
+ *
+ * Lo que decide si se envuelve no es cuántos argumentos declara la función sino
+ * **que la llamada tenga los paréntesis vacíos**: un valor por defecto se
+ * evalúa en el contexto de la función y no puede referirse a una columna de la
+ * consulta que la llama, así que una llamada con `()` siempre es independiente
+ * de la fila.
+ *
+ * Y la lección de fondo: este simulador usaba la misma consulta que la
+ * migración, así que compartía su punto ciego. Comprobaba que la
+ * transformación estuviera bien, no que el conjunto de entrada estuviera
+ * completo — por eso ahora el tercer control mira **todas** las funciones
+ * booleanas, no sólo las de la lista.
  */
 const funciones = (await consultar(
   "select pr.proname from pg_proc pr join pg_namespace n on n.oid = pr.pronamespace " +
-  "where n.nspname = 'public' and pr.pronargs = 0 and pr.prorettype = 'boolean'::regtype"
+  "where n.nspname = 'public' and pr.prorettype = 'boolean'::regtype " +
+  "and pr.provolatile in ('s','i')"
 )).map((f) => f.proname).concat(["auth.uid"]);
 
 const policies = await consultar(
