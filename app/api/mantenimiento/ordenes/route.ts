@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
+import { leerValores, escribirCeldas } from "@/lib/core/sheets";
+import { exportarAltaDeOT, maximoDeLaSerieEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import {
-  celdasParaRegistrar, filaParaLaPlanillaDeOT, repartirRegistroDeOT,
+  celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
@@ -180,29 +181,34 @@ export async function POST(request: Request) {
     .from("ordenes_trabajo").insert(record).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // A la planilla, que es la base. Best-effort: la OT ya existe en el sistema y
-  // que Google esté caído no puede tirarla abajo, pero hay que decirlo.
-  let planilla_error: string | null = null;
-  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
-
-  if (planilla) {
-    try {
-      // La fila más alta que el sistema tiene anotada. Si la planilla devuelve
-      // menos que eso, `agregarFila` se niega a escribir: el 13/10/2026 la
-      // pestaña estuvo vacía entre que alguien la borró y la restauró, y en esa
-      // ventana se creó una OT que fue a parar a la fila 3, encima de la 623.
-      const fila = await agregarFila(
-        planilla, pestana, filaParaLaPlanillaDeOT(inserted), "A",
-        await filaMasAltaConocida(admin)
-      );
-      await admin.from("ordenes_trabajo").update({ sheets_row: fila }).eq("id", inserted.id);
-    } catch (e) {
-      planilla_error = e instanceof Error ? e.message : String(e);
-    }
-  } else {
-    planilla_error = "Falta configurar GOOGLE_SHEETS_OT_ID: la OT quedó sólo en la app.";
-  }
+  // ── A la planilla ───────────────────────────────────────────
+  //
+  // **A la hoja de respuestas del formulario, no a la pestaña `OT`.** Esa
+  // pestaña es el derrame de cuatro `QUERY(IMPORTRANGE(...))`: de sus 2.161
+  // celdas de la columna A no hay una sola que sea un literal, así que escribir
+  // ahí o bloqueaba el derrame —`#REF!`, y se borraba la importación entera— o
+  // lo pisaba el derrame al recalcular. Las tres OT que figuraban como
+  // "creadas desde la app" estaban en la planilla porque alguien las había
+  // cargado **también** por el formulario. Ver `lib/mantenimiento/formulario.ts`.
+  //
+  // `sheets_row` ya no se escribe acá, y es a propósito: la fila de la hoja de
+  // respuestas no es la del master —Forms inserta y la corre—, y la del master
+  // la pone la sincronización cuando vuelve a leerla. Guardar la de acá sería
+  // guardar un número que apunta a otra planilla.
+  const alta = await exportarAltaDeOT({
+    ot_number,
+    creado: new Date(),
+    sector: record.sector_raw,
+    equipo: record.equipo_raw,
+    especialidad: record.especialidad,
+    tipo: record.tipo,
+    quien: record.quien,
+    descripcion: record.descripcion,
+    repuesto: record.repuesto,
+    fecha_ejecucion: record.fecha_ejecucion,
+    prioridad: record.prioridad,
+  });
+  const planilla_error = alta.ok ? null : alta.error ?? "No se pudo escribir en la planilla.";
 
   // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
   // alguien genere dos órdenes para el mismo problema.
@@ -212,30 +218,6 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: inserted, ot_number, planilla_error, aviso_error });
-}
-
-/**
- * Hasta qué fila de la planilla sabemos que hay órdenes.
- *
- * Cada `sheets_row` guardado es la promesa de que esa fila existe; el mayor de
- * todos es el piso que la planilla tiene que cumplir para que escribir sea
- * seguro. Si no lo cumple, `agregarFila` corta.
- *
- * Un fallo acá devuelve 0, que es "no sé": vale perder la comprobación antes
- * que impedir crear una OT porque una consulta de más no salió.
- */
-async function filaMasAltaConocida(
-  admin: ReturnType<typeof createAdminClient>
-): Promise<number> {
-  const { data } = await admin
-    .from("ordenes_trabajo")
-    .select("sheets_row")
-    .not("sheets_row", "is", null)
-    .order("sheets_row", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return data?.sheets_row ?? 0;
 }
 
 /**
@@ -251,22 +233,13 @@ async function filaMasAltaConocida(
  * crear la orden que arriesgar un número repetido, y el aviso lo dice.
  */
 async function proximoNumeroDeOT(admin: ReturnType<typeof createAdminClient>): Promise<number> {
-  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
-
   let mayor = 0;
 
-  if (planilla) {
-    try {
-      const filas = await leerValores(planilla, `${pestana}!A:A`, { sinFormato: true });
-      for (const fila of filas.slice(1)) {
-        const n = Number(fila[0]);
-        if (!isNaN(n)) mayor = Math.max(mayor, n);
-      }
-    } catch {
-      // Se cae al máximo de la base, abajo.
-    }
-  }
+  // De la hoja de respuestas del formulario, que es donde vive la serie y lo
+  // que el Apps Script del formulario también cuenta. Del master no: la recibe
+  // por IMPORTRANGE y llega con retraso, así que dos OT creadas con pocos
+  // minutos de diferencia leerían el mismo máximo y tomarían el mismo número.
+  mayor = (await maximoDeLaSerieEnLaPlanilla()) ?? 0;
 
   const { data: ultima } = await admin
     .from("ordenes_trabajo")

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeTexto, filaDeOrden, celdasParaRegistrar, filaParaLaPlanillaDeOT,
+  estadoDeTexto, filaDeOrden, celdasParaRegistrar,
   repartirRegistroDeOT,
   esEstadoDeOT,
   ESTADOS_DE_OT,
@@ -139,59 +139,6 @@ describe("celdasParaRegistrar", () => {
   });
 });
 
-describe("filaParaLaPlanillaDeOT", () => {
-  const ot = {
-    ot_number: 2350,
-    fecha: "2026-08-26",
-    sector_raw: "Calcinación",
-    equipo_raw: "PO-B1-27 – Cadena de arrastre 6",
-    especialidad: "MECÁNICO",
-    tipo: "CORRECTIVO",
-    quien: "Propio",
-    descripcion: "No arranca",
-    repuesto: "Rodamiento 6206",
-    estado: "POR_HACER",
-    prioridad: "ALTA",
-  };
-
-  it("pone cada dato en su columna", () => {
-    const f = filaParaLaPlanillaDeOT(ot);
-    expect(f[0]).toBe(2350);
-    expect(f[1]).toBe("26/08/2026");
-    expect(f[2]).toBe("Calcinación");
-    expect(f[3]).toBe("PO-B1-27 – Cadena de arrastre 6");
-    expect(f[4]).toBe("MECÁNICO");
-    expect(f[7]).toBe("No arranca");
-    expect(f[8]).toBe("Rodamiento 6206");
-    expect(f[18]).toBe("ALTA");
-  });
-
-  it("escribe el estado como lo escribe la planilla", () => {
-    expect(filaParaLaPlanillaDeOT(ot)[12]).toBe("Por hacer");
-  });
-
-  /**
-   * Este test fijaba el bug. Pedia que la L fuera "" "porque la planilla la
-   * completa sola al agregarse la fila", y eso nunca fue cierto: `agregarFila`
-   * no agrega ninguna fila, hace un PUT sobre un rango que ya existe, asi que
-   * ese "" le borraba la formula a esa fila. `null` es "no la toques", y el
-   * rango se parte en dos para no mandarla.
-   */
-  it("no toca la columna L, que es una fórmula", () => {
-    expect(filaParaLaPlanillaDeOT(ot)[11]).toBeNull();
-  });
-
-  it("y es la unica que no toca: el resto viaja aunque este vacia", () => {
-    // Vacio es "sacá lo que había" y es distinto de "no la toques". Si otra
-    // columna se colara en null dejaria de escribirse sin que nadie lo note.
-    const fila = filaParaLaPlanillaDeOT(ot);
-    expect(fila.filter((v) => v === null)).toHaveLength(1);
-  });
-
-  it("llega hasta las observaciones", () => {
-    expect(filaParaLaPlanillaDeOT(ot)).toHaveLength(23);
-  });
-});
 
 /**
  * `ordenes_trabajo` no tiene columna de observaciones ni de foto: en el sistema
