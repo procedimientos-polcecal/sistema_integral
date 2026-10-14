@@ -234,6 +234,9 @@ export const NAV: NavItem[] = [
         children: [
           { label: "El stock", href: "/calidad/carbonilla", modulo: "calidad" },
           { label: "Movimientos", href: "/calidad/movimientos", modulo: "calidad" },
+          // Desde el 13/10/2026 Odoo no mueve el stock: controla. Ésta es la
+          // única pantalla que dice que un camión entró sin orden de compra.
+          { label: "Conciliación", href: "/calidad/conciliacion", modulo: "calidad" },
           { label: "Carbonilleros", href: "/calidad/carbonilleros", modulo: "calidad", soloAdmin: true },
           { label: "Productos", href: "/calidad/productos", modulo: "calidad", soloAdmin: true },
         ],
