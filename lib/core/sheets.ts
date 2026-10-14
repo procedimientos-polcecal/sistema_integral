@@ -322,7 +322,8 @@ export function tramosDeLaFila(
 export async function agregarFila(
   planillaId: string,
   pestana: string,
-  valores: (string | number)[],
+  /** Un `null` es "esta celda no se toca": no se manda y queda como estaba. */
+  valores: (string | number | null)[],
   /*
    * Qué columna decide dónde termina lo cargado. Por defecto la `A`, que es lo
    * que necesitan las tres planillas de Mantenimiento.
@@ -336,7 +337,14 @@ export async function agregarFila(
    * orden. Es el mismo problema que `filaSiguienteSegunLaColumna` ya explica
    * para el kardex del almacén, sólo que esta función tenía la A clavada.
    */
-  columnaQueManda = "A"
+  columnaQueManda = "A",
+  /**
+   * La fila más alta que ya sabemos que existe —el mayor `sheets_row` que
+   * tengamos guardado—. Si la planilla devuelve menos, no se escribe: ver
+   * `laPlanillaEncogio`. Sin esto la función sigue andando como antes, así que
+   * los módulos que todavía no lo pasan no cambian de comportamiento.
+   */
+  filaMasAltaConocida = 0
 ): Promise<number> {
   const token = await obtenerToken([SCOPE_SHEETS]);
 
@@ -348,22 +356,39 @@ export async function agregarFila(
   if (!lectura.ok) {
     throw new Error(mensajeDeGoogle(lectura.status, await lectura.text(), cuentaDeServicio()));
   }
-  const fila = filaSiguienteSegunLaColumna(((await lectura.json()).values ?? []) as string[][]);
+  const leidas = ((await lectura.json()).values ?? []) as string[][];
 
-  // El rango tiene que abarcar todas las columnas que se mandan: si se da uno
-  // más chico, Google rechaza la escritura entera.
-  const rango = `${pestana}!A${fila}:${letraDeColumna(valores.length - 1)}${fila}`;
+  if (laPlanillaEncogio(leidas.length, filaMasAltaConocida)) {
+    throw new Error(
+      `La pestaña «${pestana}» tiene ${leidas.length} filas y el sistema tiene ` +
+      `anotadas hasta la ${filaMasAltaConocida}. Falta contenido —alguien la ` +
+      `borró, la está restaurando o hay una edición a medias—, así que no se ` +
+      `escribe nada: escribir ahora caería encima de otra fila. Revisá la ` +
+      `planilla y volvé a intentar.`
+    );
+  }
+
+  const fila = filaSiguienteSegunLaColumna(leidas);
+
+  // Por tramos y no en un rango único: lo que viene en `null` no se manda, y
+  // así una columna calculada que caiga en el medio no se pisa con un "".
+  const data = tramosDeLaFila(valores).map((t) => ({
+    range:
+      `${pestana}!${letraDeColumna(t.desde)}${fila}:${letraDeColumna(t.hasta)}${fila}`,
+    values: [t.valores],
+  }));
+  if (data.length === 0) return fila;
+
   const res = await pedir(
-    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
-      `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}/values:batchUpdate`,
     {
-      method: "PUT",
+      method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ values: [valores] }),
+      body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
     }
   );
   if (!res.ok) {
-    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
   }
 
   return fila;

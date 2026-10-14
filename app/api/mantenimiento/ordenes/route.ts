@@ -188,7 +188,14 @@ export async function POST(request: Request) {
 
   if (planilla) {
     try {
-      const fila = await agregarFila(planilla, pestana, filaParaLaPlanillaDeOT(inserted));
+      // La fila más alta que el sistema tiene anotada. Si la planilla devuelve
+      // menos que eso, `agregarFila` se niega a escribir: el 13/10/2026 la
+      // pestaña estuvo vacía entre que alguien la borró y la restauró, y en esa
+      // ventana se creó una OT que fue a parar a la fila 3, encima de la 623.
+      const fila = await agregarFila(
+        planilla, pestana, filaParaLaPlanillaDeOT(inserted), "A",
+        await filaMasAltaConocida(admin)
+      );
       await admin.from("ordenes_trabajo").update({ sheets_row: fila }).eq("id", inserted.id);
     } catch (e) {
       planilla_error = e instanceof Error ? e.message : String(e);
@@ -205,6 +212,30 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: inserted, ot_number, planilla_error, aviso_error });
+}
+
+/**
+ * Hasta qué fila de la planilla sabemos que hay órdenes.
+ *
+ * Cada `sheets_row` guardado es la promesa de que esa fila existe; el mayor de
+ * todos es el piso que la planilla tiene que cumplir para que escribir sea
+ * seguro. Si no lo cumple, `agregarFila` corta.
+ *
+ * Un fallo acá devuelve 0, que es "no sé": vale perder la comprobación antes
+ * que impedir crear una OT porque una consulta de más no salió.
+ */
+async function filaMasAltaConocida(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<number> {
+  const { data } = await admin
+    .from("ordenes_trabajo")
+    .select("sheets_row")
+    .not("sheets_row", "is", null)
+    .order("sheets_row", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.sheets_row ?? 0;
 }
 
 /**

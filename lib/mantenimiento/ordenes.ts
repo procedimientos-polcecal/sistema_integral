@@ -305,8 +305,12 @@ function fechaParaLaPlanilla(iso: string | null | undefined): string {
 /**
  * Una orden nueva, como las celdas de la planilla.
  *
- * La columna L se deja vacía: es la fórmula que calcula atrasado/al día, y la
- * planilla la completa sola al agregarse la fila.
+ * **La columna L va en `null`, que es "no la toques".** Antes iba en `""` con
+ * el comentario de que la planilla la completaba sola "al agregarse la fila", y
+ * eso era falso: `agregarFila` no agrega ninguna fila, hace un PUT sobre un
+ * rango que ya existe. Ese `""` no la dejaba vacía — le borraba la fórmula que
+ * calcula atrasado/al día a esa fila, que es justo lo que el documento del
+ * módulo dice que no hay que hacer nunca.
  */
 export function filaParaLaPlanillaDeOT(orden: {
   ot_number: number;
@@ -330,9 +334,13 @@ export function filaParaLaPlanillaDeOT(orden: {
   frecuencia?: string | null;
   proxima_fecha?: string | null;
   observaciones?: string | null;
-}): (string | number)[] {
+}): (string | number | null)[] {
   // Hasta la W —las observaciones—, que es la última que se lee.
-  const fila: (string | number)[] = new Array(COL.observaciones + 1).fill("");
+  const fila: (string | number | null)[] = new Array(COL.observaciones + 1).fill("");
+
+  // La L (índice 11) es la única que no tiene nombre en `COL`, justamente
+  // porque no es nuestra. Queda en null y el rango se parte en dos.
+  fila[11] = null;
 
   fila[COL.otNumber] = orden.ot_number;
   fila[COL.fecha] = fechaParaLaPlanilla(orden.fecha);

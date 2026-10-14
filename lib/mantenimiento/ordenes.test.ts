@@ -170,9 +170,22 @@ describe("filaParaLaPlanillaDeOT", () => {
     expect(filaParaLaPlanillaDeOT(ot)[12]).toBe("Por hacer");
   });
 
-  it("deja vacía la columna L, que es una fórmula", () => {
-    // "Column 19" calcula atrasado/al día sola.
-    expect(filaParaLaPlanillaDeOT(ot)[11]).toBe("");
+  /**
+   * Este test fijaba el bug. Pedia que la L fuera "" "porque la planilla la
+   * completa sola al agregarse la fila", y eso nunca fue cierto: `agregarFila`
+   * no agrega ninguna fila, hace un PUT sobre un rango que ya existe, asi que
+   * ese "" le borraba la formula a esa fila. `null` es "no la toques", y el
+   * rango se parte en dos para no mandarla.
+   */
+  it("no toca la columna L, que es una fórmula", () => {
+    expect(filaParaLaPlanillaDeOT(ot)[11]).toBeNull();
+  });
+
+  it("y es la unica que no toca: el resto viaja aunque este vacia", () => {
+    // Vacio es "sacá lo que había" y es distinto de "no la toques". Si otra
+    // columna se colara en null dejaria de escribirse sin que nadie lo note.
+    const fila = filaParaLaPlanillaDeOT(ot);
+    expect(fila.filter((v) => v === null)).toHaveLength(1);
   });
 
   it("llega hasta las observaciones", () => {
