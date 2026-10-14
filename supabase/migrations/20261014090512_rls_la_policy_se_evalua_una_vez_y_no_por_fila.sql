@@ -63,6 +63,16 @@
 -- que Postgres **le pone un alias** al subselect al guardarlo:
 -- `( SELECT tiene_acceso_rrhh() AS tiene_acceso_rrhh)`.
 --
+-- QUE HACE ANTES DE CORRERLA. `node scripts/simular-rls.mjs` aplica **esta
+-- misma transformación** sobre las definiciones que hoy están en la base y las
+-- muestra, sin tocar nada. Es lo más cerca que se llega a probarla, porque un
+-- agente no puede correr DDL acá. Corre tres controles, y el primero es el que
+-- importa: que una función que **recibe una columna** —`es_mi_hoja_ruta(
+-- hoja_ruta_id)`— quede intacta. Envolverla sería el único error de este cambio
+-- que no es una lentitud sino un agujero de permisos: se evaluaría una sola vez
+-- y le mostraría a cada uno los asientos del primero. Al 14/10/2026 los tres
+-- pasan sobre las 249 policies: 198 se reescriben, 51 ya son `true`.
+--
 -- SI ALGO SALE MAL. El editor de Supabase corre el script en una transacción,
 -- así que un error en cualquier policy revierte **todas**. Y para volver atrás
 -- a mano alcanza con correr el bloque de abajo cambiando `envolver := true` por
