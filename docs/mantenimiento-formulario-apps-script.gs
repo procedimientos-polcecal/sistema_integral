@@ -53,22 +53,49 @@
  *   2. Extensiones -> Apps Script, y pegar este archivo en uno nuevo. **No
  *      reemplaza al que avisa a la app**: convive con él.
  *
- *   3. **UN SOLO ACTIVADOR, y la numeración va primero.** En
- *      `mantenimiento-apps-script.gs` ya existe `alEnviarFormulario`. Hay que
- *      agregarle la primera línea:
+ *   3. **CREAR EL ACTIVADOR "Al enviarse el formulario".** No alcanza con el
+ *      de "Al editar" que ya está puesto: **una fila que escribe Google Forms
+ *      no dispara "Al editar"**. Es lo mismo que el encabezado de
+ *      `mantenimiento-apps-script.gs` ya dice para las órdenes de servicio.
+ *
+ *      Medido el 14/10/2026: seis respuestas entraron entre las 10:43 y las
+ *      10:45 y no hubo **ninguna** sincronización en ese horario — la anterior
+ *      era de las 10:05, de una edición a mano. El activador no existía.
+ *
+ *      Activadores -> Añadir activador:
+ *        alEnviarFormulario | De la hoja de cálculo -> Al enviarse el formulario
+ *
+ *   4. **UN SOLO ACTIVADOR, y la numeración va primero.** En
+ *      `mantenimiento-apps-script.gs` `alEnviarFormulario` hoy es esto:
  *
  *        function alEnviarFormulario(e) {
- *          numerarAlEnviarElFormulario(e);   // <- ESTA, antes de avisar
- *          avisarAlaApp();
+ *          alEditar(e);
  *        }
  *
- *      Por qué así y no con un activador propio: **Google no garantiza en qué
- *      orden corren dos activadores del mismo evento**, y pueden correr en
- *      paralelo. Si el aviso saliera antes que la numeración, el SdG
- *      sincronizaría una fila sin N° de OT — y `filaDeOrden` descarta la fila
- *      que no tiene número, así que esa orden no entraría y nada lo diría.
+ *      y tiene que quedar así:
  *
- *   4. Probar con `numerarLaUltima()` antes de confiar. Deja un número donde
+ *        function alEnviarFormulario(e) {
+ *          numerarAlEnviarElFormulario(e);   // <- ESTA, y antes
+ *          alEditar(e);
+ *        }
+ *
+ *      **La línea va acá y no adentro de `alEditar`**, aunque ahí parezca más
+ *      prolijo: `alEditar` arranca con un anti-rebote de treinta segundos y se
+ *      va con un `return` si ya avisó hace poco. Metida ahí, seis respuestas
+ *      seguidas —que es justo lo que pasó— numerarían una sola. El anti-rebote
+ *      está bien para el aviso y es veneno para la numeración.
+ *
+ *      Por qué llamarla desde adentro y no con un activador propio: **Google no
+ *      garantiza en qué orden corren dos activadores del mismo evento**, y
+ *      pueden correr en paralelo. Si el aviso saliera antes que la numeración,
+ *      el SdG sincronizaría una fila sin N° de OT — y `filaDeOrden` descarta la
+ *      fila que no tiene número, así que esa orden no entraría y nada lo diría.
+ *
+ *      Los dos archivos conviven en el mismo proyecto de Apps Script: las
+ *      funciones son globales, así que `alEnviarFormulario` puede llamar a
+ *      `numerarAlEnviarElFormulario` sin importar nada.
+ *
+ *   5. Probar con `numerarLaUltima()` antes de confiar. Deja un número donde
  *      había una fórmula; si no corre, el problema es de autorización y no de
  *      la lógica.
  *
