@@ -1,15 +1,79 @@
 # Carbonilla — el stock deja de ser una transcripción
 
-Diseñado y construido el 15 y 16 de septiembre de 2026. Es la otra mitad de
-Calidad; la de envases está en [CALIDAD-ENVASES.md](CALIDAD-ENVASES.md) y **va
-para el lado contrario**, así que conviene saber en cuál se está parado antes de
-tocar una ruta.
+Diseñado y construido el 15 y 16 de septiembre de 2026, y **dado vuelta el
+13/10/2026**: nació con Odoo como fuente y hoy la fuente es la planilla. Lo que
+sigue abajo conserva las dos capas a propósito — el porqué del cambio no se
+entiende sin lo que había antes.
 
-El diseño está en
+El diseño original está en
 [el spec](superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) y
 el paso a paso en
-[el plan](superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md). Acá
-quedan las decisiones y las trampas que no se deducen del código.
+[el plan](superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md); la
+inversión, en
+[el spec del 13/10](superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md).
+Acá quedan las decisiones y las trampas que no se deducen del código.
+
+## La planilla manda, y Odoo controla
+
+**Esto se dio vuelta el 13/10/2026.** El diseño original tenía a Odoo como fuente
+de las entradas y a la planilla como espejo de salida. El problema no era de
+código: **necesitaba que alguien cambiara de costumbre**. Calidad siguió
+descargando los consumos en la planilla, como siempre, y el SdG —que sólo
+escuchaba a Odoo— se quedó sin ver 925 toneladas de consumo y once camiones. Las
+cantidades estaban mal **y nada avisaba**, que es lo peor de las dos cosas.
+
+Ahora el libro entero —entradas y salidas— sale de la planilla, igual que en
+[Envases](CALIDAD-ENVASES.md): la lee `lib/calidad/desdeLaPlanilla.ts`, una vez
+por día y con el botón. Odoo pasó a **controlar**, no a crear: dice qué camión
+entró sin orden de compra, que es plata que después no se puede facturar. Eso se
+mira en `/calidad/conciliacion` y se calcula al abrir — es una vista, no un
+estado.
+
+### El ancla es el id del movimiento, en la columna `K`
+
+Lo que evita el lazo —que la lectura vuelva a importar una fila que el SdG mismo
+escribió— es **el id del movimiento, escrito en la columna `K` de la planilla**.
+Al leer una fila y crear su movimiento, el SdG le pone ahí su id; en la corrida
+siguiente esa fila ya no es nueva porque lleva su marca, esté en el número de
+fila que esté.
+
+**Empezó siendo `sheets_fila` y eso estaba mal.** Lo apoyé en una medición que
+también estaba mal —una consulta sin `traerTodo()`, PostgREST cortando en 1.000
+de 1.122 sin avisar, y el tramo que quedó afuera era justo donde estaba el
+problema—. El número real eran **30 filas desalineadas**, por dos costumbres
+distintas y las dos normales: tres filas insertadas en el medio para poner un
+camión olvidado en su lugar cronológico, y cinco consumos editados después de
+escritos. Una clave por número de fila se rompe con lo primero, una por contenido
+con lo segundo.
+
+`sheets_fila` sigue existiendo, pero ya no es la clave: es **dónde está hoy esa
+fila**, y se refresca en cada corrida. La comparación de contenido tampoco se
+fue: cambió de significado, de *"es la misma fila"* a *"a esta fila conocida le
+cambiaron el número"*, que es un aviso y no una adivinanza.
+
+Dos modos de falla nuevos, los dos informados y ninguno resuelto solo: **copiar y
+pegar una fila duplica su id** (las dos van a la bandeja y no se toca ninguna), y
+**borrar un movimiento deja el id huérfano allá** (esa fila no se relee: volvería
+a entrar con otro id y el camión quedaría dos veces; para que entre hay que
+borrar la celda `K`).
+
+### Dos permisos que no se deducen de ningún lado
+
+La pestaña `Entradas  Salidas` está protegida con el rango `ACTUALIZACIÓN DE
+STOCK`, que cubre la hoja entera. **Tener permiso de edición sobre el documento
+no alcanza**: la protección lo pisa, y la cuenta de servicio tiene que estar
+entre sus editores. Hasta el 14/10/2026 no lo estaba, y **la mitad escritora del
+espejo nunca había escrito nada** sin que se notara: los 1.128 movimientos
+habían entrado por el script de importación, por el cron de Odoo o por la
+lectura, y ninguno de los tres escribe. Por eso `sheets_pendiente` estaba en 0 en
+las 1.128 filas, que leído de apuro parece *"ninguna escritura falló"* y en
+realidad era *"ninguna escritura ocurrió"*.
+
+Y la columna `K` **no existía**, no es que estuviera vacía: la pestaña tenía diez
+columnas de verdad, y escribir afuera de la grilla hace que Google rechace el
+`batchUpdate` entero con `exceeds grid limits`. Ensancharla también la frena la
+protección. `asegurarColumnas()` de `lib/core/sheets.ts` deja el diagnóstico
+escrito; agregarla la tiene que hacer una persona.
 
 ## Qué reemplaza
 
@@ -155,11 +219,18 @@ sin cargar**. Una orden fechada el 05/09 y cargada el 20/09 **la ventana de
 El margen son 30 días fijos contra hoy, y no contra la última corrida: una
 corrida que se saltó no abre un hueco.
 
-## Lo único que evita los duplicados: `odoo_purchase_line_id`
+## `odoo_purchase_line_id`, que ya no evita lo que evitaba
 
-Una entrada llega por dos caminos —la sincronización con Odoo y la recepción de
-Despacho— y **los dos guardan el id de la línea de la orden de compra**. El
-índice `UNIQUE` frena al segundo.
+**Esto era, hasta el 13/10/2026, lo único que frenaba los duplicados.** Una
+entrada llegaba por dos caminos —la sincronización con Odoo y la recepción de
+Despacho— y los dos guardaban el id de la línea de la orden de compra; el índice
+`UNIQUE` frenaba al segundo. Sigue estando y sigue sirviendo, pero ahora Odoo no
+crea nada, así que el camino que podía chocar es uno solo.
+
+Lo que evita el lazo hoy es **el id del movimiento en la columna `K`**, y lo que
+aparea un camión con su orden para el control es `desviosContraOdoo`, que exige
+**el mismo partner** — aparear por fecha y cantidad entre proveedores distintos
+es justamente el cruce difuso que este módulo existe para eliminar.
 
 Es **la línea y no la orden**: 7 de las 577 órdenes de carbonilla del año tienen
 dos líneas —la segunda es `FLETE`—, así que la orden no identifica un camión y la
@@ -202,16 +273,25 @@ columnas. No se reescriben cientos de filas contra Google por una corrección: s
 marcan con `sheets_pendiente` en un solo `UPDATE` y cada una queda con su botón
 de reintentar.
 
-## La secuencia: importar y después sincronizar
+## La secuencia de la corrida: leer primero, controlar después
 
-**La importación corre antes que el cron, y no al revés.** El cron nunca mira
-antes de `CALIDAD_DESDE`, que es el día en que corrió el script; mientras el
-libro esté vacío, la sincronización lee 45 líneas de Odoo y escribe **cero**, y
-eso es correcto, no una falla.
+**El orden importa y no es arbitrario.** El cron y el botón hacen lo mismo y en
+este orden: primero `leerLaPlanilla`, que es lo que mueve el stock; después
+`controlarContraOdoo`, que mira el libro ya actualizado. Controlar un libro a
+medias inventa desvíos.
 
-Adelantar el corte para que la sincronización "haga algo" antes de importar deja
-a los camiones que están en la planilla y todavía no en Odoo **fuera de los dos
-lados**: el 16/09 eran 21 camiones, unas 400 toneladas.
+Y si la lectura falla, **el control no corre**: la corrida se anota `ok: false` y
+se devuelve el error. Una lectura que falla a mitad y se anota bien deja el libro
+incompleto sin que nada avise.
+
+Las dos quedan por separado en `sincronizaciones`: `carbonilla-planilla` y
+`carbonilla-odoo`. Que Odoo no conteste no es una falla del stock, y mezclarlas
+haría que una cosa tapara a la otra.
+
+**`CALIDAD_DESDE` se borró el 13/10/2026** y hay que sacarla de Vercel. Existía
+para que el cron de Odoo no pisara lo importado; con la planilla como fuente, una
+fila marcada es una fila marcada. Una variable de entorno que ya no defiende nada
+es una trampa para el próximo que la lea.
 
 ## Qué dejó la importación (16/09/2026)
 
@@ -246,9 +326,10 @@ propio ajuste. Recién ahí el stock va a estar parado sobre una medición.
 
 Un detalle de la planilla que quedó a la vista al hacer esa cuenta: **su propio
 `TOTAL` no es la suma de sus dos columnas**. La fila 1046 dice `TOTAL` 260,337 y
-`VEGETAL` + `RESIDUAL` 259,887 — cuarenta y cinco kilos de desfasaje entre tres
-celdas del mismo renglón. Se igualó contra las dos columnas por tipo, que son las
-que el SdG lleva.
+`VEGETAL` + `RESIDUAL` 259,887 — **450 kilos** de desfasaje entre tres celdas del
+mismo renglón. (Acá decía "cuarenta y cinco kilos", mal por diez.) Se igualó
+contra las dos columnas por tipo, que son las que el SdG lleva, y el porqué está
+arriba: son siempre los mismos 450 kg, de la fila 386.
 
 Dos cosas más que la importación dejó anotadas:
 
@@ -268,27 +349,30 @@ Dos cosas más que la importación dejó anotadas:
 |---|---|
 | El signo, los saldos y el saldo corrido | `lib/calidad/movimientos.ts` |
 | El desvío del conteo y el ajuste que propone | `lib/calidad/conteos.ts` |
+| **Qué filas de la planilla hay que leer, y la corrida que las lee** | **`lib/calidad/desdeLaPlanilla.ts`** |
+| **Los desvíos del libro contra Odoo** | **`lib/calidad/conciliacion.ts`** |
 | De una línea de Odoo a un movimiento, o a la bandeja | `lib/calidad/reconocer.ts` |
-| Las diez celdas de una fila de la planilla | `lib/calidad/planilla.ts` |
+| Las once celdas de una fila de la planilla — la `K` es el id | `lib/calidad/planilla.ts` |
 | De un renglón de la planilla vieja a un movimiento | `lib/calidad/importar.ts` |
-| La corrida contra Odoo | `lib/calidad/sincronizar.ts` |
+| El control contra Odoo | `lib/calidad/sincronizar.ts` |
 | La escritura a Google | `lib/calidad/espejo.ts` |
 | Que la recepción de Despacho escriba el movimiento | `lib/calidad/desdeLaRecepcion.ts` |
 | Los tres niveles de permiso | `lib/calidad/auth.ts` |
 | Rutas | `app/api/calidad/{movimientos,movimientos/[id],conteos,carbonilleros,productos,sincronizar}` |
 | El cron diario, 8 UTC | `app/api/cron/calidad-sync` |
-| Pantallas | `app/(app)/calidad/{carbonilla,movimientos,carbonilleros,productos}` |
+| Pantallas | `app/(app)/calidad/{carbonilla,movimientos,conciliacion,carbonilleros,productos}` |
 | La importación, una sola vez | `scripts/importar-stock-carbonilla.mts` |
 
 ## Lo que falta de una persona
 
 - **El conteo físico.** Ya no bloquea —el saldo se igualó a la planilla— pero es
   lo único que va a poner el stock sobre un número medido en vez de uno heredado.
-- **`CALIDAD_DESDE`** en Vercel, con `2026-09-16`. En local ya está.
-- **`GOOGLE_SHEETS_STOCK_CARBONILLA_ID`** en Vercel y en `.env.local`, más
-  **permiso de EDITOR** para la cuenta de servicio sobre la planilla: hoy está
-  compartida como lectora. Hasta entonces el espejo está apagado y cada
-  movimiento nuevo queda con `sheets_pendiente` y su botón de reintentar.
+- **Borrar `CALIDAD_DESDE` de Vercel.** Ya no la lee nadie desde el 13/10/2026.
+- **`GOOGLE_SHEETS_STOCK_CARBONILLA_ID` en Vercel**, en los tres entornos. En
+  `.env.local` ya está, pero el 14/10 a las 08:21 una corrida falló con
+  *"Falta GOOGLE_SHEETS_STOCK_CARBONILLA_ID"*, así que en al menos uno de allá
+  no está. **Sin eso la lectura no corre y el stock se queda quieto sin que se
+  note**, porque el libro sigue mostrando lo último que leyó.
 - **`00019 AJUSTE VEGETAL` y `00020 AJUSTE RESIDUAL`** en
   `Listado articulos GRAL`, para que el espejo pueda escribir un ajuste.
 - **Los 21 camiones del 04 al 15/09 que no están en Odoo.** El stock ya los tiene

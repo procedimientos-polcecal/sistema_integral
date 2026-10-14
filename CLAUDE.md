@@ -40,7 +40,7 @@ código.
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
-| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
@@ -150,20 +150,25 @@ una sola dirección, que el SdG nunca vuelve a leer. El riesgo asumido está
 escrito en [docs/PRODUCCION.md](docs/PRODUCCION.md): si alguien la edita a mano,
 el SdG no se entera y la pisa.
 
-**Calidad tiene las dos direcciones a la vez, y además un frente sin planilla**,
-así que conviene mirar en cuál de los tres se está parado antes de tocar una
-ruta. La raíz `/calidad` es un **tablero** con las tres mitades como tarjetas;
-el stock de carbonilla, que vivía ahí, se mudó a `/calidad/carbonilla` el
-13/10/2026. En **Envases**
-(`/calidad/envases`, el stock de bolsas y bolsones) **manda la planilla**, como
-en Compras, Mantenimiento e Inventario: es la planilla del almacén clonada, su
-stock es una fórmula sobre el kardex, y un movimiento cargado en la app que no
-llega allá **no existe** — la próxima sincronización lo borra de hecho. En
-**carbonilla**, en cambio, la planilla se va: las entradas salen de Odoo y de la
-balanza. Y en **Ensayos** (`/calidad/ensayos`, las muestras del laboratorio) **no
-hay planilla ninguna**: el SdG es el único lugar, así que ahí no existen
-`sheets_fila` ni `sheets_pendiente` — ver
-[docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md).
+**En los dos frentes de Calidad que tienen planilla manda la planilla, y hay un
+tercero que no tiene ninguna.** La raíz `/calidad` es un **tablero** con las tres
+mitades como tarjetas; el stock de carbonilla, que vivía ahí, se mudó a
+`/calidad/carbonilla` el 13/10/2026. En **Envases** (`/calidad/envases`, el stock
+de bolsas y bolsones) manda la planilla como en Compras, Mantenimiento e
+Inventario: es la planilla del almacén clonada, su stock es una fórmula sobre el
+kardex, y un movimiento cargado en la app que no llega allá **no existe** — la
+próxima sincronización lo borra de hecho. En **carbonilla** manda desde el
+13/10/2026, cuando se dio vuelta: nació con Odoo como fuente de las entradas y
+eso **necesitaba que alguien cambiara de costumbre**, así que mientras Calidad
+siguió descargando los consumos en la planilla el número estuvo mal sin avisar —
+925 toneladas de consumo y once camiones que el SdG no veía. Hoy el libro entero
+sale de la planilla y Odoo quedó controlando, en `/calidad/conciliacion`: dice
+qué camión entró sin orden de compra. Lo que evita el lazo ahí **no es
+`sheets_fila` sino el id del movimiento, escrito en la columna `K`** de la
+planilla; el número de fila no servía porque se insertan filas en el medio. Y en
+**Ensayos** (`/calidad/ensayos`, las muestras del laboratorio) **no hay planilla
+ninguna**: el SdG es el único lugar, así que ahí no existen `sheets_fila` ni
+`sheets_pendiente` — ver [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md).
 
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
