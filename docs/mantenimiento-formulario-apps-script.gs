@@ -88,6 +88,14 @@ var HOJA = 'Respuestas de formulario';
 var COL_NRO = 1;
 
 /**
+ * La columna de la marca temporal. B = 2.
+ *
+ * Es lo que distingue una respuesta de verdad de una fila vacía con formato:
+ * la pone Google al recibir el formulario y no se puede escribir desde afuera.
+ */
+var COL_MARCA = 2;
+
+/**
  * Desde qué fila hay datos.
  *
  * La 1 es el encabezado. La 2 es la OT 622 y es **la semilla de la serie**: no
@@ -142,6 +150,66 @@ function siguienteNumero_(hoja, filaQueSeEstaNumerando) {
     if (!isNaN(n) && n > maximo) { maximo = n; }
   }
   return maximo + 1;
+}
+
+/**
+ * Numera **todas** las filas que tengan marca temporal y no tengan número.
+ *
+ * Es la red cuando el activador no corrió, y hace falta más de lo que parece:
+ * el 14/10/2026 quedaron **seis respuestas seguidas sin número** —las filas
+ * 2166 a 2171, de 10:43 a 10:45— y ninguna existía para el sistema. El master
+ * las descarta con su `WHERE Col1 IS NOT NULL` y el importador descarta la fila
+ * cuyo N° de OT no es un número, así que seis órdenes de trabajo estaban sólo
+ * acá y nada lo decía.
+ *
+ * Por qué puede pasar aunque la fórmula siga viva: **una fila que Forms agrega
+ * debajo de un literal no hereda ninguna fórmula.** En cuanto el sistema (o
+ * esta función) escribe un número, la cadena `A{n-1}+1` queda cortada ahí y
+ * todas las respuestas siguientes nacen vacías. O sea que apenas se numera una
+ * fila a mano, el activador deja de ser opcional.
+ *
+ * Numera en orden de fila, que en esta hoja es el orden de llegada, y cada una
+ * cuenta a la anterior: así la serie no deja huecos ni repite.
+ */
+function numerarLasQueFaltan() {
+  var hoja = SpreadsheetApp.getActive().getSheetByName(HOJA);
+  if (!hoja) { throw new Error('No existe la pestaña "' + HOJA + '".'); }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30 * 1000)) {
+    throw new Error('No se pudo tomar el lock: hay otra numeración en curso.');
+  }
+
+  try {
+    var ultima = hoja.getLastRow();
+    if (ultima < PRIMERA_FILA) { return; }
+
+    var filas = ultima - PRIMERA_FILA + 1;
+    var nros = hoja.getRange(PRIMERA_FILA, COL_NRO, filas, 1).getValues();
+    var marcas = hoja.getRange(PRIMERA_FILA, COL_MARCA, filas, 1).getValues();
+
+    var maximo = 0;
+    for (var i = 0; i < nros.length; i++) {
+      var n = Number(nros[i][0]);
+      if (!isNaN(n) && n > maximo) { maximo = n; }
+    }
+
+    var numeradas = 0;
+    for (var j = 0; j < nros.length; j++) {
+      var tieneNumero = String(nros[j][0]).trim() !== "";
+      var tieneMarca = String(marcas[j][0]).trim() !== "";
+      if (tieneNumero || !tieneMarca) { continue; }
+
+      maximo = maximo + 1;
+      hoja.getRange(PRIMERA_FILA + j, COL_NRO).setValue(maximo);
+      numeradas++;
+    }
+
+    SpreadsheetApp.flush();
+    Logger.log(numeradas + ' fila(s) numerada(s). La serie va por ' + maximo + '.');
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
