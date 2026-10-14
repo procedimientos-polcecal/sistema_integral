@@ -61,6 +61,57 @@ async function pedir(url: string, init: RequestInit = {}): Promise<Response> {
 }
 
 /**
+ * Lo que Google deja en una celda cuyo valor todavía se está calculando.
+ *
+ * Sale en el idioma de la planilla, así que van las dos formas que podemos
+ * encontrarnos. No se normalizan acentos ni se busca por contenido: que una
+ * celda *contenga* la palabra "cargando" es perfectamente posible en una
+ * descripción de trabajo —"cargando camión"— y bloquear por eso sería peor que
+ * el problema.
+ */
+const CALCULANDO = new Set(["cargando...", "loading..."]);
+
+/**
+ * Si lo que se leyó todavía se estaba calculando.
+ *
+ * ESTO PASÓ Y SE LLEVÓ UNA ORDEN DE TRABAJO. El 13/10/2026 a las 12:09 se creó
+ * una OT desde la app y fue a parar a la **fila 3**, encima de la OT 623. La
+ * revisión de Drive de ese instante muestra por qué:
+ *
+ *     fila 2: Cargando...,,,,Cargando...,,,,,,,,,,,,,,Cargando...,,,,
+ *     fila 3: 2777,13/10/2026,Filler 1,...
+ *     fila 4: ,,,,,,,,,,3/12/2025,,Realizado,PIPARO,24,,,,,,,,
+ *
+ * La planilla **no estaba vacía: estaba recalculando**. Las columnas que salen
+ * de una fórmula volvieron vacías y la fila 2 volvió con el cartel. Quien leyó
+ * la columna A vio dos filas con algo, concluyó que la primera libre era la 3 y
+ * escribió ahí. Hizo bien la cuenta sobre datos que no eran datos.
+ *
+ * Por eso esto corta en `leerValores`, que es por donde pasa todo el mundo, y
+ * no en cada módulo: una planilla a medio calcular no se puede leer **ni para
+ * escribir ni para importar**. Importarla es peor y más silencioso — las filas
+ * cuya primera columna sí resolvió entrarían con el sector y el equipo vacíos,
+ * y pisarían lo que había.
+ */
+export function estaCalculando(filas: readonly (readonly unknown[])[]): boolean {
+  for (const fila of filas) {
+    for (const celda of fila ?? []) {
+      if (CALCULANDO.has(String(celda ?? "").trim().toLowerCase())) return true;
+    }
+  }
+  return false;
+}
+
+/** El mismo aviso para los dos caminos, porque es el mismo problema. */
+export function errorDeCalculo(pestana: string): Error {
+  return new Error(
+    `La pestaña «${pestana}» tiene celdas en "Cargando…": sus fórmulas se están ` +
+    `recalculando y lo que devuelve todavía no es el contenido real. No se lee ` +
+    `ni se escribe nada — esperá unos segundos y volvé a intentar.`
+  );
+}
+
+/**
  * Los valores de una pestaña, incluida la fila de encabezados.
  *
  * `sinFormato` pide los valores crudos en vez del texto que se ve: las fechas
@@ -85,7 +136,9 @@ export async function leerValores(
     throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
   }
 
-  return ((await res.json()).values ?? []) as string[][];
+  const valores = ((await res.json()).values ?? []) as string[][];
+  if (estaCalculando(valores)) throw errorDeCalculo(pestana);
+  return valores;
 }
 
 /** Los nombres de las pestañas de una planilla. */
@@ -357,6 +410,10 @@ export async function agregarFila(
     throw new Error(mensajeDeGoogle(lectura.status, await lectura.text(), cuentaDeServicio()));
   }
   const leidas = ((await lectura.json()).values ?? []) as string[][];
+
+  // Esta lectura no pasa por `leerValores`, así que la comprobación va de nuevo.
+  // Es la que importa: de acá sale la fila donde se escribe.
+  if (estaCalculando(leidas)) throw errorDeCalculo(pestana);
 
   if (laPlanillaEncogio(leidas.length, filaMasAltaConocida)) {
     throw new Error(

@@ -165,7 +165,7 @@ hay planilla ninguna**: el SdG es el único lugar, así que ahí no existen
 `sheets_fila` ni `sheets_pendiente` — ver
 [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md).
 
-Tres reglas que costaron caro, y que valen para las cuatro:
+Cinco reglas que costaron caro, y que valen para las cuatro:
 
 - **Toda ruta que toque un campo que se exporta tiene que exportar**, y si no
   puede, dejar el pendiente anotado (`sheets_pendiente`). Cambiar un estado sin
@@ -177,6 +177,16 @@ Tres reglas que costaron caro, y que valen para las cuatro:
 - **Las fechas van en d/m, no en m/d.** Leerlo al revés dio vuelta 885 fechas en
   Compras. Usar `fechaDeSheets()`, que vive en `lib/core/fechaDeSheets.ts` desde
   que la necesitó el tercer módulo.
+- **Una planilla que está calculando no se lee ni se escribe.** Cuando sus
+  fórmulas se recalculan, Google devuelve `Cargando…` en unas celdas y **vacías
+  las demás** — y eso es indistinguible de una planilla sin datos. El 13/10/2026
+  una OT nueva fue a parar a la fila 3, encima de la 623, porque la lectura de
+  la columna A devolvió dos filas y la cuenta de "la primera libre" fue correcta
+  sobre datos que no eran datos. `leerValores()` ahora corta solo; si alguien
+  arma su propia lectura, tiene que usar `estaCalculando()` de
+  `lib/core/sheets.ts`. Importar en ese estado es peor y más silencioso que
+  escribir: las filas cuya primera columna sí resolvió entran con el resto
+  vacío y pisan lo que había.
 - **Al escribir, nada va como texto.** Las dos funciones de escritura usan
   `USER_ENTERED`, así que un `"19,58"` lo interpreta la planilla según su locale
   — la misma trampa que la anterior, por el otro lado. La fecha va como serial

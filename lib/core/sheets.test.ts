@@ -1,18 +1,60 @@
 import { describe, it, expect } from "vitest";
 import {
-  filaSiguienteSegunLaColumna, laPlanillaEncogio, tramosDeLaFila,
+  estaCalculando, filaSiguienteSegunLaColumna, laPlanillaEncogio, tramosDeLaFila,
 } from "./sheets";
 
 /**
- * El caso real, y el que no estaba cubierto: el 13/10/2026 la pestaña `OT`
- * estuvo vacia entre que alguien la borro (11:22) y la restauro (12:13). A las
- * 12:09 se creo una OT desde la app, que leyo la columna A, encontro dos filas
- * y escribio en la 3 — encima de donde vive la OT 623.
+ * LA CAUSA, sacada de la revision de Drive de las 12:09:38 del 13/10/2026. La
+ * planilla NO estaba vacia: estaba recalculando. Las columnas que salen de una
+ * formula volvieron vacias y la fila 2 volvio con el cartel de Google.
+ */
+describe("si lo que se leyo todavia se estaba calculando", () => {
+  /** Las primeras filas de esa revision, tal como las exporto Drive. */
+  const comoVino = [
+    ["N° OT", "FECHA", "SECTOR", "EQUIPO", "ESPECIALIDAD"],
+    ["Cargando...", "", "", "", "Cargando..."],
+    [],
+    ["", "", "", "", ""],
+  ];
+
+  it("reconoce el cartel de Google", () => {
+    expect(estaCalculando(comoVino)).toBe(true);
+  });
+
+  it("en cualquier idioma y sin importar mayusculas ni espacios", () => {
+    expect(estaCalculando([["Loading..."]])).toBe(true);
+    expect(estaCalculando([["  cargando...  "]])).toBe(true);
+    expect(estaCalculando([["LOADING..."]])).toBe(true);
+  });
+
+  it("una planilla con datos de verdad no dispara nada", () => {
+    expect(estaCalculando([["N° OT", "FECHA"], ["623", "1/12/2025"], []])).toBe(false);
+    expect(estaCalculando([])).toBe(false);
+  });
+
+  /**
+   * El falso positivo que importa: "cargando" aparece de verdad en las
+   * descripciones de trabajo. Se compara la celda entera, no por contenido.
+   */
+  it("una descripcion que habla de cargar no es una celda calculando", () => {
+    expect(estaCalculando([["Se rompe mientras esta cargando camion"]])).toBe(false);
+    expect(estaCalculando([["Cargando"]])).toBe(false);
+  });
+
+  /** Y esta es la cuenta que se hizo sobre esos datos: dio 3. */
+  it("sobre esa lectura, la fila elegida era la 3", () => {
+    expect(filaSiguienteSegunLaColumna([["N° OT"], ["Cargando..."], [], []])).toBe(3);
+  });
+});
+
+/**
+ * La otra red: por si el cartel no llega a aparecer pero la lectura igual
+ * vuelve mas corta de lo que sabemos que hay.
  */
 describe("si la planilla encogio", () => {
   it("menos filas de las que sabemos que hay: no se escribe", () => {
-    // Lo que paso de verdad: 2 filas leidas, 2157 anotadas.
-    expect(laPlanillaEncogio(2, 2157)).toBe(true);
+    // Lo que la lectura de aquel dia devolvio: 2 filas, contra 2156 anotadas.
+    expect(laPlanillaEncogio(2, 2156)).toBe(true);
   });
 
   it("una sola fila de menos ya alcanza", () => {
