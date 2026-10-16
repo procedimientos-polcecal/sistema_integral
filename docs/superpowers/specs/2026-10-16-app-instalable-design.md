@@ -301,3 +301,55 @@ Dos cosas que un agente no puede hacer:
 2. **La pasada visual por las 22 pantallas a 375 px**, con sesión iniciada. El
    navegador del agente puede manejarse solo una vez que haya sesión, pero el
    login lo tiene que hacer una persona.
+
+---
+
+## Deuda de la fase 1, anotada al cerrar (16/10/2026)
+
+La fase se implementó en nueve tareas con revisión por tarea más una de rama
+completa. Quedaron **21 menores diferidos**; los que valían la pena se
+arreglaron en la oleada final. Esto es lo que quedó, triado, para que no viva
+sólo en un registro que se borra.
+
+### Lo que conviene cerrar pronto
+
+- **Probar las 14 descargas de Excel con el service worker activo.** Un
+  `<a href="/api/.../export">` es una navegación, así que el handler las
+  atravesaba. Se acotó para que no toque `/api/` ni `/auth/`, y el camino del
+  `?code=` se verificó en un navegador real — las descargas no.
+- **El script no ve las grillas de 2 columnas sin breakpoint**, porque corta en
+  `columnas < 3`. Quedan al menos tres: `EmpleadoDetalle:473`,
+  `FichadaEditModal:252` y `NuevaOTModal:117`. Bajar el umbral a 2 haría
+  aparecer una cantidad de hallazgos que nadie midió, así que es su propia
+  tarea.
+- **Dos tests de borde para el umbral de 343 px** del script (`w-[343px]` no
+  sale, `w-[344px]` sí). Hoy sobreviven tres mutantes: cambiar 343 por 375,
+  `<=` por `<`, y quitar el salteo de comentarios.
+
+### Lo que puede esperar
+
+- Tres precisiones en los comentarios de `lib/core/instalacion.ts`: el que dice
+  «la misma función en el servidor y en el cliente» (nadie la llama del lado del
+  servidor), el que dice que `iPhone|iPad|iPod` «sólo aparecen en iOS» (en la
+  práctica sí, literalmente no), y que falta el límite del Android en «sitio de
+  escritorio» al lado del del iPad.
+- El `icon-512-maskable.png` queda con el logo ~14 px alto de centro, heredado
+  de que `logo.png` viene descentrado. No toca la zona segura.
+- `logo-320.png` queda justo en el login de escritorio, que lo muestra a 260 px:
+  en pantallas ×2 se ve algo blando. La salida sería un `logo-640.png`.
+- Las alternativas del `matcher` de `proxy.ts` no llevan `$`, así que son
+  prefijos: `/sw.jsx` y `/faviconXico` saltan el proxy. Verificado que hoy dan
+  404. Arreglarlo cuando se toque esa línea.
+- En `lib/core/sw.test.ts`, el test «un push sin data no rompe» manda un push
+  **con** data y afirma `opciones.data ?? {}`, que pasa con cualquier cosa nula:
+  no protege nada. Y falta el caso de una ventana abierta de otro origen.
+- `public/sw.js` tira si `event.data.json()` devuelve `null`. Preexistente.
+- Tres textos de pantalla en estados de borde de `/instalar`: a quien ya instaló
+  y vuelve por el navegador le dice «Chrome no ofreció el botón»; al cancelar se
+  muestran dos mensajes redundantes; y `RecienInstalada` habla de «cajón de
+  aplicaciones», que es lenguaje de teléfono y puede verse en escritorio.
+- Las filas de «otros» de `/cantera/voladuras/[codigo]` quedan en cuatro
+  renglones sin zebra ni borde que las separe.
+- La excepción de falsos positivos del script es un techo y no una igualdad: si
+  un calendario o una tabla de la lista se saca, queda una cuota sin gastar que
+  después taparía un hallazgo real.
