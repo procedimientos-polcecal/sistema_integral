@@ -37,6 +37,17 @@
  *
  * No chequea `<select>`, imágenes ni texto largo sin cortar: sólo grillas,
  * anchos fijos y tablas, que fueron los tres tipos de lo que se encontró.
+ *
+ * **Un límite que conviene tener presente: la sintaxis arbitraria es invisible.**
+ * La regex de las grillas exige un número (`grid-cols-3`), así que una grilla
+ * escrita `grid-cols-[auto_1fr]`, `grid-cols-[repeat(12,1fr)]` o cualquier otra
+ * con corchetes **no la ve**, tenga las columnas que tenga. Hay una apoyada en
+ * eso a propósito: `cantera/cubicacion/CubicacionClient.tsx`, una lista de
+ * definición (`<dl>`) etiqueta/valor donde `auto 1fr` es mejor que una o dos
+ * columnas. Pero es una puerta abierta: quien escriba una grilla nueva con esa
+ * sintaxis **tiene que medirla a mano**, porque el script no lo va a hacer por
+ * él, y pasa el chequeo sin que nada avise —la misma trampa del `<select>`
+ * nativo: no rompe nada, y ése es el problema—.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
