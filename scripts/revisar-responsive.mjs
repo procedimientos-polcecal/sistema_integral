@@ -20,7 +20,8 @@
  * mide. Por eso las tres severidades:
  *
  *   ROMPE     seguro que no entra: una grilla donde cada columna queda por
- *             debajo de ~40 px, o un ancho fijo mayor que el ancho útil.
+ *             debajo de ~40 px, o un ancho fijo —`w-[Npx]` o `min-w-[Npx]`—
+ *             mayor que el ancho útil.
  *   APRETADO  entra, pero justo: 3 columnas o más sin breakpoint (<115 px cada
  *             una). Se mira y se decide; muchas veces es un número corto y está
  *             bien, y a veces es un nombre que se corta.
@@ -130,6 +131,29 @@ const esComentario = (linea) => /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(linea);
 const SIN_PREFIJO = String.raw`(?<![\w:\-\[])`;
 const GRILLA = new RegExp(`${SIN_PREFIJO}grid-cols-(\\d+)(?![\\w\\-\\[])`, "g");
 const ANCHO_FIJO = new RegExp(`${SIN_PREFIJO}w-\\[(\\d+(?:\\.\\d+)?)px\\](?![\\w\\-])`, "g");
+/**
+ * `min-w-[Npx]`: el cuarto patrón, y necesita su propia regex.
+ *
+ * No alcanza con la de `ANCHO_FIJO`: el lookbehind de `SIN_PREFIJO` descarta
+ * todo lo que venga precedido por un `-`, que es justo lo que le pasa a la `w`
+ * de `min-w-`. Por eso la clase quedó invisible hasta el 16/10/2026, cuando la
+ * revisión de la rama lo encontró leyendo la regex y no la salida: **los cinco
+ * `min-w-[Npx]` del árbol van de 130 a 220 px, así que no cambiaba ni un
+ * resultado**. El día que alguien escriba `min-w-[480px]` sí cambia, y hasta
+ * entonces el script decía verde sobre un patrón que no estaba mirando.
+ *
+ * Un `min-width` mayor que el ancho útil es peor que un `width`: no hay forma de
+ * que la caja se achique, así que estira la página entera sí o sí.
+ *
+ * Los valores en `rem` —`min-w-[16rem]`, que hay dos— no entran a propósito: la
+ * conversión depende del tamaño de fuente de la raíz y el script no mide, mira
+ * texto. 16rem son 256 px y entran; si aparece uno que no, lo va a encontrar la
+ * pasada visual, no esta regex.
+ */
+const MIN_ANCHO_FIJO = new RegExp(
+  `${SIN_PREFIJO}min-w-\\[(\\d+(?:\\.\\d+)?)px\\](?![\\w\\-])`,
+  "g"
+);
 const CONTENEDOR_CON_SCROLL = /overflow-(?:x-)?(?:auto|scroll)/;
 
 /**
@@ -179,15 +203,20 @@ export function revisarResponsive(archivos) {
         });
       }
 
-      for (const m of contenido.matchAll(ANCHO_FIJO)) {
-        const ancho = Number(m[1]);
-        if (ancho <= ANCHO_UTIL) continue;
-        hallazgos.push({
-          ruta: rutaNormal,
-          linea,
-          severidad: "ROMPE",
-          que: `w-[${m[1]}px] sin breakpoint: más que los ${ANCHO_UTIL} px útiles`,
-        });
+      for (const [clase, regex] of [
+        ["w", ANCHO_FIJO],
+        ["min-w", MIN_ANCHO_FIJO],
+      ]) {
+        for (const m of contenido.matchAll(regex)) {
+          const ancho = Number(m[1]);
+          if (ancho <= ANCHO_UTIL) continue;
+          hallazgos.push({
+            ruta: rutaNormal,
+            linea,
+            severidad: "ROMPE",
+            que: `${clase}-[${m[1]}px] sin breakpoint: más que los ${ANCHO_UTIL} px útiles`,
+          });
+        }
       }
 
       if (/<table[\s>]/.test(contenido)) {

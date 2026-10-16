@@ -91,6 +91,29 @@ describe("revisarResponsive", () => {
     expect(revisar(`<div className="sm:w-[400px] max-w-[400px]">`)).toEqual([]);
   });
 
+  it("min-w-[480px] sale como ROMPE y min-w-[220px] no", () => {
+    // El cuarto patrón del spec. Un `min-width` mayor que el ancho útil es peor
+    // que un `width`: la caja no se puede achicar, así que estira la página.
+    const roto = revisar(`<div className="min-w-[480px]">`);
+    expect(roto).toHaveLength(1);
+    expect(roto[0].severidad).toBe("ROMPE");
+    expect(roto[0].que).toContain("min-w-[480px]");
+    // El más ancho de los cinco que hay hoy en el árbol.
+    expect(revisar(`<div className="min-w-[220px]">`)).toEqual([]);
+  });
+
+  it("min-w-[480px] se cuenta una sola vez, no también como w-[480px]", () => {
+    // Las dos regex podrían pisarse: la de `w-` descarta `min-w-` porque el
+    // lookbehind rechaza el `-` que la precede, y es lo que hay que conservar.
+    expect(revisar(`<div className="min-w-[480px]">`)).toHaveLength(1);
+  });
+
+  it("min-w-[480px] con prefijo de breakpoint no sale, ni en rem", () => {
+    // `sm:` lo excluye el mismo lookbehind; `rem` no se convierte a propósito,
+    // porque el script mira texto y no mide.
+    expect(revisar(`<div className="sm:min-w-[480px] min-w-[16rem]">`)).toEqual([]);
+  });
+
   it("los calendarios de la lista de excepciones no salen", () => {
     // Las cinco entradas reales: un calendario del mes tiene siete columnas por
     // definición, y 49 px por celda es lo que mide un día en cualquier teléfono.
