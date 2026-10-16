@@ -12,12 +12,16 @@
  *
  * **Por qué `logo-320.png`:** `logo.png` mide 4266×4266 y pesa 2 MB, y se servía
  * tal cual en cinco lugares de pantalla —el Header, que está en *todas* las
- * páginas, y el login, el olvidé-mi-contraseña y el reseteo— para mostrarse a
- * 44 o 140 píxeles de ancho. Cada teléfono bajaba 2 MB para pintar un logo
- * chico. El de 320 de ancho cubre 140 px a pantalla de alta densidad (×2) y pesa
- * una fracción. `logo.png` se queda: el único uso que queda, la planilla de
- * planificación de Mantenimiento (`imprimir`), sale en papel y ahí la resolución
- * sí sirve.
+ * páginas, y el login, el olvidé-mi-contraseña y el reseteo— para mostrarse
+ * chico: 32 píxeles de alto en el Header, 260 de ancho en el login de
+ * escritorio y 140 en las otras tres pantallas de sesión. Cada teléfono bajaba
+ * 2 MB para pintar un logo chico. El de 320 de ancho cubre los 140 px a pantalla
+ * de alta densidad (×2) y pesa una fracción; el login de escritorio (260 px, o
+ * 520 a ×2) queda algo justo en una pantalla de esas, a cambio de no servir 2 MB.
+ * `logo.png` se queda: el único uso que queda, la planilla de planificación de
+ * Mantenimiento (`imprimir`, que lo muestra a 44 px), sale en papel y ahí la
+ * resolución sí sirve. El service worker dejó de usarlo: el ícono de las
+ * notificaciones es `icon-192.png`.
  *
  * **Por qué el maskable lleva margen:** Android aplica una máscara —un círculo,
  * en muchos teléfonos— sobre el ícono y descarta lo que queda afuera. La zona
