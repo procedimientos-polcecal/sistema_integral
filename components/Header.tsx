@@ -29,7 +29,7 @@ export function Header({
 
       <Link href="/" title="Inicio" className="flex shrink-0 items-center">
         <img
-          src="/logo.png"
+          src="/logo-320.png"
           alt="Polcecal / Polysan"
           style={{ height: 32, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }}
         />

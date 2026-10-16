@@ -50,7 +50,7 @@ export default async function LoginPage({
 
         <div className="relative z-10 flex flex-col items-center text-center">
           <img
-            src="/logo.png"
+            src="/logo-320.png"
             alt="POLYSAN S.A. / POLCECAL S.A."
             width={260}
             className="mb-10"
@@ -72,7 +72,7 @@ export default async function LoginPage({
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
           <img
-            src="/logo.png"
+            src="/logo-320.png"
             alt="POLYSAN S.A. / POLCECAL S.A."
             width={140}
             className="mb-8 md:hidden"

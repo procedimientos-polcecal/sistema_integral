@@ -11,7 +11,7 @@ export default async function ForgotPasswordPage({
   return (
     <div className="flex min-h-screen items-center justify-center px-6" style={{ background: "var(--bg)" }}>
       <div className="w-full max-w-sm">
-        <img src="/logo.png" alt="POLYSAN S.A. / POLCECAL S.A." width={140} className="mb-8" style={{ objectFit: "contain" }} />
+        <img src="/logo-320.png" alt="POLYSAN S.A. / POLCECAL S.A." width={140} className="mb-8" style={{ objectFit: "contain" }} />
 
         <h2 className="mb-2 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
           Recuperar contraseña
