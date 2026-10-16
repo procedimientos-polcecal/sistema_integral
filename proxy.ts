@@ -31,8 +31,19 @@ export const config = {
    * y —si por cualquier motivo la cookie no viajara en el pedido del Worker— un
    * 307 al login que del lado del navegador aparece como un error opaco, justo
    * en medio de la carga de una factura.
+   *
+   * `manifest.webmanifest` y `sw.js` quedan afuera por el mismo motivo, y acá
+   * el 307 no es un detalle: el manifest lo lee el navegador antes de que haya
+   * sesión (es lo que ofrece «Agregar a inicio» desde la pantalla de login), y
+   * `sw.js` tiene que registrarse para todo el origen. Con el redirect, el
+   * manifest llega como HTML donde se esperaba JSON y el service worker no se
+   * registra. Los dos son públicos por definición y no hay nada que proteger.
+   *
+   * Cuidado con el regex: las alternativas van separadas por `|` y el punto
+   * de los nombres con extensión se escapa con doble barra, porque esto es un
+   * string JS y un `\.` a secas se evalúa como `.` y no escapa nada.
    */
   matcher: [
-    "/((?!_next/static|_next/image|pdfjs|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|pdfjs|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
