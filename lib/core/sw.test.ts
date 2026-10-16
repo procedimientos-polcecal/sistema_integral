@@ -88,6 +88,37 @@ describe("public/sw.js", () => {
     await expect(respondido).resolves.toBe(RESPUESTA);
   });
 
+  it("una navegación a una pantalla sí se responde, y a /api/ y /auth/ no", () => {
+    // `/api/` y `/auth/` también son navegaciones y quedan afuera a propósito:
+    // un enlace de exportación devuelve un Excel y el canje del `?code=` es un
+    // 302 con `Set-Cookie`. Ninguno de los dos se puede probar desde acá, así
+    // que no se los atraviesa. Este test es lo que impide sacar esas líneas.
+    const casos = [
+      { url: `${ORIGEN}/rrhh/empleados`, pasa: true },
+      { url: `${ORIGEN}/api/rrhh/fichadas/export`, pasa: false },
+      { url: `${ORIGEN}/auth/confirm?code=abc`, pasa: false },
+    ];
+    for (const { url, pasa } of casos) {
+      const { handlers, fetchDoble } = cargarSW();
+      const respondWith = vi.fn();
+      handlers["fetch"]({ respondWith, request: { url, mode: "navigate" } });
+      expect(respondWith).toHaveBeenCalledTimes(pasa ? 1 : 0);
+      expect(fetchDoble).toHaveBeenCalledTimes(pasa ? 1 : 0);
+    }
+  });
+
+  it("una navegación a otro origen no pasa por acá", () => {
+    // No tiene por qué: el service worker es del SdG.
+    const { handlers, fetchDoble } = cargarSW();
+    const respondWith = vi.fn();
+    handlers["fetch"]({
+      respondWith,
+      request: { url: "https://otro-sitio.test/compras", mode: "navigate" },
+    });
+    expect(respondWith).not.toHaveBeenCalled();
+    expect(fetchDoble).not.toHaveBeenCalled();
+  });
+
   it("lo que no es navegación no se toca", () => {
     // Las imágenes, el JSON de las rutas y el bundle siguen su camino normal:
     // meterse en el medio de todo el tráfico no compra nada todavía.
