@@ -239,6 +239,32 @@ Escribir en la planilla es best-effort: si Google está caído, o la planilla no
 está compartida como editor, el trabajo igual quedó registrado y la pantalla
 dice qué falta completar a mano.
 
+**Y "no se escribió" nunca se devuelve como `null`, desde el 16/10/2026.**
+`escribirEnLaFilaDeLaOT` se iba en silencio cuando faltaba `GOOGLE_SHEETS_OT_ID`
+o cuando la OT no tenía `sheets_row` — devolviendo el mismo valor que "salió
+bien". La segunda es el estado normal de una OT recién creada desde la app: la
+fila del master la pone la sincronización, así que **registrar el trabajo sobre
+una OT nueva no escribía nada y no avisaba**. Le pasó a la 2796: se creó, se
+registró —completada, 1 hora, dos operarios— y la planilla no se enteró de nada.
+Horas después volvió a morder al repararla a mano, con un script que leyó ese
+`null` como éxito y reportó cinco celdas escritas que nunca se escribieron. Un
+diagnóstico que no se distingue de otro no es un diagnóstico; uno que no se
+distingue del éxito es peor. Ahora lo dice `porQueNoLlegaALaPlanilla`, con sus
+tests, y devuelve **las dos razones juntas** si faltan las dos.
+
+Del otro lado, que es donde se cerraba el círculo: `changeEstado` y
+`cambiarParada` del listado hacían `await fetch(...)` y **no miraban nada**, ni
+`res.ok`. Un 403 se veía igual que un cambio que salió bien. Ahora las dos
+pasan por `contar()`, que muestra el error o el `planilla_error` en el mismo
+cartel donde ya se mira lo que salió a medias.
+
+**La columna M del master tiene una fórmula, y escribirla la reemplaza a
+propósito.** Cada fila nueva nace con `=IF(Jn="","",Ln)`, que copia el
+"Atrasado / Por hacer" calculado de la L hasta que alguien pone el estado de
+verdad. Las filas que dicen "Realizado" son literales que pisaron esa fórmula —
+es como funciona la planilla, no un accidente. Conviene saberlo al mirar una OT
+recién creada: su M dice "Atrasado" sin que nadie lo haya decidido.
+
 **La foto quedó afuera.** El origen la sube a Drive con un Apps Script propio
 (`/api/fotos-drive`) y escribe el link en la columna V. Ese endpoint no existe
 acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que

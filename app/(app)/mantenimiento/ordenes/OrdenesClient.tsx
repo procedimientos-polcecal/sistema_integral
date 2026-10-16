@@ -277,12 +277,33 @@ export default function OrdenesClient({
    * suele estar frente a la OT decidiéndolo. Pedir confirmación para cada
    * tilde molesta más de lo que protege.
    */
+  /**
+   * Lo que la ruta contesta, mostrado.
+   *
+   * Las dos acciones de abajo hacían `await fetch(...)` y no miraban nada: ni
+   * `res.ok`, ni el `planilla_error`. Un 403 se veía igual que un cambio que
+   * salió bien, y lo que no llegó a la planilla no se enteraba nadie — que es
+   * como la OT 2796 quedó registrada sólo en el sistema el 16/10/2026.
+   */
+  async function contar(res: Response, queSeHizo: string) {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAvisoSync(`No se pudo ${queSeHizo}: ${body.error ?? "error desconocido"}`);
+      return false;
+    }
+    if (body.planilla_error) {
+      setAvisoSync(`Se guardó en el sistema, pero no en la planilla: ${body.planilla_error}`);
+    }
+    return true;
+  }
+
   async function cambiarParada(id: string, valor: boolean) {
-    await fetch("/api/mantenimiento/ordenes", {
+    const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, requiere_parada_sector: valor }),
     });
+    await contar(res, "cambiar la marca de parar el sector");
     load();
   }
 
@@ -318,11 +339,12 @@ export default function OrdenesClient({
       confirmText: "Cambiar estado",
     });
     if (!ok) return;
-    await fetch("/api/mantenimiento/ordenes", {
+    const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, estado }),
     });
+    await contar(res, `pasar la OT a «${meta.label}»`);
     if (view === "kanban") loadKanban();
     else load();
   }
