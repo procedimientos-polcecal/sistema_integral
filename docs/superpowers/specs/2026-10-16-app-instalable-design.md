@@ -180,15 +180,21 @@ cierra lo que quedó.
 
 | | Cuántos | Qué se hace |
 |---|---|---|
-| Tablas sin scroll propio | **8** | Envolver en un contenedor con `overflow-x-auto`, como las otras 95 |
+| Tablas sin scroll propio | **5** | Envolver en un contenedor con `overflow-x-auto`, como las otras 95 |
 | Grillas de 3 columnas sin breakpoint | **20**, en 13 pantallas | A 110 px por columna no entra una etiqueta con su campo. Pasan a `grid-cols-1 sm:grid-cols-3`, o a `grid-cols-2 sm:grid-cols-3` si lo que llevan son números cortos |
 | Filas de formulario de 12 columnas | **2**, en `/cantera/voladuras/[codigo]` | El nombre del insumo ocupa 7 de 12 y los inputs se reparten 143 px. Se apilan abajo de `sm` |
 
 De las 11 tablas sin scroll, **3 son pantallas de imprimir** —una en
 `/mantenimiento/planificacion/[id]/imprimir` y dos en
-`/remises/hoja-ruta/[id]/imprimir`—: salen en papel y no se tocan. Quedan 8, en
-cinco pantallas: `/produccion/resumenes` (3), `/inventario/lista` (2),
-`/cantera/acarreo`, `/remises` y `/rrhh/liquidaciones`.
+`/remises/hoja-ruta/[id]/imprimir`—: salen en papel y no se tocan. Quedan 5, en
+cuatro pantallas: `/inventario/lista` (2), `/cantera/acarreo`, `/remises` y
+`/rrhh/liquidaciones`.
+
+Las otras **3** tablas de `/produccion/resumenes` **no faltan**: están dentro de
+un componente (`Envoltorio`) que ya pone el `overflow-x-auto` alrededor de sus
+hijos. El script no lo ve porque mira 12 líneas hacia arriba, así que las marca
+como sin scroll. Son falsos positivos conocidos y van a su lista, en
+`scripts/revisar-responsive.mjs`, con el mismo mecanismo que los calendarios.
 
 ### Lo que NO se toca, y es importante decirlo
 
@@ -257,8 +263,9 @@ Vitest sobre funciones puras, que es lo que este repo testea:
   el caso de Chrome **en iOS**, que es un iPhone aunque el user agent diga
   `CriOS` y por lo tanto va por el camino de Apple.
 - `scripts/revisar-responsive.mjs` se prueba contra casos armados: una tabla con
-  y sin contenedor, una grilla con y sin breakpoint, y que los calendarios de la
-  lista de excepciones no salgan.
+  y sin contenedor, una grilla con y sin breakpoint, que los calendarios y las
+  tablas con scroll heredado de la lista de excepciones no salgan, y que una
+  cuarta tabla en esa misma pantalla sí salga.
 
 Lo demás —el manifest, los íconos, el service worker— **no se testea con vitest y
 hay que decirlo**: que Chrome ofrezca instalar depende de criterios que define

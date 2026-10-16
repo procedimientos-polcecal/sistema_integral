@@ -75,6 +75,31 @@ export const CALENDARIOS = [
   { ruta: "app/(app)/trituracion/partes/PartesClient.tsx", cantidad: 2 },
 ];
 
+/**
+ * Falsos positivos de tablas, y tampoco se tocan.
+ *
+ * Son las tres tablas de `/produccion/resumenes`. Están dentro de `Envoltorio`,
+ * un componente del mismo archivo que pone `<div className="overflow-x-auto">`
+ * alrededor de sus `children`: tienen scroll horizontal de verdad. El script no
+ * lo ve porque sólo mira 12 líneas hacia arriba y el contenedor está más arriba
+ * que eso. Es el límite declarado del script, no un defecto suyo: seguir el
+ * árbol de componentes lo convertiría en un compilador.
+ *
+ * Si aparece otro envoltorio así, la salida es sumarlo a esta lista, no enseñarle
+ * al script qué es `Envoltorio`: atar el script a un nombre de componente lo
+ * rompe el día que alguien lo renombra, y no generaliza.
+ *
+ * `cantidad` cuenta las tablas sin contenedor que se perdonan en ese archivo, y
+ * se gastan en orden de línea. Es la misma estrategia que los calendarios: la
+ * excepción es para esas tres, no para el archivo entero. Una cuarta tabla sin
+ * contenedor agregada **fuera** de `Envoltorio` tiene que salir. Si queda antes
+ * que las otras, el hallazgo aparece en la línea de la última: lo que se cuenta
+ * es la cantidad, no el lugar.
+ */
+export const TABLAS_CON_SCROLL_HEREDADO = [
+  { ruta: "app/(app)/produccion/resumenes/ResumenesClient.tsx", cantidad: 3 },
+];
+
 /** Las rutas siempre con `/`, también en Windows. */
 const normalizar = (ruta) => ruta.replaceAll("\\", "/");
 
@@ -115,6 +140,9 @@ export function revisarResponsive(archivos) {
     // Cuántos `grid-cols-7` de calendario le quedan por perdonar a este archivo.
     let calendariosPorPerdonar =
       CALENDARIOS.find((c) => c.ruta === rutaNormal)?.cantidad ?? 0;
+    // Cuántas tablas sin contenedor le quedan por perdonar a este archivo.
+    let tablasPorPerdonar =
+      TABLAS_CON_SCROLL_HEREDADO.find((t) => t.ruta === rutaNormal)?.cantidad ?? 0;
 
     const lineas = texto.split("\n");
 
@@ -155,12 +183,16 @@ export function revisarResponsive(archivos) {
         const desde = Math.max(0, indice - LINEAS_HASTA_EL_CONTENEDOR);
         const arriba = lineas.slice(desde, indice + 1).join("\n");
         if (!CONTENEDOR_CON_SCROLL.test(arriba)) {
-          hallazgos.push({
-            ruta: rutaNormal,
-            linea,
-            severidad: "MIRAR",
-            que: "<table> sin overflow-x-auto en las líneas de arriba",
-          });
+          if (tablasPorPerdonar > 0) {
+            tablasPorPerdonar--;
+          } else {
+            hallazgos.push({
+              ruta: rutaNormal,
+              linea,
+              severidad: "MIRAR",
+              que: "<table> sin overflow-x-auto en las líneas de arriba",
+            });
+          }
         }
       }
     });

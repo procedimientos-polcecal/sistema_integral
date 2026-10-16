@@ -1,10 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { CALENDARIOS, revisarResponsive } from "./revisar-responsive.mjs";
+import { CALENDARIOS, TABLAS_CON_SCROLL_HEREDADO, revisarResponsive } from "./revisar-responsive.mjs";
 
 /** Un archivo armado a mano: los tests no miran el árbol real, que cambia. */
 const archivo = (texto, ruta = "app/(app)/prueba/PruebaClient.tsx") => ({ ruta, texto });
 
 const revisar = (texto, ruta) => revisarResponsive([archivo(texto, ruta)]);
+
+const RUTA_RESUMENES = "app/(app)/produccion/resumenes/ResumenesClient.tsx";
+
+/** Quince líneas de comentario: alejan la tabla más de las 12 que mira el script. */
+const relleno = (n) => Array.from({ length: n }, (_, i) => `      {/* relleno ${i} */}`).join("\n");
+
+const tablaVacia = `        <table className="w-full text-sm" />`;
+
+/** El componente de resúmenes: pone el scroll una vez y sus hijos van adentro. */
+const ENVOLTORIO = [
+  "function Envoltorio({ children }) {",
+  '  return <div className="overflow-hidden card">',
+  '    <div className="overflow-x-auto">{children}</div>',
+  "  </div>;",
+  "}",
+].join("\n");
+
+/** La pantalla con `tablas` tablas, cada una lejos del contenedor de arriba. */
+const pantallaConTablas = (tablas) =>
+  [ENVOLTORIO, ...Array.from({ length: tablas }, () => `${relleno(15)}\n${tablaVacia}`)].join("\n");
 
 describe("revisarResponsive", () => {
   it("una tabla sin contenedor con scroll sale como MIRAR", () => {
@@ -108,5 +128,38 @@ describe("revisarResponsive", () => {
     const texto = `<table className="w-full"><div className="grid grid-cols-12 w-[900px]">`;
     expect(revisar(texto, "app/(app)/rrhh/imprimir/[id]/page.tsx")).toEqual([]);
     expect(revisar(texto, "app\\(app)\\rrhh\\imprimir\\[id]\\page.tsx")).toEqual([]);
+  });
+
+  it("las tres tablas de /produccion/resumenes no salen: ya tienen scroll heredado", () => {
+    // Están a 15 líneas del overflow-x-auto de Envoltorio, así que el script no lo
+    // ve. Es el caso real que motivó la lista de excepciones.
+    expect(revisar(pantallaConTablas(3), RUTA_RESUMENES)).toEqual([]);
+  });
+
+  it("una cuarta tabla sin contenedor en esa pantalla sí sale", () => {
+    // La excepción cuenta tres: la cuarta no tiene a qué acogerse.
+    const hallazgos = revisar(pantallaConTablas(4), RUTA_RESUMENES);
+    expect(hallazgos.map((h) => h.severidad)).toEqual(["MIRAR"]);
+  });
+
+  it("la excepción es por archivo: las mismas tres tablas en otra pantalla sí salen", () => {
+    const hallazgos = revisar(pantallaConTablas(3));
+    expect(hallazgos.map((h) => h.severidad)).toEqual(["MIRAR", "MIRAR", "MIRAR"]);
+  });
+
+  it("una tabla que sí tiene scroll no gasta la excepción", () => {
+    // La primera va bajo un overflow-x-auto propio: no se cuenta. Quedan cuatro
+    // sin contenedor y sólo tres se perdonan, así que sale una.
+    const conScroll = `<div className="overflow-x-auto">\n${tablaVacia}`;
+    const texto = [
+      conScroll,
+      ...Array.from({ length: 4 }, () => `${relleno(15)}\n${tablaVacia}`),
+    ].join("\n");
+    const hallazgos = revisar(texto, RUTA_RESUMENES);
+    expect(hallazgos.map((h) => h.severidad)).toEqual(["MIRAR"]);
+  });
+
+  it("la lista de excepciones de tablas tiene las tres de resúmenes", () => {
+    expect(TABLAS_CON_SCROLL_HEREDADO).toEqual([{ ruta: RUTA_RESUMENES, cantidad: 3 }]);
   });
 });
