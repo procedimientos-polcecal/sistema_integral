@@ -30,7 +30,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Arandela | `` | 1 |  | 20/01/2026 |  |
+| Arandela | — | 1 |  | 20/01/2026 |  |
 | Bulón *(c/tuerca)* | `3/8 X 2"` | 1 | 2 u | 20/01/2026 |  |
 | Manguito | `H318` | 1 | 1 u | 14/09/2026 |  |
 | Planchuela | `3/16 X 2"` | 1 | 20 cm | 20/01/2026 |  |
@@ -66,10 +66,10 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Arandela | `` | 1 |  | 19/01/2026 |  |
+| Arandela | — | 1 |  | 19/01/2026 |  |
 | Bulón *(c/tuerca)* | `3/8 X 2"` | 1 | 8 u | 19/01/2026 |  |
 | Correa | `B-75` | 1 | 1 u | 30/05/2026 |  |
-| Goma *(guardera)* | `` | 1 | 2 m | 19/01/2026 |  |
+| Goma *(guardera)* | — | 1 | 2 m | 19/01/2026 |  |
 | Parche | `200X200` | 1 |  | 04/03/2026 |  |
 
 ## PO-A1-12 — Cinta transportadora 7 · Trituración 1
@@ -77,7 +77,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Bulón | `3/8 X 1 1/2` | 1 | 5 u | 19/01/2026 |  |
-| Goma *(lateral)* | `` | 1 | 1 m | 19/01/2026 |  |
+| Goma *(lateral)* | — | 1 | 1 m | 19/01/2026 |  |
 | Parche | `200X300` | 1 |  | 04/02/2026 |  |
 
 ## PO-A1-14 — Zaranda vibratoria 2 · Trituración 1
@@ -90,20 +90,20 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 |  | 18/02/2026 |  |
+| Empalme | — | 1 |  | 18/02/2026 |  |
 | Parche *(lateral)* | `20X20` | 1 | 2 u | 18/02/2026 |  |
 
 ## PO-A1-19 — Cinta transportadora 12 · Trituración 1
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 | 1 u | 06/04/2026 |  |
+| Empalme | — | 1 | 1 u | 06/04/2026 |  |
 
 ## PO-A1-23 — Cinta transportadora 15 · Trituración 1
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 |  | 06/04/2026 |  |
+| Empalme | — | 1 |  | 06/04/2026 |  |
 
 ## PO-A2-02 — Rompedor de mandíbulas · Trituración 2
 
@@ -115,20 +115,20 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Paño *(zaranda especificaciones)* | `` | 1 |  | 10/12/2025 |  |
+| Paño *(zaranda especificaciones)* | — | 1 |  | 10/12/2025 |  |
 
 ## PO-A2-08 — Cinta transportadora 5 · Trituración 2
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 |  | 04/03/2026 |  |
+| Empalme | — | 1 |  | 04/03/2026 |  |
 
 ## PO-A3-05 — Zaranda vibratoria 1 · Trituración 3
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Correa | `C-77` | 2 | 4 u | 13/05/2026 |  |
-| Paño *(zaranda especificaciones)* | `` | 1 |  | 10/12/2025 |  |
+| Paño *(zaranda especificaciones)* | — | 1 |  | 10/12/2025 |  |
 
 ## PO-A3-06 — Cinta transportadora 3 · Trituración 3
 
@@ -158,7 +158,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 | 1 u | 06/04/2026 |  |
+| Empalme | — | 1 | 1 u | 06/04/2026 |  |
 | Parche | `200X200` | 1 | 2 u | 06/04/2026 |  |
 
 ## PO-A3-13 — Zaranda vibratoria 2 · Trituración 3
@@ -177,21 +177,21 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Chapa *(1/2" - 1500mm x 400mm)* | `` | 1 |  | 08/01/2026 |  |
+| Chapa *(1/2" - 1500mm x 400mm)* | — | 1 |  | 08/01/2026 |  |
 
 ## PO-B1-03 — Tolva de carbón · Calcinación
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Aspersor *(metálicos)* | `1"` | 1 | 4 u | 02/01/2026 |  |
-| Cañón *(riego)* | `` | 1 | 4 u | 12/12/2025 |  |
+| Cañón *(riego)* | — | 1 | 4 u | 12/12/2025 |  |
 | Sensor *(inductivo)* | `NC 24V` | 1 |  | 29/05/2026 |  |
 
 ## PO-B1-04 — Alimentador hornos · Calcinación
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Eje *(cortado)* | `` | 1 |  | 28/04/2026 |  |
+| Eje *(cortado)* | — | 1 |  | 28/04/2026 |  |
 
 ## PO-B1-07 — Cadena de arrastre 1 · Calcinación
 
@@ -260,7 +260,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Cable *(mallado 2 x 0.75 mm2)* | `` | 1 | 100 u | 11/02/2026 |  |
+| Cable *(mallado 2 x 0.75 mm2)* | — | 1 | 100 u | 11/02/2026 |  |
 
 ## PO-B1-28 — Ventilador 6 · Calcinación
 
@@ -283,25 +283,25 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Empalme | `` | 1 | 1 u | 06/04/2026 |  |
+| Empalme | — | 1 | 1 u | 06/04/2026 |  |
 
 ## PO-C1-03 — Cinta transportadora 3 · Hidratación
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Corona | `` | 1 |  | 11/08/2026 |  |
-| Piñón | `` | 1 |  | 11/08/2026 |  |
+| Corona | — | 1 |  | 11/08/2026 |  |
+| Piñón | — | 1 |  | 11/08/2026 |  |
 
 ## PO-C1-04 — Molino a martillos · Hidratación
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Grilla | `4MM` | 15 | 176 u | 13/10/2026 |  |
-| Martillo | `` | 2 | 8 u | 23/01/2026 |  |
-| Brazo | `` | 1 | 4 u | 23/01/2026 |  |
+| Martillo | — | 2 | 8 u | 23/01/2026 |  |
+| Brazo | — | 1 | 4 u | 23/01/2026 |  |
 | Correa | `C-162` | 1 | 4 u | 11/05/2026 |  |
-| Manguito | `` | 1 | 1 u | 23/01/2026 |  |
-| Martillo *(rompedora FACO)* | `` | 1 | 4 u | 29/05/2026 |  |
+| Manguito | — | 1 | 1 u | 23/01/2026 |  |
+| Martillo *(rompedora FACO)* | — | 1 | 4 u | 29/05/2026 |  |
 | Rodamiento | `22216` | 1 | 1 u | 23/01/2026 |  |
 
 ## PO-C1-08 — Sin fin doble · Hidratación
@@ -323,14 +323,14 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Balde | `` | 1 | 3 u | 15/07/2026 |  |
+| Balde | — | 1 | 3 u | 15/07/2026 |  |
 
 ## PO-D1-08 — Separador dinámico 1 · Molienda cal
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Correa | `B-142` | 1 | 4 u | 09/06/2026 |  |
-| Paleta *(fabricadas ING MAZZEO)* | `` | 1 | 12 u | 17/06/2026 |  |
+| Paleta *(fabricadas ING MAZZEO)* | — | 1 | 12 u | 17/06/2026 |  |
 
 ## PO-D1-09 — Sin fin 7 · Molienda cal
 
@@ -384,7 +384,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Autoperforante | `` | 1 |  | 11/12/2025 |  |
+| Autoperforante | — | 1 |  | 11/12/2025 |  |
 | Correa | `C-75` | 1 | 2 u | 23/03/2026 |  |
 | Perfil | `C 100` | 1 |  | 11/12/2025 |  |
 | Rodamiento | `30309` | 1 | 2 u | 22/04/2026 |  |
@@ -394,15 +394,15 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Manga *(se limpian llenas)* | `5` | 1 |  | 17/06/2026 | ⚠ revisar |
-| Manga *(rotas)* | `` | 1 | 7 u | 17/06/2026 |  |
-| Pico *(soplado)* | `` | 1 | 4 u | 17/06/2026 |  |
-| Sin identificar *(Se limpia camara soplado)* | `` | 1 |  | 17/06/2026 | ⚠ revisar |
+| Manga *(rotas)* | — | 1 | 7 u | 17/06/2026 |  |
+| Pico *(soplado)* | — | 1 | 4 u | 17/06/2026 |  |
+| Sin identificar *(Se limpia camara soplado)* | — | 1 |  | 17/06/2026 | ⚠ revisar |
 
 ## PO-D2-01 — Embolsadora · Despacho cal
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Celda de carga *(ZELL Modelo TSA 100kg Sensibilidad 2.99mV/V serie 21D316461)* | `` | 1 |  | 08/10/2026 |  |
+| Celda de carga *(ZELL Modelo TSA 100kg Sensibilidad 2.99mV/V serie 21D316461)* | — | 1 |  | 08/10/2026 |  |
 | Correa | `C-63` | 1 | 2 u | 10/02/2026 |  |
 
 ## PY-A1-03 — Cinta transportadora 1 · Filler 1
@@ -426,7 +426,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 | Grilla | `2MM` | 15 | 258 u | 14/10/2026 |  |
 | Grilla | `4MM` | 8 | 76 u | 13/10/2026 |  |
 | Rodamiento | `22216` | 3 |  | 31/08/2026 |  |
-| Martillo | `` | 2 | 8 u | 30/05/2026 |  |
+| Martillo | — | 2 | 8 u | 30/05/2026 |  |
 | Manguito | `H316` | 1 | 2 u | 31/08/2026 |  |
 | Placa | `3005` | 1 | 1 u | 25/08/2026 |  |
 | Placa | `3010` | 1 | 1 u | 25/08/2026 |  |
@@ -452,7 +452,7 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 |---|---|---:|---:|---|---|
 | Aceite | `SAE 320` | 1 | 50 l | 11/07/2026 |  |
 | Correa *(Codificadas)* | `D-162` | 1 | 5 u | 22/09/2026 |  |
-| Cuerpos moledores | `` | 1 | 980 kg | 30/01/2026 |  |
+| Cuerpos moledores | — | 1 | 980 kg | 30/01/2026 |  |
 | Rodamiento | `22218` | 1 |  | 11/12/2025 |  |
 
 ## PY-A1-09 — Sin fin · Filler 1
@@ -506,17 +506,17 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
 | Grilla | `4MM` | 16 |  | 05/10/2026 |  |
-| Brazo | `` | 4 | 20 u | 10/08/2026 |  |
-| Martillo | `` | 3 | 12 u | 05/06/2026 |  |
-| Barra *(cuadrada)* | `` | 1 | 1 u | 11/12/2025 |  |
-| Barra | `` | 1 | 1 u | 19/01/2026 |  |
+| Brazo | — | 4 | 20 u | 10/08/2026 |  |
+| Martillo | — | 3 | 12 u | 05/06/2026 |  |
+| Barra *(cuadrada)* | — | 1 | 1 u | 11/12/2025 |  |
+| Barra | — | 1 | 1 u | 19/01/2026 |  |
 | Correa | `C-144` | 1 | 5 u | 22/01/2026 |  |
 | Grilla | `6MM` | 1 | 4 u | 05/03/2026 |  |
-| Grilla | `` | 1 | 35 u | 07/10/2026 |  |
+| Grilla | — | 1 | 35 u | 07/10/2026 |  |
 | Manguito | `H316` | 1 | 2 u | 05/06/2026 |  |
 | Placa *(cierre)* | `3005` | 1 |  | 08/10/2026 |  |
 | Rodamiento | `22216` | 1 | 2 u | 05/06/2026 |  |
-| Rotor | `` | 1 |  | 05/06/2026 |  |
+| Rotor | — | 1 |  | 05/06/2026 |  |
 
 ## PY-B1-07 — Cinta transportadora 4 · Filler 2
 
@@ -557,15 +557,15 @@ tener. "Total" sólo aparece cuando todas las veces vino con cantidad.
 | Grilla | `4MM` | 11 | 151 u | 02/10/2026 |  |
 | Correa | `C-136` | 4 | 15 u | 21/09/2026 |  |
 | Caja de rodamiento | `516` | 1 | 2 u | 06/04/2026 |  |
-| Grilla | `` | 1 | 4 u | 30/07/2026 |  |
+| Grilla | — | 1 | 4 u | 30/07/2026 |  |
 | Rodamiento | `22216 EK` | 1 | 2 u | 07/10/2026 |  |
-| Rotor | `` | 1 | 1 u | 07/10/2026 |  |
+| Rotor | — | 1 | 1 u | 07/10/2026 |  |
 
 ## PY-C1-16 — Ensacadora · Planta 02
 
 | Repuesto | Código | OT | Total | Última | |
 |---|---|---:|---:|---|---|
-| Microinterruptor *(Neumann Bl-3 Final Carrera Pulsador)* | `` | 1 |  | 14/09/2026 |  |
+| Microinterruptor *(Neumann Bl-3 Final Carrera Pulsador)* | — | 1 |  | 14/09/2026 |  |
 
 ## PY-D1-02 — Cinta transportadora 1 · Filler 3
 

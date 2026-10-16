@@ -99,6 +99,17 @@ if (sinEquipo.length) {
   for (const o of sinEquipo) console.log(`  OT ${o.ot_number} · ${o.equipo_raw ?? "sin equipo"} · ${o.repuesto}`);
 }
 
+/**
+ * La celda del código.
+ *
+ * Un código vacío va como raya y no como un par de acentos graves vacío:
+ * markdown renderiza "``" como dos acentos graves literales, que en la web se
+ * ven como nada pero en el PDF aparecen impresos en la tabla.
+ */
+function celdaDeCodigo(codigo: string | null): string {
+  return codigo ? `\`${codigo}\`` : "—";
+}
+
 /* ── El informe ──────────────────────────────────────────────────────────── */
 
 const ordenados = [...catalogo.entries()].sort((a, b) => {
@@ -132,7 +143,7 @@ for (const [equipoId, lista] of ordenados) {
     const marca = r.confianza === "revisar" ? "⚠ revisar" : "";
     const total = r.total !== null ? `${r.total} ${r.unidad}` : "";
     const fecha = r.ultimaFecha ? r.ultimaFecha.split("-").reverse().join("/") : "";
-    md += `| ${r.nombre}${r.nota ? ` *(${r.nota})*` : ""} | \`${r.codigo ?? ""}\` | ${r.ots.length} | ${total} | ${fecha} | ${marca} |\n`;
+    md += `| ${r.nombre}${r.nota ? ` *(${r.nota})*` : ""} | ${celdaDeCodigo(r.codigo)} | ${r.ots.length} | ${total} | ${fecha} | ${marca} |\n`;
   }
 }
 
@@ -211,7 +222,7 @@ en [el otro informe](MANTENIMIENTO-REPUESTOS-DESDE-OT.md).
       const que = p.accion === "cambio" ? "**cambió**" : p.accion === "revision" ? "se revisó" : "se nombró";
       const fecha = p.ultimaFecha ? p.ultimaFecha.split("-").reverse().join("/") : "";
       const ejemplo = p.crudos[0].length > 70 ? `${p.crudos[0].slice(0, 70)}…` : p.crudos[0];
-      md2 += `| ${p.tipo} | \`${p.codigo ?? ""}\` | ${que} | ${p.ots.length} | ${fecha} | ${ejemplo.replace(/\|/g, "/")} |\n`;
+      md2 += `| ${p.tipo} | ${celdaDeCodigo(p.codigo)} | ${que} | ${p.ots.length} | ${fecha} | ${ejemplo.replace(/\|/g, "/")} |\n`;
     }
   }
 
