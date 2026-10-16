@@ -75,8 +75,9 @@ export function BarraInstalar() {
 
   return (
     <div
-      // z-30 y no más: el cajón del menú y su fondo oscuro (z-40 y z-50) tienen
-      // que quedar por encima cuando está abierto.
+      // z-30 y no más: el fondo oscuro del menú en teléfono es z-40 y el cajón
+      // z-50, y los dos tienen que quedar por encima cuando el menú está
+      // abierto.
       className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(15,23,42,.08)]"
       // El borde de abajo de los iPhone con gesto: sin esto el botón queda
       // debajo de la barra del sistema.

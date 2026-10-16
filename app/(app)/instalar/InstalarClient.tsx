@@ -50,15 +50,27 @@ export default function InstalarClient() {
   async function instalar() {
     setIntento("esperando");
     const resultado = await dispararInstalacion();
+    // `"sin-evento"` y `"fallo"` caen los dos en `"ninguno"`: el evento quedó
+    // descartado, así que la pantalla pasa sola a las instrucciones del menú de
+    // Chrome, que es lo que sirve cuando el diálogo no se pudo abrir.
     setIntento(
       resultado === "accepted" ? "aceptada" : resultado === "dismissed" ? "rechazada" : "ninguno",
     );
   }
 
   function contenido(e: Entorno) {
-    // Ya instalada gana sobre todo, incluso sobre "tu navegador no la soporta":
-    // si está corriendo instalada, es evidente que se pudo.
-    if (e.plataforma === "ya-instalada" || instalada) return <YaInstalada />;
+    // Estas dos no son lo mismo y confundirlas se ve en pantalla.
+    //
+    // `ya-instalada` es "esta página está corriendo adentro de la app": no hay
+    // nada que hacer. `instalada` es "acabás de instalarla en esta pestaña",
+    // que llega por `appinstalled` — y ahí la persona **sigue en el navegador**,
+    // así que decirle "estás entrando desde la app" es falso y le saca lo único
+    // accionable del momento, que es ir a buscar el ícono.
+    //
+    // Las dos van antes que "tu navegador no la soporta": si está instalada, es
+    // evidente que se pudo.
+    if (e.plataforma === "ya-instalada") return <YaInstalada />;
+    if (instalada) return <RecienInstalada />;
     if (!e.soportado) return <NoSoportado />;
     if (e.plataforma === "ios") return <PasosIOS />;
     if (e.plataforma === "android") {
@@ -106,6 +118,24 @@ function YaInstalada() {
       <p className="mt-1 text-sm text-slate-600">
         Estás entrando desde la app, así que no hay nada que hacer acá. Si la borraste del teléfono,
         volvé a entrar desde el navegador y esta pantalla te va a mostrar cómo instalarla de nuevo.
+      </p>
+    </>
+  );
+}
+
+/**
+ * Se acaba de instalar, pero esta pestaña sigue siendo la del navegador.
+ *
+ * Lo único que importa en este momento es dónde quedó el ícono: si no lo
+ * encuentran, la instalación no sirvió de nada.
+ */
+function RecienInstalada() {
+  return (
+    <>
+      <p className="text-sm font-semibold text-slate-900">Listo, ya está instalada.</p>
+      <p className="mt-1 text-sm text-slate-600">
+        Buscá el ícono del SdG en la pantalla de inicio o en el cajón de aplicaciones. Esta pestaña
+        sigue siendo la del navegador: de acá en adelante, entrá desde el ícono.
       </p>
     </>
   );
@@ -193,16 +223,9 @@ function PasosAndroid({
   intento: "ninguno" | "esperando" | "aceptada" | "rechazada";
   onInstalar: () => void;
 }) {
-  if (intento === "aceptada") {
-    return (
-      <>
-        <p className="text-sm font-semibold text-slate-900">Listo, se está instalando.</p>
-        <p className="mt-1 text-sm text-slate-600">
-          Buscá el ícono del SdG en la pantalla de inicio o en el cajón de aplicaciones.
-        </p>
-      </>
-    );
-  }
+  // El mismo cartel que cuando llega `appinstalled`: es el mismo momento, y
+  // cuál de los dos avisa primero depende del navegador.
+  if (intento === "aceptada") return <RecienInstalada />;
 
   return (
     <>

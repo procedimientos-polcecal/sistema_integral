@@ -65,7 +65,11 @@ if (typeof window !== "undefined") {
     // Sin esto Chrome muestra su propio cartel, que compite con la barra y con
     // la pantalla de instrucciones.
     e.preventDefault();
-    cambiar({ evento: e as EventoDeInstalacion, rechazada: false });
+    // `rechazada` no se toca acá a propósito: un "no" en el diálogo vale para
+    // toda la sesión, y Chrome vuelve a ofrecer el evento al rato. Limpiarlo
+    // haría reaparecer la barra que la persona acaba de rechazar, que es
+    // exactamente lo que `rechazada` existe para evitar.
+    cambiar({ evento: e as EventoDeInstalacion });
   });
 
   window.addEventListener("appinstalled", () => {
@@ -108,24 +112,41 @@ export function estaInstalada(): boolean {
  * Abre el diálogo de instalación del navegador.
  *
  * Devuelve `"sin-evento"` cuando no hay nada que disparar —Chrome no lo ofreció
- * o ya se usó—, para que quien llama muestre las instrucciones a mano en vez de
- * no hacer nada.
+ * o ya se usó— y `"fallo"` si el navegador rechazó el pedido, para que quien
+ * llama muestre las instrucciones a mano en vez de no hacer nada.
+ *
+ * EL EVENTO SE DESCARTA DESPUÉS DEL `await`, NO ANTES
+ *
+ * Descartarlo antes parece más prolijo —el evento ya está usado— y es un error
+ * que se ve en pantalla: el estado cambia en el mismo tick que el click, así
+ * que en el render siguiente el botón desaparece y en su lugar aparece «Chrome
+ * no ofreció el botón de instalar», que la persona lee **mientras el diálogo
+ * de Chrome le está pidiendo confirmación encima**. De paso dejaba inalcanzable
+ * el estado «Esperando...» de la pantalla. El doble toque lo frena el `disabled`
+ * del botón, y si algo se cuela igual, el `try` de abajo lo atrapa.
  */
-export async function dispararInstalacion(): Promise<"accepted" | "dismissed" | "sin-evento"> {
+export async function dispararInstalacion(): Promise<
+  "accepted" | "dismissed" | "sin-evento" | "fallo"
+> {
   const evento = instantanea.evento;
   if (!evento) return "sin-evento";
 
-  // Se descarta **antes** de esperar la respuesta: el diálogo es modal, pero un
-  // doble toque rápido alcanzaría para llamar a `prompt()` dos veces sobre el
-  // mismo evento, que es justo lo que tira.
-  cambiar({ evento: null });
+  try {
+    await evento.prompt();
+    const { outcome } = await evento.userChoice;
 
-  await evento.prompt();
-  const { outcome } = await evento.userChoice;
+    // Si dijo que no, la barra no vuelve a molestar en esta sesión. La pantalla
+    // `/instalar` sí sigue disponible: ahí fue a propósito.
+    cambiar(outcome === "dismissed" ? { evento: null, rechazada: true } : { evento: null });
 
-  // Si dijo que no, la barra no vuelve a molestar en esta sesión. La pantalla
-  // `/instalar` sí sigue disponible: ahí fue a propósito.
-  if (outcome === "dismissed") cambiar({ rechazada: true });
-
-  return outcome;
+    return outcome;
+  } catch {
+    // `prompt()` tira si el evento ya se había usado o si el navegador no lo
+    // considera un gesto de la persona. Sin esto queda una promesa rechazada
+    // sin manejar y la pantalla colgada en «Esperando...». El evento se
+    // descarta igual: si tiró, no sirve más, y quien llama cae en las
+    // instrucciones del menú de Chrome, que siempre funcionan.
+    cambiar({ evento: null });
+    return "fallo";
+  }
 }
