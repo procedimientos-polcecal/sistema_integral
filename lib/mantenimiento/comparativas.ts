@@ -23,12 +23,23 @@ import {
  *
  * El orden es el de la planilla. "Otros" es donde cae lo que no tiene sector
  * propio, y por eso tiene que existir siempre.
+ *
+ * **Esta lista se queda vieja sola y no avisa.** `Cantera` y `Despacho` las
+ * agregaron a la planilla después de escribir el módulo, y hasta el 16/10/2026
+ * el sistema no las conocía: la sincronización no las leía —sus cuatro
+ * cotizaciones, las tres de la OS 240 y la de la OS 250, no existían en el
+ * espejo— y una cotización cargada desde la app para esos sectores se escribía
+ * en "Otros", que es adonde `pestanaDeSector` manda lo que no reconoce. Nada
+ * falla: la fila entra, el número vuelve bien, y quien va a buscarla a la
+ * pestaña de su sector no la encuentra. Por eso la sincronización ahora
+ * compara esta lista contra las pestañas que la planilla tiene de verdad y lo
+ * dice en el resultado.
  */
 export const COMPARATIVA_PESTANAS = [
   "Planta Filler 2", "Planta Filler 1", "Compresores", "Molienda de cal",
   "Calcinación", "Planta 0-2 mm", "Planta de trituracion 1",
-  "Planta de trituracion 2", "Planta de Trituracion 3", "Hidratacion",
-  "Edificios", "Otros",
+  "Planta de trituracion 2", "Planta de Trituracion 3", "Cantera",
+  "Hidratacion", "Edificios", "Otros", "Despacho",
 ] as const;
 
 /** Columna de cada dato, contando desde A = 0. */
@@ -63,6 +74,22 @@ const PESTANA_POR_NOMBRE = new Map(
  */
 export function pestanaDeSector(sector: string | null | undefined): string {
   return PESTANA_POR_NOMBRE.get(normalizar(sector)) ?? "Otros";
+}
+
+/**
+ * Qué pestañas tiene la planilla que el sistema no conoce.
+ *
+ * Es el aviso que faltó cuando aparecieron `Cantera` y `Despacho`: una pestaña
+ * nueva no rompe nada —las cotizaciones de ese sector caen en "Otros" y la
+ * sincronización ni las mira—, así que sin esto se nota el día que alguien va
+ * a buscar una cotización a la pestaña de su sector y no está.
+ *
+ * Se compara normalizado, por lo mismo que `pestanaDeSector`: la planilla
+ * escribe "Calcinación" y el acento no puede decidir si una pestaña es nueva.
+ */
+export function pestanasQueFaltan(enLaPlanilla: readonly string[]): string[] {
+  const conocidas = new Set(COMPARATIVA_PESTANAS.map(normalizar));
+  return enLaPlanilla.filter((p) => !conocidas.has(normalizar(p)));
 }
 
 export interface CotizacionLeida {

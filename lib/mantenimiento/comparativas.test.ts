@@ -3,7 +3,7 @@ import { monto, porcentaje, siNo } from "./planilla";
 import {
   COMPARATIVA_PESTANAS, pestanaDeSector, filaDeComparativa,
   filaParaComparativa, coincideLaFila, porOrdenDeServicio, resumenDeCotizaciones,
-  pareceCotizacion,
+  pareceCotizacion, pestanasQueFaltan,
 } from "./comparativas";
 
 describe("pestanaDeSector", () => {
@@ -21,9 +21,38 @@ describe("pestanaDeSector", () => {
     expect(pestanaDeSector(null)).toBe("Otros");
   });
 
-  it("tiene las doce pestañas de la planilla", () => {
-    expect(COMPARATIVA_PESTANAS).toHaveLength(12);
+  it("tiene las catorce pestañas de la planilla", () => {
+    expect(COMPARATIVA_PESTANAS).toHaveLength(14);
     expect(COMPARATIVA_PESTANAS).toContain("Otros");
+  });
+
+  /*
+   * Cantera y Despacho se agregaron a la planilla después de escribir el
+   * módulo, y nada avisó: sus cotizaciones iban a parar a "Otros" mientras la
+   * sincronización ni siquiera leía esas dos pestañas. Medido el 16/10/2026
+   * contra la planilla: cuatro cotizaciones —las tres de la OS 240 en Cantera
+   * y la de la OS 250 en Despacho— no existían en el espejo.
+   */
+  it("conoce las pestañas que la planilla sumó después", () => {
+    expect(pestanaDeSector("Cantera")).toBe("Cantera");
+    expect(pestanaDeSector("Despacho")).toBe("Despacho");
+  });
+});
+
+describe("pestanasQueFaltan", () => {
+  it("no dice nada cuando la planilla es la que el sistema conoce", () => {
+    expect(pestanasQueFaltan([...COMPARATIVA_PESTANAS])).toEqual([]);
+  });
+
+  it("nombra la pestaña nueva, que es la que nadie iba a notar", () => {
+    expect(pestanasQueFaltan([...COMPARATIVA_PESTANAS, "Laboratorio"]))
+      .toEqual(["Laboratorio"]);
+  });
+
+  it("el acento no hace nueva a una pestaña que ya está", () => {
+    // La planilla escribe "Calcinación" y la lista también, pero "Hidratacion"
+    // va sin acento: que el aviso dependa de eso lo volvería ruido.
+    expect(pestanasQueFaltan(["Calcinacion", "Hidratación", "  OTROS "])).toEqual([]);
   });
 });
 

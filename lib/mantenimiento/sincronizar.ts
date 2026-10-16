@@ -17,7 +17,7 @@ import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlace
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
 import {
-  COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion,
+  COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
 } from "@/lib/mantenimiento/comparativas";
 import {
   OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
@@ -381,6 +381,18 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   let leidas = 0;
   const sinParsear: string[] = [];
 
+  // Una pestaña que la planilla sumó y el sistema no conoce no rompe nada, y
+  // ése es el problema: sus cotizaciones no se leen nunca y las que se carguen
+  // desde la app para ese sector caen en "Otros". Pasó con `Cantera` y
+  // `Despacho`. Que la planilla no se pueda listar no frena la corrida: es un
+  // aviso, no la sincronización.
+  let pestanasNuevas: string[] = [];
+  try {
+    pestanasNuevas = pestanasQueFaltan(await listarPestanas(planilla));
+  } catch {
+    // Sin la lista no hay aviso que dar, y las pestañas conocidas se leen igual.
+  }
+
   for (const pestana of COMPARATIVA_PESTANAS) {
     let filas: string[][];
     try {
@@ -510,7 +522,15 @@ export async function sincronizarComparativas(): Promise<Resultado> {
       `${sinParsear.slice(0, 20).join(", ")}${sinParsear.length > 20 ? "…" : ""}.`
     : null;
 
-  const aviso = [sobrantes, celdasRepetidas, noEntraron].filter(Boolean).join(" ") || null;
+  const avisoPestanas = pestanasNuevas.length > 0
+    ? `La planilla tiene ${pestanasNuevas.length} pestaña(s) que el sistema no conoce: ` +
+      `${pestanasNuevas.join(", ")}. Sus cotizaciones no se leen, y una cargada desde ` +
+      "la app para esos sectores va a parar a «Otros». Hay que sumarlas a " +
+      "COMPARATIVA_PESTANAS."
+    : null;
+
+  const aviso =
+    [sobrantes, celdasRepetidas, noEntraron, avisoPestanas].filter(Boolean).join(" ") || null;
 
   const ordenes = new Set(unicos.map((c) => c.os_number)).size;
   await registrarSincronizacion({
@@ -523,6 +543,7 @@ export async function sincronizarComparativas(): Promise<Resultado> {
     ...(sinParsear.length > 0 ? { sin_parsear: sinParsear } : {}),
     ...(sobrantes ? { sobrantes } : {}),
     ...(celdasRepetidas ? { celdas_repetidas: repetidos } : {}),
+    ...(pestanasNuevas.length > 0 ? { pestanas_nuevas: pestanasNuevas } : {}),
   });
 }
 

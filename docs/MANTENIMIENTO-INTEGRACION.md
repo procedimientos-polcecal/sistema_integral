@@ -329,9 +329,10 @@ Son **dos planillas**:
   encabezado** y no por posición, con alias por columna. Las OS nuevas se cargan
   en `SERVICIOS`, la hoja maestra.
 - **Comparativas** (`COMPARATIVA DE PROVEEDORES MANTENIMIENTO`): una pestaña por
-  sector, quince columnas fijas A..O iguales en las doce, así que se lee por
+  sector, quince columnas fijas A..O iguales en todas, así que se lee por
   posición. Varias filas con el mismo N° de OS son las ofertas que se
-  compararon; `ELECCIÓN` marca cuál se tomó.
+  compararon; `ELECCIÓN` marca cuál se tomó. Son **catorce** desde el
+  16/10/2026 — ver abajo.
 
 ### Verificado contra la planilla de comparativas
 
@@ -350,6 +351,35 @@ Son **dos planillas**:
   estar bien —plazo, garantía, quién puede venir mañana—, pero se muestra.
 - Una fila de "Planta Filler 2" tiene la fecha en 2026 mientras sus hermanas
   dicen 2025: es un error de tipeo de la planilla, no de la lectura.
+
+### Una pestaña nueva en la planilla no rompe nada, y por eso muerde
+
+La lista de pestañas está escrita en el código (`COMPARATIVA_PESTANAS`), porque
+es la que decide **a cuál va** una cotización cargada desde la app:
+`pestanaDeSector` manda a `Otros` todo lo que no reconoce, que es lo correcto
+para un sector sin pestaña propia —`Equipos móviles`, `Laboratorio`— y lo
+incorrecto para una pestaña que existe y el código no conoce.
+
+`Cantera` y `Despacho` se agregaron a la planilla después de escribir el módulo.
+Hasta el **16/10/2026** el sistema no las tenía, y nada lo dijo en ningún lado:
+
+- La sincronización **no leía esas dos pestañas**. Sus cuatro cotizaciones —las
+  tres de la OS 240 en `Cantera` y la de la OS 250 en `Despacho`— no existían en
+  el espejo: la app mostraba esas OS sin ninguna oferta.
+- Una cotización cargada desde la app para un sector de ésos **se escribía en
+  `Otros`**. Sale bien: la fila entra, el número de fila vuelve, el espejo
+  queda consistente. Lo único que pasa es que quien va a buscarla a la pestaña
+  de su sector no la encuentra. Así apareció: se cargó la cotización de la OS
+  250 (sector Despacho) y fue a `Otros!7` mientras la pestaña `Despacho` seguía
+  con la fila cargada a mano.
+
+Por eso **la sincronización ahora compara** la lista del código contra las
+pestañas que la planilla tiene de verdad (`pestanasQueFaltan`) y nombra las que
+sobran en el resultado y en el registro. Es un aviso, no un error: las pestañas
+conocidas se leen igual, y si la planilla no se puede listar la corrida sigue.
+
+Sumar una pestaña es agregarla a `COMPARATIVA_PESTANAS` **en el orden de la
+planilla**, y nada más: el resto del módulo la toma de ahí.
 
 ### La trampa de los decimales
 
