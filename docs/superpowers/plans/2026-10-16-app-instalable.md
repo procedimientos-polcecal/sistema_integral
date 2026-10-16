@@ -500,6 +500,7 @@ git commit -m "fix(app): las ocho tablas que estiraban la pagina en el telefono"
 - `app/(app)/rrhh/vacaciones/VacacionesClient.tsx` (88)
 - `app/(app)/taller-vial/page.tsx` (180)
 - `components/rrhh/FichadaEditModal.tsx` (318)
+- `app/(app)/trituracion/partes/PartesClient.tsx` (369) — **sólo la 369**. Las de las líneas 124 y 127 de ese mismo archivo son el calendario y no se tocan
 - `app/(app)/cantera/voladuras/[codigo]/VoladuraClient.tsx` (541, 575) — las de 12
 
 - [ ] **Paso 1: las 20 de tres columnas**
