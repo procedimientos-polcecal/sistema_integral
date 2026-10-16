@@ -3,7 +3,8 @@ import { monto, porcentaje, siNo } from "./planilla";
 import {
   COMPARATIVA_PESTANAS, pestanaDeSector, filaDeComparativa,
   filaParaComparativa, coincideLaFila, porOrdenDeServicio, resumenDeCotizaciones,
-  pareceCotizacion, pestanasQueFaltan,
+  pareceCotizacion, pestanasQueFaltan, elTotalLoCalculaLaPlanilla,
+  COLUMNA_PRECIO_TOTAL,
 } from "./comparativas";
 
 describe("pestanaDeSector", () => {
@@ -246,6 +247,113 @@ describe("filaParaComparativa", () => {
   it("deja vacío lo que no está", () => {
     expect(filaParaComparativa(cot)[10]).toBe("");
     expect(filaParaComparativa(cot)[13]).toBe("");
+  });
+
+  /*
+   * La J es una fórmula de la planilla y escribirla la mata.
+   *
+   * Medido el 16/10/2026 contra la planilla: las filas cargadas a mano tienen
+   * `=H6+(H6*I6)` y la única que había escrito el SdG —la cotización de la OS
+   * 250— tenía el número 2395800 pelado. Se veía a simple vista porque al
+   * perder la fórmula perdió también el formato de moneda: las demás decían
+   * " $2.395.800,00" y ésa, "2395800".
+   *
+   * Importa porque acá manda la planilla: si después alguien corrige el precio
+   * unitario, todas las filas recalculan su total menos la que cargó el
+   * sistema, y nada avisa.
+   */
+  it("no pisa la fórmula del total cuando el total es el que ella calcularía", () => {
+    // 1.972.500 + 21% = 2.386.725, que es justo lo que trae la cotización.
+    expect(filaParaComparativa(cot)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("escribe el total cuando no sale de esa cuenta", () => {
+    // El formulario deja pisar el total a propósito: a veces el proveedor
+    // cotiza uno que no es unitario + IVA.
+    const pisado = { ...cot, precio_total: "2300000" };
+    expect(filaParaComparativa(pisado)[COLUMNA_PRECIO_TOTAL]).toBe("2300000");
+  });
+
+  it("tolera los centavos del redondeo del formulario", () => {
+    // El formulario hace Math.round(u * (1 + iva) * 100) / 100, así que el
+    // total que manda puede diferir del de la planilla en menos de un centavo.
+    // 308.487 + 21% = 373.269,27 exacto, pero el caso que importa es el que
+    // redondea: 1.234.567,89 + 21% = 1.493.827,1469.
+    const redondeado = {
+      ...cot, precio_unitario: "1234567.89", precio_total: "1493827.15",
+    };
+    expect(filaParaComparativa(redondeado)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("sin total deja que lo calcule la planilla", () => {
+    const sinTotal = { ...cot, precio_total: null };
+    expect(filaParaComparativa(sinTotal)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("sigue teniendo quince celdas aunque alguna no se toque", () => {
+    expect(filaParaComparativa(cot)).toHaveLength(15);
+  });
+});
+
+describe("elTotalLoCalculaLaPlanilla", () => {
+  it("reconoce la cuenta de la planilla, H + H*I", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: "2395800",
+    })).toBe(true);
+  });
+
+  it("acepta el IVA en cero, que es como está la mitad de las filas", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "18000000", iva: 0, precio_total: "18000000",
+    })).toBe(true);
+  });
+
+  it("toma el IVA que falta como cero", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1000", iva: null, precio_total: "1000",
+    })).toBe(true);
+  });
+
+  it("dice que no cuando el total está pisado a mano", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: "2000000",
+    })).toBe(false);
+  });
+
+  /*
+   * Sin precio unitario la fórmula daría cero, así que el total cotizado es lo
+   * único que hay: va escrito aunque pise la fórmula.
+   */
+  it("dice que no cuando hay total pero no hay unitario", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: null, iva: 0.21, precio_total: "2000000",
+    })).toBe(false);
+  });
+
+  it("dice que sí cuando no hay total que escribir", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: null,
+    })).toBe(true);
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: null, iva: null, precio_total: null,
+    })).toBe(true);
+  });
+
+  /*
+   * El IVA viaja como fracción —0,21 y no 21—, que es como lo guarda la
+   * planilla y como lo manda el formulario. Tomarlo como porcentaje daría
+   * veintiún veces el precio y ninguna cotización coincidiría nunca.
+   */
+  it("el IVA es la fracción, no el porcentaje", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1000", iva: 21, precio_total: "1210",
+    })).toBe(false);
+  });
+
+  it("lee el total escrito a la argentina", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1.980.000", iva: 0.21, precio_total: "2.395.800,00",
+    })).toBe(true);
   });
 });
 

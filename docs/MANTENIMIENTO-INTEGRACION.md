@@ -407,6 +407,58 @@ IVA va como fracción, que es como lo guarda —muestra "21%" y vale 0.21—.
 Sacar una cotización **vacía** su fila en vez de borrarla, por lo mismo de
 siempre: borrarla correría todas las de abajo.
 
+#### El PRECIO TOTAL no es un número: es una fórmula
+
+La columna `J` de las catorce pestañas tiene `=H+(H*I)` —precio unitario más
+IVA— en las 199 filas de cada una. **Escribirla la mata**, y eso es lo que hacía
+el alta hasta el **16/10/2026**: armaba las quince celdas y mandaba el total
+como número literal.
+
+Medido contra la planilla ese día: las filas cargadas a mano tenían
+`=H6+(H6*I6)` y la única escrita por el SdG —la cotización de la OS 250— tenía
+`2395800` pelado. Se veía a simple vista, porque al perder la fórmula perdió
+también el formato de moneda: las demás decían " $2.395.800,00" y ésa,
+"2395800".
+
+Importa porque **acá manda la planilla**: si después alguien corrige el precio
+unitario, todas las filas recalculan su total menos la que cargó el sistema, y
+nada avisa.
+
+El arreglo usa lo que `agregarFila` ya sabía hacer: un `null` en el arreglo es
+"esta celda no se toca" y la escritura se parte en tramos salteándola. Quién
+decide es `elTotalLoCalculaLaPlanilla()`, y la regla tiene tres casos:
+
+- **El total es el que daría la fórmula** → la `J` va en `null` y la fórmula
+  sobrevive. La comparación tolera **un centavo**: el formulario redondea
+  (`Math.round(u * (1 + iva) * 100) / 100`) y la planilla no, así que pedir
+  igualdad exacta entre floats diría "no coincide" en cotizaciones que
+  coinciden.
+- **El total está pisado a mano** → va el número, que es lo correcto y
+  deliberado: el formulario deja pisarlo porque a veces el proveedor cotiza un
+  total que no sale de esa cuenta. Ahí la fórmula estorba.
+- **No hay precio unitario** → va el número igual: la fórmula daría cero y el
+  total cotizado es lo único que hay.
+
+Las otras celdas vacías —`K` vigencia, `L` plazos, `M` condiciones, `N` otras
+especificaciones— siguen yendo en `""` y no en `null`. Se miró: ahí no hay
+fórmula que cuidar, y dejarlas sin tocar heredaría lo que tuviera esa fila de
+antes.
+
+El borrado tiene el mismo problema por el otro lado —vaciaba las quince
+columnas, fórmula incluida— y se resolvió con la misma función: la `J` se vacía
+**sólo** cuando el alta había escrito ahí un número, que es el único caso en que
+ya no hay fórmula que salvar; dejarlo sería un número suelto en una fila por lo
+demás vacía. Cuando la fórmula está viva no se la toca, y la fila queda
+mostrando " $0,00" como todas las vacías de la pestaña.
+
+Un detalle que conviene saber antes de tocar esto: la fórmula de `J` **no es la
+misma en toda la planilla**. De cierta fila en adelante —la 26 en
+`Planta de Trituracion 3`, la 98 en `Planta Filler 2`— el relleno cambia a
+`=G*H*(1-#REF!)*(1+I)`, resto de una versión vieja del libro que tenía columna
+de descuento. Hoy no molesta porque las filas cargadas son pocas y las nuevas
+caen muy por encima de ese límite, pero es la razón por la que el borrado **no
+restaura** la fórmula: no hay una sola que restaurar.
+
 ### Una columna que faltaba
 
 `os_comparativas` guardaba el equipo sólo como texto libre, mientras

@@ -231,6 +231,9 @@ export function resumenDeCotizaciones<T extends Comparable>(cotizaciones: T[]) {
 /** La columna ELECCIÓN, que es la única que la app cambia sola. */
 export const COLUMNA_ELECCION = COL.eleccion;
 
+/** La columna PRECIO TOTAL, que en la planilla es una fórmula y no un número. */
+export const COLUMNA_PRECIO_TOTAL = COL.precioTotal;
+
 /** Cuántas columnas tiene la planilla: A..O. */
 export const COLUMNAS_COMPARATIVA = 15;
 
@@ -257,13 +260,51 @@ const fechaAR = (iso: string | null | undefined): string =>
   iso ? new Date(String(iso).slice(0, 10) + "T12:00:00").toLocaleDateString("es-AR") : "";
 
 /**
+ * Si el total de la cotización es el que la planilla calcularía sola.
+ *
+ * La columna J no es un número: es `=H+(H*I)`, el precio unitario más el IVA,
+ * y está así en las catorce pestañas. Cuando el total que viene del formulario
+ * es ése, escribirlo sería cambiar una fórmula por su resultado de hoy.
+ *
+ * El IVA viaja como fracción —0,21, que es como lo guarda la planilla y como
+ * lo manda el formulario—, así que la cuenta es `H + H*I` tal cual.
+ *
+ * Sin total no hay nada que escribir y la fórmula hace el trabajo. Sin precio
+ * unitario pasa lo contrario: la fórmula daría cero y el único número que hay
+ * es el total cotizado, así que ése va escrito aunque la pise.
+ *
+ * La comparación tolera un centavo porque el formulario redondea
+ * (`Math.round(u * (1 + iva) * 100) / 100`) y la planilla no: pedir igualdad
+ * exacta entre dos floats daría "no coincide" en cotizaciones que coinciden.
+ */
+export function elTotalLoCalculaLaPlanilla(c: {
+  precio_unitario?: string | null;
+  iva?: number | null;
+  precio_total?: string | null;
+}): boolean {
+  const total = monto(c.precio_total);
+  if (total === null) return true;
+
+  const unitario = monto(c.precio_unitario);
+  if (unitario === null) return false;
+
+  const calculado = unitario + unitario * (c.iva ?? 0);
+  return Math.abs(total - calculado) <= 0.01;
+}
+
+/**
  * Una cotización como las quince celdas de la planilla.
  *
  * El orden es el de las columnas y no puede cambiar: la planilla se lee por
  * posición.
+ *
+ * Un `null` es "esta celda no se toca" —`agregarFila` parte la escritura en
+ * tramos y la saltea—, y es lo que salva la fórmula del PRECIO TOTAL. Las
+ * demás celdas van en `""` aunque estén vacías: ahí no hay fórmula que
+ * cuidar, y dejarlas sin tocar heredaría lo que tuviera la fila de antes.
  */
-export function filaParaComparativa(c: ParaEscribir): (string | number)[] {
-  const fila = new Array(COLUMNAS_COMPARATIVA).fill("");
+export function filaParaComparativa(c: ParaEscribir): (string | number | null)[] {
+  const fila: (string | number | null)[] = new Array(COLUMNAS_COMPARATIVA).fill("");
 
   fila[COL.osNumber] = c.os_number;
   fila[COL.fecha] = fechaAR(c.fecha);
@@ -274,7 +315,7 @@ export function filaParaComparativa(c: ParaEscribir): (string | number)[] {
   fila[COL.proveedor] = c.proveedor;
   fila[COL.precioUnitario] = c.precio_unitario ?? "";
   fila[COL.iva] = c.iva ?? "";
-  fila[COL.precioTotal] = c.precio_total ?? "";
+  fila[COL.precioTotal] = elTotalLoCalculaLaPlanilla(c) ? null : c.precio_total ?? "";
   fila[COL.vigenciaHasta] = fechaAR(c.vigencia_hasta);
   fila[COL.plazos] = c.plazos ?? "";
   fila[COL.condicionesPago] = c.condiciones_pago ?? "";
