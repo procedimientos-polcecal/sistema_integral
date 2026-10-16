@@ -258,6 +258,28 @@ Quedan tres pantallas sin migrar, porque otra sesión las tenía tomadas en el
 `trituracion/partes`. El detalle está en
 [el spec](docs/superpowers/specs/2026-10-02-desplegables-con-buscador-design.md).
 
+## Y una grilla de tres columnas lleva breakpoint
+
+Es la gemela exacta de la regla de arriba: **escribir `grid-cols-3` sin
+breakpoint no rompe nada, y ése es el problema.** No hay error, no hay test que
+lo note, `tsc` y el build pasan; esa pantalla simplemente queda inusable en el
+teléfono y nadie se entera hasta que alguien la abre desde la cantera. Desde el
+16/10/2026 el SdG se instala en el celular, así que eso ya le pasa a la mitad del
+equipo.
+
+El ancho útil es **343 px** —los 375 del teléfono menos los 32 de padding del
+layout—, así que tres columnas quedan en 114 px cada una y ahí no entra una
+etiqueta con su campo. Va `grid-cols-1 sm:grid-cols-3`. Dos columnas entran
+—165 px— salvo que lleven un campo de texto con su rótulo, y eso es un juicio que
+el escaneo no hace.
+
+Lo detecta `node scripts/revisar-responsive.mjs`, que busca cuatro cosas: grillas
+de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343, y
+`<table>` sin un contenedor con scroll. El escaneo a mano del 16/10/2026 encontró
+30 lugares que no entraban en 313 pantallas; el script es ese escaneo convertido
+en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
+hay que medirla a mano.
+
 ## Cómo se verifica
 
 ```bash
@@ -265,10 +287,11 @@ npm test              # vitest — la lógica pura, que es donde están las deci
 npx tsc --noEmit
 npm run build
 node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
+node scripts/revisar-responsive.mjs         # lo que no entra en un telefono de 375 px
 ```
 
-**El último es el que atrapa lo que los otros tres no pueden.** Los tres primeros
-miran **el disco**; Vercel construye **el árbol commiteado**, y en este repo esos
+**`revisar-arbol-commiteado` es el que atrapa lo que los otros tres no pueden.**
+Los tres primeros miran **el disco**; Vercel construye **el árbol commiteado**, y en este repo esos
 dos no son lo mismo: como suele haber otra sesión en el mismo árbol, se commitea
 con rutas explícitas y a veces se pushea armando el árbol con plumbing, y las dos
 cosas copian sólo lo que se nombra. Un archivo nuevo que quedó *staged* y nunca
@@ -279,13 +302,24 @@ local no podía reproducir. El script resuelve todos los imports del árbol de g
 contra sí mismo; sin argumento mira `origin/main`, y acepta una ref para revisar
 otra cosa.
 
-**Las cuatro también corren solas** en cada push y en cada PR, desde
+**Las primeras cuatro también corren solas** en cada push y en cada PR, desde
 `.github/workflows/verificar.yml` (22/09/2026). Correrlas a mano sigue siendo lo
 que conviene —el CI tarda minutos y avisa tarde—, pero ya no es lo único que hay:
 antes, lo que decidía si un cambio estaba bien era que alguien se acordara.
 
+**`revisar-responsive` es la quinta y todavía NO está en el CI**, por el mismo
+motivo que el lint: los 5 calendarios del mes son falsos positivos conocidos y un
+CI que está siempre rojo no lo mira nadie. Están en una lista de excepciones del
+propio script, con el porqué; cuando esa lista esté estable se agrega el paso.
+Mientras tanto sale 1 si hay algún ROMPE, y hoy da **ROMPE 0 · APRETADO 0 ·
+MIRAR 0**: cualquier cosa que aparezca es de lo que uno acaba de escribir.
+
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
+- **Si cambiás `public/logo.png`, corré `node scripts/generar-iconos.mjs`.** Los
+  íconos del manifest se commitean generados, así que un logo nuevo sin esa
+  pasada deja la app instalada con el ícono viejo y **nada avisa**: ni el build,
+  ni los tests, ni el navegador.
 - `npm run lint` **casi pasa**. Desde `a7fd2f1` hay `eslint.config.mjs` y el
   lint corre; el 05/10/2026 se cerraron 20 de los 23 errores que quedaban —los
   `react-hooks/set-state-in-effect` pasaron a `useCargar` o a ajustarse durante

@@ -445,10 +445,13 @@ git commit -m "feat(app): un script que busca lo que no entra en un telefono"
 
 ---
 
-### Tarea 7: las 8 tablas sin scroll
+### Tarea 7: las 5 tablas sin scroll
 
 **Archivos:**
 - Modificar: `app/(app)/produccion/resumenes/ResumenesClient.tsx` (líneas 188, 301, 383)
+  — **resultaron falsos positivos**: ya tienen el `overflow-x-auto` que les pone
+  `Envoltorio`, así que no se tocaron y fueron a la lista de excepciones del
+  script. Por eso son 5 tablas y no 8
 - Modificar: `app/(app)/inventario/lista/ListaClient.tsx` (135, 242)
 - Modificar: `app/(app)/cantera/acarreo/AcarreoClient.tsx` (161)
 - Modificar: `app/(app)/remises/page.tsx` (103)
@@ -478,7 +481,7 @@ npx tsc --noEmit
 ```
 ```bash
 git add "app/(app)/produccion/resumenes/ResumenesClient.tsx" "app/(app)/inventario/lista/ListaClient.tsx" "app/(app)/cantera/acarreo/AcarreoClient.tsx" "app/(app)/remises/page.tsx" "app/(app)/rrhh/liquidaciones/LiquidacionesClient.tsx"
-git commit -m "fix(app): las ocho tablas que estiraban la pagina en el telefono"
+git commit -m "fix(app): cinco tablas sin scroll propio estiraban la pagina en el telefono"
 ```
 
 ---

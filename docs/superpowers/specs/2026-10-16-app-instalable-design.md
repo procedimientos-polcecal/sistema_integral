@@ -226,7 +226,7 @@ ROMPE  APRET  MIRAR  pantalla
     0      1      0  /rrhh/vacaciones
     0      1      0  /taller-vial
     0      1      0  (componente compartido)
-    0      0      3  /produccion/resumenes
+    0      0      3  /produccion/resumenes     (las 3 ya tienen scroll heredado: no se tocan)
     0      0      2  /inventario/lista
     0      0      1  /cantera/acarreo
     0      0      1  /remises
