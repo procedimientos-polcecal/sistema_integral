@@ -385,7 +385,12 @@ export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLi
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6 items-start">
+      {/* Apiladas abajo de `sm`: en 375 px, dos columnas dejan 159 px cada una y
+          40 se los come el padding de la tarjeta, así que quedan 119 px de
+          contenido. Adentro va el formulario de importar el Excel del reloj
+          —botón de archivo, selectores de columna—, que ahí no entra. El script
+          de responsive no lo ve porque corta en tres columnas. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6 items-start">
         <details className="card p-5">
           <summary className="font-medium text-slate-700 cursor-pointer flex items-center gap-1.5">
             Importar archivo del reloj (respaldo)
