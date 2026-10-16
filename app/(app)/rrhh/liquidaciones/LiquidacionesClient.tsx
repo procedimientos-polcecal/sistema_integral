@@ -306,48 +306,50 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
         {!liquidaciones ? (
           <p className="text-slate-500 text-sm">Cargando...</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-500 border-b">
-                <th className="pb-2">Empleado</th>
-                <th className="pb-2">Tipo</th>
-                <th className="pb-2">Período</th>
-                <th className="pb-2">Hs. normales</th>
-                <th className="pb-2">Hs. extra 50%</th>
-                <th className="pb-2">Hs. extra 100%</th>
-                <th className="pb-2">Total</th>
-                <th className="pb-2">Estado</th>
-                <th className="pb-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {liquidaciones.map((l) => (
-                <tr key={l.id} className="border-b last:border-0">
-                  <td className="py-2">{l.empleados?.apellido}, {l.empleados?.nombre}</td>
-                  <td className="py-2">{l.tipo}</td>
-                  <td className="py-2">
-                    {new Date(l.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} -{" "}
-                    {new Date(l.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}
-                  </td>
-                  <td className="py-2">{Number(l.horas_normales).toFixed(1)}</td>
-                  <td className="py-2">{Number(l.horas_extra_50).toFixed(1)}</td>
-                  <td className="py-2">{Number(l.horas_extra_100).toFixed(1)}</td>
-                  <td className="py-2 font-medium">${Number(l.total_bruto).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
-                  <td className="py-2">{l.estado}</td>
-                  <td className="py-2 text-right whitespace-nowrap">
-                    <a href={`/api/rrhh/liquidaciones/${l.id}/export`} className="text-blue-600 underline text-sm">Exportar</a>
-                    {l.estado === "BORRADOR" && (
-                      <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm ml-3">Cerrar</button>
-                    )}
-                    <button onClick={() => eliminar(l)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b">
+                  <th className="pb-2">Empleado</th>
+                  <th className="pb-2">Tipo</th>
+                  <th className="pb-2">Período</th>
+                  <th className="pb-2">Hs. normales</th>
+                  <th className="pb-2">Hs. extra 50%</th>
+                  <th className="pb-2">Hs. extra 100%</th>
+                  <th className="pb-2">Total</th>
+                  <th className="pb-2">Estado</th>
+                  <th className="pb-2"></th>
                 </tr>
-              ))}
-              {liquidaciones.length === 0 && (
-                <tr><td colSpan={9} className="py-4 text-center text-slate-400">Todavía no hay liquidaciones generadas</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {liquidaciones.map((l) => (
+                  <tr key={l.id} className="border-b last:border-0">
+                    <td className="py-2">{l.empleados?.apellido}, {l.empleados?.nombre}</td>
+                    <td className="py-2">{l.tipo}</td>
+                    <td className="py-2">
+                      {new Date(l.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} -{" "}
+                      {new Date(l.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}
+                    </td>
+                    <td className="py-2">{Number(l.horas_normales).toFixed(1)}</td>
+                    <td className="py-2">{Number(l.horas_extra_50).toFixed(1)}</td>
+                    <td className="py-2">{Number(l.horas_extra_100).toFixed(1)}</td>
+                    <td className="py-2 font-medium">${Number(l.total_bruto).toLocaleString("es-AR", { maximumFractionDigits: 0 })}</td>
+                    <td className="py-2">{l.estado}</td>
+                    <td className="py-2 text-right whitespace-nowrap">
+                      <a href={`/api/rrhh/liquidaciones/${l.id}/export`} className="text-blue-600 underline text-sm">Exportar</a>
+                      {l.estado === "BORRADOR" && (
+                        <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm ml-3">Cerrar</button>
+                      )}
+                      <button onClick={() => eliminar(l)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+                {liquidaciones.length === 0 && (
+                  <tr><td colSpan={9} className="py-4 text-center text-slate-400">Todavía no hay liquidaciones generadas</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

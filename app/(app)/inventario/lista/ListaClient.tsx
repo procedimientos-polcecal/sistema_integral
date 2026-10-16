@@ -132,54 +132,56 @@ export default function ListaClient({
           )}
         </header>
 
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-2 text-left">Nombre</th>
-              <th className="px-4 py-2 text-left">Destino habitual</th>
-              <th className="px-4 py-2 text-left">Empleado</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {visibles(solicitantes).map((s) => (
-              <tr key={s.id} className={s.activo ? "" : "bg-slate-50 text-slate-400"}>
-                <td className="px-4 py-2">{s.nombre}</td>
-                <td className="px-4 py-2">
-                  {puedeEditar ? (
-                    <Select
-                      value={s.destino_id ?? ""}
-                      disabled={ocupado}
-                      onChange={(e) => editar("solicitante", s.id, { destino_id: e.target.value })}
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                    >
-                      <option value="">— sin destino</option>
-                      {destinos.filter((d) => d.activo).map((d) => (
-                        <option key={d.id} value={d.id}>{d.nombre}</option>
-                      ))}
-                    </Select>
-                  ) : (
-                    nombreDeDestino(s.destino_id) ?? "—"
-                  )}
-                </td>
-                <td className="px-4 py-2 text-xs text-slate-500">
-                  {s.empleado_id ? "del padrón" : "sin enganchar"}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {puedeEditar && (
-                    <button
-                      disabled={ocupado}
-                      onClick={() => editar("solicitante", s.id, { activo: !s.activo })}
-                      className="text-xs text-slate-500 underline hover:text-slate-900 disabled:opacity-40"
-                    >
-                      {s.activo ? "Dar de baja" : "Reactivar"}
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-2 text-left">Nombre</th>
+                <th className="px-4 py-2 text-left">Destino habitual</th>
+                <th className="px-4 py-2 text-left">Empleado</th>
+                <th className="px-4 py-2"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibles(solicitantes).map((s) => (
+                <tr key={s.id} className={s.activo ? "" : "bg-slate-50 text-slate-400"}>
+                  <td className="px-4 py-2">{s.nombre}</td>
+                  <td className="px-4 py-2">
+                    {puedeEditar ? (
+                      <Select
+                        value={s.destino_id ?? ""}
+                        disabled={ocupado}
+                        onChange={(e) => editar("solicitante", s.id, { destino_id: e.target.value })}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                      >
+                        <option value="">— sin destino</option>
+                        {destinos.filter((d) => d.activo).map((d) => (
+                          <option key={d.id} value={d.id}>{d.nombre}</option>
+                        ))}
+                      </Select>
+                    ) : (
+                      nombreDeDestino(s.destino_id) ?? "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-slate-500">
+                    {s.empleado_id ? "del padrón" : "sin enganchar"}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {puedeEditar && (
+                      <button
+                        disabled={ocupado}
+                        onClick={() => editar("solicitante", s.id, { activo: !s.activo })}
+                        className="text-xs text-slate-500 underline hover:text-slate-900 disabled:opacity-40"
+                      >
+                        {s.activo ? "Dar de baja" : "Reactivar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {puedeEditar && (
           <form
@@ -239,48 +241,50 @@ export default function ListaClient({
           )}
         </header>
 
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-2 text-left">Destino</th>
-              <th className="px-4 py-2 text-left">Sector del sistema</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {visibles(destinos).map((d) => (
-              <tr key={d.id} className={d.activo ? "" : "bg-slate-50 text-slate-400"}>
-                <td className="px-4 py-2 font-medium">{d.nombre}</td>
-                <td className="px-4 py-2">
-                  {puedeEditar ? (
-                    <Select
-                      value={d.sector_id ?? ""}
-                      disabled={ocupado}
-                      onChange={(e) => editar("destino", d.id, { sector_id: e.target.value })}
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                    >
-                      <option value="">— no es un sector</option>
-                      {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                    </Select>
-                  ) : (
-                    nombreDeSector(d.sector_id) ?? "—"
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {puedeEditar && (
-                    <button
-                      disabled={ocupado}
-                      onClick={() => editar("destino", d.id, { activo: !d.activo })}
-                      className="text-xs text-slate-500 underline hover:text-slate-900 disabled:opacity-40"
-                    >
-                      {d.activo ? "Dar de baja" : "Reactivar"}
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-2 text-left">Destino</th>
+                <th className="px-4 py-2 text-left">Sector del sistema</th>
+                <th className="px-4 py-2"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibles(destinos).map((d) => (
+                <tr key={d.id} className={d.activo ? "" : "bg-slate-50 text-slate-400"}>
+                  <td className="px-4 py-2 font-medium">{d.nombre}</td>
+                  <td className="px-4 py-2">
+                    {puedeEditar ? (
+                      <Select
+                        value={d.sector_id ?? ""}
+                        disabled={ocupado}
+                        onChange={(e) => editar("destino", d.id, { sector_id: e.target.value })}
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                      >
+                        <option value="">— no es un sector</option>
+                        {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </Select>
+                    ) : (
+                      nombreDeSector(d.sector_id) ?? "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {puedeEditar && (
+                      <button
+                        disabled={ocupado}
+                        onClick={() => editar("destino", d.id, { activo: !d.activo })}
+                        className="text-xs text-slate-500 underline hover:text-slate-900 disabled:opacity-40"
+                      >
+                        {d.activo ? "Dar de baja" : "Reactivar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {puedeEditar && (
           <form

@@ -158,21 +158,23 @@ export default function AcarreoClient({
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg)]">
                     <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${pct}%` }} />
                   </div>
-                  <table className="mt-3 w-full text-xs">
-                    <tbody className="divide-y divide-[var(--border)]">
-                      {resumen.porTipo.map((p) => (
-                        <tr key={p.tipo}>
-                          <td className="py-1.5 text-[var(--text-secondary)]">{tipoDeAcarreo(p.tipo)?.etiqueta ?? p.tipo}</td>
-                          <td className="py-1.5 text-right text-[var(--text-muted)]">
-                            {num.format(p.cantidad)} {tipoDeAcarreo(p.tipo) && ETIQUETA_UNIDAD[tipoDeAcarreo(p.tipo)!.unidad]}
-                          </td>
-                          <td className="py-1.5 text-right font-medium">
-                            {p.monto === null ? <span className="text-amber-700">sin tarifa</span> : money(p.monto)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="mt-3 w-full text-xs">
+                      <tbody className="divide-y divide-[var(--border)]">
+                        {resumen.porTipo.map((p) => (
+                          <tr key={p.tipo}>
+                            <td className="py-1.5 text-[var(--text-secondary)]">{tipoDeAcarreo(p.tipo)?.etiqueta ?? p.tipo}</td>
+                            <td className="py-1.5 text-right text-[var(--text-muted)]">
+                              {num.format(p.cantidad)} {tipoDeAcarreo(p.tipo) && ETIQUETA_UNIDAD[tipoDeAcarreo(p.tipo)!.unidad]}
+                            </td>
+                            <td className="py-1.5 text-right font-medium">
+                              {p.monto === null ? <span className="text-amber-700">sin tarifa</span> : money(p.monto)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </details>
               );
             })}

@@ -100,31 +100,33 @@ export default async function RemisesDashboardPage() {
           {porTurno.length === 0 ? (
             <p className="empty-state mt-3">Todavía no hay turnos activos configurados.</p>
           ) : (
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
-                  <th className="py-1.5">Turno</th>
-                  <th className="py-1.5 text-right">Presentes</th>
-                  <th className="py-1.5 text-right">Ida</th>
-                  <th className="py-1.5 text-right">Vuelta</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {porTurno.map(({ turno, presentes, ida, vuelta }) => (
-                  <tr key={turno.id}>
-                    <td className="py-1.5">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: turno.color ?? "#94A3B8" }} />
-                        {turno.nombre}
-                      </span>
-                    </td>
-                    <td className="py-1.5 text-right tabular-nums">{presentes}</td>
-                    <td className="py-1.5 text-right tabular-nums">{ida || "—"}</td>
-                    <td className="py-1.5 text-right tabular-nums">{vuelta || "—"}</td>
+            <div className="overflow-x-auto">
+              <table className="mt-3 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-[var(--text-muted)]">
+                    <th className="py-1.5">Turno</th>
+                    <th className="py-1.5 text-right">Presentes</th>
+                    <th className="py-1.5 text-right">Ida</th>
+                    <th className="py-1.5 text-right">Vuelta</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {porTurno.map(({ turno, presentes, ida, vuelta }) => (
+                    <tr key={turno.id}>
+                      <td className="py-1.5">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: turno.color ?? "#94A3B8" }} />
+                          {turno.nombre}
+                        </span>
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">{presentes}</td>
+                      <td className="py-1.5 text-right tabular-nums">{ida || "—"}</td>
+                      <td className="py-1.5 text-right tabular-nums">{vuelta || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           <p className="mt-3 text-xs text-[var(--text-muted)]">{remisesHoy} remis generados hoy en total.</p>
         </section>
