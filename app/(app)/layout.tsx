@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
+import { BarraInstalar } from "@/components/BarraInstalar";
 import { modulosVisibles, nivelEnModulo, puedeUsarAsistente, MODULOS_ORDEN } from "@/lib/core/access";
 import { puedeAprobarCompras, puedeAprobarOS } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
@@ -92,6 +93,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <main className="min-w-0 flex-1 overflow-auto p-4 md:p-6">{children}</main>
         </div>
       </div>
+
+      {/* La ofrece a quien todavía no la instaló. Se dibuja sola o no se dibuja
+          nada: decide por el navegador de quien mira, y en la computadora no
+          aparece nunca. Va acá y no adentro de `main` porque está fija al pie
+          de la pantalla, por encima del contenido que scrollea. */}
+      <BarraInstalar />
     </NavMovilProvider>
   );
 }

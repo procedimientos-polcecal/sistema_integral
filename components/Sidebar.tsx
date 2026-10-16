@@ -415,6 +415,21 @@ export function Sidebar({
             </div>
           );
         })}
+
+        {/* Fuera de los módulos y sin permiso que pedir: instalar la app la
+            puede hacer cualquiera. Va al final y separado porque se usa una
+            vez —después queda el ícono en el teléfono— y no compite con las
+            páginas de todos los días. */}
+        <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--sidebar-border)" }}>
+          <Link
+            href="/instalar"
+            title={colapsado ? "Instalar la app" : undefined}
+            className={`nav-link ${esRutaActiva("/instalar", pathname, search) ? "active" : ""} ${colapsado ? "justify-center" : ""}`}
+          >
+            <IconInstalar />
+            {!colapsado && "Instalar la app"}
+          </Link>
+        </div>
       </nav>
       </aside>
     </>
@@ -648,6 +663,13 @@ function IconKanban() {
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M9 4v16M15 4v16" />
+    </svg>
+  );
+}
+function IconInstalar() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 3v11m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
