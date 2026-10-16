@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ordenSugerido, moverEnLista, asignarOrden, aplicarOrdenManual, ESTA_PENDIENTE,
+  prioridadParaLaPlanilla,
 } from "./prioridad";
 
 const HOY = "2026-08-26";
@@ -141,5 +142,51 @@ describe("aplicarOrdenManual", () => {
       { id: "y", ot_number: 19, estado: "POR_HACER", prioridad: "BAJA", fecha: "2026-08-01", orden_manual: 0 },
     ];
     expect(aplicarOrdenManual(empatadas, HOY).map((o) => o.id)).toEqual(["y", "x"]);
+  });
+});
+
+/**
+ * EL BUG DEL 16/10/2026. `NuevaOTModal` tenia su propia copia del vocabulario
+ * -["ALTA","MEDIA","BAJA"]- y el alta la escribia tal cual. La planilla dice
+ * "🟡 Media" en sus 130 filas con prioridad, y el filtro del listado usa esa
+ * forma. Resultado: una OT creada desde la app no aparecia al filtrar por
+ * "Media". La 2796 fue la primera y la unica: 36 filas decian "🟡 Media" y una
+ * sola "MEDIA".
+ *
+ * Es el mismo caso que el estado, que si se traduce al escribir -la app guarda
+ * EN_PROCESO y la planilla dice "En proceso"-. A la prioridad le faltaba.
+ */
+describe("la prioridad como la escribe la planilla", () => {
+  it("traduce la palabra sola al vocabulario de la planilla", () => {
+    expect(prioridadParaLaPlanilla("ALTA")).toBe("🟠 Alta");
+    expect(prioridadParaLaPlanilla("MEDIA")).toBe("🟡 Media");
+    expect(prioridadParaLaPlanilla("BAJA")).toBe("🟢 Baja");
+  });
+
+  /** Lo que ya viene bien no se toca: es lo que llega de la planilla. */
+  it("lo que ya esta en el vocabulario queda igual", () => {
+    expect(prioridadParaLaPlanilla("🟠 Alta")).toBe("🟠 Alta");
+    expect(prioridadParaLaPlanilla("🟡 Media")).toBe("🟡 Media");
+  });
+
+  /** Acentos, minusculas y adornos: lo mismo que resuelve el peso. */
+  it("no se deja confundir por como este escrita", () => {
+    expect(prioridadParaLaPlanilla("media")).toBe("🟡 Media");
+    expect(prioridadParaLaPlanilla("  Alta ")).toBe("🟠 Alta");
+  });
+
+  it("sin prioridad es null, no un texto vacio", () => {
+    expect(prioridadParaLaPlanilla(null)).toBeNull();
+    expect(prioridadParaLaPlanilla("")).toBeNull();
+    expect(prioridadParaLaPlanilla("   ")).toBeNull();
+  });
+
+  /**
+   * Una palabra que no conocemos pasa tal cual, igual que hace el estado con
+   * `EN_LA_PLANILLA[v] ?? v`. Inventarle un emoji seria decidir por la
+   * planilla, y perderla seria peor.
+   */
+  it("una prioridad que no conocemos pasa tal cual", () => {
+    expect(prioridadParaLaPlanilla("URGENTE")).toBe("URGENTE");
   });
 });

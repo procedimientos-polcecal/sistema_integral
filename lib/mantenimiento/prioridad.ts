@@ -40,6 +40,38 @@ const soloLaPalabra = (v: unknown): string =>
 const peso = (prioridad: string | null | undefined): number =>
   PESO_PRIORIDAD[soloLaPalabra(prioridad)] ?? 2;
 
+/** Cómo escribe cada prioridad la planilla, que es el vocabulario de la casa. */
+const COMO_LA_ESCRIBE_LA_PLANILLA: Record<string, string> = {
+  ALTA: "🟠 Alta",
+  MEDIA: "🟡 Media",
+  BAJA: "🟢 Baja",
+};
+
+/**
+ * La prioridad en el vocabulario de la planilla.
+ *
+ * EL BUG DEL 16/10/2026. `NuevaOTModal` tenía su propia copia del vocabulario
+ * —`["ALTA", "MEDIA", "BAJA"]`— y el alta lo escribía tal cual. La planilla
+ * dice `"🟡 Media"` en sus 130 filas con prioridad, y el filtro del listado usa
+ * esa forma, así que **una OT creada desde la app no aparecía al filtrar por
+ * «Media»**. Quedaron 36 filas diciendo `"🟡 Media"` y una sola `"MEDIA"`.
+ *
+ * Es el mismo caso que el estado, que sí se traduce al escribir —la app guarda
+ * `EN_PROCESO` y la planilla dice "En proceso"—. A la prioridad le faltaba, y
+ * no se notaba porque una OT que falta en un filtro se lee como "no hay
+ * ninguna".
+ *
+ * Se aplica **antes de guardar**, no al leer: así la base queda con una sola
+ * forma y el filtro puede seguir siendo un `.in()` liso. Lo que no reconocemos
+ * pasa tal cual, igual que hace el estado con `EN_LA_PLANILLA[v] ?? v`:
+ * inventarle un emoji sería decidir por la planilla, y perderlo sería peor.
+ */
+export function prioridadParaLaPlanilla(valor: unknown): string | null {
+  const palabra = soloLaPalabra(valor);
+  if (!palabra) return null;
+  return COMO_LA_ESCRIBE_LA_PLANILLA[palabra] ?? (String(valor).trim() || null);
+}
+
 export interface Ordenable extends Atrasable {
   id: string;
   ot_number?: number | null;

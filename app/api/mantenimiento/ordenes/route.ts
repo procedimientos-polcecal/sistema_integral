@@ -10,7 +10,7 @@ import {
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
-import { ESTA_PENDIENTE } from "@/lib/mantenimiento/prioridad";
+import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
@@ -164,6 +164,11 @@ export async function POST(request: Request) {
   //
   // El precio, dicho: con Google caído no se puede crear una OT desde la app.
   // Es visible y se reintenta; lo otro no se veía nunca.
+  // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
+  // la base. Si se tradujera sólo al escribir, la base quedaría con las dos y
+  // el filtro del listado —un `.in()` liso— seguiría sin encontrarla.
+  const laPrioridad = prioridadParaLaPlanilla(prioridad);
+
   const alta = await altaEnLaPlanilla({
     creado: new Date(),
     sector: sector_raw || null,
@@ -174,7 +179,7 @@ export async function POST(request: Request) {
     descripcion: descripcion.trim(),
     repuesto: repuesto?.trim() || null,
     fecha_ejecucion: fecha_ejecucion || null,
-    prioridad: prioridad || null,
+    prioridad: laPrioridad,
   });
 
   if (!alta.ok) {
@@ -207,7 +212,7 @@ export async function POST(request: Request) {
     operario_1:      operario_1?.trim() || null,
     operario_2:      operario_2?.trim() || null,
     operario_3:      operario_3?.trim() || null,
-    prioridad:       prioridad || null,
+    prioridad:       laPrioridad,
     schedule_id:     schedule_id || null,
     app_created:     true,
     created_by:      user.id,

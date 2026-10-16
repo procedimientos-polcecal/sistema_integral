@@ -219,6 +219,17 @@ y pisarla rompería el cálculo de toda la planilla.
 la dejaría con dos formas del mismo estado y la próxima lectura no las
 reconocería igual.
 
+**La prioridad también, desde el 16/10/2026 — y hasta ese día, no.** La planilla
+escribe `🟡 Media` en sus 130 filas con prioridad y el filtro del listado usa esa
+forma, pero `NuevaOTModal` tenía su propia copia del vocabulario —`["ALTA",
+"MEDIA", "BAJA"]`— y el alta la escribía tal cual. **Una OT creada desde la app
+no aparecía al filtrar por «Media»**, y no se notaba porque una orden que falta
+en un filtro se lee como "no hay ninguna". La traducción vive en
+`prioridadParaLaPlanilla` y se aplica **antes de guardar**, así la base queda con
+una sola forma y el filtro puede seguir siendo un `.in()` liso. El modal ya no
+tiene su copia: usa `PRIORIDADES_DE_OT`, para que lo que se elige sea lo que se
+filtra. La única fila afectada —la 2796— se normalizó.
+
 Antes de escribir se comprueba que la fila **siga siendo la de esta OT** —se lee
 la columna A y se compara el número—. Si no coincide no se escribe nada y se
 pide sincronizar: el número de fila se corre en cuanto alguien inserta una fila

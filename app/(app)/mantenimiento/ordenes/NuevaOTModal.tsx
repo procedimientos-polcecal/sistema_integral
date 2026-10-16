@@ -2,12 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
 const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
 const QUIEN_OPTIONS = ["INTERNO", "CONTRATADO", "MIXTO"];
-const PRIORIDADES = ["ALTA", "MEDIA", "BAJA"];
+/**
+ * Las de `filtrosOt`, no una copia.
+ *
+ * Tenía la suya —`["ALTA", "MEDIA", "BAJA"]`— y el 16/10/2026 se vio lo que
+ * costaba: lo que se elegía acá no era lo que decía el filtro del listado, así
+ * que una OT creada desde la app no aparecía al filtrar por «Media». El
+ * servidor igual lo traduce, pero **lo que se elige tiene que ser lo que se
+ * filtra**: dos vocabularios para lo mismo es cómo volvió a pasar.
+ */
+const PRIORIDADES = PRIORIDADES_DE_OT;
 const ESTADOS_OT = [
   { value: "POR_HACER",  label: "Por hacer" },
   { value: "EN_PROCESO", label: "En proceso" },
@@ -57,7 +67,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     operario_1:     "",
     operario_2:     "",
     operario_3:     "",
-    prioridad:      "MEDIA",
+    prioridad:      "🟡 Media",
     requiere_parada_sector: false,
   });
 
