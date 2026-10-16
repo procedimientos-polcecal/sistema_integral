@@ -78,6 +78,7 @@ const SUSTANTIVOS: Record<string, string> = {
   PINON: "piñón", PINONES: "piñón", CORONA: "corona", CORONAS: "corona",
   CADENA: "cadena", CADENAS: "cadena", ESLABON: "eslabón", ESLABONES: "eslabón",
   ACOPLE: "acople", ACOPLES: "acople", PERIFLEX: "periflex",
+  BUJE: "buje", BUJES: "buje", PASADOR: "pasador", PASADORES: "pasador",
   REDUCTOR: "reductor", REDUCTORES: "reductor",
   EJE: "eje", EJES: "eje", ROTOR: "rotor", ROTORES: "rotor",
   TAMBOR: "tambor", TAMBORES: "tambor", RODILLO: "rodillo", RODILLOS: "rodillo",
@@ -106,6 +107,9 @@ const SUSTANTIVOS: Record<string, string> = {
   MANGA: "manga", MANGAS: "manga",
   PICO: "pico", PICOS: "pico",
   VALVULA: "válvula", VALVULAS: "válvula",
+  ELECTROVALVULA: "electroválvula", ELECTROVALVULAS: "electroválvula",
+  DIAFRAGMA: "diafragma", DIAFRAGMAS: "diafragma",
+  BOMBA: "bomba", BOMBAS: "bomba",
   MANGUERA: "manguera", MANGUERAS: "manguera",
   CILINDRO: "cilindro", CILINDROS: "cilindro",
   ASPERSOR: "aspersor", ASPERSORES: "aspersor",
@@ -144,7 +148,8 @@ const SUSTANTIVOS: Record<string, string> = {
   PLANCHUELA: "planchuela", PLANCHUELAS: "planchuela",
   HIERRO: "hierro", HIERROS: "hierro",
   BARRA: "barra", BARRAS: "barra",
-  CANO: "caño", CANOS: "caño",
+  CANO: "caño", CANOS: "caño", CANERIA: "cañería", CANERIAS: "cañería",
+  PERNO: "perno", PERNOS: "perno", CUCHILLA: "cuchilla", CUCHILLAS: "cuchilla",
   RESORTE: "resorte", RESORTES: "resorte",
   SOPORTE: "soporte", SOPORTES: "soporte",
   JUNTA: "junta", JUNTAS: "junta",
@@ -515,6 +520,111 @@ export function nombreDeItem(item: ItemDeRepuesto): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Segunda pasada: las piezas nombradas en la descripción
+ *
+ * 564 OT nombran una pieza en la descripción y no tienen nada en la columna
+ * `repuesto`. Es material más flojo y hay que tratarlo como tal: ahí se
+ * describe **el trabajo**, no la pieza, y casi nunca viene con medida ni
+ * código.
+ *
+ * Lo que sí se puede saber es si la pieza se cambió o sólo se miró, y esa
+ * diferencia es la que vale: "se cambia bulón cortado" dice que ese bulón hay
+ * que tenerlo, y "revisar rodamiento posición 9" dice solamente que el equipo
+ * tiene rodamientos. Las dos cosas sirven, pero no para lo mismo, así que no
+ * se mezclan.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Qué le pasó a la pieza según el verbo de la oración. */
+export type AccionSobreLaPieza = "cambio" | "revision" | "mencion";
+
+/*
+ * Los verbos se buscan sobre el texto ya normalizado con `norm`, y no sobre el
+ * original. El motivo es una trampa de JavaScript: `\b` se define con `\w`,
+ * que no incluye las vocales acentuadas, así que en "Se cambió válvula" el
+ * `\b` del final no existe —entre "ó" y el espacio no hay frontera— y el
+ * patrón no matchea. Medido: 'Se cambió válvula de soplado' quedaba como "se
+ * nombró" y 'Se cambio ventilador motor' como "cambió". `norm` saca los
+ * acentos y el problema con ellos.
+ */
+const VERBOS_DE_CAMBIO =
+  /\b(CAMBI\w*|RECAMBI\w*|REEMPLAZ\w*|SUSTITUY\w*|COLOC\w*|AGREG\w*|INSTAL\w*|RENOV\w*|PONE|PUSO|PROVE\w*|FABRIC\w*)\b/;
+
+const VERBOS_DE_REVISION =
+  /\b(REVIS\w*|REPAR\w*|LIMPI\w*|AJUST\w*|CORRIG\w*|ACOMOD\w*|SUEL[DT]\w*|GIR\w*|SAC\w*|CORT\w*|CALIBR\w*|APRIE\w*|APRET\w*|DESCONECT\w*|CONTROL\w*|VERIFIC\w*|LUBRIC\w*|ENGRAS\w*|ELIMIN\w*|INSPECCION\w*|DESMONT\w*|VER|MIR\w*)\b/;
+
+/** Una pieza nombrada en la descripción de una OT. */
+export interface PiezaNombrada {
+  tipo: string;
+  /** El código, cuando la descripción llegó a darlo: "se agrega una grilla de 4mm". */
+  codigo: string | null;
+  accion: AccionSobreLaPieza;
+  cantidad: number | null;
+  /** La oración de donde salió, para que quien revise no tenga que abrir la OT. */
+  crudo: string;
+}
+
+/**
+ * Las piezas que nombra la descripción de una OT.
+ *
+ * Se parte en oraciones porque el verbo manda sobre las piezas de **su**
+ * oración y no sobre las de la de al lado: en "Se coloca 2 mangas caidas, se
+ * repara puntera sin fin descarga filtro de manga" las mangas se cambiaron y
+ * el filtro sólo se tocó.
+ *
+ * La barra también separa —"Revisar reductor/cadena/rodamiento"— pero sólo
+ * entre palabras: si hay un número de un lado es una medida, como en "3/8".
+ */
+export function piezasDeLaDescripcion(descripcion: string | null): PiezaNombrada[] {
+  if (!descripcion || !descripcion.trim()) return [];
+
+  const oraciones = descripcion
+    .split(/[,;.]\s*|\s+y\s+/i)
+    .flatMap((o) => (/^[\p{L}\s]+\/[\p{L}\s/]+$/u.test(o.trim()) ? o.split("/") : [o]))
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  const piezas: PiezaNombrada[] = [];
+  const vistas = new Set<string>();
+  let accionPrevia: AccionSobreLaPieza = "mencion";
+
+  for (const oracion of oraciones) {
+    // Una oración sin verbo propio —"reductor" después de "Revisar
+    // reductor/cadena"— sigue bajo el verbo de la anterior.
+    const normalizada = norm(oracion);
+    const hayCambio = VERBOS_DE_CAMBIO.test(normalizada);
+    const hayRevision = VERBOS_DE_REVISION.test(normalizada);
+    const accion: AccionSobreLaPieza = hayCambio ? "cambio" : hayRevision ? "revision" : accionPrevia;
+    if (hayCambio || hayRevision) accionPrevia = accion;
+
+    // Varias piezas en la misma oración: se recorre sacando la que ya se leyó.
+    let resto = oracion;
+    for (let vuelta = 0; vuelta < 6; vuelta++) {
+      const encontrado = sustantivoDe(resto);
+      if (!encontrado) break;
+      const cola = resto.slice(encontrado.hasta);
+      const { cantidad } = sacarCantidad(resto.slice(0, encontrado.desde).trim().split(/\s+/).at(-1) ?? "");
+      // Sólo el código que viene pegado al sustantivo, y sólo si tiene número:
+      // "grilla de 4mm" sí, "rodamiento posición 9" no, que es dónde está y no
+      // cuál es.
+      const pegado = cola.match(/^\s*(?:de\s+)?(\d+\s?(?:mm|cm|")|[A-Z]{1,4}[\s-]?\d{2,5}|\d{4,6})\b/i);
+      const clave = `${encontrado.tipo}|${pegado ? norm(pegado[1]) : ""}|${accion}`;
+      if (!vistas.has(clave)) {
+        vistas.add(clave);
+        piezas.push({
+          tipo: encontrado.tipo,
+          codigo: pegado ? norm(pegado[1]).replace(/\s(MM|CM)$/, "$1") : null,
+          accion,
+          cantidad,
+          crudo: oracion,
+        });
+      }
+      resto = cola;
+    }
+  }
+  return piezas;
+}
+
 /** Una OT, con lo poco que hace falta para esto. */
 export interface OtConRepuesto {
   ot_number: number;
@@ -598,6 +708,82 @@ export function repuestosPorEquipo(ots: OtConRepuesto[]): Map<string, RepuestoDe
     );
   }
   return salida;
+}
+
+/** Una pieza de un equipo, juntada de las descripciones de sus OT. */
+export interface PiezaDeEquipo {
+  equipment_id: string;
+  tipo: string;
+  codigo: string | null;
+  accion: AccionSobreLaPieza;
+  ots: number[];
+  ultimaFecha: string | null;
+  crudos: string[];
+}
+
+/**
+ * Las piezas por equipo, de las descripciones.
+ *
+ * **Se saltean las OT que ya dijeron algo en la columna `repuesto`**: ésas ya
+ * están en el otro informe, y contarlas dos veces haría parecer que hay más
+ * evidencia de la que hay.
+ */
+export function piezasPorEquipo(
+  ots: Array<OtConRepuesto & { descripcion: string | null }>
+): Map<string, PiezaDeEquipo[]> {
+  const porEquipo = new Map<string, Map<string, PiezaDeEquipo>>();
+
+  for (const ot of [...ots].sort((a, b) => a.ot_number - b.ot_number)) {
+    if (!ot.equipment_id) continue;
+    if (itemsDeRepuesto(ot.repuesto ?? "").length > 0) continue;
+    for (const pieza of piezasDeLaDescripcion(ot.descripcion)) {
+      if (!porEquipo.has(ot.equipment_id)) porEquipo.set(ot.equipment_id, new Map());
+      const delEquipo = porEquipo.get(ot.equipment_id)!;
+      const clave = `${pieza.tipo}|${pieza.codigo ?? ""}|${pieza.accion}`;
+      const ya = delEquipo.get(clave);
+      if (!ya) {
+        delEquipo.set(clave, {
+          equipment_id: ot.equipment_id,
+          tipo: pieza.tipo,
+          codigo: pieza.codigo,
+          accion: pieza.accion,
+          ots: [ot.ot_number],
+          ultimaFecha: ot.fecha,
+          crudos: [pieza.crudo],
+        });
+        continue;
+      }
+      if (!ya.ots.includes(ot.ot_number)) ya.ots.push(ot.ot_number);
+      if (ot.fecha && (!ya.ultimaFecha || ot.fecha > ya.ultimaFecha)) ya.ultimaFecha = ot.fecha;
+      if (ya.crudos.length < 5 && !ya.crudos.includes(pieza.crudo)) ya.crudos.push(pieza.crudo);
+    }
+  }
+
+  const salida = new Map<string, PiezaDeEquipo[]>();
+  for (const [equipo, mapa] of porEquipo) {
+    const orden: Record<AccionSobreLaPieza, number> = { cambio: 0, revision: 1, mencion: 2 };
+    salida.set(
+      equipo,
+      [...mapa.values()].sort(
+        (a, b) => orden[a.accion] - orden[b.accion] || b.ots.length - a.ots.length || a.tipo.localeCompare(b.tipo)
+      )
+    );
+  }
+  return salida;
+}
+
+/**
+ * ¿La pieza se llama como el equipo?
+ *
+ * "Se cambio ventilador motor" en el equipo "Ventilador 5": el motor es la
+ * pieza y el ventilador es el equipo. Un sustantivo que repite el nombre del
+ * equipo casi nunca nombra un repuesto, y dejarlo llena la lista de piezas que
+ * son el equipo entero.
+ */
+export function nombraAlEquipo(tipo: string, nombreDelEquipo: string | null | undefined): boolean {
+  if (!nombreDelEquipo) return false;
+  const palabras = new Set(norm(nombreDelEquipo).split(" "));
+  return norm(tipo).split(" ").some((p) => palabras.has(p));
 }
 
 /**

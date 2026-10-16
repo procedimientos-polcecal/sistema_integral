@@ -10,6 +10,7 @@
 // Uso:
 //   npx tsx scripts/repuestos-desde-ot.mts                 ← informe, no toca nada
 //   npx tsx scripts/repuestos-desde-ot.mts --csv salida.csv
+//   npx tsx scripts/repuestos-desde-ot.mts --descripciones  ← la segunda pasada
 //   npx tsx scripts/repuestos-desde-ot.mts --aplicar       ← escribe los de confianza alta
 //   npx tsx scripts/repuestos-desde-ot.mts --aplicar --con-dudosos
 //
@@ -20,6 +21,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createAdminClient } from "../lib/supabase/admin.ts";
 import {
   repuestosPorEquipo,
+  piezasPorEquipo,
+  nombraAlEquipo,
   notaDeFicha,
   type OtConRepuesto,
   type RepuestoDeEquipo,
@@ -32,8 +35,14 @@ for (const line of readFileSync(new URL("../.env.local", import.meta.url), "utf-
 
 const APLICAR = process.argv.includes("--aplicar");
 const CON_DUDOSOS = process.argv.includes("--con-dudosos");
-const CSV = process.argv[process.argv.indexOf("--csv") + 1];
+const DESCRIPCIONES = process.argv.includes("--descripciones");
+// Se pregunta por el índice antes de usarlo: `indexOf` devuelve -1 cuando la
+// bandera no está, y `argv[-1 + 1]` es `argv[0]`, que es el ejecutable de node.
+// Sin esto el script intenta escribir el CSV encima de `node.exe`.
+const dondeCsv = process.argv.indexOf("--csv");
+const CSV = dondeCsv === -1 ? undefined : process.argv[dondeCsv + 1];
 const INFORME = "docs/MANTENIMIENTO-REPUESTOS-DESDE-OT.md";
+const INFORME_DESC = "docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md";
 
 const sb = createAdminClient();
 
@@ -57,9 +66,9 @@ type Equipo = { id: string; name: string; code: string | null; sector_id: string
 type Sector = { id: string; nombre: string };
 
 const [ots, equipos, sectores, yaCargados] = await Promise.all([
-  traerTodo<OtConRepuesto & { equipo_raw: string | null }>(
+  traerTodo<OtConRepuesto & { equipo_raw: string | null; descripcion: string | null }>(
     "ordenes_trabajo",
-    "ot_number, fecha, equipment_id, equipo_raw, repuesto",
+    "ot_number, fecha, equipment_id, equipo_raw, repuesto, descripcion",
     "ot_number"
   ),
   traerTodo<Equipo>("equipos", "id, name, code, sector_id", "name"),
@@ -149,6 +158,66 @@ if (CSV) {
   }
   writeFileSync(CSV, filas.map((f) => f.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n"), "utf-8");
   console.log(`CSV: ${CSV}`);
+}
+
+/* ── La segunda pasada: lo que nombran las descripciones ─────────────────── */
+
+if (DESCRIPCIONES) {
+  const crudas = piezasPorEquipo(ots);
+  // La pieza que se llama como el equipo casi nunca es un repuesto: en el
+  // "Ventilador 5" el ventilador es el equipo, y lo que se cambió es el motor.
+  const porEquipo = new Map(
+    [...crudas.entries()]
+      .map(([id, lista]) => [id, lista.filter((p) => !nombraAlEquipo(p.tipo, porId.get(id)?.name))] as const)
+      .filter(([, lista]) => lista.length > 0)
+  );
+  const piezas = [...porEquipo.values()].flat();
+  const cambiadas = piezas.filter((p) => p.accion === "cambio");
+
+  let md2 = `# Piezas nombradas en la descripción de las OT
+
+Generado por \`npx tsx scripts/repuestos-desde-ot.mts --descripciones\` el ${new Date().toLocaleDateString("es-AR")}.
+
+**Esto es más flojo que el otro informe, y conviene saber por qué.** Sale de la
+descripción de las OT que **no** tienen nada escrito en la columna \`repuesto\`:
+ahí se cuenta el trabajo que se hizo, no la pieza que se usó, así que casi
+nunca trae medida ni código. Sirve para saber **qué se le toca a cada equipo**,
+no para armar un pedido.
+
+La diferencia que sí vale es la columna "Qué pasó":
+
+- **cambió** — la oración dice que se cambió, se colocó o se reemplazó. Eso es
+  evidencia de que la pieza hay que tenerla.
+- **se revisó** — se revisó, se limpió o se ajustó. Dice que el equipo tiene
+  esa pieza, y nada más.
+
+De ${ots.length} OT, ${piezas.length} piezas en **${porEquipo.size} equipos**, de las cuales ${cambiadas.length} se cambiaron.
+Las OT que ya dijeron algo en la columna \`repuesto\` no se cuentan acá: están
+en [el otro informe](MANTENIMIENTO-REPUESTOS-DESDE-OT.md).
+
+`;
+
+  const ordenados2 = [...porEquipo.entries()].sort((a, b) =>
+    (porId.get(a[0])?.code ?? "").localeCompare(porId.get(b[0])?.code ?? "")
+  );
+  for (const [equipoId, lista] of ordenados2) {
+    const e = porId.get(equipoId);
+    const sector = e?.sector_id ? sectorDe.get(e.sector_id) : null;
+    const yaTiene = catalogo.get(equipoId)?.length ?? 0;
+    md2 += `\n## ${e?.code ?? "sin código"} — ${e?.name ?? equipoId}${sector ? ` · ${sector}` : ""}\n\n`;
+    if (yaTiene) md2 += `*Este equipo ya tiene ${yaTiene} repuesto(s) en el otro informe.*\n\n`;
+    md2 += `| Pieza | Código | Qué pasó | OT | Última | De dónde salió |\n|---|---|---|---:|---|---|\n`;
+    for (const p of lista) {
+      const que = p.accion === "cambio" ? "**cambió**" : p.accion === "revision" ? "se revisó" : "se nombró";
+      const fecha = p.ultimaFecha ? p.ultimaFecha.split("-").reverse().join("/") : "";
+      const ejemplo = p.crudos[0].length > 70 ? `${p.crudos[0].slice(0, 70)}…` : p.crudos[0];
+      md2 += `| ${p.tipo} | \`${p.codigo ?? ""}\` | ${que} | ${p.ots.length} | ${fecha} | ${ejemplo.replace(/\|/g, "/")} |\n`;
+    }
+  }
+
+  writeFileSync(INFORME_DESC, md2, "utf-8");
+  console.log(`\nSegunda pasada: ${piezas.length} piezas en ${porEquipo.size} equipos (${cambiadas.length} cambiadas)`);
+  console.log(`Informe: ${INFORME_DESC}`);
 }
 
 /* ── Aplicar ─────────────────────────────────────────────────────────────── */

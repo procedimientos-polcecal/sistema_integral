@@ -11,6 +11,9 @@ import {
   repuestosPorEquipo,
   notaDeFicha,
   claveDeItem,
+  piezasDeLaDescripcion,
+  piezasPorEquipo,
+  nombraAlEquipo,
 } from "@/lib/mantenimiento/repuestosDesdeOt";
 
 describe("esSoloImporte", () => {
@@ -291,6 +294,90 @@ describe("repuestosPorEquipo", () => {
     ]).get("m1")!;
     expect(lista[0].ots).toEqual([1, 2]);
     expect(lista[0].total).toBeNull();
+  });
+});
+
+describe("piezasDeLaDescripcion", () => {
+  it("separa lo que se cambió de lo que sólo se miró", () => {
+    // La diferencia es todo el valor de esta pasada: el bulón hay que tenerlo,
+    // el cable sólo dice que el equipo tiene cables.
+    expect(piezasDeLaDescripcion("Se cambia bulón cortado de placas")).toEqual([
+      expect.objectContaining({ tipo: "bulón", accion: "cambio" }),
+      expect.objectContaining({ tipo: "placa", accion: "cambio" }),
+    ]);
+    expect(piezasDeLaDescripcion("se repara cable dañado en vibrador por cortocircuito")).toEqual([
+      expect.objectContaining({ tipo: "cable", accion: "revision" }),
+    ]);
+  });
+
+  it("el verbo manda sobre las piezas de su oración y no sobre las de al lado", () => {
+    const piezas = piezasDeLaDescripcion(
+      "Se coloca 2 mangas caidas, se repara puntera sin fin descarga filtro de manga"
+    );
+    expect(piezas.find((p) => p.tipo === "manga" && p.accion === "cambio")).toBeDefined();
+    expect(piezas.find((p) => p.tipo === "filtro")?.accion).toBe("revision");
+  });
+
+  it("parte por la barra entre palabras, que es cómo se listan tres piezas", () => {
+    expect(piezasDeLaDescripcion("Revisar reductor/cadena/rodamiento").map((p) => p.tipo)).toEqual([
+      "reductor", "cadena", "rodamiento",
+    ]);
+    // Pero no por la barra de una fracción.
+    expect(piezasDeLaDescripcion('Se cambia bulón 3/8 de la tapa')[0]).toMatchObject({
+      tipo: "bulón", accion: "cambio",
+    });
+  });
+
+  it("se queda con el código sólo cuando viene pegado al sustantivo", () => {
+    expect(piezasDeLaDescripcion("se agrega una grilla de 4mm")[0]).toMatchObject({
+      tipo: "grilla", codigo: "4MM", accion: "cambio",
+    });
+    // "posición 9" es dónde está el rodamiento, no cuál es.
+    expect(piezasDeLaDescripcion("Revisar rodamiento posición 9 y 8, valores elevados de vibraciones")[0])
+      .toMatchObject({ tipo: "rodamiento", codigo: null, accion: "revision" });
+  });
+
+  it("reconoce el verbo con tilde, que en JavaScript es una trampa", () => {
+    // `\b` se define con `\w`, que no incluye la "ó": sin normalizar, "Se
+    // cambió válvula" no matchea y "Se cambio válvula" sí.
+    expect(piezasDeLaDescripcion("Se cambió válvula de soplado")[0]).toMatchObject({
+      tipo: "válvula", accion: "cambio",
+    });
+    expect(piezasDeLaDescripcion("Se reparó cañeria")[0]?.accion).toBe("revision");
+  });
+
+  it("no inventa nada cuando la descripción no nombra ninguna pieza", () => {
+    expect(piezasDeLaDescripcion("Se calibro tolva de piedra")).toEqual([]);
+    expect(piezasDeLaDescripcion(null)).toEqual([]);
+  });
+});
+
+describe("piezasPorEquipo", () => {
+  it("saltea las OT que ya dijeron algo en la columna repuesto", () => {
+    // Si no, la misma OT suma evidencia en los dos informes.
+    const porEquipo = piezasPorEquipo([
+      { ot_number: 1, fecha: "2026-01-01", equipment_id: "m", repuesto: "2 grillas de 4mm", descripcion: "Se cambian grillas" },
+      { ot_number: 2, fecha: "2026-02-01", equipment_id: "m", repuesto: null, descripcion: "Se cambia rodamiento" },
+    ]);
+    expect(porEquipo.get("m")!.map((p) => p.tipo)).toEqual(["rodamiento"]);
+  });
+
+  it("pone primero lo que se cambió", () => {
+    const lista = piezasPorEquipo([
+      { ot_number: 1, fecha: "2026-01-01", equipment_id: "m", repuesto: null, descripcion: "Revisar cadena" },
+      { ot_number: 2, fecha: "2026-02-01", equipment_id: "m", repuesto: null, descripcion: "Se cambia correa" },
+    ]).get("m")!;
+    expect(lista[0]).toMatchObject({ tipo: "correa", accion: "cambio" });
+  });
+});
+
+describe("nombraAlEquipo", () => {
+  it("descarta la pieza que se llama igual que el equipo", () => {
+    // En "Ventilador 5", el ventilador es el equipo y el motor es la pieza.
+    expect(nombraAlEquipo("ventilador", "Ventilador 5")).toBe(true);
+    expect(nombraAlEquipo("motor", "Ventilador 5")).toBe(false);
+    expect(nombraAlEquipo("manga", "Filtro de manga")).toBe(true);
+    expect(nombraAlEquipo("rodamiento", null)).toBe(false);
   });
 });
 
