@@ -41,6 +41,18 @@ const DESCRIPCIONES = process.argv.includes("--descripciones");
 // Sin esto el script intenta escribir el CSV encima de `node.exe`.
 const dondeCsv = process.argv.indexOf("--csv");
 const CSV = dondeCsv === -1 ? undefined : process.argv[dondeCsv + 1];
+/**
+ * Qué tipos se cargan, separados por coma.
+ *
+ * Existe porque la primera carga fue parcial a propósito: las piezas de
+ * transmisión —correas, rodamientos, manguitos y cajas— son las que la
+ * planilla escribe con código, y un código es lo que hace que la ficha sirva
+ * para pedir el repuesto. Las demás se van sumando cuando alguien las mira.
+ */
+const dondeTipos = process.argv.indexOf("--tipos");
+const TIPOS = dondeTipos === -1
+  ? null
+  : new Set((process.argv[dondeTipos + 1] ?? "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean));
 const INFORME = "docs/MANTENIMIENTO-REPUESTOS-DESDE-OT.md";
 const INFORME_DESC = "docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md";
 
@@ -90,7 +102,9 @@ const conTexto = ots.filter((o) => o.repuesto?.trim() && o.repuesto.trim() !== "
 const sinEquipo = conTexto.filter((o) => !o.equipment_id);
 const todos = [...catalogo.values()].flat();
 const dudosos = todos.filter((r) => r.confianza === "revisar");
-const aCargar = todos.filter((r) => CON_DUDOSOS || r.confianza === "alta");
+const aCargar = todos
+  .filter((r) => CON_DUDOSOS || r.confianza === "alta")
+  .filter((r) => !TIPOS || (r.tipo !== null && TIPOS.has(r.tipo)));
 
 console.log(`OT leídas: ${ots.length} · con algo en la columna repuesto: ${conTexto.length}`);
 console.log(`Equipos con repuestos: ${catalogo.size} · repuestos distintos: ${todos.length} (${dudosos.length} para revisar)`);
@@ -254,6 +268,12 @@ const nuevos = aCargar
   .filter((r) => !existentes.has(clave(r.equipment_id, r.name, r.code)));
 
 console.log(`\nA insertar: ${nuevos.length} (ya estaban ${aCargar.length - nuevos.length})`);
+// Las primeras tres completas: quien corre esto tiene que poder ver cómo va a
+// quedar la ficha antes de que se escriban las otras ochenta.
+for (const r of nuevos.slice(0, 3)) {
+  console.log(`  ${porId.get(r.equipment_id)?.code ?? r.equipment_id} · ${r.name} ${r.code ?? ""}`);
+  console.log(`      ${r.notes}`);
+}
 for (let i = 0; i < nuevos.length; i += 200) {
   const lote = nuevos.slice(i, i + 200);
   const { error } = await sb.from("equipos_repuestos").insert(lote);

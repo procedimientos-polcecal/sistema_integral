@@ -800,5 +800,9 @@ export function notaDeFicha(r: RepuestoDeEquipo): string {
   if (r.nota) partes.push(r.nota);
   if (r.ri.length) partes.push(r.ri.join(", "));
   partes.push("de las OT, sin relevar en planta");
+  // Que la duda viaje hasta la pantalla: la OT decía "2 B-58" y el tipo lo
+  // pusimos nosotros. En el informe se ve marcado; en la ficha, si no se
+  // escribe, no se ve en ningún lado.
+  if (r.confianza === "revisar") partes.push("tipo deducido del código, confirmar");
   return partes.join(" · ");
 }

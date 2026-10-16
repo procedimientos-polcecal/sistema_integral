@@ -392,5 +392,16 @@ describe("notaDeFicha", () => {
     expect(nota).toContain("6 u en total");
     expect(nota).toContain("última 30/09/2026");
     expect(nota).toContain("de las OT, sin relevar en planta");
+    expect(nota).not.toContain("confirmar");
+  });
+
+  it("avisa en la ficha cuando el tipo lo dedujimos nosotros", () => {
+    // En el informe se ve el ⚠; en la ficha del equipo, si no está escrito en
+    // la nota, la duda se pierde.
+    const [r] = repuestosPorEquipo([
+      { ot_number: 1492, fecha: "2026-04-13", equipment_id: "c", repuesto: "2 B-58" },
+    ]).get("c")!;
+    expect(r.confianza).toBe("revisar");
+    expect(notaDeFicha(r)).toContain("tipo deducido del código, confirmar");
   });
 });
