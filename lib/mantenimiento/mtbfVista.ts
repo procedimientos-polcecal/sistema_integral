@@ -82,7 +82,7 @@ export function equiposSinFallas(
  */
 
 /** Un decimal y coma: 4,6. */
-function conComa(n: number, decimales: number): string {
+export function conComa(n: number, decimales: number): string {
   return n.toFixed(decimales).replace(".", ",");
 }
 

@@ -53,6 +53,56 @@ export function OtsPorMes({ datos }: { datos: { mes: string; cantidad: number }[
   );
 }
 
+/**
+ * Fallas correctivas por mes de un equipo, los últimos 12. El mes en curso va
+ * con menos opacidad y borde punteado: le faltan días, y compararlo con los
+ * cerrados sin verlo distinto hace creer que el equipo mejoró.
+ */
+export function FallasPorMes({
+  datos, mesEnCurso,
+}: {
+  datos: { etiqueta: string; cantidad: number }[];
+  mesEnCurso: string;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={170}>
+      <BarChart data={datos} barSize={16}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+        <XAxis
+          dataKey="etiqueta"
+          tick={{ fontSize: 10, fill: "#94A3B8" }}
+          axisLine={false}
+          tickLine={false}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: "#94A3B8" }}
+          axisLine={false}
+          tickLine={false}
+          allowDecimals={false}
+        />
+        <Tooltip
+          contentStyle={TOOLTIP}
+          cursor={CURSOR}
+          labelFormatter={(l) => (l === mesEnCurso ? `${l} (incompleto)` : String(l))}
+          formatter={(v) => [`${v ?? 0} ${v === 1 ? "falla" : "fallas"}`, ""]}
+        />
+        <Bar dataKey="cantidad" radius={[4, 4, 0, 0]} name="Fallas">
+          {datos.map((d) => (
+            <Cell
+              key={d.etiqueta}
+              fill="var(--primary)"
+              fillOpacity={d.etiqueta === mesEnCurso ? 0.35 : 1}
+              stroke={d.etiqueta === mesEnCurso ? "var(--primary)" : "none"}
+              strokeDasharray="3 2"
+            />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 /** Estado del parque de equipos. */
 export function EstadoDeEquipos({
   datos,

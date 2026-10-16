@@ -4,6 +4,8 @@ import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import EquipoDetalle from "./EquipoDetalle";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
+import { hoyEnArgentina } from "@/lib/core/fechas";
+import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
 import {
   costoDelEquipo,
   type OrdenDeServicio,
@@ -21,7 +23,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: equipo }, sectores, { data: historial }] = await Promise.all([
+  const [{ data: equipo }, sectores, { data: historial }, mtbf] = await Promise.all([
     supabase
       .from("equipos")
       .select("*, sectores(id, nombre, empresas(id, nombre))")
@@ -34,6 +36,9 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       .eq("equipment_id", id)
       .order("changed_at", { ascending: false })
       .limit(10),
+    // La cuenta es de toda la planta: el MTBF de un equipo depende de los días
+    // observados, que salen de la primera falla de cualquiera.
+    mtbfDeLaPlanta(supabase, hoyEnArgentina()),
   ]);
 
   if (!equipo) notFound();
@@ -50,6 +55,11 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       historial={historial ?? []}
       canEdit={canEdit}
       costo={costo}
+      confiabilidad={{
+        fila: mtbf.filas.find((f) => f.equipmentId === id) ?? null,
+        diasObservados: mtbf.diasObservados,
+        mesEnCurso: mtbf.mesEnCurso,
+      }}
     />
   );
 }
