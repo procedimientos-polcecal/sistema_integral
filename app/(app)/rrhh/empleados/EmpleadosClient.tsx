@@ -293,7 +293,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
                 </div>
               )}
               <p className="text-sm text-slate-500 mb-2">{preview.totalRows} filas encontradas. Mapeá las columnas:</p>
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 {MAPPING_FIELDS.map(([field, label]) => (
                   <div key={field}>
                     <label className="block text-xs text-slate-500 mb-1">{label}</label>
@@ -396,7 +396,7 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
       )}
 
       {showForm && (
-        <form onSubmit={crear} className="card p-5 mb-6 grid grid-cols-3 gap-4">
+        <form onSubmit={crear} className="card p-5 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">Legajo</label>
             <input required value={form.legajo} onChange={(e) => setForm({ ...form, legajo: e.target.value })} className="input" />
@@ -446,8 +446,8 @@ export default function EmpleadosClient({ empleados, empresas, sectores, canEdit
               {sectores.filter((s) => s.activo).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Select>
           </div>
-          {error && <p className="col-span-3 text-sm text-red-600">{error}</p>}
-          <div className="col-span-3">
+          {error && <p className="col-span-full text-sm text-red-600">{error}</p>}
+          <div className="col-span-full">
             <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
               {saving ? "Guardando..." : "Guardar"}
             </button>

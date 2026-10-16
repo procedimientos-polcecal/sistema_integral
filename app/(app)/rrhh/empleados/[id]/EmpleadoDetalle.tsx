@@ -319,7 +319,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       {errorEliminar && <p className="text-sm text-red-600 mb-4">{errorEliminar}</p>}
 
       {editando && (
-        <form onSubmit={guardarEdicion} className="card p-5 mb-6 grid grid-cols-3 gap-4">
+        <form onSubmit={guardarEdicion} className="card p-5 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
@@ -365,7 +365,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Select>
           </div>
-          <div className="col-span-3">
+          <div className="col-span-full">
             <button type="submit" disabled={guardandoEdicion} className="btn-primary disabled:opacity-50">
               {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
             </button>
@@ -670,7 +670,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
               <div>
                 <div className="text-sm text-slate-500">Días correspondientes</div>
                 <div className="text-2xl font-semibold">{vacaciones.correspondientes}</div>

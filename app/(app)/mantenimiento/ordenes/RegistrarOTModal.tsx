@@ -243,7 +243,7 @@ export default function RegistrarOTModal({
         </div>
 
         <Campo etiqueta="Quiénes lo hicieron">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {[
               [operario1, setOperario1],
               [operario2, setOperario2],

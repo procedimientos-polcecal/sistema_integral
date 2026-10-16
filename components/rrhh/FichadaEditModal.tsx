@@ -315,7 +315,7 @@ export default function FichadaEditModal({
 
         <div className="border-t border-slate-200 pt-4 mb-2">
           <label className="block text-xs text-slate-500 mb-1">Horas trabajadas</label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">Normales</label>
               <input type="number" step="0.1" min="0" max="24" value={normalesInput}

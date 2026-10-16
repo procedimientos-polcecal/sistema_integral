@@ -161,15 +161,15 @@ export default function CubicacionClient({
                 <BadgeLectura lectura={fila?.lectura ?? null} />
               </div>
 
-              <dl className="mt-3 grid grid-cols-3 gap-y-2 text-sm">
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
                 <dt className="text-slate-500">Exist. inicial</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
                 <dt className="text-slate-500">Voladuras</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
                 <dt className="text-slate-500">Acarreo</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.acarreo ?? 0)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.acarreo ?? 0)}</dd>
                 <dt className="font-medium text-slate-700">Stock teórico</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums font-medium text-slate-900">{t(fila?.stockTeorico ?? null)}</dd>
+                <dd className="text-right font-mono tabular-nums font-medium text-slate-900">{t(fila?.stockTeorico ?? null)}</dd>
               </dl>
 
               <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">

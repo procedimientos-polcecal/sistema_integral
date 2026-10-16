@@ -87,7 +87,7 @@ export default function TarifasAcarreoClient({ tarifas }: { tarifas: TarifaAcarr
 
       <div className="mt-6 card p-4">
         <h2 className="text-sm font-semibold">Cargar tarifa nueva</h2>
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="text-xs text-slate-600">
             Tipo
             <Select className={INPUT_CLS} value={alta.tipo} onChange={(e) => setAlta({ ...alta, tipo: e.target.value })}>

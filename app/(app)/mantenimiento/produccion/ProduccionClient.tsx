@@ -531,7 +531,7 @@ function EditorDeDia({
 
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-600">Estado</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {ESTADOS_PRODUCCION.map((k) => {
               const m = ESTADO_LABELS[k];
               const elegido = est === k;

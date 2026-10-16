@@ -701,7 +701,7 @@ export default function DashboardClient({
 
             <div className="space-y-1">
               <label className="block text-xs font-medium text-slate-600">Nuevo estado</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {PLANT_STATUS_OPTIONS.map((opt) => {
                   const meta = PLANT_STATUS_META[opt.value];
                   const selected = newStatus === opt.value;

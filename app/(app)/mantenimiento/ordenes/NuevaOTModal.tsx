@@ -138,7 +138,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               rows={3} className="input resize-none" placeholder="Describí el trabajo a realizar..." />
           </F>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <F label="Especialidad">
               <Select value={form.especialidad} onChange={e => f("especialidad", e.target.value)} className="input">
                 <option value="">—</option>
@@ -162,7 +162,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               className="input" placeholder="Ej: Rodamiento 32222..." />
           </F>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <F label="Fecha creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
@@ -174,7 +174,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </F>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <F label="Estado inicial">
               <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
                 {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -199,7 +199,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           {/* Cada columna de la orden tiene su propia lista de gente: quién
               puede ir primero no es quién puede ir tercero. Es el mismo `slot`
               que usa el modal de registrar. */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {([1, 2, 3] as const).map((slot) => {
               const campo = `operario_${slot}` as "operario_1" | "operario_2" | "operario_3";
               const elegido = form[campo];

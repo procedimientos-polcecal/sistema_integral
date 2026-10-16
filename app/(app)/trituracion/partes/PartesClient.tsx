@@ -366,7 +366,7 @@ export default function PartesClient({
             <CalendarioMes mes={mes} partes={partes} fechaSeleccionada={form.fecha} onElegir={elegirFecha} />
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
             <div>
               <div className="text-lg font-bold text-[#7E22CE]">{diasOperativos}</div>
               <div className="text-[11px] text-slate-500">días operativos</div>

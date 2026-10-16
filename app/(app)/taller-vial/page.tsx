@@ -177,7 +177,7 @@ export default async function TallerVialInicioPage() {
       <AlertasDeTaller alertas={alertas} equipos={equipos} />
 
       {/* ── Estado actual de la flota ── */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
         <KpiCard
           color="#1E7D34"
           value={`${pct(resumenActual.operativos)}%`}

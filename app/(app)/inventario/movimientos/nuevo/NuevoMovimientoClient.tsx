@@ -264,7 +264,7 @@ export default function NuevoMovimientoClient({
       {/* ── Qué pasó con él ──────────────────────────────────── */}
       {articulo && (
         <form onSubmit={guardar} className="space-y-4 card p-4">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {(["entrada", "salida", "ajuste"] as Tipo[]).map((t) => (
               <button
                 key={t}

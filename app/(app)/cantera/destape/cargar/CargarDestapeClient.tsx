@@ -283,7 +283,7 @@ export default function CargarDestapeClient({
             </label>
           </div>
         ) : editandoLegacySinAcarreo ? (
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="text-xs text-slate-600">
               Fletero
               <select className={INPUT_CLS} value={form.fleteroId} onChange={(e) => set("fleteroId", e.target.value)}>
