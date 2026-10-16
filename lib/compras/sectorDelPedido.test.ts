@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo,
+  AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo, loQueDiceLaUbicacion,
   type SectorDePlanta,
 } from "./sectorDelPedido";
 
@@ -79,5 +79,47 @@ describe("si el equipo ya elegido sigue valiendo", () => {
   it("sin equipo o sin sector no hay nada que limpiar", () => {
     expect(elEquipoSigueValiendo(EQUIPOS, "", "calcinacion")).toBe(true);
     expect(elEquipoSigueValiendo(EQUIPOS, "e3", "")).toBe(true);
+  });
+});
+
+describe("que se deduce de donde se necesita", () => {
+  const EQUIPOS2 = [
+    { id: "cat320b", sector_id: "moviles" },
+    { id: "molino", sector_id: "molienda" },
+  ];
+
+  it("un lugar que es una maquina elige el equipo, y el sector sale DEL EQUIPO", () => {
+    // "CAT 320B" es un equipo, no un lugar. El sector se lee del equipo y no
+    // del enlace: es el equipo el que sabe a cual pertenece, y leerlo de otro
+    // lado abriria la puerta a que digan cosas distintas.
+    expect(
+      loQueDiceLaUbicacion({ sector_id: "otro-cualquiera", equipo_id: "cat320b" }, EQUIPOS2)
+    ).toEqual({ sectorId: "moviles", equipoId: "cat320b" });
+  });
+
+  it("un lugar que es un sector da el sector y deja el equipo libre", () => {
+    expect(loQueDiceLaUbicacion({ sector_id: "molienda", equipo_id: null }, EQUIPOS2)).toEqual({
+      sectorId: "molienda",
+      equipoId: "",
+    });
+  });
+
+  it("un lugar sin enlace no deduce nada", () => {
+    // Taller Electrico, OTRA y Oficinas: las tres mas usadas estan aca, asi
+    // que este es el camino normal y no el raro.
+    expect(loQueDiceLaUbicacion({ sector_id: null, equipo_id: null }, EQUIPOS2)).toEqual({
+      sectorId: "",
+      equipoId: "",
+    });
+    expect(loQueDiceLaUbicacion(undefined, EQUIPOS2)).toEqual({ sectorId: "", equipoId: "" });
+  });
+
+  it("un equipo que ya no esta en la lista no se elige", () => {
+    // El catalogo de ubicaciones puede apuntar a un equipo dado de baja. Elegir
+    // un id que el desplegable no muestra seria mandar un dato que nadie puede
+    // revisar; se cae al sector del enlace, que si se puede.
+    expect(
+      loQueDiceLaUbicacion({ sector_id: "molienda", equipo_id: "dado-de-baja" }, EQUIPOS2)
+    ).toEqual({ sectorId: "molienda", equipoId: "" });
   });
 });

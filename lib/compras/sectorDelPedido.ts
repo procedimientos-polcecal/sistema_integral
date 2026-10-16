@@ -94,3 +94,43 @@ export function elEquipoSigueValiendo(
   if (!sectorId) return true;
   return equipos.some((e) => e.id === equipoId && e.sector_id === sectorId);
 }
+
+/** A qué apunta una ubicación del catálogo. */
+export interface EnlaceDeUbicacion {
+  sector_id: string | null;
+  equipo_id: string | null;
+}
+
+/**
+ * Qué se deduce de "dónde se necesita": el sector, y a veces el equipo.
+ *
+ * El lugar es una de tres cosas, y las tres existen en el catálogo —medido el
+ * 16/10/2026 sobre las 44 ubicaciones—:
+ *
+ *   * **una máquina** (15): "CAT 320B", "Amarok", "Scania 420 8x4". Ahí el
+ *     equipo queda elegido y el sector sale **del equipo**, no del enlace: es
+ *     el equipo el que sabe a qué sector pertenece, y leerlo de otro lado
+ *     abriría la puerta a que digan cosas distintas;
+ *   * **un sector** (13): "Calcinación", "Molienda de cal", "Planta Filler 1";
+ *   * **ni una cosa ni la otra** (16): "Taller Eléctrico", "OTRA", "Oficinas",
+ *     que son justamente las más usadas. Ahí no se deduce nada, y está bien:
+ *     el formulario queda como si no se hubiera elegido.
+ *
+ * El equipo le gana al sector cuando el enlace tiene los dos, porque es más
+ * específico: un pedido para el CAT 320B es del CAT 320B, no "algo de Equipos
+ * móviles".
+ */
+export function loQueDiceLaUbicacion(
+  enlace: EnlaceDeUbicacion | undefined,
+  equipos: EquipoDelSector[]
+): { sectorId: string; equipoId: string } {
+  if (!enlace) return { sectorId: "", equipoId: "" };
+
+  const equipo = enlace.equipo_id
+    ? equipos.find((e) => e.id === enlace.equipo_id)
+    : undefined;
+
+  if (equipo) return { sectorId: equipo.sector_id ?? "", equipoId: equipo.id };
+
+  return { sectorId: enlace.sector_id ?? "", equipoId: "" };
+}

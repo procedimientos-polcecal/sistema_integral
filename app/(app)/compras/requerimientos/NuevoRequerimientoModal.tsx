@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo,
+  AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo, loQueDiceLaUbicacion,
   type SectorDePlanta,
 } from "@/lib/compras/sectorDelPedido";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
@@ -81,20 +81,27 @@ export default function NuevoRequerimientoModal({
   const [equiposError, setEquiposError] = useState("");
 
   /**
-   * El sector, que no se guarda: es una ayuda para llenar el formulario.
+   * El sector **no es un campo**: sale de "dónde se necesita".
    *
-   * Hace dos cosas con datos que ya existen: recorta el desplegable de equipos
-   * de 239 a los de ese sector, y sugiere quién paga —`sectores.empresa_id`
-   * dice de qué empresa es cada sector de planta, y los que sirven a las dos
-   * están marcados transversales—. Las reglas viven en
-   * `lib/compras/sectorDelPedido.ts`, con sus tests.
+   * Es lo mismo que pregunta el formulario de Google, que tampoco pide el
+   * sector aparte: ramifica por el lugar y en cada rama ofrece los equipos de
+   * ese lugar —son las 16 columnas "EQUIPO QUE SOLICITA" de la hoja de
+   * respuestas—. Preguntarlo dos veces acá sería pedirle a la gente que
+   * conteste dos veces lo mismo y abrir la puerta a que se contradigan.
    *
-   * No hace falta guardarlo: el equipo ya dice a qué sector pertenece
-   * (`equipos.sector_id`), así que una columna más en el requerimiento sería
-   * una segunda copia del mismo hecho, de las que después se contradicen.
+   * El enlace ya existe: `compras_ubicaciones` dice a qué sector o a qué
+   * equipo corresponde cada lugar. Medido el 16/10/2026 sobre las 44
+   * ubicaciones: 13 dan un sector —de ahí salen la empresa y el filtro—, 15
+   * dan un equipo puntual —y ahí se puede elegir el equipo solo— y 16 no dan
+   * nada, entre ellas las más usadas (Taller Eléctrico, OTRA, Oficinas). Para
+   * ésas no se sugiere nada y el formulario queda como estaba, que es lo
+   * correcto: lo que no se sabe no se inventa.
    */
   const [sectores, setSectores] = useState<SectorDePlanta[]>([]);
   const [sectorId, setSectorId] = useState("");
+  const [enlaceDeUbicacion, setEnlaceDeUbicacion] = useState<
+    Record<string, { sector_id: string | null; equipo_id: string | null }>
+  >({});
 
   useEffect(() => {
     let vigente = true;
@@ -118,15 +125,28 @@ export default function NuevoRequerimientoModal({
             }))
             .filter((e2: { etiqueta: string }) => e2.etiqueta)
         );
-        // Sólo los sectores que tienen algún equipo: los 16 restantes son
-        // administrativos y elegirlos dejaría el desplegable de equipos vacío
-        // sin que nadie entienda por qué.
-        const conEquipos = new Set(
-          (body.equipos ?? []).map((e2: { sector_id: string | null }) => e2.sector_id)
-        );
-        setSectores(
-          (body.sectores ?? []).filter((s2: SectorDePlanta) => conEquipos.has(s2.id))
-        );
+        // Van todos los sectores: acá no se eligen, se usan para nombrar el
+        // que salió de la ubicación y para leerle la empresa.
+        setSectores((body.sectores ?? []) as SectorDePlanta[]);
+
+        // A qué sector o equipo apunta cada ubicación. Va en su propia llamada
+        // porque es de Compras y la de arriba es de Mantenimiento; si falla,
+        // el formulario sigue andando sin la sugerencia.
+        try {
+          const res2 = await fetch("/api/compras/ubicaciones");
+          if (res2.ok) {
+            const cuerpo2 = await res2.json();
+            if (!vigente) return;
+            setEnlaceDeUbicacion(
+              Object.fromEntries(
+                (cuerpo2.ubicaciones ?? []).map(
+                  (u: { id: string; sector_id: string | null; equipo_id: string | null }) =>
+                    [u.id, { sector_id: u.sector_id, equipo_id: u.equipo_id }]
+                )
+              )
+            );
+          }
+        } catch { /* la sugerencia es de más; el pedido se carga igual */ }
       } catch (e2) {
         if (vigente) setEquiposError(e2 instanceof Error ? e2.message : String(e2));
       }
@@ -135,7 +155,8 @@ export default function NuevoRequerimientoModal({
   }, []);
 
   /**
-   * Al elegir un sector: sugerir quién paga y recortar los equipos.
+   * Al elegir dónde se necesita: deducir el sector, sugerir quién paga y
+   * recortar los equipos.
    *
    * Las dos decisiones delicadas están acá y son la misma: **no pisar lo que
    * una persona ya eligió.**
@@ -152,15 +173,24 @@ export default function NuevoRequerimientoModal({
    *     que se ve: nadie lo puede revisar antes de enviarlo, y después aparece
    *     en la ficha contradiciendo al sector.
    */
-  function elegirSector(nuevoSectorId: string) {
+  function elegirUbicacion(nuevaUbicacionId: string) {
+    setUbicacionId(nuevaUbicacionId);
+
+    const { sectorId: nuevoSectorId, equipoId: equipoDelLugar } = loQueDiceLaUbicacion(
+      enlaceDeUbicacion[nuevaUbicacionId],
+      equipos
+    );
+
     setSectorId(nuevoSectorId);
+    if (equipoDelLugar) setEquipoId(equipoDelLugar);
+    else if (!elEquipoSigueValiendo(equipos, equipoId, nuevoSectorId)) setEquipoId("");
 
-    const sector = sectores.find((s2) => s2.id === nuevoSectorId);
-    const sugerida = empresaSugerida(sector);
+    const sugerida = empresaSugerida(sectores.find((s2) => s2.id === nuevoSectorId));
     if (sugerida && !paga) setPaga(sugerida);
-
-    if (!elEquipoSigueValiendo(equipos, equipoId, nuevoSectorId)) setEquipoId("");
   }
+
+  /** El sector deducido, para poder nombrarlo en pantalla. */
+  const sectorDeducido = sectores.find((s2) => s2.id === sectorId);
 
   const equiposOfrecidos = equiposDelSector(equipos, sectorId);
 
@@ -364,7 +394,7 @@ export default function NuevoRequerimientoModal({
             <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
-              onChange={(e) => setUbicacionId(e.target.value)}
+              onChange={(e) => elegirUbicacion(e.target.value)}
             >
               <option value="">Sin especificar</option>
               {ubicaciones.map((u) => (
@@ -372,53 +402,38 @@ export default function NuevoRequerimientoModal({
               ))}
             </Select>
             <p className="mt-1 text-xs text-slate-500">
-              ¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos
-              lo escriben igual y se puede filtrar por ubicación.
+              {sectorDeducido
+                ? `Sector ${sectorDeducido.nombre}: abajo quedan sus equipos, y quién paga ` +
+                  "viene sugerido de ahí."
+                : "¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos " +
+                  "lo escriben igual y se puede filtrar por ubicación."}
             </p>
           </Campo>
 
-          {/* Sector y equipo */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Campo label="Sector">
-              <Select
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-                value={sectorId}
-                disabled={sectores.length === 0}
-                onChange={(e2) => elegirSector(e2.target.value)}
-              >
-                <option value="">Sin especificar</option>
-                {sectores.map((s2) => (
-                  <option key={s2.id} value={s2.id}>{s2.nombre}</option>
-                ))}
-              </Select>
-              <p className="mt-1 text-xs text-slate-500">
-                Opcional. Acota la lista de equipos y propone quién paga.
-              </p>
-            </Campo>
-
-            <Campo label="Para qué equipo">
-              <Select
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-                value={equipoId}
-                disabled={equipos.length === 0}
-                onChange={(e2) => setEquipoId(e2.target.value)}
-              >
-                <option value="">Sin especificar</option>
-                {equiposOfrecidos.map((e2) => (
-                  <option key={e2.id} value={e2.id}>{e2.etiqueta}</option>
-                ))}
-              </Select>
-              <p className="mt-1 text-xs text-slate-500">
-                {equiposError
-                  ? `No se pudo traer la lista de equipos (${equiposError}). El pedido se ` +
-                    "puede cargar igual; el equipo se le agrega después."
-                  : sectorId && equiposOfrecidos.length === 0
-                    ? "Ese sector no tiene equipos cargados. Sacá el sector para ver la lista completa."
-                    : "Opcional. Es lo que después deja ver cuánto se gastó en cada máquina, " +
-                      "y de dónde sale la imputación contable."}
-              </p>
-            </Campo>
-          </div>
+          {/* Para qué equipo */}
+          <Campo label="Para qué equipo">
+            <Select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+              value={equipoId}
+              disabled={equipos.length === 0}
+              onChange={(e2) => setEquipoId(e2.target.value)}
+            >
+              <option value="">Sin especificar</option>
+              {equiposOfrecidos.map((e2) => (
+                <option key={e2.id} value={e2.id}>{e2.etiqueta}</option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-slate-500">
+              {equiposError
+                ? `No se pudo traer la lista de equipos (${equiposError}). El pedido se ` +
+                  "puede cargar igual; el equipo se le agrega después."
+                : sectorId && equiposOfrecidos.length === 0
+                  ? "Ese lugar no tiene equipos cargados. Elegí otro, o dejalo sin especificar " +
+                    "para ver la lista completa."
+                  : "Opcional. Es lo que después deja ver cuánto se gastó en cada máquina, " +
+                    "y de dónde sale la imputación contable."}
+            </p>
+          </Campo>
 
           <Campo label="Detalle extra">
             <textarea
