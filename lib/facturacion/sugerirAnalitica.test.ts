@@ -209,3 +209,30 @@ describe("la distribución que se propone para una línea", () => {
     expect(s?.detalle).toBe("#9999 100%");
   });
 });
+
+describe("el guion no decide si una analitica se encuentra", () => {
+  // El formulario de Google escribe los equipos con los dos guiones y conviven
+  // dentro de la misma seccion: medido sobre su PDF el 16/10/2026, 185
+  // opciones con guion largo y 61 con corto. Una comparacion exacta fallaria
+  // por un caracter que nadie ve.
+  const CON_GUION = [
+    { id: 900, nombre: "PO-A1 - EDIFICIO", empresa: 1 },
+    { id: 901, nombre: "PO-A1-01 - ACARREADOR DE PLACAS", empresa: 1 },
+  ];
+
+  it("encuentra la analitica aunque el pedido traiga guion largo", () => {
+    expect(analiticaPorNombre("PO-A1-01 – ACARREADOR DE PLACAS", CON_GUION, 1)?.id).toBe(901);
+  });
+
+  it("y al reves, si la analitica de Odoo es la del guion largo", () => {
+    const enOdoo = [{ id: 902, nombre: "PO-A2 – EDIFICIO", empresa: 1 }];
+    expect(analiticaPorNombre("PO-A2 - EDIFICIO", enOdoo, 1)?.id).toBe(902);
+  });
+
+  it("lo que importa es el caso sin codigo, que no tiene otra via", () => {
+    // Un equipo con codigo lo resuelve igual `analiticaDelEquipo`. "Edificio"
+    // no es un equipo: no tiene codigo, asi que esta comparacion por nombre es
+    // su unica vía y un guion distinto la dejaba sin analitica en silencio.
+    expect(analiticaPorNombre("PO-A1 – Edificio", CON_GUION, 1)?.id).toBe(900);
+  });
+});

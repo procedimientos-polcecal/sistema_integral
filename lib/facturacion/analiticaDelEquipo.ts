@@ -134,11 +134,33 @@ export function analiticaPorNombre(
   return elegibles.length === 1 ? elegibles[0] : null;
 }
 
+/**
+ * El texto listo para comparar: sin acentos, sin mayúsculas y **sin importar
+ * qué guión se usó**.
+ *
+ * Lo del guión no es cosmética. El desplegable del formulario de Google escribe
+ * los equipos de dos formas distintas, y no por áreas ni por épocas: medido el
+ * 16/10/2026 sobre el PDF del formulario, **185 opciones llevan guión largo
+ * (`–`) y 61 guión corto (`-`)**, y conviven dentro de la misma sección —
+ * `PO-A1-01 – Acarreador de placas` al lado de `PO-A1-24 - Cinta transportadora
+ * 16`—. Nadie va a poder sostener una convención que la fuente no tiene.
+ *
+ * Sin esto, una comparación exacta falla por un carácter que nadie ve. Para un
+ * equipo con código eso se nota poco, porque `analiticaDelEquipo` lo resuelve
+ * igual por el código; pero las opciones que **no** son equipos —`PO-A1 -
+ * Edificio`, `PAÑOL`— no tienen código, así que esta comparación por nombre es
+ * su única vía y un guión distinto las deja sin analítica, en silencio.
+ *
+ * Se normaliza al comparar y no al guardar: lo que se guarda es lo que la
+ * persona eligió, y reescribirlo para que entre en una comparación es perder el
+ * original para siempre.
+ */
 function sinAcentos(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toUpperCase()
+    .replace(/[‐-―]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
