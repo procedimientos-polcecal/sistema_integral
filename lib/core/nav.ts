@@ -108,6 +108,7 @@ export const NAV: NavItem[] = [
     // que se hace y lo que se planifica.
     children: [
       { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
+      { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
