@@ -471,6 +471,45 @@ y fecha.
 La lección que vale más que el arreglo: **la regla que lo rompió no venía de
 una medición, venía de un razonamiento sobre el UNIQUE que nunca se comprobó.**
 
+#### El tercer 413, y por qué el tope dejó de ser una promesa
+
+Volvió el 16/10/2026. Y lo primero que hubo que admitir es que **no se podía
+saber cuál de las dos versiones estaba instalada**: el script vive fuera del
+repo, en un proyecto de Apps Script que se actualiza pegando el archivo a mano,
+y el mismo 413 podía ser un arreglo que nunca se pegó o un agujero nuevo. Desde
+la base no se distingue: el mensaje más pesado que había entrado desde el 13
+pesaba 2,89 MB y pasa con las dos.
+
+Dos cambios, y el segundo es el que importa:
+
+**El script dice qué versión es.** Hay un `VERSION` que viaja en cada POST,
+sale en el registro de `revisarLasPropiedades` y aparece en todos los mensajes
+de error. La pregunta "¿está puesta la última?" ahora se contesta.
+
+**El tope dejó de ser una promesa y pasó a ser una pista.** Dos cosas:
+
+- Se corta por **base64 acumulado** —`contenido.length`, exactamente lo que
+  viaja— y no por bytes crudos multiplicados por 4/3. Las dos versiones
+  anteriores contaban una cosa para predecir otra.
+- Y si el servidor **igual** contesta 413, la tanda **se parte al medio y se
+  reintenta**, recursivamente. Cuando ya no se puede partir —un solo adjunto
+  que el servidor no acepta— se informa ese adjunto y la corrida sigue con el
+  resto, en vez de caerse entera por un archivo.
+
+> Un tope elegido a mano es una predicción sobre lo que el otro lado va a
+> aceptar. Un 413 es el otro lado diciendo qué acepta de verdad. **Cuando los
+> dos no coinciden, gana el 413.**
+
+Probado con un simulador que **rechaza de verdad** en vez de confiar en la
+cuenta del script. El caso que lo demuestra: con el servidor cortando en 1,5 MB
+y el script creyendo que puede mandar 3,9 MB, los cuatro adjuntos llegaron
+igual —6 POSTs, 2 rechazados y reintentados, 0 perdidos, 0 duplicados—. Y con
+un adjunto que el servidor no acepta ni solo, el chico que iba al lado entró y
+el otro quedó informado.
+
+Esto no hace que el tope no importe: si queda corto, se pagan POSTs de más. Lo
+que cambia es que **ya no puede hacer fallar una corrida**.
+
 ### Cómo no trae dos veces lo mismo
 
 Dos redes, y hacen falta las dos:
