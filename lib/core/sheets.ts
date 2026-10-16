@@ -265,6 +265,34 @@ export async function asegurarColumnas(
  */
 export const comoTexto = (valor: string): string => `'${valor}`;
 
+/**
+ * Un texto escrito por una persona, como hay que mandarlo para que la planilla
+ * no lo interprete.
+ *
+ * Es el complemento de `comoTexto`: aquélla fuerza, ésta decide cuándo. Y no
+ * contradice la nota de arriba, porque **la prosa sigue sin forzarse**: sólo se
+ * escapa lo que no es prosa. Dos casos, los dos medidos contra cómo lee Google
+ * un `USER_ENTERED`:
+ *
+ * - Lo que **arranca** con `=`, `+`, `-` o `@`: entra como fórmula. Un `=A1`
+ *   escrito en una observación deja la celda mostrando otra celda, y lo peor es
+ *   que parece un dato.
+ * - Lo que es **sólo** dígitos y separadores: `12/10` se vuelve una fecha,
+ *   `19,58` un número según el locale. "Se rompió el 12 de octubre" no entra
+ *   acá —tiene letras— y va tal cual, que es lo que se quiere.
+ *
+ * El apóstrofo no se ve en la planilla: Google lo consume y guarda el valor
+ * como texto.
+ */
+export function textoParaLaCelda(valor: string | null | undefined): string {
+  const v = String(valor ?? "");
+  // Vacío es como se borra una celda, y un apóstrofo solo no la borraría.
+  if (v === "") return "";
+  if (/^[=+\-@]/.test(v)) return comoTexto(v);
+  if (/^[\d.,:/\s-]+$/.test(v)) return comoTexto(v);
+  return v;
+}
+
 /*
  * `valor` acepta número desde el 16/09/2026, y conviene usarlo.
  *

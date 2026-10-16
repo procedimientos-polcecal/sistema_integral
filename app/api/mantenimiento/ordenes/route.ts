@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { leerValores, escribirCeldas } from "@/lib/core/sheets";
+import { escribirCeldas } from "@/lib/core/sheets";
 import { exportarAltaDeOT, maximoDeLaSerieEnLaPlanilla } from "@/lib/mantenimiento/formulario";
+import { escribirEnLaFilaDeLaOT, type FilaDeOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
@@ -347,41 +348,13 @@ export async function PATCH(request: Request) {
 /**
  * Escribe en la planilla lo que se registró en la app.
  *
- * Best-effort: la app ya guardó, y que Google esté caído o que la planilla no
- * esté compartida como editor no puede tirar abajo el registro del trabajo. Se
- * devuelve el problema para que la pantalla lo muestre.
- *
- * Antes de escribir se comprueba que la fila **siga siendo la de esta OT**: el
- * número de fila que guardamos se corre si alguien inserta una fila arriba, y
- * escribir a ciegas pisaría el trabajo de otro.
+ * Qué celdas tocar lo decide `celdasParaRegistrar`; la escritura —con la guarda
+ * de que la fila siga siendo la de esta OT— vive en `planillaDeOT.ts`, porque
+ * las notas escriben la columna X por el mismo camino.
  */
 async function escribirEnLaPlanilla(
-  orden: { ot_number: number | null; sheets_row: number | null },
+  orden: FilaDeOT,
   registro: RegistroDeOT
 ): Promise<string | null> {
-  const celdas = celdasParaRegistrar(registro);
-  if (celdas.length === 0) return null;
-
-  const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
-  if (!planilla || !orden.sheets_row) return null;
-
-  try {
-    const fila = (await leerValores(
-      planilla, `${pestana}!A${orden.sheets_row}:A${orden.sheets_row}`, { sinFormato: true }
-    ))[0] ?? [];
-
-    if (Number(fila[0]) !== orden.ot_number) {
-      return "La fila de la planilla ya no es la de esta OT — alguien la movió. " +
-             "Sincronizá las órdenes y volvé a intentar.";
-    }
-
-    await escribirCeldas(
-      planilla,
-      celdas.map((c) => ({ pestana, fila: orden.sheets_row!, columna: c.columna, valor: c.valor }))
-    );
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
+  return escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(registro));
 }

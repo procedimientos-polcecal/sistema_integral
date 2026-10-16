@@ -18,6 +18,8 @@ import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
+import JustificacionOT from "./JustificacionOT";
+import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import OrdenarTrabajo from "./OrdenarTrabajo";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
@@ -116,6 +118,16 @@ export default function OrdenesClient({
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
+  /**
+   * Cuáles de las que se están viendo ya tienen una justificación.
+   *
+   * Va en un pedido aparte del listado para que la pantalla **no dependa** de
+   * que la tabla de notas exista: si falla, el `catch` deja el conjunto vacío,
+   * los carteles no aparecen y las órdenes se siguen viendo igual. Un listado
+   * roto por un cartel sería un mal negocio.
+   */
+  const [justificadas, setJustificadas] = useState<Set<string>>(new Set());
+
   const filtros: FiltrosOt = useMemo(() => ({
     busqueda: busquedaAplicada, campoFecha, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
@@ -173,14 +185,42 @@ export default function OrdenesClient({
     window.history.replaceState(window.history.state, "", destino);
   }, [query]);
 
+  /**
+   * Cuáles de estas órdenes ya tienen quien explique por qué siguen abiertas.
+   *
+   * Sólo se pregunta por las abiertas: una realizada no debe ninguna, y
+   * mandarlas igual sería la mitad de los ids de la página para nada.
+   *
+   * Nunca tira: si la tabla no está —la migración no corrió— o el pedido
+   * falla, se queda sin carteles y el listado anda igual.
+   */
+  const cargarJustificadas = useCallback(async (ordenes: any[]) => {
+    const abiertas = ordenes.filter((o) => pideJustificacion(o.estado)).map((o) => o.id);
+    if (abiertas.length === 0) {
+      setJustificadas(new Set());
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/mantenimiento/ordenes/justificadas?ordenes=${abiertas.join(",")}`
+      );
+      const body = await res.json().catch(() => ({}));
+      setJustificadas(new Set<string>(res.ok ? body.data ?? [] : []));
+    } catch {
+      setJustificadas(new Set());
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/mantenimiento/ordenes?${consultaDeLaRuta(filtros, page)}`);
     const json = await res.json();
-    setOrders(json.data ?? []);
+    const data = json.data ?? [];
+    setOrders(data);
     setCount(json.count ?? 0);
     setLoading(false);
-  }, [page, filtros]);
+    void cargarJustificadas(data);
+  }, [page, filtros, cargarJustificadas]);
 
   async function sincronizar() {
     setSincronizando(true);
@@ -573,6 +613,18 @@ export default function OrdenesClient({
                           Parar sector
                         </span>
                       )}
+                      {/* Se marca la que NO tiene, que es la que hay que ir a
+                          buscar. La que sí tiene no lleva cartel: para leerla
+                          se abre la orden, y un cartel en las cuarenta no
+                          distinguiría ninguna. */}
+                      {pideJustificacion(o.estado) && !justificadas.has(o.id) && (
+                        <span
+                          title="Sigue abierta y nadie dejó dicho por qué"
+                          className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                        >
+                          Sin justificar
+                        </span>
+                      )}
                       <span className="text-xs text-slate-400 shrink-0 hidden md:block">
                         {o.fecha ? new Date(o.fecha).toLocaleDateString("es-AR") : "—"}
                       </span>
@@ -588,6 +640,7 @@ export default function OrdenesClient({
                         onChangeEstado={changeEstado}
                         onVerRepuestos={() => setVerRepuestos(o)}
                         onCambiarParada={cambiarParada}
+                        onJustificacion={() => cargarJustificadas(orders)}
                       />
                     )}
                   </div>
@@ -658,12 +711,16 @@ export default function OrdenesClient({
   );
 }
 
-function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos }: {
+function OTDetail({
+  order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onJustificacion,
+}: {
   onVerRepuestos?: () => void;
   order: any;
   canEdit: boolean;
   onChangeEstado: (id: string, estado: string) => void;
   onCambiarParada: (id: string, valor: boolean) => void;
+  /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
+  onJustificacion?: () => void;
 }) {
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
@@ -717,6 +774,13 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
           Repuestos que hacen falta
         </button>
       </div>
+
+      {/* Sólo en las que siguen abiertas: una realizada ya no debe ninguna
+          explicación, y lo que se encontró al hacerla va en la observación de
+          la ejecución, que es otra cosa. */}
+      {pideJustificacion(o.estado) && (
+        <JustificacionOT ordenId={o.id} puedeEditar={canEdit} onCambio={onJustificacion} />
+      )}
 
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">

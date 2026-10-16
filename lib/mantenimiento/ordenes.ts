@@ -8,11 +8,16 @@
  *   G quién lo realiza · H descripción · I repuesto · J ejecución · K cierre ·
  *   L (calculada, se saltea) · M estado · N contratista · O horas ·
  *   P/Q/R operarios · S prioridad · T frecuencia · U próxima fecha ·
- *   V fotos · W observaciones
+ *   V fotos · W observaciones · X observación previa
  *
  * La L se llama "Column 19" y trae un "Atrasado / al día" calculado. **No es el
  * estado**: el estado está en M, y confundirlas daría por atrasada media
  * planilla.
+ *
+ * La W y la X son dos cosas distintas y se confunden por el nombre: la W es lo
+ * que se **encontró al hacer** el trabajo, y la X por qué **todavía no se
+ * hizo**. Una la escribe el registro de la ejecución y la otra las notas de
+ * `lib/mantenimiento/notas.ts`.
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
@@ -50,7 +55,17 @@ const COL = {
   proximaFecha: 20,
   fotos: 21,
   observaciones: 22,
+  observacionPrevia: 23,
 } as const;
+
+/**
+ * La columna de la observación previa, para quien la escribe desde afuera.
+ *
+ * Se exporta desde acá y no se repite en `notas.ts` porque el mapa de columnas
+ * de esta planilla tiene que ser uno solo: una segunda copia es cómo dos
+ * campos terminan escribiendo la misma celda.
+ */
+export const COLUMNA_OBSERVACION_PREVIA: number = COL.observacionPrevia;
 
 /**
  * El estado de la planilla, en el vocabulario del sistema.

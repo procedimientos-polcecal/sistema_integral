@@ -166,7 +166,10 @@ Sus columnas coinciden con lo que leía el código de origen:
 `A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
 H descripción · I repuesto · J ejecución · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
-U próxima fecha · V fotos · W observaciones`
+U próxima fecha · V fotos · W observaciones · X observación previa`
+
+La **X se agregó el 16/10/2026** y es la única que no estaba en el origen. Ver
+"Por qué una OT todavía no se hizo", más abajo.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media
@@ -229,6 +232,47 @@ dice qué falta completar a mano.
 (`/api/fotos-drive`) y escribe el link en la columna V. Ese endpoint no existe
 acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que
 cuando haya dónde subirla es sumar el campo.
+
+## Por qué una OT todavía no se hizo
+
+La observación de arriba se completa **al realizar** el trabajo: qué se
+encontró, qué se cambió. Para una OT que sigue abierta no servía, porque no hay
+ejecución de la que colgarla — y ésa es justamente la que hay que explicar. Al
+16/10/2026 había **40 órdenes abiertas**: 24 atrasadas, 12 por hacer, 4 en
+proceso, ninguna con dónde decir por qué.
+
+**Es un historial y no un campo.** Una OT atrasada se vuelve a justificar con el
+tiempo —"falta el repuesto" y dos meses después "esperamos la parada de
+planta"—, y pisar la razón anterior borra la única señal de que se viene
+postergando, que es lo que una revisión quiere ver. Las notas viven en
+`ordenes_trabajo_notas` (migración `20261016092258`), con quién y cuándo, y
+**no se editan**: un historial que se puede reescribir no es un historial. Un
+error se arregla borrando la propia nota y escribiendo otra.
+
+**A la planilla va la última**, a la columna X, porque una celda no es una
+lista y lo que le sirve a quien la mira es por qué está parada *hoy*. Se escribe
+por el mismo camino que la W —`escribirEnLaFilaDeLaOT` de
+`lib/mantenimiento/planillaDeOT.ts`, con su guarda de que la fila siga siendo la
+de esta OT— y borrar una nota reescribe la celda con la que quedó siendo la
+última: dejar la anterior sería mentir sobre por qué está parada.
+
+**El texto va escapado.** Las escrituras usan `USER_ENTERED`, así que un "12/10"
+se vuelve una fecha y un "=A1" una fórmula que lee otra celda. `textoParaLaCelda`
+de `lib/core/sheets.ts` antepone el apóstrofo —que Google consume— sólo a lo que
+arranca con `= + - @` o es nada más que dígitos y separadores. **La prosa no se
+fuerza**: "Se rompió el 12 de octubre" tiene letras y va tal cual.
+
+**El cartel "Sin justificar" se pide aparte del listado.** Un
+`ordenes_trabajo_notas(count)` colgado del `select` de las órdenes funciona
+—está probado contra la base— pero ata la pantalla entera a que la tabla exista:
+un deploy antes de correr la migración dejaría las órdenes en 400. Con el pedido
+aparte, lo único que pasa es que los carteles no aparecen. Se marca la que **no**
+tiene: la que sí tiene se abre y se lee.
+
+**Qué falta a mano en la planilla:** la pestaña `OT` tenía exactamente 23
+columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1`.
+Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
+planilla con lo que haya dicho Google.
 
 ## Iniciar una OT pregunta por el equipo
 
