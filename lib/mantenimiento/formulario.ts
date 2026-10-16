@@ -115,18 +115,21 @@ export function laSerieEstaCongelada(columna: readonly (readonly unknown[])[]): 
 /**
  * El próximo número de la serie y en qué fila va, de **una sola lectura**.
  *
- * EL INCIDENTE DEL 16/10/2026. La OT 2796 se creó desde el sistema y no llegó
- * a la planilla: la serie seguía sin congelar, así que la guarda se negó a
- * escribir —bien— pero el número ya estaba tomado. La OT quedó en la base con
- * el 2796 y la hoja de respuestas con el 2795 arriba de todo, así que la
- * siguiente respuesta del formulario iba a llevarse el 2796 también —el Apps
- * Script cuenta `max(A)+1`— y el `upsert` por `ot_number` de la sincronización
- * habría pisado la de la app con la del formulario, sin avisar.
+ * EL INCIDENTE DEL 16/10/2026, que es de donde sale esta función. La OT 2796 se
+ * creó desde el sistema y no llegó a la planilla: la guarda se negó a escribir
+ * —bien— pero el número ya estaba tomado, porque **salía de una lectura y la
+ * fila de otra**, con una escritura en el medio que podía no pasar. Pedir las
+ * dos juntas es lo que hace que una negativa no cueste nada.
  *
- * La raíz no era la guarda: era que **el número salía de una lectura y la fila
- * de otra**, con una escritura en el medio que podía no pasar. Pedir las dos
- * juntas es lo que hace que una negativa no cueste nada: si no se puede
- * escribir, no se consume ningún número.
+ * **La serie está repartida entre dos pestañas** desde ese mismo día: el
+ * formulario escribe en la suya y el sistema en `Altas del sistema`, para que
+ * Forms no pueda empujar las filas del sistema hacia abajo. Por eso el máximo
+ * se cuenta sobre las dos: contar una sola es repartir un número que la otra ya
+ * usó, que es exactamente lo que se está evitando.
+ *
+ * La **fila** es la de las altas, que es donde se escribe. La guarda de las
+ * fórmulas, en cambio, mira **sólo el formulario**: ahí vive la cadena
+ * relativa, y la hoja de altas la escribe el sistema con literales.
  *
  * Es pura para poder probarla: lo que habla con Google es `altaEnLaPlanilla`.
  */
@@ -135,9 +138,10 @@ export type LoQueSigue =
   | { ok: false; error: string };
 
 export function loQueSigueEnLaSerie(
-  serie: readonly (readonly unknown[])[]
+  serieDelFormulario: readonly (readonly unknown[])[],
+  serieDeLasAltas: readonly (readonly unknown[])[]
 ): LoQueSigue {
-  if (!laSerieEstaCongelada(serie)) {
+  if (!laSerieEstaCongelada(serieDelFormulario)) {
     return {
       ok: false,
       error:
@@ -151,8 +155,11 @@ export function loQueSigueEnLaSerie(
 
   return {
     ok: true,
-    ot_number: maximoDeLaSerie(serie) + 1,
-    fila: filaSiguienteSegunLaColumna(serie),
+    ot_number: Math.max(
+      maximoDeLaSerie(serieDelFormulario),
+      maximoDeLaSerie(serieDeLasAltas)
+    ) + 1,
+    fila: filaSiguienteSegunLaColumna(serieDeLasAltas),
   };
 }
 

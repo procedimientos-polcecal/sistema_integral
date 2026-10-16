@@ -176,42 +176,66 @@ describe("las celdas del alta", () => {
  * dos de la misma, y si no se puede escribir no se consume nada.
  */
 describe("lo que sigue en la serie", () => {
-  const congelada = [["N° OT"], ["622"], ["2794"], ["2795"]];
+  const form = [["N° OT"], ["622"], ["2794"], ["2795"]];
+  const sinAltas = [["N° OT"]];
 
   it("el numero y la fila salen de la misma lectura", () => {
-    const r = loQueSigueEnLaSerie(congelada);
+    const r = loQueSigueEnLaSerie(form, sinAltas);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.ot_number).toBe(2796);
-    expect(r.fila).toBe(5);
-  });
-
-  /** Con una formula viva no se da numero: darlo es lo que lo quemaba. */
-  it("si la serie no esta congelada no hay numero, y dice por que", () => {
-    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], ['=A2+1']]);
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.error).toContain("fórmula");
-  });
-
-  /** Una pestana con solo el encabezado: la serie arranca y la fila es la 2. */
-  it("una hoja recien hecha empieza en 1", () => {
-    const r = loQueSigueEnLaSerie([["N° OT"]]);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.ot_number).toBe(1);
     expect(r.fila).toBe(2);
   });
 
   /**
-   * Los huecos del medio no corren la fila ni saltean el numero: la fila es la
-   * siguiente a la ultima con algo, y el numero el maximo mas uno.
+   * La serie quedo repartida entre dos hojas el 16/10/2026, asi que contar una
+   * sola es repartir un numero que la otra ya uso.
    */
+  it("el maximo sale de las dos pestanas, no de una", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2795"]], [["N° OT"], ["2796"], ["2797"]]);
+    expect(r.ok && r.ot_number).toBe(2798);
+  });
+
+  it("si el maximo esta en el formulario, tambien", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2799"]], [["N° OT"], ["2796"]]);
+    expect(r.ok && r.ot_number).toBe(2800);
+  });
+
+  /** Se escribe en las altas, asi que la fila es de esa hoja y no del formulario. */
+  it("la fila es la de las altas, no la del formulario", () => {
+    const largo = Array.from({ length: 2175 }, (_, i) => [String(600 + i)]);
+    const r = loQueSigueEnLaSerie(largo, [["N° OT"], ["2796"], ["2797"]]);
+    expect(r.ok && r.fila).toBe(4);
+  });
+
+  it("con las altas vacias se empieza en la fila 2", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2795"]], sinAltas);
+    expect(r.ok && r.fila).toBe(2);
+    expect(r.ok && r.ot_number).toBe(2796);
+  });
+
+  /**
+   * La cadena de formulas vive en el formulario; la hoja de altas la escribe el
+   * sistema con literales. El mensaje tiene que mandar a la que hay que tocar.
+   */
+  it("una formula viva en el formulario frena, y nombra esa pestana", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], ['=A2+1']], sinAltas);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("Respuestas de formulario");
+    expect(r.error).not.toContain("Altas del sistema");
+  });
+
+  it("una hoja recien hecha empieza en 1", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"]], sinAltas);
+    expect(r.ok && r.ot_number).toBe(1);
+    expect(r.ok && r.fila).toBe(2);
+  });
+
+  /** Un hueco no corre la fila ni saltea el numero. */
   it("un hueco en el medio no desacomoda ninguna de las dos", () => {
-    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], [], ["2795"]]);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.ot_number).toBe(2796);
-    expect(r.fila).toBe(5);
+    const r = loQueSigueEnLaSerie(form, [["N° OT"], ["2796"], [], ["2797"]]);
+    expect(r.ok && r.ot_number).toBe(2798);
+    expect(r.ok && r.fila).toBe(5);
   });
 });
