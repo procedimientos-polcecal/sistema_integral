@@ -233,6 +233,53 @@ dice qué falta completar a mano.
 acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que
 cuando haya dónde subirla es sumar el campo.
 
+## Crear una OT desde el sistema: la planilla primero
+
+**Una OT creada desde la app se escribe en la hoja de respuestas del
+formulario, no en la pestaña `OT` del master.** Esa pestaña es el derrame de
+cuatro `QUERY(IMPORTRANGE(...))` y no tiene un solo literal en la columna A:
+escribir ahí o bloquea el derrame —`#REF!`, y se borra la importación entera— o
+lo pisa el derrame al recalcular.
+
+**El orden es planilla y después base, y no al revés.** La planilla manda: una
+orden existe cuando tiene su fila. El número sale de la misma lectura que la
+fila, y si la escritura no se puede hacer, no se creó nada en ningún lado.
+
+Lo que costó aprenderlo, el **16/10/2026**: se creó la OT **2796** desde el
+sistema. La columna A de la hoja de respuestas todavía no estaba congelada, así
+que la guarda se negó a escribir —bien—, pero el número **ya estaba tomado**.
+Quedó así:
+
+| | |
+|---|---|
+| En la base | OT 2796, `app_created`, `sheets_row` null |
+| En la hoja de respuestas | arriba de todo, 2795 |
+
+El Apps Script numera con `max(A)+1`, así que **la siguiente respuesta del
+formulario se iba a llevar el 2796 también**, y el `upsert` por `ot_number` de
+la sincronización habría pisado la de la app con la del formulario. No era "el
+riesgo de un número repetido": era una pérdida garantizada y silenciosa.
+
+El código decía, con todas las letras, que prefería ese riesgo: *"Si la planilla
+no se puede leer, vale el máximo de la base: es peor no poder crear la orden que
+arriesgar un número repetido, y el aviso lo dice."* Dos cosas estaban mal ahí. La
+primera es que el riesgo no era un riesgo. **La segunda es que el aviso no lo
+decía**: la ruta devolvía `planilla_error` desde siempre y `NuevaOTModal` nunca
+lo leyó, así que la pantalla se cerró sin una palabra. Un valor que nadie
+muestra no es un aviso.
+
+**El precio, dicho:** con Google caído no se puede crear una OT desde la app. Es
+visible y se reintenta. Lo otro no se veía nunca.
+
+**El caso del medio también está cubierto:** si la fila se escribe y después
+falla el insert en la base, la OT queda sólo en la planilla — que es el estado
+normal de cualquier orden cargada por el formulario, y la próxima
+sincronización la trae. La pantalla lo dice y pide no cargarla de nuevo.
+
+**La precondición sigue siendo que la columna A esté congelada.** Mientras tenga
+una sola fórmula viva, crear una OT desde el sistema devuelve 502 explicando por
+qué, sin tomar número.
+
 ## Por qué una OT todavía no se hizo
 
 La observación de arriba se completa **al realizar** el trabajo: qué se

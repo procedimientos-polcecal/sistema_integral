@@ -112,6 +112,50 @@ export function laSerieEstaCongelada(columna: readonly (readonly unknown[])[]): 
   return true;
 }
 
+/**
+ * El próximo número de la serie y en qué fila va, de **una sola lectura**.
+ *
+ * EL INCIDENTE DEL 16/10/2026. La OT 2796 se creó desde el sistema y no llegó
+ * a la planilla: la serie seguía sin congelar, así que la guarda se negó a
+ * escribir —bien— pero el número ya estaba tomado. La OT quedó en la base con
+ * el 2796 y la hoja de respuestas con el 2795 arriba de todo, así que la
+ * siguiente respuesta del formulario iba a llevarse el 2796 también —el Apps
+ * Script cuenta `max(A)+1`— y el `upsert` por `ot_number` de la sincronización
+ * habría pisado la de la app con la del formulario, sin avisar.
+ *
+ * La raíz no era la guarda: era que **el número salía de una lectura y la fila
+ * de otra**, con una escritura en el medio que podía no pasar. Pedir las dos
+ * juntas es lo que hace que una negativa no cueste nada: si no se puede
+ * escribir, no se consume ningún número.
+ *
+ * Es pura para poder probarla: lo que habla con Google es `altaEnLaPlanilla`.
+ */
+export type LoQueSigue =
+  | { ok: true; ot_number: number; fila: number }
+  | { ok: false; error: string };
+
+export function loQueSigueEnLaSerie(
+  serie: readonly (readonly unknown[])[]
+): LoQueSigue {
+  if (!laSerieEstaCongelada(serie)) {
+    return {
+      ok: false,
+      error:
+        `La columna ${COLUMNA_SERIE} de «${HOJA_DE_RESPUESTAS}» todavía numera con una ` +
+        `fórmula por fila. Mientras siga así, una OT escrita por el sistema y una ` +
+        `respuesta del formulario pueden quedar con el mismo número, así que no se ` +
+        `escribe ni se toma número. Hay que pegar esa columna como sólo valores — ver ` +
+        `docs/mantenimiento-formulario-apps-script.gs.`,
+    };
+  }
+
+  return {
+    ok: true,
+    ot_number: maximoDeLaSerie(serie) + 1,
+    fila: filaSiguienteSegunLaColumna(serie),
+  };
+}
+
 /** El número más alto de la serie, que es de donde sale el siguiente. */
 export function maximoDeLaSerie(columna: readonly (readonly unknown[])[]): number {
   let maximo = 0;
@@ -233,13 +277,16 @@ const COLUMNA_SERIE = "A";
 const serieDeLaPlanilla = (planilla: string): Promise<string[][]> =>
   leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
 
-export interface ResultadoDelAlta {
-  ok: boolean;
-  /** En qué fila de la hoja de respuestas quedó. Sólo para informar. */
-  fila?: number;
+export type ResultadoDelAlta =
+  | {
+      ok: true;
+      /** El número que la serie le dio, y que ya está escrito en la planilla. */
+      ot_number: number;
+      /** En qué fila de la hoja de respuestas quedó. Sólo para informar. */
+      fila: number;
+    }
   /** Qué pasó, sin traducir. Un diagnóstico que no se distingue no sirve. */
-  error?: string;
-}
+  | { ok: false; error: string };
 
 /**
  * El número más alto de la serie, leído de donde la serie vive.
@@ -265,66 +312,66 @@ export async function maximoDeLaSerieEnLaPlanilla(): Promise<number | null> {
 }
 
 /**
- * Escribe el alta al final de la hoja de respuestas.
+ * Da de alta la orden en la hoja de respuestas y devuelve el número que le tocó.
  *
- * No lanza: devuelve qué pasó. Quien llama decide, y lo que decide es decirlo
- * —la OT ya existe en el sistema y que Google esté caído no puede tirarla
- * abajo, pero tampoco se puede callar que no llegó a la planilla—.
+ * **Se llama antes de crear la OT en la base, y ése es el punto.** La planilla
+ * manda en Mantenimiento: una orden existe cuando tiene su fila. Si esto falla,
+ * no se creó nada en ningún lado y no se consumió ningún número — que es
+ * exactamente lo que el 16/10/2026 no pasó y dejó a la 2796 esperando que el
+ * formulario repartiera su número otra vez. Ver `loQueSigueEnLaSerie`.
  *
- * Se lee con `leerFormulasDeRango` y no con los valores a propósito: hacen
- * falta las dos cosas de la misma lectura —si la celda es una fórmula y qué
- * número tiene—, y con los valores calculados la primera pregunta no se puede
- * contestar.
+ * Al revés tampoco es gratis, y conviene saberlo: si la fila se escribe y
+ * después falla el insert en la base, la OT queda **sólo en la planilla**. Eso
+ * no es un estado roto sino el estado normal de cualquier orden cargada por el
+ * formulario, y la próxima sincronización la trae. Al derecho, en cambio, la
+ * pérdida era silenciosa.
+ *
+ * No lanza: devuelve qué pasó, sin traducir, para que la pantalla lo muestre.
+ *
+ * Se lee con `leerFormulas` y no con los valores a propósito: hacen falta las
+ * dos cosas de la misma lectura —si la celda es una fórmula y qué número
+ * tiene—, y con los valores calculados la primera no se puede contestar.
  */
-export async function exportarAltaDeOT(datos: DatosDelAlta): Promise<ResultadoDelAlta> {
+export async function altaEnLaPlanilla(
+  datos: Omit<DatosDelAlta, "ot_number">
+): Promise<ResultadoDelAlta> {
   const planilla = PLANILLA();
   if (!planilla) {
     return {
       ok: false,
       error:
-        "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID: la OT quedó sólo en la app.",
+        "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay " +
+        "dónde escribir la orden ni de dónde sacarle el número.",
     };
   }
 
   try {
     const serie = await serieDeLaPlanilla(planilla);
 
-    // La guarda que no se puede delegar a que alguien se acuerde. Ver el
-    // encabezado de este archivo: con la fórmula viva, la primera fila que
-    // Forms inserte en el medio reparte un número que el sistema ya usó.
-    if (!laSerieEstaCongelada(serie)) {
-      return {
-        ok: false,
-        error:
-          `La columna ${COLUMNA_SERIE} de «${HOJA_DE_RESPUESTAS}» todavía numera con una ` +
-          `fórmula por fila. Mientras siga así, una OT escrita por el sistema y una ` +
-          `respuesta del formulario pueden quedar con el mismo número, así que no se ` +
-          `escribe. Hay que pegar esa columna como sólo valores — ver ` +
-          `docs/mantenimiento-formulario-apps-script.gs.`,
-      };
-    }
+    // El número y la fila, de esta misma lectura. Si la serie no está
+    // congelada no devuelve ninguno de los dos: con la fórmula viva, la
+    // primera fila que Forms inserte en el medio reparte un número que el
+    // sistema ya usó.
+    const sigue = loQueSigueEnLaSerie(serie);
+    if (!sigue.ok) return sigue;
 
     const encabezado =
       (await leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!1:1`))[0] ?? [];
 
-    const armado = celdasDelAlta(encabezado, datos);
+    const armado = celdasDelAlta(encabezado, { ...datos, ot_number: sigue.ot_number });
     if (!armado.ok) return { ok: false, error: armado.motivos.join("; ") };
-
-    // La fila libre sale de la misma columna que la serie: es la que dice si
-    // una fila tiene datos, y viene de la lectura que ya comprobamos.
-    const fila = filaSiguienteSegunLaColumna(serie);
 
     await escribirCeldas(
       planilla,
       armado.celdas.map((c) => ({
         pestana: HOJA_DE_RESPUESTAS,
         columna: c.columna,
-        fila,
+        fila: sigue.fila,
         valor: c.valor,
       }))
     );
 
-    return { ok: true, fila };
+    return { ok: true, ot_number: sigue.ot_number, fila: sigue.fila };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

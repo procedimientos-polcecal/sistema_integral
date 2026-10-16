@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { escribirCeldas } from "@/lib/core/sheets";
-import { exportarAltaDeOT, maximoDeLaSerieEnLaPlanilla } from "@/lib/mantenimiento/formulario";
+import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT, type FilaDeOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   celdasParaRegistrar, repartirRegistroDeOT,
@@ -146,7 +146,45 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  const ot_number = await proximoNumeroDeOT(admin);
+  // ── Primero la planilla, después la base ────────────────────
+  //
+  // **La planilla manda en Mantenimiento: una orden existe cuando tiene su
+  // fila.** Acá se escribe esa fila y de ahí sale el número, de la misma
+  // lectura. Si falla, no se creó nada en ningún lado y no se consumió ningún
+  // número.
+  //
+  // Antes era al revés —insertar, y después intentar la planilla como
+  // best-effort— con el argumento de que "es peor no poder crear la orden que
+  // arriesgar un número repetido". El 16/10/2026 se vio lo que ese argumento
+  // no medía: la OT 2796 quedó en la base con un número que la hoja de
+  // respuestas todavía no había repartido, así que la siguiente respuesta del
+  // formulario se lo iba a llevar también, y el `upsert` por `ot_number` de la
+  // sincronización habría pisado la de la app con la del formulario. No era el
+  // riesgo de un número repetido: era una pérdida garantizada y silenciosa.
+  //
+  // El precio, dicho: con Google caído no se puede crear una OT desde la app.
+  // Es visible y se reintenta; lo otro no se veía nunca.
+  const alta = await altaEnLaPlanilla({
+    creado: new Date(),
+    sector: sector_raw || null,
+    equipo: equipo_raw || null,
+    especialidad: especialidad || null,
+    tipo: tipo || null,
+    quien: quien || null,
+    descripcion: descripcion.trim(),
+    repuesto: repuesto?.trim() || null,
+    fecha_ejecucion: fecha_ejecucion || null,
+    prioridad: prioridad || null,
+  });
+
+  if (!alta.ok) {
+    return NextResponse.json(
+      { error: `La orden no se creó porque no se pudo escribir en la planilla. ${alta.error}` },
+      { status: 502 }
+    );
+  }
+
+  const ot_number = alta.ot_number;
 
   const record = {
     ot_number,
@@ -178,38 +216,29 @@ export async function POST(request: Request) {
     synced_at:       new Date().toISOString(),
   };
 
-  const { data: inserted, error } = await admin
-    .from("ordenes_trabajo").insert(record).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // ── A la planilla ───────────────────────────────────────────
+  // La fila ya está escrita, así que la orden ya existe donde manda. Si esto
+  // falla queda sólo en la planilla, que es el estado normal de cualquier
+  // orden cargada por el formulario: la próxima sincronización la trae. Se
+  // dice igual, porque hasta entonces no se ve en el sistema.
   //
-  // **A la hoja de respuestas del formulario, no a la pestaña `OT`.** Esa
-  // pestaña es el derrame de cuatro `QUERY(IMPORTRANGE(...))`: de sus 2.161
-  // celdas de la columna A no hay una sola que sea un literal, así que escribir
-  // ahí o bloqueaba el derrame —`#REF!`, y se borraba la importación entera— o
-  // lo pisaba el derrame al recalcular. Las tres OT que figuraban como
-  // "creadas desde la app" estaban en la planilla porque alguien las había
-  // cargado **también** por el formulario. Ver `lib/mantenimiento/formulario.ts`.
-  //
-  // `sheets_row` ya no se escribe acá, y es a propósito: la fila de la hoja de
+  // `sheets_row` no se escribe acá, y es a propósito: la fila de la hoja de
   // respuestas no es la del master —Forms inserta y la corre—, y la del master
   // la pone la sincronización cuando vuelve a leerla. Guardar la de acá sería
   // guardar un número que apunta a otra planilla.
-  const alta = await exportarAltaDeOT({
-    ot_number,
-    creado: new Date(),
-    sector: record.sector_raw,
-    equipo: record.equipo_raw,
-    especialidad: record.especialidad,
-    tipo: record.tipo,
-    quien: record.quien,
-    descripcion: record.descripcion,
-    repuesto: record.repuesto,
-    fecha_ejecucion: record.fecha_ejecucion,
-    prioridad: record.prioridad,
-  });
-  const planilla_error = alta.ok ? null : alta.error ?? "No se pudo escribir en la planilla.";
+  const { data: inserted, error } = await admin
+    .from("ordenes_trabajo").insert(record).select().single();
+
+  if (error) {
+    return NextResponse.json(
+      {
+        error:
+          `La OT ${ot_number} quedó escrita en la planilla pero no se pudo guardar en ` +
+          `el sistema: ${error.message}. Va a entrar en la próxima sincronización; ` +
+          `no la cargues de nuevo o quedan dos.`,
+      },
+      { status: 500 }
+    );
+  }
 
   // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
   // alguien genere dos órdenes para el mismo problema.
@@ -218,38 +247,7 @@ export async function POST(request: Request) {
     aviso_error = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
   }
 
-  return NextResponse.json({ data: inserted, ot_number, planilla_error, aviso_error });
-}
-
-/**
- * El próximo número de OT, leído de la planilla.
- *
- * De la planilla y no de la base porque la planilla es la fuente: alguien pudo
- * cargar una orden ahí desde la última sincronización, y tomar el máximo de la
- * base daría un número que ya existe. No es teórico —al escribir esto la
- * planilla iba cuatro órdenes adelante—, y dos OT con el mismo número dejan la
- * escritura de vuelta apuntando a la fila equivocada.
- *
- * Si la planilla no se puede leer, vale el máximo de la base: es peor no poder
- * crear la orden que arriesgar un número repetido, y el aviso lo dice.
- */
-async function proximoNumeroDeOT(admin: ReturnType<typeof createAdminClient>): Promise<number> {
-  let mayor = 0;
-
-  // De la hoja de respuestas del formulario, que es donde vive la serie y lo
-  // que el Apps Script del formulario también cuenta. Del master no: la recibe
-  // por IMPORTRANGE y llega con retraso, así que dos OT creadas con pocos
-  // minutos de diferencia leerían el mismo máximo y tomarían el mismo número.
-  mayor = (await maximoDeLaSerieEnLaPlanilla()) ?? 0;
-
-  const { data: ultima } = await admin
-    .from("ordenes_trabajo")
-    .select("ot_number")
-    .order("ot_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return Math.max(mayor, ultima?.ot_number ?? 0) + 1;
+  return NextResponse.json({ data: inserted, ot_number, aviso_error });
 }
 
 /**

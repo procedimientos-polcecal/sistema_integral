@@ -665,7 +665,13 @@ export default function OrdenesClient({
           sectores={sectores}
           equipos={equipos}
           onClose={() => setShowNew(false)}
-          onCreated={() => { setShowNew(false); load(); }}
+          onCreated={(aviso) => {
+            setShowNew(false);
+            // Se reusa el cartel de la sincronización: es el lugar de esta
+            // pantalla donde ya se mira lo que salió a medias.
+            if (aviso) setAvisoSync(aviso);
+            load();
+          }}
         />
       )}
 

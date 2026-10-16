@@ -19,7 +19,8 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   sectores: any[];
   equipos: any[];
   onClose: () => void;
-  onCreated: () => void;
+  /** Se creó. `aviso` es lo que no salió del todo, para que se muestre. */
+  onCreated: (aviso?: string | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
@@ -98,7 +99,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error ?? "Error al crear"); setSaving(false); return; }
-    onCreated();
+
+    // Lo que salió a medias se dice, no se calla. La OT se creó —por eso el
+    // modal se cierra igual— pero si el aviso del que nació no quedó marcado,
+    // alguien puede generar una segunda orden para el mismo problema. Este
+    // valor se devolvía desde siempre y nadie lo leía: el 16/10/2026 una OT no
+    // llegó a la planilla y la pantalla no dijo una palabra.
+    onCreated(data.aviso_error ?? null);
   }
 
   return (

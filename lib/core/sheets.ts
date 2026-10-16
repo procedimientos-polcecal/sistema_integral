@@ -343,7 +343,9 @@ export async function escribirCeldas(
  * Una fila vacía en el medio no corta la cuenta: se busca la última con algo,
  * no la primera sin nada.
  */
-export function filaSiguienteSegunLaColumna(columna: string[][]): number {
+export function filaSiguienteSegunLaColumna(
+  columna: readonly (readonly unknown[])[]
+): number {
   for (let i = columna.length - 1; i >= 0; i--) {
     if (String(columna[i]?.[0] ?? "").trim()) return i + 2;
   }

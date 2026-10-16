@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   indiceDeColumnas, laSerieEstaCongelada, maximoDeLaSerie, celdasDelAlta,
+  loQueSigueEnLaSerie,
 } from "./formulario";
 
 /**
@@ -156,5 +157,61 @@ describe("las celdas del alta", () => {
   it("una fecha de creacion invalida se niega en vez de escribir NaN", () => {
     const r = celdasDelAlta(ENCABEZADO, { ...datos, creado: new Date("no es una fecha") });
     expect(r.ok).toBe(false);
+  });
+});
+
+/**
+ * EL INCIDENTE DEL 16/10/2026, y por qué esta funcion existe.
+ *
+ * La OT 2796 se creo desde el sistema y no llego a la planilla. La serie
+ * seguia sin congelar, asi que la guarda se nego a escribir —bien— pero el
+ * numero ya se habia tomado: la OT quedo en la base con el 2796 y la hoja de
+ * respuestas segui­a con 2795 arriba de todo. La siguiente respuesta del
+ * formulario iba a numerarse 2796 tambien (el Apps Script cuenta max(A)+1), y
+ * el upsert por `ot_number` de la sincronizacion habria pisado la de la app
+ * con la del formulario, sin avisar.
+ *
+ * La raiz no era la guarda: era que el numero salia de una lectura y la fila
+ * de otra, con una escritura en el medio que podia no pasar. Acá salen las
+ * dos de la misma, y si no se puede escribir no se consume nada.
+ */
+describe("lo que sigue en la serie", () => {
+  const congelada = [["N° OT"], ["622"], ["2794"], ["2795"]];
+
+  it("el numero y la fila salen de la misma lectura", () => {
+    const r = loQueSigueEnLaSerie(congelada);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ot_number).toBe(2796);
+    expect(r.fila).toBe(5);
+  });
+
+  /** Con una formula viva no se da numero: darlo es lo que lo quemaba. */
+  it("si la serie no esta congelada no hay numero, y dice por que", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], ['=A2+1']]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("fórmula");
+  });
+
+  /** Una pestana con solo el encabezado: la serie arranca y la fila es la 2. */
+  it("una hoja recien hecha empieza en 1", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"]]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ot_number).toBe(1);
+    expect(r.fila).toBe(2);
+  });
+
+  /**
+   * Los huecos del medio no corren la fila ni saltean el numero: la fila es la
+   * siguiente a la ultima con algo, y el numero el maximo mas uno.
+   */
+  it("un hueco en el medio no desacomoda ninguna de las dos", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], [], ["2795"]]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ot_number).toBe(2796);
+    expect(r.fila).toBe(5);
   });
 });
