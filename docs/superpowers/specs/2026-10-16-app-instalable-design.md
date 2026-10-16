@@ -17,7 +17,7 @@ tamaño:
 | Fase | Qué |
 |---|---|
 | **1 — ésta** | Que se instale y que se vea bien: manifest, íconos, instalación explicada por plataforma, y las 22 pantallas del escaneo |
-| 2 | Que avise: generalizar el push a los doce módulos sobre `/api/home/avisos`, y arreglar que hoy entre un solo dispositivo por persona |
+| 2 | Que avise: generalizar el push a los doce módulos sobre `/api/home/avisos`, y arreglar que hoy entre un solo dispositivo por persona. **Lo primero que tiene que hacer: que `enviarPush` mande `data: { url }`.** La fase 1 dejó el `notificationclick` leyendo ese campo, y el único emisor que existe —el cron de Remises— todavía manda sólo `{title, body}`, así que su notificación lleva a `/` en vez de `/mi-remis`. No afecta a nadie hoy porque hay **cero suscripciones**, pero es lo primero que se nota si alguien activa las notificaciones |
 | 3 | Leer sin señal: cachear lo último visto |
 | 4 | Cargar sin señal: la cola de escritura |
 
