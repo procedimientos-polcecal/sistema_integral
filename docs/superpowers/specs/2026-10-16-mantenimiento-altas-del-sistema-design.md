@@ -89,37 +89,65 @@ selecciona `Col1`, que es la prioridad. Para poder ordenar por N° de OT hay que
 traer también la `A`, así que el rango pasa a ser `A2:AC10000` y la selección a
 `SELECT Col29 … ORDER BY Col1`.
 
-`D3` (equipo) es la trampa. Hoy es:
+`D` (equipo) es la trampa. Hoy es `D3`:
 
 ```
-=LET(d; FLATTEN(IMPORTRANGE(FORM; "Respuestas de formulario!G2:U10000"));
-     FILTER(d; d<>""))
+=LET(d, FLATTEN(IMPORTRANGE(FORM, "Respuestas de formulario!G2:U10000")),
+     FILTER(d, d<>""))
 ```
 
 Un `FLATTEN` **no tiene el N° de OT para ordenar**: aplanar quince columnas por
 fila y quedarse con la no vacía funciona sólo mientras el orden físico mande.
 Agregar `ORDER BY` a las otras tres y dejar ésta es desalinear la columna
-EQUIPO, que es exactamente el error que se está arreglando. Propuesta:
+EQUIPO, que es exactamente el error que se está arreglando.
+
+**Y además hay que moverla a `D2`.** Que hoy esté en la `D3` y funcione es una
+casualidad, medida el 16/10/2026: la primera fila de respuestas es la OT 622 y
+**no tiene nada entre `G` y `U`**, así que el `FILTER` la descarta y lo que
+queda arranca justo en la fila que le corresponde a la 623. Si esa fila hubiera
+tenido equipo alguna vez, las 2.174 filas de EQUIPO estarían corridas una — sin
+que nada avisara. La versión nueva no depende de eso porque lleva la clave al
+lado, pero tiene que empezar donde empieza la `A`.
 
 ```
 =LET(
-  d; {IMPORTRANGE(FORM; "Respuestas de formulario!A2:U10000");
-      IMPORTRANGE(FORM; "Altas del sistema!A2:U10000")};
-  k; CHOOSECOLS(d; 1);
-  e; BYROW(CHOOSECOLS(d; SEQUENCE(1;15;7)); LAMBDA(f; TEXTJOIN(""; VERDADERO; f)));
-  SORT(FILTER(e; k<>""); FILTER(k; k<>""); VERDADERO)
+  d, {IMPORTRANGE(FORM, "Respuestas de formulario!A2:U10000");
+      IMPORTRANGE(FORM, "Altas del sistema!A2:U10000")},
+  k, CHOOSECOLS(d, 1),
+  e, BYROW(CHOOSECOLS(d, SEQUENCE(1,15,7)), LAMBDA(f, TEXTJOIN("", TRUE, f))),
+  SORT(FILTER(e, k<>""), FILTER(k, k<>""), TRUE)
 )
 ```
 
-`TEXTJOIN` sobre `G:U` devuelve la única celda no vacía de esa fila —se
-comprobó el 16/10/2026 que **ninguna de las 2.174 filas tiene más de una**,
-incluidas las 99 que usan `DÓNDE SE SOLICITA`, que está en el medio del rango—.
-Así cada fila queda con su equipo y su N° de OT al lado, y se puede ordenar
-igual que las otras tres.
+`CHOOSECOLS(d, SEQUENCE(1,15,7))` toma las columnas 7 a 21 —`G` a `U`— y
+`TEXTJOIN` devuelve la única no vacía de esa fila. Se apoya en algo medido: de
+las 2.174 filas **ninguna tiene más de un valor** en ese rango, incluidas las 99
+que usan `DÓNDE SE SOLICITA`, que está en el medio.
 
-**Estas fórmulas no están probadas contra la planilla real** y no se pueden
-probar sin escribir en ella: se prueban en un duplicado del master antes de
-reemplazar nada.
+### Probadas, no supuestas
+
+Se corrieron el 16/10/2026 en tres pestañas temporales del libro de respuestas
+—creadas y borradas en la misma pasada; la cuenta de servicio no puede crear
+planillas propias, da 403—. Los datos imitaban el caso que falló: el formulario
+con 2795, 2798 y 2799 en ese orden físico, el sistema con 2796 y 2797 aparte, y
+**una fila con el equipo en la columna `S`**, que es la que rompería un
+`CHOOSECOLS` mal contado.
+
+| N° | viene de | equipo escrito en | EQUIPO que salió |
+|---|---|---|---|
+| 2795 | formulario | `K` | PO-C1-02 – Cinta 2 |
+| 2796 | **sistema** | `G` | PY-C1-03 – Molino |
+| 2797 | **sistema** | `G` | PY-A1-05 – Rompedora |
+| 2798 | formulario | **`S`** | PO-B1-10 – Silos |
+| 2799 | formulario | `G` | PO-A1-01 – Descarga |
+
+Las cinco salieron en orden numérico y con su equipo, su sector, su
+especialidad, su descripción y su prioridad alineados — **las del sistema
+intercaladas entre las del formulario**, que es la propiedad que se buscaba.
+
+La primera corrida salió con la `D` corrida una fila, porque se copió la `D3`
+del master actual. De eso salió el párrafo de arriba: es justo el error que una
+revisión a ojo no encuentra.
 
 ### 3. El Apps Script numera contando las dos pestañas
 
