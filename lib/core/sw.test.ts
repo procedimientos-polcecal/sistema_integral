@@ -21,6 +21,9 @@ type Ventana = {
   navigate?: ReturnType<typeof vi.fn>;
 };
 
+/** La respuesta que devuelve el `fetch` doble: alcanza con que sea identificable. */
+const RESPUESTA = { ok: true } as const;
+
 /** Evalúa el service worker y devuelve sus handlers y las dobles con que corrió. */
 function cargarSW(ventanas: Ventana[] = []) {
   const handlers: Record<string, (event: unknown) => void> = {};
@@ -36,9 +39,12 @@ function cargarSW(ventanas: Ventana[] = []) {
     registration: { showNotification },
     clients,
   };
+  // `fetch` entra como parámetro y no como global: así el handler de navegación
+  // se prueba contra una doble en vez de salir a la red de verdad.
+  const fetchDoble = vi.fn(async () => RESPUESTA);
   // `clients` aparece suelto en el archivo, como global del service worker.
-  new Function("self", "clients", CODIGO)(self, clients);
-  return { handlers, openWindow, showNotification, matchAll };
+  new Function("self", "clients", "fetch", CODIGO)(self, clients, fetchDoble);
+  return { handlers, openWindow, showNotification, matchAll, fetchDoble };
 }
 
 /** Dispara `notificationclick` y espera lo que el handler le pasó a `waitUntil`. */
@@ -65,12 +71,33 @@ describe("public/sw.js", () => {
     expect(typeof handlers["fetch"]).toBe("function");
   });
 
-  it("el handler de fetch no intercepta nada", () => {
-    // No llama a `respondWith`: la petición sigue su camino normal a la red.
-    const { handlers } = cargarSW();
+  it("una navegación se responde con la misma petición, contra la red", async () => {
+    // El handler tiene que hacer algo observable: un `() => {}` es el patrón que
+    // Chrome documenta como gameado y dejó de aceptar. Esto es el mínimo
+    // honesto, y lo que prueba este test es que efectivamente responde.
+    const { handlers, fetchDoble } = cargarSW();
     const respondWith = vi.fn();
-    handlers["fetch"]({ respondWith, request: { url: `${ORIGEN}/compras` } });
-    expect(respondWith).not.toHaveBeenCalled();
+    const request = { url: `${ORIGEN}/compras`, mode: "navigate" };
+    handlers["fetch"]({ respondWith, request });
+
+    expect(respondWith).toHaveBeenCalledTimes(1);
+    expect(fetchDoble).toHaveBeenCalledWith(request);
+    // Lo que se responde es lo que devolvió `fetch`, sin tocarlo: ni caché ni
+    // página de reemplazo, que es la fase 3.
+    const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
+    await expect(respondido).resolves.toBe(RESPUESTA);
+  });
+
+  it("lo que no es navegación no se toca", () => {
+    // Las imágenes, el JSON de las rutas y el bundle siguen su camino normal:
+    // meterse en el medio de todo el tráfico no compra nada todavía.
+    const { handlers, fetchDoble } = cargarSW();
+    for (const mode of ["cors", "no-cors", "same-origin", undefined]) {
+      const respondWith = vi.fn();
+      handlers["fetch"]({ respondWith, request: { url: `${ORIGEN}/icon-192.png`, mode } });
+      expect(respondWith).not.toHaveBeenCalled();
+    }
+    expect(fetchDoble).not.toHaveBeenCalled();
   });
 
   describe("notificationclick", () => {

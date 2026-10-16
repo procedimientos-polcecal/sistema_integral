@@ -2,16 +2,34 @@
 // lleva a la persona a donde la notificación dice al tocarla, y existe para que
 // el navegador considere instalable a la app. Sin caché offline todavía.
 
-// Handler de `fetch` de paso: no intercepta nada, la petición sigue a la red.
+// Handler de `fetch`: responde **las navegaciones** yendo a la red, y no toca
+// nada más.
 //
 // **Está por la instalabilidad. Que nadie lo borre por parecer inútil.** Chrome
 // no dispara `beforeinstallprompt` si el service worker no tiene un handler de
 // `fetch`, y entonces el botón de instalar de Android no aparece nunca, sin
 // ningún error: la app simplemente no se ofrece. `lib/core/sw.test.ts` verifica
-// que siga registrado.
+// que siga registrado y que haga lo que dice acá.
 //
-// Además es el gancho donde la fase 3 va a colgar el caché.
-self.addEventListener("fetch", () => {});
+// **POR QUÉ NO ESTÁ VACÍO.** Lo estuvo, y no servía: un `() => {}` es
+// literalmente el patrón que Chrome documenta como gameado —los sitios ponían
+// handlers vacíos sólo para pasar el criterio— y que por eso dejó de aceptar. El
+// requisito de que haya handler sigue en pie, así que tiene que hacer algo
+// observable. Esto es el mínimo honesto: contesta la navegación con la misma
+// petición que iba a salir igual.
+//
+// **EL RIESGO, QUE CORRE EN PRODUCCIÓN PARA TODOS.** Si la promesa que recibe
+// `respondWith` rechaza, la navegación falla. Sin señal `fetch` rechaza y el
+// navegador muestra su página de sin-conexión — que es exactamente lo que pasa
+// hoy sin service worker, así que no empeora nada. Lo que sí empeoraría es
+// agregarle caché o lógica acá: eso es la fase 3 y va con su propio spec.
+//
+// Se filtran los pedidos que no son navegación (imágenes, JSON, el bundle) para
+// no meterse en el medio de todo el tráfico de la app a cambio de nada.
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(fetch(event.request));
+});
 
 self.addEventListener("push", (event) => {
   let data = { title: "SdG", body: "" };
