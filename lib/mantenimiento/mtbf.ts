@@ -145,7 +145,12 @@ export function confiabilidad(mtbf: number, dias: number): number {
  * Si el ritmo de los últimos DIAS_RECIENTE días se despegó del de toda la
  * ventana. Con pocas fallas el promedio es ruido, así que no se opina.
  */
-function ritmoDe(fechas: string[], mtbf: number | null, hasta: string): RitmoCambiado | null {
+function ritmoDe(
+  fechas: string[],
+  mtbf: number | null,
+  hasta: string,
+  diasObservados: number
+): RitmoCambiado | null {
   if (mtbf === null || fechas.length < MIN_FALLAS_PARA_AVISO) return null;
 
   const desde = restarDias(hasta, DIAS_RECIENTE - 1);
@@ -153,7 +158,10 @@ function ritmoDe(fechas: string[], mtbf: number | null, hasta: string): RitmoCam
 
   if (recientes === 0) return { mtbfReciente: null, factor: null, direccion: "mejoro" };
 
-  const mtbfReciente = DIAS_RECIENTE / recientes;
+  // Si se observó menos que DIAS_RECIENTE, dividir por 90 compara contra una
+  // ventana que nadie miró: con 6 fallas en 20 días daría "mejoró" sin que el
+  // ritmo haya cambiado. Los días recientes nunca superan los observados.
+  const mtbfReciente = Math.min(DIAS_RECIENTE, diasObservados) / recientes;
   const factor = mtbfReciente / mtbf;
   if (factor >= FACTOR_AVISO) return { mtbfReciente, factor, direccion: "mejoro" };
   if (factor <= 1 / FACTOR_AVISO) return { mtbfReciente, factor, direccion: "empeoro" };
@@ -208,7 +216,7 @@ export function calcularMtbf(ordenes: OtCruda[], hasta: string): Mtbf {
         etiqueta: mes.etiqueta,
         cantidad: fechas.filter((f) => f >= mes.desde && f < mes.hasta).length,
       })),
-      ritmo: ritmoDe(fechas, mtbf, hasta),
+      ritmo: ritmoDe(fechas, mtbf, hasta, diasObservados),
     };
   });
 

@@ -182,4 +182,17 @@ describe("el aviso de ritmo cambiado", () => {
     ]), HASTA);
     expect(r.filas[0].ritmo).toBeNull();
   });
+
+  /**
+   * Con menos de noventa dias observados, dividir los recientes por 90 compara
+   * contra una ventana que nadie miro: seis fallas en veinte dias daban
+   * "mejoro" cuando el ritmo era exactamente el mismo.
+   */
+  it("con pocos dias observados el ritmo no cambio y no avisa", () => {
+    const r = calcularMtbf(muchas([
+      "2026-09-26", "2026-09-29", "2026-10-02", "2026-10-05", "2026-10-08", "2026-10-11",
+    ]), HASTA);
+    expect(r.diasObservados).toBe(20);
+    expect(r.filas[0].ritmo).toBeNull();
+  });
 });
