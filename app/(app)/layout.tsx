@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
 import { BarraInstalar } from "@/components/BarraInstalar";
+import { RegistrarServiceWorker } from "@/components/RegistrarServiceWorker";
 import { modulosVisibles, nivelEnModulo, puedeUsarAsistente, MODULOS_ORDEN } from "@/lib/core/access";
 import { puedeAprobarCompras, puedeAprobarOS } from "@/lib/compras/auth";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
@@ -92,13 +93,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               tablas scrolleen adentro en vez de estirar la página entera. */}
           <main className="min-w-0 flex-1 overflow-auto p-4 md:p-6">{children}</main>
         </div>
+
+        {/* La ofrece a quien todavía no la instaló. Se dibuja sola o no se
+            dibuja nada: decide por el navegador de quien mira, y en la
+            computadora no aparece nunca.
+
+            Va acá adentro, como último hijo de la columna de altura de
+            pantalla, y no suelta al final: así ocupa lugar de verdad y le quita
+            alto al `<main>` que scrollea. Cuando estaba `fixed` no se lo quitaba
+            a nadie y tapaba los últimos 52 a 86 px de todas las pantallas. */}
+        <BarraInstalar />
       </div>
 
-      {/* La ofrece a quien todavía no la instaló. Se dibuja sola o no se dibuja
-          nada: decide por el navegador de quien mira, y en la computadora no
-          aparece nunca. Va acá y no adentro de `main` porque está fija al pie
-          de la pantalla, por encima del contenido que scrollea. */}
-      <BarraInstalar />
+      {/* Registra el service worker, que es lo que hace instalable a la app.
+          No dibuja nada; va en el layout porque tiene que correr para todos y
+          en cada carga, no detrás de un botón. */}
+      <RegistrarServiceWorker />
     </NavMovilProvider>
   );
 }

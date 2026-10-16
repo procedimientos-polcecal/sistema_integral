@@ -26,6 +26,22 @@ import { dispararInstalacion, estaInstalada, useEstadoDeInstalacion } from "./pr
  *   definición de molesta.
  * - Si dijeron que no en el diálogo del navegador: no vuelve en esta sesión.
  * - En `/instalar`: ofrecer ir a la pantalla en la que ya estás no ayuda.
+ *
+ * POR QUÉ YA NO ES `fixed`
+ *
+ * Lo fue, y tapaba el pie de todas las pantallas: `fixed bottom-0` saca a la
+ * barra del flujo, así que nadie le reservaba el lugar. El `<main>` del layout
+ * es el que scrollea y su borde de abajo es el del viewport, de modo que al
+ * llegar al final de cualquier pantalla quedaban tapados los 68 px de la barra
+ * más el `safe-area-inset-bottom` —34 px en un iPhone con gesto—: una tabla
+ * cortada, o un botón «Guardar» inalcanzable.
+ *
+ * Ahora es el último hijo de la columna de altura de pantalla del layout, en el
+ * flujo normal. Se ve igual —el `<main>` scrollea arriba y la barra queda
+ * quieta al pie— pero el lugar lo reserva el propio layout, sin espaciadores que
+ * haya que mantener del mismo alto que la barra ni `padding` condicionales que
+ * coordinar. Y sigue siendo correcto si el texto se parte en dos líneas en una
+ * pantalla angosta, que es donde un espaciador de alto fijo se equivocaría.
  */
 const DESCARTADA_KEY = "sdg-instalar-descartada";
 
@@ -75,10 +91,15 @@ export function BarraInstalar() {
 
   return (
     <div
-      // z-30 y no más: el fondo oscuro del menú en teléfono es z-40 y el cajón
-      // z-50, y los dos tienen que quedar por encima cuando el menú está
-      // abierto.
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(15,23,42,.08)]"
+      // `shrink-0` para que no la aplaste la columna de altura de pantalla: sin
+      // eso, en una pantalla baja el flex le come el alto a la barra antes que
+      // al `<main>`, que es el que tiene que ceder.
+      //
+      // `relative z-30` no posiciona nada: está para que la barra pinte por
+      // encima del contenido de `<main>` —su sombra hacia arriba, si no, queda
+      // debajo del texto del final de la página— y para quedar por debajo del
+      // menú en teléfono, cuyo fondo oscuro es z-40 y el cajón z-50.
+      className="relative z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(15,23,42,.08)]"
       // El borde de abajo de los iPhone con gesto: sin esto el botón queda
       // debajo de la barra del sistema.
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
