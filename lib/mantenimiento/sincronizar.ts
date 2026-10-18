@@ -21,6 +21,9 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
+import { traerTodo } from "@/lib/core/paginado";
+import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
+import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
 import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
@@ -458,6 +461,22 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
     );
   }
 
+  // Qué números ya estaban, para saber cuáles nacen en esta corrida. Va antes
+  // del `upsert` porque después todas existen y la pregunta deja de tener
+  // respuesta — a diferencia de Compras, que distingue el alta de la
+  // actualización dentro de su propio bucle.
+  //
+  // `traerTodo` y no un `select` pelado: son 261 filas hoy, pero PostgREST
+  // corta en 1000 sin avisar y el día que se pase, esto empezaría a anunciar
+  // como nuevas las que quedaron afuera de la primera página.
+  const yaEstaban = new Set(
+    (
+      await traerTodo<{ os_number: number }>((desde, hasta) =>
+        admin.from("ordenes_servicio").select("os_number").range(desde, hasta)
+      )
+    ).map((o) => o.os_number)
+  );
+
   let guardadas = 0;
   for (let i = 0; i < registros.length; i += 500) {
     const lote = registros.slice(i, i + 500);
@@ -485,6 +504,27 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes-servicio", ok: true, filas: guardadas,
   });
+
+  // El aviso al instante a quien aprueba una OS. Va al final, después de que
+  // todo está guardado y registrado: `avisarAQuienDecide` no tira, así que un
+  // push service caído no puede hacer que esta corrida figure como fallada.
+  //
+  // La url es la de Compras y no la de Mantenimiento: las órdenes de servicio
+  // se aprueban en /compras/aprobaciones, que es donde se ejerce la decisión,
+  // aunque la OS sea una entidad de este módulo.
+  const aviso = await avisarAQuienDecide(admin, {
+    lista: "os_aprobadores",
+    // El cast es por `Datos = Record<string, unknown>`, que es como se arma lo
+    // que va al `upsert`: los cuatro campos los pone `filaDeOS` y están
+    // declarados en `OrdenServicioLeida`, pero el tipo del mapa los borra.
+    items: lasOSQueNacenEsperando(
+      registros as unknown as Parameters<typeof lasOSQueNacenEsperando>[0],
+      yaEstaban
+    ),
+    nombre: { singular: "Una orden de servicio", plural: "órdenes de servicio" },
+    url: "/compras/aprobaciones",
+  });
+
   return logra({
     guardadas,
     sin_equipo: sinEquipo,
@@ -493,6 +533,10 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
     sin_proveedor: [...sinProveedor],
     borradas: borrado.borradas,
     borrado: borrado.aviso,
+    // Un 0 es lo normal: la mayoría de las corridas no traen OS nuevas y fuera
+    // de la ventana 7:00–21:00 no se manda nada a propósito.
+    avisos_al_instante: aviso.enviadas,
+    ...(aviso.motivo ? { avisos_al_instante_motivo: aviso.motivo } : {}),
   });
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   aprobarCorreriaFilas,
   esAprobacionDeOS,
+  lasOSQueNacenEsperando,
   esperaDecision,
   ordenarParaAprobar,
   porQueNoSePuedeAprobar,
@@ -231,5 +232,57 @@ describe("lo que se le dice a quien no puede aprobar desde aca", () => {
 
   it("explica el dano, que es lo que justifica la negativa", () => {
     expect(mensaje.toLowerCase()).toContain("seguimiento");
+  });
+});
+
+describe("lasOSQueNacenEsperando", () => {
+  const enMaestro = (n: number, estado: string | null = null) => ({
+    os_number: n,
+    descripcion: `trabajo ${n}`,
+    sheets_tab: "SERVICIOS",
+    estado,
+  });
+
+  it("una que ya estaba no nace", () => {
+    expect(lasOSQueNacenEsperando([enMaestro(10)], new Set([10]))).toEqual([]);
+  });
+
+  it("una nueva en el maestro espera decision", () => {
+    expect(lasOSQueNacenEsperando([enMaestro(11)], new Set())).toEqual([
+      { etiqueta: "OS 11", descripcion: "trabajo 11" },
+    ]);
+  });
+
+  // Si ya vive en la pestaña de su area es porque alguien le escribio APROBADO
+  // en el maestro: lo que le falta es el seguimiento, que es otro trabajo.
+  it("una nueva que la planilla trae en la pestaña de su area no espera a nadie", () => {
+    expect(
+      lasOSQueNacenEsperando(
+        [{ os_number: 12, descripcion: "x", sheets_tab: "CALCINACIÓN", estado: null }],
+        new Set()
+      )
+    ).toEqual([]);
+  });
+
+  it("una denegada no interrumpe", () => {
+    expect(lasOSQueNacenEsperando([enMaestro(13, "DENEGADO")], new Set())).toEqual([]);
+  });
+
+  it("POR APROBAR y EN REVISION si interrumpen", () => {
+    expect(
+      lasOSQueNacenEsperando(
+        [enMaestro(14, "POR APROBAR"), enMaestro(15, "EN REVISIÓN")],
+        new Set()
+      ).map((i) => i.etiqueta)
+    ).toEqual(["OS 14", "OS 15"]);
+  });
+
+  it("sin descripcion queda en null y la notificacion muestra la etiqueta sola", () => {
+    expect(
+      lasOSQueNacenEsperando(
+        [{ os_number: 16, descripcion: "  ", sheets_tab: "SERVICIOS", estado: null }],
+        new Set()
+      )
+    ).toEqual([{ etiqueta: "OS 16", descripcion: null }]);
   });
 });
