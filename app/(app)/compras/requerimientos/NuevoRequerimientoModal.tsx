@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
+import { areaPorDefecto } from "@/lib/compras/areaDelUsuario";
 import {
   AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo, loQueDiceLaUbicacion,
   type SectorDePlanta,
@@ -47,7 +49,37 @@ export default function NuevoRequerimientoModal({
   onSaved: () => void;
 }) {
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? "");
+
+  /**
+   * El área viene con la de quien pide, y **se puede cambiar**.
+   *
+   * No se bloquea ni se avisa si la cambia: alguien de Mantenimiento pidiendo
+   * algo para Producción es un caso legítimo, y lo que decide quién lo ve en
+   * «Mis pedidos» es el área que quede, no la de quien escribe.
+   *
+   * Lo pide el modal y no las seis pantallas que lo montan — Compras, los tres
+   * listados de Inventario, los repuestos de una OT y Mis pedidos—: pasárselo a
+   * las seis es seis lugares donde olvidarse de uno.
+   *
+   * Si falla, se queda vacío y se elige a mano, como hasta ahora. Que no se
+   * sepa de qué área es alguien no puede impedirle pedir un material.
+   */
   const [areaId, setAreaId] = useState("");
+
+  useCargar(async (vigente) => {
+    try {
+      const res = await fetch("/api/compras/mi-area");
+      const body = await res.json().catch(() => ({}));
+      if (!vigente() || !res.ok) return;
+      const suya = areaPorDefecto(body.data ?? []);
+      // Sólo si todavía no eligió: la respuesta puede llegar después de que
+      // alguien ya tocó el desplegable, y pisarle la elección sería peor que
+      // no completar nada.
+      if (suya) setAreaId((actual) => actual || suya);
+    } catch {
+      // Se queda vacío a propósito.
+    }
+  }, []);
   const [cantidad, setCantidad] = useState(inicial?.cantidad ?? "");
   const [codigo, setCodigo] = useState(inicial?.codigo ?? "");
   const [fechaNecesidad, setFechaNecesidad] = useState("");

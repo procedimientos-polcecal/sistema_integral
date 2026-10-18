@@ -169,8 +169,26 @@ export async function POST(request: Request) {
   // el filtro del listado —un `.in()` liso— seguiría sin encontrarla.
   const laPrioridad = prioridadParaLaPlanilla(prioridad);
 
+  // Quién la pide, para que la planilla lo diga. Es lo que le falta a quien la
+  // mira para saber a quién preguntarle, y sale del usuario de la sesión: el
+  // formulario se lo pregunta a la persona y acá ya lo sabemos.
+  //
+  // Con el cliente admin porque `usuarios` sólo deja leer la fila propia salvo
+  // que uno sea admin —la policy es `id = auth.uid() or es_admin()`—, y acá
+  // justamente es la propia, pero el resto de la ruta ya usa `admin` y pedirlo
+  // dos veces con dos clientes distintos es una incoherencia que se paga la
+  // próxima vez que alguien lea esto.
+  const { data: quienPide } = await admin
+    .from("usuarios")
+    .select("email, nombre, apellido")
+    .eq("id", user.id)
+    .maybeSingle();
+
   const alta = await altaEnLaPlanilla({
     creado: new Date(),
+    email: quienPide?.email ?? null,
+    nombre: quienPide?.nombre ?? null,
+    apellido: quienPide?.apellido ?? null,
     sector: sector_raw || null,
     equipo: equipo_raw || null,
     especialidad: especialidad || null,

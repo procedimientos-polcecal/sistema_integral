@@ -25,6 +25,9 @@ const ENCABEZADO = [
 
 const datos = {
   ot_number: 2786,
+  email: "rocco@polcecal.com",
+  nombre: "Rocco",
+  apellido: "Gimenez",
   creado: new Date("2026-10-14T12:30:00Z"),
   sector: "Planta filler 1",
   equipo: "PY-A1-05 – Rompedora a martillos",
@@ -127,15 +130,40 @@ describe("las celdas del alta", () => {
   });
 
   /**
-   * Las columnas que no son nuestras quedan vacias: poner algo en el mail o el
-   * nombre seria decir que alguien contesto el formulario.
+   * QUIEN LA PIDIO, desde el 18/10/2026.
+   *
+   * Estas tres columnas quedaban vacias a proposito, con esta razon escrita:
+   * "poner algo en el mail o el nombre seria decir que alguien contesto el
+   * formulario". Esa razon se murio cuando el alta se mudo a su propia
+   * pestana: una fila en «Altas del sistema» no dice que nadie contesto nada,
+   * dice que el sistema la creo, y ahi saber quien fue es informacion.
    */
-  it("no toca las columnas del formulario que no le corresponden", () => {
+  it("escribe quien la pidio en el correo, el nombre y el apellido", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 2)).toBe("rocco@polcecal.com");
+    expect(valorDe(r.celdas, 3)).toBe("Rocco");
+    expect(valorDe(r.celdas, 4)).toBe("Gimenez");
+  });
+
+  /** La puntuacion sigue siendo del formulario: esa no se toca. */
+  it("no toca la puntuacion, que no es nuestra", () => {
     const r = celdasDelAlta(ENCABEZADO, datos);
     if (!r.ok) throw new Error("no armó");
-    for (const ajena of [2, 3, 4, 27]) {
-      expect(r.celdas.some((c) => c.columna === ajena)).toBe(false);
-    }
+    expect(r.celdas.some((c) => c.columna === 27)).toBe(false);
+  });
+
+  /**
+   * Un usuario sin apellido cargado existe. No se escribe nada en esa celda,
+   * que es la misma convencion que el repuesto y la fecha: en una fila nueva
+   * no escribir y escribir "" son lo mismo, y lo que importa es que no entre
+   * un "undefined" en una planilla que mira gente.
+   */
+  it("lo que el usuario no tenga cargado no se escribe", () => {
+    const r = celdasDelAlta(ENCABEZADO, { ...datos, apellido: null, nombre: null });
+    if (!r.ok) throw new Error("no armó");
+    expect(r.celdas.some((c) => c.columna === 3)).toBe(false);
+    expect(r.celdas.some((c) => c.columna === 4)).toBe(false);
   });
 
   it("un campo vacio no se escribe", () => {

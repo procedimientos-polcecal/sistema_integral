@@ -75,6 +75,9 @@ export const HOJA_DE_ALTAS = "Altas del sistema";
 const ALIAS = {
   nro: ["N° OT", "Nº OT", "N OT"],
   marca: ["Marca temporal"],
+  email: ["Dirección de correo electrónico", "Direccion de correo electronico"],
+  nombre: ["NOMBRE"],
+  apellido: ["APELLIDO"],
   sector: ["SECTOR QUE SOLICITA"],
   equipo: ["EQUIPO QUE SOLICITA"],
   especialidad: ["ESPECIALIDAD"],
@@ -194,6 +197,20 @@ export interface DatosDelAlta {
   ot_number: number;
   /** Cuándo se creó. Va como serial, nunca como texto. */
   creado: Date;
+  /**
+   * Quién la pidió, de su usuario del sistema.
+   *
+   * Estas tres columnas quedaban vacías a propósito, con esta razón: "poner
+   * algo en el mail o el nombre sería decir que alguien contestó el
+   * formulario". **Esa razón se murió el 18/10/2026**, cuando el alta se mudó a
+   * `Altas del sistema`: una fila ahí no dice que nadie contestó nada, dice que
+   * la creó el sistema — y entonces saber quién fue es información y no una
+   * mentira. Es lo que le faltaba a quien mira la planilla para saber a quién
+   * preguntarle.
+   */
+  email: string | null;
+  nombre: string | null;
+  apellido: string | null;
   sector: string | null;
   equipo: string | null;
   especialidad: string | null;
@@ -242,16 +259,19 @@ export function celdasDelAlta(
   // `serialDelInstante` no valida —lo dice su propio docstring—: una fecha
   // inválida da NaN, que escrito es "NaN" y deja una marca temporal basura en
   // una fila que ya no se puede distinguir de una respuesta de verdad.
+  const texto = (v: string | null | undefined): string => String(v ?? "").trim();
+
   const marca = serialDelInstante(datos.creado);
   if (!Number.isFinite(marca)) {
     return { ok: false, motivos: [`la fecha de creación no es válida: ${String(datos.creado)}`] };
   }
 
-  const texto = (v: string | null | undefined): string => String(v ?? "").trim();
-
   const valores: Partial<Record<Clave, string | number>> = {
     nro: datos.ot_number,
     marca,
+    email: texto(datos.email),
+    nombre: texto(datos.nombre),
+    apellido: texto(datos.apellido),
     sector: texto(datos.sector),
     equipo: texto(datos.equipo),
     especialidad: texto(datos.especialidad),

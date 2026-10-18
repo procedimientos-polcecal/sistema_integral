@@ -319,6 +319,15 @@ celda destino justo antes de escribir (dos altas a la vez calculan la misma fila
 libre y la segunda pisaría a la primera); y se relee lo escrito (es lo único que
 distingue "quedó con su número" de "quedó con el de otro").
 
+**La fila dice quién la pidió**, desde el 18/10/2026: el correo, el nombre y el
+apellido salen del usuario de la sesión y van a las columnas `C`, `D` y `E`.
+Antes quedaban vacías a propósito —*"poner algo en el mail o el nombre sería
+decir que alguien contestó el formulario"*—, y esa razón se murió al mudar el
+alta a su propia pestaña: una fila en `Altas del sistema` no dice que nadie
+contestó nada, dice que la creó el sistema. Es lo que le faltaba a quien mira la
+planilla para saber a quién preguntarle. La **Puntuación** sigue sin tocarse:
+ésa sí es del formulario.
+
 **La precondición sigue siendo que la columna A del formulario esté congelada.**
 Mientras tenga una fórmula viva, crear una OT devuelve 502 explicando por qué,
 sin tomar número.
