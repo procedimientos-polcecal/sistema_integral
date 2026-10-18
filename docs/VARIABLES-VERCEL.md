@@ -87,6 +87,7 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_CANTERA_TAB_VOL` | Pestaña de voladuras | Por defecto `VOLADURAS` |
 | `GOOGLE_SHEETS_CANTERA_TAB_BOCH` | Pestaña de bochones | Por defecto `BOCHONES` |
 | `GOOGLE_SHEETS_TRITURACION_ID` | La planilla de las 3 plantas de trituración (pestañas `PLANTA 1`/`PLANTA 2`/`PLANTA 3`): `1QU1iDgcsTSwTe_RMzUs9DOJwfDV0H6ylR7ublMwcMdI`. Espejo de una sola vía: manda el SdG, y sin esta variable un parte se guarda igual pero queda con `sheets_pendiente`. **La cuenta de servicio necesita EDITOR**, no sólo lectora — se compartió como lectora el 18/09/2026 para relevar, hay que subirle el permiso antes de que el espejo pueda escribir | El tramo entre `/d/` y `/edit` de la URL |
+| `GOOGLE_SHEETS_RESPALDO_ID` | El libro de **respaldo legible**, que tiene que ser uno **nuevo y vacío** creado a mano. Lo escribe el cron `respaldo-sheets` todas las noches a las 00:00 de Argentina, con una pestaña por módulo **que no tiene planilla**: RRHH (padrón, asistencia y marcaciones), Remises, los ensayos de Calidad y el buzón de Facturación. Los módulos donde **manda la planilla** no entran, y no es un olvido: ésos ya tienen este respaldo por construcción, y escribirles encima el estado del sistema sería darle de comer al importador su propia salida — desde el 18/10/2026 su sincronización **borra** lo que la planilla dejó de tener. Ver [RESPALDO.md](RESPALDO.md) | La cuenta de servicio necesita **Editor**. **No puede ser ninguna de las planillas de arriba**: cada pestaña se borra entera y se reescribe. Sin la variable el cron devuelve 500 con el nombre de la variable en el mensaje — a propósito: un respaldo que se omite en silencio es peor que no tenerlo |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
 
@@ -276,6 +277,7 @@ SHEETS_WEBHOOK_SECRET=
 GOOGLE_SHEETS_COMPRAS_ID=1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80
 GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID=1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM
 GOOGLE_SHEETS_SEGUIMIENTO_ID=1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8
+GOOGLE_SHEETS_RESPALDO_ID=
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=

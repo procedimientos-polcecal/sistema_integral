@@ -45,6 +45,7 @@ código.
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
+| Respaldo | [docs/RESPALDO.md](docs/RESPALDO.md) |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
 

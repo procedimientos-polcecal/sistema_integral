@@ -679,3 +679,71 @@ export async function crearPestana(
 
   return true;
 }
+
+/**
+ * Reemplazar el contenido entero de una pestaña por estas filas.
+ *
+ * Es lo que necesita una instantánea de respaldo: no hay nada que conservar
+ * abajo, la pestaña se reescribe completa cada noche.
+ *
+ * **Borra antes de escribir, y eso no es un detalle.** Un `PUT` sólo pisa el
+ * rango que se le manda, así que una instantánea más corta que la de ayer
+ * —alguien que ya no está en el padrón, un movimiento que se anuló— dejaría la
+ * cola vieja abajo, sin ninguna marca de que es vieja. Un respaldo que muestra
+ * un empleado dado de baja como si siguiera es peor que no tenerlo.
+ *
+ * **Va en un solo `PUT` y no celda por celda.** `escribirCeldas` manda un rango
+ * por celda, que es lo correcto cuando se tocan cinco celdas de una planilla
+ * que alguien más mantiene; acá serían 40.000 rangos en un pedido para una
+ * instantánea de 4.000 filas, y Google lo rechaza.
+ *
+ * Crea la pestaña si no está, así que un libro vacío alcanza para empezar.
+ *
+ * Escribe con `USER_ENTERED` como el resto del sistema: los números van como
+ * número y las fechas con `serialDelDia()`. Un `"19,58"` mandado como texto lo
+ * interpreta la planilla según su locale, que es la misma trampa que dio vuelta
+ * 885 fechas en Compras, por el otro lado.
+ */
+export async function reemplazarPestana(
+  planillaId: string,
+  pestana: string,
+  filas: (string | number)[][]
+): Promise<void> {
+  // Devuelve false si ya existía, que es el caso normal a partir de la segunda
+  // noche. No es un error y no se mira.
+  await crearPestana(planillaId, pestana);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+
+  const limpieza = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(pestana)}:clear`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!limpieza.ok) {
+    throw new Error(
+      mensajeDeGoogle(limpieza.status, await limpieza.text(), cuentaDeServicio(), "escribir")
+    );
+  }
+
+  if (filas.length === 0) return;
+
+  // El ancho lo decide la fila más larga: las filas de datos pueden tener menos
+  // columnas que el encabezado si la última viene vacía, y un rango más angosto
+  // que la matriz hace que Google rechace el pedido entero.
+  const ancho = Math.max(...filas.map((f) => f.length));
+  const rango = `${pestana}!A1:${letraDeColumna(ancho - 1)}${filas.length}`;
+
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: filas }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}

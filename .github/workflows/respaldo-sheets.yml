@@ -1,0 +1,125 @@
+# Respaldo legible a Google Sheets, todas las noches a las 00:00 de Argentina.
+#
+# QUÉ ES Y QUÉ NO ES
+#
+# Es la tercera pata del respaldo, y la única que alguien puede abrir y leer:
+#
+#   - Supabase guarda sus backups 7 días y sólo en el plan Pro.
+#   - `backup.yml` sube un dump completo y cifrado a Drive. Restaura el sistema
+#     entero, pero es SQL: no sirve para que alguien liquide sueldos el martes
+#     a la mañana con el sistema caído.
+#   - Esto copia a una planilla lo que NO tiene planilla: RRHH, Remises, los
+#     ensayos del laboratorio y el buzón de Facturación.
+#
+# Compras, Mantenimiento, Inventario y las dos mitades de Calidad con planilla
+# NO entran acá y no es un olvido: en esos módulos manda la planilla, así que
+# ya tienen este respaldo por construcción. Escribirles encima el estado del
+# sistema sería destructivo — desde el 18/10/2026 su sincronización borra las
+# filas que la planilla dejó de tener, y leería el respaldo como la verdad.
+# El porqué completo está en lib/respaldo/instantaneas.ts.
+#
+# POR QUÉ ACÁ Y NO EN vercel.json
+#
+# Por lo mismo que los demás: el plan Hobby limita cuántos crons se pueden
+# declarar, y pasarse no degrada el cron, hace fallar el deploy entero.
+# vercel.json ya tiene diez. Este queda en Actions, que además corre aunque el
+# deploy de Vercel esté roto.
+#
+# QUÉ HAY QUE CONFIGURAR, UNA VEZ
+#
+#   Variables (Settings → Secrets and variables → Actions → Variables):
+#     APP_URL                      ya está: la usan los otros seis workflows.
+#
+#   Secrets:
+#     CRON_SECRET                  ya está, por lo mismo.
+#
+#   En Vercel (Project → Settings → Environment Variables):
+#     GOOGLE_SHEETS_RESPALDO_ID    el id del libro de respaldo. Tiene que ser
+#                                  un libro NUEVO Y VACÍO, compartido como
+#                                  editor con la cuenta de servicio
+#                                  (sheets-reader@mantenimientopp.iam.gserviceaccount.com).
+#
+#                                  NO puede ser ninguna de las planillas que el
+#                                  sistema ya sincroniza. El id es lo que va
+#                                  entre /d/ y /edit en la URL.
+#
+# El endpoint se protege solo: exige el mismo CRON_SECRET y sin él responde 503
+# en vez de quedar abierto.
+
+name: Respaldo a Sheets
+
+on:
+  schedule:
+    # 03:00 UTC = 00:00 en Argentina, que es lo que se pidió.
+    #
+    # Queda tres horas antes del dump de `backup.yml` (06:00 UTC) a propósito:
+    # así los dos respaldos de la noche no compiten por la base, y el dump sale
+    # de una base quieta como estaba pensado.
+    #
+    # Por ahora diario. Para pasarlo a semanal alcanza con "0 3 * * 1" (lunes).
+    - cron: "0 3 * * *"
+  # Para poder correrlo a mano desde la pestaña Actions, que es como conviene
+  # probarlo la primera vez.
+  workflow_dispatch:
+
+concurrency:
+  # Cada pestaña se borra y se reescribe entera: dos corridas a la vez la
+  # dejarían a medias, y a medias es indistinguible de completa.
+  group: respaldo-sheets
+  cancel-in-progress: false
+
+jobs:
+  respaldar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que estén las variables
+        # Por `env:` y no interpolados en el comando, igual que en los demás:
+        # interpolar un secreto con la sintaxis de expresiones de Actions mete
+        # su VALOR dentro del script, así que un secreto con una comilla rompe
+        # el test — o se ejecuta. Actions enmascara el valor en el log, no en
+        # la línea de comando.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          faltan=""
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir el respaldo
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/respaldo-sheets")
+
+          cat respuesta.json
+          echo
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::El respaldo devolvió $codigo"
+            exit 1
+          fi
+
+          # Un 200 puede traer pestañas que fallaron: la ruta devuelve 500 sólo
+          # si falló TODO, porque cinco pestañas de siete siguen siendo un
+          # respaldo. Pero tiene que verse, si no "verde" pasa a significar
+          # "algo se escribió" en vez de "está completo".
+          fallaron=$(node -e 'const r=require("./respuesta.json");console.log(r.fallaron ?? 0)')
+          if [ "$fallaron" != "0" ]; then
+            echo "::warning::$fallaron pestaña(s) del respaldo no se pudieron escribir. El detalle está arriba y queda anotado en la tabla sincronizaciones."
+          else
+            echo "::notice::Respaldo completo."
+          fi
