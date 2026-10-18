@@ -693,8 +693,14 @@ export const SINCRONIZACIONES = [
   // Los equipos y sectores ya están; lo demás cuelga de ellos. Las órdenes de
   // servicio antes que sus comparativas, para que una cotización nunca quede
   // apuntando a una OS que todavía no existe.
-  { recurso: "avisos", correr: sincronizarAvisos },
-  { recurso: "ordenes", correr: sincronizarOrdenes },
-  { recurso: "ordenes-servicio", correr: sincronizarOrdenesDeServicio },
-  { recurso: "comparativas", correr: sincronizarComparativas },
+  //
+  // Las cuatro se envuelven con la misma firma para que el reloj pueda decir
+  // quién es: sin eso, un borrado hecho por el cron de las 6 queda en la
+  // auditoría indistinguible del que hizo alguien apretando el botón, que es
+  // justo la diferencia para la que existe la columna `actor`. Comparativas
+  // acepta las opciones y no las usa: su borrado es anterior a todo esto.
+  { recurso: "avisos", correr: (o?: OpcionesDeCorrida) => sincronizarAvisos(o) },
+  { recurso: "ordenes", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenes(o) },
+  { recurso: "ordenes-servicio", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenesDeServicio(o) },
+  { recurso: "comparativas", correr: (_o?: OpcionesDeCorrida) => sincronizarComparativas() },
 ] as const;
