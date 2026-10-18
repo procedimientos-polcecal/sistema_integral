@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   fechaEnArgentina, hoyEnArgentina, diaEnArgentina, ahoraEnArgentina, instanteDeArgentina,
   sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
-  rangoDelMes, mesRelativo, esMesValido,
+  rangoDelMes, mesRelativo, esMesValido, horaEnArgentina,
 } from "./fechas";
 
 /**
@@ -266,5 +266,19 @@ describe("esMesValido", () => {
     expect(esMesValido("")).toBe(false);
     expect(esMesValido(null)).toBe(false);
     expect(esMesValido(undefined)).toBe(false);
+  });
+});
+
+describe("horaEnArgentina", () => {
+  it("usa UTC-3 fijo y no el huso del runtime", () => {
+    expect(horaEnArgentina(new Date("2026-10-18T12:00:00Z"))).toBe(9);
+    expect(horaEnArgentina(new Date("2026-10-18T02:00:00Z"))).toBe(23);
+  });
+
+  // La franja del bug de siempre: a las 21:00 de Argentina ya es el dia
+  // siguiente en UTC, asi que la hora tiene que salir de la cuenta y no de
+  // `getUTCHours()` pelado.
+  it("la medianoche UTC son las nueve de la noche de aca", () => {
+    expect(horaEnArgentina(new Date("2026-10-19T00:30:00Z"))).toBe(21);
   });
 });

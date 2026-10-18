@@ -61,6 +61,19 @@ export function ahoraEnArgentina(instante: Date = new Date()): string {
 }
 
 /**
+ * La hora de pared en Argentina, de 0 a 23.
+ *
+ * `new Date().getHours()` da la hora de la máquina y `getUTCHours()` da la de
+ * UTC: en Vercel las dos son la misma y las dos están tres horas adelantadas.
+ * A las 22 de Argentina el runtime cree que es la 1 — y ya del día siguiente—,
+ * así que cualquier decisión de "¿es hora de molestar a alguien?" tomada con
+ * esos getters se corre tres horas justo en la punta que importa.
+ */
+export function horaEnArgentina(instante: Date = new Date()): number {
+  return new Date(instante.getTime() - OFFSET_ARGENTINA_MS).getUTCHours();
+}
+
+/**
  * Lo que devuelve un `datetime-local` ("YYYY-MM-DDTHH:mm", hora de pared de
  * Argentina) convertido a un instante ISO sin ambigüedad, para mandarlo a una
  * columna `timestamptz`.
