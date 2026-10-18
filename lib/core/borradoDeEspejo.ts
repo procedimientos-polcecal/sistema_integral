@@ -269,18 +269,24 @@ export async function borrarLoQueLaPlanillaNoTrajo(
     espejo.deLaApp.columna, espejo.editada,
   ].filter(Boolean).join(", ");
 
+  // Las dos lecturas van ordenadas por `id`. No es por prolijidad: `LIMIT` y
+  // `OFFSET` sin `ORDER BY` no tienen garantizada la estabilidad entre
+  // páginas, asi que una fila podria aparecer dos veces o ninguna. Medido el
+  // 18/10/2026 sobre las 2.200 ordenes de trabajo, sin orden no fallaba — pero
+  // lo que decide acá qué se borra no puede depender de que el planificador
+  // siga eligiendo el mismo recorrido.
   let candidatas: Record<string, unknown>[];
   let total: number;
   try {
     candidatas = await traerTodo<Record<string, unknown>>((desde, hasta) =>
       cliente.from(espejo.tabla).select(columnas).neq(espejo.sincronizado, corrida.cuando)
-        .range(desde, hasta).returns<Record<string, unknown>[]>()
+        .order("id").range(desde, hasta).returns<Record<string, unknown>[]>()
     );
     // Las que nunca se sincronizaron también sobran: un `neq` no alcanza a un
     // null en SQL, así que van en su propia consulta.
     const nulas = await traerTodo<Record<string, unknown>>((desde, hasta) =>
       cliente.from(espejo.tabla).select(columnas).is(espejo.sincronizado, null)
-        .range(desde, hasta).returns<Record<string, unknown>[]>()
+        .order("id").range(desde, hasta).returns<Record<string, unknown>[]>()
     );
     candidatas.push(...nulas);
     // Un id no puede venir en las dos consultas —un valor es distinto de
