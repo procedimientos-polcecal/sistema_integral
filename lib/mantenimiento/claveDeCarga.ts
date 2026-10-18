@@ -34,12 +34,15 @@
 // y no armar la respuesta como si el id fuera obligatorio.
 //
 // Tests: lo que decide está en funciones puras —`decidirPorClave`,
-// `esChoqueDeClave` y `cambiosDeResolucion`— y esas sí se prueban.
-// `reservarClave` y `resolverClave` quedan sin test: son el pegamento con
-// PostgREST, y en este repo lo que habla con la base no se mockea, porque un
-// mock probaría el mock. Lo que ahí queda sin probar son los dos `throw` que
-// propagan un fallo de la base (y el de "no estaba reservada"); el resto de lo
-// que deciden ya salió a las puras. La tabla es `cargas_offline`
+// `esChoqueDeClave`, `cambiosDeResolucion` y `filaVisible`— y esas sí se
+// prueban; `filaVisible` en particular fija qué veredictos exponen la fila, que
+// es la propiedad de seguridad del archivo. `reservarClave` y `resolverClave`
+// quedan sin test: son el pegamento con PostgREST, y en este repo lo que habla
+// con la base no se mockea, porque un mock probaría el mock. Lo que ahí queda
+// sin probar son los cinco `throw` que propagan un fallo: reservar, leer,
+// "ya no está" (en `reservarClave`), resolver y "no estaba reservada" (en
+// `resolverClave`). Ninguno decide nada, pero tampoco los cubre un test. La
+// tabla es `cargas_offline`
 // (supabase/migrations/20261018165613_claves_de_las_cargas_offline.sql).
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -125,6 +128,18 @@ export function decidirPorClave(
 }
 
 /**
+ * Qué fila se le puede mostrar a quien llama según el veredicto. Sólo la de
+ * `ya-esta` y `en-duda`, que son de esta carga. `ajena` y `otro-tipo` dan null
+ * porque su `numero` y su `entidad_id` pertenecen a otra carga: si la ruta hace
+ * eco de lo que recibe, ahí se filtraría. `seguir` no tiene fila que mostrar.
+ * Está separada de `reservarClave` para poder probarla: es la línea que, mal
+ * reescrita, vuelve a abrir la fuga sin que falle nada.
+ */
+export function filaVisible(decision: DecisionDeClave, fila: FilaDeClave | null): FilaDeClave | null {
+  return decision === "ya-esta" || decision === "en-duda" ? fila : null;
+}
+
+/**
  * Reserva la clave antes de tocar la planilla. Si la clave ya existe lee la
  * fila y la decisión dice qué hacer.
  *
@@ -167,8 +182,7 @@ export async function reservarClave(
 
   const existente = data as FilaDeClave;
   const decision = decidirPorClave(existente, datos.usuarioId, datos.tipo);
-  const esDeEstaCarga = decision === "ya-esta" || decision === "en-duda";
-  return { decision, fila: esDeEstaCarga ? existente : null };
+  return { decision, fila: filaVisible(decision, existente) };
 }
 
 /**

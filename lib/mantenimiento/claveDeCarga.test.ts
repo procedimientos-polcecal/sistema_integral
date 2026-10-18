@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  decidirPorClave, esChoqueDeClave, cambiosDeResolucion, type FilaDeClave,
+  decidirPorClave, esChoqueDeClave, cambiosDeResolucion, filaVisible,
+  type DecisionDeClave, type FilaDeClave,
 } from "./claveDeCarga";
 
 function fila(cambios: Partial<FilaDeClave> = {}): FilaDeClave {
@@ -101,5 +102,39 @@ describe("cambiosDeResolucion", () => {
   it("un id null o vacío tampoco se escribe", () => {
     expect("entidad_id" in cambiosDeResolucion({ numero: "1", entidadId: null }, AHORA)).toBe(false);
     expect("entidad_id" in cambiosDeResolucion({ numero: "1", entidadId: "" }, AHORA)).toBe(false);
+  });
+});
+
+describe("filaVisible", () => {
+  // Una fila con datos de verdad: si algún veredicto la deja pasar, se nota.
+  const CON_DATOS = fila({
+    usuario_id: "beto",
+    resuelto_en: "2026-10-18T12:00:00Z",
+    numero: "2796",
+    entidad_id: "ot-1",
+  });
+
+  it("ajena y otro-tipo no exponen la fila: el número no es de quien pregunta", () => {
+    expect(filaVisible("ajena", CON_DATOS)).toBeNull();
+    expect(filaVisible("otro-tipo", CON_DATOS)).toBeNull();
+  });
+
+  it("ya-esta y en-duda devuelven la fila: es de esta carga", () => {
+    expect(filaVisible("ya-esta", CON_DATOS)).toBe(CON_DATOS);
+    expect(filaVisible("en-duda", CON_DATOS)).toBe(CON_DATOS);
+  });
+
+  it("seguir no tiene fila que mostrar, aunque se le pase una", () => {
+    expect(filaVisible("seguir", CON_DATOS)).toBeNull();
+  });
+
+  it("cubre los cinco veredictos: uno nuevo obliga a decidir si expone o no", () => {
+    const todos: Record<DecisionDeClave, boolean> = {
+      seguir: false, "ya-esta": true, "en-duda": true, ajena: false, "otro-tipo": false,
+    };
+    for (const [decision, expone] of Object.entries(todos)) {
+      const visible = filaVisible(decision as DecisionDeClave, CON_DATOS);
+      expect(visible !== null, decision).toBe(expone);
+    }
   });
 });
