@@ -239,6 +239,29 @@ caso que lo justifica ya pasó: el 13/10/2026 una planilla recalculando devolvi�
 alguna pestaña de área no se pudo leer, no se borra nada de ninguna, porque las
 filas de esa área faltan en bloque.
 
+**Al encenderlo no había nada que borrar, en ninguna.** Medido el 18/10/2026
+con `npx tsx scripts/ensayo-borrado-mantenimiento.mts`, que lee las planillas
+con las mismas funciones que usan las sincronizaciones:
+
+| | En la planilla | En la base | A borrar |
+|---|---:|---:|---:|
+| Órdenes de trabajo | 2.200 | 2.200 | 0 |
+| Avisos | 172 | 172 | 0 |
+| Órdenes de servicio | 262 | 262 | 0 |
+| Requerimientos de Compras | 2.159 | 2.159 | 0 |
+
+Es el mejor resultado posible: el borrado no tenía un acumulado que arrastrar,
+así que sólo va a actuar cuando alguien saque una línea a propósito. Conviene
+volver a correr ese ensayo antes de cualquier cambio en cómo se lee una
+planilla — un parseo que empeore se ve acá como filas "que la planilla ya no
+tiene", y el freno lo va a frenar, pero mejor verlo antes.
+
+**Y corre solo, cada quince minutos**, desde
+`.github/workflows/mantenimiento-sync.yml`. El cron de `vercel.json` es la red
+diaria por si Actions falla. O sea que el borrado es automático y desatendido,
+dentro del freno; lo que hizo queda en `auditoria` con `accion = 'borrar'` y
+los números en el `contexto`.
+
 Quien mire el número y sepa que el borrado grande es correcto lo confirma
 repitiendo la llamada con `?confirmar_borrado=1`. **El cron nunca lo manda.**
 
