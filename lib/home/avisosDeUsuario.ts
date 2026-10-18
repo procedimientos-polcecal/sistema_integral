@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { modulosVisibles } from "@/lib/core/access";
+import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
@@ -34,11 +34,10 @@ export interface QuienMira {
  * sesión o sin ella. Si algún día alguna tabla pasara a filtrar por fila, esto
  * deja de ser cierto y hay que volver acá.
  */
-export async function avisosDeUsuario(
+async function avisosDeLosModulos(
   supabase: SupabaseClient,
-  quien: QuienMira
+  modulos: Modulo[]
 ): Promise<Notificacion[]> {
-  const modulos = modulosVisibles(quien.rol, quien.grants);
   const tiene = (m: Modulo) => modulos.includes(m);
   const hoy = hoyEnArgentina();
 
@@ -58,7 +57,7 @@ export async function avisosDeUsuario(
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, filasRitmo, descartes,
+    tallerVialSinEquipo, tallerVialSinService, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -82,11 +81,6 @@ export async function avisosDeUsuario(
       ? equiposTallerVialSinService(supabase).then((r) => r.equiposSinService)
       : Promise.resolve(0),
     traerRitmo(supabase),
-    supabase
-      .from("notificaciones_descartes")
-      .select("notificacion_id, cantidad_vista")
-      .eq("usuario_id", quien.id)
-      .then((r) => r.data ?? []),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -96,8 +90,42 @@ export async function avisosDeUsuario(
     tallerVialSinEquipo, tallerVialSinService,
   };
 
-  return filtrarDescartadas(
-    [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)],
-    descartes
-  );
+  return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
+}
+
+/**
+ * Los avisos de **todo el sistema**, sin filtrar por persona ni por descartes.
+ *
+ * Existe para la foto diaria con la que el resumen calcula qué se movió, y la
+ * foto es **global** porque los conteos son globales: `avisosDeLosModulos` los
+ * saca con `count` sobre las tablas y lo único que cambia por persona es qué
+ * módulos ve. Por eso son trece filas por día y no trece por persona.
+ *
+ * **No pasa por `filtrarDescartadas` a propósito.** Un descarte es de alguien;
+ * la foto no es de nadie. Si la foto se calculara con los descartes de una
+ * persona, el movimiento de todos quedaría atado a lo que esa persona silenció.
+ */
+export async function avisosDeTodoElSistema(
+  supabase: SupabaseClient
+): Promise<Notificacion[]> {
+  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN]);
+}
+
+/**
+ * Los avisos de una persona: los de los módulos que ve, ya sin lo que descartó.
+ */
+export async function avisosDeUsuario(
+  supabase: SupabaseClient,
+  quien: QuienMira
+): Promise<Notificacion[]> {
+  const [avisos, descartes] = await Promise.all([
+    avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants)),
+    supabase
+      .from("notificaciones_descartes")
+      .select("notificacion_id, cantidad_vista")
+      .eq("usuario_id", quien.id)
+      .then((r) => r.data ?? []),
+  ]);
+
+  return filtrarDescartadas(avisos, descartes);
 }
