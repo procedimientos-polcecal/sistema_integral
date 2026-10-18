@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   indiceDeColumnas, laSerieEstaCongelada, maximoDeLaSerie, celdasDelAlta,
-  loQueSigueEnLaSerie,
+  loQueSigueEnLaSerie, laFilaEstaLibre,
 } from "./formulario";
 
 /**
@@ -237,5 +237,37 @@ describe("lo que sigue en la serie", () => {
     const r = loQueSigueEnLaSerie(form, [["N° OT"], ["2796"], [], ["2797"]]);
     expect(r.ok && r.ot_number).toBe(2798);
     expect(r.ok && r.fila).toBe(5);
+  });
+});
+
+/**
+ * La guarda de concurrencia. Dos altas al mismo tiempo leen la misma columna y
+ * calculan la misma fila libre; sin esto, la segunda pisa a la primera y la OT
+ * que se perdio no deja rastro en ningun lado.
+ */
+describe("la fila donde va el alta tiene que estar libre", () => {
+  it("una fila con algo no esta libre", () => {
+    expect(laFilaEstaLibre([["2798"]])).toBe(false);
+  });
+
+  it("vacia, sin celdas o con espacios, si", () => {
+    expect(laFilaEstaLibre([[""]])).toBe(true);
+    expect(laFilaEstaLibre([])).toBe(true);
+    expect(laFilaEstaLibre([["   "]])).toBe(true);
+    expect(laFilaEstaLibre([[]])).toBe(true);
+  });
+});
+
+/**
+ * Sin encabezado no se escribe. La pestana "Altas del sistema" la crea una
+ * persona a mano, asi que existir sin encabezado es un estado real y no una
+ * hipotesis: escribir ahi dejaria una fila con los datos en cualquier columna.
+ */
+describe("si la pestana de altas esta sin encabezado", () => {
+  it("se niega y dice que columnas faltan", () => {
+    const r = celdasDelAlta([], datos);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivos.join(" ")).toContain("descripcion");
   });
 });

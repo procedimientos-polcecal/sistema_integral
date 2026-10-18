@@ -42,8 +42,24 @@ import {
   escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas,
 } from "@/lib/core/sheets";
 
-/** La pestaña donde caen las respuestas y donde el sistema agrega sus altas. */
+/** La pestaña donde caen las respuestas del formulario. */
 export const HOJA_DE_RESPUESTAS = "Respuestas de formulario";
+
+/**
+ * La pestaña donde el sistema escribe sus altas, y **sólo él**.
+ *
+ * Existe desde el 16/10/2026 porque **Google Forms inserta sus respuestas
+ * dentro de su propio rango y empuja hacia abajo cualquier fila ajena**. Con
+ * las dos conviviendo en `Respuestas de formulario`, la OT 2796 del sistema se
+ * corrió dos lugares y su registro —"Realizado, 1 h, dos operarios"— quedó
+ * pegado a la 2798, que es de otro: el derrame de los `IMPORTRANGE` del master
+ * se movió con ella y las columnas literales no.
+ *
+ * Acá Forms no entra. Y para que el orden del master no dependa de la posición
+ * física, sus cuatro importaciones apilan las dos pestañas con `ORDER BY` por
+ * N° de OT — ver el spec `2026-10-16-mantenimiento-altas-del-sistema-design.md`.
+ */
+export const HOJA_DE_ALTAS = "Altas del sistema";
 
 /**
  * Cómo puede llamarse cada columna que el alta llena.
@@ -265,6 +281,18 @@ export function celdasDelAlta(
 }
 
 
+/**
+ * Si en esa fila no hay nada todavía.
+ *
+ * Es la guarda de concurrencia del alta: dos altas al mismo tiempo leen la
+ * misma columna y calculan la misma fila libre, y sin esto la segunda pisa a la
+ * primera — una OT que desaparece sin dejar rastro en ningún lado.
+ */
+export function laFilaEstaLibre(celda: readonly (readonly unknown[])[]): boolean {
+  return String(celda[0]?.[0] ?? "").trim() === "";
+}
+
+
 // ── Lo que habla con Google ───────────────────────────────────
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID ?? "";
@@ -281,24 +309,24 @@ const COLUMNA_SERIE = "A";
  * la primera no se puede contestar: una fórmula que devuelve 2785 se lee igual
  * que un 2785 escrito.
  */
-const serieDeLaPlanilla = (planilla: string): Promise<string[][]> =>
-  leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
+const serieDeLaPestana = (planilla: string, pestana: string): Promise<string[][]> =>
+  leerFormulas(planilla, `${pestana}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
 
 export type ResultadoDelAlta =
   | {
       ok: true;
       /** El número que la serie le dio, y que ya está escrito en la planilla. */
       ot_number: number;
-      /** En qué fila de la hoja de respuestas quedó. Sólo para informar. */
+      /** En qué fila de «Altas del sistema» quedó. Sólo para informar. */
       fila: number;
     }
   /** Qué pasó, sin traducir. Un diagnóstico que no se distingue no sirve. */
   | { ok: false; error: string };
 
 /**
- * El número más alto de la serie, leído de donde la serie vive.
+ * El número más alto de la serie, leído de las **dos** pestañas donde vive.
  *
- * **De la hoja de respuestas y no del master.** El master la recibe por
+ * **De la planilla de respuestas y no del master.** El master la recibe por
  * `IMPORTRANGE`, que llega con retraso: dos OT creadas con pocos minutos de
  * diferencia leerían el mismo máximo y tomarían el mismo número. Acá se lee la
  * fuente, que es lo que el Apps Script del formulario también cuenta.
@@ -312,26 +340,34 @@ export async function maximoDeLaSerieEnLaPlanilla(): Promise<number | null> {
   if (!planilla) return null;
 
   try {
-    return maximoDeLaSerie(await serieDeLaPlanilla(planilla));
+    const [form, altas] = await Promise.all([
+      serieDeLaPestana(planilla, HOJA_DE_RESPUESTAS),
+      serieDeLaPestana(planilla, HOJA_DE_ALTAS),
+    ]);
+    return Math.max(maximoDeLaSerie(form), maximoDeLaSerie(altas));
   } catch {
     return null;
   }
 }
 
 /**
- * Da de alta la orden en la hoja de respuestas y devuelve el número que le tocó.
+ * Da de alta la orden en «Altas del sistema» y devuelve el número que le tocó.
  *
  * **Se llama antes de crear la OT en la base, y ése es el punto.** La planilla
  * manda en Mantenimiento: una orden existe cuando tiene su fila. Si esto falla,
  * no se creó nada en ningún lado y no se consumió ningún número — que es
  * exactamente lo que el 16/10/2026 no pasó y dejó a la 2796 esperando que el
- * formulario repartiera su número otra vez. Ver `loQueSigueEnLaSerie`.
+ * formulario repartiera su número otra vez.
  *
  * Al revés tampoco es gratis, y conviene saberlo: si la fila se escribe y
  * después falla el insert en la base, la OT queda **sólo en la planilla**. Eso
  * no es un estado roto sino el estado normal de cualquier orden cargada por el
  * formulario, y la próxima sincronización la trae. Al derecho, en cambio, la
  * pérdida era silenciosa.
+ *
+ * **Escribe en `Altas del sistema` y no en la pestaña del formulario**, que es
+ * de donde salió todo esto: Forms inserta dentro de su rango y empuja las filas
+ * ajenas hacia abajo, y el registro de una OT corrida queda pegado a otra.
  *
  * No lanza: devuelve qué pasó, sin traducir, para que la pantalla lo muestre.
  *
@@ -353,33 +389,80 @@ export async function altaEnLaPlanilla(
   }
 
   try {
-    const serie = await serieDeLaPlanilla(planilla);
+    // Las dos columnas A. El número sale del máximo de las dos y la fila de la
+    // de altas, que es donde se escribe.
+    const [form, altas] = await Promise.all([
+      serieDeLaPestana(planilla, HOJA_DE_RESPUESTAS),
+      serieDeLaPestana(planilla, HOJA_DE_ALTAS),
+    ]);
 
-    // El número y la fila, de esta misma lectura. Si la serie no está
-    // congelada no devuelve ninguno de los dos: con la fórmula viva, la
-    // primera fila que Forms inserte en el medio reparte un número que el
-    // sistema ya usó.
-    const sigue = loQueSigueEnLaSerie(serie);
+    const sigue = loQueSigueEnLaSerie(form, altas);
     if (!sigue.ok) return sigue;
 
+    // El encabezado de **las altas**: es la pestaña donde se va a escribir, y
+    // la crea una persona a mano. Si quedó sin encabezado, `celdasDelAlta` se
+    // niega diciendo qué columnas faltan en vez de escribir una fila con los
+    // datos en cualquier lado.
     const encabezado =
-      (await leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!1:1`))[0] ?? [];
+      (await leerFormulas(planilla, `${HOJA_DE_ALTAS}!1:1`))[0] ?? [];
 
     const armado = celdasDelAlta(encabezado, { ...datos, ot_number: sigue.ot_number });
-    if (!armado.ok) return { ok: false, error: armado.motivos.join("; ") };
+    if (!armado.ok) {
+      return {
+        ok: false,
+        error: `La pestaña «${HOJA_DE_ALTAS}» no sirve para escribir: ${armado.motivos.join("; ")}`,
+      };
+    }
+
+    // Releer justo esa celda antes de escribir. Entre la lectura de arriba y
+    // esta línea puede haber entrado otra alta, y las dos calcularon la misma
+    // fila libre: sin esto, la segunda pisa a la primera y la OT perdida no
+    // deja rastro en ningún lado.
+    const destino = await leerFormulas(
+      planilla, `${HOJA_DE_ALTAS}!${COLUMNA_SERIE}${sigue.fila}`
+    );
+    if (!laFilaEstaLibre(destino)) {
+      return {
+        ok: false,
+        error:
+          `La fila ${sigue.fila} de «${HOJA_DE_ALTAS}» se ocupó mientras se preparaba ` +
+          `el alta. No se escribió nada: volvé a intentar.`,
+      };
+    }
 
     await escribirCeldas(
       planilla,
       armado.celdas.map((c) => ({
-        pestana: HOJA_DE_RESPUESTAS,
+        pestana: HOJA_DE_ALTAS,
         columna: c.columna,
         fila: sigue.fila,
         valor: c.valor,
       }))
     );
 
+    // Y releer lo escrito. No es ceremonia: es lo único que distingue "quedó
+    // con su número" de "quedó con el de otro", y es lo que Compras aprendió
+    // perdiendo un pedido el 09/09/2026.
+    const quedo = await leerFormulas(
+      planilla, `${HOJA_DE_ALTAS}!${COLUMNA_SERIE}${sigue.fila}`
+    );
+    const escrito = Number(String(quedo[0]?.[0] ?? "").trim());
+    if (escrito !== sigue.ot_number) {
+      return {
+        ok: false,
+        error:
+          `Se escribió la fila ${sigue.fila} de «${HOJA_DE_ALTAS}» pero quedó con el N° ` +
+          `${JSON.stringify(quedo[0]?.[0] ?? "")} en vez de ${sigue.ot_number}. ` +
+          `Revisá esa fila antes de volver a cargarla.`,
+      };
+    }
+
     return { ok: true, ot_number: sigue.ot_number, fila: sigue.fila };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const porque = e instanceof Error ? e.message : String(e);
+    // Con el nombre de la pestaña adelante: el 400 de Google por una pestaña
+    // que todavía no existe dice "Unable to parse range", que no le sirve a
+    // nadie si no se sabe qué rango se pidió.
+    return { ok: false, error: `No se pudo escribir en «${HOJA_DE_ALTAS}»: ${porque}` };
   }
 }
