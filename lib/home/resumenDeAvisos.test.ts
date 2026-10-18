@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resumirParaPush } from "./resumenDeAvisos";
+import { resumirParaPush, resumirElMovimiento } from "./resumenDeAvisos";
 import type { Notificacion } from "./notificaciones";
 
 const conteo = (id: string, titulo: string, cantidad: number, href: string): Notificacion => ({
@@ -97,5 +97,72 @@ describe("resumirParaPush", () => {
       conteo("b", "Segundo", 99, "/b"),
     ]);
     expect(r?.body.startsWith("1 · Primero")).toBe(true);
+  });
+});
+
+describe("resumirElMovimiento", () => {
+  it("sin movimiento no se manda nada", () => {
+    expect(resumirElMovimiento([])).toBeNull();
+  });
+
+  /*
+   * "mas" es invariable a proposito. Los titulos mezclan genero —"Ausencias
+   * sin clasificar" contra "Requerimientos esperando aprobacion"— asi que
+   * "3 nuevas" concuerda con la mitad y chirria con la otra. Y el numero nunca
+   * va solo: un 3 que antes era el total y ahora es el delta es peor que
+   * cualquiera de los dos.
+   */
+  it("uno solo dice cuanto subio, no el total", () => {
+    expect(
+      resumirElMovimiento([
+        { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 3, href: "/x" },
+      ])
+    ).toEqual({ title: "Órdenes de trabajo atrasadas", body: "3 más", url: "/x" });
+  });
+
+  it("varios se cuentan como novedades", () => {
+    expect(
+      resumirElMovimiento([
+        { id: "a", titulo: "Ausencias sin clasificar", cantidad: 2, href: "/a" },
+        { id: "b", titulo: "Órdenes de trabajo atrasadas", cantidad: 3, href: "/b" },
+      ])
+    ).toEqual({
+      title: "2 novedades",
+      body: "2 más · Ausencias sin clasificar\n3 más · Órdenes de trabajo atrasadas",
+      url: "/",
+    });
+  });
+
+  // Un aviso de ritmo no cuenta cosas: su cantidad son umbrales. Va sin numero,
+  // igual que en `resumirParaPush`.
+  it("un aviso de ritmo va sin numero", () => {
+    expect(
+      resumirElMovimiento([
+        {
+          id: "ritmo-trituracion",
+          titulo: "Trituración: hace 18 días que no se carga",
+          cantidad: 1,
+          href: "/t",
+        },
+      ])!.body
+    ).toBe("");
+  });
+
+  it("entre varios, el de ritmo va con su titulo solo", () => {
+    expect(
+      resumirElMovimiento([
+        { id: "ritmo-remises", titulo: "Remises: hace 82 días que no se carga", cantidad: 1, href: "/r" },
+        { id: "b", titulo: "Facturas en el buzón sin vincular", cantidad: 2, href: "/b" },
+      ])!.body
+    ).toBe("Remises: hace 82 días que no se carga\n2 más · Facturas en el buzón sin vincular");
+  });
+
+  it("con mas de tres se nombran tres y se resume el resto", () => {
+    const r = resumirElMovimiento(
+      ["a", "b", "c", "d", "e"].map((id) => ({ id, titulo: `T${id}`, cantidad: 1, href: `/${id}` }))
+    );
+    expect(r!.title).toBe("5 novedades");
+    expect(r!.body.split("\n")).toHaveLength(4);
+    expect(r!.body).toContain("y 2 más");
   });
 });
