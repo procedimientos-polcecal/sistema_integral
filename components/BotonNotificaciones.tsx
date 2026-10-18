@@ -69,7 +69,13 @@ export function BotonNotificaciones() {
       // `register` es idempotente: si el service worker ya está registrado
       // —lo hace `RegistrarServiceWorker` en cada carga desde la fase 1—
       // devuelve el mismo registro en vez de crear otro.
-      const registro = await navigator.serviceWorker.register("/sw.js");
+      //
+      // **El `type` tiene que ser el mismo que allá**: `public/sw.js` importa
+      // las reglas de la cola de cargas sin señal, así que es un módulo, y
+      // registrar el mismo alcance con otro tipo **rechaza**. Si alguien cambia
+      // uno solo de los dos, el que quede distinto deja la app sin service
+      // worker —sin instalar y sin push— y acá eso se ve sólo como "fallo".
+      const registro = await navigator.serviceWorker.register("/sw.js", { type: "module" });
       const { clavePublica } = await fetch("/api/push/suscripcion").then((r) => r.json());
       if (!clavePublica) { setEstado("fallo"); return; }
 

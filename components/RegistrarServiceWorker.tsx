@@ -30,6 +30,18 @@ import { useEffect } from "react";
  * vuelve. Sin esa rama, en una visita que entra por cualquier pantalla que no
  * sea la primera, el registro no ocurriría nunca.
  *
+ * POR QUÉ `{ type: "module" }`
+ *
+ * `public/sw.js` importa las reglas de la cola de cargas sin señal desde
+ * `/cola/colaOffline.js`, para que sean **las mismas** que corre la pantalla y
+ * no una segunda copia que se separe sin que nadie lo note. Un service worker
+ * clásico no puede importar nada, así que este registro y el de
+ * `BotonNotificaciones` pasan a declararlo módulo.
+ *
+ * **Los dos o ninguno.** Registrar el mismo alcance con un tipo distinto del
+ * que ya está rechaza, y ahí la app queda sin service worker —sin oferta de
+ * instalar y sin push— hasta el deploy siguiente.
+ *
  * FALLA CALLADO, A PROPÓSITO
  *
  * Esto corre en cada carga de cada pantalla para los 14 usuarios: no tiene
@@ -44,7 +56,7 @@ export function RegistrarServiceWorker() {
 
     const registrar = () => {
       try {
-        navigator.serviceWorker.register("/sw.js").catch(() => {
+        navigator.serviceWorker.register("/sw.js", { type: "module" }).catch(() => {
           // Registro rechazado: queda sin service worker y nada más.
         });
       } catch {

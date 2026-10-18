@@ -39,6 +39,15 @@ export const config = {
    * manifest llega como HTML donde se esperaba JSON y el service worker no se
    * registra. Los dos son públicos por definición y no hay nada que proteger.
    *
+   * `cola` queda afuera por el mismo motivo que `sw.js`, y es parte de lo
+   * mismo: `public/sw.js` importa de `/cola/colaOffline.js` y `/cola/idb.js`
+   * las reglas de la cola de cargas sin señal, para que sean las mismas que
+   * corre la pantalla. El navegador baja esos dos archivos **cuando registra o
+   * actualiza el service worker**, y si ahí contestara un 307 al login —basta
+   * una cookie vencida en ese momento— llegaría HTML donde se espera un módulo
+   * y **el service worker entero no se registraría**. Son funciones de
+   * decisión: no leen la base, no tienen datos ni secretos adentro.
+   *
    * `/cargar` —la pantalla que se dibuja entera en el navegador para poder
    * cargar un aviso o una OT sin señal— **NO queda afuera, y eso es a
    * propósito**: con señal tiene que pedir sesión como cualquier otra pantalla.
@@ -53,6 +62,6 @@ export const config = {
    * string JS y un `\.` a secas se evalúa como `.` y no escapa nada.
    */
   matcher: [
-    "/((?!_next/static|_next/image|pdfjs|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|pdfjs|cola/|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
