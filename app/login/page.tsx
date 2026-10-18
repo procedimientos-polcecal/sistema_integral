@@ -23,7 +23,7 @@ export default async function LoginPage({
   const mensajeError = error ? (MENSAJES_ERROR[error] ?? error) : null;
 
   return (
-    <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
+    <div className="flex min-h-dvh" style={{ background: "var(--bg)" }}>
       {/* Panel izquierdo */}
       <div
         className="relative hidden overflow-hidden md:flex md:w-[45%] md:flex-col md:justify-between"

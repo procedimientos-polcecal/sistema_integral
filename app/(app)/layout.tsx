@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!usuario || !usuario.activo) {
     const desactivado = Boolean(usuario) && !usuario?.activo;
     return (
-      <main className="flex min-h-screen items-center justify-center p-6 text-center">
+      <main className="flex min-h-dvh items-center justify-center p-6 text-center">
         <div className="max-w-sm">
           <p className="text-lg font-semibold">
             {desactivado ? "Tu cuenta está desactivada." : "Tu cuenta todavía no fue habilitada."}
@@ -74,7 +74,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <NavMovilProvider>
-      <div className="flex h-screen flex-col">
+      {/* `h-dvh` y no `h-screen`: en Safari de iPhone `100vh` es la altura
+          **con las barras ocultas**, no la que se ve, así que el armazón mide
+          más que la pantalla y el layout se recalcula cada vez que Safari
+          colapsa o expande su barra al scrollear — se siente como que la
+          pantalla no está firme, y se nota sobre todo abajo, que es donde vive
+          la barra de instalar. `100dvh` es la altura real en cada momento.
+          No lleva reserva a `100vh`: Tailwind 4 ya exige Safari 16.4+, y `dvh`
+          existe desde la 15.4, así que no hay navegador soportado sin él —
+          Lightning CSS borra la reserva por muerta, medido. */}
+      <div className="flex h-dvh flex-col">
         <Header
           usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
           asistenteHabilitado={puedeUsarAsistente({ rol, puede_usar_asistente: usuario.puede_usar_asistente })}

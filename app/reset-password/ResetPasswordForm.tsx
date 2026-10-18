@@ -41,7 +41,7 @@ export default function ResetPasswordForm({ sesionLista }: { sesionLista: boolea
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6" style={{ background: "var(--bg)" }}>
+    <div className="flex min-h-dvh items-center justify-center px-6" style={{ background: "var(--bg)" }}>
       <div className="w-full max-w-sm">
         <img src="/logo-320.png" alt="POLYSAN S.A. / POLCECAL S.A." width={140} className="mb-8" style={{ objectFit: "contain" }} />
 
