@@ -222,7 +222,7 @@ function clienteFalso(opciones: { auditoriaFalla?: string; filas?: Record<string
     // sello nulo. El falso tiene que distinguirlas o devuelve las mismas filas
     // dos veces, que es algo que la base no puede hacer.
     let porSelloNulo = false;
-    for (const m of ["select", "neq", "range", "returns", "eq"]) self[m] = encadena;
+    for (const m of ["select", "neq", "range", "returns", "eq", "order"]) self[m] = encadena;
     self.is = () => { porSelloNulo = true; return self; };
     // `select(...).range(...)` termina devolviéndose a sí mismo y se espera
     // como promesa: así `traerTodo` lo puede recorrer.
