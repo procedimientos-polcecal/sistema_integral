@@ -224,9 +224,13 @@ Cinco reglas que costaron caro, y que valen para las cuatro:
   requerimientos de Compras. Antes sólo traían y pisaban, así que una fila que
   alguien sacaba de la planilla seguía viva para siempre y el espejo dejaba de
   ser un espejo sin avisar. Es un `DELETE` de verdad, decidido a pedido: borrar
-  una OT se lleva en cascada sus notas, sus repuestos y **su aviso**, deja en
-  null el enlace de las ejecuciones, y **falla** si hay un ítem de
-  planificación diaria apuntándole (hoy no hay ninguno).
+  una OT se lleva en cascada sus notas, sus repuestos y **su aviso**, y deja en
+  null el enlace de las ejecuciones y de los ítems de planificación diaria —el
+  plan de un día ya pasado no se reescribe—. Qué cuelga de una tabla y qué le
+  pasa al borrarla lo contesta `node scripts/que-cuelga-de.mjs <tabla>`, y
+  conviene preguntárselo a él: varias tablas de Mantenimiento las creó un delta
+  aplicado a mano, así que sus `on delete` no están en ninguna migración y
+  deducirlos del código da mal.
   La decisión vive en [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts),
   y lo que hay que saber antes de tocarla es que **sólo se borra aquello cuya
   ausencia prueba algo**: lo que la app escribió y todavía no exportó, y lo que

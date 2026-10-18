@@ -205,17 +205,26 @@ aplicado a mano y sus `on delete` no están en ninguna migración del repo—:
 | `ordenes_trabajo_repuestos` | **se borra** en cascada |
 | `avisos` | **se borra** en cascada, desde la migración `20261018160209` |
 | `mantenimientos_ejecuciones` | queda, con el enlace en null |
-| `planificacion_diaria_items` | **hace fallar el borrado** |
+| `planificacion_diaria_items` | queda, con el enlace en null, desde `20261018161825` |
 
-Las dos últimas filas son las que importan. El aviso se va con la OT a pedido,
-y conviene saber que **`avisos` espeja su propia planilla**: si la línea sigue
-en la hoja AVISOS, la sincronización de avisos lo vuelve a traer sin enlace. El
-borrado es definitivo sólo si también se sacó de allá.
+Las dos decisiones que no se deducen solas:
 
-Y `planificacion_diaria_items` sigue en `no action`, que es el único de los
-cinco que **hace fallar** el borrado. Hoy no tiene ninguna fila enlazada; el día
-que la tenga, ese borrado —y el del lote de 200 en el que viaje— falla entero,
-se informa y el resto queda para la próxima corrida.
+**El aviso se va con la OT**, a pedido. Conviene saber que **`avisos` espeja su
+propia planilla**: si la línea sigue en la hoja AVISOS, la sincronización de
+avisos lo vuelve a traer, sin enlace. El borrado es definitivo sólo si también
+se sacó de allá.
+
+**El ítem de planificación se queda**, y eso es lo contrario. Porque no es de
+la OT: es del plan de un día, que alguien armó y que siguió existiendo, y
+borrarlo reescribiría un plan ya pasado. No pierde la referencia —el ítem
+guarda `ot_number`, la especialidad, el sector, el equipo y la descripción,
+copiados al planificar—: lo único que se pierde es poder navegar a una fila que
+ya no está.
+
+Hasta el 18/10/2026 ése estaba en `no action` y **hacía fallar** el borrado,
+que con lotes de 200 ids significa tumbar las 200 que viajaran con ella. Hoy no
+hay ninguna fila enlazada, así que el cambio no movió un dato: cambia lo que va
+a pasar cuando la haya.
 
 **Sólo se borra aquello cuya ausencia prueba algo.** Quedan protegidas la fila
 que la app escribió y todavía no exportó —`app_created` con `sheets_row` en
