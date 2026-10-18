@@ -363,9 +363,9 @@ Run: `npx tsc --noEmit`
 Expected: sin errores.
 
 Y un script de un solo uso en el scratchpad que llame a `mtbfDeLaPlanta` con el `SUPABASE_SERVICE_ROLE_KEY` de `.env.local` y imprima las cinco primeras filas, los días observados y el largo de `sinAtribuir`.
-Expected, al 16/10/2026: `PO-C1-04` primero con **70 fallas y MTBF 4,6**, `diasObservados` **319**, `sinAtribuir` **49**.
+Expected: `PO-C1-04` primero con **70 fallas**, **166 equipos con fallas** y `sinAtribuir` **49**; esos números no dependen de la fecha. `diasObservados` **no es una constante**: son los días desde la primera correctiva registrada (1/12/2025) hasta hoy, inclusive, así que crece un día por día hasta que la ventana se llene, alrededor del 1/12/2026. Al corte del 15/10/2026 dio **319** y MTBF **4,6** (319 ÷ 70); el 18/10 da 322. No tomar 319 como invariante ni "arreglar" código que anda: verificar contra la cuenta de días de hoy.
 
-Si da 5,2 en vez de 4,6, el denominador se tomó como 365. Si `PY-A1-05` muestra 29 fallas el 19/01, se está leyendo `fecha` en vez de `fecha_ejecucion`. Si las filas son menos de 166, la lectura se cortó en 1000.
+Si da 5,2 cuando la cuenta de días observados da 4,6, el denominador se tomó como 365. Si `PY-A1-05` muestra 29 fallas el 19/01, se está leyendo `fecha` en vez de `fecha_ejecucion`. Si las filas son menos de 166, la lectura se cortó en 1000.
 
 - [ ] **Step 4: Commitear**
 

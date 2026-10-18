@@ -71,7 +71,7 @@ Dos consecuencias que hay que respetar al construirlo:
 | Equipos activos | 239 |
 | Con al menos una correctiva en la ventana | 166 |
 | Sin ninguna | 73 |
-| Primera correctiva de la ventana | 1/12/2025 → **319 días observados** |
+| Primera correctiva de la ventana | 1/12/2025 → **319 días observados, con corte al 15/10/2026** (crece un día por día; ver más abajo) |
 
 Reparto de correctivas por equipo: 51 equipos con una sola, 27 con dos, 27 con
 tres, y **20 equipos con diez o más**. La cola larga es donde está la noticia.
@@ -138,9 +138,16 @@ MTBF = días observados de la ventana ÷ cantidad de fallas del equipo
 
 **La ventana son los últimos 365 días, pero el denominador son los días
 observados dentro de ella**, es decir desde la primera correctiva registrada
-—hoy el 1/12/2025— hasta hoy: **319 días**, no 365.
+—hoy el 1/12/2025— hasta hoy, inclusive: **319 días con corte al 15/10/2026**,
+no 365.
 
-Esto no es un detalle. Los 46 días de la ventana que no tienen ningún dato
+**Ese 319 no es un invariante: es una medición fechada, y crece un día por
+día** (320 el 16/10, 322 el 18/10) hasta que la ventana se llene, alrededor del
+1/12/2026, y desde ahí vale 365. Quien verifique contra la base en otra fecha
+tiene que esperar `días desde el 1/12/2025 hasta hoy, inclusive`, no 319; si el
+número no coincide con 319 pero sí con esa cuenta, el código anda.
+
+Esto no es un detalle. Los 46 días de la ventana (al 15/10) que no tienen ningún dato
 inflarían cada MTBF un 14%, y alrededor del **1/12/2026, cuando la ventana
 termine de llenarse, todos los números de la pantalla bajarían un 13% de un día
 para el otro sin que cambie nada en la planta** — y quien comparara contra una
@@ -156,8 +163,9 @@ desaparece del listado justo cuando interesa saber que falló. Con esta fórmula
 aparece, y el que falló poco sale bien ubicado.
 
 **Un equipo sin fallas en la ventana no tiene MTBF**: dividir por cero no da
-"muy bueno", da nada. Se muestra como **"sin fallas · MTBF > 319 d"**, que es una
-cota inferior verdadera. No se le escribe 319.
+"muy bueno", da nada. Se muestra como **"sin fallas · MTBF > N d"**, con N los días
+observados de hoy (319 al 15/10/2026), que es una cota inferior verdadera. No se
+le escribe un MTBF igual a N.
 
 ### Confiabilidad
 
@@ -173,7 +181,7 @@ de leer cualquier número.
 
 Molino de Hidratación: R(7) = 22%, R(30) = 0,1%. Elevador 2 de Molienda cal
 (MTBF 21,3 d): R(7) = 72%, R(30) = 24%. Un equipo sin fallas, con la cota de 319
-días: R(7) ≥ 98%, R(30) ≥ 91%.
+días (la del 15/10/2026; crece con los días observados): R(7) ≥ 98%, R(30) ≥ 91%.
 
 **La fórmula supone que la tasa de falla es constante, y en 18 de los 42 equipos
 que importan no lo es.** Ver más abajo: ése es el riesgo asumido de todo esto.
@@ -388,11 +396,17 @@ node scripts/revisar-arbol-commiteado.mjs
 `revisar-responsive.mjs` importa acá más que de costumbre: una tabla de ocho
 columnas con sparkline es justo lo que marca.
 
-Y contra la base, con el `SUPABASE_SERVICE_ROLE_KEY` de `.env.local`, al
-16/10/2026: el listado tiene que dar **PO-C1-04 primero, con 70 fallas y MTBF de
-4,6 días**, 166 equipos con fallas, 73 sin ninguna y 49 correctivas sin atribuir.
-Si da **5,2 días** en vez de 4,6, el denominador se está tomando como 365 en vez
-de los 319 observados. Si PY-A1-05 muestra 29 fallas el 19/01, se está usando
+Y contra la base, con el `SUPABASE_SERVICE_ROLE_KEY` de `.env.local`, el
+listado tiene que dar **PO-C1-04 primero, con 70 fallas**, 166 equipos con
+fallas, 73 sin ninguna y 49 correctivas sin atribuir. Esos cuatro números no
+dependen de la fecha. Los que sí dependen son el MTBF y los días observados:
+al corte del 15/10/2026 daban **MTBF de 4,6 días y 319 días observados**, pero
+**los días observados son los que van del 1/12/2025 hasta hoy, inclusive, así
+que el número crece un día por día** (322 el 18/10) hasta que la ventana se
+llene, alrededor del 1/12/2026. Hoy hay que esperar esa cuenta, no 319 — y el
+MTBF de PO-C1-04 es esos días ÷ sus fallas. Si da **5,2 días** cuando la cuenta
+da 4,6, el denominador se está tomando como 365 en vez de los días observados.
+Si PY-A1-05 muestra 29 fallas el 19/01, se está usando
 `fecha` en vez de `fecha_ejecucion`. Y si los equipos con fallas son menos de
 166, la lectura se cortó en 1000 filas.
 
