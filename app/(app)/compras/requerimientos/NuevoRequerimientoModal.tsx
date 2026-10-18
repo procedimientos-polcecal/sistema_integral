@@ -20,9 +20,15 @@ type Opcion = { id: string; nombre: string };
  * el código y la cantidad ya están del otro lado, y volver a escribirlos es
  * donde el código se pierde y el RI termina diciendo "rodamiento" a secas.
  *
- * **El área y quién paga no se pueden precargar y es a propósito.** Son
- * decisiones de quien pide, y elegirlas por él es cómo un pedido de
- * Mantenimiento entra como si fuera de Producción.
+ * **Quién paga no se precarga nunca**, y el área **sólo cuando no se la está
+ * adivinando**. Son decisiones de quien pide, y elegirlas por él es cómo un
+ * pedido de Mantenimiento entra como si fuera de Producción.
+ *
+ * Esa razón es contra adivinar, no contra saber. Desde el 18/10/2026 la orden
+ * de trabajo manda `areaId`: un repuesto que falta para una OT **es** un pedido
+ * de Mantenimiento por construcción, lo pida quien lo pida. Quién paga sigue
+ * sin precargarse desde afuera — se deduce acá, de la ubicación, y se puede
+ * cambiar.
  */
 export interface ValoresIniciales {
   descripcion?: string;
@@ -31,6 +37,8 @@ export interface ValoresIniciales {
   detalle?: string;
   ubicacionId?: string;
   equipoId?: string;
+  /** Sólo cuando quien precarga lo sabe de verdad. Ver arriba. */
+  areaId?: string;
 }
 
 /**
@@ -63,8 +71,12 @@ export default function NuevoRequerimientoModal({
    *
    * Si falla, se queda vacío y se elige a mano, como hasta ahora. Que no se
    * sepa de qué área es alguien no puede impedirle pedir un material.
+   *
+   * Y si quien abre el formulario ya sabe el área —la orden de trabajo manda
+   * Mantenimiento—, ésa gana: es más específica que la del perfil, y el pedido
+   * es de la orden y no de quien la mira.
    */
-  const [areaId, setAreaId] = useState("");
+  const [areaId, setAreaId] = useState(inicial?.areaId ?? "");
 
   useCargar(async (vigente) => {
     try {
@@ -219,6 +231,34 @@ export default function NuevoRequerimientoModal({
 
     const sugerida = empresaSugerida(sectores.find((s2) => s2.id === nuevoSectorId));
     if (sugerida && !paga) setPaga(sugerida);
+  }
+
+  /**
+   * Lo que vino precargado pasa por **la misma deducción** que elegirlo a mano.
+   *
+   * Precargar `ubicacionId` guardaba el valor y nada más: el sector no se
+   * deducía y quién paga quedaba vacío, aunque la ubicación dijera de qué
+   * sector es. Correr `elegirUbicacion` en vez de repetir sus cuentas acá es a
+   * propósito — dos caminos que tienen que dar lo mismo tarde o temprano no lo
+   * dan, y el que se usa menos es el que se queda viejo.
+   *
+   * Espera a que estén los catálogos porque sin ellos no hay nada que deducir,
+   * y corre **una sola vez**: después de eso lo que haya en pantalla es de
+   * quien lo está completando.
+   *
+   * Va **durante el render y no en un efecto**, que es como esta casa ajusta
+   * un estado derivado —igual que el salto a la última página del listado de
+   * órdenes—. Y el testigo es estado y no un `ref`: un `ref` leído en el
+   * render es lo que `react-hooks/refs` marca, con razón, porque no dispara el
+   * re-render que esto necesita.
+   *
+   * Si alguien eligió la ubicación a mano antes de que llegaran los catálogos,
+   * esto corre igual y completa lo que en ese momento no se pudo deducir.
+   */
+  const [dedujoLaInicial, setDedujoLaInicial] = useState(false);
+  if (!dedujoLaInicial && ubicacionId && sectores.length > 0 && enlaceDeUbicacion[ubicacionId]) {
+    setDedujoLaInicial(true);
+    elegirUbicacion(ubicacionId);
   }
 
   /** El sector deducido, para poder nombrarlo en pantalla. */

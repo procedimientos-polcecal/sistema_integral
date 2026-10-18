@@ -46,6 +46,9 @@ export default function RepuestosOTModal({
   orden: {
     id: string; ot_number: number | null; descripcion: string | null;
     repuesto: string | null; equipment_id: string | null; equipo_raw: string | null;
+    /** El sector de la OT: de ahí sale dónde se necesita cuando la máquina no
+        tiene una ubicación propia, y de la ubicación sale quién paga. */
+    sector_id: string | null;
   };
   puedeEditar: boolean;
   /** Los catálogos del formulario de requerimiento, para poder pedir de acá. */
@@ -180,7 +183,7 @@ export default function RepuestosOTModal({
                       <button
                         onClick={() => setPidiendo(pedidoSugerido(
                           { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
-                          d, orden, ubicaciones
+                          d, orden, ubicaciones, areas
                         ))}
                         className="mt-1 text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
                       >
