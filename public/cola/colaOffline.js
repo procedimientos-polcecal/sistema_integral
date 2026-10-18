@@ -1,8 +1,17 @@
 /*
  * Las decisiones de la cola de cargas sin señal: qué fallo es definitivo y cuál
- * pasajero, de quién es cada carga, cuál sigue y cuánto se espera entre
- * reintentos. Son funciones puras: no tocan IndexedDB ni `fetch`. Lo que
- * persiste la cola y lo que la dispara son otros archivos; acá sólo se decide.
+ * pasajero, de quién es cada carga, cuál sigue, cuánto se espera entre
+ * reintentos, **cómo se lee lo que contestó la ruta de alta y cómo queda la
+ * carga después de cada intento**. Son funciones puras: no tocan IndexedDB ni
+ * `fetch`. Lo que persiste la cola y lo que la dispara son otros archivos; acá
+ * sólo se decide.
+ *
+ * Las dos últimas están acá y no en la pantalla por un motivo concreto: el
+ * service worker va a vaciar la cola con la app cerrada (tarea 7 del plan) y
+ * necesita exactamente las mismas reglas, palabra por palabra. Desde un service
+ * worker no se puede importar un componente de React, así que si vivieran allá
+ * se escribirían dos veces — y dos implementaciones de la misma transición,
+ * ninguna probada, es como esto se separa sin que nadie lo note.
  *
  * Vive en `public/` y es JavaScript plano porque lo van a importar los dos
  * mundos: la app (con `@/public/cola/colaOffline.js`) y el service worker
@@ -205,4 +214,236 @@ export function esperaAntesDeReintentar(intentos) {
   // es raro, es "muchísimos": 2 ** Infinity da Infinity y el techo lo corta.
   const n = intentos > 1 ? intentos : 1;
   return Math.min(0.5 * 2 ** (n - 1), MINUTOS_TECHO_DE_ESPERA);
+}
+
+/**
+ * Si una **persona** puede empujar esta carga a mano desde esta sesión.
+ *
+ * Es `puedeMandarse` con una sola diferencia, y es la que justifica el botón de
+ * la pantalla: una carga `parada` no se reintenta sola —falló con algo que el
+ * servidor volvería a contestar igual— pero una persona sí puede decidir
+ * reintentarla después de mirar qué pasó. Lo demás no se relaja: sigue teniendo
+ * que ser de quien tiene la sesión abierta, y sigue sin pisar a un disparo que
+ * la tomó hace menos de `MINUTOS_PARA_SOLTAR`.
+ *
+ * Existe para que el botón no reimplemente a mano un tercio de la regla, que es
+ * exactamente lo que hacía: copiaba "es mía" y perdía las otras dos
+ * condiciones.
+ *
+ * @param {CargaEnCola} carga
+ * @param {string | null} usuarioActualId
+ * @param {Date} ahora
+ * @returns {boolean}
+ */
+export function puedeEmpujarla(carga, usuarioActualId, ahora) {
+  return puedeMandarse({ ...carga, estado: "esperando" }, usuarioActualId, ahora);
+}
+
+// ── Cómo se lee lo que contestó la ruta de alta ──────────────────────────────
+
+/** Cómo se llama el número en la respuesta de cada ruta. */
+const CAMPO_DEL_NUMERO = {
+  aviso: "oa_number",
+  orden: "ot_number",
+};
+
+/**
+ * Lo que contestó la ruta, ya leído por quien la llamó.
+ *
+ * @typedef {object} ContestacionCruda
+ * @property {number | null} status El código HTTP, o null si ni se llegó a hablar con el servidor.
+ * @property {boolean} redirigida Si el pedido terminó en otra dirección que la pedida.
+ * @property {Record<string, unknown>} cuerpo El JSON, o un objeto vacío si no lo era.
+ */
+
+/**
+ * @typedef {{ ok: true, numero: string, advertencia: string | null }
+ *         | { ok: false, status: number | null, error: string }} ResultadoDelEnvio
+ */
+
+/**
+ * Qué salió de un envío.
+ *
+ * UN 200 SIN NÚMERO NO ES UN ÉXITO, y ésta es la razón entera de que esta
+ * función exista en vez de mirar `response.ok`. Las dos rutas devuelven siempre
+ * su número en un 200 —el reintento que cae en "ya estaba" también, porque la
+ * clave se resuelve escribiendo el número junto con la marca de resuelta—, así
+ * que un 200 sin número es siempre una respuesta que **no salió de la ruta de
+ * carga**. Y ese camino no es teórico: es el más probable de esta pantalla.
+ * `proxy.ts` contesta un 307 al login a cualquier pedido sin sesión válida,
+ * incluidas las rutas de `/api/mantenimiento/*`; `fetch` sigue el redirect y
+ * devuelve el HTML del login con un 200 redondo. Ya pasó en este repo —está
+ * contado en `lib/supabase/middleware.ts`— y la sesión vencida es justamente el
+ * escenario de esta pantalla: un teléfono que estuvo un día sin señal. Un
+ * portal cautivo de WiFi hace lo mismo sin ninguna ambigüedad.
+ *
+ * Tratarlo como éxito era lo peor que podía pasar: la pantalla decía "se cargó"
+ * y vaciaba el formulario sin que se hubiera escrito nada, y en el reintento
+ * **borraba de la cola** una carga que había esperado días. Es pasajero, así
+ * que la carga se queda y se vuelve a intentar.
+ *
+ * De paso, esto es lo que deja vivo el diseño del 401 como pasajero: ese 401
+ * casi nunca llega solo, lo tapa el 307.
+ *
+ * @param {TipoDeCarga} tipo
+ * @param {ContestacionCruda} contestacion
+ * @returns {ResultadoDelEnvio}
+ */
+export function comoContesto(tipo, contestacion) {
+  const { status, redirigida, cuerpo } = contestacion;
+  const salioBien = status !== null && status >= 200 && status < 300;
+
+  if (salioBien) {
+    const numero = cuerpo[CAMPO_DEL_NUMERO[tipo]];
+    const comoTexto =
+      numero === null || numero === undefined ? "" : String(numero).trim();
+    if (comoTexto !== "") {
+      return { ok: true, numero: comoTexto, advertencia: loQueQuedoPendiente(cuerpo) };
+    }
+    return {
+      ok: false,
+      status,
+      error: redirigida
+        ? "El pedido terminó en otra pantalla, casi seguro el login: la sesión de " +
+          "este teléfono se venció. La carga queda esperando; entrá de nuevo al SdG " +
+          "y mandala desde la lista."
+        : "El servidor contestó que sí pero sin número, así que eso no salió de la " +
+          "ruta de carga —un portal de WiFi contesta así—. La carga queda esperando.",
+    };
+  }
+
+  const dicho = texto(cuerpo.error);
+  return {
+    ok: false,
+    status,
+    error:
+      dicho ??
+      (status === null
+        ? "No se pudo hablar con el servidor."
+        : `El servidor contestó ${status} y no dijo por qué.`),
+  };
+}
+
+/**
+ * Lo que la ruta contestó que quedó a medias, todo junto, o null si no quedó
+ * nada. **Lo que salió a medias se dice, no se calla.**
+ *
+ * Los cuatro campos conviven y por eso se miran los cuatro en los dos tipos de
+ * carga, aunque hoy cada ruta mande los suyos: la de avisos devuelve
+ * `advertencia` y `clave_error`, y la de órdenes ésos dos más `planilla_error`
+ * y `aviso_error`. El que más importa es `advertencia`: aparece cuando la carga
+ * ya está escrita en la planilla y no se sabe si llegó al sistema, que es
+ * exactamente el caso en el que alguien podría cargar dos veces lo mismo.
+ *
+ * @param {Record<string, unknown>} cuerpo
+ * @returns {string | null}
+ */
+export function loQueQuedoPendiente(cuerpo) {
+  const claveError = texto(cuerpo.clave_error);
+  const planillaError = texto(cuerpo.planilla_error);
+
+  const partes = [
+    texto(cuerpo.advertencia),
+    claveError === null
+      ? null
+      : `La clave de esta carga no se pudo anotar del lado del servidor ` +
+        `(${claveError}): si se vuelve a mandar, mirá la planilla antes de darla ` +
+        `por duplicada.`,
+    planillaError === null
+      ? null
+      : `El estado y las horas todavía no llegaron a la planilla (${planillaError}) — ` +
+        `queda pendiente y lo escribe la próxima sincronización.`,
+    texto(cuerpo.aviso_error),
+  ].filter((parte) => parte !== null);
+
+  return partes.length > 0 ? partes.join(" ") : null;
+}
+
+/** El campo si es un texto con algo adentro; null en cualquier otro caso. */
+function texto(valor) {
+  return typeof valor === "string" && valor.trim() !== "" ? valor : null;
+}
+
+// ── Cómo queda la carga después de un intento ────────────────────────────────
+
+/**
+ * Cada veredicto trae lo que hace falta para ejecutarlo, y no sólo su nombre:
+ * así quien llama no tiene que volver a mirar el resultado —que es volver a
+ * decidir— para saber qué número mostrar o qué error guardar.
+ *
+ * @typedef {{ accion: "listo", numero: string, advertencia: string | null }
+ *         | { accion: "rechazar", error: string }
+ *         | { accion: "encolar", intentos: number, ultimoError: string | null }} QueHacerConLaNueva
+ */
+
+/**
+ * Qué hacer con una carga **recién hecha**, que todavía no está en la cola.
+ *
+ * `null` es "ni se intentó": no había señal, así que va derecho a la cola sin
+ * ningún intento en contra.
+ *
+ * Un fallo **definitivo** no se encola, y eso es una decisión y no un atajo:
+ * una carga que el servidor volvería a rechazar igual no va a entrar nunca, y
+ * dejarla en la lista sólo tapa a las que sí pueden salir. Se le muestra a
+ * quien cargó el texto de la ruta, sin traducir, mientras lo escrito sigue en
+ * el formulario para corregirlo.
+ *
+ * @param {ResultadoDelEnvio | null} resultado
+ * @returns {QueHacerConLaNueva}
+ */
+export function queHacerConLaNueva(resultado) {
+  if (resultado === null) return { accion: "encolar", intentos: 0, ultimoError: null };
+  if (resultado.ok) {
+    return { accion: "listo", numero: resultado.numero, advertencia: resultado.advertencia };
+  }
+  if (clasificarFallo(resultado.status) === "definitivo") {
+    return { accion: "rechazar", error: resultado.error };
+  }
+  return { accion: "encolar", intentos: 1, ultimoError: resultado.error };
+}
+
+/**
+ * Qué se le escribe a una carga al tomarla para mandarla. La marca es lo que
+ * evita que dos disparos —la pantalla y el service worker, o dos pestañas—
+ * manden lo mismo; `puedeMandarse` la lee y `MINUTOS_PARA_SOLTAR` la suelta si
+ * quien la tomó muere a mitad de camino.
+ *
+ * @param {CargaEnCola} carga
+ * @param {Date} ahora
+ * @returns {Partial<CargaEnCola>}
+ */
+export function tomarLaCarga(carga, ahora) {
+  const intentos = Number.isFinite(carga.intentos) ? carga.intentos : 0;
+  return { tomadaEn: ahora.toISOString(), intentos: intentos + 1 };
+}
+
+/**
+ * @typedef {{ accion: "borrar" } | { accion: "actualizar", cambios: Partial<CargaEnCola> }} QueHacerDespues
+ */
+
+/**
+ * Cómo queda una carga **que ya estaba en la cola** después de intentarla.
+ *
+ * Sale de la cola sólo cuando el envío salió bien de verdad —y qué es "bien" lo
+ * decide `comoContesto`, no `response.ok`—. Borrarla por cualquier otra cosa es
+ * perder sin aviso lo que alguien escribió hace días.
+ *
+ * Si falló, la marca de tomada se suelta sí o sí: dejarla puesta la trabaría
+ * `MINUTOS_PARA_SOLTAR` minutos por un fallo que ya se conoce. Y el estado
+ * depende de si reintentar tiene sentido: `parada` es la que necesita que una
+ * persona la mire, `esperando` la que sale sola cuando vuelva la señal.
+ *
+ * @param {ResultadoDelEnvio} resultado
+ * @returns {QueHacerDespues}
+ */
+export function despuesDelIntento(resultado) {
+  if (resultado.ok) return { accion: "borrar" };
+  return {
+    accion: "actualizar",
+    cambios: {
+      tomadaEn: null,
+      ultimoError: resultado.error,
+      estado: clasificarFallo(resultado.status) === "definitivo" ? "parada" : "esperando",
+    },
+  };
 }
