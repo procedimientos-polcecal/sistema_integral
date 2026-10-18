@@ -28,10 +28,18 @@
 // Así un reintento que cae entre las dos recibe el número de verdad en vez de
 // un 409, y es cierto: esa OT ya existe donde manda, que es la planilla.
 //
-// Tests: sólo `decidirPorClave`, que es donde está la decisión. `reservarClave`
-// y `resolverClave` son dos llamadas a PostgREST sin decisiones adentro, y en
-// este repo lo que sólo habla con la base no se mockea: un mock probaría el
-// mock. La tabla es `cargas_offline`
+// POR ESO "ya-esta" PUEDE VENIR CON `entidad_id: null`: en esa ventana
+// `resuelto_en` y `numero` ya están llenos y el id todavía no. Quien reciba un
+// "ya-esta" tiene que contar con que el número siempre está y el id a veces no,
+// y no armar la respuesta como si el id fuera obligatorio.
+//
+// Tests: lo que decide está en funciones puras —`decidirPorClave`,
+// `esChoqueDeClave` y `cambiosDeResolucion`— y esas sí se prueban.
+// `reservarClave` y `resolverClave` quedan sin test: son el pegamento con
+// PostgREST, y en este repo lo que habla con la base no se mockea, porque un
+// mock probaría el mock. Lo que ahí queda sin probar son los dos `throw` que
+// propagan un fallo de la base (y el de "no estaba reservada"); el resto de lo
+// que deciden ya salió a las puras. La tabla es `cargas_offline`
 // (supabase/migrations/20261018165613_claves_de_las_cargas_offline.sql).
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -56,32 +64,75 @@ export type FilaDeClave = {
   entidad_id: string | null;
 };
 
-export type DecisionDeClave = "seguir" | "ya-esta" | "en-duda" | "ajena";
+export type DecisionDeClave = "seguir" | "ya-esta" | "en-duda" | "ajena" | "otro-tipo";
 
 // El código de Postgres para una violación de unicidad: la primaria chocó.
 const VIOLACION_DE_UNICIDAD = "23505";
 
 /**
+ * Si el error de PostgREST es la clave primaria repetida, o sea un reintento
+ * legítimo. Es lo que separa seguir leyendo la fila de propagar un fallo de
+ * verdad (una caída, un `tipo` fuera del check, una foreign key de usuario).
+ */
+export function esChoqueDeClave(error: { code?: string; message?: string }): boolean {
+  return error.code === VIOLACION_DE_UNICIDAD;
+}
+
+/**
+ * Qué columnas se escriben al resolver una carga. Sin `entidadId` no se toca
+ * `entidad_id`: así la segunda llamada, con el id, lo completa, y una primera
+ * llamada tardía no lo borra. `resuelto_en` se reescribe cada vez; el efecto es
+ * que marca cuándo terminó de verdad, que es cuando llegó el id.
+ */
+export function cambiosDeResolucion(
+  resultado: { numero: string; entidadId?: string | null },
+  ahora: Date,
+): { resuelto_en: string; numero: string; entidad_id?: string } {
+  const cambios: { resuelto_en: string; numero: string; entidad_id?: string } = {
+    resuelto_en: ahora.toISOString(),
+    numero: resultado.numero,
+  };
+  if (resultado.entidadId) cambios.entidad_id = resultado.entidadId;
+  return cambios;
+}
+
+/**
  * Qué hacer con una carga según lo que había guardado para su clave.
  *
  * - `seguir`: no hay fila, es una carga nueva.
- * - `ya-esta`: ya se resolvió; hay que devolver lo de antes, no cargar de nuevo.
+ * - `ya-esta`: ya se resolvió; hay que devolver lo de antes, no cargar de
+ *   nuevo. El `entidad_id` puede faltar (ver el encabezado).
  * - `en-duda`: la clave se reservó y no se resolvió; la fila pudo escribirse en
  *   la planilla (ver el encabezado).
  * - `ajena`: la clave es de otro usuario. Se mira primero y gana sobre las
  *   demás: devolverle a uno el número de otro filtraría una carga ajena.
+ * - `otro-tipo`: la clave es del mismo usuario pero de otro tipo de carga (un
+ *   aviso y una OT con la misma clave). No son la misma carga, y reconocerlas
+ *   como tales devolvería el número de un aviso para una OT sin que nada
+ *   fallara. Es casi imposible —las claves son uuid generados en el teléfono—,
+ *   pero el modo de fallar es silencioso, y por eso se cierra acá.
  */
-export function decidirPorClave(fila: FilaDeClave | null, usuarioId: string): DecisionDeClave {
+export function decidirPorClave(
+  fila: FilaDeClave | null,
+  usuarioId: string,
+  tipo: TipoDeCarga,
+): DecisionDeClave {
   if (!fila) return "seguir";
   if (fila.usuario_id !== usuarioId) return "ajena";
+  if (fila.tipo !== tipo) return "otro-tipo";
   if (fila.resuelto_en) return "ya-esta";
   return "en-duda";
 }
 
 /**
- * Reserva la clave antes de tocar la planilla. Si la clave ya existe lee la fila
- * y la decisión dice qué hacer; `fila` viene en null sólo cuando la reserva
- * fue nueva (`seguir`).
+ * Reserva la clave antes de tocar la planilla. Si la clave ya existe lee la
+ * fila y la decisión dice qué hacer.
+ *
+ * `fila` viene en null cuando la reserva fue nueva (`seguir`) y también cuando
+ * la decisión es `ajena` u `otro-tipo`: esa fila no es de esta carga y su
+ * `numero` y `entidad_id` no se le pueden mostrar a quien llama, aunque la
+ * ruta haga eco de lo que recibe. Sólo viene con datos en `ya-esta` y en
+ * `en-duda`.
  */
 export async function reservarClave(
   admin: ClienteAdmin,
@@ -93,13 +144,13 @@ export async function reservarClave(
 
   if (!error) return { decision: "seguir", fila: null };
 
-  // Cualquier error que no sea la primaria chocando (una caída, un tipo fuera
-  // del check) no es un reintento: se propaga tal como lo dijo la base.
-  if (error.code !== VIOLACION_DE_UNICIDAD) {
+  // Cualquier error que no sea la primaria chocando no es un reintento: se
+  // propaga tal como lo dijo la base.
+  if (!esChoqueDeClave(error)) {
     throw new Error(`No se pudo reservar la clave de la carga: ${error.message}`);
   }
 
-  const { data: fila, error: errorDeLectura } = await admin
+  const { data, error: errorDeLectura } = await admin
     .from("cargas_offline")
     .select("clave, usuario_id, tipo, resuelto_en, numero, entidad_id")
     .eq("clave", datos.clave)
@@ -110,20 +161,20 @@ export async function reservarClave(
   }
   // Chocó la primaria y un instante después la fila no está: se borró en el
   // medio (el usuario, en cascada). No hay forma segura de seguir.
-  if (!fila) {
+  if (!data) {
     throw new Error("La clave de la carga chocó con otra y ya no está: reintentá.");
   }
 
-  const existente = fila as FilaDeClave;
-  return { decision: decidirPorClave(existente, datos.usuarioId), fila: existente };
+  const existente = data as FilaDeClave;
+  const decision = decidirPorClave(existente, datos.usuarioId, datos.tipo);
+  const esDeEstaCarga = decision === "ya-esta" || decision === "en-duda";
+  return { decision, fila: esDeEstaCarga ? existente : null };
 }
 
 /**
  * Anota cómo terminó la carga: el número que se le dio y, cuando se conoce, el
  * id de lo creado. Se puede llamar dos veces: una con el número y sin id (la
  * planilla ya confirmó, la base todavía no) y otra con el id, que lo completa.
- * Sin `entidadId` no toca la columna, así que la segunda llamada no se pisa con
- * la primera ni al revés.
  *
  * Falla si la clave no existe: significaría que se resolvió una carga que
  * nunca se reservó, y un silencio acá escondería el orden mal hecho.
@@ -133,15 +184,9 @@ export async function resolverClave(
   clave: string,
   resultado: { numero: string; entidadId?: string | null },
 ): Promise<void> {
-  const cambios: { resuelto_en: string; numero: string; entidad_id?: string } = {
-    resuelto_en: new Date().toISOString(),
-    numero: resultado.numero,
-  };
-  if (resultado.entidadId) cambios.entidad_id = resultado.entidadId;
-
   const { data, error } = await admin
     .from("cargas_offline")
-    .update(cambios)
+    .update(cambiosDeResolucion(resultado, new Date()))
     .eq("clave", clave)
     .select("clave");
 
