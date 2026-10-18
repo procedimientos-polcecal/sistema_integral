@@ -240,6 +240,7 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   }
 
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_AVISOS, {
+    clavesLeidas: new Set(unicos.map((r) => r.oa_number as string)),
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
@@ -369,6 +370,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   }
 
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
+    clavesLeidas: new Set(unicos.map((r) => r.ot_number as number)),
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
@@ -497,6 +499,7 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
   // de Calcinación sus órdenes faltan en bloque. Borrarlas sería vaciar un
   // área entera por un error de red.
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OS, {
+    clavesLeidas: new Set(porNumero.keys()),
     cuando, inicio, fuentesSinLeer: sinLeer,
     sinFreno: opciones.sinFreno, actor: opciones.actor,
   });

@@ -231,6 +231,16 @@ tests y el detalle del freno. Lo propio de Compras es esto:
 planilla y 2.159 en la base, cero diferencia. El borrado sólo va a actuar
 cuando alguien saque una línea a propósito.
 
+**Lo que decide quién sobra son los RI que la planilla trajo, y no el sello de
+la corrida.** La primera versión preguntaba por las filas que la corrida no
+había vuelto a escribir, dando por sentado que todo lo que la planilla trae se
+reescribe. Acá no: **una fila con `editado_en_app` se saltea sin reescribirse**
+—1.678 de 2.160 el 18/10/2026—, así que quedaban como candidatas 1.678 filas
+que la planilla sí tenía. El freno saltaba, no se borraba nada, y desde afuera
+se veía exactamente igual que si el borrado no existiera. Se descubrió porque
+un RI borrado a mano de la planilla seguía apareciendo después de tres
+sincronizaciones seguidas.
+
 **`editado_en_app` no protege.** Lo tienen 714 de cada 1.000 filas, así que
 proteger por eso sería no borrar nunca. Se informa cuántas de las borradas lo
 tenían, que es lo que hace falta para saber qué se perdió.

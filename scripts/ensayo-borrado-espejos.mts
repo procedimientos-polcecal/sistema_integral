@@ -33,25 +33,25 @@ const { borrarLoQueLaPlanillaNoTrajo } = await import("../lib/core/borradoDeEspe
  */
 const ESPEJOS: EspejoBorrable[] = [
   {
-    tabla: "ordenes_trabajo", numero: "ot_number", sincronizado: "synced_at",
+    tabla: "ordenes_trabajo", numero: "ot_number",
     creada: "created_at_app", fila: "sheets_row",
     deLaApp: { columna: "app_created", valor: true },
     modulo: "mantenimiento", entidad: "orden_trabajo",
   },
   {
-    tabla: "avisos", numero: "oa_number", sincronizado: "synced_at",
+    tabla: "avisos", numero: "oa_number",
     creada: "created_at", fila: "sheets_row",
     deLaApp: { columna: "app_created", valor: true },
     modulo: "mantenimiento", entidad: "aviso",
   },
   {
-    tabla: "ordenes_servicio", numero: "os_number", sincronizado: "synced_at",
+    tabla: "ordenes_servicio", numero: "os_number",
     creada: "created_at", fila: "sheets_row",
     deLaApp: { columna: "app_created", valor: true },
     modulo: "mantenimiento", entidad: "orden_servicio",
   },
   {
-    tabla: "compras_requerimientos", numero: "nro_ri", sincronizado: "sheets_sincronizado_en",
+    tabla: "compras_requerimientos", numero: "nro_ri",
     creada: "created_at", fila: "sheets_fila",
     deLaApp: { columna: "origen", valor: "app" },
     editada: "editado_en_app",
@@ -60,15 +60,17 @@ const ESPEJOS: EspejoBorrable[] = [
 ];
 
 const sb = createAdminClient();
-// Un sello que no tiene ninguna fila: todas quedan como candidatas.
-const NINGUNA = "1970-01-01T00:00:00.000Z";
+// Ninguna clave leída: todas las filas quedan como candidatas, el freno salta
+// y no se borra nada. Es la forma de ejercitar las columnas sin arriesgar.
+const NINGUNA = new Set<string | number>();
 
 let malas = 0;
 for (const espejo of ESPEJOS) {
   const antes = (await sb.from(espejo.tabla).select("id", { count: "exact", head: true })).count ?? 0;
 
   const r = await borrarLoQueLaPlanillaNoTrajo(sb, espejo, {
-    cuando: NINGUNA,
+    clavesLeidas: NINGUNA,
+    cuando: new Date().toISOString(),
     inicio: new Date().toISOString(),
   });
 

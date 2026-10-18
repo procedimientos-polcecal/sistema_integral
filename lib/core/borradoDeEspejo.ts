@@ -205,8 +205,6 @@ export interface EspejoBorrable {
   tabla: string;
   /** La que nombra la fila para el informe: "ot_number", "nro_ri". */
   numero: string;
-  /** La que esta corrida sella: "synced_at", "sheets_sincronizado_en". */
-  sincronizado: string;
   /** Cuándo apareció la fila: "created_at_app", "created_at". */
   creada: string;
   /** El puntero a la planilla: "sheets_row", "sheets_fila". */
@@ -247,9 +245,22 @@ export async function borrarLoQueLaPlanillaNoTrajo(
   cliente: SupabaseClient,
   espejo: EspejoBorrable,
   corrida: {
-    /** El valor que esta corrida escribió en `sincronizado`. */
+    /**
+     * Las claves que la planilla trajo en esta corrida: los N° de OT, los RI.
+     *
+     * **Esto y no el sello es lo que decide quién sobra.** La primera versión
+     * preguntaba por las filas que la corrida no había sellado, dando por
+     * sentado que todo lo que la planilla trae se vuelve a escribir. En
+     * Compras no es así: una fila con `editado_en_app` se saltea sin
+     * reescribirse —1.678 de 2.160 el 18/10/2026—, así que quedaban como
+     * candidatas 1.678 filas que la planilla sí tenía, el freno saltaba, y no
+     * se borraba nada. Se veía exactamente igual que si la función no
+     * existiera.
+     */
+    clavesLeidas: ReadonlySet<string | number>;
+    /** Identifica la corrida en el registro de auditoría. */
     cuando: string;
-    /** Cuándo arrancó, que puede ser anterior a `cuando`. */
+    /** Cuándo arrancó, para no borrar lo que nació después de la lectura. */
     inicio: string;
     fuentesSinLeer?: readonly string[] | null;
     sinFreno?: boolean;
@@ -260,48 +271,33 @@ export async function borrarLoQueLaPlanillaNoTrajo(
 
   // La cadena del select se arma acá porque las columnas cambian por tabla.
   // Se pierde la inferencia de tipos de Supabase —la regla de CLAUDE.md— y en
-  // este caso no hay alternativa: la tabla es un parámetro. Por eso las dos
-  // lecturas declaran su tipo con `.returns<>()`: sin eso Supabase las tipa
-  // como `GenericStringError[]` y `tsc` las rechaza, que es la misma regla
-  // avisando por el otro lado.
+  // este caso no hay alternativa: la tabla es un parámetro. Por eso la lectura
+  // declara su tipo con `.returns<>()`: sin eso Supabase la tipa como
+  // `GenericStringError[]` y `tsc` la rechaza, que es la misma regla avisando
+  // por el otro lado.
   const columnas = [
     "id", espejo.numero, espejo.creada, espejo.fila,
     espejo.deLaApp.columna, espejo.editada,
   ].filter(Boolean).join(", ");
 
-  // Las dos lecturas van ordenadas por `id`. No es por prolijidad: `LIMIT` y
-  // `OFFSET` sin `ORDER BY` no tienen garantizada la estabilidad entre
-  // páginas, asi que una fila podria aparecer dos veces o ninguna. Medido el
-  // 18/10/2026 sobre las 2.200 ordenes de trabajo, sin orden no fallaba — pero
-  // lo que decide acá qué se borra no puede depender de que el planificador
-  // siga eligiendo el mismo recorrido.
-  let candidatas: Record<string, unknown>[];
-  let total: number;
+  // Ordenada por `id`: `LIMIT`/`OFFSET` sin `ORDER BY` no tienen garantizada
+  // la estabilidad entre páginas, y lo que decide acá qué se borra no puede
+  // depender de que el planificador siga eligiendo el mismo recorrido.
+  let enLaBase: Record<string, unknown>[];
   try {
-    candidatas = await traerTodo<Record<string, unknown>>((desde, hasta) =>
-      cliente.from(espejo.tabla).select(columnas).neq(espejo.sincronizado, corrida.cuando)
+    enLaBase = await traerTodo<Record<string, unknown>>((desde, hasta) =>
+      cliente.from(espejo.tabla).select(columnas)
         .order("id").range(desde, hasta).returns<Record<string, unknown>[]>()
     );
-    // Las que nunca se sincronizaron también sobran: un `neq` no alcanza a un
-    // null en SQL, así que van en su propia consulta.
-    const nulas = await traerTodo<Record<string, unknown>>((desde, hasta) =>
-      cliente.from(espejo.tabla).select(columnas).is(espejo.sincronizado, null)
-        .order("id").range(desde, hasta).returns<Record<string, unknown>[]>()
-    );
-    candidatas.push(...nulas);
-    // Un id no puede venir en las dos consultas —un valor es distinto de
-    // `cuando` o es null, no las dos cosas—, pero si alguna vez pasara, el
-    // número que se informa y el que se audita dejarían de ser el mismo que
-    // se borra. Contar dos veces lo mismo es barato de evitar.
-    const vistos = new Set<string>();
-    candidatas = candidatas.filter((f) => !vistos.has(String(f.id)) && vistos.add(String(f.id)));
-
-    const { count, error } = await cliente.from(espejo.tabla).select("id", { count: "exact", head: true });
-    if (error) throw new Error(error.message);
-    total = count ?? 0;
   } catch (e) {
     return { ...sinNada, aviso: `No se pudo mirar qué sobra, así que no se borró nada: ${(e as Error).message}` };
   }
+
+  // Las claves se comparan como texto: la planilla da números para el N° de OT
+  // y para el RI, y texto para el de aviso ("A1"). Un `Set` de números no
+  // encuentra un `"2161"` y se llevaría puesta toda la tabla.
+  const leidas = new Set([...corrida.clavesLeidas].map(String));
+  const candidatas = enLaBase.filter((f) => !leidas.has(String(f[espejo.numero])));
 
   if (candidatas.length === 0) return sinNada;
 
@@ -314,7 +310,7 @@ export async function borrarLoQueLaPlanillaNoTrajo(
       editadaEnLaApp: espejo.editada ? f[espejo.editada] === true : false,
       creadaEn: (f[espejo.creada] ?? null) as string | null,
     })),
-    totalEnLaBase: total,
+    totalEnLaBase: enLaBase.length,
     inicioDeLaCorrida: corrida.inicio,
     fuentesSinLeer: corrida.fuentesSinLeer,
     sinFreno: corrida.sinFreno,
@@ -344,8 +340,8 @@ export async function borrarLoQueLaPlanillaNoTrajo(
     entidadId: `corrida ${corrida.cuando}`,
     accion: "borrar",
     actor: corrida.actor ?? "sincronizacion",
-    valorAnterior: String(total),
-    valorNuevo: String(total - veredicto.borrar.length),
+    valorAnterior: String(enLaBase.length),
+    valorNuevo: String(enLaBase.length - veredicto.borrar.length),
     contexto: { tabla: espejo.tabla, numeros, corrida: corrida.cuando },
   });
   if (!registro.ok) {

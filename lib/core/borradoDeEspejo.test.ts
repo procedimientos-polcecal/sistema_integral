@@ -218,19 +218,14 @@ function clienteFalso(opciones: { auditoriaFalla?: string; filas?: Record<string
   const consulta = (tabla: string) => {
     const self: Record<string, unknown> = {};
     const encadena = () => self;
-    // Las candidatas salen de dos consultas: la del sello distinto y la del
-    // sello nulo. El falso tiene que distinguirlas o devuelve las mismas filas
-    // dos veces, que es algo que la base no puede hacer.
-    let porSelloNulo = false;
-    for (const m of ["select", "neq", "range", "returns", "eq", "order"]) self[m] = encadena;
-    self.is = () => { porSelloNulo = true; return self; };
+    for (const m of ["select", "neq", "is", "range", "returns", "eq", "order"]) self[m] = encadena;
     // `select(...).range(...)` termina devolviéndose a sí mismo y se espera
     // como promesa: así `traerTodo` lo puede recorrer.
     self.then = (resolver: (v: unknown) => unknown) =>
       Promise.resolve(
         tabla === "auditoria"
           ? { data: null, error: opciones.auditoriaFalla ? { message: opciones.auditoriaFalla } : null }
-          : { data: porSelloNulo ? [] : filas, error: null, count: 500 }
+          : { data: filas, error: null, count: 500 }
       ).then(resolver);
     self.insert = (f: unknown) => {
       hechos.push(`insert ${tabla}`);
@@ -249,7 +244,7 @@ function clienteFalso(opciones: { auditoriaFalla?: string; filas?: Record<string
 }
 
 const ESPEJO = {
-  tabla: "avisos", numero: "oa_number", sincronizado: "synced_at",
+  tabla: "avisos", numero: "oa_number",
   creada: "created_at", fila: "sheets_row",
   deLaApp: { columna: "app_created", valor: true },
   modulo: "mantenimiento", entidad: "aviso",
@@ -264,6 +259,7 @@ describe("borrarLoQueLaPlanillaNoTrajo", () => {
   it("borra sólo después de registrar, y registra antes de borrar", async () => {
     const { cliente, hechos } = clienteFalso({ filas: UNA_FILA });
     const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO, {
+      clavesLeidas: new Set<string | number>(),
       cuando: "2026-10-18T09:00:00.000Z", inicio: ARRANQUE,
     });
     expect(r.borradas).toBe(1);
@@ -279,12 +275,37 @@ describe("borrarLoQueLaPlanillaNoTrajo", () => {
       auditoriaFalla: 'violates check constraint "auditoria_accion_check"',
     });
     const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO, {
+      clavesLeidas: new Set<string | number>(),
       cuando: "2026-10-18T09:00:00.000Z", inicio: ARRANQUE,
     });
     expect(r.borradas).toBe(0);
     expect(hechos).not.toContain("delete avisos");
     expect(r.aviso).toContain("Un borrado sin registro no se hace");
     expect(r.aviso).toContain("20261018134754");
+  });
+
+  it("NO borra la fila que la planilla sí trajo, aunque esta corrida no la haya escrito", async () => {
+    // La falla del 18/10/2026. La primera versión preguntaba "¿quién no
+    // selló esta corrida?" dando por sentado que todo lo que la planilla trae
+    // se reescribe. En Compras una fila con `editado_en_app` se saltea sin
+    // reescribirse —1.678 de 2.160—, así que quedaban como candidatas 1.678
+    // filas que la planilla tenía, el freno saltaba y no se borraba nada: se
+    // veía igual que si la función no existiera.
+    const { cliente, hechos } = clienteFalso({ filas: UNA_FILA });
+    const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO, {
+      clavesLeidas: new Set(["A9"]),
+      cuando: "2026-10-18T09:00:00.000Z", inicio: ARRANQUE,
+    });
+    expect(r.borradas).toBe(0);
+    expect(r.aviso).toBeNull();
+    expect(hechos).toEqual([]);
+  });
+
+  it("compara las claves como texto, venga número o texto de la planilla", () => {
+    // El N° de OT y el RI son números; el de aviso es "A1". Un Set de números
+    // no encuentra un "2161" y se llevaría puesta toda la tabla.
+    expect(new Set([2161, "A9"].map(String)).has(String(2161))).toBe(true);
+    expect(new Set([2161].map(String)).has(String("2161"))).toBe(true);
   });
 
   it("con el freno puesto no registra ni borra", async () => {
@@ -295,6 +316,7 @@ describe("borrarLoQueLaPlanillaNoTrajo", () => {
     }));
     const { cliente, hechos } = clienteFalso({ filas: muchas });
     const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO, {
+      clavesLeidas: new Set<string | number>(),
       cuando: "2026-10-18T09:00:00.000Z", inicio: ARRANQUE,
     });
     expect(r.borradas).toBe(0);

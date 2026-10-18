@@ -896,6 +896,10 @@ export async function importarDesdeSheets(
     // renombrada no deja huérfanas a sus filas. Si falla la lectura de una
     // pestaña, `leerPestana` tira y no se llega hasta acá.
     const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_REQUERIMIENTOS, {
+      // Los RI que la planilla trajo, **no** los que esta corrida escribió:
+      // una fila con `editado_en_app` se saltea sin reescribirse —1.678 de
+      // 2.160 el 18/10/2026— y preguntarle al sello la daba por borrada.
+      clavesLeidas: new Set(porRi.keys()),
       cuando: sincronizadoEn, inicio,
       sinFreno: opciones.sinFreno,
       actor: origen === "cron" ? "cron" : "sincronizacion",
