@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
+import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
@@ -112,20 +113,69 @@ export async function avisosDeTodoElSistema(
 }
 
 /**
- * Los avisos de una persona: los de los módulos que ve, ya sin lo que descartó.
+ * Qué listas de responsables integra quien mira.
+ *
+ * Hoy hay una sola porque hoy hay un solo aviso con lista. **Falta el de las
+ * órdenes de servicio**: `os_aprobadores` existe y el aviso al instante ya la
+ * usa, pero la campana no tiene un aviso de OS esperando aprobación. El día que
+ * se agregue, va acá con su `apruebaOS` — no se deja preparado porque sería una
+ * consulta por persona y por día que hoy no la usa nadie.
+ */
+export interface QuePuedeAtender {
+  apruebaCompras: boolean;
+}
+
+/** Los avisos que tienen una lista de responsables, y cuál. */
+const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
+  "compras-por-aprobar": "apruebaCompras",
+};
+
+/**
+ * Saca los avisos que esta persona no puede atender.
+ *
+ * **Esto no es repartir por permiso.** Lo que mira es una **lista de
+ * responsables** que ya existe —`compras_aprobadores`, `os_aprobadores`—, que
+ * es la misma regla que usa el aviso al instante en
+ * `lib/core/avisoAlInstante.ts`. Aprobar un gasto no lo habilita el nivel del
+ * módulo ni ser admin del sistema: lo habilita estar en la lista, y eso ya lo
+ * explica `puedeAprobarCompras` en `lib/compras/auth.ts`.
+ *
+ * Por qué hizo falta: medido el 18/10/2026, «Requerimientos esperando
+ * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Pedirle a
+ * alguien que haga algo que no puede hacer enseña que un aviso tuyo puede no
+ * ser tuyo, y esa lección se paga en todos los demás avisos.
+ *
+ * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
+ * 18/10/2026. Acá no se filtra por rol ni por nivel: sólo los avisos que están
+ * en `DE_UNA_LISTA`, y hoy ésos son los dos de aprobación.
+ */
+export function sinLoQueNoPuedeAtender(
+  avisos: Notificacion[],
+  puede: QuePuedeAtender
+): Notificacion[] {
+  return avisos.filter((a) => {
+    const lista = DE_UNA_LISTA[a.id];
+    return lista === undefined || puede[lista];
+  });
+}
+
+/**
+ * Los avisos de una persona: los de los módulos que ve, sin lo que descartó y
+ * sin lo que no puede atender.
  */
 export async function avisosDeUsuario(
   supabase: SupabaseClient,
   quien: QuienMira
 ): Promise<Notificacion[]> {
-  const [avisos, descartes] = await Promise.all([
+  const [avisos, descartes, apruebaCompras] = await Promise.all([
     avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants)),
     supabase
       .from("notificaciones_descartes")
       .select("notificacion_id, cantidad_vista")
       .eq("usuario_id", quien.id)
       .then((r) => r.data ?? []),
+    puedeAprobarCompras(supabase, quien.id),
   ]);
 
-  return filtrarDescartadas(avisos, descartes);
+  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras });
 }
