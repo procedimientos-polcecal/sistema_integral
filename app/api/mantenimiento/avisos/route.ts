@@ -5,7 +5,7 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
-import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDelAviso } from "@/lib/mantenimiento/avisos";
+import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -44,6 +44,26 @@ export async function POST(request: Request) {
   if (!descripcion) {
     return NextResponse.json({ error: "Contá qué pasa" }, { status: 400 });
   }
+
+  // La fecha puede venir en el cuerpo, y es el único ensanche que este plan le
+  // hace a la ruta: un aviso cargado sin señal el viernes entra el lunes, y
+  // fecharlo el lunes corre el historial del equipo y el MTBF. **Sin `fecha` se
+  // usa hoy, igual que siempre**, que es lo que manda hoy el modal de la
+  // pantalla de avisos —no manda `fecha`—, así que con señal no cambia nada.
+  //
+  // La que vino y no sirve es un 400 y **no se corrige a hoy**: la fecha del
+  // aviso viaja a la columna B de la planilla, y corregirla en silencio la
+  // dejaría diciendo un día que nadie eligió. Para la cola un 400 es
+  // definitivo, así que la carga queda parada con este texto a la vista.
+  //
+  // Va antes de reservar la clave: una clave reservada para un cuerpo que
+  // termina en 400 quedaría en duda para siempre.
+  const hoy = hoyEnArgentina();
+  const laFecha = fechaDeLaCarga(b?.fecha, hoy);
+  if (laFecha.estado === "no-sirve") {
+    return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
+  }
+  const fecha = laFecha.estado === "sirve" ? laFecha.fecha : hoy;
 
   const admin = createAdminClient();
 
@@ -164,10 +184,7 @@ export async function POST(request: Request) {
 
   const aviso = {
     oa_number,
-    // La fecha puede venir en el cuerpo: un aviso cargado sin señal el viernes
-    // entra el lunes, y fecharlo el lunes corre el historial del equipo y el
-    // MTBF. Qué fecha se acepta lo decide `fechaDelAviso`, con sus tests.
-    fecha: fechaDelAviso(b, hoyEnArgentina()),
+    fecha,
     sector_raw: sectorRaw,
     equipo_raw: equipoRaw,
     descripcion,

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   filaDeAviso, prioridadDeUrgencia, URGENCIAS,
   proximoNumeroDeAviso, filaParaLaPlanilla, COLUMNA_OT_ASIGNADA,
-  fechaDelAviso, fechaValidaOHoy,
+  fechaDeLaCarga,
 } from "./avisos";
 
 describe("filaDeAviso", () => {
@@ -112,53 +112,56 @@ describe("filaParaLaPlanilla", () => {
   });
 });
 
-describe("fechaDelAviso", () => {
-  it("sin fecha en el cuerpo usa la de hoy, como hasta ahora", () => {
-    expect(fechaDelAviso({}, "2026-10-19")).toBe("2026-10-19");
+describe("fechaDeLaCarga", () => {
+  // Los cuatro primeros son los del plan, con una diferencia pedida: lo que no
+  // sirve ya no cae a hoy, se rechaza. Corregir la fecha en silencio deja la
+  // carga fechada un día que nadie eligió y nadie se entera.
+  it("sin fecha en el cuerpo no hay nada que decidir: la ruta pone hoy, como hasta ahora", () => {
+    expect(fechaDeLaCarga(undefined, "2026-10-19")).toEqual({ estado: "ausente" });
+    expect(fechaDeLaCarga("", "2026-10-19")).toEqual({ estado: "ausente" });
+    expect(fechaDeLaCarga(null, "2026-10-19")).toEqual({ estado: "ausente" });
   });
 
   it("con la fecha del viernes la respeta, aunque entre el lunes", () => {
-    expect(fechaDelAviso({ fecha: "2026-10-16" }, "2026-10-19")).toBe("2026-10-16");
+    expect(fechaDeLaCarga("2026-10-16", "2026-10-19")).toEqual({
+      estado: "sirve", fecha: "2026-10-16",
+    });
   });
 
-  it("una fecha que no es una fecha no entra: cae a hoy", () => {
-    expect(fechaDelAviso({ fecha: "el viernes" }, "2026-10-19")).toBe("2026-10-19");
+  it("una fecha que no es una fecha no entra, y no se corrige a hoy", () => {
+    const r = fechaDeLaCarga("el viernes", "2026-10-19");
+    expect(r.estado).toBe("no-sirve");
   });
 
   it("una fecha futura no entra: el reloj del teléfono puede estar mal", () => {
-    expect(fechaDelAviso({ fecha: "2026-11-30" }, "2026-10-19")).toBe("2026-10-19");
-  });
-});
-
-describe("fechaValidaOHoy", () => {
-  // La misma regla la usan las dos rutas de alta: el aviso por
-  // `fechaDelAviso` y la OT directo. Se prueba acá para que la de la OT no
-  // dependa de los tests del aviso.
-  it("sin nada usa la de hoy", () => {
-    expect(fechaValidaOHoy(undefined, "2026-10-19")).toBe("2026-10-19");
-    expect(fechaValidaOHoy("", "2026-10-19")).toBe("2026-10-19");
-    expect(fechaValidaOHoy(null, "2026-10-19")).toBe("2026-10-19");
+    const r = fechaDeLaCarga("2026-11-30", "2026-10-19");
+    expect(r.estado).toBe("no-sirve");
   });
 
-  it("respeta una fecha pasada: es la de cuando se cargó", () => {
-    expect(fechaValidaOHoy("2026-10-16", "2026-10-19")).toBe("2026-10-16");
+  it("el motivo nombra lo que vino: es lo primero que busca en su pantalla quien lo lee", () => {
+    const basura = fechaDeLaCarga("el viernes", "2026-10-19");
+    expect(basura.estado === "no-sirve" && basura.motivo).toContain("el viernes");
+
+    const futura = fechaDeLaCarga("2026-11-30", "2026-10-19");
+    // Como la escribe una persona, que es como la eligió en la pantalla.
+    expect(futura.estado === "no-sirve" && futura.motivo).toContain("30/11/2026");
   });
 
   it("acepta hoy mismo, que es el caso de siempre", () => {
-    expect(fechaValidaOHoy("2026-10-19", "2026-10-19")).toBe("2026-10-19");
+    expect(fechaDeLaCarga("2026-10-19", "2026-10-19")).toEqual({
+      estado: "sirve", fecha: "2026-10-19",
+    });
   });
 
-  it("una fecha futura cae a hoy: el reloj del teléfono puede estar mal", () => {
-    expect(fechaValidaOHoy("2026-10-20", "2026-10-19")).toBe("2026-10-19");
-  });
-
-  it("una fecha que no existe cae a hoy y no rueda al día siguiente", () => {
+  it("una fecha que no existe no entra y no rueda al día siguiente", () => {
     // El 31 de febrero no se convierte en 3 de marzo: `fechaDeTexto` lo
-    // descarta, y acá eso tiene que terminar en hoy.
-    expect(fechaValidaOHoy("2026-02-31", "2026-10-19")).toBe("2026-10-19");
+    // descarta, y acá eso tiene que terminar en un rechazo.
+    expect(fechaDeLaCarga("2026-02-31", "2026-10-19").estado).toBe("no-sirve");
   });
 
   it("lee d/m como las planillas y no al revés", () => {
-    expect(fechaValidaOHoy("05/10/2026", "2026-10-19")).toBe("2026-10-05");
+    expect(fechaDeLaCarga("05/10/2026", "2026-10-19")).toEqual({
+      estado: "sirve", fecha: "2026-10-05",
+    });
   });
 });

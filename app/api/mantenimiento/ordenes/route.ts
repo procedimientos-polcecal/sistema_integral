@@ -9,7 +9,7 @@ import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
-import { COLUMNA_OT_ASIGNADA, fechaValidaOHoy } from "@/lib/mantenimiento/avisos";
+import { COLUMNA_OT_ASIGNADA, fechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
@@ -213,7 +213,30 @@ export async function POST(request: Request) {
     );
   }
 
+  // ── La fecha, sólo cuando la carga viene de la cola ────────
+  //
+  // Con `clave`, el cuerpo lo armó un teléfono que pudo pasar días sin señal:
+  // la fecha la puso su reloj y no la revisó nadie, así que una futura o una
+  // que no es fecha se rechazan en vez de corregirse. Corregirla en silencio
+  // dejaría la orden fechada un día que nadie eligió —y de esa fecha salen el
+  // historial del equipo y los filtros del listado— sin que nadie se entere.
+  //
+  // **Sin `clave` esto no corre**: ese cuerpo es el de alguien cargando con
+  // señal desde la pantalla de siempre, donde la fecha la eligió a mano en un
+  // `<input type="date">` y la está viendo. Ahí la ruta queda letra por letra
+  // como estaba —`fecha || hoy`—, porque con señal no cambia nada.
+  const hoy = hoyEnArgentina();
+  let fechaDeLaOrden: string = fecha || hoy;
+
   if (clave) {
+    // La fecha primero: un 400 tiene que salir antes de reservar la clave, o
+    // esa clave queda en duda para siempre por un cuerpo que nunca se cargó.
+    const revisada = fechaDeLaCarga(fecha, hoy);
+    if (revisada.estado === "no-sirve") {
+      return NextResponse.json({ error: revisada.motivo }, { status: 400 });
+    }
+    fechaDeLaOrden = revisada.estado === "sirve" ? revisada.fecha : hoy;
+
     let reserva;
     try {
       reserva = await reservarClave(admin, { clave, usuarioId: user.id, tipo: "orden" });
@@ -338,12 +361,7 @@ export async function POST(request: Request) {
 
   const record = {
     ot_number,
-    // La fecha pasa por el mismo filtro que la del aviso: una OT cargada sin
-    // señal el viernes entra el lunes y tiene que quedar fechada el viernes,
-    // y una fecha futura —el reloj del teléfono lo pone la persona— no puede
-    // entrar. El precio, dicho: si alguien elige a propósito una fecha futura
-    // en el modal, la ruta la corrige a hoy sin avisar.
-    fecha:           fechaValidaOHoy(fecha, hoyEnArgentina()),
+    fecha:           fechaDeLaOrden,
     sector_id:       sector_id || null,
     sector_raw:      sector_raw || null,
     equipo_raw:      equipo_raw || null,

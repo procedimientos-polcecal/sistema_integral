@@ -17,7 +17,7 @@
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
-import { fechaDeTexto } from "@/lib/core/fechas";
+import { fechaDeTexto, comoSeLee } from "@/lib/core/fechas";
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {
@@ -114,7 +114,7 @@ export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]):
 }
 
 /**
- * Con qué fecha se carga algo que llega de afuera: la que vino, o la de hoy.
+ * Qué fecha trae una carga en su cuerpo: ninguna, una que sirve, o por qué no.
  *
  * Hasta ahora las dos rutas de alta fechaban con `hoyEnArgentina()` o con lo
  * que viniera sin mirarlo, porque la carga era en el momento. Una carga hecha
@@ -123,32 +123,52 @@ export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]):
  * y el MTBF, así que no es un detalle de presentación. Por eso el cuerpo puede
  * traer la suya.
  *
- * DOS FECHAS NO ENTRAN, y las dos caen a hoy en vez de rechazar la carga:
- * - La que no es una fecha, porque no hay nada mejor que poner.
- * - La **futura**: el reloj del teléfono lo pone la persona y puede estar mal,
- *   y algo fechado el mes que viene no lo encuentra nadie.
- * Fallar la carga por la fecha sería peor: un aviso es lo único que no se puede
- * perder, y hoy es una fecha razonable para algo que está llegando ahora.
+ * LAS TRES RESPUESTAS SON DISTINTAS A PROPÓSITO, y la última es la que importa:
+ *
+ * - `ausente`: no vino ninguna. Quien llama pone hoy, que es lo de siempre.
+ * - `sirve`: la fecha, ya en "YYYY-MM-DD".
+ * - `no-sirve`: vino algo y no se puede usar. **No se corrige a hoy.** Devolver
+ *   hoy calladamente dejaría la carga fechada un día que nadie eligió —y en el
+ *   aviso eso viaja a la planilla— sin que nadie se entere nunca: es la misma
+ *   forma del error que dio vuelta 885 fechas en Compras. Quien llama lo
+ *   devuelve como 400, que para la cola es definitivo, así que la carga queda
+ *   parada y visible con el motivo.
+ *
+ * Una fecha **futura** tampoco entra: el reloj del teléfono lo pone la persona,
+ * y algo fechado el mes que viene no lo encuentra nadie.
+ *
+ * El motivo se escribe para quien cargó, no para el log: nombra el valor que
+ * vino, porque lo primero que hace quien lo lee es buscarlo en su pantalla.
  *
  * `hoy` se recibe en vez de calcularse para poder probarla, igual que en
  * `lib/core/fechas.ts`.
  */
-export function fechaValidaOHoy(valor: unknown, hoy: string): string {
-  const pedida = fechaDeTexto(valor);
-  // Las dos son "YYYY-MM-DD", así que comparar los textos compara los días.
-  return !pedida || pedida > hoy ? hoy : pedida;
-}
+export type FechaDeLaCarga =
+  | { estado: "ausente" }
+  | { estado: "sirve"; fecha: string }
+  | { estado: "no-sirve"; motivo: string };
 
-/**
- * La fecha de un aviso que llega en el cuerpo del pedido.
- *
- * Existe aparte de `fechaValidaOHoy` porque el que decide es el nombre del
- * campo: la ruta de avisos no elige qué fecha mirar, la mira de `fecha` y
- * punto. Qué fecha entra lo decide `fechaValidaOHoy`, que es la misma regla que
- * usa la ruta de órdenes.
- */
-export function fechaDelAviso(cuerpo: { fecha?: unknown }, hoy: string): string {
-  return fechaValidaOHoy(cuerpo?.fecha, hoy);
+export function fechaDeLaCarga(valor: unknown, hoy: string): FechaDeLaCarga {
+  const crudo = String(valor ?? "").trim();
+  if (crudo === "") return { estado: "ausente" };
+
+  const fecha = fechaDeTexto(crudo);
+  if (!fecha) {
+    return {
+      estado: "no-sirve",
+      motivo: `"${crudo}" no es una fecha. Va como 16/10/2026 o 2026-10-16.`,
+    };
+  }
+
+  // Las dos son "YYYY-MM-DD", así que comparar los textos compara los días.
+  if (fecha > hoy) {
+    return {
+      estado: "no-sirve",
+      motivo: `La fecha ${comoSeLee(fecha)} todavía no llegó. Fijate la hora del teléfono.`,
+    };
+  }
+
+  return { estado: "sirve", fecha };
 }
 
 /** Una fecha ISO como la escribe la planilla. */
