@@ -193,11 +193,29 @@ La decisión y el cómo viven en [`lib/core/borradoDeEspejo.ts`](../lib/core/bor
 que es compartido con Compras y es donde están los tests. Acá sólo hace falta
 saber cuatro cosas.
 
-**Se borra de verdad, con `DELETE`.** No es una marca: la fila se va, y con
-ella las notas de "por qué no se hizo" (cascada) y el enlace de las ejecuciones
-(queda en null). Se eligió así a pedido, sabiendo el precio. Una OT que tenga
-un aviso enlazado **hace fallar el borrado** —`avisos.work_order_id` no declara
-`on delete`—, y eso no tumba la corrida: se informa y el resto se borra igual.
+**Se borra de verdad, con `DELETE`.** No es una marca: la fila se va. Lo que
+cuelga de una OT y qué le pasa, leído de la base el 18/10/2026 con
+`node scripts/que-cuelga-de.mjs ordenes_trabajo` —que conviene volver a correr
+antes de creerle a esta tabla, porque varias de estas tablas las creó un delta
+aplicado a mano y sus `on delete` no están en ninguna migración del repo—:
+
+| Apunta a la OT | Al borrarla |
+|---|---|
+| `ordenes_trabajo_notas` (por qué no se hizo) | **se borra** en cascada |
+| `ordenes_trabajo_repuestos` | **se borra** en cascada |
+| `avisos` | **se borra** en cascada, desde la migración `20261018160209` |
+| `mantenimientos_ejecuciones` | queda, con el enlace en null |
+| `planificacion_diaria_items` | **hace fallar el borrado** |
+
+Las dos últimas filas son las que importan. El aviso se va con la OT a pedido,
+y conviene saber que **`avisos` espeja su propia planilla**: si la línea sigue
+en la hoja AVISOS, la sincronización de avisos lo vuelve a traer sin enlace. El
+borrado es definitivo sólo si también se sacó de allá.
+
+Y `planificacion_diaria_items` sigue en `no action`, que es el único de los
+cinco que **hace fallar** el borrado. Hoy no tiene ninguna fila enlazada; el día
+que la tenga, ese borrado —y el del lote de 200 en el que viaje— falla entero,
+se informa y el resto queda para la próxima corrida.
 
 **Sólo se borra aquello cuya ausencia prueba algo.** Quedan protegidas la fila
 que la app escribió y todavía no exportó —`app_created` con `sheets_row` en
