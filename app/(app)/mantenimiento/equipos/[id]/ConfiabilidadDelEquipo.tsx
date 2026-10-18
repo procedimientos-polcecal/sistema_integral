@@ -12,9 +12,11 @@ import {
 } from "@/lib/mantenimiento/mtbf";
 import {
   conComa,
+  DIAS_DE_CALENDARIO,
   diasCorridos,
   fechaCorta,
   porcentajeDeConfiabilidad,
+  type ConfiabilidadDeLaFicha,
 } from "@/lib/mantenimiento/mtbfVista";
 
 /**
@@ -26,20 +28,16 @@ const FallasPorMes = dynamic(
   { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" /> }
 );
 
-export interface ConfiabilidadProps {
-  /** null cuando el equipo no falló en la ventana. */
-  fila: FilaMtbf | null;
-  diasObservados: number;
-  /** La etiqueta del mes en curso, para dibujarlo incompleto. */
-  mesEnCurso: string;
-}
+export type ConfiabilidadProps = ConfiabilidadDeLaFicha;
 
 /**
  * Cada cuánto falla este equipo.
  *
- * Tres estados que dicen cosas distintas, y por eso no se juntan: el equipo que
+ * Cuatro estados que dicen cosas distintas, y por eso no se juntan: el equipo que
  * no falló (el MTBF es "más que lo observado"), el que falló pero con tan poca
- * historia que el número todavía no se publica, y el normal.
+ * historia que el número todavía no se publica, el normal, y el que no se pudo
+ * calcular porque la lectura falló. Este último **nunca** se pinta como "sin
+ * fallas": sería decirle a quien mira que la máquina anda bien sin saberlo.
  *
  * El aviso de ritmo cambiado es la mitad del valor de la tarjeta. El MTBF es el
  * de toda la ventana, y una máquina que venía fallando cada dos días y hace tres
@@ -50,7 +48,7 @@ export interface ConfiabilidadProps {
  * arrancan a mitad de un mes: la suma de las barras puede ser menor que la
  * cantidad de fallas, y no se presentan como el mismo total.
  */
-export default function ConfiabilidadDelEquipo({ fila, diasObservados, mesEnCurso }: ConfiabilidadProps) {
+export default function ConfiabilidadDelEquipo(props: ConfiabilidadProps) {
   return (
     <section>
       <div className="flex items-center justify-between mb-2">
@@ -64,24 +62,41 @@ export default function ConfiabilidadDelEquipo({ fila, diasObservados, mesEnCurs
       </div>
 
       <div className="card overflow-hidden">
-        {fila === null ? (
-          <SinFallas diasObservados={diasObservados} />
-        ) : fila.mtbf === null ? (
-          <SinHistoria fila={fila} diasObservados={diasObservados} />
-        ) : (
-          <ConNumero fila={fila} mesEnCurso={mesEnCurso} diasObservados={diasObservados} />
-        )}
+        <Cuerpo {...props} />
 
         <div className="border-t border-slate-100 bg-amber-50 px-4 py-3 text-xs text-amber-900 space-y-1">
           <p>
-            <strong>Son días de calendario, no horas de máquina.</strong> Las horas de marcha todavía no
-            se cargan, así que una máquina que trabaja un turno y otra que trabaja tres se comparan como
-            si fueran iguales, y la que más trabaja parece peor de lo que es.
+            <strong>{DIAS_DE_CALENDARIO.titulo}</strong> {DIAS_DE_CALENDARIO.detalle}
           </p>
           <p>Las probabilidades suponen una tasa de falla constante.</p>
         </div>
       </div>
     </section>
+  );
+}
+
+function Cuerpo(props: ConfiabilidadProps) {
+  if (!props.disponible) return <NoDisponible />;
+  const { fila, diasObservados, mesEnCurso } = props;
+  if (fila === null) return <SinFallas diasObservados={diasObservados} />;
+  if (fila.mtbf === null) return <SinHistoria fila={fila} diasObservados={diasObservados} />;
+  return <ConNumero fila={fila} mesEnCurso={mesEnCurso} diasObservados={diasObservados} />;
+}
+
+/**
+ * La lectura de las órdenes falló. No hay número y tampoco hay "sin fallas":
+ * se dice que no se pudo calcular y se manda a mirar las OT del equipo, que
+ * están más abajo en la misma ficha.
+ */
+function NoDisponible() {
+  return (
+    <div className="px-4 py-4 space-y-1" role="status">
+      <p className="text-sm font-semibold text-slate-800">No se pudo calcular la confiabilidad.</p>
+      <p className="text-sm text-slate-500">
+        Esto no quiere decir que el equipo no haya fallado. Recargá la página y, si sigue igual,
+        revisá sus órdenes de trabajo más abajo.
+      </p>
+    </div>
   );
 }
 

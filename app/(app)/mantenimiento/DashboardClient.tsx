@@ -11,7 +11,7 @@ import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 import Select from "@/components/Select";
 import { useCargar } from "@/lib/core/useCargar";
 import type { FilaMtbf, Mtbf } from "@/lib/mantenimiento/mtbf";
-import { diasCorridos, fechaCorta } from "@/lib/mantenimiento/mtbfVista";
+import { DIAS_DE_CALENDARIO, diasCorridos, fechaCorta } from "@/lib/mantenimiento/mtbfVista";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -273,7 +273,7 @@ function PeoresPorMtbf() {
     <div className="card p-5">
       <div className="flex items-baseline justify-between gap-3 mb-3">
         <h2 className="text-sm font-semibold text-slate-700">Los que menos aguantan (MTBF)</h2>
-        <InfoTip text="Cada cuántos días, en promedio, falla el equipo: cuanto menor, peor. Se cuenta sobre las órdenes correctivas del último año." />
+        <InfoTip text={`Cada cuántos días, en promedio, falla el equipo: cuanto menor, peor. Se cuenta sobre las órdenes correctivas del último año. ${DIAS_DE_CALENDARIO.titulo} ${DIAS_DE_CALENDARIO.detalle}`} />
       </div>
 
       {peores === null ? (
@@ -304,7 +304,8 @@ function PeoresPorMtbf() {
         </ul>
       )}
 
-      <div className="mt-2 text-right">
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="text-xs text-amber-800">{DIAS_DE_CALENDARIO.corto}</p>
         <Link href="/mantenimiento/mtbf" className="text-xs text-[var(--primary)] hover:underline">
           Ver todos los equipos →
         </Link>

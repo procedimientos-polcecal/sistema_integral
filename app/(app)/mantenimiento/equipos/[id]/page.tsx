@@ -6,6 +6,7 @@ import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
+import { confiabilidadDeLaFicha } from "@/lib/mantenimiento/mtbfVista";
 import {
   costoDelEquipo,
   type OrdenDeServicio,
@@ -38,7 +39,14 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       .limit(10),
     // La cuenta es de toda la planta: el MTBF de un equipo depende de los días
     // observados, que salen de la primera falla de cualquiera.
-    mtbfDeLaPlanta(supabase, hoyEnArgentina()),
+    // Es una tarjeta secundaria: si la lectura falla, la ficha de la máquina se
+    // ve igual. Pero el fallo se devuelve como `null` y no como "sin fallas":
+    // `confiabilidadDeLaFicha` lo convierte en "no se pudo calcular", que es lo
+    // único verdadero.
+    mtbfDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
+      console.error("No se pudo calcular el MTBF de la ficha del equipo", error);
+      return null;
+    }),
   ]);
 
   if (!equipo) notFound();
@@ -55,11 +63,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       historial={historial ?? []}
       canEdit={canEdit}
       costo={costo}
-      confiabilidad={{
-        fila: mtbf.filas.find((f) => f.equipmentId === id) ?? null,
-        diasObservados: mtbf.diasObservados,
-        mesEnCurso: mtbf.mesEnCurso,
-      }}
+      confiabilidad={confiabilidadDeLaFicha(mtbf, id)}
     />
   );
 }

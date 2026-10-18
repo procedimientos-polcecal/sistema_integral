@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { filasVisibles, equiposSinFallas, type EquipoDeLaVista } from "./mtbfVista";
-import type { FilaMtbf } from "./mtbf";
+import {
+  confiabilidadDeLaFicha,
+  equiposSinFallas,
+  filasVisibles,
+  type EquipoDeLaVista,
+} from "./mtbfVista";
+import type { FilaMtbf, Mtbf } from "./mtbf";
 
 const eq = (id: string, sectorId: string): EquipoDeLaVista =>
   ({ id, code: id.toUpperCase(), name: "Molino " + id, sectorId, sectorNombre: "S " + sectorId });
@@ -59,5 +64,29 @@ describe("los equipos sin fallas", () => {
   /** Un equipo que nunca fallo no tuvo fallas de ninguna especialidad. */
   it("desaparecen cuando se filtra por especialidad", () => {
     expect(equiposSinFallas([fila("a")], EQUIPOS, { sectorId: null, especialidad: "MECÁNICO" })).toEqual([]);
+  });
+});
+
+describe("la confiabilidad de la ficha", () => {
+  const mtbf: Mtbf = {
+    filas: [fila("a")], diasObservados: 319, sinAtribuir: [], mesEnCurso: "2026-10",
+  };
+
+  it("trae la fila del equipo y los datos de la planta", () => {
+    expect(confiabilidadDeLaFicha(mtbf, "a")).toEqual({
+      disponible: true, fila: mtbf.filas[0], diasObservados: 319, mesEnCurso: "2026-10",
+    });
+  });
+
+  it("un equipo que no falló está disponible, con fila null", () => {
+    const r = confiabilidadDeLaFicha(mtbf, "b");
+    expect(r).toMatchObject({ disponible: true, fila: null });
+  });
+
+  /** Si la lectura falló no hay cuenta: nunca se puede confundir con "sin fallas". */
+  it("si la lectura falló no está disponible, y no trae una fila null", () => {
+    const r = confiabilidadDeLaFicha(null, "a");
+    expect(r).toEqual({ disponible: false });
+    expect("fila" in r).toBe(false);
   });
 });

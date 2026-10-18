@@ -13,7 +13,7 @@
  * Un equipo que nunca falló no tuvo fallas de ninguna especialidad, así que con
  * ese filtro puesto no figura entre los "sin fallas".
  */
-import type { FilaMtbf } from "./mtbf";
+import type { FilaMtbf, Mtbf } from "./mtbf";
 
 export interface EquipoDeLaVista {
   id: string;
@@ -73,6 +73,57 @@ export function equiposSinFallas(
       !conFallas.has(e.id) &&
       (filtros.sectorId === null || e.sectorId === filtros.sectorId)
   );
+}
+
+/**
+ * El límite que más cambia cómo se lee el número, escrito en un solo lugar.
+ *
+ * Sin horas de marcha cargadas, el MTBF cuenta días de calendario: una máquina
+ * de un turno y otra de tres se comparan como si fueran iguales, y la que más
+ * trabaja parece peor de lo que es. El spec manda decirlo en texto visible y no
+ * en un tooltip, en las tres pantallas (listado, ficha y tablero). Si vive en
+ * tres archivos, el día que se corrija en uno queda distinto en los otros dos.
+ *
+ * `titulo` va en negrita y `detalle` sigue en el mismo párrafo. `corto` es la
+ * versión de una línea para donde no hay lugar, como el pie del tablero.
+ */
+export const DIAS_DE_CALENDARIO = {
+  titulo: "Son días de calendario, no horas de máquina.",
+  detalle:
+    "Las horas de marcha todavía no se cargan, así que una máquina que trabaja un turno y otra que trabaja tres se comparan como si fueran iguales, y la que más trabaja parece peor de lo que es.",
+  corto: "Días de calendario, no horas de máquina.",
+} as const;
+
+/**
+ * Lo que la ficha del equipo sabe de su confiabilidad. Son dos estados y no uno
+ * con `fila: null` a propósito: `fila: null` quiere decir "no falló en la
+ * ventana" y la tarjeta lo pinta como una buena noticia. Si la lectura falló,
+ * eso sería decirle "sin fallas" a una máquina que puede fallar cada cuatro
+ * días, que es la mentira más cara que esta pantalla puede decir.
+ */
+export type ConfiabilidadDeLaFicha =
+  | {
+      disponible: true;
+      /** null cuando el equipo no falló en la ventana. */
+      fila: FilaMtbf | null;
+      diasObservados: number;
+      /** La etiqueta del mes en curso, para dibujarlo incompleto. */
+      mesEnCurso: string;
+    }
+  | { disponible: false };
+
+/** `mtbf` es null cuando la lectura de la planta falló: no hay cuenta, no hay "sin fallas". */
+export function confiabilidadDeLaFicha(
+  mtbf: Mtbf | null,
+  equipmentId: string
+): ConfiabilidadDeLaFicha {
+  if (mtbf === null) return { disponible: false };
+  return {
+    disponible: true,
+    fila: mtbf.filas.find((f) => f.equipmentId === equipmentId) ?? null,
+    diasObservados: mtbf.diasObservados,
+    mesEnCurso: mtbf.mesEnCurso,
+  };
 }
 
 /*

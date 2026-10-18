@@ -12,6 +12,7 @@ import {
   type Mtbf,
 } from "@/lib/mantenimiento/mtbf";
 import {
+  DIAS_DE_CALENDARIO,
   diasCorridos,
   equiposSinFallas,
   fechaCorta,
@@ -198,19 +199,25 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 space-y-1">
         <p>
-          <strong>Son días de calendario, no horas de máquina.</strong> Las horas de marcha todavía no
-          se cargan, así que una máquina que trabaja un turno y otra que trabaja tres se comparan como
-          si fueran iguales, y la que más trabaja parece peor de lo que es.
+          <strong>{DIAS_DE_CALENDARIO.titulo}</strong> {DIAS_DE_CALENDARIO.detalle}
         </p>
         <p>
           Las probabilidades suponen una tasa de falla constante. Si el equipo cambió de ritmo, la
           tendencia lo muestra: el último punto es el mes en curso y está incompleto.
         </p>
+        <p>
+          <strong>Ordena por frecuencia de falla, no por criticidad.</strong> Nadie cargó la
+          criticidad de los equipos —casi todos figuran con el valor por defecto—, así que la lista
+          no dice qué conviene atender primero: una máquina que falla cada 4 días y no para la planta
+          sale arriba de una que falla cada 20 y sí la para.
+        </p>
       </div>
 
       {!hayFilas ? (
         <div className="card p-8 text-center text-sm text-slate-500">
-          No hay correctivas con fecha en los últimos {VENTANA_DIAS} días, así que no hay nada que medir.
+          {mtbf.sinAtribuir.length > 0
+            ? `Ninguna correctiva de los últimos ${VENTANA_DIAS} días tiene un equipo enlazado, así que no hay MTBF por máquina que calcular. Las que hay se listan abajo.`
+            : `No hay correctivas con fecha en los últimos ${VENTANA_DIAS} días, así que no hay nada que medir.`}
         </div>
       ) : (
         <>
@@ -296,7 +303,7 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
                 ))}
                 {filas.length === 0 && (
                   <tr>
-                    <td colSpan={5 + PLAZOS.length} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={6 + PLAZOS.length} className="px-3 py-6 text-center text-slate-500">
                       Ningún equipo con esos filtros tuvo fallas en la ventana.
                     </td>
                   </tr>
@@ -324,39 +331,40 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
             </details>
           )}
 
-          {mtbf.sinAtribuir.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                {mtbf.sinAtribuir.length} correctivas sin equipo enlazado
-              </h2>
-              <p className="text-xs text-slate-500">
-                Son fallas que ocurrieron pero no se pueden atribuir a una máquina del sistema, así que
-                no entran en ningún MTBF. Se muestran como vienen cargadas, sin adivinar de qué equipo
-                son.
-              </p>
-              <div className="overflow-x-auto card">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600">OT</th>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600">Equipo (texto libre)</th>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {mtbf.sinAtribuir.map((s) => (
-                      <tr key={s.otNumber}>
-                        <td className="px-3 py-2 text-slate-700 whitespace-nowrap">#{s.otNumber}</td>
-                        <td className="px-3 py-2 text-slate-500">{s.equipoRaw?.trim() || "—"}</td>
-                        <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fechaCorta(s.fecha)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
         </>
+      )}
+
+      {mtbf.sinAtribuir.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-900">
+            {mtbf.sinAtribuir.length} correctivas sin equipo enlazado
+          </h2>
+          <p className="text-xs text-slate-500">
+            Son fallas que ocurrieron pero no se pueden atribuir a una máquina del sistema, así que
+            no entran en ningún MTBF. Se muestran como vienen cargadas, sin adivinar de qué equipo
+            son.
+          </p>
+          <div className="overflow-x-auto card">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">OT</th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">Equipo (texto libre)</th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">Fecha</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {mtbf.sinAtribuir.map((s) => (
+                  <tr key={s.otNumber}>
+                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">#{s.otNumber}</td>
+                    <td className="px-3 py-2 text-slate-500">{s.equipoRaw?.trim() || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fechaCorta(s.fecha)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );
