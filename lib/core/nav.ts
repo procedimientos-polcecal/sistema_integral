@@ -396,3 +396,27 @@ export function puedeVerItem(item: NavItem, ctx: ContextoNav): boolean {
   if (item.soloAdmin) return item.modulo ? ctx.adminModulos.has(item.modulo) : ctx.esAdminGlobal;
   return true;
 }
+
+/**
+ * Si una ruta cae **dentro** de un sector: su propia página o cualquiera
+ * debajo. Es lo que decide qué grupo del menú lateral se despliega solo.
+ *
+ * Mira el prefijo y no la igualdad porque las dos formas de entrar a un módulo
+ * la necesitan, y con igualdad las dos dejaban el menú cerrado: la tarjeta del
+ * Inicio lleva a la raíz (`/compras`), que no es el href de ningún hijo —los
+ * trece grupos tienen esa forma—, y una página de detalle como
+ * `/cantera/voladuras/ABC` no figura en el menú.
+ *
+ * La barra del final no es de adorno, y tiene dos trabajos. Sin ella
+ * `/remises` daría verdadero para `/remisesX`; hoy ningún módulo es prefijo de
+ * otro, pero eso es una propiedad de la lista de hoy y no una garantía. Y hace
+ * que la raíz `/` del Inicio no contenga a todo el sistema, que es lo que
+ * pasaría con un `startsWith` pelado.
+ *
+ * El query no cuenta: `/rrhh/ausencias?tab=licencias` y
+ * `/rrhh/ausencias?tab=injustificadas` están las dos dentro de RRHH.
+ */
+export function estaDentroDe(href: string, pathname: string): boolean {
+  const raiz = href.split("?")[0];
+  return pathname === raiz || pathname.startsWith(`${raiz}/`);
+}

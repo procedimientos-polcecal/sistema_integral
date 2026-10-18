@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { NAV, puedeVerItem, type NavItem } from "@/lib/core/nav";
+import { NAV, puedeVerItem, estaDentroDe, type NavItem } from "@/lib/core/nav";
 import { esAdminDelNucleo } from "@/lib/core/access";
 import { useNavMovil } from "./NavMovil";
 import type { Modulo, Rol } from "@/lib/core/types";
@@ -204,8 +204,12 @@ export function Sidebar({
     });
   };
 
-  // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo
-  // despliega solo.
+  // Si la ruta actual pertenece a un sector (o sub-grupo), lo despliega solo.
+  //
+  // Cuenta tanto una sub-página del menú como cualquier ruta debajo de la raíz
+  // del sector: entrar a `/compras` desde una tarjeta del Inicio, o a una
+  // página de detalle que no está en el menú, dejaban el menú cerrado — y los
+  // trece grupos tenían el problema, porque ninguno repite su raíz como hijo.
   //
   // Se ajusta durante el render y no en un efecto. Con el efecto habia un commit
   // en el que la pagina nueva ya estaba pintada y el menu todavia mostraba el
@@ -223,9 +227,13 @@ export function Sidebar({
       if (!item.children) continue;
       const hijoDirectoActivo = item.children.some((c) => !c.children && esRutaActiva(c.href, pathname, search));
       const subgrupoActivo = item.children.find((c) => c.children?.some((n) => esRutaActiva(n.href, pathname, search)));
-      if (hijoDirectoActivo || subgrupoActivo) {
+      if (hijoDirectoActivo || subgrupoActivo || estaDentroDe(item.href, pathname)) {
         setAbierto(item.label);
-        if (subgrupoActivo) setAbiertoSub(subgrupoActivo.label);
+        // Se fija en vez de sólo abrirse: al entrar por la raíz no hay
+        // sub-grupo activo, y dejar el del módulo anterior mostraba uno
+        // desplegado que no correspondía. Resetear al cambiar de ruta es lo
+        // que el comentario de arriba ya promete.
+        setAbiertoSub(subgrupoActivo?.label ?? null);
         break;
       }
     }
