@@ -14,10 +14,15 @@
 
 import { leerValores, escribirCeldas } from "@/lib/core/sheets";
 
-/** La OT, con lo justo para encontrar su fila y confirmar que es la de ella. */
+/**
+ * La OT, con lo justo para encontrar su fila.
+ *
+ * `sheets_row` ya no está: la fila se busca por el número. La columna sigue en
+ * la base y la sigue llenando la sincronización, pero la escritura dejó de
+ * apoyarse en ella.
+ */
 export interface FilaDeOT {
   ot_number: number | null;
-  sheets_row: number | null;
 }
 
 /**
@@ -25,52 +30,62 @@ export interface FilaDeOT {
  *
  * EL 16/10/2026, dos veces el mismo silencio. La OT 2796 se creó desde la app
  * y se registró el trabajo; nada llegó a la planilla y la pantalla no dijo una
- * palabra, porque faltaba `sheets_row` y eso devolvía `null` — **el mismo
- * valor que "salió bien"**. Horas después volvió a morder al repararla a mano:
- * un script sin `GOOGLE_SHEETS_OT_ID` leyó ese `null` como éxito y reportó
- * cinco celdas escritas que nunca se escribieron.
+ * palabra, porque devolvía `null` — **el mismo valor que "salió bien"**. Horas
+ * después volvió a morder al repararla a mano: un script sin
+ * `GOOGLE_SHEETS_OT_ID` leyó ese `null` como éxito y reportó cinco celdas
+ * escritas que nunca se escribieron.
  *
  * Un diagnóstico que no se distingue de otro no es un diagnóstico; uno que no
- * se distingue del éxito es peor. Las dos razones se devuelven juntas: saber
- * que falta la variable y descubrir recién después que además falta la fila es
- * la misma pérdida de tiempo, dos veces.
+ * se distingue del éxito es peor.
  *
- * `sheets_row` en null es el estado normal de una OT recién creada desde la
- * app —la fila del master la pone la sincronización, porque la fila en la hoja
- * de respuestas no es la del master—, así que esto no es un error del sistema:
- * es información para quien acaba de hacer el cambio.
+ * Antes también miraba `sheets_row`. Dejó de hacerlo cuando la fila pasó a
+ * buscarse: no tenerla guardada ya no impide nada.
  */
-export function porQueNoLlegaALaPlanilla(
-  planilla: string,
-  orden: FilaDeOT
-): string | null {
-  const faltan: string[] = [];
-
-  if (!planilla) {
-    faltan.push("falta configurar GOOGLE_SHEETS_OT_ID");
-  }
-  // Cero no es una fila: las planillas empiezan en 1.
-  if (!orden.sheets_row || orden.sheets_row < 1) {
-    faltan.push(
-      "la OT todavía no tiene fila en la planilla — se creó desde el sistema y hay que sincronizar las órdenes"
-    );
-  }
-
-  if (faltan.length === 0) return null;
-  return `El cambio quedó sólo en el sistema: ${faltan.join(" y ")}.`;
+export function porQueNoLlegaALaPlanilla(planilla: string): string | null {
+  if (planilla) return null;
+  return "El cambio quedó sólo en el sistema: falta configurar GOOGLE_SHEETS_OT_ID.";
 }
 
 /**
- * Escribe celdas en la fila de la OT. Devuelve qué falló, o `null` si salió.
+ * En qué fila del master está una OT, buscándola por su número.
+ *
+ * **Se busca y no se calcula.** Mientras el master conservaba el orden de la
+ * hoja de respuestas, la fila se podía deducir; desde que ordena por N° de OT
+ * —16/10/2026— esa cuenta dejó de valer, y una cuenta que deja de valer **no
+ * avisa**: sigue devolviendo un número plausible y la escritura se va a la fila
+ * de otra orden. Es la misma lección que Compras escribió el 11/09/2026.
+ *
+ * Buscar hace además que **la búsqueda sea la verificación**: si la OT no está,
+ * no se escribe. Y no estar es lo normal recién creada, porque el `IMPORTRANGE`
+ * del master tarda — por eso devuelve `null` y no algo aproximado.
+ *
+ * Devuelve el número de fila como lo cuenta una planilla: la primera es la 1.
+ */
+export function filaDeLaOTenElMaster(
+  columnaA: readonly (readonly unknown[])[],
+  ot_number: number | null
+): number | null {
+  if (ot_number === null) return null;
+
+  for (let i = 0; i < columnaA.length; i++) {
+    if (Number(String(columnaA[i]?.[0] ?? "").trim()) === ot_number) return i + 1;
+  }
+  return null;
+}
+
+/**
+ * Escribe celdas en la fila que la OT tiene en el master. Devuelve qué falló, o
+ * `null` si salió.
  *
  * Best-effort a propósito: la app ya guardó, y que Google esté caído o que la
  * planilla no esté compartida como editor no puede tirar abajo lo que se
  * registró. El problema se devuelve para que la pantalla lo muestre — un fallo
  * de escritura nunca es un `console.warn`.
  *
- * Antes de escribir se comprueba que la fila **siga siendo la de esta OT**: el
- * número de fila que guardamos se corre si alguien inserta una fila arriba, y
- * escribir a ciegas pisaría el trabajo de otro.
+ * La fila **se busca por el N° de OT** en vez de venir dada. Antes llegaba en
+ * `sheets_row` y se comprobaba releyendo la columna A; buscar hace las dos
+ * cosas de una, y sobre todo sobrevive a que el master ordene por número, que
+ * es lo que hace que la posición de una fila ya no sea estable.
  */
 export async function escribirEnLaFilaDeLaOT(
   orden: FilaDeOT,
@@ -82,22 +97,22 @@ export async function escribirEnLaFilaDeLaOT(
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
 
   // Y no `return null`, que es como esto se callaba.
-  const noSePuede = porQueNoLlegaALaPlanilla(planilla, orden);
+  const noSePuede = porQueNoLlegaALaPlanilla(planilla);
   if (noSePuede) return noSePuede;
 
   try {
-    const fila = (await leerValores(
-      planilla, `${pestana}!A${orden.sheets_row}:A${orden.sheets_row}`, { sinFormato: true }
-    ))[0] ?? [];
+    const columnaA = await leerValores(planilla, `${pestana}!A:A`, { sinFormato: true });
+    const fila = filaDeLaOTenElMaster(columnaA, orden.ot_number);
 
-    if (Number(fila[0]) !== orden.ot_number) {
-      return "La fila de la planilla ya no es la de esta OT — alguien la movió. " +
-             "Sincronizá las órdenes y volvé a intentar.";
+    if (fila === null) {
+      return `La OT ${orden.ot_number} todavía no está en la planilla —el master la ` +
+             `recibe por IMPORTRANGE y tarda—, así que el cambio quedó sólo en el ` +
+             `sistema. Probá de nuevo en un rato o sincronizá las órdenes.`;
     }
 
     await escribirCeldas(
       planilla,
-      celdas.map((c) => ({ pestana, fila: orden.sheets_row!, columna: c.columna, valor: c.valor }))
+      celdas.map((c) => ({ pestana, fila, columna: c.columna, valor: c.valor }))
     );
     return null;
   } catch (e) {
