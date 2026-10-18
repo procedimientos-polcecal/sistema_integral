@@ -297,6 +297,31 @@ de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343,
 en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
 hay que medirla a mano.
 
+## Un aviso nuevo sale por dos lados
+
+Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
+notificación por persona con lo que tiene para mirar en sus módulos, a las 11:30
+UTC (8:30 de Argentina), después del último sync. Cada uno las prende en **Mi
+cuenta → Notificaciones**, y **por aparato** — la clave de `push_suscripciones`
+es `(usuario_id, endpoint)`, así que el celular y la computadora son dos filas.
+
+Lo que hay que saber antes de tocar un módulo: **si agregás un aviso a
+`lib/home/avisos.ts`, va a la campana y al push**. Los dos salen de
+`avisosDeUsuario()`, a propósito, para que no puedan decir cosas distintas. O
+sea que un aviso mal calibrado ya no es una campanita de más: es una
+notificación en el teléfono de alguien, todos los días.
+
+Y una trampa que no se deduce del código: **la `cantidad` de un aviso de ritmo
+no cuenta cosas.** Es cuántos umbrales lleva el módulo sin cargarse, y existe
+sólo para que descartarlo no lo traiga de vuelta mañana. Por eso el resumen los
+imprime sin número — si no diría «9 · Trituración: hace 36 días que no se
+carga». Está fijado con un test en `lib/home/resumenDeAvisos.test.ts`.
+
+El diseño y lo que se verificó están en
+[el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),
+que lleva las cuatro fases: instalar y verse bien (hecha), avisar (hecha), leer
+sin señal y cargar sin señal (sin empezar).
+
 ## Cómo se verifica
 
 ```bash

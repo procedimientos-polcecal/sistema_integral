@@ -16,8 +16,8 @@ tamaño:
 
 | Fase | Qué |
 |---|---|
-| **1 — ésta** | Que se instale y que se vea bien: manifest, íconos, instalación explicada por plataforma, y las 22 pantallas del escaneo |
-| 2 | Que avise: generalizar el push a los doce módulos sobre `/api/home/avisos`, y arreglar que hoy entre un solo dispositivo por persona. **Lo primero que tiene que hacer: que `enviarPush` mande `data: { url }`.** La fase 1 dejó el `notificationclick` leyendo ese campo, y el único emisor que existe —el cron de Remises— todavía manda sólo `{title, body}`, así que su notificación lleva a `/` en vez de `/mi-remis`. No afecta a nadie hoy porque hay **cero suscripciones**, pero es lo primero que se nota si alguien activa las notificaciones |
+| **1 — hecha** | Que se instale y que se vea bien: manifest, íconos, instalación explicada por plataforma, y las 22 pantallas del escaneo |
+| **2 — hecha, 18/10/2026** | Que avise: un resumen diario por push con lo que cada uno tiene para mirar en sus módulos, en el celular y en la computadora. Probada de punta a punta ese día — ver «Cómo terminó la fase 2» al final |
 | 3 | Leer sin señal: cachear lo último visto |
 | 4 | Cargar sin señal: la cola de escritura |
 
@@ -353,3 +353,45 @@ sólo en un registro que se borra.
 - La excepción de falsos positivos del script es un techo y no una igualdad: si
   un calendario o una tabla de la lista se saca, queda una cuota sin gastar que
   después taparía un hallazgo real.
+
+---
+
+## Cómo terminó la fase 2 (18/10/2026)
+
+Se construyó y se verificó contra producción el mismo día.
+
+**Lo que hace.** Una notificación por día y por persona, con lo que tiene para
+mirar en los módulos a los que tiene acceso. El contenido sale de
+`lib/home/avisosDeUsuario.ts`, la misma función que alimenta la campana, así que
+las dos no pueden decir cosas distintas. El cron es `/api/cron/avisos-diarios`,
+a las 11:30 UTC (8:30 de Argentina), después del último sync para que mire datos
+del día. Cada uno las prende en **Mi cuenta → Notificaciones**, y por aparato.
+
+**Las tres decisiones que no son obvias:**
+
+- **Un resumen, no un aviso por evento.** Avisar en el momento exigiría
+  enganchar las rutas de escritura de los doce módulos, y nada de esto es
+  urgente a la hora. Un aviso por ítem, con los números de ese día, eran diez
+  pushes a la mañana: se silencian, y a partir de ahí el sistema no avisa más
+  nada.
+- **No se manda nada cuando no hay nada.** El push diario que dice «no pasa
+  nada» es el que enseña a ignorarlos.
+- **La clave de `push_suscripciones` es `(usuario_id, endpoint)`.** Era
+  `usuario_id` sola, o sea un dispositivo por persona: suscribirse en la
+  computadora borraba la del teléfono, sin error y sin aviso.
+
+**La trampa que más fácil se cuela**, y que tiene test: la `cantidad` de un
+aviso de ritmo **no cuenta cosas** —es cuántos umbrales lleva parado, para que
+descartarlo funcione— así que imprimirla daría «9 · Trituración: hace 36 días
+que no se carga». Los avisos de ritmo van sin número.
+
+**Qué se verificó, en este orden:** la migración (tabla renombrada, clave
+compuesta, `creado_en`); que el insert pase por RLS con la sesión de una
+persona; el cálculo del resumen para los 13 usuarios activos contra la base real
+(277 a 927 ms cada uno, ~7 s los trece); el cron en producción, que devolvió
+`enviadas: 1`; que la suscripción sobreviviera al envío; y **que la notificación
+llegara, dijera lo que tenía que decir y abriera el SdG al tocarla** — en Safari
+sobre Apple, que es el push service más estricto con el `mailto:` del VAPID.
+
+**Lo que queda:** que las otras doce personas la activen. Y las fases 3 y 4,
+abajo, sin empezar.
