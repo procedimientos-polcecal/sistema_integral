@@ -8,6 +8,7 @@ import {
   ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario, maximoDeLaSerieEnLaPlanilla,
 } from "@/lib/compras/formulario";
 import { proximoNroRi } from "@/lib/compras/serieDeRi";
+import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
 
 /**
  * Cuánto puede tardar el POST antes de que la plataforma lo mate.
@@ -255,6 +256,29 @@ export async function POST(request: Request) {
       if (avisoSheets) {
         console.error(`RI ${data.nro_ri}: no se pudo escribir en la planilla: ${avisoSheets}`);
       }
+
+      // ── El aviso al instante a quien tiene que aprobarlo ──
+      //
+      // Va último, después de la planilla: el pedido ya está guardado y ya está
+      // encolado, así que esto no puede voltear nada. `avisarAQuienDecide` no
+      // tira —si el push service está caído la compra igual quedó pedida—, y
+      // por eso no necesita su propio `try`.
+      //
+      // `excepto: user.id` porque quien carga un pedido suele ser de los que
+      // aprueban: de los cuatro de `compras_aprobadores`, varios también piden.
+      // Avisarle a alguien de algo que acaba de hacer él es la clase de
+      // notificación que enseña a ignorarlas.
+      //
+      // Nada de lo que devuelve entra en la respuesta: quien cargó el pedido no
+      // tiene nada que hacer con que a otro le haya llegado o no un push, y un
+      // cartel sobre eso sería ruido en la pantalla de quien pide.
+      await avisarAQuienDecide(admin, {
+        lista: "compras_aprobadores",
+        items: [{ etiqueta: `RI ${data.nro_ri}`, descripcion }],
+        nombre: { singular: "Un pedido", plural: "pedidos" },
+        url: "/compras/aprobaciones",
+        excepto: user.id,
+      });
 
       return NextResponse.json(
         { ...data, ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}) },
