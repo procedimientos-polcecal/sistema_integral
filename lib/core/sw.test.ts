@@ -216,20 +216,56 @@ describe("public/sw.js", () => {
   });
 
   describe("push", () => {
-    it("guarda data en la notificación para que el click la encuentre", async () => {
+    /*
+     * El payload es el que manda el servidor, con `url` en el PRIMER NIVEL:
+     * un `Aviso` de `lib/core/webpush.ts`, tal cual sale de `JSON.stringify`.
+     *
+     * Antes este test le pasaba `{title, body, data: {url}}` —un nivel de mas,
+     * que nadie escribe— y por eso pasaba en verde mientras en produccion toda
+     * notificacion abria el inicio. Inventar la forma del payload en el test
+     * es lo que dejo pasar el bug: la forma se copia del contrato.
+     */
+    it("guarda el payload en la notificación para que el click lo encuentre", async () => {
       const { handlers, showNotification } = cargarSW();
       const esperas: Promise<unknown>[] = [];
       handlers["push"]({
         data: {
-          json: () => ({ title: "Compras", body: "Hay una para aprobar", data: { url: "/compras/aprobaciones" } }),
+          json: () => ({
+            title: "Un pedido espera tu aprobación",
+            body: "RI 2161 · prueba",
+            url: "/compras/aprobaciones",
+          }),
         },
         waitUntil: (p: Promise<unknown>) => esperas.push(p),
       });
       await Promise.all(esperas);
       expect(showNotification).toHaveBeenCalledTimes(1);
       const [titulo, opciones] = showNotification.mock.calls[0] as unknown as [string, Record<string, unknown>];
-      expect(titulo).toBe("Compras");
-      expect(opciones.data).toEqual({ url: "/compras/aprobaciones" });
+      expect(titulo).toBe("Un pedido espera tu aprobación");
+      expect((opciones.data as { url?: string })?.url).toBe("/compras/aprobaciones");
+    });
+
+    /*
+     * Los dos handlers juntos, que es el unico nivel donde el bug se veia.
+     * Cada uno por separado estaba bien: el `push` guardaba *algo* y el
+     * `notificationclick` abria *lo que le dieran*. Lo que estaba mal era el
+     * empalme, y eso no lo prueba ningun test de a uno.
+     */
+    it("de un Aviso del servidor al click: termina en la pantalla del aviso", async () => {
+      const { handlers, showNotification, openWindow } = cargarSW();
+      const esperas: Promise<unknown>[] = [];
+      handlers["push"]({
+        data: {
+          json: () => ({ title: "Un pedido espera tu aprobación", body: "RI 2161", url: "/compras/aprobaciones" }),
+        },
+        waitUntil: (p: Promise<unknown>) => esperas.push(p),
+      });
+      await Promise.all(esperas);
+      const [, opciones] = showNotification.mock.calls[0] as unknown as [string, Record<string, unknown>];
+
+      // Se le da al click exactamente lo que el push guardo, sin retocarlo.
+      await clickear(handlers, opciones.data as { url?: string });
+      expect(openWindow).toHaveBeenCalledWith("/compras/aprobaciones");
     });
 
     it("usa el ícono chico y no el logo de 2 MB", async () => {
@@ -245,8 +281,10 @@ describe("public/sw.js", () => {
       expect(opciones.badge).toBe("/icon-192.png");
     });
 
-    it("un push sin data no rompe: guarda data vacía", async () => {
-      const { handlers, showNotification } = cargarSW();
+    // Un aviso sin url no deberia existir —`Aviso` la pide— pero si llega, el
+    // click tiene que caer en la raiz y no romperse.
+    it("un push sin url no rompe: el click cae en la raíz", async () => {
+      const { handlers, showNotification, openWindow } = cargarSW();
       const esperas: Promise<unknown>[] = [];
       handlers["push"]({
         data: { json: () => ({ title: "SdG", body: "x" }) },
@@ -254,7 +292,8 @@ describe("public/sw.js", () => {
       });
       await Promise.all(esperas);
       const [, opciones] = showNotification.mock.calls[0] as unknown as [string, Record<string, unknown>];
-      expect(opciones.data ?? {}).toEqual({});
+      await clickear(handlers, opciones.data as { url?: string });
+      expect(openWindow).toHaveBeenCalledWith("/");
     });
   });
 });

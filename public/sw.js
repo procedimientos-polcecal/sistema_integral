@@ -76,9 +76,20 @@ self.addEventListener("push", (event) => {
       // notificación se bajaba el logo entero para dibujar un ícono de 64.
       icon: "/icon-192.png",
       badge: "/icon-192.png",
-      // Sin esto el click no encuentra a dónde ir: `event.notification.data`
-      // es lo único que la notificación recuerda de este payload.
-      data: data.data,
+      // El payload ENTERO, no `data.data`.
+      //
+      // Lo que manda el servidor es un `Aviso` de `lib/core/webpush.ts`:
+      // `{title, body, url}`, con la url en el primer nivel. Esto decía
+      // `data: data.data`, o sea un nivel que nadie escribe nunca, así que
+      // `event.notification.data` llegaba `undefined`, `destinoDe` caía en su
+      // rama de respaldo y **toda notificación abría el inicio** en vez de su
+      // pantalla. Confirmado en producción el 18/10/2026.
+      //
+      // El test no lo vio porque le pasaba al handler un payload anidado que
+      // el servidor no produce: inventaba la forma en vez de copiar la del
+      // contrato. Ahora hay un test que arranca de un `Aviso` de verdad y
+      // sigue hasta el click.
+      data,
     })
   );
 });
