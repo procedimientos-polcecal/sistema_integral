@@ -364,6 +364,31 @@ El porqué medido de cada una está en
 la lista de los candidatos que **no** pasan el filtro y por qué — que es lo que
 permite decirle que no al próximo módulo que lo pida.
 
+**El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los tres emisores que
+hay —el resumen diario, el aviso al instante y el de Remises—. La `url` va en
+el primer nivel, no adentro de un `data`.
+
+Esto parece un detalle y costó un mes de notificaciones que no llevaban a
+ningún lado: el handler de `push` de `public/sw.js` guardaba `data: data.data`,
+un nivel que nadie escribe, así que `event.notification.data` llegaba
+`undefined` y **toda notificación abría el inicio** — el resumen diario y el
+aviso de Remises incluidos. Se arregló el 18/10/2026 y lo que importa es por
+qué no lo vio nadie:
+
+- **El test inventaba la forma del payload.** Le pasaba al handler
+  `{title, body, data: {url}}`, anidado, que ningún emisor produce. Afirmaba
+  que el handler guarda lo que le den en `data.data`: cierto e inútil. La
+  forma de un payload se copia del contrato, no se inventa en el test.
+- **Los dos handlers por separado estaban bien.** El `push` guardaba *algo* y
+  el `notificationclick` abría *lo que le dieran*. Lo roto era el empalme, y
+  eso no lo prueba ningún test de a uno. Por eso ahora hay uno que arranca de
+  un `Aviso` tal cual sale de `JSON.stringify` y sigue hasta el `openWindow`,
+  pasándole al click exactamente lo que el push guardó.
+
+Si tocás el payload de un lado, el test de punta a punta de
+`lib/core/sw.test.ts` es el que tiene que seguir en verde.
+
 ## Cómo se verifica
 
 ```bash
