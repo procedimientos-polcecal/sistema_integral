@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BotonNotificaciones } from "@/components/BotonNotificaciones";
 
 export default function MiCuentaClient({
   email,
@@ -69,6 +70,16 @@ export default function MiCuentaClient({
           <span className="text-slate-500">Rol: </span>
           <span className="text-slate-900">{rolLabel}</span>
         </div>
+      </div>
+
+      {/* Las notificaciones viven acá y no en el menú de un módulo porque son
+          de todo el sistema: el resumen diario trae lo de todos los módulos a
+          los que cada uno tiene acceso. Hasta el 18/10/2026 el único botón para
+          prenderlas estaba escondido adentro de `/mi-remis`, que lo ve un
+          puñado de gente — por eso en dos años no las activó nadie. */}
+      <div className="card p-5">
+        <h2 className="font-medium text-slate-700 mb-3">Notificaciones</h2>
+        <BotonNotificaciones />
       </div>
 
       <div className="card p-5">

@@ -11,6 +11,7 @@ import {
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
+import { estadoSegunElCierre, loQueFaltaParaCerrar } from "@/lib/mantenimiento/cierreDeOT";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
@@ -167,6 +168,21 @@ export async function POST(request: Request) {
   // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
   // la base. Si se tradujera sólo al escribir, la base quedaría con las dos y
   // el filtro del listado —un `.in()` liso— seguiría sin encontrarla.
+  // Antes de la planilla, para no consumir un número por una orden incompleta.
+  const faltaParaCerrar = loQueFaltaParaCerrar({
+    fecha_cierre, horas, quien, contratista, operario_1, operario_2, operario_3,
+  });
+  if (faltaParaCerrar.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          `La orden tiene fecha de cierre, así que ya se hizo. Falta cargar ` +
+          `${faltaParaCerrar.join(", ")}.`,
+      },
+      { status: 400 }
+    );
+  }
+
   const laPrioridad = prioridadParaLaPlanilla(prioridad);
 
   // Quién la pide, para que la planilla lo diga. Es lo que le falta a quien la
@@ -224,7 +240,10 @@ export async function POST(request: Request) {
     repuesto:        repuesto?.trim() || null,
     fecha_ejecucion: fecha_ejecucion || null,
     fecha_cierre:    fecha_cierre || null,
-    estado:          estado || "POR_HACER",
+    // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
+    // que haya venido. La regla está acá y no sólo en el formulario porque el
+    // formulario no es el único que puede llamar a esta ruta.
+    estado:          estadoSegunElCierre(fecha_cierre, estado),
     contratista:     contratista?.trim() || null,
     horas:           horas ? Number(horas) : null,
     operario_1:      operario_1?.trim() || null,

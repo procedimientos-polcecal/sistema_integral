@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revisarElSecreto } from "@/lib/core/cron";
-import { enviarPush } from "@/lib/remises/webpush";
+import { enviarPush } from "@/lib/core/webpush";
 import { diaEnArgentina, comoSeLee } from "@/lib/core/fechas";
 
 /**
@@ -46,12 +46,14 @@ export async function GET(request: Request) {
     const { data: usuario } = await admin.from("usuarios").select("id").eq("empleado_id", empleadoId).maybeSingle();
     if (!usuario) continue;
 
-    const { data: token } = await admin
-      .from("remises_push_tokens")
+    // Todos los aparatos de esa persona, no uno: desde que la clave es
+    // (usuario_id, endpoint), el celular y la computadora conviven. Con
+    // `maybeSingle()` esto tiraba apenas alguien tuviera dos.
+    const { data: aparatos } = await admin
+      .from("push_suscripciones")
       .select("endpoint, p256dh, auth")
-      .eq("usuario_id", usuario.id)
-      .maybeSingle();
-    if (!token) continue;
+      .eq("usuario_id", usuario.id);
+    if (!aparatos?.length) continue;
 
     const primera = asignaciones[0];
     const title = `Remis para mañana ${fmtFecha}`;
@@ -61,12 +63,23 @@ export async function GET(request: Request) {
       asignaciones.length > 1 ? `(${asignaciones.length} remises asignados)` : "",
     ].filter(Boolean).join("\n");
 
-    const ok = await enviarPush(token, { title, body });
-    if (ok) {
-      enviados++;
-    } else {
-      tokensInvalidos++;
-      await admin.from("remises_push_tokens").delete().eq("usuario_id", usuario.id);
+    for (const aparato of aparatos) {
+      // `url` va siempre: el `notificationclick` del service worker la lee y
+      // cae en `/` cuando no viene. Hasta el 18/10/2026 esto mandaba sólo
+      // `{title, body}`, así que tocar el aviso del remis abría el inicio y la
+      // persona tenía que ir a buscar sola de qué se trataba.
+      const resultado = await enviarPush(aparato, { title, body, url: "/mi-remis" });
+      if (resultado === "enviada") {
+        enviados++;
+      } else if (resultado === "vencida") {
+        // Se borra ese aparato y no todos los de la persona: desinstaló la app
+        // de un teléfono, no se dio de baja de todo.
+        tokensInvalidos++;
+        await admin.from("push_suscripciones").delete()
+          .eq("usuario_id", usuario.id).eq("endpoint", aparato.endpoint);
+      }
+      // `fallo` no borra nada: el problema es del push service y la próxima
+      // corrida puede andar.
     }
   }
 

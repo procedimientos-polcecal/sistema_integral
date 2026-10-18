@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { estadoSegunElCierre, loQueFaltaParaCerrar } from "@/lib/mantenimiento/cierreDeOT";
 import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -82,6 +83,10 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     });
   }
 
+  /** Si esta orden nace cerrada. Lo decide la fecha, no el desplegable. */
+  const cierraAlCrearse = estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO"
+    && Boolean(form.fecha_cierre.trim());
+
   const filteredEquip = form.sector_id
     ? equipos.filter((e: any) => e.sector_id === form.sector_id)
     : equipos;
@@ -89,6 +94,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.descripcion.trim()) { setError("La descripción es requerida."); return; }
+
+    // Una OT que nace con fecha de cierre ya se hizo, así que tiene que decir
+    // cuánto llevó y quién la hizo. Todo junto y no de a uno: contestar tres
+    // veces para que te digan tres cosas es lo que hace que la gente complete
+    // de cualquier manera.
+    const falta = loQueFaltaParaCerrar(form);
+    if (falta.length > 0) {
+      setError(
+        `La orden tiene fecha de cierre, así que ya se hizo. Falta cargar ${falta.join(", ")}.`
+      );
+      return;
+    }
     setSaving(true); setError("");
 
     const eq = equipos.find((eq: any) => eq.id === form.equipment_id);
@@ -100,6 +117,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       body: JSON.stringify({
         ...form,
         horas:       form.horas ? Number(form.horas) : null,
+        // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
+        // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
+        estado:      estadoSegunElCierre(form.fecha_cierre, form.estado),
         equipo_raw:  eq ? `${eq.code} – ${eq.name}` : null,
         equipo_code: eq?.code ?? null,
         sector_raw:  sec?.nombre ?? null,
@@ -192,10 +212,21 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Con fecha de cierre el estado deja de ser una pregunta: la orden
+                ya se hizo. Se muestra fijo en vez de esconderse, para que lo
+                que se ve sea lo que se guarda — el servidor aplica la misma
+                regla, así que esconderlo dejaría la pantalla diciendo una cosa
+                y la base otra. */}
             <F label="Estado inicial">
-              <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
-                {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </Select>
+              {cierraAlCrearse ? (
+                <p className="input flex items-center bg-slate-50 text-slate-600">
+                  Realizado <span className="ml-2 text-xs text-slate-400">— tiene fecha de cierre</span>
+                </p>
+              ) : (
+                <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
+                  {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+              )}
             </F>
             <F label="Prioridad">
               <Select value={form.prioridad} onChange={e => f("prioridad", e.target.value)} className="input">

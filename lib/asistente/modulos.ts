@@ -35,6 +35,9 @@ export type Ambito = Modulo | "nucleo";
 export const MODULO_DE_TABLA: Record<string, Ambito> = {
   // ── Núcleo: catálogos que comparten los diez módulos ──
   empresas: "nucleo",
+  // Una fila por aparato suscrito a las notificaciones. Era de Remises hasta
+  // el 18/10/2026, cuando las notificaciones pasaron a ser de todo el sistema.
+  push_suscripciones: "nucleo",
   sectores: "nucleo",
   empleados: "nucleo",
   productos: "nucleo",
@@ -73,7 +76,6 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   remises_plantillas: "remises",
   remises_plantillas_grupos: "remises",
   remises_config: "remises",
-  remises_push_tokens: "remises",
 
   // ── Mantenimiento ──
   equipos: "mantenimiento",
