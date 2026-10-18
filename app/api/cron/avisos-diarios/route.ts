@@ -3,8 +3,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { traerTodo } from "@/lib/core/paginado";
 import { enviarPush } from "@/lib/core/webpush";
-import { avisosDeUsuario } from "@/lib/home/avisosDeUsuario";
-import { resumirParaPush } from "@/lib/home/resumenDeAvisos";
+import { avisosDeUsuario, avisosDeTodoElSistema } from "@/lib/home/avisosDeUsuario";
+import { resumirParaPush, resumirElMovimiento } from "@/lib/home/resumenDeAvisos";
+import { loQueSeMovio, esDiaDeRecordatorio } from "@/lib/home/movimiento";
+import { ultimaFoto, guardarFoto } from "@/lib/home/fotoDeAvisos";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 /**
@@ -48,6 +51,38 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
+  // ── Con qué se compara, y qué se manda hoy ──
+  //
+  // La foto es **la última que haya**, no la de ayer: el día que el cron no
+  // corra, comparar contra ayer daría un delta vacío y al día siguiente uno
+  // falso. Contra la última que exista, un día perdido se recupera solo.
+  //
+  // Sin ninguna foto es el primer día: no hay con qué comparar, así que no se
+  // manda nada y sólo se guarda. Tratar "sin foto" como "todo es nuevo" sería
+  // un push de estreno con los trece avisos, que es justo lo que este cambio
+  // viene a evitar.
+  const { fecha: fechaDeLaFoto, foto, error: errorAlLeerLaFoto } = await ultimaFoto(admin);
+
+  // La tabla la crea una migración y la aplica una persona, así que entre el
+  // deploy y esa aplicación no existe. Se dice con todas las letras y se corta:
+  // seguir trataría la falta de tabla como "primer día" y el cron no mandaría
+  // nada, todos los días, sin que nadie se entere. Mismo criterio que
+  // `push_suscripciones` acá abajo.
+  if (errorAlLeerLaFoto) {
+    console.error("avisos-diarios: no se pudo leer avisos_fotos:", errorAlLeerLaFoto);
+    return NextResponse.json(
+      {
+        error: "No se pudo leer la foto de avisos. ¿Falta aplicar la migración de avisos_fotos?",
+        detalle: errorAlLeerLaFoto,
+      },
+      { status: 503 }
+    );
+  }
+
+  const hoy = hoyEnArgentina();
+  const esLunes = esDiaDeRecordatorio(hoy);
+  const primerDia = fechaDeLaFoto === null;
+
   // La tabla la crea una migración y las migraciones las aplica una persona, así
   // que entre el deploy y esa aplicación puede no existir. Se dice con todas las
   // letras en vez de tirar un 500 diario que no explica nada — mismo criterio
@@ -76,7 +111,7 @@ export async function GET(request: Request) {
   let vencidas = 0;
   let fallos = 0;
 
-  for (const [usuarioId, aparatos] of porUsuario) {
+  for (const [usuarioId, aparatos] of primerDia ? [] : porUsuario) {
     // Una cuenta dada de baja no recibe: sigue teniendo suscripciones hasta que
     // el `on delete cascade` las limpie, y eso sólo pasa si se borra la fila.
     const { data: usuario } = await admin
@@ -92,7 +127,10 @@ export async function GET(request: Request) {
       grants: (grants ?? []) as UsuarioModulo[],
     });
 
-    const resumen = resumirParaPush(avisos);
+    // Los lunes el total; el resto de los días, lo que se movió. Las dos
+    // salen de los mismos avisos: lo único que cambia es contra qué se
+    // comparan y cómo se redactan.
+    const resumen = esLunes ? resumirParaPush(avisos) : resumirElMovimiento(loQueSeMovio(avisos, foto));
     if (!resumen) continue;
     conAvisos++;
 
@@ -111,11 +149,33 @@ export async function GET(request: Request) {
     }
   }
 
+  // ── La foto de hoy, al final ──
+  //
+  // **Después de mandar y no antes**: si se guardara antes, `ultimaFoto` de
+  // esta misma corrida devolvería la de hoy y el delta daría cero para todos.
+  //
+  // Y sale de `avisosDeTodoElSistema` y no de lo que se le calculó a las
+  // personas: si saliera de ahí dependería de quién esté suscripto ese día, y
+  // un módulo que nadie suscripto mira quedaría sin foto — para aparecer
+  // entero como novedad el día que alguien se suscriba.
+  //
+  // Si falla no se voltea nada: ya se mandó lo que había que mandar, y la
+  // comparación de mañana se hace contra la última foto que exista.
+  const todos = await avisosDeTodoElSistema(admin);
+  const { error: errorDeLaFoto } = await guardarFoto(admin, hoy, todos);
+  if (errorDeLaFoto) console.error("avisos-diarios: no se pudo guardar la foto:", errorDeLaFoto);
+
   return NextResponse.json({
     personasConSuscripcion: porUsuario.size,
     personasConAvisos: conAvisos,
     enviadas,
     vencidas,
     fallos,
+    // Para poder mirar qué hizo sin adivinar.
+    esLunes,
+    primerDia,
+    fechaDeLaFoto,
+    avisosEnLaFoto: todos.length,
+    ...(errorDeLaFoto ? { errorDeLaFoto } : {}),
   });
 }
