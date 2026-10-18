@@ -7,7 +7,10 @@
  * Vive en `public/` y es JavaScript plano porque lo importan los dos mundos: la
  * app (con `@/public/cola/colaOffline.js`) y el service worker `public/sw.js`,
  * que no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
- * tipos van por JSDoc, y `allowJs` hace que `tsc` los respete.
+ * tipos van por JSDoc, pero ojo con qué garantizan: `tsconfig.json` tiene
+ * `allowJs` y no `checkJs`, y no incluye los `.js` en su `include`, así que
+ * adentro de este archivo nadie los verifica. Rigen sólo para quien lo importa
+ * desde TypeScript, que ve las firmas y las usa para chequear sus llamadas.
  *
  * LO ÚNICO CONTRAINTUITIVO: un 401 es PASAJERO. Parece una falla definitiva
  * —"no tenés permiso"—, pero acá no lo es: la sesión de Supabase se vence sola,
@@ -57,8 +60,11 @@ const MS_POR_MINUTO = 60_000;
  *
  * Definitivo es lo que el servidor contesta con la cabeza fría y volvería a
  * contestar igual: un 400 (la carga está mal armada), un 403 (no tiene
- * permiso) o un 409 (la ruta reservó la clave y no se sabe si la fila llegó a
- * escribirse en la planilla: reintentar sólo daría otro 409). Todo lo demás es
+ * permiso) o un 409. El 409 es el que va a devolver la ruta de carga cuando la
+ * clave quedó reservada y no se sabe si la fila llegó a escribirse en la
+ * planilla (la ruta se escribe en la tarea 4 del plan; hasta entonces es el
+ * contrato que se acordó, no algo que ya exista): reintentar sólo daría otro
+ * 409. Todo lo demás es
  * pasajero —un 502 porque Google no contestó, un 500, un corte a mitad de
  * camino— y, sobre todo, el 401: ver la cabecera del archivo.
  *
@@ -79,6 +85,17 @@ function enMilisegundos(fechaIso) {
 }
 
 /**
+ * La fecha como número para ordenar; una ilegible queda al final.
+ *
+ * @param {string} fechaIso
+ * @returns {number}
+ */
+function clavesDeOrden(fechaIso) {
+  const ms = enMilisegundos(fechaIso);
+  return Number.isNaN(ms) ? Infinity : ms;
+}
+
+/**
  * Si esta carga se puede mandar ahora, desde esta sesión.
  *
  * @param {CargaEnCola} carga
@@ -87,17 +104,23 @@ function enMilisegundos(fechaIso) {
  * @returns {boolean}
  */
 export function puedeMandarse(carga, usuarioActualId, ahora) {
-  // Sin sesión conocida no hay a nombre de quién mandar. Y una carga de otra
-  // persona se queda esperando a que ella vuelva a entrar: mandarla desde esta
-  // sesión firmaría la planilla con quien no la hizo.
-  if (usuarioActualId === null || carga.usuarioId !== usuarioActualId) return false;
+  // Sin sesión conocida no hay a nombre de quién mandar, y una carga sin dueño
+  // no tiene a quién firmar. Se chequea la falsedad y no sólo `null` porque el
+  // service worker es JavaScript sin tipos: ahí puede llegar `undefined` o "", y
+  // dos valores vacíos iguales pasarían la comparación de abajo. Una carga de
+  // otra persona se queda esperando a que ella vuelva a entrar: mandarla desde
+  // esta sesión firmaría la planilla con quien no la hizo.
+  if (!usuarioActualId || !carga.usuarioId) return false;
+  if (carga.usuarioId !== usuarioActualId) return false;
   if (carga.estado !== "esperando") return false;
   if (carga.tomadaEn === null) return true;
 
   const hace = ahora.getTime() - enMilisegundos(carga.tomadaEn);
   // Una marca ilegible o del futuro (el reloj del teléfono se corrigió hacia
   // atrás) no puede trabar la carga hasta que el reloj la alcance: se suelta.
-  // Mandarla dos veces no es un riesgo, porque la ruta reserva la clave.
+  // El diseño es que mandarla dos veces no sea un riesgo, porque la ruta de
+  // carga reservará la clave y el segundo intento recibirá un 409 (esa ruta
+  // llega con la tarea 4 del plan; hasta entonces esto descansa en esa promesa).
   if (Number.isNaN(hace) || hace < 0) return true;
   return hace > MINUTOS_PARA_SOLTAR * MS_POR_MINUTO;
 }
@@ -105,6 +128,11 @@ export function puedeMandarse(carga, usuarioActualId, ahora) {
 /**
  * La próxima carga a mandar: la más vieja de las que se pueden mandar, para que
  * salgan en el orden en que se cargaron. No modifica el arreglo que recibe.
+ *
+ * Una `creadaEn` ilegible no tiene lugar en la fila: iría a cualquier parte
+ * según cómo compare el motor. Se decide que va al final, así nunca le pasa por
+ * delante a una carga con fecha, pero tampoco se queda sin mandar si es la
+ * única; entre dos ilegibles se respeta el orden en que llegaron.
  *
  * @param {CargaEnCola[]} cargas
  * @param {string | null} usuarioActualId
@@ -114,7 +142,14 @@ export function puedeMandarse(carga, usuarioActualId, ahora) {
 export function proximaAMandar(cargas, usuarioActualId, ahora) {
   const mandables = cargas
     .filter((carga) => puedeMandarse(carga, usuarioActualId, ahora))
-    .sort((a, b) => enMilisegundos(a.creadaEn) - enMilisegundos(b.creadaEn));
+    .sort((a, b) => {
+      const desdeA = clavesDeOrden(a.creadaEn);
+      const desdeB = clavesDeOrden(b.creadaEn);
+      // Comparación explícita y no resta: Infinity - Infinity da NaN.
+      if (desdeA < desdeB) return -1;
+      if (desdeA > desdeB) return 1;
+      return 0;
+    });
   return mandables[0] ?? null;
 }
 
@@ -140,6 +175,19 @@ export function esperandoDesdeAyer(cargas, ahora) {
 }
 
 /**
+ * Las cargas que quedaron paradas, sin importar hace cuánto: son las que
+ * fallaron de forma definitiva y no se reintentan solas, así que la persona
+ * tiene que enterarse de que están. `esperandoDesdeAyer` no las cuenta; las dos
+ * listas son lo que muestra el aviso de la cola.
+ *
+ * @param {CargaEnCola[]} cargas
+ * @returns {CargaEnCola[]}
+ */
+export function paradas(cargas) {
+  return cargas.filter((carga) => carga.estado === "parada");
+}
+
+/**
  * Cuántos minutos esperar antes del próximo reintento, según cuántos van.
  *
  * Es una decisión y no un detalle del service worker, así que vive acá, donde
@@ -152,7 +200,8 @@ export function esperandoDesdeAyer(cargas, ahora) {
  * @returns {number} Minutos.
  */
 export function esperaAntesDeReintentar(intentos) {
-  // Un dato raro (NaN, negativo) cuenta como el primer reintento.
-  const n = Number.isFinite(intentos) && intentos > 1 ? intentos : 1;
+  // Un dato raro (NaN, negativo) cuenta como el primer reintento. Infinity no
+  // es raro, es "muchísimos": 2 ** Infinity da Infinity y el techo lo corta.
+  const n = intentos > 1 ? intentos : 1;
   return Math.min(0.5 * 2 ** (n - 1), MINUTOS_TECHO_DE_ESPERA);
 }

@@ -4,29 +4,29 @@ import {
   puedeMandarse,
   proximaAMandar,
   esperandoDesdeAyer,
+  paradas,
   esperaAntesDeReintentar,
   MINUTOS_PARA_SOLTAR,
-} from "./colaOffline.js";
+} from "@/public/cola/colaOffline.js";
 
 const AHORA = new Date("2026-10-18T12:00:00.000Z");
 
 /** Minutos antes de AHORA, como texto ISO. */
-function haceMinutos(minutos) {
+function haceMinutos(minutos: number): string {
   return new Date(AHORA.getTime() - minutos * 60_000).toISOString();
 }
 
-/** @returns {import("./colaOffline.js").CargaEnCola} */
-function carga(cambios = {}) {
+function carga(cambios: Record<string, unknown> = {}) {
   return {
     clave: "clave-1",
-    tipo: "aviso",
+    tipo: "aviso" as const,
     cuerpo: {},
     usuarioId: "ana",
     creadaEn: haceMinutos(30),
-    tomadaEn: null,
+    tomadaEn: null as string | null,
     intentos: 0,
-    ultimoError: null,
-    estado: "esperando",
+    ultimoError: null as string | null,
+    estado: "esperando" as "esperando" | "parada",
     ...cambios,
   };
 }
@@ -77,12 +77,36 @@ describe("puedeMandarse", () => {
     expect(puedeMandarse(tomada, "ana", AHORA)).toBe(true);
   });
 
+  it("el límite es exacto: a los MINUTOS_PARA_SOLTAR justos todavía está tomada", () => {
+    const justo = carga({ tomadaEn: haceMinutos(MINUTOS_PARA_SOLTAR) });
+    expect(puedeMandarse(justo, "ana", AHORA)).toBe(false);
+    const pasado = carga({ tomadaEn: new Date(AHORA.getTime() - MINUTOS_PARA_SOLTAR * 60_000 - 1).toISOString() });
+    expect(puedeMandarse(pasado, "ana", AHORA)).toBe(true);
+  });
+
   it("sin sesión conocida no se manda nada", () => {
     expect(puedeMandarse(carga(), null, AHORA)).toBe(false);
   });
 
+  it("un usuario actual undefined o vacío tampoco manda nada, aunque la carga no tenga dueño", () => {
+    // El service worker es JavaScript sin chequeo de tipos: ahí llega lo que llegue.
+    const sinDuenio = carga({ usuarioId: undefined });
+    expect(puedeMandarse(sinDuenio, undefined as unknown as null, AHORA)).toBe(false);
+    expect(puedeMandarse(carga({ usuarioId: "" }), "", AHORA)).toBe(false);
+  });
+
+  it("una carga sin usuarioId no se manda nunca: no hay a quién firmar", () => {
+    expect(puedeMandarse(carga({ usuarioId: undefined }), "ana", AHORA)).toBe(false);
+    expect(puedeMandarse(carga({ usuarioId: "" }), "ana", AHORA)).toBe(false);
+  });
+
   it("una marca de toma en el futuro no traba la carga para siempre", () => {
     const tomada = carga({ tomadaEn: haceMinutos(-600) });
+    expect(puedeMandarse(tomada, "ana", AHORA)).toBe(true);
+  });
+
+  it("una marca de toma ilegible no traba la carga para siempre", () => {
+    const tomada = carga({ tomadaEn: "no es una fecha" });
     expect(puedeMandarse(tomada, "ana", AHORA)).toBe(true);
   });
 });
@@ -114,6 +138,25 @@ describe("proximaAMandar", () => {
     proximaAMandar(cargas, "ana", AHORA);
     expect(cargas.map((c) => c.clave)).toEqual(["nueva", "vieja"]);
   });
+
+  it("una creadaEn ilegible va al final: nunca le pasa por delante a una con fecha", () => {
+    const rota = carga({ clave: "rota", creadaEn: "no es una fecha" });
+    const nueva = carga({ clave: "nueva", creadaEn: haceMinutos(10) });
+    expect(proximaAMandar([rota, nueva], "ana", AHORA)?.clave).toBe("nueva");
+    expect(proximaAMandar([nueva, rota], "ana", AHORA)?.clave).toBe("nueva");
+  });
+
+  it("si sólo queda una con creadaEn ilegible, se manda igual", () => {
+    const rota = carga({ clave: "rota", creadaEn: "no es una fecha" });
+    expect(proximaAMandar([rota], "ana", AHORA)?.clave).toBe("rota");
+  });
+
+  it("entre dos con creadaEn ilegible conserva el orden en que llegaron", () => {
+    const a = carga({ clave: "a", creadaEn: "x" });
+    const b = carga({ clave: "b", creadaEn: "y" });
+    expect(proximaAMandar([a, b], "ana", AHORA)?.clave).toBe("a");
+    expect(proximaAMandar([b, a], "ana", AHORA)?.clave).toBe("b");
+  });
 });
 
 describe("esperandoDesdeAyer", () => {
@@ -125,32 +168,60 @@ describe("esperandoDesdeAyer", () => {
   });
 
   it("ignora una carga con fecha futura: el reloj del teléfono puede estar mal", () => {
-    const futura = carga({ creadaEn: haceMinutos(-24 * 60) });
+    // 48 horas y no 24: con un valor absoluto de la diferencia, −24 h también daría "más de 24".
+    const futura = carga({ creadaEn: haceMinutos(-48 * 60) });
     expect(esperandoDesdeAyer([futura], AHORA)).toEqual([]);
   });
 
-  it("ignora una carga parada: ya no está esperando, está frenada", () => {
+  it("ignora una carga con fecha ilegible: no se puede afirmar que lleve esperando nada", () => {
+    const rota = carga({ creadaEn: "no es una fecha" });
+    expect(esperandoDesdeAyer([rota], AHORA)).toEqual([]);
+  });
+
+  it("no incluye las paradas: esas las devuelve paradas()", () => {
     const parada = carga({ estado: "parada", creadaEn: haceMinutos(48 * 60) });
     expect(esperandoDesdeAyer([parada], AHORA)).toEqual([]);
   });
 });
 
-describe("esperaAntesDeReintentar", () => {
-  it("el primer reintento es casi inmediato", () => {
-    expect(esperaAntesDeReintentar(0)).toBeLessThanOrEqual(1);
-    expect(esperaAntesDeReintentar(1)).toBeLessThanOrEqual(1);
+describe("paradas", () => {
+  it("devuelve las que están paradas, sin importar cuánto llevan", () => {
+    const reciente = carga({ clave: "reciente", estado: "parada", creadaEn: haceMinutos(2) });
+    const vieja = carga({ clave: "vieja", estado: "parada", creadaEn: haceMinutos(72 * 60) });
+    const esperando = carga({ clave: "esperando" });
+    expect(paradas([esperando, reciente, vieja]).map((c) => c.clave)).toEqual(["reciente", "vieja"]);
   });
 
-  it("la espera crece con los intentos y tiene techo", () => {
-    expect(esperaAntesDeReintentar(3)).toBeGreaterThan(esperaAntesDeReintentar(1));
-    expect(esperaAntesDeReintentar(6)).toBeGreaterThan(esperaAntesDeReintentar(3));
-    // 50 intentos no pueden dar días de espera.
-    expect(esperaAntesDeReintentar(50)).toBeLessThanOrEqual(60);
-    expect(esperaAntesDeReintentar(50)).toBe(esperaAntesDeReintentar(500));
+  it("sin paradas devuelve una lista vacía", () => {
+    expect(paradas([carga(), carga({ clave: "otra" })])).toEqual([]);
+    expect(paradas([])).toEqual([]);
+  });
+});
+
+describe("esperaAntesDeReintentar", () => {
+  it("el primer reintento es casi inmediato: medio minuto", () => {
+    expect(esperaAntesDeReintentar(0)).toBe(0.5);
+    expect(esperaAntesDeReintentar(1)).toBe(0.5);
+  });
+
+  it("la espera se duplica con los intentos", () => {
+    expect(esperaAntesDeReintentar(2)).toBe(1);
+    expect(esperaAntesDeReintentar(3)).toBe(2);
+    expect(esperaAntesDeReintentar(6)).toBe(16);
+  });
+
+  it("tiene techo: 50 intentos no dan días", () => {
+    expect(esperaAntesDeReintentar(50)).toBe(60);
+    expect(esperaAntesDeReintentar(500)).toBe(60);
+  });
+
+  it("un número de intentos infinito da el techo, no el primer reintento", () => {
+    expect(esperaAntesDeReintentar(Infinity)).toBe(60);
   });
 
   it("un dato raro no da una espera rara", () => {
-    expect(esperaAntesDeReintentar(-3)).toBeLessThanOrEqual(1);
-    expect(esperaAntesDeReintentar(Number.NaN)).toBeLessThanOrEqual(1);
+    expect(esperaAntesDeReintentar(-3)).toBe(0.5);
+    expect(esperaAntesDeReintentar(-Infinity)).toBe(0.5);
+    expect(esperaAntesDeReintentar(Number.NaN)).toBe(0.5);
   });
 });
