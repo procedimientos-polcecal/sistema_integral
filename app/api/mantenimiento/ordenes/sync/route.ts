@@ -11,7 +11,21 @@ export const maxDuration = 300;
  * El trabajo está en `lib/mantenimiento/sincronizar`: acá sólo se comprueba
  * quién lo pide. El reloj llama a la misma función sin pasar por acá.
  */
-export async function POST() {
+/**
+ * El freno de mano del borrado, levantado a mano.
+ *
+ * Cuando la planilla dejó de traer más filas que el tope, la sincronización no
+ * borra nada y lo dice. Si ese borrado es de verdad —una limpieza grande—,
+ * quien lo miró lo confirma repitiendo la llamada con `?confirmar_borrado=1`.
+ *
+ * Va como parámetro y no como opción guardada a propósito: vale para **esta**
+ * corrida. El cron nunca lo manda, así que un borrado masivo siempre lo
+ * autoriza una persona que vio el número.
+ */
+const confirmaElBorrado = (request: Request) =>
+  new URL(request.url).searchParams.get("confirmar_borrado") === "1";
+
+export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -23,7 +37,7 @@ export async function POST() {
     );
   }
 
-  const r = await sincronizarOrdenes();
+  const r = await sincronizarOrdenes({ sinFreno: confirmaElBorrado(request) });
 
   return r.ok
     ? NextResponse.json(r.datos)

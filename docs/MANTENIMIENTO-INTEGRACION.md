@@ -182,6 +182,46 @@ Especialidades: `MECÁNICO`, `ELÉCTRICO`, `CIVIL`, `LUBRICACIÓN`.
 Un guión suelto en un campo de texto se lee como vacío: es cómo se escribe "acá
 no va nada" en una planilla, no un contratista llamado "-".
 
+## Lo que la planilla deja de tener, se borra
+
+Desde el 18/10/2026 las tres sincronizaciones —OT, avisos y órdenes de
+servicio— **borran** la fila que la planilla ya no trae. Hasta ese día sólo
+traían y pisaban, así que una fila que alguien sacaba de la planilla seguía
+viva en el SdG para siempre: el espejo dejaba de ser un espejo y nada avisaba.
+
+La decisión y el cómo viven en [`lib/core/borradoDeEspejo.ts`](../lib/core/borradoDeEspejo.ts),
+que es compartido con Compras y es donde están los tests. Acá sólo hace falta
+saber cuatro cosas.
+
+**Se borra de verdad, con `DELETE`.** No es una marca: la fila se va, y con
+ella las notas de "por qué no se hizo" (cascada) y el enlace de las ejecuciones
+(queda en null). Se eligió así a pedido, sabiendo el precio. Una OT que tenga
+un aviso enlazado **hace fallar el borrado** —`avisos.work_order_id` no declara
+`on delete`—, y eso no tumba la corrida: se informa y el resto se borra igual.
+
+**Sólo se borra aquello cuya ausencia prueba algo.** Quedan protegidas la fila
+que la app escribió y todavía no exportó —`app_created` con `sheets_row` en
+null, hoy una OT— y la que nació después de que leyéramos la planilla. Que no
+vinieran en la lectura es lo esperable en los dos casos.
+
+**Hay un freno y salta solo.** Si lo que habría que borrar pasa de 50 filas o
+del 10% de la tabla —lo que sea mayor—, no se borra nada y se dice por qué. El
+caso que lo justifica ya pasó: el 13/10/2026 una planilla recalculando devolvió
+2 filas de 623, y con esto encendido y sin freno esa lectura se habría llevado
+621 órdenes de trabajo. En órdenes de servicio hay además un freno propio: si
+alguna pestaña de área no se pudo leer, no se borra nada de ninguna, porque las
+filas de esa área faltan en bloque.
+
+Quien mire el número y sepa que el borrado grande es correcto lo confirma
+repitiendo la llamada con `?confirmar_borrado=1`. **El cron nunca lo manda.**
+
+**Si no se puede auditar, no se borra.** El registro se escribe *antes* que el
+`DELETE` y, si no entra, la corrida no borra nada. Es al revés que las otras
+seis rutas que auditan —ahí la acción ya pasó cuando se registra—, y acá se
+puede elegir el orden. La migración `20261018134754` es la que agrega el verbo
+`borrar` al check de `auditoria`: **sin ella aplicada, esto no borra nada y lo
+dice en la respuesta.**
+
 ## "Requiere parar el sector": una diferencia con el origen
 
 En la app de origen la marca sólo se pone **al crear** la OT: no hay forma de

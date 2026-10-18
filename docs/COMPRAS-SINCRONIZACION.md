@@ -216,6 +216,36 @@ protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
 protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
 control de quién aprueba pasa a estar en los permisos de la app.
 
+## Lo que la planilla deja de tener, se borra
+
+Desde el 18/10/2026 la importación **borra** el requerimiento que la planilla
+ya no trae. Hasta ese día sólo traía y pisaba, así que un RI que alguien sacaba
+de la planilla seguía vivo en el SdG para siempre.
+
+La decisión vive en [`lib/core/borradoDeEspejo.ts`](../lib/core/borradoDeEspejo.ts),
+compartido con las tres sincronizaciones de Mantenimiento, y ahí están los
+tests y el detalle del freno. Lo propio de Compras es esto:
+
+**Hoy no borra nada, y ése es el mejor resultado posible.** Medido el
+18/10/2026 con `npx tsx scripts/ensayo-borrado-compras.mts`: 2.159 RI en la
+planilla y 2.159 en la base, cero diferencia. El borrado sólo va a actuar
+cuando alguien saque una línea a propósito.
+
+**`editado_en_app` no protege.** Lo tienen 714 de cada 1.000 filas, así que
+proteger por eso sería no borrar nunca. Se informa cuántas de las borradas lo
+tenían, que es lo que hace falta para saber qué se perdió.
+
+**El master cubre a las pestañas de área.** Los 2.159 RI están en
+`Requerimientos internos`, así que una pestaña de área renombrada no deja
+huérfanas a sus filas. Y si la lectura de una pestaña falla, `leerPestana`
+tira y la importación no llega al borrado. Eso hace a Compras la más segura de
+las cuatro para esto.
+
+**Lo que se reconoce como "nunca estuvo en la planilla"** es `origen = "app"`
+con `sheets_fila` en null: el alta que se cargó desde el sistema y todavía no
+bajó. Hoy los tres RI con `origen = "app"` ya tienen su fila, así que ninguno
+cae en esa categoría.
+
 ## La orden de compra se crea desde acá, y por qué
 
 **El disparador estaba donde el flujo no pasa.** La orden en Odoo se creaba en

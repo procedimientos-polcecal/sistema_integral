@@ -7,10 +7,21 @@
  *
  * Cada una registra su corrida —salga bien o mal— para que la pantalla pueda
  * decir cuándo se actualizó por última vez.
+ *
+ * LAS TRES BORRAN, DESDE EL 18/10/2026
+ *
+ * Hasta ahora sólo traían y pisaban, así que una fila que alguien sacaba de la
+ * planilla seguía viva en el SdG para siempre: el espejo dejaba de ser un
+ * espejo y nada avisaba. Ahora, lo que la planilla no trajo se borra.
+ *
+ * El cómo —qué se protege y cuándo no se borra nada— está en
+ * `lib/core/borradoDeEspejo.ts`, que es donde vive la decisión y donde están
+ * los tests. Acá cada sincronización sólo dice cómo se llaman sus columnas.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
+import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
@@ -24,6 +35,47 @@ import {
 } from "@/lib/mantenimiento/os";
 
 type Datos = Record<string, unknown>;
+
+/**
+ * Cómo se llama cada cosa en las tres tablas que se espejan.
+ *
+ * Las tres comparten el vocabulario porque vinieron de la misma app: `*_number`
+ * para el número de la planilla, `synced_at` para el sello de la corrida,
+ * `app_created` + `sheets_row` para distinguir lo que la app escribió y
+ * todavía no exportó.
+ */
+const ESPEJO_DE_OT = {
+  tabla: "ordenes_trabajo", numero: "ot_number", sincronizado: "synced_at",
+  creada: "created_at_app", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "orden_trabajo",
+} as const;
+
+const ESPEJO_DE_AVISOS = {
+  tabla: "avisos", numero: "oa_number", sincronizado: "synced_at",
+  creada: "created_at", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "aviso",
+} as const;
+
+const ESPEJO_DE_OS = {
+  tabla: "ordenes_servicio", numero: "os_number", sincronizado: "synced_at",
+  creada: "created_at", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "orden_servicio",
+} as const;
+
+/**
+ * Lo que una corrida puede pedir.
+ *
+ * `sinFreno` levanta el tope del borrado masivo. Lo pasa la ruta cuando una
+ * persona confirmó el número; **el cron no lo pasa nunca**, y ésa es toda la
+ * diferencia: un borrado grande de verdad lo autoriza alguien que lo miró.
+ */
+export interface OpcionesDeCorrida {
+  sinFreno?: boolean;
+  actor?: "sincronizacion" | "cron";
+}
 
 /**
  * Cómo salió una sincronización.
@@ -128,10 +180,14 @@ async function porQueNoSeLeyo(
 }
 
 /** Trae los avisos de su planilla. */
-export async function sincronizarAvisos(): Promise<Resultado> {
+export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_AVISOS_ID");
+
+  // Antes de leer: lo que aparezca después de este instante no estaba en lo
+  // que leímos, y su ausencia no prueba que alguien lo haya borrado.
+  const inicio = new Date().toISOString();
 
   let filas: string[][];
   try {
@@ -144,6 +200,10 @@ export async function sincronizarAvisos(): Promise<Resultado> {
 
   const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
+  // Uno solo para toda la corrida: es el sello que después distingue lo que la
+  // planilla trajo de lo que sobra. Con un `toISOString()` por fila, cada una
+  // quedaba con el suyo y no se podía preguntar "cuáles no toqué".
+  const cuando = new Date().toISOString();
 
   const registros: Datos[] = [];
   let sinEquipo = 0;
@@ -155,7 +215,7 @@ export async function sincronizarAvisos(): Promise<Resultado> {
     const { equipment_id, sector_id } = resolver(enlaces, aviso);
     if (!equipment_id) sinEquipo += 1;
 
-    registros.push({ ...aviso, equipment_id, sector_id, synced_at: new Date().toISOString() });
+    registros.push({ ...aviso, equipment_id, sector_id, synced_at: cuando });
   }
 
   let guardados = 0;
@@ -174,20 +234,27 @@ export async function sincronizarAvisos(): Promise<Resultado> {
     guardados += lote.length;
   }
 
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_AVISOS, {
+    cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
+  });
+
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
   });
   return logra({
     leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
+    borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }
 
 /** Trae las órdenes de trabajo de su planilla. */
-export async function sincronizarOrdenes(): Promise<Resultado> {
+export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OT_ID");
+
+  const inicio = new Date().toISOString();
 
   let filas: string[][];
   try {
@@ -200,6 +267,7 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
 
   const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
+  const cuando = new Date().toISOString();
 
   const registros: Datos[] = [];
   const sinProveedor = new Set<string>();
@@ -217,10 +285,7 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     const proveedor_id = proveedorDe(enlaces, orden.contratista);
     if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
 
-    registros.push({
-      ...orden, equipment_id, sector_id, proveedor_id,
-      synced_at: new Date().toISOString(),
-    });
+    registros.push({ ...orden, equipment_id, sector_id, proveedor_id, synced_at: cuando });
   }
 
   let guardadas = 0;
@@ -241,6 +306,10 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     guardadas += lote.length;
   }
 
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
+    cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
+  });
+
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
   });
@@ -250,14 +319,17 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
     sin_proveedor: [...sinProveedor],
+    borradas: borrado.borradas,
+    borrado: borrado.aviso,
   });
 }
 
 /** Trae las órdenes de servicio de su planilla, una pestaña por área. */
-export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
+export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OS_ID ?? "";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OS_ID");
 
+  const inicio = new Date().toISOString();
   const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
   const cuando = new Date().toISOString();
@@ -343,6 +415,14 @@ export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
     guardadas += lote.length;
   }
 
+  // `sinLeer` entra como freno: la OS lee una pestaña por área, y si falla la
+  // de Calcinación sus órdenes faltan en bloque. Borrarlas sería vaciar un
+  // área entera por un error de red.
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OS, {
+    cuando, inicio, fuentesSinLeer: sinLeer,
+    sinFreno: opciones.sinFreno, actor: opciones.actor,
+  });
+
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes-servicio", ok: true, filas: guardadas,
   });
@@ -352,6 +432,8 @@ export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
     sin_leer: sinLeer,
     huerfanas,
     sin_proveedor: [...sinProveedor],
+    borradas: borrado.borradas,
+    borrado: borrado.aviso,
   });
 }
 

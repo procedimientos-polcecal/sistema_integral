@@ -219,6 +219,21 @@ Cinco reglas que costaron caro, y que valen para las cuatro:
   — la misma trampa que la anterior, por el otro lado. La fecha va como serial
   con `serialDelDia()` y los números como número; `escribirCeldas()` y
   `agregarFila()` aceptan los dos tipos. Un número no se interpreta.
+- **Lo que la planilla deja de tener, se borra** — desde el 18/10/2026, en las
+  cuatro que espejan por número: OT, avisos, órdenes de servicio y los
+  requerimientos de Compras. Antes sólo traían y pisaban, así que una fila que
+  alguien sacaba de la planilla seguía viva para siempre y el espejo dejaba de
+  ser un espejo sin avisar. Es un `DELETE` de verdad, decidido a pedido: se
+  lleva las notas en cascada y deja en null el enlace de las ejecuciones.
+  La decisión vive en [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts),
+  y lo que hay que saber antes de tocarla es que **sólo se borra aquello cuya
+  ausencia prueba algo**: lo que la app escribió y todavía no exportó, y lo que
+  nació después de la lectura, quedan. Hay un **freno** que corta si habría que
+  borrar más de 50 filas o del 10% de la tabla —el 13/10/2026 una planilla
+  recalculando devolvió 2 filas de 623, y eso se habría llevado 621 OT—, se
+  levanta con `?confirmar_borrado=1` y **el cron no lo levanta nunca**. Y el
+  registro de auditoría se escribe **antes** del borrado: si no entra, no se
+  borra. Por eso el verbo `borrar` necesitó su migración (`20261018134754`).
 
 **RRHH tiene además una integración por API con el reloj biométrico, que no es
 una planilla** y donde **manda Lenox**: las marcaciones entran solas por un cron

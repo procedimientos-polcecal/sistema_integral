@@ -30,6 +30,7 @@ import {
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
+import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPlanilla";
 // Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
 // `indexarColumnas` de acá. Las cuatro son funciones y ninguna se llama al
@@ -62,6 +63,25 @@ const HOJA_MASTER = "Requerimientos internos";
  * puntas coinciden por construcción y no por casualidad.
  */
 export const esPestanaDeArea = (pestana: string) => pestana.startsWith("RI ");
+
+/**
+ * Cómo se llama cada cosa en `compras_requerimientos`, para el borrado.
+ *
+ * El vocabulario no es el de Mantenimiento: acá el sello es
+ * `sheets_sincronizado_en`, el puntero es `sheets_fila` y lo que la app
+ * escribió se reconoce por `origen = "app"`.
+ *
+ * `editado_en_app` se informa pero **no protege**: lo tienen 714 de cada 1.000
+ * filas, así que proteger por eso sería no borrar nunca. Si la planilla manda,
+ * manda también para borrar.
+ */
+const ESPEJO_DE_REQUERIMIENTOS = {
+  tabla: "compras_requerimientos", numero: "nro_ri", sincronizado: "sheets_sincronizado_en",
+  creada: "created_at", fila: "sheets_fila",
+  deLaApp: { columna: "origen", valor: "app" },
+  editada: "editado_en_app",
+  modulo: "compras", entidad: "requerimiento",
+} as const;
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -365,6 +385,16 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
    */
   punteros_actualizados: number;
   /**
+   * Cuántos requerimientos se borraron porque la planilla ya no los tiene.
+   *
+   * En régimen tiene que dar 0 —medido el 18/10/2026: 2.159 RI en la planilla
+   * y 2.159 en la base—, y cualquier número distinto de 0 es alguien que borró
+   * una línea a propósito. Si el borrado no se hizo, `borrado` dice por qué.
+   */
+  borradas: number;
+  /** Qué se borró, o por qué no se borró nada. */
+  borrado?: string;
+  /**
    * Si algún puntero no se pudo guardar, por qué. La importación siguió igual:
    * lo que se pierde es que ese RI exporte a la celda que le toca, no el alta
    * de los nuevos. Se devuelve en vez de quedar en un `console.warn` porque un
@@ -410,9 +440,19 @@ interface FilaPlanilla {
   datos: Record<string, unknown>;
 }
 
-export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyncCompleto> {
+export async function importarDesdeSheets(
+  origen = "cron",
+  opciones: { sinFreno?: boolean } = {}
+): Promise<ResultadoSyncCompleto> {
   const comenzo = Date.now();
   const admin = createAdminClient();
+  // Antes de leer: un RI que aparezca después de este instante no estaba en lo
+  // que leimos, y su ausencia no prueba que lo hayan borrado.
+  const inicio = new Date().toISOString();
+  // Uno solo para toda la corrida. Con un `toISOString()` por fila —que es
+  // como estaba— cada una queda con el suyo y despues no se puede preguntar
+  // cuales no tocamos, que es exactamente lo que decide quien sobra.
+  const sincronizadoEn = new Date().toISOString();
 
   try {
     const pestanas = await listarPestanas();
@@ -679,7 +719,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         costo_envio: d.costo_envio ?? null,
         hoja_origen: registro.hoja,
         sheets_fila: registro.fila,
-        sheets_sincronizado_en: new Date().toISOString(),
+        sheets_sincronizado_en: sincronizadoEn,
         // Las nueve columnas que la planilla puede no traer. La regla —y por
         // qué cada una está en la lista— vive en `fusionarConLoQueYaHabia`.
         ...fusion,
@@ -820,8 +860,23 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       direccion: "importar", origen, ...resultado, duracion_ms: Date.now() - comenzo,
     });
 
+    // Lo que la planilla dejó de tener. Va después del `upsert` porque lo que
+    // decide quién sobra es no haber sido sellado por esta corrida.
+    //
+    // Compras es la más segura de las cuatro para esto: el master trae **todos**
+    // los RI —2.159 de 2.159, medido el 18/10/2026— así que una pestaña de área
+    // renombrada no deja huérfanas a sus filas. Si falla la lectura de una
+    // pestaña, `leerPestana` tira y no se llega hasta acá.
+    const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_REQUERIMIENTOS, {
+      cuando: sincronizadoEn, inicio,
+      sinFreno: opciones.sinFreno,
+      actor: origen === "cron" ? "cron" : "sincronizacion",
+    });
+
     return {
       ...resultado,
+      borradas: borrado.borradas,
+      ...(borrado.aviso ? { borrado: borrado.aviso } : {}),
       // Cuántos de los que se escribieron quedaron con su planilla enlazada.
       comparativas: aEscribir.filter((f) => f.comparativa_drive_id).length,
       comparativas_sin_planilla: sinPlanilla.length,

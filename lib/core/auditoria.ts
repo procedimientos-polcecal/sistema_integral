@@ -32,7 +32,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * el actor— estén en `filaDeAuditoria()`, que es pura y tiene test.
  */
 
-/** Los verbos que se auditan. Agregar uno pide tocar también el check de la tabla. */
+/**
+ * Los verbos que se auditan. Agregar uno pide tocar también el check de la
+ * tabla: el octavo, `borrar`, lo agrega la migración `20261018134754`.
+ */
 export const ACCIONES = [
   "postear",
   "aprobar",
@@ -41,6 +44,11 @@ export const ACCIONES = [
   "ajustar",
   "conceder_acceso",
   "quitar_acceso",
+  // Lo escriben las sincronizaciones cuando una fila desaparece de la planilla
+  // que espejan. Es el unico de los ocho que dispara un proceso y no una
+  // persona, y por eso el que mas necesita quedar registrado: sin esto, el dia
+  // que alguien pregunte donde fue a parar la OT 1843 no hay donde mirar.
+  "borrar",
 ] as const;
 export type Accion = (typeof ACCIONES)[number];
 
