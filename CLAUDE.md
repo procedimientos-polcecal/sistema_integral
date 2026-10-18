@@ -314,7 +314,34 @@ Lo que hay que saber antes de tocar un módulo: **si agregás un aviso a
 `lib/home/avisos.ts`, va a la campana y al push**. Los dos salen de
 `avisosDeUsuario()`, a propósito, para que no puedan decir cosas distintas. O
 sea que un aviso mal calibrado ya no es una campanita de más: es una
-notificación en el teléfono de alguien, todos los días.
+notificación en el teléfono de alguien.
+
+**Pero no dicen lo mismo: la campana muestra el stock y el push el
+movimiento.** Desde el 18/10/2026 el resumen diario dice lo que **se movió**
+desde el resumen anterior —«3 más · Órdenes de trabajo atrasadas»— y los
+**lunes** manda los totales. El motivo está medido: contando stocks, el push de
+mañana decía lo mismo que el de hoy. «Facturas en el buzón sin vincular: 1»
+dijo lo mismo trece días; hay **un solo service en todo el sistema**, así que
+«15 equipos sin service» no podía bajar; 19 de las 23 OT atrasadas tienen más
+de una semana y la más vieja es del 11/12/2025. Y la prueba de que ya costó: de
+13 personas, las dos únicas que probaron las notificaciones en serio tenían
+**los 13 avisos descartados** cada una — descartar era la única defensa contra
+un mensaje que se repite.
+
+Tres cosas que no se deducen del código:
+
+- **La `cantidad` de un aviso se compara contra la foto del día anterior**
+  (`avisos_fotos`, que escribe el mismo cron al final de cada corrida). Si
+  cambiás **qué cuenta** un aviso sin cambiarle el id, el día del cambio sale
+  una novedad falsa del tamaño del salto. Id nuevo para conteo nuevo.
+- **Los lunes son la red, no un extra.** Contando sólo movimiento, algo que
+  dejó de moverse no se nombra nunca más — y hay una OT atrasada desde
+  diciembre de 2025. Si sacás el recordatorio semanal, el depósito se pudre en
+  silencio.
+- **Un aviso con lista de responsables va a la lista.** `compras-por-aprobar`
+  va a `compras_aprobadores` y no a todo el que vea Compras: medido, le llegaba
+  a 6 personas y 3 no podían aprobar. Los administradores siguen recibiendo
+  todo lo demás.
 
 Y una trampa que no se deduce del código: **la `cantidad` de un aviso de ritmo
 no cuenta cosas.** Es cuántos umbrales lleva el módulo sin cargarse, y existe
