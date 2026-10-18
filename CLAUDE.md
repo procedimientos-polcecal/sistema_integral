@@ -301,7 +301,7 @@ de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343,
 en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
 hay que medirla a mano.
 
-## Un aviso nuevo sale por dos lados
+## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
 notificación por persona con lo que tiene para mirar en sus módulos, a las 11:30
@@ -325,6 +325,44 @@ El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),
 que lleva las cuatro fases: instalar y verse bien (hecha), avisar (hecha), leer
 sin señal y cargar sin señal (sin empezar).
+
+**El tercer lado es el aviso al instante, y no se hereda: se pide a mano.**
+Desde el 18/10/2026, cuando algo queda esperando la decisión de una persona
+—hoy un requerimiento de compra y una orden de servicio— quien tiene que
+decidir recibe un push en el momento, sin esperar al resumen. Lo manda
+`avisarAQuienDecide()` de [lib/core/avisoAlInstante.ts](lib/core/avisoAlInstante.ts),
+y lo importante es lo que **no** hace: **agregar un aviso a `lib/home/avisos.ts`
+no lo vuelve instantáneo**. Eso se decide ahí, a mano, y pasando las tres
+condiciones que el encabezado de ese archivo deja escritas:
+
+1. hay una **persona nombrada** esperando —una lista concreta como
+   `compras_aprobadores`, no "el módulo"—;
+2. **nada avanza** hasta que decida;
+3. **acaba de pasar** — un estado que lleva tres días igual no es noticia a
+   ninguna hora, y para eso está el resumen.
+
+Tres cosas más que no se deducen del código, y que son las que evitan que esto
+termine en que alguien apague las notificaciones:
+
+- **Una notificación por corrida, no una por ítem.** La sincronización de
+  Compras trae mediana 2 y hasta 16 filas nuevas de una vez; una por ítem son
+  picos de dieciséis pushes juntos, que es exactamente lo que el resumen diario
+  evita. De ahí sale gratis el freno contra una pegada de 200 filas en la
+  planilla.
+- **Ventana 7:00–21:00 de Argentina, y fuera de ella no se encola nada.** El
+  resumen de las 8:30 ya cuenta los `PENDIENTE` sin mirar cuándo entraron, así
+  que el repesque existe sin código. Ojo: el cron de Compras corre 09:00 UTC,
+  que son las 6 de la mañana de acá, y queda afuera a propósito.
+- **El enganche va en la sincronización y no en la ruta de alta.** De los
+  últimos 400 requerimientos, 397 entraron por la planilla y 3 por la app: el
+  momento en que el SdG se entera de un pedido es el momento en que
+  `importarDesdeSheets` lo inserta, que el webhook del Apps Script corre con
+  cada edición.
+
+El porqué medido de cada una está en
+[el spec](docs/superpowers/specs/2026-10-18-avisos-al-instante-design.md), con
+la lista de los candidatos que **no** pasan el filtro y por qué — que es lo que
+permite decirle que no al próximo módulo que lo pida.
 
 ## Cómo se verifica
 

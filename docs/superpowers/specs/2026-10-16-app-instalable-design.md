@@ -21,6 +21,16 @@ tamaño:
 | 3 | Leer sin señal: cachear lo último visto |
 | 4 | Cargar sin señal: la cola de escritura |
 
+**La decisión de la fase 2 fue un resumen y no un aviso por evento, y sigue en
+pie.** El 18/10/2026 se le abrió **una** excepción, acotada y con su propio
+portón: cuando algo queda esperando la decisión de una persona concreta —un
+requerimiento de compra, una orden de servicio— esa persona recibe un push en
+el momento. No es una quinta fase: es la excepción explícita a esta decisión, y
+las tres condiciones que hay que cumplir para pedirla están en
+[su spec](2026-10-18-avisos-al-instante-design.md). Para todo lo demás —los
+avisos de ritmo, los `sheets_pendiente`, las OT atrasadas, las facturas sin
+vincular— lo que vale es lo que dice esta fase: un resumen, a las 8:30.
+
 **La fase 1 va primera y no por ser la más chica.** En iPhone las notificaciones
 push **sólo se entregan a una app agregada a la pantalla de inicio**: Safari no
 las manda a una pestaña común. Así que instalar no es el paso cosmético, es el
