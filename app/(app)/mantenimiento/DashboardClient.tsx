@@ -9,6 +9,9 @@ import KpiCard from "@/components/KpiCard";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 import Select from "@/components/Select";
+import { useCargar } from "@/lib/core/useCargar";
+import type { FilaMtbf, Mtbf } from "@/lib/mantenimiento/mtbf";
+import { diasCorridos, fechaCorta } from "@/lib/mantenimiento/mtbfVista";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -201,6 +204,111 @@ function VentanasDeReparacion({ ventanas, semana }: {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Cuántos molinos muestra el recuadro del MTBF. */
+const CUANTOS_PEORES = 5;
+
+interface PeorPorMtbf {
+  fila: FilaMtbf;
+  codigo: string;
+  nombre: string;
+}
+
+/**
+ * Los cinco equipos que menos aguantan entre falla y falla.
+ *
+ * Es el camino de entrada al MTBF: quien abre el módulo a la mañana ve dónde
+ * está el problema sin ir a buscarlo a `/mantenimiento/mtbf`.
+ *
+ * **Se pide desde el cliente, después del primer pintado, y no en el servidor.**
+ * El tablero se limpió a propósito de traer miles de filas para contarlas en
+ * memoria (ver docs/MANTENIMIENTO-INTEGRACION.md) y este recuadro necesita las
+ * ~950 correctivas de la ventana. Así el resto pinta completo y rápido, y esto
+ * llega después. Por lo mismo es información secundaria: si el pedido falla, el
+ * recuadro no aparece y el tablero sigue igual, porque no puede tumbar la
+ * pantalla de entrada del módulo.
+ *
+ * Las filas ya vienen ordenadas por MTBF ascendente desde la API. Las de MTBF
+ * null no entran —no tienen número que mostrar— y un equipo que ya no está en
+ * el catálogo activo tampoco, como en la pantalla del listado completo.
+ */
+function PeoresPorMtbf() {
+  // `null` mientras carga; `"error"` si algo falló y el recuadro se esconde.
+  const [peores, setPeores] = useState<PeorPorMtbf[] | "error" | null>(null);
+
+  useCargar(async (vigente) => {
+    try {
+      const [rMtbf, rEquipos] = await Promise.all([
+        fetch("/api/mantenimiento/mtbf"),
+        fetch("/api/mantenimiento/equipos-y-sectores"),
+      ]);
+      if (!rMtbf.ok || !rEquipos.ok) throw new Error("No se pudo traer el MTBF");
+      const mtbf: Mtbf = await rMtbf.json();
+      const { equipos }: { equipos: { id: string; code: string | null; name: string }[] } =
+        await rEquipos.json();
+      if (!vigente()) return;
+
+      const porId = new Map(equipos.map((e) => [e.id, e]));
+      const elegidos: PeorPorMtbf[] = [];
+      for (const fila of mtbf.filas) {
+        if (fila.mtbf === null) continue;
+        const equipo = porId.get(fila.equipmentId);
+        if (!equipo) continue;
+        elegidos.push({ fila, codigo: equipo.code ?? "", nombre: equipo.name });
+        if (elegidos.length === CUANTOS_PEORES) break;
+      }
+      setPeores(elegidos);
+    } catch {
+      if (vigente()) setPeores("error");
+    }
+  }, []);
+
+  if (peores === "error") return null;
+  if (peores !== null && peores.length === 0) return null;
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <h2 className="text-sm font-semibold text-slate-700">Los que menos aguantan (MTBF)</h2>
+        <InfoTip text="Cada cuántos días, en promedio, falla el equipo: cuanto menor, peor. Se cuenta sobre las órdenes correctivas del último año." />
+      </div>
+
+      {peores === null ? (
+        <div className="space-y-2" aria-busy="true" aria-label="Cargando el MTBF">
+          {Array.from({ length: CUANTOS_PEORES }, (_, i) => (
+            <div key={i} className="h-9 animate-pulse rounded-lg bg-slate-100" />
+          ))}
+        </div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {peores.map(({ fila, codigo, nombre }) => (
+            <li key={fila.equipmentId}>
+              <Link
+                href={`/mantenimiento/equipos/${fila.equipmentId}`}
+                className="flex items-baseline gap-3 py-2 hover:bg-slate-50"
+              >
+                <span className="w-16 shrink-0 font-mono text-xs text-slate-400">{codigo}</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-900">{nombre}</span>
+                <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
+                  {fila.fallas} falla{fila.fallas === 1 ? "" : "s"} · última {fechaCorta(fila.ultima)}
+                </span>
+                <span className="shrink-0 text-sm font-semibold text-[var(--status-rep)]">
+                  {diasCorridos(fila.mtbf)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-2 text-right">
+        <Link href="/mantenimiento/mtbf" className="text-xs text-[var(--primary)] hover:underline">
+          Ver todos los equipos →
+        </Link>
+      </div>
     </div>
   );
 }
@@ -574,6 +682,8 @@ export default function DashboardClient({
       <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
 
       <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
+
+      <PeoresPorMtbf />
 
       <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
 
