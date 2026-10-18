@@ -37,7 +37,7 @@ import { ordenar, siguienteOrden, type Columna, type Orden } from "@/lib/manteni
 interface Props {
   mtbf: Mtbf;
   equipos: EquipoDeLaVista[];
-  sectores: { id: string; nombre: string }[];
+  sectores: { id: string; nombre: string; empresa: string | null }[];
 }
 
 /**
@@ -102,7 +102,9 @@ function Tendencia({ porMes, mesEnCurso, antesDelGrafico }: {
             x1={previo.x} y1={previo.y} x2={ultimo.x} y2={ultimo.y}
             stroke="currentColor" strokeWidth={1.5} strokeDasharray="2 2"
           />
-          <circle cx={ultimo.x} cy={ultimo.y} r={2.5} fill="white" stroke="currentColor" strokeWidth={1.5} />
+          {/* El punto va hueco, o sea del color de la tarjeta y no blanco: si
+              algún día hay tema oscuro, un blanco fijo queda como una mancha. */}
+          <circle cx={ultimo.x} cy={ultimo.y} r={2.5} fill="var(--card)" stroke="currentColor" strokeWidth={1.5} />
         </>
       )}
     </svg>
@@ -233,15 +235,20 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
             <Select
               value={sectorId}
               onChange={(e) => setSectorId(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
             >
               <option value="">Todos los sectores</option>
-              {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              {/* "Polcecal · Calcinación", como en el resto del módulo: los dos
+                  nombres propios de planta conviven y el sector solo no dice
+                  dónde está la máquina. */}
+              {sectores.map((s) => (
+                <option key={s.id} value={s.id}>{s.empresa ?? "Transversal"} · {s.nombre}</option>
+              ))}
             </Select>
             <Select
               value={especialidad}
               onChange={(e) => setEspecialidad(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
             >
               <option value="">Todas las especialidades</option>
               {especialidades.map((e) => <option key={e} value={e}>{e}</option>)}

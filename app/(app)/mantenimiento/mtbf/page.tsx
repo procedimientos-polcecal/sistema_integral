@@ -3,7 +3,12 @@ import { redirect } from "next/navigation";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
-import { sectoresDePlanta, CAMPOS_SECTOR } from "@/lib/mantenimiento/sectores";
+import {
+  sectoresDePlanta,
+  empresaDelSector,
+  CAMPOS_SECTOR,
+  type SectorDePlanta,
+} from "@/lib/mantenimiento/sectores";
 import type { EquipoDeLaVista } from "@/lib/mantenimiento/mtbfVista";
 import MtbfClient from "./MtbfClient";
 
@@ -36,7 +41,7 @@ export default async function MtbfPage() {
         .order("code")
         .range(de, a)
     ),
-    sectoresDePlanta<{ id: string; nombre: string }>(supabase, CAMPOS_SECTOR),
+    sectoresDePlanta<SectorDePlanta>(supabase, CAMPOS_SECTOR),
   ]);
 
   const nombreDeSector = new Map(sectores.map((s) => [s.id, s.nombre]));
@@ -53,7 +58,14 @@ export default async function MtbfPage() {
     <MtbfClient
       mtbf={mtbf}
       equipos={equipos}
-      sectores={sectores.map((s) => ({ id: s.id, nombre: s.nombre }))}
+      // La empresa viaja resuelta: el embed de PostgREST llega como objeto o
+      // como arreglo según cómo esté declarada la relación, y eso no tiene por
+      // qué saberlo el cliente.
+      sectores={sectores.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        empresa: empresaDelSector(s.empresas),
+      }))}
     />
   );
 }

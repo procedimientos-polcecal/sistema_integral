@@ -20,9 +20,14 @@ export async function GET() {
   try {
     return NextResponse.json(await mtbfDeLaPlanta(supabase, hoyISO()));
   } catch (e) {
-    const mensaje = e instanceof Error ? e.message : "Error desconocido";
+    // El detalle va al log del servidor y no al cuerpo de la respuesta: lo que
+    // falla acá es una lectura de `ordenes_trabajo`, y el mensaje de Supabase
+    // nombra tablas y columnas. No se pierde —queda entero en los logs de
+    // Vercel, que es donde se diagnostica—, y al tablero no le servía: ya
+    // muestra su propio renglón con el botón de reintentar sin leer el cuerpo.
+    console.error("[mantenimiento/mtbf] no se pudo calcular el MTBF:", e);
     return NextResponse.json(
-      { error: `No se pudo calcular el MTBF: ${mensaje}` },
+      { error: "No se pudo calcular el MTBF. Probá de nuevo en un momento." },
       { status: 500 }
     );
   }
