@@ -253,13 +253,50 @@ const CAMPO_DEL_NUMERO = {
  * @typedef {object} ContestacionCruda
  * @property {number | null} status El código HTTP, o null si ni se llegó a hablar con el servidor.
  * @property {boolean} redirigida Si el pedido terminó en otra dirección que la pedida.
- * @property {Record<string, unknown>} cuerpo El JSON, o un objeto vacío si no lo era.
+ * @property {unknown} cuerpo El JSON tal cual vino. Es `unknown` y no un objeto a propósito: `JSON.parse("null")` da `null`, y un tipo que prometiera un objeto haría que quien llama escribiera un cast en vez de que esto lo contemple.
  */
 
 /**
+ * `deLaRuta` es si el fallo lo contestó **la ruta de carga** y no otra cosa en
+ * el medio. Existe porque el código HTTP sólo significa algo si lo contestó
+ * quien dice haberlo contestado: un 400 de un portal cautivo o del cortafuegos
+ * de Vercel no dice nada sobre la carga, y tratarlo como definitivo la deja
+ * parada para siempre por algo que se arregla saliendo del WiFi del bar.
+ *
  * @typedef {{ ok: true, numero: string, advertencia: string | null }
- *         | { ok: false, status: number | null, error: string }} ResultadoDelEnvio
+ *         | { ok: false, status: number | null, deLaRuta: boolean, error: string }} ResultadoDelEnvio
  */
+
+/** Si el valor es un objeto con el que se puede trabajar. `null` no lo es. */
+function esObjeto(valor) {
+  return typeof valor === "object" && valor !== null;
+}
+
+/**
+ * Lo que se dice cuando la respuesta no salió de la ruta de carga.
+ *
+ * Un redirect tiene nombre y apellido —la sesión se venció y hay que volver a
+ * entrar— y eso es accionable, así que se dice aparte.
+ *
+ * @param {boolean} redirigida
+ * @param {number | null} status
+ * @returns {string}
+ */
+function laContestoOtro(redirigida, status) {
+  if (redirigida) {
+    return (
+      "El pedido terminó en otra pantalla, casi seguro el login: la sesión de " +
+      "este teléfono se venció. La carga queda esperando; entrá de nuevo al SdG " +
+      "y mandala desde la lista."
+    );
+  }
+  if (status === null) return "No se pudo hablar con el servidor.";
+  return (
+    `Contestó ${status}, pero sin nada de lo que manda siempre la ruta de carga, ` +
+    `así que eso lo contestó otro —un portal de WiFi o un cortafuegos—. ` +
+    `La carga queda esperando.`
+  );
+}
 
 /**
  * Qué salió de un envío.
@@ -285,12 +322,26 @@ const CAMPO_DEL_NUMERO = {
  * De paso, esto es lo que deja vivo el diseño del 401 como pasajero: ese 401
  * casi nunca llega solo, lo tapa el 307.
  *
+ * LA MISMA IDEA, GENERALIZADA: **un fallo sin `error` en el cuerpo tampoco
+ * salió de la ruta.** Las dos rutas mandan `error` en todos sus 400, 403 y 409,
+ * sin excepción. Así que un 400 pelado es de otro —el mismo portal cautivo, el
+ * cortafuegos de Vercel— y marcarlo definitivo dejaría la carga parada para
+ * siempre por algo que se arregla saliendo de ese WiFi. Eso es lo que decide
+ * `deLaRuta`, y lo que lee `convieneReintentar`.
+ *
+ * ES TOTAL A PROPÓSITO: un `cuerpo` que no es objeto —un JSON que es
+ * literalmente `null`, que es lo que devuelve `JSON.parse("null")`— no puede
+ * tirar acá. En la pantalla lo atraparía un `catch` y saldría un mensaje
+ * engañoso; en el service worker sería una excepción sin atrapar que corta el
+ * vaciado de la cola entera.
+ *
  * @param {TipoDeCarga} tipo
  * @param {ContestacionCruda} contestacion
  * @returns {ResultadoDelEnvio}
  */
 export function comoContesto(tipo, contestacion) {
-  const { status, redirigida, cuerpo } = contestacion;
+  const { status, redirigida } = contestacion;
+  const cuerpo = esObjeto(contestacion.cuerpo) ? contestacion.cuerpo : {};
   const salioBien = status !== null && status >= 200 && status < 300;
 
   if (salioBien) {
@@ -303,25 +354,33 @@ export function comoContesto(tipo, contestacion) {
     return {
       ok: false,
       status,
-      error: redirigida
-        ? "El pedido terminó en otra pantalla, casi seguro el login: la sesión de " +
-          "este teléfono se venció. La carga queda esperando; entrá de nuevo al SdG " +
-          "y mandala desde la lista."
-        : "El servidor contestó que sí pero sin número, así que eso no salió de la " +
-          "ruta de carga —un portal de WiFi contesta así—. La carga queda esperando.",
+      deLaRuta: false,
+      error: laContestoOtro(redirigida, status),
     };
   }
 
   const dicho = texto(cuerpo.error);
-  return {
-    ok: false,
-    status,
-    error:
-      dicho ??
-      (status === null
-        ? "No se pudo hablar con el servidor."
-        : `El servidor contestó ${status} y no dijo por qué.`),
-  };
+  if (dicho !== null) return { ok: false, status, deLaRuta: true, error: dicho };
+
+  return { ok: false, status, deLaRuta: false, error: laContestoOtro(redirigida, status) };
+}
+
+/**
+ * Si conviene volver a intentar esta carga.
+ *
+ * `clasificarFallo` mira el código, y el código sólo significa algo **si lo
+ * contestó la ruta**. Cuando no salió de ella —un redirect al login, un portal
+ * cautivo, un cortafuegos, o `fetch` que ni llegó a hablar— no hay nada que
+ * clasificar: lo que falló está en el camino y no en la carga, así que se
+ * reintenta sea cual sea el número que haya llegado.
+ *
+ * @param {ResultadoDelEnvio} resultado
+ * @returns {boolean}
+ */
+export function convieneReintentar(resultado) {
+  if (resultado.ok) return false;
+  if (!resultado.deLaRuta) return true;
+  return clasificarFallo(resultado.status) === "pasajero";
 }
 
 /**
@@ -335,10 +394,13 @@ export function comoContesto(tipo, contestacion) {
  * ya está escrita en la planilla y no se sabe si llegó al sistema, que es
  * exactamente el caso en el que alguien podría cargar dos veces lo mismo.
  *
- * @param {Record<string, unknown>} cuerpo
+ * @param {unknown} cuerpoCrudo El JSON de la respuesta, sea lo que sea.
  * @returns {string | null}
  */
-export function loQueQuedoPendiente(cuerpo) {
+export function loQueQuedoPendiente(cuerpoCrudo) {
+  // Un `null` entra acá igual que a `comoContesto`, y por el mismo motivo no
+  // puede tirar: es pública y la va a llamar el service worker.
+  const cuerpo = esObjeto(cuerpoCrudo) ? cuerpoCrudo : {};
   const claveError = texto(cuerpo.clave_error);
   const planillaError = texto(cuerpo.planilla_error);
 
@@ -396,9 +458,7 @@ export function queHacerConLaNueva(resultado) {
   if (resultado.ok) {
     return { accion: "listo", numero: resultado.numero, advertencia: resultado.advertencia };
   }
-  if (clasificarFallo(resultado.status) === "definitivo") {
-    return { accion: "rechazar", error: resultado.error };
-  }
+  if (!convieneReintentar(resultado)) return { accion: "rechazar", error: resultado.error };
   return { accion: "encolar", intentos: 1, ultimoError: resultado.error };
 }
 
@@ -418,7 +478,18 @@ export function tomarLaCarga(carga, ahora) {
 }
 
 /**
- * @typedef {{ accion: "borrar" } | { accion: "actualizar", cambios: Partial<CargaEnCola> }} QueHacerDespues
+ * `borrar-y-avisar` **no es** `borrar` con un campo de más, y el nombre
+ * distinto es el punto entero: quien ejecute esto no puede borrar la carga sin
+ * darse cuenta de que había algo que decir. Un `{accion:"borrar", advertencia}`
+ * se maneja sin leer el segundo campo —y el service worker de la tarea 7
+ * borraría la carga con la advertencia adentro, que es la que dice «está en la
+ * planilla y todavía no en el sistema, no la cargues de nuevo»—. Un veredicto
+ * que no se llama igual no se puede atender igual sin querer: en TypeScript el
+ * `switch` deja de ser exhaustivo, y en JavaScript el nombre es la instrucción.
+ *
+ * @typedef {{ accion: "borrar", numero: string }
+ *         | { accion: "borrar-y-avisar", numero: string, advertencia: string }
+ *         | { accion: "actualizar", cambios: Partial<CargaEnCola> }} QueHacerDespues
  */
 
 /**
@@ -427,6 +498,12 @@ export function tomarLaCarga(carga, ahora) {
  * Sale de la cola sólo cuando el envío salió bien de verdad —y qué es "bien" lo
  * decide `comoContesto`, no `response.ok`—. Borrarla por cualquier otra cosa es
  * perder sin aviso lo que alguien escribió hace días.
+ *
+ * Cuando salió bien **y quedó algo a medias**, la carga igual sale de la cola
+ * —ya está hecha, dejarla ahí haría que se mande dos veces— pero el veredicto
+ * se llama distinto y trae la advertencia, para que quien borra tenga que
+ * decirla. En esta pantalla es un cartel; en el service worker va a ser una
+ * notificación. En este repo eso no puede terminar en un log.
  *
  * Si falló, la marca de tomada se suelta sí o sí: dejarla puesta la trabaría
  * `MINUTOS_PARA_SOLTAR` minutos por un fallo que ya se conoce. Y el estado
@@ -437,13 +514,21 @@ export function tomarLaCarga(carga, ahora) {
  * @returns {QueHacerDespues}
  */
 export function despuesDelIntento(resultado) {
-  if (resultado.ok) return { accion: "borrar" };
+  if (resultado.ok) {
+    return resultado.advertencia === null
+      ? { accion: "borrar", numero: resultado.numero }
+      : {
+          accion: "borrar-y-avisar",
+          numero: resultado.numero,
+          advertencia: resultado.advertencia,
+        };
+  }
   return {
     accion: "actualizar",
     cambios: {
       tomadaEn: null,
       ultimoError: resultado.error,
-      estado: clasificarFallo(resultado.status) === "definitivo" ? "parada" : "esperando",
+      estado: convieneReintentar(resultado) ? "esperando" : "parada",
     },
   };
 }

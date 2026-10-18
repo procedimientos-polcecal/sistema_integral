@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clasificarFallo,
   comoContesto,
+  convieneReintentar,
   despuesDelIntento,
   esperaAntesDeReintentar,
   esperandoDesdeAyer,
@@ -294,11 +295,46 @@ describe("comoContesto", () => {
   it("y es PASAJERO, así que la carga se queda esperando en vez de borrarse", () => {
     const r = comoContesto("aviso", contestacion());
     if (r.ok) throw new Error("tendría que haber fallado");
-    expect(clasificarFallo(r.status)).toBe("pasajero");
+    expect(convieneReintentar(r)).toBe(true);
     expect(despuesDelIntento(r)).toEqual({
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: r.error, estado: "esperando" },
     });
+  });
+
+  it("un cuerpo que es literalmente null no tira: en el service worker cortaría el vaciado", () => {
+    const r = comoContesto("aviso", contestacion({ cuerpo: null }));
+    expect(r.ok).toBe(false);
+    expect(comoContesto("orden", { status: 500, redirigida: false, cuerpo: null }).ok).toBe(false);
+    expect(comoContesto("orden", contestacion({ cuerpo: "texto suelto" })).ok).toBe(false);
+  });
+
+  // Un 400 de un portal cautivo o del cortafuegos de Vercel no dice nada sobre
+  // la carga, y darlo por definitivo la dejaría parada para siempre por algo
+  // que se arregla saliendo de ese WiFi.
+  it("un fallo DEFINITIVO sin `error` en el cuerpo no salió de la ruta, así que se reintenta", () => {
+    for (const status of [400, 403, 409]) {
+      const r = comoContesto("aviso", contestacion({ status }));
+      if (r.ok) throw new Error("tendría que haber fallado");
+      expect(r.deLaRuta).toBe(false);
+      expect(convieneReintentar(r)).toBe(true);
+      expect(despuesDelIntento(r).accion).toBe("actualizar");
+      expect(queHacerConLaNueva(r).accion).toBe("encolar");
+    }
+  });
+
+  it("y uno que sí trae `error` sigue siendo de la ruta y sigue parando la carga", () => {
+    const r = comoContesto("aviso", contestacion({ status: 409, cuerpo: { error: "en duda" } }));
+    if (r.ok) throw new Error("tendría que haber fallado");
+    expect(r.deLaRuta).toBe(true);
+    expect(convieneReintentar(r)).toBe(false);
+  });
+
+  it("un redirect que termina en 403 también se reintenta, y lo dice como redirect", () => {
+    const r = comoContesto("aviso", contestacion({ status: 403, redirigida: true }));
+    if (r.ok) throw new Error("tendría que haber fallado");
+    expect(convieneReintentar(r)).toBe(true);
+    expect(r.error).toContain("login");
   });
 
   it("si vino de un redirect lo dice: la sesión se venció y hay que volver a entrar", () => {
@@ -318,7 +354,7 @@ describe("comoContesto", () => {
       "aviso",
       contestacion({ status: 400, cuerpo: { error: "Contá qué pasa" } }),
     );
-    expect(r).toEqual({ ok: false, status: 400, error: "Contá qué pasa" });
+    expect(r).toEqual({ ok: false, status: 400, deLaRuta: true, error: "Contá qué pasa" });
   });
 
   it("un fallo mudo dice el código, que es lo único que se sabe", () => {
@@ -331,7 +367,7 @@ describe("comoContesto", () => {
     const r = comoContesto("aviso", contestacion({ status: null }));
     if (r.ok) throw new Error("tendría que haber fallado");
     expect(r.status).toBe(null);
-    expect(clasificarFallo(r.status)).toBe("pasajero");
+    expect(convieneReintentar(r)).toBe(true);
   });
 
   it("un 200 con número trae además lo que quedó a medias: es lo que evita el duplicado", () => {
@@ -402,24 +438,38 @@ describe("queHacerConLaNueva", () => {
   });
 
   it("un fallo definitivo NO se encola: no va a entrar nunca y taparía a las que sí", () => {
-    expect(queHacerConLaNueva({ ok: false, status: 400, error: "Contá qué pasa" })).toEqual({
-      accion: "rechazar",
-      error: "Contá qué pasa",
-    });
+    expect(
+      queHacerConLaNueva({ ok: false, status: 400, deLaRuta: true, error: "Contá qué pasa" }),
+    ).toEqual({ accion: "rechazar", error: "Contá qué pasa" });
   });
 
   it("un fallo pasajero se encola con el intento contado y lo que dijo el servidor", () => {
-    expect(queHacerConLaNueva({ ok: false, status: 502, error: "Google no contestó" })).toEqual({
-      accion: "encolar",
-      intentos: 1,
-      ultimoError: "Google no contestó",
-    });
+    expect(
+      queHacerConLaNueva({ ok: false, status: 502, deLaRuta: true, error: "Google no contestó" }),
+    ).toEqual({ accion: "encolar", intentos: 1, ultimoError: "Google no contestó" });
   });
 
   it("un 401 se encola: la sesión se vence sola y la carga sigue siendo buena", () => {
     expect(
-      queHacerConLaNueva({ ok: false, status: 401, error: "No autorizado" }).accion,
+      queHacerConLaNueva({ ok: false, status: 401, deLaRuta: true, error: "No autorizado" })
+        .accion,
     ).toBe("encolar");
+  });
+});
+
+describe("convieneReintentar", () => {
+  it("lo que salió bien no se reintenta", () => {
+    expect(convieneReintentar({ ok: true, numero: "A139", advertencia: null })).toBe(false);
+  });
+
+  it("de la ruta, manda el código", () => {
+    expect(convieneReintentar({ ok: false, status: 409, deLaRuta: true, error: "x" })).toBe(false);
+    expect(convieneReintentar({ ok: false, status: 502, deLaRuta: true, error: "x" })).toBe(true);
+  });
+
+  it("si no salió de la ruta, el código no significa nada y se reintenta igual", () => {
+    expect(convieneReintentar({ ok: false, status: 409, deLaRuta: false, error: "x" })).toBe(true);
+    expect(convieneReintentar({ ok: false, status: null, deLaRuta: false, error: "x" })).toBe(true);
   });
 });
 
@@ -437,21 +487,48 @@ describe("tomarLaCarga", () => {
 });
 
 describe("despuesDelIntento", () => {
-  it("sale de la cola SÓLO cuando salió bien de verdad", () => {
+  it("sale de la cola SÓLO cuando salió bien de verdad, y trae el número", () => {
     expect(despuesDelIntento({ ok: true, numero: "A139", advertencia: null })).toEqual({
       accion: "borrar",
+      numero: "A139",
     });
   });
 
+  // Esto es lo que no puede perderse: la advertencia dice que la carga ya está
+  // en la planilla y todavía no en el sistema. Si se borrara sin decirla, nadie
+  // se enteraría nunca —y en el service worker, menos—.
+  it("si quedó algo a medias, el veredicto se llama DISTINTO y trae la advertencia", () => {
+    expect(
+      despuesDelIntento({ ok: true, numero: "A139", advertencia: "Está en la planilla." }),
+    ).toEqual({
+      accion: "borrar-y-avisar",
+      numero: "A139",
+      advertencia: "Está en la planilla.",
+    });
+  });
+
+  it("nunca borra en silencio algo que tenía advertencia", () => {
+    const conAdvertencia = despuesDelIntento({
+      ok: true,
+      numero: "A139",
+      advertencia: "Está en la planilla.",
+    });
+    expect(conAdvertencia.accion).not.toBe("borrar");
+  });
+
   it("un fallo definitivo la para: necesita que una persona la mire", () => {
-    expect(despuesDelIntento({ ok: false, status: 409, error: "en duda" })).toEqual({
+    expect(
+      despuesDelIntento({ ok: false, status: 409, deLaRuta: true, error: "en duda" }),
+    ).toEqual({
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: "en duda", estado: "parada" },
     });
   });
 
   it("un fallo pasajero la deja esperando, y suelta la marca de tomada", () => {
-    expect(despuesDelIntento({ ok: false, status: 500, error: "se cayó" })).toEqual({
+    expect(
+      despuesDelIntento({ ok: false, status: 500, deLaRuta: true, error: "se cayó" }),
+    ).toEqual({
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
     });

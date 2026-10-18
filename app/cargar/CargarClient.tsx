@@ -270,21 +270,22 @@ export default function CargarClient() {
         await actualizarCarga(carga.clave, tomarLaCarga(carga, new Date()));
         await releerLaCola();
 
-        const respuesta = await mandarALaRuta(carga.tipo, carga.cuerpo);
-        const queHacer = despuesDelIntento(respuesta);
+        // Todo lo que hay que hacer sale de `despuesDelIntento`: acá no se
+        // vuelve a mirar la respuesta, porque volver a mirarla es volver a
+        // decidir. `borrar-y-avisar` es un veredicto aparte justamente para que
+        // no se pueda borrar la carga sin decir lo que quedó a medias.
+        const queHacer = despuesDelIntento(await mandarALaRuta(carga.tipo, carga.cuerpo));
 
         if (queHacer.accion === "borrar") {
           await borrarCarga(carga.clave);
+          setAvisoDeLaCola(`Se mandó: ${comoSeLlama(carga.tipo)} ${queHacer.numero}.`);
+        } else if (queHacer.accion === "borrar-y-avisar") {
+          await borrarCarga(carga.clave);
+          setAvisoDeLaCola(
+            `Se mandó: ${comoSeLlama(carga.tipo)} ${queHacer.numero}. ${queHacer.advertencia}`,
+          );
         } else {
           await actualizarCarga(carga.clave, queHacer.cambios);
-        }
-
-        if (respuesta.ok) {
-          setAvisoDeLaCola(
-            [`Se mandó: ${comoSeLlama(carga.tipo)} ${respuesta.numero}.`, respuesta.advertencia]
-              .filter(Boolean)
-              .join(" "),
-          );
         }
       } catch (e) {
         setAvisoDeLaCola(`No se pudo tocar la cola del teléfono: ${loQueDijo(e)}`);

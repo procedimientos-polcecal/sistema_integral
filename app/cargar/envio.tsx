@@ -61,12 +61,16 @@ export async function mandarALaRuta(
       body: JSON.stringify(cuerpo),
     });
   } catch (e) {
-    return { ok: false, status: null, error: loQueDijo(e) };
+    // Ni se llegó a hablar con nadie, así que esto no salió de la ruta y es
+    // pasajero: sin señal, o el túnel que corta a mitad de camino.
+    return { ok: false, status: null, deLaRuta: false, error: loQueDijo(e) };
   }
 
   // Un cuerpo que no es JSON no es un error a propagar: es el HTML del login o
-  // el de un portal de WiFi, y `comoContesto` lo reconoce por lo que falta.
-  const devuelto = (await respuesta.json().catch(() => ({}))) as Record<string, unknown>;
+  // el de un portal de WiFi, y `comoContesto` lo reconoce por lo que falta. Va
+  // tal cual y sin cast —puede ser `null`, que es lo que da `JSON.parse("null")`—
+  // porque contemplarlo es trabajo de ahí y no de acá.
+  const devuelto: unknown = await respuesta.json().catch(() => ({}));
 
   return comoContesto(tipo, {
     status: respuesta.status,
