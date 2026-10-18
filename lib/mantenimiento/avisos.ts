@@ -17,6 +17,7 @@
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
+import { fechaDeTexto } from "@/lib/core/fechas";
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {
@@ -110,6 +111,31 @@ export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]):
   }, 0);
 
   return `A${mayor + 1}`;
+}
+
+/**
+ * Con qué fecha se carga un aviso: la que vino en el cuerpo, o la de hoy.
+ *
+ * Hasta ahora la ruta usaba siempre `hoyEnArgentina()`, porque el aviso se
+ * cargaba en el momento. Un aviso que se carga sin señal el viernes puede
+ * entrar el lunes, cuando el teléfono vuelve a tener red, y quedaría fechado el
+ * lunes: de esa fecha salen el historial del equipo y el MTBF, así que no es un
+ * detalle de presentación. Por eso el cuerpo puede traer la suya.
+ *
+ * DOS FECHAS NO ENTRAN, y las dos caen a hoy en vez de rechazar la carga:
+ * - La que no es una fecha, porque no hay nada mejor que poner.
+ * - La **futura**: el reloj del teléfono lo pone la persona y puede estar mal,
+ *   y un aviso fechado el mes que viene no lo encuentra nadie.
+ * Fallar la carga por la fecha sería peor: el aviso es lo único que no se puede
+ * perder, y hoy es una fecha razonable para algo que está llegando ahora.
+ *
+ * `hoy` se recibe en vez de calcularse para poder probarla, igual que en
+ * `lib/core/fechas.ts`.
+ */
+export function fechaDelAviso(cuerpo: { fecha?: unknown }, hoy: string): string {
+  const pedida = fechaDeTexto(cuerpo?.fecha);
+  // Las dos son "YYYY-MM-DD", así que comparar los textos compara los días.
+  return !pedida || pedida > hoy ? hoy : pedida;
 }
 
 /** Una fecha ISO como la escribe la planilla. */

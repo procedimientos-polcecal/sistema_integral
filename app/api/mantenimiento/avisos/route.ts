@@ -5,7 +5,8 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
-import { proximoNumeroDeAviso, filaParaLaPlanilla } from "@/lib/mantenimiento/avisos";
+import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDelAviso } from "@/lib/mantenimiento/avisos";
+import { reservarClave, resolverClave } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
@@ -46,6 +47,91 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
+  // ── La clave de la carga ────────────────────────────────────
+  //
+  // Un aviso cargado sin señal llega con una `clave` que el teléfono repite en
+  // cada reintento. **Sin `clave` no se toca nada de esto**: la ruta se
+  // comporta exactamente como antes, y la tabla `cargas_offline` ni se
+  // consulta. No es una comodidad —es lo que sostiene que con señal no cambie
+  // nada, y lo que hace que esta ruta no dependa de que esa tabla exista.
+  //
+  // Se reserva **antes** de leer y de escribir la planilla. Ésa es la ventana
+  // que importa: el reintento que llega mientras el primer envío todavía está
+  // hablando con Google tiene que encontrar la clave anotada, o lee el mismo
+  // "próximo número" y escribe una segunda fila.
+  //
+  // Lo que cuesta, dicho: si la lectura de la planilla falla después de
+  // reservar, la clave queda en duda aunque no se haya escrito nada, y el
+  // reintento recibe un 409 que manda a mirar la planilla para nada. Se
+  // acepta porque ese 409 hace mirar y no perder: la carga queda parada en el
+  // teléfono, con el texto de acá, hasta que una persona decida.
+  const clave = typeof b?.clave === "string" ? b.clave.trim() : "";
+  // Una clave que no es un texto se dice en vez de ignorarse: tratarla como
+  // ausente apagaría la protección contra el duplicado sin que nadie se entere.
+  if (b?.clave !== undefined && !clave) {
+    return NextResponse.json(
+      { error: "La clave de la carga tiene que ser un texto" },
+      { status: 400 }
+    );
+  }
+
+  if (clave) {
+    let reserva;
+    try {
+      reserva = await reservarClave(admin, { clave, usuarioId: user.id, tipo: "aviso" });
+    } catch (e) {
+      // No se pudo reservar: seguir sería cargar sin red de contención, y un
+      // reintento duplicaría el aviso. El 503 es pasajero para la cola, así
+      // que la carga queda y se vuelve a intentar.
+      return NextResponse.json(
+        { error: `No se pudo registrar la carga: ${e instanceof Error ? e.message : e}` },
+        { status: 503 }
+      );
+    }
+
+    if (reserva.decision === "ya-esta") {
+      // Este aviso ya se cargó con esta clave: se devuelve el número de
+      // entonces y la planilla no se toca. El `entidad_id` puede faltar —la
+      // planilla confirma antes de que el aviso esté en la base— y el número
+      // igual es el bueno: el aviso ya existe donde manda. `data` va en null
+      // porque lo que esperaba quien reintenta es su número, no la fila.
+      return NextResponse.json({
+        data: null,
+        oa_number: reserva.fila?.numero ?? null,
+        ya_estaba: true,
+      });
+    }
+
+    if (reserva.decision === "ajena") {
+      return NextResponse.json(
+        { error: "Esa clave de carga es de otra persona: no se puede mandar desde esta sesión." },
+        { status: 403 }
+      );
+    }
+
+    if (reserva.decision === "otro-tipo") {
+      // La misma clave ya se usó para una OT. No es falta de permiso —es el
+      // mismo usuario—, así que no es un 403: es un conflicto, y va con el
+      // mismo 409 que la duda porque para la cola los dos son definitivos y
+      // reintentar no los cambia.
+      return NextResponse.json(
+        { error: "Esa clave de carga ya se usó para una orden de trabajo. Cargá el aviso de nuevo." },
+        { status: 409 }
+      );
+    }
+
+    if (reserva.decision === "en-duda") {
+      return NextResponse.json(
+        {
+          error:
+            "Esta carga ya había arrancado y no se sabe si llegó: el aviso puede haber " +
+            "quedado escrito en la planilla. Mirala antes de cargarlo de nuevo o quedan dos.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   // El próximo número sale de la **planilla**, no de la base: alguien puede
   // haber cargado un aviso ahí desde la última sincronización, y repetir un
   // número dejaría dos avisos distintos llamados igual.
@@ -66,7 +152,10 @@ export async function POST(request: Request) {
 
   const aviso = {
     oa_number,
-    fecha: hoyEnArgentina(),
+    // La fecha puede venir en el cuerpo: un aviso cargado sin señal el viernes
+    // entra el lunes, y fecharlo el lunes corre el historial del equipo y el
+    // MTBF. Qué fecha se acepta lo decide `fechaDelAviso`, con sus tests.
+    fecha: fechaDelAviso(b, hoyEnArgentina()),
     sector_raw: sectorRaw,
     equipo_raw: equipoRaw,
     descripcion,
@@ -86,6 +175,12 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
+
+  // La fila ya está escrita, así que el aviso existe donde manda. Se anota el
+  // número ahora, antes del insert: un reintento que caiga en esta ventana
+  // recibe el número de verdad en vez de un 409 que obligue a mirar la
+  // planilla a mano.
+  if (clave) await anotarLaClave(admin, clave, { numero: oa_number });
 
   const enlaces = await cargarEnlaces(admin);
   const equipo_code = codigoDeEquipo(equipoRaw);
@@ -110,5 +205,37 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
+  // saber. `resolverClave` no borra el número al reescribir.
+  if (clave) await anotarLaClave(admin, clave, { numero: oa_number, entidadId: data.id });
+
   return NextResponse.json({ data, oa_number });
+}
+
+/**
+ * Anota cómo terminó la carga, sin poder voltear el pedido.
+ *
+ * `resolverClave` lanza, y acá un error propagado sería lo peor que podría
+ * pasar: la fila ya está en la planilla, así que fallar manda al teléfono a
+ * reintentar, y el reintento —con la clave sin resolver— escribiría la segunda
+ * fila que toda esta máquina existe para evitar. Por eso se atrapa y se sigue.
+ *
+ * Lo que queda, dicho: la clave queda reservada y sin resolver, así que el
+ * próximo reintento con esa clave recibe el 409 de "en duda" y lo mira una
+ * persona. Eso es correcto —el aviso está en la planilla— y es lo que el log
+ * tiene que permitir entender, por eso va el mensaje de la base sin traducir.
+ */
+async function anotarLaClave(
+  admin: ReturnType<typeof createAdminClient>,
+  clave: string,
+  resultado: { numero: string; entidadId?: string }
+): Promise<void> {
+  try {
+    await resolverClave(admin, clave, resultado);
+  } catch (e) {
+    console.error(
+      `No se pudo anotar la clave ${clave} del aviso: ${e instanceof Error ? e.message : e}`
+    );
+  }
 }

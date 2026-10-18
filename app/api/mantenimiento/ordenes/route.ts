@@ -10,6 +10,7 @@ import {
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
+import { reservarClave, resolverClave } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
@@ -185,6 +186,92 @@ export async function POST(request: Request) {
     );
   }
 
+  // ── La clave de la carga ────────────────────────────────────
+  //
+  // Una OT cargada sin señal llega con una `clave` que el teléfono repite en
+  // cada reintento. **Sin `clave` no se toca nada de esto**: la ruta se
+  // comporta exactamente como antes y la tabla `cargas_offline` ni se
+  // consulta. No es una comodidad —es lo que sostiene que con señal no cambie
+  // nada, y lo que hace que esta ruta no dependa de que esa tabla exista.
+  //
+  // Va acá: después de todo lo que puede rechazar el pedido por su contenido
+  // —reservar una clave para un cuerpo que termina en 400 la dejaría en duda
+  // para siempre— y antes de la planilla, que es donde se reparte el número.
+  //
+  // Lo que cuesta, dicho: si la planilla no contesta después de reservar, la
+  // clave queda en duda aunque no se haya repartido ningún número, y el
+  // reintento recibe un 409 que manda a mirar la planilla para nada. Se
+  // acepta porque ese 409 hace mirar y no perder: la carga queda parada en el
+  // teléfono, con el texto de acá, hasta que una persona decida.
+  const clave = typeof body?.clave === "string" ? body.clave.trim() : "";
+  // Una clave que no es un texto se dice en vez de ignorarse: tratarla como
+  // ausente apagaría la protección contra el duplicado sin que nadie se entere.
+  if (body?.clave !== undefined && !clave) {
+    return NextResponse.json(
+      { error: "La clave de la carga tiene que ser un texto" },
+      { status: 400 }
+    );
+  }
+
+  if (clave) {
+    let reserva;
+    try {
+      reserva = await reservarClave(admin, { clave, usuarioId: user.id, tipo: "orden" });
+    } catch (e) {
+      // No se pudo reservar: seguir sería repartir un número sin red de
+      // contención, y un reintento crearía la segunda OT. El 503 es pasajero
+      // para la cola, así que la carga queda y se vuelve a intentar.
+      return NextResponse.json(
+        { error: `No se pudo registrar la carga: ${e instanceof Error ? e.message : e}` },
+        { status: 503 }
+      );
+    }
+
+    if (reserva.decision === "ya-esta") {
+      // Esta OT ya se creó con esta clave: se devuelve el número de entonces y
+      // la planilla no se toca. El `entidad_id` puede faltar —la planilla
+      // reparte el número antes de que la OT esté en la base— y el número
+      // igual es el bueno: la OT ya existe donde manda y la sincronización la
+      // va a traer. Lo que el primer intento no haya alcanzado a hacer
+      // —enlazar el aviso, exportar el cierre— no se rehace acá: no se sabe
+      // qué llegó a pasar, y repetirlo a ciegas pisaría la planilla.
+      return NextResponse.json({
+        data: null,
+        ot_number: Number(reserva.fila?.numero),
+        ya_estaba: true,
+      });
+    }
+
+    if (reserva.decision === "ajena") {
+      return NextResponse.json(
+        { error: "Esa clave de carga es de otra persona: no se puede mandar desde esta sesión." },
+        { status: 403 }
+      );
+    }
+
+    if (reserva.decision === "otro-tipo") {
+      // La misma clave ya se usó para un aviso. No es falta de permiso —es el
+      // mismo usuario—, así que no es un 403: es un conflicto, y va con el
+      // mismo 409 que la duda porque para la cola los dos son definitivos y
+      // reintentar no los cambia.
+      return NextResponse.json(
+        { error: "Esa clave de carga ya se usó para un aviso. Cargá la orden de nuevo." },
+        { status: 409 }
+      );
+    }
+
+    if (reserva.decision === "en-duda") {
+      return NextResponse.json(
+        {
+          error:
+            "Esta carga ya había arrancado y no se sabe si llegó: la orden puede haber " +
+            "quedado escrita en la planilla. Mirala antes de cargarla de nuevo o quedan dos.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   const laPrioridad = prioridadParaLaPlanilla(prioridad);
 
   // Quién la pide, para que la planilla lo diga. Es lo que le falta a quien la
@@ -226,6 +313,12 @@ export async function POST(request: Request) {
   }
 
   const ot_number = alta.ot_number;
+
+  // La fila ya está escrita, así que la OT existe donde manda y su número ya
+  // está repartido. Se anota ahora, antes del insert: un reintento que caiga
+  // en esta ventana recibe el número de verdad en vez de un 409 que obligue a
+  // mirar la planilla a mano.
+  if (clave) await anotarLaClave(admin, clave, { numero: String(ot_number) });
 
   const record = {
     ot_number,
@@ -284,6 +377,10 @@ export async function POST(request: Request) {
     );
   }
 
+  // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
+  // saber. `resolverClave` no borra el número al reescribir.
+  if (clave) await anotarLaClave(admin, clave, { numero: String(ot_number), entidadId: inserted.id });
+
   // ── Lo que la planilla todavía no sabe ──────────────────────
   //
   // Una OT puede nacer ya realizada, con cierre, horas y operarios. Eso vive en
@@ -319,6 +416,33 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: inserted, ot_number, aviso_error, planilla_error });
+}
+
+/**
+ * Anota cómo terminó la carga, sin poder voltear el pedido.
+ *
+ * `resolverClave` lanza, y acá un error propagado sería lo peor que podría
+ * pasar: la fila ya está en la planilla y el número ya se repartió, así que
+ * fallar manda al teléfono a reintentar, y el reintento —con la clave sin
+ * resolver— consumiría un segundo número. Por eso se atrapa y se sigue.
+ *
+ * Lo que queda, dicho: la clave queda reservada y sin resolver, así que el
+ * próximo reintento con esa clave recibe el 409 de "en duda" y lo mira una
+ * persona. Eso es correcto —la OT está en la planilla— y es lo que el log
+ * tiene que permitir entender, por eso va el mensaje de la base sin traducir.
+ */
+async function anotarLaClave(
+  admin: ReturnType<typeof createAdminClient>,
+  clave: string,
+  resultado: { numero: string; entidadId?: string }
+): Promise<void> {
+  try {
+    await resolverClave(admin, clave, resultado);
+  } catch (e) {
+    console.error(
+      `No se pudo anotar la clave ${clave} de la OT: ${e instanceof Error ? e.message : e}`
+    );
+  }
 }
 
 /**

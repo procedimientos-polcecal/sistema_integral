@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   filaDeAviso, prioridadDeUrgencia, URGENCIAS,
   proximoNumeroDeAviso, filaParaLaPlanilla, COLUMNA_OT_ASIGNADA,
+  fechaDelAviso,
 } from "./avisos";
 
 describe("filaDeAviso", () => {
@@ -108,5 +109,23 @@ describe("filaParaLaPlanilla", () => {
 
   it("llega hasta las observaciones y no más", () => {
     expect(filaParaLaPlanilla(aviso)).toHaveLength(12);
+  });
+});
+
+describe("fechaDelAviso", () => {
+  it("sin fecha en el cuerpo usa la de hoy, como hasta ahora", () => {
+    expect(fechaDelAviso({}, "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("con la fecha del viernes la respeta, aunque entre el lunes", () => {
+    expect(fechaDelAviso({ fecha: "2026-10-16" }, "2026-10-19")).toBe("2026-10-16");
+  });
+
+  it("una fecha que no es una fecha no entra: cae a hoy", () => {
+    expect(fechaDelAviso({ fecha: "el viernes" }, "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("una fecha futura no entra: el reloj del teléfono puede estar mal", () => {
+    expect(fechaDelAviso({ fecha: "2026-11-30" }, "2026-10-19")).toBe("2026-10-19");
   });
 });
