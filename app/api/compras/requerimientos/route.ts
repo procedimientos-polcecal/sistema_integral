@@ -8,7 +8,7 @@ import {
   ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario, maximoDeLaSerieEnLaPlanilla,
 } from "@/lib/compras/formulario";
 import { proximoNroRi } from "@/lib/compras/serieDeRi";
-import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
+import { avisarDeLosPedidosQueEsperan } from "@/lib/compras/avisoDeAprobacion";
 
 /**
  * Cuánto puede tardar el POST antes de que la plataforma lo mate.
@@ -272,13 +272,10 @@ export async function POST(request: Request) {
       // Nada de lo que devuelve entra en la respuesta: quien cargó el pedido no
       // tiene nada que hacer con que a otro le haya llegado o no un push, y un
       // cartel sobre eso sería ruido en la pantalla de quien pide.
-      await avisarAQuienDecide(admin, {
-        lista: "compras_aprobadores",
-        items: [{ etiqueta: `RI ${data.nro_ri}`, descripcion }],
-        nombre: { singular: "Un pedido", plural: "pedidos" },
-        url: "/compras/aprobaciones",
-        excepto: user.id,
-      });
+      await avisarDeLosPedidosQueEsperan(
+        [{ etiqueta: `RI ${data.nro_ri}`, descripcion }],
+        user.id
+      );
 
       return NextResponse.json(
         { ...data, ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}) },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { importarDesdeSheets } from "@/lib/compras/sheets";
+import { avisarDeLosPedidosQueEsperan } from "@/lib/compras/avisoDeAprobacion";
 
 export const maxDuration = 300;
 
@@ -37,7 +38,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await importarDesdeSheets("manual", { sinFreno: confirmaElBorrado(request) }));
+    const importado = await importarDesdeSheets("manual", { sinFreno: confirmaElBorrado(request) });
+    // Tambien desde el boton: si alguien sincroniza a mano y entran pedidos
+    // nuevos, quien aprueba se entera igual. No se le avisa a quien apreto el
+    // boton de lo que el mismo trajo? Si se le avisa: no cargo el pedido, solo
+    // disparo la importacion — el `excepto` es para quien lo pide.
+    const aviso = await avisarDeLosPedidosQueEsperan(importado.nacen_esperando);
+    return NextResponse.json({
+      ...importado,
+      avisos_al_instante: aviso.enviadas,
+      ...(aviso.motivo ? { avisos_al_instante_motivo: aviso.motivo } : {}),
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
