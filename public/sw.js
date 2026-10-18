@@ -2,6 +2,37 @@
 // lleva a la persona a donde la notificación dice al tocarla, y existe para que
 // el navegador considere instalable a la app. Sin caché offline todavía.
 
+// ── Que una versión nueva tome el control, en vez de quedarse esperando ──
+//
+// Sin esto, un service worker nuevo se instala y queda **en espera** hasta que
+// se cierren TODAS las ventanas de su alcance, y mientras tanto el viejo sigue
+// atendiendo los `push`. Con la app instalada en un teléfono eso puede no pasar
+// en días: mandarla atrás no la cierra, y basta una pestaña del dominio abierta
+// en otro lado para que el worker viejo siga vivo.
+//
+// Y lo peor es que no se nota: un service worker en espera no se distingue de
+// uno que funciona. El 18/10/2026 se arregló acá que la notificación llevara a
+// su pantalla, se desplegó, y el único teléfono con notificaciones prendidas
+// siguió cayendo en el inicio — el arreglo estaba servido y no corría. Mirando
+// para atrás, **ningún arreglo hecho a este archivo desde la fase 1 llegó nunca
+// a un aparato con la app instalada**. `register("/sw.js")` corre en cada carga,
+// pero eso descarga el worker nuevo; no lo activa.
+//
+// **CUÁNDO ESTO DEJA DE SER SEGURO.** Hoy lo es porque este archivo **no cachea
+// nada**: el handler de `fetch` pasa derecho a la red, así que un worker nuevo
+// tomando el control a mitad de sesión no puede servir nada inconsistente. El
+// día que este archivo cachee —la fase 3 y la 4—, `skipWaiting` pasa a
+// significar que a una página ya cargada con los assets de una versión se le
+// empiecen a servir los de otra. Quien agregue el caché tiene que decidir ahí
+// si versiona el nombre del caché, si condiciona esto, o si lo saca.
+//
+// **No se borran cachés viejos en el `activate`,** y no es un olvido: hoy no hay
+// ninguno, y un `activate` que borra es justamente lo que vuelve peligroso a
+// `skipWaiting` —la página vieja pide un chunk que ya no está—. Esa decisión va
+// junto con la del caché, no antes.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(clients.claim()));
+
 // Handler de `fetch`: responde **las navegaciones a una pantalla del SdG**
 // yendo a la red, y no toca nada más.
 //

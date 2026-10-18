@@ -30,13 +30,18 @@ function cargarSW(ventanas: Ventana[] = []) {
   const openWindow = vi.fn(async () => undefined);
   const showNotification = vi.fn(async () => undefined);
   const matchAll = vi.fn(async () => ventanas);
-  const clients = { matchAll, openWindow };
+  // `claim` y `skipWaiting` son las del ciclo de vida: sin ellas el worker
+  // nuevo queda en espera y el viejo sigue atendiendo los push.
+  const claim = vi.fn(async () => undefined);
+  const skipWaiting = vi.fn(() => undefined);
+  const clients = { matchAll, openWindow, claim };
   const self = {
     addEventListener: (tipo: string, fn: (event: unknown) => void) => {
       handlers[tipo] = fn;
     },
     location: { origin: ORIGEN },
     registration: { showNotification },
+    skipWaiting,
     clients,
   };
   // `fetch` entra como parámetro y no como global: así el handler de navegación
@@ -44,7 +49,7 @@ function cargarSW(ventanas: Ventana[] = []) {
   const fetchDoble = vi.fn(async () => RESPUESTA);
   // `clients` aparece suelto en el archivo, como global del service worker.
   new Function("self", "clients", "fetch", CODIGO)(self, clients, fetchDoble);
-  return { handlers, openWindow, showNotification, matchAll, fetchDoble };
+  return { handlers, openWindow, showNotification, matchAll, fetchDoble, claim, skipWaiting };
 }
 
 /** Dispara `notificationclick` y espera lo que el handler le pasó a `waitUntil`. */
@@ -63,6 +68,43 @@ async function clickear(
 }
 
 describe("public/sw.js", () => {
+  /*
+   * El ciclo de vida, que es lo que hace que un arreglo a este archivo llegue
+   * a un aparato.
+   *
+   * Sin `skipWaiting` el worker nuevo queda en espera hasta que se cierren
+   * todas las ventanas del dominio, y mientras tanto el viejo sigue atendiendo
+   * los `push`. El 18/10/2026 eso hizo que un arreglo desplegado no corriera
+   * en el unico telefono con notificaciones prendidas, y no se noto porque un
+   * worker en espera no se distingue de uno que funciona.
+   */
+  describe("ciclo de vida", () => {
+    it("una version nueva no espera: toma el control enseguida", () => {
+      const { handlers, skipWaiting } = cargarSW();
+      expect(handlers["install"]).toBeTypeOf("function");
+      handlers["install"]({});
+      expect(skipWaiting).toHaveBeenCalledTimes(1);
+    });
+
+    it("al activarse se queda con las ventanas que ya estaban abiertas", async () => {
+      const { handlers, claim } = cargarSW();
+      expect(handlers["activate"]).toBeTypeOf("function");
+      const esperas: Promise<unknown>[] = [];
+      handlers["activate"]({ waitUntil: (p: Promise<unknown>) => esperas.push(p) });
+      await Promise.all(esperas);
+      expect(claim).toHaveBeenCalledTimes(1);
+    });
+
+    /*
+     * Hoy no hay cachés, y un `activate` que borra es lo que vuelve peligroso a
+     * `skipWaiting`: la página vieja pide un chunk que ya no está. La decisión
+     * de qué se borra y cuándo va junto con la del caché, en la fase 3/4.
+     */
+    it("el activate no borra cachés: esa decisión va con la del caché", () => {
+      expect(CODIGO).not.toMatch(/caches\s*\.\s*delete/);
+    });
+  });
+
   it("el service worker registra un handler de fetch", () => {
     // Sin handler de fetch Chrome no dispara `beforeinstallprompt` y el botón de
     // instalar de Android no aparece nunca, sin ningún error. Es la línea que
