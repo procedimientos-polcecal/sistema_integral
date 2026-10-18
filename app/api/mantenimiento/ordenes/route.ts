@@ -11,7 +11,9 @@ import {
 } from "@/lib/mantenimiento/ordenes";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
-import { estadoSegunElCierre, loQueFaltaParaCerrar } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
+} from "@/lib/mantenimiento/cierreDeOT";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
@@ -282,6 +284,33 @@ export async function POST(request: Request) {
     );
   }
 
+  // ── Lo que la planilla todavía no sabe ──────────────────────
+  //
+  // Una OT puede nacer ya realizada, con cierre, horas y operarios. Eso vive en
+  // las columnas literales del master, y **acá casi nunca se puede escribir**:
+  // su fila llega por `IMPORTRANGE` y tarda. Se intenta igual —a veces ya está—
+  // y si no, queda anotado para que lo termine la sincronización.
+  //
+  // Sin esto el cron de las 06:00 lee la `M` vacía y pisa el estado, y lee la
+  // `O` vacía y pisa las horas con null. Medido: las cinco OT que hoy siguen en
+  // REALIZADO lo están porque alguien escribió "Realizado" a mano.
+  let planilla_error: string | null = null;
+  const paraLaPlanilla = loQueHayQueExportar(inserted);
+
+  if (paraLaPlanilla) {
+    planilla_error = await escribirEnLaFilaDeLaOT(
+      inserted, celdasParaRegistrar(paraLaPlanilla)
+    );
+
+    await admin
+      .from("ordenes_trabajo")
+      .update({
+        sheets_pendiente: planilla_error,
+        sheets_intentado_en: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
+  }
+
   // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
   // alguien genere dos órdenes para el mismo problema.
   let aviso_error: string | null = null;
@@ -289,7 +318,7 @@ export async function POST(request: Request) {
     aviso_error = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
   }
 
-  return NextResponse.json({ data: inserted, ot_number, aviso_error });
+  return NextResponse.json({ data: inserted, ot_number, aviso_error, planilla_error });
 }
 
 /**

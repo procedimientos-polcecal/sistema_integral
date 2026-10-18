@@ -135,7 +135,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // alguien puede generar una segunda orden para el mismo problema. Este
     // valor se devolvía desde siempre y nadie lo leía: el 16/10/2026 una OT no
     // llegó a la planilla y la pantalla no dijo una palabra.
-    onCreated(data.aviso_error ?? null);
+    // Y lo mismo con lo que no llegó a la planilla. Que el estado o las horas
+    // queden pendientes es lo normal recién creada —la fila del master tarda—,
+    // así que se dice sin sonar a error: lo termina la sincronización.
+    const aMedias = [
+      data.aviso_error,
+      data.planilla_error
+        ? `El estado y las horas todavía no llegaron a la planilla (${data.planilla_error}) — ` +
+          `queda pendiente y lo escribe la próxima sincronización.`
+        : null,
+    ].filter(Boolean) as string[];
+
+    onCreated(aMedias.length ? aMedias.join(" ") : null);
   }
 
   return (

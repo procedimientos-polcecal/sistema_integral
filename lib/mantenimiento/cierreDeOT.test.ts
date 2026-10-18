@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estadoSegunElCierre, loQueFaltaParaCerrar } from "./cierreDeOT";
+import {
+  estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
+} from "./cierreDeOT";
 
 /**
  * Una OT que nace con fecha de cierre es una OT que ya se hizo: se esta
@@ -105,5 +107,84 @@ describe("que falta para poder darla por cerrada", () => {
 
   it("los espacios no cuentan como cargado", () => {
     expect(loQueFaltaParaCerrar({ ...hecha, horas: "  ", operario_1: " " })).toHaveLength(2);
+  });
+});
+
+/**
+ * QUE HAY QUE MANDARLE A LA PLANILLA de una OT recien creada.
+ *
+ * Las columnas literales del master -K cierre, M estado, N contratista, O
+ * horas, P/Q/R operarios- no las escribe el alta: su fila todavia no existe,
+ * llega por IMPORTRANGE y tarda. Queda anotado y lo termina la sincronizacion.
+ *
+ * Si no hay nada que mandar NO se anota un pendiente: una cola con filas que no
+ * tienen nada que hacer deja de decir si algo esta trabado.
+ */
+describe("que hay que exportarle a la planilla", () => {
+  const base = {
+    estado: "POR_HACER",
+    fecha_cierre: null,
+    horas: null,
+    contratista: null,
+    operario_1: null,
+    operario_2: null,
+    operario_3: null,
+  };
+
+  it("una orden que nace por hacer y vacia no tiene nada que exportar", () => {
+    expect(loQueHayQueExportar(base)).toBeNull();
+  });
+
+  /** El estado es lo primero: con la M vacia, el cron la pisa. */
+  it("un estado distinto de por hacer si", () => {
+    const r = loQueHayQueExportar({ ...base, estado: "REALIZADO" });
+    expect(r?.estado).toBe("REALIZADO");
+  });
+
+  /**
+   * Las horas y los operarios viajan solos, SIN el estado. Escribir "Por hacer"
+   * en la M reemplazaria la formula =IF(J="","",L) que la planilla usa para
+   * marcar sola lo atrasado: la OT quedaria fija en "por hacer" el dia que se
+   * pase de fecha. Por eso POR_HACER es el unico estado que no se exporta.
+   */
+  it("las horas y los operarios viajan sin el estado por hacer", () => {
+    const r = loQueHayQueExportar({ ...base, horas: 2, operario_1: "Aguirre" });
+    expect(r?.horas).toBe(2);
+    expect(r?.operario_1).toBe("Aguirre");
+    expect("estado" in r!).toBe(false);
+  });
+
+  it("y la fecha de cierre y el contratista", () => {
+    const r = loQueHayQueExportar({ ...base, fecha_cierre: "2026-10-18", contratista: "Pérez" });
+    expect(r?.fecha_cierre).toBe("2026-10-18");
+    expect(r?.contratista).toBe("Pérez");
+  });
+
+  /**
+   * Lo que esta vacio NO viaja. `celdasParaRegistrar` vacia la celda cuando se
+   * le pasa null, y vaciar una celda que nadie lleno es escribir de mas en una
+   * planilla que mira gente.
+   */
+  it("lo vacio no se manda, para no vaciar celdas ajenas", () => {
+    const r = loQueHayQueExportar({ ...base, estado: "REALIZADO" });
+    expect(r).not.toBeNull();
+    expect("horas" in r!).toBe(false);
+    expect("operario_1" in r!).toBe(false);
+    expect("contratista" in r!).toBe(false);
+  });
+
+  /** Cero horas es un dato y tiene que llegar. */
+  it("cero horas viaja", () => {
+    expect(loQueHayQueExportar({ ...base, horas: 0 })?.horas).toBe(0);
+  });
+
+  it("una orden completa manda todo junto", () => {
+    const r = loQueHayQueExportar({
+      estado: "REALIZADO", fecha_cierre: "2026-10-18", horas: 1,
+      contratista: null, operario_1: "Aguirre", operario_2: "Mendizabal", operario_3: null,
+    });
+    expect(Object.keys(r!).sort()).toEqual(
+      ["estado", "fecha_cierre", "horas", "operario_1", "operario_2"]
+    );
   });
 });

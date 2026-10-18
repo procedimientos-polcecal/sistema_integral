@@ -399,6 +399,42 @@ planilla para saber a quién preguntarle. La **Puntuación** sigue sin tocarse:
 Mientras tenga una fórmula viva, crear una OT devuelve 502 explicando por qué,
 sin tomar número.
 
+### Una OT puede nacer realizada, y eso tiene que llegar a la planilla
+
+No es un caso raro: de las seis órdenes creadas en el sistema hasta el
+18/10/2026, **cinco** nacieron con fecha de cierre, horas y operarios. No se
+está pidiendo trabajo, se está cargando trabajo ya hecho.
+
+**La fecha de cierre manda sobre el estado.** Si hay cierre, la orden nace
+`REALIZADO` — elegirlo aparte es contestar dos veces la misma pregunta, y es
+donde quedan las OT cerradas figurando "por hacer". Y si ya se hizo, el
+formulario **exige** las horas y quién la hizo: un operario si es interno, el
+contratista si es contratado, los dos si es mixto. Una OT cerrada sin eso no
+sirve para el MTBF ni para las horas por sector, y nadie se entera hasta que el
+informe sale con la mitad de las filas vacías.
+
+**Esos datos viven en las columnas literales del master** —`K` cierre, `M`
+estado, `N` contratista, `O` horas, `P`/`Q`/`R` operarios— y **el alta no las
+puede escribir en el momento**: la fila del master llega por `IMPORTRANGE` y
+tarda. Se intenta igual, y si no se puede queda anotado en `sheets_pendiente`,
+con la pantalla diciéndolo.
+
+Lo que costaba no tenerlo, medido el 18/10/2026: el cron de las 06:00 lee la
+`M`, la encuentra vacía y pisa el estado; con las horas es peor, porque las lee
+de la `O` y las pisa con `null`. **Las cinco OT que hoy siguen en REALIZADO lo
+están porque alguien les escribió "Realizado" a mano en la planilla.**
+
+**La sincronización exporta antes de importar**, y ése es el orden que importa:
+al revés, el master vacío borraría el estado justo antes de que lo
+escribiéramos. Y **lo que sigue pendiente no se pisa** — la planilla todavía no
+sabe lo que el sistema sabe. Es el mismo principio que `editado_en_app` en
+Compras y que *"no pisa lo que una persona corrigió"* en las marcaciones.
+
+**`POR_HACER` es el único estado que no se exporta**, y no por ahorrar una
+escritura: la `M` trae `=IF(J="","",L)`, la fórmula con la que la planilla marca
+sola lo atrasado. Escribirle "Por hacer" la reemplaza por un literal y la orden
+queda fija en "por hacer" el día que se pase de fecha.
+
 ### La fila del master se busca, no se calcula
 
 Con el `ORDER BY`, la posición de una fila dejó de ser estable. Compras lo dice

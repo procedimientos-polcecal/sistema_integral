@@ -26,7 +26,9 @@ import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
-import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
+import { filaDeOrden, celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
+import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
 } from "@/lib/mantenimiento/comparativas";
@@ -249,12 +251,66 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
 }
 
 /** Trae las órdenes de trabajo de su planilla. */
+/**
+ * Las órdenes cuyo estado, cierre, horas u operarios todavía no llegaron al
+ * master. Devuelve los `ot_number` que **siguen** pendientes después de
+ * intentarlo.
+ *
+ * Corre **antes de importar**, y ése es el punto. Una OT creada desde el
+ * sistema nace con esos datos y su fila del master todavía no existe —llega por
+ * `IMPORTRANGE` y tarda—, así que el alta no los pudo escribir. Si se importara
+ * primero, el master —con la `M` y la `O` vacías— le borraría el estado y las
+ * horas justo antes de que los exportemos.
+ *
+ * Y lo que sigue pendiente, la importación **no lo pisa**: la planilla todavía
+ * no sabe lo que el sistema sabe. Es el mismo principio que `editado_en_app` en
+ * Compras y que "no pisa lo que una persona corrigió" en las marcaciones.
+ */
+async function exportarLoPendiente(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<Set<number>> {
+  const siguenPendientes = new Set<number>();
+
+  const { data: pendientes } = await admin
+    .from("ordenes_trabajo")
+    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3")
+    .not("sheets_pendiente", "is", null);
+
+  for (const orden of pendientes ?? []) {
+    const registro = loQueHayQueExportar(orden);
+
+    // Dejó de tener algo que exportar: alguien lo borró o lo cambió en el
+    // sistema. Se limpia la marca en vez de reintentar para siempre.
+    if (!registro) {
+      await admin.from("ordenes_trabajo")
+        .update({ sheets_pendiente: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", orden.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(registro));
+    if (fallo) siguenPendientes.add(orden.ot_number as number);
+
+    await admin.from("ordenes_trabajo")
+      .update({ sheets_pendiente: fallo, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", orden.id);
+  }
+
+  return siguenPendientes;
+}
+
 export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OT_ID");
 
   const inicio = new Date().toISOString();
+
+  // Primero sale lo que el sistema sabe y la planilla no. Después se lee: así
+  // lo que acabamos de escribir vuelve con el resto, en vez de ser pisado por
+  // una columna vacía.
+  const admin = createAdminClient();
+  const sinExportar = await exportarLoPendiente(admin);
 
   let filas: string[][];
   try {
@@ -265,7 +321,6 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
 
   if (filas.length < 2) return logra({ leidas: 0, guardadas: 0, sin_equipo: 0 });
 
-  const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
   const cuando = new Date().toISOString();
 
@@ -276,6 +331,10 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
+
+    // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
+    // que el sistema sabe, y leerla ahora le borraría el estado y las horas.
+    if (sinExportar.has(orden.ot_number)) continue;
 
     const { equipment_id, sector_id } = resolver(enlaces, orden);
     if (!equipment_id) sinEquipo += 1;
