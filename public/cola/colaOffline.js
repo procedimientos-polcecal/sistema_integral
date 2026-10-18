@@ -4,9 +4,10 @@
  * reintentos. Son funciones puras: no tocan IndexedDB ni `fetch`. Lo que
  * persiste la cola y lo que la dispara son otros archivos; acá sólo se decide.
  *
- * Vive en `public/` y es JavaScript plano porque lo importan los dos mundos: la
- * app (con `@/public/cola/colaOffline.js`) y el service worker `public/sw.js`,
- * que no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
+ * Vive en `public/` y es JavaScript plano porque lo van a importar los dos
+ * mundos: la app (con `@/public/cola/colaOffline.js`) y el service worker
+ * `public/sw.js` (el enganche es la tarea 7 del plan; hoy no lo importa), que
+ * no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
  * tipos van por JSDoc, pero ojo con qué garantizan: `tsconfig.json` tiene
  * `allowJs` y no `checkJs`, y no incluye los `.js` en su `include`, así que
  * adentro de este archivo nadie los verifica. Rigen sólo para quien lo importa

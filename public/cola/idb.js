@@ -21,8 +21,9 @@
  * guardó: una carga que se perdió sin aviso es peor que una que se rechazó.
  *
  * Vive en `public/` y es JavaScript plano por la misma razón que
- * `colaOffline.js`: lo importan la app y el service worker, y un service worker
- * no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
+ * `colaOffline.js`: lo van a importar la app y el service worker (el enganche del
+ * service worker es la tarea 7 del plan; hoy no lo importa nadie), y un service
+ * worker no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
  * tipos van por JSDoc y rigen sólo para quien lo importe desde TypeScript
  * (`tsconfig.json` tiene `allowJs` pero no `checkJs`).
  *
@@ -39,6 +40,11 @@ const NOMBRE_DE_LA_BASE = "sdg";
 /**
  * Sube cuando cambia la forma de la base. Hoy no hay migraciones: la única
  * versión crea los dos almacenes.
+ *
+ * El día que haya una versión 2, una pestaña vieja con la versión 1 abierta
+ * puede bloquear la subida: `onversionchange` le cierra la conexión, pero si
+ * esa pestaña no llega a hacerlo `abrirBase` rechaza con un error de bloqueo, y
+ * si el desbloqueo llega tarde la conexión que se abra se cierra sola.
  */
 const VERSION_DE_LA_BASE = 1;
 
@@ -49,7 +55,7 @@ const ALMACEN_CATALOGOS = "catalogos";
  * Abre la base `sdg`, creándola la primera vez. Cola: una carga por `clave`.
  * Catálogos: un catálogo por `nombre`.
  *
- * Es pública porque el service worker y la app la necesitan igual; las demás
+ * Es pública porque el service worker y la app la van a necesitar igual; las demás
  * funciones la llaman por su cuenta y cierran la conexión al terminar, así que
  * quien use `abrirBase` directamente es dueño de cerrar lo que abrió.
  *
@@ -59,6 +65,7 @@ export function abrirBase() {
   return new Promise((resolver, rechazar) => {
     // `indexedDB` puede no existir (un contexto sin almacenamiento): esa
     // excepción tiene que salir como rechazo y no como un throw síncrono.
+    let rechazada = false;
     let pedido;
     try {
       pedido = indexedDB.open(NOMBRE_DE_LA_BASE, VERSION_DE_LA_BASE);
@@ -78,14 +85,22 @@ export function abrirBase() {
     };
     pedido.onsuccess = () => {
       const base = pedido.result;
+      // Si ya se rechazó por el bloqueo, nadie recibió esta conexión y nadie la va
+      // a cerrar: se cierra acá para no dejarla abierta bloqueando futuras subidas.
+      if (rechazada) {
+        base.close();
+        return;
+      }
       // Si otra pestaña pide subir la versión, esta conexión no puede quedarse
       // abierta bloqueándola.
       base.onversionchange = () => base.close();
       resolver(base);
     };
     pedido.onerror = () => rechazar(pedido.error);
-    pedido.onblocked = () =>
+    pedido.onblocked = () => {
+      rechazada = true;
       rechazar(new Error("La base sdg está bloqueada por otra pestaña abierta."));
+    };
   });
 }
 
@@ -108,7 +123,16 @@ async function enTransaccion(almacen, modo, trabajo) {
       const transaccion = base.transaction(almacen, modo);
       const pedido = trabajo(transaccion.objectStore(almacen));
       transaccion.oncomplete = () => resolver(pedido ? pedido.result : undefined);
-      transaccion.onerror = () => rechazar(transaccion.error);
+      // El error va del pedido que falló y no de `transaccion.error`: ese campo
+      // recién se llena cuando la transacción aborta, y el evento de error sube
+      // a la transacción antes, así que acá todavía vale `null`. Rechazar con
+      // `null` rompería el `catch` de quien llama en cuanto lea `e.message`.
+      transaccion.onerror = (evento) =>
+        rechazar(
+          /** @type {IDBRequest} */ (evento.target)?.error ??
+            transaccion.error ??
+            new Error("Falló una operación de la base."),
+        );
       transaccion.onabort = () =>
         rechazar(transaccion.error ?? new Error("La transacción se canceló."));
     });
@@ -160,7 +184,9 @@ export async function actualizarCarga(clave, cambios) {
     lectura.onsuccess = () => {
       const actual = lectura.result;
       if (actual === undefined) return;
-      almacen.put({ ...actual, ...cambios });
+      // `clave` va al final: es la identidad de la carga, y un `cambios` con otra
+      // crearía una carga nueva dejando viva la original.
+      almacen.put({ ...actual, ...cambios, clave });
     };
     return null;
   });
