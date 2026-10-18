@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lasQuePasaronAPedido,
+  lasQueNacenEsperando,
   loQueFaltaParaLaOrden,
   repartirLasOrdenes,
   TOPE_POR_CORRIDA,
@@ -144,5 +145,72 @@ describe("el reparto de una corrida", () => {
 
   it("sin candidatos no hay nada que hacer", () => {
     expect(repartirLasOrdenes([])).toEqual({ aCrear: [], sinDatos: [], postergadas: [] });
+  });
+});
+
+describe("lasQueNacenEsperando", () => {
+  const antes = (nros: number[]) => new Map<number, unknown>(nros.map((n) => [n, {}]));
+
+  it("una que ya estaba no nace", () => {
+    expect(
+      lasQueNacenEsperando(
+        [{ nro_ri: 10, descripcion: "x", estado_aprobacion: "PENDIENTE" }],
+        antes([10])
+      )
+    ).toEqual([]);
+  });
+
+  it("una nueva en PENDIENTE nace esperando", () => {
+    expect(
+      lasQueNacenEsperando(
+        [{ nro_ri: 11, descripcion: "Rodamiento", estado_aprobacion: "PENDIENTE" }],
+        antes([])
+      )
+    ).toEqual([{ etiqueta: "RI 11", descripcion: "Rodamiento" }]);
+  });
+
+  // Los mismos dos estados que cuenta la campana, a proposito.
+  it("EN_REVISION tambien espera", () => {
+    expect(
+      lasQueNacenEsperando(
+        [{ nro_ri: 12, descripcion: "x", estado_aprobacion: "EN_REVISION" }],
+        antes([])
+      )
+    ).toHaveLength(1);
+  });
+
+  it("una que la planilla trae ya decidida no interrumpe a nadie", () => {
+    expect(
+      lasQueNacenEsperando(
+        [
+          { nro_ri: 13, descripcion: "x", estado_aprobacion: "APROBADA" },
+          { nro_ri: 14, descripcion: "x", estado_aprobacion: "DENEGADA" },
+          { nro_ri: 15, descripcion: "x", estado_aprobacion: null },
+        ],
+        antes([])
+      )
+    ).toEqual([]);
+  });
+
+  it("'(sin descripción)' es el relleno del importador, no una descripcion", () => {
+    expect(
+      lasQueNacenEsperando(
+        [{ nro_ri: 16, descripcion: "(sin descripción)", estado_aprobacion: "PENDIENTE" }],
+        antes([])
+      )
+    ).toEqual([{ etiqueta: "RI 16", descripcion: null }]);
+  });
+
+  it("de una corrida mezclada salen solo las nuevas que esperan", () => {
+    expect(
+      lasQueNacenEsperando(
+        [
+          { nro_ri: 20, descripcion: "vieja", estado_aprobacion: "PENDIENTE" },
+          { nro_ri: 21, descripcion: "nueva", estado_aprobacion: "PENDIENTE" },
+          { nro_ri: 22, descripcion: "nueva aprobada", estado_aprobacion: "APROBADA" },
+        ],
+        antes([20])
+      )
+    ).toEqual([{ etiqueta: "RI 21", descripcion: "nueva" }]);
   });
 });

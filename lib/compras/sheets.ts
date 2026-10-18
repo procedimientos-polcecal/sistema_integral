@@ -24,9 +24,11 @@ import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { equiposPorRi, resolverElEquipo } from "@/lib/compras/equipoDelFormulario";
 import {
   lasQuePasaronAPedido,
+  lasQueNacenEsperando,
   repartirLasOrdenes,
   type RequerimientoParaLaOrden,
 } from "@/lib/compras/ordenesDesdeLaPlanilla";
+import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
@@ -394,6 +396,17 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
   borradas: number;
   /** Qué se borró, o por qué no se borró nada. */
   borrado?: string;
+  /**
+   * A cuántos aparatos les llegó el aviso al instante de los pedidos que
+   * nacieron esperando aprobación.
+   *
+   * **Un 0 acá no es un fallo de la corrida.** Lo normal es 0: la mayoría de
+   * las corridas no traen filas nuevas, y fuera de la ventana 7:00–21:00 no se
+   * manda nada a propósito. `avisos_al_instante_motivo` dice cuál de esas fue.
+   */
+  avisos_al_instante: number;
+  /** Por qué no se avisó, cuando no se avisó. Para poder distinguir "nadie suscripto" de un fallo. */
+  avisos_al_instante_motivo?: string;
   /**
    * Si algún puntero no se pudo guardar, por qué. La importación siguió igual:
    * lo que se pierde es que ese RI exporte a la celda que le toca, no el alta
@@ -849,6 +862,31 @@ export async function importarDesdeSheets(
       else punterosMovidos++;
     }
 
+    // ── El aviso al instante a quien tiene que aprobar ──
+    //
+    // Va acá y no en la ruta de alta de la app porque **el pedido no entra por
+    // la app**: de los últimos 400 requerimientos, 397 vinieron de la planilla
+    // y 3 de acá adentro. El momento en que el SdG se entera de un pedido nuevo
+    // es el momento en que esta función lo inserta —el webhook del Apps Script
+    // la corre con cada edición—, así que éste es el único lugar desde el que
+    // se puede avisar a tiempo.
+    //
+    // Una notificación por corrida y no una por ítem: con mediana 2 y máximo 16
+    // filas nuevas por corrida, una por ítem son picos de dieciséis pushes
+    // juntos. El porqué completo está en `lib/core/avisoAlInstante.ts`.
+    //
+    // No tira nunca, y por eso va sin `try`: si el push service está caído la
+    // sincronización igual terminó bien y los pedidos igual están guardados.
+    const avisoAlInstante = await avisarAQuienDecide(admin, {
+      lista: "compras_aprobadores",
+      items: lasQueNacenEsperando(
+        aEscribir as { nro_ri: number; descripcion?: unknown; estado_aprobacion?: unknown }[],
+        previo
+      ),
+      nombre: { singular: "Un pedido", plural: "pedidos" },
+      url: "/compras/aprobaciones",
+    });
+
     const resultado: ResultadoSync = {
       filas_leidas: leidas,
       filas_nuevas: nuevas,
@@ -891,6 +929,12 @@ export async function importarDesdeSheets(
       ...(errorDeEquipos ? { equipos_error: errorDeEquipos } : {}),
       ordenes_odoo: ordenesCreadas,
       ...(errorDeOrdenes ? { ordenes_odoo_error: errorDeOrdenes } : {}),
+      // Va en el resultado que ve quien aprieta el botón y NO en `resultado`,
+      // que es exactamente lo que se inserta en `compras_sincronizaciones` y
+      // esa tabla no tiene la columna. Es la misma razón por la que
+      // `ResultadoSyncCompleto` existe aparte de `ResultadoSync`.
+      avisos_al_instante: avisoAlInstante.enviadas,
+      ...(avisoAlInstante.motivo ? { avisos_al_instante_motivo: avisoAlInstante.motivo } : {}),
     };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);
