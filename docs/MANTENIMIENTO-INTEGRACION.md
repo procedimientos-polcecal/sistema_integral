@@ -270,52 +270,116 @@ recién creada: su M dice "Atrasado" sin que nadie lo haya decidido.
 acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que
 cuando haya dónde subirla es sumar el campo.
 
-## Crear una OT desde el sistema: la planilla primero
+## Crear una OT desde el sistema: la planilla primero, y en su propia pestaña
 
-**Una OT creada desde la app se escribe en la hoja de respuestas del
+**Una OT creada desde la app se escribe en el libro de respuestas del
 formulario, no en la pestaña `OT` del master.** Esa pestaña es el derrame de
 cuatro `QUERY(IMPORTRANGE(...))` y no tiene un solo literal en la columna A:
 escribir ahí o bloquea el derrame —`#REF!`, y se borra la importación entera— o
 lo pisa el derrame al recalcular.
 
-**El orden es planilla y después base, y no al revés.** La planilla manda: una
-orden existe cuando tiene su fila. El número sale de la misma lectura que la
-fila, y si la escritura no se puede hacer, no se creó nada en ningún lado.
+**Y dentro de ese libro va a `Altas del sistema`, no a `Respuestas de
+formulario`.** Es lo que cambió el 16/10/2026 y lo que más caro salió:
 
-Lo que costó aprenderlo, el **16/10/2026**: se creó la OT **2796** desde el
-sistema. La columna A de la hoja de respuestas todavía no estaba congelada, así
-que la guarda se negó a escribir —bien—, pero el número **ya estaba tomado**.
-Quedó así:
+> Se creó la OT **2796** desde el sistema y se le escribió la fila en la pestaña
+> del formulario. Entraron dos respuestas. **Forms inserta dentro de su propio
+> rango y empuja hacia abajo cualquier fila ajena**, así que 2796 y 2797 bajaron
+> dos lugares; las columnas `A`–`J` y `S` del master son derrame y se movieron
+> con ellas, las `K`–`R` son literales y se quedaron. Resultado medido: la **OT
+> 2798 figuraba como «Realizado, 1 h, Aguirre, Mendizabal»** — el registro de la
+> 2796, pegado a la orden de otro.
 
-| | |
-|---|---|
-| En la base | OT 2796, `app_created`, `sheets_row` null |
-| En la hoja de respuestas | arriba de todo, 2795 |
+La premisa del diseño anterior era *«acá sí conviven, porque el master ordena
+por N° de OT»*. Se leyeron las cuatro importaciones: **ninguna tenía `ORDER
+BY`**. Dependía de una propiedad que la planilla no tenía y nada lo comprobaba.
 
-El Apps Script numera con `max(A)+1`, así que **la siguiente respuesta del
-formulario se iba a llevar el 2796 también**, y el `upsert` por `ot_number` de
-la sincronización habría pisado la de la app con la del formulario. No era "el
-riesgo de un número repetido": era una pérdida garantizada y silenciosa.
+**Son dos mitades y ninguna alcanza sola.** La pestaña aparte saca las filas del
+sistema del rango donde Forms inserta; el `ORDER BY` es lo que hace que agregar
+una fila no corra las de arriba —apilar `{formulario; sistema}` sin ordenar deja
+el bloque del sistema abajo y cada respuesta nueva lo corre entero—. Como toda
+OT nueva es el máximo de la serie, ordenar por N° deja la salida estrictamente
+creciente. Es lo mismo que Compras resolvió el 11/09/2026.
 
-El código decía, con todas las letras, que prefería ese riesgo: *"Si la planilla
-no se puede leer, vale el máximo de la base: es peor no poder crear la orden que
-arriesgar un número repetido, y el aviso lo dice."* Dos cosas estaban mal ahí. La
-primera es que el riesgo no era un riesgo. **La segunda es que el aviso no lo
-decía**: la ruta devolvía `planilla_error` desde siempre y `NuevaOTModal` nunca
-lo leyó, así que la pantalla se cerró sin una palabra. Un valor que nadie
-muestra no es un aviso.
+**La serie vive en dos hojas**, y eso obliga a que las cuenten las dos: el SdG
+en `loQueSigueEnLaSerie` y el Apps Script en `maximoDeLaHoja_`. Contar una sola
+es repartir un número que la otra ya usó.
 
-**El precio, dicho:** con Google caído no se puede crear una OT desde la app. Es
-visible y se reintenta. Lo otro no se veía nunca.
+**El orden es planilla y después base.** La planilla manda: una orden existe
+cuando tiene su fila. El número sale de la misma lectura que la fila, así que si
+la escritura no se puede hacer no se creó nada en ningún lado y no se consumió
+ningún número. El precio, dicho: con Google caído no se puede crear una OT desde
+la app. Es visible y se reintenta; lo otro no se veía nunca. Si la fila se
+escribe y después falla el insert, la OT queda sólo en la planilla —el estado
+normal de cualquier orden del formulario— y la sincronización la trae.
 
-**El caso del medio también está cubierto:** si la fila se escribe y después
-falla el insert en la base, la OT queda sólo en la planilla — que es el estado
-normal de cualquier orden cargada por el formulario, y la próxima
-sincronización la trae. La pantalla lo dice y pide no cargarla de nuevo.
+**Tres guardas en el alta**, cada una por un modo de falla concreto: el
+encabezado se lee de `Altas del sistema` y no del formulario (esa pestaña la
+crea una persona, así que existir sin encabezado es un estado real); se relee la
+celda destino justo antes de escribir (dos altas a la vez calculan la misma fila
+libre y la segunda pisaría a la primera); y se relee lo escrito (es lo único que
+distingue "quedó con su número" de "quedó con el de otro").
 
-**La precondición sigue siendo que la columna A esté congelada.** Mientras tenga
-una sola fórmula viva, crear una OT desde el sistema devuelve 502 explicando por
-qué, sin tomar número.
+**La precondición sigue siendo que la columna A del formulario esté congelada.**
+Mientras tenga una fórmula viva, crear una OT devuelve 502 explicando por qué,
+sin tomar número.
+
+### La fila del master se busca, no se calcula
+
+Con el `ORDER BY`, la posición de una fila dejó de ser estable. Compras lo dice
+con todas las letras: *«una cuenta que deja de valer no avisa: sigue devolviendo
+un número plausible»*. `escribirEnLaFilaDeLaOT` busca la OT por su número en la
+columna A —`filaDeLaOTenElMaster`— y si no está, no escribe. No encontrarla es
+lo **normal** recién creada, porque el `IMPORTRANGE` tarda; por eso el mensaje
+pide reintentar en vez de sonar a error.
+
+`sheets_row` sigue en la base y la sigue llenando la sincronización, pero la
+escritura dejó de apoyarse en ella.
+
+### Lo que queda a mano en las planillas
+
+Nada de esto lo puede hacer un agente. Hasta que estén los cuatro, crear una OT
+desde el sistema falla con el motivo en pantalla.
+
+1. **Crear `Altas del sistema`** en el libro de respuestas, con el **mismo
+   encabezado de 31 columnas** que `Respuestas de formulario` en la fila 1.
+2. **Reemplazar las cuatro importaciones del master.** Ojo con dos cosas: la de
+   la columna `D` pasa de `D3` a **`D2`**, y la de `S2` cambia de rango porque
+   necesita la columna A para poder ordenar.
+
+```
+A2  =QUERY({IMPORTRANGE(FORM, "Respuestas de formulario!A2:F10000");
+            IMPORTRANGE(FORM, "Altas del sistema!A2:F10000")},
+           "SELECT Col1, Col2, Col6 WHERE Col1 IS NOT NULL ORDER BY Col1", 0)
+
+D2  =LET(d, {IMPORTRANGE(FORM, "Respuestas de formulario!A2:U10000");
+             IMPORTRANGE(FORM, "Altas del sistema!A2:U10000")},
+         k, CHOOSECOLS(d, 1),
+         e, BYROW(CHOOSECOLS(d, SEQUENCE(1,15,7)), LAMBDA(f, TEXTJOIN("", TRUE, f))),
+         SORT(FILTER(e, k<>""), FILTER(k, k<>""), TRUE))
+
+E2  =QUERY({IMPORTRANGE(FORM, "Respuestas de formulario!A2:AA10000");
+            IMPORTRANGE(FORM, "Altas del sistema!A2:AA10000")},
+           "SELECT Col22, Col23, Col24, Col25, Col26, Col27
+            WHERE Col1 IS NOT NULL ORDER BY Col1", 0)
+
+S2  =QUERY({IMPORTRANGE(FORM, "Respuestas de formulario!A2:AC10000");
+            IMPORTRANGE(FORM, "Altas del sistema!A2:AC10000")},
+           "SELECT Col29 WHERE Col1 IS NOT NULL ORDER BY Col1", 0)
+```
+
+   Probadas el 16/10/2026 en tres pestañas temporales con una fila cuyo equipo
+   estaba en la columna `S` —la que rompe un `CHOOSECOLS` mal contado—; el
+   detalle está en el [spec](superpowers/specs/2026-10-16-mantenimiento-altas-del-sistema-design.md).
+
+   **Que la `D3` de hoy funcione es una casualidad**: la primera fila de
+   respuestas es la OT 622 y no tiene nada entre `G` y `U`, así que el `FILTER`
+   la descarta y lo que queda arranca justo donde va. Si esa fila hubiera tenido
+   equipo, las 2.174 filas de EQUIPO estarían corridas una sin que nada avisara.
+
+3. **Pegar el Apps Script actualizado** —`docs/mantenimiento-formulario-apps-script.gs`—,
+   que ahora cuenta las dos pestañas en sus dos funciones.
+4. **Congelar `Respuestas de formulario!A2:A`**: copiar y pegar como sólo
+   valores.
 
 ## Por qué una OT todavía no se hizo
 
