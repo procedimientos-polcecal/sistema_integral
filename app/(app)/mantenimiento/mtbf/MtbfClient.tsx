@@ -124,13 +124,34 @@ function Tendencia({ porMes, mesEnCurso }: { porMes: FilaMtbf["porMes"]; mesEnCu
   );
 }
 
+/**
+ * Qué analiza cada columna.
+ *
+ * Van acá y no sueltos en el JSX porque dos de estos textos son la diferencia
+ * entre leer bien el tablero y leerlo mal: que cada orden correctiva cuenta una
+ * aunque dos caigan el mismo día, y que la fecha es la de **ejecución** y no la
+ * de carga de la orden en la planilla.
+ */
+const QUE_ANALIZA = {
+  equipo: "El nombre y el código de la máquina. Lleva a su ficha, donde está el detalle mes a mes.",
+  sector: "Dónde está la máquina. Sólo sectores de planta: los organizativos no tienen equipos.",
+  mtbf: "Tiempo medio entre fallas: los días observados de la ventana divididos por las correctivas de esa máquina. Menos días es peor.",
+  fallas: "Cuántas órdenes correctivas se ejecutaron sobre la máquina en la ventana. Cada orden cuenta una, también cuando dos caen el mismo día.",
+  tendencia: "Las fallas mes a mes, los últimos doce. Dice si el ritmo viene bajando o subiendo; el mes en curso va punteado porque está incompleto.",
+  ultima: "Cuándo se ejecutó la última correctiva. Es la fecha en que se hizo el trabajo, no la fecha en que se cargó la orden en la planilla.",
+} as const;
+
+const llegaA = (dias: number) =>
+  `Probabilidad de que la máquina aguante ${dias} días sin una correctiva, calculada sobre su MTBF. Supone que la tasa de falla es constante, y en varias máquinas no lo es.`;
+
 function Encabezado({
-  columna, orden, onOrdenar, alinear = "left", children,
+  columna, orden, onOrdenar, alinear = "left", info, children,
 }: {
   columna: Columna;
   orden: Orden;
   onOrdenar: (c: Columna) => void;
   alinear?: "left" | "right";
+  info: string;
   children: React.ReactNode;
 }) {
   const activa = orden.columna === columna;
@@ -143,6 +164,7 @@ function Encabezado({
         {children}
         <span className="ml-1 text-xs text-slate-400">{activa ? (orden.ascendente ? "▲" : "▼") : ""}</span>
       </button>
+      <InfoTip text={info} className="ml-1" />
     </th>
   );
 }
@@ -260,17 +282,20 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <Encabezado columna="equipo" orden={orden} onOrdenar={cambiarOrden}>Equipo</Encabezado>
-                  <Encabezado columna="sector" orden={orden} onOrdenar={cambiarOrden}>Sector</Encabezado>
-                  <Encabezado columna="mtbf" orden={orden} onOrdenar={cambiarOrden} alinear="right">MTBF</Encabezado>
-                  <Encabezado columna="fallas" orden={orden} onOrdenar={cambiarOrden} alinear="right">Fallas</Encabezado>
+                  <Encabezado columna="equipo" orden={orden} onOrdenar={cambiarOrden} info={QUE_ANALIZA.equipo}>Equipo</Encabezado>
+                  <Encabezado columna="sector" orden={orden} onOrdenar={cambiarOrden} info={QUE_ANALIZA.sector}>Sector</Encabezado>
+                  <Encabezado columna="mtbf" orden={orden} onOrdenar={cambiarOrden} alinear="right" info={QUE_ANALIZA.mtbf}>MTBF</Encabezado>
+                  <Encabezado columna="fallas" orden={orden} onOrdenar={cambiarOrden} alinear="right" info={QUE_ANALIZA.fallas}>Fallas</Encabezado>
                   {PLAZOS.map((dias, i) => (
-                    <Encabezado key={dias} columna={`r${i}`} orden={orden} onOrdenar={cambiarOrden} alinear="right">
+                    <Encabezado key={dias} columna={`r${i}`} orden={orden} onOrdenar={cambiarOrden} alinear="right" info={llegaA(dias)}>
                       Llega a {dias} d
                     </Encabezado>
                   ))}
-                  <th className="px-3 py-3 text-left font-medium text-slate-600 whitespace-nowrap">Tendencia</th>
-                  <Encabezado columna="ultima" orden={orden} onOrdenar={cambiarOrden}>Última</Encabezado>
+                  <th className="px-3 py-3 text-left font-medium text-slate-600 whitespace-nowrap">
+                    Tendencia
+                    <InfoTip text={QUE_ANALIZA.tendencia} className="ml-1" />
+                  </th>
+                  <Encabezado columna="ultima" orden={orden} onOrdenar={cambiarOrden} info={QUE_ANALIZA.ultima}>Última</Encabezado>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
