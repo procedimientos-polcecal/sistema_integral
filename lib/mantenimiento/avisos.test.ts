@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   filaDeAviso, prioridadDeUrgencia, URGENCIAS,
   proximoNumeroDeAviso, filaParaLaPlanilla, COLUMNA_OT_ASIGNADA,
-  fechaDelAviso,
+  fechaDelAviso, fechaValidaOHoy,
 } from "./avisos";
 
 describe("filaDeAviso", () => {
@@ -127,5 +127,38 @@ describe("fechaDelAviso", () => {
 
   it("una fecha futura no entra: el reloj del teléfono puede estar mal", () => {
     expect(fechaDelAviso({ fecha: "2026-11-30" }, "2026-10-19")).toBe("2026-10-19");
+  });
+});
+
+describe("fechaValidaOHoy", () => {
+  // La misma regla la usan las dos rutas de alta: el aviso por
+  // `fechaDelAviso` y la OT directo. Se prueba acá para que la de la OT no
+  // dependa de los tests del aviso.
+  it("sin nada usa la de hoy", () => {
+    expect(fechaValidaOHoy(undefined, "2026-10-19")).toBe("2026-10-19");
+    expect(fechaValidaOHoy("", "2026-10-19")).toBe("2026-10-19");
+    expect(fechaValidaOHoy(null, "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("respeta una fecha pasada: es la de cuando se cargó", () => {
+    expect(fechaValidaOHoy("2026-10-16", "2026-10-19")).toBe("2026-10-16");
+  });
+
+  it("acepta hoy mismo, que es el caso de siempre", () => {
+    expect(fechaValidaOHoy("2026-10-19", "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("una fecha futura cae a hoy: el reloj del teléfono puede estar mal", () => {
+    expect(fechaValidaOHoy("2026-10-20", "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("una fecha que no existe cae a hoy y no rueda al día siguiente", () => {
+    // El 31 de febrero no se convierte en 3 de marzo: `fechaDeTexto` lo
+    // descarta, y acá eso tiene que terminar en hoy.
+    expect(fechaValidaOHoy("2026-02-31", "2026-10-19")).toBe("2026-10-19");
+  });
+
+  it("lee d/m como las planillas y no al revés", () => {
+    expect(fechaValidaOHoy("05/10/2026", "2026-10-19")).toBe("2026-10-05");
   });
 });

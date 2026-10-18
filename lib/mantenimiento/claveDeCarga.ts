@@ -33,6 +33,14 @@
 // "ya-esta" tiene que contar con que el número siempre está y el id a veces no,
 // y no armar la respuesta como si el id fuera obligatorio.
 //
+// QUIEN RESUELVE NO PUEDE FALLAR: `resolverClave` lanza, pero las dos rutas la
+// llaman cuando la fila ya está escrita en la planilla, y ahí un error
+// propagado manda al teléfono a reintentar — o sea, al duplicado que este
+// archivo existe para evitar. Por eso el que usan las rutas es
+// `anotarLaClave`, que es `resolverClave` con el catch puesto. Vive acá y no
+// en las rutas a propósito: es una decisión, y una decisión copiada en dos
+// rutas un día está en una sola.
+//
 // Tests: lo que decide está en funciones puras —`decidirPorClave`,
 // `esChoqueDeClave`, `cambiosDeResolucion` y `filaVisible`— y esas sí se
 // prueban; `filaVisible` en particular fija qué veredictos exponen la fila, que
@@ -41,7 +49,8 @@
 // con la base no se mockea, porque un mock probaría el mock. Lo que ahí queda
 // sin probar son los cinco `throw` que propagan un fallo: reservar, leer,
 // "ya no está" (en `reservarClave`), resolver y "no estaba reservada" (en
-// `resolverClave`). Ninguno decide nada, pero tampoco los cubre un test. La
+// `resolverClave`) —los dos últimos, tragados por `anotarLaClave`, que tampoco
+// tiene test—. Ninguno decide nada, pero tampoco los cubre un test. La
 // tabla es `cargas_offline`
 // (supabase/migrations/20261018165613_claves_de_las_cargas_offline.sql).
 
@@ -209,5 +218,41 @@ export async function resolverClave(
   }
   if (!data || data.length === 0) {
     throw new Error("No se pudo resolver la clave de la carga: no estaba reservada.");
+  }
+}
+
+/** Cómo se nombra cada tipo de carga en un mensaje. */
+const COMO_SE_LLAMA: Record<TipoDeCarga, string> = {
+  aviso: "del aviso",
+  orden: "de la orden",
+};
+
+/**
+ * Anota cómo terminó la carga, sin poder voltear el pedido.
+ *
+ * Es lo que llaman las rutas, y la diferencia con `resolverClave` es entera: la
+ * fila ya está escrita en la planilla cuando esto corre, así que devolver un
+ * error haría que el teléfono reintente y que el reintento escriba la segunda
+ * fila. Fallar acá es peor que no anotar.
+ *
+ * Lo que queda cuando falla, dicho: la clave sigue reservada y sin resolver, o
+ * sea que el próximo reintento con esa clave recibe el veredicto `en-duda` y lo
+ * mira una persona. Eso es correcto —la carga está en la planilla— y el log es
+ * lo único que permite entender por qué, así que va el mensaje de la base sin
+ * traducir.
+ */
+export async function anotarLaClave(
+  admin: ClienteAdmin,
+  clave: string,
+  tipo: TipoDeCarga,
+  resultado: { numero: string; entidadId?: string },
+): Promise<void> {
+  try {
+    await resolverClave(admin, clave, resultado);
+  } catch (e) {
+    console.error(
+      `No se pudo anotar la clave ${clave} ${COMO_SE_LLAMA[tipo]}: ` +
+      `${e instanceof Error ? e.message : e}`
+    );
   }
 }

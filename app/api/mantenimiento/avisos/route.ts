@@ -6,7 +6,7 @@ import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDelAviso } from "@/lib/mantenimiento/avisos";
-import { reservarClave, resolverClave } from "@/lib/mantenimiento/claveDeCarga";
+import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
@@ -91,14 +91,26 @@ export async function POST(request: Request) {
 
     if (reserva.decision === "ya-esta") {
       // Este aviso ya se cargó con esta clave: se devuelve el número de
-      // entonces y la planilla no se toca. El `entidad_id` puede faltar —la
-      // planilla confirma antes de que el aviso esté en la base— y el número
-      // igual es el bueno: el aviso ya existe donde manda. `data` va en null
-      // porque lo que esperaba quien reintenta es su número, no la fila.
+      // entonces y la planilla no se toca. `data` va en null porque lo que
+      // esperaba quien reintenta es su número, no la fila.
+      //
+      // SIN `entidad_id` EL CASO ES OTRO y no se puede contestar igual: la
+      // planilla ya tiene la fila con su número y el insert en la base nunca
+      // ocurrió. El número sigue siendo el bueno —el aviso existe donde
+      // manda—, pero contestar "ya está" a secas dejaría a la persona
+      // creyendo que está en el sistema, y hasta la próxima sincronización no
+      // lo ve nadie desde acá.
+      const numero = reserva.fila?.numero ?? null;
+      const soloEnLaPlanilla = !reserva.fila?.entidad_id;
       return NextResponse.json({
         data: null,
-        oa_number: reserva.fila?.numero ?? null,
+        oa_number: numero,
         ya_estaba: true,
+        advertencia: soloEnLaPlanilla
+          ? `El aviso ${numero} quedó escrito en la planilla y todavía no está en ` +
+            `el sistema: va a entrar con la próxima sincronización. No lo cargues ` +
+            `de nuevo o quedan dos.`
+          : null,
       });
     }
 
@@ -180,7 +192,7 @@ export async function POST(request: Request) {
   // número ahora, antes del insert: un reintento que caiga en esta ventana
   // recibe el número de verdad en vez de un 409 que obligue a mirar la
   // planilla a mano.
-  if (clave) await anotarLaClave(admin, clave, { numero: oa_number });
+  if (clave) await anotarLaClave(admin, clave, "aviso", { numero: oa_number });
 
   const enlaces = await cargarEnlaces(admin);
   const equipo_code = codigoDeEquipo(equipoRaw);
@@ -208,34 +220,7 @@ export async function POST(request: Request) {
 
   // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
   // saber. `resolverClave` no borra el número al reescribir.
-  if (clave) await anotarLaClave(admin, clave, { numero: oa_number, entidadId: data.id });
+  if (clave) await anotarLaClave(admin, clave, "aviso", { numero: oa_number, entidadId: data.id });
 
   return NextResponse.json({ data, oa_number });
-}
-
-/**
- * Anota cómo terminó la carga, sin poder voltear el pedido.
- *
- * `resolverClave` lanza, y acá un error propagado sería lo peor que podría
- * pasar: la fila ya está en la planilla, así que fallar manda al teléfono a
- * reintentar, y el reintento —con la clave sin resolver— escribiría la segunda
- * fila que toda esta máquina existe para evitar. Por eso se atrapa y se sigue.
- *
- * Lo que queda, dicho: la clave queda reservada y sin resolver, así que el
- * próximo reintento con esa clave recibe el 409 de "en duda" y lo mira una
- * persona. Eso es correcto —el aviso está en la planilla— y es lo que el log
- * tiene que permitir entender, por eso va el mensaje de la base sin traducir.
- */
-async function anotarLaClave(
-  admin: ReturnType<typeof createAdminClient>,
-  clave: string,
-  resultado: { numero: string; entidadId?: string }
-): Promise<void> {
-  try {
-    await resolverClave(admin, clave, resultado);
-  } catch (e) {
-    console.error(
-      `No se pudo anotar la clave ${clave} del aviso: ${e instanceof Error ? e.message : e}`
-    );
-  }
 }

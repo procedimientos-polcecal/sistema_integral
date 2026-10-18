@@ -9,8 +9,8 @@ import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
-import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
-import { reservarClave, resolverClave } from "@/lib/mantenimiento/claveDeCarga";
+import { COLUMNA_OT_ASIGNADA, fechaValidaOHoy } from "@/lib/mantenimiento/avisos";
+import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
@@ -229,16 +229,32 @@ export async function POST(request: Request) {
 
     if (reserva.decision === "ya-esta") {
       // Esta OT ya se creó con esta clave: se devuelve el número de entonces y
-      // la planilla no se toca. El `entidad_id` puede faltar —la planilla
-      // reparte el número antes de que la OT esté en la base— y el número
-      // igual es el bueno: la OT ya existe donde manda y la sincronización la
-      // va a traer. Lo que el primer intento no haya alcanzado a hacer
-      // —enlazar el aviso, exportar el cierre— no se rehace acá: no se sabe
-      // qué llegó a pasar, y repetirlo a ciegas pisaría la planilla.
+      // la planilla no se toca. Lo que el primer intento no haya alcanzado a
+      // hacer —enlazar el aviso, exportar el cierre— no se rehace acá: no se
+      // sabe qué llegó a pasar y repetirlo a ciegas pisaría la planilla.
+      //
+      // SIN `entidad_id` EL CASO ES OTRO y no se puede contestar igual: la
+      // planilla ya tiene la fila con su número y el insert en la base nunca
+      // ocurrió. Contestar "ya está" a secas dejaría a la persona creyendo que
+      // la orden está en el sistema, y si venía de un aviso, ese aviso quedó
+      // sin su `work_order_id` y nadie se entera. Se dice, con el mismo
+      // criterio que el 500 de más abajo: el estado raro se cuenta, no se
+      // tapa.
+      const numero = Number(reserva.fila?.numero);
+      const soloEnLaPlanilla = !reserva.fila?.entidad_id;
       return NextResponse.json({
         data: null,
-        ot_number: Number(reserva.fila?.numero),
+        ot_number: numero,
         ya_estaba: true,
+        advertencia: soloEnLaPlanilla
+          ? `La OT ${numero} quedó escrita en la planilla y todavía no está en el ` +
+            `sistema: va a entrar con la próxima sincronización. No la cargues de ` +
+            `nuevo o quedan dos.` +
+            (aviso_id
+              ? ` El aviso del que salía quedó sin el enlace a esta OT: hay que ` +
+                `ponérselo a mano cuando aparezca.`
+              : "")
+          : null,
       });
     }
 
@@ -318,11 +334,16 @@ export async function POST(request: Request) {
   // está repartido. Se anota ahora, antes del insert: un reintento que caiga
   // en esta ventana recibe el número de verdad en vez de un 409 que obligue a
   // mirar la planilla a mano.
-  if (clave) await anotarLaClave(admin, clave, { numero: String(ot_number) });
+  if (clave) await anotarLaClave(admin, clave, "orden", { numero: String(ot_number) });
 
   const record = {
     ot_number,
-    fecha:           fecha || hoyEnArgentina(),
+    // La fecha pasa por el mismo filtro que la del aviso: una OT cargada sin
+    // señal el viernes entra el lunes y tiene que quedar fechada el viernes,
+    // y una fecha futura —el reloj del teléfono lo pone la persona— no puede
+    // entrar. El precio, dicho: si alguien elige a propósito una fecha futura
+    // en el modal, la ruta la corrige a hoy sin avisar.
+    fecha:           fechaValidaOHoy(fecha, hoyEnArgentina()),
     sector_id:       sector_id || null,
     sector_raw:      sector_raw || null,
     equipo_raw:      equipo_raw || null,
@@ -379,7 +400,9 @@ export async function POST(request: Request) {
 
   // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
   // saber. `resolverClave` no borra el número al reescribir.
-  if (clave) await anotarLaClave(admin, clave, { numero: String(ot_number), entidadId: inserted.id });
+  if (clave) {
+    await anotarLaClave(admin, clave, "orden", { numero: String(ot_number), entidadId: inserted.id });
+  }
 
   // ── Lo que la planilla todavía no sabe ──────────────────────
   //
@@ -416,33 +439,6 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: inserted, ot_number, aviso_error, planilla_error });
-}
-
-/**
- * Anota cómo terminó la carga, sin poder voltear el pedido.
- *
- * `resolverClave` lanza, y acá un error propagado sería lo peor que podría
- * pasar: la fila ya está en la planilla y el número ya se repartió, así que
- * fallar manda al teléfono a reintentar, y el reintento —con la clave sin
- * resolver— consumiría un segundo número. Por eso se atrapa y se sigue.
- *
- * Lo que queda, dicho: la clave queda reservada y sin resolver, así que el
- * próximo reintento con esa clave recibe el 409 de "en duda" y lo mira una
- * persona. Eso es correcto —la OT está en la planilla— y es lo que el log
- * tiene que permitir entender, por eso va el mensaje de la base sin traducir.
- */
-async function anotarLaClave(
-  admin: ReturnType<typeof createAdminClient>,
-  clave: string,
-  resultado: { numero: string; entidadId?: string }
-): Promise<void> {
-  try {
-    await resolverClave(admin, clave, resultado);
-  } catch (e) {
-    console.error(
-      `No se pudo anotar la clave ${clave} de la OT: ${e instanceof Error ? e.message : e}`
-    );
-  }
 }
 
 /**
