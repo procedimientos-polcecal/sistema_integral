@@ -227,19 +227,25 @@ interface PeorPorMtbf {
  * El tablero se limpió a propósito de traer miles de filas para contarlas en
  * memoria (ver docs/MANTENIMIENTO-INTEGRACION.md) y este recuadro necesita las
  * ~950 correctivas de la ventana. Así el resto pinta completo y rápido, y esto
- * llega después. Por lo mismo es información secundaria: si el pedido falla, el
- * recuadro no aparece y el tablero sigue igual, porque no puede tumbar la
- * pantalla de entrada del módulo.
+ * llega después. Por lo mismo es información secundaria: si el pedido falla no
+ * tumba la pantalla de entrada del módulo, se dice en un renglón y se ofrece
+ * reintentar.
+ *
+ * **El recuadro ocupa su lugar siempre, con número o sin él.** Esconderlo hacía
+ * dos cosas malas a la vez: el resto del tablero saltaba ~200 px hacia arriba
+ * cuando la respuesta llegaba sin equipos elegibles, y "falló la lectura" era
+ * indistinguible de "no hay nada que mostrar" — las dos terminaban en un hueco,
+ * y el hueco no dice nada.
  *
  * Las filas ya vienen ordenadas por MTBF ascendente desde la API. Las de MTBF
  * null no entran —no tienen número que mostrar— y un equipo que ya no está en
  * el catálogo activo tampoco, como en la pantalla del listado completo.
  */
 function PeoresPorMtbf() {
-  // `null` mientras carga; `"error"` si algo falló y el recuadro se esconde.
+  // `null` mientras carga; `"error"` si algo falló.
   const [peores, setPeores] = useState<PeorPorMtbf[] | "error" | null>(null);
 
-  useCargar(async (vigente) => {
+  const recargar = useCargar(async (vigente) => {
     try {
       const [rMtbf, rEquipos] = await Promise.all([
         fetch("/api/mantenimiento/mtbf"),
@@ -266,8 +272,7 @@ function PeoresPorMtbf() {
     }
   }, []);
 
-  if (peores === "error") return null;
-  if (peores !== null && peores.length === 0) return null;
+  const hayNumeros = peores !== null && peores !== "error" && peores.length > 0;
 
   return (
     <div className="card p-5">
@@ -282,6 +287,27 @@ function PeoresPorMtbf() {
             <div key={i} className="h-9 animate-pulse rounded-lg bg-slate-100" />
           ))}
         </div>
+      ) : peores === "error" ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
+        >
+          <p className="text-sm text-slate-600">
+            No se pudo calcular el MTBF. <span className="text-slate-500">Esto no quiere decir
+            que las máquinas no estén fallando.</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => { setPeores(null); recargar(); }}
+            className="text-sm font-medium text-[var(--primary)] hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : peores.length === 0 ? (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
+          Ningún equipo activo tiene fallas correctivas con MTBF publicable en la ventana.
+        </p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {peores.map(({ fila, codigo, nombre }) => (
@@ -305,7 +331,8 @@ function PeoresPorMtbf() {
       )}
 
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-xs text-amber-800">{DIAS_DE_CALENDARIO.corto}</p>
+        {/* El aviso acompaña a un número: sin números no hay nada que aclarar. */}
+        <p className="text-xs text-amber-800">{hayNumeros ? DIAS_DE_CALENDARIO.corto : ""}</p>
         <Link href="/mantenimiento/mtbf" className="text-xs text-[var(--primary)] hover:underline">
           Ver todos los equipos →
         </Link>

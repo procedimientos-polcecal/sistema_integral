@@ -65,6 +65,12 @@ export interface FilaMtbf {
   confiabilidades: (number | null)[];
   ultima: string;
   porEspecialidad: { especialidad: string; cantidad: number }[];
+  /**
+   * Los últimos 12 meses calendario. **La suma puede ser menor que `fallas`**:
+   * la ventana son 365 días y arranca a mitad de un mes, así que las fallas de
+   * esos días sueltos no tienen barra. `fallasAntesDelGrafico()` de
+   * `mtbfVista.ts` dice cuántas son, para que la pantalla lo aclare.
+   */
   porMes: { etiqueta: string; cantidad: number }[];
   ritmo: RitmoCambiado | null;
 }
@@ -163,8 +169,17 @@ function ritmoDe(
   // ritmo haya cambiado. Los días recientes nunca superan los observados.
   const mtbfReciente = Math.min(DIAS_RECIENTE, diasObservados) / recientes;
   const factor = mtbfReciente / mtbf;
-  if (factor >= FACTOR_AVISO) return { mtbfReciente, factor, direccion: "mejoro" };
-  if (factor <= 1 / FACTOR_AVISO) return { mtbfReciente, factor, direccion: "empeoro" };
+
+  // El límite se compara por productos y no contra `factor`. Un ritmo que
+  // matemáticamente duplica al de la ventana puede dar 1,9999999999999998 al
+  // dividir dos veces en punto flotante, y entonces el aviso no sale justo en
+  // el caso del enunciado. Con los días enteros de hoy no ocurre —se probaron
+  // los ~12.000 casos de hasta 400 días y 2.000 fallas, y ninguno falla—, pero
+  // el spec deja escrito que el día que Producción cargue horas de marcha el
+  // denominador deja de ser entero. El aviso es la mitad del valor de la ficha:
+  // no vale la pena que dependa de eso.
+  if (mtbfReciente >= FACTOR_AVISO * mtbf) return { mtbfReciente, factor, direccion: "mejoro" };
+  if (mtbfReciente * FACTOR_AVISO <= mtbf) return { mtbfReciente, factor, direccion: "empeoro" };
   return null;
 }
 

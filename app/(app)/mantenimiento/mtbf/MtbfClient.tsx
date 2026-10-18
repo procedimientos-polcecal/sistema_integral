@@ -15,12 +15,13 @@ import {
   DIAS_DE_CALENDARIO,
   diasCorridos,
   equiposSinFallas,
+  fallasAntesDelGrafico,
   fechaCorta,
   filasVisibles,
   porcentajeDeConfiabilidad,
   type EquipoDeLaVista,
-  type FilaDeVista,
 } from "@/lib/mantenimiento/mtbfVista";
+import { ordenar, siguienteOrden, type Columna, type Orden } from "@/lib/mantenimiento/mtbfOrden";
 
 /**
  * El listado de MTBF. No hace cuentas: la cuenta viene hecha del servidor y acá
@@ -33,38 +34,10 @@ import {
  * tooltip que nadie abre.
  */
 
-type Columna = "equipo" | "sector" | "mtbf" | "fallas" | "ultima" | `r${number}`;
-interface Orden { columna: Columna; ascendente: boolean }
-
 interface Props {
   mtbf: Mtbf;
   equipos: EquipoDeLaVista[];
   sectores: { id: string; nombre: string }[];
-}
-
-/** Lo que se ordena en cada columna. null va siempre al final, sea cual sea el sentido. */
-function valorDe(f: FilaDeVista, columna: Columna): string | number | null {
-  switch (columna) {
-    case "equipo": return f.equipo.name;
-    case "sector": return f.equipo.sectorNombre;
-    case "mtbf": return f.mtbf;
-    case "fallas": return f.fallas;
-    case "ultima": return f.ultima;
-    default: return f.confiabilidades[Number(columna.slice(1))] ?? null;
-  }
-}
-
-function ordenar(filas: FilaDeVista[], { columna, ascendente }: Orden): FilaDeVista[] {
-  return [...filas].sort((a, b) => {
-    const x = valorDe(a, columna);
-    const y = valorDe(b, columna);
-    if (x === null && y === null) return b.fallas - a.fallas;
-    if (x === null) return 1;
-    if (y === null) return -1;
-    const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "es");
-    if (c !== 0) return ascendente ? c : -c;
-    return b.fallas - a.fallas;
-  });
 }
 
 /**
@@ -76,7 +49,12 @@ function ordenar(filas: FilaDeVista[], { columna, ascendente }: Orden): FilaDeVi
  * lo dice el MTBF. El último punto es el mes en curso, que va a medias: el
  * tramo que llega hasta él es punteado y el punto, hueco.
  */
-function Tendencia({ porMes, mesEnCurso }: { porMes: FilaMtbf["porMes"]; mesEnCurso: string }) {
+function Tendencia({ porMes, mesEnCurso, antesDelGrafico }: {
+  porMes: FilaMtbf["porMes"];
+  mesEnCurso: string;
+  /** Las fallas de la ventana que quedan antes del primer mes dibujado. */
+  antesDelGrafico: number;
+}) {
   const ancho = 84;
   const alto = 24;
   const margen = 3;
@@ -91,7 +69,14 @@ function Tendencia({ porMes, mesEnCurso }: { porMes: FilaMtbf["porMes"]; mesEnCu
   const completos = puntos.filter((p) => !p.incompleto);
   const ultimo = puntos.find((p) => p.incompleto);
   const previo = completos[completos.length - 1];
-  const texto = porMes.map((m) => `${m.etiqueta}: ${m.cantidad}`).join(" · ");
+  // La línea son 12 meses calendario y la ventana 365 días: las fallas de los
+  // días sueltos del principio no tienen punto donde caer, y si no se dicen, la
+  // línea parece el total.
+  const sobrante =
+    antesDelGrafico > 0
+      ? ` · ${antesDelGrafico} ${antesDelGrafico === 1 ? "falla anterior" : "fallas anteriores"} al gráfico`
+      : "";
+  const texto = porMes.map((m) => `${m.etiqueta}: ${m.cantidad}`).join(" · ") + sobrante;
 
   return (
     <svg
@@ -194,13 +179,7 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
   );
 
   function cambiarOrden(columna: Columna) {
-    setOrden((o) =>
-      o.columna === columna
-        ? { columna, ascendente: !o.ascendente }
-        // Lo primero que se quiere ver de una columna numérica es el peor valor:
-        // el MTBF y las confiabilidades más bajas, las fallas y la fecha más altas.
-        : { columna, ascendente: columna === "equipo" || columna === "sector" || columna === "mtbf" || columna.startsWith("r") }
-    );
+    setOrden((o) => siguienteOrden(o, columna));
   }
 
   const hayFilas = mtbf.filas.length > 0;
@@ -321,7 +300,11 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
                       </td>
                     ))}
                     <td className="px-3 py-2">
-                      <Tendencia porMes={f.porMes} mesEnCurso={mtbf.mesEnCurso} />
+                      <Tendencia
+                        porMes={f.porMes}
+                        mesEnCurso={mtbf.mesEnCurso}
+                        antesDelGrafico={fallasAntesDelGrafico(f)}
+                      />
                     </td>
                     <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fechaCorta(f.ultima)}</td>
                   </tr>

@@ -146,13 +146,39 @@ export function diasCorridos(mtbf: number | null): string {
  * Una probabilidad 0..1 como porcentaje. Entero desde el 1%, un decimal por
  * debajo —"0,1%" es la diferencia entre un molino que casi no llega al mes y uno
  * que no llega nunca— y "<0,1%" antes que un 0% que dice imposible.
+ *
+ * Los dos extremos están tapados por el mismo motivo. Redondear 99,6% a "100%"
+ * afirma certeza sobre una exponencial que supone una tasa de falla constante:
+ * ninguna máquina llega al mes con probabilidad 1, y el que lee "100%" deja de
+ * mirarla. Va "≥99%", que es cierto, igual que "<0,1%" por abajo.
  */
 export function porcentajeDeConfiabilidad(p: number | null): string {
   if (p === null) return "—";
   const v = p * 100;
+  if (v >= 99.5) return "≥99%";
   if (v >= 1) return `${Math.round(v)}%`;
   if (v >= 0.05) return `${conComa(v, 1)}%`;
   return "<0,1%";
+}
+
+/**
+ * Cuántas fallas de la ventana quedan antes del primer mes del gráfico.
+ *
+ * El gráfico son 12 meses calendario y la ventana son 365 días, que arrancan a
+ * mitad de un mes: las fallas de esos días sueltos cuentan en `fallas` y no
+ * tienen barra donde caer. Hoy da 0 porque el historial todavía no llena la
+ * ventana, pero alrededor del 1/12/2026 empieza a dar hasta un mes entero de
+ * fallas, y entonces las barras suman menos que el total **sin que nada lo
+ * diga** — que es la única forma en que este gráfico puede mentir.
+ *
+ * Se informa en vez de corregirse: el spec pide doce meses, y un gráfico de
+ * trece dibujaría un mes a medias al principio, con la misma etiqueta que el
+ * mes en curso. Quien lo lea tiene que saber que el total y las barras no son
+ * lo mismo, no que le escondan la diferencia.
+ */
+export function fallasAntesDelGrafico(fila: FilaMtbf): number {
+  const enElGrafico = fila.porMes.reduce((suma, m) => suma + m.cantidad, 0);
+  return Math.max(0, fila.fallas - enElGrafico);
 }
 
 /** `YYYY-MM-DD` como `DD/MM/YYYY`, sin pasar por `Date`. */

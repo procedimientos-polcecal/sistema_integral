@@ -34,6 +34,39 @@ describe("que entra en la ventana", () => {
   it("deja afuera lo anterior a la ventana", () => {
     expect(fallasDeLaVentana([ot({ fecha_ejecucion: "2023-03-06" })], HASTA)).toEqual([]);
   });
+
+  /**
+   * Los dos bordes exactos de la ventana, que es lo que un refactor rompe sin
+   * que nada se queje: un `<` por un `<=` corre la ventana un día y cambia los
+   * días observados, o sea el MTBF de todos los equipos.
+   */
+  it("lo ejecutado hoy mismo entra", () => {
+    const r = fallasDeLaVentana([ot({ fecha_ejecucion: HASTA })], HASTA);
+    expect(r.map((f) => f.fecha)).toEqual([HASTA]);
+  });
+
+  it("el dia 365 de la ventana entra y el anterior no", () => {
+    const ordenes = [
+      ot({ ot_number: 1, fecha_ejecucion: "2025-10-16" }), // hasta - 364
+      ot({ ot_number: 2, fecha_ejecucion: "2025-10-15" }), // hasta - 365
+    ];
+    expect(fallasDeLaVentana(ordenes, HASTA).map((f) => f.otNumber)).toEqual([1]);
+  });
+
+  /**
+   * La planilla puede traer cualquier cosa en la fecha de ejecución. Si no es
+   * una fecha utilizable se cae al respaldo en vez de descartar la falla: la
+   * máquina se rompió igual.
+   */
+  it("una fecha de ejecucion que no es fecha cae al respaldo de carga", () => {
+    const basura = ot({ fecha_ejecucion: "15/10/2026", fecha: "2026-05-01" });
+    expect(fechaDeFalla(basura)).toBe("2026-05-01");
+    expect(fallasDeLaVentana([basura], HASTA).map((f) => f.fecha)).toEqual(["2026-05-01"]);
+  });
+
+  it("sin ejecucion utilizable ni carga, la falla no entra", () => {
+    expect(fallasDeLaVentana([ot({ fecha_ejecucion: "sin fecha", fecha: "" })], HASTA)).toEqual([]);
+  });
   it("conserva las que no tienen equipo", () => {
     const r = fallasDeLaVentana([ot({ equipment_id: null, equipo_raw: "molino viejo", fecha_ejecucion: "2026-05-01" })], HASTA);
     expect(r).toHaveLength(1);
@@ -96,9 +129,10 @@ describe("el calculo completo", () => {
   it("la tendencia trae doce meses, con cero en los que no hubo", () => {
     const [eq1] = calcularMtbf(ORDENES, HASTA).filas;
     expect(eq1.porMes).toHaveLength(12);
-    expect(eq1.porMes.every((m) => typeof m.cantidad === "number")).toBe(true);
-    // Febrero no tuvo ninguna y tiene que estar igual.
-    expect(eq1.porMes.filter((m) => m.cantidad === 0).length).toBeGreaterThan(0);
+    // Nov'25 es el primero y Oct'26 el ultimo; febrero no tuvo ninguna y tiene
+    // que estar igual, con su cero.
+    expect(eq1.porMes[0].etiqueta).toBe("Nov");
+    expect(eq1.porMes[3]).toEqual({ etiqueta: "Feb", cantidad: 0 });
   });
 
   it("marca el mes en curso para poder dibujarlo incompleto", () => {
@@ -173,6 +207,34 @@ describe("el aviso de ritmo cambiado", () => {
     ]), HASTA);
     expect(r.filas[0].ritmo?.direccion).toBe("empeoro");
     expect(r.filas[0].ritmo!.factor!).toBeLessThanOrEqual(0.5);
+  });
+
+  /**
+   * Los dos bordes del aviso son inclusivos: el factor exactamente 2 avisa, y
+   * exactamente 0,5 también. Están armados para que la cuenta dé redonda —7
+   * fallas en 105 días observados con 3 en los últimos 90 dan 30 contra 15— así
+   * que si alguien cambia el `>=` por un `>`, o vuelve a comparar `factor`
+   * contra el límite en punto flotante, estos dos se caen.
+   */
+  it("avisa con el factor justo en 2", () => {
+    const r = calcularMtbf(muchas([
+      "2026-07-03", "2026-07-07", "2026-07-12", "2026-07-16", // antes de los 90 dias
+      "2026-07-18", "2026-08-26", "2026-10-15",               // dentro de los 90
+    ]), HASTA);
+    expect(r.diasObservados).toBe(105);
+    expect(r.filas[0].ritmo?.factor).toBe(2);
+    expect(r.filas[0].ritmo?.direccion).toBe("mejoro");
+  });
+
+  it("avisa con el factor justo en 0,5", () => {
+    const r = calcularMtbf(muchas([
+      "2026-01-19", "2026-03-29", "2026-05-18",               // antes de los 90 dias
+      "2026-07-18", "2026-07-27", "2026-08-16",               // dentro de los 90
+      "2026-09-05", "2026-09-25", "2026-10-15",
+    ]), HASTA);
+    expect(r.diasObservados).toBe(270);
+    expect(r.filas[0].ritmo?.factor).toBe(0.5);
+    expect(r.filas[0].ritmo?.direccion).toBe("empeoro");
   });
 
   it("no avisa cuando el ritmo se mantuvo", () => {

@@ -19,6 +19,22 @@ describe("el porcentaje de confiabilidad", () => {
   it("no muestra 0% cuando es chico pero no es cero", () => {
     expect(porcentajeDeConfiabilidad(0.00001)).toBe("<0,1%");
   });
+
+  /**
+   * El otro extremo del mismo acuerdo. "100%" afirma certeza sobre una
+   * exponencial que supone una tasa de falla constante, y quien lo lee deja de
+   * mirar esa máquina.
+   */
+  it("no muestra 100%: arriba del 99,5% dice >=99%", () => {
+    expect(porcentajeDeConfiabilidad(1)).toBe("≥99%");
+    expect(porcentajeDeConfiabilidad(0.9996)).toBe("≥99%");
+    expect(porcentajeDeConfiabilidad(0.995)).toBe("≥99%");
+  });
+
+  it("debajo del 99,5% sigue siendo un entero exacto", () => {
+    expect(porcentajeDeConfiabilidad(0.9949)).toBe("99%");
+    expect(porcentajeDeConfiabilidad(0.986)).toBe("99%");
+  });
 });
 
 describe("los dias corridos", () => {

@@ -14,6 +14,7 @@ import {
   conComa,
   DIAS_DE_CALENDARIO,
   diasCorridos,
+  fallasAntesDelGrafico,
   fechaCorta,
   porcentajeDeConfiabilidad,
   type ConfiabilidadDeLaFicha,
@@ -135,6 +136,9 @@ function SinHistoria({ fila, diasObservados }: { fila: FilaMtbf; diasObservados:
 function ConNumero({
   fila, mesEnCurso, diasObservados,
 }: { fila: FilaMtbf; mesEnCurso: string; diasObservados: number }) {
+  // Hoy da 0 y alrededor del 1/12/2026 empieza a dar hasta un mes de fallas.
+  const antesDelGrafico = fallasAntesDelGrafico(fila);
+
   return (
     <div className="px-4 py-4 space-y-4">
       {fila.ritmo && <AvisoDeRitmo ritmo={fila.ritmo} mtbf={fila.mtbf} />}
@@ -161,6 +165,15 @@ function ConNumero({
         <div className="h-[170px]">
           <FallasPorMes datos={fila.porMes} mesEnCurso={mesEnCurso} />
         </div>
+        {antesDelGrafico > 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            {antesDelGrafico === 1
+              ? "Una falla queda antes del primer mes del gráfico"
+              : `${antesDelGrafico} fallas quedan antes del primer mes del gráfico`}
+            : las barras son 12 meses calendario y la ventana son {VENTANA_DIAS} días, así que
+            suman {fila.fallas - antesDelGrafico} y no {fila.fallas}.
+          </p>
+        )}
       </div>
 
       <p className="text-sm text-slate-600">

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   confiabilidadDeLaFicha,
   equiposSinFallas,
+  fallasAntesDelGrafico,
   filasVisibles,
   type EquipoDeLaVista,
 } from "./mtbfVista";
@@ -64,6 +65,32 @@ describe("los equipos sin fallas", () => {
   /** Un equipo que nunca fallo no tuvo fallas de ninguna especialidad. */
   it("desaparecen cuando se filtra por especialidad", () => {
     expect(equiposSinFallas([fila("a")], EQUIPOS, { sectorId: null, especialidad: "MECÁNICO" })).toEqual([]);
+  });
+});
+
+describe("las fallas que quedan antes del grafico", () => {
+  const meses = (cantidades: number[]) =>
+    cantidades.map((cantidad, i) => ({ etiqueta: `M${i}`, cantidad }));
+
+  it("no hay ninguna cuando las barras suman el total", () => {
+    const f = fila("a", { fallas: 6, porMes: meses([1, 2, 0, 3]) });
+    expect(fallasAntesDelGrafico(f)).toBe(0);
+  });
+
+  /**
+   * La ventana son 365 días y el gráfico 12 meses calendario, que arrancan el
+   * primero del mes: las fallas de los días sueltos del principio cuentan en
+   * `fallas` y no tienen barra. Si no se dice, las barras suman menos que el
+   * total y nadie se entera.
+   */
+  it("son las que no tienen barra donde caer", () => {
+    const f = fila("a", { fallas: 10, porMes: meses([1, 2, 0, 3]) });
+    expect(fallasAntesDelGrafico(f)).toBe(4);
+  });
+
+  it("nunca es negativo", () => {
+    const f = fila("a", { fallas: 2, porMes: meses([3]) });
+    expect(fallasAntesDelGrafico(f)).toBe(0);
   });
 });
 
