@@ -6,7 +6,9 @@ import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDeLaCarga } from "@/lib/mantenimiento/avisos";
-import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
+import {
+  reservarClave, anotarLaClave, respuestaDeLaReserva,
+} from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
@@ -58,12 +60,10 @@ export async function POST(request: Request) {
   //
   // Va antes de reservar la clave: una clave reservada para un cuerpo que
   // termina en 400 quedaría en duda para siempre.
-  const hoy = hoyEnArgentina();
-  const laFecha = fechaDeLaCarga(b?.fecha, hoy);
+  const laFecha = fechaDeLaCarga(b?.fecha, hoyEnArgentina());
   if (laFecha.estado === "no-sirve") {
     return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
   }
-  const fecha = laFecha.estado === "sirve" ? laFecha.fecha : hoy;
 
   const admin = createAdminClient();
 
@@ -109,59 +109,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (reserva.decision === "ya-esta") {
-      // Este aviso ya se cargó con esta clave: se devuelve el número de
-      // entonces y la planilla no se toca. `data` va en null porque lo que
-      // esperaba quien reintenta es su número, no la fila.
-      //
-      // SIN `entidad_id` EL CASO ES OTRO y no se puede contestar igual: la
-      // planilla ya tiene la fila con su número y el insert en la base nunca
-      // ocurrió. El número sigue siendo el bueno —el aviso existe donde
-      // manda—, pero contestar "ya está" a secas dejaría a la persona
-      // creyendo que está en el sistema, y hasta la próxima sincronización no
-      // lo ve nadie desde acá.
-      const numero = reserva.fila?.numero ?? null;
-      const soloEnLaPlanilla = !reserva.fila?.entidad_id;
-      return NextResponse.json({
-        data: null,
-        oa_number: numero,
-        ya_estaba: true,
-        advertencia: soloEnLaPlanilla
-          ? `El aviso ${numero} quedó escrito en la planilla y todavía no está en ` +
-            `el sistema: va a entrar con la próxima sincronización. No lo cargues ` +
-            `de nuevo o quedan dos.`
-          : null,
-      });
-    }
-
-    if (reserva.decision === "ajena") {
-      return NextResponse.json(
-        { error: "Esa clave de carga es de otra persona: no se puede mandar desde esta sesión." },
-        { status: 403 }
-      );
-    }
-
-    if (reserva.decision === "otro-tipo") {
-      // La misma clave ya se usó para una OT. No es falta de permiso —es el
-      // mismo usuario—, así que no es un 403: es un conflicto, y va con el
-      // mismo 409 que la duda porque para la cola los dos son definitivos y
-      // reintentar no los cambia.
-      return NextResponse.json(
-        { error: "Esa clave de carga ya se usó para una orden de trabajo. Cargá el aviso de nuevo." },
-        { status: 409 }
-      );
-    }
-
-    if (reserva.decision === "en-duda") {
-      return NextResponse.json(
-        {
-          error:
-            "Esta carga ya había arrancado y no se sabe si llegó: el aviso puede haber " +
-            "quedado escrito en la planilla. Mirala antes de cargarlo de nuevo o quedan dos.",
-        },
-        { status: 409 }
-      );
-    }
+    // Qué contesta cada veredicto lo decide `respuestaDeLaReserva`, que es pura
+    // y tiene los cinco fijados con tests. `null` es "seguir": la única que
+    // deja crear el aviso.
+    const respuesta = respuestaDeLaReserva(reserva.decision, reserva.fila, "aviso");
+    if (respuesta) return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
   }
 
   // El próximo número sale de la **planilla**, no de la base: alguien puede
@@ -184,7 +136,11 @@ export async function POST(request: Request) {
 
   const aviso = {
     oa_number,
-    fecha,
+    // Sin `fecha` en el cuerpo, hoy. `hoyEnArgentina()` se llama **acá**, que
+    // es donde se llamaba antes de este plan: un pedido que cruza la
+    // medianoche mientras habla con Google se sigue fechando igual que se
+    // fechaba, y eso tiene que ser literal.
+    fecha: laFecha.estado === "sirve" ? laFecha.fecha : hoyEnArgentina(),
     sector_raw: sectorRaw,
     equipo_raw: equipoRaw,
     descripcion,
@@ -209,7 +165,8 @@ export async function POST(request: Request) {
   // número ahora, antes del insert: un reintento que caiga en esta ventana
   // recibe el número de verdad en vez de un 409 que obligue a mirar la
   // planilla a mano.
-  if (clave) await anotarLaClave(admin, clave, "aviso", { numero: oa_number });
+  let clave_error: string | null = null;
+  if (clave) clave_error = await anotarLaClave(admin, clave, "aviso", { numero: oa_number });
 
   const enlaces = await cargarEnlaces(admin);
   const equipo_code = codigoDeEquipo(equipoRaw);
@@ -233,11 +190,33 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  // La fila ya está en la planilla cuando se llega acá, así que esto dejó de
+  // ser "no se pudo cargar el aviso": el aviso **existe**. Devolver el error
+  // de Postgres a secas hacía que quien cargó lo cargara de nuevo y quedaran
+  // dos, que es justo lo que esta tarea vino a cerrar. Es el mismo trato que
+  // la ruta de OT le da a su insert fallido, y un 500 para la cola es
+  // pasajero: el reintento cae en `ya-esta` y recibe el número.
+  if (error) {
+    return NextResponse.json(
+      {
+        error:
+          `El aviso ${oa_number} quedó escrito en la planilla pero no se pudo guardar ` +
+          `en el sistema: ${error.message}. Va a entrar en la próxima sincronización; ` +
+          `no lo cargues de nuevo o quedan dos.`,
+      },
+      { status: 500 }
+    );
+  }
 
   // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
   // saber. `resolverClave` no borra el número al reescribir.
-  if (clave) await anotarLaClave(admin, clave, "aviso", { numero: oa_number, entidadId: data.id });
+  // El `?? clave_error` es para no borrar el fallo de la primera pasada con el
+  // null de una segunda que sí anduvo.
+  if (clave) {
+    clave_error =
+      (await anotarLaClave(admin, clave, "aviso", { numero: oa_number, entidadId: data.id }))
+      ?? clave_error;
+  }
 
-  return NextResponse.json({ data, oa_number });
+  return NextResponse.json({ data, oa_number, clave_error });
 }

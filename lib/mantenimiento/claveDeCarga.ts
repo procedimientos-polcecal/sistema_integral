@@ -22,11 +22,12 @@
 // `reservarClave`: este archivo sólo la reconoce y la nombra.
 //
 // El número puede guardarse antes de que se conozca el id. En la ruta de OT el
-// número existe apenas la planilla confirma, antes del insert en la base. La
-// ruta de OT va a llamar a `resolverClave` en ese punto, con `entidadId`
-// todavía desconocido, y una segunda vez cuando tenga el id para completarlo.
-// Así un reintento que cae entre las dos recibe el número de verdad en vez de
-// un 409, y es cierto: esa OT ya existe donde manda, que es la planilla.
+// número existe apenas la planilla confirma, antes del insert en la base, y en
+// la de avisos apenas se escribe la fila: las dos llaman ahí a `anotarLaClave`
+// —que es `resolverClave` con el catch puesto— con `entidadId` todavía
+// desconocido, y una segunda vez cuando tienen el id, que lo completa. Así un
+// reintento que cae entre las dos recibe el número de verdad en vez de un 409,
+// y es cierto: esa carga ya existe donde manda, que es la planilla.
 //
 // POR ESO "ya-esta" PUEDE VENIR CON `entidad_id: null`: en esa ventana
 // `resuelto_en` y `numero` ya están llenos y el id todavía no. Quien reciba un
@@ -148,6 +149,132 @@ export function filaVisible(decision: DecisionDeClave, fila: FilaDeClave | null)
   return decision === "ya-esta" || decision === "en-duda" ? fila : null;
 }
 
+/** Lo que se le dice a quien manda una carga con la clave de otra persona. */
+const CLAVE_AJENA =
+  "Esa clave de carga es de otra persona: no se puede mandar desde esta sesión.";
+
+/**
+ * Cómo se nombra cada tipo de carga en lo que ve una persona.
+ *
+ * Los textos viven acá y no en las rutas porque son parte de lo que esta
+ * función decide: cambiar uno sin mirar el otro deja a dos pantallas diciendo
+ * cosas distintas del mismo problema.
+ */
+const TEXTOS: Record<TipoDeCarga, {
+  campoDelNumero: string;
+  otroTipo: string;
+  enDuda: string;
+  estaEnLaPlanilla: (numero: string, avisoId?: unknown) => string;
+}> = {
+  aviso: {
+    campoDelNumero: "oa_number",
+    otroTipo:
+      "Esa clave de carga ya se usó para una orden de trabajo. Cargá el aviso de nuevo.",
+    enDuda:
+      "Esta carga ya había arrancado y no se sabe si llegó: el aviso puede haber " +
+      "quedado escrito en la planilla. Mirala antes de cargarlo de nuevo o quedan dos.",
+    estaEnLaPlanilla: (numero) =>
+      `El aviso ${numero} está escrito en la planilla. Acá no quedó registrado si ` +
+      `llegó a guardarse en el sistema: si no está, entra con la próxima ` +
+      `sincronización. No lo cargues de nuevo o quedan dos.`,
+  },
+  orden: {
+    campoDelNumero: "ot_number",
+    otroTipo:
+      "Esa clave de carga ya se usó para un aviso. Cargá la orden de nuevo.",
+    enDuda:
+      "Esta carga ya había arrancado y no se sabe si llegó: la orden puede haber " +
+      "quedado escrita en la planilla. Mirala antes de cargarla de nuevo o quedan dos.",
+    estaEnLaPlanilla: (numero, avisoId) =>
+      `La OT ${numero} está escrita en la planilla. Acá no quedó registrado si ` +
+      `llegó a guardarse en el sistema: si no está, entra con la próxima ` +
+      `sincronización. No la cargues de nuevo o quedan dos.` +
+      (avisoId
+        ? ` El aviso del que salía puede haber quedado sin el enlace a esta OT: ` +
+          `fijate y ponéselo a mano si falta.`
+        : ""),
+  },
+};
+
+/**
+ * Qué contesta la ruta según el veredicto, o `null` para **seguir**.
+ *
+ * Vive acá y no en las dos rutas por el mismo motivo que `anotarLaClave`: es lo
+ * que decide —qué status lleva cada veredicto, qué número se devuelve y qué se
+ * dice— y copiado en dos rutas un día está en una sola. Que sea pura es lo que
+ * permite fijar con tests la propiedad que importa: `ajena` y `otro-tipo` no
+ * devuelven número ni aunque les llegue la fila.
+ *
+ * EL `switch` ES EXHAUSTIVO CONTRA `never` A PROPÓSITO. Antes esto eran cinco
+ * `if` sueltos en cada ruta, así que un sexto veredicto no manejado se caía
+ * para abajo y la ruta creaba la carga igual —duplicar en silencio, que es el
+ * único modo de fallar que este archivo no puede tener—. Ahora no compila.
+ *
+ * LA ADVERTENCIA DE `ya-esta` dice lo que se sabe y no más. Sin `entidad_id` lo
+ * único cierto es que la fila está en la planilla: la carga puede no haber
+ * llegado nunca a la base, puede estar entrando en este mismo momento —entre el
+ * insert y la segunda anotación hay una ventana— o puede estar guardada y haber
+ * fallado esa anotación, que deja el `entidad_id` en null para siempre. Decir
+ * "todavía no está en el sistema" era falso en dos de esos tres casos; el
+ * consejo —no cargarla de nuevo— es el mismo en los tres.
+ */
+export function respuestaDeLaReserva(
+  decision: DecisionDeClave,
+  fila: FilaDeClave | null,
+  tipo: TipoDeCarga,
+  contexto: { avisoId?: unknown } = {},
+): { status: number; cuerpo: Record<string, unknown> } | null {
+  const textos = TEXTOS[tipo];
+
+  switch (decision) {
+    case "seguir":
+      return null;
+
+    case "ya-esta": {
+      const numero = fila?.numero ?? null;
+      const soloEnLaPlanilla = !fila?.entidad_id;
+      return {
+        status: 200,
+        cuerpo: {
+          // La fila no se devuelve: lo que esperaba quien reintenta es su
+          // número, y traerla sería otra consulta para eso.
+          data: null,
+          // Cada ruta espera el suyo con su forma —"A139" el aviso, 2796 la
+          // orden— y `null` cuando no hay, en las dos: un 0 o un NaN se leen
+          // como un número de verdad.
+          [textos.campoDelNumero]:
+            tipo === "orden" ? (numero === null ? null : Number(numero)) : numero,
+          ya_estaba: true,
+          advertencia:
+            soloEnLaPlanilla && numero
+              ? textos.estaEnLaPlanilla(numero, contexto.avisoId)
+              : null,
+        },
+      };
+    }
+
+    // Ni el número ni el id: son de otra carga.
+    case "ajena":
+      return { status: 403, cuerpo: { error: CLAVE_AJENA } };
+
+    // No es falta de permiso —es el mismo usuario—, así que no es un 403: es un
+    // conflicto. Va con el mismo 409 que la duda porque para la cola los dos
+    // son definitivos y reintentar no los cambia.
+    case "otro-tipo":
+      return { status: 409, cuerpo: { error: textos.otroTipo } };
+
+    case "en-duda":
+      return { status: 409, cuerpo: { error: textos.enDuda } };
+
+    default: {
+      // Un veredicto que nadie contempló no sigue de largo: seguir sería crear
+      // la carga sin haber decidido nada sobre la clave.
+      const nunca: never = decision;
+      throw new Error(`Veredicto de clave sin contestar: ${String(nunca)}`);
+    }
+  }
+}
+
 /**
  * Reserva la clave antes de tocar la planilla. Si la clave ya existe lee la
  * fila y la decisión dice qué hacer.
@@ -237,22 +364,24 @@ const COMO_SE_LLAMA: Record<TipoDeCarga, string> = {
  *
  * Lo que queda cuando falla, dicho: la clave sigue reservada y sin resolver, o
  * sea que el próximo reintento con esa clave recibe el veredicto `en-duda` y lo
- * mira una persona. Eso es correcto —la carga está en la planilla— y el log es
- * lo único que permite entender por qué, así que va el mensaje de la base sin
- * traducir.
+ * mira una persona. Eso es correcto —la carga está en la planilla—, pero que no
+ * voltee el pedido no quiere decir que no haya pasado nada: devuelve el mensaje
+ * de la base **sin traducir** para que la ruta lo mande como `clave_error`,
+ * igual que ya manda `planilla_error` y `aviso_error`. Un fallo que sólo sale
+ * por el log no lo ve quien cargó.
  */
 export async function anotarLaClave(
   admin: ClienteAdmin,
   clave: string,
   tipo: TipoDeCarga,
   resultado: { numero: string; entidadId?: string },
-): Promise<void> {
+): Promise<string | null> {
   try {
     await resolverClave(admin, clave, resultado);
+    return null;
   } catch (e) {
-    console.error(
-      `No se pudo anotar la clave ${clave} ${COMO_SE_LLAMA[tipo]}: ` +
-      `${e instanceof Error ? e.message : e}`
-    );
+    const motivo = e instanceof Error ? e.message : String(e);
+    console.error(`No se pudo anotar la clave ${clave} ${COMO_SE_LLAMA[tipo]}: ${motivo}`);
+    return motivo;
   }
 }

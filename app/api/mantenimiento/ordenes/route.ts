@@ -9,8 +9,12 @@ import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
-import { COLUMNA_OT_ASIGNADA, fechaDeLaCarga } from "@/lib/mantenimiento/avisos";
-import { reservarClave, anotarLaClave } from "@/lib/mantenimiento/claveDeCarga";
+import {
+  COLUMNA_OT_ASIGNADA, fechaDeLaCarga, type FechaDeLaCarga,
+} from "@/lib/mantenimiento/avisos";
+import {
+  reservarClave, anotarLaClave, respuestaDeLaReserva,
+} from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
@@ -150,27 +154,6 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  // ── Primero la planilla, después la base ────────────────────
-  //
-  // **La planilla manda en Mantenimiento: una orden existe cuando tiene su
-  // fila.** Acá se escribe esa fila y de ahí sale el número, de la misma
-  // lectura. Si falla, no se creó nada en ningún lado y no se consumió ningún
-  // número.
-  //
-  // Antes era al revés —insertar, y después intentar la planilla como
-  // best-effort— con el argumento de que "es peor no poder crear la orden que
-  // arriesgar un número repetido". El 16/10/2026 se vio lo que ese argumento
-  // no medía: la OT 2796 quedó en la base con un número que la hoja de
-  // respuestas todavía no había repartido, así que la siguiente respuesta del
-  // formulario se lo iba a llevar también, y el `upsert` por `ot_number` de la
-  // sincronización habría pisado la de la app con la del formulario. No era el
-  // riesgo de un número repetido: era una pérdida garantizada y silenciosa.
-  //
-  // El precio, dicho: con Google caído no se puede crear una OT desde la app.
-  // Es visible y se reintenta; lo otro no se veía nunca.
-  // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
-  // la base. Si se tradujera sólo al escribir, la base quedaría con las dos y
-  // el filtro del listado —un `.in()` liso— seguiría sin encontrarla.
   // Antes de la planilla, para no consumir un número por una orden incompleta.
   const faltaParaCerrar = loQueFaltaParaCerrar({
     fecha_cierre, horas, quien, contratista, operario_1, operario_2, operario_3,
@@ -224,18 +207,17 @@ export async function POST(request: Request) {
   // **Sin `clave` esto no corre**: ese cuerpo es el de alguien cargando con
   // señal desde la pantalla de siempre, donde la fecha la eligió a mano en un
   // `<input type="date">` y la está viendo. Ahí la ruta queda letra por letra
-  // como estaba —`fecha || hoy`—, porque con señal no cambia nada.
-  const hoy = hoyEnArgentina();
-  let fechaDeLaOrden: string = fecha || hoy;
+  // como estaba —`fecha || hoy`—, porque con señal no cambia nada: queda en
+  // `null`, que es lo que más abajo deja pasar la fecha del cuerpo sin mirar.
+  let laFecha: FechaDeLaCarga | null = null;
 
   if (clave) {
     // La fecha primero: un 400 tiene que salir antes de reservar la clave, o
     // esa clave queda en duda para siempre por un cuerpo que nunca se cargó.
-    const revisada = fechaDeLaCarga(fecha, hoy);
-    if (revisada.estado === "no-sirve") {
-      return NextResponse.json({ error: revisada.motivo }, { status: 400 });
+    laFecha = fechaDeLaCarga(fecha, hoyEnArgentina());
+    if (laFecha.estado === "no-sirve") {
+      return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
     }
-    fechaDeLaOrden = revisada.estado === "sirve" ? revisada.fecha : hoy;
 
     let reserva;
     try {
@@ -250,67 +232,18 @@ export async function POST(request: Request) {
       );
     }
 
-    if (reserva.decision === "ya-esta") {
-      // Esta OT ya se creó con esta clave: se devuelve el número de entonces y
-      // la planilla no se toca. Lo que el primer intento no haya alcanzado a
-      // hacer —enlazar el aviso, exportar el cierre— no se rehace acá: no se
-      // sabe qué llegó a pasar y repetirlo a ciegas pisaría la planilla.
-      //
-      // SIN `entidad_id` EL CASO ES OTRO y no se puede contestar igual: la
-      // planilla ya tiene la fila con su número y el insert en la base nunca
-      // ocurrió. Contestar "ya está" a secas dejaría a la persona creyendo que
-      // la orden está en el sistema, y si venía de un aviso, ese aviso quedó
-      // sin su `work_order_id` y nadie se entera. Se dice, con el mismo
-      // criterio que el 500 de más abajo: el estado raro se cuenta, no se
-      // tapa.
-      const numero = Number(reserva.fila?.numero);
-      const soloEnLaPlanilla = !reserva.fila?.entidad_id;
-      return NextResponse.json({
-        data: null,
-        ot_number: numero,
-        ya_estaba: true,
-        advertencia: soloEnLaPlanilla
-          ? `La OT ${numero} quedó escrita en la planilla y todavía no está en el ` +
-            `sistema: va a entrar con la próxima sincronización. No la cargues de ` +
-            `nuevo o quedan dos.` +
-            (aviso_id
-              ? ` El aviso del que salía quedó sin el enlace a esta OT: hay que ` +
-                `ponérselo a mano cuando aparezca.`
-              : "")
-          : null,
-      });
-    }
-
-    if (reserva.decision === "ajena") {
-      return NextResponse.json(
-        { error: "Esa clave de carga es de otra persona: no se puede mandar desde esta sesión." },
-        { status: 403 }
-      );
-    }
-
-    if (reserva.decision === "otro-tipo") {
-      // La misma clave ya se usó para un aviso. No es falta de permiso —es el
-      // mismo usuario—, así que no es un 403: es un conflicto, y va con el
-      // mismo 409 que la duda porque para la cola los dos son definitivos y
-      // reintentar no los cambia.
-      return NextResponse.json(
-        { error: "Esa clave de carga ya se usó para un aviso. Cargá la orden de nuevo." },
-        { status: 409 }
-      );
-    }
-
-    if (reserva.decision === "en-duda") {
-      return NextResponse.json(
-        {
-          error:
-            "Esta carga ya había arrancado y no se sabe si llegó: la orden puede haber " +
-            "quedado escrita en la planilla. Mirala antes de cargarla de nuevo o quedan dos.",
-        },
-        { status: 409 }
-      );
-    }
+    // Qué contesta cada veredicto lo decide `respuestaDeLaReserva`, que es pura
+    // y tiene los cinco fijados con tests. `null` es "seguir": la única que
+    // deja crear la orden.
+    const respuesta = respuestaDeLaReserva(
+      reserva.decision, reserva.fila, "orden", { avisoId: aviso_id }
+    );
+    if (respuesta) return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
   }
 
+  // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
+  // la base. Si se tradujera sólo al escribir, la base quedaría con las dos y
+  // el filtro del listado —un `.in()` liso— seguiría sin encontrarla.
   const laPrioridad = prioridadParaLaPlanilla(prioridad);
 
   // Quién la pide, para que la planilla lo diga. Es lo que le falta a quien la
@@ -328,6 +261,29 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .maybeSingle();
 
+  // ── Primero la planilla, después la base ────────────────────
+  //
+  // **La planilla manda en Mantenimiento: una orden existe cuando tiene su
+  // fila.** Acá se escribe esa fila y de ahí sale el número, de la misma
+  // lectura. Si falla, no se creó nada en ningún lado y no se consumió ningún
+  // número.
+  //
+  // Antes era al revés —insertar, y después intentar la planilla como
+  // best-effort— con el argumento de que "es peor no poder crear la orden que
+  // arriesgar un número repetido". El 16/10/2026 se vio lo que ese argumento
+  // no medía: la OT 2796 quedó en la base con un número que la hoja de
+  // respuestas todavía no había repartido, así que la siguiente respuesta del
+  // formulario se lo iba a llevar también, y el `upsert` por `ot_number` de la
+  // sincronización habría pisado la de la app con la del formulario. No era el
+  // riesgo de un número repetido: era una pérdida garantizada y silenciosa.
+  //
+  // El precio, dicho: con Google caído no se puede crear una OT desde la app.
+  // Es visible y se reintenta; lo otro no se veía nunca.
+  //
+  // ESTO NO LO CONTRADICE LA RESERVA DE LA CLAVE, que sí escribe en la base
+  // antes: una fila de `cargas_offline` **no es la orden**, es la anotación de
+  // que alguien la está creando. Lo que no puede existir antes que la fila de
+  // la planilla es la orden, y no existe.
   const alta = await altaEnLaPlanilla({
     creado: new Date(),
     email: quienPide?.email ?? null,
@@ -357,11 +313,17 @@ export async function POST(request: Request) {
   // está repartido. Se anota ahora, antes del insert: un reintento que caiga
   // en esta ventana recibe el número de verdad en vez de un 409 que obligue a
   // mirar la planilla a mano.
-  if (clave) await anotarLaClave(admin, clave, "orden", { numero: String(ot_number) });
+  let clave_error: string | null = null;
+  if (clave) {
+    clave_error = await anotarLaClave(admin, clave, "orden", { numero: String(ot_number) });
+  }
 
   const record = {
     ot_number,
-    fecha:           fechaDeLaOrden,
+    // Sin `clave`, `fecha || hoyEnArgentina()` letra por letra como estaba, y
+    // llamado **acá**, que es donde se llamaba: un pedido que cruza la
+    // medianoche mientras habla con Google se sigue fechando igual.
+    fecha:           laFecha?.estado === "sirve" ? laFecha.fecha : fecha || hoyEnArgentina(),
     sector_id:       sector_id || null,
     sector_raw:      sector_raw || null,
     equipo_raw:      equipo_raw || null,
@@ -418,8 +380,13 @@ export async function POST(request: Request) {
 
   // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
   // saber. `resolverClave` no borra el número al reescribir.
+  // El `?? clave_error` es para no borrar el fallo de la primera pasada con el
+  // null de una segunda que sí anduvo.
   if (clave) {
-    await anotarLaClave(admin, clave, "orden", { numero: String(ot_number), entidadId: inserted.id });
+    clave_error =
+      (await anotarLaClave(
+        admin, clave, "orden", { numero: String(ot_number), entidadId: inserted.id }
+      )) ?? clave_error;
   }
 
   // ── Lo que la planilla todavía no sabe ──────────────────────
@@ -456,7 +423,9 @@ export async function POST(request: Request) {
     aviso_error = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
   }
 
-  return NextResponse.json({ data: inserted, ot_number, aviso_error, planilla_error });
+  return NextResponse.json({
+    data: inserted, ot_number, aviso_error, planilla_error, clave_error,
+  });
 }
 
 /**
