@@ -39,6 +39,15 @@ export const config = {
    * manifest llega como HTML donde se esperaba JSON y el service worker no se
    * registra. Los dos son públicos por definición y no hay nada que proteger.
    *
+   * `/cargar` —la pantalla que se dibuja entera en el navegador para poder
+   * cargar un aviso o una OT sin señal— **NO queda afuera, y eso es a
+   * propósito**: con señal tiene que pedir sesión como cualquier otra pantalla.
+   * No la necesita para dibujarse, pero sí para que lo que se cargue ahí llegue
+   * a algún lado, y excluirla sólo lograría que alguien sin sesión la abriera,
+   * cargara, y se quedara con la carga adentro del teléfono. Sin señal este
+   * código no corre —no hay servidor— y la va a servir el service worker desde
+   * el caché, que es la tarea 7 del plan.
+   *
    * Cuidado con el regex: las alternativas van separadas por `|` y el punto
    * de los nombres con extensión se escapa con doble barra, porque esto es un
    * string JS y un `\.` a secas se evalúa como `.` y no escapa nada.
