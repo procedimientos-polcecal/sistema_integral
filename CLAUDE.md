@@ -389,6 +389,24 @@ qué no lo vio nadie:
 Si tocás el payload de un lado, el test de punta a punta de
 `lib/core/sw.test.ts` es el que tiene que seguir en verde.
 
+**Y un arreglo a `public/sw.js` no llegaba a ningún aparato.** El archivo no
+tenía `skipWaiting` ni `clients.claim`, así que un worker nuevo quedaba **en
+espera** hasta que se cerraran todas las ventanas del dominio —con la app
+instalada, eso puede no pasar en días— mientras el viejo seguía atendiendo los
+push. Se desplegó el arreglo de arriba y el teléfono siguió cayendo en el
+inicio: estaba servido y no corría. **Ningún arreglo hecho a ese archivo desde
+la fase 1 había llegado nunca a un aparato con la app instalada**, y no se nota,
+porque un worker en espera no se distingue de uno que funciona. Se agregó el
+18/10/2026 y ahora cada versión toma el control sola.
+
+Lo que hay que saber antes de tocarlo: **`skipWaiting` es seguro mientras ese
+archivo no cachee nada.** Hoy el handler de `fetch` pasa derecho a la red. El
+día que cachee —las fases 3 y 4—, un worker nuevo tomando el control a mitad de
+sesión le puede servir a una página ya cargada los assets de otra versión. Por
+eso mismo el `activate` **no borra cachés** y hay un test que lo fija: un
+`activate` que borra es justo lo que vuelve peligroso a `skipWaiting`. La
+advertencia completa está en el encabezado del propio `public/sw.js`.
+
 ## Cómo se verifica
 
 ```bash

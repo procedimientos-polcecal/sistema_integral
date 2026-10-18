@@ -251,3 +251,68 @@ estado })` de `lib/mantenimiento/aprobacion.ts`, que ya existe y ya tiene tests.
 - Si el envío a varios aparatos va en serie o en paralelo. Son pocos; en serie
   está bien y copia el molde del cron.
 - El recorte de la descripción en el cuerpo de la notificación.
+
+---
+
+## Cómo terminó (18/10/2026)
+
+Probado de punta a punta en producción, con pedidos reales cargados por el
+formulario de Google y sincronizados desde la app. **Llegó el push y llevó a
+`/compras/aprobaciones`.**
+
+Lo que se midió al verificarlo, y que no estaba en el diseño:
+
+| | |
+|---|---|
+| Aprobadores de compras | 4 |
+| Con notificaciones prendidas | **1** (Bernardo Strupp, que sí está en la lista) |
+| Aprobadores de OS | 1 (Nicolás Lenzetti), **sin** notificaciones |
+
+O sea que el lado de las órdenes de servicio está escrito y probado por tests
+pero **hoy no le llega a nadie**. No es un defecto del diseño: es que la
+función se escribe una vez y se prende sola cuando alguien active las
+notificaciones.
+
+### Los dos bugs que aparecieron, que no eran de esto
+
+Hicieron falta tres intentos en producción, y los dos primeros fallaron por
+cosas preexistentes. Las dos valen más que la funcionalidad que las destapó.
+
+**1. El payload del push nunca se leyó.** El handler de `push` de
+`public/sw.js` guardaba `data: data.data`, un nivel que ningún emisor escribe:
+el `Aviso` de `lib/core/webpush.ts` es plano. Así que
+`event.notification.data` llegaba `undefined` y **toda notificación abría el
+inicio** — el resumen diario de la fase 2 y el aviso de Remises incluidos.
+El test no lo vio porque le pasaba al handler un payload anidado que nadie
+produce: inventaba la forma en vez de copiarla del contrato. Y los dos
+handlers por separado estaban bien; lo roto era el empalme, que no lo prueba
+ningún test de a uno.
+
+**2. Ningún arreglo a `public/sw.js` llegaba a un aparato.** El archivo no
+tenía `skipWaiting` ni `clients.claim`, así que un worker nuevo quedaba en
+espera hasta que se cerraran todas las ventanas del dominio mientras el viejo
+seguía atendiendo los `push`. Se desplegó el arreglo del payload y el teléfono
+siguió cayendo en el inicio: el arreglo estaba servido y no corría. Mirando
+para atrás, **ningún arreglo hecho a ese archivo desde la fase 1 llegó nunca a
+un aparato con la app instalada**, y nadie lo habría notado, porque un service
+worker en espera no se distingue de uno que funciona.
+
+El segundo tuvo que superar al problema que arregla: hizo falta cerrar la app
+instalada **y** la pestaña del dominio una última vez para salir del worker
+viejo. De ahí en adelante se activa solo. Un aparato que hoy tenga la app
+instalada y nunca la cierre sigue con el worker de antes hasta que la cierre
+una vez.
+
+`skipWaiting` es seguro **mientras `public/sw.js` no cachee nada**. El día que
+cachee —fases 3 y 4— hay que volver a decidirlo; la advertencia está en el
+encabezado del propio archivo, con la fecha.
+
+### Lo que cambió respecto del diseño
+
+Nada de las decisiones. Sí un detalle de dónde vive el código: el envío **no
+puede vivir en `lib/compras/sheets.ts`**, porque ese módulo termina en el
+bundle del cliente por `empresaParaPlanilla` y `web-push` es sólo de Node.
+Hacía fallar `next build` sin que `tsc` ni los tests lo vieran. La
+sincronización ahora sólo **calcula** quiénes nacieron esperando y los
+devuelve en `nacen_esperando`; avisa `lib/compras/avisoDeAprobacion.ts`, desde
+las rutas.
