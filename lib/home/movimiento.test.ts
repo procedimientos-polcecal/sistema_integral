@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loQueSeMovio, esDiaDeRecordatorio } from "./movimiento";
+import { loQueSeMovio, esDiaDeRecordatorio, queMandarHoy } from "./movimiento";
 import type { Notificacion } from "./notificaciones";
 
 const aviso = (id: string, cantidad: number): Notificacion => ({
@@ -82,5 +82,51 @@ describe("esDiaDeRecordatorio", () => {
     for (const d of ["2026-10-18", "2026-10-20", "2026-10-24", "2026-10-25"]) {
       expect(esDiaDeRecordatorio(d)).toBe(false);
     }
+  });
+});
+
+describe("queMandarHoy", () => {
+  /*
+   * LA IDEMPOTENCIA DEL CRON VIVE ACA, y no en el upsert.
+   *
+   * Para el movimiento alcanzaba con el upsert: la segunda corrida compara
+   * contra la foto que escribio la primera y da cero. Pero el resumen de los
+   * lunes NO mira la foto —son totales— asi que un reintento mandaba el mismo
+   * push dos veces. Y el disparo manual de la prueba de produccion es
+   * exactamente ese caso.
+   */
+  it("si la ultima foto es la de hoy, ya corrio: no se manda nada", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: "2026-10-19", hoy: "2026-10-19" })).toBe("nada");
+  });
+
+  it("y tampoco un lunes, que es cuando el upsert no alcanzaba", () => {
+    // 2026-10-19 es lunes.
+    expect(queMandarHoy({ fechaDeLaFoto: "2026-10-19", hoy: "2026-10-19" })).toBe("nada");
+  });
+
+  it("un dia comun con foto de ayer: movimiento", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: "2026-10-19", hoy: "2026-10-20" })).toBe("movimiento");
+  });
+
+  it("un lunes con foto de ayer: totales", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: "2026-10-18", hoy: "2026-10-19" })).toBe("totales");
+  });
+
+  it("el primer dia, sin ninguna foto: nada que comparar, no se manda", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: null, hoy: "2026-10-20" })).toBe("nada");
+  });
+
+  /*
+   * Y la excepcion que importa para este despliegue: los totales NO necesitan
+   * foto. Si el primer dia con tabla cae lunes —que es lo mas probable ahora
+   * mismo—, cortar por "primer dia" perderia el recordatorio de esa semana
+   * entera.
+   */
+  it("el primer dia, si es lunes: los totales no necesitan foto", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: null, hoy: "2026-10-19" })).toBe("totales");
+  });
+
+  it("una foto vieja de varios dias sigue sirviendo: movimiento", () => {
+    expect(queMandarHoy({ fechaDeLaFoto: "2026-10-14", hoy: "2026-10-20" })).toBe("movimiento");
   });
 });

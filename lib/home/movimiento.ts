@@ -77,3 +77,43 @@ export function loQueSeMovio(avisos: Notificacion[], foto: Foto): Notificacion[]
 export function esDiaDeRecordatorio(fecha: string): boolean {
   return diaDeLaSemana(fecha) === 1;
 }
+
+/** Qué resumen le toca al día de hoy. */
+export type QueMandar = "nada" | "movimiento" | "totales";
+
+/**
+ * Qué mandar hoy, según qué día es y cuál fue la última foto.
+ *
+ * **Vive acá y no en la ruta porque es la decisión, y una decisión se prueba.**
+ * Es la regla del repo: lo que importa se saca de la ruta a `lib/`.
+ *
+ * ── LA IDEMPOTENCIA DEL CRON VIVE EN LA PRIMERA LÍNEA ────────────────────────
+ *
+ * Para el movimiento alcanzaba con el `upsert` de la foto: la segunda corrida
+ * del día compara contra lo que escribió la primera y da cero. **Pero el
+ * resumen de los lunes no mira la foto** —son totales—, así que un reintento
+ * mandaba el mismo push dos veces. Y el disparo a mano con el que se prueba
+ * esto en producción es exactamente ese caso.
+ *
+ * Si la última foto es la de hoy, esta corrida ya pasó: no se manda nada.
+ *
+ * ── LOS TOTALES NO NECESITAN FOTO ────────────────────────────────────────────
+ *
+ * Por eso el lunes se decide **antes** que el primer día. Cortar por "no hay
+ * foto" también el lunes perdería el recordatorio de toda esa semana, y el
+ * primer día con la tabla viva puede perfectamente caer lunes.
+ *
+ * ── SIN FOTO NO HAY MOVIMIENTO ───────────────────────────────────────────────
+ *
+ * El primer día no hay con qué comparar. Tratarlo como "todo es nuevo" sería
+ * un push de estreno con los trece avisos, que es justo lo que esto evita.
+ */
+export function queMandarHoy(cuando: {
+  fechaDeLaFoto: string | null;
+  hoy: string;
+}): QueMandar {
+  if (cuando.fechaDeLaFoto === cuando.hoy) return "nada";
+  if (esDiaDeRecordatorio(cuando.hoy)) return "totales";
+  if (cuando.fechaDeLaFoto === null) return "nada";
+  return "movimiento";
+}

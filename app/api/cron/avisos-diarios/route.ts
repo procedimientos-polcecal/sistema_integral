@@ -5,7 +5,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import { enviarPush } from "@/lib/core/webpush";
 import { avisosDeUsuario, avisosDeTodoElSistema } from "@/lib/home/avisosDeUsuario";
 import { resumirParaPush, resumirElMovimiento } from "@/lib/home/resumenDeAvisos";
-import { loQueSeMovio, esDiaDeRecordatorio } from "@/lib/home/movimiento";
+import { loQueSeMovio, queMandarHoy } from "@/lib/home/movimiento";
 import { ultimaFoto, guardarFoto } from "@/lib/home/fotoDeAvisos";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
@@ -80,8 +80,9 @@ export async function GET(request: Request) {
   }
 
   const hoy = hoyEnArgentina();
-  const esLunes = esDiaDeRecordatorio(hoy);
-  const primerDia = fechaDeLaFoto === null;
+  // Qué resumen le toca al día de hoy. La decisión vive en `queMandarHoy`
+  // —pura y con tests— y no acá: es la que decide si alguien recibe un push.
+  const queMandar = queMandarHoy({ fechaDeLaFoto, hoy });
 
   // La tabla la crea una migración y las migraciones las aplica una persona, así
   // que entre el deploy y esa aplicación puede no existir. Se dice con todas las
@@ -111,7 +112,7 @@ export async function GET(request: Request) {
   let vencidas = 0;
   let fallos = 0;
 
-  for (const [usuarioId, aparatos] of primerDia ? [] : porUsuario) {
+  for (const [usuarioId, aparatos] of queMandar === "nada" ? [] : porUsuario) {
     // Una cuenta dada de baja no recibe: sigue teniendo suscripciones hasta que
     // el `on delete cascade` las limpie, y eso sólo pasa si se borra la fila.
     const { data: usuario } = await admin
@@ -130,7 +131,10 @@ export async function GET(request: Request) {
     // Los lunes el total; el resto de los días, lo que se movió. Las dos
     // salen de los mismos avisos: lo único que cambia es contra qué se
     // comparan y cómo se redactan.
-    const resumen = esLunes ? resumirParaPush(avisos) : resumirElMovimiento(loQueSeMovio(avisos, foto));
+    const resumen =
+      queMandar === "totales"
+        ? resumirParaPush(avisos)
+        : resumirElMovimiento(loQueSeMovio(avisos, foto));
     if (!resumen) continue;
     conAvisos++;
 
@@ -172,8 +176,7 @@ export async function GET(request: Request) {
     vencidas,
     fallos,
     // Para poder mirar qué hizo sin adivinar.
-    esLunes,
-    primerDia,
+    queMandar,
     fechaDeLaFoto,
     avisosEnLaFoto: todos.length,
     ...(errorDeLaFoto ? { errorDeLaFoto } : {}),

@@ -15,6 +15,20 @@ import type { Foto } from "./movimiento";
 const TABLA = "avisos_fotos";
 
 /**
+ * El `notificacion_id` de la fila centinela de un día sin ningún aviso.
+ *
+ * Existe para que **la fecha avance igual**. Sin ella, un día en que todos los
+ * conteos dan cero no escribe ninguna fila, `ultimaFoto` sigue devolviendo la
+ * de anteayer, y el delta del día siguiente se compara contra un número viejo
+ * y más alto: un día en que se atrasan cinco OT no avisaría nada, y el silencio
+ * duraría hasta superar el número viejo.
+ *
+ * Los paréntesis hacen que no pueda chocar con un id de `lib/home/avisos.ts`,
+ * que son todos kebab-case.
+ */
+export const SIN_AVISOS = "(sin avisos)";
+
+/**
  * La **última** foto que haya, con su fecha. `fecha: null` es que no hay
  * ninguna: el primer día.
  *
@@ -51,14 +65,26 @@ export async function ultimaFoto(
   const fecha = (ultima?.fecha as string | undefined) ?? null;
   if (!fecha) return { fecha: null, foto: new Map() };
 
-  const { data: filas } = await admin
+  const { data: filas, error: errorDeLasFilas } = await admin
     .from(TABLA)
     .select("notificacion_id, cantidad")
     .eq("fecha", fecha);
 
+  // **El error de ESTA consulta importa tanto como el de la de arriba.**
+  // Devolver la fecha con el mapa vacío sería decirle al cron "hay foto y está
+  // vacía", y entonces `loQueSeMovio` da por nuevo todo: a cada persona le
+  // llegaría un push donde cada número es el stock entero rotulado como delta
+  // —«23 más · Órdenes de trabajo atrasadas»—. Un delta que miente es peor que
+  // un stock repetido, porque el stock al menos es verdad.
+  if (errorDeLasFilas) return { fecha: null, foto: new Map(), error: errorDeLasFilas.message };
+
   return {
     fecha,
-    foto: new Map((filas ?? []).map((f) => [f.notificacion_id as string, f.cantidad as number])),
+    foto: new Map(
+      (filas ?? [])
+        .filter((f) => f.notificacion_id !== SIN_AVISOS)
+        .map((f) => [f.notificacion_id as string, f.cantidad as number])
+    ),
   };
 }
 
@@ -78,12 +104,17 @@ export async function guardarFoto(
   fecha: string,
   avisos: Notificacion[]
 ): Promise<{ error?: string }> {
-  if (avisos.length === 0) return {};
+  // Un día sin ningún aviso **igual deja marcada la fecha**, con la centinela.
+  // Ver `SIN_AVISOS`: saltear la escritura dejaría la fecha quieta y el delta
+  // del día siguiente se compararía contra una foto vieja.
+  const filas =
+    avisos.length === 0
+      ? [{ fecha, notificacion_id: SIN_AVISOS, cantidad: 0 }]
+      : avisos.map((a) => ({ fecha, notificacion_id: a.id, cantidad: a.cantidad }));
 
-  const { error } = await admin.from(TABLA).upsert(
-    avisos.map((a) => ({ fecha, notificacion_id: a.id, cantidad: a.cantidad })),
-    { onConflict: "fecha,notificacion_id" }
-  );
+  const { error } = await admin.from(TABLA).upsert(filas, {
+    onConflict: "fecha,notificacion_id",
+  });
 
   return error ? { error: error.message } : {};
 }
