@@ -471,7 +471,20 @@ generan una región (`QUERY`, `FILTER`, `IMPORTRANGE`, `ARRAYFORMULA`) que
 devuelve error, **y** la pestaña sin filas. La decisión vive en
 [lib/core/saludDePlanilla.ts](lib/core/saludDePlanilla.ts), con las dos caídas
 reales fijadas como tests; el script es sólo la lectura. Sale 1 si hay un
-ROMPE, y hoy da **ROMPE 0 · MIRAR 22**.
+ROMPE, y hoy da **ROMPE 0 · MIRAR 21**.
+
+Lo primero que encontró vale como ejemplo de qué buscar. En el libro
+`Respuestas ORDEN DE TRABAJO` había una copia de la pestaña `OT` de la planilla
+`ORDEN DE TRABAJO`, y al estar en el mismo libro que los datos, su
+`IMPORTRANGE` había quedado apuntando a sí mismo — nadie escribió nada raro:
+**se duplicó una pestaña y la URL, que nombraba al libro de respuestas, pasó a
+nombrar su propio libro.** Esa copia además traía sólo `Respuestas de
+formulario` y no `Altas del sistema`, así que le faltaban las OT que crea el
+SdG: 2.200 de 2.203 el 19/10/2026, sin las 2822, 2823 y 2824. Se borró, y con
+eso **no queda ninguna auto-importación en las once planillas**.
+
+La moraleja para la próxima: duplicar una pestaña que tiene `IMPORTRANGE`
+**crea el lazo sola**, sin que nadie escriba una fórmula mala.
 
 Necesita `GOOGLE_SERVICE_ACCOUNT_JSON`, así que **no puede ir al CI** como está:
 leer las planillas de producción desde un runner pide meter esa credencial ahí.
