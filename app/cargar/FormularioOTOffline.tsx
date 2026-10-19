@@ -4,6 +4,8 @@ import { useState } from "react";
 import Select from "@/components/Select";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
+import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import { lineasDesdeElCuerpo, type LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -75,6 +77,15 @@ export default function FormularioOTOffline({
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [form, setForm] = useState(() => borradorDesdeElCuerpo(vacio(), borrador));
+  /*
+   * Los repuestos van aparte de `form`, igual que en el modal: `form` se
+   * derrama entero al cuerpo y una lista no es un campo de texto.
+   *
+   * Y se recuperan con su propia función porque `borradorDesdeElCuerpo`
+   * descarta los arreglos a propósito —un `String({})` daría «[object
+   * Object]»—, así que una carga parada perdería los repuestos sin decir nada.
+   */
+  const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>(() => lineasDesdeElCuerpo(borrador));
 
   function f(clave: keyof FormularioDeOT, valor: string | boolean) {
     setForm((previo) => {
@@ -119,6 +130,9 @@ export default function FormularioOTOffline({
     try {
       const salida = await onMandar({
         ...form,
+        // Los renglones; la ruta arma con ellos el texto de la única celda que
+        // la planilla tiene para esto.
+        repuestos,
         horas: form.horas ? Number(form.horas) : null,
         // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
         // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
@@ -133,7 +147,10 @@ export default function FormularioOTOffline({
       // Se vacía salvo cuando la carga se rechazó: ahí lo escrito es lo único
       // que hay, y borrarlo obligaría a tipear todo de nuevo para corregir una
       // coma. Este formulario tiene dieciocho campos.
-      if (salida.estado !== "rechazada") setForm(vacio());
+      if (salida.estado !== "rechazada") {
+        setForm(vacio());
+        setRepuestos([{ cantidad: "", nombre: "" }]);
+      }
     } catch (e) {
       // Nada de acá debería tirar, pero si tira —`crypto.randomUUID` en un
       // contexto inseguro, por ejemplo— no puede quedarse en la consola: la
@@ -253,13 +270,11 @@ export default function FormularioOTOffline({
         </F>
       </div>
 
-      <F label="Repuesto utilizado">
-        <input
-          value={form.repuesto}
-          onChange={(e) => f("repuesto", e.target.value)}
-          disabled={deshabilitado}
-          className="input"
-          placeholder="Ej: Rodamiento 32222…"
+      <F label="Repuestos utilizados">
+        <RepuestosDeLaOT
+          lineas={repuestos}
+          onCambiar={setRepuestos}
+          deshabilitado={deshabilitado}
         />
       </F>
 
@@ -440,7 +455,6 @@ function vacio() {
     tipo: "CORRECTIVO",
     quien: "INTERNO",
     descripcion: "",
-    repuesto: "",
     fecha: hoyEnArgentina(),
     fecha_ejecucion: "",
     fecha_cierre: "",

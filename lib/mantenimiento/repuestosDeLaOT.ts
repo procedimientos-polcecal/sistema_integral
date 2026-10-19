@@ -104,3 +104,39 @@ export function repuestosDelCuerpo(body: {
   const suelto = typeof body?.repuesto === "string" ? body.repuesto.trim() : "";
   return { texto: suelto || null, lineas: [] };
 }
+
+/**
+ * Los renglones con los que arranca el formulario, a partir de una carga parada.
+ *
+ * POR QUÉ NO ALCANZA CON `borradorDesdeElCuerpo`
+ *
+ * Esa función reconstruye el formulario de una carga que quedó parada, y
+ * **descarta los objetos y los arreglos a propósito**: un `String({})` daría
+ * «[object Object]» adentro de un campo de texto. Los repuestos ahora viajan
+ * como arreglo, así que caen justo en esa regla y se perderían en silencio —
+ * alguien que corrige una coma de una OT rechazada tendría que volver a cargar
+ * todos los repuestos sin que nada se lo diga.
+ *
+ * Entiende las dos formas porque la cola guarda el cuerpo tal como se armó: una
+ * carga parada hace dos semanas tiene `repuesto` de texto, y recuperarla como
+ * un renglón es mejor que recuperarla vacía.
+ *
+ * Siempre devuelve al menos un renglón: el formulario necesita dónde escribir.
+ */
+export function lineasDesdeElCuerpo(
+  cuerpo: Record<string, unknown> | null | undefined
+): LineaDeRepuesto[] {
+  const vacio = [{ cantidad: "", nombre: "" }];
+  if (!cuerpo) return vacio;
+
+  if (Array.isArray(cuerpo.repuestos)) {
+    const lineas = lineasQueValen(cuerpo.repuestos as LineaDeRepuesto[]);
+    return lineas.length > 0 ? lineas : vacio;
+  }
+
+  const suelto = typeof cuerpo.repuesto === "string" ? cuerpo.repuesto.trim() : "";
+  // El texto entero al nombre y la cantidad vacía: partir "2 grillas 2 mm" en
+  // cantidad y nombre es adivinar, y acá el que mira es quien lo escribió —
+  // que lo acomode si quiere.
+  return suelto ? [{ cantidad: "", nombre: suelto }] : vacio;
+}

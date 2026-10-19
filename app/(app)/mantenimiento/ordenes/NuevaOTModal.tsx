@@ -6,6 +6,11 @@ import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import {
+  copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
+} from "@/lib/mantenimiento/reutilizarOT";
+import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 
 const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
 const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
@@ -27,6 +32,22 @@ const ESTADOS_OT = [
   { value: "ATRASADO",   label: "Atrasado" },
 ];
 
+/**
+ * Lo que los desplegables de este formulario pueden mostrar.
+ *
+ * Sale de las mismas constantes que se renderizan, no de una copia: una OT
+ * vieja con un valor que no está acá —hay 5 con especialidad LUBRICACIÓN— no
+ * se copia, y se avisa. Copiarla dejaría el desplegable en "—" y el formulario
+ * guardando otra cosa.
+ */
+const VOCABULARIO: Vocabulario = {
+  especialidades: ESPECIALIDADES,
+  tipos: TIPOS,
+  quien: QUIEN_OPTIONS,
+  estados: ESTADOS_OT.map(o => o.value),
+  prioridades: PRIORIDADES,
+};
+
 export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: {
   sectores: any[];
   equipos: any[];
@@ -36,6 +57,40 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
+
+  /* ── Reutilizar una OT vieja ──────────────────────────────────────────
+   * Se cargan trabajos ya hechos en tanda, varios del mismo día y con la
+   * misma gente. `vieneDe` queda puesto hasta que se guarda: es lo que
+   * sostiene la barra que pide revisar, porque estos campos no los escribió
+   * quien está mirando la pantalla. */
+  const [numeroViejo, setNumeroViejo] = useState("");
+  const [trayendo, setTrayendo] = useState(false);
+  const [errorAlTraer, setErrorAlTraer] = useState("");
+  const [vieneDe, setVieneDe] = useState<string | null>(null);
+
+  async function traerLaVieja() {
+    const numero = numeroDeOT(numeroViejo);
+    if (!numero) { setErrorAlTraer("Poné el número de la OT que querés copiar."); return; }
+
+    setTrayendo(true); setErrorAlTraer("");
+    try {
+      const res = await fetch(`/api/mantenimiento/ordenes/reutilizar?numero=${numero}`);
+      const body = await res.json().catch(() => ({}));
+      // Nada se toca si no se pudo traer: lo que ya hubiera escrito queda.
+      if (!res.ok) { setErrorAlTraer(body.error ?? "No se pudo traer esa OT."); return; }
+
+      const { campos, lineas, noEntraron } = copiarDeLaOT(body.data, VOCABULARIO);
+      setForm(prev => ({ ...prev, ...campos }));
+      // Un renglón vacío y no una lista vacía: el formulario tiene que quedar
+      // listo para escribir, igual que recién abierto.
+      setRepuestos(lineas.length > 0 ? lineas : [{ cantidad: "", nombre: "" }]);
+      setVieneDe(avisoDeReutilizada(numero, noEntraron));
+    } catch {
+      setErrorAlTraer("No se pudo traer esa OT.");
+    } finally {
+      setTrayendo(false);
+    }
+  }
 
   // La lista de Configuración, igual que al registrar el trabajo hecho: se
   // elige de ella en vez de escribir. Escribir el nombre cada vez es cómo
@@ -58,10 +113,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
    * Arranca con un renglón vacío para que el formulario se vea como antes —un
    * campo listo para escribir— y no como una lista que hay que estrenar.
    */
-  const [repuestos, setRepuestos] = useState([{ cantidad: "", nombre: "" }]);
-
-  const cambiarRepuesto = (i: number, campo: "cantidad" | "nombre", valor: string) =>
-    setRepuestos(rs => rs.map((r, n) => (n === i ? { ...r, [campo]: valor } : r)));
+  const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
 
   const [form, setForm] = useState({
     equipment_id:   "",
@@ -217,39 +269,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
 
           <F label="Repuestos utilizados">
-            <div className="space-y-2">
-              {repuestos.map((r, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    value={r.cantidad}
-                    onChange={e => cambiarRepuesto(i, "cantidad", e.target.value)}
-                    className="input w-20 shrink-0"
-                    placeholder="Cant."
-                    aria-label={`Cantidad del repuesto ${i + 1}`}
-                  />
-                  <input
-                    value={r.nombre}
-                    onChange={e => cambiarRepuesto(i, "nombre", e.target.value)}
-                    className="input flex-1 min-w-0"
-                    placeholder="Ej: rodamientos 22212"
-                    aria-label={`Repuesto ${i + 1}`}
-                  />
-                  {repuestos.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setRepuestos(rs => rs.filter((_, n) => n !== i))}
-                      className="shrink-0 px-2 text-slate-400 hover:text-red-600 transition-colors"
-                      title="Sacar este repuesto"
-                    >×</button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setRepuestos(rs => [...rs, { cantidad: "", nombre: "" }])}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
-              >+ Agregar otro repuesto</button>
-            </div>
+            <RepuestosDeLaOT lineas={repuestos} onCambiar={setRepuestos} deshabilitado={saving} />
           </F>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

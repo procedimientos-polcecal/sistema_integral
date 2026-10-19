@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lineasQueValen, textoParaLaPlanilla, filasParaLaBase, repuestosDelCuerpo,
+  lineasDesdeElCuerpo,
 } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { itemsDeRepuesto } from "@/lib/mantenimiento/repuestosDesdeOt";
 
@@ -131,5 +132,29 @@ describe("repuestosDelCuerpo", () => {
 
   it("una lista vacía es 'no se usó nada' y no el texto viejo", () => {
     expect(repuestosDelCuerpo({ repuesto: "lo viejo", repuestos: [] }).texto).toBeNull();
+  });
+});
+
+describe("lineasDesdeElCuerpo", () => {
+  it("recupera los renglones de una carga parada", () => {
+    expect(lineasDesdeElCuerpo({ repuestos: [{ cantidad: "2", nombre: "grillas 2 mm" }] }))
+      .toEqual([{ cantidad: "2", nombre: "grillas 2 mm" }]);
+  });
+
+  it("recupera el texto suelto de una carga parada hace dos semanas", () => {
+    // La cola guarda el cuerpo tal como se armó: un teléfono que no se
+    // actualizó dejó parada una OT con `repuesto` de texto. Recuperarla vacía
+    // obligaría a cargar los repuestos de nuevo sin decir por qué.
+    expect(lineasDesdeElCuerpo({ repuesto: "2 grillas 2 mm" }))
+      .toEqual([{ cantidad: "", nombre: "2 grillas 2 mm" }]);
+  });
+
+  it("siempre deja un renglón donde escribir", () => {
+    expect(lineasDesdeElCuerpo(null)).toEqual([{ cantidad: "", nombre: "" }]);
+    expect(lineasDesdeElCuerpo({})).toEqual([{ cantidad: "", nombre: "" }]);
+    expect(lineasDesdeElCuerpo({ repuestos: [] })).toEqual([{ cantidad: "", nombre: "" }]);
+    expect(lineasDesdeElCuerpo({ repuesto: "   " })).toEqual([{ cantidad: "", nombre: "" }]);
+    expect(lineasDesdeElCuerpo({ repuestos: [{ cantidad: "3", nombre: "" }] }))
+      .toEqual([{ cantidad: "", nombre: "" }]);
   });
 });
