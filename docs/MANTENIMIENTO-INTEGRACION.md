@@ -182,6 +182,38 @@ Especialidades: `MECÁNICO`, `ELÉCTRICO`, `CIVIL`, `LUBRICACIÓN`.
 Un guión suelto en un campo de texto se lee como vacío: es cómo se escribe "acá
 no va nada" en una planilla, no un contratista llamado "-".
 
+### El repuesto es **una celda**, y está en dos lugares
+
+Leído de las planillas el 19/10/2026, porque es lo primero que se pregunta al
+tocar ese campo y no se deduce del código:
+
+| Dónde | Columna | Quién la escribe |
+|---|---|---|
+| `Respuestas ORDEN DE TRABAJO` → `Altas del sistema` | **Z** `REPUESTO UTILIZADO` | El SdG, al crear la OT |
+| `ORDEN DE TRABAJO` → `OT` (el master) | **I** `REPUESTO UTILIZADO` | **Nadie**: A–J son el derrame del `QUERY(IMPORTRANGE())` |
+
+O sea que escribir "el repuesto en la planilla" es escribir la **Z** del libro de
+respuestas; la **I** del master aparece sola y la sincronización la lee de ahí,
+**por posición** (índice 8). Una columna insertada antes de la I rompe esa
+lectura en silencio.
+
+**Desde el 19/10/2026 el formulario de alta carga los repuestos por renglones**,
+cada uno con su cantidad, y se guardan en `ordenes_trabajo_repuestos`. A la
+celda va el texto de todos juntos, separados por coma: `2 grillas 2 mm, 4
+martillos`. La coma no es decorativa — es por donde corta `itemsDeRepuesto()` de
+[lib/mantenimiento/repuestosDesdeOt.ts](../lib/mantenimiento/repuestosDesdeOt.ts),
+el parseo que sacó los repuestos de las 275 OT viejas, así que lo que el
+sistema escribe hoy se vuelve a leer igual que lo que escribió la gente a mano.
+Hay tests que hacen la vuelta completa en
+[repuestosDeLaOT.test.ts](../lib/mantenimiento/repuestosDeLaOT.test.ts).
+
+**Se evaluó dejarlos en dos columnas y se decidió que no** (19/10/2026): la
+columna de cantidad habría que agregarla en el libro de respuestas —que lo
+gobierna Google Forms—, extender el `QUERY` del master, y eso corre las
+columnas que la sincronización lee por posición. El detalle por renglón ya vive
+en `ordenes_trabajo_repuestos`, que es donde sirve para algo; la celda queda
+como lo que es, el renglón que lee una persona.
+
 ## Lo que la planilla deja de tener, se borra
 
 Desde el 18/10/2026 las tres sincronizaciones —OT, avisos y órdenes de
