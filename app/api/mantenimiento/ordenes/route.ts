@@ -21,6 +21,7 @@ import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 export async function GET(request: Request) {
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
   const body = await cuerpoJson(request);
   const {
     equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
-    especialidad, tipo, quien, descripcion, repuesto,
+    especialidad, tipo, quien, descripcion,
     fecha, fecha_ejecucion, fecha_cierre,
     estado, contratista, horas, operario_1, operario_2, operario_3, prioridad,
     schedule_id, aviso_id,
@@ -143,6 +144,14 @@ export async function POST(request: Request) {
   if (!descripcion?.trim()) {
     return NextResponse.json({ error: "La descripción es requerida" }, { status: 400 });
   }
+
+  // Los repuestos vienen por renglones (`repuestos`) o como el texto suelto de
+  // siempre (`repuesto`). Las dos formas conviven porque la carga sin señal
+  // manda el cuerpo que armó días atrás: un teléfono sin actualizar sigue
+  // mandando el texto, y tratarlo como ausente le borraría el repuesto a esa
+  // OT sin que nadie se entere. El texto es lo que va a la planilla —tiene una
+  // sola celda— y los renglones, a `ordenes_trabajo_repuestos`.
+  const losRepuestos = repuestosDelCuerpo(body);
 
   // El POST no validaba el estado y el PATCH sí: cualquier texto entraba a la
   // base y de ahí a la planilla, donde `EN_LA_PLANILLA[v] ?? v` lo escribía tal
@@ -304,7 +313,7 @@ export async function POST(request: Request) {
     tipo: tipo || null,
     quien: quien || null,
     descripcion: descripcion.trim(),
-    repuesto: repuesto?.trim() || null,
+    repuesto: losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
     prioridad: laPrioridad,
   });
@@ -342,7 +351,7 @@ export async function POST(request: Request) {
     tipo:            tipo || null,
     quien:           quien || null,
     descripcion:     descripcion.trim(),
-    repuesto:        repuesto?.trim() || null,
+    repuesto:        losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
     fecha_cierre:    fecha_cierre || null,
     // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
@@ -385,6 +394,28 @@ export async function POST(request: Request) {
       },
       { status: 500 }
     );
+  }
+
+  // ── Los repuestos, renglón por renglón ─────────────────────
+  //
+  // Va después del insert porque recién acá hay un id al que colgarlos, y el
+  // fallo **no tumba la orden**: la OT ya existe en la planilla y en la base, y
+  // su texto de repuestos —el que va a la celda— ya quedó guardado en las dos.
+  // Lo que se pierde es el detalle por renglón, que se puede volver a cargar
+  // desde el modal de repuestos de la orden. Reventar acá sería tirar una OT
+  // buena por una lista accesoria.
+  let repuestos_error: string | null = null;
+  const filasDeRepuestos = filasParaLaBase(inserted.id, losRepuestos.lineas);
+  if (filasDeRepuestos.length > 0) {
+    const { error: errorRepuestos } = await admin
+      .from("ordenes_trabajo_repuestos")
+      .insert(filasDeRepuestos);
+    if (errorRepuestos) {
+      repuestos_error =
+        `La OT se creó, pero los ${filasDeRepuestos.length} repuestos no se guardaron ` +
+        `uno por uno: ${errorRepuestos.message}. En la planilla están, en el texto de la ` +
+        "orden; se pueden volver a cargar desde el detalle.";
+    }
   }
 
   // Segunda pasada, ahora con el id: completa lo que la de arriba no podía
@@ -433,7 +464,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    data: inserted, ot_number, aviso_error, planilla_error, clave_error,
+    data: inserted, ot_number, aviso_error, planilla_error, clave_error, repuestos_error,
   });
 }
 

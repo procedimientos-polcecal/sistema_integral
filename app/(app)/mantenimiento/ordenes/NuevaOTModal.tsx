@@ -52,6 +52,17 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     return () => { vigente = false; };
   }, []);
 
+  /*
+   * Los repuestos van aparte de `form` y no adentro: `form` se derrama entero
+   * al cuerpo del POST con `...form`, y una lista no es un campo de texto.
+   * Arranca con un renglón vacío para que el formulario se vea como antes —un
+   * campo listo para escribir— y no como una lista que hay que estrenar.
+   */
+  const [repuestos, setRepuestos] = useState([{ cantidad: "", nombre: "" }]);
+
+  const cambiarRepuesto = (i: number, campo: "cantidad" | "nombre", valor: string) =>
+    setRepuestos(rs => rs.map((r, n) => (n === i ? { ...r, [campo]: valor } : r)));
+
   const [form, setForm] = useState({
     equipment_id:   "",
     sector_id:      "",
@@ -59,7 +70,6 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     tipo:           "CORRECTIVO",
     quien:          "INTERNO",
     descripcion:    "",
-    repuesto:       "",
     fecha:          hoyEnArgentina(),
     fecha_ejecucion: "",
     fecha_cierre:   "",
@@ -113,6 +123,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        // Los renglones; la ruta arma con ellos el texto de la celda de la
+        // planilla, que tiene una sola.
+        repuestos,
         horas:       form.horas ? Number(form.horas) : null,
         // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
         // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
@@ -141,6 +154,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         ? `El estado y las horas todavía no llegaron a la planilla (${data.planilla_error}) — ` +
           `queda pendiente y lo escribe la próxima sincronización.`
         : null,
+      data.repuestos_error,
     ].filter(Boolean) as string[];
 
     onCreated(aMedias.length ? aMedias.join(" ") : null);
@@ -202,9 +216,40 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </F>
           </div>
 
-          <F label="Repuesto utilizado">
-            <input value={form.repuesto} onChange={e => f("repuesto", e.target.value)}
-              className="input" placeholder="Ej: Rodamiento 32222..." />
+          <F label="Repuestos utilizados">
+            <div className="space-y-2">
+              {repuestos.map((r, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    value={r.cantidad}
+                    onChange={e => cambiarRepuesto(i, "cantidad", e.target.value)}
+                    className="input w-20 shrink-0"
+                    placeholder="Cant."
+                    aria-label={`Cantidad del repuesto ${i + 1}`}
+                  />
+                  <input
+                    value={r.nombre}
+                    onChange={e => cambiarRepuesto(i, "nombre", e.target.value)}
+                    className="input flex-1 min-w-0"
+                    placeholder="Ej: rodamientos 22212"
+                    aria-label={`Repuesto ${i + 1}`}
+                  />
+                  {repuestos.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setRepuestos(rs => rs.filter((_, n) => n !== i))}
+                      className="shrink-0 px-2 text-slate-400 hover:text-red-600 transition-colors"
+                      title="Sacar este repuesto"
+                    >×</button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRepuestos(rs => [...rs, { cantidad: "", nombre: "" }])}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >+ Agregar otro repuesto</button>
+            </div>
           </F>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
