@@ -72,16 +72,43 @@ esos kardex hoy, movimiento por movimiento, conviviendo con las fórmulas.
 
 ## Las cuatro trampas
 
-### 1. Una pestaña protegida rechaza también a la cuenta de servicio
+### 1. ~~Una pestaña protegida rechaza a la cuenta de servicio~~ — probado el 19/10, y sale mejor
 
-Proteger un rango en Google Sheets no es quitarle el acceso a la gente: es
-dejar una lista de quién puede editarlo. **La cuenta de servicio tiene que estar
-en esa lista**, en cada protección de cada libro, o el sistema empieza a recibir
-un 400 por cada escritura y todo cae en `sheets_pendiente`.
+Proteger un rango no es quitarle el acceso a la gente: es dejar una lista de
+quién puede editarlo. La pregunta era si la cuenta de servicio quedaba afuera.
 
-Ser Editor del archivo **no alcanza**: la protección se aplica igual sobre la
-API. Hay que verificarlo en una copia del libro antes de proteger el de
-producción, no después.
+**Probado contra un libro real, y la respuesta es que no sólo pasa: puede
+administrarse la protección ella misma.**
+
+| | |
+|---|---|
+| Protege, y escribe con la protección puesta | **sí**, HTTP 200 |
+| Al crear la protección, ¿quién queda de editor? | el servicio **y** los administradores del archivo (`nicolaslenzetti@`, `procedimientos@`) |
+| ¿Puede sacar a las personas y quedar sola? | **sí** — `editors = [sheets-reader@…]` |
+| ¿Puede excluirse a sí misma? | **no**: `You can't remove yourself as an editor` |
+| ¿Puede quitar la protección? | sí |
+
+Eso cambia el plan para mejor: **no hace falta tocar nada a mano, pestaña por
+pestaña.** La bajada de cada módulo puede poner su propia protección al
+terminar de escribir, dejándose como única editora. Y que no pueda excluirse a
+sí misma es, acá, una garantía: no existe la forma de dejar una pestaña que el
+sistema tenga que escribir y no pueda.
+
+**Lo que falta confirmar, y lo tiene que hacer una persona:** que alguien que
+*no* está en la lista efectivamente quede bloqueado al escribir desde la
+pantalla de Sheets. Es la mitad que no se puede probar con una cuenta de
+servicio.
+
+Quedó un libro listo para eso, con la primera pestaña protegida y el servicio
+como único editor:
+[PRUEBA PROTECCION](https://docs.google.com/spreadsheets/d/1neEDekcdPvCRiNOxibrkoD6EnWMMiL3nVX1mWpYXwiI/edit).
+Abrirlo y tratar de escribir en `A1` contesta la pregunta.
+
+**Y la sospecha que hay que despejar ahí**: el dueño de un archivo, y en una
+unidad compartida quien la administra, suele poder editar igual aunque no esté
+en la lista. Si eso pasa, la protección frena a la mayoría pero **no al dueño de
+cada planilla**, que es justamente quien más las edita. De ese resultado depende
+si el bloqueo alcanza o si además hay que bajar a esas personas a *Lector*.
 
 ### 2. El importador y la bajada no pueden convivir
 
@@ -151,8 +178,9 @@ El cron es semanal, los lunes, junto al respaldo.
 
 ## Lo que queda sin resolver
 
-- **No está verificado que una protección deje pasar a la cuenta de servicio.**
-  Es la trampa 1 y es lo primero que hay que probar, en una copia.
+- **Si el dueño de cada planilla puede saltearse la protección.** Es lo único
+  que queda de la trampa 1 y decide si alcanza con proteger o si además hay que
+  bajar a esas personas a *Lector*.
 - **El histórico.** La primera bajada reescribe la pestaña entera: hay que
   decidir si se conserva una copia del libro tal como estaba, y la respuesta
   casi seguro es sí, porque es irreversible.
