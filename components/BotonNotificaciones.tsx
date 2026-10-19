@@ -92,11 +92,16 @@ export function BotonNotificaciones() {
       // la manda a reintentar algo que no va a funcionar nunca. Como la
       // computadora es una fila aparte de `push_suscripciones`, es un caso real
       // y no teórico.
+      //
+      // **Sin señal no se dice eso**, porque ahí reintentar sí cambia algo: un
+      // aparato que todavía no tiene el worker módulo y está sin red cae en
+      // este mismo rechazo, y mandarlo a cambiar de navegador sería un consejo
+      // falso. Ese caso es «fallo», que es el cartel que dice «probá de nuevo».
       let registro;
       try {
         registro = await navigator.serviceWorker.register("/sw.js", { type: "module" });
       } catch {
-        setEstado("sin-modulos");
+        setEstado(navigator.onLine ? "sin-modulos" : "fallo");
         return;
       }
       const { clavePublica } = await fetch("/api/push/suscripcion").then((r) => r.json());

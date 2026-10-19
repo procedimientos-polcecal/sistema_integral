@@ -9,14 +9,17 @@ import { useEffect } from "react";
  *
  * Sin esto **no hay service worker**, y sin service worker Chrome no dispara
  * `beforeinstallprompt`: el camino de «un toque» de Android no existe y la barra
- * de instalar sólo puede mandar a leer las instrucciones a mano. El único
- * `register()` que había en el repo vive en `app/(app)/mi-remis`, adentro de
- * `activarNotificaciones()`, detrás de un botón que **nunca tocó nadie** —cero
- * suscripciones medidas—, así que en los hechos el navegador no veía ninguno y
- * el handler de `fetch` de `public/sw.js` era código muerto en producción.
+ * de instalar sólo puede mandar a leer las instrucciones a mano. Cuando esto se
+ * escribió, el único `register()` del repo estaba en `app/(app)/mi-remis`,
+ * detrás de un botón que **nunca tocó nadie** —cero suscripciones medidas—, así
+ * que en los hechos el navegador no veía ninguno y el handler de `fetch` de
+ * `public/sw.js` era código muerto en producción.
  *
- * Aquel registro **se deja como está**: es de la fase 2, y registrar dos veces
- * el mismo scope devuelve el mismo registro, así que no se pisan.
+ * **Aquel registro ya no existe**; el párrafo anterior cuenta de dónde viene
+ * este componente, no lo que hay hoy. Los `register()` del repo son dos: éste y
+ * el de `components/BotonNotificaciones.tsx`, y lo que importa de que sean dos
+ * está abajo. Registrar dos veces el mismo alcance devuelve el mismo registro,
+ * así que no se pisan.
  *
  * POR QUÉ EN EL `load` Y NO EN EL MONTAJE
  *

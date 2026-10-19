@@ -41,10 +41,15 @@ const CODIGO = readFileSync(join(process.cwd(), "public", "sw.js"), "utf8");
 const SIN_IMPORTS = CODIGO.replace(/^import\s+\{[\s\S]*?\}\s+from\s+"[^"]+";$/gm, "");
 
 /**
- * El archivo sin sus comentarios, ni los de bloque ni los de línea. Es un
- * recorte a lo bruto y alcanza: `public/sw.js` no tiene expresiones regulares
- * ni textos con esas marcas adentro, y si alguna vez los tuviera, el peor caso
- * es que un test mire de más.
+ * El archivo sin sus comentarios, ni los de bloque ni los de línea.
+ *
+ * **Es un recorte a lo bruto y rompe código**: `public/sw.js` tiene varias
+ * expresiones regulares, y la de `archivosDe` que descarta `//otro.com/x.js`
+ * lleva un `"//"` adentro, así que a partir de ahí la línea se corta. O sea que
+ * esto **no sirve para analizar el archivo**: sirve para una sola cosa, que es
+ * preguntar si una llamada aparece, donde borrar de más sólo puede hacer que un
+ * test pase cuando debería fallar — y esa llamada no está en ninguna de las
+ * líneas que el recorte trunca. No lo uses para nada más sin mirar esto.
  */
 function soloCodigo(texto: string) {
   return texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
@@ -388,6 +393,33 @@ describe("public/sw.js", () => {
     }
   });
 
+  it("proxy.ts deja fuera de la sesión lo que el service worker importa", () => {
+    /*
+     * MEDIDO EN PRODUCCIÓN el 19/10/2026: pedir `/cola/cualquier-cosa.js` desde
+     * el registro de un service worker daba «The script resource is behind a
+     * redirect, which is disallowed» —el 307 al login—. O sea que sacar `cola`
+     * del matcher no deja el módulo lento ni a medias: **el service worker
+     * entero no se registra**, y se van con él el push y la instalabilidad.
+     *
+     * Se arma el regex del matcher igual que Next y se le pregunta por los dos
+     * casos, en vez de buscar el texto «cola» adentro de la cadena: así esto
+     * sigue valiendo si alguien reescribe el matcher de otra forma.
+     */
+    const proxy = readFileSync(join(process.cwd(), "proxy.ts"), "utf8");
+    const matcher = proxy.match(/"(\/\(\(\?!.*)",/)?.[1];
+    expect(matcher).toBeTypeOf("string");
+    const comoNext = new RegExp(`^${matcher}$`);
+
+    for (const ruta of ["/cola/colaOffline.js", "/cola/idb.js"]) {
+      expect(comoNext.test(ruta)).toBe(false);
+    }
+    // Y una pantalla normal sigue pasando por el proxy, que es lo que pide la
+    // sesión: la exclusión no puede haberse comido media app.
+    for (const ruta of ["/mantenimiento", "/cargar", "/compras/aprobaciones"]) {
+      expect(comoNext.test(ruta)).toBe(true);
+    }
+  });
+
   it("los archivos que el service worker importa existen donde dice", () => {
     /*
      * NADA MÁS LO VERIFICA, y por eso este test existe. `tsc` no mira
@@ -420,7 +452,8 @@ describe("public/sw.js", () => {
     const HTML =
       `<html><head>` +
       `<link rel="stylesheet" href="/_next/static/css/a1b2.css"/>` +
-      `<link rel="preload" href="/_next/static/media/no-va.woff2"/>` +
+      `<link rel="preload" as="script" href="/_next/static/chunks/precargado.js"/>` +
+      `<link rel="preload" as="font" href="/_next/static/media/no-va.woff2"/>` +
       `</head><body><script src="/_next/static/chunks/main-9f8e.js"></script></body></html>`;
 
     it("guarda /cargar y los archivos que esa página pide", async () => {
@@ -431,7 +464,11 @@ describe("public/sw.js", () => {
       expect(urls).toContain("/cargar");
       expect(urls).toContain("/_next/static/chunks/main-9f8e.js");
       expect(urls).toContain("/_next/static/css/a1b2.css");
-      // El `preload` no es una hoja de estilo ni un script: no se guarda.
+      // Un `preload` de código entra aunque hoy sea redundante: si Next emite
+      // uno que no esté además como `<script src>`, sin esto la pantalla
+      // fallaría sin señal.
+      expect(urls).toContain("/_next/static/chunks/precargado.js");
+      // Una fuente no: sin ella la pantalla se dibuja con la de respaldo.
       expect(urls).not.toContain("/_next/static/media/no-va.woff2");
     });
 
@@ -452,7 +489,12 @@ describe("public/sw.js", () => {
       expect(urlsGuardadas(guardado)).toEqual([]);
     });
 
-    it("un archivo que no se pudo bajar no se lleva puestos a los demás", async () => {
+    it("si falta un archivo no se guarda nada: a medias es peor que nada", async () => {
+      // Antes esto afirmaba lo contrario —que con el `.css` caído `/cargar`
+      // igual quedaba guardado— y lo que fijaba era un estado roto: un HTML
+      // guardado cuyos chunks no están es, sin señal, la pantalla en blanco.
+      // Y nadie la curaba: el `install` no vuelve a correr hasta que cambien
+      // los bytes del archivo.
       const { handlers, guardado } = cargarSW([], {
         red: async (url) => {
           if (url.endsWith(".css")) throw new Error("sin red");
@@ -460,10 +502,70 @@ describe("public/sw.js", () => {
         },
       });
       await lanzar(handlers, "install");
-      const urls = urlsGuardadas(guardado);
-      expect(urls).toContain("/cargar");
-      expect(urls).toContain("/_next/static/chunks/main-9f8e.js");
-      expect(urls).not.toContain("/_next/static/css/a1b2.css");
+      expect(urlsGuardadas(guardado)).toEqual([]);
+    });
+
+    it("un archivo que contesta 404 cuenta como faltante", async () => {
+      // Un 404 guardado es peor que no guardarlo: el navegador lo serviría
+      // como si fuera el chunk.
+      const { handlers, guardado } = cargarSW([], {
+        red: async (url) => (url.endsWith(".css") ? contesta(404) : pagina(HTML)),
+      });
+      await lanzar(handlers, "install");
+      expect(urlsGuardadas(guardado)).toEqual([]);
+    });
+
+    it("un precache incompleto no se lleva puesto al que ya andaba", async () => {
+      // Lo que ya estaba guardado sigue sirviendo sin señal. Por eso la poda
+      // va al final y sólo cuando bajó todo.
+      const VIEJO = "/_next/static/chunks/del-despliegue-anterior.js";
+      const { handlers, guardado, caches } = cargarSW([], {
+        red: async (url) => {
+          if (url.endsWith(".css")) throw new Error("sin red");
+          return pagina(HTML);
+        },
+      });
+      const caché = await caches.open("sdg-cargar-v1");
+      await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
+      await caché.put(`${ORIGEN}/cargar`, RESPUESTA);
+
+      await lanzar(handlers, "install");
+      expect(urlsGuardadas(guardado)).toContain(VIEJO);
+      expect(urlsGuardadas(guardado)).toContain("/cargar");
+    });
+
+    it("el push vuelve a intentarlo si no quedó nada guardado", async () => {
+      // `install` corre una sola vez por versión del archivo, así que un corte
+      // de señal justo ahí dejaba a ese teléfono sin pantalla sin señal hasta
+      // el próximo despliegue del service worker.
+      let hayRed = false;
+      const { handlers, guardado } = cargarSW([], {
+        red: async (url) => {
+          if (!hayRed) throw new Error("sin red");
+          return url === "/cargar" ? pagina(HTML) : RESPUESTA;
+        },
+      });
+      await lanzar(handlers, "install");
+      expect(urlsGuardadas(guardado)).toEqual([]);
+
+      hayRed = true;
+      await lanzar(handlers, "push", {
+        data: { json: () => ({ title: "SdG", body: "x", url: "/" }) },
+      });
+      expect(urlsGuardadas(guardado)).toContain("/cargar");
+    });
+
+    it("y si ya había algo guardado, el push no vuelve a bajarlo", async () => {
+      // Medio mega por día por aparato contra una señal que ya es mala, para
+      // refrescar algo que es consistente consigo mismo, no se paga.
+      const { handlers, fetchDoble } = cargarSW([], { red: async () => pagina(HTML) });
+      await lanzar(handlers, "install");
+      const bajadas = fetchDoble.mock.calls.length;
+
+      await lanzar(handlers, "push", {
+        data: { json: () => ({ title: "SdG", body: "x", url: "/" }) },
+      });
+      expect(fetchDoble).toHaveBeenCalledTimes(bajadas);
     });
 
     it("saca del caché lo que la pantalla ya no pide", async () => {
@@ -643,6 +745,25 @@ describe("public/sw.js", () => {
       const respuesta = (await navegarA(handlers, `${ORIGEN}/mantenimiento/ot`)) as Response;
       expect(respuesta.status).toBe(302);
       expect(respuesta.headers.get("location")).toBe(`${ORIGEN}/cargar`);
+    });
+
+    it("un POST que navega va a la red y no se contesta con la pantalla", async () => {
+      // El envío de un formulario: lo que esa persona quiere saber es si su
+      // POST entró, no ver otra pantalla. Sin señal falla como siempre.
+      const { handlers, fetchDoble, cortarLaRed } = await conLaPantallaGuardada();
+      const request = { url: `${ORIGEN}/mantenimiento`, mode: "navigate", method: "POST" };
+
+      const respondWith = vi.fn();
+      handlers["fetch"]({ respondWith, request });
+      expect(fetchDoble).toHaveBeenCalledWith(request);
+      const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
+      await expect(respondido).resolves.toBe(RESPUESTA);
+
+      cortarLaRed();
+      const segundo = vi.fn();
+      handlers["fetch"]({ respondWith: segundo, request });
+      const [sinRed] = segundo.mock.calls[0] as unknown as [Promise<unknown>];
+      await expect(sinRed).rejects.toThrow("sin red");
     });
 
     it("sin nada guardado no se redirige a ninguna parte: sería un lazo", async () => {
@@ -977,6 +1098,15 @@ describe("public/sw.js", () => {
     const AVISOS = "/api/mantenimiento/avisos";
     const ORDENES = "/api/mantenimiento/ordenes";
 
+    /**
+     * Cuántas cargas salieron. Se cuentan los POST a las rutas de alta y no
+     * los pedidos a secas: los disparos que vacían la cola también completan
+     * la pantalla guardada si falta, así que `fetchDoble` ve `/cargar`.
+     */
+    function cargasMandadas(fetchDoble: { mock: { calls: unknown[][] } }) {
+      return fetchDoble.mock.calls.filter(([url]) => url === AVISOS || url === ORDENES);
+    }
+
     it("el evento sync manda la carga que corresponde", async () => {
       const { handlers, fetchDoble, cola } = cargarSW([], {
         cargas: [unaCarga({ tipo: "orden", cuerpo: { descripcion: "cambiar correa" } })],
@@ -1046,10 +1176,10 @@ describe("public/sw.js", () => {
       const segundo = lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
       await segundo;
 
-      expect(fetchDoble).toHaveBeenCalledTimes(1);
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
       soltar();
       await primero;
-      expect(fetchDoble).toHaveBeenCalledTimes(1);
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
       expect(cola.filas.size).toBe(0);
     });
 
@@ -1083,7 +1213,7 @@ describe("public/sw.js", () => {
         red: async (url) => (url === AVISOS ? contesta(500) : RESPUESTA),
       });
       await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
-      expect(fetchDoble).toHaveBeenCalledTimes(1);
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
     });
 
     it("un 200 sin número no es un éxito: la carga no se borra", async () => {
@@ -1107,7 +1237,7 @@ describe("public/sw.js", () => {
         sesion: null,
       });
       await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
-      expect(fetchDoble).not.toHaveBeenCalled();
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
     });
 
     it("no manda la carga de otra persona", async () => {
@@ -1116,7 +1246,7 @@ describe("public/sw.js", () => {
         sesion: { id: "u1", nombre: "Ana" },
       });
       await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
-      expect(fetchDoble).not.toHaveBeenCalled();
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
       expect(cola.filas.size).toBe(1);
     });
 

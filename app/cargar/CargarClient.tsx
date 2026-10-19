@@ -552,9 +552,14 @@ function LaCola({
 
               <p className="mt-1 text-sm text-slate-800">{resumen(carga)}</p>
 
+              {/* El rótulo es neutro a propósito. Decía «Lo que contestó el
+                  servidor», y desde que el service worker vacía la cola este
+                  campo también puede llevar el texto de `siNoSePudoAvisar`
+                  —«Entró: se cargó el aviso OA-77…»—, que el servidor no dijo.
+                  Era el rótulo pegado al texto, o sea el que se lee. */}
               {carga.ultimoError && (
                 <p className="mt-1 text-xs text-red-700">
-                  Lo que contestó el servidor: {carga.ultimoError}
+                  Lo último que pasó con esta carga: {carga.ultimoError}
                 </p>
               )}
 

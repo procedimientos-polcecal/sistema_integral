@@ -131,6 +131,28 @@ const LA_PANTALLA = "/cargar";
  * tiene los assets de los despliegues viejos. Sin red no se borra nada, porque
  * la función ya salió por el `catch`.
  *
+ * **ES TODO O NADA, Y ESO FUE UNA DECISIÓN.** Antes bajaba el HTML, lo
+ * guardaba, y después intentaba los archivos uno por uno siguiendo de largo con
+ * el que fallara. Si la red se cortaba en el medio —la señal de la cantera, que
+ * es **exactamente** la gente para la que esto existe— quedaba un `/cargar`
+ * guardado cuyos chunks no estaban y cuyos reemplazos viejos ya se habían
+ * podado: sin señal, la pantalla en blanco, que es peor que el error del
+ * navegador porque parece que algo anda. Y no la curaba nadie, porque el
+ * `install` no vuelve a correr hasta que cambien los bytes de este archivo.
+ * Ahora: se baja **todo** primero y recién si está todo se escribe. Si falta
+ * uno, el caché queda **exactamente como estaba** —ni el HTML nuevo, ni los
+ * archivos nuevos, ni la poda—, así que lo que ya andaba sigue andando y lo que
+ * no había sigue sin haber, que es honesto.
+ *
+ * La otra salida que se consideró era curar lo que faltara al pasar por el
+ * handler de `fetch`, limitado a las urls que el HTML guardado nombra. Se
+ * descartó porque sólo cura **con red**, que es justo cuando la pantalla anda
+ * igual sin caché: cierra la ventana donde no duele y la deja abierta donde sí.
+ *
+ * Lo que sí resuelve el «¿y si falló la única vez que corrió?» está en el
+ * `sync` y el `push`: esto se vuelve a intentar cada vez que despiertan al
+ * worker, y como es todo o nada, un intento que falla no puede empeorar nada.
+ *
  * No rechaza nunca: un `install` que falla deja al worker sin activarse, y con
  * él se van el push y el vaciado. Guardar la pantalla es lo que se puede perder.
  */
@@ -139,30 +161,56 @@ async function guardarLaPantalla() {
     const respuesta = await fetch(LA_PANTALLA);
     if (!respuesta.ok || respuesta.redirected) return;
 
-    const cache = await caches.open(CACHE);
     const html = await respuesta.clone().text();
-    await cache.put(LA_PANTALLA, respuesta);
-
-    // Uno por uno y cada uno con su red de seguridad: un archivo que no se pudo
-    // bajar no tiene por qué llevarse puestos a los demás, que es justo lo que
-    // haría un `cache.addAll`.
     const archivos = archivosDe(html);
-    await Promise.all(
+
+    // Todos juntos y ninguno guardado todavía: si uno falla, esto tira y el
+    // `catch` sale sin haber tocado el caché. Es lo contrario de `cache.addAll`
+    // sólo en una cosa, y es la que importa: el error dice cuál faltó.
+    const bajados = await Promise.all(
       archivos.map(async (url) => {
-        try {
-          const archivo = await fetch(url);
-          if (archivo.ok) await cache.put(url, archivo);
-        } catch {
-          // Ese archivo no entra. La página puede andar sin él o no, pero se
-          // sabrá al abrirla; dejar de guardar los otros no ayuda a nadie.
-        }
+        const archivo = await fetch(url);
+        if (!archivo.ok) throw new Error(`${url} contestó ${archivo.status}`);
+        return archivo;
       })
     );
 
+    const cache = await caches.open(CACHE);
+    await Promise.all(archivos.map((url, i) => cache.put(url, bajados[i])));
+    await cache.put(LA_PANTALLA, respuesta);
     await sacarLoQueYaNoPide(cache, archivos);
   } catch {
-    // Sin red al instalar no hay nada que guardar. El worker se activa igual.
+    // Sin red, o con un archivo que no vino: el caché queda como estaba y el
+    // worker se activa igual. Se vuelve a intentar en el próximo `sync` o
+    // `push`.
   }
+}
+
+/**
+ * Lo mismo, pero sólo si no hay nada guardado.
+ *
+ * Es el reintento del todo-o-nada: `install` corre **una sola vez** por versión
+ * de este archivo, así que un corte de señal en ese momento dejaba a ese
+ * teléfono sin pantalla sin señal hasta el próximo despliegue del service
+ * worker. Los disparos que despiertan al worker —el push diario, el `sync`—
+ * vuelven a intentarlo.
+ *
+ * **Y sólo si falta, no cada vez.** Rebajar `/cargar` y sus once archivos en
+ * cada push sería medio mega por día por aparato contra una señal que ya es
+ * mala, a cambio de refrescar algo que no lo necesita: lo guardado es
+ * consistente consigo mismo —el HTML viejo pide los chunks viejos, que están—,
+ * así que quedarse viejo no lo rompe. Lo que no se puede dejar pasar es que
+ * falte.
+ */
+async function guardarLaPantallaSiFalta() {
+  try {
+    const cache = await caches.open(CACHE);
+    if (await cache.match(LA_PANTALLA)) return;
+  } catch {
+    // Sin caché no hay nada que completar.
+    return;
+  }
+  await guardarLaPantalla();
 }
 
 /**
@@ -189,33 +237,46 @@ async function sacarLoQueYaNoPide(cache, archivos) {
 }
 
 /**
- * Los archivos que un HTML pide: los `src` de `<script>` y los `href` de
- * `<link rel="stylesheet">`. No es un parser de HTML y no pretende serlo —en un
- * service worker no hay DOM—, así que se queda con lo que Next escribe y con
- * nada más: rutas que empiezan con una sola barra, o sea de este mismo origen.
+ * Los archivos que un HTML pide: los `src` de `<script>`, los `href` de
+ * `<link rel="stylesheet">` y los de `<link rel="preload">` que traen código
+ * —`as="script"` o `as="style"`—. No es un parser de HTML y no pretende serlo
+ * —en un service worker no hay DOM—, así que se queda con lo que Next escribe y
+ * con nada más: rutas que empiezan con una sola barra, o sea de este mismo
+ * origen.
  *
- * Lo que queda afuera a propósito: los `<link rel="preload">` (el navegador los
- * va a pedir igual y van a pasar por el handler de `fetch`) y cualquier url de
+ * **Los `preload` de código entran aunque hoy sean redundantes.** En el
+ * `/cargar` de hoy el único `preload` apunta a un chunk que además está como
+ * `<script src>`, así que no cambia nada; pero si mañana Next emite uno que no,
+ * ese archivo no estaría guardado y la pantalla fallaría sin señal. Antes acá
+ * decía que quedaban afuera «porque van a pasar por el handler de `fetch`», y
+ * eso dejó de ser cierto cuando el handler dejó de guardar lo que pasa.
+ *
+ * Lo que queda afuera: los `preload` de fuentes e imágenes —sin ellos la
+ * pantalla se dibuja igual, con la tipografía de respaldo— y cualquier url de
  * otro origen, que no se puede guardar sin saber si contesta con CORS.
  *
  * @param {string} html
  * @returns {string[]}
  */
 function archivosDe(html) {
-  const urls = [];
+  const urls = new Set();
 
   for (const etiqueta of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)) {
-    urls.push(etiqueta[1]);
+    urls.add(etiqueta[1]);
   }
 
   for (const etiqueta of html.matchAll(/<link\b[^>]*>/gi)) {
-    if (!/\brel=["']stylesheet["']/i.test(etiqueta[0])) continue;
+    const hojaDeEstilo = /\brel=["']stylesheet["']/i.test(etiqueta[0]);
+    const codigoPrecargado =
+      /\brel=["']preload["']/i.test(etiqueta[0]) &&
+      /\bas=["'](?:script|style)["']/i.test(etiqueta[0]);
+    if (!hojaDeEstilo && !codigoPrecargado) continue;
     const href = etiqueta[0].match(/\bhref=["']([^"']+)["']/i);
-    if (href) urls.push(href[1]);
+    if (href) urls.add(href[1]);
   }
 
   // `//otro.com/x.js` también empieza con barra y es de otro origen.
-  return urls.filter((url) => url.startsWith("/") && !url.startsWith("//"));
+  return [...urls].filter((url) => url.startsWith("/") && !url.startsWith("//"));
 }
 
 // Handler de `fetch`: responde **las navegaciones a una pantalla del SdG**
@@ -427,6 +488,7 @@ self.addEventListener("push", (event) => {
   // cambia cuánto vive el worker, y separados se lee qué es cada cosa —la
   // notificación es lo prometido, el vaciado es lo de más—.
   event.waitUntil(vaciarLaCola());
+  event.waitUntil(guardarLaPantallaSiFalta());
 });
 
 /**
@@ -438,7 +500,10 @@ self.addEventListener("push", (event) => {
  * que filtrar por un nombre que nadie usa sería código muerto con aire de
  * precisión. El día que haya un segundo uso de `sync`, acá va el filtro.
  */
-self.addEventListener("sync", (event) => event.waitUntil(vaciarLaCola()));
+self.addEventListener("sync", (event) => {
+  event.waitUntil(vaciarLaCola());
+  event.waitUntil(guardarLaPantallaSiFalta());
+});
 
 // Dónde lleva una notificación: lo que traiga `data.url`, y la raíz si no trae
 // nada. Sólo rutas del propio SdG; una url de otro origen cae en la raíz.
