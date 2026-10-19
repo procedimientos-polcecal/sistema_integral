@@ -6,6 +6,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { useCargar } from "@/lib/core/useCargar";
 import {
+  comoSeLlama,
   despuesDelIntento,
   paradas,
   puedeEmpujarla,
@@ -500,10 +501,17 @@ function LaCola({
           : `Esperando: ${esperando}${detenidas > 0 ? ` · paradas: ${detenidas}` : ""}`}
       </h2>
 
+      {/* Las dos clases de parada, porque **no todas fallaron**: desde que el
+          service worker vacía la cola, una carga que entró y cuya advertencia
+          no se pudo mostrar también queda parada, y decir de ésa que «el
+          servidor contestó algo que volvería a contestar igual» es falso —
+          contestó su número. Lo que tienen en común, y es lo que hay que decir,
+          es que ninguna sale sola y que el texto de cada una dice cuál es. */}
       {detenidas > 0 && (
         <p className="text-xs text-amber-800">
-          Una carga parada no se reintenta sola: el servidor contestó algo que
-          volvería a contestar igual. Hay que mirarla.
+          Una carga parada no se reintenta sola: o el servidor contestó algo que
+          volvería a contestar igual, o ya entró y quedó algo para mirar. Lo que
+          dice cada una está abajo.
         </p>
       )}
 
@@ -592,11 +600,6 @@ function LaCola({
       </ul>
     </section>
   );
-}
-
-/** Cómo se nombra cada tipo de carga en lo que ve una persona. */
-function comoSeLlama(tipo: TipoDeCarga): string {
-  return tipo === "aviso" ? "Aviso" : "Orden de trabajo";
 }
 
 /**

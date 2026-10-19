@@ -15,18 +15,34 @@
 //
 // La consecuencia es que este archivo **se registra con `{ type: "module" }`**,
 // en `components/RegistrarServiceWorker.tsx` y en
-// `components/BotonNotificaciones.tsx`. Los dos o ninguno: registrar el mismo
-// alcance con un tipo distinto del que ya está **rechaza**, y la app queda sin
-// service worker hasta el deploy siguiente —sin oferta de instalar y sin push—.
+// `components/BotonNotificaciones.tsx`.
 //
-// Y por lo mismo `proxy.ts` deja `cola` afuera de su matcher: si `/cola/*.js`
-// pidiera sesión, un canje de cookie vencido devolvería el HTML del login donde
-// el navegador espera un módulo y **el service worker entero no se registraría**.
-// Son funciones de decisión, sin datos ni secretos.
+// **QUÉ PASA CON LOS 14 QUE YA TIENEN EL WORKER CLÁSICO DE LA FASE 2. Medido en
+// Chromium el 19/10/2026, no deducido:** registrar el mismo alcance con un tipo
+// distinto del que ya está **no rechaza**. Devuelve la misma registración y
+// arranca un worker `installing`, o sea que dispara una actualización normal,
+// que es lo que dice el algoritmo del estándar. (Antes acá decía que chocaba.
+// Era falso y nadie lo había medido.)
+//
+// **Y SI EL MÓDULO NO CARGA, EL MODO DE FALLAR ES EL SEGURO**, también medido:
+// un script de módulo que no se puede cargar hace que el `register` rechace y
+// **deja al worker anterior en `activated`**. Se sigue con el viejo, el push
+// sigue andando, y un deploy posterior arreglado se toma en el chequeo
+// siguiente. Eso es lo que vuelve aceptable el riesgo de este cambio.
+// Falta confirmarlo en Safari/iOS: el algoritmo es el mismo y Chromium lo
+// cumple, pero no se midió ahí.
+//
+// Lo que **sí** rompe todo es que los imports no carguen, y eso ya pasaba:
+// medido contra producción el 19/10/2026, `/cola/cualquier-cosa.js` devolvía
+// *«The script resource is behind a redirect, which is disallowed»* —el 307 al
+// login del `proxy.ts`—. Por eso `proxy.ts` ahora deja `cola` afuera de su
+// matcher. Sin esa exclusión el service worker entero no se registra.
 import {
   comoContesto,
+  conSuArticulo,
   despuesDelIntento,
   proximaAMandar,
+  siNoSePudoAvisar,
   tomarLaCarga,
 } from "/cola/colaOffline.js";
 import { actualizarCarga, borrarCarga, leerCatalogo, leerCola } from "/cola/idb.js";
@@ -50,23 +66,27 @@ import { actualizarCarga, borrarCarga, leerCatalogo, leerCola } from "/cola/idb.
 // **CÓMO CONVIVE CON EL CACHÉ, QUE YA ESTÁ ACÁ.** El aviso de arriba decía que
 // el día que este archivo cacheara, `skipWaiting` pasaría a significar que a una
 // página ya cargada con los assets de una versión se le empiecen a servir los de
-// otra. Ese día es hoy, y así se resolvió, con las tres cosas juntas:
+// otra. Ese día es hoy, y lo que lo vuelve seguro son estas dos cosas:
 //
-//   - **El nombre del caché va versionado** (`CACHE`). Una versión nueva estrena
-//     caché en vez de pisarle los assets a quien ya está adentro.
 //   - **Un chunk que no está en el caché sale a la red.** En Vercel los assets
 //     de los despliegues viejos siguen estando, así que una página ya cargada
-//     que pide un chunk de otra versión lo consigue igual.
+//     que pide un chunk de otra versión lo consigue igual. Ésta es la que hace
+//     todo el trabajo.
 //   - **El respaldo de navegación se activa sólo cuando la red falla**, nunca
 //     para una página que cargó bien: con señal, lo que llega es lo del
 //     servidor, igual que sin service worker.
 //
-// **No se borran cachés viejos en el `activate`,** y sigue sin ser un olvido:
-// un `activate` que borra es justamente lo que vuelve peligroso a `skipWaiting`
-// —la página vieja pide un chunk que ya no está—. El costo asumido es que si
-// algún día se sube la versión, el caché anterior queda ocupando lugar hasta que
-// el navegador lo desaloje. Hay un test que fija esto (`not.toMatch(/caches
-// .delete/)`): si alguien decide limpiar, va con su propio porqué escrito.
+// El nombre del caché además va **versionado**, pero ojo con lo que eso es y lo
+// que no: `CACHE` es un literal que sólo cambia **a mano**, así que no hay un
+// caché por despliegue. Es una palanca para el día en que lo guardado quede
+// inservible, no parte de lo de arriba.
+//
+// **El `activate` no borra ningún caché** —`caches.delete` se lleva un caché
+// entero, incluido el que está usando una pestaña abierta, y eso es justamente
+// lo que volvería peligroso a `skipWaiting`—. Lo que sí hace el `install` es
+// **limpiar adentro del propio caché** lo que la pantalla ya no pide; por qué
+// eso sí es seguro está explicado en `guardarLaPantalla`. Un test fija la
+// diferencia.
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(guardarLaPantalla());
@@ -97,6 +117,20 @@ const LA_PANTALLA = "/cargar";
  * siempre a quien abra la pantalla sin señal. Por eso se mira `redirected`: no
  * alcanza con `ok`.
  *
+ * **Y ACÁ SE LIMPIA LO QUE SOBRA**, que es lo que mantiene a este caché del
+ * tamaño de una pantalla en vez de dejarlo crecer para siempre. Eso importa más
+ * de lo que parece: **el desalojo de un origen se lleva todo el almacenamiento,
+ * IndexedDB incluido**, o sea la base `sdg` con las cargas que todavía no
+ * salieron. De eso no se vuelve —lo que alguien escribió sin señal desaparece
+ * sin aviso—, así que un caché que crece sin límite empuja contra la cuota
+ * justamente donde vive lo que este plan existe para no perder.
+ *
+ * Por qué borrar **acá adentro** sí es seguro, al revés que un `caches.delete`:
+ * esto corre sólo cuando el `fetch` de arriba anduvo, o sea **con red**, y un
+ * chunk que se saca y alguien pide igual cae en la red, donde Vercel todavía
+ * tiene los assets de los despliegues viejos. Sin red no se borra nada, porque
+ * la función ya salió por el `catch`.
+ *
  * No rechaza nunca: un `install` que falla deja al worker sin activarse, y con
  * él se van el push y el vaciado. Guardar la pantalla es lo que se puede perder.
  */
@@ -112,8 +146,9 @@ async function guardarLaPantalla() {
     // Uno por uno y cada uno con su red de seguridad: un archivo que no se pudo
     // bajar no tiene por qué llevarse puestos a los demás, que es justo lo que
     // haría un `cache.addAll`.
+    const archivos = archivosDe(html);
     await Promise.all(
-      archivosDe(html).map(async (url) => {
+      archivos.map(async (url) => {
         try {
           const archivo = await fetch(url);
           if (archivo.ok) await cache.put(url, archivo);
@@ -123,9 +158,34 @@ async function guardarLaPantalla() {
         }
       })
     );
+
+    await sacarLoQueYaNoPide(cache, archivos);
   } catch {
     // Sin red al instalar no hay nada que guardar. El worker se activa igual.
   }
+}
+
+/**
+ * Saca del caché lo que la pantalla guardada ya no pide: los chunks del
+ * despliegue anterior, que llevan otro hash en el nombre y no los va a volver a
+ * pedir nadie.
+ *
+ * Se compara por el **camino** y no por la url entera porque lo que entra por
+ * el handler de `fetch` se guarda con la url absoluta y lo del precache con la
+ * ruta tal como la escribe el HTML; son la misma cosa escrita de dos formas.
+ *
+ * @param {Cache} cache
+ * @param {string[]} archivos Lo que la pantalla pide ahora.
+ */
+async function sacarLoQueYaNoPide(cache, archivos) {
+  const sirven = new Set([LA_PANTALLA, ...archivos]);
+  const guardados = await cache.keys();
+  await Promise.all(
+    guardados.map(async (pedido) => {
+      const camino = new URL(pedido.url, self.location.origin).pathname;
+      if (!sirven.has(camino)) await cache.delete(pedido);
+    })
+  );
 }
 
 /**
@@ -185,11 +245,18 @@ function archivosDe(html) {
 //
 // Se filtran los pedidos que no son navegación (imágenes, JSON) para no meterse
 // en el medio de todo el tráfico de la app a cambio de nada. La excepción es
-// `/_next/static/`, que **sí** se guarda al pasar: esos nombres llevan hash, así
-// que una url nunca cambia de contenido y lo guardado no puede quedar viejo.
-// (El costo asumido: ese caché sólo crece. Cada despliegue estrena nombres y los
-// de ayer se quedan hasta que el navegador desaloje el origen entero, que es un
-// desalojo del que se vuelve pidiendo todo a la red.)
+// `/_next/static/`, que se **lee** del caché: sin eso la pantalla guardada no
+// encontraría sus propios chunks sin señal, que es todo el punto.
+//
+// **PERO NO SE GUARDA NADA AL PASAR, Y ESO SE DECIDIÓ.** Guardar todo chunk que
+// pasa era tentador —esos nombres llevan hash, así que nunca quedan viejos— y
+// significaba acumular el bundle entero de cada despliegue para siempre. Lo que
+// eso compra es casi nada: la pantalla guardada apunta a los chunks que el
+// precache ya tiene, y para cualquier **otra** pantalla este plan no promete
+// nada sin señal. Lo que cuesta es concreto: **el desalojo de un origen se lleva
+// todo el almacenamiento, IndexedDB incluido**, o sea la cola con lo que alguien
+// cargó sin señal y todavía no salió. De eso no se vuelve. El caché se queda del
+// tamaño de una pantalla.
 //
 // **Y SE FILTRAN ADEMÁS `/api/` Y `/auth/`, QUE TAMBIÉN SON NAVEGACIONES.** Esto
 // no es una optimización ni una redundancia: es no meterse en el medio de dos
@@ -221,7 +288,6 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Antes que el filtro de navegación, porque un chunk no es una navegación.
-  // Sólo GET: `cache.put` tira con cualquier otro método.
   if (url.pathname.startsWith("/_next/static/") && event.request.method === "GET") {
     event.respondWith(loGuardadoOLaRed(event.request));
     return;
@@ -241,8 +307,7 @@ self.addEventListener("fetch", (event) => {
 });
 
 /**
- * Un archivo de `/_next/static/`: lo guardado si está, y si no la red,
- * guardando lo que vuelva.
+ * Un archivo de `/_next/static/`: lo guardado si está, y si no la red.
  *
  * El caché es lo primero porque esos nombres llevan hash —el contenido de una
  * url nunca cambia—, así que servir lo guardado no puede devolver algo viejo.
@@ -250,6 +315,9 @@ self.addEventListener("fetch", (event) => {
  * despliegues anteriores siguen estando, así que una página ya cargada que pide
  * un chunk de otra versión lo consigue igual. Eso es lo que deja que este caché
  * conviva con `skipWaiting`.
+ *
+ * Acá no se guarda nada; lo que hay guardado lo puso `guardarLaPantalla`. El
+ * porqué está arriba, en el comentario del handler.
  *
  * **Y SI EL CACHÉ NO SE PUEDE ABRIR, ESTO SE APARTA.** `caches.open` tira en la
  * ventana privada de Safari y con el almacenamiento bloqueado; dejar salir esa
@@ -261,26 +329,15 @@ self.addEventListener("fetch", (event) => {
  * @returns {Promise<Response>}
  */
 async function loGuardadoOLaRed(pedido) {
-  let cache = null;
   try {
-    cache = await caches.open(CACHE);
+    const cache = await caches.open(CACHE);
     const guardado = await cache.match(pedido);
     if (guardado) return guardado;
   } catch {
     // Sin caché, a la red y nada más.
   }
 
-  const respuesta = await fetch(pedido);
-  // La copia se guarda sin esperarla: lo que la página necesita es la respuesta,
-  // no que el caché haya terminado de escribir.
-  if (cache && respuesta.ok) {
-    const copia = respuesta.clone();
-    cache.put(pedido, copia).catch(() => {
-      // El almacenamiento está lleno o el navegador no deja guardar. La
-      // respuesta ya salió; lo único que se pierde es tenerla la próxima vez.
-    });
-  }
-  return respuesta;
+  return await fetch(pedido);
 }
 
 /**
@@ -291,8 +348,20 @@ async function loGuardadoOLaRed(pedido) {
  * `/cargar` en lugar de la pantalla que pidió. Acá, con señal no cambia
  * absolutamente nada respecto de no tener service worker.
  *
+ * **SIN SEÑAL SE CONTESTA UN REDIRECT Y NO EL DOCUMENTO, Y ÉSE ES EL CAMINO
+ * PRINCIPAL.** El `start_url` del manifest es `/` (ver `app/manifest.ts`), así
+ * que tocar el ícono de la app sin señal **navega a `/`**, no a `/cargar`.
+ * Contestar ahí con el documento de `/cargar` dejaría una página cuyo payload
+ * de Next describe `/cargar` mientras `location.pathname` dice `/`: si el
+ * router no tolera ese desajuste, la pantalla queda en blanco, que es **peor**
+ * que el error de sin-conexión del navegador. Mandándolo a `/cargar` el
+ * navegador pide esa url, vuelve a entrar por acá y recibe el documento **en su
+ * propio camino**, donde no hay nada que tolerar. No depende de cómo se porte
+ * el router, que es lo que lo hace la opción correcta y no la cómoda.
+ *
  * Y si no hay nada guardado, el error vuelve a salir tal cual: el navegador
- * muestra su página de sin-conexión, como siempre.
+ * muestra su página de sin-conexión, como siempre. Nunca se redirige a una
+ * pantalla que no está guardada, que sería un lazo.
  *
  * @param {Request} pedido
  * @returns {Promise<Response>}
@@ -304,7 +373,11 @@ async function laRedYSiNoLaPantalla(pedido) {
     try {
       const cache = await caches.open(CACHE);
       const guardada = await cache.match(LA_PANTALLA);
-      if (guardada) return guardada;
+      if (guardada) {
+        return new URL(pedido.url).pathname === LA_PANTALLA
+          ? guardada
+          : Response.redirect(new URL(LA_PANTALLA, self.location.origin).href, 302);
+      }
     } catch {
       // El caché no se pudo abrir. Lo que hay que contarle a quien navega
       // sigue siendo que no hay red, no que falló el caché.
@@ -346,13 +419,13 @@ self.addEventListener("push", (event) => {
 
   // El push es, hoy, el disparo que de verdad despierta a este archivo con la
   // app cerrada: el resumen diario llega a las 11:30 UTC. Se aprovecha para
-  // vaciar la cola, y va en el mismo `waitUntil` para que el navegador no mate
-  // al worker apenas termina de dibujar la notificación.
+  // vaciar la cola, y el `waitUntil` es lo que pide que el navegador no mate al
+  // worker apenas terminó de dibujar la notificación.
   //
-  // Dos `waitUntil` y no uno solo con un `Promise.all`: así el vaciado no puede
-  // demorar ni tumbar a la notificación, que es lo que a la persona le
-  // prometieron. `vaciarLaCola` no rechaza nunca, pero eso es una promesa de
-  // otra función y acá no se depende de ella.
+  // Es un `waitUntil` aparte y no un `Promise.all` con el de arriba por una
+  // razón sola: **el navegador espera por los dos igual**, así que juntarlos no
+  // cambia cuánto vive el worker, y separados se lee qué es cada cosa —la
+  // notificación es lo prometido, el vaciado es lo de más—.
   event.waitUntil(vaciarLaCola());
 });
 
@@ -541,17 +614,10 @@ async function mandarUna(carga) {
     // adentro para que `/cargar` lo muestre. Es la única diferencia con la
     // pantalla, donde el cartel siempre se puede dibujar.
     //
-    // Va como `parada` y no como `esperando`, y es por lo mismo que la borraría
-    // si se hubiera podido avisar: ya está entregada, así que no tiene que
-    // volver a salir sola. `parada` significa exactamente «necesita que una
-    // persona la mire», que es lo que pasa acá.
-    await actualizarCarga(carga.clave, {
-      tomadaEn: null,
-      estado: "parada",
-      ultimoError:
-        `Se cargó ${comoSeLlama(carga.tipo)} ${veredicto.numero}, pero con esto ` +
-        `para mirar: ${veredicto.advertencia}`,
-    });
+    // Qué estado le queda y qué dice el texto lo decide `siNoSePudoAvisar`, que
+    // vive en `colaOffline.js` con su test: acá eso estaba escrito a mano, y es
+    // exactamente así como una regla termina estando en dos lugares.
+    await actualizarCarga(carga.clave, siNoSePudoAvisar(veredicto, carga.tipo).cambios);
     return true;
   }
 
@@ -583,7 +649,7 @@ async function mandarUna(carga) {
  */
 async function contarLaAdvertencia(tipo, numero, advertencia) {
   try {
-    await self.registration.showNotification(`Se cargó ${comoSeLlama(tipo)} ${numero}`, {
+    await self.registration.showNotification(`Se cargó ${conSuArticulo(tipo)} ${numero}`, {
       body: advertencia,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
@@ -638,9 +704,4 @@ async function mandarALaRuta(tipo, cuerpo) {
 /** El mensaje de un error, sea lo que sea lo que se haya tirado. */
 function loQueDijo(e) {
   return e instanceof Error ? e.message : String(e);
-}
-
-/** Cómo se nombra cada tipo de carga en lo que ve una persona. */
-function comoSeLlama(tipo) {
-  return tipo === "aviso" ? "el aviso" : "la orden de trabajo";
 }

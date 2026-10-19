@@ -15,7 +15,12 @@
  * a mitad de camino— es un fallo sin status, y eso es pasajero.
  */
 
-import { comoContesto, type ResultadoDelEnvio, type TipoDeCarga } from "@/public/cola/colaOffline.js";
+import {
+  comoContesto,
+  conSuArticulo,
+  type ResultadoDelEnvio,
+  type TipoDeCarga,
+} from "@/public/cola/colaOffline.js";
 
 /** Qué pasó con una carga. Es lo único que el formulario tiene que mostrar. */
 export type Resultado =
@@ -104,7 +109,11 @@ export function CartelDelResultado({
 }) {
   if (!resultado) return null;
 
-  const comoSeLlama = tipo === "aviso" ? "el aviso" : "la orden";
+  // El nombre sale de `colaOffline.js` y no de acá: decía «la orden» mientras la
+  // lista decía «Orden de trabajo» y la notificación del service worker «la
+  // orden de trabajo», o sea que la misma carga cambiaba de nombre según si
+  // entró con la app abierta o cerrada.
+  const comoSeLlama = conSuArticulo(tipo);
 
   if (resultado.estado === "rechazada") {
     return (

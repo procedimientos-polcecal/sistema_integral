@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   comoContesto,
+  conSuArticulo,
   despuesDelIntento,
   proximaAMandar,
+  siNoSePudoAvisar,
   tomarLaCarga,
 } from "@/public/cola/colaOffline.js";
 import type { CargaEnCola } from "@/public/cola/colaOffline.js";
@@ -37,6 +39,16 @@ const CODIGO = readFileSync(join(process.cwd(), "public", "sw.js"), "utf8");
  * un fallo raro en otro lado.
  */
 const SIN_IMPORTS = CODIGO.replace(/^import\s+\{[\s\S]*?\}\s+from\s+"[^"]+";$/gm, "");
+
+/**
+ * El archivo sin sus comentarios, ni los de bloque ni los de línea. Es un
+ * recorte a lo bruto y alcanza: `public/sw.js` no tiene expresiones regulares
+ * ni textos con esas marcas adentro, y si alguna vez los tuviera, el peor caso
+ * es que un test mire de más.
+ */
+function soloCodigo(texto: string) {
+  return texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
 
 /** Los nombres que `public/sw.js` importa, tal como los escribe. */
 function loQueImporta(): string[] {
@@ -143,8 +155,12 @@ function colaDoble(iniciales: CargaEnCola[]) {
 /** `caches` doble: un Map por nombre de caché, con lo que guardó cada uno. */
 function cachesDoble() {
   const porNombre = new Map<string, Map<string, unknown>>();
+  // La clave se normaliza a url absoluta como hace el Cache de verdad, y eso no
+  // es cosmético: el precache guarda con la ruta tal como la escribe el HTML
+  // (`/_next/...`) y el handler de `fetch` busca con la url absoluta del
+  // pedido. Si el doble no las unificara, daría por fallado un acierto real.
   const clave = (pedido: unknown) =>
-    typeof pedido === "string" ? pedido : (pedido as { url: string }).url;
+    new URL(typeof pedido === "string" ? pedido : (pedido as { url: string }).url, ORIGEN).href;
   const abiertos: string[] = [];
   const caches = {
     open: vi.fn(async (nombre: string) => {
@@ -156,6 +172,10 @@ function cachesDoble() {
           guardado.set(clave(pedido), respuesta);
         }),
         match: vi.fn(async (pedido: unknown) => guardado.get(clave(pedido))),
+        // `keys()` devuelve pedidos, no textos: es lo que el service worker
+        // recorre para sacar lo que la pantalla ya no pide.
+        keys: vi.fn(async () => [...guardado.keys()].map((url) => ({ url }))),
+        delete: vi.fn(async (pedido: unknown) => guardado.delete(clave(pedido))),
       };
     }),
   };
@@ -219,8 +239,10 @@ function cargarSW(ventanas: Ventana[] = [], opciones: Opciones = {}) {
   const dependencias: Record<string, unknown> = {
     // Las puras, de verdad: son las mismas reglas que corre la pantalla.
     comoContesto,
+    conSuArticulo,
     despuesDelIntento,
     proximaAMandar,
+    siNoSePudoAvisar,
     tomarLaCarga,
     // La persistencia, doble: IndexedDB no existe acá.
     actualizarCarga: cola.actualizarCarga,
@@ -250,6 +272,7 @@ function cargarSW(ventanas: Ventana[] = [], opciones: Opciones = {}) {
     skipWaiting,
     cola,
     leerCatalogo,
+    caches,
     cachesAbiertos: abiertos,
     guardado: porNombre,
     dependencias,
@@ -275,9 +298,15 @@ function dejarCorrer() {
   return new Promise((resolver) => setTimeout(resolver, 0));
 }
 
-/** Lo único del caché que a los tests les importa: qué urls quedaron guardadas. */
+/**
+ * Lo único del caché que a los tests les importa: qué quedó guardado. Devuelve
+ * caminos y no urls enteras porque es lo que se lee de un vistazo en un
+ * `expect`, y el origen es siempre el mismo.
+ */
 function urlsGuardadas(guardado: Map<string, Map<string, unknown>>) {
-  return [...guardado.values()].flatMap((caché) => [...caché.keys()]);
+  return [...guardado.values()].flatMap((caché) =>
+    [...caché.keys()].map((url) => new URL(url).pathname),
+  );
 }
 
 /** Dispara `notificationclick` y espera lo que el handler le pasó a `waitUntil`. */
@@ -327,12 +356,25 @@ describe("public/sw.js", () => {
     });
 
     /*
-     * Hoy no hay cachés, y un `activate` que borra es lo que vuelve peligroso a
-     * `skipWaiting`: la página vieja pide un chunk que ya no está. La decisión
-     * de qué se borra y cuándo va junto con la del caché, en la fase 3/4.
+     * Un `activate` que borra un caché entero es lo que vuelve peligroso a
+     * `skipWaiting`: la página vieja pide un chunk que ya no está y no hay de
+     * dónde sacarlo.
+     *
+     * **Este test cambió a propósito cuando llegó el caché.** Antes decía «no
+     * hay cachés, así que no se borra ninguno»; ahora dice algo más preciso y
+     * que sigue teniendo fuerza: no se borra ningún **caché**
+     * (`caches.delete`), que es la operación peligrosa. Sacar entradas de
+     * adentro del propio caché (`cache.delete`) es otra cosa y sí se hace, en
+     * el `install` y sólo cuando la red anduvo — un chunk que se saca y alguien
+     * pide igual cae en la red, donde Vercel todavía lo tiene. Eso es lo que
+     * mantiene al caché del tamaño de una pantalla, que importa porque el
+     * desalojo de un origen se lleva también la cola de IndexedDB.
      */
-    it("el activate no borra cachés: esa decisión va con la del caché", () => {
-      expect(CODIGO).not.toMatch(/caches\s*\.\s*delete/);
+    it("no se borra ningún caché entero: eso es lo que rompe con skipWaiting", () => {
+      // Se mira el código sin comentarios: el comentario que explica esta regla
+      // la nombra, y un test que se dispara con su propia explicación obliga a
+      // no explicarla.
+      expect(soloCodigo(CODIGO)).not.toMatch(/caches\s*\.\s*delete/);
     });
   });
 
@@ -343,6 +385,29 @@ describe("public/sw.js", () => {
     const { dependencias } = cargarSW();
     for (const nombre of loQueImporta()) {
       expect(Object.keys(dependencias)).toContain(nombre);
+    }
+  });
+
+  it("los archivos que el service worker importa existen donde dice", () => {
+    /*
+     * NADA MÁS LO VERIFICA, y por eso este test existe. `tsc` no mira
+     * `public/`, el build no empaqueta este archivo, `revisar-arbol-commiteado`
+     * sólo sigue `./`, `../` y `@/`, y el molde de acá arriba **borra los
+     * imports con un regex** antes de evaluar. O sea que si alguien mueve
+     * `public/cola/`, todo queda verde y en producción el navegador no puede
+     * cargar los módulos: **el service worker entero deja de registrarse** y se
+     * van con él el push y la instalabilidad.
+     *
+     * Las rutas son absolutas (`/cola/…`) porque las resuelve el navegador
+     * contra el origen, así que el archivo vive en `public` + esa ruta.
+     */
+    const rutas = [...CODIGO.matchAll(/^import\s+\{[\s\S]*?\}\s+from\s+"([^"]+)";$/gm)].map(
+      (bloque) => bloque[1],
+    );
+    expect(rutas.length).toBeGreaterThan(0);
+    for (const ruta of rutas) {
+      expect(ruta.startsWith("/")).toBe(true);
+      expect(existsSync(join(process.cwd(), "public", ruta))).toBe(true);
     }
   });
 
@@ -399,6 +464,38 @@ describe("public/sw.js", () => {
       expect(urls).toContain("/cargar");
       expect(urls).toContain("/_next/static/chunks/main-9f8e.js");
       expect(urls).not.toContain("/_next/static/css/a1b2.css");
+    });
+
+    it("saca del caché lo que la pantalla ya no pide", async () => {
+      // Sin esto el caché acumularía los chunks de todos los despliegues para
+      // siempre, y un desalojo del origen se lleva **también la cola** de
+      // IndexedDB: lo que alguien cargó sin señal y todavía no salió.
+      const VIEJO = "/_next/static/chunks/del-despliegue-anterior.js";
+      const { handlers, guardado, caches } = cargarSW([], { red: async () => pagina(HTML) });
+      const caché = await caches.open("sdg-cargar-v1");
+      await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
+      expect(urlsGuardadas(guardado)).toContain(VIEJO);
+
+      await lanzar(handlers, "install");
+
+      expect(urlsGuardadas(guardado)).not.toContain(VIEJO);
+      expect(urlsGuardadas(guardado)).toContain("/cargar");
+      expect(urlsGuardadas(guardado)).toContain("/_next/static/chunks/main-9f8e.js");
+    });
+
+    it("sin red no saca nada, porque ahí no hay de dónde volver a sacarlo", async () => {
+      // Borrar sólo es seguro cuando el que se saca se puede pedir a la red.
+      const VIEJO = "/_next/static/chunks/del-despliegue-anterior.js";
+      const { handlers, guardado, caches } = cargarSW([], {
+        red: async () => {
+          throw new Error("sin red");
+        },
+      });
+      const caché = await caches.open("sdg-cargar-v1");
+      await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
+
+      await lanzar(handlers, "install");
+      expect(urlsGuardadas(guardado)).toContain(VIEJO);
     });
 
     it("si la red no contesta nada, el install no falla", async () => {
@@ -510,16 +607,51 @@ describe("public/sw.js", () => {
       return { ...sw, laPantalla, cortarLaRed: () => (hayRed = false) };
     }
 
+    /** Dispara una navegación y devuelve lo que el handler contestó. */
+    async function navegarA(
+      handlers: Record<string, (event: unknown) => void>,
+      url: string,
+    ) {
+      const respondWith = vi.fn();
+      handlers["fetch"]({ respondWith, request: { url, mode: "navigate", method: "GET" } });
+      const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
+      return await respondido;
+    }
+
     it("una navegación que la red rechaza se contesta con /cargar guardado", async () => {
       const { handlers, cortarLaRed, laPantalla } = await conLaPantallaGuardada();
       cortarLaRed();
-      const respondWith = vi.fn();
-      handlers["fetch"]({
-        respondWith,
-        request: { url: `${ORIGEN}/mantenimiento`, mode: "navigate", method: "GET" },
+      expect(await navegarA(handlers, `${ORIGEN}/cargar`)).toBe(laPantalla);
+    });
+
+    it("sin señal, la raíz manda a /cargar en vez de servirla ahí", async () => {
+      // `start_url` del manifest es `/`, así que tocar el ícono de la app sin
+      // señal navega a `/`. Contestar ahí con el documento de `/cargar` dejaría
+      // una página cuyo payload de Next describe `/cargar` mientras
+      // `location.pathname` dice `/`. El redirect deja que el navegador pida la
+      // url correcta, y el documento se sirve en su propio camino.
+      const { handlers, cortarLaRed } = await conLaPantallaGuardada();
+      cortarLaRed();
+      const respuesta = (await navegarA(handlers, `${ORIGEN}/`)) as Response;
+      expect(respuesta.status).toBe(302);
+      expect(respuesta.headers.get("location")).toBe(`${ORIGEN}/cargar`);
+    });
+
+    it("sin señal, cualquier otra pantalla también manda a /cargar", async () => {
+      const { handlers, cortarLaRed } = await conLaPantallaGuardada();
+      cortarLaRed();
+      const respuesta = (await navegarA(handlers, `${ORIGEN}/mantenimiento/ot`)) as Response;
+      expect(respuesta.status).toBe(302);
+      expect(respuesta.headers.get("location")).toBe(`${ORIGEN}/cargar`);
+    });
+
+    it("sin nada guardado no se redirige a ninguna parte: sería un lazo", async () => {
+      const { handlers } = cargarSW([], {
+        red: async () => {
+          throw new Error("sin red");
+        },
       });
-      const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
-      await expect(respondido).resolves.toBe(laPantalla);
+      await expect(navegarA(handlers, `${ORIGEN}/`)).rejects.toThrow("sin red");
     });
 
     it("una navegación que la red contesta no toca el caché", async () => {
@@ -552,23 +684,31 @@ describe("public/sw.js", () => {
       await expect(respondido).rejects.toThrow("sin red");
     });
 
-    it("guarda lo de /_next/static al pasarlo, porque esos nombres llevan hash", async () => {
-      const { handlers, guardado } = cargarSW();
+    it("un chunk de la pantalla guardada se sirve del caché sin salir a la red", async () => {
+      // Es todo el punto: sin señal, el HTML guardado pide sus propios chunks.
+      const { handlers, fetchDoble, cortarLaRed } = await conLaPantallaGuardada();
+      cortarLaRed();
+      const pedidosDeRed = fetchDoble.mock.calls.length;
+
       const respondWith = vi.fn();
-      const request = {
-        url: `${ORIGEN}/_next/static/chunks/otro-1234.js`,
-        mode: "no-cors",
-        method: "GET",
-      };
-      handlers["fetch"]({ respondWith, request });
+      handlers["fetch"]({
+        respondWith,
+        request: {
+          url: `${ORIGEN}/_next/static/chunks/main-9f8e.js`,
+          mode: "no-cors",
+          method: "GET",
+        },
+      });
       const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
-      await expect(respondido).resolves.toBe(RESPUESTA);
-      await dejarCorrer();
-      expect(urlsGuardadas(guardado)).toContain(`${ORIGEN}/_next/static/chunks/otro-1234.js`);
+      await expect(respondido).resolves.toBeDefined();
+      expect(fetchDoble).toHaveBeenCalledTimes(pedidosDeRed);
     });
 
-    it("un chunk que ya está guardado sale del caché y no de la red", async () => {
-      const { handlers, fetchDoble, guardado } = cargarSW();
+    it("un chunk que pasa NO se guarda: el caché no crece con cada despliegue", async () => {
+      // Guardar todo lo que pasa acumularía el bundle entero de cada
+      // despliegue, y un desalojo del origen se lleva **también la cola** de
+      // IndexedDB. Lo que la pantalla guardada necesita ya lo puso el install.
+      const { handlers, guardado } = cargarSW();
       const request = {
         url: `${ORIGEN}/_next/static/chunks/otro-1234.js`,
         mode: "no-cors",
@@ -576,14 +716,7 @@ describe("public/sw.js", () => {
       };
       handlers["fetch"]({ respondWith: vi.fn(), request });
       await dejarCorrer();
-      const pedidosDeRed = fetchDoble.mock.calls.length;
-
-      const respondWith = vi.fn();
-      handlers["fetch"]({ respondWith, request });
-      const [respondido] = respondWith.mock.calls[0] as unknown as [Promise<unknown>];
-      await expect(respondido).resolves.toBe(RESPUESTA);
-      expect(fetchDoble).toHaveBeenCalledTimes(pedidosDeRed);
-      expect(urlsGuardadas(guardado)).toContain(request.url);
+      expect(urlsGuardadas(guardado)).not.toContain(request.url);
     });
 
     it("un chunk que no está guardado sale a la red igual", async () => {

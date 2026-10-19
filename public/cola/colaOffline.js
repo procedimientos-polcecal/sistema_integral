@@ -239,6 +239,36 @@ export function puedeEmpujarla(carga, usuarioActualId, ahora) {
   return puedeMandarse({ ...carga, estado: "esperando" }, usuarioActualId, ahora);
 }
 
+// ── Cómo se nombra una carga ─────────────────────────────────────────────────
+
+/**
+ * Cómo se llama cada tipo de carga en lo que ve una persona.
+ *
+ * **Vive acá porque la misma carga se nombraba de tres formas distintas**
+ * —«Orden de trabajo» en la lista, «la orden» en el formulario y «la orden de
+ * trabajo» en la notificación del service worker—, o sea que una carga cambiaba
+ * de nombre según si entró con la app abierta o cerrada. Son dos funciones y no
+ * una porque el castellano necesita las dos formas, pero **son dos y no tres**:
+ * el que necesite nombrarla tiene que usar una de éstas.
+ *
+ * @param {TipoDeCarga} tipo
+ * @returns {string}
+ */
+export function comoSeLlama(tipo) {
+  return tipo === "aviso" ? "Aviso" : "Orden de trabajo";
+}
+
+/**
+ * Lo mismo, para cuando va en medio de una oración: «Se cargó la orden de
+ * trabajo OT-12».
+ *
+ * @param {TipoDeCarga} tipo
+ * @returns {string}
+ */
+export function conSuArticulo(tipo) {
+  return tipo === "aviso" ? "el aviso" : "la orden de trabajo";
+}
+
 // ── Cómo se lee lo que contestó la ruta de alta ──────────────────────────────
 
 /** Cómo se llama el número en la respuesta de cada ruta. */
@@ -529,6 +559,44 @@ export function despuesDelIntento(resultado) {
       tomadaEn: null,
       ultimoError: resultado.error,
       estado: convieneReintentar(resultado) ? "esperando" : "parada",
+    },
+  };
+}
+
+/**
+ * Qué hacer con una carga que **entró** y cuya advertencia **no se pudo decir**.
+ *
+ * Existe por el service worker, que es el único que puede quedarse sin dónde
+ * decirla: con la app cerrada el único lugar es una notificación, y sin permiso
+ * de notificaciones no hay ninguno. En la pantalla no pasa nunca —el cartel
+ * siempre se puede dibujar—, así que allá `borrar-y-avisar` se ejecuta entero.
+ *
+ * Está acá y no en `public/sw.js` por lo mismo que todo lo demás de este
+ * archivo: decide **una transición de estado** y **compone el texto que lee una
+ * persona**, que son las dos cosas que este archivo existe para concentrar. En
+ * el service worker eso quedaba escrito a mano, que es exactamente cómo una
+ * regla termina estando en dos lugares.
+ *
+ * **El estado es `parada` y no `esperando`:** la carga ya está entregada, así
+ * que no tiene que volver a salir sola —sería un lazo de POST que siempre
+ * terminan igual—, y `parada` significa literalmente «necesita que una persona
+ * la mire». Es la única carga `parada` que **sí** entró, y por eso el texto
+ * empieza diciendo que entró y con qué número: lo primero que alguien tiene que
+ * saber es que esto **no** hay que volver a cargarlo.
+ *
+ * @param {{ numero: string, advertencia: string }} veredicto El `borrar-y-avisar` que no se pudo ejecutar.
+ * @param {TipoDeCarga} tipo
+ * @returns {{ accion: "actualizar", cambios: Partial<CargaEnCola> }}
+ */
+export function siNoSePudoAvisar(veredicto, tipo) {
+  return {
+    accion: "actualizar",
+    cambios: {
+      tomadaEn: null,
+      estado: "parada",
+      ultimoError:
+        `Entró: se cargó ${conSuArticulo(tipo)} ${veredicto.numero}, así que no ` +
+        `hay que volver a cargarlo. Pero quedó esto para mirar: ${veredicto.advertencia}`,
     },
   };
 }

@@ -22,7 +22,16 @@ import { useCargar } from "@/lib/core/useCargar";
  * más, y desde la app no hay forma de revertirlo — hay que ir a la
  * configuración del navegador. Sin ese texto, el botón parece roto.
  */
-type Estado = "mirando" | "apagado" | "prendiendo" | "prendido" | "apagando" | "no-soportado" | "denegado" | "fallo";
+type Estado =
+  | "mirando"
+  | "apagado"
+  | "prendiendo"
+  | "prendido"
+  | "apagando"
+  | "no-soportado"
+  | "denegado"
+  | "sin-modulos"
+  | "fallo";
 
 /** La clave pública VAPID viaja en base64url y `subscribe` la quiere en bytes. */
 function base64UrlABytes(base64: string): Uint8Array {
@@ -70,12 +79,26 @@ export function BotonNotificaciones() {
       // —lo hace `RegistrarServiceWorker` en cada carga desde la fase 1—
       // devuelve el mismo registro en vez de crear otro.
       //
-      // **El `type` tiene que ser el mismo que allá**: `public/sw.js` importa
-      // las reglas de la cola de cargas sin señal, así que es un módulo, y
-      // registrar el mismo alcance con otro tipo **rechaza**. Si alguien cambia
-      // uno solo de los dos, el que quede distinto deja la app sin service
-      // worker —sin instalar y sin push— y acá eso se ve sólo como "fallo".
-      const registro = await navigator.serviceWorker.register("/sw.js", { type: "module" });
+      // **El `type` tiene que ser el mismo que en `RegistrarServiceWorker`**:
+      // `public/sw.js` importa las reglas de la cola de cargas sin señal, así
+      // que es un módulo. (Medido en Chromium el 19/10/2026: registrar el mismo
+      // alcance con otro tipo **no choca**, dispara una actualización normal.
+      // Antes acá decía lo contrario y nadie lo había comprobado.)
+      //
+      // **ACÁ SE ATRAPA APARTE, Y ES POR FIREFOX DE ESCRITORIO**, que no
+      // soporta service workers de tipo módulo en **ninguna** versión —lo de la
+      // 114 son los *dedicated workers*, que es otra cosa—. Ahí esto rechaza, y
+      // sin esta rama la persona veía «No se pudo activar. Probá de nuevo», que
+      // la manda a reintentar algo que no va a funcionar nunca. Como la
+      // computadora es una fila aparte de `push_suscripciones`, es un caso real
+      // y no teórico.
+      let registro;
+      try {
+        registro = await navigator.serviceWorker.register("/sw.js", { type: "module" });
+      } catch {
+        setEstado("sin-modulos");
+        return;
+      }
       const { clavePublica } = await fetch("/api/push/suscripcion").then((r) => r.json());
       if (!clavePublica) { setEstado("fallo"); return; }
 
@@ -135,6 +158,18 @@ export function BotonNotificaciones() {
         Las notificaciones están bloqueadas en {aparato}. El navegador no vuelve
         a preguntar, así que hay que habilitarlas a mano en su configuración,
         en los permisos de este sitio.
+      </p>
+    );
+  }
+
+  if (estado === "sin-modulos") {
+    return (
+      <p className="text-sm text-amber-700">
+        En este navegador no se pueden activar. El SdG usa un service worker de
+        tipo módulo, y Firefox de escritorio no los soporta en ninguna versión;
+        reintentar no va a cambiar nada. Desde Chrome o Edge en la computadora,
+        o desde el teléfono, funcionan. Si estás en otro navegador y ves esto,
+        avisá: puede ser una falla del último despliegue.
       </p>
     );
   }

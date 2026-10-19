@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   clasificarFallo,
   comoContesto,
+  comoSeLlama,
+  conSuArticulo,
   convieneReintentar,
   despuesDelIntento,
   esperaAntesDeReintentar,
@@ -12,6 +14,7 @@ import {
   puedeEmpujarla,
   puedeMandarse,
   queHacerConLaNueva,
+  siNoSePudoAvisar,
   tomarLaCarga,
   MINUTOS_PARA_SOLTAR,
 } from "@/public/cola/colaOffline.js";
@@ -532,5 +535,52 @@ describe("despuesDelIntento", () => {
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
     });
+  });
+});
+
+describe("cómo se nombra una carga", () => {
+  it("son dos formas y no tres, y las dos dicen «orden de trabajo»", () => {
+    // El bug que esto cierra: la misma carga se llamaba «Orden de trabajo» en
+    // la lista, «la orden» en el formulario y «la orden de trabajo» en la
+    // notificación, o sea que cambiaba de nombre según si entró con la app
+    // abierta o cerrada.
+    expect(comoSeLlama("aviso")).toBe("Aviso");
+    expect(comoSeLlama("orden")).toBe("Orden de trabajo");
+    expect(conSuArticulo("aviso")).toBe("el aviso");
+    expect(conSuArticulo("orden")).toBe("la orden de trabajo");
+  });
+});
+
+describe("siNoSePudoAvisar", () => {
+  const VEREDICTO = { numero: "OA-77", advertencia: "Quedó en la planilla." };
+
+  it("la para, porque ya entró y no tiene que volver a salir sola", () => {
+    const { accion, cambios } = siNoSePudoAvisar(VEREDICTO, "aviso");
+    expect(accion).toBe("actualizar");
+    expect(cambios.estado).toBe("parada");
+    // La marca de tomada se suelta: el intento terminó.
+    expect(cambios.tomadaEn).toBeNull();
+  });
+
+  it("el texto dice primero que entró y con qué número", () => {
+    // Es la única carga `parada` que sí entró. Lo primero que quien la mire
+    // tiene que saber es que esto NO hay que volver a cargarlo.
+    const { cambios } = siNoSePudoAvisar(VEREDICTO, "aviso");
+    expect(cambios.ultimoError).toMatch(/^Entró/);
+    expect(cambios.ultimoError).toContain("OA-77");
+    expect(cambios.ultimoError).toContain("no hay que volver a cargarlo");
+    expect(cambios.ultimoError).toContain("Quedó en la planilla.");
+  });
+
+  it("nombra la carga como la nombra todo el resto del sistema", () => {
+    expect(siNoSePudoAvisar({ numero: "OT-12", advertencia: "x" }, "orden").cambios.ultimoError)
+      .toContain("la orden de trabajo OT-12");
+  });
+
+  it("lo que devuelve es ejecutable sin volver a decidir nada", () => {
+    // Misma forma que el `actualizar` de `despuesDelIntento`: quien llama hace
+    // `actualizarCarga(clave, cambios)` y nada más.
+    const falla = despuesDelIntento({ ok: false, status: 500, deLaRuta: true, error: "x" });
+    expect(Object.keys(siNoSePudoAvisar(VEREDICTO, "aviso"))).toEqual(Object.keys(falla));
   });
 });

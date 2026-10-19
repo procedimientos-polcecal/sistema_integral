@@ -38,9 +38,21 @@ import { useEffect } from "react";
  * clásico no puede importar nada, así que este registro y el de
  * `BotonNotificaciones` pasan a declararlo módulo.
  *
- * **Los dos o ninguno.** Registrar el mismo alcance con un tipo distinto del
- * que ya está rechaza, y ahí la app queda sin service worker —sin oferta de
- * instalar y sin push— hasta el deploy siguiente.
+ * **Qué les pasa a los que ya tienen el worker clásico de la fase 2. Medido en
+ * Chromium el 19/10/2026, no deducido:** registrar el mismo alcance con un tipo
+ * distinto del que ya está **no rechaza** — devuelve la misma registración y
+ * arranca un worker `installing`, o sea una actualización normal. Y si el
+ * módulo no cargara, el `register` rechaza **dejando activo al worker
+ * anterior**: se sigue con el viejo, el push sigue llegando, y un deploy
+ * arreglado se toma en el chequeo siguiente. Ése es el modo de fallar seguro
+ * que vuelve aceptable el cambio.
+ *
+ * **Dónde sí duele: Firefox de escritorio**, que no soporta service workers de
+ * tipo módulo en ninguna versión. Ahí esto rechaza siempre, lo atrapa el
+ * `catch` de abajo y esa computadora se queda con el worker de la fase 2 para
+ * siempre: el push que ya tenga prendido sigue andando, pero ningún arreglo
+ * futuro le llega y no puede prenderlo si no lo tenía. `BotonNotificaciones`
+ * lo dice con todas las letras en vez de ofrecer un reintento inútil.
  *
  * FALLA CALLADO, A PROPÓSITO
  *
