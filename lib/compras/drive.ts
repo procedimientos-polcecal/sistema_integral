@@ -17,7 +17,7 @@ import {
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 // La regla de en qué fila escribir vive en el núcleo: la usan las cuatro
 // planillas y tenerla dos veces es cómo se corrige en una sola.
-import { filaSiguienteSegunLaColumna } from "@/lib/core/sheets";
+import { filaSiguienteSegunLaColumna, estaCalculando, errorDeCalculo } from "@/lib/core/sheets";
 export { filaSiguienteSegunLaColumna };
 export { urlDePlanilla } from "@/lib/compras/vincular";
 
@@ -106,6 +106,7 @@ export async function leerComparativa(fileId: string): Promise<ComparativaLeida>
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const valores = ((await res.json()).values ?? []) as string[][];
+  if (estaCalculando(valores)) throw errorDeCalculo(pestana);
   return { nombre, pestana, encabezado: valores[0] ?? [], filas: valores.slice(1) };
 }
 
@@ -115,6 +116,13 @@ export async function leerComparativa(fileId: string): Promise<ComparativaLeida>
  * Se mira la columna A y no la hoja entera porque es la que dice si una fila
  * tiene datos: en las comparativas el formato, las fórmulas y los desplegables
  * llegan mucho más abajo que los presupuestos cargados.
+ *
+ * **Y por eso mismo corta si la planilla está calculando.** Ésta es la función
+ * con la forma exacta del accidente del 13/10/2026: una lectura de la columna A
+ * que devolvió dos filas de 623 porque las fórmulas se estaban recalculando, y
+ * una cuenta de "la primera libre" impecable sobre datos que no eran datos. Acá
+ * el resultado sería escribir el presupuesto de un proveedor encima del de
+ * otro, en una comparativa que después alguien usa para elegir a quién comprar.
  */
 async function proximaFilaLibre(token: string, fileId: string, pestana: string): Promise<number> {
   const url =
@@ -125,6 +133,7 @@ async function proximaFilaLibre(token: string, fileId: string, pestana: string):
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
 
   const columnaA = ((await res.json()).values ?? []) as string[][];
+  if (estaCalculando(columnaA)) throw errorDeCalculo(pestana);
   return filaSiguienteSegunLaColumna(columnaA);
 }
 
