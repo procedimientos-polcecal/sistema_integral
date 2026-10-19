@@ -109,11 +109,49 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
            encarga del salto) para no generar hojas casi en blanco. */
         .pdf-exporting .ot-page { margin: 0 !important; }
 
+        /* LOS TAMAÑOS DE LA HOJA, JUNTOS. Es lo único que hay que tocar si
+           hay que agrandarla más — antes estaban repartidos en catorce
+           atributos style en línea, y subir uno sin los otros desbalanceaba
+           la hoja.
+           Van en px y no en pt porque la hoja se mide en px para que
+           html2pdf la capture 1:1 contra los 190mm de ancho útil. */
+        .ot-page {
+          --ot-rotulo: 13px;   /* ESPECIALIDAD, SECTOR, DESCRIPCIÓN… */
+          --ot-dato:   16px;   /* lo que se lee: el sector, el equipo, la fecha */
+          --ot-cuerpo: 18px;   /* la descripción y los repuestos, que es lo que
+                                  alguien lee parado al lado de una máquina */
+        }
+
+        /* Un rótulo se lee como rótulo: en versales, sobre un fondo que lo
+           separa del dato. Es lo que hace que la hoja se recorra de un
+           vistazo en vez de leerse entera. */
+        .ot-rotulo {
+          font-weight: 700;
+          font-size: var(--ot-rotulo);
+          color: #B45309;
+          background: #FFFBEB;
+          text-align: center;
+          vertical-align: middle;
+          letter-spacing: .4px;
+          line-height: 1.25;
+          padding-left: 4px;
+          padding-right: 4px;
+        }
+        /* Los rótulos largos no llevan interletrado: DESCRIPCIÓN y REPUESTOS
+           UTILIZADOS son los dos más anchos de la hoja y con él tocaban los
+           bordes de su columna. */
+        .cell-label.ot-rotulo, .cell-real.ot-rotulo {
+          letter-spacing: 0;
+        }
+        .ot-dato   { font-size: var(--ot-dato); vertical-align: middle; }
+        .ot-cuerpo { font-size: var(--ot-cuerpo); line-height: 1.55; }
+        .ot-resaltado { color: #B45309; font-weight: 600; }
+
         .ot-table {
           width: 100%;
           border-collapse: collapse;
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 11px;
+          font-size: var(--ot-dato);
           flex: 1;
           display: flex;
           flex-direction: column;
@@ -141,20 +179,20 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
         }
         .cell-logo   { width: 56px; flex-shrink: 0; }
         .cell-title  { flex: 1; }
-        .cell-ot-lbl { width: 52px; flex-shrink: 0; }
-        .cell-ot-num { width: 64px; flex-shrink: 0; }
+        .cell-ot-lbl { width: 62px; flex-shrink: 0; }
+        .cell-ot-num { width: 80px; flex-shrink: 0; }
         .cell-esp    { flex: 1; }
         .cell-fecha-val { width: 116px; flex-shrink: 0; }
-        .cell-sector-lbl { width: 80px; flex-shrink: 0; }
+        .cell-sector-lbl { width: 92px; flex-shrink: 0; }
         .cell-sector-val { flex: 1; }
-        .cell-equipo-lbl { width: 72px; flex-shrink: 0; }
+        .cell-equipo-lbl { width: 84px; flex-shrink: 0; }
         .cell-equipo-val { flex: 1; }
-        .cell-label  { width: 80px; flex-shrink: 0; }
+        .cell-label  { width: 118px; flex-shrink: 0; }
         .cell-content { flex: 1; overflow: hidden; }
-        .cell-fec-lbl { width: 80px; flex-shrink: 0; }
+        .cell-fec-lbl { width: 96px; flex-shrink: 0; }
         .cell-fec-val { flex: 1; }
-        .cell-real    { width: 120px; flex-shrink: 0; }
-        .cell-firma   { width: 100px; flex-shrink: 0; }
+        .cell-real    { width: 152px; flex-shrink: 0; }
+        .cell-firma   { width: 120px; flex-shrink: 0; }
       `}</style>
 
       <div className="print-content py-8 px-4">
@@ -176,60 +214,54 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
                     </td>
                     <td className="cell-title"
                       style={{ textAlign: "center", verticalAlign: "middle", padding: "8px 12px" }}>
-                      <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: 2 }}>ORDEN DE TRABAJO</span>
+                      <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: 2 }}>ORDEN DE TRABAJO</span>
                     </td>
-                    <td className="cell-ot-lbl"
-                      style={{ textAlign: "center", verticalAlign: "bottom", padding: "4px 6px", fontWeight: 700, fontSize: 10 }}>
+                    <td className="cell-ot-lbl ot-rotulo" style={{ padding: "6px" }}>
                       N° OT
                     </td>
                     <td className="cell-ot-num"
-                      style={{ textAlign: "center", verticalAlign: "middle", padding: "4px 6px", fontWeight: 900, fontSize: 16 }}>
+                      style={{ textAlign: "center", verticalAlign: "middle", padding: "6px", fontWeight: 900, fontSize: 24 }}>
                       {item.ot_number}
                     </td>
                   </tr>
 
                   <tr className="row-esp">
-                    <td className="cell-esp" style={{ padding: "5px 12px", verticalAlign: "middle" }}>
-                      <span style={{ fontWeight: 700, marginRight: 8, fontSize: 10 }}>ESPECIALIDAD</span>
-                      <span style={{ color: "#D97706", fontWeight: 600 }}>{item.especialidad ?? "—"}</span>
-                      <span style={{ fontWeight: 700, marginLeft: 24, marginRight: 8, fontSize: 10 }}>FECHA</span>
+                    <td className="cell-esp ot-dato" style={{ padding: "7px 12px" }}>
+                      <span className="ot-rotulo" style={{ background: "none", marginRight: 10 }}>ESPECIALIDAD</span>
+                      <span className="ot-resaltado">{item.especialidad ?? "—"}</span>
+                      <span className="ot-rotulo" style={{ background: "none", marginLeft: 26, marginRight: 10 }}>FECHA</span>
                       <span>{fechaStr}</span>
                     </td>
-                    <td colSpan={2} className="cell-fecha-val"
-                      style={{ textAlign: "center", verticalAlign: "middle", padding: "5px 8px" }}>
+                    <td colSpan={2} className="cell-fecha-val ot-dato"
+                      style={{ textAlign: "center", padding: "7px 8px" }}>
                       {fechaEjec}
                     </td>
                   </tr>
 
                   <tr className="row-sector">
-                    <td className="cell-sector-lbl"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 10, padding: "6px 8px" }}>
+                    <td className="cell-sector-lbl ot-rotulo" style={{ padding: "8px" }}>
                       SECTOR
                     </td>
-                    <td className="cell-sector-val"
-                      style={{ padding: "6px 12px", verticalAlign: "middle", color: "#D97706", fontWeight: 600 }}>
+                    <td className="cell-sector-val ot-dato ot-resaltado" style={{ padding: "8px 12px" }}>
                       {item.sector_raw ?? "—"}
                     </td>
-                    <td className="cell-equipo-lbl"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 10, padding: "6px 8px" }}>
+                    <td className="cell-equipo-lbl ot-rotulo" style={{ padding: "8px" }}>
                       EQUIPO
                     </td>
-                    <td className="cell-equipo-val"
-                      style={{ padding: "6px 8px", verticalAlign: "middle", color: "#D97706", fontWeight: 600 }}>
+                    <td className="cell-equipo-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
                       {item.equipo_raw ?? "—"}
                     </td>
                   </tr>
 
                   <tr className="row-desc">
-                    <td className="cell-label"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 10, padding: "6px 8px", color: "#D97706" }}>
+                    <td className="cell-label ot-rotulo" style={{ padding: "8px" }}>
                       DESCRIPCIÓN
                     </td>
                     <td colSpan={3} className="cell-content"
-                      style={{ padding: "10px 14px", verticalAlign: "top" }}>
-                      <div style={{ fontSize: 12, lineHeight: 1.6 }}>{item.descripcion ?? ""}</div>
+                      style={{ padding: "12px 16px", verticalAlign: "top" }}>
+                      <div className="ot-cuerpo">{item.descripcion ?? ""}</div>
                       {item.notas_item && (
-                        <div style={{ marginTop: 10, fontSize: 10, color: "#555", fontStyle: "italic", borderTop: "1px dashed #ccc", paddingTop: 8 }}>
+                        <div style={{ marginTop: 12, fontSize: "var(--ot-dato)", color: "#555", fontStyle: "italic", borderTop: "1px dashed #ccc", paddingTop: 10 }}>
                           Nota: {item.notas_item}
                         </div>
                       )}
@@ -237,33 +269,33 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
                   </tr>
 
                   <tr className="row-rep">
-                    <td className="cell-label"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 10, padding: "6px 8px", color: "#D97706" }}>
+                    <td className="cell-label ot-rotulo" style={{ padding: "8px" }}>
                       REPUESTOS<br />UTILIZADOS
                     </td>
-                    <td colSpan={3} className="cell-content"
-                      style={{ padding: "10px 14px", verticalAlign: "top", fontSize: 12 }}>
+                    <td colSpan={3} className="cell-content ot-cuerpo"
+                      style={{ padding: "12px 16px", verticalAlign: "top" }}>
                       {item.repuesto ?? ""}
                     </td>
                   </tr>
 
                   <tr className="row-fecha">
-                    <td className="cell-fec-lbl"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 9, padding: "8px 6px", color: "#D97706" }}>
+                    <td className="cell-fec-lbl ot-rotulo" style={{ padding: "10px 6px" }}>
                       FECHA DE<br />EJECUCIÓN
                     </td>
-                    <td className="cell-fec-val"
-                      style={{ padding: "8px 12px", verticalAlign: "middle", fontSize: 12 }}>
+                    <td className="cell-fec-val ot-dato" style={{ padding: "10px 12px" }}>
                       {fechaEjec}
                     </td>
-                    <td className="cell-real"
-                      style={{ textAlign: "center", verticalAlign: "middle", fontWeight: 700, fontSize: 10, padding: "8px 6px", color: "#D97706" }}>
+                    <td className="cell-real ot-rotulo" style={{ padding: "10px 6px" }}>
                       REALIZADO / ATRASADO
                     </td>
-                    <td className="cell-firma"
-                      style={{ padding: "8px 10px", verticalAlign: "middle" }}>
-                      <div style={{ fontWeight: 700, fontSize: 10, color: "#D97706" }}>FIRMA</div>
-                      {assignee && <div style={{ fontSize: 10, color: "#444", marginTop: 4 }}>{assignee}</div>}
+                    <td className="cell-firma ot-rotulo"
+                      style={{ padding: "10px", background: "none", textAlign: "left" }}>
+                      FIRMA
+                      {assignee && (
+                        <div style={{ fontSize: "var(--ot-dato)", fontWeight: 400, color: "#444", marginTop: 6 }}>
+                          {assignee}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 </tbody>
