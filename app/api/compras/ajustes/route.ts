@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { esAdminDelNucleo } from "@/lib/core/access";
+import { esAdminCompras } from "@/lib/compras/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { CuerpoDelUmbral } from "@/lib/compras/ajustes";
@@ -8,16 +8,14 @@ import { CuerpoDelUmbral } from "@/lib/compras/ajustes";
 /**
  * Guardar el umbral de monto alto.
  *
- * Es de **administrador del sistema** y no de administrador del módulo, aunque
- * la pantalla viva en Compras: la policy de escritura de `compras_ajustes` usa
- * `es_admin()`, que desde el 10/09/2026 es sólo `admin_sistema`. Pedir menos
- * acá dejaría pasar a un admin de módulo que la base después rechaza *sin
- * error* —un UPDATE que RLS filtra afecta cero filas y no falla—, y la
- * pantalla diría "guardado" sin que nada haya cambiado.
+ * Es de quien administra el módulo, la misma regla que la lista de aprobadores
+ * (`/api/compras/aprobadores`) con la que comparte pantalla, y la misma que
+ * tiene la policy de escritura de `compras_ajustes`.
  *
- * Por eso se escribe con el cliente de la sesión y no con el admin: la base es
- * la segunda llave, y si alguna vez las dos reglas se separan el que manda es
- * ella. Y se pide la fila de vuelta: si no vuelve ninguna, no se guardó.
+ * Se escribe con el cliente de la sesión y no con el admin: la base es la
+ * segunda llave, y si alguna vez las dos reglas se separan el que manda es
+ * ella. Un UPDATE que RLS filtra afecta cero filas y no falla, así que se pide
+ * la fila de vuelta: si no vuelve ninguna, no se guardó.
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
@@ -25,10 +23,9 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { data: usuario } = await supabase.from("usuarios").select("rol").eq("id", user.id).single();
-  if (!esAdminDelNucleo(usuario?.rol)) {
+  if (!(await esAdminCompras(supabase, user.id))) {
     return NextResponse.json(
-      { error: "Sólo un administrador del sistema puede cambiar el umbral de monto alto" },
+      { error: "Cambiar el umbral de monto alto requiere nivel de administrador del módulo" },
       { status: 403 }
     );
   }

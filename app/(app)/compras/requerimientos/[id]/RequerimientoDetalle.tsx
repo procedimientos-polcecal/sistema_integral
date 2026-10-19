@@ -455,9 +455,11 @@ export default function RequerimientoDetalle({
             )}
           </section>
 
-          {/* Marcar a mano pasa por el mismo PATCH que el resto de la gestión de
-              compra, y ese exige que el RI esté aprobado: antes de eso la
-              marca se muestra pero no se ofrece. */}
+          {/* La marca se ofrece en cualquier estado, y no sólo con el RI
+              aprobado: existe para llegar ANTES del número —los que esperan a
+              gerencia no tienen ninguno—, así que condicionarla al estado la
+              volvía inútil justo donde hace falta. La puede poner quien
+              gestiona o quien aprueba. */}
           <MontoAlto
             montoConocido={r.monto_conocido}
             manual={r.monto_alto_manual}
@@ -467,12 +469,7 @@ export default function RequerimientoDetalle({
                 ? "Costo de la compra, con IVA y envío"
                 : "El presupuesto más alto que se cargó"
             }
-            puedeMarcar={puedeEditar && r.estado_aprobacion === "APROBADA"}
-            motivoDeNoPoder={
-              puedeEditar && r.estado_aprobacion !== "APROBADA"
-                ? "Se puede marcar a mano una vez que el requerimiento está aprobado."
-                : null
-            }
+            puedeMarcar={puedeEditar || puedeAprobar}
             guardando={guardando}
             onCambiar={(valor) => guardar({ monto_alto_manual: valor })}
           />

@@ -4,7 +4,6 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe, aprobadoresDeCompras, aprobadoresDeOS } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cuentaDeServicio } from "@/lib/core/google";
-import { esAdminDelNucleo } from "@/lib/core/access";
 import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import ConfiguracionClient from "./ConfiguracionClient";
 import type { Sincronizacion } from "@/lib/compras/types";
@@ -86,19 +85,16 @@ export default async function ConfiguracionPage() {
     .eq("activo", true)
     .order("nombre");
 
-  // El umbral lo escribe sólo un administrador del sistema —es lo que dice la
-  // policy de `compras_ajustes`—, que no es lo mismo que `nivel === "admin"`
-  // del módulo: un encargado con nivel admin en Compras lo vería y la base le
-  // rechazaría el cambio. Por eso se pregunta el rol y no el nivel.
-  const [{ data: yo }, umbralMontoAlto] = await Promise.all([
-    supabase.from("usuarios").select("rol").eq("id", user.id).single(),
-    umbralDeMontoAlto(supabase),
-  ]);
+  // El umbral lo edita quien administra el módulo, igual que la lista de
+  // aprobadores que vive en esta misma pantalla: es la regla de la policy de
+  // `compras_ajustes` y la de `compras_aprobadores`, y la ruta usa la misma
+  // función (`esAdminCompras`). Tres lugares que dicen lo mismo.
+  const umbralMontoAlto = await umbralDeMontoAlto(supabase);
 
   return (
     <ConfiguracionClient
       umbralMontoAlto={umbralMontoAlto}
-      puedeEditarUmbral={esAdminDelNucleo(yo?.rol)}
+      puedeEditarUmbral={permisos.nivel === "admin"}
       // Mandar la cola entera a Odoo son 177 órdenes en la contabilidad real:
       // es de admin, con el mismo criterio que confirmar una factura allá.
       esAdmin={permisos.nivel === "admin"}

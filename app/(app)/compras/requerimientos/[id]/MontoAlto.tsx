@@ -17,7 +17,7 @@ import { lecturaDeMontoAlto, POSICIONES_DE_MONTO_ALTO } from "@/lib/compras/mont
  * sentidos, y por eso hay que dejar claro cuál está puesta.
  */
 export default function MontoAlto({
-  montoConocido, manual, umbral, origenDelMonto, puedeMarcar, motivoDeNoPoder, guardando, onCambiar,
+  montoConocido, manual, umbral, origenDelMonto, puedeMarcar, guardando, onCambiar,
 }: {
   montoConocido: number | null;
   manual: MarcaManual;
@@ -26,8 +26,6 @@ export default function MontoAlto({
   origenDelMonto: string;
   /** Si quien mira puede cambiar la marca. */
   puedeMarcar: boolean;
-  /** Si no puede, por qué —sólo se dice a quien podría en otro momento—. */
-  motivoDeNoPoder: string | null;
   guardando: boolean;
   onCambiar: (valor: MarcaManual) => void;
 }) {
@@ -105,10 +103,6 @@ export default function MontoAlto({
             rutinaria.
           </p>
         </div>
-      )}
-
-      {!puedeMarcar && motivoDeNoPoder && (
-        <p className="mt-3 text-xs text-slate-500">{motivoDeNoPoder}</p>
       )}
     </section>
   );

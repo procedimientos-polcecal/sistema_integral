@@ -27,7 +27,7 @@ export default function ConfiguracionClient({
   esAdmin: boolean;
   /** A partir de cuánto un requerimiento es de monto alto. */
   umbralMontoAlto: number;
-  /** Administrador del sistema: el único que puede escribir el umbral. */
+  /** Administrador del módulo: la misma regla que la lista de aprobadores. */
   puedeEditarUmbral: boolean;
   sincronizaciones: Sincronizacion[];
   /** Con qué cuenta de Google escribe el sistema en la planilla. */
