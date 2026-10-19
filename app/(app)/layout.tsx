@@ -102,8 +102,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             barra cuenta son avisos y órdenes de trabajo, y su botón lleva a
             `/cargar`, que al vivir fuera del grupo `(app)` **se abre igual**
             para cualquiera con sesión. O sea que acá no alcanza con que el
-            destino rebote: si no se filtra, no filtra nadie. */}
-        <CargasEsperando conMantenimiento={modulos.includes("mantenimiento")} />
+            destino rebote: si no se filtra, no filtra nadie.
+
+            Y `usuarioId` es la excepción a ese filtro, que existe por la misma
+            puerta abierta: sin red el service worker manda cualquier navegación
+            a `/cargar`, así que alguien sin el módulo puede llegar a encolar
+            algo. A nadie se le esconde lo que cargó él. El porqué está en el
+            componente. */}
+        <CargasEsperando
+          conMantenimiento={modulos.includes("mantenimiento")}
+          usuarioId={user.id}
+        />
 
         <div className="flex min-h-0 flex-1">
           <Sidebar

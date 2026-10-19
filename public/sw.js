@@ -214,7 +214,8 @@ async function guardarLaPantalla() {
  * necesita permiso de notificaciones, que hoy tienen dos personas de trece. El
  * `sync` llega a quien tenga algo esperando en la cola y un navegador con
  * Background Sync, o sea Android y no iPhone. Y el `message`, que es el que
- * nivela: lo manda la app al abrirse, en cualquier navegador.
+ * nivela: lo manda la app, en cualquier navegador, al abrirse y cuando vuelve
+ * la señal con `/cargar` abierta.
  *
  * **Pero los dos últimos se piden bajo la misma condición, y es más angosta de
  * lo que parece: sólo si hay alguna carga en estado `esperando`.** No «algo en
@@ -538,8 +539,9 @@ self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
 /**
  * El tercer disparo, y el único que ocurre en todos lados: la app abierta
  * pidiéndolo. Lo manda `pedirVaciadoAhora` de `lib/core/vaciarLaCola.ts`, desde
- * dos lados: la barra del layout cuando ve que hay algo esperando, y `/cargar`
- * cuando vuelve la señal con la pantalla abierta.
+ * dos lados y **los dos con la misma condición, que haya algo en estado
+ * `esperando`**: la barra del layout al abrirse la app, y `/cargar` al abrirse
+ * y cada vez que vuelve la señal con ella abierta.
  *
  * Pide más que los otros dos —necesita una pestaña abierta, porque es ella la
  * que mantiene vivo al worker— pero es el que siempre está: el `push` lo tienen

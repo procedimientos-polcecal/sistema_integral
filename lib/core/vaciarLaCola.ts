@@ -24,11 +24,17 @@
  * pueda separar sin que nadie lo note.
  *
  * QUIÉN LOS LLAMA, QUE ES LO QUE EXPLICA POR QUÉ NO ALCANZA CON UNO:
- * `components/CargasEsperando.tsx` pide los dos al abrirse la app con algo en
- * la cola. `app/cargar/CargarClient.tsx` pide el de segundo plano al guardar
- * una carga —la barra no llega ahí, porque `/cargar` vive fuera del grupo
- * `(app)`— y el de ahora cuando vuelve la señal con la pantalla abierta, que en
- * un iPhone es la única de las dos llamadas de esa pantalla que hace algo.
+ * `components/CargasEsperando.tsx` pide los dos al abrirse la app.
+ * `app/cargar/CargarClient.tsx` pide el de segundo plano al guardar una carga
+ * —la barra no llega ahí, porque `/cargar` vive fuera del grupo `(app)`— y el
+ * de ahora al abrirse y cada vez que vuelve la señal con la pantalla abierta,
+ * que en un iPhone es la única de las dos llamadas de esa pantalla que hace
+ * algo.
+ *
+ * **Los dos se piden siempre bajo la misma condición: que haya alguna carga en
+ * estado `esperando`.** Pedirlos con la cola vacía sería despertar al worker
+ * para que no haga nada, y en `/cargar` eso ocurriría en cada ida y vuelta de
+ * la señal, que es lo que más se repite donde esa pantalla se usa.
  *
  * LAS DOS FALLAN CALLADAS, A PROPÓSITO. Esto lo llama una barra que se monta en
  * el layout de toda la app: no tiene derecho a romper nada. Sin service worker

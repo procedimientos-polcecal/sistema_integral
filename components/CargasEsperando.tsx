@@ -43,7 +43,13 @@ import { leerCola } from "@/public/cola/idb.js";
  * `vaciarLaCola.ts`), esta barra es lo **único** que queda del diseño sin
  * señal, así que es exactamente donde no puede faltar.
  */
-export function CargasEsperando({ conMantenimiento }: { conMantenimiento: boolean }) {
+export function CargasEsperando({
+  conMantenimiento,
+  usuarioId,
+}: {
+  conMantenimiento: boolean;
+  usuarioId: string;
+}) {
   // null es los dos estados en los que no hay barra: todavía no se leyó, y no
   // hay nada que decir. Son el mismo dibujo —ninguno— y distinguirlos sólo
   // agregaría un estado que nadie mira.
@@ -51,20 +57,6 @@ export function CargasEsperando({ conMantenimiento }: { conMantenimiento: boolea
   const [cerrada, setCerrada] = useState(false);
 
   useCargar(async (vigente) => {
-    // Sin el módulo no hay barra, por lo mismo que el ítem del menú se filtra:
-    // un cartel sobre avisos y órdenes de trabajo no le dice nada a quien no
-    // trabaja en Mantenimiento, y el botón «Ver» lo llevaría a una pantalla de
-    // un módulo que no es suyo (`/cargar` está fuera del grupo `(app)`, así que
-    // **se abriría igual** — no rebota, y por eso el filtro tiene que estar
-    // acá).
-    //
-    // Ojo con lo que este filtro NO es: no filtra por **persona**. Quien tenga
-    // Mantenimiento ve también las cargas de sus compañeros, que es el punto —
-    // en la planta el teléfono se presta, y una carga ajena de hace tres días
-    // es justamente la que nadie mira—. Lo que se filtra es el módulo, no el
-    // dueño. Quien no tenga Mantenimiento tampoco pudo haber cargado nada.
-    if (!conMantenimiento) return;
-
     let cargas;
     try {
       cargas = await leerCola();
@@ -83,6 +75,32 @@ export function CargasEsperando({ conMantenimiento }: { conMantenimiento: boolea
       return;
     }
     if (!vigente()) return;
+
+    // SIN EL MÓDULO NO HAY BARRA, SALVO QUE LA CARGA SEA SUYA.
+    //
+    // Lo primero es por lo mismo que se filtra el ítem del menú: un cartel
+    // sobre avisos y órdenes de trabajo no le dice nada a quien no trabaja en
+    // Mantenimiento. Y el filtro tiene que estar acá y no en el destino porque
+    // `/cargar` **no rebota**: vive fuera del grupo `(app)` y `proxy.ts` sólo
+    // le exige sesión, así que la abre cualquiera.
+    //
+    // LA EXCEPCIÓN NO ES TEÓRICA, Y ÉSTE ES EL CASO. Esa misma puerta abierta
+    // hace que alguien sin Mantenimiento pueda terminar cargando: sin red,
+    // `public/sw.js` contesta **cualquier** navegación con `/cargar`, así que
+    // aterriza en los dos formularios y puede encolar un aviso. (Con señal no
+    // pasa: la ruta de alta contesta 403 con su propio texto —«Cargar un aviso
+    // requiere nivel de edición en Mantenimiento»—, que para la cola es
+    // definitivo, así que esa carga ni se encola.) Sin la excepción, esa carga
+    // quedaría sin barra y sin ítem de menú: invisible para quien la hizo.
+    //
+    // Ojo con lo que este filtro NO es, que es lo que importa del otro lado:
+    // no filtra por **persona**. Quien tenga Mantenimiento ve también las
+    // cargas de sus compañeros —en la planta el teléfono se presta, y una carga
+    // ajena de hace tres días es justamente la que nadie mira—. Y tampoco
+    // promete permiso: el módulo visible no es nivel de edición, y quien lo
+    // tenga sólo en lectura va a ver la barra y recibir el mismo 403. Quien
+    // decide si una carga puede entrar es la ruta, no esto.
+    if (!conMantenimiento && !cargas.some((carga) => carga.usuarioId === usuarioId)) return;
 
     // El vaciado se pide sólo si hay algo que mandar. Esto corre una vez por
     // carga de documento —el layout no se vuelve a montar al navegar entre

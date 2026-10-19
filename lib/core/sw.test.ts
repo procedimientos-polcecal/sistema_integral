@@ -12,8 +12,10 @@ import {
 import type { CargaEnCola } from "@/public/cola/colaOffline.js";
 // Sólo el mensaje, no la etiqueta del `sync`: `public/sw.js` no filtra por
 // etiqueta —atiende cualquier `sync`— así que ese nombre no ata nada y el test
-// puede escribirlo. El del mensaje sí ata, y por eso entra importado.
-import { MENSAJE_DE_VACIADO } from "./vaciarLaCola";
+// puede escribirlo. El del mensaje sí ata, y por eso entra importado. Y entra
+// también `pedirVaciadoAhora`, que es quien lo manda de verdad: ver el test
+// «de punta a punta».
+import { MENSAJE_DE_VACIADO, pedirVaciadoAhora } from "./vaciarLaCola";
 
 /**
  * Prueba `public/sw.js` de verdad: es JavaScript plano que usa `self`, así que
@@ -1213,6 +1215,46 @@ describe("public/sw.js", () => {
 
       expect(cargasMandadas(fetchDoble)).toHaveLength(0);
       expect(cola.filas.size).toBe(1);
+    });
+
+    /*
+     * DE PUNTA A PUNTA, Y ES EL ÚNICO TEST QUE CIERRA LA CADENA ENTERA.
+     *
+     * Los de arriba atan `MENSAJE_DE_VACIADO` con el literal de `public/sw.js`,
+     * pero dejaban suelta la punta que de verdad manda: nadie comprobaba que
+     * `pedirVaciadoAhora` mandara **esa** constante. Cambiar ahí el argumento
+     * por `{ tipo: "otra-cosa" }` dejaba `tsc` limpio y los 151 tests en verde,
+     * con el único disparo que existe en un iPhone muerto en silencio — la
+     * misma muerte silenciosa de antes, corrida una línea.
+     *
+     * Acá no se escribe ningún literal: lo que sale de `pedirVaciadoAhora` se
+     * le entrega tal cual al handler del service worker, y lo que se mira es si
+     * la carga salió de la cola. Si las dos puntas dejan de coincidir, por el
+     * lado que sea, esto se pone rojo.
+     */
+    it("de punta a punta: lo que manda la app es lo que el service worker atiende", async () => {
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [unaCarga({ tipo: "orden", cuerpo: { descripcion: "cambiar correa" } })],
+        red: async (url) => (url === ORDENES ? contesta(200, { ot_number: "OT-12" }) : RESPUESTA),
+      });
+
+      // El navegador de `pedirVaciadoAhora`: lo único que hace falta de él es
+      // un worker activo que anote lo que le llega.
+      const postMessage = vi.fn();
+      vi.stubGlobal("navigator", {
+        serviceWorker: { ready: Promise.resolve({ active: { postMessage } }) },
+      });
+      try {
+        await pedirVaciadoAhora();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+
+      expect(postMessage).toHaveBeenCalledTimes(1);
+      await lanzar(handlers, "message", { data: postMessage.mock.calls[0][0] });
+
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
+      expect(cola.filas.size).toBe(0);
     });
 
     it("un mensaje sin data no rompe el service worker", async () => {

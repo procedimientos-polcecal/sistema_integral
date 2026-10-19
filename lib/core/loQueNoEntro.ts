@@ -76,6 +76,12 @@ export function loQueNoEntro(cargas: CargaEnCola[], ahora: Date): LoQueNoEntro |
  * ya filtró por fecha, así que no debería llegar ninguna rota; se contempla
  * igual porque el día que esto se use sobre otra lista —las paradas, que no
  * miran la fecha— el error sería mudo.
+ *
+ * **Y por eso mismo ese `continue` no lo ejercita ningún test**: desde la
+ * entrada pública es inalcanzable, y un test que lo tocara tendría que llamar a
+ * esta función directamente, o sea probar una rama que hoy no existe. Queda
+ * anotado para que no se lo lea como código cubierto: el día que se lo use
+ * sobre las paradas, hay que traerle su test.
  */
 function laMasVieja(cargas: CargaEnCola[]): string | null {
   let masVieja: string | null = null;

@@ -63,9 +63,10 @@ type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
  * «Mandar ahora» de cada carga, que es el único que hay en un iPhone con la app
  * cerrada. Y solo, cuando el service worker se despierta, que esta pantalla le
  * pide dos veces: al guardar una carga (`pedirVaciadoEnSegundoPlano`, que en
- * Android lo despierta cuando vuelva la señal aunque nadie abra nada) y cuando
- * la señal vuelve con la pantalla abierta (`pedirVaciadoAhora`, que es el único
- * de los dos que funciona en un iPhone).
+ * Android lo despierta cuando vuelva la señal aunque nadie abra nada) y, si
+ * quedó algo esperando, al abrir esta pantalla y cada vez que vuelve la señal
+ * con ella abierta (`pedirVaciadoAhora`, que es el único de los dos que
+ * funciona en un iPhone).
  */
 export default function CargarClient() {
   const [arranque, setArranque] = useState<Arranque>("leyendo");
@@ -111,6 +112,30 @@ export default function CargarClient() {
     if (!vigente()) return;
     setCola(guardadas);
 
+    // EL PEDIDO DE VACIADO, BAJO LA MISMA CONDICIÓN QUE LA BARRA DEL LAYOUT:
+    // sólo si hay algo en estado `esperando`. Sin eso se despertaría al service
+    // worker para que mire una cola vacía, y acá pasaría en cada ida y vuelta
+    // de la señal, que es lo que más se repite justamente en los lugares para
+    // los que esta pantalla existe.
+    //
+    // POR QUÉ ACÁ Y NO EN EL HANDLER DE `online`: esto corre al abrir la
+    // pantalla **y** cada vez que ese handler llama a `volverALeer`, así que
+    // cubre los dos momentos con una sola regla y sobre la cola recién leída en
+    // lugar de una copia del render anterior.
+    //
+    // Y POR QUÉ IMPORTA QUE SEA `pedirVaciadoAhora`: lo que pide `encolar` es
+    // `pedirVaciadoEnSegundoPlano`, o sea Background Sync, que Safari no
+    // implementa. Para medio equipo éste es el único pedido que hace algo, y
+    // las dos condiciones que necesita —pantalla abierta y señal— son las que
+    // se dan acá.
+    //
+    // **Esta pantalla sigue sin mandar nada por su cuenta**: le pide al service
+    // worker que corra **su** vaciado. Un segundo lugar que decidiera cuándo
+    // sale una carga sería las mismas reglas escritas dos veces.
+    if (guardadas.some((guardada) => guardada.estado === "esperando")) {
+      void pedirVaciadoAhora();
+    }
+
     // Acá un fallo ya no apaga la pantalla: la cola se leyó, o sea que la base
     // abre. Lo que falte queda vacío, que se ve, y se vuelve a bajar con señal.
     const [guardados, recordada, conocida] = await Promise.all([
@@ -150,23 +175,11 @@ export default function CargarClient() {
       setEnLinea(hay);
       // Con la señal de vuelta se vuelve a leer todo: los catálogos quedaron
       // viejos, la sesión puede haberse renovado y la cola puede haber cambiado
-      // en otra pestaña o la puede haber vaciado el service worker.
-      //
-      // Y SE PIDE EL VACIADO, QUE EN UN IPHONE ES LA ÚNICA VEZ QUE SE PUEDE.
-      // El pedido de `encolar` es `pedirVaciadoEnSegundoPlano`, o sea Background
-      // Sync, que Safari no implementa: para medio equipo ahí no quedó pedido
-      // nada. Acá están las dos condiciones que `pedirVaciadoAhora` necesita y
-      // que casi nunca se dan juntas —la pantalla abierta y la señal de
-      // vuelta—, así que desaprovecharlas sería dejar la cola quieta con la
-      // persona mirándola.
-      //
-      // **Esta pantalla sigue sin mandar nada por su cuenta**: le pide al
-      // service worker que corra **su** vaciado. Un segundo lugar que decidiera
-      // cuándo sale una carga sería las mismas reglas escritas dos veces.
-      if (hay) {
-        void pedirVaciadoAhora();
-        volverALeer();
-      }
+      // en otra pestaña o la puede haber vaciado el service worker. Y de paso
+      // se pide el vaciado si hace falta: eso lo decide `volverALeer` con la
+      // cola recién leída, arriba, para no tener la misma condición escrita en
+      // dos lados diciendo cosas parecidas.
+      if (hay) volverALeer();
     };
     window.addEventListener("online", alCambiarLaConexion);
     window.addEventListener("offline", alCambiarLaConexion);
