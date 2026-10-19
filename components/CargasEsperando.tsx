@@ -34,10 +34,16 @@ import { leerCola } from "@/public/cola/idb.js";
  * el layout es exactamente cómo estas dos se separan sin que nadie lo note.
  *
  * NO TIENE DERECHO A ROMPER NADA: se monta en el layout de toda la app, o sea
- * que corre en cada pantalla para los 14 usuarios. Sin IndexedDB, con la base
- * sin abrir o sin service worker, no se dibuja y la app sigue igual.
+ * que corre para los 14 usuarios en cualquier pantalla donde entren. Si
+ * IndexedDB no está o la base no abre, no se dibuja y la app sigue igual.
+ *
+ * **Sin service worker sí se dibuja**, y la distinción importa: el dibujo no lo
+ * toca para nada, lo único que se saltea es pedirle el vaciado. En Firefox de
+ * escritorio, que rechaza los service workers de tipo módulo (ver
+ * `vaciarLaCola.ts`), esta barra es lo **único** que queda del diseño sin
+ * señal, así que es exactamente donde no puede faltar.
  */
-export function CargasEsperando() {
+export function CargasEsperando({ conMantenimiento }: { conMantenimiento: boolean }) {
   // null es los dos estados en los que no hay barra: todavía no se leyó, y no
   // hay nada que decir. Son el mismo dibujo —ninguno— y distinguirlos sólo
   // agregaría un estado que nadie mira.
@@ -45,6 +51,20 @@ export function CargasEsperando() {
   const [cerrada, setCerrada] = useState(false);
 
   useCargar(async (vigente) => {
+    // Sin el módulo no hay barra, por lo mismo que el ítem del menú se filtra:
+    // un cartel sobre avisos y órdenes de trabajo no le dice nada a quien no
+    // trabaja en Mantenimiento, y el botón «Ver» lo llevaría a una pantalla de
+    // un módulo que no es suyo (`/cargar` está fuera del grupo `(app)`, así que
+    // **se abriría igual** — no rebota, y por eso el filtro tiene que estar
+    // acá).
+    //
+    // Ojo con lo que este filtro NO es: no filtra por **persona**. Quien tenga
+    // Mantenimiento ve también las cargas de sus compañeros, que es el punto —
+    // en la planta el teléfono se presta, y una carga ajena de hace tres días
+    // es justamente la que nadie mira—. Lo que se filtra es el módulo, no el
+    // dueño. Quien no tenga Mantenimiento tampoco pudo haber cargado nada.
+    if (!conMantenimiento) return;
+
     let cargas;
     try {
       cargas = await leerCola();
@@ -64,10 +84,11 @@ export function CargasEsperando() {
     }
     if (!vigente()) return;
 
-    // El vaciado se pide sólo si hay algo que mandar. Pedirlo siempre
-    // despertaría al service worker en cada carga de cada pantalla para que
-    // mire una cola vacía, y en Android dejaría registrado un `sync` que no
-    // tiene nada que hacer.
+    // El vaciado se pide sólo si hay algo que mandar. Esto corre una vez por
+    // carga de documento —el layout no se vuelve a montar al navegar entre
+    // pantallas—, así que pedirlo siempre no sería mucho; lo que no se quiere
+    // es despertar al service worker para que mire una cola vacía, y en Android
+    // dejarle registrado un `sync` que no tiene nada que hacer.
     if (cargas.some((carga) => carga.estado === "esperando")) {
       void pedirVaciadoAhora();
       void pedirVaciadoEnSegundoPlano();
@@ -75,14 +96,20 @@ export function CargasEsperando() {
 
     // La foto es de antes del vaciado, a propósito: esperar a que el worker
     // termine para recién ahí dibujar dejaría la barra en blanco justo cuando
-    // no hay señal, que es cuando hay algo que decir. Si el vaciado anda, lo
-    // que sobre desaparece en la próxima carga de la app.
+    // no hay señal, que es cuando hay algo que decir.
+    //
+    // LA CONSECUENCIA, ESCRITA: si el vaciado sale bien, la barra sigue
+    // diciendo que hay trabajo esperando aunque ya no lo haya, hasta la próxima
+    // carga de documento. O sea que puede quedar hasta que la persona cierre y
+    // vuelva a abrir la app, no sólo mientras navega. Se eligió ese error y no
+    // el otro: decir de más manda a alguien a `/cargar` a ver una lista vacía;
+    // decir de menos es exactamente lo que esta barra existe para que no pase.
     setQueHay(loQueNoEntro(cargas, new Date()));
   }, []);
 
   if (queHay === null || cerrada) return null;
 
-  const { demoradas, detenidas, laMasVieja } = queHay;
+  const { demoradas, detenidas, laMasViejaQueEspera } = queHay;
 
   return (
     <div
@@ -103,15 +130,20 @@ export function CargasEsperando() {
           {/* Esperar no es haberse perdido, y decirlo es lo que evita que esta
               barra asuste por algo que se arregla solo. Lo que no se promete es
               cuándo: eso depende de que haya señal y de que entre quien la
-              cargó. */}
+              cargó.
+
+              La fecha que se imprime acá es `laMasViejaQueEspera` y no la más
+              vieja de la cola: una parada vieja le prestaría su fecha a esta
+              frase, que termina diciendo «salen solas cuando haya señal» — de
+              la única que no sale sola nunca. Lo fija un test. */}
           {demoradas > 0 && (
             <p className="mt-0.5">
               {demoradas === 1
                 ? "Una espera desde hace más de un día"
                 : `${demoradas} esperan desde hace más de un día`}
-              {laMasVieja === null
+              {laMasViejaQueEspera === null
                 ? ". "
-                : `; la más vieja se cargó ${haceCuanto(laMasVieja)}. `}
+                : `; la más vieja se cargó ${haceCuanto(laMasViejaQueEspera)}. `}
               No se perdieron: salen solas cuando haya señal.
             </p>
           )}

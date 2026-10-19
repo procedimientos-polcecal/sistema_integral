@@ -6,10 +6,9 @@
  * ACÁ NO SE DECIDE NADA. Esto habla HTTP —arma el pedido, lee el JSON— y le
  * pasa lo que recibió a `comoContesto` de `public/cola/colaOffline.js`, que es
  * quien dice si eso fue un éxito y qué quedó a medias. La razón es que el
- * service worker va a mandar la misma carga con la app cerrada (tarea 7 del
- * plan) y necesita esas mismas reglas; desde un service worker no se puede
- * importar un componente de React, así que una regla escrita acá se escribiría
- * dos veces.
+ * service worker manda la misma carga con la app cerrada y necesita esas mismas
+ * reglas; desde un service worker no se puede importar un componente de React,
+ * así que una regla escrita acá se escribiría dos veces.
  *
  * Lo único que sí es de acá: un `fetch` que tira —sin señal, el túnel que corta
  * a mitad de camino— es un fallo sin status, y eso es pasajero.

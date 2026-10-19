@@ -214,9 +214,13 @@ async function guardarLaPantalla() {
  * necesita permiso de notificaciones, que hoy tienen dos personas de trece. El
  * `sync` llega a quien tenga algo esperando en la cola y un navegador con
  * Background Sync, o sea Android y no iPhone. Y el `message`, que es el que
- * nivela: lo manda la app al abrirse, en cualquier navegador, pero **sólo
- * cuando hay algo en la cola** —si no, nadie lo pide—. O sea que un teléfono
- * que nunca cargó nada sin señal sigue dependiendo de `install`, o sea del
+ * nivela: lo manda la app al abrirse, en cualquier navegador.
+ *
+ * **Pero los dos últimos se piden bajo la misma condición, y es más angosta de
+ * lo que parece: sólo si hay alguna carga en estado `esperando`.** No «algo en
+ * la cola»: una cola con puras cargas `parada` no pide nada, así que ese
+ * teléfono no repara su caché por este camino aunque tenga la cola llena. Y uno
+ * que nunca cargó nada sin señal tampoco: depende de `install`, o sea del
  * próximo despliegue de este archivo. No es un detalle de redacción: si alguien
  * cuenta con esto para recuperar un caché roto, lo va a hacer para gente que no
  * lo recibe.
@@ -533,8 +537,9 @@ self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
 
 /**
  * El tercer disparo, y el único que ocurre en todos lados: la app abierta
- * pidiéndolo. Lo manda `pedirVaciadoAhora` de `lib/core/vaciarLaCola.ts`
- * cuando la barra del layout ve que hay algo esperando.
+ * pidiéndolo. Lo manda `pedirVaciadoAhora` de `lib/core/vaciarLaCola.ts`, desde
+ * dos lados: la barra del layout cuando ve que hay algo esperando, y `/cargar`
+ * cuando vuelve la señal con la pantalla abierta.
  *
  * Pide más que los otros dos —necesita una pestaña abierta, porque es ella la
  * que mantiene vivo al worker— pero es el que siempre está: el `push` lo tienen

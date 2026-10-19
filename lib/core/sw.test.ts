@@ -10,6 +10,10 @@ import {
   tomarLaCarga,
 } from "@/public/cola/colaOffline.js";
 import type { CargaEnCola } from "@/public/cola/colaOffline.js";
+// Sólo el mensaje, no la etiqueta del `sync`: `public/sw.js` no filtra por
+// etiqueta —atiende cualquier `sync`— así que ese nombre no ata nada y el test
+// puede escribirlo. El del mensaje sí ata, y por eso entra importado.
+import { MENSAJE_DE_VACIADO } from "./vaciarLaCola";
 
 /**
  * Prueba `public/sw.js` de verdad: es JavaScript plano que usa `self`, así que
@@ -1175,13 +1179,21 @@ describe("public/sw.js", () => {
      * Safari no implementa Background Sync, así que sin este camino el `sync`
      * de arriba no llega nunca a la mitad del equipo y la carga se queda en el
      * teléfono hasta que alguien toque el botón de cada una.
+     *
+     * **EL MENSAJE ENTRA IMPORTADO Y NO ESCRITO A MANO**, y es el único motivo
+     * por el que este test prueba algo. `MENSAJE_DE_VACIADO` es lo que la app
+     * manda de verdad y `public/sw.js` lo compara contra un literal suyo: son
+     * dos cadenas que tienen que coincidir y ningún tipo las ata. Con el
+     * literal copiado acá, cambiarle el `tipo` a la constante dejaba pasar
+     * `tsc`, el build y estos tres tests, y mataba en silencio el único disparo
+     * que existe en un iPhone. Importándola, ese cambio pone esto en rojo.
      */
     it("un mensaje de la app también vacía la cola", async () => {
       const { handlers, fetchDoble, cola } = cargarSW([], {
         cargas: [unaCarga({ tipo: "orden", cuerpo: { descripcion: "cambiar correa" } })],
         red: async (url) => (url === ORDENES ? contesta(200, { ot_number: "OT-12" }) : RESPUESTA),
       });
-      await lanzar(handlers, "message", { data: { tipo: "vaciar-la-cola" } });
+      await lanzar(handlers, "message", { data: MENSAJE_DE_VACIADO });
 
       expect(cargasMandadas(fetchDoble)).toHaveLength(1);
       expect(cola.filas.size).toBe(0);

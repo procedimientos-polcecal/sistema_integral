@@ -16,14 +16,14 @@
  *
  * Ninguna función traga su propio error. Si la base no abre —Safari en modo
  * privado, el almacenamiento lleno, el permiso denegado— la promesa rechaza, y
- * quien llama decide qué decirle a la persona. La pantalla de carga (tarea 6
- * del plan) tiene que poder avisar que no pudo guardar en lugar de fingir que
- * guardó: una carga que se perdió sin aviso es peor que una que se rechazó.
+ * quien llama decide qué decirle a la persona. La pantalla de carga avisa que
+ * no pudo guardar en lugar de fingir que guardó: una carga que se perdió sin
+ * aviso es peor que una que se rechazó.
  *
  * Vive en `public/` y es JavaScript plano por la misma razón que
- * `colaOffline.js`: lo van a importar la app y el service worker (el enganche del
- * service worker es la tarea 7 del plan; hoy no lo importa nadie), y un service
- * worker no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
+ * `colaOffline.js`: lo importan la app (`app/cargar/CargarClient.tsx` y
+ * `components/CargasEsperando.tsx`) y el service worker `public/sw.js`, que no
+ * puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
  * tipos van por JSDoc y rigen sólo para quien lo importe desde TypeScript
  * (`tsconfig.json` tiene `allowJs` pero no `checkJs`).
  *
@@ -55,7 +55,7 @@ const ALMACEN_CATALOGOS = "catalogos";
  * Abre la base `sdg`, creándola la primera vez. Cola: una carga por `clave`.
  * Catálogos: un catálogo por `nombre`.
  *
- * Es pública porque el service worker y la app la van a necesitar igual; las demás
+ * Es pública porque el service worker y la app la necesitan igual; las demás
  * funciones la llaman por su cuenta y cierran la conexión al terminar, así que
  * quien use `abrirBase` directamente es dueño de cerrar lo que abrió.
  *

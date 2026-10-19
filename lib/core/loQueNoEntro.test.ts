@@ -42,7 +42,7 @@ describe("loQueNoEntro", () => {
     expect(loQueNoEntro([carga()], AHORA)).toEqual({
       demoradas: 1,
       detenidas: 0,
-      laMasVieja: haceHoras(30),
+      laMasViejaQueEspera: haceHoras(30),
     });
   });
 
@@ -55,7 +55,7 @@ describe("loQueNoEntro", () => {
     expect(loQueNoEntro([carga({ estado: "parada", creadaEn: haceHoras(1) })], AHORA)).toEqual({
       demoradas: 0,
       detenidas: 1,
-      laMasVieja: haceHoras(1),
+      laMasViejaQueEspera: null,
     });
   });
 
@@ -72,21 +72,22 @@ describe("loQueNoEntro", () => {
     expect(loQueNoEntro(cargas, AHORA)).toEqual({
       demoradas: 2,
       detenidas: 1,
-      laMasVieja: haceHoras(50),
+      laMasViejaQueEspera: haceHoras(50),
     });
   });
 
   /*
-   * La más vieja sale del conjunto de las dos listas y no de una sola: si la
-   * más vieja fuera una parada, decir el «desde cuándo» de la demorada sería
-   * quedarse corto justo con la que más urge.
+   * EL CRUCE QUE ESTE CAMPO EXISTE PARA NO HACER. La fecha es la de las que
+   * esperan y de ninguna otra: una parada de hace ocho días prestándole su
+   * fecha a la frase «no se perdieron, salen solas cuando haya señal» diría de
+   * la que no sale sola nunca justo lo contrario de lo que le pasa.
    */
-  it("la más vieja puede ser una parada", () => {
+  it("una parada vieja no le presta su fecha a la frase de las que esperan", () => {
     const cargas = [
       carga({ clave: "a", creadaEn: haceHoras(26) }),
       carga({ clave: "b", estado: "parada", creadaEn: haceHoras(200) }),
     ];
-    expect(loQueNoEntro(cargas, AHORA)?.laMasVieja).toBe(haceHoras(200));
+    expect(loQueNoEntro(cargas, AHORA)?.laMasViejaQueEspera).toBe(haceHoras(26));
   });
 
   /*
@@ -98,16 +99,8 @@ describe("loQueNoEntro", () => {
     expect(loQueNoEntro([carga({ estado: "parada", creadaEn: "cualquier cosa" })], AHORA)).toEqual({
       demoradas: 0,
       detenidas: 1,
-      laMasVieja: null,
+      laMasViejaQueEspera: null,
     });
-  });
-
-  it("una fecha ilegible no le gana a una que sí se entiende", () => {
-    const cargas = [
-      carga({ clave: "a", estado: "parada", creadaEn: "cualquier cosa" }),
-      carga({ clave: "b", estado: "parada", creadaEn: haceHoras(5) }),
-    ];
-    expect(loQueNoEntro(cargas, AHORA)?.laMasVieja).toBe(haceHoras(5));
   });
 
   /*

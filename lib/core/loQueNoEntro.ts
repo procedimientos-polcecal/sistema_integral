@@ -22,12 +22,23 @@ export type LoQueNoEntro = {
   /** Cuántas no salen solas: ver `paradas` en `colaOffline.js`. */
   detenidas: number;
   /**
-   * La fecha ISO de la más vieja de todas las que se cuentan, para poder decir
-   * desde cuándo. Es null cuando ninguna tiene una fecha que se entienda: ahí
-   * no hay nada cierto que afirmar sobre el cuándo, y la barra dice sólo el
-   * cuánto.
+   * La fecha ISO de la más vieja **de las demoradas**, para poder decir desde
+   * cuándo en la frase de ésas.
+   *
+   * EL NOMBRE DICE «QUE ESPERA» Y ES LO ÚNICO QUE IMPORTA DE ESTE CAMPO.
+   * Salía de las dos listas juntas, y así una parada de hace ocho días le
+   * prestaba su fecha a la frase de las que esperan: «una espera desde hace más
+   * de un día; la más vieja se cargó hace 8 días. No se perdieron: salen solas
+   * cuando haya señal» — los ocho días eran de la que no sale sola nunca. Es el
+   * mismo cruce que el tipo entero existe para evitar, un escalón más abajo: no
+   * alcanza con separar los números si después una frase toma prestado un dato
+   * de la otra.
+   *
+   * Es null cuando no hay demoradas, o cuando ninguna tiene una fecha que se
+   * entienda: ahí no hay nada cierto que afirmar sobre el cuándo, y la barra
+   * dice sólo el cuánto.
    */
-  laMasVieja: string | null;
+  laMasViejaQueEspera: string | null;
 };
 
 /**
@@ -52,7 +63,7 @@ export function loQueNoEntro(cargas: CargaEnCola[], ahora: Date): LoQueNoEntro |
   return {
     demoradas: demoradas.length,
     detenidas: detenidas.length,
-    laMasVieja: laMasVieja([...demoradas, ...detenidas]),
+    laMasViejaQueEspera: laMasVieja(demoradas),
   };
 }
 
@@ -61,8 +72,10 @@ export function loQueNoEntro(cargas: CargaEnCola[], ahora: Date): LoQueNoEntro |
  *
  * Una fecha ilegible se saltea en vez de arrastrar un `NaN` que haría que la
  * comparación diera siempre falso y la más vieja terminara siendo cualquiera.
- * Puede llegar: `paradas` no mira la fecha —no tiene por qué, su criterio es el
- * estado—, así que una carga con el `creadaEn` roto entra igual a la cuenta.
+ * Hoy la llama sólo `loQueNoEntro` con las demoradas, que `esperandoDesdeAyer`
+ * ya filtró por fecha, así que no debería llegar ninguna rota; se contempla
+ * igual porque el día que esto se use sobre otra lista —las paradas, que no
+ * miran la fecha— el error sería mudo.
  */
 function laMasVieja(cargas: CargaEnCola[]): string | null {
   let masVieja: string | null = null;

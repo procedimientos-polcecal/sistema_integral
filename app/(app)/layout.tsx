@@ -96,8 +96,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             último lugar donde se mira —y en el teléfono suele estar fuera de
             cuadro—, así que la red de abajo del diseño sin señal quedaría donde
             menos se ve. Se dibuja sola o no se dibuja nada: decide con lo que
-            haya guardado el teléfono de quien mira. */}
-        <CargasEsperando />
+            haya guardado el teléfono de quien mira.
+
+            `conMantenimiento` por lo mismo que el ítem del menú: lo que la
+            barra cuenta son avisos y órdenes de trabajo, y su botón lleva a
+            `/cargar`, que al vivir fuera del grupo `(app)` **se abre igual**
+            para cualquiera con sesión. O sea que acá no alcanza con que el
+            destino rebote: si no se filtra, no filtra nadie. */}
+        <CargasEsperando conMantenimiento={modulos.includes("mantenimiento")} />
 
         <div className="flex min-h-0 flex-1">
           <Sidebar

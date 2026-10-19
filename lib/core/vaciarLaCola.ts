@@ -13,15 +13,22 @@
  *   guarda el pedido y despierta al worker cuando vuelve la conexión, **con la
  *   app cerrada**. Es el bueno, y **no existe en iPhone**: Safari no implementa
  *   Background Sync en ninguna versión.
- * - **`pedirVaciadoAhora`** le habla al worker activo por `postMessage`. Pide
- *   menos —necesita la app abierta, porque es la pestaña la que mantiene vivo
- *   al worker— pero funciona en todos lados, iPhone incluido. Abrir la app es
- *   el único disparo que siempre ocurre, y en la mitad del equipo es el único
- *   que hay.
+ * - **`pedirVaciadoAhora`** le habla al worker activo por `postMessage`. **Pide
+ *   más** —necesita la app abierta, porque es la pestaña la que mantiene vivo
+ *   al worker— pero a cambio funciona en todos lados, iPhone incluido. Abrir la
+ *   app es el único disparo que siempre ocurre, y en la mitad del equipo es el
+ *   único que hay.
  *
  * Los dos corren el **mismo** código del otro lado (`loQueHaceUnDisparo` en
  * `public/sw.js`), así que no hay una segunda versión de las reglas que se
  * pueda separar sin que nadie lo note.
+ *
+ * QUIÉN LOS LLAMA, QUE ES LO QUE EXPLICA POR QUÉ NO ALCANZA CON UNO:
+ * `components/CargasEsperando.tsx` pide los dos al abrirse la app con algo en
+ * la cola. `app/cargar/CargarClient.tsx` pide el de segundo plano al guardar
+ * una carga —la barra no llega ahí, porque `/cargar` vive fuera del grupo
+ * `(app)`— y el de ahora cuando vuelve la señal con la pantalla abierta, que en
+ * un iPhone es la única de las dos llamadas de esa pantalla que hace algo.
  *
  * LAS DOS FALLAN CALLADAS, A PROPÓSITO. Esto lo llama una barra que se monta en
  * el layout de toda la app: no tiene derecho a romper nada. Sin service worker

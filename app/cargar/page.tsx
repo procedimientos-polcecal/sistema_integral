@@ -20,8 +20,10 @@ import CargarClient from "./CargarClient";
  * lo que se cargue acá no sale del aparato hasta que haya una sesión válida que
  * lo firme.
  *
- * Que esta pantalla quede guardada para poder abrirse sin conexión es la tarea
- * 7 del plan; hasta entonces se puede abrir con señal como cualquier otra.
+ * Esta pantalla queda guardada para poder abrirse sin conexión: el `install`
+ * de `public/sw.js` la precachea con los archivos que pide. A ella se llega por
+ * el menú de Mantenimiento, por la barra de «hay algo esperando» del layout, o
+ * porque el service worker la sirve cuando una navegación no tiene red.
  */
 export default function CargarPage() {
   return <CargarClient />;

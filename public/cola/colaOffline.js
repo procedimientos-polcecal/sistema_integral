@@ -7,16 +7,17 @@
  * sólo se decide.
  *
  * Las dos últimas están acá y no en la pantalla por un motivo concreto: el
- * service worker va a vaciar la cola con la app cerrada (tarea 7 del plan) y
- * necesita exactamente las mismas reglas, palabra por palabra. Desde un service
+ * service worker vacía la cola con la app cerrada y necesita exactamente las
+ * mismas reglas, palabra por palabra. Desde un service
  * worker no se puede importar un componente de React, así que si vivieran allá
  * se escribirían dos veces — y dos implementaciones de la misma transición,
  * ninguna probada, es como esto se separa sin que nadie lo note.
  *
- * Vive en `public/` y es JavaScript plano porque lo van a importar los dos
- * mundos: la app (con `@/public/cola/colaOffline.js`) y el service worker
- * `public/sw.js` (el enganche es la tarea 7 del plan; hoy no lo importa), que
- * no puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
+ * Vive en `public/` y es JavaScript plano porque lo importan los dos
+ * mundos: la app (con `@/public/cola/colaOffline.js`, desde `CargarClient.tsx`
+ * y `lib/core/loQueNoEntro.ts`) y el service worker `public/sw.js`, que le
+ * importa seis funciones y no puede importar TypeScript ni nada que el sitio no
+ * sirva tal cual. Los
  * tipos van por JSDoc, pero ojo con qué garantizan: `tsconfig.json` tiene
  * `allowJs` y no `checkJs`, y no incluye los `.js` en su `include`, así que
  * adentro de este archivo nadie los verifica. Rigen sólo para quien lo importa
@@ -70,11 +71,9 @@ const MS_POR_MINUTO = 60_000;
  *
  * Definitivo es lo que el servidor contesta con la cabeza fría y volvería a
  * contestar igual: un 400 (la carga está mal armada), un 403 (no tiene
- * permiso) o un 409. El 409 es el que va a devolver la ruta de carga cuando la
- * clave quedó reservada y no se sabe si la fila llegó a escribirse en la
- * planilla (la ruta se escribe en la tarea 4 del plan; hasta entonces es el
- * contrato que se acordó, no algo que ya exista): reintentar sólo daría otro
- * 409. Todo lo demás es
+ * permiso) o un 409. El 409 es el que devuelve la ruta de carga cuando la clave
+ * quedó reservada y no se sabe si la fila llegó a escribirse en la planilla:
+ * reintentar sólo daría otro 409. Todo lo demás es
  * pasajero —un 502 porque Google no contestó, un 500, un corte a mitad de
  * camino— y, sobre todo, el 401: ver la cabecera del archivo.
  *
@@ -129,8 +128,7 @@ export function puedeMandarse(carga, usuarioActualId, ahora) {
   // Una marca ilegible o del futuro (el reloj del teléfono se corrigió hacia
   // atrás) no puede trabar la carga hasta que el reloj la alcance: se suelta.
   // El diseño es que mandarla dos veces no sea un riesgo, porque la ruta de
-  // carga reservará la clave y el segundo intento recibirá un 409 (esa ruta
-  // llega con la tarea 4 del plan; hasta entonces esto descansa en esa promesa).
+  // carga reserva la clave y el segundo intento recibe un 409.
   if (Number.isNaN(hace) || hace < 0) return true;
   return hace > MINUTOS_PARA_SOLTAR * MS_POR_MINUTO;
 }
@@ -511,8 +509,8 @@ export function tomarLaCarga(carga, ahora) {
  * `borrar-y-avisar` **no es** `borrar` con un campo de más, y el nombre
  * distinto es el punto entero: quien ejecute esto no puede borrar la carga sin
  * darse cuenta de que había algo que decir. Un `{accion:"borrar", advertencia}`
- * se maneja sin leer el segundo campo —y el service worker de la tarea 7
- * borraría la carga con la advertencia adentro, que es la que dice «está en la
+ * se maneja sin leer el segundo campo —y el service worker borraría la carga
+ * con la advertencia adentro, que es la que dice «está en la
  * planilla y todavía no en el sistema, no la cargues de nuevo»—. Un veredicto
  * que no se llama igual no se puede atender igual sin querer: en TypeScript el
  * `switch` deja de ser exhaustivo, y en JavaScript el nombre es la instrucción.
@@ -532,7 +530,7 @@ export function tomarLaCarga(carga, ahora) {
  * Cuando salió bien **y quedó algo a medias**, la carga igual sale de la cola
  * —ya está hecha, dejarla ahí haría que se mande dos veces— pero el veredicto
  * se llama distinto y trae la advertencia, para que quien borra tenga que
- * decirla. En esta pantalla es un cartel; en el service worker va a ser una
+ * decirla. En la pantalla es un cartel; en el service worker, una
  * notificación. En este repo eso no puede terminar en un log.
  *
  * Si falló, la marca de tomada se suelta sí o sí: dejarla puesta la trabaría

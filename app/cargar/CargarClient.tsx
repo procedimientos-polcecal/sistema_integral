@@ -5,7 +5,7 @@ import { ConfirmProvider, useConfirm } from "@/components/ConfirmProvider";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { useCargar } from "@/lib/core/useCargar";
-import { pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
+import { pedirVaciadoAhora, pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
 import {
   comoSeLlama,
   despuesDelIntento,
@@ -61,9 +61,11 @@ type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
  *
  * De la cola se sale por dos caminos, y los dos existen. A mano, con el botón
  * «Mandar ahora» de cada carga, que es el único que hay en un iPhone con la app
- * cerrada. Y solo, cuando el service worker se despierta: por eso al guardar se
- * le pide un vaciado en segundo plano (`pedirVaciadoEnSegundoPlano`), que en
- * Android lo despierta en cuanto vuelva la señal aunque nadie abra nada.
+ * cerrada. Y solo, cuando el service worker se despierta, que esta pantalla le
+ * pide dos veces: al guardar una carga (`pedirVaciadoEnSegundoPlano`, que en
+ * Android lo despierta cuando vuelva la señal aunque nadie abra nada) y cuando
+ * la señal vuelve con la pantalla abierta (`pedirVaciadoAhora`, que es el único
+ * de los dos que funciona en un iPhone).
  */
 export default function CargarClient() {
   const [arranque, setArranque] = useState<Arranque>("leyendo");
@@ -150,12 +152,21 @@ export default function CargarClient() {
       // viejos, la sesión puede haberse renovado y la cola puede haber cambiado
       // en otra pestaña o la puede haber vaciado el service worker.
       //
-      // **Esta pantalla no manda nada por su cuenta acá.** Quien saca las
-      // cargas solo es el service worker, y el pedido ya quedó hecho al
-      // guardarlas; esto sólo refresca lo que se ve. Mandar también desde acá
-      // sería un segundo lugar que decide cuándo sale una carga, con las mismas
-      // reglas escritas dos veces.
-      if (hay) volverALeer();
+      // Y SE PIDE EL VACIADO, QUE EN UN IPHONE ES LA ÚNICA VEZ QUE SE PUEDE.
+      // El pedido de `encolar` es `pedirVaciadoEnSegundoPlano`, o sea Background
+      // Sync, que Safari no implementa: para medio equipo ahí no quedó pedido
+      // nada. Acá están las dos condiciones que `pedirVaciadoAhora` necesita y
+      // que casi nunca se dan juntas —la pantalla abierta y la señal de
+      // vuelta—, así que desaprovecharlas sería dejar la cola quieta con la
+      // persona mirándola.
+      //
+      // **Esta pantalla sigue sin mandar nada por su cuenta**: le pide al
+      // service worker que corra **su** vaciado. Un segundo lugar que decidiera
+      // cuándo sale una carga sería las mismas reglas escritas dos veces.
+      if (hay) {
+        void pedirVaciadoAhora();
+        volverALeer();
+      }
     };
     window.addEventListener("online", alCambiarLaConexion);
     window.addEventListener("offline", alCambiarLaConexion);
