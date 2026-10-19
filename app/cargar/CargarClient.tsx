@@ -8,6 +8,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { pedirVaciadoAhora, pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
 import {
   comoSeLlama,
+  conSuArticulo,
   despuesDelIntento,
   paradas,
   puedeEmpujarla,
@@ -59,9 +60,11 @@ type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
  *   que una carga sin dueño no podría salir nunca. Aceptarla sería guardarla
  *   para siempre.
  *
- * De la cola se sale por dos caminos, y los dos existen. A mano, con el botón
+ * De la cola se sale por tres caminos, y los tres existen. A mano, con el botón
  * «Mandar ahora» de cada carga, que es el único que hay en un iPhone con la app
- * cerrada. Y solo, cuando el service worker se despierta, que esta pantalla le
+ * cerrada. Corrigiéndola, cuando lo que falló fue definitivo y hay algo que
+ * arreglar —la vieja sale recién cuando la corregida está guardada—. Y solo,
+ * cuando el service worker se despierta, que esta pantalla le
  * pide dos veces: al guardar una carga (`pedirVaciadoEnSegundoPlano`, que en
  * Android lo despierta cuando vuelva la señal aunque nadie abra nada) y, si
  * quedó algo esperando, al abrir esta pantalla y cada vez que vuelve la señal
@@ -82,6 +85,13 @@ export default function CargarClient() {
   const [enLinea, setEnLinea] = useState(true);
   const [queFormulario, setQueFormulario] = useState<TipoDeCarga>("aviso");
   const [avisoDeLaCola, setAvisoDeLaCola] = useState("");
+  // La carga parada que se está editando, y un contador que es la `key` de los
+  // formularios. **Son dos cosas y no una**: el contador sube sólo al empezar a
+  // editar, así que al guardar se puede soltar el borrador sin remontar el
+  // formulario — remontarlo borraría el cartel que acaba de decir con qué
+  // número entró, que es lo único que esa persona está esperando leer.
+  const [borrador, setBorrador] = useState<CargaEnCola | null>(null);
+  const [generacion, setGeneracion] = useState(0);
 
   const releerLaCola = useCallback(async () => {
     try {
@@ -112,30 +122,6 @@ export default function CargarClient() {
     if (!vigente()) return;
     setCola(guardadas);
 
-    // EL PEDIDO DE VACIADO, BAJO LA MISMA CONDICIÓN QUE LA BARRA DEL LAYOUT:
-    // sólo si hay algo en estado `esperando`. Sin eso se despertaría al service
-    // worker para que mire una cola vacía, y acá pasaría en cada ida y vuelta
-    // de la señal, que es lo que más se repite justamente en los lugares para
-    // los que esta pantalla existe.
-    //
-    // POR QUÉ ACÁ Y NO EN EL HANDLER DE `online`: esto corre al abrir la
-    // pantalla **y** cada vez que ese handler llama a `volverALeer`, así que
-    // cubre los dos momentos con una sola regla y sobre la cola recién leída en
-    // lugar de una copia del render anterior.
-    //
-    // Y POR QUÉ IMPORTA QUE SEA `pedirVaciadoAhora`: lo que pide `encolar` es
-    // `pedirVaciadoEnSegundoPlano`, o sea Background Sync, que Safari no
-    // implementa. Para medio equipo éste es el único pedido que hace algo, y
-    // las dos condiciones que necesita —pantalla abierta y señal— son las que
-    // se dan acá.
-    //
-    // **Esta pantalla sigue sin mandar nada por su cuenta**: le pide al service
-    // worker que corra **su** vaciado. Un segundo lugar que decidiera cuándo
-    // sale una carga sería las mismas reglas escritas dos veces.
-    if (guardadas.some((guardada) => guardada.estado === "esperando")) {
-      void pedirVaciadoAhora();
-    }
-
     // Acá un fallo ya no apaga la pantalla: la cola se leyó, o sea que la base
     // abre. Lo que falte queda vacío, que se ve, y se vuelve a bajar con señal.
     const [guardados, recordada, conocida] = await Promise.all([
@@ -156,15 +142,72 @@ export default function CargarClient() {
       return;
     }
 
-    const ahora = await recordarLaSesion();
+    // NO PUEDE QUEDAR AFUERA DE UN `try`, Y ESO ES EL ARREGLO DEL 19/10/2026.
+    // `recordarLaSesion` anota quién sos en IndexedDB, y esa escritura rechaza
+    // cuando el almacenamiento está lleno o bloqueado. Ese rechazo lo descartaba
+    // el `void` de `useCargar`, así que `sesionResuelta` se quedaba en false
+    // para siempre: formularios apagados y el cartel «Viendo quién tiene la
+    // sesión abierta…» fijo, sin una palabra de diagnóstico — justo el modo de
+    // falla que esta pantalla existe para contar.
+    let ahora: SesionRecordada | null = null;
+    try {
+      ahora = await recordarLaSesion();
+    } catch (e) {
+      if (!vigente()) return;
+      setProblemaDeAlmacenamiento(loQueDijo(e));
+      setArranque("sin-almacenamiento");
+      return;
+    }
     if (!vigente()) return;
-    if (ahora) {
-      setSesion(ahora);
-      setGente((previa) => ({ ...previa, [ahora.id]: ahora.nombre }));
+    const quienEs = ahora;
+    if (quienEs) {
+      setSesion(quienEs);
+      setGente((previa) => ({ ...previa, [quienEs.id]: quienEs.nombre }));
     }
     setSesionResuelta(true);
 
-    const frescos = await refrescarCatalogos(guardados);
+    // EL PEDIDO DE VACIADO VA ACÁ, DESPUÉS DE ANOTAR QUIÉN SOS, y el orden es
+    // la mitad del asunto: el service worker decide a nombre de quién manda por
+    // lo que encuentre anotado en IndexedDB —no puede leer la cookie—, así que
+    // pedirlo antes dejaría salir la carga de la persona anterior con la cookie
+    // de ésta. Si no se pudo averiguar quién sos, no se pide: la cola espera.
+    //
+    // **SIN CONDICIÓN SOBRE LA COLA, y eso cambió el 19/10/2026.** Antes se
+    // pedía sólo si había algo en estado `esperando`, igual que la barra del
+    // layout. Lo que esa condición no miraba es que el disparo no vacía sólo la
+    // cola: también **repara el precache** de esta misma pantalla
+    // (`guardarLaPantallaSiFalta`). `install` corre una sola vez por versión de
+    // `sw.js`, así que el teléfono donde esa única corrida pasó sin señal se
+    // quedó con `/cargar` a medias —o sin guardar—, y el único camino de
+    // reparación eran el `sync`, el `push` y este mensaje. Con la condición
+    // vieja **el teléfono que nunca encoló nada no reparaba nunca**, ni
+    // abriendo esta pantalla con señal, que es justo lo que alguien haría para
+    // dejarla lista antes de ir a la planta. Y ésos son casi todos: la cola
+    // vacía es el estado normal.
+    //
+    // Lo que cuesta pedirlo siempre es un `postMessage` a un worker que esta
+    // pestaña ya mantiene vivo; la bajada del precache ocurre sólo si falta.
+    //
+    // POR QUÉ ACÁ Y NO EN EL HANDLER DE `online`: esto corre al abrir la
+    // pantalla **y** cada vez que ese handler llama a `volverALeer`, así que
+    // cubre los dos momentos con una sola regla.
+    //
+    // Y POR QUÉ IMPORTA QUE SEA `pedirVaciadoAhora`: lo que pide `encolar` es
+    // `pedirVaciadoEnSegundoPlano`, o sea Background Sync, que Safari no
+    // implementa. Para medio equipo éste es el único pedido que hace algo.
+    //
+    // **Esta pantalla sigue sin mandar nada por su cuenta**: le pide al service
+    // worker que corra **su** vaciado. Un segundo lugar que decidiera cuándo
+    // sale una carga sería las mismas reglas escritas dos veces.
+    if (quienEs) void pedirVaciadoAhora();
+
+    // Refrescar los catálogos es una mejora y no una operación de la persona,
+    // así que un fallo acá deja los de ayer, que sirven. El `catch` es por lo
+    // mismo que el `try` de arriba y no por la red —de eso ya se ocupa
+    // `refrescarCatalogos`—: guardar lo bajado también puede rechazar, y una
+    // promesa rechazada en este punto sería otra vez un error que nadie
+    // observa, con la pantalla ya dibujada y usable.
+    const frescos = await refrescarCatalogos(guardados).catch(() => guardados);
     if (!vigente()) return;
     setCatalogos(frescos);
   }, []);
@@ -223,7 +266,12 @@ export default function CargarClient() {
   );
 
   const mandar = useCallback(
-    async (tipo: TipoDeCarga, cuerpo: Record<string, unknown>): Promise<Resultado> => {
+    async (
+      tipo: TipoDeCarga,
+      cuerpo: Record<string, unknown>,
+      /** La clave de la carga parada que esto viene a reemplazar, si es una corrección. */
+      reemplaza: string | null = null,
+    ): Promise<Resultado> => {
       // UNA CLAVE POR CARGA, generada acá y **nunca derivada del contenido**:
       // dos avisos iguales el mismo día son dos avisos y no un duplicado. Es la
       // misma clave en cada reintento, y es lo que hace que el servidor
@@ -262,7 +310,34 @@ export default function CargarClient() {
       const respuesta = navigator.onLine ? await mandarALaRuta(tipo, cuerpoCompleto) : null;
       const queHacer = queHacerConLaNueva(respuesta);
 
+      /**
+       * La carga parada que se estaba corrigiendo sale de la cola **recién
+       * ahora**, y nunca antes: si se borrara al empezar a editar, cerrar la
+       * pantalla a mitad de camino perdería lo que alguien escribió en la
+       * planta. Y no sale si la corrección también se rechazó —ahí lo viejo
+       * sigue siendo lo único que hay—.
+       *
+       * No se reutiliza su `clave`: ésta es otra carga, con otro cuerpo, y la
+       * vieja puede haber quedado reservada del lado del servidor. Una clave
+       * reusada chocaría contra esa reserva y recibiría un 409 «en duda» que no
+       * es cierto.
+       */
+      async function soltarLaQueSeEditaba() {
+        if (!reemplaza) return;
+        try {
+          await borrarCarga(reemplaza);
+        } catch {
+          // Lo nuevo ya está guardado o mandado. Que la vieja siga en la lista
+          // es visible y lo arregla el botón de borrar; perderla no.
+        }
+        // Sin tocar `generacion`: el formulario no se remonta, así que el
+        // cartel que dice con qué número entró se queda en pantalla.
+        setBorrador(null);
+      }
+
       if (queHacer.accion === "listo") {
+        await soltarLaQueSeEditaba();
+        await releerLaCola();
         return {
           estado: "mandada",
           numero: queHacer.numero,
@@ -277,14 +352,29 @@ export default function CargarClient() {
           fechaDelReloj: !laPusoUnaPersona,
         };
       }
-      return await encolar(
+      const salida = await encolar(
         { ...carga, intentos: queHacer.intentos, ultimoError: queHacer.ultimoError },
         queHacer.ultimoError,
         !laPusoUnaPersona,
       );
+      if (salida.estado === "encolada") {
+        await soltarLaQueSeEditaba();
+        await releerLaCola();
+      }
+      return salida;
     },
-    [sesion, encolar],
+    [sesion, encolar, releerLaCola],
   );
+
+  /**
+   * Una carga que ya no está en la cola tampoco puede seguir siendo la que el
+   * formulario dice estar corrigiendo: el cartel de arriba quedaría prometiendo
+   * sacar de la lista algo que ya no está. Lo escrito **no se toca** — que la
+   * vieja se haya ido no es motivo para tirar la corrección en curso.
+   */
+  const seFue = useCallback((clave: string) => {
+    setBorrador((previo) => (previo?.clave === clave ? null : previo));
+  }, []);
 
   const reintentar = useCallback(
     async (carga: CargaEnCola) => {
@@ -319,9 +409,11 @@ export default function CargarClient() {
 
         if (queHacer.accion === "borrar") {
           await borrarCarga(carga.clave);
+          seFue(carga.clave);
           setAvisoDeLaCola(`Se mandó: ${comoSeLlama(carga.tipo)} ${queHacer.numero}.`);
         } else if (queHacer.accion === "borrar-y-avisar") {
           await borrarCarga(carga.clave);
+          seFue(carga.clave);
           setAvisoDeLaCola(
             `Se mandó: ${comoSeLlama(carga.tipo)} ${queHacer.numero}. ${queHacer.advertencia}`,
           );
@@ -337,20 +429,43 @@ export default function CargarClient() {
       }
       await releerLaCola();
     },
-    [sesion, releerLaCola],
+    [sesion, releerLaCola, seFue],
   );
+
+  /**
+   * Corregir una carga parada: vuelve al formulario con lo que se había
+   * escrito, y la vieja sale de la cola recién cuando la nueva está guardada.
+   *
+   * ES LO QUE EL SPEC PROMETÍA Y EL CÓDIGO NO CUMPLÍA: «se avisa y la carga
+   * queda parada, **visible y editable**, no borrada». Lo que había era
+   * «Reintentar igual» —mandar de nuevo exactamente lo que ya fue rechazado,
+   * que va a fallar otra vez— y «Borrar», que pierde lo escrito. Para una OT
+   * son dieciocho campos cargados parado en la cantera.
+   */
+  const editar = useCallback((carga: CargaEnCola) => {
+    setAvisoDeLaCola("");
+    setQueFormulario(carga.tipo);
+    setBorrador(carga);
+    // El contador sube sólo acá: es lo que remonta el formulario con los
+    // valores de esta carga, sin arrastrar lo que hubiera escrito antes.
+    setGeneracion((n) => n + 1);
+    // El formulario está arriba de la lista, y en un teléfono eso es fuera de
+    // la pantalla: sin esto el botón parecería no hacer nada.
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const borrar = useCallback(
     async (carga: CargaEnCola) => {
       setAvisoDeLaCola("");
       try {
         await borrarCarga(carga.clave);
+        seFue(carga.clave);
       } catch (e) {
         setAvisoDeLaCola(`No se pudo borrar la carga: ${loQueDijo(e)}`);
       }
       await releerLaCola();
     },
-    [releerLaCola],
+    [releerLaCola, seFue],
   );
 
   const sinDondeGuardar = arranque === "sin-almacenamiento";
@@ -446,20 +561,55 @@ export default function CargarClient() {
             ))}
           </div>
 
+          {/* Se dice que se está corrigiendo algo, porque si no el formulario
+              aparece lleno sin motivo visible y quien lo mira puede creer que
+              está cargando una segunda cosa — que es el duplicado que todo
+              esto existe para evitar. */}
+          {borrador && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <span className="min-w-0 flex-1">
+                Estás corrigiendo {conSuArticulo(borrador.tipo)} que quedó parada.
+                La vieja sale de la lista recién cuando ésta se guarde.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setBorrador(null);
+                  setGeneracion((n) => n + 1);
+                }}
+                className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
+              >
+                Dejar de corregirla
+              </button>
+            </div>
+          )}
+
+          {/* La `key` es lo que vuelve a dibujar el formulario con los valores
+              de la carga que se eligió corregir. Sube **sólo** al empezar o
+              dejar una corrección: al guardar no, porque remontar ahí borraría
+              el cartel que acaba de decir con qué número entró. */}
           {queFormulario === "aviso" ? (
             <FormularioAvisoOffline
+              key={generacion}
               equipos={catalogos.equipos}
               sectores={catalogos.sectores}
               deshabilitado={deshabilitado}
-              onMandar={(cuerpo) => mandar("aviso", cuerpo)}
+              borrador={borrador?.tipo === "aviso" ? borrador.cuerpo : null}
+              onMandar={(cuerpo) =>
+                mandar("aviso", cuerpo, borrador?.tipo === "aviso" ? borrador.clave : null)
+              }
             />
           ) : (
             <FormularioOTOffline
+              key={generacion}
               equipos={catalogos.equipos}
               sectores={catalogos.sectores}
               operarios={catalogos.operarios}
               deshabilitado={deshabilitado}
-              onMandar={(cuerpo) => mandar("orden", cuerpo)}
+              borrador={borrador?.tipo === "orden" ? borrador.cuerpo : null}
+              onMandar={(cuerpo) =>
+                mandar("orden", cuerpo, borrador?.tipo === "orden" ? borrador.clave : null)
+              }
             />
           )}
         </>
@@ -471,7 +621,9 @@ export default function CargarClient() {
           sesion={sesion}
           gente={gente}
           aviso={avisoDeLaCola}
+          editando={borrador?.clave ?? null}
           onReintentar={reintentar}
+          onEditar={editar}
           onBorrar={borrar}
         />
       </ConfirmProvider>
@@ -484,9 +636,14 @@ export default function CargarClient() {
  *
  * Mientras no haya correo, **ésta es la única forma que tienen doce de trece
  * personas de enterarse de que algo salió mal**: la única que recibe el push lo
- * tiene prendido. Por eso están las cuatro cosas: cuántas esperan, de cuándo es
- * cada una, qué dijo el servidor de la que falló —sin traducir— y de quién es
- * cuando no es de quien está mirando.
+ * tiene prendido (medido el 19/10/2026: una suscripción, trece usuarios
+ * activos). Por eso están las cuatro cosas: cuántas esperan, de cuándo es cada
+ * una, qué dijo el servidor de la que falló —sin traducir— y de quién es cuando
+ * no es de quien está mirando.
+ *
+ * Y por eso una parada se puede **corregir**, no sólo reintentar o borrar: el
+ * texto del servidor dice qué le falta, y sin un camino para arreglarlo ese
+ * texto no sirve para nada.
  *
  * Va adentro de `<ConfirmProvider>` y no al revés porque `useConfirm()` rompe
  * sin proveedor arriba, que es lo que se quiere: borrar una carga la pierde
@@ -497,14 +654,19 @@ function LaCola({
   sesion,
   gente,
   aviso,
+  editando,
   onReintentar,
+  onEditar,
   onBorrar,
 }: {
   cargas: CargaEnCola[];
   sesion: SesionRecordada | null;
   gente: GenteConocida;
   aviso: string;
+  /** La clave de la que se está corrigiendo arriba, para no ofrecerlo dos veces. */
+  editando: string | null;
   onReintentar: (carga: CargaEnCola) => Promise<void>;
+  onEditar: (carga: CargaEnCola) => void;
   onBorrar: (carga: CargaEnCola) => Promise<void>;
 }) {
   const confirm = useConfirm();
@@ -631,6 +793,23 @@ function LaCola({
                       : carga.estado === "parada"
                         ? "Reintentar igual"
                         : "Mandar ahora"}
+                  </button>
+                )}
+
+                {/* CORREGIR, QUE ES LO QUE EL SPEC PEDÍA: una parada quedaba
+                    «visible» pero no editable, así que ante un 400 —que es
+                    definitivo— las dos salidas eran mandar otra vez lo mismo o
+                    tirar lo escrito. Se ofrece sólo sobre las paradas propias:
+                    una que **espera** va a salir sola y tocarla sería cambiarle
+                    el cuerpo a algo que puede estar saliendo en este momento, y
+                    una ajena no se puede corregir en nombre de otro. */}
+                {!ajena && carga.estado === "parada" && editando !== carga.clave && (
+                  <button
+                    onClick={() => onEditar(carga)}
+                    disabled={ocupada !== null}
+                    className="rounded-lg border border-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-900 disabled:opacity-50"
+                  >
+                    Corregir y volver a mandar
                   </button>
                 )}
                 <button

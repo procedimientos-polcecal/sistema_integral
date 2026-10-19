@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Select from "@/components/Select";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
+import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
 import type { EquipoDelCatalogo, SectorDelCatalogo } from "./catalogos";
 import { CartelDelResultado, loQueDijo, type Resultado } from "./envio";
 
@@ -32,29 +33,52 @@ const VACIO = {
   quien_aviso: "",
   observaciones: "",
 };
+/**
+ * Cómo viaja un equipo en `equipo_raw`. Está en una función porque se usa para
+ * armarlo y para reconocerlo al editar: dos formas distintas de escribirlo
+ * harían que editar una carga perdiera el equipo sin decir nada.
+ */
+function comoSeEscribe(equipo: EquipoDelCatalogo): string {
+  return `${equipo.code ?? ""} ${equipo.name}`.trim();
+}
+
 export default function FormularioAvisoOffline({
   equipos,
   sectores,
   deshabilitado,
+  borrador,
   onMandar,
 }: {
   equipos: EquipoDelCatalogo[];
   sectores: SectorDelCatalogo[];
   /** Sin dónde guardar o sin saber de quién sería la carga, no se acepta nada. */
   deshabilitado: boolean;
+  /**
+   * El cuerpo de una carga parada que se está editando. `CargarClient` remonta
+   * este componente con `key` cuando cambia, así que esto se lee una sola vez.
+   */
+  borrador?: Record<string, unknown> | null;
   onMandar: (cuerpo: Record<string, unknown>) => Promise<Resultado>;
 }) {
   const [mandando, setMandando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
-  const [campos, setCampos] = useState(VACIO);
+  const [campos, setCampos] = useState(() => borradorDesdeElCuerpo(VACIO, borrador));
 
   // Cuál equipo está elegido, que el cuerpo del aviso no lleva: la ruta espera
   // `equipo_raw` en texto. Se guarda aparte para que el desplegable sea
   // controlado y **se vacíe junto con el resto** después de cargar; sin esto
   // seguiría mostrando el equipo anterior sobre un formulario en blanco.
-  const [equipoElegido, setEquipoElegido] = useState("");
+  //
+  // Y por eso al editar una carga parada hay que **volver a buscarlo**: el
+  // cuerpo guardado tiene el texto y no el id. Se compara contra el mismo texto
+  // que arma `elegirEquipo`, así que si no aparece es porque ese equipo ya no
+  // está en el catálogo — ahí el desplegable queda vacío y el `equipo_raw`
+  // guardado viaja igual, que es lo que la ruta mira.
+  const [equipoElegido, setEquipoElegido] = useState(
+    () => equipos.find((e) => comoSeEscribe(e) === String(borrador?.equipo_raw ?? ""))?.id ?? "",
+  );
 
   const set = (clave: string, valor: string) =>
     setCampos((c) => ({ ...c, [clave]: valor }));
@@ -69,7 +93,7 @@ export default function FormularioAvisoOffline({
     }
     setCampos((c) => ({
       ...c,
-      equipo_raw: `${equipo.code ?? ""} ${equipo.name}`.trim(),
+      equipo_raw: comoSeEscribe(equipo),
       sector_id: equipo.sector_id ?? c.sector_id,
       sector_raw: sectores.find((s) => s.id === equipo.sector_id)?.nombre ?? c.sector_raw,
     }));

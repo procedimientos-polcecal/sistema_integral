@@ -14,10 +14,11 @@
  * ninguna probada, es como esto se separa sin que nadie lo note.
  *
  * Vive en `public/` y es JavaScript plano porque lo importan los dos
- * mundos: la app (con `@/public/cola/colaOffline.js`, desde `CargarClient.tsx`
- * y `lib/core/loQueNoEntro.ts`) y el service worker `public/sw.js`, que le
- * importa seis funciones y no puede importar TypeScript ni nada que el sitio no
- * sirva tal cual. Los
+ * mundos: la app (con `@/public/cola/colaOffline.js`, desde `CargarClient.tsx`,
+ * `app/cargar/envio.tsx`, `lib/core/sesionDelTelefono.ts` y
+ * `lib/core/loQueNoEntro.ts`) y el service worker `public/sw.js`, que le
+ * importa seis funciones y las dos constantes de abajo, y no puede importar
+ * TypeScript ni nada que el sitio no sirva tal cual. Los
  * tipos van por JSDoc, pero ojo con qué garantizan: `tsconfig.json` tiene
  * `allowJs` y no `checkJs`, y no incluye los `.js` en su `include`, así que
  * adentro de este archivo nadie los verifica. Rigen sólo para quien lo importa
@@ -33,6 +34,38 @@
  */
 
 /** @typedef {"aviso" | "orden"} TipoDeCarga */
+
+// ── El pegamento que los dos mundos tienen que escribir igual ────────────────
+//
+// No son reglas —no deciden nada— pero son los dos nombres que la pantalla y el
+// service worker **tienen** que escribir idénticos, y hasta el 19/10/2026
+// estaban copiados a mano en los dos lados. El modo de fallar de `SESION` es el
+// peor que tiene esta cola: el worker lee quién sos de esa clave, así que una
+// letra distinta deja el vaciado sin sesión conocida y **no sale ninguna
+// carga**, sin un error en ningún lado.
+//
+// Un test que atara las dos copias habría avisado; tener una sola definición
+// hace que no haya nada que atar, y por eso viven acá: es el único archivo que
+// pueden importar los tres —React, el service worker y vitest—.
+
+/**
+ * Dónde queda anotado en el teléfono quién tiene la sesión abierta.
+ *
+ * Lo escriben `lib/core/sesionDelTelefono.ts` (desde `/cargar` y desde la barra
+ * del layout) y lo lee `public/sw.js` para decidir a nombre de quién puede
+ * mandar una carga.
+ */
+export const SESION = "sesion";
+
+/**
+ * A dónde va cada tipo de carga. Son las rutas de siempre, sin ninguna nueva.
+ *
+ * @type {Record<TipoDeCarga, string>}
+ */
+export const RUTA_DE = {
+  aviso: "/api/mantenimiento/avisos",
+  orden: "/api/mantenimiento/ordenes",
+};
 
 /**
  * Una carga que espera en el teléfono hasta tener señal.
@@ -198,8 +231,20 @@ export function paradas(cargas) {
 /**
  * Cuántos minutos esperar antes del próximo reintento, según cuántos van.
  *
- * Es una decisión y no un detalle del service worker, así que vive acá, donde
- * se puede probar. El primer reintento sale casi enseguida (una señal que
+ * **NO LA USA NADIE TODAVÍA, Y ESO HAY QUE DECIRLO ACÁ** porque este archivo es
+ * donde alguien viene a leer cuál es la política de reintento. La de hoy, la de
+ * verdad, es **«en cada disparo, sin espera»**: ni `public/sw.js` ni
+ * `CargarClient.tsx` la llaman. Para respetarla habría que anotar en la carga a
+ * partir de cuándo puede volver a salir, y `CargaEnCola` no tiene ese campo.
+ * Lo que hay en su lugar, y es lo que esta espera venía a comprar, es que **el
+ * vaciado corta en el primer fallo**: sin señal se gasta un pedido por disparo
+ * y no uno por carga (ver el punto 3 de `public/sw.js`).
+ *
+ * Queda escrita y probada porque la decisión ya está tomada —cuánto esperar es
+ * esto— y el día que `CargaEnCola` tenga el campo, usarla es una línea. Lo que
+ * no puede pasar es que alguien lea esto y crea que el escalonado ya corre.
+ *
+ * Qué haría si se usara: el primer reintento sale casi enseguida (una señal que
  * parpadea suele volver en segundos); después la espera se duplica para no
  * gastar batería ni datos golpeando un servidor caído, y se frena en una hora
  * para que cincuenta fallos no signifiquen días de silencio.

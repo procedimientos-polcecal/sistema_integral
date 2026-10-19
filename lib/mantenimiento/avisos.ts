@@ -137,6 +137,18 @@ export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]):
  * Una fecha **futura** tampoco entra: el reloj del teléfono lo pone la persona,
  * y algo fechado el mes que viene no lo encuentra nadie.
  *
+ * Y TAMPOCO UNA DE HACE MÁS DE UN AÑO, que es el agujero del otro lado y es el
+ * peor de los dos. El futuro se rechazaba y el pasado se aceptaba entero, así
+ * que un teléfono con la hora perdida —la pila que se agotó, el aparato que
+ * vuelve a la fecha de fábrica— fechaba el aviso en 2019 **sin decir nada**, y
+ * de esa fecha salen el historial del equipo y el MTBF. Una futura se nota; una
+ * de 2019 se mete en el medio de la serie y ahí se queda.
+ *
+ * Un año y no un mes porque **cargar algo viejo es legítimo**: estas rutas
+ * también reciben trabajo ya hecho que se carga tarde, y con un tope corto eso
+ * quedaría rechazado sin que nadie tenga nada mal. Lo que un año sí descarta es
+ * el único caso que importa, el reloj que no sabe en qué año está.
+ *
  * El motivo se escribe para quien cargó, no para el log: nombra el valor que
  * vino, porque lo primero que hace quien lo lee es buscarlo en su pantalla.
  *
@@ -168,7 +180,30 @@ export function fechaDeLaCarga(valor: unknown, hoy: string): FechaDeLaCarga {
     };
   }
 
+  if (fecha < haceUnAño(hoy)) {
+    return {
+      estado: "no-sirve",
+      motivo:
+        `La fecha ${comoSeLee(fecha)} es de hace más de un año. ` +
+        `Fijate la hora del teléfono.`,
+    };
+  }
+
   return { estado: "sirve", fecha };
+}
+
+/**
+ * El mismo día del año pasado, en "YYYY-MM-DD", para comparar como texto.
+ *
+ * Restarle uno al año y nada más: un 29 de febrero da un "2025-02-29" que no
+ * existe como día, y eso **no importa** porque nunca se construye una fecha con
+ * esto — sólo se compara texto contra texto, y ahí "2025-02-29" se ordena justo
+ * donde tiene que ordenarse. Hacerlo con `Date` traería los husos horarios a un
+ * cálculo que no los necesita, que es de donde salen los errores de un día.
+ */
+function haceUnAño(hoy: string): string {
+  const [año, resto] = [hoy.slice(0, 4), hoy.slice(4)];
+  return `${String(Number(año) - 1).padStart(4, "0")}${resto}`;
 }
 
 /** Una fecha ISO como la escribe la planilla. */

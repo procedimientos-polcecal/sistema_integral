@@ -15,6 +15,7 @@
  */
 
 import {
+  RUTA_DE,
   comoContesto,
   conSuArticulo,
   type ResultadoDelEnvio,
@@ -36,12 +37,6 @@ export type Resultado =
        */
       fechaDelReloj: boolean;
     };
-
-/** A dónde va cada tipo de carga. Son las rutas de siempre, sin ninguna nueva. */
-const RUTA_DE: Record<TipoDeCarga, string> = {
-  aviso: "/api/mantenimiento/avisos",
-  orden: "/api/mantenimiento/ordenes",
-};
 
 /**
  * Manda el cuerpo tal cual y devuelve qué salió de eso.

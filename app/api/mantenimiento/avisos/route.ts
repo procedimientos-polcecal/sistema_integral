@@ -7,7 +7,7 @@ import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { proximoNumeroDeAviso, filaParaLaPlanilla, fechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import {
-  reservarClave, anotarLaClave, respuestaDeLaReserva,
+  reservarClave, anotarLaClave, respuestaDeLaReserva, soltarLaClave,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -80,11 +80,18 @@ export async function POST(request: Request) {
   // hablando con Google tiene que encontrar la clave anotada, o lee el mismo
   // "próximo número" y escribe una segunda fila.
   //
-  // Lo que cuesta, dicho: si la lectura de la planilla falla después de
-  // reservar, la clave queda en duda aunque no se haya escrito nada, y el
-  // reintento recibe un 409 que manda a mirar la planilla para nada. Se
-  // acepta porque ese 409 hace mirar y no perder: la carga queda parada en el
-  // teléfono, con el texto de acá, hasta que una persona decida.
+  // Y SI LA LECTURA DE LA PLANILLA FALLA DESPUÉS DE RESERVAR, LA CLAVE SE
+  // SUELTA. Es el único lugar de las dos rutas donde se puede, y la razón es
+  // que `leerValores` **sólo lee**: acá el servidor sabe con certeza que no
+  // escribió nada, así que dejar la clave reservada no protegería de ningún
+  // duplicado y en cambio haría daño — el reintento chocaría la primaria,
+  // caería en `en-duda`, recibiría un 409 (definitivo para la cola) y la carga
+  // quedaría parada con un texto que manda a mirar una planilla donde no hay
+  // nada que mirar. Y no es un caso raro: una planilla recalculando hace cortar
+  // a `leerValores` por diseño. Suelta, el reintento entra por `seguir`.
+  //
+  // (En la ruta de OT esto **no** se puede hacer; el porqué está en
+  // `soltarLaClave`.)
   const clave = typeof b?.clave === "string" ? b.clave.trim() : "";
   // Una clave que no es un texto se dice en vez de ignorarse: tratarla como
   // ausente apagaría la protección contra el duplicado sin que nadie se entere.
@@ -124,6 +131,9 @@ export async function POST(request: Request) {
     const filas = await leerValores(planilla, PESTANA());
     numeros = filas.slice(1).map((f) => String(f[0] ?? ""));
   } catch (e) {
+    // Acá no se escribió nada —`leerValores` sólo lee—, así que la clave
+    // reservada se devuelve antes de contestar. Ver el bloque de la clave.
+    if (clave) await soltarLaClave(admin, clave, user.id);
     return NextResponse.json(
       { error: `No se pudo leer la planilla para saber el próximo número: ${e instanceof Error ? e.message : e}` },
       { status: 502 }
@@ -195,7 +205,15 @@ export async function POST(request: Request) {
   // de Postgres a secas hacía que quien cargó lo cargara de nuevo y quedaran
   // dos, que es justo lo que esta tarea vino a cerrar. Es el mismo trato que
   // la ruta de OT le da a su insert fallido, y un 500 para la cola es
-  // pasajero: el reintento cae en `ya-esta` y recibe el número.
+  // pasajero, así que el teléfono reintenta.
+  //
+  // DÓNDE CAE ESE REINTENTO: en `ya-esta` y con el número **si `anotarLaClave`
+  // anduvo**, que es el caso normal. Si esa anotación falló —y por eso la ruta
+  // devuelve su motivo como `clave_error` en vez de tragárselo—, la clave sigue
+  // reservada sin resolver y el reintento cae en `en-duda`: un 409, definitivo
+  // para la cola, con el texto que manda a mirar la planilla. Eso es correcto
+  // —el aviso **sí** está escrita allá— pero no es "recibe el número", y
+  // escribirlo como si siempre pasara era prometer de más.
   if (error) {
     return NextResponse.json(
       {

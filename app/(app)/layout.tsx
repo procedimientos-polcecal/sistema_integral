@@ -108,10 +108,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             puerta abierta: sin red el service worker manda cualquier navegación
             a `/cargar`, así que alguien sin el módulo puede llegar a encolar
             algo. A nadie se le esconde lo que cargó él. El porqué está en el
-            componente. */}
+            componente.
+
+            Los dos salen de la **cookie**, acá en el servidor, y no de lo que
+            el teléfono haya recordado: son lo único autoritativo sobre quién
+            está mirando, y la barra los necesita para anotar la sesión antes de
+            pedir el vaciado. Sin eso una carga sale firmada por quien no la
+            hizo — ver `lib/core/sesionDelTelefono.ts`. */}
         <CargasEsperando
           conMantenimiento={modulos.includes("mantenimiento")}
           usuarioId={user.id}
+          usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
         />
 
         <div className="flex min-h-0 flex-1">

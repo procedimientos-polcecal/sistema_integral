@@ -4,10 +4,12 @@
  *
  * `public/sw.js` sabe vaciar la cola de cargas sin señal —mandar lo que espera
  * y dejar cada carga como corresponda— pero **nadie se lo pedía**: sus dos
- * disparos eran el `push` del resumen diario, que hoy tienen prendido dos
- * personas de trece, y el `sync`, que no registraba nadie. O sea que una carga
- * hecha el viernes en la cantera podía quedarse en el teléfono hasta que su
- * dueño abriera `/cargar` y tocara el botón de cada una.
+ * disparos eran el `push` del resumen diario, que al 19/10/2026 tiene prendido
+ * **una sola persona de trece** (medido contra `push_suscripciones`: una
+ * suscripción, un usuario, trece usuarios activos), y el `sync`, que no
+ * registraba nadie. O sea que una carga hecha el viernes en la cantera podía
+ * quedarse en el teléfono hasta que su dueño abriera `/cargar` y tocara el
+ * botón de cada una.
  *
  * - **`pedirVaciadoEnSegundoPlano`** usa Background Sync: el navegador
  *   guarda el pedido y despierta al worker cuando vuelve la conexión, **con la
@@ -31,10 +33,23 @@
  * que en un iPhone es la única de las dos llamadas de esa pantalla que hace
  * algo.
  *
- * **Los dos se piden siempre bajo la misma condición: que haya alguna carga en
- * estado `esperando`.** Pedirlos con la cola vacía sería despertar al worker
- * para que no haga nada, y en `/cargar` eso ocurriría en cada ida y vuelta de
- * la señal, que es lo que más se repite donde esa pantalla se usa.
+ * **BAJO QUÉ CONDICIÓN SE PIDEN, QUE NO ES LA MISMA EN LOS DOS LADOS.** La
+ * barra y el `pedirVaciadoEnSegundoPlano` de `/cargar` se piden sólo si hay
+ * alguna carga en estado `esperando`: despertar al worker para que mire una
+ * cola vacía no compra nada. Pero `/cargar` abierta **con señal** pide
+ * `pedirVaciadoAhora` **sin condición**, y eso es a propósito desde el
+ * 19/10/2026: el disparo no vacía sólo la cola, también **repara el precache**
+ * (`guardarLaPantallaSiFalta`), y de esa reparación depende el teléfono que
+ * **nunca encoló nada** —o sea la mayoría—, que es justamente el que puede
+ * tener `/cargar` guardada a medias sin saberlo. Con la condición vieja ese
+ * aparato no reparaba nunca, ni abriendo `/cargar` con señal.
+ *
+ * **ANTES DE PEDIR UN VACIADO HAY QUE ANOTAR QUIÉN SOS**, con
+ * `recordarQuienEs` de `lib/core/sesionDelTelefono.ts`. El worker no puede leer
+ * la cookie: decide a nombre de quién manda por lo que haya anotado en
+ * IndexedDB, así que un pedido hecho sin actualizar eso puede mandar la carga
+ * de la persona anterior con la cookie de la que tiene el teléfono ahora. Está
+ * explicado en el punto 2 de `public/sw.js`.
  *
  * LAS DOS FALLAN CALLADAS, A PROPÓSITO. Esto lo llama una barra que se monta en
  * el layout de toda la app: no tiene derecho a romper nada. Sin service worker

@@ -43,16 +43,19 @@
 // rutas un día está en una sola.
 //
 // Tests: lo que decide está en funciones puras —`decidirPorClave`,
-// `esChoqueDeClave`, `cambiosDeResolucion` y `filaVisible`— y esas sí se
-// prueban; `filaVisible` en particular fija qué veredictos exponen la fila, que
-// es la propiedad de seguridad del archivo. `reservarClave` y `resolverClave`
-// quedan sin test: son el pegamento con PostgREST, y en este repo lo que habla
-// con la base no se mockea, porque un mock probaría el mock. Lo que ahí queda
-// sin probar son los cinco `throw` que propagan un fallo: reservar, leer,
-// "ya no está" (en `reservarClave`), resolver y "no estaba reservada" (en
-// `resolverClave`) —los dos últimos, tragados por `anotarLaClave`, que tampoco
-// tiene test—. Ninguno decide nada, pero tampoco los cubre un test. La
-// tabla es `cargas_offline`
+// `esChoqueDeClave`, `cambiosDeResolucion`, `filaVisible` y
+// `respuestaDeLaReserva`— y esas sí se prueban. Las dos que fijan propiedades y
+// no sólo comportamiento son `filaVisible`, que dice qué veredictos exponen la
+// fila, y `respuestaDeLaReserva`, que además de elegir status y texto es donde
+// se comprueba que `ajena` y `otro-tipo` no devuelven número **ni aunque les
+// llegue la fila**: entre las dos está la propiedad de seguridad del archivo.
+// `reservarClave`, `resolverClave` y `soltarLaClave` quedan sin test: son el
+// pegamento con PostgREST, y en este repo lo que habla con la base no se
+// mockea, porque un mock probaría el mock. Lo que ahí queda sin probar son los
+// cinco `throw` que propagan un fallo: reservar, leer, "ya no está" (en
+// `reservarClave`), resolver y "no estaba reservada" (en `resolverClave`) —los
+// dos últimos, tragados por `anotarLaClave`, que tampoco tiene test—. Ninguno
+// decide nada, pero tampoco los cubre un test. La tabla es `cargas_offline`
 // (supabase/migrations/20261018165613_claves_de_las_cargas_offline.sql).
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -345,6 +348,57 @@ export async function resolverClave(
   }
   if (!data || data.length === 0) {
     throw new Error("No se pudo resolver la clave de la carga: no estaba reservada.");
+  }
+}
+
+/**
+ * Suelta una clave que se reservó y **no llegó a tocar la planilla**.
+ *
+ * POR QUÉ HACE FALTA, Y CUÁNDO NO SE PUEDE USAR. La clave se reserva antes de
+ * hablar con Google. Si Google no contesta, la ruta devuelve 502 —pasajero para
+ * la cola, o sea que el teléfono reintenta— y ese reintento choca la primaria,
+ * encuentra la fila sin `resuelto_en` y cae en `en-duda`: un 409, que para la
+ * cola es **definitivo**. La carga queda parada con un texto que manda a mirar
+ * la planilla **al pedo**, porque ahí no se escribió nunca nada. Y el caso no
+ * es raro: una planilla recalculando hace cortar a `leerValores` por diseño.
+ *
+ * Soltarla devuelve la clave al estado de no usada, así que el reintento entra
+ * por `seguir` y vuelve a intentar de verdad.
+ *
+ * **SÓLO SIRVE DONDE EL SERVIDOR SABE CON CERTEZA QUE NO ESCRIBIÓ.** Hoy eso es
+ * un lugar solo: el 502 de la ruta de avisos por `leerValores`, que es una
+ * lectura. En la ruta de OT no se puede, y no por prolijidad: `altaEnLaPlanilla`
+ * devuelve `ok:false` **también después de haber escrito la fila** —cuando
+ * relee la celda y el número que quedó no es el que esperaba—, así que un 502
+ * de ahí no distingue "no escribí" de "escribí y no sé con qué número". Soltar
+ * la clave en ese caso dejaría al reintento escribir la segunda OT, que es
+ * exactamente lo que esta tabla existe para evitar. Ahí el 409 «en duda» es la
+ * respuesta correcta: hace mirar y no perder.
+ *
+ * No lanza y no voltea nada: si no se puede soltar, lo que queda es el
+ * comportamiento de antes —un 409 en el reintento—, que es feo y no es grave.
+ * Se acota a la fila propia y sin resolver: nunca borra una carga ya hecha.
+ */
+export async function soltarLaClave(
+  admin: ClienteAdmin,
+  clave: string,
+  usuarioId: string,
+): Promise<void> {
+  try {
+    // El error de PostgREST viene en la respuesta y no como excepción, así que
+    // se miran los dos: el `catch` solo dejaría pasar un fallo de la base sin
+    // una línea en ningún lado.
+    const { error } = await admin
+      .from("cargas_offline")
+      .delete()
+      .eq("clave", clave)
+      .eq("usuario_id", usuarioId)
+      .is("resuelto_en", null);
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    console.error(
+      `No se pudo soltar la clave ${clave}: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 

@@ -150,6 +150,19 @@ carga**:
 | | |
 |---|---|
 | **Definitivo** | `400` (falta la descripción), `403` (sin permiso de edición). Reintentar no va a cambiar nada. Se avisa y la carga queda parada, visible y editable, no borrada |
+
+> **«Editable», resuelto el 19/10/2026.** La primera versión dejaba la carga
+> parada con dos botones —«Reintentar igual», que manda otra vez exactamente lo
+> que ya fue rechazado, y «Borrar», que pierde lo escrito—. O sea que ante un
+> 400 las dos salidas eran inútiles, y una OT son dieciocho campos cargados
+> parado en la cantera. Ahora hay un tercer botón, **«Corregir y volver a
+> mandar»**: vuelve los valores al formulario y la carga vieja sale de la cola
+> **recién cuando la corregida está guardada** —antes, cerrar la pantalla a
+> mitad de camino la habría perdido—. La corregida lleva **clave nueva**: es
+> otro cuerpo, y la vieja puede haber quedado reservada del lado del servidor,
+> así que reusarla recibiría un 409 «en duda» que no es cierto. Se ofrece sólo
+> sobre las **paradas propias**: una que espera puede estar saliendo en este
+> mismo momento, y una ajena no se corrige en nombre de otro.
 | **Pasajero** | `401` (la sesión se venció mientras esperaba), `502` (Google caído, que es como la ruta reporta que no pudo escribir la planilla), o que el `fetch` ni salga. Se reintenta más tarde |
 
 **Un `401` tratado como definitivo tira a la basura una carga perfectamente
@@ -215,6 +228,15 @@ falló es la notificación push, y **las notificaciones las tiene prendidas una
 sola persona de trece**. Para los otros doce, enterarse va a significar abrir el
 SdG y mirar la pantalla de la cola. Mientras el correo no exista, que la gente
 prenda las notificaciones **es parte de que esto funcione**, no una preferencia.
+
+> **Medido el 19/10/2026**, contra producción con el `SUPABASE_SERVICE_ROLE_KEY`
+> y de sólo lectura: `push_suscripciones` tiene **una fila**, de **un** usuario,
+> contra **trece** usuarios activos. Este número vale, y durante la ejecución se
+> escribió «dos de trece» en cuatro archivos —`public/sw.js` dos veces,
+> `lib/core/vaciarLaCola.ts` y `components/CargasEsperando.tsx`— justificando
+> con él decisiones de diseño. Era falso y ya está corregido. Se anota acá
+> porque el número va a volver a cambiar: el que no lleva fecha no se puede
+> revisar.
 
 ## Mandar dos veces es peor que no mandar
 

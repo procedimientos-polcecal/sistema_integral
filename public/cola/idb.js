@@ -21,7 +21,8 @@
  * aviso es peor que una que se rechazó.
  *
  * Vive en `public/` y es JavaScript plano por la misma razón que
- * `colaOffline.js`: lo importan la app (`app/cargar/CargarClient.tsx` y
+ * `colaOffline.js`: lo importan la app (`app/cargar/CargarClient.tsx`,
+ * `app/cargar/catalogos.ts`, `lib/core/sesionDelTelefono.ts` y
  * `components/CargasEsperando.tsx`) y el service worker `public/sw.js`, que no
  * puede importar TypeScript ni nada que el sitio no sirva tal cual. Los
  * tipos van por JSDoc y rigen sólo para quien lo importe desde TypeScript

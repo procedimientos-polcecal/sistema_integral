@@ -164,4 +164,39 @@ describe("fechaDeLaCarga", () => {
       estado: "sirve", fecha: "2026-10-05",
     });
   });
+
+  /*
+   * El tope para atrás, que es el agujero gemelo del de la fecha futura y el
+   * peor de los dos: una futura se nota, una de 2019 se mete en el medio de la
+   * serie del equipo y ahí se queda. Pasa con el reloj perdido —la pila que se
+   * agotó, el aparato que vuelve a la fecha de fábrica—, y la carga sin señal
+   * es justamente donde la fecha la pone el reloj y no la mira nadie.
+   */
+  it("una fecha de hace años no entra: el reloj del teléfono se perdió", () => {
+    const r = fechaDeLaCarga("2019-03-04", "2026-10-19");
+    expect(r.estado).toBe("no-sirve");
+    expect(r.estado === "no-sirve" && r.motivo).toContain("04/03/2019");
+    expect(r.estado === "no-sirve" && r.motivo).toContain("más de un año");
+  });
+
+  it("hasta un año para atrás sí entra: cargar trabajo viejo es legítimo", () => {
+    // El tope es un año y no un mes a propósito: estas rutas también reciben
+    // trabajo ya hecho que se carga tarde, y rechazarlo sería trabar una carga
+    // que no tiene nada mal.
+    expect(fechaDeLaCarga("2025-10-19", "2026-10-19")).toEqual({
+      estado: "sirve", fecha: "2025-10-19",
+    });
+    expect(fechaDeLaCarga("2025-10-20", "2026-10-19")).toEqual({
+      estado: "sirve", fecha: "2025-10-20",
+    });
+    expect(fechaDeLaCarga("2025-10-18", "2026-10-19").estado).toBe("no-sirve");
+  });
+
+  it("el tope se corre con el año bisiesto sin romperse", () => {
+    // El 29 de febrero menos un año da un día que no existe; acá nunca se
+    // construye una fecha con eso, sólo se compara texto, así que el orden
+    // sigue siendo el correcto.
+    expect(fechaDeLaCarga("2027-03-01", "2028-02-29").estado).toBe("sirve");
+    expect(fechaDeLaCarga("2027-02-28", "2028-02-29").estado).toBe("no-sirve");
+  });
 });

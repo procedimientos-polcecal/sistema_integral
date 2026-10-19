@@ -38,6 +38,8 @@
 // login del `proxy.ts`—. Por eso `proxy.ts` ahora deja `cola` afuera de su
 // matcher. Sin esa exclusión el service worker entero no se registra.
 import {
+  RUTA_DE,
+  SESION,
   comoContesto,
   conSuArticulo,
   despuesDelIntento,
@@ -211,20 +213,21 @@ async function guardarLaPantalla() {
  * worker. Los disparos que despiertan al worker vuelven a intentarlo.
  *
  * **A CUÁNTA GENTE LE LLEGA ESTE REINTENTO.** Los disparos son tres. El push
- * necesita permiso de notificaciones, que hoy tienen dos personas de trece. El
- * `sync` llega a quien tenga algo esperando en la cola y un navegador con
- * Background Sync, o sea Android y no iPhone. Y el `message`, que es el que
- * nivela: lo manda la app, en cualquier navegador, al abrirse y cuando vuelve
- * la señal con `/cargar` abierta.
+ * necesita permiso de notificaciones, que al 19/10/2026 tiene **una sola
+ * persona de trece** (medido contra `push_suscripciones`: una suscripción, un
+ * usuario, trece usuarios activos). El `sync` llega a quien tenga algo
+ * esperando en la cola y un navegador con Background Sync, o sea Android y no
+ * iPhone. Y el `message`, que es el que nivela: lo manda la app, en cualquier
+ * navegador.
  *
- * **Pero los dos últimos se piden bajo la misma condición, y es más angosta de
- * lo que parece: sólo si hay alguna carga en estado `esperando`.** No «algo en
- * la cola»: una cola con puras cargas `parada` no pide nada, así que ese
- * teléfono no repara su caché por este camino aunque tenga la cola llena. Y uno
- * que nunca cargó nada sin señal tampoco: depende de `install`, o sea del
- * próximo despliegue de este archivo. No es un detalle de redacción: si alguien
- * cuenta con esto para recuperar un caché roto, lo va a hacer para gente que no
- * lo recibe.
+ * **Y el `message` es el que hace que esto repare de verdad**, desde el
+ * 19/10/2026: `/cargar` abierta **con señal** lo pide **sin condición**. Antes
+ * los dos últimos se pedían sólo si había alguna carga en estado `esperando`, y
+ * eso dejaba sin reparación al teléfono que nunca encoló nada —o sea a casi
+ * todos—, que es justamente el que puede tener el caché a medias sin saberlo.
+ * La barra del layout sigue pidiéndolo bajo la condición vieja, porque ahí no
+ * hay señal garantizada y despertar al worker para que mire una cola vacía no
+ * compra nada.
  *
  * **Y sólo si falta, no cada vez.** Rebajar `/cargar` y sus once archivos en
  * cada push sería medio mega por día por aparato contra una señal que ya es
@@ -539,14 +542,15 @@ self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
 /**
  * El tercer disparo, y el único que ocurre en todos lados: la app abierta
  * pidiéndolo. Lo manda `pedirVaciadoAhora` de `lib/core/vaciarLaCola.ts`, desde
- * dos lados y **los dos con la misma condición, que haya algo en estado
- * `esperando`**: la barra del layout al abrirse la app, y `/cargar` al abrirse
- * y cada vez que vuelve la señal con ella abierta.
+ * dos lados y **con una condición distinta cada uno**: la barra del layout sólo
+ * si hay algo en estado `esperando`, y `/cargar` **siempre que haya señal**,
+ * porque ahí el vaciado no es lo único que se pide —también se repara el caché,
+ * y eso le hace falta justo al teléfono que no tiene nada en la cola—.
  *
  * Pide más que los otros dos —necesita una pestaña abierta, porque es ella la
- * que mantiene vivo al worker— pero es el que siempre está: el `push` lo tienen
- * prendido dos personas de trece y el `sync` no existe en iPhone. Abrir la app
- * es lo único que hace todo el mundo.
+ * que mantiene vivo al worker— pero es el que siempre está: el `push` lo tiene
+ * prendido **una sola persona de trece** (medido el 19/10/2026) y el `sync` no
+ * existe en iPhone. Abrir la app es lo único que hace todo el mundo.
  *
  * **Se filtra por `tipo` aunque hoy éste sea el único mensaje**, al revés que
  * el `sync` de arriba, y la diferencia es cuál es el riesgo de cada uno. Un
@@ -635,21 +639,33 @@ self.addEventListener("notificationclick", (event) => {
 // **No protege contra la carrera; la acota.** Si algún día eso no alcanzara, el
 // lugar es la base y no acá: una transacción que lea y marque junto.
 //
-// **2. DE QUIÉN ES UNA CARGA: ESTO ESTÁ ACOTADO, NO RESUELTO.** `puedeMandarse`
-// exige que la carga sea de quien tiene la sesión abierta, porque la planilla
-// queda firmada con esa persona. Pero acá «quién sos» sale de lo que la pantalla
-// anotó en IndexedDB —`catalogos.ts` lo escribe cada vez que alguien abre
-// `/cargar` con señal—, **no de la cookie**, que un service worker no puede
-// leer. Entonces: si otra persona entra al SdG en ese teléfono y **nunca abre
-// `/cargar`**, lo anotado sigue diciendo la anterior, y una carga de la anterior
-// saldría con la cookie de la nueva — firmada por quien no la hizo, que es
-// exactamente lo que `puedeMandarse` existe para evitar.
-// Qué lo acota hoy: la ventana se cierra sola en cuanto alguien abre `/cargar`
-// (y esa pantalla es la única razón para que haya algo en la cola), y una carga
-// ajena **nunca** sale —lo que puede salir mal es la firma de una propia, no la
-// de otro—. Qué lo cerraría de verdad: que el servidor diga de quién es la
-// cookie. Eso es una ruta nueva o un campo en la respuesta del alta, y no
-// entraba en esta tarea.
+// **2. DE QUIÉN ES UNA CARGA: QUIÉN ESCRIBE LA CLAVE `SESION` ES LA MITAD DEL
+// ASUNTO.** `puedeMandarse` exige que la carga sea de quien tiene la sesión
+// abierta, porque la planilla queda firmada con esa persona. Pero acá «quién
+// sos» sale de lo que se anotó en IndexedDB bajo `SESION`, **no de la cookie**,
+// que un service worker no puede leer. O sea que esa anotación tiene que estar
+// al día en **todo** lugar desde el que se pida un vaciado, o el POST sale con
+// la cookie de uno y la carga de otro.
+//
+// Hasta el 19/10/2026 eso lo escribía **sólo `/cargar`**, y la barra del layout
+// —`components/CargasEsperando.tsx`, que se monta en toda la app— pedía el
+// vaciado desde cualquier pantalla. El agujero era entero: Ana carga sin señal,
+// presta el teléfono, Beto entra y abre **cualquier** pantalla, la barra dispara
+// el vaciado, lo anotado todavía dice Ana, y el POST sale con la cookie de Beto
+// — el alta de OT escribe en la planilla el nombre y el correo de **Beto**. La
+// clave de la carga no lo tapa: detecta `ajena` en un **reintento**, no en el
+// primer envío.
+//
+// Hoy la regla es: **quien pide un vaciado anota primero quién es**, y si no
+// puede anotarlo no lo pide. Lo hace `lib/core/sesionDelTelefono.ts`, que usan
+// los dos —la barra con el `usuarioId` que el layout sacó de la cookie del
+// servidor, y `/cargar` con la sesión de Supabase—.
+//
+// Qué queda abierto, dicho: un teléfono donde la segunda persona **no abre
+// ninguna pantalla del grupo `(app)` ni `/cargar`** no actualiza nada, pero
+// entonces tampoco hay quien pida el vaciado desde ahí. Lo que cerraría el tema
+// del todo es que el servidor diga de quién es la cookie en la respuesta del
+// alta; eso es una ruta nueva o un campo más, y no entra acá.
 //
 // **3. NO HAY ESPERA ENTRE REINTENTOS.** `esperaAntesDeReintentar` existe y está
 // probada, pero no se usa todavía —ni acá ni en la pantalla—: para respetarla
@@ -658,20 +674,12 @@ self.addEventListener("notificationclick", (event) => {
 // a comprar, es que **el vaciado corta en el primer fallo**: sin señal se gasta
 // un pedido por disparo y no uno por carga.
 
-/** Dónde dejó la pantalla anotado quién tiene la sesión abierta. */
-//
-// Es el mismo nombre que usa `app/cargar/catalogos.ts`, escrito dos veces porque
-// aquél es un archivo de React y desde acá no se puede importar. **Si allá
-// cambia y acá no, este vaciado deja de mandar nada y no avisa**: sin sesión
-// conocida no hay a nombre de quién mandar. Es pegamento, no una regla, y por
-// eso se copia en vez de mudarse a `public/cola/`.
-const SESION = "sesion";
-
-/** A dónde va cada tipo de carga. Las de siempre, las mismas que `envio.tsx`. */
-const RUTA_DE = {
-  aviso: "/api/mantenimiento/avisos",
-  orden: "/api/mantenimiento/ordenes",
-};
+// `SESION` y `RUTA_DE` se importan de `/cola/colaOffline.js` y **ya no se
+// escriben acá**. Hasta el 19/10/2026 estaban copiados a mano en este archivo y
+// en los de React, sin nada que atara las copias; el modo de fallar de `SESION`
+// es que este vaciado se quede sin sesión conocida y **no mande ninguna carga**,
+// en silencio. Con una sola definición no hay dos cadenas que puedan separarse.
+// Un test de `lib/core/sw.test.ts` prohíbe volver a declararlas acá.
 
 /**
  * Cuántas cargas manda un disparo. El tope no es por la red —el vaciado corta

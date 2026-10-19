@@ -2,21 +2,13 @@
 
 /*
  * Lo que la pantalla de carga necesita tener guardado en el teléfono para poder
- * dibujarse sin servidor: los desplegables y quién es la sesión.
+ * dibujarse sin servidor: los desplegables, y de paso quién es la sesión.
  *
- * POR QUÉ LA SESIÓN SE GUARDA. `IndexedDB` es del navegador, no de la persona.
- * El alta de OT escribe en la planilla el nombre y el correo de la sesión, así
- * que una carga que se manda bajo otra sesión aparece firmada por quien no la
- * hizo — y eso no se nota nunca. `puedeMandarse` exige que el dueño de la carga
- * sea quien tiene la sesión abierta, y sin red no hay a quién preguntarle quién
- * es: por eso queda anotado acá.
- *
- * Y POR QUÉ ADEMÁS SE GUARDA LA GENTE QUE PASÓ POR ESTE TELÉFONO. La cola tiene
- * que poder decir de quién es una carga que no es de la sesión actual, y de esa
- * carga lo único que se guarda es el id del usuario. Un id no le dice nada a
- * nadie. Cada vez que alguien entra se suma su nombre a `gente`, así que un
- * teléfono que pasó de mano puede nombrar al dueño de lo que quedó esperando.
- * Si esa persona nunca entró acá, la cola dice "otra sesión" y no inventa.
+ * QUIÉN ES LA SESIÓN YA NO VIVE ACÁ: se mudó a `lib/core/sesionDelTelefono.ts`
+ * el 19/10/2026, con el porqué escrito allá. En dos palabras: esa anotación la
+ * tiene que escribir **todo** el que vaya a pedir un vaciado, y uno de ésos es
+ * la barra del layout, que no puede arrastrar el cliente de Supabase que este
+ * archivo importa. Acá quedan los catálogos y la bajada con señal.
  *
  * Los tres catálogos son 41 KB medidos contra producción el 18/10/2026 —244
  * equipos, 40 sectores, 10 operarios— y no son secretos para quien ya tiene
@@ -25,7 +17,17 @@
  */
 
 import { guardarCatalogo, leerCatalogo } from "@/public/cola/idb.js";
+import { recordarQuienEs, type SesionRecordada } from "@/lib/core/sesionDelTelefono";
 import { createClient } from "@/lib/supabase/client";
+
+// Se re-exportan para que `CargarClient` siga teniendo un solo lugar de dónde
+// traer lo que necesita el arranque de la pantalla.
+export {
+  genteConocida,
+  sesionRecordada,
+  type GenteConocida,
+  type SesionRecordada,
+} from "@/lib/core/sesionDelTelefono";
 
 export interface EquipoDelCatalogo {
   id: string;
@@ -55,21 +57,10 @@ export interface Catalogos {
 /** Lo que hay antes de leer el teléfono, y lo que queda si nunca se bajó nada. */
 export const SIN_CATALOGOS: Catalogos = { equipos: [], sectores: [], operarios: [] };
 
-/** Quién tiene la sesión abierta, tal como quedó anotado en el teléfono. */
-export interface SesionRecordada {
-  id: string;
-  nombre: string;
-}
-
-/** Id de usuario → cómo se llama. Sólo de quienes entraron en este teléfono. */
-export type GenteConocida = Record<string, string>;
-
 // Un almacén por endpoint, con el nombre del endpoint: así se ve de un vistazo
 // qué catálogo quedó viejo y de dónde se vuelve a bajar.
 const EQUIPOS_Y_SECTORES = "mantenimiento/equipos-y-sectores";
 const OPERARIOS = "mantenimiento/operarios";
-const SESION = "sesion";
-const GENTE = "gente";
 
 /** Lo que haya guardado. Un catálogo que nunca se bajó queda como lista vacía. */
 export async function catalogosGuardados(): Promise<Catalogos> {
@@ -124,22 +115,19 @@ export async function refrescarCatalogos(guardados: Catalogos): Promise<Catalogo
 }
 
 /**
- * La sesión que quedó anotada la última vez que alguien entró en este teléfono.
- * Es lo que se usa sin señal, cuando no hay a quién preguntarle.
- */
-export async function sesionRecordada(): Promise<SesionRecordada | null> {
-  return await leerCatalogo<SesionRecordada>(SESION);
-}
-
-/** Los nombres de quienes entraron alguna vez en este teléfono. */
-export async function genteConocida(): Promise<GenteConocida> {
-  return (await leerCatalogo<GenteConocida>(GENTE)) ?? {};
-}
-
-/**
  * Quién tiene la sesión abierta ahora, y lo deja anotado para cuando no haya
- * red. Devuelve null si no se pudo averiguar; ahí vale lo que ya estaba
+ * red. Devuelve null si no se pudo **averiguar**; ahí vale lo que ya estaba
  * guardado, que es de la última persona que entró.
+ *
+ * **LOS DOS FALLOS NO SE MEZCLAN, Y ESO ES EL ARREGLO DEL 19/10/2026.** No
+ * poder averiguar quién sos es normal —no hay red, y esta pantalla existe para
+ * eso— y se contesta con null. No poder **anotarlo** es otra cosa: el
+ * almacenamiento está lleno o bloqueado, que es justo el modo de falla que esta
+ * pantalla existe para contar. Eso sale como rechazo, igual que todo `idb.js`.
+ * Antes los dos `guardarCatalogo` quedaban fuera del `try` y su rechazo lo
+ * descartaba el `void` de `useCargar`: la pantalla se quedaba con los
+ * formularios apagados y el cartel «Viendo quién tiene la sesión abierta…»
+ * fijo para siempre, sin una palabra de diagnóstico.
  *
  * `getSession()` y no `getUser()`: el segundo le pregunta al servidor de
  * Supabase, y esta pantalla existe para los momentos en que no hay servidor que
@@ -171,10 +159,7 @@ export async function recordarLaSesion(): Promise<SesionRecordada | null> {
     return null;
   }
 
-  const sesion: SesionRecordada = { id, nombre };
-  await guardarCatalogo(SESION, sesion);
-  await guardarCatalogo(GENTE, { ...(await genteConocida()), [id]: nombre });
-  return sesion;
+  return await recordarQuienEs(id, nombre);
 }
 
 /**

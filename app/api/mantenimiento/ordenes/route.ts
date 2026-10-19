@@ -184,6 +184,17 @@ export async function POST(request: Request) {
   // reintento recibe un 409 que manda a mirar la planilla para nada. Se
   // acepta porque ese 409 hace mirar y no perder: la carga queda parada en el
   // teléfono, con el texto de acá, hasta que una persona decida.
+  //
+  // **Y POR QUÉ ACÁ NO SE SUELTA LA CLAVE, SI LA RUTA DE AVISOS SÍ LO HACE.**
+  // Allá el 502 sale de `leerValores`, que sólo lee, así que el servidor sabe
+  // con certeza que no escribió nada. Acá sale de `altaEnLaPlanilla`, y esa
+  // función devuelve `ok:false` **también después de haber escrito la fila**:
+  // cuando relee la celda y el número que quedó no es el que esperaba. O sea
+  // que un 502 de abajo no distingue "no escribí" de "escribí y no sé con qué
+  // número", y soltar la clave en el segundo caso dejaría al reintento escribir
+  // la segunda OT —el duplicado irreversible en la fuente de verdad del
+  // módulo, que es el anti-objetivo que esta tabla existe para cerrar—. Entre
+  // un 409 que hace mirar de más y una OT duplicada, el 409.
   const clave = typeof body?.clave === "string" ? body.clave.trim() : "";
   // Una clave que no es un texto se dice en vez de ignorarse: tratarla como
   // ausente apagaría la protección contra el duplicado sin que nadie se entere.

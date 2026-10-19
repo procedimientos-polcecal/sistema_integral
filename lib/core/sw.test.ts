@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  RUTA_DE,
+  SESION,
   comoContesto,
   conSuArticulo,
   despuesDelIntento,
@@ -251,13 +253,22 @@ function cargarSW(ventanas: Ventana[] = [], opciones: Opciones = {}) {
     cola.leerCola.mockRejectedValue(new Error("la base sdg no abre"));
   }
   const sesion = opciones.sesion === undefined ? { id: "u1", nombre: "Ana" } : opciones.sesion;
-  const leerCatalogo = vi.fn(async (nombre: string) => (nombre === "sesion" ? sesion : null));
+  // La clave entra **importada** y no escrita a mano: es la misma constante que
+  // escribe `lib/core/sesionDelTelefono.ts` y la que el service worker lee. Si
+  // el worker buscara bajo otro nombre, acá no encontraría la sesión y todos
+  // los tests de vaciado se pondrían rojos, que es lo que se quiere.
+  const leerCatalogo = vi.fn(async (nombre: string) => (nombre === SESION ? sesion : null));
   const { caches, porNombre, abiertos } = cachesDoble();
   if (opciones.sinCache) {
     caches.open.mockRejectedValue(new Error("el almacenamiento está bloqueado"));
   }
 
   const dependencias: Record<string, unknown> = {
+    // El pegamento compartido, también de verdad: son las dos cadenas que la
+    // pantalla y el worker tienen que escribir igual, y desde el 19/10/2026 hay
+    // una sola definición de cada una en vez de dos copias.
+    RUTA_DE,
+    SESION,
     // Las puras, de verdad: son las mismas reglas que corre la pantalla.
     comoContesto,
     conSuArticulo,
@@ -397,6 +408,34 @@ describe("public/sw.js", () => {
       // no explicarla.
       expect(soloCodigo(CODIGO)).not.toMatch(/caches\s*\.\s*delete/);
     });
+  });
+
+  /*
+   * EL PEGAMENTO QUE LOS DOS MUNDOS TIENEN QUE ESCRIBIR IGUAL.
+   *
+   * `SESION` y `RUTA_DE` estaban copiados a mano en `public/sw.js` y en los
+   * archivos de React, sin nada que atara las copias. El modo de fallar de
+   * `SESION` es el peor que tiene esta cola: el worker lee de esa clave quién
+   * tiene la sesión abierta, así que una letra distinta lo deja sin sesión
+   * conocida y **no sale ninguna carga**, sin un error en ningún lado.
+   *
+   * Se arregló sacando la copia en vez de atándola: hay **una sola definición**
+   * de cada una, en `public/cola/colaOffline.js`, y los tres mundos la importan
+   * —React, el service worker y estos tests, que las inyectan en el molde—. Lo
+   * único que queda por vigilar, y es lo que este test hace, es que nadie vuelva
+   * a declararlas acá: una `const SESION = "..."` local **gana sobre el import**
+   * sin que falle nada, y el agujero vuelve a abrirse igual que antes.
+   *
+   * Los tests de vaciado son la otra mitad: el doble de `leerCatalogo` responde
+   * bajo `SESION` y las urls esperadas salen de `RUTA_DE`, así que si el worker
+   * dejara de usarlas se ponen rojos.
+   */
+  it("el service worker no redeclara el pegamento: lo importa", () => {
+    const codigo = soloCodigo(CODIGO);
+    for (const nombre of ["SESION", "RUTA_DE"]) {
+      expect(loQueImporta()).toContain(nombre);
+      expect(codigo).not.toMatch(new RegExp(`(const|let|var)\\s+${nombre}\\s*=`));
+    }
   });
 
   it("el molde le da al service worker todo lo que importa", () => {
@@ -1146,8 +1185,11 @@ describe("public/sw.js", () => {
    * exactamente el nivel donde se escondía el bug del payload del push.
    */
   describe("vaciado", () => {
-    const AVISOS = "/api/mantenimiento/avisos";
-    const ORDENES = "/api/mantenimiento/ordenes";
+    // Las urls salen de `RUTA_DE`, que es la constante que el service worker
+    // usa de verdad: escritas a mano acá, el test seguiría verde con el worker
+    // mandando a cualquier lado.
+    const AVISOS = RUTA_DE.aviso;
+    const ORDENES = RUTA_DE.orden;
 
     /**
      * Cuántas cargas salieron. Se cuentan los POST a las rutas de alta y no

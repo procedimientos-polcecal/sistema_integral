@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { loQueNoEntro, type LoQueNoEntro } from "@/lib/core/loQueNoEntro";
+import { recordarQuienEs } from "@/lib/core/sesionDelTelefono";
 import { useCargar } from "@/lib/core/useCargar";
 import { pedirVaciadoAhora, pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
 import { leerCola } from "@/public/cola/idb.js";
@@ -14,11 +15,12 @@ import { leerCola } from "@/public/cola/idb.js";
  *
  * ES LA RED DE ABAJO DE TODO EL DISEÑO SIN SEÑAL. Lo demás son disparos que
  * pueden no ocurrir: el `sync` del service worker no existe en iPhone, y el
- * push de las 8:30 lo tienen prendido dos personas de trece. Abrir la app es lo
- * único que hace todo el mundo todos los días, y es lo único que esta barra
- * necesita. Sin ella, una carga hecha el viernes en la planta puede no existir
- * para nadie hasta que alguien entre a `/cargar` por casualidad; el tope
- * acordado para eso es un día.
+ * push de las 8:30 lo tiene prendido **una sola persona de trece** (medido el
+ * 19/10/2026 contra `push_suscripciones`). Abrir la app es lo único que hace
+ * todo el mundo todos los días, y es lo único que esta barra necesita. Sin
+ * ella, una carga hecha el viernes en la planta puede no existir para nadie
+ * hasta que alguien entre a `/cargar` por casualidad; el tope acordado para eso
+ * es un día.
  *
  * NO MEZCLA DOS COSAS EN UNA FRASE, que es lo único difícil de esta pantalla.
  * Una carga **demorada** lleva más de un día esperando y no está perdida: sale
@@ -33,8 +35,18 @@ import { leerCola } from "@/public/cola/idb.js";
  * llega el push. Una segunda implementación de «mandar una carga» viviendo en
  * el layout es exactamente cómo estas dos se separan sin que nadie lo note.
  *
+ * Y ANTES DE PEDIRLO ANOTA QUIÉN ESTÁ MIRANDO, que es la parte que no se puede
+ * saltear. El service worker no lee la cookie: decide a nombre de quién manda
+ * por lo que encuentre anotado en IndexedDB. Hasta el 19/10/2026 eso lo
+ * escribía sólo `/cargar`, mientras esta barra disparaba el vaciado desde
+ * cualquiera de las 313 pantallas — así que el teléfono prestado mandaba la
+ * carga de Ana con la cookie de Beto y la planilla quedaba firmada por Beto,
+ * que es un anti-objetivo textual del spec. **Si anotarlo falla, no se pide el
+ * vaciado**: que la cola espere a que alguien abra `/cargar` es infinitamente
+ * mejor que firmarla mal.
+ *
  * NO TIENE DERECHO A ROMPER NADA: se monta en el layout de toda la app, o sea
- * que corre para los 14 usuarios en cualquier pantalla donde entren. Si
+ * que corre para los trece usuarios en cualquier pantalla donde entren. Si
  * IndexedDB no está o la base no abre, no se dibuja y la app sigue igual.
  *
  * **Sin service worker sí se dibuja**, y la distinción importa: el dibujo no lo
@@ -46,9 +58,13 @@ import { leerCola } from "@/public/cola/idb.js";
 export function CargasEsperando({
   conMantenimiento,
   usuarioId,
+  usuarioNombre,
 }: {
   conMantenimiento: boolean;
+  /** De la cookie, resuelto en el servidor: es lo único autoritativo acá. */
   usuarioId: string;
+  /** Para que la cola pueda decir «es de Ana» y no un uuid. */
+  usuarioNombre: string;
 }) {
   // null es los dos estados en los que no hay barra: todavía no se leyó, y no
   // hay nada que decir. Son el mismo dibujo —ninguno— y distinguirlos sólo
@@ -107,9 +123,23 @@ export function CargasEsperando({
     // pantallas—, así que pedirlo siempre no sería mucho; lo que no se quiere
     // es despertar al service worker para que mire una cola vacía, y en Android
     // dejarle registrado un `sync` que no tiene nada que hacer.
+    //
+    // PRIMERO SE ANOTA QUIÉN ESTÁ MIRANDO, Y SI NO SE PUEDE NO SE PIDE NADA.
+    // El worker compara el dueño de cada carga contra esa anotación para
+    // decidir cuál puede salir; con la de la persona anterior, la carga de ella
+    // sale con la cookie de ésta y la planilla queda firmada mal. Un fallo acá
+    // es el almacenamiento lleno o bloqueado, y no se le dice a nadie desde la
+    // barra por lo mismo que el `catch` de arriba: quien lo cuenta bien, con
+    // las palabras del navegador, es `/cargar`.
     if (cargas.some((carga) => carga.estado === "esperando")) {
-      void pedirVaciadoAhora();
-      void pedirVaciadoEnSegundoPlano();
+      void recordarQuienEs(usuarioId, usuarioNombre)
+        .then(() => {
+          void pedirVaciadoAhora();
+          void pedirVaciadoEnSegundoPlano();
+        })
+        .catch((e) => {
+          console.error("cargas sin señal: no se pudo anotar quién tiene la sesión", e);
+        });
     }
 
     // La foto es de antes del vaciado, a propósito: esperar a que el worker

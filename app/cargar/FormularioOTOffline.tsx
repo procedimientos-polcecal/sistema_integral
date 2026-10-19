@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
-import { estadoSegunElCierre, loQueFaltaParaCerrar } from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
+import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type {
@@ -39,12 +41,21 @@ const ESTADOS_OT = [
  * LO QUE NO HACE, Y ES A PROPÓSITO: no manda `aviso_id`. Una OT que nace de un
  * aviso se carga desde el aviso, que es donde está el botón; acá se carga una
  * orden suelta, que es lo que alguien necesita parado en la planta.
+ *
+ * Y CONVIVIR TIENE UN PRECIO QUE YA SE PAGÓ UNA VEZ: el 19/10/2026 otra sesión
+ * sumó `loQueFaltaParaCrear` a la ruta y al modal, y este formulario no se
+ * enteró. Con sus valores por defecto le faltaban el sector, el equipo, la
+ * especialidad y la fecha de ejecución, así que toda OT cargada en la planta
+ * iba a recibir un 400 —definitivo para la cola— y quedar parada. **Las dos
+ * validaciones tienen que salir de la misma función**, que es la que corre la
+ * ruta: cualquier otra cosa es esperar a que alguien se acuerde.
  */
 export default function FormularioOTOffline({
   equipos,
   sectores,
   operarios,
   deshabilitado,
+  borrador,
   onMandar,
 }: {
   equipos: EquipoDelCatalogo[];
@@ -52,12 +63,18 @@ export default function FormularioOTOffline({
   operarios: OperarioDelCatalogo[];
   /** Sin dónde guardar o sin saber de quién sería la carga, no se acepta nada. */
   deshabilitado: boolean;
+  /**
+   * El cuerpo de una carga parada que se está editando, para arrancar con sus
+   * valores. `CargarClient` remonta este componente con `key` cuando cambia:
+   * así lo que se escribió en el formulario anterior no se arrastra.
+   */
+  borrador?: Record<string, unknown> | null;
   onMandar: (cuerpo: Record<string, unknown>) => Promise<Resultado>;
 }) {
   const [mandando, setMandando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [form, setForm] = useState(vacio);
+  const [form, setForm] = useState(() => borradorDesdeElCuerpo(vacio(), borrador));
 
   function f(clave: keyof FormularioDeOT, valor: string | boolean) {
     setForm((previo) => {
@@ -80,21 +97,15 @@ export default function FormularioOTOffline({
     : equipos;
 
   async function crear() {
-    if (!form.descripcion.trim()) {
-      setError("La descripción es requerida.");
-      return;
-    }
-
-    // Una OT que nace con fecha de cierre ya se hizo, así que tiene que decir
-    // cuánto llevó y quién la hizo. Todo junto y no de a uno: contestar tres
-    // veces para que te digan tres cosas es lo que hace que la gente complete
-    // de cualquier manera. Y acá importa más que con señal — sin conexión, el
-    // que contesta de a una cosa es el servidor, horas o días después.
-    const falta = loQueFaltaParaCerrar(form);
+    // **LA MISMA FUNCIÓN QUE CORRE LA RUTA, Y ÉSE ES EL PUNTO.** Son los
+    // obligatorios de siempre más, si viene con fecha de cierre, las horas y
+    // quién la hizo; todo junto y en un solo mensaje. Acá importa más que con
+    // señal: sin conexión el que contesta es el servidor, horas o días después,
+    // y lo que contesta es un 400 — definitivo para la cola, o sea una carga
+    // parada por algo que se podía decir en el momento.
+    const falta = loQueFaltaParaCrear(form);
     if (falta.length > 0) {
-      setError(
-        `La orden tiene fecha de cierre, así que ya se hizo. Falta cargar ${falta.join(", ")}.`,
-      );
+      setError(`Falta cargar ${falta.join(", ")}.`);
       return;
     }
 
@@ -146,15 +157,20 @@ export default function FormularioOTOffline({
       )}
       <CartelDelResultado tipo="orden" resultado={resultado} />
 
+      {/* LOS RÓTULOS DE LAS OPCIONES VACÍAS DICEN «Elegí…» Y NO «— Todos —».
+          Decían eso, que es el rótulo de un **filtro**: en un filtro dejarlo
+          vacío significa no filtrar, y acá significa una OT que no se puede
+          contar contra ninguna máquina ni dar por atrasada nunca. Invitaban a
+          dejar vacío justo el campo que la ruta rechaza con un 400. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <F label="Sector">
+        <F label="Sector" required>
           <Select
             value={form.sector_id}
             onChange={(e) => f("sector_id", e.target.value)}
             disabled={deshabilitado}
             className="input"
           >
-            <option value="">— Todos —</option>
+            <option value="">— Elegí el sector —</option>
             {sectores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.codigo ? `${s.codigo} — ` : ""}
@@ -163,14 +179,14 @@ export default function FormularioOTOffline({
             ))}
           </Select>
         </F>
-        <F label="Equipo">
+        <F label="Equipo" required>
           <Select
             value={form.equipment_id}
             onChange={(e) => f("equipment_id", e.target.value)}
             disabled={deshabilitado}
             className="input"
           >
-            <option value="">— Sin asignar —</option>
+            <option value="">— Elegí el equipo —</option>
             {equiposDelSector.map((eq) => (
               <option key={eq.id} value={eq.id}>
                 {eq.code} – {eq.name}
@@ -192,14 +208,14 @@ export default function FormularioOTOffline({
       </F>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <F label="Especialidad">
+        <F label="Especialidad" required>
           <Select
             value={form.especialidad}
             onChange={(e) => f("especialidad", e.target.value)}
             disabled={deshabilitado}
             className="input"
           >
-            <option value="">—</option>
+            <option value="">— Elegí la especialidad —</option>
             {ESPECIALIDADES.map((v) => (
               <option key={v} value={v}>
                 {v}
@@ -207,7 +223,7 @@ export default function FormularioOTOffline({
             ))}
           </Select>
         </F>
-        <F label="Tipo">
+        <F label="Tipo" required>
           <Select
             value={form.tipo}
             onChange={(e) => f("tipo", e.target.value)}
@@ -221,7 +237,7 @@ export default function FormularioOTOffline({
             ))}
           </Select>
         </F>
-        <F label="Quién realiza">
+        <F label="Quién realiza" required>
           <Select
             value={form.quien}
             onChange={(e) => f("quien", e.target.value)}
@@ -257,7 +273,9 @@ export default function FormularioOTOffline({
             className="input"
           />
         </F>
-        <F label="Fecha ejecución">
+        {/* Obligatoria y no un adorno: sin ella la OT no se atrasa nunca, así
+            que no aparece en ningún listado de lo que está vencido. */}
+        <F label="Fecha ejecución" required>
           <input
             type="date"
             value={form.fecha_ejecucion}
