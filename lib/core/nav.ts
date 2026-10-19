@@ -111,6 +111,26 @@ export const NAV: NavItem[] = [
       { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      /*
+       * La única entrada estable a `/cargar`. Hasta acá no había ninguna: a esa
+       * pantalla se llegaba porque el service worker la servía cuando no había
+       * señal, o porque la barra de «hay algo esperando» aparecía. O sea que
+       * quien quisiera abrirla **antes** de salir a la planta —que es cuando
+       * sirve bajar los desplegables y dejar la sesión recordada— no tenía
+       * cómo.
+       *
+       * Vive en el menú de Mantenimiento y no en el de otro módulo porque lo
+       * que carga son avisos y órdenes de trabajo. Y cae debajo de las dos
+       * pantallas de esas cosas, no arriba: con señal se carga por los modales
+       * de siempre, y ésta es la de la excepción.
+       *
+       * OJO CON LA RUTA: `/cargar` está **fuera** del grupo `(app)`, así que
+       * `estaDentroDe("/mantenimiento", "/cargar")` es falso y el menú de
+       * Mantenimiento no se va a desplegar parado ahí. Es correcto y es a
+       * propósito: esa pantalla tampoco tiene este menú, porque tiene que poder
+       * dibujarse sin servidor.
+       */
+      { label: "Cargar sin señal", href: "/cargar", modulo: "mantenimiento" },
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },

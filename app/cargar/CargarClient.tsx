@@ -5,6 +5,7 @@ import { ConfirmProvider, useConfirm } from "@/components/ConfirmProvider";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { useCargar } from "@/lib/core/useCargar";
+import { pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
 import {
   comoSeLlama,
   despuesDelIntento,
@@ -58,9 +59,11 @@ type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
  *   que una carga sin dueño no podría salir nunca. Aceptarla sería guardarla
  *   para siempre.
  *
- * Mientras tanto, de la cola sale a mano: el botón «Mandar ahora» de cada
- * carga. El vaciado automático, con la app cerrada, lo va a hacer el service
- * worker en la tarea 7 del plan.
+ * De la cola se sale por dos caminos, y los dos existen. A mano, con el botón
+ * «Mandar ahora» de cada carga, que es el único que hay en un iPhone con la app
+ * cerrada. Y solo, cuando el service worker se despierta: por eso al guardar se
+ * le pide un vaciado en segundo plano (`pedirVaciadoEnSegundoPlano`), que en
+ * Android lo despierta en cuanto vuelva la señal aunque nadie abra nada.
  */
 export default function CargarClient() {
   const [arranque, setArranque] = useState<Arranque>("leyendo");
@@ -145,10 +148,13 @@ export default function CargarClient() {
       setEnLinea(hay);
       // Con la señal de vuelta se vuelve a leer todo: los catálogos quedaron
       // viejos, la sesión puede haberse renovado y la cola puede haber cambiado
-      // en otra pestaña. **No vacía la cola** —eso lo va a hacer el service
-      // worker en la tarea 7 del plan—, así que lo que esperaba sigue
-      // esperando, pero al menos la pantalla deja de mostrar datos de hace una
-      // hora.
+      // en otra pestaña o la puede haber vaciado el service worker.
+      //
+      // **Esta pantalla no manda nada por su cuenta acá.** Quien saca las
+      // cargas solo es el service worker, y el pedido ya quedó hecho al
+      // guardarlas; esto sólo refresca lo que se ve. Mandar también desde acá
+      // sería un segundo lugar que decide cuándo sale una carga, con las mismas
+      // reglas escritas dos veces.
       if (hay) volverALeer();
     };
     window.addEventListener("online", alCambiarLaConexion);
@@ -176,6 +182,16 @@ export default function CargarClient() {
           fechaDelReloj,
         };
       }
+      // Recién con la carga guardada: pedirlo antes dejaría registrado un
+      // vaciado para una cola a la que no entró nada. Y acá y no sólo en la
+      // barra del layout, porque esa barra **no se monta en esta pantalla** —
+      // `/cargar` vive fuera del grupo `(app)`, justamente para poder dibujarse
+      // sin servidor—, así que éste es el único lugar del camino que importa
+      // desde donde se puede pedir. En Android es lo que hace que la carga
+      // salga sola cuando vuelva la señal, con la app cerrada; en iPhone no
+      // hace nada y falla callado, porque no es algo que la persona pueda
+      // arreglar.
+      void pedirVaciadoEnSegundoPlano();
       await releerLaCola();
       return { estado: "encolada", motivo };
     },
@@ -332,9 +348,11 @@ export default function CargarClient() {
       </header>
 
       {/* Dice lo que es y no más. Con señal, lo que se cargue **ahora** sale
-          derecho; lo que ya estaba esperando no sale solo —el vaciado
-          automático llega con el service worker en la tarea 7 del plan— y
-          decir «sale al toque» con cinco cargas en la lista sería mentir. */}
+          derecho. Lo que ya estaba esperando **puede** salir solo —el service
+          worker vacía la cola cuando lo despiertan— pero eso no se promete acá:
+          en un iPhone el único disparo es abrir la app, y decir «sale al toque»
+          con cinco cargas en la lista sería prometer lo que no se controla. El
+          botón de cada una sí es cierto siempre. */}
       <div
         className={`rounded-lg px-3 py-2 text-sm font-medium ${
           enLinea ? "bg-green-50 text-green-800" : "bg-slate-100 text-slate-700"

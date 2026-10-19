@@ -1,8 +1,8 @@
 // Service worker del SdG. Hace cinco cosas: recibe notificaciones Web Push,
 // lleva a la persona a donde la notificación dice al tocarla, existe para que
 // el navegador considere instalable a la app, **guarda la pantalla `/cargar`
-// para poder abrirla sin señal**, y **vacía la cola de cargas con la app
-// cerrada**.
+// para poder abrirla sin señal**, y **vacía la cola de cargas**, con la app
+// abierta o cerrada según cuál de sus tres disparos le llegue.
 //
 // ── ES UN MÓDULO, Y ESO OBLIGA A LOS DOS `register()` ────────────────────────
 //
@@ -210,13 +210,16 @@ async function guardarLaPantalla() {
  * teléfono sin pantalla sin señal hasta el próximo despliegue del service
  * worker. Los disparos que despiertan al worker vuelven a intentarlo.
  *
- * **A CUÁNTA GENTE LE LLEGA ESTE REINTENTO HOY: a dos de trece.** Los disparos
- * son el push y el `sync`; el `sync` no lo registra nadie todavía —la pantalla
- * no llama a `registration.sync.register()`— y el push necesita permiso de
- * notificaciones, que hoy tienen dos personas. Al resto lo repara `install`, o
- * sea el próximo despliegue de este archivo. No es un detalle de redacción: si
- * alguien cuenta con esto para recuperar un caché roto, lo va a hacer para once
- * personas que no lo reciben.
+ * **A CUÁNTA GENTE LE LLEGA ESTE REINTENTO.** Los disparos son tres. El push
+ * necesita permiso de notificaciones, que hoy tienen dos personas de trece. El
+ * `sync` llega a quien tenga algo esperando en la cola y un navegador con
+ * Background Sync, o sea Android y no iPhone. Y el `message`, que es el que
+ * nivela: lo manda la app al abrirse, en cualquier navegador, pero **sólo
+ * cuando hay algo en la cola** —si no, nadie lo pide—. O sea que un teléfono
+ * que nunca cargó nada sin señal sigue dependiendo de `install`, o sea del
+ * próximo despliegue de este archivo. No es un detalle de redacción: si alguien
+ * cuenta con esto para recuperar un caché roto, lo va a hacer para gente que no
+ * lo recibe.
  *
  * **Y sólo si falta, no cada vez.** Rebajar `/cargar` y sus once archivos en
  * cada push sería medio mega por día por aparato contra una señal que ya es
@@ -514,15 +517,42 @@ self.addEventListener("push", (event) => {
 });
 
 /**
- * El otro disparo: `sync`, que el navegador entrega cuando vuelve la señal,
- * incluso con la app cerrada.
+ * El segundo disparo: `sync`, que el navegador entrega cuando vuelve la señal,
+ * incluso con la app cerrada. Lo registra `pedirVaciadoEnSegundoPlano` de
+ * `lib/core/vaciarLaCola.ts`, con la etiqueta `"vaciar-la-cola"`.
  *
- * **No se filtra por etiqueta**, y no es un descuido: hoy nadie registra
- * ninguna —la pantalla todavía no llama a `registration.sync.register()`—, así
- * que filtrar por un nombre que nadie usa sería código muerto con aire de
- * precisión. El día que haya un segundo uso de `sync`, acá va el filtro.
+ * **No se filtra por etiqueta**, y no es un descuido: ése es el único `sync`
+ * que se registra en todo el SdG, así que el filtro no podría descartar nada y
+ * sí podría descartarlo todo el día que alguien cambiara una de las dos
+ * cadenas. El día que haya un segundo uso de `sync`, acá va el filtro.
+ *
+ * **No llega nunca a un iPhone**: Safari no implementa Background Sync en
+ * ninguna versión. Para esos aparatos está el `message` de abajo.
  */
 self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
+
+/**
+ * El tercer disparo, y el único que ocurre en todos lados: la app abierta
+ * pidiéndolo. Lo manda `pedirVaciadoAhora` de `lib/core/vaciarLaCola.ts`
+ * cuando la barra del layout ve que hay algo esperando.
+ *
+ * Pide más que los otros dos —necesita una pestaña abierta, porque es ella la
+ * que mantiene vivo al worker— pero es el que siempre está: el `push` lo tienen
+ * prendido dos personas de trece y el `sync` no existe en iPhone. Abrir la app
+ * es lo único que hace todo el mundo.
+ *
+ * **Se filtra por `tipo` aunque hoy éste sea el único mensaje**, al revés que
+ * el `sync` de arriba, y la diferencia es cuál es el riesgo de cada uno. Un
+ * `sync` sin filtrar no puede venir de otro lado: lo entrega el navegador por
+ * un pedido nuestro. Un `message` sí —cualquier código de la página, hoy o
+ * mañana, puede mandarle uno al worker—, así que atender cualquier cosa sería
+ * ponerse a vaciar la cola por un mensaje que no habla de esto.
+ */
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.tipo === "vaciar-la-cola") {
+    event.waitUntil(loQueHaceUnDisparo());
+  }
+});
 
 /**
  * Las dos cosas que hace un disparo, **en este orden y no a la vez**.

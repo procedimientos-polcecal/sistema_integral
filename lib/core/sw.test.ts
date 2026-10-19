@@ -1170,6 +1170,45 @@ describe("public/sw.js", () => {
       expect(cola.filas.size).toBe(0);
     });
 
+    /*
+     * El disparo de «abrir la app», que es el único que existe en un iPhone:
+     * Safari no implementa Background Sync, así que sin este camino el `sync`
+     * de arriba no llega nunca a la mitad del equipo y la carga se queda en el
+     * teléfono hasta que alguien toque el botón de cada una.
+     */
+    it("un mensaje de la app también vacía la cola", async () => {
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [unaCarga({ tipo: "orden", cuerpo: { descripcion: "cambiar correa" } })],
+        red: async (url) => (url === ORDENES ? contesta(200, { ot_number: "OT-12" }) : RESPUESTA),
+      });
+      await lanzar(handlers, "message", { data: { tipo: "vaciar-la-cola" } });
+
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
+      expect(cola.filas.size).toBe(0);
+    });
+
+    /*
+     * Al revés que el `sync`, el `message` sí se filtra: un `sync` sólo puede
+     * venir de un pedido nuestro, pero un `message` lo puede mandar cualquier
+     * código de la página. Atender cualquiera sería ponerse a vaciar la cola
+     * por un mensaje que no habla de esto.
+     */
+    it("un mensaje de otra cosa no dispara nada", async () => {
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [unaCarga({ tipo: "orden" })],
+      });
+      await lanzar(handlers, "message", { data: { tipo: "otra-cosa" } });
+
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
+      expect(cola.filas.size).toBe(1);
+    });
+
+    it("un mensaje sin data no rompe el service worker", async () => {
+      const { handlers, fetchDoble } = cargarSW([], { cargas: [unaCarga({ tipo: "orden" })] });
+      await expect(lanzar(handlers, "message", {})).resolves.toBeDefined();
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
+    });
+
     it("manda la más vieja primero", async () => {
       const pedidas: string[] = [];
       const { handlers } = cargarSW([], {

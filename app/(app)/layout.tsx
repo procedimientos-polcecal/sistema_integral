@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
 import { BarraInstalar } from "@/components/BarraInstalar";
+import { CargasEsperando } from "@/components/CargasEsperando";
 import { RegistrarServiceWorker } from "@/components/RegistrarServiceWorker";
 import { modulosVisibles, nivelEnModulo, puedeUsarAsistente, MODULOS_ORDEN } from "@/lib/core/access";
 import { puedeAprobarCompras, puedeAprobarOS } from "@/lib/compras/auth";
@@ -88,6 +89,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           usuarioNombre={`${usuario.nombre} ${usuario.apellido}`.trim()}
           asistenteHabilitado={puedeUsarAsistente({ rol, puede_usar_asistente: usuario.puede_usar_asistente })}
         />
+        {/* Arriba de todo y no al pie junto a `BarraInstalar`, y la diferencia
+            es qué es cada barra. Aquélla es una oferta que se puede ignorar
+            para siempre; ésta es trabajo de alguien que no entró al sistema y
+            puede llevar días ahí. El pie de una pantalla que scrollea es el
+            último lugar donde se mira —y en el teléfono suele estar fuera de
+            cuadro—, así que la red de abajo del diseño sin señal quedaría donde
+            menos se ve. Se dibuja sola o no se dibuja nada: decide con lo que
+            haya guardado el teléfono de quien mira. */}
+        <CargasEsperando />
+
         <div className="flex min-h-0 flex-1">
           <Sidebar
             modulos={modulos}
