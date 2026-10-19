@@ -129,9 +129,9 @@ from parte_corregida pc
 join candidato c on c.clave = pc.clave
 on conflict (requerimiento_id, proveedor_id) do nothing;
 
--- ── Los dos repartos que sí se conocen ──────────────────────
+-- ── Los repartos que sí se conocen ─────────────────────────
 --
--- Son los únicos dos de los 21 que tienen de dónde sacar el monto, y los dos
+-- Son los únicos dos de los 21 que tienen de dónde sacar un reparto, y los dos
 -- salieron del libro SEGUIMIENTO DE COMPRA, no del sistema:
 --
 --   RI 472 — dos filas de entrega: TORRACO 180 y BRALBOL 1000
@@ -144,6 +144,15 @@ on conflict (requerimiento_id, proveedor_id) do nothing;
 -- Va la CANTIDAD y no el monto: es lo que dice el dato. Inventar el monto
 -- dividiendo por la cantidad sería suponer que las dos partes salieron al mismo
 -- precio unitario, que es justamente lo que no sabemos.
+--
+-- ESCRIBE TRES FILAS Y NO CUATRO, Y ESO ESTÁ BIEN. La línea de TORRACO en el
+-- RI 472 no engancha con nada, porque las dos fuentes NO DICEN LO MISMO: la
+-- planilla de seguimiento anota TORRACO 180 + BRALBOL 1000, y el sistema tiene
+-- ese RI a nombre de "FLEXIRIGS, BRALBOL". No se sabe cuál de las dos tiene
+-- razón, así que no se crea la fila (472, TORRACO): sería enlazar al que se le
+-- parece, que es justamente lo que este modelo existe para dejar de hacer.
+-- Queda la línea escrita a propósito —es inocua, no hay fila que tocar— para
+-- que la discrepancia quede documentada donde se la va a volver a mirar.
 update public.compras_requerimiento_proveedores rp
    set cantidad = v.cantidad
   from (values

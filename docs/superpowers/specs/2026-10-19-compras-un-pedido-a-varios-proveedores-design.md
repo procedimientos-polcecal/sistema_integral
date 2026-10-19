@@ -54,6 +54,13 @@ solo y 14 ninguno—. Lo único que hay está en el libro SEGUIMIENTO DE COMPRA:
 - **RI 472**: dos filas de verdad, TORRACO 180 y BRALBOL 1000.
 - **RI 708**: una fila, pero alguien escribió `"BOLSAGRO (400), TORRACO (600)"`.
 
+Y de esos 2 terminan entrando **3 cantidades y no 4**, porque el RI 472 es la
+primera divergencia que el modelo nuevo destapa: **la planilla y el sistema no
+dicen lo mismo**. La planilla anota TORRACO y BRALBOL; el sistema tiene ese RI
+a nombre de `FLEXIRIGS, BRALBOL`. No se sabe cuál tiene razón, así que la fila
+`(472, TORRACO)` **no se crea** —sería enlazar al que se le parece— y los 180
+quedan sin cargar. Coincide BRALBOL 1000, y eso sí entra.
+
 Ese RI 708 es la misma señal que las seis cotizaciones con `"30 y 45 dias CTA
 CTE"` metido en el campo de condiciones: **la gente ya expresa lo que el sistema
 no modela, en el único lugar que le queda**.
@@ -163,3 +170,11 @@ unos días sin sorpresas.
   mismo patrón de mayúsculas y CUIT. Sólo 12 RI apuntan a la copia mala, por
   $8,8M, así que es basura de catálogo y no corrupción: **queda para otra tarea**,
   y acá sólo se lo esquiva con la regla de preferir el que tiene CUIT.
+- **Y hay duplicados que esa regla no toca, porque no son el mismo nombre.**
+  De los 17 proveedores destino, 6 quedaron sin CUIT, y al menos uno tiene par:
+  `TORRACO` contra `Torraco Pablo Javier` (CUIT 23-21481183-9). No se unieron
+  **a propósito** —son nombres distintos y unirlos es adivinar—, pero quiere
+  decir que preguntar "cuánto se le compró a Torraco" sigue necesitando la
+  limpieza de catálogo. Lo mismo por el otro lado: `Recycle Bags` y
+  `Envases Reciclados [Recycle Bag]` son dos registros **con el mismo CUIT
+  30-71442874-4**, o sea la misma empresa dos veces.
