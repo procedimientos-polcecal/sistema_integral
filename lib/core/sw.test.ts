@@ -38,14 +38,24 @@ const CODIGO = readFileSync(join(process.cwd(), "public", "sw.js"), "utf8");
  * test más abajo que lo dice con todas las letras en vez de dejarlo salir como
  * un fallo raro en otro lado.
  */
+/**
+ * El nombre del caché, leído del propio archivo. Sale de ahí y no escrito a
+ * mano porque **se sube a propósito** cuando lo guardado quedó roto, y un test
+ * que lo tuviera fijo pasaría a sembrar un caché que el service worker ya no
+ * usa: seguiría verde sin probar nada.
+ */
+const NOMBRE_DEL_CACHE = /const CACHE = "([^"]+)"/.exec(
+  readFileSync(join(process.cwd(), "public", "sw.js"), "utf8"),
+)?.[1] as string;
+
 const SIN_IMPORTS = CODIGO.replace(/^import\s+\{[\s\S]*?\}\s+from\s+"[^"]+";$/gm, "");
 
 /**
  * El archivo sin sus comentarios, ni los de bloque ni los de línea.
  *
- * **Es un recorte a lo bruto y rompe código**: `public/sw.js` tiene varias
- * expresiones regulares, y la de `archivosDe` que descarta `//otro.com/x.js`
- * lleva un `"//"` adentro, así que a partir de ahí la línea se corta. O sea que
+ * **Es un recorte a lo bruto y rompe código**: en `archivosDe`, la línea que
+ * descarta `//otro.com/x.js` lleva un `"//"` adentro de un texto, y esto la
+ * corta ahí como si fuera un comentario. O sea que
  * esto **no sirve para analizar el archivo**: sirve para una sola cosa, que es
  * preguntar si una llamada aparece, donde borrar de más sólo puede hacer que un
  * test pase cuando debería fallar — y esa llamada no está en ninguna de las
@@ -525,7 +535,7 @@ describe("public/sw.js", () => {
           return pagina(HTML);
         },
       });
-      const caché = await caches.open("sdg-cargar-v1");
+      const caché = await caches.open(NOMBRE_DEL_CACHE);
       await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
       await caché.put(`${ORIGEN}/cargar`, RESPUESTA);
 
@@ -555,6 +565,41 @@ describe("public/sw.js", () => {
       expect(urlsGuardadas(guardado)).toContain("/cargar");
     });
 
+    it("el sync también lo vuelve a intentar", async () => {
+      // El `sync` llega cuando vuelve la señal, incluso con la app cerrada, y
+      // sin este test sacarlo del handler quedaba verde.
+      let hayRed = false;
+      const { handlers, guardado } = cargarSW([], {
+        red: async (url) => {
+          if (!hayRed) throw new Error("sin red");
+          return url === "/cargar" ? pagina(HTML) : RESPUESTA;
+        },
+      });
+      await lanzar(handlers, "install");
+      expect(urlsGuardadas(guardado)).toEqual([]);
+
+      hayRed = true;
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(urlsGuardadas(guardado)).toContain("/cargar");
+    });
+
+    it("primero sale la cola y después se completa la pantalla", async () => {
+      // En paralelo, medio mega de chunks competiría con los POST de la cola
+      // por la misma señal mala. La cola es lo que alguien está esperando.
+      const orden: string[] = [];
+      const { handlers } = cargarSW([], {
+        cargas: [unaCarga()],
+        red: async (url) => {
+          orden.push(url);
+          if (url === "/api/mantenimiento/avisos") return contesta(200, { oa_number: "OA-1" });
+          return url === "/cargar" ? pagina(HTML) : RESPUESTA;
+        },
+      });
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(orden[0]).toBe("/api/mantenimiento/avisos");
+      expect(orden).toContain("/cargar");
+    });
+
     it("y si ya había algo guardado, el push no vuelve a bajarlo", async () => {
       // Medio mega por día por aparato contra una señal que ya es mala, para
       // refrescar algo que es consistente consigo mismo, no se paga.
@@ -574,7 +619,7 @@ describe("public/sw.js", () => {
       // IndexedDB: lo que alguien cargó sin señal y todavía no salió.
       const VIEJO = "/_next/static/chunks/del-despliegue-anterior.js";
       const { handlers, guardado, caches } = cargarSW([], { red: async () => pagina(HTML) });
-      const caché = await caches.open("sdg-cargar-v1");
+      const caché = await caches.open(NOMBRE_DEL_CACHE);
       await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
       expect(urlsGuardadas(guardado)).toContain(VIEJO);
 
@@ -593,7 +638,7 @@ describe("public/sw.js", () => {
           throw new Error("sin red");
         },
       });
-      const caché = await caches.open("sdg-cargar-v1");
+      const caché = await caches.open(NOMBRE_DEL_CACHE);
       await caché.put(`${ORIGEN}${VIEJO}`, RESPUESTA);
 
       await lanzar(handlers, "install");

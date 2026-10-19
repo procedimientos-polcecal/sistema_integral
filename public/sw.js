@@ -95,10 +95,26 @@ self.addEventListener("activate", (event) => event.waitUntil(clients.claim()));
 
 /**
  * El caché, con el nombre versionado. **Subir el número estrena caché**: es lo
- * que hay que hacer si alguna vez lo guardado queda inservible, porque `install`
- * sólo vuelve a correr cuando cambian los bytes de este archivo.
+ * que hay que hacer cuando lo guardado quedó inservible y nada lo va a
+ * arreglar solo, porque `install` corre una sola vez por versión de este
+ * archivo y `guardarLaPantallaSiFalta` mira si **hay** algo guardado, no si lo
+ * que hay sirve.
+ *
+ * **POR QUÉ ESTÁ EN v2.** La v1 se desplegó con un `guardarLaPantalla` que
+ * guardaba el HTML primero y después bajaba los archivos uno por uno siguiendo
+ * de largo con el que fallara (commits `48715d1` y `0b18d61`, los dos ya en
+ * producción). En un aparato donde la señal se cortó en el medio quedó un
+ * `/cargar` guardado **sin sus chunks**: sin señal, la pantalla en blanco. El
+ * arreglo de esa función no alcanza para curarlos —`install` los repara si su
+ * única corrida anda, y si falla no hay nada más que los recupere—, y el
+ * reintento ve el HTML presente y se va. Con el nombre nuevo el caché nace
+ * vacío, así que el reintento sí se activa y lo que quedó a medias deja de
+ * existir.
+ *
+ * O sea: esta palanca se toca cuando lo guardado puede estar roto de una forma
+ * que el código nuevo no distingue de lo sano. No para estrenar versión.
  */
-const CACHE = "sdg-cargar-v1";
+const CACHE = "sdg-cargar-v2";
 
 /** La única pantalla que se guarda. El resto de la app sigue necesitando red. */
 const LA_PANTALLA = "/cargar";
@@ -192,8 +208,15 @@ async function guardarLaPantalla() {
  * Es el reintento del todo-o-nada: `install` corre **una sola vez** por versión
  * de este archivo, así que un corte de señal en ese momento dejaba a ese
  * teléfono sin pantalla sin señal hasta el próximo despliegue del service
- * worker. Los disparos que despiertan al worker —el push diario, el `sync`—
- * vuelven a intentarlo.
+ * worker. Los disparos que despiertan al worker vuelven a intentarlo.
+ *
+ * **A CUÁNTA GENTE LE LLEGA ESTE REINTENTO HOY: a dos de trece.** Los disparos
+ * son el push y el `sync`; el `sync` no lo registra nadie todavía —la pantalla
+ * no llama a `registration.sync.register()`— y el push necesita permiso de
+ * notificaciones, que hoy tienen dos personas. Al resto lo repara `install`, o
+ * sea el próximo despliegue de este archivo. No es un detalle de redacción: si
+ * alguien cuenta con esto para recuperar un caché roto, lo va a hacer para once
+ * personas que no lo reciben.
  *
  * **Y sólo si falta, no cada vez.** Rebajar `/cargar` y sus once archivos en
  * cada push sería medio mega por día por aparato contra una señal que ya es
@@ -486,9 +509,8 @@ self.addEventListener("push", (event) => {
   // Es un `waitUntil` aparte y no un `Promise.all` con el de arriba por una
   // razón sola: **el navegador espera por los dos igual**, así que juntarlos no
   // cambia cuánto vive el worker, y separados se lee qué es cada cosa —la
-  // notificación es lo prometido, el vaciado es lo de más—.
-  event.waitUntil(vaciarLaCola());
-  event.waitUntil(guardarLaPantallaSiFalta());
+  // notificación es lo prometido, el trabajo de abajo es lo de más—.
+  event.waitUntil(loQueHaceUnDisparo());
 });
 
 /**
@@ -500,10 +522,20 @@ self.addEventListener("push", (event) => {
  * que filtrar por un nombre que nadie usa sería código muerto con aire de
  * precisión. El día que haya un segundo uso de `sync`, acá va el filtro.
  */
-self.addEventListener("sync", (event) => {
-  event.waitUntil(vaciarLaCola());
-  event.waitUntil(guardarLaPantallaSiFalta());
-});
+self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
+
+/**
+ * Las dos cosas que hace un disparo, **en este orden y no a la vez**.
+ *
+ * Primero sale la cola, que es lo que alguien está esperando, y recién después
+ * se completa la pantalla guardada si falta. En paralelo, medio mega de chunks
+ * competiría con los POST de la cola por la misma señal mala y adentro de la
+ * vida acotada de un evento: no se pierde nada, pero la tarea de más puede
+ * demorar a la que importa.
+ */
+function loQueHaceUnDisparo() {
+  return vaciarLaCola().then(() => guardarLaPantallaSiFalta());
+}
 
 // Dónde lleva una notificación: lo que traiga `data.url`, y la raíz si no trae
 // nada. Sólo rutas del propio SdG; una url de otro origen cae en la raíz.

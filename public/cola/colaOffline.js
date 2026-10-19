@@ -44,7 +44,7 @@
  * @property {string} creadaEn Fecha ISO de cuando se cargó.
  * @property {string | null} tomadaEn Fecha ISO de cuando un disparo la tomó para mandarla; null si nadie la tiene.
  * @property {number} intentos
- * @property {string | null} ultimoError Lo que dijo el servidor, sin traducir.
+ * @property {string | null} ultimoError Lo último que pasó con la carga, para mostrarlo tal cual: casi siempre lo que dijo el servidor sin traducir, y en un caso lo que compuso `siNoSePudoAvisar` —una carga que entró y cuya advertencia no se pudo decir—.
  * @property {"esperando" | "parada"} estado "parada" es una carga que no se reintenta sola: necesita que una persona la mire.
  */
 
