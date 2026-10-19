@@ -1043,6 +1043,48 @@ nombre. No se partió la tabla en dos porque avisos, OT y OS ya apuntan a
 la base exige una cosa o la otra: o el sector tiene empresa, o está marcado
 transversal.
 
+### El nombre del sector es la clave de enlace, y por eso no se toca a gusto
+
+**Renombrar un sector de planta rompe el enlace de la planilla, en silencio.**
+La columna SECTOR de la planilla de OT la llena un formulario de Google con una
+lista fija, y `cargarEnlaces()` busca el sector **por nombre** —en minúsculas—
+cuando la fila no trae un equipo que lo diga. El código es el otro camino, pero
+el formulario escribe el nombre, no el código.
+
+El 19/10/2026 eso tenía **184 órdenes sin sector** y nadie lo había visto,
+porque una OT sin sector se ve igual que una OT: el filtro simplemente no la
+trae. Las causas, medidas:
+
+| OT | decía la planilla | por qué no enlazaba |
+|---:|---|---|
+| 99 | Servicios auxiliares | el sector no existía en el SdG |
+| 29 | Taller | no existía |
+| 29 | Planta filler 1 | el catálogo lo llamaba "Filler 1" |
+| 26 | Planta filler 2 | lo llamaba "Filler 2" |
+| 1 | (vacío) | no hay con qué |
+
+Se acomodó el catálogo a lo que la planilla ya escribía —ocho renombres y dos
+altas, en `scripts/sectores-de-la-ot.mts`— y 183 de las 184 volvieron a
+enlazar solas en la sincronización siguiente. **La dirección importa:** se
+cambió el SdG para que coincida con la planilla, no al revés, porque la
+planilla manda y porque su lista la eligió quien usa el formulario.
+
+Lo que hay que saber antes de renombrar uno: mirar primero qué dice la columna
+SECTOR de la planilla. Si el nombre nuevo no es el que el formulario escribe,
+ese sector deja de enlazar para toda orden que no traiga un equipo
+identificado — hoy son 368 de 2.206.
+
+**"Despacho cal" está en el catálogo y no en el formulario, a propósito.** Tiene
+7 equipos y 39 órdenes, que llegaron por el código del equipo y no por el
+nombre. La lista del formulario dice *quién solicita* y el catálogo dice *dónde
+está la máquina*: no son la misma taxonomía, y sacarlo de los de planta lo
+borraría de los filtros dejando esas 39 sin poder filtrarse.
+
+**Los dos nuevos no llevan `codigo`.** Sale del libro BD Equipos y ahí no
+tienen equipos; inventarles uno sería escribir un dato que dice venir de un
+lugar del que no viene. Quedan en null como "Cantera", y el precio es que el
+desplegable los muestra al final, porque ordena por código.
+
 **Distinguirlos no alcanza si después las pantallas no filtran.** El tablero
 mostraba "Tesorería" al lado de "Trituración 1" porque seis pantallas traían
 todos los sectores. El filtro vive ahora en `lib/mantenimiento/sectores.ts` y no
