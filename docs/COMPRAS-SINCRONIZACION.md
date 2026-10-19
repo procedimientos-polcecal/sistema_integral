@@ -216,6 +216,60 @@ protección "APROBACIÓN DE GERENCIA"**, y contemplar que el script que crea las
 protecciones automáticas la incluya. Es una decisión de gobierno, no técnica: el
 control de quién aprueba pasa a estar en los permisos de la app.
 
+## Un libro que se importa a sí mismo se cuelga entero
+
+Pasó el 19/10/2026 y costó el día: `Requerimientos internos` devolvió columnas
+vacías, `Cargando…` en la del equipo, y **las diez pestañas por área quedaron en
+`#N/A` al mismo tiempo**, porque todas son `FILTER` del master. Google lo contaba
+así:
+
+```
+A2  #VALUE!   Unable to parse query string for Function QUERY
+              parameter 2: NO_COLUMN: Col2
+H2  LOADING   Loading data…
+```
+
+El `QUERY` pedía la columna 2 de un arreglo que tenía **una sola**, porque el
+`IMPORTRANGE` que lo alimenta nunca terminaba de resolver. Y no resolvía por
+esto: en `APROB COMPRAS`, la columna C tenía **1.686 fórmulas haciendo
+`IMPORTRANGE` del propio `PEDIDOS DE COMPRA`** —el mismo libro— en lugar de la
+referencia local `'Requerimientos internos'!A:D` que todavía conservaba C2.
+
+Es un lazo, y por eso no se destraba solo: `Requerimientos internos` depende del
+formulario por `IMPORTRANGE`, y `APROB COMPRAS` depende de `Requerimientos
+internos` **por una importación externa del mismo libro**. Google resuelve un
+`IMPORTRANGE` contra una foto del origen; cuando el origen es él mismo, la foto
+no se estabiliza nunca.
+
+Tres cosas que conviene saber antes de que vuelva a pasar:
+
+- **No hace falta `IMPORTRANGE` para leer otra pestaña del mismo libro.** Una
+  referencia local —`'Requerimientos internos'!A:D`— trae lo mismo sin salir a
+  la red. Si aparece el id de `PEDIDOS DE COMPRA` adentro de una fórmula **de**
+  `PEDIDOS DE COMPRA`, está mal, sin excepciones.
+- **Se arrastra solo.** Las 1.687 fórmulas de esa columna apuntaban cada una a
+  su propia fila, sin desfase: alcanzó con que alguien arrastrara una celda mal
+  escrita desde C3 para abajo.
+- **Diagnóstico en una línea**: leer el libro con `valueRenderOption=FORMULA` y
+  contar cuántas fórmulas contienen su propio id. Debe dar cero.
+
+El sistema **no perdió nada** esa vez, y vale la pena saber por qué, porque dos
+de las tres razones son accidentes y no defensas:
+
+| | |
+|---|---|
+| El freno de `borradoDeEspejo` (50 filas o el 10%) | defensa de verdad — habría cortado el `DELETE` de 2.159 filas, y el cron no lo levanta |
+| Las escrituras de la app no tocaron nada | defensa de verdad — `filaEnMaster` busca por la columna A, no la encontró y [sheets.ts](../lib/compras/sheets.ts) no escribe sin fila |
+| La importación no metió basura | **casualidad** — la única fila con algo traía `#VALUE!` en el N° de RI, que no parsea como número y se saltea |
+
+Esa casualidad es la que se cerró el mismo día: `leerPestana` de
+[lib/compras/sheets.ts](../lib/compras/sheets.ts) y las dos lecturas de
+[lib/compras/drive.ts](../lib/compras/drive.ts) eran las únicas lecturas propias
+del módulo y **ninguna llamaba a `estaCalculando()`**, la guarda que
+`leerValores` hace por todos los demás. La peor de las tres era
+`proximaFilaLibre`, que calcula dónde escribir un presupuesto contando la
+columna A: exactamente la forma del accidente de las 621 OT del 13/10/2026.
+
 ## Lo que la planilla deja de tener, se borra
 
 Desde el 18/10/2026 la importación **borra** el requerimiento que la planilla

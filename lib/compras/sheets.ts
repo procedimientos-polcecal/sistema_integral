@@ -45,7 +45,7 @@ import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/ty
 import {
   obtenerToken as tokenGoogle, cuentaDeServicio, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
-import { leerValores } from "@/lib/core/sheets";
+import { leerValores, estaCalculando, errorDeCalculo } from "@/lib/core/sheets";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -134,12 +134,38 @@ export function nuevoCacheSheets(): CacheSheets {
   return { encabezados: new Map() };
 }
 
+/**
+ * Una pestaña —o un rango— de la planilla de Compras.
+ *
+ * Es la única lectura propia del módulo: no pasa por `leerValores` porque
+ * necesita rangos (`Requerimientos internos!A:A`) y su propio texto de error,
+ * que viaja a la cola de pendientes. Por eso tiene que repetir acá la guarda
+ * que `leerValores` hace por todos: **una planilla a medio calcular no se
+ * puede leer**.
+ *
+ * Y no era una formalidad. El 19/10/2026 una fórmula de `APROB COMPRAS` quedó
+ * importando el libro contra sí mismo —1.686 celdas con un `IMPORTRANGE` al
+ * propio `PEDIDOS DE COMPRA`—, el `IMPORTRANGE` que alimenta al master no pudo
+ * resolver nunca y `Requerimientos internos` pasó el día entero devolviendo
+ * `Cargando…` y columnas vacías. Esta función lo habría leído como datos: las
+ * diez pestañas por área, que son `FILTER` del master, quedaron en `#N/A` al
+ * mismo tiempo.
+ *
+ * Esa vez no mordió de casualidad —la única fila con algo traía `#VALUE!` en
+ * el N° de RI, que no parsea como número y se saltea, y el freno de
+ * `borradoDeEspejo` cubría el `DELETE`—, pero las dos defensas son accidentes
+ * de ese caso y no una decisión: la importación habría entrado igual con las
+ * columnas vacías si el `QUERY` hubiera resuelto la primera y no el resto. Es
+ * exactamente la trampa de las 621 OT del 13/10/2026, por el mismo motivo.
+ */
 async function leerPestana(pestana: string): Promise<string[][]> {
   const token = await obtenerToken(false);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}/values/${encodeURIComponent(pestana)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
-  return ((await res.json()).values ?? []) as string[][];
+  const valores = ((await res.json()).values ?? []) as string[][];
+  if (estaCalculando(valores)) throw errorDeCalculo(pestana);
+  return valores;
 }
 
 async function listarPestanas(): Promise<string[]> {
