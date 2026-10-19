@@ -114,7 +114,11 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
         .cell-label.ot-rotulo, .cell-real.ot-rotulo {
           letter-spacing: 0;
         }
-        .ot-dato   { font-size: var(--ot-dato); vertical-align: middle; }
+        /* Centrado, como en un formulario de papel: cada dato en el medio
+           de su casillero. No alcanza a la descripción ni a los repuestos,
+           que son prosa y van en .ot-cuerpo — un párrafo centrado se lee
+           peor, y además ese recuadro se completa a mano. */
+        .ot-dato   { font-size: var(--ot-dato); vertical-align: middle; text-align: center; }
         .ot-cuerpo { font-size: var(--ot-cuerpo); line-height: 1.55; }
         .ot-resaltado { color: #B45309; font-weight: 600; }
 
@@ -152,14 +156,20 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
         .cell-title  { flex: 1; }
         .cell-ot-lbl { width: 62px; flex-shrink: 0; }
         .cell-ot-num { width: 80px; flex-shrink: 0; }
-        .cell-esp    { flex: 1; }
-        .cell-sector-lbl { width: 92px; flex-shrink: 0; }
-        .cell-sector-val { flex: 1; }
-        .cell-equipo-lbl { width: 84px; flex-shrink: 0; }
-        .cell-equipo-val { flex: 1; }
+        /* Las dos filas de datos comparten columnas para que la grilla
+           cierre: ESPECIALIDAD sobre SECTOR y FECHA sobre EQUIPO. Antes la
+           de arriba era UNA sola celda con los textos adentro y la de abajo
+           cuatro celdas, así que nada alineaba. */
+        /* 118px es el ancho de la columna de rótulos de TODA la hoja:
+           ESPECIALIDAD, SECTOR, DESCRIPCIÓN, REPUESTOS y FECHA DE EJECUCIÓN
+           caen una debajo de otra. Es lo que la hace leer como una grilla y
+           no como cinco filas que se parecen. */
+        .cell-rot-izq { width: 118px; flex-shrink: 0; }
+        .cell-rot-der { width: 96px; flex-shrink: 0; }
+        .cell-val     { flex: 1; min-width: 0; }
         .cell-label  { width: 118px; flex-shrink: 0; }
         .cell-content { flex: 1; overflow: hidden; }
-        .cell-fec-lbl { width: 96px; flex-shrink: 0; }
+        .cell-fec-lbl { width: 118px; flex-shrink: 0; }
         .cell-fec-val { flex: 1; }
         .cell-real    { width: 152px; flex-shrink: 0; }
         .cell-firma   { width: 120px; flex-shrink: 0; }
@@ -235,32 +245,31 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
                   </tr>
 
                   <tr className="row-esp">
-                    <td className="cell-esp ot-dato" style={{ padding: "7px 12px" }}>
-                      <span className="ot-rotulo" style={{ background: "none", marginRight: 10 }}>ESPECIALIDAD</span>
-                      <span className="ot-resaltado">{item.especialidad ?? "—"}</span>
-                      <span className="ot-rotulo" style={{ background: "none", marginLeft: 26, marginRight: 10 }}>FECHA</span>
-                      <span>{fechaStr}</span>
+                    <td className="cell-rot-izq ot-rotulo" style={{ padding: "8px" }}>
+                      ESPECIALIDAD
                     </td>
-                    {/* Acá había una segunda fecha, sin rótulo: la de ejecución.
-                        Se leía como que la fecha estaba repetida —y casi
-                        siempre lo parecía, porque una OT del plan se ejecuta el
-                        día del plan—, pero son dos cosas distintas: ésta es la
-                        del plan y aquélla la de ejecución. Sobraba igual: la de
-                        ejecución ya está al pie, donde sí dice qué es. Una
-                        fecha sin rótulo no informa, confunde. */}
+                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
+                      {item.especialidad ?? "—"}
+                    </td>
+                    <td className="cell-rot-der ot-rotulo" style={{ padding: "8px" }}>
+                      FECHA
+                    </td>
+                    <td className="cell-val ot-dato" style={{ padding: "8px" }}>
+                      {fechaStr}
+                    </td>
                   </tr>
 
                   <tr className="row-sector">
-                    <td className="cell-sector-lbl ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="cell-rot-izq ot-rotulo" style={{ padding: "8px" }}>
                       SECTOR
                     </td>
-                    <td className="cell-sector-val ot-dato ot-resaltado" style={{ padding: "8px 12px" }}>
+                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px 12px" }}>
                       {item.sector_raw ?? "—"}
                     </td>
-                    <td className="cell-equipo-lbl ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="cell-rot-der ot-rotulo" style={{ padding: "8px" }}>
                       EQUIPO
                     </td>
-                    <td className="cell-equipo-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
+                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
                       {item.equipo_raw ?? "—"}
                     </td>
                   </tr>
