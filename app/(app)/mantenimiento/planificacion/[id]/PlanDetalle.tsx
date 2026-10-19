@@ -111,6 +111,20 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
               Imprimir
             </Link>
           )}
+          {/* El segundo impreso, y conviene saber en qué se diferencia del de
+              al lado: aquél saca una OT por página, para llevar al lado de la
+              máquina; éste saca el turno entero como la tabla del papel
+              `PARTE DIARIO DE MANTENIMIENTO`, que es el que se archiva. */}
+          {items.length > 0 && (
+            <Link href={`/mantenimiento/planificacion/${plan.id}/parte-diario`} target="_blank"
+              className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Parte diario
+            </Link>
+          )}
           {canEdit && (
             <button onClick={() => setShowAddOT(true)}
               className="btn-primary">

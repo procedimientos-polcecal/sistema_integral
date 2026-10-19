@@ -118,8 +118,18 @@ const normalizar = (ruta) => ruta.replaceAll("\\", "/");
 /**
  * Lo que se imprime en A4 no tiene por qué entrar en un teléfono: se abre para
  * mandarlo a la impresora, con otro ancho.
+ *
+ * `parte-diario` entra acá desde el 19/10/2026: es el segundo impreso de la
+ * planificación —el papel `PARTE DIARIO DE MANTENIMIENTO`, con las OT del turno
+ * como renglones— y su hoja mide 186 mm por la misma razón que la del otro.
+ * Se nombra la carpeta y no se afloja el patrón a "cualquier cosa que tenga una
+ * tabla ancha": lo que vale la excepción es que la pantalla exista **para
+ * mandarse a la impresora**, y eso no se deduce del contenido.
  */
-const esPantallaDeImprimir = (ruta) => normalizar(ruta).includes("/imprimir/");
+const esPantallaDeImprimir = (ruta) => {
+  const r = normalizar(ruta);
+  return r.includes("/imprimir/") || r.includes("/parte-diario/");
+};
 
 const esComentario = (linea) => /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(linea);
 
