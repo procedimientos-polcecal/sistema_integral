@@ -152,6 +152,25 @@ Las tres salen del mismo comando y **van juntas o no van**: si falta una,
 `lib/remises/webpush.ts` tira `Faltan variables de entorno de Web Push (VAPID)`
 al intentar notificar. Si Remises no usa push todavía, se pueden omitir las tres.
 
+## El correo de la carga que no entró
+
+| Variable | Qué es | De dónde sale |
+|---|---|---|
+| `SDG_CORREO_URL` | La url de la aplicación web de Apps Script que manda el correo | La da Google al **implementar** el script de [docs/sdg-correo-apps-script.gs](sdg-correo-apps-script.gs) |
+| `SDG_CORREO_SECRET` | Lo único que separa esa url de cualquiera que la encuentre | Lo inventás vos, y el mismo valor va en las propiedades del script |
+
+**Sin las dos, el SdG no intenta mandar ningún correo y no se queja.** Eso es a
+propósito: entre el deploy y el día que alguien publique el script va a pasar
+tiempo, y un error por cada carga rechazada sería ruido diario sobre algo que
+nadie pidió todavía. Lo fija un test en `lib/core/correo.test.ts`.
+
+El script **se publica desde una casilla del sistema y no desde la cuenta de una
+persona**: el dueño del proyecto es el remitente que la gente va a ver y a donde
+van a ir las respuestas, y eso no se cambia sin volver a implementar. Sus
+instrucciones de instalación están en el encabezado del propio archivo, y
+también la propiedad `DOMINIOS`, que es la que impide que una url filtrada se
+convierta en un relay para mandar correo desde la empresa.
+
 ## Odoo (Contabilidad, Tesorería y la orden de compra)
 
 Si faltan, las rutas de Odoo contestan **503 diciendo cuáles faltan** y el resto
@@ -283,6 +302,8 @@ GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
 WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
+SDG_CORREO_URL=
+SDG_CORREO_SECRET=
 ```
 
 `GOOGLE_SERVICE_ACCOUNT_JSON` es la única incómoda: el JSON va **entero y en una
