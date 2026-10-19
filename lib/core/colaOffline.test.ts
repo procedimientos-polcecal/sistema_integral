@@ -3,6 +3,7 @@ import {
   clasificarFallo,
   comoContesto,
   comoSeLlama,
+  concordado,
   conSuArticulo,
   convieneReintentar,
   despuesDelIntento,
@@ -548,6 +549,18 @@ describe("cómo se nombra una carga", () => {
     expect(comoSeLlama("orden")).toBe("Orden de trabajo");
     expect(conSuArticulo("aviso")).toBe("el aviso");
     expect(conSuArticulo("orden")).toBe("la orden de trabajo");
+  });
+
+  it("lo que concuerda con el artículo lleva su género: «el aviso … parado», «la orden … parada»", () => {
+    // El bug que esto cierra: el cartel de /cargar decía «el aviso que quedó
+    // parada». Un participio escrito a mano en la pantalla sólo acierta con uno
+    // de los dos tipos.
+    expect(`${conSuArticulo("aviso")} que quedó ${concordado("aviso", "parad")}`).toBe(
+      "el aviso que quedó parado",
+    );
+    expect(`${conSuArticulo("orden")} que quedó ${concordado("orden", "parad")}`).toBe(
+      "la orden de trabajo que quedó parada",
+    );
   });
 });
 

@@ -161,9 +161,13 @@ export function CargasEsperando({
 
   return (
     <div
+      // `no-print` porque es armazón de la app y no parte de lo que se imprime:
+      // se monta en el layout de todas las pantallas, así que sin la clase
+      // cualquier hoja impresa con algo esperando en la cola salía con la barra
+      // ámbar encima (mismo agujero que cerró c28c2cc para el resto del armazón).
       // `shrink-0` por lo mismo que la barra de instalar: en una pantalla baja,
       // el alto lo tiene que ceder el `<main>` que scrollea y no la barra.
-      className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-amber-900"
+      className="no-print shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-amber-900"
       role="status"
     >
       {/* Se parte en una pantalla angosta en vez de apretar el enlace: en los

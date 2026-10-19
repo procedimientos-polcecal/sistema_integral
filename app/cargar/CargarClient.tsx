@@ -8,6 +8,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { pedirVaciadoAhora, pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
 import {
   comoSeLlama,
+  concordado,
   conSuArticulo,
   despuesDelIntento,
   paradas,
@@ -568,7 +569,7 @@ export default function CargarClient() {
           {borrador && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <span className="min-w-0 flex-1">
-                Estás corrigiendo {conSuArticulo(borrador.tipo)} que quedó parada.
+                Estás corrigiendo {conSuArticulo(borrador.tipo)} que quedó {concordado(borrador.tipo, "parad")}.
                 La vieja sale de la lista recién cuando ésta se guarde.
               </span>
               <button

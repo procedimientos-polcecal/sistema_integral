@@ -59,7 +59,7 @@ import { useEffect } from "react";
  *
  * FALLA CALLADO, A PROPÓSITO
  *
- * Esto corre en cada carga de cada pantalla para los 14 usuarios: no tiene
+ * Esto corre en cada carga de cada pantalla para los 13 usuarios: no tiene
  * derecho a romper nada. Sin soporte (Safari viejo, modo privado de Firefox) o
  * si el registro rechaza, la app sigue funcionando igual que hoy — lo único que
  * se pierde es la oferta de instalar. No hay nada que decirle a la persona: no

@@ -312,6 +312,24 @@ export function conSuArticulo(tipo) {
   return tipo === "aviso" ? "el aviso" : "la orden de trabajo";
 }
 
+/**
+ * Un participio o adjetivo que concuerda con lo que nombra `conSuArticulo`:
+ * «el aviso que quedó parado», «la orden de trabajo que quedó parada». Se da la
+ * raíz sin la vocal final («parad») y se le pone la que corresponde.
+ *
+ * Vive junto al artículo y no en la pantalla porque el género es de la palabra
+ * («aviso» es masculino, «orden» femenino), y quien escribe la oración no tiene
+ * por qué acordarse: sin esto, un cartel que decía «que quedó parada» salía mal
+ * con el aviso y bien con la orden, sin que nada lo notara.
+ *
+ * @param {TipoDeCarga} tipo
+ * @param {string} raiz La palabra sin su vocal final, por ejemplo «parad».
+ * @returns {string}
+ */
+export function concordado(tipo, raiz) {
+  return raiz + (tipo === "aviso" ? "o" : "a");
+}
+
 // ── Cómo se lee lo que contestó la ruta de alta ──────────────────────────────
 
 /** Cómo se llama el número en la respuesta de cada ruta. */
