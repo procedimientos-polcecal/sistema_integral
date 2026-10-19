@@ -1,7 +1,7 @@
 # El resumen diario dice lo que se movió, no lo que hay — diseño
 
 **Fecha:** 18/10/2026
-**Estado:** propuesto
+**Estado:** implementado y verificado en producción el 19/10/2026
 **Antecede:** [la app instalable](2026-10-16-app-instalable-design.md) (el resumen
 diario) y [los avisos al instante](2026-10-18-avisos-al-instante-design.md).
 
@@ -170,3 +170,55 @@ problema que deja de existir. Es DML, así que lo puede aplicar un agente.
   de los dos.
 - Si el día del recordatorio semanal se fija en el código o se configura. Por
   defecto, el lunes.
+
+
+---
+
+## Cómo terminó (19/10/2026)
+
+Implementado y verificado contra producción. La tabla `avisos_fotos` se aplicó
+el 19/10 y el cron de las 11:30 UTC corrió por primera vez con ella viva.
+
+**La primera corrida cayó lunes, que es el caso que casi se pierde.** Sin foto
+previa y siendo lunes, `queMandarHoy` devolvió `"totales"` y el push salió:
+«11 cosas para mirar». Con la primera versión del código —que cortaba por
+«primer día» antes de mirar el día de la semana— no habría salido nada y el
+primer recordatorio habría sido el lunes siguiente. Lo encontró la revisión del
+branch, no los tests.
+
+Después de esa corrida la tabla quedó con las 11 filas de la foto, fechadas
+2026-10-19, idénticas a lo que la simulación había predicho.
+
+**La idempotencia quedó probada de verdad y no por razonamiento**: con la foto
+de hoy ya escrita, `queMandarHoy` devuelve `"nada"`, así que un reintento del
+cron o un disparo a mano no mandan un segundo push.
+
+### Lo que la revisión encontró, y que los tests no
+
+Cuatro, y los cuatro del tipo que no rompe nada visible: mandan el mensaje
+equivocado.
+
+1. **Si fallaba la segunda consulta de `ultimaFoto`, el delta mentía.** Con la
+   fecha resuelta y las filas caídas, la foto volvía vacía pero con fecha, así
+   que no era «primer día» y todo contaba como nuevo: cada número habría salido
+   como el stock entero rotulado de delta —«23 más · Órdenes de trabajo
+   atrasadas»—. Era el anti-goal textual de este documento.
+2. **Un día sin avisos no dejaba marcada la fecha**, así que el delta del día
+   siguiente se comparaba contra una foto vieja y más alta. Se escribe una fila
+   centinela.
+3. **Los lunes el cron no era idempotente**: los totales no miran la foto.
+4. **El primer día en lunes perdía el recordatorio de esa semana.**
+
+Los dos últimos se arreglaron juntos sacando la decisión de la ruta a
+`queMandarHoy`.
+
+### Lo que queda pendiente
+
+- **Si el cron no corre un lunes, el recordatorio no se repone** y el backlog
+  queda 14 días sin nombrarse. Arreglarlo pide saber cuándo fue el último
+  recordatorio, que es estado que este diseño no tiene.
+- El cron paga **una pasada extra** de los 13 conteos para armar la foto,
+  después del bucle por persona. Es costo y no corrección; el presupuesto de
+  una función de Vercel es de 300 s.
+- **Falta ver el primer resumen de movimiento de verdad**, que es el del martes
+  20/10: hasta ahora sólo se probó la rama de los totales.
