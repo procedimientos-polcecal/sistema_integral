@@ -80,7 +80,16 @@ export async function correrElRespaldo(
     throw new Error(
       "Falta GOOGLE_SHEETS_RESPALDO_ID: es el id del libro de respaldo, que tiene que ser " +
         "uno NUEVO y vacío, compartido como editor con la cuenta de servicio. No puede ser " +
-        "ninguna de las planillas que el sistema ya sincroniza."
+        "ninguna de las planillas que el sistema ya sincroniza. " +
+        // Esta segunda mitad existe porque el mensaje de arriba, solo, hizo
+        // perder una vuelta entera: la variable estaba cargada en Vercel y el
+        // error seguía diciendo que faltaba. Vercel aplica una variable a los
+        // deploys creados DESPUÉS de agregarla, así que el que ya estaba
+        // publicado no la tiene nunca. Decirlo acá es más barato que volver a
+        // deducirlo.
+        "Si ya la cargaste en Vercel y seguís viendo esto: una variable nueva no entra en un " +
+        "deploy ya hecho. Hay que redesplegar producción (Deployments → el último → Redeploy) " +
+        "y confirmar que esté tildada para Production y no sólo para Preview."
     );
   }
   if (!hayCredencialesGoogle()) {
