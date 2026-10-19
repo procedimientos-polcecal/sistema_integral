@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  CABECERA_DEL_DISPARO,
+  DISPARO,
   RUTA_DE,
   SESION,
   comoContesto,
@@ -267,6 +269,8 @@ function cargarSW(ventanas: Ventana[] = [], opciones: Opciones = {}) {
     // El pegamento compartido, también de verdad: son las dos cadenas que la
     // pantalla y el worker tienen que escribir igual, y desde el 19/10/2026 hay
     // una sola definición de cada una en vez de dos copias.
+    CABECERA_DEL_DISPARO,
+    DISPARO,
     RUTA_DE,
     SESION,
     // Las puras, de verdad: son las mismas reglas que corre la pantalla.
@@ -432,7 +436,7 @@ describe("public/sw.js", () => {
    */
   it("el service worker no redeclara el pegamento: lo importa", () => {
     const codigo = soloCodigo(CODIGO);
-    for (const nombre of ["SESION", "RUTA_DE"]) {
+    for (const nombre of ["SESION", "RUTA_DE", "CABECERA_DEL_DISPARO", "DISPARO"]) {
       expect(loQueImporta()).toContain(nombre);
       expect(codigo).not.toMatch(new RegExp(`(const|let|var)\\s+${nombre}\\s*=`));
     }
@@ -1303,6 +1307,51 @@ describe("public/sw.js", () => {
       const { handlers, fetchDoble } = cargarSW([], { cargas: [unaCarga({ tipo: "orden" })] });
       await expect(lanzar(handlers, "message", {})).resolves.toBeDefined();
       expect(cargasMandadas(fetchDoble)).toHaveLength(0);
+    });
+
+    /*
+     * DE DÓNDE SALIÓ LA CARGA, QUE ES LO QUE DECIDE SI HAY CORREO.
+     *
+     * El correo de una carga rechazada sale **sólo** cuando la mandó el
+     * teléfono solo, con la app cerrada: si salió de la pantalla, la persona
+     * está mirando el cartel que dice lo mismo. El servidor no tiene forma de
+     * saberlo salvo que se lo digan, y quien lo sabe es este archivo, porque
+     * son tres handlers distintos.
+     *
+     * Va en una **cabecera** y no en el cuerpo a propósito: el cuerpo es lo que
+     * las dos rutas de alta validan, y toda la fase 4 se sostiene sobre que ese
+     * cuerpo no cambie.
+     */
+    function disparoDe(fetchDoble: { mock: { calls: unknown[][] } }) {
+      const [, init] = cargasMandadas(fetchDoble)[0] as [string, { headers: Record<string, string> }];
+      return init.headers[CABECERA_DEL_DISPARO];
+    }
+
+    function conUnaCargaLista() {
+      return cargarSW([], {
+        cargas: [unaCarga({ tipo: "orden", cuerpo: { descripcion: "cambiar correa" } })],
+        red: async (url) => (url === ORDENES ? contesta(200, { ot_number: "OT-12" }) : RESPUESTA),
+      });
+    }
+
+    it("una carga que sale por el push viaja marcada como del fondo", async () => {
+      const { handlers, fetchDoble } = conUnaCargaLista();
+      await lanzar(handlers, "push", {
+        data: { json: () => ({ title: "SdG", body: "x", url: "/" }) },
+      });
+      expect(disparoDe(fetchDoble)).toBe(DISPARO.fondo);
+    });
+
+    it("una carga que sale por el sync también es del fondo", async () => {
+      const { handlers, fetchDoble } = conUnaCargaLista();
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(disparoDe(fetchDoble)).toBe(DISPARO.fondo);
+    });
+
+    it("una carga que sale por el message de la pantalla NO es del fondo", async () => {
+      const { handlers, fetchDoble } = conUnaCargaLista();
+      await lanzar(handlers, "message", { data: MENSAJE_DE_VACIADO });
+      expect(disparoDe(fetchDoble)).toBe(DISPARO.pantalla);
     });
 
     it("manda la más vieja primero", async () => {

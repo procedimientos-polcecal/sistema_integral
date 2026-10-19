@@ -68,6 +68,35 @@ export const RUTA_DE = {
 };
 
 /**
+ * De dónde salió una carga: si la mandó el teléfono solo o si alguien estaba
+ * mirando la pantalla.
+ *
+ * **Decide si una carga rechazada manda correo**, y por eso viaja: la ruta no
+ * tiene forma de saberlo. Sólo este archivo y `public/sw.js` lo saben, porque
+ * allá son tres handlers distintos —`push` y `sync` despiertan al worker con la
+ * app cerrada; el `message` lo pide una pestaña abierta—.
+ *
+ * **Va en una cabecera y no en el cuerpo a propósito.** El cuerpo es lo que las
+ * dos rutas de alta validan y guardan, y la promesa de que una carga sin
+ * `clave` se comporta exactamente como antes se sostiene sobre que ese cuerpo
+ * no cambie.
+ *
+ * El nombre y los dos valores viven **acá y en ningún otro lado**: los usan el
+ * service worker, la pantalla y las dos rutas, y son tres mundos que no
+ * comparten tipos. Copiarlos a mano en alguno es cómo se desincronizan sin que
+ * nada falle —ya pasó en este repo con la clave de la sesión—.
+ */
+export const CABECERA_DEL_DISPARO = "X-SdG-Disparo";
+
+/** @type {{ fondo: "fondo", pantalla: "pantalla" }} */
+export const DISPARO = {
+  /** Lo mandó el teléfono solo, con la app cerrada: no había nadie mirando. */
+  fondo: "fondo",
+  /** Lo pidió una pestaña abierta: la persona está viendo lo que pasa. */
+  pantalla: "pantalla",
+};
+
+/**
  * Una carga que espera en el teléfono hasta tener señal.
  *
  * @typedef {object} CargaEnCola

@@ -15,6 +15,8 @@
  */
 
 import {
+  CABECERA_DEL_DISPARO,
+  DISPARO,
   RUTA_DE,
   comoContesto,
   conSuArticulo,
@@ -56,7 +58,11 @@ export async function mandarALaRuta(
   try {
     respuesta = await fetch(RUTA_DE[tipo], {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Todo lo que sale de esta pantalla sale con alguien mirando, así que
+      // nunca pide correo: el cartel de abajo ya le va a decir lo mismo, y un
+      // correo que repite lo que la persona está leyendo es cómo se aprende a
+      // ignorar los correos del sistema.
+      headers: { "Content-Type": "application/json", [CABECERA_DEL_DISPARO]: DISPARO.pantalla },
       body: JSON.stringify(cuerpo),
     });
   } catch (e) {

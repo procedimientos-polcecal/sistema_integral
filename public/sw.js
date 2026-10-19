@@ -38,6 +38,8 @@
 // login del `proxy.ts`—. Por eso `proxy.ts` ahora deja `cola` afuera de su
 // matcher. Sin esa exclusión el service worker entero no se registra.
 import {
+  CABECERA_DEL_DISPARO,
+  DISPARO,
   RUTA_DE,
   SESION,
   comoContesto,
@@ -521,7 +523,7 @@ self.addEventListener("push", (event) => {
   // razón sola: **el navegador espera por los dos igual**, así que juntarlos no
   // cambia cuánto vive el worker, y separados se lee qué es cada cosa —la
   // notificación es lo prometido, el trabajo de abajo es lo de más—.
-  event.waitUntil(loQueHaceUnDisparo());
+  event.waitUntil(loQueHaceUnDisparo(DISPARO.fondo));
 });
 
 /**
@@ -537,7 +539,7 @@ self.addEventListener("push", (event) => {
  * **No llega nunca a un iPhone**: Safari no implementa Background Sync en
  * ninguna versión. Para esos aparatos está el `message` de abajo.
  */
-self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
+self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo(DISPARO.fondo)));
 
 /**
  * El tercer disparo, y el único que ocurre en todos lados: la app abierta
@@ -561,7 +563,7 @@ self.addEventListener("sync", (event) => event.waitUntil(loQueHaceUnDisparo()));
  */
 self.addEventListener("message", (event) => {
   if (event.data && event.data.tipo === "vaciar-la-cola") {
-    event.waitUntil(loQueHaceUnDisparo());
+    event.waitUntil(loQueHaceUnDisparo(DISPARO.pantalla));
   }
 });
 
@@ -574,8 +576,8 @@ self.addEventListener("message", (event) => {
  * vida acotada de un evento: no se pierde nada, pero la tarea de más puede
  * demorar a la que importa.
  */
-function loQueHaceUnDisparo() {
-  return vaciarLaCola().then(() => guardarLaPantallaSiFalta());
+function loQueHaceUnDisparo(disparo) {
+  return vaciarLaCola(disparo).then(() => guardarLaPantallaSiFalta());
 }
 
 // Dónde lleva una notificación: lo que traiga `data.url`, y la raíz si no trae
@@ -695,7 +697,7 @@ const TOPE_POR_DISPARO = 20;
  * **No rechaza nunca.** Quien la llama es un `waitUntil`, y una promesa
  * rechazada ahí le dice al navegador que el push falló.
  */
-async function vaciarLaCola() {
+async function vaciarLaCola(disparo) {
   try {
     const sesion = await leerCatalogo(SESION);
     const quienSoy = sesion && typeof sesion.id === "string" ? sesion.id : null;
@@ -706,7 +708,7 @@ async function vaciarLaCola() {
     for (let vuelta = 0; vuelta < TOPE_POR_DISPARO; vuelta++) {
       const carga = proximaAMandar(await leerCola(), quienSoy, new Date());
       if (!carga) return;
-      if (!(await mandarUna(carga))) return;
+      if (!(await mandarUna(carga, disparo))) return;
     }
   } catch {
     // La base no abrió —Safari en modo privado, el almacenamiento lleno— o la
@@ -721,12 +723,12 @@ async function vaciarLaCola() {
  * @param {import("/cola/colaOffline.js").CargaEnCola} carga
  * @returns {Promise<boolean>} Si tiene sentido seguir con la siguiente.
  */
-async function mandarUna(carga) {
+async function mandarUna(carga, disparo) {
   await actualizarCarga(carga.clave, tomarLaCarga(carga, new Date()));
 
   let resultado;
   try {
-    resultado = await mandarALaRuta(carga.tipo, carga.cuerpo);
+    resultado = await mandarALaRuta(carga.tipo, carga.cuerpo, disparo);
   } catch (e) {
     // Un error de acá —no del servidor— no puede dejar la carga trabada cinco
     // minutos por algo que ya terminó.
@@ -816,12 +818,12 @@ async function contarLaAdvertencia(tipo, numero, advertencia) {
  * @param {"aviso" | "orden"} tipo
  * @param {Record<string, unknown>} cuerpo
  */
-async function mandarALaRuta(tipo, cuerpo) {
+async function mandarALaRuta(tipo, cuerpo, disparo) {
   let respuesta;
   try {
     respuesta = await fetch(RUTA_DE[tipo], {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", [CABECERA_DEL_DISPARO]: disparo },
       body: JSON.stringify(cuerpo),
     });
   } catch (e) {
