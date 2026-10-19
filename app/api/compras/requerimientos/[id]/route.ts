@@ -49,6 +49,10 @@ const CAMPOS_COMPRA = [
   // La aplicación: la carga el área, pero el permiso es el mismo. Gatearla por
   // `usuario_areas_compras` no protegería a nadie: esa tabla tiene una fila.
   "se_aplico", "fecha_aplicacion",
+  // La marca de monto alto. `monto_conocido` NO está acá a propósito: lo
+  // mantiene un trigger y dejar que una ruta lo escriba sería tener dos
+  // dueños del mismo número.
+  "monto_alto_manual",
 ] as const;
 
 /**

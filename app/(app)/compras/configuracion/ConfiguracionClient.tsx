@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { fechaHora } from "@/lib/compras/constants";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import PendientesDeOdoo from "./PendientesDeOdoo";
+import UmbralDeMontoAlto from "./UmbralDeMontoAlto";
 import type { Sincronizacion } from "@/lib/compras/types";
 import Select from "@/components/Select";
 
@@ -20,10 +21,14 @@ interface Importacion {
 }
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio, esAdmin
+  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio, esAdmin, umbralMontoAlto, puedeEditarUmbral
 }: {
   /** Admin de Compras: es quien puede mandar la cola entera a Odoo. */
   esAdmin: boolean;
+  /** A partir de cuánto un requerimiento es de monto alto. */
+  umbralMontoAlto: number;
+  /** Administrador del sistema: el único que puede escribir el umbral. */
+  puedeEditarUmbral: boolean;
   sincronizaciones: Sincronizacion[];
   /** Con qué cuenta de Google escribe el sistema en la planilla. */
   cuentaDeServicio: string | null;
@@ -198,6 +203,8 @@ export default function ConfiguracionClient({
       <PendientesDeOdoo esAdmin={esAdmin} />
 
       <VincularComparativas />
+
+      <UmbralDeMontoAlto umbral={umbralMontoAlto} puedeEditar={puedeEditarUmbral} />
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">

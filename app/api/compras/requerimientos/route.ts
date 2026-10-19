@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
+import { filtroDeMontoAlto } from "@/lib/compras/montoAlto";
+import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { paginaPedida } from "@/lib/core/paginado";
 import {
@@ -315,10 +317,22 @@ export async function GET(request: Request) {
   const aprobacion = searchParams.get("estado_aprobacion");
   const compra = searchParams.get("estado_compra");
   const mios = searchParams.get("mios");
+  const montoAlto = searchParams.get("monto_alto");
 
   if (aprobacion) query = query.eq("estado_aprobacion", aprobacion);
   if (compra) query = query.eq("estado_compra", compra);
   if (mios === "1") query = query.eq("solicitante_id", user.id);
+
+  // El monto alto se filtra ACÁ y no en la pantalla porque este listado pagina
+  // de a 50 en el servidor: filtrar después de traer la página daría páginas
+  // incompletas —y una lista corta se lee como "no hay más", no como "faltan"—.
+  //
+  // La regla está escrita dos veces, en `lib/compras/montoAlto.ts`: una para la
+  // pantalla y otra para PostgREST. Viven pegadas y hay un test que fija las
+  // dos, porque separarlas es la forma de que se contradigan sin que nada avise.
+  if (montoAlto === "1" || montoAlto === "0") {
+    query = query.or(filtroDeMontoAlto(montoAlto === "1", await umbralDeMontoAlto(supabase)));
+  }
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

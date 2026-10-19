@@ -23,6 +23,17 @@ import { ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES } from "./constants";
  * saber es qué hay abierto. Dentro de un filtro los valores suman (o), y entre
  * filtros se recortan (y): «área Mantenimiento, estado Pedido o En camino».
  */
+/**
+ * Las tres posiciones del filtro de monto alto: `""` es no filtrar, `"1"` sólo
+ * los de monto alto y `"0"` sólo los que no lo son.
+ *
+ * Es un texto y no un booleano porque son **tres** posiciones, y `"0"` tiene
+ * que viajar por la URL: un booleano sólo se escribe cuando es `true`, y
+ * "sólo los que no son altos" desaparecería de la barra de direcciones. Sirve
+ * para revisar lo que alguien desmarcó a mano.
+ */
+export type FiltroMontoAlto = "" | "1" | "0";
+
 export interface FiltrosCompras {
   busqueda: string;
   area: string[];
@@ -40,12 +51,13 @@ export interface FiltrosCompras {
    */
   equipo: string[];
   sector: string[];
+  montoAlto: FiltroMontoAlto;
 }
 
 export const FILTROS_VACIOS: FiltrosCompras = {
   busqueda: "", area: [], aprobacion: [], compra: [],
   prioridad: [], empresa: [], proveedor: [], ubicacion: [],
-  equipo: [], sector: [],
+  equipo: [], sector: [], montoAlto: "",
 };
 
 /** Las listas contra las que se validan los filtros que son referencias. */
@@ -76,7 +88,17 @@ export function leerFiltrosDeLaUrl(
     ubicacion: losQueEstanEnLaLista(params, "ubicacion", catalogos.ubicaciones),
     equipo: losQueEstanEnLaLista(params, "equipo", catalogos.equipos),
     sector: losQueEstanEnLaLista(params, "sector", catalogos.sectores),
+    montoAlto: leerMontoAlto(params),
   };
+}
+
+/**
+ * Cualquier cosa que no sea `1` o `0` es no filtrar: un `?monto_alto=si` a
+ * mano dejaría puesto un filtro que el desplegable no sabe mostrar.
+ */
+function leerMontoAlto(params: URLSearchParams): FiltroMontoAlto {
+  const v = params.get("monto_alto")?.trim();
+  return v === "1" || v === "0" ? v : "";
 }
 
 /** Si la URL trajo algo utilizable. Sirve para saber si arrancar filtrado. */
@@ -94,6 +116,8 @@ const NOMBRES: readonly [keyof FiltrosCompras, string][] = [
   ["ubicacion", "ubicacion"],
   ["equipo", "equipo"],
   ["sector", "sector"],
+  // El mismo nombre que acepta la API de requerimientos.
+  ["montoAlto", "monto_alto"],
 ];
 
 /**

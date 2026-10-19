@@ -239,3 +239,38 @@ describe("la pagina en la URL", () => {
     expect(paginaDeArranque(listado.searchParams)).toBe(4);
   });
 });
+
+/**
+ * El filtro de monto alto tiene tres posiciones, y "0" es una de ellas: tiene
+ * que sobrevivir a la ida y vuelta por la URL. Un booleano no lo haria.
+ */
+describe("filtro de monto alto", () => {
+  it("sin el parametro no filtra", () => {
+    expect(leer("").montoAlto).toBe("");
+  });
+
+  it("lee las dos posiciones que filtran", () => {
+    expect(leer("monto_alto=1").montoAlto).toBe("1");
+    expect(leer("monto_alto=0").montoAlto).toBe("0");
+    expect(hayAlgunFiltro(leer("monto_alto=0"))).toBe(true);
+  });
+
+  it("descarta cualquier otro valor", () => {
+    expect(leer("monto_alto=si").montoAlto).toBe("");
+    expect(leer("monto_alto=true").montoAlto).toBe("");
+    expect(hayAlgunFiltro(leer("monto_alto=si"))).toBe(false);
+  });
+
+  it("el cero se escribe en la URL y se vuelve a leer", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, montoAlto: "0" })).toBe("monto_alto=0");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, montoAlto: "1" })).toBe("monto_alto=1");
+    for (const v of ["0", "1"] as const) {
+      const puestos = { ...FILTROS_VACIOS, compra: ["PEDIDO"], montoAlto: v };
+      expect(leer(escribirFiltrosEnLaUrl(puestos))).toEqual(puestos);
+    }
+  });
+
+  it("no filtrar no deja rastro en la URL", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, montoAlto: "" })).toBe("");
+  });
+});

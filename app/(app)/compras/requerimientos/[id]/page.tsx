@@ -5,6 +5,7 @@ import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { volverAlListado } from "@/lib/compras/filtrosUrl";
+import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import RequerimientoDetalle from "./RequerimientoDetalle";
 import { dondeApuntaOdoo, enlaceAOdoo } from "@/lib/odoo/client";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
@@ -64,6 +65,9 @@ export default async function RequerimientoPage({
   // dólares. Puede ser null: la pantalla lo dice en vez de inventar un número.
   const dolar = await cotizacionDeHoy();
 
+  // Con qué número se decide si es de monto alto: el mismo que usa el listado.
+  const umbralMontoAlto = await umbralDeMontoAlto(supabase);
+
   // Aprobar la compra es de quien la tiene asignada: la comparativa le
   // ofrece elegir solo a esa persona.
   const esAsignado = requerimiento.compra_asignada_a === user.id;
@@ -99,6 +103,7 @@ export default async function RequerimientoPage({
       puedeEditar={permisos.puedeEditar}
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
+      umbralMontoAlto={umbralMontoAlto}
       aprobadores={aprobadores}
       odoo={dondeApuntaOdoo()}
       ordenesOdoo={(ordenesOdoo ?? []).map((o) => ({

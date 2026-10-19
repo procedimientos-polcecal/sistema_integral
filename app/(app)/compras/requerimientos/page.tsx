@@ -7,6 +7,7 @@ import { leerFiltrosDeLaUrl } from "@/lib/compras/filtrosUrl";
 import { paginaDeArranque } from "@/lib/core/filtrosUrl";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { opcionesConUbicacion, type UbicacionEnlazada } from "@/lib/compras/ubicaciones";
+import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import RequerimientosClient from "./RequerimientosClient";
 
@@ -25,7 +26,7 @@ export default async function RequerimientosPage({
   const [
     { data: areas }, { data: proveedores }, { data: empresas }, { data: ubicaciones },
     { data: equipos }, sectoresPlanta,
-    { nivel }, aprobadores, sync,
+    { nivel }, aprobadores, sync, umbralMontoAlto,
   ] = await Promise.all([
     supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
     supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
@@ -56,6 +57,9 @@ export default async function RequerimientosPage({
     // Esta tabla es el espejo de la planilla: cuándo se actualizó es parte de
     // lo que hay que saber para leerla.
     ultimaSincronizacionDe(supabase, "compras", "planilla"),
+    // Qué se considera monto alto: lo necesita la consulta del filtro y la
+    // marca de cada fila, y los dos tienen que usar el mismo número.
+    umbralDeMontoAlto(supabase),
   ]);
 
   // Los filtros de la URL se validan acá, que es donde están los catálogos: es
@@ -107,6 +111,7 @@ export default async function RequerimientosPage({
       filtrosIniciales={filtrosIniciales}
       paginaInicial={paginaDeArranque(query)}
       sync={sync}
+      umbralMontoAlto={umbralMontoAlto}
     />
   );
 }

@@ -21,10 +21,12 @@ import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
+import MontoAlto from "./MontoAlto";
+import MarcaMontoAlto from "../../MarcaMontoAlto";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo,
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto,
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -39,6 +41,8 @@ export default function RequerimientoDetalle({
   ordenesOdoo?: OrdenDeOdoo[];
   /** A qué instancia de Odoo se le va a escribir. Producción o staging. */
   odoo?: { base: string; esStaging: boolean };
+  /** A partir de cuánto un requerimiento es de monto alto. */
+  umbralMontoAlto: number;
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -121,6 +125,7 @@ export default function RequerimientoDetalle({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-400">RI N° {r.nro_ri}</span>
             <Chip {...etiquetaPrioridad(r.prioridad)} />
+            <MarcaMontoAlto montoConocido={r.monto_conocido} manual={r.monto_alto_manual} umbral={umbralMontoAlto} />
             <span className="text-xs text-slate-500">Paga: {etiquetaEmpresa(r.empresas?.nombre, r.paga_ambas)}</span>
           </div>
           <h1 className="mt-1 text-xl font-bold text-slate-900">{r.descripcion}</h1>
@@ -449,6 +454,28 @@ export default function RequerimientoDetalle({
               <p className="text-sm text-slate-500">Pendiente de aprobación.</p>
             )}
           </section>
+
+          {/* Marcar a mano pasa por el mismo PATCH que el resto de la gestión de
+              compra, y ese exige que el RI esté aprobado: antes de eso la
+              marca se muestra pero no se ofrece. */}
+          <MontoAlto
+            montoConocido={r.monto_conocido}
+            manual={r.monto_alto_manual}
+            umbral={umbralMontoAlto}
+            origenDelMonto={
+              r.costo_iva !== null
+                ? "Costo de la compra, con IVA y envío"
+                : "El presupuesto más alto que se cargó"
+            }
+            puedeMarcar={puedeEditar && r.estado_aprobacion === "APROBADA"}
+            motivoDeNoPoder={
+              puedeEditar && r.estado_aprobacion !== "APROBADA"
+                ? "Se puede marcar a mano una vez que el requerimiento está aprobado."
+                : null
+            }
+            guardando={guardando}
+            onCambiar={(valor) => guardar({ monto_alto_manual: valor })}
+          />
 
           {/* Resumen de compra */}
           <section className="rounded-xl border border-slate-200 bg-white p-5">
