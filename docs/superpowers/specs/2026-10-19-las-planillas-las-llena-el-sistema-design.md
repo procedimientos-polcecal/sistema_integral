@@ -144,13 +144,51 @@ Para ese módulo, la bajada exige **sacar el derrame y poner literales**, que es
 una restructuración real de la planilla y no sólo un cambio de permisos. Es la
 segunda razón por la que Mantenimiento va último.
 
+## Lo que encontró el ensayo de Envases (19/10/2026)
+
+La bajada se corrió contra una **copia** de la planilla real antes de tocar
+nada, y el diff antes/después destapó una divergencia que no tiene que ver con
+el cambio de dirección: **el SdG venía atrasado cinco días.**
+
+| | |
+|---|---|
+| Filas con datos en la planilla | 1.524 |
+| Movimientos en el SdG | 1.506 |
+| Última sincronización | **14/10 11:04**, cinco días antes |
+| Último movimiento que el SdG tenía | **10/10** |
+| Movimientos en la planilla que el SdG no vio | **18**, del 11 al 18/10 |
+| Artículos con el stock mal | **10 de 25** |
+
+La causa: **Envases era el único de los cinco espejos sin corrida automática.**
+Su única entrada era el botón de la pantalla, que exige usuario logueado, así
+que el stock sólo estaba al día si alguien se acordaba de apretarlo. Acá manda
+la planilla, de modo que el SdG mostró stock equivocado durante cinco días sin
+que nada lo dijera — nadie mira un número que no cambió.
+
+Se agregó el cron que faltaba (`calidad-envases-sync`, cada 30 minutos). **Eso
+es un arreglo del sistema actual y vale aunque el cambio de dirección no se
+haga nunca.**
+
+### Y cambia el orden del corte
+
+La bajada escribe lo que el SdG tiene. Con el SdG atrasado, **habría borrado
+esos 18 movimientos de la planilla**: el ensayo los vació y por eso 10 artículos
+cambiaron de stock. De ahí sale un paso que antes no estaba:
+
+**Antes de bajar un módulo hay que probar que el SdG y la planilla dicen lo
+mismo.** No alcanza con que la bajada funcione. El ensayo contra una copia es
+la prueba, y la condición para cortar es que el diff sea **sólo cosmético** —en
+Envases, los `0` que la planilla tiene escritos y el SdG deja vacíos a
+propósito—. Mientras aparezcan filas huérfanas, lo que falta es sincronizar, no
+bajar.
+
 ## El orden, y por qué
 
 De menos a más gente afectada:
 
 | # | Módulo | Por qué ahí | Lo que hay que hacer afuera |
 |---|---|---|---|
-| 1 | **Calidad / Envases** | 1.506 filas, kardex simple, un solo sector carga, sin formulario. El sistema ya escribe ahí | Proteger la pestaña, sumar la cuenta de servicio |
+| 1 | **Calidad / Envases** | 1.506 filas, kardex simple, un solo sector carga, sin formulario. El sistema ya escribe ahí. **Bajada escrita y ensayada contra una copia el 19/10** | Nada: la protección la pone el propio sistema |
 | 2 | **Calidad / Carbonilla** | Mismo kardex y mismo sector que el anterior, así que el cambio de costumbre es uno solo | Ídem |
 | 3 | **Inventario** | 4.584 filas, el mismo patrón de kardex, pero es el almacén y lo mira más gente | Ídem |
 | 4 | **Compras** | Hay que apagar el formulario; 397 de 400 pedidos entran por ahí | Apagar el Form, avisar a los sectores |

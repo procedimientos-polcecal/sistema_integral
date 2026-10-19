@@ -850,3 +850,71 @@ export async function borrarPestana(planillaId: string, pestana: string): Promis
   }
   return true;
 }
+
+/**
+ * Escribir un bloque rectangular a partir de una celda, en un solo `PUT`.
+ *
+ * Es el hermano acotado de `reemplazarPestana`: ésa borra la pestaña entera y
+ * sirve para un libro que el sistema genera; ésta toca **sólo el rectángulo que
+ * se le da** y existe para las planillas donde hay columnas de fórmula
+ * intercaladas que no se pueden pisar —el kardex de Envases tiene la B, la G y
+ * la K en el medio de las literales—.
+ *
+ * Un `PUT` y no `escribirCeldas`: esa manda un rango por celda, que está bien
+ * para cinco celdas y es imposible para 1.500 filas × 4 columnas.
+ *
+ * `filaInicial` y `columnaInicial` van en base 1 y base 0 respectivamente, como
+ * en el resto del archivo.
+ */
+export async function escribirBloque(
+  planillaId: string,
+  pestana: string,
+  columnaInicial: number,
+  filaInicial: number,
+  filas: (string | number)[][]
+): Promise<void> {
+  if (filas.length === 0) return;
+
+  const ancho = Math.max(...filas.map((f) => f.length));
+  const rango =
+    `${pestana}!${letraDeColumna(columnaInicial)}${filaInicial}:` +
+    `${letraDeColumna(columnaInicial + ancho - 1)}${filaInicial + filas.length - 1}`;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: filas }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}
+
+/**
+ * Hasta qué fila llega la fórmula de una columna.
+ *
+ * Hace falta antes de bajar un kardex entero: las planillas de stock tienen las
+ * fórmulas **arrastradas hasta mucho más abajo de los datos** —la de Envases
+ * tiene datos hasta la 1.525 y fórmulas hasta la 3.304— y escribir un
+ * movimiento más abajo de donde llega la fórmula deja una fila **sin stock y
+ * sin que nada avise**: la columna queda en blanco y parece un renglón más.
+ *
+ * Devuelve 0 si la columna no tiene ninguna fórmula.
+ */
+export async function hastaDondeLlegaLaFormula(
+  planillaId: string,
+  pestana: string,
+  columna: number
+): Promise<number> {
+  const filas = await leerFormulas(planillaId, pestana);
+  let ultima = 0;
+  for (let i = 0; i < filas.length; i++) {
+    if (String(filas[i]?.[columna] ?? "").startsWith("=")) ultima = i + 1;
+  }
+  return ultima;
+}
