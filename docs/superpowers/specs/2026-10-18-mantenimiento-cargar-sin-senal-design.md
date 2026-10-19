@@ -346,3 +346,63 @@ que algo salió mal.
   cola no es más irreversible por haber esperado. Lo que el anti-objetivo pide
   es que la cola **se pueda mirar**, y eso lo da la pantalla. Así se evita un
   verbo nuevo y otra migración.
+
+## Cómo quedó, al 19/10/2026
+
+**El código está hecho y en `main`.** Lo que falta es la única cosa que no se
+puede comprobar desde una computadora: probarlo en un teléfono.
+
+Lo que se construyó, de abajo hacia arriba: la tabla `cargas_offline` con la
+clave que se reserva **antes** de tocar la planilla; las decisiones de la cola
+en `public/cola/colaOffline.js`, puras y con tests; `public/cola/idb.js` para
+la persistencia; las dos rutas de alta aceptando la clave y la fecha sin
+cambiar en nada lo que hacen cuando no viene una clave; la pantalla `/cargar`,
+dibujada entera en el navegador; el service worker, que la guarda, la sirve
+cuando la red falla y vacía la cola con la app cerrada; y la barra que al abrir
+la app dice que había algo esperando.
+
+### Tres cosas que no estaban en el diseño y que aparecieron construyendo
+
+- **El service worker pasó a ser un módulo.** Era eso, duplicar las reglas de la
+  cola adentro de `sw.js`, o agregar un bundler. Se midió en Chromium contra
+  producción que registrar el mismo alcance con otro `type` **no rechaza**: con
+  un registro clásico ya activo, devuelve la misma registración y dispara una
+  actualización. Y un script de módulo que no carga deja el worker anterior
+  activo, que es el modo de fallar seguro. Lo que **no** se pudo medir es
+  Safari.
+- **`proxy.ts` deja pasar `/cola/`**, y no es una precaución: se midió que hoy
+  `/cola/cualquier-cosa.js` devuelve *«The script resource is behind a redirect,
+  which is disallowed»*. Sin esa exclusión los `import` no cargan y el service
+  worker entero no se registra.
+- **En Firefox de escritorio esto no existe**: no soporta service workers de
+  tipo módulo en ninguna versión, así que ahí el registro rechaza. La app sigue
+  andando y la barra de la cola se dibuja igual, pero no hay pantalla sin señal
+  ni vaciado en segundo plano, y quien tenga el push prendido en esa computadora
+  deja de recibir los arreglos futuros del worker.
+
+### Lo que falta, y es lo único
+
+La verificación en aparatos de verdad, en este orden:
+
+1. **Que `/cargar` abra sin señal sin haberla abierto antes.** Es el momento del
+   pedido. Si falla, la fase no resuelve nada.
+2. **Que el push siga llegando en el iPhone** después del cambio a módulo. Es el
+   riesgo más caro: si falla, ese aparato se queda sin service worker —sin push,
+   sin oferta de instalar y sin pantalla sin señal— en silencio.
+3. **Cargar una OT sin señal con los valores por defecto** y ver que entra.
+4. **Dos avisos iguales seguidos**: tienen que entrar los dos, con dos números.
+5. **Ventana privada**: tiene que decir que no puede guardar y no dejar cargar.
+6. **Android con la app cerrada**: que entre sola por el `sync`.
+7. **iPhone con la app cerrada**: que el push de las 8:30 despierte al worker y
+   vacíe la cola. Si esto falla, la fase sale igual y la barra pasa de red de
+   abajo a mecanismo principal.
+8. **El teléfono prestado**: cargar con una sesión, entrar con otra, y mirar a
+   nombre de quién quedó la fila en la planilla.
+
+### Y una medición que conviene no olvidar
+
+Al 19/10/2026, `push_suscripciones` tiene **una sola fila**, de **un** usuario,
+sobre **trece** activos. Todo lo que depende del push —el vaciado con la app
+cerrada en iPhone, el aviso de que una carga falló— hoy alcanza a una persona.
+Mientras eso siga así, que la gente prenda las notificaciones es parte de que
+esto funcione, no una preferencia.
