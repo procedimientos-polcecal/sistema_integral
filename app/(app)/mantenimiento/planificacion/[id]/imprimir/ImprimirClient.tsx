@@ -153,7 +153,6 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
         .cell-ot-lbl { width: 62px; flex-shrink: 0; }
         .cell-ot-num { width: 80px; flex-shrink: 0; }
         .cell-esp    { flex: 1; }
-        .cell-fecha-val { width: 116px; flex-shrink: 0; }
         .cell-sector-lbl { width: 92px; flex-shrink: 0; }
         .cell-sector-val { flex: 1; }
         .cell-equipo-lbl { width: 84px; flex-shrink: 0; }
@@ -242,10 +241,13 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
                       <span className="ot-rotulo" style={{ background: "none", marginLeft: 26, marginRight: 10 }}>FECHA</span>
                       <span>{fechaStr}</span>
                     </td>
-                    <td colSpan={2} className="cell-fecha-val ot-dato"
-                      style={{ textAlign: "center", padding: "7px 8px" }}>
-                      {fechaEjec}
-                    </td>
+                    {/* Acá había una segunda fecha, sin rótulo: la de ejecución.
+                        Se leía como que la fecha estaba repetida —y casi
+                        siempre lo parecía, porque una OT del plan se ejecuta el
+                        día del plan—, pero son dos cosas distintas: ésta es la
+                        del plan y aquélla la de ejecución. Sobraba igual: la de
+                        ejecución ya está al pie, donde sí dice qué es. Una
+                        fecha sin rótulo no informa, confunde. */}
                   </tr>
 
                   <tr className="row-sector">
