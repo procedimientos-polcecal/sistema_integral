@@ -8,9 +8,9 @@ import { moneda } from "@/lib/compras/constants";
  * A partir de cuánto un requerimiento es de monto alto.
  *
  * Lo ve todo el que entra a la configuración, porque explica por qué unos RI
- * aparecen marcados y otros no; lo edita sólo un administrador del sistema,
- * que es quien puede escribir en `compras_ajustes`. A los demás no se les
- * ofrece un campo que la base iba a rechazar.
+ * aparecen marcados y otros no; lo edita quien administra el módulo, que es
+ * quien puede escribir en `compras_ajustes`. A los demás no se les ofrece un
+ * campo que la base iba a rechazar.
  *
  * Cambiarlo **no recalcula nada**: la base guarda el monto de cada RI y no un
  * «es alto», así que el nuevo umbral cambia la pregunta, no las respuestas ya
@@ -98,7 +98,7 @@ export default function UmbralDeMontoAlto({
         </div>
       ) : (
         <p className="text-xs text-slate-500">
-          Lo cambia un administrador del sistema.
+          Lo cambia un administrador del módulo.
         </p>
       )}
     </section>
