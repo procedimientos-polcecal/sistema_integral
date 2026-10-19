@@ -1082,8 +1082,24 @@ borraría de los filtros dejando esas 39 sin poder filtrarse.
 
 **Los dos nuevos no llevan `codigo`.** Sale del libro BD Equipos y ahí no
 tienen equipos; inventarles uno sería escribir un dato que dice venir de un
-lugar del que no viene. Quedan en null como "Cantera", y el precio es que el
-desplegable los muestra al final, porque ordena por código.
+lugar del que no viene. Quedan en null como "Cantera".
+
+**Y el desplegable no ordena por código.** Se intentó y no alcanza, por dos
+razones que sólo se ven con la lista delante: los tres filler y la planta de
+0-2 mm son PY-A1, PY-B1, PY-D1 y PY-C1 —el filler 3 va antes que la de 0-2 mm
+aunque su código sea mayor—, y los tres sin código caían todos al final, con
+Cantera última cuando es la primera del proceso. El orden es una lista
+explícita en `enOrdenDePlanta()` de
+[lib/mantenimiento/sectores.ts](../lib/mantenimiento/sectores.ts), la misma que
+usa el formulario, y lo aplican las seis pantallas que piden sectores de
+planta.
+
+Esa lista va por **código** y no por nombre, que es lo que la hace sobrevivir:
+los ocho nombres se cambiaron enteros el mismo día, y un orden colgado de
+ellos se habría desarmado solo. Los tres sin código van por nombre, y eso es
+lo frágil que queda — renombrarlos los manda al final sin avisar. Está fijado
+con un test para que se note ahí y no en el desplegable. Un sector nuevo
+también va al final: aparecer último se ve, colarse en el medio no.
 
 **Distinguirlos no alcanza si después las pantallas no filtran.** El tablero
 mostraba "Tesorería" al lado de "Trituración 1" porque seis pantallas traían

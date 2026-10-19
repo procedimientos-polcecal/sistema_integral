@@ -18,11 +18,72 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const CAMPOS_SECTOR = "id, nombre, codigo, empresas(nombre)";
 
 /**
- * Los sectores de planta, ordenados por su código.
+ * El orden en que se recorre la planta.
  *
- * El código —PO-A1, PY-B1, AMB-C1— los ordena por planta y por proceso, que es
- * el orden en que alguien los recorre; alfabéticamente quedarían mezcladas las
- * dos empresas.
+ * Es el mismo de la lista del formulario de OT, que es como la nombra quien
+ * trabaja ahí: de la cantera al taller, siguiendo el material.
+ *
+ * **Ordenar por `codigo` no alcanzaba, y no por poco.** Los tres filler y la
+ * planta de 0-2 mm son PY-A1, PY-B1, PY-D1 y PY-C1: el filler 3 va antes que
+ * la de 0-2 mm aunque su código sea mayor. Y los tres sectores sin código
+ * —Cantera, Servicios auxiliares y Taller— caían todos al final, con Cantera
+ * última cuando es la primera de la lista y la primera del proceso.
+ *
+ * La clave es el **código**, no el nombre, porque el código es lo estable: los
+ * nombres se renombraron enteros el 19/10/2026 para que coincidieran con la
+ * planilla, y un orden atado a ellos se habría desarmado solo. Los tres que no
+ * tienen código van por nombre, que es lo único que tienen, y eso es
+ * exactamente lo frágil que queda — está fijado con un test.
+ *
+ * Un sector que no esté acá va al final, ordenado por su clave. Al final y no
+ * en el medio a propósito: aparecer último se ve, y colarse en el medio no.
+ */
+const ORDEN_DE_PLANTA = [
+  "CANTERA",
+  "PO-A1", "PO-A2", "PO-A3",   // trituración 1, 2 y 3
+  "PO-B1",                     // calcinación
+  "PO-C1",                     // hidratación
+  "PO-D1",                     // molienda de cal
+  "PO-D2",                     // despacho cal — no está en el formulario, va con su proceso
+  "PY-A1", "PY-B1", "PY-D1",   // filler 1, 2 y 3
+  "PY-C1",                     // planta 0-2 mm
+  "AMB-C1",                    // compresores
+  "AMB-EM",                    // equipos móviles
+  "SERVICIOS AUXILIARES",
+  "TALLER",
+] as const;
+
+/** Con qué se lo busca en el orden: el código si lo tiene, el nombre si no. */
+export function claveDeOrden(s: { nombre: string; codigo?: string | null }): string {
+  return (s.codigo ?? s.nombre ?? "").trim().toUpperCase();
+}
+
+/**
+ * Los sectores de planta, en el orden en que se recorre la planta.
+ *
+ * No muta lo que recibe: devuelve una copia ordenada.
+ */
+export function enOrdenDePlanta<T extends { nombre: string; codigo?: string | null }>(
+  sectores: readonly T[]
+): T[] {
+  const lugar = (s: T) => {
+    const i = (ORDEN_DE_PLANTA as readonly string[]).indexOf(claveDeOrden(s));
+    return i === -1 ? ORDEN_DE_PLANTA.length : i;
+  };
+  return [...sectores].sort((a, b) => {
+    const d = lugar(a) - lugar(b);
+    // Los desconocidos comparten el último lugar: entre ellos, por su clave,
+    // para que dos corridas devuelvan siempre lo mismo.
+    return d !== 0 ? d : claveDeOrden(a).localeCompare(claveDeOrden(b));
+  });
+}
+
+/**
+ * Los sectores de planta, en el orden en que se recorre la planta.
+ *
+ * El orden lo pone `enOrdenDePlanta()` y no la base: lo que se quiere no se
+ * puede escribir como un `order by`. Se pide igual ordenado por código para
+ * que la consulta sea determinista antes de ordenarla.
  *
  * Devuelve el arreglo ya resuelto y no el `builder`: con un `select()` armado
  * en una variable, Supabase pierde la inferencia de tipos y todo lo que sale
@@ -38,7 +99,11 @@ export async function sectoresDePlanta<T = SectorDePlanta>(
     .eq("es_de_planta", true)
     .order("codigo");
 
-  return (data ?? []) as T[];
+  // El doble casteo es por el `select` dinámico: con los campos en una
+  // variable Supabase tipa la respuesta como `GenericStringError[]`, que es la
+  // misma regla de CLAUDE.md asomando. El tipo real lo declara quien llama.
+  const filas = (data ?? []) as unknown as (T & { nombre: string; codigo?: string | null })[];
+  return enOrdenDePlanta(filas) as T[];
 }
 
 export interface SectorDePlanta {

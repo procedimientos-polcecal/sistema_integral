@@ -27,8 +27,9 @@
 // `sectores.codigo` —PO-A1, AMB-C1— sale del libro BD Equipos, y "Servicios
 // auxiliares" y "Taller" no tienen equipos ahí. Inventarles uno sería escribir
 // un dato que dice venir de un lugar del que no viene. Quedan en null, igual
-// que "Cantera", que es el precedente. El costo es que el desplegable los
-// muestra al final, porque ordena por código y los nulos van últimos.
+// que "Cantera", que es el precedente. El desplegable no se ordena por código
+// —`enOrdenDePlanta()` lo pone en el orden del proceso—, así que no quedan
+// últimos por no tenerlo.
 //
 // LO QUE NO TOCA
 //
