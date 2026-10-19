@@ -16,9 +16,8 @@ import {
   reservarClave, anotarLaClave, respuestaDeLaReserva,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
-import {
-  estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
-} from "@/lib/mantenimiento/cierreDeOT";
+import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
@@ -155,16 +154,15 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   // Antes de la planilla, para no consumir un número por una orden incompleta.
-  const faltaParaCerrar = loQueFaltaParaCerrar({
-    fecha_cierre, horas, quien, contratista, operario_1, operario_2, operario_3,
+  // La regla está acá y no sólo en el formulario porque el formulario no es el
+  // único que puede llamar a esta ruta.
+  const falta = loQueFaltaParaCrear({
+    sector_id, equipment_id, descripcion, especialidad, tipo, quien, fecha_ejecucion,
+    fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
   });
-  if (faltaParaCerrar.length > 0) {
+  if (falta.length > 0) {
     return NextResponse.json(
-      {
-        error:
-          `La orden tiene fecha de cierre, así que ya se hizo. Falta cargar ` +
-          `${faltaParaCerrar.join(", ")}.`,
-      },
+      { error: `Falta cargar ${falta.join(", ")}.` },
       { status: 400 }
     );
   }

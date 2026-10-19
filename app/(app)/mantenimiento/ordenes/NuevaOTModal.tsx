@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
-import { estadoSegunElCierre, loQueFaltaParaCerrar } from "@/lib/mantenimiento/cierreDeOT";
+import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -93,17 +94,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.descripcion.trim()) { setError("La descripción es requerida."); return; }
-
-    // Una OT que nace con fecha de cierre ya se hizo, así que tiene que decir
-    // cuánto llevó y quién la hizo. Todo junto y no de a uno: contestar tres
-    // veces para que te digan tres cosas es lo que hace que la gente complete
-    // de cualquier manera.
-    const falta = loQueFaltaParaCerrar(form);
+    // Todo lo que falta, de una sola vez: los obligatorios de siempre y, si
+    // viene con fecha de cierre, también las horas y quién la hizo. Un solo
+    // mensaje — que un campo sea obligatorio siempre o sólo al cerrar es una
+    // distinción del código, no de quien está completando.
+    const falta = loQueFaltaParaCrear(form);
     if (falta.length > 0) {
-      setError(
-        `La orden tiene fecha de cierre, así que ya se hizo. Falta cargar ${falta.join(", ")}.`
-      );
+      setError(`Falta cargar ${falta.join(", ")}.`);
       return;
     }
     setSaving(true); setError("");
@@ -163,7 +160,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
         <form onSubmit={submit} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
-            <F label="Sector">
+            <F label="Sector" required>
               <Select value={form.sector_id} onChange={e => f("sector_id", e.target.value)} className="input">
                 <option value="">— Todos —</option>
                 {sectores.map((s: any) => (
@@ -171,7 +168,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 ))}
               </Select>
             </F>
-            <F label="Equipo">
+            <F label="Equipo" required>
               <Select value={form.equipment_id} onChange={e => f("equipment_id", e.target.value)} className="input">
                 <option value="">— Sin asignar —</option>
                 {filteredEquip.map((eq: any) => (
@@ -187,18 +184,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </F>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <F label="Especialidad">
+            <F label="Especialidad" required>
               <Select value={form.especialidad} onChange={e => f("especialidad", e.target.value)} className="input">
                 <option value="">—</option>
                 {ESPECIALIDADES.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
-            <F label="Tipo">
+            <F label="Tipo" required>
               <Select value={form.tipo} onChange={e => f("tipo", e.target.value)} className="input">
                 {TIPOS.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
-            <F label="Quién realiza">
+            <F label="Quién realiza" required>
               <Select value={form.quien} onChange={e => f("quien", e.target.value)} className="input">
                 {QUIEN_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
@@ -214,7 +211,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             <F label="Fecha creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
-            <F label="Fecha ejecución">
+            <F label="Fecha ejecución" required>
               <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
