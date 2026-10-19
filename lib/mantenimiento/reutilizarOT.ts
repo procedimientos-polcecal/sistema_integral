@@ -1,0 +1,182 @@
+/**
+ * Copiar una OT vieja para cargar una nueva.
+ *
+ * POR QUÉ EXISTE
+ *
+ * Se cargan OT de trabajos ya hechos, en tanda: varias del mismo día, hechas
+ * por la misma gente, sobre el mismo equipo. Hoy eso es volver a elegir sector,
+ * equipo, especialidad, tipo, quién, los tres operarios y las horas una y otra
+ * vez, cambiando sólo el detalle del trabajo.
+ *
+ * Esto decide **qué le presta una OT vieja a una nueva**. Vive acá y no en el
+ * modal porque es una decisión con reglas, no un `setState`: qué se copia, qué
+ * no, y —lo que más importa— qué hacer con un valor que el formulario no puede
+ * mostrar.
+ *
+ * LAS FECHAS NO SE COPIAN
+ *
+ * Es el pedido y es lo único que no se discute: la OT nueva es de otro día.
+ * Tampoco el número, que lo da la planilla al guardar.
+ *
+ * UN VALOR QUE EL DESPLEGABLE NO TIENE, NO SE COPIA
+ *
+ * Y ésta es la que no se deduce. `ordenes_trabajo.especialidad` tiene
+ * `LUBRICACIÓN` en 5 de las 2.206 órdenes, y la lista del formulario no la
+ * ofrece: son MECÁNICO, ELÉCTRICO, INSTRUMENTACIÓN, CIVIL y OTRO. Si se copiara
+ * igual, el desplegable mostraría "—" mientras el formulario guarda
+ * `LUBRICACIÓN` — lo que se ve y lo que se guarda, distintos, que es la familia
+ * de errores que este repo paga más caro.
+ *
+ * Así que un valor fuera de la lista **no entra**, y se devuelve en
+ * `noEntraron` para decírselo a quien está cargando. Dejarlo vacío y callarlo
+ * sería la misma trampa con otra ropa.
+ *
+ * El `Select` de operarios no necesita esto: ya se agrega a sí mismo el valor
+ * elegido cuando no está en la lista de Configuración, así que una persona que
+ * ya no figura se sigue viendo.
+ */
+import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
+
+/** La OT vieja, con lo único que se le pide prestado. */
+export interface OTVieja {
+  ot_number: number;
+  equipment_id: string | null;
+  sector_id: string | null;
+  especialidad: string | null;
+  tipo: string | null;
+  quien: string | null;
+  descripcion: string | null;
+  estado: string | null;
+  contratista: string | null;
+  horas: number | null;
+  operario_1: string | null;
+  operario_2: string | null;
+  operario_3: string | null;
+  prioridad: string | null;
+  requiere_parada_sector: boolean | null;
+  /** El texto de la celda de la planilla, para las OT anteriores a los renglones. */
+  repuesto: string | null;
+  /** Los renglones, cuando la OT los tiene. */
+  repuestos?: ReadonlyArray<{ nombre: string; cantidad: string | null }> | null;
+}
+
+/** Lo que cada desplegable del formulario puede mostrar. */
+export interface Vocabulario {
+  especialidades: readonly string[];
+  tipos: readonly string[];
+  quien: readonly string[];
+  estados: readonly string[];
+  prioridades: readonly string[];
+}
+
+export interface LoQueSeCopia {
+  /** Para derramar sobre el estado del formulario. Las fechas no están. */
+  campos: Record<string, string | boolean>;
+  /** Los renglones de repuesto, listos para el formulario. */
+  lineas: LineaDeRepuesto[];
+  /**
+   * Lo que la OT vieja tenía y el formulario no puede mostrar, en castellano.
+   * Vacío es lo normal.
+   */
+  noEntraron: string[];
+}
+
+/** Un campo de texto libre: el null de la base es la cadena vacía del formulario. */
+const texto = (v: string | null | undefined) => (v ?? "").trim();
+
+/**
+ * Qué se lleva la OT nueva de la vieja.
+ *
+ * `campos` se derrama sobre el formulario con `{...form, ...campos}`, así que
+ * **lo que no está acá queda como estaba**: las tres fechas, y cualquier
+ * desplegable cuyo valor no se pudo representar.
+ */
+export function copiarDeLaOT(vieja: OTVieja, vocabulario: Vocabulario): LoQueSeCopia {
+  const campos: Record<string, string | boolean> = {};
+  const noEntraron: string[] = [];
+
+  /** Copia sólo si el desplegable puede mostrarlo; si no, lo dice. */
+  const deLista = (
+    campo: string,
+    valor: string | null,
+    lista: readonly string[],
+    comoSeLlama: string
+  ) => {
+    const v = texto(valor);
+    if (!v) return;
+    if (lista.includes(v)) campos[campo] = v;
+    else noEntraron.push(`${comoSeLlama} ("${v}")`);
+  };
+
+  // Los ids viajan juntos: el equipo filtra por sector, así que copiar uno sin
+  // el otro deja el desplegable de equipos mostrando una lista que no lo tiene.
+  campos.sector_id = texto(vieja.sector_id);
+  campos.equipment_id = texto(vieja.equipment_id);
+
+  deLista("especialidad", vieja.especialidad, vocabulario.especialidades, "la especialidad");
+  deLista("tipo", vieja.tipo, vocabulario.tipos, "el tipo");
+  deLista("quien", vieja.quien, vocabulario.quien, "quién realiza");
+  deLista("estado", vieja.estado, vocabulario.estados, "el estado");
+  // 2.040 de 2.206 OT no tienen prioridad, y su desplegable no tiene opción
+  // vacía: copiar el null dejaría el campo sin nada seleccionado. Sin valor,
+  // se queda el que el formulario ya traía.
+  deLista("prioridad", vieja.prioridad, vocabulario.prioridades, "la prioridad");
+
+  campos.descripcion = texto(vieja.descripcion);
+  campos.contratista = texto(vieja.contratista);
+  campos.operario_1 = texto(vieja.operario_1);
+  campos.operario_2 = texto(vieja.operario_2);
+  campos.operario_3 = texto(vieja.operario_3);
+
+  // La base lo guarda como número y el formulario lo escribe como texto.
+  campos.horas = vieja.horas === null || vieja.horas === undefined ? "" : String(vieja.horas);
+
+  campos.requiere_parada_sector = Boolean(vieja.requiere_parada_sector);
+
+  return { campos, lineas: lineasDeLaOT(vieja), noEntraron };
+}
+
+/**
+ * Los renglones de repuesto que se copian.
+ *
+ * Una OT cargada desde ayer los tiene en `ordenes_trabajo_repuestos`. Las
+ * 2.200 anteriores no: tienen el texto suelto de la planilla, "2 grillas 2 mm".
+ *
+ * Ese texto entra **tal cual, en un solo renglón**. Hay un parseo que lo
+ * partiría en cantidad y descripción —`itemsDeRepuesto()`, el que leyó las 275
+ * OT viejas—, y a propósito no se usa acá: normaliza el texto, y lo que salga
+ * de este formulario se escribe en la celda de la planilla. Que el sistema
+ * reescriba "2 grillas 2 mm" como "2 grilla 2MM" es cambiarle las palabras a
+ * quien las puso. Partirlo es una decisión de quien está cargando, que tiene
+ * los dos campos al lado.
+ */
+export function lineasDeLaOT(vieja: OTVieja): LineaDeRepuesto[] {
+  const renglones = (vieja.repuestos ?? [])
+    .map((r) => ({ cantidad: texto(r?.cantidad), nombre: texto(r?.nombre) }))
+    .filter((r) => r.nombre !== "");
+  if (renglones.length > 0) return renglones;
+
+  const suelto = texto(vieja.repuesto);
+  return suelto ? [{ cantidad: "", nombre: suelto }] : [];
+}
+
+/**
+ * El número tal como lo escribieron, listo para preguntar por él.
+ *
+ * Se acepta "2814", " 2814 " y "OT 2814": quien copia está mirando una
+ * pantalla donde el número viene con esa etiqueta, y pedirle que la saque es
+ * pedirle que haga de parser.
+ */
+export function numeroDeOT(escrito: string): number | null {
+  const soloDigitos = String(escrito ?? "").replace(/[^0-9]/g, "");
+  if (!soloDigitos) return null;
+  const n = Number(soloDigitos);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** El aviso de la barra, con lo que no se pudo traer si hubo algo. */
+export function avisoDeReutilizada(numero: number, noEntraron: readonly string[]): string {
+  const base = `Los campos vienen de la OT ${numero} — revisalos antes de guardar.`;
+  if (noEntraron.length === 0) return base;
+  return `${base} No se pudo traer ${noEntraron.join(" ni ")}: elegilo a mano.`;
+}

@@ -225,6 +225,46 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         </div>
 
         <form onSubmit={submit} className="p-6 space-y-5">
+          {/* Arriba de todo y no escondido entre los campos: es lo primero que
+              se hace cuando se carga una tanda de órdenes del mismo día. */}
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+            <label className="block text-xs font-medium text-slate-600">
+              Reutilizar una OT
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={numeroViejo}
+                onChange={e => { setNumeroViejo(e.target.value); setErrorAlTraer(""); }}
+                /* Enter traería la OT y además mandaría el formulario: dentro
+                   de un <form>, un input suelto lo envía. Acá se corta y se
+                   hace sólo lo primero. */
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); traerLaVieja(); } }}
+                className="input flex-1 min-w-0"
+                placeholder="N° de OT — ej: 2814"
+                inputMode="numeric"
+                aria-label="Número de la OT a reutilizar"
+              />
+              <button
+                type="button"
+                onClick={traerLaVieja}
+                disabled={trayendo}
+                className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              >{trayendo ? "Trayendo…" : "Traer"}</button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Copia todo menos las fechas, que las ponés vos.
+            </p>
+            {errorAlTraer && <p className="text-sm text-red-600">{errorAlTraer}</p>}
+          </div>
+
+          {/* La barra queda hasta que se guarda. Estos campos no los escribió
+              quien está mirando, y ésa es toda la razón por la que existe. */}
+          {vieneDe && (
+            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {vieneDe}
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <F label="Sector" required>
               <Select value={form.sector_id} onChange={e => f("sector_id", e.target.value)} className="input">
