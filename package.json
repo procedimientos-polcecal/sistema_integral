@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migracion": "node scripts/nueva-migracion.mjs",
+    "planillas": "npx tsx scripts/revisar-planillas.mts",
     "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts"
   },
   "dependencies": {

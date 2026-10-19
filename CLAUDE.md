@@ -451,7 +451,39 @@ npx tsc --noEmit
 npm run build
 node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
 node scripts/revisar-responsive.mjs         # lo que no entra en un telefono de 375 px
+npm run planillas                           # si alguna planilla se cayo por una formula
 ```
+
+**`npm run planillas` es el único que no mira el código sino el dato del otro
+lado**, y existe porque los otros cinco no podían ver lo que pasó dos veces en
+una semana: el 13/10/2026 la planilla de OT estaba recalculando y una OT nueva
+fue a parar encima de la 623, y el 19/10/2026 la de Compras pasó el día entera
+en blanco porque `APROB COMPRAS` tenía 1.686 celdas importando **su propio
+libro** —un lazo de `IMPORTRANGE` que no resuelve nunca—. Las once pestañas de
+Compras se vaciaron a la vez, porque las diez por área son `FILTER` del master.
+El código estaba bien las dos veces.
+
+Lo difícil ahí no es leer la planilla: es **no sonar por lo que no importa**.
+Hay miles de `#N/A` normales —2.420 en `APROB COMPRAS`, 1.659 en el
+seguimiento— que son un `VLOOKUP` sobre una clave que no está, y llevan meses.
+Por eso una caída pide **dos** condiciones juntas: una fórmula de las que
+generan una región (`QUERY`, `FILTER`, `IMPORTRANGE`, `ARRAYFORMULA`) que
+devuelve error, **y** la pestaña sin filas. La decisión vive en
+[lib/core/saludDePlanilla.ts](lib/core/saludDePlanilla.ts), con las dos caídas
+reales fijadas como tests; el script es sólo la lectura. Sale 1 si hay un
+ROMPE, y hoy da **ROMPE 0 · MIRAR 22**.
+
+Necesita `GOOGLE_SERVICE_ACCOUNT_JSON`, así que **no puede ir al CI** como está:
+leer las planillas de producción desde un runner pide meter esa credencial ahí.
+
+Y una defensa que ya existe y está apagada: `agregarFila()` de
+`lib/core/sheets.ts` acepta `filaMasAltaConocida` y se niega a escribir si la
+planilla devuelve menos filas de las que el sistema tiene anotadas
+—`laPlanillaEncogio`, escrita justamente por lo del 13/10—. **Ninguno de los
+nueve lugares que la llaman se lo pasa**, así que el valor por defecto es 0 y la
+comprobación nunca se hace. Está así a propósito, para no cambiar el
+comportamiento de los módulos de golpe; encenderla es pasarle el mayor
+`sheets_row`/`sheets_fila` guardado, módulo por módulo.
 
 **`revisar-arbol-commiteado` es el que atrapa lo que los otros tres no pueden.**
 Los tres primeros miran **el disco**; Vercel construye **el árbol commiteado**, y en este repo esos
