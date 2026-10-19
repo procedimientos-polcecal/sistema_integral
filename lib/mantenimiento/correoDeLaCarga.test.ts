@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { correoPorElRechazo, type RechazoDeCarga } from "./correoDeLaCarga";
+import { correoPorElRechazo, salioDelFondo, type RechazoDeCarga } from "./correoDeLaCarga";
+import { DISPARO } from "@/public/cola/colaOffline.js";
 
 /** Un rechazo claro de una carga que el teléfono mandó solo: el caso que sí avisa. */
 function rechazo(extra: Partial<RechazoDeCarga> = {}): RechazoDeCarga {
@@ -78,6 +79,13 @@ describe("correoPorElRechazo", () => {
     expect(correoPorElRechazo(sinLaMarca as RechazoDeCarga)).toBeNull();
   });
 
+  it("sin descripción lo dice, en vez de dejar unas comillas vacías", () => {
+    // Es justo el caso del 400 «Contá qué pasa»: no hay descripción que mostrar.
+    const correo = correoPorElRechazo(rechazo({ descripcion: "" }))!;
+    expect(correo.cuerpo).toContain("sin descripción");
+    expect(correo.cuerpo).not.toContain("«»");
+  });
+
   it("una orden se nombra como orden y no como aviso", () => {
     const correo = correoPorElRechazo(rechazo({ tipo: "orden" }))!;
     expect(correo.asunto).toContain("orden");
@@ -89,5 +97,31 @@ describe("correoPorElRechazo", () => {
     expect(correo.cuerpo).toContain("Bomba 3 pierde aceite");
     expect(correo.cuerpo).not.toContain("null");
     expect(correo.cuerpo).not.toContain("—\n");
+  });
+});
+
+/*
+ * La traducción de la cabecera a un booleano es **el único lugar** donde pasa,
+ * y el escaneo previo del plan la marcó: si acá se compara mal, el correo sale
+ * siempre o no sale nunca, y ningún otro test lo nota. El valor entra
+ * importado y no escrito a mano, por el mismo motivo que la cabecera misma.
+ */
+describe("salioDelFondo", () => {
+  it("la manda el teléfono solo cuando la cabecera dice fondo", () => {
+    expect(salioDelFondo(DISPARO.fondo)).toBe(true);
+  });
+
+  it("desde la pantalla, no", () => {
+    expect(salioDelFondo(DISPARO.pantalla)).toBe(false);
+  });
+
+  it("sin cabecera, no: una carga vieja o un cuerpo armado a mano no avisan", () => {
+    expect(salioDelFondo(null)).toBe(false);
+    expect(salioDelFondo("")).toBe(false);
+  });
+
+  it("cualquier otra cosa tampoco: ante la duda no se molesta a nadie", () => {
+    expect(salioDelFondo("Fondo")).toBe(false);
+    expect(salioDelFondo("cualquiera")).toBe(false);
   });
 });

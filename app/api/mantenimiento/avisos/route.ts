@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
@@ -26,11 +27,29 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // El cuerpo se lee **antes** del chequeo de permisos y eso no cambia el orden
+  // de los chequeos ni ninguna respuesta: leer JSON no tiene efectos. Hace
+  // falta acá porque para avisarle por correo a quien cargó sin señal hay que
+  // saber qué cargó, y el 403 llega antes que todo lo demás.
+  const admin = createAdminClient();
+
+  const b = await request.json().catch(() => null);
+  const descripcion = String(b?.descripcion ?? "").trim();
+  const sectorDelAviso = String(b?.sector_raw ?? "").trim() || null;
+  const fechaCruda = typeof b?.fecha === "string" ? b.fecha : "";
+
+  /** Lo que las dos llamadas de abajo comparten. Ver `avisarDeLaCarga`. */
+  const deEstaCarga = { tipo: "aviso" as const, descripcion, sector: sectorDelAviso, fecha: fechaCruda };
+
   if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    return NextResponse.json(
-      { error: "Cargar un aviso requiere nivel de edición en Mantenimiento" },
-      { status: 403 }
-    );
+    const error = "Cargar un aviso requiere nivel de edición en Mantenimiento";
+    await avisarDeLaCarga(admin, request, user.id, {
+      ...deEstaCarga,
+      status: 403,
+      error,
+      enDuda: false,
+    });
+    return NextResponse.json({ error }, { status: 403 });
   }
 
   const planilla = PLANILLA();
@@ -41,10 +60,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const b = await request.json().catch(() => null);
-  const descripcion = String(b?.descripcion ?? "").trim();
   if (!descripcion) {
-    return NextResponse.json({ error: "Contá qué pasa" }, { status: 400 });
+    const error = "Contá qué pasa";
+    await avisarDeLaCarga(admin, request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
   }
 
   // La fecha puede venir en el cuerpo, y es el único ensanche que este plan le
@@ -62,10 +81,14 @@ export async function POST(request: Request) {
   // termina en 400 quedaría en duda para siempre.
   const laFecha = fechaDeLaCarga(b?.fecha, hoyEnArgentina());
   if (laFecha.estado === "no-sirve") {
+    await avisarDeLaCarga(admin, request, user.id, {
+      ...deEstaCarga,
+      status: 400,
+      error: laFecha.motivo,
+      enDuda: false,
+    });
     return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
   }
-
-  const admin = createAdminClient();
 
   // ── La clave de la carga ────────────────────────────────────
   //
@@ -120,7 +143,18 @@ export async function POST(request: Request) {
     // y tiene los cinco fijados con tests. `null` es "seguir": la única que
     // deja crear el aviso.
     const respuesta = respuestaDeLaReserva(reserva.decision, reserva.fila, "aviso");
-    if (respuesta) return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
+    if (respuesta) {
+      // `en-duda` es el único de los cinco veredictos donde la fila **puede**
+      // estar escrita en la planilla, y por eso lleva su propio texto: decirle
+      // a alguien que no se cargó cuando quizás sí termina en dos avisos.
+      await avisarDeLaCarga(admin, request, user.id, {
+        ...deEstaCarga,
+        status: respuesta.status,
+        error: String((respuesta.cuerpo as { error?: unknown }).error ?? ""),
+        enDuda: reserva.decision === "en-duda",
+      });
+      return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
+    }
   }
 
   // El próximo número sale de la **planilla**, no de la base: alguien puede

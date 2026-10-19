@@ -1,4 +1,4 @@
-import { conSuArticulo } from "@/public/cola/colaOffline.js";
+import { DISPARO, conSuArticulo } from "@/public/cola/colaOffline.js";
 
 /**
  * Si una carga rechazada merece un correo, y cuál de los dos textos.
@@ -32,6 +32,23 @@ import { conSuArticulo } from "@/public/cola/colaOffline.js";
  * salir mal.
  */
 
+/**
+ * Si la carga la mandó el teléfono solo, leído de la cabecera que pone
+ * `public/sw.js`.
+ *
+ * **Es el único lugar donde ese texto se vuelve un booleano**, y por eso tiene
+ * test propio: comparar mal acá hace que el correo salga siempre o no salga
+ * nunca, y ningún otro test de este plan lo notaría.
+ *
+ * Todo lo que no sea exactamente la marca del fondo es **no**: una carga
+ * guardada antes de que la cabecera existiera, un cuerpo armado a mano, o un
+ * valor que alguien cambió de un lado y no del otro. Ante la duda no se
+ * molesta a nadie — la pantalla sigue contándolo igual.
+ */
+export function salioDelFondo(cabecera: string | null): boolean {
+  return cabecera === DISPARO.fondo;
+}
+
 /** Los tres que la cola trata como definitivos, y por lo tanto los que avisan. */
 const DEFINITIVOS = [400, 403, 409];
 
@@ -59,7 +76,10 @@ function comoSeEscribe(fecha: string): string {
 /** Qué carga era, lo suficiente para reconocerla entre varias. */
 function cualEra(rechazo: RechazoDeCarga): string {
   const sector = rechazo.sector?.trim();
-  return `«${rechazo.descripcion}»${sector ? ` — ${sector}` : ""}`;
+  // Sin descripción es justo el caso del 400 «Contá qué pasa»: unas comillas
+  // vacías no ayudan a reconocer nada, y encima parecen un error del correo.
+  const que = rechazo.descripcion.trim() ? `«${rechazo.descripcion.trim()}»` : "(sin descripción)";
+  return `${que}${sector ? ` — ${sector}` : ""}`;
 }
 
 export function correoPorElRechazo(

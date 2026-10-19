@@ -18,6 +18,7 @@ import {
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
@@ -128,10 +129,10 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
-  }
-
+  // El cuerpo se lee **antes** del chequeo de permisos, y eso no cambia el
+  // orden de los chequeos ni ninguna respuesta: `cuerpoJson` no tiene efectos.
+  // Hace falta acá porque para avisarle por correo a quien cargó sin señal hay
+  // que saber qué cargó, y el 403 llega antes que todo lo demás.
   const body = await cuerpoJson(request);
   const {
     equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
@@ -141,8 +142,33 @@ export async function POST(request: Request) {
     schedule_id, aviso_id,
   } = body;
 
+  /** Lo que comparten las llamadas de abajo. Ver `avisarDeLaCarga`. */
+  const deEstaCarga = {
+    tipo: "orden" as const,
+    descripcion: String(descripcion ?? ""),
+    sector: typeof sector_raw === "string" && sector_raw.trim() ? sector_raw.trim() : null,
+    fecha: typeof fecha === "string" ? fecha : "",
+  };
+
+  // El chequeo de permisos **en el mismo lugar del orden que siempre**: antes
+  // que la descripción y que todo lo demás. Lo único que cambió es que ahora
+  // el cuerpo ya está leído, así que el correo puede decir qué carga era.
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    await avisarDeLaCarga(createAdminClient(), request, user.id, {
+      ...deEstaCarga,
+      status: 403,
+      error: "Sin permisos",
+      enDuda: false,
+    });
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
   if (!descripcion?.trim()) {
-    return NextResponse.json({ error: "La descripción es requerida" }, { status: 400 });
+    const error = "La descripción es requerida";
+    await avisarDeLaCarga(createAdminClient(), request, user.id, {
+      ...deEstaCarga, status: 400, error, enDuda: false,
+    });
+    return NextResponse.json({ error }, { status: 400 });
   }
 
   // Los repuestos vienen por renglones (`repuestos`) o como el texto suelto de
@@ -170,10 +196,9 @@ export async function POST(request: Request) {
     fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
   });
   if (falta.length > 0) {
-    return NextResponse.json(
-      { error: `Falta cargar ${falta.join(", ")}.` },
-      { status: 400 }
-    );
+    const error = `Falta cargar ${falta.join(", ")}.`;
+    await avisarDeLaCarga(admin, request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
   }
 
   // ── La clave de la carga ────────────────────────────────────
@@ -234,6 +259,9 @@ export async function POST(request: Request) {
     // esa clave queda en duda para siempre por un cuerpo que nunca se cargó.
     laFecha = fechaDeLaCarga(fecha, hoyEnArgentina());
     if (laFecha.estado === "no-sirve") {
+      await avisarDeLaCarga(admin, request, user.id, {
+        ...deEstaCarga, status: 400, error: laFecha.motivo, enDuda: false,
+      });
       return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
     }
 
@@ -256,7 +284,19 @@ export async function POST(request: Request) {
     const respuesta = respuestaDeLaReserva(
       reserva.decision, reserva.fila, "orden", { avisoId: aviso_id }
     );
-    if (respuesta) return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
+    if (respuesta) {
+      // `en-duda` es el único de los cinco veredictos donde la fila **puede**
+      // estar escrita en la planilla, y por eso lleva su propio texto: decirle
+      // a alguien que no se cargó cuando quizás sí termina en dos órdenes, que
+      // es el anti-objetivo de toda esta función.
+      await avisarDeLaCarga(admin, request, user.id, {
+        ...deEstaCarga,
+        status: respuesta.status,
+        error: String((respuesta.cuerpo as { error?: unknown }).error ?? ""),
+        enDuda: reserva.decision === "en-duda",
+      });
+      return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
+    }
   }
 
   // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
