@@ -166,6 +166,14 @@ general **la planilla manda**: es de donde lee quien no entra al sistema. (RRHH
 importa archivos de Excel, que es otra cosa: una carga puntual, no un espejo. Y
 Remises no tiene planilla.)
 
+**Acordado el 19/10/2026 y sin empezar: esto se va a dar vuelta.** Los cinco
+espejos donde hoy manda la planilla pasan a que **los llene el sistema**, con
+la planilla bloqueada para edición y una bajada semanal del último estado. El
+orden, las cuatro trampas y por qué esta vez no repite las 800 toneladas de
+carbonilla están en
+[el spec](docs/superpowers/specs/2026-10-19-las-planillas-las-llena-el-sistema-design.md).
+Hasta que eso esté hecho, lo que sigue abajo es lo que vale.
+
 **Producción es la excepción, y conviene saberlo antes de tocarlo:** también
 escribe una planilla, pero ahí **manda el sistema**. Calidad carga en el SdG y la
 planilla quedó como el lugar donde miran los que no entran — una exportación de
