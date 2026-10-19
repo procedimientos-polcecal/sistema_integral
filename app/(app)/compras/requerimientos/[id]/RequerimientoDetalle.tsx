@@ -22,11 +22,12 @@ import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
 import MontoAlto from "./MontoAlto";
+import type { HistoricoDelArticulo } from "@/lib/compras/historicoDelArticulo";
 import MarcaMontoAlto from "../../MarcaMontoAlto";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto,
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto, historicoDelArticulo,
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -43,6 +44,7 @@ export default function RequerimientoDetalle({
   odoo?: { base: string; esStaging: boolean };
   /** A partir de cuánto un requerimiento es de monto alto. */
   umbralMontoAlto: number;
+  historicoDelArticulo: HistoricoDelArticulo | null;
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -473,6 +475,46 @@ export default function RequerimientoDetalle({
             guardando={guardando}
             onCambiar={(valor) => guardar({ monto_alto_manual: valor })}
           />
+
+          {/*
+            Qué costó antes lo mismo. Es un HECHO sobre requerimientos pasados,
+            no una inferencia sobre éste: por eso se muestra y no se marca solo.
+            Marcar por histórico se midió y acierta entre el 82% y el 93% —o
+            sea que se equivoca entre 1 de cada 14 y 1 de cada 5—, y un aviso
+            que se equivoca una de cada cinco veces enseña a ignorar los avisos.
+            Acá el número es cierto siempre y juzga la persona, con la marca
+            manual a un clic. Ver `lib/compras/historicoDelArticulo.ts`.
+          */}
+          {historicoDelArticulo && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <p>
+                Ya se pidió lo mismo{" "}
+                {historicoDelArticulo.veces === 1
+                  ? "una vez"
+                  : `${historicoDelArticulo.veces} veces`}
+                . La última fue el{" "}
+                <Link
+                  href={`/compras/requerimientos/${historicoDelArticulo.ultimo.nro_ri}`}
+                  className="font-mono text-xs font-semibold text-[var(--primary)]"
+                >
+                  RI {historicoDelArticulo.ultimo.nro_ri}
+                </Link>
+                , y costó {moneda(historicoDelArticulo.ultimo.monto_conocido)}
+                {historicoDelArticulo.ultimo.proveedor
+                  ? ` a ${historicoDelArticulo.ultimo.proveedor}`
+                  : ""}
+                .
+              </p>
+              {/* El rango sólo cuando dice algo: con un solo pedido anterior,
+                  máximo y mínimo son el mismo número y repetirlo es ruido. */}
+              {historicoDelArticulo.maximo !== historicoDelArticulo.minimo && (
+                <p className="mt-1 text-xs text-slate-500">
+                  En los anteriores fue de {moneda(historicoDelArticulo.minimo)} a{" "}
+                  {moneda(historicoDelArticulo.maximo)}: el precio de este artículo salta.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Resumen de compra */}
           <section className="rounded-xl border border-slate-200 bg-white p-5">

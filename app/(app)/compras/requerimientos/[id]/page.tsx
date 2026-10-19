@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { permisosComprasDe, aprobadoresDeCompras } from "@/lib/compras/auth";
+import { resumenDelHistorico } from "@/lib/compras/historicoDelArticulo";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { volverAlListado } from "@/lib/compras/filtrosUrl";
@@ -9,6 +10,14 @@ import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import RequerimientoDetalle from "./RequerimientoDetalle";
 import { dondeApuntaOdoo, enlaceAOdoo } from "@/lib/odoo/client";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
+
+
+/** El embed de proveedor llega como objeto o como arreglo según la relación. */
+function nombreDelProveedor(v: unknown): string | null {
+  const uno = Array.isArray(v) ? v[0] : v;
+  const nombre = (uno as { nombre?: unknown } | null)?.nombre;
+  return typeof nombre === "string" ? nombre : null;
+}
 
 export default async function RequerimientoPage({
   params, searchParams,
@@ -91,6 +100,43 @@ export default async function RequerimientoPage({
     .eq("requerimiento_id", id)
     .order("porcentaje", { ascending: false });
 
+  /*
+   * Qué costó antes lo mismo que se está pidiendo.
+   *
+   * Se busca por `clave_articulo`, que es una columna generada: la descripción
+   * normalizada, que mantiene Postgres sola. Acá no se vuelve a normalizar
+   * nada — se compara la clave del RI contra la de los demás — y por eso la
+   * regla no existe dos veces.
+   *
+   * Sólo los que YA tienen monto, y nunca este mismo RI. Es un hecho sobre
+   * requerimientos pasados: la pantalla lo muestra y decide la persona. El
+   * porqué de no marcar con esto está en `lib/compras/historicoDelArticulo.ts`.
+   */
+  const clave = (requerimiento as { clave_articulo?: string | null }).clave_articulo ?? null;
+  const { data: pasados } = clave
+    ? await supabase
+        .from("compras_requerimientos")
+        .select("nro_ri, fecha, monto_conocido, proveedores!proveedor_id(nombre)")
+        .eq("clave_articulo", clave)
+        .not("monto_conocido", "is", null)
+        .neq("id", id)
+        .order("nro_ri", { ascending: false })
+        // Veinte alcanza para el resumen —cuántas veces, el último, el rango— y
+        // pone un techo: el artículo más repetido del histórico tiene 6.
+        .limit(20)
+    : { data: null };
+
+  const historicoDelArticulo = resumenDelHistorico(
+    (pasados ?? []).map((p) => ({
+      nro_ri: p.nro_ri as number,
+      fecha: (p.fecha ?? null) as string | null,
+      monto_conocido: Number(p.monto_conocido),
+      // El embed llega como objeto o como arreglo según la relación, igual que
+      // en `descripcionDelArticulo` unas líneas más arriba.
+      proveedor: nombreDelProveedor(p.proveedores),
+    }))
+  );
+
   return (
     <RequerimientoDetalle
       dolar={dolar}
@@ -104,6 +150,7 @@ export default async function RequerimientoPage({
       puedeAprobar={permisos.puedeAprobar}
       esAsignado={esAsignado}
       umbralMontoAlto={umbralMontoAlto}
+      historicoDelArticulo={historicoDelArticulo}
       aprobadores={aprobadores}
       odoo={dondeApuntaOdoo()}
       ordenesOdoo={(ordenesOdoo ?? []).map((o) => ({
