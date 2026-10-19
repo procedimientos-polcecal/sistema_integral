@@ -76,12 +76,13 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
 
       <style>{`
         @page { size: A4 portrait; margin: 10mm 12mm; }
+        /* Lo que esconde el armazón —el header, el aside y las dos barras—
+           vive en app/globals.css, no acá. Enumerarlo por pantalla es lo que
+           dejó esta hoja saliendo con la barra de búsqueda encima el día que
+           el layout ganó un header. */
         @media print {
           .no-print { display: none !important; }
-          aside, .sidebar, .mobile-topbar, nav { display: none !important; }
-          main, [class*="main"], body > div { margin: 0 !important; padding: 0 !important; }
           .print-content { padding: 0 !important; margin: 0 !important; }
-          body { background: white !important; margin: 0 !important; }
           .ot-page { page-break-after: always; page-break-inside: avoid; }
           .ot-page:last-child { page-break-after: avoid; }
         }

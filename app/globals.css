@@ -342,3 +342,38 @@ button.nav-link { width: 100%; text-align: left; font-family: inherit; cursor: p
     transition-duration: .01ms !important;
   }
 }
+
+/* ── Imprimir ───────────────────────────────────────────────────────────────
+ *
+ * El armazón de la app no va al papel. Vive acá y no en cada pantalla que
+ * imprime, porque quien olvida esto no es el que escribe la hoja sino el que
+ * **agrega un elemento nuevo al armazón** — y eso ya pasó: la pantalla de
+ * impresión de OT escondía `aside`, `.sidebar`, `.mobile-topbar` y `nav`, y
+ * cuando el layout ganó un `<header>` la barra de búsqueda empezó a salir
+ * impresa. Sus 56 px empujaban la hoja y la partían en dos páginas, así que la
+ * OT salía cortada abajo — y el PDF, que se arma aparte con html2pdf, salía
+ * bien. De ahí la confusión de "hay que bajar el PDF para que se vea".
+ *
+ * Va por clase y NO por etiqueta, aunque el armazón use `<header>` y `<aside>`.
+ * Se probó al revés y estaba mal: de los cinco `<header>` del proyecto, **tres
+ * son contenido** —las dos tarjetas de `inventario/lista` y el de `/cargar`—,
+ * así que esconderlos por etiqueta borraba de la hoja justo lo que alguien
+ * quería imprimir, sin que nada avisara. Que una clase se pueda olvidar al
+ * agregar un elemento nuevo al armazón es el precio, y es el barato: se ve
+ * apenas alguien imprime.
+ */
+@media print {
+  .no-print { display: none !important; }
+
+  /* El armazón mide una pantalla y scrollea adentro: en papel eso corta la
+     hoja a la altura del monitor en vez de dejarla fluir por las páginas. */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+}

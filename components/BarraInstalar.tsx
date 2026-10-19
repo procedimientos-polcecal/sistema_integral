@@ -91,6 +91,7 @@ export function BarraInstalar() {
 
   return (
     <div
+      // No va al papel: es una oferta de la app, no parte de lo que se imprime.
       // `shrink-0` para que no la aplaste la columna de altura de pantalla: sin
       // eso, en una pantalla baja el flex le come el alto a la barra antes que
       // al `<main>`, que es el que tiene que ceder.
@@ -99,7 +100,7 @@ export function BarraInstalar() {
       // encima del contenido de `<main>` —su sombra hacia arriba, si no, queda
       // debajo del texto del final de la página— y para quedar por debajo del
       // menú en teléfono, cuyo fondo oscuro es z-40 y el cajón z-50.
-      className="relative z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(15,23,42,.08)]"
+      className="no-print relative z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(15,23,42,.08)]"
       // El borde de abajo de los iPhone con gesto: sin esto el botón queda
       // debajo de la barra del sistema.
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}

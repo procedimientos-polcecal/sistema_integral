@@ -253,7 +253,8 @@ export function Sidebar({
 
       <aside
         className={[
-          "flex flex-col shrink-0 transition-[width] duration-200",
+          // No va al papel: el armazón se esconde al imprimir.
+          "no-print flex flex-col shrink-0 transition-[width] duration-200",
           // En un teléfono es un cajón: encima del contenido, y sólo cuando se
           // lo pide. Sin esto se comía 240 de los 375 px de pantalla.
           "fixed inset-y-0 left-0 z-50 w-72",

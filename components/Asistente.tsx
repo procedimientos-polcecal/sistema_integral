@@ -62,7 +62,7 @@ export function Asistente({ habilitado }: { habilitado: boolean }) {
       {abierto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setAbierto(false)}>
           <aside
-            className="flex h-full w-full max-w-[520px] flex-col bg-white shadow-xl"
+            className="no-print flex h-full w-full max-w-[520px] flex-col bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center justify-between border-b px-4 py-3">
