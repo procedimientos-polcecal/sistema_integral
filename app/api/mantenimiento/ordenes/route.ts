@@ -154,7 +154,7 @@ export async function POST(request: Request) {
   // que la descripción y que todo lo demás. Lo único que cambió es que ahora
   // el cuerpo ya está leído, así que el correo puede decir qué carga era.
   if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    await avisarDeLaCarga(createAdminClient(), request, user.id, {
+    avisarDeLaCarga(request, user.id, {
       ...deEstaCarga,
       status: 403,
       error: "Sin permisos",
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
 
   if (!descripcion?.trim()) {
     const error = "La descripción es requerida";
-    await avisarDeLaCarga(createAdminClient(), request, user.id, {
+    avisarDeLaCarga(request, user.id, {
       ...deEstaCarga, status: 400, error, enDuda: false,
     });
     return NextResponse.json({ error }, { status: 400 });
@@ -183,7 +183,13 @@ export async function POST(request: Request) {
   // base y de ahí a la planilla, donde `EN_LA_PLANILLA[v] ?? v` lo escribía tal
   // cual. Sin estado la OT nace por hacer, que es de donde se parte.
   if (estado !== undefined && estado !== null && estado !== "" && !esEstadoDeOT(estado)) {
-    return NextResponse.json({ error: mensajeDeEstadoInvalido(estado) }, { status: 400 });
+    // Éste **sí es alcanzable desde la cola**: un teléfono con la app vieja
+    // manda un estado que dejó de valer, y sin este aviso esa carga queda
+    // parada para siempre sin que nadie se entere — el agujero exacto que todo
+    // esto vino a cerrar.
+    const error = mensajeDeEstadoInvalido(estado);
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -197,7 +203,7 @@ export async function POST(request: Request) {
   });
   if (falta.length > 0) {
     const error = `Falta cargar ${falta.join(", ")}.`;
-    await avisarDeLaCarga(admin, request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
     return NextResponse.json({ error }, { status: 400 });
   }
 
@@ -259,7 +265,7 @@ export async function POST(request: Request) {
     // esa clave queda en duda para siempre por un cuerpo que nunca se cargó.
     laFecha = fechaDeLaCarga(fecha, hoyEnArgentina());
     if (laFecha.estado === "no-sirve") {
-      await avisarDeLaCarga(admin, request, user.id, {
+      avisarDeLaCarga(request, user.id, {
         ...deEstaCarga, status: 400, error: laFecha.motivo, enDuda: false,
       });
       return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
@@ -289,7 +295,7 @@ export async function POST(request: Request) {
       // estar escrita en la planilla, y por eso lleva su propio texto: decirle
       // a alguien que no se cargó cuando quizás sí termina en dos órdenes, que
       // es el anti-objetivo de toda esta función.
-      await avisarDeLaCarga(admin, request, user.id, {
+      avisarDeLaCarga(request, user.id, {
         ...deEstaCarga,
         status: respuesta.status,
         error: String((respuesta.cuerpo as { error?: unknown }).error ?? ""),

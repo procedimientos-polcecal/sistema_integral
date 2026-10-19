@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { enviarCorreo } from "./correo";
+import { enviarCorreo, estaConfigurado } from "./correo";
 
 /**
  * Un solo test, y es el que protege el día del deploy.
@@ -36,5 +36,31 @@ describe("enviarCorreo", () => {
     expect(resultado).toBe("sin-configurar");
     expect(fetchDoble).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * Se pregunta **antes** de buscar a quién mandarle. Sin esto, cada carga
+ * rechazada hace una consulta a `usuarios` con el cliente admin para después
+ * tirar el resultado, durante todo el tiempo que pase hasta que alguien
+ * publique el Apps Script — que se espera largo.
+ */
+describe("estaConfigurado", () => {
+  it("con las dos variables, sí", () => {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/x/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "abc");
+    expect(estaConfigurado()).toBe(true);
+  });
+
+  it("con una sola, no: van juntas o no van", () => {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/x/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "");
+    expect(estaConfigurado()).toBe(false);
+  });
+
+  it("sin ninguna, no", () => {
+    vi.stubEnv("SDG_CORREO_URL", "");
+    vi.stubEnv("SDG_CORREO_SECRET", "");
+    expect(estaConfigurado()).toBe(false);
   });
 });

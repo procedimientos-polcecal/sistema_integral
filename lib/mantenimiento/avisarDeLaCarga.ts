@@ -1,6 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CABECERA_DEL_DISPARO } from "@/public/cola/colaOffline.js";
-import { enviarCorreo } from "@/lib/core/correo";
+import { enviarCorreo, estaConfigurado } from "@/lib/core/correo";
 import { correoPorElRechazo, salioDelFondo, type RechazoDeCarga } from "./correoDeLaCarga";
 
 /**
@@ -12,51 +13,67 @@ import { correoPorElRechazo, salioDelFondo, type RechazoDeCarga } from "./correo
  * una. Copiarlo es cómo una decisión termina estando en una sola de las dos: en
  * la fase anterior pasó exactamente eso con el registro de la clave, y la
  * salida fue ésta. Acá vive, además, la regla de que esto **no puede hacer
- * fallar nada**, que es lo que más caro sale olvidar.
+ * fallar nada ni demorar nada**, que es lo que más caro sale olvidar.
  *
- * ## No lanza nunca, y no devuelve nada
+ * ## No espera, y por eso no devuelve nada
  *
- * Quien la llama está por devolverle a alguien el rechazo de su carga. Esa
- * respuesta es sobre la carga, no sobre el correo: si el correo no sale, la
- * carga igual queda parada, visible en `/cargar` y contada por la barra del
- * layout. Por eso no hay nada que reportar hacia arriba y por eso el `catch`
- * se traga todo — ver el encabezado de `lib/core/correo.ts`, donde está
- * escrito por qué un `console.error` alcanza en este caso.
+ * El envío va en un `after()`: corre **después** de que la respuesta salió. Del
+ * otro lado hay un Apps Script que arranca una máquina virtual por pedido y
+ * puede tardar segundos, y de este lado hay un service worker esperando el
+ * rechazo para seguir con la cola. Esperarlo le sumaría esos segundos a cada
+ * carga rechazada, que es justo el momento en que menos conviene.
  *
- * ## Las tres razones por las que no manda nada, y son la mayoría de las veces
+ * Que el correo no salga tampoco cambia nada: la carga igual queda parada,
+ * visible en `/cargar` y contada por la barra del layout. Por eso el `catch` se
+ * traga todo — en el encabezado de `lib/core/correo.ts` está escrito por qué un
+ * `console.error` alcanza en este caso y en qué se diferencia de un fallo de
+ * escritura de los que este repo nunca deja en un log.
+ *
+ * ## Las cuatro razones por las que no manda nada, y son la mayoría de las veces
  *
  *   - La carga salió de la pantalla: la persona está leyendo el cartel.
  *   - El rechazo no es definitivo: se va a reintentar solo.
+ *   - El correo no está configurado todavía.
  *   - Quien cargó no tiene correo en `usuarios`: no hay a quién mandarle.
+ *
+ * Las dos primeras se deciden sin tocar nada, y la tercera antes de buscar a
+ * nadie: un cuerpo de los que manda la pantalla de siempre —sin la cabecera—
+ * no genera ni una consulta de más.
  */
-export async function avisarDeLaCarga(
-  admin: SupabaseClient,
+export function avisarDeLaCarga(
   request: Request,
   usuarioId: string,
   rechazo: Omit<RechazoDeCarga, "delFondo">,
-): Promise<void> {
-  try {
-    const correo = correoPorElRechazo({
-      ...rechazo,
-      delFondo: salioDelFondo(request.headers.get(CABECERA_DEL_DISPARO)),
-    });
-    if (!correo) return;
+): void {
+  // La cabecera se lee acá y no adentro del `after`: `request` es de este
+  // momento, y leerla después sería depender de que siga estando.
+  const correo = correoPorElRechazo({
+    ...rechazo,
+    delFondo: salioDelFondo(request.headers.get(CABECERA_DEL_DISPARO)),
+  });
+  if (!correo) return;
+  if (!estaConfigurado()) return;
 
-    // Con el cliente admin porque `usuarios` sólo deja leer la fila propia
-    // salvo que uno sea admin —la policy es `id = auth.uid() or es_admin()`—,
-    // y acá justamente es la propia. Es el mismo motivo por el que la ruta de
-    // OT ya lo hace así para la planilla.
-    const { data } = await admin
-      .from("usuarios")
-      .select("email")
-      .eq("id", usuarioId)
-      .maybeSingle();
+  after(async () => {
+    try {
+      // Con el cliente admin, y creado **acá adentro**: la policy de `usuarios`
+      // es `id = auth.uid() or es_admin()`, así que con el cliente de la sesión
+      // la fila propia se leería igual —pero este código corre después de que
+      // la respuesta salió, cuando esa sesión ya no está a mano—. Crearlo
+      // dentro del `after` además lo mantiene fuera del camino de cualquier
+      // pedido que no manda correo.
+      const { data } = await createAdminClient()
+        .from("usuarios")
+        .select("email")
+        .eq("id", usuarioId)
+        .maybeSingle();
 
-    const para = typeof data?.email === "string" ? data.email.trim() : "";
-    if (!para) return;
+      const para = typeof data?.email === "string" ? data.email.trim() : "";
+      if (!para) return;
 
-    await enviarCorreo({ para, asunto: correo.asunto, cuerpo: correo.cuerpo });
-  } catch (e) {
-    console.error("correo de la carga: no se pudo avisar", (e as Error)?.message ?? e);
-  }
+      await enviarCorreo({ para, asunto: correo.asunto, cuerpo: correo.cuerpo });
+    } catch (e) {
+      console.error("correo de la carga: no se pudo avisar", (e as Error)?.message ?? e);
+    }
+  });
 }

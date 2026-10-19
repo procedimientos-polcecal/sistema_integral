@@ -31,8 +31,6 @@ export async function POST(request: Request) {
   // de los chequeos ni ninguna respuesta: leer JSON no tiene efectos. Hace
   // falta acá porque para avisarle por correo a quien cargó sin señal hay que
   // saber qué cargó, y el 403 llega antes que todo lo demás.
-  const admin = createAdminClient();
-
   const b = await request.json().catch(() => null);
   const descripcion = String(b?.descripcion ?? "").trim();
   const sectorDelAviso = String(b?.sector_raw ?? "").trim() || null;
@@ -43,7 +41,7 @@ export async function POST(request: Request) {
 
   if (!(await puedeEditarMantenimiento(supabase, user.id))) {
     const error = "Cargar un aviso requiere nivel de edición en Mantenimiento";
-    await avisarDeLaCarga(admin, request, user.id, {
+    avisarDeLaCarga(request, user.id, {
       ...deEstaCarga,
       status: 403,
       error,
@@ -62,7 +60,7 @@ export async function POST(request: Request) {
 
   if (!descripcion) {
     const error = "Contá qué pasa";
-    await avisarDeLaCarga(admin, request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
     return NextResponse.json({ error }, { status: 400 });
   }
 
@@ -81,7 +79,7 @@ export async function POST(request: Request) {
   // termina en 400 quedaría en duda para siempre.
   const laFecha = fechaDeLaCarga(b?.fecha, hoyEnArgentina());
   if (laFecha.estado === "no-sirve") {
-    await avisarDeLaCarga(admin, request, user.id, {
+    avisarDeLaCarga(request, user.id, {
       ...deEstaCarga,
       status: 400,
       error: laFecha.motivo,
@@ -89,6 +87,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: laFecha.motivo }, { status: 400 });
   }
+
+  const admin = createAdminClient();
 
   // ── La clave de la carga ────────────────────────────────────
   //
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       // `en-duda` es el único de los cinco veredictos donde la fila **puede**
       // estar escrita en la planilla, y por eso lleva su propio texto: decirle
       // a alguien que no se cargó cuando quizás sí termina en dos avisos.
-      await avisarDeLaCarga(admin, request, user.id, {
+      avisarDeLaCarga(request, user.id, {
         ...deEstaCarga,
         status: respuesta.status,
         error: String((respuesta.cuerpo as { error?: unknown }).error ?? ""),

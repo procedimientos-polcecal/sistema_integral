@@ -86,6 +86,46 @@ describe("correoPorElRechazo", () => {
     expect(correo.cuerpo).not.toContain("«»");
   });
 
+  it("concuerda el género: una orden quedó cargada, un aviso quedó cargado", () => {
+    // `concordado` existe para esto y su comentario cuenta el cartel que salía
+    // mal «sin que nada lo notara». Acá pasaba igual: la orden de trabajo es
+    // femenina y todos los participios estaban en masculino.
+    const orden = correoPorElRechazo(rechazo({ tipo: "orden", status: 409, enDuda: true }))!;
+    expect(`${orden.asunto} ${orden.cuerpo}`).not.toContain("cargado");
+    const aviso = correoPorElRechazo(rechazo({ status: 409, enDuda: true }))!;
+    expect(`${aviso.asunto} ${aviso.cuerpo}`).not.toContain("cargada");
+  });
+
+  it("la orden que quedó en el teléfono quedó guardada, no guardado", () => {
+    const orden = correoPorElRechazo(rechazo({ tipo: "orden" }))!;
+    expect(orden.cuerpo).toContain("guardada");
+    expect(orden.cuerpo).not.toContain("guardado");
+  });
+
+  it("a un 403 no se le dice que lo corrija: no hay nada que corregir", () => {
+    // Los tres 403 son de permisos —«requiere nivel de edición», «Sin
+    // permisos», «esa clave es de otra persona»—. Mandarlo de nuevo va a
+    // fallar igual, así que prometer eso es un correo que dice algo falso.
+    const correo = correoPorElRechazo(rechazo({ status: 403, error: "Sin permisos" }))!;
+    expect(correo.cuerpo).not.toContain("Corregi");
+    expect(correo.cuerpo).not.toContain("mandalo de nuevo");
+  });
+
+  it("el asunto no lleva saltos de línea ni crece sin límite", () => {
+    // La descripción es un textarea sin tope: un salto de línea en un asunto
+    // es una cabecera partida, y dos mil caracteres son un asunto fuera de
+    // norma. Es el único campo libre que llega a una cabecera.
+    const larga = `linea uno\nlinea dos ${"x".repeat(500)}`;
+    for (const caso of [
+      rechazo({ descripcion: larga }),
+      rechazo({ descripcion: larga, status: 409, enDuda: true }),
+    ]) {
+      const correo = correoPorElRechazo(caso)!;
+      expect(correo.asunto).not.toMatch(/[\r\n]/);
+      expect(correo.asunto.length).toBeLessThanOrEqual(160);
+    }
+  });
+
   it("una orden se nombra como orden y no como aviso", () => {
     const correo = correoPorElRechazo(rechazo({ tipo: "orden" }))!;
     expect(correo.asunto).toContain("orden");

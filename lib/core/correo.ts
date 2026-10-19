@@ -44,6 +44,18 @@
  */
 const TOPE_DE_ESPERA_MS = 5_000;
 
+/**
+ * Si el correo está configurado, para preguntarlo **antes** de juntar los
+ * datos del mensaje.
+ *
+ * Entre el deploy y el día que alguien publique el Apps Script va a pasar
+ * tiempo, y en ese rato cada carga rechazada haría una consulta a `usuarios`
+ * para después tirar el resultado. Las dos variables van juntas o no van.
+ */
+export function estaConfigurado(): boolean {
+  return Boolean(process.env.SDG_CORREO_URL && process.env.SDG_CORREO_SECRET);
+}
+
 export type ResultadoDelCorreo = "enviado" | "sin-configurar" | "fallo";
 
 export interface Mensaje {
@@ -88,7 +100,7 @@ export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo
     // Lo que contestó, sin traducir: es lo único que después va a permitir
     // distinguir un secreto mal puesto de un dominio no permitido de un cupo
     // agotado.
-    console.error("correo: lo rechazo el Apps Script", respuesta.status, dijo.slice(0, 500));
+    console.error("correo: lo rechazó el Apps Script", respuesta.status, dijo.slice(0, 500));
     return "fallo";
   } catch (e) {
     console.error("correo: no se pudo llamar al Apps Script", (e as Error)?.message ?? e);

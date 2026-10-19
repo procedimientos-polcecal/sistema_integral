@@ -117,6 +117,10 @@ function doPost(e) {
 
   // El secreto primero y antes de mirar nada más: es lo único que separa a esta
   // URL de cualquiera que la encuentre.
+  // Un cuerpo que es `null` o un número parsea bien y después revienta al
+  // pedirle una propiedad. Se descarta antes de mirar el secreto.
+  if (!pedido || typeof pedido !== "object") return respuesta_("cuerpo-ilegible", "no es un objeto");
+
   if (pedido.secreto !== secreto) return respuesta_("secreto-invalido", "");
 
   if (!dominiosPermitidos_().length) {

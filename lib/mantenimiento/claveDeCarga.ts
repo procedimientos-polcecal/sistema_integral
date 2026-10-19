@@ -63,9 +63,14 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 type ClienteAdmin = ReturnType<typeof createAdminClient>;
 
 // Los dos valores los fija el `check` de la migración: si se agrega un tercer
-// tipo hay que tocar los dos lados. Se declara acá y no se importa del módulo
-// del navegador (`public/cola/colaOffline.js`) porque una ruta de servidor no
-// debe depender de código de cliente.
+// tipo hay que tocar los dos lados. Se declara acá y no se importa de
+// `public/cola/colaOffline.js` por costumbre más que por regla, y conviene
+// decirlo porque desde el 19/10/2026 **sí hay** código de servidor que importa
+// de ese archivo: `lib/mantenimiento/correoDeLaCarga.ts` y
+// `lib/mantenimiento/avisarDeLaCarga.ts` toman de ahí los nombres de la carga y
+// la cabecera del disparo, justamente para que no haya dos definiciones. El
+// archivo es JavaScript plano sin nada del navegador adentro, y `npm run build`
+// confirma que no llega al bundle del cliente.
 export type TipoDeCarga = "aviso" | "orden";
 
 // Una fila de `cargas_offline`, tal como la devuelve PostgREST. `tipo` es

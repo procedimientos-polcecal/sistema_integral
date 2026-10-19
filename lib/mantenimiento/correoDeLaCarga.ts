@@ -1,4 +1,4 @@
-import { DISPARO, conSuArticulo } from "@/public/cola/colaOffline.js";
+import { DISPARO, concordado, conSuArticulo } from "@/public/cola/colaOffline.js";
 
 /**
  * Si una carga rechazada merece un correo, y cuál de los dos textos.
@@ -63,17 +63,42 @@ export interface RechazoDeCarga {
   tipo: "aviso" | "orden";
   descripcion: string;
   sector: string | null;
-  /** El día en que se cargó, en ISO. */
+  /**
+   * El día de la carga, en ISO.
+   *
+   * Para el aviso es el día en que se cargó. Para la orden **es el que la
+   * persona eligió** en «Fecha creación», que puede ser anterior: por eso el
+   * texto dice «la orden del 5/10» y no «la que cargaste el 5/10».
+   */
   fecha: string;
 }
 
 /** El día como lo escribe este sistema: d/m, nunca m/d. */
 function comoSeEscribe(fecha: string): string {
   const [, mes, dia] = fecha.split("-");
-  return dia && mes ? `${Number(dia)}/${Number(mes)}` : fecha;
+  // Sin forma de fecha no se inventa ninguna ni se deja un hueco: hoy la cola
+  // manda siempre ISO, así que esto es la red por si eso deja de ser cierto.
+  if (!dia || !mes) return "(sin fecha)";
+  return `${Number(dia)}/${Number(mes)}`;
 }
 
 /** Qué carga era, lo suficiente para reconocerla entre varias. */
+/**
+ * Cuánto de la descripción entra en un asunto.
+ *
+ * La descripción es un `<textarea>` sin tope en los dos formularios, y el
+ * asunto es una **cabecera**: un salto de línea ahí es una cabecera partida y
+ * dos mil caracteres son un asunto fuera de norma. Es el único campo libre que
+ * llega a una.
+ */
+const LARGO_DEL_ASUNTO = 80;
+
+/** Lo que puede ir en una cabecera: una sola línea y acotada. */
+function paraUnAsunto(texto: string): string {
+  const unaLinea = texto.replace(/\s+/g, " ").trim();
+  return unaLinea.length > LARGO_DEL_ASUNTO ? `${unaLinea.slice(0, LARGO_DEL_ASUNTO - 1)}…` : unaLinea;
+}
+
 function cualEra(rechazo: RechazoDeCarga): string {
   const sector = rechazo.sector?.trim();
   // Sin descripción es justo el caso del 400 «Contá qué pasa»: unas comillas
@@ -95,6 +120,20 @@ export function correoPorElRechazo(
   const dia = comoSeEscribe(rechazo.fecha);
   const dijo = `El sistema dijo: ${rechazo.error}`;
 
+  // Concordados, y no a ojo: la orden de trabajo es femenina y el aviso
+  // masculino. `concordado` existe por esto mismo —su comentario cuenta un
+  // cartel que salía mal con uno y bien con el otro **sin que nada lo notara**—
+  // y acá estaba pasando igual.
+  const quedo = concordado(rechazo.tipo, "cargad");
+  const guardada = concordado(rechazo.tipo, "guardad");
+
+  // A un rechazo por permisos no se le puede decir «corregilo y mandalo de
+  // nuevo»: no hay nada que corregir y mandarlo de nuevo va a fallar igual.
+  const queHacer =
+    rechazo.status === 403
+      ? "Quedó en tu teléfono, en Cargar. Pedí el permiso que falta y después mandala desde ahí."
+      : `Quedó ${guardada} en tu teléfono, en Cargar. Corregila y mandala de nuevo.`;
+
   // El caso en duda **no puede decir que no se cargó**, porque quizás sí: la
   // clave quedó reservada y no se sabe si la fila llegó a escribirse en la
   // planilla. Es el aviso más caro de perderse —si nadie lo mira, termina en
@@ -102,12 +141,12 @@ export function correoPorElRechazo(
   // igual, con su propio texto.
   if (rechazo.enDuda) {
     return {
-      asunto: `Revisá la planilla: ${cualEra(rechazo)} puede haber quedado cargado`,
+      asunto: paraUnAsunto(`Revisá la planilla: ${cualEra(rechazo)} puede haber quedado ${quedo}`),
       cuerpo: [
-        `${laCarga.charAt(0).toUpperCase()}${laCarga.slice(1)} que cargaste el ${dia} se mandó, y no sabemos si entró.`,
+        `${laCarga.charAt(0).toUpperCase()}${laCarga.slice(1)} del ${dia} se mandó, y no sabemos si entró.`,
         cualEra(rechazo),
         dijo,
-        "Puede haber quedado escrito en la planilla. Miralo ahí antes de cargarlo de nuevo, o quedan dos.",
+        `Puede haber quedado ${concordado(rechazo.tipo, "escrit")} en la planilla. Mirala ahí antes de cargarla de nuevo, o quedan dos.`,
       ].join("\n\n"),
     };
   }
@@ -117,11 +156,11 @@ export function correoPorElRechazo(
   // correo, que puede ser la computadora, y ahí no está. Decir dónde está es
   // verdad; linkear a donde no está, no.
   return {
-    asunto: `No se pudo cargar ${laCarga} del ${dia}`,
+    asunto: paraUnAsunto(`No se pudo cargar ${laCarga} del ${dia}: ${cualEra(rechazo)}`),
     cuerpo: [
       cualEra(rechazo),
       dijo,
-      "Quedó guardado en tu teléfono, en Cargar. Corregilo y mandalo de nuevo.",
+      queHacer,
     ].join("\n\n"),
   };
 }
