@@ -918,3 +918,133 @@ export async function hastaDondeLlegaLaFormula(
   }
   return ultima;
 }
+
+/**
+ * Dejar una pestaña donde **sólo el sistema puede escribir**.
+ *
+ * Probado el 19/10/2026 contra un libro real, porque era la duda que bloqueaba
+ * todo el cambio de dirección:
+ *
+ * | | |
+ * |---|---|
+ * | ¿Escribe con la protección puesta? | **sí** |
+ * | Al crearla, ¿quién queda de editor? | el servicio **y** los administradores del archivo |
+ * | ¿Puede sacar a las personas y quedar sola? | **sí** |
+ * | ¿Puede excluirse a sí misma? | **no**: `You can't remove yourself as an editor` |
+ *
+ * Lo último parece un límite y es una garantía: **no existe la forma de dejar
+ * una pestaña que el sistema tenga que escribir y no pueda**.
+ *
+ * Son dos llamadas y no una porque Google agrega sola a la cuenta de servicio
+ * —y a los administradores— al crear la protección; depurar la lista es un
+ * `updateProtectedRange` aparte.
+ *
+ * Es **idempotente**: si la pestaña ya está protegida, actualiza los editores
+ * de la protección que hay en vez de apilar una segunda.
+ */
+export async function protegerPestana(
+  planillaId: string,
+  pestana: string,
+  descripcion = "La escribe el sistema"
+): Promise<{ creada: boolean; editores: string[] }> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) throw new Error(`La pestaña "${pestana}" no existe en la planilla`);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const batch = async (requests: unknown[]) => {
+    const res = await pedir(`https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests }),
+    });
+    const cuerpo = await res.text();
+    if (!res.ok) {
+      throw new Error(mensajeDeGoogle(res.status, cuerpo, cuentaDeServicio(), "escribir"));
+    }
+    return JSON.parse(cuerpo);
+  };
+
+  const leerProtecciones = async (): Promise<{ protectedRangeId: number; range?: { sheetId?: number } }[]> => {
+    const res = await pedir(
+      `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+        `?fields=sheets(properties.sheetId,protectedRanges(protectedRangeId,range.sheetId,editors))`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+    const datos = (await res.json()) as {
+      sheets?: { properties: { sheetId: number }; protectedRanges?: { protectedRangeId: number; range?: { sheetId?: number } }[] }[];
+    };
+    return datos.sheets?.find((s) => s.properties.sheetId === sheetId)?.protectedRanges ?? [];
+  };
+
+  // Una protección de la hoja entera no trae `range.startRowIndex`: es la que
+  // interesa. Si ya está, se reusa en vez de apilar otra.
+  const yaHay = (await leerProtecciones())[0];
+  let protectedRangeId = yaHay?.protectedRangeId;
+  const creada = protectedRangeId === undefined;
+
+  if (creada) {
+    const r = await batch([{ addProtectedRange: { protectedRange: { range: { sheetId }, description: descripcion } } }]);
+    protectedRangeId = r.replies[0].addProtectedRange.protectedRange.protectedRangeId;
+  }
+
+  // Dejar sólo a la cuenta de servicio. `domainUsersCanEdit: false` es lo que
+  // saca al resto del dominio; sin eso la protección no frena a nadie.
+  await batch([
+    {
+      updateProtectedRange: {
+        protectedRange: {
+          protectedRangeId,
+          description: descripcion,
+          editors: { users: [cuentaDeServicio()], domainUsersCanEdit: false },
+        },
+        fields: "editors,description",
+      },
+    },
+  ]);
+
+  const final = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}?fields=sheets.protectedRanges(protectedRangeId,editors)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const datos = (await final.json()) as {
+    sheets?: { protectedRanges?: { protectedRangeId: number; editors?: { users?: string[] } }[] }[];
+  };
+  const editores =
+    datos.sheets
+      ?.flatMap((s) => s.protectedRanges ?? [])
+      .find((p) => p.protectedRangeId === protectedRangeId)?.editors?.users ?? [];
+
+  return { creada, editores };
+}
+
+/** Saca la protección de una pestaña. Devuelve cuántas sacó. */
+export async function desprotegerPestana(planillaId: string, pestana: string): Promise<number> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) return 0;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `?fields=sheets(properties.sheetId,protectedRanges.protectedRangeId)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+  const datos = (await res.json()) as {
+    sheets?: { properties: { sheetId: number }; protectedRanges?: { protectedRangeId: number }[] }[];
+  };
+  const ids = (datos.sheets?.find((s) => s.properties.sheetId === sheetId)?.protectedRanges ?? []).map(
+    (p) => p.protectedRangeId
+  );
+  if (ids.length === 0) return 0;
+
+  const borrar = await pedir(`https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests: ids.map((protectedRangeId) => ({ deleteProtectedRange: { protectedRangeId } })) }),
+  });
+  if (!borrar.ok) {
+    throw new Error(mensajeDeGoogle(borrar.status, await borrar.text(), cuentaDeServicio(), "escribir"));
+  }
+  return ids.length;
+}

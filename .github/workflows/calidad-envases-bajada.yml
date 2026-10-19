@@ -1,0 +1,103 @@
+# Baja el kardex de envases a la planilla, los lunes.
+#
+# QUE ES
+#
+# Desde el corte del 19/10/2026, en el kardex de envases MANDA EL SdG y la
+# planilla es el lugar donde miran los que no entran al sistema. Esta corrida
+# reescribe el kardex entero y deja la pestaña protegida.
+#
+# NO es lo unico que escribe la planilla: lib/calidad/envases/espejo.ts sigue
+# mandando cada movimiento EN EL MOMENTO en que alguien lo carga. Si esto fuera
+# lo unico, un movimiento cargado un martes no apareceria alla hasta el lunes.
+#
+# Esto es la RECONCILIACION: reescribir el kardex entero es lo unico capaz de
+# reflejar una correccion o un borrado, porque el espejo solo sabe agregar al
+# final.
+#
+# POR QUE SEMANAL Y NO MAS SEGUIDO
+#
+# Porque el espejo ya cubre lo urgente. Esto corrige lo que el espejo no puede,
+# que son casos raros, y cada corrida reescribe 1.500 filas: hacerlo cada media
+# hora seria mover la planilla entera todo el dia para no cambiar nada.
+#
+# Los lunes 03:00 UTC = 00:00 de Argentina, el mismo hueco que el respaldo.
+#
+# SE NIEGA SOLA SI TODAVIA MANDA LA PLANILLA
+#
+# La ruta comprueba EL_SISTEMA_MANDA_EL_KARDEX y devuelve 409 si esta en false.
+# Los dos no pueden convivir: la bajada compacta las filas y la importacion
+# inserta por sheets_fila, asi que con las dos vivas una escribiria los datos de
+# una fila sobre la clave de otra, sin fallar y sin avisar.
+#
+# COMO SE VUELVE ATRAS
+#
+#   1. EL_SISTEMA_MANDA_EL_KARDEX en false y desplegar.
+#   2. Sacar la proteccion de la pestaña, o la gente sigue sin poder escribir.
+#   3. Apagar este workflow.
+#
+# El endpoint se protege solo: exige CRON_SECRET y sin el responde 503.
+
+name: Bajada de envases
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  # Para poder correrla a mano el dia del corte y cuando haga falta.
+  workflow_dispatch:
+
+concurrency:
+  # El kardex se reescribe entero: dos corridas a la vez lo dejarian a medias,
+  # y a medias es indistinguible de completo.
+  group: calidad-envases-bajada
+  cancel-in-progress: false
+
+jobs:
+  bajar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que esten las variables
+        # Por `env:` y no interpolados en el comando: interpolar un secreto con
+        # la sintaxis de expresiones de Actions mete su VALOR dentro del script.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          faltan=""
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir la bajada
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de mas
+          # al final rompe el header antes de que salga de aca.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/calidad-envases-bajada")
+
+          cat respuesta.json
+          echo
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::La bajada devolvio $codigo"
+            exit 1
+          fi
+
+          # La proteccion se informa aparte y no tira abajo la corrida: una
+          # planilla escrita pero editable es molesto; una sin escribir es peor.
+          # Pero tiene que verse, si no "verde" pasa a significar "algo paso".
+          if node -e 'process.exit(require("./respuesta.json").proteccion?.error ? 0 : 1)'; then
+            echo "::warning::La bajada escribio, pero la proteccion de la pestaña fallo. La planilla quedo editable: el detalle esta arriba."
+          else
+            echo "::notice::Bajada completa y pestaña protegida."
+          fi
