@@ -176,11 +176,40 @@ esos 18 movimientos de la planilla**: el ensayo los vació y por eso 10 artícul
 cambiaron de stock. De ahí sale un paso que antes no estaba:
 
 **Antes de bajar un módulo hay que probar que el SdG y la planilla dicen lo
-mismo.** No alcanza con que la bajada funcione. El ensayo contra una copia es
-la prueba, y la condición para cortar es que el diff sea **sólo cosmético** —en
-Envases, los `0` que la planilla tiene escritos y el SdG deja vacíos a
-propósito—. Mientras aparezcan filas huérfanas, lo que falta es sincronizar, no
-bajar.
+mismo.** No alcanza con que la bajada funcione.
+
+Eso lo contesta `scripts/simular-bajada-envases.mts`, que dice qué cambiaría
+**sin escribir una sola celda** —el hermano de `simular-rls.mjs`—. Sale 0
+cuando se puede cortar. Es mejor que el ensayo contra una copia: no deja
+archivos sueltos y se puede correr las veces que haga falta.
+
+La condición para cortar es que **no quede ninguna diferencia real**. Las
+cosméticas conocidas no cuentan, y hoy son dos clases:
+
+- los `0` que la planilla tiene escritos y el SdG deja vacíos a propósito
+  (vacío es "acá no pasó nada", un cero es "se contó y dio cero"; la fórmula
+  suma igual las dos);
+- una fecha que en la planilla quedó como **texto** y el SdG dejaría como
+  fecha de verdad. Sólo cuenta como cosmética si los dos lados significan lo
+  mismo, comparado con `fechaDeSheets()` y no a ojo: un `3/4/2025` es ambiguo,
+  y leer d/m al revés ya dio vuelta 885 fechas en Compras.
+
+### Estado de Envases al 19/10/2026: listo
+
+Después de sincronizar, el simulador da:
+
+```
+DIFERENCIAS COSMÉTICAS:  356 × cero escrito que el SdG deja vacío
+                           1 × fecha que la planilla tiene como texto
+DIFERENCIAS REALES:      ninguna
+FILAS QUE LA BAJADA BORRARÍA: 0
+LISTO PARA CORTAR
+```
+
+**Lo que falta es el corte, y es una decisión y no código**: apagar el
+importador y encender la bajada en el mismo deploy, poner la protección, y que
+el sector empiece a cargar en el SdG ese día. Correr el simulador otra vez
+inmediatamente antes, porque entre hoy y el corte la planilla sigue viva.
 
 ## El orden, y por qué
 
