@@ -747,3 +747,106 @@ export async function reemplazarPestana(
     throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
   }
 }
+
+/** El `sheetId` (gid) de una pestaña por su nombre, o null si no está. */
+async function idDePestana(planillaId: string, pestana: string): Promise<number | null> {
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}?fields=sheets.properties(sheetId,title)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+  }
+  const datos = (await res.json()) as { sheets?: { properties: { sheetId: number; title: string } }[] };
+  return datos.sheets?.find((s) => s.properties.title === pestana)?.properties.sheetId ?? null;
+}
+
+/** Los formatos que sabe aplicar `formatearColumnas`. */
+export type FormatoDeColumna = "fecha" | "hora";
+
+const PATRON: Record<FormatoDeColumna, { type: string; pattern: string }> = {
+  fecha: { type: "DATE", pattern: "dd/mm/yyyy" },
+  hora: { type: "DATE_TIME", pattern: "hh:mm" },
+};
+
+/**
+ * Darle formato de fecha o de hora a columnas enteras de una pestaña.
+ *
+ * **Hace falta, y no es cosmético.** Las fechas se escriben como serial —texto
+ * sería interpretado según el locale de la planilla, que es la trampa que dio
+ * vuelta 885 fechas en Compras—, pero un serial sin formato se muestra tal
+ * cual: la columna "Ingreso" de un libro recién creado decía `45903` en vez de
+ * `01/08/1991`. En las planillas que ya existen el formato está puesto desde
+ * siempre y por eso nunca se notó; en un libro nuevo las columnas nacen en
+ * "Automático" y un número se queda número.
+ *
+ * Un respaldo que hay que descifrar no es legible, y legible es exactamente
+ * para lo que existe.
+ *
+ * Se aplica **desde la fila 3**: arriba están el aviso y el encabezado, que son
+ * texto. Formatearlos no rompe nada, pero tampoco hace nada, y acotar el rango
+ * deja claro dónde empiezan los datos.
+ *
+ * `formatos` va alineado a las columnas: un `null` es "esta columna no se
+ * toca".
+ */
+export async function formatearColumnas(
+  planillaId: string,
+  pestana: string,
+  formatos: (FormatoDeColumna | null)[]
+): Promise<void> {
+  const conFormato = formatos
+    .map((f, i) => ({ f, i }))
+    .filter((x): x is { f: FormatoDeColumna; i: number } => x.f !== null);
+  if (conFormato.length === 0) return;
+
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) throw new Error(`La pestaña "${pestana}" no existe en la planilla`);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: conFormato.map(({ f, i }) => ({
+          repeatCell: {
+            range: { sheetId, startRowIndex: 2, startColumnIndex: i, endColumnIndex: i + 1 },
+            cell: { userEnteredFormat: { numberFormat: PATRON[f] } },
+            fields: "userEnteredFormat.numberFormat",
+          },
+        })),
+      }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}
+
+/**
+ * Borrar una pestaña por nombre. Devuelve false si no estaba.
+ *
+ * Existe para la `Sheet1` que Google crea sola con cada libro nuevo: queda
+ * vacía al lado de las del respaldo y hace dudar de si falta algo.
+ */
+export async function borrarPestana(planillaId: string, pestana: string): Promise<boolean> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) return false;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [{ deleteSheet: { sheetId } }] }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+  return true;
+}

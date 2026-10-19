@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { reemplazarPestana } from "@/lib/core/sheets";
+import { reemplazarPestana, formatearColumnas } from "@/lib/core/sheets";
 import { hayCredencialesGoogle } from "@/lib/core/google";
 import { INSTANTANEAS, hoyParaElRespaldo, type Instantanea } from "./instantaneas";
 
@@ -37,8 +37,8 @@ export interface ResultadoDelRespaldo {
 function encabezadoDelRespaldo(ins: Instantanea, generadoEn: string): string {
   return (
     `RESPALDO AUTOMATICO DEL SdG — generado el ${generadoEn}. ` +
-    `NO EDITAR: esta pestaña se reescribe entera todas las noches y el sistema nunca la lee. ` +
-    `${ins.descripcion}`
+    `NO EDITAR: esta pestaña se reescribe entera en cada corrida y el sistema nunca la lee, ` +
+    `así que lo que se escriba acá se pierde sin avisar. ${ins.descripcion}`
   );
 }
 
@@ -103,6 +103,11 @@ export async function correrElRespaldo(
         ins.encabezados,
         ...datos,
       ]);
+      // Después de escribir y no antes: `reemplazarPestana` crea la pestaña si
+      // no estaba, y formatear una que no existe es un error.
+      if (ins.formatos?.length) {
+        await formatearColumnas(planillaId, ins.pestana, ins.formatos);
+      }
       pestanas.push({ pestana: ins.pestana, ok: true, filas: datos.length });
     } catch (e) {
       pestanas.push({

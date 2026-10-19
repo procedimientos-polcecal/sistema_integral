@@ -102,6 +102,14 @@ el índice, que es lo que permite saber qué falta.
 - **Las fechas van como serial, nunca como texto.** La escritura usa
   `USER_ENTERED`: un `"05/10/2026"` lo interpreta la planilla según su locale.
   Es la misma trampa que dio vuelta 885 fechas en Compras, por el otro lado.
+- **Un serial sin formato se muestra crudo.** Las fechas van como serial —texto
+  lo interpretaría la planilla según su locale— pero en un libro **nuevo** las
+  columnas nacen en "Automático", así que la columna «Ingreso» decía `45903` en
+  vez de `03/09/2025` y el respaldo entero dejaba de ser legible, que es para lo
+  único que existe. En las planillas que ya existen el formato está puesto desde
+  siempre y por eso nunca se había notado. Lo aplica `formatearColumnas()` y cada
+  instantánea declara sus columnas en `formatos`. **Se vio leyendo la planilla de
+  vuelta, no escribiéndola**: las siete escrituras habían devuelto `ok`.
 - **Todo se lee con `traerTodo`.** La instantánea de asistencia son ~4.200 filas
   y PostgREST corta en 1.000 sin avisar. Un respaldo truncado en silencio es la
   peor clase de respaldo: parece completo hasta el día que hace falta.
@@ -115,6 +123,11 @@ el índice, que es lo que permite saber qué falta.
 | La corrida | [lib/respaldo/correr.ts](../lib/respaldo/correr.ts) |
 | La ruta | `app/api/cron/respaldo-sheets/route.ts` |
 | El cron | [.github/workflows/respaldo-sheets.yml](../.github/workflows/respaldo-sheets.yml) |
+
+Corre **los lunes a las 00:00 de Argentina** (`0 3 * * 1` en UTC) desde el
+19/10/2026. El dump de la base sigue siendo diario: son dos respaldos distintos
+y una semana de atraso en la fotocopia no es lo mismo que una semana de trabajo
+perdido.
 
 **Cada pestaña va por su cuenta y un fallo no corta el resto**: son módulos
 independientes, y que Facturación rompa no es motivo para quedarse sin el padrón
@@ -141,15 +154,22 @@ la base.
 
 ## Qué falta configurar
 
-1. **Crear el libro de respaldo** en Drive: uno nuevo y vacío, con un nombre que
-   se entienda (`RESPALDO AUTOMATICO SdG`). Conviene que viva en la misma unidad
-   compartida que los backups.
-2. **Compartirlo como Editor** con la cuenta de servicio
-   (`sheets-reader@mantenimientopp.iam.gserviceaccount.com`).
-3. **Cargar `GOOGLE_SHEETS_RESPALDO_ID`** en Vercel (el tramo entre `/d/` y
-   `/edit` de la URL) y redesplegar.
-4. **Correr el workflow a mano** desde la pestaña *Actions* → *Respaldo a
-   Sheets* → *Run workflow*, y mirar que las siete pestañas digan `ok`.
+~~1. Crear el libro~~ — hecho el 19/10/2026. Es
+`RESPALDO AUTOMATICO SdG`, id `1MhFYWLEmt8ePsb5XSjGtDphJYGjbufc509kGq7Cx94A`,
+dentro de la unidad compartida *Backups SdG*. Por vivir en una unidad
+compartida, la cuenta de servicio ya es editora y no hubo que compartir nada.
+
+~~2. Probarlo~~ — hecho: las siete pestañas escritas y **leídas de vuelta**,
+8.817 filas, con las fechas verificadas contra la base (`2025-09-03` →
+`03/09/2025`, d/m y no m/d).
+
+3. **Cargar `GOOGLE_SHEETS_RESPALDO_ID` en Vercel** con ese id, en los tres
+   entornos, y redesplegar. **Es lo único que falta**, y hasta que esté el cron
+   va a fallar en rojo todos los lunes con el nombre de la variable en el
+   mensaje.
+
+4. Después, correr el workflow a mano desde *Actions* → *Respaldo a Sheets* →
+   *Run workflow* para confirmar que sale verde sin esperar al lunes.
 
 ## Pendiente de la otra mitad
 

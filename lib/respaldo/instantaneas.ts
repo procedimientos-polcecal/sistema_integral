@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import type { FormatoDeColumna } from "@/lib/core/sheets";
 import {
   desdeHace, fecha, hora, nombreDe, numero, quien, si, uno, type Persona,
 } from "./celdas";
@@ -72,6 +73,16 @@ export interface Instantanea {
   /** Qué es, en una línea: va en la fila 1, arriba del encabezado. */
   descripcion: string;
   encabezados: string[];
+  /**
+   * Qué formato lleva cada columna, alineado a `encabezados`. Un hueco es
+   * "no se toca".
+   *
+   * Sin esto una fecha se ve como `45903`: se escribe como serial —texto lo
+   * interpretaría la planilla segun su locale— y un serial sin formato se
+   * muestra crudo. En los libros que ya existen el formato está puesto desde
+   * siempre; en uno nuevo las columnas nacen en "Automático".
+   */
+  formatos?: (FormatoDeColumna | null)[];
   filas(admin: SupabaseClient, hoy: string): Promise<(string | number)[][]>;
 }
 
@@ -91,6 +102,7 @@ export const INSTANTANEAS: Instantanea[] = [
       "Legajo", "Apellido", "Nombre", "Empresa", "Sector",
       "Ingreso", "Modalidad", "Horas teoricas",
     ],
+    formatos: [null, null, null, null, null, "fecha", null, null],
     async filas(admin) {
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
         admin
@@ -124,6 +136,7 @@ export const INSTANTANEAS: Instantanea[] = [
       "Extra 50", "Extra 100", "Ausente", "Tipo de ausencia", "Justificada",
       "Tarde", "Retiro anticipado", "Observaciones",
     ],
+    formatos: ["fecha"],
     async filas(admin, hoy) {
       const desdeIso = desdeHace(hoy, DIAS_DE_VENTANA);
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
@@ -164,6 +177,7 @@ export const INSTANTANEAS: Instantanea[] = [
     descripcion:
       `Las fichadas crudas de los últimos ${DIAS_DE_VENTANA} días, como entraron del reloj. Van además del cálculo porque son el insumo: con esto se puede rehacer la cuenta, con el cálculo solo hay que creerle.`,
     encabezados: ["Fecha", "Legajo", "Empleado", "Entrada", "Salida", "Origen", "Observaciones"],
+    formatos: ["fecha", null, null, "hora", "hora"],
     async filas(admin, hoy) {
       const desdeIso = desdeHace(hoy, DIAS_DE_VENTANA);
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
@@ -193,6 +207,7 @@ export const INSTANTANEAS: Instantanea[] = [
     descripcion:
       "Quién viaja en qué turno. Remises no tiene planilla propia: si el SdG no está, esto no existe en ningún lado.",
     encabezados: ["Fecha", "Legajo", "Empleado", "Turno", "Tipo"],
+    formatos: ["fecha"],
     async filas(admin, hoy) {
       const desdeIso = desdeHace(hoy, DIAS_DE_VENTANA_REMISES);
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
@@ -218,6 +233,7 @@ export const INSTANTANEAS: Instantanea[] = [
     pestana: "Remises - Asistencia",
     descripcion: "Quién viajó de verdad, contra el plan de la pestaña anterior.",
     encabezados: ["Fecha", "Legajo", "Empleado", "Turno"],
+    formatos: ["fecha"],
     async filas(admin, hoy) {
       const desdeIso = desdeHace(hoy, DIAS_DE_VENTANA_REMISES);
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
@@ -249,6 +265,7 @@ export const INSTANTANEAS: Instantanea[] = [
       "Cal util ml acido", "Cal util peso muestra g",
       "Granulometria peso muestra g", "Observaciones",
     ],
+    formatos: ["fecha"],
     async filas(admin) {
       // Sin ventana: son 27 filas en total. Un respaldo parcial del único lugar
       // donde vive un dato no tiene sentido.
@@ -283,6 +300,7 @@ export const INSTANTANEAS: Instantanea[] = [
     descripcion:
       "Qué entró por el buzón y en qué estado quedó. El PDF no se copia —vive en Storage—: lo que se respalda es el índice, que es lo que permite saber qué falta.",
     encabezados: ["Recibido", "Remitente", "Asunto", "Tipo", "Estado", "Motivo", "Archivo"],
+    formatos: ["fecha"],
     async filas(admin) {
       const datos = await traerTodo<Record<string, unknown>>((desde, hasta) =>
         admin
