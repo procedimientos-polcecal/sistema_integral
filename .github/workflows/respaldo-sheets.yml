@@ -50,14 +50,23 @@ name: Respaldo a Sheets
 
 on:
   schedule:
-    # 03:00 UTC = 00:00 en Argentina, que es lo que se pidió.
+    # Lunes a las 03:00 UTC = 00:00 de Argentina, que es lo que se pidió.
     #
     # Queda tres horas antes del dump de `backup.yml` (06:00 UTC) a propósito:
-    # así los dos respaldos de la noche no compiten por la base, y el dump sale
-    # de una base quieta como estaba pensado.
+    # así los dos respaldos no compiten por la base, y el dump sale de una base
+    # quieta como estaba pensado.
     #
-    # Por ahora diario. Para pasarlo a semanal alcanza con "0 3 * * 1" (lunes).
-    - cron: "0 3 * * *"
+    # **El dump de la base sigue siendo DIARIO y eso no se tocó.** Semanal es
+    # este respaldo, que es la fotocopia legible; bajar a semanal el backup
+    # restaurable convertiría cualquier pérdida de datos en hasta siete días de
+    # trabajo perdido en vez de uno.
+    #
+    # Para volver a diario: "0 3 * * *".
+    #
+    # Ojo con las ventanas de `instantaneas.ts` si algún día se espacia más:
+    # son de 60 días, así que a una corrida semanal le sobran ocho semanas de
+    # margen. Una corrida mensual ya no tendría margen.
+    - cron: "0 3 * * 1"
   # Para poder correrlo a mano desde la pestaña Actions, que es como conviene
   # probarlo la primera vez.
   workflow_dispatch:
