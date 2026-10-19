@@ -45,35 +45,6 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
   return (
     <>
       {/* Controls — hidden on print */}
-      <div className="no-print fixed top-4 right-4 z-10 flex gap-2">
-        <button onClick={() => window.print()}
-          className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-slate-700 transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-          </svg>
-          Imprimir
-        </button>
-        <button onClick={savePDF} disabled={generating}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-slate-900 shadow-lg hover:bg-amber-600 disabled:opacity-50 transition-colors">
-          {generating ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            </svg>
-          )}
-          {generating ? "Generando PDF..." : "Guardar PDF"}
-        </button>
-        <button onClick={() => window.close()}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50 transition-colors">
-          Cerrar
-        </button>
-      </div>
-
       <style>{`
         @page { size: A4 portrait; margin: 10mm 12mm; }
         /* Lo que esconde el armazón —el header, el aside y las dos barras—
@@ -196,6 +167,45 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
       `}</style>
 
       <div className="print-content py-8 px-4">
+        {/* En el flujo y no flotando. Estaban en `fixed top-4 right-4`, que
+            las dibujaba **encima del header de la app** —tapaban la campana y
+            el nombre de quien mira—, porque `fixed` se posiciona contra la
+            ventana y no contra el área que scrollea.
+
+            `sticky top-0` da lo mismo que daba `fixed` —siguen a la vista al
+            bajar por una tanda de OT— sin el choque: se pegan al tope del
+            `<main>`, que empieza justo debajo del header. Y no lleva un alto
+            de header escrito a mano, que es lo que se rompe el día que el
+            header cambie de alto. */}
+          <div className="no-print sticky top-0 z-10 -mx-4 mb-6 flex justify-end gap-2 bg-[#f1f5f9] px-4 py-3">
+          <button onClick={() => window.print()}
+            className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-slate-700 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Imprimir
+          </button>
+          <button onClick={savePDF} disabled={generating}
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-slate-900 shadow-lg hover:bg-amber-600 disabled:opacity-50 transition-colors">
+            {generating ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+            )}
+            {generating ? "Generando PDF..." : "Guardar PDF"}
+          </button>
+          <button onClick={() => window.close()}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50 transition-colors">
+            Cerrar
+          </button>
+        </div>
+
         <div ref={contentRef} className="pdf-root">
         {items.map((item, idx) => {
           const assignee = nombreCompleto(item.assigned_user) || item.assigned_name || "";
