@@ -272,6 +272,12 @@ Lo medido llamando a `enviarCorreo` de verdad:
 | Segundo, en caliente | `enviado` en 1.773 ms |
 | A una dirección de otro dominio | `fallo`, con `dominio-no-permitido` |
 
+**Y los dos correos llegaron de verdad**, confirmado por quien los recibió. No
+es un detalle: `enviado` es lo que contestó el Apps Script, y eso prueba que el
+pedido salió, no que el correo haya aterrizado en una casilla. Es la misma
+distinción que este repo paga cada vez que la olvida — verificar el gesto en
+lugar del resultado.
+
 Tres cosas que eso deja fijadas y que antes eran supuestos:
 
 - **El tope de espera de 5 s es generoso**, no apretado. Era el único número de
