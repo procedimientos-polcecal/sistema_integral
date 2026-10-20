@@ -164,9 +164,11 @@ propósito: entre el deploy y el día que alguien publique el script va a pasar
 tiempo, y un error por cada carga rechazada sería ruido diario sobre algo que
 nadie pidió todavía. Lo fija un test en `lib/core/correo.test.ts`.
 
-El script **se publica desde una casilla del sistema y no desde la cuenta de una
-persona**: el dueño del proyecto es el remitente que la gente va a ver y a donde
-van a ir las respuestas, y eso no se cambia sin volver a implementar. Sus
+El script **se publica desde la cuenta de quien administra el SdG**: el dueño del
+proyecto es el remitente que la gente va a ver y a donde van a ir las
+respuestas. Renombrar esa cuenta no rompe nada —es la misma cuenta y el mismo
+Drive, así que la URL sigue sirviendo—; lo que sí obliga a transferir el
+proyecto y volver a publicar es **mover esto a otra cuenta**. Sus
 instrucciones de instalación están en el encabezado del propio archivo, y
 también la propiedad `DOMINIOS`, que es la que impide que una url filtrada se
 convierta en un relay para mandar correo desde la empresa.

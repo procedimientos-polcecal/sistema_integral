@@ -143,13 +143,25 @@ web. Eso trae sus propias cosas:
   un hecho raro— no se toca, pero el script tiene que fallar diciendo qué pasó
   y no en silencio.
 
-**Sale de una casilla del sistema, no de la cuenta de una persona.** Se
-preguntó y se decidió así: el proyecto de Apps Script se publica ejecutándose
-como su dueño, y ese dueño es el remitente que la gente va a ver y a donde van a
-ir las respuestas. Una casilla propia deja claro que lo manda el sistema; la
-cuenta de alguien haría que el correo figure mandado por esa persona y que las
-respuestas le lleguen a ella. **La dirección concreta la elige quien lo
-instala** y va en las instrucciones del script.
+**Sale de la cuenta de quien administra el SdG**, y eso se decidió sobre la
+marcha, el 20/10/2026, cambiando lo que decía antes este documento. El plan era
+una casilla del sistema, para que el correo no figure mandado por una persona.
+Se descartó por una razón práctica: **Vercel no da casillas** —no tiene producto
+de correo—, así que una casilla aparte es un usuario más de Google Workspace, o
+sea una licencia, para mandar un correo que hoy es raro.
+
+Lo que hizo aceptable la decisión es que **es reversible y barata de revertir**:
+renombrar esa cuenta más adelante no rompe nada, porque un renombre en Workspace
+deja la misma cuenta, el mismo Drive y el mismo proyecto, así que la URL de
+implementación sigue sirviendo. Lo que sí rompe es **mover el proyecto a otra
+cuenta**: hay que transferirlo antes de suspender la vieja y volver a publicar.
+
+Y si algún día molesta que el remitente sea una persona sin querer pagar una
+licencia, la salida es un **alias de envío** en esa misma cuenta con el
+remitente fijo en las propiedades del script. **Fijo, nunca tomado del pedido**:
+hoy `MailApp.sendEmail` se llama con tres argumentos sueltos justamente para que
+desde el cuerpo no se pueda inyectar `from`, `cc` ni copia oculta, y eso no se
+negocia por comodidad.
 
 El porqué de no leer ni escribir Gmail desde el servidor ya está medido y
 escrito en el encabezado de `docs/facturacion-correo-apps-script.gs`: la cuenta

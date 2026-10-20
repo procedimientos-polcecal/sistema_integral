@@ -29,9 +29,24 @@
  *
  * ## Instalación
  *
- *   1. **Desde una casilla del sistema, no desde la cuenta de una persona.**
- *      El dueño del proyecto es el remitente que la gente va a ver y a donde
- *      van a ir las respuestas, y eso no se cambia sin volver a publicar.
+ *   1. **Desde la cuenta de quien administra el SdG.** El dueño del proyecto es
+ *      el remitente que la gente va a ver y a donde van a ir las respuestas.
+ *      Se evaluó una casilla aparte y se descartó: en Workspace una cuenta
+ *      nueva ocupa una licencia, y no hace falta para esto.
+ *
+ *      **Renombrar esa cuenta más adelante no rompe nada.** Un renombre en
+ *      Workspace deja la misma cuenta, con el mismo Drive y el mismo proyecto,
+ *      así que la URL de implementación sigue sirviendo y no hay que tocar
+ *      `SDG_CORREO_URL`. Lo único que cambia es el remitente.
+ *
+ *      **Lo que sí rompe es mover esto a otra cuenta.** Crear una casilla
+ *      nueva y suspender la vieja deja el script en un Drive suspendido, que
+ *      no ejecuta nada: hay que transferir el proyecto **antes** de suspender
+ *      y volver a implementar. Si lo único que se busca es que el correo no
+ *      figure mandado por una persona, la salida barata es un alias de envío
+ *      en esta misma cuenta y un remitente fijo en las propiedades del
+ *      script — nunca tomado del pedido, que es lo que hoy impide que desde el
+ *      cuerpo se inyecte `from`, `cc` o copia oculta.
  *   2. script.google.com -> Nuevo proyecto, y pegar este archivo.
  *   3. Configuración del proyecto -> Propiedades del script:
  *        SECRETO  = el mismo valor que SDG_CORREO_SECRET en Vercel
