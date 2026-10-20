@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizarLugar, esRiego, terminosDeLaExpresion, totalDeLaExpresion,
-  repartirHoras, lunesDeLaSemana, agruparEnOrdenes, descripcionDeLaOT,
+  repartirHoras, lunesDeLaSemana, domingoDeLaSemana, claveDeOT,
+  agruparEnOrdenes, descripcionDeLaOT,
   type RenglonParaAgrupar,
 } from "./partesDeContratista";
 
@@ -220,7 +221,8 @@ describe("las OT que salen de los partes", () => {
 
   const renglon = (p: Partial<RenglonParaAgrupar> & { id: string }): RenglonParaAgrupar => ({
     parte_numero: 1301, fecha: "2026-10-01", actividad: "Limpieza",
-    lugar_raw: "x", sector_id: CALCINACION, equipo_id: null, horas: 4, ...p,
+    lugar_raw: "x", sector_id: CALCINACION, equipo_id: null, horas: 4,
+    orden_trabajo_id: null, ...p,
   });
 
   /**
@@ -305,6 +307,62 @@ describe("las OT que salen de los partes", () => {
     expect(mixto.grupos[0].equipo_id).toBeNull();
     // Pero las horas siguen enteras: no se pierde nada por no saber el equipo.
     expect(mixto.grupos[0].horas).toBe(8);
+  });
+
+  /**
+   * EL AGUJERO DEL 20/10/2026, encontrado cargando el 1301 de verdad.
+   *
+   * Una quincena no se carga de una sentada. Si la agrupacion mirara solo los
+   * renglones pendientes, la segunda tanda volveria a producir la clave que la
+   * primera ya convirtio y se crearia una SEGUNDA OT para el mismo sector y la
+   * misma semana — justo lo contrario de "una OT por semana, por sector". El
+   * `orden_trabajo_id` impide reconvertir un renglon; no impide eso.
+   */
+  it("un grupo que ya tiene orden la trae, en vez de pedir otra", () => {
+    const { grupos } = agruparEnOrdenes([
+      renglon({ id: "a", parte_numero: 1301, orden_trabajo_id: "ot-1" }),
+      renglon({ id: "b", parte_numero: 1302, orden_trabajo_id: null }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ot_existentes).toEqual(["ot-1"]);
+    // Las horas son las de los dos: a esa OT hay que dejarla en 8, no crear
+    // otra de 4.
+    expect(grupos[0].horas).toBe(8);
+    // Y sólo el que falta se marca: remarcar el primero le cambiaria la orden.
+    expect(grupos[0].renglon_ids_sin_ot).toEqual(["b"]);
+  });
+
+  it("un grupo entero sin convertir no trae ninguna orden", () => {
+    const { grupos } = agruparEnOrdenes([renglon({ id: "a" }), renglon({ id: "b" })]);
+    expect(grupos[0].ot_existentes).toEqual([]);
+    expect(grupos[0].renglon_ids_sin_ot).toEqual(["a", "b"]);
+  });
+
+  /**
+   * No deberia pasar nunca, y si pasa no se toca ninguna: repartir horas entre
+   * dos ordenes que ya existen es inventar. Quien llama lo informa.
+   */
+  it("dos ordenes para la misma clave se denuncian, no se eligen", () => {
+    const { grupos } = agruparEnOrdenes([
+      renglon({ id: "a", orden_trabajo_id: "ot-1" }),
+      renglon({ id: "b", orden_trabajo_id: "ot-2" }),
+    ]);
+    expect(grupos[0].ot_existentes).toEqual(["ot-1", "ot-2"]);
+  });
+
+  it("la clave es la misma se calcule de donde se calcule", () => {
+    // Es lo que sostiene todo lo de arriba: si las dos cuentas se separaran,
+    // la segunda tanda no reconoceria la orden de la primera.
+    expect(claveDeOT("2026-10-01", "Limpieza", "s-1"))
+      .toBe(claveDeOT("2026-10-04", "LIMPIEZA", "s-1"));
+    expect(claveDeOT("2026-10-01", "Limpieza", "s-1"))
+      .not.toBe(claveDeOT("2026-10-05", "Limpieza", "s-1"));
+  });
+
+  it("la semana se estira a domingo para pedir el rango entero", () => {
+    expect(domingoDeLaSemana("2026-10-01")).toBe("2026-10-04");
+    expect(domingoDeLaSemana("2026-09-28")).toBe("2026-10-04");
+    expect(domingoDeLaSemana("2026-10-05")).toBe("2026-10-11");
   });
 
   it("la actividad agrupa sin importar como se escribio", () => {

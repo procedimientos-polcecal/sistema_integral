@@ -265,6 +265,34 @@ export function lunesDeLaSemana(fecha: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * El domingo de la semana de una fecha.
+ *
+ * Hace falta para **estirar el rango que se pide a semanas enteras**, que es lo
+ * que impide que una semana cargada en dos tandas termine con dos OT para el
+ * mismo sector. Ver `agruparEnOrdenes`.
+ */
+export function domingoDeLaSemana(fecha: string): string {
+  const lunes = lunesDeLaSemana(fecha);
+  if (!lunes) return "";
+  const d = new Date(`${lunes}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 6);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Qué hace a una OT una OT: la semana, la actividad y el sector.
+ *
+ * Está en una función y no repetida en dos lados porque **la clave se calcula
+ * dos veces**: una sobre los renglones que todavía no se convirtieron y otra
+ * sobre los que ya tienen orden, para saber si hay que crear una OT o sumarle
+ * horas a la que ya existe. Si las dos cuentas se separaran, una semana
+ * cargada en dos tandas volvería a terminar con dos órdenes del mismo sector.
+ */
+export function claveDeOT(fecha: string, actividad: string, sectorId: string): string {
+  return `${lunesDeLaSemana(fecha)}|${normalizarLugar(actividad)}|${sectorId}`;
+}
+
 // ── La agrupación en OT ─────────────────────────────────────
 
 export interface RenglonParaAgrupar {
@@ -276,6 +304,20 @@ export interface RenglonParaAgrupar {
   sector_id: string | null;
   equipo_id: string | null;
   horas: number;
+  /**
+   * La OT a la que ya fue, si fue.
+   *
+   * Se agrupan **los convertidos junto con los que no**, que es lo contrario de
+   * lo primero que se escribió. Mirando sólo los pendientes, una semana cargada
+   * en dos tandas da dos veces la misma clave: el 1301 crea «Limpieza ·
+   * Calcinación» de la semana del 28/9, y el 1302 —mismo sector, misma semana—
+   * crea otra. El `orden_trabajo_id` impide reconvertir un renglón, no impide
+   * una segunda orden con la misma clave.
+   *
+   * Juntos, el grupo sabe que ya tiene orden y lo que corresponde es **sumarle
+   * las horas nuevas**, no crear otra.
+   */
+  orden_trabajo_id?: string | null;
 }
 
 export interface GrupoDeOT {
@@ -301,7 +343,18 @@ export interface GrupoDeOT {
   horas: number;
   /** La fecha del último parte del grupo: es cuando se dio por terminado. */
   fecha_cierre: string;
+  /** Todos los renglones del grupo, convertidos o no. */
   renglon_ids: string[];
+  /** Los que todavía no tienen orden: son los que hay que marcar. */
+  renglon_ids_sin_ot: string[];
+  /**
+   * Las OT que ya tienen los renglones de este grupo.
+   *
+   * Vacío es «hay que crearla». Una es «hay que sumarle las horas nuevas».
+   * **Más de una no debería pasar nunca**, y si pasa no se toca ninguna: se
+   * informa. Repartir horas entre dos órdenes que ya existen es inventar.
+   */
+  ot_existentes: string[];
   /** Los textos de Candia con su número de parte, para la descripción. */
   detalle: { parte_numero: number; fecha: string; lugar_raw: string; horas: number }[];
 }
@@ -323,6 +376,13 @@ export interface Agrupacion {
  * manda a un sector parecido ni a uno genérico: un enlace equivocado pone las
  * horas en el centro de costo que no es y eso no se nota nunca. Quedan para
  * que alguien los enganche, y la próxima corrida los toma.
+ *
+ * **Se le pasan los renglones ya convertidos junto con los pendientes**, y eso
+ * no es un detalle: una quincena no se carga de una sentada, así que mirando
+ * sólo los pendientes la segunda tanda vuelve a producir la clave que la
+ * primera ya convirtió, y se crea una segunda OT para el mismo sector y la
+ * misma semana. Juntos, el grupo trae en `ot_existentes` la orden que ya tiene
+ * y quien llama sabe que lo que corresponde es sumarle las horas nuevas.
  */
 export function agruparEnOrdenes(
   renglones: readonly RenglonParaAgrupar[]
@@ -335,7 +395,7 @@ export function agruparEnOrdenes(
 
     const semana = lunesDeLaSemana(r.fecha);
     const actividad = r.actividad.trim();
-    const clave = `${semana}|${normalizarLugar(actividad)}|${r.sector_id}`;
+    const clave = claveDeOT(r.fecha, actividad, r.sector_id);
 
     const grupo = porClave.get(clave);
     if (!grupo) {
@@ -348,12 +408,22 @@ export function agruparEnOrdenes(
         horas: r.horas,
         fecha_cierre: r.fecha,
         renglon_ids: [r.id],
+        renglon_ids_sin_ot: r.orden_trabajo_id ? [] : [r.id],
+        ot_existentes: r.orden_trabajo_id ? [r.orden_trabajo_id] : [],
         detalle: [{
           parte_numero: r.parte_numero, fecha: r.fecha,
           lugar_raw: r.lugar_raw, horas: r.horas,
         }],
       });
       continue;
+    }
+
+    if (r.orden_trabajo_id) {
+      if (!grupo.ot_existentes.includes(r.orden_trabajo_id)) {
+        grupo.ot_existentes.push(r.orden_trabajo_id);
+      }
+    } else {
+      grupo.renglon_ids_sin_ot.push(r.id);
     }
 
     grupo.horas = redondearHoras(grupo.horas + r.horas);

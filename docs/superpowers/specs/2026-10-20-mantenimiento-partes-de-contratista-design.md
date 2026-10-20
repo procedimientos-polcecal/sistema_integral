@@ -168,9 +168,43 @@ número de la serie, escribe en «Altas del sistema» y deja el pendiente anotad
 si la planilla no estaba.
 
 **Un grupo ya generado no se vuelve a generar**: el renglón guarda a qué OT
-fue, y eso es lo que impide duplicar veinte órdenes por apretar dos veces. Un
-parte cargado después del primer botonazo entra en el siguiente sin repetir
-nada.
+fue, y eso es lo que impide duplicar veinte órdenes por apretar dos veces.
+
+### Y lo que eso NO alcanzaba a impedir
+
+Encontrado el 20/10/2026 **cargando el parte 1301 de verdad**, después de dar
+el diseño por cerrado. El `orden_trabajo_id` impide reconvertir un renglón; no
+impide una segunda orden con la misma clave.
+
+Una quincena de quince hojas no se carga de una sentada. Con la agrupación
+mirando sólo los renglones pendientes, la secuencia natural —cargo el 1301,
+genero, cargo el 1302 del jueves, genero— daba **dos OT de «Limpieza ·
+Calcinación» de la semana del 28/9**: la segunda corrida volvía a armar la
+clave que la primera ya había convertido, sin ver que ya existía. Es
+exactamente lo contrario de «una OT cada semana, por sector», y no avisa: las
+dos órdenes son válidas, cada una con sus horas.
+
+Tres cosas lo arreglan, y van juntas:
+
+- **El rango se estira a semanas enteras.** Pedir "del 1 al 3" trae la semana
+  del 28/9 completa, porque la unidad es la semana.
+- **Se agrupan los convertidos junto con los pendientes.** Es lo contrario de
+  lo primero que se escribió, y es lo que permite que el grupo sepa que ya
+  tiene orden.
+- **Un grupo que ya tiene orden suma, no crea.** Se le reescriben las horas con
+  el total del grupo —no se suma sobre lo que haya en la base, que contaría dos
+  veces lo de antes— y la fecha de cierre **sólo avanza**: un parte del lunes
+  cargado después del jueves no mueve el cierre hacia atrás.
+
+Si los renglones de un grupo apuntaran a **dos** órdenes distintas, no se toca
+ninguna y se informa: repartirles horas eligiendo una sería inventar.
+
+La vista previa dice cuál es cuál —«OT nueva» o «suma horas»— porque son cosas
+distintas y la diferencia es la que importa.
+
+Verificado contra las filas reales del 1301: primera corrida, 4 OT nuevas;
+segunda sin partes nuevos, nada; segunda con el 1302 del 2/10, una sola línea,
+«suma horas · 8 h · Limpieza · Calcinación».
 
 Antes de crear nada hay una **vista previa**: el botón «Ver qué se crea» corre
 exactamente la misma agrupación y la muestra. Existe porque generar veinte OT

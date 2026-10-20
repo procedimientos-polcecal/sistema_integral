@@ -10,7 +10,7 @@ import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/orde
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
-  agruparEnOrdenes, descripcionDeLaOT,
+  agruparEnOrdenes, descripcionDeLaOT, lunesDeLaSemana, domingoDeLaSemana,
   type RenglonParaAgrupar, type GrupoDeOT,
 } from "@/lib/mantenimiento/partesDeContratista";
 
@@ -72,6 +72,7 @@ interface FilaDeRenglon {
   sector_id: string | null;
   equipo_id: string | null;
   horas: number;
+  orden_trabajo_id: string | null;
   /**
    * El embed del parte, en **las dos formas**.
    *
@@ -125,19 +126,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ese contratista no existe" }, { status: 400 });
   }
 
-  // Sólo los que todavía no se convirtieron. Es lo que impide crear veinte
-  // órdenes dos veces por apretar el botón dos veces, y vale también si entre
-  // las dos corridas se cargó un parte más: se toma el nuevo y nada más.
+  // ── El rango se estira a semanas enteras ────────────────────
+  //
+  // La unidad es la semana, así que pedir "del 1 al 3 de octubre" tiene que
+  // traer la semana del 28/9 completa. Sin esto, cargar una quincena en dos
+  // tandas termina con **dos OT del mismo sector y la misma semana**: la
+  // primera corrida convierte lo del 1301 y la segunda vuelve a armar la misma
+  // clave con lo del 1302, sin ver que ya existe. Se encontró el 20/10/2026
+  // cargando el 1301 de verdad.
+  const desdeEntero = lunesDeLaSemana(desde);
+  const hastaEntero = domingoDeLaSemana(hasta);
+  if (!desdeEntero || !hastaEntero) {
+    return NextResponse.json({ error: "Esas fechas no se entienden" }, { status: 400 });
+  }
+
+  // **Todos los renglones de esas semanas, convertidos o no.** Los ya
+  // convertidos hacen falta para reconocer la orden que el grupo ya tiene; sin
+  // ellos la agrupación no puede distinguir "hay que crearla" de "hay que
+  // sumarle las horas nuevas".
   const filas = await traerTodo<FilaDeRenglon>((d, h) =>
     admin
       .from("mant_partes_contratista_renglones")
       // La cadena va literal: un `select()` armado en una variable —o partido
       // en dos con un `+`— pierde la inferencia de tipos de Supabase.
-      .select("id, actividad, lugar_raw, sector_id, equipo_id, horas, mant_partes_contratista!inner(numero, fecha, proveedor_id)")
-      .is("orden_trabajo_id", null)
+      .select("id, actividad, lugar_raw, sector_id, equipo_id, horas, orden_trabajo_id, mant_partes_contratista!inner(numero, fecha, proveedor_id)")
       .eq("mant_partes_contratista.proveedor_id", proveedor_id)
-      .gte("mant_partes_contratista.fecha", desde)
-      .lte("mant_partes_contratista.fecha", hasta)
+      .gte("mant_partes_contratista.fecha", desdeEntero)
+      .lte("mant_partes_contratista.fecha", hastaEntero)
       .range(d, h)
   );
 
@@ -154,10 +169,17 @@ export async function POST(request: Request) {
       sector_id: f.sector_id,
       equipo_id: f.equipo_id,
       horas: Number(f.horas),
+      orden_trabajo_id: f.orden_trabajo_id,
     });
   }
 
-  const { grupos, sinSector } = agruparEnOrdenes(renglones);
+  const todos = agruparEnOrdenes(renglones);
+  const sinSector = todos.sinSector.filter((r) => !r.orden_trabajo_id);
+
+  // Un grupo entero ya convertido y sin horas nuevas no tiene nada que hacer.
+  // Dejarlo en la lista haría que la vista previa muestre veinte filas cuando
+  // no hay nada para generar, que es peor que no mostrar nada.
+  const grupos = todos.grupos.filter((g) => g.renglon_ids_sin_ot.length > 0);
 
   // Los nombres que la planilla necesita: escribe texto, no ids.
   const nombres = await nombresDeSectoresYEquipos(admin, grupos);
@@ -173,21 +195,36 @@ export async function POST(request: Request) {
     });
   }
 
-  const creadas: { ot_number: number; actividad: string; sector: string; horas: number }[] = [];
+  const creadas: Resumen[] = [];
+  const actualizadas: Resumen[] = [];
   const problemas: string[] = [];
 
   for (const grupo of grupos.slice(0, TOPE_POR_CORRIDA)) {
-    const resultado = await crearLaOT(
-      admin, user.id, grupo, nombres, proveedor.nombre, especialidad, tipo
-    );
-    if (resultado.ok) creadas.push(resultado.resumen);
-    else problemas.push(resultado.error);
+    // Tres caminos, y el del medio es el que faltaba: una semana cargada en dos
+    // tandas no necesita una orden más, necesita que la que ya tiene diga las
+    // horas de las dos.
+    if (grupo.ot_existentes.length > 1) {
+      problemas.push(
+        `${comoDecirla(grupo, nombres)}: los renglones de ese grupo apuntan a ${grupo.ot_existentes.length} ` +
+        `órdenes distintas, así que no se tocó ninguna. Hay que mirarlas a mano: repartirles ` +
+        `horas eligiendo una sería inventar.`
+      );
+      continue;
+    }
+
+    const resultado = grupo.ot_existentes.length === 1
+      ? await actualizarLaOT(admin, grupo, nombres, proveedor.nombre)
+      : await crearLaOT(admin, user.id, grupo, nombres, proveedor.nombre, especialidad, tipo);
+
+    if (!resultado.ok) { problemas.push(resultado.error); continue; }
+    (grupo.ot_existentes.length === 1 ? actualizadas : creadas).push(resultado.resumen);
   }
 
   const quedaron = Math.max(0, grupos.length - TOPE_POR_CORRIDA);
 
   return NextResponse.json({
     creadas,
+    actualizadas,
     problemas,
     quedaron,
     sinSector: sinSector.map((r) => ({
@@ -255,14 +292,136 @@ function conNombres(grupo: GrupoDeOT, nombres: Nombres, contratista: string) {
     fecha_cierre: grupo.fecha_cierre,
     partes: [...new Set(grupo.detalle.map((d) => d.parte_numero))],
     descripcion: descripcionDeLaOT(grupo, contratista),
+    /** Si ya existe, se le suman las horas nuevas en vez de crear otra. */
+    ya_existe: grupo.ot_existentes.length === 1,
+    conflicto: grupo.ot_existentes.length > 1,
   };
 }
+
+/** Cómo nombrar un grupo en un mensaje de error. */
+function comoDecirla(grupo: GrupoDeOT, nombres: Nombres): string {
+  const sector = nombres.sectores.get(grupo.sector_id)?.nombre ?? "(sector desconocido)";
+  return `${grupo.actividad} · ${sector} · semana del ${grupo.semana}`;
+}
+
+type Resumen = {
+  ot_number: number; actividad: string; sector: string; horas: number;
+};
 
 // ── Crear una ───────────────────────────────────────────────
 
 type Resultado =
-  | { ok: true; resumen: { ot_number: number; actividad: string; sector: string; horas: number } }
+  | { ok: true; resumen: Resumen }
   | { ok: false; error: string };
+
+/**
+ * Le suma a una OT que ya existe las horas de los partes nuevos.
+ *
+ * Es el camino que faltaba, y es el normal: una quincena de quince hojas no se
+ * carga de una sentada, así que la semana del 28/9 ya tiene su orden cuando
+ * entra el parte del jueves. **Crear otra sería tener dos órdenes del mismo
+ * sector y la misma semana**, que es exactamente lo contrario de lo que se
+ * pidió.
+ *
+ * Reescribe las horas y la descripción con el total del grupo —no suma sobre lo
+ * que haya en la base—: el grupo ya trae todos sus renglones, los viejos y los
+ * nuevos, así que leer y sumar contaría dos veces lo de antes.
+ *
+ * **La fecha de cierre sólo avanza.** Un parte del lunes cargado después del
+ * jueves no puede mover el cierre hacia atrás: la semana se terminó el día que
+ * se terminó.
+ */
+async function actualizarLaOT(
+  admin: ReturnType<typeof createAdminClient>,
+  grupo: GrupoDeOT,
+  nombres: Nombres,
+  contratista: string
+): Promise<Resultado> {
+  const id = grupo.ot_existentes[0];
+
+  const { data: antes } = await admin
+    .from("ordenes_trabajo")
+    .select("ot_number, fecha_cierre")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!antes) {
+    return {
+      ok: false,
+      error:
+        `${comoDecirla(grupo, nombres)}: los renglones apuntan a una OT que ya no está en el ` +
+        `sistema. No se creó otra: si la borraron a propósito, hay que desmarcar esos ` +
+        `renglones; si no, va a volver con la próxima sincronización.`,
+    };
+  }
+
+  const cierre = (antes.fecha_cierre ?? "") > grupo.fecha_cierre
+    ? antes.fecha_cierre as string
+    : grupo.fecha_cierre;
+
+  const descripcion = descripcionDeLaOT(grupo, contratista);
+
+  const { data: actualizada, error } = await admin
+    .from("ordenes_trabajo")
+    .update({
+      horas: grupo.horas,
+      descripcion,
+      fecha_cierre: cierre,
+      fecha_ejecucion: cierre,
+      estado: "REALIZADO",
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return {
+      ok: false,
+      error: `${comoDecirla(grupo, nombres)}: no se pudo actualizar la OT ${antes.ot_number}: ${error.message}`,
+    };
+  }
+
+  // Lo mismo que el alta: las horas y el cierre viven en columnas literales del
+  // master. Acá la fila **sí suele existir** —la OT se creó en una corrida
+  // anterior—, así que esta escritura normalmente entra. Si no, queda anotada.
+  const paraLaPlanilla = loQueHayQueExportar(actualizada);
+  if (paraLaPlanilla) {
+    const pendiente = await escribirEnLaFilaDeLaOT(
+      actualizada, celdasParaRegistrar(paraLaPlanilla as RegistroDeOT)
+    );
+    await admin
+      .from("ordenes_trabajo")
+      .update({ sheets_pendiente: pendiente, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", id);
+  }
+
+  // Sólo los que no tenían orden: remarcar los viejos no cambia nada, pero
+  // pedirlo de más es pedirle a la base que mire filas que ya están bien.
+  const { error: errorMarca } = await admin
+    .from("mant_partes_contratista_renglones")
+    .update({ orden_trabajo_id: id })
+    .in("id", grupo.renglon_ids_sin_ot);
+
+  if (errorMarca) {
+    return {
+      ok: false,
+      error:
+        `${comoDecirla(grupo, nombres)}: la OT ${antes.ot_number} quedó con ${grupo.horas} h pero los ` +
+        `renglones nuevos no se marcaron (${errorMarca.message}). **Si volvés a generar, ` +
+        `se le vuelven a sumar**: revisá esos renglones antes.`,
+    };
+  }
+
+  return {
+    ok: true,
+    resumen: {
+      ot_number: antes.ot_number as number,
+      actividad: grupo.actividad,
+      sector: nombres.sectores.get(grupo.sector_id)?.nombre ?? "",
+      horas: grupo.horas,
+    },
+  };
+}
 
 /**
  * Crea una OT a partir de un grupo, por el mismo camino que el alta a mano.
@@ -375,7 +534,7 @@ async function crearLaOT(
   const { error: errorMarca } = await admin
     .from("mant_partes_contratista_renglones")
     .update({ orden_trabajo_id: creada.id })
-    .in("id", grupo.renglon_ids);
+    .in("id", grupo.renglon_ids_sin_ot);
 
   if (errorMarca) {
     return {

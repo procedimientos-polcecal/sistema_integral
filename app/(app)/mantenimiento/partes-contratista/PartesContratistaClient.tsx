@@ -219,11 +219,18 @@ export default function PartesContratistaClient({
 
     setPrevio(null);
     const hechas = (body.creadas ?? []) as { ot_number: number }[];
-    const partesTexto = hechas.length === 1 ? "orden" : "órdenes";
+    const sumadas = (body.actualizadas ?? []) as { ot_number: number; horas: number }[];
     setAviso(
-      `Se crearon ${hechas.length} ${partesTexto}: ` +
-      `${hechas.map((c) => c.ot_number).join(", ") || "ninguna"}.` +
-      (body.quedaron ? ` Quedaron ${body.quedaron} para la próxima corrida.` : "")
+      [
+        hechas.length
+          ? `Se crearon ${hechas.length}: OT ${hechas.map((c) => c.ot_number).join(", ")}.`
+          : "No se creó ninguna orden nueva.",
+        sumadas.length
+          ? `Se le sumaron horas a ${sumadas.length} que ya existían: ` +
+            `${sumadas.map((c) => `OT ${c.ot_number} (${c.horas} h)`).join(", ")}.`
+          : "",
+        body.quedaron ? `Quedaron ${body.quedaron} para la próxima corrida.` : "",
+      ].filter(Boolean).join(" ")
     );
     if (body.problemas?.length) setError(body.problemas.join(" · "));
     router.refresh();
@@ -606,6 +613,7 @@ interface Simulacion {
     clave: string; semana: string; actividad: string; sector: string;
     equipo: string; tiene_equipo: boolean; horas: number;
     fecha_cierre: string; partes: number[]; descripcion: string;
+    ya_existe: boolean; conflicto: boolean;
   }[];
   sinSector: { lugar_raw: string; parte_numero: number; horas: number }[];
   tope: number;
@@ -647,6 +655,7 @@ function Previo({ previo }: { previo: Simulacion }) {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-400">
               <tr>
+                <th className="px-3 py-2">Qué pasa</th>
                 <th className="px-3 py-2">Semana</th>
                 <th className="px-3 py-2">Actividad</th>
                 <th className="px-3 py-2">Sector</th>
@@ -658,6 +667,18 @@ function Previo({ previo }: { previo: Simulacion }) {
             <tbody>
               {previo.grupos.map((g) => (
                 <tr key={g.clave} className="border-t border-slate-100">
+                  {/* Crear y sumar no son lo mismo y la diferencia importa:
+                      «suma» quiere decir que esa semana ya tenía su orden y
+                      queda con el total de las dos tandas, no con dos órdenes. */}
+                  <td className="px-3 py-2">
+                    {g.conflicto ? (
+                      <span className="text-rose-700">revisar a mano</span>
+                    ) : g.ya_existe ? (
+                      <span className="text-amber-700">suma horas</span>
+                    ) : (
+                      <span className="text-emerald-700">OT nueva</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{enDiaMes(g.semana)}</td>
                   <td className="px-3 py-2">{g.actividad}</td>
                   <td className="px-3 py-2">{g.sector}</td>
