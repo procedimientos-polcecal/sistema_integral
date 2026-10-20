@@ -97,12 +97,22 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   // "Piparo" y "piparo" terminan siendo dos personas, y cómo la orden deja de
   // sumar horas a nadie.
   const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
+  // Los proveedores marcados como contratistas —hoy PIPARO y CANDIA—. Se elige
+  // de la lista en vez de escribir, igual que al registrar el trabajo hecho:
+  // es lo que evita que "Candia" y "CANDIA" terminen siendo dos.
+  const [contratistas, setContratistas] = useState<{ id: string; nombre: string }[]>([]);
 
   useEffect(() => {
     let vigente = true;
-    fetch("/api/mantenimiento/operarios")
-      .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((b) => { if (vigente) setOperarios(b.data ?? []); })
+    Promise.all([
+      fetch("/api/mantenimiento/operarios").then((r) => (r.ok ? r.json() : { data: [] })),
+      fetch("/api/mantenimiento/proveedores").then((r) => (r.ok ? r.json() : { data: [] })),
+    ])
+      .then(([o, c]) => {
+        if (!vigente) return;
+        setOperarios(o.data ?? []);
+        setContratistas(c.data ?? []);
+      })
       .catch(() => {});
     return () => { vigente = false; };
   }, []);
@@ -354,7 +364,16 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
           {(form.quien === "CONTRATADO" || form.quien === "MIXTO") && (
             <F label="Contratista">
-              <input value={form.contratista} onChange={e => f("contratista", e.target.value)} className="input" />
+              <Select value={form.contratista} onChange={e => f("contratista", e.target.value)} className="input">
+                <option value="">—</option>
+                {/* Si vino copiado de una OT vieja y no está en la lista, se
+                    suma para no perderlo al guardar: la planilla escribió ese
+                    nombre y borrarlo sería corregir hacia atrás. */}
+                {[...new Set([
+                  ...contratistas.map((c) => c.nombre),
+                  ...(form.contratista ? [form.contratista] : []),
+                ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
+              </Select>
             </F>
           )}
           {/* Cada columna de la orden tiene su propia lista de gente: quién
