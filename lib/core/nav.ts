@@ -132,6 +132,10 @@ export const NAV: NavItem[] = [
        */
       { label: "Cargar sin señal", href: "/cargar", modulo: "mantenimiento" },
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
+      // Debajo de las órdenes de servicio porque es lo mismo visto por el otro
+      // lado: allá se le pide un trabajo a un tercero, acá se carga el papel
+      // con el que un tercero dice qué hizo cada día.
+      { label: "Partes de contratista", href: "/mantenimiento/partes-contratista", modulo: "mantenimiento" },
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
