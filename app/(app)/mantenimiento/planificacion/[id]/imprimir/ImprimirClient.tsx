@@ -108,10 +108,14 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
           padding-left: 4px;
           padding-right: 4px;
         }
-        /* Los rótulos largos no llevan interletrado: DESCRIPCIÓN y REPUESTOS
-           UTILIZADOS son los dos más anchos de la hoja y con él tocaban los
-           bordes de su columna. */
-        .cell-label.ot-rotulo, .cell-real.ot-rotulo {
+        /* Los rótulos largos no llevan interletrado: DESCRIPCIÓN, REPUESTOS
+           UTILIZADOS y REALIZADO / ATRASADO son los más anchos de la hoja y
+           con él tocaban los bordes de su columna.
+           Apunta a las dos columnas de rótulos enteras y no a tres clases
+           sueltas: las clases por celda se fueron el 20/10/2026 al unificar la
+           grilla, y una regla que nombra clases que ya no existen no avisa —
+           simplemente deja de aplicarse. */
+        .col-1.ot-rotulo, .col-3.ot-rotulo {
           letter-spacing: 0;
         }
         /* Centrado, como en un formulario de papel: cada dato en el medio
@@ -152,27 +156,51 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
           border: 1.5px solid #222;
           box-sizing: border-box;
         }
-        .cell-logo   { width: 56px; flex-shrink: 0; }
-        .cell-title  { flex: 1; }
-        .cell-ot-lbl { width: 62px; flex-shrink: 0; }
-        .cell-ot-num { width: 80px; flex-shrink: 0; }
-        /* Las dos filas de datos comparten columnas para que la grilla
-           cierre: ESPECIALIDAD sobre SECTOR y FECHA sobre EQUIPO. Antes la
-           de arriba era UNA sola celda con los textos adentro y la de abajo
-           cuatro celdas, así que nada alineaba. */
-        /* 118px es el ancho de la columna de rótulos de TODA la hoja:
-           ESPECIALIDAD, SECTOR, DESCRIPCIÓN, REPUESTOS y FECHA DE EJECUCIÓN
-           caen una debajo de otra. Es lo que la hace leer como una grilla y
-           no como cinco filas que se parecen. */
-        .cell-rot-izq { width: 118px; flex-shrink: 0; }
-        .cell-rot-der { width: 96px; flex-shrink: 0; }
-        .cell-val     { flex: 1; min-width: 0; }
-        .cell-label  { width: 118px; flex-shrink: 0; }
-        .cell-content { flex: 1; overflow: hidden; }
-        .cell-fec-lbl { width: 118px; flex-shrink: 0; }
-        .cell-fec-val { flex: 1; }
-        .cell-real    { width: 152px; flex-shrink: 0; }
-        .cell-firma   { width: 120px; flex-shrink: 0; }
+        /*
+         * LAS CUATRO COLUMNAS DE LA HOJA, DEFINIDAS UNA SOLA VEZ.
+         *
+         * Antes cada fila declaraba sus anchos —"cell-logo" 56px, "cell-real"
+         * 152px, "cell-val" con "flex: 1"— y por eso ninguna divisoria caía
+         * sobre la de arriba. Medido el 20/10/2026 sobre la hoja renderizada:
+         * la línea del logo en x=201 contra x=263 en todas las demás filas, y
+         * la de FECHA en 515, la de EQUIPO en 519 y la de REALIZADO en 591.
+         *
+         * **"flex: 1" no sirve para columnas que tienen que alinear**: su
+         * "flex-basis: 0" se mide sobre la caja de contenido, así que la celda
+         * con "padding: 8px 12px" termina 4px más ancha que la de "8px" aunque
+         * las dos digan "flex: 1". Ésos eran los 4px entre FECHA y EQUIPO.
+         *
+         * Van en porcentaje y no en px porque la hoja mide 190mm en pantalla y
+         * 100% al imprimir: con anchos fijos la grilla cerraría en una y no en
+         * la otra. Y van con "flex: 0 0 ancho" —ni crecen ni se encogen— más
+         * el "box-sizing: border-box" de arriba, que es lo que mete el padding
+         * adentro del ancho en vez de sumárselo.
+         *
+         * Si hay que cambiar una, se cambia acá y la hoja entera sigue
+         * cerrando. Las cuatro suman 100.
+         */
+        .col-1    { flex: 0 0 17%; }   /* ESPECIALIDAD, SECTOR, DESCRIPCIÓN… */
+        .col-2    { flex: 0 0 38%; min-width: 0; }
+        .col-3    { flex: 0 0 15%; }   /* FECHA, EQUIPO, REALIZADO / ATRASADO */
+        .col-4    { flex: 0 0 30%; min-width: 0; }
+        /* Las filas que no parten la derecha: DESCRIPCIÓN y REPUESTOS. */
+        .col-2-3-4 { flex: 0 0 83%; min-width: 0; overflow: hidden; }
+
+        /*
+         * El encabezado tiene su propio reparto, y es a propósito.
+         *
+         * Su primera celda sí es col-1 —el logo cae sobre la columna de
+         * rótulos, que es lo que lo hacía salir corrido— pero las otras tres no
+         * comparten las divisorias de abajo: en el papel el título ocupa casi
+         * todo el ancho y el N° va en dos cajas chicas a la derecha, más
+         * angostas que las columnas de FECHA y EQUIPO.
+         *
+         * Forzarlo al mismo reparto se probó y parte "ORDEN DE TRABAJO" en dos
+         * renglones: 38% de la hoja no alcanza para 28px con interletrado.
+         */
+        .hdr-titulo { flex: 1 1 auto; min-width: 0; }
+        .hdr-rotulo { flex: 0 0 10%; }
+        .hdr-numero { flex: 0 0 13%; }
       `}</style>
 
       <div className="print-content py-8 px-4">
@@ -227,58 +255,58 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
               <table className="ot-table" style={{ tableLayout: "fixed" }}>
                 <tbody>
                   <tr className="row-header">
-                    <td className="cell-logo" rowSpan={2}
+                    <td className="col-1"
                       style={{ verticalAlign: "middle", textAlign: "center", padding: 6 }}>
                       <img src="/logo.png" alt="Logo" style={{ width: 44, height: 44, objectFit: "contain" }} />
                     </td>
-                    <td className="cell-title"
+                    <td className="hdr-titulo"
                       style={{ textAlign: "center", verticalAlign: "middle", padding: "8px 12px" }}>
                       <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: 2 }}>ORDEN DE TRABAJO</span>
                     </td>
-                    <td className="cell-ot-lbl ot-rotulo" style={{ padding: "6px" }}>
+                    <td className="hdr-rotulo ot-rotulo" style={{ padding: "6px" }}>
                       N° OT
                     </td>
-                    <td className="cell-ot-num"
+                    <td className="hdr-numero"
                       style={{ textAlign: "center", verticalAlign: "middle", padding: "6px", fontWeight: 900, fontSize: 24 }}>
                       {item.ot_number}
                     </td>
                   </tr>
 
                   <tr className="row-esp">
-                    <td className="cell-rot-izq ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-1 ot-rotulo" style={{ padding: "8px" }}>
                       ESPECIALIDAD
                     </td>
-                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
+                    <td className="col-2 ot-dato ot-resaltado" style={{ padding: "8px" }}>
                       {item.especialidad ?? "—"}
                     </td>
-                    <td className="cell-rot-der ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-3 ot-rotulo" style={{ padding: "8px" }}>
                       FECHA
                     </td>
-                    <td className="cell-val ot-dato" style={{ padding: "8px" }}>
+                    <td className="col-4 ot-dato" style={{ padding: "8px" }}>
                       {fechaStr}
                     </td>
                   </tr>
 
                   <tr className="row-sector">
-                    <td className="cell-rot-izq ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-1 ot-rotulo" style={{ padding: "8px" }}>
                       SECTOR
                     </td>
-                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px 12px" }}>
+                    <td className="col-2 ot-dato ot-resaltado" style={{ padding: "8px 12px" }}>
                       {item.sector_raw ?? "—"}
                     </td>
-                    <td className="cell-rot-der ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-3 ot-rotulo" style={{ padding: "8px" }}>
                       EQUIPO
                     </td>
-                    <td className="cell-val ot-dato ot-resaltado" style={{ padding: "8px" }}>
+                    <td className="col-4 ot-dato ot-resaltado" style={{ padding: "8px" }}>
                       {item.equipo_raw ?? "—"}
                     </td>
                   </tr>
 
                   <tr className="row-desc">
-                    <td className="cell-label ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-1 ot-rotulo" style={{ padding: "8px" }}>
                       DESCRIPCIÓN
                     </td>
-                    <td colSpan={3} className="cell-content"
+                    <td colSpan={3} className="col-2-3-4"
                       style={{ padding: "12px 16px", verticalAlign: "top" }}>
                       <div className="ot-cuerpo">{item.descripcion ?? ""}</div>
                       {item.notas_item && (
@@ -290,26 +318,26 @@ export default function ImprimirClient({ plan, items }: { plan: any; items: any[
                   </tr>
 
                   <tr className="row-rep">
-                    <td className="cell-label ot-rotulo" style={{ padding: "8px" }}>
+                    <td className="col-1 ot-rotulo" style={{ padding: "8px" }}>
                       REPUESTOS<br />UTILIZADOS
                     </td>
-                    <td colSpan={3} className="cell-content ot-cuerpo"
+                    <td colSpan={3} className="col-2-3-4 ot-cuerpo"
                       style={{ padding: "12px 16px", verticalAlign: "top" }}>
                       {item.repuesto ?? ""}
                     </td>
                   </tr>
 
                   <tr className="row-fecha">
-                    <td className="cell-fec-lbl ot-rotulo" style={{ padding: "10px 6px" }}>
+                    <td className="col-1 ot-rotulo" style={{ padding: "10px 6px" }}>
                       FECHA DE<br />EJECUCIÓN
                     </td>
-                    <td className="cell-fec-val ot-dato" style={{ padding: "10px 12px" }}>
+                    <td className="col-2 ot-dato" style={{ padding: "10px 12px" }}>
                       {fechaEjec}
                     </td>
-                    <td className="cell-real ot-rotulo" style={{ padding: "10px 6px" }}>
+                    <td className="col-3 ot-rotulo" style={{ padding: "10px 6px" }}>
                       REALIZADO / ATRASADO
                     </td>
-                    <td className="cell-firma ot-rotulo"
+                    <td className="col-4 ot-rotulo"
                       style={{ padding: "10px", background: "none", textAlign: "left" }}>
                       FIRMA
                       {assignee && (
