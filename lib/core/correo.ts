@@ -41,6 +41,11 @@
  * Del otro lado hay un servicio que no es rápido —arranca una máquina virtual
  * de Google por pedido— y de este lado hay un rechazo esperando salir. Más vale
  * un correo que no se manda que una carga que tarda.
+ *
+ * **Medido contra el script real el 20/10/2026**: el primer envío, en frío,
+ * tardó 1.918 ms, y el segundo 1.773 ms. O sea que cinco segundos es generoso
+ * y no apretado — era el único número de este trabajo puesto a ojo. Si alguna
+ * vez empieza a cortar, lo que cambió es el script o Google, no esto.
  */
 const TOPE_DE_ESPERA_MS = 5_000;
 

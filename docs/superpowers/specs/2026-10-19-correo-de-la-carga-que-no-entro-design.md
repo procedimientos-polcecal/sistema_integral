@@ -257,3 +257,38 @@ corto, porque del otro lado hay un servicio que no es rápido.
    mano**.
 
 Hasta que eso esté, el SdG sigue andando igual y no manda ningún correo.
+
+## Cómo terminó (20/10/2026)
+
+**El código está hecho y en `main`, y el camino hasta el Apps Script está
+probado contra el script real.** El Apps Script lo publicó una persona desde su
+cuenta ese día, y las dos variables quedaron puestas.
+
+Lo medido llamando a `enviarCorreo` de verdad:
+
+| | |
+|---|---|
+| Primer envío, **en frío** | `enviado` en 1.918 ms |
+| Segundo, en caliente | `enviado` en 1.773 ms |
+| A una dirección de otro dominio | `fallo`, con `dominio-no-permitido` |
+
+Tres cosas que eso deja fijadas y que antes eran supuestos:
+
+- **El tope de espera de 5 s es generoso**, no apretado. Era el único número de
+  todo este trabajo puesto a ojo, y la duda era al revés: que un arranque en
+  frío de Apps Script se lo comiera.
+- **El script no es un relay abierto.** La dirección de otro dominio se rechaza
+  del lado de Google, no del lado del SdG.
+- **Apps Script contesta 200 aunque rechace**, con `ok:false` en el cuerpo. Lo
+  había encontrado la revisión final leyendo el código; acá quedó visto. Si el
+  módulo mirara `respuesta.ok`, ese rechazo habría pasado por enviado.
+
+### Lo que falta, y es lo mismo que le falta a la fase 4
+
+El camino entero en un teléfono: cargar algo sin señal, cerrar la app, dejar que
+el teléfono lo mande solo, y ver si llega el correo. Y la otra mitad, que es la
+que define el diseño: **mandando desde la pantalla no tiene que llegar nada**.
+
+Eso no se puede probar hasta que se corra la verificación en aparatos de la fase
+4, porque depende de las mismas dos cosas: que `/cargar` abra sin señal y que el
+service worker despierte con la app cerrada.
