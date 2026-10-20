@@ -63,6 +63,26 @@ export async function GET(request: Request) {
     });
   }
 
+  // La marca del conjunto, que es la que mira la pantalla.
+  //
+  // **Tiene que escribirse también cuando sale bien**, y ese fue el error: el
+  // fallo de arranque anotaba `respaldo/sheets` y el éxito sólo anotaba una
+  // fila por pestaña, que son otros recursos. O sea que el `sheets` en rojo del
+  // 19/10 —cuando faltaba la variable— se quedó en rojo para siempre, aunque el
+  // respaldo funcionara doce minutos después: `ultima_sincronizacion` devuelve
+  // la última fila de **ese** recurso, y nunca hubo otra. Un indicador que no
+  // puede volver a verde no es un indicador.
+  await registrarSincronizacion({
+    modulo: "respaldo",
+    recurso: "sheets",
+    ok: resultado.fallaron === 0,
+    filas: resultado.pestanas.reduce((a, p) => a + p.filas, 0),
+    error:
+      resultado.fallaron === 0
+        ? null
+        : resultado.pestanas.filter((p) => !p.ok).map((p) => `${p.pestana}: ${p.error}`).join(" · "),
+  });
+
   const todasFallaron = resultado.fallaron === resultado.pestanas.length && resultado.pestanas.length > 0;
   return NextResponse.json(resultado, { status: todasFallaron ? 500 : 200 });
 }
