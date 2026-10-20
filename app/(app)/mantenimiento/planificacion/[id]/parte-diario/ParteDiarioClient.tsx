@@ -27,6 +27,17 @@ import {
  * porque ahí no hay nada que elegir. Acá sí —el turno y qué OT entran—, y una
  * hoja que se manda a la impresora antes de que uno elija es papel tirado.
  *
+ * EL SECTOR NO ESTÁ EN EL ENCABEZADO, Y EL PAPEL SÍ LO TIENE
+ *
+ * Se sacó a pedido el 20/10/2026: cada OT trae el suyo en la columna SECTOR, y
+ * un plan del turno cruza varios —el parte del 19/10 tenía Hidratación y
+ * Molienda cal en la misma hoja—. Un sector escrito arriba o queda vacío o
+ * contradice a la mitad de los renglones, que es peor que no estar.
+ *
+ * El papel lo tiene porque se llenaba de a un sector por hoja. Si alguna vez
+ * se vuelve a necesitar, va como filtro de qué OT entran y no como un texto
+ * suelto en el encabezado.
+ *
  * EL TURNO SE ELIGE Y NO SE GUARDA
  *
  * El papel lo trae preimpreso ("Turno 12 a 20"). Acá se elige al imprimir, con
@@ -50,7 +61,6 @@ export default function ParteDiarioClient({
   const [elegidos, setElegidos] = useState<Set<string>>(() => new Set(items.map((i) => i.id)));
   const [turno, setTurno] = useState<string>("12_20");
   const [operario, setOperario] = useState("");
-  const [sector, setSector] = useState("");
 
   const { dia, mes, anio } = diaMesAnio(plan.fecha);
   const hojas = paginasDelParte(filasDelParte(items, elegidos));
@@ -137,7 +147,7 @@ export default function ParteDiarioClient({
           </button>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <label className="block text-xs font-medium text-slate-600">Turno</label>
             <Select value={turno} onChange={(e) => setTurno(e.target.value)} className="input">
@@ -149,11 +159,6 @@ export default function ParteDiarioClient({
           <div className="space-y-1">
             <label className="block text-xs font-medium text-slate-600">Op.</label>
             <input value={operario} onChange={(e) => setOperario(e.target.value)}
-              className="input" placeholder="Se puede dejar en blanco" />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-600">Sector</label>
-            <input value={sector} onChange={(e) => setSector(e.target.value)}
               className="input" placeholder="Se puede dejar en blanco" />
           </div>
         </div>
@@ -222,7 +227,6 @@ export default function ParteDiarioClient({
           <div style={{ display: "flex", gap: 24, margin: "8px 0 6px", fontSize: 11 }}>
             <span><strong>Turno</strong> {comoSeLeeElTurno(turno as (typeof TURNOS)[number])}</span>
             <span style={{ flex: 1 }}><strong>Op.:</strong> {operario}</span>
-            <span style={{ flex: 1 }}><strong>Sector:</strong> {sector}</span>
           </div>
 
           <table className="pd-tabla">
