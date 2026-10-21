@@ -28,9 +28,18 @@
  * No es "que se entienda": es que **lo pueda volver a leer el parseo que ya
  * existe**. `itemsDeRepuesto()` de `repuestosDesdeOt.ts` es el que saca los
  * repuestos de las 275 OT viejas, y lo que escribamos acá tiene que caer del
- * mismo lado. Por eso se separa con coma —que es por donde ese parseo corta— y
- * por eso una coma adentro de un nombre se reemplaza por un espacio: si no, un
- * renglón se leería como dos.
+ * mismo lado.
+ *
+ * **Los renglones se separan con `;`**, a pedido y desde el 21/10/2026: un
+ * punto y coma se ve de lejos en la celda de la planilla y una coma no, porque
+ * adentro de un repuesto ya hay comas —"rodamiento 22216, EK"—. Antes se
+ * separaban con coma, que es por donde ese parseo cortaba desde siempre; ahora
+ * corta por las dos, y eso no cambió ninguna de las 277 OT que ya tienen
+ * repuesto escrito, porque **ninguna tiene un punto y coma** (medido ese día).
+ *
+ * Lo que sí sigue: un `;` o una `,` adentro de un nombre se reemplazan por un
+ * espacio. Los dos cortan al volver a leer, así que un renglón se leería como
+ * dos.
  */
 
 /** Un renglón tal como lo carga el formulario. */
@@ -46,9 +55,10 @@ export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | 
   return lineas
     .map((l) => ({
       cantidad: String(l?.cantidad ?? "").trim(),
-      // La coma es el separador del texto de la planilla: adentro de un nombre
-      // partiría el renglón en dos al volver a leerlo.
-      nombre: String(l?.nombre ?? "").replace(/,/g, " ").replace(/\s+/g, " ").trim(),
+      // El `;` separa los renglones del texto de la planilla y la `,` también
+      // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
+      // partiría ese renglón en dos.
+      nombre: String(l?.nombre ?? "").replace(/[,;]/g, " ").replace(/\s+/g, " ").trim(),
     }))
     .filter((l) => l.nombre !== "");
 }
@@ -59,11 +69,14 @@ export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | 
  * `null` cuando no hay ningún renglón, que es lo que la columna espera para
  * decir "no se usó nada" — una cadena vacía y un null se ven igual en la
  * planilla, pero en la base no.
+ *
+ * Con un solo renglón no hay separador que poner, así que la celda queda igual
+ * que cuando la escribía una persona: "2 grillas 2 mm".
  */
 export function textoParaLaPlanilla(lineas: readonly LineaDeRepuesto[] | undefined | null): string | null {
   const valen = lineasQueValen(lineas);
   if (valen.length === 0) return null;
-  return valen.map((l) => (l.cantidad ? `${l.cantidad} ${l.nombre}` : l.nombre)).join(", ");
+  return valen.map((l) => (l.cantidad ? `${l.cantidad} ${l.nombre}` : l.nombre)).join("; ");
 }
 
 /**

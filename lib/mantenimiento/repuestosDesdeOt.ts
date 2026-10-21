@@ -228,15 +228,21 @@ function sacarVerbo(texto: string): string {
 /**
  * Partir el texto en renglones.
  *
- * Las comas y la "y" separan siempre. El guión con espacios —"Rodamiento 22217
- * EK - Manguito H317"— separa **sólo si del otro lado hay otro sustantivo**:
- * en "Aceite SAE 320 - 50 litros" y en "Chapa 1/2\" - 1500 mm x 400 mm" ese
- * mismo guión está uniendo la pieza con su medida, y cortarlo ahí perdería la
- * cantidad o la medida.
+ * Las comas, el punto y coma y la "y" separan siempre. El guión con espacios
+ * —"Rodamiento 22217 EK - Manguito H317"— separa **sólo si del otro lado hay
+ * otro sustantivo**: en "Aceite SAE 320 - 50 litros" y en "Chapa 1/2\" - 1500
+ * mm x 400 mm" ese mismo guión está uniendo la pieza con su medida, y cortarlo
+ * ahí perdería la cantidad o la medida.
+ *
+ * **El punto y coma se agregó el 21/10/2026**, cuando pasó a ser el separador
+ * que escribe el formulario de alta (`textoParaLaPlanilla`). No cambió la
+ * lectura de nada de lo que ya estaba: de las 277 OT con repuesto escrito,
+ * ninguna tenía un punto y coma. Si no se agregaba, "2 grillas; 4 martillos"
+ * se leía como un solo item y las OT nuevas se entendían peor que las viejas.
  */
 export function partirRepuesto(texto: string): string[] {
   const porComaYuncion = texto
-    .split(/\s*,\s*|\s+y\s+|\s*\+\s*/i)
+    .split(/\s*[,;]\s*|\s+y\s+|\s*\+\s*/i)
     .flatMap((trozo) => {
       const partes = trozo.split(/\s+-\s+/);
       if (partes.length < 2) return [trozo];

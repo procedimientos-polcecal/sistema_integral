@@ -19,10 +19,13 @@ describe("lineasQueValen", () => {
       .toEqual([{ cantidad: "", nombre: "periflex" }]);
   });
 
-  it("cambia la coma del nombre por un espacio", () => {
-    // La coma separa los renglones en el texto de la planilla: adentro de un
-    // nombre partiría uno en dos al volver a leerlo.
+  it("cambia por un espacio la coma y el punto y coma del nombre", () => {
+    // El `;` separa los renglones en el texto de la planilla y la `,` también
+    // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
+    // partiría ese renglón en dos.
     expect(lineasQueValen([{ cantidad: "1", nombre: "rodamiento 22216, EK" }]))
+      .toEqual([{ cantidad: "1", nombre: "rodamiento 22216 EK" }]);
+    expect(lineasQueValen([{ cantidad: "1", nombre: "rodamiento 22216; EK" }]))
       .toEqual([{ cantidad: "1", nombre: "rodamiento 22216 EK" }]);
   });
 
@@ -34,11 +37,18 @@ describe("lineasQueValen", () => {
 });
 
 describe("textoParaLaPlanilla", () => {
-  it("junta los renglones como los escribiría una persona", () => {
+  it("separa los renglones con punto y coma", () => {
+    // Pedido el 21/10/2026: en la celda de la planilla un `;` se ve de lejos y
+    // una coma no, porque adentro de un repuesto ya hay comas.
     expect(textoParaLaPlanilla([
       { cantidad: "2", nombre: "grillas 2 mm" },
       { cantidad: "4", nombre: "martillos" },
-    ])).toBe("2 grillas 2 mm, 4 martillos");
+    ])).toBe("2 grillas 2 mm; 4 martillos");
+  });
+
+  it("con un solo renglón no pone separador", () => {
+    expect(textoParaLaPlanilla([{ cantidad: "2", nombre: "grillas 2 mm" }]))
+      .toBe("2 grillas 2 mm");
   });
 
   it("sin cantidad escribe sólo el nombre, sin el espacio de más", () => {
@@ -76,7 +86,7 @@ describe("el texto que escribimos lo tiene que poder leer el parseo que ya exist
       { cantidad: "2", nombre: "rodamientos 22212" },
       { cantidad: "2", nombre: "manguitos H312" },
     ])!;
-    expect(texto).toBe("2 rodamientos 22212, 2 manguitos H312");
+    expect(texto).toBe("2 rodamientos 22212; 2 manguitos H312");
     expect(itemsDeRepuesto(texto).map((i) => `${i.tipo} ${i.codigo}`))
       .toEqual(["rodamiento 22212", "manguito H312"]);
   });
@@ -85,6 +95,22 @@ describe("el texto que escribimos lo tiene que poder leer el parseo que ya exist
     const texto = textoParaLaPlanilla([{ cantidad: "2", nombre: "rodamientos 22216, EK" }])!;
     expect(itemsDeRepuesto(texto)).toHaveLength(1);
     expect(itemsDeRepuesto(texto)[0]).toMatchObject({ tipo: "rodamiento", codigo: "22216 EK" });
+  });
+
+  it("tres renglones separados por `;` vuelven a ser tres items", () => {
+    // La vuelta completa del separador nuevo: si `partirRepuesto` no cortara
+    // por `;`, esto daría un solo item y las OT nuevas se leerían peor que las
+    // que cargó la gente a mano.
+    const texto = textoParaLaPlanilla([
+      { cantidad: "2", nombre: "rodamientos 22212" },
+      { cantidad: "2", nombre: "manguitos H312" },
+      { cantidad: "1", nombre: "correa SPB 2000" },
+    ])!;
+    expect(texto).toBe("2 rodamientos 22212; 2 manguitos H312; 1 correa SPB 2000");
+    expect(itemsDeRepuesto(texto).map((i) => `${i.tipo} ${i.codigo}`))
+      // El código de la correa sale normalizado —"SPB-2000"—, que es lo que
+      // ese parseo viene haciendo con las 277 OT viejas.
+      .toEqual(["rodamiento 22212", "manguito H312", "correa SPB-2000"]);
   });
 });
 
@@ -106,9 +132,12 @@ describe("filasParaLaBase", () => {
 
 describe("repuestosDelCuerpo", () => {
   it("con renglones, arma el texto y las filas", () => {
-    const r = repuestosDelCuerpo({ repuestos: [{ cantidad: "2", nombre: "grillas 2 mm" }] });
-    expect(r.texto).toBe("2 grillas 2 mm");
-    expect(r.lineas).toHaveLength(1);
+    const r = repuestosDelCuerpo({ repuestos: [
+      { cantidad: "2", nombre: "grillas 2 mm" },
+      { cantidad: "4", nombre: "martillos" },
+    ] });
+    expect(r.texto).toBe("2 grillas 2 mm; 4 martillos");
+    expect(r.lineas).toHaveLength(2);
   });
 
   it("con el campo viejo de texto suelto, lo respeta", () => {

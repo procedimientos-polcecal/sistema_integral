@@ -199,13 +199,22 @@ lectura en silencio.
 
 **Desde el 19/10/2026 el formulario de alta carga los repuestos por renglones**,
 cada uno con su cantidad, y se guardan en `ordenes_trabajo_repuestos`. A la
-celda va el texto de todos juntos, separados por coma: `2 grillas 2 mm, 4
-martillos`. La coma no es decorativa — es por donde corta `itemsDeRepuesto()` de
+celda va el texto de todos juntos, **separados por punto y coma** desde el
+21/10/2026: `2 grillas 2 mm; 4 martillos`. El separador no es decorativo — es
+por donde corta `itemsDeRepuesto()` de
 [lib/mantenimiento/repuestosDesdeOt.ts](../lib/mantenimiento/repuestosDesdeOt.ts),
 el parseo que sacó los repuestos de las 275 OT viejas, así que lo que el
 sistema escribe hoy se vuelve a leer igual que lo que escribió la gente a mano.
 Hay tests que hacen la vuelta completa en
 [repuestosDeLaOT.test.ts](../lib/mantenimiento/repuestosDeLaOT.test.ts).
+
+Era una coma hasta el 21/10/2026, y se cambió a pedido: en la celda un `;` se
+ve de lejos y una coma no, porque **adentro de un repuesto ya hay comas**
+—"rodamiento 22216, EK"—. `partirRepuesto` ahora corta por las dos, y eso no
+cambió la lectura de nada de lo que ya estaba: de las 277 OT con repuesto
+escrito, **ninguna tenía un punto y coma**. Y un `;` o una `,` adentro de un
+nombre se siguen reemplazando por un espacio, porque los dos partirían ese
+renglón en dos al volver a leerlo.
 
 **Se evaluó dejarlos en dos columnas y se decidió que no** (19/10/2026): la
 columna de cantidad habría que agregarla en el libro de respuestas —que lo

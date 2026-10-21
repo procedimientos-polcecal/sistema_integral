@@ -18,6 +18,32 @@ import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
  * sea que la misma OT se cargaba de dos formas distintas según de dónde—. La
  * duplicación de campos sueltos se nota; la de una lista con comportamiento,
  * no.
+ *
+ * EL ANCHO VA EN EL ENVOLTORIO Y NO EN EL `input`, Y ESTO MORDIÓ
+ *
+ * `.input` de `app/globals.css` declara `width: 100%` **fuera de toda capa**, y
+ * las utilidades de Tailwind v4 viven en `@layer utilities`. Entre una regla
+ * sin capa y una con capa gana la que no tiene capa, pase lo que pase con la
+ * especificidad. O sea que `className="input w-20"` **no mide 20**: mide el
+ * 100% de la fila, y con `shrink-0` encima no cede.
+ *
+ * Eso es exactamente lo que pasaba acá hasta el 21/10/2026, medido sobre la
+ * hoja renderizada: en el modal de 672 px, el campo de cantidad medía **624 px**
+ * —la fila entera— y el del repuesto quedaba en **26 px empujado afuera de la
+ * tarjeta**. No se veía ningún nombre de repuesto. Nada falla, nada avisa: es
+ * la misma clase de trampa que un `grid-cols-3` sin breakpoint.
+ *
+ * Por eso cada campo va adentro de un `div` que lleva el ancho, y el `input`
+ * se queda con su `width: 100%` llenándolo. **Un `.input` con una clase de
+ * ancho al lado no sirve en este repo**; si aparece otro, es este mismo error.
+ *
+ * EN EL TELÉFONO SE APILAN
+ *
+ * Lado a lado en 295 px útiles —375 menos los paddings del modal— el repuesto
+ * se queda con 124 px y "rodamiento 22217 EK" no entra. Así que de `sm` para
+ * arriba van lado a lado, y abajo de eso el repuesto toma la fila entera y la
+ * cantidad cae debajo, con sus 80 px. Los rótulos de columna se esconden ahí:
+ * apilados mentirían sobre qué columna es cuál, y los placeholders ya lo dicen.
  */
 export default function RepuestosDeLaOT({
   lineas,
@@ -31,40 +57,50 @@ export default function RepuestosDeLaOT({
   const cambiar = (i: number, campo: "cantidad" | "nombre", valor: string) =>
     onCambiar(lineas.map((l, n) => (n === i ? { ...l, [campo]: valor } : l)));
 
+  /* El × aparece recién con dos renglones, así que la columna del botón existe
+     o no existe, y los rótulos tienen que correrse con ella. */
+  const hayBoton = lineas.length > 1;
+
   return (
     <div className="space-y-2">
+      {/* Los rótulos de columna, una sola vez y no por renglón. El placeholder
+          se va cuando se escribe, y entonces nada dice cuál campo es cuál. */}
+      <div className="hidden gap-2 sm:flex">
+        <div className="min-w-0 flex-1 text-xs font-medium text-slate-500">Repuesto</div>
+        <div className="w-20 shrink-0 text-xs font-medium text-slate-500">Cantidad</div>
+        {hayBoton && <div className="w-7 shrink-0" aria-hidden="true" />}
+      </div>
+
       {lineas.map((l, i) => (
-        /*
-         * `flex` y no una grilla de tres columnas: en los 343 px útiles de un
-         * teléfono, tres columnas iguales dan 114 px cada una y ahí no entra
-         * el nombre de un repuesto. Así la cantidad se queda en sus 80 px y el
-         * nombre se lleva el resto.
-         */
-        <div key={i} className="flex gap-2">
-          <input
-            value={l.cantidad}
-            onChange={(e) => cambiar(i, "cantidad", e.target.value)}
-            disabled={deshabilitado}
-            className="input w-20 shrink-0"
-            placeholder="Cant."
-            aria-label={`Cantidad del repuesto ${i + 1}`}
-          />
-          <input
-            value={l.nombre}
-            onChange={(e) => cambiar(i, "nombre", e.target.value)}
-            disabled={deshabilitado}
-            className="input min-w-0 flex-1"
-            placeholder="Ej: rodamientos 22212"
-            aria-label={`Repuesto ${i + 1}`}
-          />
+        <div key={i} className="flex flex-wrap gap-2 sm:flex-nowrap">
+          <div className="w-full sm:min-w-0 sm:flex-1">
+            <input
+              value={l.nombre}
+              onChange={(e) => cambiar(i, "nombre", e.target.value)}
+              disabled={deshabilitado}
+              className="input"
+              placeholder="Ej: rodamientos 22212"
+              aria-label={`Repuesto ${i + 1}`}
+            />
+          </div>
+          <div className="w-20 shrink-0">
+            <input
+              value={l.cantidad}
+              onChange={(e) => cambiar(i, "cantidad", e.target.value)}
+              disabled={deshabilitado}
+              className="input"
+              placeholder="Cant."
+              aria-label={`Cantidad del repuesto ${i + 1}`}
+            />
+          </div>
           {/* Con un solo renglón no se muestra: sacarlo dejaría la lista vacía
               y el formulario sin dónde escribir. */}
-          {lineas.length > 1 && (
+          {hayBoton && (
             <button
               type="button"
               onClick={() => onCambiar(lineas.filter((_, n) => n !== i))}
               disabled={deshabilitado}
-              className="shrink-0 px-2 text-slate-400 transition-colors hover:text-red-600"
+              className="w-7 shrink-0 text-slate-400 transition-colors hover:text-red-600"
               title="Sacar este repuesto"
             >
               ×

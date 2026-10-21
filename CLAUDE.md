@@ -310,6 +310,30 @@ de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343,
 en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
 hay que medirla a mano.
 
+## Y `className="input w-20"` no mide 20
+
+La tercera de la misma familia, y ésta tampoco rompe nada. `.input` —y `.card`,
+y los `.btn-*`— están declarados en `app/globals.css` **fuera de toda capa**,
+mientras las utilidades de Tailwind v4 viven en `@layer utilities`. Entre una
+regla sin capa y una con capa **gana siempre la que no tiene capa**, pase lo que
+pase con la especificidad. Así que el `width: 100%` de `.input` le gana a
+cualquier `w-*` que se le ponga al lado.
+
+Se nota poco porque casi siempre el elemento puede encogerse y queda "ancho pero
+entra": hoy pasa en `administracion/usuarios` (`input w-40`) y en
+`mantenimiento/ejecuciones` (`input w-32`), donde el ancho declarado no se
+respeta pero nada se desborda. **Se vuelve grave cuando el ancho va con
+`shrink-0`**: el 21/10/2026, en los renglones de repuestos de la OT, el campo de
+cantidad medía **624 px —la fila entera— y el del repuesto quedaba en 26 px,
+empujado afuera de la tarjeta**. Dos días cargando repuestos sin ver lo que se
+escribía.
+
+El arreglo es **poner el ancho en un `div` que envuelva al campo** y dejar que el
+`input` llene ese envoltorio con su `width: 100%`. Está hecho y explicado en
+[components/RepuestosDeLaOT.tsx](components/RepuestosDeLaOT.tsx).
+`flex-1`, en cambio, sí funciona: no declara `width`, y en un ítem flex el
+`flex-basis` manda sobre el ancho.
+
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
