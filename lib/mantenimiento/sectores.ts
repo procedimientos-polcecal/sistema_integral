@@ -44,7 +44,12 @@ const ORDEN_DE_PLANTA = [
   "PO-B1",                     // calcinación
   "PO-C1",                     // hidratación
   "PO-D1",                     // molienda de cal
-  "PO-D2",                     // despacho cal — no está en el formulario, va con su proceso
+  // Despacho cal se unió a la molienda el 21/10/2026 (migración
+  // `20261021085411`), así que esta entrada no corresponde a ningún sector.
+  // Se deja igual: el libro BD Equipos sigue diciendo PO-D2 y su importación
+  // recrea los sectores por código, así que si vuelve conviene que aparezca
+  // acá y no al final.
+  "PO-D2",
   "PY-A1", "PY-B1", "PY-D1",   // filler 1, 2 y 3
   "PY-C1",                     // planta 0-2 mm
   "AMB-C1",                    // compresores

@@ -1074,11 +1074,25 @@ SECTOR de la planilla. Si el nombre nuevo no es el que el formulario escribe,
 ese sector deja de enlazar para toda orden que no traiga un equipo
 identificado — hoy son 368 de 2.206.
 
-**"Despacho cal" está en el catálogo y no en el formulario, a propósito.** Tiene
-7 equipos y 39 órdenes, que llegaron por el código del equipo y no por el
-nombre. La lista del formulario dice *quién solicita* y el catálogo dice *dónde
-está la máquina*: no son la misma taxonomía, y sacarlo de los de planta lo
-borraría de los filtros dejando esas 39 sin poder filtrarse.
+**"Despacho cal" se dejó en el catálogo el 19/10 y se unió a Molienda de cal el
+21/10.** Vale contar el error, porque el razonamiento parecía bueno: tenía 7
+equipos y 39 órdenes, y se lo dejó pensando que la lista del formulario dice
+*quién solicita* y el catálogo *dónde está la máquina*. Eso es cierto en
+general y era falso acá — la división no existe en la planta, existe en el
+libro BD Equipos, que parte la molienda en `PO-D1` y `PO-D2`.
+
+Lo que lo delataba estaba a la vista y no se miró: **las 39 órdenes de PO-D2
+dicen `"Molienda de cal"` y ninguna dice "Despacho"**, exactamente el patrón
+que la migración `044` ya había documentado para los dos despachos de filler.
+La prueba de que molestaba: eran la discrepancia más grande entre lo que
+alguien escribía y dónde el sistema ponía la orden.
+
+Lo une la migración `20261021085411`, con la misma advertencia que la `044`:
+el libro sigue diciendo PO-D2 y su importación recrea los sectores por código,
+así que **un "Importar BD Equipos" lo trae de vuelta** mientras el libro no se
+corrija. Por eso `PO-D2` sigue en la lista de orden de
+[lib/mantenimiento/sectores.ts](../lib/mantenimiento/sectores.ts): si vuelve,
+que al menos aparezca al lado de la molienda y no al final.
 
 **Los dos nuevos no llevan `codigo`.** Sale del libro BD Equipos y ahí no
 tienen equipos; inventarles uno sería escribir un dato que dice venir de un
