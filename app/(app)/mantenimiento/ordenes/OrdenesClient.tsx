@@ -22,7 +22,8 @@ import JustificacionOT from "./JustificacionOT";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import OrdenarTrabajo from "./OrdenarTrabajo";
 import PuntajeGut from "./PuntajeGut";
-import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import PuntuarGutModal from "./PuntuarGutModal";
+import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
@@ -117,6 +118,7 @@ export default function OrdenesClient({
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [iniciando, setIniciando] = useState<any | null>(null);
   const [registrando, setRegistrando] = useState<any | null>(null);
+  const [puntuando, setPuntuando] = useState<any | null>(null);
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
@@ -623,7 +625,20 @@ export default function OrdenesClient({
                         <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
                         <p className="text-xs text-slate-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
                       </div>
-                      <PuntajeGut orden={o} />
+                      {/* El recuadro abre el modal de puntuar. Va dentro del
+                          botón que despliega la fila, así que no puede ser otro
+                          botón: es un atajo para el mouse, y con el teclado se
+                          llega por el mismo botón del detalle. */}
+                      {canEdit ? (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setPuntuando(o); }}
+                          className="shrink-0 cursor-pointer rounded-md hover:ring-2 hover:ring-violet-200"
+                        >
+                          <PuntajeGut orden={o} />
+                        </span>
+                      ) : (
+                        <PuntajeGut orden={o} />
+                      )}
                       <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
                         style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
                         {meta.label}
@@ -664,6 +679,7 @@ export default function OrdenesClient({
                         canEdit={canEdit}
                         onChangeEstado={changeEstado}
                         onVerRepuestos={() => setVerRepuestos(o)}
+                        onPuntuar={() => setPuntuando(o)}
                         onCambiarParada={cambiarParada}
                         onJustificacion={() => cargarJustificadas(orders)}
                       />
@@ -723,6 +739,17 @@ export default function OrdenesClient({
         />
       )}
 
+      {puntuando && (
+        <PuntuarGutModal
+          orden={puntuando}
+          onCerrar={() => setPuntuando(null)}
+          onGuardada={() => {
+            setPuntuando(null);
+            load();
+          }}
+        />
+      )}
+
       {iniciando && (
         <IniciarOTModal
           orden={iniciando}
@@ -743,9 +770,10 @@ export default function OrdenesClient({
 }
 
 function OTDetail({
-  order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onJustificacion,
+  order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
 }: {
   onVerRepuestos?: () => void;
+  onPuntuar?: () => void;
   order: any;
   canEdit: boolean;
   onChangeEstado: (id: string, estado: string) => void;
@@ -787,6 +815,14 @@ function OTDetail({
             </span>
           );
         })}
+        {canEdit && (
+          <button
+            onClick={onPuntuar}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {puntajeGut(o) !== null ? "Corregir puntaje" : "Puntuar"}
+          </button>
+        )}
       </div>
 
       {canEdit && (
