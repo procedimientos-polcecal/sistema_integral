@@ -1144,6 +1144,49 @@ Medido contra las 1.728 OT y los 138 avisos ya cargados: enlazan a un equipo el
 **83%** y el **90%**; y quedan con sector conocido el **93%** y el **97%**. De los
 códigos que las planillas nombran, el libro los tiene **todos**.
 
+## El edificio de cada sector es un equipo del catálogo
+
+Desde el 21/10/2026 cada sector de planta tiene en `equipos` una fila llamada
+**"Edificio"**, y existe por una razón concreta: **«toda OT lleva equipo» rige
+desde el 19/10/2026** y un trabajo sobre el edificio —un techo, una pared, un
+piso, un portón— no es sobre ninguna máquina, así que desde el sistema **no se
+podía cargar**. En la planilla sí se venía cargando: medido ese día, **314 OT,
+12 avisos y 26 requerimientos** dicen «Edificio» en la columna EQUIPO y no
+tienen equipo enlazado, porque `"PO-A3 - Edificio"` es una opción de la lista
+del formulario de Google y no un equipo.
+
+**El código es el del sector**, no uno nuevo: el edificio de Calcinación es
+`PO-B1`. Con eso, lo que el sistema escribe en la planilla —`"<code> – <name>"`—
+queda `"PO-B1 – Edificio"`, que es palabra por palabra lo que la planilla ya
+dice, y la planilla no termina con dos formas de nombrar lo mismo. De yapa, las
+**183 OT, 10 avisos y 23 requerimientos** que ya decían eso pasan a colgar del
+edificio de su sector en la siguiente sincronización, sin tocar una fila a mano.
+
+Dos cosas que no se deducen del código:
+
+- **La palabra «Edificio» no puede ser el código.** `buscarCodigo` se queda con
+  el código más largo que encuentre, así que un equipo con código `EDIFICIO`
+  ganaría contra `PO-A1` dentro de `"PO-A1 - Edificio"` y las 183 filas de los
+  doce sectores irían todas al mismo edificio. Por eso los tres sectores que no
+  tienen código de planta —Cantera, Servicios auxiliares y Taller— llevan uno
+  propio y delimitado: `CANTERA-ED`, `SERV-AUX-ED`, `TALLER-ED`. En la planilla
+  esos tres escriben «Edificios» o «Edificio» pelado, sin código, así que una OT
+  cargada allá para ellos sigue quedando sin equipo; una cargada desde el
+  sistema trae el código y vuelve a enlazar sola.
+- **No se lleva puesta ninguna máquina.** El borde de `buscarCodigo` son los
+  caracteres que no son letra, número ni guión, así que `PO-A1` **no** matchea
+  dentro de `"PO-A1-24 - Cinta transportadora 16"`. Medido sobre las 2.224 OT,
+  los 183 avisos, los 2.167 requerimientos y las 264 OS: las 216 filas que
+  cambian de enlace dicen todas «Edificio».
+
+Lo escribe `npx tsx scripts/edificio-de-cada-sector.mts --aplicar`,
+que sin `--aplicar` sólo dice qué haría y vuelve a medir qué filas se moverían.
+
+Y lo que esto dejó a la vista: **56 OT dicen `PY-A2 - Edificio` o
+`PY-B2 - Edificio`, y esos sectores no existen** — los filler son PY-A1, PY-B1 y
+PY-D1. La lista del formulario nombra dos plantas que el libro BD Equipos no
+tiene, y por eso esas 56 siguen sin equipo.
+
 ## El menú, igual que en la app de Mantenimiento
 
 El mismo orden y los mismos nombres, y **sólo** ésos: Dashboard, Equipos,
