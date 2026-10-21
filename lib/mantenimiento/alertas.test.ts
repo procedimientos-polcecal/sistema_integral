@@ -87,8 +87,43 @@ describe("resumirAtrasadas", () => {
     expect(resumirAtrasadas(ordenes, HOY).total).toBe(2);
   });
 
-  it("dice cuántas son urgentes", () => {
-    expect(resumirAtrasadas(ordenes, HOY).urgentes).toBe(1);
+  describe("urgentes", () => {
+    const base = { estado: "POR_HACER", proxima_fecha: "2026-01-01", sector_raw: "Calcinación" };
+
+    it("cuenta como urgentes las atrasadas de puntaje 65 o más", () => {
+      const r = resumirAtrasadas([
+        // 5 x 4 x 4 = 80
+        { ...base, ot_number: 1, gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: 4 },
+        // 2 x 2 x 3 = 12
+        { ...base, ot_number: 2, gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3 },
+      ], HOY);
+      expect(r.urgentes).toBe(1);
+    });
+
+    it("no cuenta las que no tienen puntaje", () => {
+      const r = resumirAtrasadas([
+        { ...base, ot_number: 1 },
+        { ...base, ot_number: 2, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null },
+      ], HOY);
+      expect(r.urgentes).toBe(0);
+    });
+
+    it("la prioridad de la planilla ya no cuenta", () => {
+      // Una atrasada "🟠 Alta" sin GUT no es urgente. Antes tampoco lo era, pero
+      // por un bug —la planilla guarda el emoji— y no por una decisión.
+      const r = resumirAtrasadas([
+        { ...base, ot_number: 1, prioridad: "🟠 Alta" },
+        { ...base, ot_number: 2, prioridad: "ALTA" },
+      ], HOY);
+      expect(r.urgentes).toBe(0);
+    });
+
+    it("no cuenta una realizada aunque tenga GUT alto", () => {
+      const r = resumirAtrasadas([
+        { ...base, ot_number: 1, estado: "REALIZADO", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 },
+      ], HOY);
+      expect(r.urgentes).toBe(0);
+    });
   });
 
   it("dice cuál es la más vieja", () => {

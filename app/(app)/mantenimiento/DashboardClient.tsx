@@ -112,8 +112,8 @@ function OrdenesAtrasadas({ resumen, hoy }: {
           {resumen.total} orden{resumen.total === 1 ? "" : "es"} de trabajo atrasada
           {resumen.total === 1 ? "" : "s"}
           {resumen.urgentes > 0 && (
-            <span className="ml-2 font-normal text-red-700">
-              · {resumen.urgentes} de prioridad alta
+            <span className="ml-2 font-normal text-red-700" title="Atrasadas con puntaje GUT de 65 o más (de 125)">
+              · {resumen.urgentes} de GUT alto
             </span>
           )}
         </h2>

@@ -164,7 +164,7 @@ export default async function MantenimientoDashboardPage() {
   // realizada tarde ya no está atrasada.
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
-    .select("ot_number, estado, proxima_fecha, prioridad, sector_raw, descripcion, equipo_raw, quien")
+    .select("ot_number, estado, proxima_fecha, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
     .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}`)
     .limit(500);
 
