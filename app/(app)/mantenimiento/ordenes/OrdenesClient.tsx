@@ -21,6 +21,8 @@ import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import OrdenarTrabajo from "./OrdenarTrabajo";
+import PuntajeGut from "./PuntajeGut";
+import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
@@ -621,6 +623,7 @@ export default function OrdenesClient({
                         <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
                         <p className="text-xs text-slate-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
                       </div>
+                      <PuntajeGut orden={o} />
                       <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
                         style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
                         {meta.label}
@@ -765,6 +768,25 @@ function OTDetail({
         <D label="Fecha ejecución" value={o.fecha_ejecucion ? new Date(o.fecha_ejecucion).toLocaleDateString("es-AR") : null} />
         <D label="Fecha cierre"    value={o.fecha_cierre   ? new Date(o.fecha_cierre).toLocaleDateString("es-AR")   : null} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
+      </div>
+
+      {/* En una pantalla táctil no hay "pasar por encima": acá las tres notas
+          van escritas, con las palabras de la escala. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">GUT</span>
+          <PuntajeGut orden={o} />
+        </span>
+        {(["gravedad", "urgencia", "tendencia"] as const).map((campo) => {
+          const nota: number | null = o[`gut_${campo}`] ?? null;
+          if (nota == null) return null;
+          return (
+            <span key={campo} className="text-xs text-slate-500">
+              <span className="capitalize">{campo}</span> {nota}
+              {" · "}{ESCALAS_GUT[campo][nota - 1]}
+            </span>
+          );
+        })}
       </div>
 
       {canEdit && (
