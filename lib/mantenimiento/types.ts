@@ -260,6 +260,16 @@ export interface Aviso {
   repuesto: string | null;
   reference_photos: string[] | null;
   app_created: boolean;
+  /**
+   * Cuándo se decidió que este aviso **no** va a ser orden de trabajo.
+   *
+   * Las tres viajan juntas o ninguna —lo sostiene un `check` de la base—, y
+   * `null` es que nadie lo decidió todavía, que no es lo mismo que "va a
+   * hacerse". Ver `lib/mantenimiento/desestimarAviso.ts`.
+   */
+  desestimado_en: string | null;
+  desestimado_por: string | null;
+  motivo_desestimado: string | null;
   sheets_row: number | null;
   synced_at: string | null;
   created_at: string;

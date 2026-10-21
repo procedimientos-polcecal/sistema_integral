@@ -99,6 +99,17 @@ export const URGENCIAS = ["🟠 Alta", "🟡 Media", "🟢 Baja"] as const;
 export const COLUMNA_OT_ASIGNADA = COL.otAsignada;
 
 /**
+ * La columna donde se escribe por qué un aviso no va a ser orden de trabajo.
+ *
+ * Es `OBSERVACIONES` y **no `OT ASIGNADA`**, que sería lo intuitivo: esa otra
+ * quiere decir *cuál* orden, así que una palabra ahí hace que el aviso cuente
+ * como que ya tiene una. Y está vacía en los 183 avisos, medido el
+ * 21/10/2026 — es la columna que existe para esto y que nadie usa para otra
+ * cosa. El porqué completo está en `desestimarAviso.ts`.
+ */
+export const COLUMNA_OBSERVACIONES = COL.observaciones;
+
+/**
  * El próximo número de aviso.
  *
  * Van como `A1`, `A2`… y se compara el número, no el texto: alfabéticamente

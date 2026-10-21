@@ -7,8 +7,11 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
-import GenerarOTModal from "./GenerarOTModal";
+import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
+import DesestimarModal from "./DesestimarModal";
 import Select from "@/components/Select";
+import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
+import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 
 /**
  * Los avisos: lo que alguien reportó que necesita mantenimiento.
@@ -18,12 +21,15 @@ import Select from "@/components/Select";
  * cada uno es algo que alguien vio y nadie tomó.
  */
 export default function AvisosClient({
-  avisos, puedeEditar, sync
+  avisos, puedeEditar, sync, sectores, equipos
 }: {
   avisos: Aviso[];
   puedeEditar: boolean;
   /** Cuándo se trajo por última vez lo de la planilla. */
   sync: UltimaSync | null;
+  /** Para poder corregir a qué máquina es la OT antes de crearla. */
+  sectores: SectorDePlanta[];
+  equipos: EquipoDelAviso[];
 }) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -54,8 +60,18 @@ export default function AvisosClient({
   });
   const [creando, setCreando] = useState(arranqueDelAlta !== null);
 
-  /** Un aviso tiene OT si la app la generó o si la planilla dice que sí. */
-  const tieneOt = (a: Aviso) => Boolean(a.work_order_id) || Boolean(a.ot_asignada);
+  /**
+   * En qué terminó cada aviso: con OT, desestimado, o todavía pendiente.
+   *
+   * Son tres desde el 21/10/2026. Antes eran dos, y por eso la lista de
+   * pendientes mezclaba lo que falta hacer con lo que ya se decidió no hacer:
+   * de 183 avisos había 5 sin OT, y dos eran de julio y septiembre.
+   *
+   * La decisión vive en `lib/mantenimiento/desestimarAviso.ts` con sus tests,
+   * incluida la regla de que tener OT gana sobre estar desestimado.
+   */
+  const tieneOt = (a: Aviso) => finalDelAviso(a) === "con-ot";
+  const estaPendiente = (a: Aviso) => finalDelAviso(a) === "pendiente";
 
   // La urgencia viene con emoji desde la planilla —"🔴 Alta"—, así que las
   // opciones salen de los datos y no de una lista fija que quedaría corta.
@@ -68,7 +84,10 @@ export default function AvisosClient({
     const q = busqueda.toLowerCase().trim();
     return avisos.filter((a) => {
       if (urgencia && a.urgencia !== urgencia) return false;
-      if (soloSinOt && tieneOt(a)) return false;
+      // "Sin OT" quiere decir PENDIENTE: un aviso desestimado tampoco tiene
+      // orden, pero ya se decidio que no la va a tener, asi que mostrarlo aca
+      // devuelve a la lista justo lo que esta funcion vino a sacar.
+      if (soloSinOt && !estaPendiente(a)) return false;
       if (!q) return true;
       return [a.oa_number, a.descripcion, a.equipo_raw, a.sector_raw, a.quien_aviso]
         .some((v) => v?.toLowerCase().includes(q));
@@ -120,6 +139,27 @@ export default function AvisosClient({
    * `lib/mantenimiento/otDesdeAviso.ts`.
    */
   const [generarDe, setGenerarDe] = useState<Aviso | null>(null);
+  const [desestimarA, setDesestimarA] = useState<Aviso | null>(null);
+
+  /**
+   * Volver a dejarlo pendiente.
+   *
+   * Desestimar no es irreversible —por eso tampoco se audita—, y sin esto la
+   * unica forma de deshacerlo seria editar la base a mano.
+   */
+  async function retomar(aviso: Aviso) {
+    setError(""); setResultado(null);
+    const res = await fetch(`/api/mantenimiento/avisos/desestimar?id=${aviso.id}`, {
+      method: "DELETE",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(body.error ?? "No se pudo retomar el aviso."); return; }
+    setResultado(
+      `El aviso ${aviso.oa_number} vuelve a estar pendiente.` +
+      (body.planilla_error ? ` Ojo: ${body.planilla_error}` : "")
+    );
+    router.refresh();
+  }
 
   function generarOT(aviso: Aviso) {
     setError("");
@@ -144,7 +184,9 @@ export default function AvisosClient({
               ? `${avisos.length} aviso${avisos.length === 1 ? "" : "s"}`
               : `${visibles.length} de ${avisos.length}`}
             {" · "}
-            {avisos.filter((a) => !tieneOt(a)).length} sin orden de trabajo
+            {avisos.filter(estaPendiente).length} sin orden de trabajo
+            {avisos.filter(estaDesestimado).length > 0 &&
+              ` · ${avisos.filter(estaDesestimado).length} desestimados`}
           </p>
         </div>
 
@@ -239,13 +281,23 @@ export default function AvisosClient({
                   <span className="text-xs text-slate-500">
                     {a.ot_asignada ? `OT #${a.ot_asignada}` : "Ya tiene OT"}
                   </span>
+                ) : estaDesestimado(a) ? (
+                  <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                 ) : puedeEditar ? (
-                  <button
-                    onClick={() => generarOT(a)}
-                    className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
-                  >
-                    Generar OT
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => generarOT(a)}
+                      className="flex-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
+                    >
+                      Generar OT
+                    </button>
+                    <button
+                      onClick={() => setDesestimarA(a)}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600"
+                    >
+                      No va
+                    </button>
+                  </div>
                 ) : (
                   <span className="text-xs text-amber-700">Pendiente de OT</span>
                 )}
@@ -288,13 +340,23 @@ export default function AvisosClient({
                       <span className="text-xs text-slate-500">
                         {a.ot_asignada ? `OT #${a.ot_asignada}` : "sí"}
                       </span>
+                    ) : estaDesestimado(a) ? (
+                      <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                     ) : puedeEditar ? (
-                      <button
-                        onClick={() => generarOT(a)}
-                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
-                      >
-                        Generar OT
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => generarOT(a)}
+                          className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                        >
+                          Generar OT
+                        </button>
+                        <button
+                          onClick={() => setDesestimarA(a)}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          No va
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-xs text-amber-700">pendiente</span>
                     )}
@@ -319,9 +381,23 @@ export default function AvisosClient({
         />
       )}
 
+      {desestimarA && (
+        <DesestimarModal
+          aviso={desestimarA}
+          onClose={() => setDesestimarA(null)}
+          onHecho={(mensaje) => {
+            setDesestimarA(null);
+            setResultado(mensaje);
+            router.refresh();
+          }}
+        />
+      )}
+
       {generarDe && (
         <GenerarOTModal
           aviso={generarDe}
+          sectores={sectores}
+          equipos={equipos}
           onClose={() => setGenerarDe(null)}
           onCreada={(mensaje) => {
             setGenerarDe(null);
@@ -329,6 +405,37 @@ export default function AvisosClient({
             router.refresh();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Un aviso que alguien decidió que no se hace.
+ *
+ * **Muestra el motivo y no sólo la palabra «desestimado».** Es la diferencia
+ * entre esto y dejar el aviso pendiente para siempre: si la pantalla dijera
+ * sólo que se descartó, dentro de tres meses nadie podría saber si fue una
+ * decisión o un olvido, que es exactamente lo que había antes.
+ */
+function Desestimado({ aviso, puedeEditar, onRetomar }: {
+  aviso: Aviso;
+  puedeEditar: boolean;
+  onRetomar: (a: Aviso) => void;
+}) {
+  return (
+    <div className="text-xs">
+      <span className="font-medium text-slate-500">No va a hacerse</span>
+      {aviso.motivo_desestimado && (
+        <span className="text-slate-400"> · {aviso.motivo_desestimado}</span>
+      )}
+      {puedeEditar && (
+        <button
+          onClick={() => onRetomar(aviso)}
+          className="ml-2 text-slate-400 underline hover:text-slate-600"
+        >
+          retomar
+        </button>
       )}
     </div>
   );
