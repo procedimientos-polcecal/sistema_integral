@@ -33,16 +33,37 @@
 -- son decisiones de ordenamiento y no mediciones de nada:
 --
 --   · el 27 de las que no tienen puntaje (`coalesce(..., 27)`): 27 es 3×3×3,
---     el punto medio de la escala. Una orden sin puntaje no pasa por delante de
---     una que lo tiene alto, ni se hunde detrás de una que lo tiene bajo.
+--     o sea el 3 en cada una de las tres notas —no el punto medio de 1 a 125,
+--     que sería 63—. Una orden sin puntaje se ordena como si todo fuera
+--     «medio»: no pasa por delante de una que lo tiene alto, ni se hunde
+--     detrás de una que lo tiene bajo.
 --   · el +1000 de las que siguen abiertas: el máximo posible es 125, así que
 --     sumar 1000 deja a toda orden abierta por encima de toda orden cerrada
 --     (REALIZADO o SUSPENDIDA), sin importar el puntaje de cada una.
 --
+-- Dos casos que se deducen del SQL pero conviene dejar dichos:
+--
+--   · Un trío a medias —sólo la gravedad, por ejemplo— da producto null y
+--     por lo tanto el 27, igual que uno vacío. Ningún `check` obliga a cargar
+--     las tres notas o ninguna: es una decisión, y es la misma que toma el
+--     TypeScript, que devuelve null si falta cualquiera de las tres.
+--   · Un `estado` null caería en el `else` y contaría como abierta. No puede
+--     pasar: `estado` es `text not null default 'POR_HACER'` (005, línea 159),
+--     así que es sólo una defensa. Los valores de hoy, medidos el 21/10/2026,
+--     son exactamente REALIZADO (2.179), POR_HACER (23), EN_PROCESO (14) y
+--     ATRASADO (11): en mayúsculas, sin espacios, sin nulos. SUSPENDIDA no
+--     tiene filas todavía, pero la 005 (línea 143) anota que los datos de
+--     origen la usan y `lib/mantenimiento/alertas.ts` ya la trata como
+--     cerrada; nombrarla acá es lo correcto y no una previsión de más.
+--
 -- Por eso la pantalla NUNCA imprime `gut_orden`: mostraría 1027 para una orden
 -- sin puntaje y 1125 para una con 5-5-5. El puntaje que se muestra es el
--- producto de las tres notas, se calcula en TypeScript y es null si falta
--- alguna.
+-- producto de las tres notas, es null si falta alguna y se calcula en
+-- `lib/mantenimiento/gut.ts`.
+--
+-- ATENCIÓN: el 27 vive en dos lugares, acá y en ese archivo. Si se cambia uno
+-- hay que cambiar el otro, y como esta migración no se edita una vez
+-- aplicada, el cambio de acá es otra migración que reemplace la columna.
 --
 -- ── LO QUE NO HACE FALTA ─────────────────────────────────────────────────────
 --
