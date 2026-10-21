@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
-import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
   copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
@@ -12,19 +13,33 @@ import {
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 
-const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
-const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
-const QUIEN_OPTIONS = ["INTERNO", "CONTRATADO", "MIXTO"];
 /**
- * Las de `filtrosOt`, no una copia.
+ * Los cuatro vocabularios, de `lib/`, no una copia.
  *
- * Tenía la suya —`["ALTA", "MEDIA", "BAJA"]`— y el 16/10/2026 se vio lo que
- * costaba: lo que se elegía acá no era lo que decía el filtro del listado, así
- * que una OT creada desde la app no aparecía al filtrar por «Media». El
- * servidor igual lo traduce, pero **lo que se elige tiene que ser lo que se
- * filtra**: dos vocabularios para lo mismo es cómo volvió a pasar.
+ * LA PRIORIDAD YA HABÍA PASADO POR ESTO. Tenía la suya —`["ALTA", "MEDIA",
+ * "BAJA"]`— y el 16/10/2026 se vio lo que costaba: lo que se elegía acá no era
+ * lo que decía el filtro del listado, así que una OT creada desde la app no
+ * aparecía al filtrar por «Media». El servidor igual lo traduce, pero **lo que
+ * se elige tiene que ser lo que se filtra**.
+ *
+ * Y LAS OTRAS TRES SEGUÍAN IGUAL HASTA EL 21/10/2026, con el mismo agujero y
+ * sin que nada lo notara: ofrecían INSTRUMENTACIÓN y OTRO, que no estaban en
+ * `ESPECIALIDADES`; PREDICTIVO y MEJORA, que no estaban en `TIPOS_DE_OT`; y
+ * MIXTO, que no estaba en `QUIENES_DE_OT`. Y la de especialidades, además, **no
+ * ofrecía LUBRICACIÓN**, así que desde acá no se podía crear ninguna de las de
+ * ese oficio ni copiar las 7 que existen. Los cinco valores de más se sumaron
+ * al vocabulario; el porqué medido está en los encabezados de `ordenes.ts` y
+ * `filtrosOt.ts`.
+ *
+ * Mientras esta lista salga de `lib/`, elegir y filtrar no se pueden separar.
  */
 const PRIORIDADES = PRIORIDADES_DE_OT;
+/**
+ * Los estados **sí** son una lista propia, y es a propósito: es un
+ * subconjunto de `ESTADOS_DE_OT` —le falta SUSPENDIDA— porque una OT no nace
+ * suspendida, y lleva etiquetas de pantalla que el vocabulario no tiene.
+ * Ofrecer menos no abre el agujero de arriba; ofrecer de más, sí.
+ */
 const ESTADOS_OT = [
   { value: "POR_HACER",  label: "Por hacer" },
   { value: "EN_PROCESO", label: "En proceso" },
@@ -36,14 +51,20 @@ const ESTADOS_OT = [
  * Lo que los desplegables de este formulario pueden mostrar.
  *
  * Sale de las mismas constantes que se renderizan, no de una copia: una OT
- * vieja con un valor que no está acá —hay 5 con especialidad LUBRICACIÓN— no
- * se copia, y se avisa. Copiarla dejaría el desplegable en "—" y el formulario
- * guardando otra cosa.
+ * vieja con un valor que no está acá no se copia, y se avisa. Copiarla dejaría
+ * el desplegable en "—" y el formulario guardando otra cosa.
+ *
+ * **Las 7 OT con especialidad LUBRICACIÓN ya se copian**, desde el 21/10/2026.
+ * Eran el ejemplo que ilustraba esta regla, y en realidad eran un síntoma de la
+ * otra: no se copiaban porque la lista de arriba era una copia a mano que no
+ * tenía LUBRICACIÓN. Ahora que sale de `lib/`, el único valor que de verdad
+ * puede quedar afuera es el de una OT vieja con algo que nadie ofrece hoy — que
+ * es para lo que esto existe.
  */
 const VOCABULARIO: Vocabulario = {
   especialidades: ESPECIALIDADES,
-  tipos: TIPOS,
-  quien: QUIEN_OPTIONS,
+  tipos: TIPOS_DE_OT,
+  quien: QUIENES_DE_OT,
   estados: ESTADOS_OT.map(o => o.value),
   prioridades: PRIORIDADES,
 };
@@ -308,12 +329,12 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </F>
             <F label="Tipo" required>
               <Select value={form.tipo} onChange={e => f("tipo", e.target.value)} className="input">
-                {TIPOS.map(v => <option key={v} value={v}>{v}</option>)}
+                {TIPOS_DE_OT.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
             <F label="Quién realiza" required>
               <Select value={form.quien} onChange={e => f("quien", e.target.value)} className="input">
-                {QUIEN_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                {QUIENES_DE_OT.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
           </div>

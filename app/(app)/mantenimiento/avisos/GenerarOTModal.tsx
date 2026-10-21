@@ -23,11 +23,14 @@ import {
  * la regla exija uno más, este formulario lo pide solo. Ver el encabezado de
  * `lib/mantenimiento/otDesdeAviso.ts`, que es donde está el porqué.
  *
- * Los vocabularios se importan de `lib/` y no se escriben acá. `NuevaOTModal`
- * tiene los suyos propios y no son los mismos —ofrece INSTRUMENTACIÓN y OTRO,
- * que no están en `ESPECIALIDADES`, y MIXTO, que no está en `QUIENES_DE_OT`—;
- * eso es una divergencia que ya existía y que hay que cerrar de aquel lado, no
- * copiarla para acá.
+ * Los vocabularios se importan de `lib/` y no se escriben acá. `NuevaOTModal` y
+ * `FormularioOTOffline` tenían los suyos propios y no eran los mismos —ofrecían
+ * INSTRUMENTACIÓN y OTRO, que no estaban en `ESPECIALIDADES`; PREDICTIVO y
+ * MEJORA, que no estaban en `TIPOS_DE_OT`; y MIXTO, que no estaba en
+ * `QUIENES_DE_OT`—. Se cerró el 21/10/2026, de aquel lado y no copiando la
+ * divergencia para acá: los cinco valores se sumaron al vocabulario y las dos
+ * pantallas lo importan. Hoy **ningún formulario de OT tiene lista propia**
+ * salvo la de estados, que es un subconjunto a propósito.
  */
 export default function GenerarOTModal({ aviso, onClose, onCreada }: {
   aviso: AvisoParaLaOT;

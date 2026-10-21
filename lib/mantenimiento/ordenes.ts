@@ -28,8 +28,23 @@ import { letraDeColumna } from "@/lib/core/columnaDeSheets";
  *
  * Es vocabulario cerrado: si aparece una nueva hay que sumarla acá para poder
  * filtrar por ella — las OT igual se guardan con lo que diga la celda.
+ *
+ * **INSTRUMENTACIÓN y OTRO se sumaron el 21/10/2026 y no salen de la planilla:
+ * salen de dos formularios que las ofrecían por su cuenta.** `NuevaOTModal` y
+ * `FormularioOTOffline` tenían cada uno su copia de esta lista, con esas dos de
+ * más y sin LUBRICACIÓN. O sea que desde esas pantallas se podía crear una OT
+ * con una especialidad que el filtro del listado no conocía —no aparecía al
+ * filtrar, igual que las prioridades del 16/10— y no se podía crear ninguna de
+ * lubricación, de las que hay 7.
+ *
+ * Se decidió sumarlas en vez de sacarlas de las pantallas, a pedido: las dos
+ * tienen 0 usos en 2.224 OT, pero son oficios que existen y el formulario los
+ * ofrecía por algo. Lo que cuesta, dicho: ahora esos dos valores **pueden
+ * viajar a la columna E de la planilla**, que nunca los tuvo.
  */
-export const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "CIVIL", "LUBRICACIÓN"] as const;
+export const ESPECIALIDADES = [
+  "MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "LUBRICACIÓN", "OTRO",
+] as const;
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {

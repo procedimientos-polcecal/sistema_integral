@@ -27,11 +27,26 @@ import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
  *
  * No son enums de la base —la columna es texto libre, porque el origen es una
  * planilla— así que la lista se declara acá y se la valida contra ella. Salen
- * de mirar las 1.819 órdenes cargadas: `tipo` tiene dos valores, `quien` dos, y
- * `prioridad` tres, todos escritos siempre igual.
+ * de mirar las órdenes cargadas: al 21/10/2026, sobre 2.224, `tipo` tiene dos
+ * valores en uso, `quien` dos y `prioridad` tres, todos escritos siempre igual.
+ *
+ * **PREDICTIVO, MEJORA y MIXTO se sumaron el 21/10/2026 y tienen 0 usos.** No
+ * salen de la planilla: salen de `NuevaOTModal` y `FormularioOTOffline`, que
+ * tenían cada uno su copia de estas dos listas y los ofrecían. Una OT creada
+ * desde ahí con uno de esos tres valores no aparecía al filtrar por nada, que
+ * es exactamente lo que pasó con las prioridades el 16/10.
+ *
+ * Se decidió sumarlos en vez de sacarlos de las pantallas, a pedido. MIXTO
+ * además **ya estaba diseñado**: `loQueFaltaParaCerrar` le exige contratista y
+ * operario, y los dos formularios muestran el campo de contratista cuando se
+ * elige. Era la única de las tres con código detrás.
+ *
+ * Lo que NO hubo que tocar, y conviene saber por qué: el MTBF cuenta fallas con
+ * `tipo === "CORRECTIVO"` (`mtbf.ts`, `mtbfDatos.ts`), así que un PREDICTIVO o
+ * una MEJORA no cuentan como falla — que es lo correcto, no una omisión.
  */
-export const TIPOS_DE_OT = ["PROGRAMADO", "CORRECTIVO"] as const;
-export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO"] as const;
+export const TIPOS_DE_OT = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"] as const;
+export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO", "MIXTO"] as const;
 
 /**
  * La prioridad viene con el emoji adelante, tal cual la escribe la planilla:

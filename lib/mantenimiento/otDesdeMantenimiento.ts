@@ -5,8 +5,8 @@
  *
  * **1. Mandaba el nombre de una persona en un campo de vocabulario cerrado.**
  * El botón armaba `quien: nombreCompleto(s.assigned_user)`, pero `quien` vale
- * INTERNO o CONTRATADO —`QUIENES_DE_OT`, las dos únicas formas que tienen las
- * 1.000 órdenes con ese campo cargado—. Una OT con `quien = "Juan Pérez"` no la
+ * INTERNO, CONTRATADO o MIXTO —`QUIENES_DE_OT`; las 2.223 órdenes con ese campo
+ * cargado usan las dos primeras—. Una OT con `quien = "Juan Pérez"` no la
  * encuentra nunca el filtro del listado, que es un `.in()` liso, y a la columna
  * G de la planilla le llega un nombre donde va una categoría. Es la misma clase
  * de error que las prioridades del 16/10: dos vocabularios para lo mismo.
@@ -18,10 +18,9 @@
  * `assigned_to`, y **0 OT nacidas de un schedule en toda la historia**.
  *
  * Su `maintenance_type` es `"Lubricacion"` y viajaba crudo a `especialidad`,
- * donde el vocabulario es `ESPECIALIDADES` = MECÁNICO / ELÉCTRICO / CIVIL /
- * LUBRICACIÓN. O sea que aunque hubiera pasado, esa OT tampoco se habría podido
- * filtrar por especialidad: sin tilde y capitalizado no es ninguno de los
- * cuatro.
+ * donde el vocabulario es `ESPECIALIDADES`. O sea que aunque hubiera pasado,
+ * esa OT tampoco se habría podido filtrar por especialidad: sin tilde y
+ * capitalizado no es ninguna de las de la lista.
  *
  * ── CÓMO QUEDÓ, Y POR QUÉ ASÍ ────────────────────────────────────────────────
  *
@@ -102,6 +101,22 @@ const ESPECIALIDAD_CIERTA: Readonly<Record<string, (typeof ESPECIALIDADES)[numbe
 };
 
 /**
+ * El tipo que **se llama igual que una especialidad y aun así no la prueba**.
+ *
+ * El 21/10/2026 `ESPECIALIDADES` sumó OTRO, y con eso el tipo de tarea "Otro"
+ * pasó a coincidir por nombre con la especialidad "OTRO" — una traducción
+ * automática que no dice nada: que la tarea esté sin clasificar no prueba que el
+ * oficio esté sin clasificar. Si se dejara pasar, el formulario nunca más
+ * preguntaría de qué oficio es un trabajo marcado "Otro", que es exactamente el
+ * caso donde más hace falta preguntarlo.
+ *
+ * Está como lista y no como un `if` porque el problema es de forma, no de este
+ * valor: cualquier futuro tipo «cajón de sastre» que se llame igual que una
+ * especialidad cae en la misma trampa.
+ */
+const NO_PRUEBAN_NADA: readonly string[] = ["OTRO"];
+
+/**
  * De qué especialidad es un tipo de mantenimiento, o `""` si no se sabe.
  *
  * Dos caminos, los dos ciertos: que el tipo **sea** una especialidad escrita de
@@ -117,7 +132,7 @@ const ESPECIALIDAD_CIERTA: Readonly<Record<string, (typeof ESPECIALIDADES)[numbe
  */
 export function especialidadDeTipo(tipo: string | null | undefined): string {
   const t = comoSeCompara(tipo);
-  if (!t) return "";
+  if (!t || NO_PRUEBAN_NADA.includes(t)) return "";
 
   const igual = ESPECIALIDADES.find((e) => norm(e) === t);
   if (igual) return igual;
@@ -171,9 +186,9 @@ export function respuestasIniciales(m: MantenimientoParaLaOT): RespuestasDelMant
   return {
     // Vacía cuando el tipo no se reconoce. La pantalla avisa por qué.
     especialidad: especialidadDeTipo(m.maintenance_type),
-    // El trabajo lo hace nuestra gente salvo que se diga otra cosa: 758 de las
-    // 1.000 órdenes con `quien` cargado son INTERNO, y un preventivo programado
-    // más todavía.
+    // El trabajo lo hace nuestra gente salvo que se diga otra cosa: 1.677 de
+    // las 2.223 órdenes con `quien` cargado son INTERNO, y un preventivo
+    // programado más todavía.
     quien: "INTERNO",
     // La que el mantenimiento ya tiene puesta. Puede estar en el pasado —la de
     // hoy vence el 08/08/2026— y se ve, así que se corrige antes de generar.

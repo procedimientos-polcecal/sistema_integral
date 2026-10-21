@@ -7,7 +7,8 @@ import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import { lineasDesdeElCuerpo, type LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
-import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type {
   EquipoDelCatalogo,
@@ -16,16 +17,30 @@ import type {
 } from "./catalogos";
 import { CartelDelResultado, loQueDijo, type Resultado } from "./envio";
 
-const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
-const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
-const QUIEN_OPTIONS = ["INTERNO", "CONTRATADO", "MIXTO"];
 /**
- * Las de `filtrosOt`, no una copia. Es la misma razón por la que `NuevaOTModal`
- * las toma de ahí: lo que se elige tiene que ser lo que se filtra, y dos
- * vocabularios para lo mismo es cómo una OT creada desde la app dejó de
- * aparecer al filtrar por «Media».
+ * Los cuatro vocabularios, de `lib/`, no una copia. Es la misma razón por la
+ * que `NuevaOTModal` los toma de ahí: lo que se elige tiene que ser lo que se
+ * filtra, y dos vocabularios para lo mismo es cómo una OT creada desde la app
+ * dejó de aparecer al filtrar por «Media».
+ *
+ * La prioridad se arregló el 16/10/2026; las otras tres, el 21/10, y acá el
+ * agujero era peor que en el modal: **una OT cargada sin señal no se revisa en
+ * el momento**. Se manda desde la cola horas o días después, así que una con
+ * especialidad INSTRUMENTACIÓN —que el filtro no conocía— entraba, se
+ * sincronizaba y no aparecía más, sin que nadie estuviera mirando la pantalla
+ * para notarlo. Y como esta lista no ofrecía LUBRICACIÓN, un engrase cargado en
+ * la planta no se podía clasificar como tal.
+ *
+ * El porqué medido de los cinco valores que se sumaron al vocabulario está en
+ * los encabezados de `ordenes.ts` y `filtrosOt.ts`.
  */
 const PRIORIDADES = PRIORIDADES_DE_OT;
+/**
+ * Los estados **sí** son una lista propia, y es a propósito: es un subconjunto
+ * de `ESTADOS_DE_OT` —le falta SUSPENDIDA— porque una OT no nace suspendida, y
+ * lleva etiquetas de pantalla que el vocabulario no tiene. Ofrecer menos no
+ * abre el agujero de arriba; ofrecer de más, sí.
+ */
 const ESTADOS_OT = [
   { value: "POR_HACER", label: "Por hacer" },
   { value: "EN_PROCESO", label: "En proceso" },
@@ -247,7 +262,7 @@ export default function FormularioOTOffline({
             disabled={deshabilitado}
             className="input"
           >
-            {TIPOS.map((v) => (
+            {TIPOS_DE_OT.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>
@@ -261,7 +276,7 @@ export default function FormularioOTOffline({
             disabled={deshabilitado}
             className="input"
           >
-            {QUIEN_OPTIONS.map((v) => (
+            {QUIENES_DE_OT.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>

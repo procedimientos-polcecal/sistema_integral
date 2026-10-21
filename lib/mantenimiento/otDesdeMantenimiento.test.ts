@@ -65,10 +65,26 @@ describe("de qué especialidad es un tipo de mantenimiento", () => {
     expect(especialidadDeTipo("Limpieza")).toBe("");
     expect(especialidadDeTipo("Ajuste")).toBe("");
     expect(especialidadDeTipo("Reemplazo")).toBe("");
-    expect(especialidadDeTipo("Otro")).toBe("");
     expect(especialidadDeTipo("cualquier cosa")).toBe("");
     expect(especialidadDeTipo(null)).toBe("");
     expect(especialidadDeTipo("   ")).toBe("");
+  });
+
+  /**
+   * LA TRAMPA QUE ABRIÓ EL 21/10/2026, cuando `ESPECIALIDADES` sumó OTRO. El
+   * tipo de tarea "Otro" pasó a coincidir **por nombre** con la especialidad
+   * "OTRO", así que la traducción automática se la habría puesto sola. Y no
+   * prueba nada: que la tarea esté sin clasificar no dice que el oficio lo
+   * esté. Peor todavía, es el caso donde más falta hace preguntar — un trabajo
+   * marcado "Otro" es justo el que nadie describió.
+   *
+   * Este test es la única defensa: agregar un valor al vocabulario no avisa de
+   * que empezó a coincidir con un tipo.
+   */
+  it("el tipo «Otro» no se traduce a la especialidad OTRO, aunque se llamen igual", () => {
+    expect(ESPECIALIDADES).toContain("OTRO");
+    expect(especialidadDeTipo("Otro")).toBe("");
+    expect(especialidadDeTipo("OTRO")).toBe("");
   });
 
   /**

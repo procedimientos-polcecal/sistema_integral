@@ -20,12 +20,18 @@
  *
  * UN VALOR QUE EL DESPLEGABLE NO TIENE, NO SE COPIA
  *
- * Y ésta es la que no se deduce. `ordenes_trabajo.especialidad` tiene
- * `LUBRICACIÓN` en 5 de las 2.206 órdenes, y la lista del formulario no la
- * ofrece: son MECÁNICO, ELÉCTRICO, INSTRUMENTACIÓN, CIVIL y OTRO. Si se copiara
- * igual, el desplegable mostraría "—" mientras el formulario guarda
- * `LUBRICACIÓN` — lo que se ve y lo que se guarda, distintos, que es la familia
- * de errores que este repo paga más caro.
+ * Y ésta es la que no se deduce. Si se copiara un valor que el desplegable no
+ * tiene, mostraría "—" mientras el formulario guarda otra cosa — lo que se ve y
+ * lo que se guarda, distintos, que es la familia de errores que este repo paga
+ * más caro.
+ *
+ * El ejemplo con el que nació esto era `LUBRICACIÓN`, que 7 órdenes tienen y el
+ * formulario no ofrecía. **Ya no aplica, y por qué dejó de aplicar importa más
+ * que el ejemplo**: el 21/10/2026 se vio que esa lista era una copia a mano —y
+ * que además ofrecía INSTRUMENTACIÓN, OTRO, PREDICTIVO, MEJORA y MIXTO, que
+ * ningún filtro conocía—, así que ahora sale de `lib/` y esas 7 se copian. Lo
+ * que todavía puede quedar afuera es el valor de una OT vieja que nadie ofrece
+ * hoy, que es para lo que esta regla existe de verdad.
  *
  * Así que un valor fuera de la lista **no entra**, y se devuelve en
  * `noEntraron` para decírselo a quien está cargando. Dejarlo vacío y callarlo
