@@ -7,6 +7,7 @@ import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import {
   copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
 } from "@/lib/mantenimiento/reutilizarOT";
@@ -163,6 +164,12 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     operario_2:     "",
     operario_3:     "",
     prioridad:      "🟡 Media",
+    // Las tres notas GUT arrancan VACÍAS, y no a la manera de `prioridad`
+    // (que arranca en Media y no tiene opción vacía): tres desplegables en 3
+    // fabricarían un 27 que nadie contestó, impreso como si fuera una medición.
+    gut_gravedad:   "",
+    gut_urgencia:   "",
+    gut_tendencia:  "",
     requiere_parada_sector: false,
   });
 
@@ -210,6 +217,11 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         // planilla, que tiene una sola.
         repuestos,
         horas:       form.horas ? Number(form.horas) : null,
+        // Sin elegir viaja como null, no como 0 ni como "": una nota que nadie
+        // puso no puede quedar guardada como si fuera una.
+        gut_gravedad:  form.gut_gravedad  ? Number(form.gut_gravedad)  : null,
+        gut_urgencia:  form.gut_urgencia  ? Number(form.gut_urgencia)  : null,
+        gut_tendencia: form.gut_tendencia ? Number(form.gut_tendencia) : null,
         // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
         // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
         estado:      estadoSegunElCierre(form.fecha_cierre, form.estado),
@@ -381,6 +393,31 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input type="number" value={form.horas} onChange={e => f("horas", e.target.value)}
                 className="input" placeholder="—" min={0} step={0.5} />
             </F>
+          </div>
+
+          {/* Puntaje GUT: opcional y sin valor por defecto. Las tres van juntas
+              o no cuenta ninguna; con una sola o dos, la orden queda sin
+              puntaje y se puede completar después. */}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-slate-600">
+              Puntaje GUT <span className="text-slate-400 font-normal">— opcional, las tres juntas</span>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {([
+                ["gut_gravedad",  "Gravedad",  ESCALAS_GUT.gravedad],
+                ["gut_urgencia",  "Urgencia",  ESCALAS_GUT.urgencia],
+                ["gut_tendencia", "Tendencia", ESCALAS_GUT.tendencia],
+              ] as const).map(([campo, etiqueta, escala]) => (
+                <F key={campo} label={etiqueta}>
+                  <Select value={form[campo]} onChange={e => f(campo, e.target.value)} className="input">
+                    <option value="">—</option>
+                    {escala.map((palabra, i) => (
+                      <option key={i + 1} value={String(i + 1)}>{i + 1} · {palabra}</option>
+                    ))}
+                  </Select>
+                </F>
+              ))}
+            </div>
           </div>
 
           {(form.quien === "CONTRATADO" || form.quien === "MIXTO") && (

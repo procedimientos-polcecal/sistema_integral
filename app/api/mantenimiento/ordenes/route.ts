@@ -24,6 +24,8 @@ import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { esquemaGut } from "@/lib/mantenimiento/gut";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -196,6 +198,25 @@ export async function POST(request: Request) {
     const error = mensajeDeEstadoInvalido(estado);
     avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
     return NextResponse.json({ error }, { status: 400 });
+  }
+
+  // Las tres notas GUT son opcionales y van juntas o no van —ver gut.ts—: no
+  // se exige ninguna, así que `loQueFaltaParaCrear` no las mira. Lo que no
+  // puede pasar es que un vacío se guarde como otra cosa que null: el
+  // formulario manda `""` en un desplegable sin elegir, y un `0` o un `""` en
+  // la base serían una nota que nadie puso. Lo que sí vino tiene que ser un
+  // entero de 1 a 5.
+  const vacioANull = (v: unknown) => (v === "" || v === undefined ? null : v);
+  const gut = validar(esquemaGut, {
+    gut_gravedad:  vacioANull(body.gut_gravedad),
+    gut_urgencia:  vacioANull(body.gut_urgencia),
+    gut_tendencia: vacioANull(body.gut_tendencia),
+  });
+  if (!gut.ok) {
+    avisarDeLaCarga(request, user.id, {
+      ...deEstaCarga, status: 400, error: gut.problemas.join(" "), enDuda: false,
+    });
+    return errorDeValidacion(gut.problemas);
   }
 
   const admin = createAdminClient();
@@ -416,6 +437,9 @@ export async function POST(request: Request) {
     operario_2:      operario_2?.trim() || null,
     operario_3:      operario_3?.trim() || null,
     prioridad:       laPrioridad,
+    gut_gravedad:    gut.datos.gut_gravedad ?? null,
+    gut_urgencia:    gut.datos.gut_urgencia ?? null,
+    gut_tendencia:   gut.datos.gut_tendencia ?? null,
     schedule_id:     schedule_id || null,
     app_created:     true,
     created_by:      user.id,
