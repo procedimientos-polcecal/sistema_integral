@@ -32,9 +32,14 @@
  * por columnas y el listado se pagina en la base. `claveDeOrdenGut` es su
  * gemela en TypeScript, para el orden que hace el cliente. Cambiar un número en
  * un lado y olvidar el otro no rompe nada y no avisa: el listado y la pestaña
- * ordenarían distinto. Por eso hay un test que reescribe el SQL a mano y lo
- * compara contra esta función, y por eso ese test no se refactoriza para usar
- * un ayudante compartido: probaría al ayudante contra sí mismo.
+ * ordenarían distinto. Por eso hay un test que reescribe la expresión del SQL
+ * a mano, con el 1000 y el 27 como literales, y la compara contra esta función:
+ * atrapa que `claveDeOrdenGut` se aparte de la expresión de la migración, en
+ * estructura o en valor. Ese test no se refactoriza para usar un ayudante
+ * compartido, porque probaría al ayudante contra sí mismo. Lo que ningún test
+ * de TypeScript puede ver es el SQL mismo: si los números de la migración
+ * cambiaran, nada acá se enteraría. Se sobrevive a eso porque una migración
+ * aplicada no se edita en este repo, se corrige con otra.
  */
 
 import { z } from "zod";

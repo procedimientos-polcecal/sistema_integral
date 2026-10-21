@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ESCALAS_GUT, SIN_PUNTAJE, EMPUJON_ABIERTA, CERRADAS_GUT, ES_ALTO_GUT,
-  puntajeGut, claveDeOrdenGut, bandaDeGut, esGutAlto, esquemaGut,
+  type NotasGut, puntajeGut, claveDeOrdenGut, bandaDeGut, esGutAlto, esquemaGut,
 } from "./gut";
 import { validar } from "@/lib/core/validar";
 
@@ -111,8 +111,8 @@ describe("esquemaGut", () => {
   });
 });
 
-// Ocho órdenes que cubren las dos cerradas, dos abiertas, con puntaje, sin
-// puntaje y con dos de tres cargadas.
+// Diez órdenes que cubren los dos estados cerrados, los abiertos, con puntaje,
+// sin puntaje, con dos de tres cargadas y con el estado vacío.
 const CASOS = [
   { estado: "REALIZADO", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 },
   { estado: "REALIZADO" },
@@ -128,13 +128,18 @@ const CASOS = [
 
 describe("la clave de orden y la columna generada dicen lo mismo", () => {
   it("reproduce el coalesce y el case de la migración", () => {
-    // Espejo literal de `gut_orden`. Si alguien cambia el 27 o el 1000 en un
-    // lado y no en el otro, el listado y la pestaña ordenan distinto y nada avisa.
+    // Espejo de `gut_orden`, con el 1000 y el 27 como literales y no como las
+    // constantes: así, cambiar `EMPUJON_ABIERTA` o `SIN_PUNTAJE` en TypeScript
+    // rompe este test en vez de mover los dos lados juntos. Lo que atrapa es que
+    // `claveDeOrdenGut` se aparte de la expresión de la migración, en estructura
+    // o en valor. Lo que no puede ver es el SQL mismo: si los números de la
+    // migración cambiaran, este test no se enteraría. Se sobrevive a eso porque
+    // en este repo una migración aplicada no se edita, se corrige con otra.
     // Se reescribe a propósito en vez de llamar a claveDeOrdenGut: un ayudante
     // compartido sólo probaría al ayudante contra sí mismo.
-    const comoLoHaceLaBase = (o: any) =>
-      (CERRADAS_GUT.includes(o.estado) ? 0 : EMPUJON_ABIERTA)
-      + (puntajeGut(o) ?? SIN_PUNTAJE);
+    const comoLoHaceLaBase = (o: NotasGut & { estado?: string | null }) =>
+      (CERRADAS_GUT.includes(o.estado ?? "") ? 0 : 1000)
+      + (puntajeGut(o) ?? 27);
     for (const o of CASOS) expect(claveDeOrdenGut(o)).toBe(comoLoHaceLaBase(o));
   });
 });
