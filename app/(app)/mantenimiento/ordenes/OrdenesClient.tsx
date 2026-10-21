@@ -123,6 +123,28 @@ export default function OrdenesClient({
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
   /**
+   * Todo lo que está pendiente, con sus notas de GUT, para la línea que
+   * sugiere puntuar. Es una consulta aparte de la del listado a propósito: el
+   * listado está paginado y filtrado, y "cuántas pendientes no tienen GUT" es
+   * una pregunta sobre todas, no sobre la página que se está mirando.
+   *
+   * Si falla queda en null y la línea simplemente no aparece: una sugerencia
+   * no vale un cartel de error.
+   */
+  const [pendientes, setPendientes] = useState<any[] | null>(null);
+  const recargarPendientes = useCargar(async (vigente) => {
+    try {
+      const res = await fetch("/api/mantenimiento/ordenes?pendientes=1");
+      if (!res.ok) return;
+      const body = await res.json();
+      if (!vigente()) return;
+      setPendientes(body.data ?? []);
+    } catch {
+      // Sin la línea. El listado anda igual.
+    }
+  }, []);
+
+  /**
    * Cuáles de las que se están viendo ya tienen una justificación.
    *
    * Va en un pedido aparte del listado para que la pantalla **no dependa** de
@@ -434,6 +456,10 @@ export default function OrdenesClient({
 
       {view === "list" && (
         <div className="space-y-2">
+          {canEdit && (
+            <SugerenciaGut pendientes={pendientes} onPuntuar={setPuntuando} />
+          )}
+
           {/* Los estados siguen siendo botones y no un desplegable: son cuatro,
               tienen color, y es el filtro que se usa siempre. Lo que cambia es
               que ahora se pueden tildar varios — "qué hay abierto" son tres
@@ -746,6 +772,7 @@ export default function OrdenesClient({
           onGuardada={() => {
             setPuntuando(null);
             load();
+            recargarPendientes();
           }}
         />
       )}
@@ -764,6 +791,63 @@ export default function OrdenesClient({
             else load();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Una línea, no un aviso: dice cuántas de las pendientes no tienen GUT y deja
+ * ver cuáles son para puntuarlas desde ahí.
+ *
+ * Vive sólo en esta pantalla a propósito. Un aviso de `lib/home/avisos.ts` va
+ * a la campana y al resumen de las 8:30, y un contador de órdenes sin puntuar
+ * casi no se mueve: diría lo mismo todos los días hasta que alguien lo
+ * descartara para siempre. Acá la ve quien ya está mirando las órdenes, y
+ * desaparece sola cuando no queda ninguna.
+ */
+function SugerenciaGut({ pendientes, onPuntuar }: {
+  pendientes: any[] | null;
+  onPuntuar: (orden: any) => void;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  if (pendientes === null) return null;
+
+  const sinGut = pendientes.filter((o) => puntajeGut(o) === null);
+  if (sinGut.length === 0) return null;
+
+  return (
+    <div className="text-xs text-slate-500">
+      <p className="flex flex-wrap items-center gap-x-2">
+        <span>
+          {sinGut.length} de las {pendientes.length}{" "}
+          {pendientes.length === 1 ? "pendiente no tiene" : "pendientes no tienen"} GUT
+        </span>
+        <button
+          onClick={() => setAbierta((v) => !v)}
+          className="font-semibold text-slate-600 underline hover:text-slate-900"
+        >
+          {abierta ? "Ocultar" : "Puntuarlas"}
+        </button>
+      </p>
+
+      {abierta && (
+        <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto card">
+          {sinGut.map((o) => (
+            <li key={o.id} className="flex items-center gap-3 px-3 py-2">
+              <p className="min-w-0 flex-1 truncate text-sm text-slate-800">
+                <span className="font-mono text-xs text-slate-400">#{o.ot_number}</span>{" "}
+                {o.descripcion ?? o.equipo_raw ?? "—"}
+              </p>
+              <button
+                onClick={() => onPuntuar(o)}
+                className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Puntuar
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

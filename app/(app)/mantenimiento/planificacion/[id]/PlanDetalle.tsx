@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { claveDeOrdenGut } from "@/lib/mantenimiento/gut";
 
 const ESTADO_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -32,6 +33,9 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
   const planDate = new Date(plan.fecha + "T12:00:00");
 
   const alreadyIds = new Set(items.map((i: any) => i.work_order_id).filter(Boolean));
+  // Se ofrecen en orden de GUT, de mayor a menor: acá es donde se decide qué se
+  // hace mañana. `sort` es estable, así que a igual clave queda el orden en que
+  // llegaron (el número de OT, de la más nueva a la más vieja).
   const availableOTs = useMemo(() => pendingOTs.filter(o => {
     if (alreadyIds.has(o.id)) return false;
     if (filterSector && o.sector_id !== filterSector) return false;
@@ -42,7 +46,8 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
         || String(o.ot_number).includes(q);
     }
     return true;
-  }), [pendingOTs, alreadyIds, filterSector, filterQ]);
+  }).sort((a, b) => claveDeOrdenGut(b) - claveDeOrdenGut(a)),
+  [pendingOTs, alreadyIds, filterSector, filterQ]);
 
   async function addOT(ot: any) {
     setSaving(true);
