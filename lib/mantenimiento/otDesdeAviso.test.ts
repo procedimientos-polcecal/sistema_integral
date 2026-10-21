@@ -198,3 +198,38 @@ describe("lo que el aviso no trae", () => {
     expect(loQueFaltaDelAviso(sinEquipo, elegido)).toEqual([]);
   });
 });
+
+/**
+ * NADIE HEREDA UN PUNTAJE. La urgencia del aviso la puso quien reportó la
+ * falla; el GUT lo contesta quien reparte el trabajo. Sembrar uno desde el
+ * otro pondría en el orden una nota que nadie contestó, pesando igual que una
+ * que sí.
+ */
+describe("el puntaje GUT no sale del aviso", () => {
+  it("arranca vacío, con la urgencia que sea", () => {
+    for (const urgencia of ["🟠 Alta", "🟡 Media", "🟢 Baja", null]) {
+      const p = loQuePropone({ ...AVISO, urgencia }, DE_ENTRADA);
+      expect(p.gut_gravedad).toBe("");
+      expect(p.gut_urgencia).toBe("");
+      expect(p.gut_tendencia).toBe("");
+    }
+  });
+
+  it("el cuerpo sin contestar manda las tres notas en null", () => {
+    const cuerpo = cuerpoDeLaOT(AVISO, completo());
+    expect(cuerpo.gut_gravedad).toBeNull();
+    expect(cuerpo.gut_urgencia).toBeNull();
+    expect(cuerpo.gut_tendencia).toBeNull();
+  });
+
+  it("lo que una persona elige viaja como número", () => {
+    const cuerpo = cuerpoDeLaOT(AVISO, {
+      ...completo(), gut_gravedad: "5", gut_urgencia: "4", gut_tendencia: "3",
+    });
+    expect([cuerpo.gut_gravedad, cuerpo.gut_urgencia, cuerpo.gut_tendencia]).toEqual([5, 4, 3]);
+  });
+
+  it("no es obligatorio: sin notas la orden se puede crear", () => {
+    expect(loQueFaltaDelAviso(AVISO, completo())).toEqual([]);
+  });
+});

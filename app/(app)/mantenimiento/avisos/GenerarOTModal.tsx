@@ -5,6 +5,7 @@ import Select from "@/components/Select";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT, TIPOS_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
   cuerpoDeLaOT, loQuePropone, loQueFaltaDelAviso, loQueHayQuePreguntar,
@@ -216,6 +217,36 @@ export default function GenerarOTModal({
                 {["ALTA", "MEDIA", "BAJA"].map((p) => <option key={p} value={p}>{p}</option>)}
               </Select>
             </Campo>
+          </div>
+
+          {/* Puntaje GUT: opcional, sin valor por defecto y **sin sembrar desde
+              la urgencia del aviso** —ver `loQuePropone`—. Esa urgencia la puso
+              quien reportó la falla; esto lo contesta quien reparte el
+              trabajo. Las tres van juntas o la orden queda sin puntaje. */}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-slate-500">
+              Puntaje GUT <span className="font-normal text-slate-400">— opcional, las tres juntas</span>
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {([
+                ["gut_gravedad", "Gravedad", ESCALAS_GUT.gravedad],
+                ["gut_urgencia", "Urgencia", ESCALAS_GUT.urgencia],
+                ["gut_tendencia", "Tendencia", ESCALAS_GUT.tendencia],
+              ] as const).map(([campo, etiqueta, escala]) => (
+                <Campo key={campo} etiqueta={etiqueta}>
+                  <Select
+                    value={form[campo]}
+                    onChange={(e) => cambiar({ [campo]: e.target.value })}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">—</option>
+                    {escala.map((palabra, i) => (
+                      <option key={i + 1} value={String(i + 1)}>{i + 1} · {palabra}</option>
+                    ))}
+                  </Select>
+                </Campo>
+              ))}
+            </div>
           </div>
 
           <Campo etiqueta="Fecha de ejecución">

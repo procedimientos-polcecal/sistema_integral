@@ -31,7 +31,9 @@ export async function GET(request: Request) {
     .from("ordenes_trabajo")
     // Una sola línea y sin concatenar: partida con `+` deja de ser un literal
     // y Supabase pierde la inferencia, que es la regla de CLAUDE.md. Pasó acá.
-    .select("id, ot_number, equipment_id, sector_id, especialidad, tipo, quien, descripcion, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, requiere_parada_sector, repuesto")
+    // Las tres notas GUT se traen sólo para poder avisar que la vieja tenía un
+    // puntaje: `copiarDeLaOT` no las copia, y por qué está en ese archivo.
+    .select("id, ot_number, equipment_id, sector_id, especialidad, tipo, quien, descripcion, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, requiere_parada_sector, repuesto, gut_gravedad, gut_urgencia, gut_tendencia")
     .eq("ot_number", numero)
     .maybeSingle();
 

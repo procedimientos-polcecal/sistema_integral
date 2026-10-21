@@ -37,11 +37,30 @@
  * `noEntraron` para decírselo a quien está cargando. Dejarlo vacío y callarlo
  * sería la misma trampa con otra ropa.
  *
+ * EL PUNTAJE GUT NO SE COPIA, Y NO ES POR EL DESPLEGABLE
+ *
+ * Es el único valor de la OT vieja que **sí tiene dónde mostrarse** y aun así
+ * no entra. La regla de arriba no lo explica: el formulario tiene los tres
+ * desplegables y podría perfectamente recibir un 5-4-4. No entra porque el
+ * puntaje depende de **cuándo** es la orden y no de **qué** es: la quinta vez
+ * que se cambian los mismos martillos no pesa lo que pesó la primera, porque
+ * lo que se puntúa es cuánto tiempo hay y hacia dónde va, hoy. Copiarlo es la
+ * misma equivocación que sembrar `gut_urgencia` desde el aviso —ver
+ * `lib/mantenimiento/otDesdeAviso.ts`—: un número que nadie contestó pesando
+ * igual que uno que sí.
+ *
+ * Es la clase de "mejora" que parece gratis —ya se copia la prioridad, ¿por qué
+ * no esto?— y es justo lo que el diseño no quiere. La prioridad es una palabra
+ * del trabajo; el GUT es una medición de este momento. Por eso va a
+ * `noEntraron`, que ya se le dice a quien está cargando: que sepa que la vieja
+ * tenía un puntaje y que éste lo tiene que contestar él.
+ *
  * El `Select` de operarios no necesita esto: ya se agrega a sí mismo el valor
  * elegido cuando no está en la lista de Configuración, así que una persona que
  * ya no figura se sigue viendo.
  */
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
+import { puntajeGut } from "@/lib/mantenimiento/gut";
 
 /** La OT vieja, con lo único que se le pide prestado. */
 export interface OTVieja {
@@ -60,6 +79,14 @@ export interface OTVieja {
   operario_3: string | null;
   prioridad: string | null;
   requiere_parada_sector: boolean | null;
+  /**
+   * El puntaje GUT que la vieja tenía. Está acá **sólo para poder decir que no
+   * se copia**: nada de esto entra en `campos`. Opcionales porque lo que llega
+   * de la ruta puede no traerlas.
+   */
+  gut_gravedad?: number | null;
+  gut_urgencia?: number | null;
+  gut_tendencia?: number | null;
   /** El texto de la celda de la planilla, para las OT anteriores a los renglones. */
   repuesto: string | null;
   /** Los renglones, cuando la OT los tiene. */
@@ -138,6 +165,12 @@ export function copiarDeLaOT(vieja: OTVieja, vocabulario: Vocabulario): LoQueSeC
   campos.horas = vieja.horas === null || vieja.horas === undefined ? "" : String(vieja.horas);
 
   campos.requiere_parada_sector = Boolean(vieja.requiere_parada_sector);
+
+  // El GUT no entra en `campos`: ver "EL PUNTAJE GUT NO SE COPIA" arriba. Sólo
+  // se avisa, y sólo si la vieja tenía el puntaje entero —con una o dos notas
+  // `puntajeGut` da null, y media puntuación cuenta como sin puntaje—.
+  const puntaje = puntajeGut(vieja);
+  if (puntaje !== null) noEntraron.push(`el puntaje GUT ("${puntaje}")`);
 
   return { campos, lineas: lineasDeLaOT(vieja), noEntraron };
 }

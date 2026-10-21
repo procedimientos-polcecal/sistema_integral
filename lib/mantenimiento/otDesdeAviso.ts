@@ -79,12 +79,21 @@ export interface RespuestasDelAviso {
   equipment_id: string;
   equipo_raw: string;
   equipo_code: string;
+  /**
+   * Las tres notas GUT, como las deja el desplegable: "" sin elegir o "1" a
+   * "5". **No vienen del aviso** —ver `loQuePropone`— y por eso no están entre
+   * los que el aviso propone.
+   */
+  gut_gravedad: string;
+  gut_urgencia: string;
+  gut_tendencia: string;
 }
 
 export const RESPUESTAS_VACIAS: RespuestasDelAviso = {
   especialidad: "", quien: "", fecha_ejecucion: "",
   descripcion: "", tipo: "", prioridad: "",
   sector_id: "", sector_raw: "", equipment_id: "", equipo_raw: "", equipo_code: "",
+  gut_gravedad: "", gut_urgencia: "", gut_tendencia: "",
 };
 
 /**
@@ -100,6 +109,22 @@ export const RESPUESTAS_VACIAS: RespuestasDelAviso = {
  * llama: la especialidad vacía —el aviso no da ni un indicio y acertarle de
  * memoria sería enlazar al que se le parece— y los otros dos con el valor
  * normal, que se ve y se cambia.
+ *
+ * ── EL PUNTAJE GUT ARRANCA VACÍO, Y NO SE SIEMBRA DESDE LA URGENCIA ─────────
+ *
+ * Acá, con `prioridadDeUrgencia` a la vista, es donde alguien va a querer
+ * escribir `gut_urgencia: …` «para ahorrarle un click a quien genera la
+ * orden». Parece gratis y parece correcto, y es justo lo que el diseño del GUT
+ * no quiere (docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md,
+ * «nadie hereda un puntaje»).
+ *
+ * La urgencia de un aviso la puso **quien reportó la falla**, con lo que ve
+ * desde su puesto; el GUT lo contesta **quien reparte el trabajo**, mirando
+ * cuánto tiempo hay y hacia dónde va. Son dos personas mirando dos cosas, y
+ * una nota sembrada pesaría en el orden exactamente igual que una que alguien
+ * contestó: un número que nadie contestó, impreso como si fuera una medición.
+ * Las tres notas quedan en blanco y las contesta una persona; sin las tres, la
+ * orden vale 27 en la lista, que es lo que corresponde a una sin puntuar.
  */
 export function loQuePropone(
   aviso: AvisoParaLaOT,
@@ -118,8 +143,16 @@ export function loQuePropone(
     equipment_id: aviso.equipment_id ?? "",
     equipo_raw: aviso.equipo_raw ?? "",
     equipo_code: aviso.equipo_code ?? "",
+
+    // Vacías a propósito: ver «EL PUNTAJE GUT ARRANCA VACÍO» más arriba.
+    gut_gravedad: "",
+    gut_urgencia: "",
+    gut_tendencia: "",
   };
 }
+
+/** El valor del desplegable de una nota: "" es null, y lo demás es el número. */
+const notaOnull = (v: string) => (v.trim() === "" ? null : Number(v));
 
 /**
  * El cuerpo que se le manda a `POST /api/mantenimiento/ordenes`.
@@ -148,6 +181,14 @@ export function cuerpoDeLaOT(
     descripcion: texto(respuestas.descripcion),
     tipo: texto(respuestas.tipo),
     prioridad: texto(respuestas.prioridad),
+
+    // Lo que la persona eligió y nada más: este cuerpo no deduce ninguna nota
+    // del aviso ni de `prioridad` —ver `loQuePropone`—. Un desplegable sin
+    // elegir va como null, que es como la ruta distingue «sin nota» de una
+    // nota; con una o dos la orden queda sin puntaje y se completa después.
+    gut_gravedad: notaOnull(respuestas.gut_gravedad),
+    gut_urgencia: notaOnull(respuestas.gut_urgencia),
+    gut_tendencia: notaOnull(respuestas.gut_tendencia),
 
     especialidad: texto(respuestas.especialidad),
     quien: texto(respuestas.quien),

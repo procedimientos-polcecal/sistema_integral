@@ -222,3 +222,42 @@ describe("avisoDeReutilizada", () => {
     expect(aviso).toContain("elegilo a mano");
   });
 });
+
+/**
+ * NADIE HEREDA UN PUNTAJE. El GUT depende de cuándo es la orden, no de qué es:
+ * cambiar los mismos martillos por quinta vez no hace que la quinta pese lo
+ * que pesó la primera. Una orden nueva empieza sin puntaje y alguien lo
+ * contesta.
+ */
+describe("el puntaje GUT de la orden vieja", () => {
+  const conPuntaje = { gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: 4 };
+
+  it("no se copia", () => {
+    const { campos } = copiarDeLaOT(ot(conPuntaje), VOCABULARIO);
+    expect(campos).not.toHaveProperty("gut_gravedad");
+    expect(campos).not.toHaveProperty("gut_urgencia");
+    expect(campos).not.toHaveProperty("gut_tendencia");
+  });
+
+  it("se avisa que no viajó, con el puntaje que tenía", () => {
+    const { noEntraron } = copiarDeLaOT(ot(conPuntaje), VOCABULARIO);
+    expect(noEntraron.join(" ")).toContain("puntaje GUT");
+    expect(noEntraron).toEqual(['el puntaje GUT ("80")']);
+  });
+
+  it("no se avisa nada si la vieja no tenía puntaje", () => {
+    expect(copiarDeLaOT(ot(), VOCABULARIO).noEntraron).toEqual([]);
+    expect(
+      copiarDeLaOT(ot({ gut_gravedad: null, gut_urgencia: null, gut_tendencia: null }), VOCABULARIO).noEntraron
+    ).toEqual([]);
+  });
+
+  it("dos notas de tres no son un puntaje: no hay nada que avisar", () => {
+    // Misma regla que `puntajeGut`: media puntuación cuenta como sin puntaje.
+    const { noEntraron } = copiarDeLaOT(
+      ot({ gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: null }),
+      VOCABULARIO
+    );
+    expect(noEntraron).toEqual([]);
+  });
+});
