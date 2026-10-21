@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { fecha } from "@/lib/compras/constants";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
-import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
+import GenerarOTModal from "./GenerarOTModal";
 import Select from "@/components/Select";
 
 /**
@@ -53,7 +53,6 @@ export default function AvisosClient({
     };
   });
   const [creando, setCreando] = useState(arranqueDelAlta !== null);
-  const [generando, setGenerando] = useState<string | null>(null);
 
   /** Un aviso tiene OT si la app la generó o si la planilla dice que sí. */
   const tieneOt = (a: Aviso) => Boolean(a.work_order_id) || Boolean(a.ot_asignada);
@@ -108,42 +107,24 @@ export default function AvisosClient({
    * La OT nace correctiva —alguien reportó una falla, no es un preventivo
    * programado— y con la prioridad que le corresponde a la urgencia del aviso.
    * El aviso queda apuntando a ella para que nadie genere una segunda.
+   *
+   * **Abre un formulario en vez de crearla de una**, desde el 21/10/2026.
+   * Hasta ese día mandaba el cuerpo directo, con seis campos; el 19/10 una OT
+   * nueva pasó a exigir siete —entre ellos la especialidad, quién la hace y la
+   * fecha de ejecución, que un aviso no dice— y desde entonces este botón
+   * contestaba «Falta cargar la especialidad, quién lo realiza, la fecha de
+   * ejecución» y no generaba nada.
+   *
+   * Lo que el aviso sí sabe no se vuelve a preguntar, y qué falta preguntar lo
+   * decide la misma regla que corre el servidor: ver
+   * `lib/mantenimiento/otDesdeAviso.ts`.
    */
-  async function generarOT(aviso: Aviso) {
-    setGenerando(aviso.id);
+  const [generarDe, setGenerarDe] = useState<Aviso | null>(null);
+
+  function generarOT(aviso: Aviso) {
     setError("");
     setResultado(null);
-
-    const res = await fetch("/api/mantenimiento/ordenes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        aviso_id: aviso.id,
-        equipment_id: aviso.equipment_id,
-        sector_id: aviso.sector_id,
-        sector_raw: aviso.sector_raw,
-        equipo_raw: aviso.equipo_raw,
-        equipo_code: aviso.equipo_code,
-        descripcion: aviso.descripcion ?? `Aviso ${aviso.oa_number}`,
-        repuesto: aviso.repuesto,
-        tipo: "CORRECTIVO",
-        estado: "POR_HACER",
-        prioridad: prioridadDeUrgencia(aviso.urgencia),
-      }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setGenerando(null);
-
-    if (!res.ok) { setError(body.error ?? "No se pudo generar la OT."); return; }
-
-    setResultado(
-      [
-        `Se generó la OT #${body.ot_number} y el aviso ${aviso.oa_number} quedó marcado.`,
-        body.planilla_error && `Ojo: no se pudo escribir en la planilla de OT (${body.planilla_error}).`,
-        body.aviso_error && `Ojo: no se pudo marcar el aviso en su planilla (${body.aviso_error}).`,
-      ].filter(Boolean).join(" ")
-    );
-    router.refresh();
+    setGenerarDe(aviso);
   }
 
   return (
@@ -261,10 +242,9 @@ export default function AvisosClient({
                 ) : puedeEditar ? (
                   <button
                     onClick={() => generarOT(a)}
-                    disabled={generando !== null}
-                    className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                    className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
                   >
-                    {generando === a.id ? "Generando…" : "Generar OT"}
+                    Generar OT
                   </button>
                 ) : (
                   <span className="text-xs text-amber-700">Pendiente de OT</span>
@@ -311,10 +291,9 @@ export default function AvisosClient({
                     ) : puedeEditar ? (
                       <button
                         onClick={() => generarOT(a)}
-                        disabled={generando !== null}
-                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
                       >
-                        {generando === a.id ? "Generando…" : "Generar OT"}
+                        Generar OT
                       </button>
                     ) : (
                       <span className="text-xs text-amber-700">pendiente</span>
@@ -335,6 +314,18 @@ export default function AvisosClient({
           onCreado={(oa) => {
             setCreando(false);
             setResultado(`Se cargó el aviso ${oa}.`);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {generarDe && (
+        <GenerarOTModal
+          aviso={generarDe}
+          onClose={() => setGenerarDe(null)}
+          onCreada={(mensaje) => {
+            setGenerarDe(null);
+            setResultado(mensaje);
             router.refresh();
           }}
         />
