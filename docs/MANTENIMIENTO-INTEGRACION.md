@@ -1501,7 +1501,8 @@ convenga cambiar de oficio.
 ## En qué orden hacer el trabajo
 
 Hay dos órdenes y el manual gana. El **sugerido** sale de los datos —lo atrasado
-primero, después lo urgente, después lo que espera hace más— y el **manual** sale
+primero, después el puntaje GUT (ver `## La matriz GUT`), después lo que espera
+hace más— y el **manual** sale
 de lo que sabe quien reparte el trabajo y los datos no: que el repuesto llega el
 jueves, que conviene aprovechar que el sector está parado.
 
@@ -1522,6 +1523,97 @@ El orden **no se escribe en la planilla**: es una decisión del día a día, no 
 dato de la orden, y la planilla no tiene dónde ponerlo. Y se puede volver al
 sugerido de una, porque si no la única forma de deshacer un orden viejo sería
 arrastrar las treinta de nuevo.
+
+## La matriz GUT: qué puntaje tiene una orden y cómo se ordena con él
+
+Desde el 21/10/2026 cada orden de trabajo puede llevar tres notas de 1 a 5
+—**gravedad, urgencia y tendencia**— y su producto, de 1 a 125, decide en qué
+orden conviene atacarlas. El porqué, las escalas con sus palabras y lo que no
+hace están en
+[el spec](superpowers/specs/2026-10-21-mantenimiento-gut-design.md); lo de acá
+son las trampas que no se deducen del código. La migración es
+`20261021104750_gut_en_ordenes_de_trabajo.sql` y la lógica pura,
+`lib/mantenimiento/gut.ts`.
+
+**`gut_orden` es una columna generada y NO es el puntaje.** Es la clave con la
+que ordena la base, y lleva adentro dos decisiones de ordenamiento: el 27 de las
+órdenes sin puntaje y el +1000 de las que siguen abiertas. Una orden abierta sin
+puntuar tiene `gut_orden = 1027`; una realizada con 4×5×4 tiene 80. Una pantalla
+que la imprima muestra 1027 donde quiere decir "sin puntaje". **El puntaje es el
+producto de las tres notas, se calcula en TypeScript con `puntajeGut()`, y es
+`null` si falta alguna**: las tres van juntas o la orden cuenta como sin
+puntaje.
+
+**El 27 está escrito en dos lugares y tiene que estar escrito en dos.** En el
+`coalesce` de la columna generada, para el orden que hace la base, y en
+`SIN_PUNTAJE` de `gut.ts`, para el que hace el cliente (`ordenSugerido`, el
+selector del plan). Cambiar uno y olvidar el otro no rompe nada: el listado y
+"Qué hacer primero" empiezan a discrepar. `gut.test.ts` tiene un test que
+reconstruye `gut_orden` con el 27 y el 1000 como **literales**, no como las
+constantes del módulo: con las constantes, cambiar el valor movería los dos
+lados juntos y el test pasaría igual. Si tocás el 27, ese test es el que tiene
+que decirte que falta la migración.
+
+**Una orden sin puntaje vale 27 y no 0**, porque con cero las pendientes sin
+puntuar se irían al fondo de la lista y nadie mira el fondo. 27 es el centro de
+la escala (3×3×3). Y **lo cerrado va al final**: el +1000 existe porque, sin él,
+una orden realizada de 125 puntos quedaría para siempre arriba de todo, por
+encima de la que entró hoy.
+
+**El GUT no se exporta a ninguna planilla.** `prioridad` es la columna S de la
+pestaña `OT`, que es parte del derrame de un `IMPORTRANGE`: un `PUT` ahí bloquea
+el derrame o lo pisa el recálculo. Por eso el puntaje vive en columnas propias
+que la sincronización nunca nombra: su `upsert` por `ot_number` arma el payload
+desde `OrdenLeida`, así que el puntaje sobrevive a cada corrida. Quien no entra
+al SdG no lo ve: es un **riesgo asumido**, y se revisa cuando las planillas se
+den vuelta
+([el spec](superpowers/specs/2026-10-19-las-planillas-las-llena-el-sistema-design.md)).
+Lo que sí se lo lleva es el borrado de espejo: si la fila desaparece de la
+planilla, la orden y su puntaje se van juntas.
+
+**Tres consultas tuvieron que cambiar porque pedían una lista explícita de
+columnas sin las `gut_*`**, y es la trampa de esta feature y la que más
+probablemente muerda a quien la extienda:
+
+- `app/api/mantenimiento/ordenes/reutilizar/route.ts`
+- `app/(app)/mantenimiento/page.tsx` (el tablero)
+- `app/(app)/mantenimiento/planificacion/[id]/page.tsx` (el selector del plan)
+
+En las tres, de no traer las notas, **toda orden cuenta como sin puntaje**: el
+orden no se mueve, el contador da 0 y el aviso de "el puntaje no se copió" nunca
+se dispara. Sin error y con los tests unitarios en verde, porque lo que fallaba
+era la consulta y no la función. Una cuarta se revisó y no lo necesitó: "Qué
+hacer primero" usa `select("*")`. **Toda pantalla nueva que ordene o cuente por
+GUT tiene que mirar qué columnas pide.**
+
+Cómo queda el resto:
+
+- **Se puntúa sólo desde el SdG**, nunca en el formulario de Google: de 2.227
+  órdenes, 2.209 entraron por ahí y llegan sin puntuar. Se puntúa al crear
+  (`NuevaOTModal`, `GenerarOTModal`), y sobre una orden ya cargada desde el
+  listado y el detalle, por `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
+  audita: un puntaje se deshace escribiendo otro. Los tres desplegables arrancan
+  **vacíos** y no son obligatorios.
+- **Ningún camino de alta hereda un puntaje.** Aviso → OT no siembra
+  `gut_urgencia` desde la urgencia del aviso (la puso quien reportó, el GUT lo
+  contesta quien reparte), y Reutilizar OT no copia las notas y lo informa en
+  `noEntraron`.
+- **La `prioridad` de la planilla ya no ordena nada.** Sigue entrando, sigue en
+  los filtros y en el detalle, pero `ordenSugerido` lee el puntaje. Y el
+  recuadro del puntaje es un número con un solo tono en cinco intensidades, sin
+  palabra: «alta/media/baja» ya son de `prioridad`, y los colores de estado ya
+  están tomados.
+- **"N de prioridad alta" del tablero nunca funcionó.** Comparaba contra
+  `"ALTA"` lo que la planilla guarda como `"🟠 Alta"`, así que leía 0 desde
+  siempre. Ahora `resumirAtrasadas().urgentes` cuenta las atrasadas de **GUT 65
+  o más** y la leyenda dice «de GUT alto». Por la misma razón se sacó la pastilla
+  `alta` de `OrdenarTrabajo`, que nunca se había dibujado.
+- **La sugerencia de puntuar es una línea en la pantalla**, y no un aviso de
+  `lib/home/avisos.ts`: iría a la campana y al push de las 8:30, y un contador
+  que casi no se mueve termina descartado para siempre.
+- **Mientras la migración no esté aplicada**, el listado, el tablero, el
+  selector del plan y reutilizar fallan: piden columnas que no existen todavía.
+  Se aplica antes de desplegar.
 
 ## Las órdenes atrasadas
 
