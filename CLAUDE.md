@@ -228,6 +228,27 @@ Cinco reglas que costaron caro, y que valen para las cuatro:
   — la misma trampa que la anterior, por el otro lado. La fecha va como serial
   con `serialDelDia()` y los números como número; `escribirCeldas()` y
   `agregarFila()` aceptan los dos tipos. Un número no se interpreta.
+- **Antes de escribir una celda, comprobar el encabezado de esa columna.**
+  `letraDeColumna()` es **0-based** —su primer renglón es `indice + 1`, así que
+  el 0 es la A—, y el 21/10/2026 un script le pasó un `6` creyendo que era la F:
+  escribió en la **G**, que en el libro de respuestas de OT es el equipo. Seis
+  órdenes quedaron diciendo «EQUIPO: Planta filler 1». Lo que lo vuelve caro no
+  es el off-by-one sino que **el script tenía al lado una constante `LETRA =
+  "F"` sólo para imprimir**: el informe decía `...!F4` mientras la escritura iba
+  a G, así que la pantalla confirmaba lo que no había pasado. Un rango que se
+  arma por índice y se informa por letra son dos fuentes de verdad.
+  Se recuperó porque el derrame del master —sus columnas A a J son un
+  `QUERY(IMPORTRANGE())`— recalculó **después** de la última sincronización, así
+  que `ordenes_trabajo` todavía tenía el `equipo_raw` bueno y de ahí salieron los
+  valores (`scripts/restaurar-equipo-de-seis-ot.mts`). Quince minutos más tarde
+  no había de dónde sacarlos.
+- **El libro de respuestas de OT tiene catorce columnas `EQUIPO QUE SOLICITA`,
+  una por sector**, porque el formulario pregunta por el equipo **después** de
+  elegir el sector: Cantera escribe en la G, Hidratación en la K, Molienda en la
+  L, filler 1 en la M, Taller en la U. El master las junta, así que de ese lado
+  se ve una sola columna. **El alta del SdG escribe siempre en la G**, la de
+  Cantera; hoy funciona por esa unión, y conviene saberlo antes de tocar
+  cualquiera de las dos puntas.
 - **Lo que la planilla deja de tener, se borra** — desde el 18/10/2026, en las
   cuatro que espejan por número: OT, avisos, órdenes de servicio y los
   requerimientos de Compras. Antes sólo traían y pisaban, así que una fila que

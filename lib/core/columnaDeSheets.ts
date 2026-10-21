@@ -23,6 +23,12 @@
  * y no en la planilla de alguien.
  */
 export function letraDeColumna(indice: number): string {
+  // **0-based**: `letraDeColumna(0)` es "A" y `letraDeColumna(6)` es "G". El
+  // 21/10/2026 un script le pasó un 6 creyendo que la F era la sexta y escribió
+  // en la G —el equipo— encima de seis órdenes. Si en el llamador hay una letra
+  // escrita a mano al lado del índice, son dos fuentes de verdad y una va a
+  // mentir: que la letra salga de acá, y que antes de escribir se compruebe el
+  // encabezado de esa columna.
   if (!Number.isInteger(indice) || indice < 0) {
     throw new Error(
       `letraDeColumna(${indice}): no es un índice de columna. ` +
