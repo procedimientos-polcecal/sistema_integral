@@ -9,14 +9,15 @@
 --
 -- ── LAS TRES NOTAS ───────────────────────────────────────────────────────────
 --
--- Son nulas hasta que alguien las cargue: de las 2.224 órdenes que ya existen,
--- ninguna tiene puntaje y no hay de dónde sacarlo. Inventar un 3-3-3 para
+-- Son nulas hasta que alguien las cargue: de las 2.227 órdenes que existían el
+-- 21/10/2026, ninguna tiene puntaje, y 2.053 ni siquiera tienen una prioridad
+-- cargada de la que partir. No hay de dónde sacarlo, e inventar un 3-3-3 para
 -- todas sería decir algo que nadie midió. El `check` deja entrar sólo 1 a 5.
 --
 -- ── POR QUÉ `gut_orden` ES UNA COLUMNA GENERADA ──────────────────────────────
 --
 -- PostgREST sólo sabe ordenar por columnas, no por expresiones. El listado de
--- OT se pagina de a 50 sobre 2.224 filas, así que ordenar en el cliente
+-- OT se pagina de a 50 sobre 2.227 filas (21/10/2026), así que ordenar en el cliente
 -- ordenaría nada más que la página que se está viendo: la orden más urgente
 -- podría estar en la página 40 y nunca aparecer arriba. El orden tiene que
 -- decidirlo la base, y para eso tiene que existir como columna.
@@ -45,25 +46,30 @@
 --
 --   · Un trío a medias —sólo la gravedad, por ejemplo— da producto null y
 --     por lo tanto el 27, igual que uno vacío. Ningún `check` obliga a cargar
---     las tres notas o ninguna: es una decisión, y es la misma que toma el
---     TypeScript, que devuelve null si falta cualquiera de las tres.
+--     las tres notas o ninguna: es una decisión, y el plan es que el TypeScript
+--     (`lib/mantenimiento/gut.ts`, que se agrega en una tarea posterior) tome la
+--     misma: puntaje null si falta cualquiera de las tres.
 --   · Un `estado` null caería en el `else` y contaría como abierta. No puede
 --     pasar: `estado` es `text not null default 'POR_HACER'` (005, línea 159),
---     así que es sólo una defensa. Los valores de hoy, medidos el 21/10/2026,
---     son exactamente REALIZADO (2.179), POR_HACER (23), EN_PROCESO (14) y
---     ATRASADO (11): en mayúsculas, sin espacios, sin nulos. SUSPENDIDA no
---     tiene filas todavía, pero la 005 (línea 143) anota que los datos de
---     origen la usan y `lib/mantenimiento/alertas.ts` ya la trata como
---     cerrada; nombrarla acá es lo correcto y no una previsión de más.
+--     así que es sólo una defensa. Los valores, medidos el 21/10/2026 sobre
+--     las 2.227 órdenes, son exactamente REALIZADO (2.179), POR_HACER (23),
+--     EN_PROCESO (14) y ATRASADO (11): en mayúsculas, sin espacios, sin nulos.
+--     Las 48 abiertas son las tres últimas. Es una foto de ese día y no una
+--     garantía: la tabla crece con cada sincronización. SUSPENDIDA no tiene
+--     filas todavía, pero la 005 (líneas 141-143) anota que la app usa valores
+--     como ése, que ni siquiera están en el enum `ot_estado`, y
+--     `lib/mantenimiento/alertas.ts` ya la trata como cerrada; nombrarla acá es
+--     lo correcto y no una previsión de más.
 --
 -- Por eso la pantalla NUNCA imprime `gut_orden`: mostraría 1027 para una orden
 -- sin puntaje y 1125 para una con 5-5-5. El puntaje que se muestra es el
--- producto de las tres notas, es null si falta alguna y se calcula en
--- `lib/mantenimiento/gut.ts`.
+-- producto de las tres notas y es null si falta alguna; el plan lo calcula en
+-- TypeScript, en `lib/mantenimiento/gut.ts`, que todavía no existe.
 --
--- ATENCIÓN: el 27 vive en dos lugares, acá y en ese archivo. Si se cambia uno
--- hay que cambiar el otro, y como esta migración no se edita una vez
--- aplicada, el cambio de acá es otra migración que reemplace la columna.
+-- ATENCIÓN: cuando ese archivo exista, el 27 va a vivir en dos lugares, acá y
+-- ahí. Si se cambia uno hay que cambiar el otro, y como esta migración no se
+-- edita una vez aplicada, el cambio de acá es otra migración que reemplace la
+-- columna.
 --
 -- ── LO QUE NO HACE FALTA ─────────────────────────────────────────────────────
 --
