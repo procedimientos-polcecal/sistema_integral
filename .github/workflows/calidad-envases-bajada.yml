@@ -39,9 +39,24 @@
 
 name: Bajada de envases
 
+# APAGADA EL 21/10/2026, paso 3 del "como se vuelve atras" de arriba.
+#
+# El corte se desando porque el sector sigue cargando en la planilla hasta que
+# los numeros empaten y eso se sostenga. Con la gente cargando alla, esta
+# corrida les habria borrado lo cargado el lunes siguiente: reescribe el kardex
+# con lo que tiene el SdG y filasAVaciar() limpia toda fila que el SdG no tenga.
+#
+# La ruta ya se niega con 409 mientras EL_SISTEMA_MANDA_EL_KARDEX este en false,
+# asi que esto es la segunda defensa y no la unica. Se apaga igual para no
+# dejar una corrida en rojo todos los lunes: un fallo esperado que se ve igual
+# que uno real entrena a no mirar ninguno.
+#
+# Para volver a encenderla, descomentar el schedule — y leer antes el "COMO SE
+# VUELVE A CORTAR" de lib/calidad/envases/sincronizar.ts, que pide correr el
+# simulador y que de cero diferencias reales.
 on:
-  schedule:
-    - cron: "0 3 * * 1"
+  # schedule:
+  #   - cron: "0 3 * * 1"
   # Para poder correrla a mano el dia del corte y cuando haga falta.
   workflow_dispatch:
 
