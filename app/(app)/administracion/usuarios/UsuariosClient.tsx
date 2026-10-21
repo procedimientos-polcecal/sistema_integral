@@ -392,16 +392,24 @@ function EditarUsuarioModal({
               {MODULOS.map((m) => (
                 <div key={m} className="flex items-center justify-between gap-2">
                   <span className="text-sm text-slate-600">{MODULO_LABEL[m]}</span>
-                  <Select
-                    value={grants[m]}
-                    onChange={(e) => setGrants({ ...grants, [m]: e.target.value as Nivel | "" })}
-                    className="input w-40"
-                  >
-                    <option value="">Sin acceso</option>
-                    {(Object.keys(NIVEL_LABEL) as Nivel[]).map((n) => (
-                      <option key={n} value={n}>{NIVEL_LABEL[n]}</option>
-                    ))}
-                  </Select>
+                  {/* El ancho va acá y no en el `Select`: `.input` declara
+                      `width: 100%` sin capa y le gana a cualquier `w-*`, que
+                      vive en `@layer utilities` (la regla está en CLAUDE.md).
+                      Con el ancho suelto, estos doce desplegables se estiraban
+                      hasta donde llegara el nombre del módulo y ninguno medía
+                      lo mismo que el de al lado. */}
+                  <div className="w-40">
+                    <Select
+                      value={grants[m]}
+                      onChange={(e) => setGrants({ ...grants, [m]: e.target.value as Nivel | "" })}
+                      className="input"
+                    >
+                      <option value="">Sin acceso</option>
+                      {(Object.keys(NIVEL_LABEL) as Nivel[]).map((n) => (
+                        <option key={n} value={n}>{NIVEL_LABEL[n]}</option>
+                      ))}
+                    </Select>
+                  </div>
                 </div>
               ))}
             </div>

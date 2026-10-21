@@ -320,19 +320,28 @@ pase con la especificidad. Así que el `width: 100%` de `.input` le gana a
 cualquier `w-*` que se le ponga al lado.
 
 Se nota poco porque casi siempre el elemento puede encogerse y queda "ancho pero
-entra": hoy pasa en `administracion/usuarios` (`input w-40`) y en
-`mantenimiento/ejecuciones` (`input w-32`), donde el ancho declarado no se
-respeta pero nada se desborda. **Se vuelve grave cuando el ancho va con
-`shrink-0`**: el 21/10/2026, en los renglones de repuestos de la OT, el campo de
-cantidad medía **624 px —la fila entera— y el del repuesto quedaba en 26 px,
-empujado afuera de la tarjeta**. Dos días cargando repuestos sin ver lo que se
-escribía.
+entra", así que no se ve roto: se ve mal. **Se vuelve grave cuando el ancho va
+con `shrink-0`**, porque entonces no cede: el 21/10/2026, en los renglones de
+repuestos de la OT, el campo de cantidad medía **624 px —la fila entera— y el
+del repuesto quedaba en 26 px, empujado afuera de la tarjeta**. Dos días
+cargando repuestos sin ver lo que se escribía.
 
 El arreglo es **poner el ancho en un `div` que envuelva al campo** y dejar que el
-`input` llene ese envoltorio con su `width: 100%`. Está hecho y explicado en
-[components/RepuestosDeLaOT.tsx](components/RepuestosDeLaOT.tsx).
+`input` llene ese envoltorio con su `width: 100%`. Está explicado en
+[components/RepuestosDeLaOT.tsx](components/RepuestosDeLaOT.tsx), y el
+21/10/2026 se arreglaron los tres lugares que tenían el ancho suelto, medidos
+antes y después:
+
+| Dónde | Declaraba | Medía | Mide |
+|---|---|---|---|
+| Repuestos de la OT | `w-20` (80) | 624 px, y tapaba al otro campo | 80 px |
+| `administracion/usuarios` | `w-40` (160) | 300, 352 y 319 px — uno distinto por módulo | 160 px los doce |
+| `mantenimiento/ejecuciones` | `w-32` (128) | 346 px para escribir "40" | 128 px |
+
 `flex-1`, en cambio, sí funciona: no declara `width`, y en un ítem flex el
-`flex-basis` manda sobre el ancho.
+`flex-basis` manda sobre el ancho. Y `.card` con `max-w-*` también, porque
+`.card` no declara ni `width` ni `max-width`: lo que choca es la **misma**
+propiedad, no cualquier utilidad de tamaño.
 
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
