@@ -79,6 +79,12 @@ export async function GET(request: Request) {
   let query = supabase
     .from("ordenes_trabajo")
     .select("*", { count: "exact" })
+    // El orden es del servidor y no del cliente: son 2.227 filas paginadas de a
+    // 50, y ordenar en el cliente ordenaría sólo la página que se está mirando —
+    // la orden más urgente podría estar en la página 40 y no aparecer nunca.
+    // `gut_orden` ya sube las abiertas por encima de las cerradas; el número de
+    // OT desempata para que el orden sea siempre el mismo.
+    .order("gut_orden", { ascending: false })
     .order("ot_number", { ascending: false });
 
   query = pendientes

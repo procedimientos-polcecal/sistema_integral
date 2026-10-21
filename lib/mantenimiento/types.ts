@@ -206,6 +206,14 @@ export interface OrdenTrabajo {
   created_by: string | null;
   created_at_app: string | null;
   schedule_id: string | null;
+  // Las tres notas de la matriz GUT, de 1 a 5. Null mientras la orden no se puntuó.
+  gut_gravedad: number | null;
+  gut_urgencia: number | null;
+  gut_tendencia: number | null;
+  // Es una CLAVE DE ORDEN, no el puntaje: lleva el 27 de las sin puntuar y +1000
+  // a las abiertas. Columna generada, nunca se escribe. No se muestra: el
+  // puntaje sale de `puntajeGut()` con las tres notas.
+  gut_orden: number;
 }
 
 export interface PlanificacionDiaria {
