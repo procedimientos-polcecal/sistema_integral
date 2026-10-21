@@ -12,22 +12,19 @@
  */
 
 import { estaAtrasada, type Atrasable } from "@/lib/mantenimiento/alertas";
+import { puntajeGut, SIN_PUNTAJE, type NotasGut } from "@/lib/mantenimiento/gut";
 
 /** Los estados en los que la orden todavía espera algo de alguien. */
 export const ESTA_PENDIENTE = ["ATRASADO", "EN_PROCESO", "POR_HACER"] as const;
-
-/** Cuánto pesa cada prioridad. Lo que no se reconoce queda en el medio. */
-const PESO_PRIORIDAD: Record<string, number> = { ALTA: 3, MEDIA: 2, BAJA: 1 };
 
 /**
  * La prioridad, reducida a la palabra.
  *
  * La planilla la escribe con un emoji adelante —"🟠 Alta", "🟡 Media"— y así se
  * guarda, porque es lo que dice la celda. Comparar eso contra "ALTA" no
- * coincidía nunca, así que **las 120 órdenes con prioridad pesaban todas 2** y
- * el orden sugerido las trataba igual que a las 1.699 que no tienen ninguna. La
- * función existía y no hacía nada; no se notaba porque el resultado seguía
- * pareciendo un orden.
+ * coincidía nunca. Antes servía para pesar el orden sugerido; desde el
+ * 21/10/2026 ese peso lo reemplazó el GUT y sólo la usa
+ * `prioridadParaLaPlanilla`, para reconocer la palabra detrás del adorno.
  *
  * Se descarta todo lo que no sea una letra: el emoji, el espacio y los acentos.
  * Así entra "🟠 Alta", "ALTA", "alta" y lo que venga mañana con otro adorno.
@@ -36,9 +33,6 @@ const soloLaPalabra = (v: unknown): string =>
   String(v ?? "")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toUpperCase().replace(/[^A-Z]/g, "");
-
-const peso = (prioridad: string | null | undefined): number =>
-  PESO_PRIORIDAD[soloLaPalabra(prioridad)] ?? 2;
 
 /** Cómo escribe cada prioridad la planilla, que es el vocabulario de la casa. */
 const COMO_LA_ESCRIBE_LA_PLANILLA: Record<string, string> = {
@@ -72,7 +66,7 @@ export function prioridadParaLaPlanilla(valor: unknown): string | null {
   return COMO_LA_ESCRIBE_LA_PLANILLA[palabra] ?? (String(valor).trim() || null);
 }
 
-export interface Ordenable extends Atrasable {
+export interface Ordenable extends Atrasable, NotasGut {
   id: string;
   ot_number?: number | null;
   prioridad?: string | null;
@@ -83,8 +77,11 @@ export interface Ordenable extends Atrasable {
 /**
  * El orden que sugieren los datos.
  *
- * Primero lo atrasado —ya se pasó de fecha, no importa con qué prioridad
- * nació—, después lo urgente, y entre iguales lo que espera hace más.
+ * Primero lo atrasado —ya se pasó de fecha, no importa con qué puntaje
+ * nació—, después lo de más puntaje GUT, y entre iguales lo que espera hace más.
+ *
+ * La columna `prioridad` (ALTA/MEDIA/BAJA) ya no ordena: el 92% de las órdenes
+ * nunca la tuvo y el GUT la reemplaza.
  */
 export function ordenSugerido<T extends Ordenable>(ordenes: T[], hoy: string): T[] {
   return [...ordenes].sort((a, b) => {
@@ -92,8 +89,14 @@ export function ordenSugerido<T extends Ordenable>(ordenes: T[], hoy: string): T
     const atrasoB = estaAtrasada(b, hoy) ? 1 : 0;
     if (atrasoA !== atrasoB) return atrasoB - atrasoA;
 
-    const prioridad = peso(b.prioridad) - peso(a.prioridad);
-    if (prioridad !== 0) return prioridad;
+    // Una orden sin puntaje vale 27 y no 0. Con 0 las pendientes sin puntuar
+    // se irían al fondo y se quedarían ahí para siempre, porque nadie mira el
+    // fondo: es lo que este diseño quiere evitar. Con 27 —3·3·3, el 3 en cada
+    // nota— quedan en el medio del pelotón, y puntuarla la puede mover para
+    // cualquiera de los dos lados. (Con dos notas de tres también cuenta como
+    // sin puntaje: `puntajeGut` da null.)
+    const puntaje = (puntajeGut(b) ?? SIN_PUNTAJE) - (puntajeGut(a) ?? SIN_PUNTAJE);
+    if (puntaje !== 0) return puntaje;
 
     // La más vieja primero. Las fechas `aaaa-mm-dd` se comparan como texto.
     return String(a.fecha ?? "").localeCompare(String(b.fecha ?? ""));

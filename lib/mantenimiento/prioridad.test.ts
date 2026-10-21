@@ -13,52 +13,95 @@ describe("ESTA_PENDIENTE", () => {
 });
 
 describe("ordenSugerido", () => {
+  /**
+   * Desde el 21/10/2026 el orden no lee la columna `prioridad` —ALTA/MEDIA/BAJA,
+   * que el 92% de las órdenes nunca tuvo— sino las tres notas del GUT. Los
+   * puntajes de abajo: a = 2·2·3 = 12, b = 1·1·1 = 1, c = 4·4·5 = 80 y
+   * d = 5·4·4 = 80.
+   */
   const ordenes = [
-    { id: "a", ot_number: 10, estado: "POR_HACER", prioridad: "BAJA", fecha: "2026-08-01", proxima_fecha: null },
-    { id: "b", ot_number: 11, estado: "ATRASADO", prioridad: "BAJA", fecha: "2026-08-20", proxima_fecha: null },
-    { id: "c", ot_number: 12, estado: "POR_HACER", prioridad: "ALTA", fecha: "2026-08-15", proxima_fecha: null },
-    { id: "d", ot_number: 13, estado: "EN_PROCESO", prioridad: "ALTA", fecha: "2026-08-10", proxima_fecha: null },
+    { id: "a", ot_number: 10, estado: "POR_HACER", prioridad: "BAJA", gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3, fecha: "2026-08-01", proxima_fecha: null },
+    { id: "b", ot_number: 11, estado: "ATRASADO", prioridad: "BAJA", gut_gravedad: 1, gut_urgencia: 1, gut_tendencia: 1, fecha: "2026-08-20", proxima_fecha: null },
+    { id: "c", ot_number: 12, estado: "POR_HACER", prioridad: "ALTA", gut_gravedad: 4, gut_urgencia: 4, gut_tendencia: 5, fecha: "2026-08-15", proxima_fecha: null },
+    { id: "d", ot_number: 13, estado: "EN_PROCESO", prioridad: "ALTA", gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: 4, fecha: "2026-08-10", proxima_fecha: null },
   ];
 
-  it("pone primero lo atrasado, aunque sea de prioridad baja", () => {
-    // Ya se pasó de fecha: no importa con qué prioridad nació.
+  it("lo atrasado sigue yendo primero, aunque tenga el puntaje más bajo", () => {
+    // Ya se pasó de fecha: no importa con qué puntaje nació.
     expect(ordenSugerido(ordenes, HOY)[0].id).toBe("b");
   });
 
-  it("después las de prioridad alta, y entre ellas la más vieja", () => {
-    const [, segundo, tercero] = ordenSugerido(ordenes, HOY);
+  it("entre dos que no están atrasadas, primero la de más puntaje", () => {
+    // `a` es la más vieja (08-01) pero vale 12; `c` vale 80 y es más nueva.
+    const [, segundo, tercero, cuarto] = ordenSugerido(ordenes, HOY);
     expect(segundo.id).toBe("d");
     expect(tercero.id).toBe("c");
+    expect(cuarto.id).toBe("a");
   });
 
-  it("deja las de prioridad baja al final", () => {
-    expect(ordenSugerido(ordenes, HOY).at(-1)!.id).toBe("a");
+  it("con el mismo puntaje, la que espera hace más", () => {
+    // c y d valen 80: va primero d, que es de 08-10 contra el 08-15 de c.
+    const sinAtraso = ordenes.filter((o) => o.id !== "b");
+    expect(ordenSugerido(sinAtraso, HOY).map((o) => o.id)).toEqual(["d", "c", "a"]);
+  });
+
+  it("deja las de menos puntaje al final", () => {
+    const sinAtraso = ordenes.filter((o) => o.id !== "b");
+    expect(ordenSugerido(sinAtraso, HOY).at(-1)!.id).toBe("a");
   });
 
   /**
-   * EL CASO REAL, y el que los tests de arriba no cubrian: la planilla no
-   * escribe "ALTA" sino "🟠 Alta". Comparar eso contra la tabla de pesos no
-   * coincidia nunca, asi que las 120 ordenes con prioridad pesaban todas 2 y
-   * este orden las trataba igual que a las 1.699 que no tienen ninguna. No se
-   * notaba porque el resultado seguia pareciendo un orden.
+   * LA RAZÓN DEL 27. Sin puntaje no es cero: con cero, las pendientes sin
+   * puntuar se irían al fondo y nadie las miraría más. Vale 3·3·3, la nota del
+   * medio en cada eje, así que queda entre las de más de 27 y las de menos.
    */
-  it("entiende la prioridad como la escribe la planilla, con el emoji", () => {
+  it("la que no tiene puntaje queda entre las de más y las de menos de 27", () => {
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const alta   = { ...base, id: "alta",   ot_number: 1, gut_gravedad: 5, gut_urgencia: 3, gut_tendencia: 2 }; // 30
+    const sin    = { ...base, id: "sin",    ot_number: 2 };
+    const baja   = { ...base, id: "baja",   ot_number: 3, gut_gravedad: 4, gut_urgencia: 3, gut_tendencia: 2 }; // 24
+    // Entran en el peor orden para que el resultado no sea casualidad.
+    expect(ordenSugerido([baja, sin, alta], HOY).map((o) => o.id)).toEqual(["alta", "sin", "baja"]);
+  });
+
+  it("la que no tiene puntaje no se hunde por debajo de una de 25", () => {
+    // Si valiera 0 iría al final; vale 27 y le gana a una de menos.
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const sin  = { ...base, id: "sin", ot_number: 1 };
+    const casi = { ...base, id: "casi", ot_number: 2, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 1 }; // 25
+    expect(ordenSugerido([casi, sin], HOY)[0].id).toBe("sin");
+  });
+
+  it("con sólo dos de las tres notas cuenta como sin puntaje", () => {
+    // Dos de tres es 5·5·(falta): si se multiplicara lo que hay, valdría 25 y
+    // quedaría debajo de la de 27. Es sin puntaje, así que vale 27 y va antes.
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const dosDeTres = { ...base, id: "dos", ot_number: 1, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null };
+    const casi      = { ...base, id: "casi", ot_number: 2, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 1 }; // 25
+    expect(ordenSugerido([casi, dosDeTres], HOY)[0].id).toBe("dos");
+  });
+
+  /**
+   * La columna `prioridad` ya no ordena. Dos órdenes iguales salvo en ella
+   * salen en el orden en que entraron: el desempate por fecha no las separa y
+   * el sort es estable.
+   */
+  it("la prioridad de la planilla ya no cambia el orden", () => {
     const comoVienen = [
       { id: "baja",  ot_number: 1, estado: "POR_HACER", prioridad: "🟢 Baja",  fecha: "2026-08-01", proxima_fecha: null },
       { id: "alta",  ot_number: 2, estado: "POR_HACER", prioridad: "🟠 Alta",  fecha: "2026-08-01", proxima_fecha: null },
       { id: "media", ot_number: 3, estado: "POR_HACER", prioridad: "🟡 Media", fecha: "2026-08-01", proxima_fecha: null },
     ];
-    expect(ordenSugerido(comoVienen, HOY).map((o) => o.id)).toEqual(["alta", "media", "baja"]);
+    expect(ordenSugerido(comoVienen, HOY).map((o) => o.id)).toEqual(["baja", "alta", "media"]);
   });
 
-  it("le da lo mismo el emoji, los acentos y las mayusculas", () => {
-    const mismas = ["ALTA", "Alta", "🟠 Alta", "  alta  "].map((prioridad, i) => ({
-      id: String(i), ot_number: i, estado: "POR_HACER", prioridad,
-      fecha: "2026-08-01", proxima_fecha: null,
-    }));
-    const baja = { id: "z", ot_number: 9, estado: "POR_HACER", prioridad: "🟢 Baja", fecha: "2026-08-01", proxima_fecha: null };
-    // Las cuatro formas de "alta" van antes que la baja, ninguna se queda atras.
-    expect(ordenSugerido([baja, ...mismas], HOY).at(-1)!.id).toBe("z");
+  it("una prioridad alta no le gana a un puntaje más alto ni a una fecha más vieja", () => {
+    const base = { estado: "POR_HACER", proxima_fecha: null };
+    const altaNueva = { ...base, id: "altaNueva", ot_number: 1, prioridad: "🟠 Alta", fecha: "2026-08-20", gut_gravedad: 3, gut_urgencia: 3, gut_tendencia: 3 };
+    const bajaVieja = { ...base, id: "bajaVieja", ot_number: 2, prioridad: "🟢 Baja", fecha: "2026-08-01", gut_gravedad: 3, gut_urgencia: 3, gut_tendencia: 3 };
+    const bajaFuerte = { ...base, id: "bajaFuerte", ot_number: 3, prioridad: "🟢 Baja", fecha: "2026-08-25", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 };
+    expect(ordenSugerido([altaNueva, bajaVieja, bajaFuerte], HOY).map((o) => o.id))
+      .toEqual(["bajaFuerte", "bajaVieja", "altaNueva"]);
   });
 
   it("no rompe con prioridad desconocida o vacía", () => {
@@ -169,7 +212,7 @@ describe("la prioridad como la escribe la planilla", () => {
     expect(prioridadParaLaPlanilla("🟡 Media")).toBe("🟡 Media");
   });
 
-  /** Acentos, minusculas y adornos: lo mismo que resuelve el peso. */
+  /** Acentos, minusculas y adornos: lo mismo que resuelve `soloLaPalabra`. */
   it("no se deja confundir por como este escrita", () => {
     expect(prioridadParaLaPlanilla("media")).toBe("🟡 Media");
     expect(prioridadParaLaPlanilla("  Alta ")).toBe("🟠 Alta");
