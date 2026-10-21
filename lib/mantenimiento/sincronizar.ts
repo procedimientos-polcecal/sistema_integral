@@ -32,6 +32,7 @@ import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { filaDeOrden, celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
+import { cualesReintentar } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
 } from "@/lib/mantenimiento/comparativas";
@@ -269,18 +270,40 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
  * Y lo que sigue pendiente, la importación **no lo pisa**: la planilla todavía
  * no sabe lo que el sistema sabe. Es el mismo principio que `editado_en_app` en
  * Compras y que "no pisa lo que una persona corrigió" en las marcaciones.
+ *
+ * ── DESDE EL 21/10/2026 YA NO ES EL ÚNICO DRENAJE, Y ESO ERA EL PROBLEMA ────
+ *
+ * Esto era lo único que vaciaba la cola, y corre con la sincronización: en la
+ * práctica **cada 3 a 5 horas**, no cada quince minutos como dice su workflow.
+ * Medido: de la K en adelante, las columnas que sólo viven en el master
+ * tardaban entre 3 horas y 53 en llegar, y dos órdenes estaban esperando desde
+ * hacía horas. Ahora también lo llaman el `after()` de la ruta de alta —que
+ * insiste cuatro minutos— y la pantalla de Órdenes al abrirse. Esto queda de
+ * piso: es lo que agarra lo que aquéllos no pudieron.
+ *
+ * `conFreno` es para esos dos: no reintenta una orden que se intentó hace menos
+ * de diez minutos, porque la pantalla se abre todo el día y una orden que no se
+ * va a poder escribir nunca haría una lectura del master por cada visita.
  */
-async function exportarLoPendiente(
-  admin: ReturnType<typeof createAdminClient>
+export async function exportarLoPendiente(
+  admin: ReturnType<typeof createAdminClient>,
+  opciones: { conFreno?: boolean } = {}
 ): Promise<Set<number>> {
   const siguenPendientes = new Set<number>();
 
-  const { data: pendientes } = await admin
+  const { data: todos } = await admin
     .from("ordenes_trabajo")
-    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3")
+    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, sheets_intentado_en")
     .not("sheets_pendiente", "is", null);
 
-  for (const orden of pendientes ?? []) {
+  // Con freno cuando lo dispara una visita a la pantalla, y sin freno cuando lo
+  // dispara la sincronización: ésa es el piso y tiene que intentarlo todo. Ver
+  // `MINIMO_ENTRE_INTENTOS_MS`.
+  const pendientes = opciones.conFreno
+    ? cualesReintentar(todos ?? [], Date.now())
+    : (todos ?? []);
+
+  for (const orden of pendientes) {
     const registro = loQueHayQueExportar(orden);
 
     // Dejó de tener algo que exportar: alguien lo borró o lo cambió en el

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT, TIPOS_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
@@ -117,7 +118,7 @@ export default function GenerarOTModal({
     onCreada(
       [
         `Se generó la OT #${body.ot_number} y el aviso ${aviso.oa_number} quedó marcado.`,
-        body.planilla_error && `Ojo: no se pudo escribir en la planilla de OT (${body.planilla_error}).`,
+        avisoDelPendiente(body.planilla_error, body.planilla_reintentando),
         body.aviso_error && `Ojo: no se pudo marcar el aviso en su planilla (${body.aviso_error}).`,
       ].filter(Boolean).join(" ")
     );

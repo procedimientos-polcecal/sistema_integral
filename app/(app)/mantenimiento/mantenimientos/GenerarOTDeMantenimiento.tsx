@@ -5,6 +5,7 @@ import Select from "@/components/Select";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   cuerpoDeLaOT, loQueFaltaDelMantenimiento, loQueHayQuePreguntar, loQueNoSeArreglaAca,
   respuestasIniciales, especialidadDeTipo, etiquetaDeTipo, nombreDelAsignado,
@@ -73,7 +74,7 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
     onCreada(
       [
         `Se generó la OT #${body.ot_number}.`,
-        body.planilla_error && `Ojo: no se pudo escribir en la planilla de OT (${body.planilla_error}).`,
+        avisoDelPendiente(body.planilla_error, body.planilla_reintentando),
       ].filter(Boolean).join(" ")
     );
   }

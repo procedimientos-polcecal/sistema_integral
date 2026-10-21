@@ -5,6 +5,7 @@ import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
@@ -242,13 +243,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // llegó a la planilla y la pantalla no dijo una palabra.
     // Y lo mismo con lo que no llegó a la planilla. Que el estado o las horas
     // queden pendientes es lo normal recién creada —la fila del master tarda—,
-    // así que se dice sin sonar a error: lo termina la sincronización.
+    // así que se dice sin sonar a error. El texto lo arma `avisoDelPendiente`,
+    // en `lib/`, porque las tres pantallas que crean una OT decían tres cosas
+    // distintas y ésta prometía «la próxima sincronización», que en la práctica
+    // son entre 3 y 5 horas. Hoy el sistema reintenta solo durante 4 minutos.
     const aMedias = [
       data.aviso_error,
-      data.planilla_error
-        ? `El estado y las horas todavía no llegaron a la planilla (${data.planilla_error}) — ` +
-          `queda pendiente y lo escribe la próxima sincronización.`
-        : null,
+      avisoDelPendiente(data.planilla_error, data.planilla_reintentando),
       data.repuestos_error,
     ].filter(Boolean) as string[];
 

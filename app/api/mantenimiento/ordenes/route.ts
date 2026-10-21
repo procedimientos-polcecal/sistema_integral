@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
@@ -18,6 +18,10 @@ import {
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import {
+  reintentarHastaQueSalga, hacePocoQueSeDreno,
+} from "@/lib/mantenimiento/reintentoDePendientes";
+import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { paginaPedida } from "@/lib/core/paginado";
 import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
@@ -26,6 +30,25 @@ import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuest
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+
+/**
+ * Cinco minutos, que es lo que necesita el reintento del alta.
+ *
+ * El `after()` del POST insiste cuatro minutos esperando que la fila del master
+ * aparezca. Sin esto, Vercel cortaría la función antes y el reintento no
+ * serviría de nada — el test de `ESPERAS_DEL_REINTENTO` fija que las esperas
+ * sumen menos que esto.
+ */
+export const maxDuration = 300;
+
+/**
+ * Cuándo drenó la cola esta instancia, para no hacerlo seis veces por visita.
+ *
+ * Vive en el módulo y no en la base porque es un freno de ráfaga y no un dato:
+ * si la instancia se recicla, lo peor que pasa es un drenaje de más. Ver
+ * `hacePocoQueSeDreno`.
+ */
+let ultimoDrenaje: number | null = null;
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -122,6 +145,27 @@ export async function GET(request: Request) {
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // ── Abrir Órdenes termina lo que quedó a medias ────────────
+  //
+  // De la K en adelante —cierre, estado, contratista, horas, operarios— las
+  // columnas son literales del master, y el alta no las puede escribir porque
+  // la fila todavía no existe. Quedan en `sheets_pendiente`, y hasta el
+  // 21/10/2026 lo único que vaciaba esa cola era la sincronización: en la
+  // práctica cada 3 a 5 horas, no cada quince minutos como dice su workflow.
+  //
+  // Esta pantalla la abre todo el día la gente de Mantenimiento, así que es el
+  // reloj más confiable que hay — y corre con `after()`, después de contestar,
+  // de modo que no le agrega ni un milisegundo a quien está mirando. El freno
+  // de arriba evita que las seis consultas de una misma visita drenen seis
+  // veces; `conFreno` evita insistir con una orden que se intentó recién.
+  if (!hacePocoQueSeDreno(ultimoDrenaje, Date.now())) {
+    ultimoDrenaje = Date.now();
+    // Sin `catch`: lo que falla por orden ya queda anotado en su
+    // `sheets_pendiente`, y una excepción acá es un problema de verdad que
+    // tiene que verse en los logs y no morir en un `catch` vacío.
+    after(() => exportarLoPendiente(createAdminClient(), { conFreno: true }));
+  }
 
   return NextResponse.json({ data, count });
 }
@@ -516,12 +560,12 @@ export async function POST(request: Request) {
   // `O` vacía y pisa las horas con null. Medido: las cinco OT que hoy siguen en
   // REALIZADO lo están porque alguien escribió "Realizado" a mano.
   let planilla_error: string | null = null;
+  let planilla_reintentando = false;
   const paraLaPlanilla = loQueHayQueExportar(inserted);
 
   if (paraLaPlanilla) {
-    planilla_error = await escribirEnLaFilaDeLaOT(
-      inserted, celdasParaRegistrar(paraLaPlanilla)
-    );
+    const celdas = celdasParaRegistrar(paraLaPlanilla);
+    planilla_error = await escribirEnLaFilaDeLaOT(inserted, celdas);
 
     await admin
       .from("ordenes_trabajo")
@@ -530,6 +574,38 @@ export async function POST(request: Request) {
         sheets_intentado_en: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+
+    // ── Y SI NO SALIÓ, SE INSISTE ─────────────────────────────
+    //
+    // Este intento **nunca salió ni una vez**: medido el 21/10/2026 sobre las
+    // cinco órdenes que tenían algo que exportar, las cinco fallaron acá, a los
+    // 0,6 segundos del alta. No podía ser de otra forma: la fila del master
+    // llega por `IMPORTRANGE` y no existe todavía.
+    //
+    // Lo que seguía era la cola, y la cola la vaciaba sólo la sincronización,
+    // que corre cada 3 a 5 horas. Resultado: de la K en adelante —cierre,
+    // estado, contratista, horas, operarios— la planilla quedaba incompleta
+    // entre 3 horas y 53. La 2796 esperó 53 horas.
+    //
+    // `after()` corre **después de haberle contestado a la persona**, así que
+    // los cuatro minutos de espera no los paga nadie mirando una pantalla. Y no
+    // reemplaza a la cola: si tampoco sale, la orden queda anotada con el
+    // último error y la terminan el drenaje de la pantalla o la sincronización.
+    if (planilla_error) {
+      planilla_reintentando = true;
+      after(async () => {
+        const r = await reintentarHastaQueSalga({
+          intentar: () => escribirEnLaFilaDeLaOT(inserted, celdas),
+        });
+        await admin
+          .from("ordenes_trabajo")
+          .update({
+            sheets_pendiente: r.error,
+            sheets_intentado_en: new Date().toISOString(),
+          })
+          .eq("id", inserted.id);
+      });
+    }
   }
 
   // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
@@ -540,7 +616,8 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    data: inserted, ot_number, aviso_error, planilla_error, clave_error, repuestos_error,
+    data: inserted, ot_number, aviso_error, planilla_error, planilla_reintentando,
+    clave_error, repuestos_error,
   });
 }
 
