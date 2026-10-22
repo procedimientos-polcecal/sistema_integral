@@ -38,7 +38,17 @@ export const NOTAS: Record<string, string> = {
     "sale después una orden de trabajo.",
 
   ordenes_trabajo:
-    "Las OT. Los campos de persona apuntan a `usuarios`, no a `empleados`.",
+    "Las OT. Los campos de persona apuntan a `usuarios`, no a `empleados`. " +
+    "**Para decir qué OT atacar primero o cuáles son las más urgentes, usá el puntaje " +
+    "GUT y no `prioridad`**: `prioridad` (ALTA/MEDIA/BAJA) está vacía en el 92% de las " +
+    "órdenes y ya no ordena nada. El puntaje GUT es `gut_gravedad * gut_urgencia * " +
+    "gut_tendencia` (cada nota va de 1 a 5, el producto de 1 a 125) y es null si falta " +
+    "cualquiera de las tres: una orden sin las tres notas está sin puntuar, no vale 0. " +
+    "**`gut_orden` NO es el puntaje**: es la clave con la que la base ordena la lista, y " +
+    "lleva 27 para las órdenes sin puntuar y +1000 para las que siguen abiertas (una " +
+    "abierta sin puntuar tiene 1027). No la muestres ni la describas como puntaje: " +
+    "calculá el producto de las tres notas. Abiertas son las que no están REALIZADO ni " +
+    "SUSPENDIDA.",
 
   despacho_ordenes_carga:
     "Cada camión que entró al predio. Los tiempos de carga y de permanencia son " +

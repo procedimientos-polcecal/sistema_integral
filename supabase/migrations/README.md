@@ -180,6 +180,16 @@ la referencian después.** Así la transacción ya tiene el lock más fuerte cua
 crea la tabla y no hay subida. Pasó en
 `20260911103029_facturacion_el_detalle_de_la_factura.sql`.
 
+**Una migración que agrega columnas a una tabla que el Asistente conoce lo deja
+ciego hasta que alguien corra `npm run catalogo`.** El catálogo es una foto
+commiteada (`lib/asistente/catalogo.generado.json`) y no se regenera sola: la
+tabla sigue ahí, sin error, pero sin las columnas nuevas. Y si la columna es de
+las que se malinterpretan —`gut_orden` en `ordenes_trabajo`, que parece un
+puntaje y no lo es—, **primero la nota en `lib/asistente/notas.ts` y después el
+`npm run catalogo`**, nunca al revés. La feature de la matriz GUT es la prueba de
+que el aviso que ya estaba en `docs/ASISTENTE.md` solo no se encuentra: el
+catálogo llevaba 27 tablas de atraso cuando se miró.
+
 ## Y una que no es de las migraciones pero muerde igual
 
 `PostgREST corta en 1000 filas y no avisa`: `.limit(3000)` devuelve 1000. Al

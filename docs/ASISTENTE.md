@@ -131,7 +131,7 @@ npm run catalogo
 
 Corre `scripts/generar-catalogo-asistente.mts` con la service role, lee
 `information_schema` y los `pg_enum`, y escribe
-`lib/asistente/catalogo.generado.json` (hoy: 102 tablas, 1.184 columnas, 27
+`lib/asistente/catalogo.generado.json` (hoy: 129 tablas, 1.464 columnas, 29
 enums). Se regenera **a mano cuando cambia el esquema** — no hay hook que lo
 dispare solo.
 
@@ -145,7 +145,7 @@ una migración que agrega una tabla, hay que mirar esa lista y agregar la
 entrada en `MODULO_DE_TABLA` (o dejarla afuera a propósito, si es una tabla que
 no le sirve a nadie preguntar, como `asistente_consultas`).
 
-El catálogo por módulo pesa entre 4.820 caracteres (Producción) y 11.789
+El catálogo por módulo pesa entre 6.060 caracteres (Producción) y 14.029
 (Mantenimiento) — conviene tenerlo presente si se agregan notas largas: es
 prompt que se manda en cada pregunta.
 
