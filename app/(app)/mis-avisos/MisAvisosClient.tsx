@@ -209,6 +209,23 @@ export default function MisAvisosClient({
         )}
       </div>
 
+      {/* Se dice **siempre** que falta el área, y no sólo cuando la lista está
+          vacía: sin área esta pantalla abre en «Todos», que tiene los 184
+          avisos, así que un cartel metido en la lista vacía no se veía nunca y
+          10 de los 14 usuarios no tenían forma de saber por qué no hay «Mi
+          área». Un cartel que sólo dice «no hay nada» manda a buscar el problema
+          al lugar equivocado. */}
+      {misAreas.length === 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">Todavía no tenés un área asignada.</p>
+          <p className="mt-0.5 text-xs">
+            Los avisos se agrupan por área. Pedile a un administrador que te asigne
+            la tuya en Administración → Usuarios y vas a ver acá todo lo que avisó
+            tu área.
+          </p>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
@@ -219,7 +236,6 @@ export default function MisAvisosClient({
         <Vacio
           alcance={alcance}
           filtrando={hayFiltro}
-          sinArea={misAreas.length === 0}
           onVerTodos={() => setAlcance("todos")}
           onAvisar={() => setModalAbierto(true)}
         />
@@ -401,9 +417,13 @@ function EnQueTermino({
     const crudo = String(aviso.ot_asignada ?? "").trim();
     if (/^\d+$/.test(crudo)) {
       return tieneMantenimiento ? (
-        // Lleva al listado de órdenes y no a una: ni la ruta ni su buscador
-        // entienden un N° de OT todavía.
-        <Link href="/mantenimiento/ordenes" className="font-medium text-slate-700 underline">
+        // Lleva al listado de órdenes ya buscando ese número: el buscador de
+        // `/mantenimiento/ordenes` entiende `?q=` y compara contra `ot_number`.
+        // `crudo` son sólo dígitos, así que no hace falta escaparlo.
+        <Link
+          href={`/mantenimiento/ordenes?q=${crudo}`}
+          className="font-medium text-slate-700 underline"
+        >
           OT #{crudo}
         </Link>
       ) : (
@@ -434,14 +454,17 @@ function EnQueTermino({
   return <span className="text-amber-700">Pendiente</span>;
 }
 
+/**
+ * La lista vacía. **No habla de la falta de área**: sin área `alcance` nunca es
+ * «mios», y el cartel que lo explica está arriba de la lista, donde se ve haya
+ * o no resultados.
+ */
 function Vacio({
-  alcance, filtrando, sinArea, onVerTodos, onAvisar,
+  alcance, filtrando, onVerTodos, onAvisar,
 }: {
   alcance: "mios" | "todos";
   /** Hay una búsqueda o una urgencia puesta. */
   filtrando: boolean;
-  /** Nadie le asignó un área todavía: sin eso no hay «mi área» que mostrar. */
-  sinArea: boolean;
   onVerTodos: () => void;
   onAvisar: () => void;
 }) {
@@ -466,19 +489,8 @@ function Vacio({
       <p className="text-sm text-slate-500">
         {alcance === "todos"
           ? "Todavía no hay avisos cargados."
-          : sinArea
-            ? "Todavía no tenés un área asignada."
-            : "Tu área todavía no avisó de nada."}
+          : "Tu área todavía no avisó de nada."}
       </p>
-      {alcance === "mios" && sinArea && (
-        // Se dice qué falta y quién lo puede hacer. Un cartel que sólo dice «no
-        // hay nada» manda a buscar el problema al lugar equivocado.
-        <p className="mx-auto mt-2 max-w-md text-xs text-slate-400">
-          Los avisos se agrupan por área. Pedile a un administrador que te asigne
-          la tuya en Administración → Usuarios y vas a ver acá todo lo que avisó
-          tu área.
-        </p>
-      )}
       {alcance === "mios" && (
         <div className="mt-4 flex justify-center gap-2">
           <button

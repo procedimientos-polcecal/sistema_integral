@@ -139,7 +139,15 @@ export async function GET(request: Request) {
     // Sanitizar: quitar caracteres que rompen el filtro PostgREST (,()*\)
     const safe = search.replace(/[,()*\\%]/g, "").trim();
     if (safe) {
-      query = query.or(`descripcion.ilike.%${safe}%,equipo_raw.ilike.%${safe}%,sector_raw.ilike.%${safe}%`);
+      // `ot_number` es `integer`: un `ilike` sobre él no existe, y buscar un
+      // número con texto de por medio no es una OT. Sólo si lo escrito es un
+      // número entero se suma la igualdad. «OT #1989» de Mis avisos llega acá
+      // con `?q=1989`, y sin esto caía en una lista de ~2.200 sin forma de
+      // encontrarla. Se acota a 9 dígitos para no desbordar el `integer`.
+      const porNumero = /^\d{1,9}$/.test(safe) ? `,ot_number.eq.${safe}` : "";
+      query = query.or(
+        `descripcion.ilike.%${safe}%,equipo_raw.ilike.%${safe}%,sector_raw.ilike.%${safe}%${porNumero}`
+      );
     }
   }
 
