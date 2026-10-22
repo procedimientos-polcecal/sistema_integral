@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
-import { resolverElArea } from "@/lib/mantenimiento/areaDelAviso";
+import { areaPorDefecto } from "@/lib/compras/areaDelUsuario";
 import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
@@ -11,7 +11,6 @@ import {
   reservarClave, anotarLaClave, respuestaDeLaReserva, soltarLaClave,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { traerTodo } from "@/lib/core/paginado";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
 const PESTANA = () => process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
@@ -134,21 +133,22 @@ export async function POST(request: Request) {
     }
   }
 
-  // Las fotos son links de `POST /api/mantenimiento/fotos`. Algo que no es una
-  // lista de textos es un 400 y no se ignora: tirar la foto en silencio dejaría
-  // un aviso sin el dato que quien lo cargó creía haber mandado.
+  // Las fotos son links de `POST /api/mantenimiento/fotos`, o sea siempre una
+  // URL http(s). Se exige eso y no sólo "un texto" porque `agregarFila()` escribe
+  // con `USER_ENTERED`: un valor que empiece con `=` lo interpreta la planilla de
+  // producción como una fórmula, y este campo lo abre cualquier usuario activo.
+  // Algo que no es una lista de URLs es un 400 y no se ignora: tirar la foto en
+  // silencio dejaría un aviso sin el dato que quien lo cargó creía haber mandado.
   const fotosCrudas: unknown = b?.reference_photos;
-  if (
-    fotosCrudas != null &&
-    !(Array.isArray(fotosCrudas) && fotosCrudas.every((f) => typeof f === "string"))
-  ) {
-    const error = "Las fotos tienen que ser una lista de links";
+  const sonUrls =
+    Array.isArray(fotosCrudas) &&
+    fotosCrudas.every((f) => typeof f === "string" && /^https?:\/\/\S+$/i.test(f.trim()));
+  if (fotosCrudas != null && !sonUrls) {
+    const error = "Las fotos tienen que ser una lista de links http(s)";
     avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
     return NextResponse.json({ error }, { status: 400 });
   }
-  const fotos = ((fotosCrudas as string[] | null | undefined) ?? [])
-    .map((f) => f.trim())
-    .filter(Boolean);
+  const fotos = ((fotosCrudas as string[] | null | undefined) ?? []).map((f) => f.trim());
 
   // ── La clave de la carga ────────────────────────────────────
   //
@@ -292,12 +292,18 @@ export async function POST(request: Request) {
   // tiene. Lo mismo vale para el asistente, que arma una URL con valores
   // iniciales y tampoco lleva área.
   //
-  // Si el cuerpo no la trae se resuelve igual que lo hace la sincronización de
-  // la planilla, con `resolverElArea` sobre `quien_aviso`: sólo cuando esa
-  // persona tiene **exactamente un** área. Con cero, con dos, o con un nombre
-  // que no se reconoce con certeza queda en null, que es visible y se corrige a
-  // mano; elegir una de dos es adivinar, y un área equivocada no se nota nunca.
-  const area_id = areaDelCuerpo || (await areaDeQuienAviso(admin, aviso.quien_aviso));
+  // Si el cuerpo no la trae sale de las áreas de **quien carga**, que acá se
+  // sabe por la sesión: sólo cuando tiene exactamente una (`areaPorDefecto`).
+  // Con cero o con dos queda en null, que es visible y se corrige a mano; elegir
+  // una de dos es adivinar, y un área equivocada no se nota nunca.
+  //
+  // `resolverElArea` NO se usa acá, y no es un olvido: es para los dos caminos
+  // que no tienen sesión —el relleno de los avisos históricos y la
+  // sincronización desde la planilla—, donde el único dato es el texto que
+  // escribió el Forms y hay que reconocer un nombre. Con sesión se sabe quién
+  // carga; reconocer un nombre sería ir por el camino largo, y además dejaría
+  // sin área a quien deja `quien_aviso` vacío.
+  const area_id = areaDelCuerpo || (await areaDeQuienCarga(admin, user.id));
 
   const { data, error } = await admin
     .from("avisos")
@@ -355,43 +361,27 @@ export async function POST(request: Request) {
 }
 
 /**
- * De qué área es el aviso cuando quien lo cargó no la eligió. `null` si no se
- * puede saber.
+ * De qué área es el aviso cuando quien lo cargó no la eligió: la única que
+ * tenga asignada en `usuario_areas_compras`. `null` si no tiene o tiene más de
+ * una.
  *
  * **Un fallo acá no frena el aviso.** A esta altura la fila ya está en la
- * planilla, y un error al leer usuarios que terminara en un 500 haría que quien
+ * planilla, y un error de lectura que terminara en un 500 haría que quien
  * cargó lo cargara de nuevo y quedaran dos. Sin área el aviso se guarda igual,
  * y se ve: es el caso de siempre para quien no tiene una cargada.
  */
-async function areaDeQuienAviso(
+async function areaDeQuienCarga(
   admin: ReturnType<typeof createAdminClient>,
-  quienAviso: string | null
+  usuarioId: string
 ): Promise<string | null> {
-  if (!quienAviso) return null;
-
   try {
-    const [usuarios, asignadas] = await Promise.all([
-      traerTodo((desde, hasta) =>
-        admin.from("usuarios").select("id, nombre, apellido").range(desde, hasta)
-      ),
-      traerTodo((desde, hasta) =>
-        admin.from("usuario_areas_compras").select("usuario_id, area_id").range(desde, hasta)
-      ),
-    ]);
+    const { data, error } = await admin
+      .from("usuario_areas_compras")
+      .select("area_id")
+      .eq("usuario_id", usuarioId);
+    if (error) return null;
 
-    const areasDe = new Map<string, string[]>();
-    for (const a of asignadas) {
-      areasDe.set(a.usuario_id, [...(areasDe.get(a.usuario_id) ?? []), a.area_id]);
-    }
-
-    return resolverElArea(
-      usuarios.map((u) => ({
-        id: u.id,
-        nombre: u.nombre,
-        apellido: u.apellido,
-        areas: areasDe.get(u.id) ?? [],
-      }))
-    )(quienAviso);
+    return areaPorDefecto((data ?? []).map((a) => a.area_id as string)) || null;
   } catch {
     return null;
   }

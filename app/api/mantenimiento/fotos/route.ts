@@ -77,12 +77,18 @@ export async function POST(request: Request) {
   //
   // Una foto de aviso va a `avisos/<oa>/` y no a `ordenes/sin-ot/`: un aviso no
   // es una orden, y dentro de seis meses "sin-ot" no le diría nada a nadie.
-  // El nombre del aviso se limpia porque esta ruta ya no la usa sólo gente de
-  // Mantenimiento, y lo que llega acá termina siendo parte de una ruta del
-  // bucket. Si vienen los dos campos gana `aviso`.
-  const aviso = String(formulario.get("aviso") ?? "").trim().replace(/[^A-Za-z0-9_-]/g, "-");
-  const ot = String(formulario.get("ot") ?? "").trim() || "sin-ot";
-  const extension = archivo.name.split(".").pop()?.toLowerCase() || "jpg";
+  // Lo que llega en `aviso`, en `ot` y en el nombre del archivo termina siendo
+  // parte de una ruta del bucket, y esta ruta ya no la usa sólo gente de
+  // Mantenimiento: cualquier usuario activo puede mandar lo que quiera. Por eso
+  // los tres se limpian —un archivo llamado `a./../x` daría extensión `/x`—.
+  // Si vienen `aviso` y `ot` gana `aviso`.
+  const limpio = (texto: string) => texto.trim().replace(/[^A-Za-z0-9_-]/g, "-");
+  const aviso = limpio(String(formulario.get("aviso") ?? ""));
+  const ot = limpio(String(formulario.get("ot") ?? "")) || "sin-ot";
+  const extensionCruda = archivo.name.includes(".")
+    ? (archivo.name.split(".").pop()?.toLowerCase() ?? "")
+    : "";
+  const extension = /^[a-z0-9]{1,5}$/.test(extensionCruda) ? extensionCruda : "jpg";
   const ruta = aviso
     ? `avisos/${aviso}/${Date.now()}.${extension}`
     : `ordenes/${ot}/${Date.now()}.${extension}`;
