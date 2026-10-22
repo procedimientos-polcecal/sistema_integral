@@ -12,7 +12,7 @@
  */
 
 import { estaAtrasada, type Atrasable } from "@/lib/mantenimiento/alertas";
-import { puntajeGut, SIN_PUNTAJE, type NotasGut } from "@/lib/mantenimiento/gut";
+import { claveDeOrdenGut, type NotasGut } from "@/lib/mantenimiento/gut";
 
 /** Los estados en los que la orden todavía espera algo de alguien. */
 export const ESTA_PENDIENTE = ["ATRASADO", "EN_PROCESO", "POR_HACER"] as const;
@@ -89,14 +89,16 @@ export function ordenSugerido<T extends Ordenable>(ordenes: T[], hoy: string): T
     const atrasoB = estaAtrasada(b, hoy) ? 1 : 0;
     if (atrasoA !== atrasoB) return atrasoB - atrasoA;
 
-    // Una orden sin puntaje vale 27 y no 0. Con 0 las pendientes sin puntuar
-    // se irían al fondo y se quedarían ahí para siempre, porque nadie mira el
-    // fondo: es lo que este diseño quiere evitar. Con 27 —3·3·3, el 3 en cada
-    // nota— quedan en el medio del pelotón, y puntuarla la puede mover para
-    // cualquiera de los dos lados. (Con dos notas de tres también cuenta como
-    // sin puntaje: `puntajeGut` da null.)
-    const puntaje = (puntajeGut(b) ?? SIN_PUNTAJE) - (puntajeGut(a) ?? SIN_PUNTAJE);
-    if (puntaje !== 0) return puntaje;
+    // Se compara la clave entera de `claveDeOrdenGut` y no sólo el puntaje, a
+    // propósito: la clave lleva las dos decisiones del orden —lo cerrado va
+    // después de lo abierto (+1000) y lo que no tiene puntaje vale 27 y no 0—.
+    // Con sólo el puntaje esto andaba únicamente porque hoy la única fuente
+    // (`?pendientes=1`) trae los tres estados abiertos; alimentada con otra
+    // cosa, una REALIZADO de 125 pasaría por delante de una abierta, que es justo lo que el
+    // +1000 existe para impedir. (Sin puntaje, o con dos notas de tres, la
+    // clave suma 27: `puntajeGut` da null.)
+    const clave = claveDeOrdenGut(b) - claveDeOrdenGut(a);
+    if (clave !== 0) return clave;
 
     // La más vieja primero. Las fechas `aaaa-mm-dd` se comparan como texto.
     return String(a.fecha ?? "").localeCompare(String(b.fecha ?? ""));
