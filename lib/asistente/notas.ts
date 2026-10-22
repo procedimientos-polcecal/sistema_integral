@@ -37,6 +37,29 @@ export const NOTAS: Record<string, string> = {
     "El primer eslabón de Mantenimiento: alguien vio que algo anda mal. De un aviso " +
     "sale después una orden de trabajo.",
 
+  auditoria:
+    "El registro de lo que no se deshace: postear un asiento en Odoo, mover " +
+    "permisos, cerrar una liquidación, ajustar stock, aprobar o denegar una " +
+    "compra, borrar filas de un espejo. **Sólo `admin_sistema` la lee**: a " +
+    "cualquier otro RLS le devuelve cero filas, y eso NO significa que la " +
+    "acción no haya pasado. Si te vuelve vacía y quien pregunta no es " +
+    "administrador, decí que no tenés acceso al registro, no que no hay nada.",
+
+  compras_requerimiento_proveedores:
+    "A qué proveedores se repartió un pedido, cuando se le compró a más de uno. " +
+    "**No reemplaza a `compras_requerimientos.proveedor_id`, que sigue siendo " +
+    "el dueño del dato**: la tabla se agregó el 19/10/2026 y por ahora sólo " +
+    "suma. Para 'a quién se le compró' mirá las dos, porque un RI repartido " +
+    "tiene acá sus proveedores y allá uno solo. `monto` en null es 'no se " +
+    "sabe cuánto le tocó a éste', y va a estar null la mayoría de las veces.",
+
+  ordenes_trabajo_notas:
+    "**Por qué una OT todavía no se hizo**, con quién lo escribió y cuándo. Es un " +
+    "historial: no se edita y puede tener varias por orden, así que la última " +
+    "es la que vale. Ojo con confundirla: esto es de ANTES de hacer el " +
+    "trabajo. Lo que se encontró AL hacerlo lo escribe el registro de la " +
+    "ejecución, en otro lado.",
+
   ordenes_trabajo:
     "Las OT. Los campos de persona apuntan a `usuarios`, no a `empleados`. " +
     "**Para decir qué OT atacar primero o cuáles son las más urgentes, usá el puntaje " +

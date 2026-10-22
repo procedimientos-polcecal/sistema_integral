@@ -14,7 +14,7 @@
 // que la tabla nueva de la semana que viene no quede invisible para siempre.
 import { readFileSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { MODULO_DE_TABLA } from "../lib/asistente/modulos.ts";
+import { MODULO_DE_TABLA, SIN_MAPEAR_A_PROPOSITO } from "../lib/asistente/modulos.ts";
 
 for (const line of readFileSync(new URL("../.env.local", import.meta.url), "utf-8").split("\n")) {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
@@ -101,10 +101,29 @@ writeFileSync(destino, JSON.stringify({ tablas, enums: valoresDeEnum }, null, 2)
 
 console.log(`Escrito: ${Object.keys(tablas).length} tablas, ${Object.keys(valoresDeEnum).length} enums.`);
 
-const sinMapear = Object.keys(tablas).filter((t) => !MODULO_DE_TABLA[t]);
+// El reporte separa lo que falta decidir de lo que ya se decidió. Antes las
+// mezclaba, así que cantaba siempre las mismas cuatro y dejó de leerse: el
+// 22/10/2026 el mapa estaba 29 tablas atrás, con dos módulos enteros sin una
+// sola tabla, y el reporte lo venía diciendo en cada corrida.
+const sinMapear = Object.keys(tablas).filter(
+  (t) => !MODULO_DE_TABLA[t] && !SIN_MAPEAR_A_PROPOSITO[t]
+);
 if (sinMapear.length) {
   console.log(`\nSin mapear en lib/asistente/modulos.ts (${sinMapear.length}) — no se le muestran a nadie:`);
   for (const t of sinMapear) console.log(`  ${t}`);
+  console.log("  ↑ decidí cada una: mapeala a su módulo, o agregala a SIN_MAPEAR_A_PROPOSITO con el motivo.");
+}
+
+const afueraYaDecidido = Object.keys(SIN_MAPEAR_A_PROPOSITO).filter((t) => tablas[t]);
+if (afueraYaDecidido.length) {
+  console.log(`\nAfuera a propósito (${afueraYaDecidido.length}) — nada que hacer:`);
+  for (const t of afueraYaDecidido) console.log(`  ${t}`);
+}
+
+const decididaQueYaNoEsta = Object.keys(SIN_MAPEAR_A_PROPOSITO).filter((t) => !tablas[t]);
+if (decididaQueYaNoEsta.length) {
+  console.log(`\nEn SIN_MAPEAR_A_PROPOSITO pero ya no en la base (${decididaQueYaNoEsta.length}) — sobran:`);
+  for (const t of decididaQueYaNoEsta) console.log(`  ${t}`);
 }
 
 const fantasma = Object.keys(MODULO_DE_TABLA).filter((t) => !tablas[t]);

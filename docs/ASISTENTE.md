@@ -142,12 +142,28 @@ enteran de que existe. Es la diferencia entre una tabla nueva invisible —se
 nota, alguien pregunta por qué el asistente no la conoce— y una expuesta sin
 que nadie lo haya decidido. Cada vez que se corre `npm run catalogo` después de
 una migración que agrega una tabla, hay que mirar esa lista y agregar la
-entrada en `MODULO_DE_TABLA` (o dejarla afuera a propósito, si es una tabla que
-no le sirve a nadie preguntar, como `asistente_consultas`).
+entrada en `MODULO_DE_TABLA` — o, si es una tabla que no le sirve a nadie
+preguntar, en **`SIN_MAPEAR_A_PROPOSITO`**, con el motivo escrito.
 
-El catálogo por módulo pesa entre 6.060 caracteres (Producción) y 14.029
-(Mantenimiento) — conviene tenerlo presente si se agregan notas largas: es
-prompt que se manda en cada pregunta.
+**Esa segunda lista existe porque el reporte dejó de leerse.** Hasta el
+22/10/2026 mezclaba lo que faltaba decidir con lo ya decidido, así que cantaba
+siempre las mismas cuatro tablas y se volvió ruido de fondo. Mientras tanto el
+mapa se atrasó 29 tablas, incluidos **dos módulos enteros** —`taller_vial` y
+`trituracion`, sin una sola tabla— cuya gente sólo veía el núcleo. El reporte
+lo venía diciendo en cada corrida. Ahora separa las dos cosas: si aparece algo
+bajo "sin mapear", hay una decisión pendiente; si no aparece nada, no la hay.
+
+El catálogo por módulo pesa entre 6.348 caracteres (Trituración) y 16.446
+(Mantenimiento), sobre un piso de 5.605 que es el núcleo solo — conviene
+tenerlo presente si se agregan notas largas: es prompt que se manda en cada
+pregunta.
+
+Mantenimiento pasó de 14.029 a 16.446 el 22/10/2026, al mapear sus cuatro
+tablas que faltaban y escribirles nota. **Ése es el costo de mapear**, y es el
+único: no es un permiso, porque RLS decide igual quién ve qué fila. Lo que se
+paga es prompt en cada pregunta de cada persona de ese módulo, y el riesgo de
+que el modelo conteste desde la tabla equivocada — que es lo que las notas
+están para evitar.
 
 ## Dónde tocar cuando una respuesta sale mal
 
