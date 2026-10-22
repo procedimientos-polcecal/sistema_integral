@@ -379,6 +379,11 @@ export const NAV: NavItem[] = [
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
   { label: "Mis pedidos", href: "/mis-pedidos" },
+  // Sin `modulo`, por lo mismo: quien ve una máquina rota trabaja en Producción,
+  // en Cantera o en el laboratorio y no tiene Mantenimiento. Contar que algo anda
+  // mal no compromete nada; decidir qué se hace con eso —generar la OT,
+  // desestimarlo— sí, y eso queda adentro del módulo.
+  { label: "Mis avisos", href: "/mis-avisos" },
   // Los usuarios y las empresas son de todo el SdG, no de un módulo: se
   // administran acá y no repetidos dentro de cada uno. Estaban colgados de RRHH
   // y de Mantenimiento, que es donde alguien los fue necesitando primero.
