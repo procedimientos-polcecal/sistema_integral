@@ -29,6 +29,7 @@ import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
+import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
 import { filaDeOrden, celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
@@ -185,6 +186,56 @@ async function porQueNoSeLeyo(
   );
 }
 
+/**
+ * Lo que hace falta para ponerle área a los avisos que llegan de la planilla:
+ * el resolvedor de nombres y qué áreas tienen ya guardadas los avisos.
+ *
+ * Son dos lecturas por corrida, y de la segunda se trae **sólo lo que ya tiene
+ * área**: es lo que hay que proteger, y filtrar por la condición evita tanto
+ * un `.in()` con cientos de números como traer los que no aportan nada.
+ *
+ * **Si cualquiera falla devuelve `{ error }` y la sincronización sigue sin tocar
+ * el área.** Frenar toda la corrida por esto dejaría sin actualizar los avisos por
+ * una columna secundaria; en cambio no mandar `area_id` es siempre seguro, y lo
+ * que quedó sin completar se completa en la corrida siguiente.
+ */
+async function cargarLasAreasDeLosAvisos(admin: ReturnType<typeof createAdminClient>): Promise<
+  | { areaDe: ReturnType<typeof resolverElArea>; guardadas: Map<string, string> }
+  | { error: string }
+> {
+  try {
+    const usuarios = await traerTodo((desde, hasta) =>
+      admin
+        .from("usuarios")
+        .select("id, nombre, apellido, usuario_areas_compras(area_id)")
+        .order("id")
+        .range(desde, hasta)
+    );
+    const conArea = await traerTodo((desde, hasta) =>
+      admin
+        .from("avisos")
+        .select("oa_number, area_id")
+        .not("area_id", "is", null)
+        .order("oa_number")
+        .range(desde, hasta)
+    );
+
+    return {
+      areaDe: resolverElArea(
+        usuarios.map((u) => ({
+          id: u.id,
+          nombre: u.nombre ?? "",
+          apellido: u.apellido ?? "",
+          areas: (u.usuario_areas_compras ?? []).map((a) => a.area_id as string),
+        }))
+      ),
+      guardadas: new Map(conArea.map((a) => [String(a.oa_number), a.area_id as string])),
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Trae los avisos de su planilla. */
 export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
@@ -227,17 +278,35 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   let guardados = 0;
   const { unicos, repetidos } = unaPorNumero(registros, "oa_number");
 
-  for (let i = 0; i < unicos.length; i += 500) {
-    const lote = unicos.slice(i, i + 500);
-    const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
+  // El área no viene de la planilla —no tiene columna para eso— sino del nombre
+  // de quien avisó, y sólo se **completa**: lo que alguien ya eligió en la app
+  // no se toca. Ver `areaParaElUpsert` para el porqué, y `repartirPorArea` para
+  // por qué van dos upserts y no uno. Se lee acá, después de la planilla y justo
+  // antes de escribir, para que la ventana en la que alguien pueda elegir un
+  // área sin que la veamos sea la más corta posible.
+  const areas = await cargarLasAreasDeLosAvisos(admin);
+  const { conArea, sinArea } =
+    "error" in areas
+      ? { conArea: [], sinArea: unicos }
+      : repartirPorArea(
+          unicos as (Datos & { oa_number: string; quien_aviso?: string | null })[],
+          areas.guardadas,
+          areas.areaDe
+        );
 
-    if (error) {
-      await registrarSincronizacion({
-        modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
-      });
-      return falla(400, error.message);
+  for (const grupo of [conArea, sinArea]) {
+    for (let i = 0; i < grupo.length; i += 500) {
+      const lote = grupo.slice(i, i + 500);
+      const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
+
+      if (error) {
+        await registrarSincronizacion({
+          modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
+        });
+        return falla(400, error.message);
+      }
+      guardados += lote.length;
     }
-    guardados += lote.length;
   }
 
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_AVISOS, {
@@ -251,6 +320,10 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   return logra({
     leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
+    areas_completadas: conArea.length,
+    // Un fallo acá no frena la corrida, así que se dice en el resultado: si no,
+    // los avisos nuevos quedarían sin área sin que nadie supiera por qué.
+    ...("error" in areas ? { area_sin_leer: areas.error } : {}),
     borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }

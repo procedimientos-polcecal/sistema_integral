@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverElArea } from "./areaDelAviso";
+import { resolverElArea, areaParaElUpsert, repartirPorArea } from "./areaDelAviso";
 
 const USUARIOS = [
   { id: "u-martin", nombre: "Martin", apellido: "Sandoval", areas: ["a-produccion"] },
@@ -35,5 +35,51 @@ describe("resolverElArea", () => {
     ]);
     expect(area("Ana Núñez")).toBeNull();
     expect(area("Ana Nunez")).toBeNull();
+  });
+});
+
+describe("areaParaElUpsert", () => {
+  it("no pisa el área que ya tiene el aviso", () => {
+    expect(areaParaElUpsert("a-produccion", "a-cantera")).toBeUndefined();
+    expect(areaParaElUpsert("a-produccion", null)).toBeUndefined();
+  });
+
+  it("completa la que falta, y si no la resuelve no manda la columna", () => {
+    expect(areaParaElUpsert(null, "a-cantera")).toBe("a-cantera");
+    expect(areaParaElUpsert(null, null)).toBeUndefined();
+  });
+
+  it("un aviso que la base no conoce todavía cuenta como sin área", () => {
+    expect(areaParaElUpsert(undefined, "a-cantera")).toBe("a-cantera");
+    expect(areaParaElUpsert(undefined, null)).toBeUndefined();
+  });
+});
+
+describe("repartirPorArea", () => {
+  const area = resolverElArea(USUARIOS);
+
+  it("separa en dos lotes: el que lleva la columna y el que no la tiene ni como null", () => {
+    const { conArea, sinArea } = repartirPorArea(
+      [
+        { oa_number: "1", quien_aviso: "Luna Fourcade" }, // sin área guardada, se resuelve
+        { oa_number: "2", quien_aviso: "Luna Fourcade" }, // ya tiene otra: no se toca
+        { oa_number: "3", quien_aviso: "Juan Perez" }, // no se reconoce
+        { oa_number: "4", quien_aviso: "Mayra Benitez" }, // dos áreas
+      ],
+      new Map([["2", "a-produccion"]]),
+      area
+    );
+
+    expect(conArea).toEqual([{ oa_number: "1", quien_aviso: "Luna Fourcade", area_id: "a-cantera" }]);
+    expect(sinArea.map((r) => r.oa_number)).toEqual(["2", "3", "4"]);
+    // `Object.keys` y no `toEqual`: un `area_id: undefined` también se ve igual
+    // para `toEqual`, y para supabase-js la clave presente ya arma la columna.
+    for (const r of sinArea) expect(Object.keys(r)).not.toContain("area_id");
+  });
+
+  it("no muta las filas que recibe", () => {
+    const fila = { oa_number: "1", quien_aviso: "Luna Fourcade" };
+    repartirPorArea([fila], new Map(), area);
+    expect(Object.keys(fila)).not.toContain("area_id");
   });
 });

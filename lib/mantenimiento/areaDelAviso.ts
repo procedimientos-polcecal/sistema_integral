@@ -56,3 +56,57 @@ export function resolverElArea(
     return areaPorDefecto(areasDe.get(id) ?? []) || null;
   };
 }
+
+/**
+ * Qué `area_id` le toca a una fila que llega de la planilla. `undefined` quiere
+ * decir «no mandes la columna», y **no es lo mismo que `null`**.
+ *
+ * El `upsert` de PostgREST escribe todas las columnas que van en el payload.
+ * Mandar `area_id: null` porque la fila no se pudo resolver pisaría, en la
+ * próxima corrida del cron y sin avisar, el área que alguien eligió en el modal
+ * o corrigió a mano: la planilla no tiene columna de área, así que ella nunca
+ * puede ser la que mande. Por eso la sincronización sólo **completa** —cuando el
+ * aviso no tiene área y el nombre la resuelve— y en cualquier otro caso se queda
+ * callada. El día que alguien «simplifique» esto a `area_id: x ?? null`, el bug
+ * vuelve y no avisa.
+ *
+ * Es la misma familia de regla que `borradoDeEspejo`: sólo se escribe aquello
+ * cuya ausencia —o en este caso, cuya presencia— prueba algo.
+ */
+export function areaParaElUpsert(
+  areaGuardada: string | null | undefined,
+  areaResuelta: string | null
+): string | undefined {
+  if (areaGuardada) return undefined;
+  return areaResuelta ?? undefined;
+}
+
+/**
+ * Parte las filas de la planilla en dos lotes para dos `upsert` distintos:
+ * `conArea` lleva la columna `area_id`; `sinArea` no la tiene, ni siquiera como
+ * null.
+ *
+ * **Con un solo lote no alcanza, y esta es la segunda mitad de la misma
+ * trampa.** supabase-js arma el parámetro `columns` del upsert con la unión de
+ * las claves de **todas** las filas, y a la fila que no trae una de ellas le
+ * pone null. Basta una fila con `area_id` en el lote para que todas las demás
+ * lo lleven como null en el `EXCLUDED` del `ON CONFLICT DO UPDATE`, y pisen el
+ * área elegida a mano. Omitir la clave fila por fila no protege nada si viajan
+ * juntas: tienen que viajar en llamadas separadas.
+ */
+export function repartirPorArea<T extends { oa_number: string; quien_aviso?: string | null }>(
+  filas: readonly T[],
+  areasGuardadas: ReadonlyMap<string, string>,
+  areaDe: (quienAviso: string | null | undefined) => string | null
+): { conArea: (T & { area_id: string })[]; sinArea: T[] } {
+  const conArea: (T & { area_id: string })[] = [];
+  const sinArea: T[] = [];
+
+  for (const fila of filas) {
+    const area = areaParaElUpsert(areasGuardadas.get(fila.oa_number), areaDe(fila.quien_aviso));
+    if (area === undefined) sinArea.push(fila);
+    else conArea.push({ ...fila, area_id: area });
+  }
+
+  return { conArea, sinArea };
+}
