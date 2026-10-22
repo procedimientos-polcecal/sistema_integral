@@ -65,6 +65,12 @@ preguntando. Medido el 16/09/2026 cruzando `information_schema.tables` con
   029 —que cerró `avisos`, `ordenes_servicio`, `os_comparativas` y las demás
   con `mant_puede_ver()`— no llegó a éstas. No parece deliberado, y sigue
   siendo una decisión abierta (ver Pendientes).
+- **`avisos`, desde el 22/10/2026**: la `20261022101507` la volvió a `using (true)`
+  —la 029 la había cerrado— y es la **segunda excepción deliberada** a ese cierre,
+  después de `equipos`. El motivo es el de Compras: el circuito es transversal, y
+  `/mis-avisos` la lee quien no tiene Mantenimiento (10 de 14 usuarios). El
+  asistente puede leer los avisos de cualquiera que le pregunte. La cifra de 30
+  de 102 es del 16/09 y no la incluye.
 
 **No tocar:** `cantera_finanzas`, `compras_aprobadores` y `os_aprobadores` son
 padrones de permisos —tablas de `usuario_id`, quién puede conciliar o aprobar—,
@@ -281,7 +287,9 @@ tiene en cuenta (`await convertToModelMessages(mensajes)`).
   incluido el de este módulo: sin él, el asistente no podía contestar cómo se
   usa a sí mismo.
 - ~~Media Mantenimiento con lectura abierta~~ — cerrada por la migración
-  `20260916110349`, salvo `equipos`, que queda abierta **a propósito**: la leen
+  `20260916110349`, salvo `equipos` —y, desde el 22/10/2026, `avisos`, que la
+  `20261022101507` volvió a abrir a propósito, ver arriba—. `equipos` queda
+  abierta **a propósito**: la leen
   Compras (dos pantallas, una ruta y la exportación a la planilla), Inventario,
   Facturación y el buscador global del header. En los hechos dejó de ser una
   tabla de Mantenimiento y es un catálogo del núcleo; cerrarla dejaría a un

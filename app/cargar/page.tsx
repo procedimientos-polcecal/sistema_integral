@@ -23,17 +23,21 @@ import CargarClient from "./CargarClient";
  * **Y «no filtra nada» incluye el módulo**: `proxy.ts` sólo exige sesión, y
  * `public/sw.js` contesta con esta pantalla **cualquier** navegación que se
  * quede sin red, así que acá puede aterrizar alguien que no tenga
- * Mantenimiento. No se le avisa antes de escribir, y es una decisión: desde el
- * navegador no hay cómo saberlo sin inventarlo —los catálogos que baja esta
- * pantalla son `equipos` y `sectores`, que son del núcleo y los lee cualquier
- * autenticado, así que no hay un 403 del que enterarse—, y un cartel genérico
- * para todos sería ruido permanente para los trece que sí tienen acceso. Lo que
- * sí pasa es que **se entera con el texto de la ruta y no con uno inventado**:
- * con señal, el alta contesta «Cargar un aviso requiere nivel de edición en
- * Mantenimiento», que para la cola es un fallo definitivo, así que la carga ni
- * se encola y lo escrito queda en el formulario. Sin señal se encola y ese
- * mismo 403 la deja `parada` y a la vista, acá y en la barra del layout —que
- * nunca le esconde a alguien una carga suya, justamente por este camino—.
+ * Mantenimiento. No se le avisa antes de escribir, y desde `f7bd2ed` ya no hace
+ * falta: **el alta de un aviso no pide el módulo**, la puede cargar cualquier
+ * usuario activo —quien ve la máquina rota trabaja en Producción o en la
+ * cantera—, así que no hay un permiso del que enterarse antes. Lo que sigue
+ * gateado a Mantenimiento es **el menú** que lleva a `/cargar`, no lo que se
+ * hace acá. El único rechazo definitivo que le queda al alta de un aviso es el
+ * 403 de «Tu usuario está desactivado», y un fallo pasajero de la base contesta
+ * 503, que la cola reintenta. Lo que sí pasa es que **se entera con el texto de
+ * la ruta y no con uno inventado**: un rechazo definitivo no se encola y lo
+ * escrito queda en el formulario; sin señal se encola y ese mismo rechazo la
+ * deja `parada` y a la vista, acá y en la barra del layout —que nunca le
+ * esconde a alguien una carga suya—.
+ *
+ * **La OT sí sigue pidiendo nivel de edición en Mantenimiento**, y su 403 se
+ * trata igual: es definitivo, y lo que queda parado se ve.
  *
  * Esta pantalla queda guardada para poder abrirse sin conexión: el `install`
  * de `public/sw.js` la precachea con los archivos que pide. A ella se llega por
