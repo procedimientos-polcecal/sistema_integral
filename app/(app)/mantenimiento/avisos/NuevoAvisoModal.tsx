@@ -27,10 +27,25 @@ export interface ValoresInicialesAviso {
  * planilla. El número se lo pone el sistema leyendo el último de la planilla.
  */
 export default function NuevoAvisoModal({
-  inicial, onCerrar, onCreado,
+  inicial, quienAviso, areas, areaInicial, onCerrar, onCreado,
 }: {
   /** Precargado desde la URL. Se puede editar todo antes de enviar. */
   inicial?: ValoresInicialesAviso;
+  /**
+   * «Nombre Apellido» de quien tiene la sesión. Arranca escrito y se puede
+   * cambiar: Martín carga lo que le cuentan en Producción, y a veces quien vio
+   * la falla es otro. Precargado corta las ortografías distintas de la misma
+   * persona, que ya eran cuatro.
+   */
+  quienAviso?: string;
+  /** Las áreas entre las que se elige: las de `compras_areas`. */
+  areas: { id: string; nombre: string }[];
+  /**
+   * El área con la que arranca, que sale de `areaPorDefecto()`: `""` si quien
+   * carga no tiene ninguna o tiene más de una. En esos dos casos se elige a
+   * mano y el formulario dice por qué.
+   */
+  areaInicial?: string;
   onCerrar: () => void;
   onCreado: (oaNumber: string) => void;
 }) {
@@ -45,9 +60,19 @@ export default function NuevoAvisoModal({
     sector_id: "",
     descripcion: inicial?.descripcion ?? "",
     urgencia: inicial?.urgencia ?? (URGENCIAS[1] as string),
-    quien_aviso: "",
+    quien_aviso: quienAviso ?? "",
+    area_id: areaInicial ?? "",
     observaciones: "",
   });
+
+  // UNA sola foto. La columna de la planilla es una celda y `filaDeAviso()` la
+  // lee como un solo valor: una segunda foto se perdería sin que nadie se
+  // entere, así que no se deja subir.
+  const [foto, setFoto] = useState<{ link: string; nombre: string } | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  // Lo que dijo la ruta sobre la foto, tal cual: si el bucket es privado, el
+  // link no se abre desde la planilla y quien subió la foto tiene que saberlo.
+  const [avisoDeLaFoto, setAvisoDeLaFoto] = useState("");
 
   const set = (clave: string, valor: string) => setCampos((c) => ({ ...c, [clave]: valor }));
 
@@ -73,15 +98,58 @@ export default function NuevoAvisoModal({
     }));
   }
 
+  async function subirFoto(archivo: File) {
+    setSubiendo(true);
+    setError("");
+    setAvisoDeLaFoto("");
+
+    // El número del aviso lo pone la ruta al crearlo, así que todavía no existe:
+    // la foto va a `avisos/sin-numero/` y no a `ordenes/sin-ot/`, que es de
+    // otra cosa.
+    const fd = new FormData();
+    fd.append("file", archivo);
+    fd.append("aviso", "sin-numero");
+
+    try {
+      const res = await fetch("/api/mantenimiento/fotos", { method: "POST", body: fd });
+      const body = await res.json().catch(() => ({}));
+
+      // Si falla se dice con lo que contestó la ruta y el aviso se puede cargar
+      // igual, sin foto: no vale perder lo escrito por una foto que no subió.
+      if (!res.ok) { setError(body.error ?? "No se pudo subir la foto."); return; }
+
+      setFoto({ link: body.link, nombre: archivo.name });
+      // Sólo viene con `publica: false`. Se muestra sin traducir.
+      if (body.publica === false && body.aviso) setAvisoDeLaFoto(String(body.aviso));
+    } catch {
+      setError("No se pudo subir la foto: se cortó la conexión.");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  function quitarFoto() {
+    setFoto(null);
+    setAvisoDeLaFoto("");
+  }
+
   async function crear() {
     if (!campos.descripcion.trim()) { setError("Contá qué pasa."); return; }
+    // Sin elegir no se manda: la ruta lo resolvería sola desde las áreas de la
+    // sesión, y con cero o dos queda en null, que es justo lo que acá se evita.
+    if (areas.length > 0 && !campos.area_id) { setError("Elegí el área."); return; }
     setGuardando(true);
     setError("");
 
     const res = await fetch("/api/mantenimiento/avisos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...campos, sector_id: campos.sector_id || null }),
+      body: JSON.stringify({
+        ...campos,
+        sector_id: campos.sector_id || null,
+        area_id: campos.area_id || null,
+        reference_photos: foto ? [foto.link] : [],
+      }),
     });
     const body = await res.json().catch(() => ({}));
     setGuardando(false);
@@ -165,6 +233,18 @@ export default function NuevoAvisoModal({
           </label>
 
           <label className="block space-y-1">
+            <span className="block text-xs font-medium text-slate-600">Área</span>
+            <Select
+              value={campos.area_id}
+              onChange={(e) => set("area_id", e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">Elegí el área</option>
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </Select>
+          </label>
+
+          <label className="block space-y-1">
             <span className="block text-xs font-medium text-slate-600">Quién avisa</span>
             <input
               value={campos.quien_aviso}
@@ -175,6 +255,16 @@ export default function NuevoAvisoModal({
           </label>
         </div>
 
+        {!areaInicial && areas.length > 0 && (
+          // Se dice por qué hay que elegir. `areaPorDefecto` devuelve vacío con
+          // cero áreas y con dos, y elegir una de dos sería adivinar: un área
+          // equivocada no se nota, le esconde el aviso a quien tenía que verlo.
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            No pudimos elegir tu área sola: no tenés ninguna asignada o cubrís más de
+            una. Elegila vos arriba; el aviso le llega a quien mira esa área.
+          </p>
+        )}
+
         <label className="block space-y-1">
           <span className="block text-xs font-medium text-slate-600">Observaciones</span>
           <input
@@ -184,6 +274,41 @@ export default function NuevoAvisoModal({
           />
         </label>
 
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-slate-600">Foto (opcional, una)</span>
+          {foto ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <span className="min-w-0 truncate">{foto.nombre}</span>
+              <button
+                type="button"
+                onClick={quitarFoto}
+                className="shrink-0 text-xs font-medium text-red-600 hover:underline"
+              >
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={subiendo}
+              onChange={(e) => {
+                const archivo = e.target.files?.[0];
+                e.target.value = "";
+                if (archivo) subirFoto(archivo);
+              }}
+              className="w-full text-sm text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700"
+            />
+          )}
+          {subiendo && <p className="text-xs text-slate-400">Subiendo…</p>}
+          {avisoDeLaFoto && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {avisoDeLaFoto}
+            </p>
+          )}
+        </div>
+
         <p className="text-xs text-slate-500">
           Se escribe primero en la planilla de avisos, que es la base, y después acá.
         </p>
@@ -191,7 +316,7 @@ export default function NuevoAvisoModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={crear}
-            disabled={guardando}
+            disabled={guardando || subiendo}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {guardando ? "Cargando…" : "Cargar el aviso"}

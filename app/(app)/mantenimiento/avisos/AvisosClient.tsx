@@ -21,8 +21,12 @@ import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
  * cada uno es algo que alguien vio y nadie tomó.
  */
 export default function AvisosClient({
-  avisos, puedeEditar, sync, sectores, equipos
+  avisos, puedeEditar, sync, sectores, equipos, areas, areaInicial, quienAviso,
 }: {
+  /** Para el alta de un aviso: ver `NuevoAvisoModal`. */
+  areas: { id: string; nombre: string }[];
+  areaInicial: string;
+  quienAviso: string;
   avisos: Aviso[];
   puedeEditar: boolean;
   /** Cuándo se trajo por última vez lo de la planilla. */
@@ -372,6 +376,9 @@ export default function AvisosClient({
       {creando && (
         <NuevoAvisoModal
           inicial={arranqueDelAlta ?? undefined}
+          quienAviso={quienAviso}
+          areas={areas}
+          areaInicial={areaInicial}
           onCerrar={() => setCreando(false)}
           onCreado={(oa) => {
             setCreando(false);
