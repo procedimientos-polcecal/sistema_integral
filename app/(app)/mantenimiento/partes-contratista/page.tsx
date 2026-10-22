@@ -60,7 +60,7 @@ export default async function PartesContratistaPage() {
   const partes = await traerTodo<ParteCargado>((d, h) =>
     supabase
       .from("mant_partes_contratista")
-      .select("id, proveedor_id, numero, fecha, dirigido_a, hora_entrada, hora_salida, horas_expresion, horas_declaradas, materiales, mant_partes_contratista_renglones(id, orden, actividad, lugar_raw, sector_id, equipo_id, horas, orden_trabajo_id)")
+      .select("id, proveedor_id, numero, fecha, dirigido_a, hora_entrada, hora_salida, horas_declaradas, materiales, mant_partes_contratista_renglones(id, orden, actividad, lugar_raw, sector_id, equipo_id, horas, orden_trabajo_id)")
       .order("fecha", { ascending: false })
       .order("numero", { ascending: false })
       .range(d, h)

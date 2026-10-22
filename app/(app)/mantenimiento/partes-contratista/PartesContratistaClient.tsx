@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
-  repartirHoras, normalizarLugar, lunesDeLaSemana,
+  horasTrasUnCambio, controlarHoras, normalizarLugar, lunesDeLaSemana,
 } from "@/lib/mantenimiento/partesDeContratista";
 
 /**
@@ -15,10 +15,14 @@ import {
  * delante tiene que poder ver que da 18 antes de pasar a la siguiente; una
  * comprobación que llega recién al guardar obliga a volver a leer el papel.
  *
- * El reparto que muestra la pantalla es **el mismo código** que corre en la
- * ruta —`repartirHoras`, que es puro y por eso se puede importar de los dos
+ * El control que muestra la pantalla es **el mismo código** que corre en la
+ * ruta —`controlarHoras`, que es puro y por eso se puede importar de los dos
  * lados—. Si fueran dos cálculos parecidos, el día que se separen la pantalla
  * mostraría un número y la base guardaría otro.
+ *
+ * **Las horas las escribe quien carga** (22/10/2026). El reparto parejo sólo
+ * las propone: ver `horasAMano` más abajo, que es lo que impide que la
+ * propuesta pise una corrección.
  */
 
 export interface Contratista { id: string; nombre: string }
@@ -37,7 +41,7 @@ export interface RenglonCargado {
 export interface ParteCargado {
   id: string; proveedor_id: string; numero: number; fecha: string;
   dirigido_a: string | null; hora_entrada: string | null; hora_salida: string | null;
-  horas_expresion: string; horas_declaradas: number; materiales: string | null;
+  horas_declaradas: number; materiales: string | null;
   mant_partes_contratista_renglones: RenglonCargado[] | null;
 }
 
@@ -47,11 +51,27 @@ interface RenglonEnEdicion {
   lugar_raw: string;
   sector_id: string;
   equipo_id: string;
+  /** Texto y no número: el campo puede estar a medio escribir. */
+  horas: string;
 }
 
 const RENGLON_VACIO: RenglonEnEdicion = {
-  actividad: "Limpieza", lugar_raw: "", sector_id: "", equipo_id: "",
+  actividad: "Limpieza", lugar_raw: "", sector_id: "", equipo_id: "", horas: "",
 };
+
+/**
+ * La propuesta puesta en los renglones.
+ *
+ * La decisión —si se repropone o no— la toma `horasTrasUnCambio`, que vive en
+ * `lib/` y tiene tests: es la regla que puede pisar lo que alguien escribió.
+ * Acá sólo se la monta sobre los renglones.
+ */
+function conLaPropuesta(
+  rs: RenglonEnEdicion[], total: string, aMano: boolean
+): RenglonEnEdicion[] {
+  const horas = horasTrasUnCambio(rs.map((r) => r.horas), total, aMano);
+  return rs.map((r, i) => ({ ...r, horas: horas[i] ?? "" }));
+}
 
 export default function PartesContratistaClient({
   puedeEditar, sectores, equipos, contratistas, lugares, partes, faltaLaMigracion,
@@ -78,12 +98,21 @@ export default function PartesContratistaClient({
   const [dirigidoA, setDirigidoA] = useState("");
   const [horaEntrada, setHoraEntrada] = useState("");
   const [horaSalida, setHoraSalida] = useState("");
-  const [expresion, setExpresion] = useState("");
   const [declaradas, setDeclaradas] = useState("");
   const [horas50, setHoras50] = useState("");
   const [horas100, setHoras100] = useState("");
   const [materiales, setMateriales] = useState("");
   const [renglones, setRenglones] = useState<RenglonEnEdicion[]>([{ ...RENGLON_VACIO }]);
+  /**
+   * Si alguien ya corrigió las horas a mano.
+   *
+   * Mientras está en false el reparto parejo se vuelve a aplicar solo —al
+   * tipear el total, al agregar o al quitar un renglón—, que es lo que ahorra
+   * tipear cinco veces 3,6. **Apenas se corrige un renglón pasa a true y no
+   * vuelve a pisar nada**: un renglón agregado después entra en blanco y lo
+   * acomoda quien carga. Se vuelve atrás a pedido, con «Repartir parejo».
+   */
+  const [horasAMano, setHorasAMano] = useState(false);
 
   // ── La generación ───────────────────────────────────────────
   const [desde, setDesde] = useState("");
@@ -111,19 +140,20 @@ export default function PartesContratistaClient({
   }, [lugares, contratista]);
 
   /**
-   * El reparto, en vivo.
+   * El control, en vivo.
    *
    * Es el mismo que va a correr la ruta. Mientras no cierre, muestra qué le
    * falta en vez de un número — que es el control de la factura asomando en la
    * pantalla.
    */
-  const reparto = useMemo(
-    () => repartirHoras(
-      expresion,
-      renglones.map((r) => ({ actividad: r.actividad, lugar_raw: r.lugar_raw })),
+  const control = useMemo(
+    () => controlarHoras(
+      renglones.map((r) => ({
+        actividad: r.actividad, lugar_raw: r.lugar_raw, horas: Number(r.horas),
+      })),
       Number(declaradas)
     ),
-    [expresion, renglones, declaradas]
+    [renglones, declaradas]
   );
 
   const partesDelContratista = useMemo(
@@ -133,6 +163,37 @@ export default function PartesContratistaClient({
 
   function cambiarRenglon(i: number, cambio: Partial<RenglonEnEdicion>) {
     setRenglones((previos) => previos.map((r, j) => (j === i ? { ...r, ...cambio } : r)));
+  }
+
+  /** El total del papel: mientras nadie corrigió horas, reparte parejo solo. */
+  function cambiarTotal(valor: string) {
+    setDeclaradas(valor);
+    setRenglones((p) => conLaPropuesta(p, valor, horasAMano));
+  }
+
+  /**
+   * Las horas de un renglón, a mano.
+   *
+   * Tocar una es decir «el reparto parejo no es lo que pasó ese día», así que
+   * desde acá la propuesta no vuelve a correr sola.
+   */
+  function cambiarHoras(i: number, valor: string) {
+    setHorasAMano(true);
+    cambiarRenglon(i, { horas: valor });
+  }
+
+  function agregarRenglon() {
+    setRenglones((p) => conLaPropuesta([...p, { ...RENGLON_VACIO }], declaradas, horasAMano));
+  }
+
+  function quitarRenglon(i: number) {
+    setRenglones((p) => conLaPropuesta(p.filter((_, j) => j !== i), declaradas, horasAMano));
+  }
+
+  /** Volver a la propuesta, para quien se arrepintió de corregir. */
+  function repartirParejo() {
+    setHorasAMano(false);
+    setRenglones((p) => conLaPropuesta(p, declaradas, false));
   }
 
   /**
@@ -157,9 +218,10 @@ export default function PartesContratistaClient({
   function limpiar() {
     setNumero(""); setFecha(""); setDirigidoA("");
     setHoraEntrada(""); setHoraSalida("");
-    setExpresion(""); setDeclaradas("");
+    setDeclaradas("");
     setHoras50(""); setHoras100(""); setMateriales("");
     setRenglones([{ ...RENGLON_VACIO }]);
+    setHorasAMano(false);
   }
 
   async function guardar() {
@@ -172,13 +234,13 @@ export default function PartesContratistaClient({
         numero, fecha,
         dirigido_a: dirigidoA,
         hora_entrada: horaEntrada, hora_salida: horaSalida,
-        horas_expresion: expresion,
         horas_declaradas: declaradas,
         horas_50: horas50, horas_100: horas100,
         materiales,
         renglones: renglones.map((r) => ({
           actividad: r.actividad,
           lugar_raw: r.lugar_raw,
+          horas: r.horas,
           sector_id: r.sector_id || null,
           equipo_id: r.equipo_id || null,
         })),
@@ -337,63 +399,65 @@ export default function PartesContratistaClient({
             </Campo>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <div className="sm:col-span-2">
-              <Campo etiqueta="Horas normales, como están escritas">
-                <input
-                  value={expresion} onChange={(e) => setExpresion(e.target.value)}
-                  placeholder="2 P. x 8H + 1 P. x 2H"
-                  className="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm"
-                />
-              </Campo>
-            </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Campo etiqueta="Total que dice el papel">
               <input
                 type="number" step="0.01" value={declaradas}
-                onChange={(e) => setDeclaradas(e.target.value)}
+                onChange={(e) => cambiarTotal(e.target.value)}
                 placeholder="18"
                 className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
               />
             </Campo>
-            <div className="grid grid-cols-2 gap-2">
-              <Campo etiqueta="Al 50 %">
-                <input
-                  type="number" step="0.01" value={horas50}
-                  onChange={(e) => setHoras50(e.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-              </Campo>
-              <Campo etiqueta="Al 100 %">
-                <input
-                  type="number" step="0.01" value={horas100}
-                  onChange={(e) => setHoras100(e.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-              </Campo>
-            </div>
+            <Campo etiqueta="Al 50 %">
+              <input
+                type="number" step="0.01" value={horas50}
+                onChange={(e) => setHoras50(e.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              />
+            </Campo>
+            <Campo etiqueta="Al 100 %">
+              <input
+                type="number" step="0.01" value={horas100}
+                onChange={(e) => setHoras100(e.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              />
+            </Campo>
           </div>
 
           {/* El control de la factura, a la vista mientras se carga. */}
           <div className="mt-3">
-            {reparto.ok ? (
+            {control.ok ? (
               <p className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                Cierra: {reparto.total} h repartidas entre {renglones.length}{" "}
+                Cierra: {control.total} h entre {renglones.length}{" "}
                 {renglones.length === 1 ? "renglón" : "renglones"}.
               </p>
             ) : (
               <ul className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                {reparto.problemas.map((p) => <li key={p}>{p}</li>)}
+                {control.problemas.map((p) => <li key={p}>{p}</li>)}
               </ul>
             )}
           </div>
 
-          <h3 className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Detalle del trabajo
-          </h3>
+          <div className="mt-5 mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Detalle del trabajo
+            </h3>
+            <span className="text-xs text-slate-500">
+              {horasAMano
+                ? "Las horas las estás poniendo vos."
+                : "Las horas arrancan repartidas parejo; corregilas donde no dio parejo."}
+              <button
+                type="button"
+                onClick={repartirParejo}
+                className="ml-2 text-slate-600 underline hover:text-slate-800"
+              >
+                Repartir parejo
+              </button>
+            </span>
+          </div>
 
           <div className="space-y-3">
             {renglones.map((r, i) => {
-              const horas = reparto.ok ? reparto.renglones[i]?.horas : null;
               const delSector = r.sector_id ? porSector.get(r.sector_id) ?? [] : [];
               const conocido = catalogo.has(normalizarLugar(r.lugar_raw));
               return (
@@ -401,7 +465,7 @@ export default function PartesContratistaClient({
                   key={i}
                   className="rounded border border-slate-200 bg-slate-50 p-3"
                 >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <Campo etiqueta="Actividad">
                       <input
                         value={r.actividad}
@@ -444,12 +508,18 @@ export default function PartesContratistaClient({
                         ))}
                       </Select>
                     </Campo>
+                    <Campo etiqueta="Horas">
+                      <input
+                        type="number" step="0.01" min="0" inputMode="decimal"
+                        value={r.horas}
+                        onChange={(e) => cambiarHoras(i, e.target.value)}
+                        placeholder="0"
+                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </Campo>
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    <span className="font-medium text-slate-600">
-                      {horas === null ? "— h" : `${horas} h`}
-                    </span>
                     {conocido && (
                       <span className="text-slate-400">ya estaba en el catálogo</span>
                     )}
@@ -461,7 +531,7 @@ export default function PartesContratistaClient({
                     {renglones.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => setRenglones((p) => p.filter((_, j) => j !== i))}
+                        onClick={() => quitarRenglon(i)}
                         className="ml-auto text-rose-600 hover:underline"
                       >
                         Quitar
@@ -476,7 +546,7 @@ export default function PartesContratistaClient({
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setRenglones((p) => [...p, { ...RENGLON_VACIO }])}
+              onClick={agregarRenglon}
               className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               Agregar renglón
@@ -484,7 +554,7 @@ export default function PartesContratistaClient({
             <button
               type="button"
               onClick={guardar}
-              disabled={cargando || !reparto.ok}
+              disabled={cargando || !control.ok}
               className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
               {cargando ? "Guardando…" : "Guardar parte"}

@@ -5,19 +5,23 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { traerTodo } from "@/lib/core/paginado";
 import {
-  repartirHoras, normalizarLugar, type RenglonDelParte,
+  controlarHoras, normalizarLugar,
 } from "@/lib/mantenimiento/partesDeContratista";
 
 /**
  * Los partes diarios del contratista: el papel, tal como está escrito.
  *
- * Esta ruta **no crea ninguna OT**. Guarda la hoja y reparte sus horas entre
- * los renglones del detalle; las OT salen después, agrupando una semana entera
- * —ver `./generar/route.ts`—. Separarlo es lo que permite cargar las quince
- * hojas de una quincena sin ir creando órdenes a medias.
+ * Esta ruta **no crea ninguna OT**. Guarda la hoja con las horas que quien la
+ * cargó le puso a cada renglón; las OT salen después, agrupando una semana
+ * entera —ver `./generar/route.ts`—. Separarlo es lo que permite cargar las
+ * quince hojas de una quincena sin ir creando órdenes a medias.
  */
 
-interface RenglonDelCuerpo extends RenglonDelParte {
+interface RenglonDelCuerpo {
+  actividad: string;
+  lugar_raw: string;
+  /** Las horas que le puso quien cargó el parte. Llegan como número o texto. */
+  horas: number | string;
   sector_id?: string | null;
   equipo_id?: string | null;
 }
@@ -62,7 +66,7 @@ export async function POST(request: Request) {
   const body = await cuerpoJson(request);
   const {
     proveedor_id, numero, fecha, dirigido_a, hora_entrada, hora_salida,
-    horas_expresion, horas_declaradas, horas_50, horas_100, materiales,
+    horas_declaradas, horas_50, horas_100, materiales,
   } = body ?? {};
 
   const renglones: RenglonDelCuerpo[] = Array.isArray(body?.renglones) ? body.renglones : [];
@@ -77,7 +81,6 @@ export async function POST(request: Request) {
   if (!proveedor_id) falta.push("el contratista");
   if (!Number.isFinite(Number(numero)) || Number(numero) <= 0) falta.push("el número del parte");
   if (!fecha) falta.push("la fecha");
-  if (!String(horas_expresion ?? "").trim()) falta.push("las horas normales");
   if (!Number.isFinite(Number(horas_declaradas)) || Number(horas_declaradas) <= 0) {
     falta.push("el total de horas que dice el papel");
   }
@@ -89,21 +92,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Falta cargar ${falta.join(", ")}.` }, { status: 400 });
   }
 
-  // ── El reparto ──────────────────────────────────────────────
+  // ── El control de la factura ────────────────────────────────
   //
-  // Es también el control de la factura: si la suma no da el total escrito a
-  // mano, **no se guarda**. Sin esa comprobación esto sería sólo transcribir.
-  const reparto = repartirHoras(
-    String(horas_expresion),
-    renglones.map((r) => ({
-      actividad: String(r.actividad).trim(),
-      lugar_raw: String(r.lugar_raw).trim(),
-    })),
-    Number(horas_declaradas)
-  );
-  if (!reparto.ok) {
+  // Las horas las escribió quien tiene la hoja delante, así que acá no se
+  // reparte nada: se comprueba. Si la suma no da el total escrito a mano,
+  // **no se guarda**. Sin esa comprobación esto sería sólo transcribir.
+  const limpios = renglones.map((r) => ({
+    actividad: String(r.actividad).trim(),
+    lugar_raw: String(r.lugar_raw).trim(),
+    horas: Number(r.horas),
+  }));
+
+  const control = controlarHoras(limpios, Number(horas_declaradas));
+  if (!control.ok) {
     return NextResponse.json(
-      { error: reparto.problemas.join(" "), problemas: reparto.problemas },
+      { error: control.problemas.join(" "), problemas: control.problemas },
       { status: 400 }
     );
   }
@@ -119,7 +122,6 @@ export async function POST(request: Request) {
       dirigido_a: String(dirigido_a ?? "").trim() || null,
       hora_entrada: String(hora_entrada ?? "").trim() || null,
       hora_salida: String(hora_salida ?? "").trim() || null,
-      horas_expresion: String(horas_expresion).trim(),
       horas_declaradas: Number(horas_declaradas),
       horas_50: horas_50 === "" || horas_50 == null ? null : Number(horas_50),
       horas_100: horas_100 === "" || horas_100 == null ? null : Number(horas_100),
@@ -147,7 +149,7 @@ export async function POST(request: Request) {
 
   const { error: errorRenglones } = await admin
     .from("mant_partes_contratista_renglones")
-    .insert(reparto.renglones.map((r, i) => ({
+    .insert(limpios.map((r, i) => ({
       parte_id: parte.id,
       orden: i + 1,
       actividad: r.actividad,
@@ -178,7 +180,7 @@ export async function POST(request: Request) {
   // próxima carga, no el dato. Se dice igual.
   let catalogo_error: string | null = null;
   const aprender = renglones
-    .map((r, i) => ({ r, lugar: reparto.renglones[i].lugar_raw }))
+    .map((r, i) => ({ r, lugar: limpios[i].lugar_raw }))
     .filter(({ r }) => r.sector_id)
     .map(({ r, lugar }) => ({
       proveedor_id,
@@ -202,7 +204,7 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ data: parte, horas: reparto.total, catalogo_error });
+  return NextResponse.json({ data: parte, horas: control.total, catalogo_error });
 }
 
 export async function DELETE(request: Request) {

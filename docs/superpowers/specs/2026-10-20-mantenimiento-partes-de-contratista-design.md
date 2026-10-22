@@ -40,7 +40,84 @@ MATERIALES
 Los números **son correlativos** —1301, 1302, 1303— así que un salto o un
 repetido se detecta solo.
 
-## La regla de las horas
+## Las horas las escribe quien carga el parte (22/10/2026)
+
+**Lo de abajo —«La regla de las horas»— es historia.** Se deja escrito porque
+explica qué hay en la base del parte 1301 y por qué la columna
+`horas_expresion` existe, pero **ya no es lo que hace el sistema**.
+
+Lo que lo dio vuelta, dicho por quien pidió la función: *«el reparto automático
+reparte parejo y a veces no es así»*. Era una suposición del diseño que la
+primera quincena de verdad desmintió — una limpieza de horno se lleva la mañana
+entera mientras un bajo cintas lleva una hora, y repartir 16 h entre cuatro
+renglones manda esas horas al sector equivocado con cara de haberlas medido.
+
+Lo que vale desde hoy:
+
+- **Cada renglón del detalle tiene su propio campo de horas**, y las escribe
+  quien tiene la hoja delante.
+- **El reparto parejo queda como propuesta.** Al tipear el total los renglones
+  arrancan con el total dividido por la cantidad de renglones, y se corrigen
+  encima. Es la mayoría de las hojas, así que ahorra tipear cinco veces 3,6.
+- **La propuesta no pisa una corrección.** Apenas se toca una hora a mano, el
+  reparto automático deja de correr solo: un renglón agregado después entra en
+  blanco y lo acomoda quien carga. Se vuelve a la propuesta a pedido, con el
+  botón «Repartir parejo». Esto es `horasAMano` en la pantalla.
+- **Lo que no divide justo lo carga el último renglón**: 16 h entre 3 son
+  5,33 + 5,33 + 5,34. No es cosmética — el control exige que los renglones den
+  el total escrito, así que una propuesta que arranca a centésimas de cerrar
+  obligaría a corregir a mano algo que nadie midió mal. Por la misma razón la
+  tolerancia es cero: la comparación es a la centésima.
+- **Todo renglón lleva horas.** Un renglón en cero aparecería en el parte sin
+  generar horas ni OT; se pidió que no exista. Si el frente se trabajó lleva
+  horas, y si no se trabajó no es un renglón del parte.
+
+**El control de la factura no cambió, y es lo único que importaba preservar:**
+la suma de los renglones tiene que dar `horas_declaradas`, el total escrito a
+mano en la casilla "HORAS". Si no da, el parte no se guarda y la pantalla dice
+por cuánto está —«Los renglones suman 12 h y el papel dice 18 h: faltan 6 h»—.
+Sin esa comprobación esto sería sólo transcribir.
+
+### Lo que se fue con la expresión
+
+El campo «Horas normales, como están escritas» se sacó de la pantalla, y con él
+toda la lectura de la suma: `terminosDeLaExpresion`, `totalDeLaExpresion`,
+`esRiego` y `repartirHoras` ya no existen. Eso se lleva puestas cuatro reglas
+que sólo tenían sentido mientras el reparto era automático:
+
+- que **el segundo término sea siempre el riego**. El riego es ahora un renglón
+  más, con las horas que le ponga quien carga;
+- que **más de dos términos** no se interpreten;
+- los dos avisos cruzados: «el detalle nombra riego pero la suma no lo paga» y
+  «la suma paga riego pero el detalle no lo nombra». Con horas a mano las dos
+  situaciones se escriben solas y no hay nada que denunciar.
+
+Y se lleva también la pregunta que el diseño del 20/10 había dejado abierta
+—«¿las 16 h se parten entre los renglones o entre las actividades distintas?»—:
+**ya no hay que contestarla**, porque no hay reparto que decidir.
+
+**La columna `horas_expresion` no se borra, se vuelve opcional**
+(`20261022102129_partes_de_contratista_horas_a_mano.sql`). El parte 1301 la
+tiene y es lo que decía su papel; borrarla tiraría esa prueba para no ahorrar
+nada.
+
+### Y lo que dice la OT es otra cosa ahora
+
+La descripción generada decía que las horas «son una convención y no una
+medición por frente de trabajo», que era cierto cuando salían de dividir. Ahora
+dice **de dónde salen**: las anotó quien cargó el parte repartiendo el total
+escrito en la hoja. Sigue sin ser una medición, pero hay alguien a quien
+preguntarle, que no es lo mismo que un número que salió de una división.
+
+### La generación de las OT no se tocó
+
+Agrupa igual por *(semana, actividad, sector)*, suma las horas que estén
+guardadas, y todo lo de «Y lo que eso NO alcanzaba a impedir» sigue valiendo
+tal cual. Lo único que cambió es de dónde salen las horas de cada renglón.
+
+---
+
+## La regla de las horas — HISTÓRICA, reemplazada el 22/10/2026
 
 Es la regla con la que trabaja Candia, no una invención del sistema:
 
@@ -148,10 +225,13 @@ Las tres llevan el prefijo `mant_` y la migración es
 `/mantenimiento/partes-contratista`, dentro de Mantenimiento.
 
 Una lista de los partes cargados y un botón para cargar uno. El formulario es la
-hoja: número, fecha, horas de entrada y salida, los términos de personal × horas
-—que suman solos y se comparan contra el total escrito—, y los renglones del
-detalle: actividad y lugar, con el sector que el catálogo ya conoce o vacío para
-engancharlo.
+hoja: número, fecha, horas de entrada y salida, el total escrito en la casilla
+"HORAS", y los renglones del detalle: actividad, lugar, **las horas** y el
+sector que el catálogo ya conoce o vacío para engancharlo.
+
+**Las horas de cada renglón se escriben a mano** desde el 22/10/2026 —ver la
+sección de arriba—; la pantalla las propone repartidas parejo y se corrigen
+encima.
 
 **El total se ve mientras se carga**, no al guardar: quien está mirando la hoja
 tiene que poder ver que da 18 antes de pasar a la siguiente.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  normalizarLugar, esRiego, terminosDeLaExpresion, totalDeLaExpresion,
-  repartirHoras, lunesDeLaSemana, domingoDeLaSemana, claveDeOT,
+  normalizarLugar, repartoParejo, horasTrasUnCambio, controlarHoras,
+  lunesDeLaSemana, domingoDeLaSemana, claveDeOT,
   agruparEnOrdenes, descripcionDeLaOT,
   type RenglonParaAgrupar,
 } from "./partesDeContratista";
@@ -22,182 +22,161 @@ describe("el texto escrito a mano", () => {
     expect(normalizarLugar("Caño")).not.toBe(normalizarLugar("Cano"));
     expect(normalizarLugar("Rincón")).toBe(normalizarLugar("Rincon"));
   });
-
-  it("el riego se reconoce por la palabra y no por una lista cerrada", () => {
-    expect(esRiego("Riego")).toBe(true);
-    expect(esRiego("Riego en planta")).toBe(true);
-    expect(esRiego("riego de caminos")).toBe(true);
-    expect(esRiego("Limpieza")).toBe(false);
-    expect(esRiego("Riegos")).toBe(true);
-    // Por palabra y no por `includes`: una actividad que apenas contiene las
-    // letras no es el riego, y confundirla le daria a esa OT las horas enteras
-    // del segundo termino, que no trabajo.
-    expect(esRiego("Desmalezado")).toBe(false);
-    expect(esRiego("Arriego")).toBe(false);
-  });
 });
 
-describe("la suma de horas del papel", () => {
-  it("lee los dos terminos de una hoja de Candia", () => {
-    expect(terminosDeLaExpresion("2 P. x 8H + 1 P. x 2H")).toEqual([
-      { personas: 2, horas: 8 },
-      { personas: 1, horas: 2 },
-    ]);
-  });
-
-  it("acepta las formas que aparecen escritas", () => {
-    expect(terminosDeLaExpresion("2P x 8 Hs")).toEqual([{ personas: 2, horas: 8 }]);
-    expect(terminosDeLaExpresion("2 Pers. × 8h")).toEqual([{ personas: 2, horas: 8 }]);
-    expect(terminosDeLaExpresion("3 x 4")).toEqual([{ personas: 3, horas: 4 }]);
+/**
+ * El reparto parejo es **el punto de partida y no la regla**.
+ *
+ * Hasta el 22/10/2026 las horas de cada renglón salían de leer la expresión
+ * del papel —"2 P. x 8H + 1 P. x 2H"— y repartir el primer término entre los
+ * renglones que no eran riego. Eso suponía que todos los frentes llevaron lo
+ * mismo, y a veces no: una limpieza de horno puede llevarse la mañana entera
+ * mientras el bajo cintas lleva una hora. Ahora las horas las escribe quien
+ * carga, y esto sólo las propone.
+ */
+describe("el reparto parejo, que es lo que propone la pantalla", () => {
+  it("un total que divide justo queda igual en todos", () => {
+    expect(repartoParejo(18, 5)).toEqual([3.6, 3.6, 3.6, 3.6, 3.6]);
   });
 
   /**
-   * No adivina. Quien carga tiene el papel delante; repartir sobre una lectura
-   * dudosa pondria horas en sectores que nadie eligio.
+   * Lo que no divide justo lo carga el último. No es cosmética: el control de
+   * la factura exige que los renglones den el total escrito, así que un
+   * reparto que arranca a centésimas de cerrar obligaría a corregir a mano
+   * algo que nadie midió mal.
    */
-  it("se niega con lo que no entiende, en vez de arriesgar", () => {
-    expect(terminosDeLaExpresion("dos personas ocho horas")).toBeNull();
-    expect(terminosDeLaExpresion("2 P. x")).toBeNull();
-    expect(terminosDeLaExpresion("")).toBeNull();
-    expect(terminosDeLaExpresion("0 P. x 8H")).toBeNull();
+  it("lo que no divide justo lo carga el ultimo, para que cierre", () => {
+    const partes = repartoParejo(16, 3);
+    expect(partes).toEqual([5.33, 5.33, 5.34]);
+    expect(partes.reduce((s, h) => s + h, 0)).toBe(16);
   });
 
-  it("suma personas por horas", () => {
-    expect(totalDeLaExpresion([{ personas: 2, horas: 8 }, { personas: 1, horas: 2 }])).toBe(18);
+  it("no redondea a la media hora ni a la hora", () => {
+    expect(repartoParejo(16, 5)).toEqual([3.2, 3.2, 3.2, 3.2, 3.2]);
+  });
+
+  it("sin renglones no propone nada", () => {
+    expect(repartoParejo(18, 0)).toEqual([]);
   });
 });
 
 /**
- * Las tres hojas que se midieron el 20/10/2026, con los lugares traducidos a
- * sector por la persona: «molino horizontal» es el molino de Molienda de cal y
- * «bajo cintas» son las cintas de la Planta de trituracion 3.
+ * Cuándo la propuesta vuelve a correr y cuándo no.
+ *
+ * Es la regla que decide si el formulario pisa lo que alguien escribió, así
+ * que vive acá y no en la pantalla: una pantalla no se puede probar, y un
+ * reparto que pisa una corrección no avisa — la hora queda cambiada y el
+ * parte cierra igual, contra el sector equivocado.
  */
-describe("el reparto, contra las tres hojas reales", () => {
-  const renglones1301 = [
-    { actividad: "Limpieza", lugar_raw: "Horno N°1" },
-    { actividad: "Limpieza", lugar_raw: "Molino horizontal" },
-    { actividad: "Riego", lugar_raw: "Riego en planta" },
-    { actividad: "Limpieza", lugar_raw: "Planta N°3 zaranda" },
-    { actividad: "Limpieza", lugar_raw: "Bajo cintas" },
-  ];
-
-  it("1301: el riego se lleva el segundo termino y el resto se parte en cuatro", () => {
-    const r = repartirHoras("2 P. x 8H + 1 P. x 2H", renglones1301, 18);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.renglones.map((x) => x.horas)).toEqual([4, 4, 2, 4, 4]);
-    expect(r.total).toBe(18);
+describe("la propuesta, despues de agregar o quitar un renglon", () => {
+  it("mientras nadie corrigio a mano, repropone parejo", () => {
+    expect(horasTrasUnCambio(["3.6", "3.6", ""], 18, false)).toEqual(["6", "6", "6"]);
   });
 
-  it("1303: sin segundo termino no hay riego, y las 16 van entre los cinco", () => {
-    const cinco = [
-      { actividad: "Limpieza", lugar_raw: "Caja E" },
-      { actividad: "Limpieza", lugar_raw: "Bandejas" },
-      { actividad: "Limpieza", lugar_raw: "Balanza" },
-      { actividad: "Limpieza", lugar_raw: "Horno N°1" },
-      { actividad: "Limpieza", lugar_raw: "Bajo cintas" },
-    ];
-    const r = repartirHoras("2 P. x 8H", cinco, 16);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.renglones.map((x) => x.horas)).toEqual([3.2, 3.2, 3.2, 3.2, 3.2]);
-    expect(r.total).toBe(16);
+  it("cuando ya se corrigio a mano, no pisa nada", () => {
+    expect(horasTrasUnCambio(["10", "4", ""], 18, true)).toEqual(["10", "4", ""]);
   });
 
-  /**
-   * 3,2 no se redondea. Redondear a 3 o a 3,5 rompe que la quincena cierre
-   * contra la factura, que es para lo que existe todo esto.
-   */
-  it("no redondea a la media hora", () => {
-    const r = repartirHoras(
-      "2 P. x 8H",
-      Array.from({ length: 5 }, (_, i) => ({ actividad: "Limpieza", lugar_raw: `L${i}` })),
+  it("un total que todavia no es un numero deja las horas en blanco", () => {
+    expect(horasTrasUnCambio(["3.6", "3.6"], "", false)).toEqual(["", ""]);
+  });
+
+  it("sin renglones no hay horas que proponer", () => {
+    expect(horasTrasUnCambio([], 18, false)).toEqual([]);
+  });
+});
+
+/**
+ * El control de la factura, que es para lo que existe todo esto: lo que el
+ * sistema suma tiene que dar lo que Candia escribió a mano en la casilla
+ * "HORAS". Sin esa comprobación esto sería sólo transcribir.
+ */
+describe("el control contra el total del papel", () => {
+  const limpieza = (lugar: string, horas: number) => ({
+    actividad: "Limpieza", lugar_raw: lugar, horas,
+  });
+
+  it("cuando las horas escritas a mano dan el total, cierra", () => {
+    const r = controlarHoras(
+      [limpieza("Horno N°1", 6), limpieza("Molino horizontal", 4), {
+        actividad: "Riego en planta", lugar_raw: "Riego en planta", horas: 8,
+      }],
+      18
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.total).toBe(18);
+  });
+
+  it("las centesimas del reparto parejo cierran", () => {
+    const r = controlarHoras(
+      [limpieza("Caja E", 5.33), limpieza("Bandejas", 5.33), limpieza("Balanza", 5.34)],
       16
     );
-    if (!r.ok) throw new Error("tenia que repartir");
-    expect(r.renglones[0].horas).not.toBe(3);
-    expect(r.renglones[0].horas).not.toBe(3.5);
+    expect(r.ok).toBe(true);
   });
 
-  it("una division que no es exacta queda en centesimas, no en una suma rota", () => {
-    const r = repartirHoras("2 P. x 8H", [
-      { actividad: "Limpieza", lugar_raw: "A" },
-      { actividad: "Limpieza", lugar_raw: "B" },
-      { actividad: "Limpieza", lugar_raw: "C" },
-    ], 16);
-    if (!r.ok) throw new Error("tenia que repartir");
-    expect(r.renglones.map((x) => x.horas)).toEqual([5.33, 5.33, 5.33]);
-    // Y la diferencia se ve: el numero con el que se controla la factura es
-    // `horas_declaradas`, no esta suma.
-    expect(r.total).toBe(15.99);
-  });
-});
-
-describe("cuando el papel no cierra", () => {
-  const unos = [
-    { actividad: "Limpieza", lugar_raw: "A" },
-    { actividad: "Limpieza", lugar_raw: "B" },
-  ];
-
-  /** El control de la factura. Sin esto, esto seria solo transcribir. */
-  it("la suma que no da el total escrito se dice con los dos numeros", () => {
-    const r = repartirHoras("2 P. x 8H", unos, 20);
+  it("la suma que no llega al total se dice con los dos numeros y la diferencia", () => {
+    const r = controlarHoras([limpieza("Horno N°1", 6), limpieza("Caja E", 6)], 18);
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.problemas.join(" ")).toContain("16");
-    expect(r.problemas.join(" ")).toContain("20");
+    if (!r.ok) {
+      expect(r.problemas.join(" ")).toContain("12");
+      expect(r.problemas.join(" ")).toContain("18");
+      expect(r.problemas.join(" ")).toContain("faltan 6");
+    }
   });
 
-  it("la expresion ilegible no se reparte", () => {
-    const r = repartirHoras("ocho horas", unos, 8);
+  it("y cuando se pasa, tambien", () => {
+    const r = controlarHoras([limpieza("Horno N°1", 12), limpieza("Caja E", 12)], 18);
     expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.problemas.join(" ")).toContain("sobran 6");
   });
 
   /**
-   * La regla dice: si no hay segundo termino no hubo riego AUNQUE EL DETALLE
-   * LO NOMBRE. Se muestra en vez de acomodarlo — inventarle horas seria
-   * cobrarle al sistema algo que el papel no paga.
+   * Un renglón en cero aparecería en el parte sin generar horas ni OT. Se
+   * pidió que no: si el frente se trabajó, lleva horas; si no se trabajó, no
+   * es un renglón del parte.
    */
-  it("el detalle nombra riego pero la suma no lo paga", () => {
-    const r = repartirHoras("2 P. x 8H", [
-      { actividad: "Limpieza", lugar_raw: "A" },
-      { actividad: "Riego", lugar_raw: "Riego en planta" },
-    ], 16);
+  it("un renglon sin horas no se guarda, y se dice cual", () => {
+    const r = controlarHoras([limpieza("Horno N°1", 18), limpieza("Caja E", 0)], 18);
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.problemas.join(" ")).toContain("segundo término");
+    if (!r.ok) expect(r.problemas.join(" ")).toContain("renglón 2");
   });
 
-  it("la suma paga riego pero el detalle no lo nombra", () => {
-    const r = repartirHoras("2 P. x 8H + 1 P. x 2H", unos, 18);
+  it("una hora que no es un numero tampoco", () => {
+    const r = controlarHoras(
+      [{ actividad: "Limpieza", lugar_raw: "Horno N°1", horas: Number.NaN }],
+      18
+    );
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.problemas.join(" ")).toContain("riego");
   });
 
-  it("un tercer termino no se interpreta: lo contesta una persona", () => {
-    const r = repartirHoras("2 P. x 8H + 1 P. x 2H + 1 P. x 1H", [
-      { actividad: "Limpieza", lugar_raw: "A" },
-      { actividad: "Riego", lugar_raw: "Riego" },
-    ], 19);
+  it("las horas negativas no pasan", () => {
+    const r = controlarHoras(
+      [limpieza("Horno N°1", 20), limpieza("Caja E", -2)],
+      18
+    );
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.problemas.join(" ")).toContain("tres términos".replace("tres ", "3 "));
+    if (!r.ok) expect(r.problemas.join(" ")).toContain("renglón 2");
   });
 
-  /** La vara de `validar()`: todo junto y no de a uno. */
+  /** La vara de `validar()` del núcleo: todo junto y no de a uno. */
   it("dice todo lo que no cierra de una sola vez", () => {
-    const r = repartirHoras("2 P. x 8H + 1 P. x 2H", unos, 99);
+    const r = controlarHoras([limpieza("Horno N°1", 0), limpieza("Caja E", 0)], 18);
     expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.problemas.length).toBeGreaterThan(1);
+    if (!r.ok) expect(r.problemas.length).toBeGreaterThan(2);
   });
 
-  it("sin renglones no hay entre que repartir", () => {
-    const r = repartirHoras("2 P. x 8H", [], 16);
+  it("sin renglones no hay nada que controlar", () => {
+    const r = controlarHoras([], 18);
+    expect(r.ok).toBe(false);
+  });
+
+  it("sin total escrito no hay contra que controlar", () => {
+    const r = controlarHoras([limpieza("Horno N°1", 18)], 0);
     expect(r.ok).toBe(false);
   });
 });
+
 
 describe("la semana", () => {
   it("corre de lunes a domingo", () => {
@@ -395,14 +374,14 @@ describe("lo que dice la OT", () => {
   });
 
   /**
-   * Las horas son una convencion y la OT lo dice. En seis meses alguien va a
-   * leer "4 h" y va a creer que alguien las conto.
+   * De donde salen las horas, dicho en la propia OT. En seis meses alguien va
+   * a leer "4 h" y va a querer saber quien las conto.
    */
-  it("deja dicho que las horas salen de un reparto", () => {
+  it("deja dicho de donde salen las horas", () => {
     const { grupos } = agruparEnOrdenes([{
       id: "a", parte_numero: 1301, fecha: "2026-10-01", actividad: "Limpieza",
       lugar_raw: "Horno N°1", sector_id: "s1", equipo_id: null, horas: 4,
     }]);
-    expect(descripcionDeLaOT(grupos[0], "CANDIA")).toContain("convención");
+    expect(descripcionDeLaOT(grupos[0], "CANDIA")).toContain("quien cargó el parte");
   });
 });
