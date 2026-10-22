@@ -125,6 +125,41 @@ describe("filaParaLaPlanilla", () => {
   it("sin foto, la K queda vacía", () => {
     expect(filaParaLaPlanilla({ oa_number: "A186" })[10]).toBe("");
   });
+
+  // `agregarFila()` escribe con USER_ENTERED: lo que entra lo interpreta la
+  // planilla de producción, y estos tres campos los escribe cualquier usuario.
+  it("un texto que empieza con = no llega como fórmula", () => {
+    const f = filaParaLaPlanilla({
+      oa_number: "A187",
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      observaciones: "=1+1",
+      quien_aviso: "=HYPERLINK(\"http://x\")",
+    });
+    expect(f[4]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(f[11]).toBe("'=1+1");
+    expect(f[6]).toBe("'=HYPERLINK(\"http://x\")");
+  });
+
+  it("un texto que empieza con -, + o @ tampoco", () => {
+    expect(filaParaLaPlanilla({ oa_number: "A188", descripcion: "- pierde aceite" })[4])
+      .toBe("'- pierde aceite");
+    expect(filaParaLaPlanilla({ oa_number: "A188", descripcion: "+54 9 381" })[4])
+      .toBe("'+54 9 381");
+    expect(filaParaLaPlanilla({ oa_number: "A188", observaciones: "@jefe" })[11])
+      .toBe("'@jefe");
+  });
+
+  it("un texto normal no cambia, ni siquiera con un = en el medio", () => {
+    const f = filaParaLaPlanilla({
+      oa_number: "A189",
+      descripcion: "pierde aceite a=3 - mucho",
+      observaciones: "avisado",
+      quien_aviso: "Martín Sandoval",
+    });
+    expect(f[4]).toBe("pierde aceite a=3 - mucho");
+    expect(f[11]).toBe("avisado");
+    expect(f[6]).toBe("Martín Sandoval");
+  });
 });
 
 describe("fechaDeLaCarga", () => {

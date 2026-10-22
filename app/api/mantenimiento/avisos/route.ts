@@ -45,11 +45,28 @@ export async function POST(request: Request) {
   /** Lo que las dos llamadas de abajo comparten. Ver `avisarDeLaCarga`. */
   const deEstaCarga = { tipo: "aviso" as const, descripcion, sector: sectorDelAviso, fecha: fechaCruda };
 
-  const { data: usuario } = await supabase
+  const { data: usuario, error: errorDelUsuario } = await supabase
     .from("usuarios")
     .select("activo")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  // `maybeSingle` y no `single`: sin fila `single` también devuelve `error`, y
+  // alguien con sesión pero sin fila en `usuarios` pasaría de 403 a un 503 que
+  // la cola reintentaría para siempre.
+  //
+  // Un fallo de la lectura no es «tu usuario está desactivado»: sin esto,
+  // `usuario` queda null, `!usuario?.activo` da true y la ruta contesta un 403
+  // con un motivo que nadie dijo. Para la cola sin señal un 403 es definitivo,
+  // así que una caída pasajera de la base dejaría la carga parada para siempre.
+  // 503 es lo que la cola reintenta. Es el mismo criterio que más abajo con la
+  // consulta del área.
+  if (errorDelUsuario) {
+    return NextResponse.json(
+      { error: `No se pudo comprobar tu usuario: ${errorDelUsuario.message}` },
+      { status: 503 }
+    );
+  }
 
   if (!usuario?.activo) {
     // Este 403 no sólo contesta: a quien cargó sin señal hay que avisarle por
