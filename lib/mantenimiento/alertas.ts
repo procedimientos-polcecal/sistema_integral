@@ -19,7 +19,14 @@ export interface Atrasable {
   proxima_fecha?: string | null;
 }
 
-/** Estados en los que la orden ya no espera nada de nadie. */
+/**
+ * Estados en los que la orden ya no espera nada de nadie.
+ *
+ * Tiene una gemela, `CERRADAS_GUT` en `gut.ts`, con los mismos dos valores y
+ * **otro dueño**: aquella espeja la migración de `gut_orden` y ésta no espeja
+ * nada, sólo decide qué cuenta como atrasada. No se unifican a propósito. Si un
+ * día aparece un estado nuevo, hay que mirar las dos y decidir en cada una.
+ */
 const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
 
 /**

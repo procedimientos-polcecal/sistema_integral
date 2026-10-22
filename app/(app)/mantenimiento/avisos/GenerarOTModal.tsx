@@ -228,6 +228,9 @@ export default function GenerarOTModal({
             <p className="text-xs font-medium text-slate-500">
               Puntaje GUT <span className="font-normal text-slate-400">— opcional, las tres juntas</span>
             </p>
+            <p className="text-xs text-slate-400">
+              La prioridad de arriba es la de la planilla; lo que ordena el trabajo en el sistema es el GUT.
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {([
                 ["gut_gravedad", "Gravedad", ESCALAS_GUT.gravedad],

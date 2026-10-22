@@ -39,8 +39,15 @@ function notasEnLetras(orden: NotasGut): string {
   return `G${n(orden.gut_gravedad)} · U${n(orden.gut_urgencia)} · T${n(orden.gut_tendencia)}`;
 }
 
-export default function PuntajeGut({ orden }: { orden: NotasGut }) {
+/**
+ * `pista` es lo que pasa al hacer clic, cuando el recuadro es un atajo para
+ * puntuar. Va dentro del `title` del propio recuadro y no en el del envoltorio:
+ * el `title` más cercano al puntero es el único que se muestra, así que uno
+ * puesto afuera nunca se vería.
+ */
+export default function PuntajeGut({ orden, pista }: { orden: NotasGut; pista?: string }) {
   const puntaje = puntajeGut(orden);
+  const conPista = (texto: string) => (pista ? `${texto} · ${pista}` : texto);
 
   if (puntaje === null) {
     // Con una o dos notas se guardan pero no hay puntaje: se dice cuáles hay.
@@ -48,9 +55,9 @@ export default function PuntajeGut({ orden }: { orden: NotasGut }) {
       orden.gut_gravedad != null || orden.gut_urgencia != null || orden.gut_tendencia != null;
     return (
       <span
-        title={hayAlguna ? `Incompleto: ${notasEnLetras(orden)}` : "Sin puntaje"}
+        title={conPista(hayAlguna ? `Incompleto: ${notasEnLetras(orden)}` : "Sin puntaje")}
         aria-label={hayAlguna ? `Puntaje incompleto, ${notasEnLetras(orden)}` : "Sin puntaje"}
-        className="inline-flex h-6 min-w-[2rem] shrink-0 items-center justify-center rounded-md border border-slate-200 px-1.5 text-xs font-semibold text-slate-300"
+        className="inline-flex h-6 min-w-[2rem] shrink-0 items-center justify-center rounded-md border border-slate-200 px-1.5 text-xs font-semibold text-slate-400"
       >
         —
       </span>
@@ -60,7 +67,7 @@ export default function PuntajeGut({ orden }: { orden: NotasGut }) {
   const tono = INTENSIDADES[bandaDeGut(puntaje)];
   return (
     <span
-      title={notasEnLetras(orden)}
+      title={conPista(notasEnLetras(orden))}
       aria-label={`Puntaje ${puntaje}, ${notasEnLetras(orden)}`}
       className="inline-flex h-6 min-w-[2rem] shrink-0 items-center justify-center rounded-md border px-1.5 text-xs font-bold tabular-nums"
       style={{ background: tono.fondo, color: tono.texto, borderColor: tono.borde }}

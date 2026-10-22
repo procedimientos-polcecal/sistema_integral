@@ -79,7 +79,15 @@ export const SIN_PUNTAJE = 27;
 /** Lo que se le suma a lo que sigue abierto: más que el máximo puntaje, 125. */
 export const EMPUJON_ABIERTA = 1000;
 
-/** Los estados que ya no esperan nada y van después de lo abierto. */
+/**
+ * Los estados que ya no esperan nada y van después de lo abierto.
+ *
+ * Espeja el `case` de la columna generada `gut_orden` (migración
+ * 20261021104750): si cambia, hay que escribir una migración nueva. Tiene una
+ * gemela con los mismos valores, `CERRADAS` en `alertas.ts`, que NO espeja la
+ * migración —sólo decide qué orden está atrasada—. No se unifican: tienen
+ * dueños distintos y un estado nuevo (¿"ANULADA"?) se decide en cada una.
+ */
 export const CERRADAS_GUT: readonly string[] = ["REALIZADO", "SUSPENDIDA"];
 
 /** Desde este puntaje una orden se considera de GUT alto. */

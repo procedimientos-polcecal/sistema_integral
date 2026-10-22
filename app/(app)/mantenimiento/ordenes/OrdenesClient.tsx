@@ -131,9 +131,15 @@ export default function OrdenesClient({
    *
    * Si falla queda en null y la línea simplemente no aparece: una sugerencia
    * no vale un cartel de error.
+   *
+   * Sólo se pide si la línea se va a ver: la ve quien puede puntuar (`canEdit`)
+   * y sólo en el listado. Sin ese filtro cada visita —de quien sólo mira, o en
+   * el tablero o en "qué hacer primero"— traía hasta 300 filas con todas las
+   * columnas para una línea que nunca se pinta.
    */
   const [pendientes, setPendientes] = useState<any[] | null>(null);
   const recargarPendientes = useCargar(async (vigente) => {
+    if (!canEdit || view !== "list") return;
     try {
       const res = await fetch("/api/mantenimiento/ordenes?pendientes=1");
       if (!res.ok) return;
@@ -143,7 +149,7 @@ export default function OrdenesClient({
     } catch {
       // Sin la línea. El listado anda igual.
     }
-  }, []);
+  }, [canEdit, view]);
 
   /**
    * Cuáles de las que se están viendo ya tienen una justificación.
@@ -667,7 +673,10 @@ export default function OrdenesClient({
                           onClick={(e) => { e.stopPropagation(); setPuntuando(o); }}
                           className="shrink-0 cursor-pointer rounded-md hover:ring-2 hover:ring-violet-200"
                         >
-                          <PuntajeGut orden={o} />
+                          <PuntajeGut
+                            orden={o}
+                            pista={puntajeGut(o) === null ? "clic para puntuar con GUT" : "clic para cambiar el puntaje GUT"}
+                          />
                         </span>
                       ) : (
                         <PuntajeGut orden={o} />
@@ -827,8 +836,9 @@ function SugerenciaGut({ pendientes, onPuntuar }: {
     <div className="text-xs text-slate-500">
       <p className="flex flex-wrap items-center gap-x-2">
         <span>
-          {sinGut.length} de las {pendientes.length}{" "}
-          {pendientes.length === 1 ? "pendiente no tiene" : "pendientes no tienen"} GUT
+          {pendientes.length === 1
+            ? "La única pendiente no tiene GUT"
+            : `${sinGut.length} de las ${pendientes.length} pendientes ${sinGut.length === 1 ? "no tiene" : "no tienen"} GUT`}
         </span>
         <button
           onClick={() => setAbierta((v) => !v)}
@@ -1023,7 +1033,12 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
       </div>
       <p className="text-xs font-medium text-slate-800 leading-snug line-clamp-3">{o.descripcion ?? "—"}</p>
       <p className="text-xs text-slate-400 truncate">{o.equipo_raw ?? o.sector_raw ?? "—"}</p>
-      {o.fecha && <p className="text-xs text-slate-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p>}
+      {/* Cada columna son las 50 de más puntaje GUT y no las 50 más nuevas:
+          sin el recuadro, el orden de las tarjetas no tendría explicación. */}
+      <div className="flex items-center justify-between gap-2">
+        {o.fecha ? <p className="text-xs text-slate-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p> : <span />}
+        <PuntajeGut orden={o} />
+      </div>
     </div>
   );
 }

@@ -113,7 +113,7 @@ function OrdenesAtrasadas({ resumen, hoy }: {
           {resumen.total === 1 ? "" : "s"}
           {resumen.urgentes > 0 && (
             <span className="ml-2 font-normal text-red-700" title="Atrasadas con puntaje GUT de 65 o más (de 125)">
-              · {resumen.urgentes} de GUT alto
+              · {resumen.urgentes} de puntaje GUT alto
             </span>
           )}
         </h2>
