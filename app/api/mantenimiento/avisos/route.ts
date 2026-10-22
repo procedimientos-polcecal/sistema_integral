@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
-import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { resolverElArea } from "@/lib/mantenimiento/areaDelAviso";
 import { leerValores, agregarFila } from "@/lib/core/sheets";
 import { cargarEnlaces, resolver } from "@/lib/mantenimiento/enlaces";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
@@ -11,6 +11,7 @@ import {
   reservarClave, anotarLaClave, respuestaDeLaReserva, soltarLaClave,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { traerTodo } from "@/lib/core/paginado";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
 const PESTANA = () => process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
@@ -21,6 +22,12 @@ const PESTANA = () => process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
  * Es el primer eslabón de todo el módulo, y hasta ahora sólo se podía hacer
  * abriendo la planilla. Se escribe **primero ahí** —es la base y de ahí lo lee
  * quien no usa el sistema— y después acá.
+ *
+ * La puede cargar cualquier usuario activo, tenga o no el módulo Mantenimiento:
+ * quien ve que una máquina anda mal trabaja en Producción, en Cantera o en el
+ * laboratorio. Pedir nivel de edición dejaba a 4 de 14 usuarios activos en
+ * condiciones de avisar, y los 184 avisos que había entraron todos por el
+ * Forms. Es el mismo criterio que el alta de un requerimiento en Compras.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -39,8 +46,17 @@ export async function POST(request: Request) {
   /** Lo que las dos llamadas de abajo comparten. Ver `avisarDeLaCarga`. */
   const deEstaCarga = { tipo: "aviso" as const, descripcion, sector: sectorDelAviso, fecha: fechaCruda };
 
-  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    const error = "Cargar un aviso requiere nivel de edición en Mantenimiento";
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("activo")
+    .eq("id", user.id)
+    .single();
+
+  if (!usuario?.activo) {
+    // Este 403 no sólo contesta: a quien cargó sin señal hay que avisarle por
+    // correo qué pasó con su carga, así que `avisarDeLaCarga` se llama antes
+    // de devolver. Cambió el motivo del 403, no que haya que avisar.
+    const error = "Tu usuario está desactivado";
     avisarDeLaCarga(request, user.id, {
       ...deEstaCarga,
       status: 403,
@@ -89,6 +105,50 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // El área y las fotos que vienen en el cuerpo se validan acá, **antes** de
+  // reservar la clave y de tocar la planilla, por la misma razón que la fecha:
+  // un `area_id` que no existe haría fallar el insert **después** de escribir
+  // la fila en la planilla, y quedaría un aviso allá que el sistema no tiene.
+  //
+  // `area_id` es opcional y no tiene que dejar de serlo: ver "El área" más abajo.
+  const areaDelCuerpo = typeof b?.area_id === "string" ? b.area_id.trim() : "";
+  if (areaDelCuerpo) {
+    const { data: existe, error: errorDelArea } = await admin
+      .from("compras_areas")
+      .select("id")
+      .eq("id", areaDelCuerpo)
+      .maybeSingle();
+    // Un fallo de la consulta no es "el área no existe": 503, que para la cola
+    // es pasajero, en vez de un 400 definitivo por algo que no dijo nadie.
+    if (errorDelArea) {
+      return NextResponse.json(
+        { error: `No se pudo comprobar el área: ${errorDelArea.message}` },
+        { status: 503 }
+      );
+    }
+    if (!existe) {
+      const error = "El área elegida no existe";
+      avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+      return NextResponse.json({ error }, { status: 400 });
+    }
+  }
+
+  // Las fotos son links de `POST /api/mantenimiento/fotos`. Algo que no es una
+  // lista de textos es un 400 y no se ignora: tirar la foto en silencio dejaría
+  // un aviso sin el dato que quien lo cargó creía haber mandado.
+  const fotosCrudas: unknown = b?.reference_photos;
+  if (
+    fotosCrudas != null &&
+    !(Array.isArray(fotosCrudas) && fotosCrudas.every((f) => typeof f === "string"))
+  ) {
+    const error = "Las fotos tienen que ser una lista de links";
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
+  }
+  const fotos = ((fotosCrudas as string[] | null | undefined) ?? [])
+    .map((f) => f.trim())
+    .filter(Boolean);
 
   // ── La clave de la carga ────────────────────────────────────
   //
@@ -191,6 +251,9 @@ export async function POST(request: Request) {
     urgencia: String(b.urgencia ?? "").trim() || null,
     quien_aviso: String(b.quien_aviso ?? "").trim() || null,
     observaciones: String(b.observaciones ?? "").trim() || null,
+    // La planilla se escribe primero y es de donde lee quien no entra al
+    // sistema, así que la foto entra en el mismo objeto que va a la fila.
+    reference_photos: fotos.length > 0 ? fotos : null,
   };
 
   // La planilla primero: si falla, no queda un aviso en la app con un número
@@ -220,10 +283,28 @@ export async function POST(request: Request) {
     sector_raw: sectorRaw,
   });
 
+  // ── El área ──
+  //
+  // **`area_id` NO es obligatorio, y no hay que volverlo obligatorio.**
+  // `app/cargar/FormularioAvisoOffline.tsx` postea a esta misma ruta y no sabe
+  // nada de áreas, y para la cola de cargas sin señal un 400 es definitivo: el
+  // aviso quedaría parado para siempre por un campo que su propio formulario no
+  // tiene. Lo mismo vale para el asistente, que arma una URL con valores
+  // iniciales y tampoco lleva área.
+  //
+  // Si el cuerpo no la trae se resuelve igual que lo hace la sincronización de
+  // la planilla, con `resolverElArea` sobre `quien_aviso`: sólo cuando esa
+  // persona tiene **exactamente un** área. Con cero, con dos, o con un nombre
+  // que no se reconoce con certeza queda en null, que es visible y se corrige a
+  // mano; elegir una de dos es adivinar, y un área equivocada no se nota nunca.
+  const area_id = areaDelCuerpo || (await areaDeQuienAviso(admin, aviso.quien_aviso));
+
   const { data, error } = await admin
     .from("avisos")
     .insert({
       ...aviso,
+      area_id,
+      creado_por: user.id,
       equipo_code,
       equipment_id,
       sector_id: b.sector_id || sector_id,
@@ -271,4 +352,47 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data, oa_number, clave_error });
+}
+
+/**
+ * De qué área es el aviso cuando quien lo cargó no la eligió. `null` si no se
+ * puede saber.
+ *
+ * **Un fallo acá no frena el aviso.** A esta altura la fila ya está en la
+ * planilla, y un error al leer usuarios que terminara en un 500 haría que quien
+ * cargó lo cargara de nuevo y quedaran dos. Sin área el aviso se guarda igual,
+ * y se ve: es el caso de siempre para quien no tiene una cargada.
+ */
+async function areaDeQuienAviso(
+  admin: ReturnType<typeof createAdminClient>,
+  quienAviso: string | null
+): Promise<string | null> {
+  if (!quienAviso) return null;
+
+  try {
+    const [usuarios, asignadas] = await Promise.all([
+      traerTodo((desde, hasta) =>
+        admin.from("usuarios").select("id, nombre, apellido").range(desde, hasta)
+      ),
+      traerTodo((desde, hasta) =>
+        admin.from("usuario_areas_compras").select("usuario_id, area_id").range(desde, hasta)
+      ),
+    ]);
+
+    const areasDe = new Map<string, string[]>();
+    for (const a of asignadas) {
+      areasDe.set(a.usuario_id, [...(areasDe.get(a.usuario_id) ?? []), a.area_id]);
+    }
+
+    return resolverElArea(
+      usuarios.map((u) => ({
+        id: u.id,
+        nombre: u.nombre,
+        apellido: u.apellido,
+        areas: areasDe.get(u.id) ?? [],
+      }))
+    )(quienAviso);
+  } catch {
+    return null;
+  }
 }

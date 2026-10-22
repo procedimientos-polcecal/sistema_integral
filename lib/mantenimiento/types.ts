@@ -269,6 +269,14 @@ export interface Aviso {
   reference_photos: string[] | null;
   app_created: boolean;
   /**
+   * De qué área de la empresa es el aviso (`compras_areas`). Decide qué avisos
+   * ve cada uno en `/mis-avisos`. `null` es que no se pudo saber con certeza,
+   * no que no tenga: ver `lib/mantenimiento/areaDelAviso.ts`.
+   */
+  area_id: string | null;
+  /** Quién lo cargó **en el sistema**; los que entraron por la planilla no lo tienen. */
+  creado_por: string | null;
+  /**
    * Cuándo se decidió que este aviso **no** va a ser orden de trabajo.
    *
    * Las tres viajan juntas o ninguna —lo sostiene un `check` de la base—, y
