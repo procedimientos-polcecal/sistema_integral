@@ -8,6 +8,7 @@ import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
+  ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
@@ -510,12 +511,18 @@ export default function OrdenesClient({
             <MultiSelect valores={especialidad} onCambio={setEspecialidad}
               vacio="Toda especialidad" plural="especialidades"
               opciones={ESPECIALIDADES.map((e) => [e, e])} />
+            {/* Las etiquetas salen de `lib/` y no de un ternario acá: el que
+                había mandaba todo lo que no fuera PROGRAMADO a «Correctivo», y
+                el día que la lista pasó de dos a cuatro valores el desplegable
+                mostró «Correctivo» tres veces. Ver `ETIQUETA_DE_TIPO`. Y el
+                texto de «sin filtrar» ya no enumera los valores, por lo mismo:
+                «Programado y correctivo» dejó de ser cierto sin avisar. */}
             <MultiSelect valores={tipo} onCambio={setTipo}
-              vacio="Programado y correctivo" plural="tipos"
-              opciones={TIPOS_DE_OT.map((t) => [t, t === "PROGRAMADO" ? "Programado" : "Correctivo"])} />
+              vacio="Todo tipo" plural="tipos"
+              opciones={TIPOS_DE_OT.map((t) => [t, ETIQUETA_DE_TIPO[t]])} />
             <MultiSelect valores={quien} onCambio={setQuien}
-              vacio="Interno y contratado" plural="formas"
-              opciones={QUIENES_DE_OT.map((q) => [q, q === "INTERNO" ? "Interno" : "Contratado"])} />
+              vacio="Toda forma" plural="formas"
+              opciones={QUIENES_DE_OT.map((q) => [q, ETIQUETA_DE_QUIEN[q]])} />
             <MultiSelect valores={prioridad} onCambio={setPrioridad}
               vacio="Toda prioridad" plural="prioridades"
               opciones={PRIORIDADES_DE_OT.map((x) => [x, x])} />

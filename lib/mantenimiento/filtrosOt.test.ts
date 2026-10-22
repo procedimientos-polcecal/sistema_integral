@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, consultaDeLaRuta,
   columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
+  TIPOS_DE_OT, QUIENES_DE_OT, ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
 } from "./filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 
@@ -241,5 +242,45 @@ describe("la pagina en la barra de direcciones", () => {
   it("la de la API no se mezcla con la de la URL", () => {
     expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("page=1");
     expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 1)).toBe("");
+  });
+});
+
+describe("como se escriben los tipos y los quienes en pantalla", () => {
+  /**
+   * EL BUG DEL 22/10/2026. El filtro del listado armaba la etiqueta con un
+   * ternario —`t === "PROGRAMADO" ? "Programado" : "Correctivo"`— que valia
+   * mientras la lista tuviera exactamente dos valores. El 21/10 se sumaron
+   * PREDICTIVO y MEJORA, y el desplegable paso a mostrar
+   * «Programado, Correctivo, Correctivo, Correctivo»: tres opciones distintas
+   * con la misma etiqueta. El de «quien lo realiza» mostraba «Contratado» dos
+   * veces, por MIXTO.
+   *
+   * Que cada valor TENGA etiqueta ya lo exige `tsc`, porque el `Record` esta
+   * tipado contra el propio tuple. Lo que `tsc` no puede ver es que dos valores
+   * distintos compartan el mismo texto, que es exactamente el sintoma: tres
+   * opciones que la persona no puede distinguir ni usar.
+   */
+  it("ningun tipo comparte etiqueta con otro", () => {
+    const etiquetas = TIPOS_DE_OT.map((t) => ETIQUETA_DE_TIPO[t]);
+    expect(new Set(etiquetas).size).toBe(TIPOS_DE_OT.length);
+  });
+
+  it("ningun quien comparte etiqueta con otro", () => {
+    const etiquetas = QUIENES_DE_OT.map((q) => ETIQUETA_DE_QUIEN[q]);
+    expect(new Set(etiquetas).size).toBe(QUIENES_DE_OT.length);
+  });
+
+  /** Y ninguna queda vacia, que se veria como una opcion sin nombre. */
+  it("ninguna etiqueta esta vacia", () => {
+    for (const t of TIPOS_DE_OT) expect(ETIQUETA_DE_TIPO[t].trim()).not.toBe("");
+    for (const q of QUIENES_DE_OT) expect(ETIQUETA_DE_QUIEN[q].trim()).not.toBe("");
+  });
+
+  /** Las cuatro y las tres de hoy, escritas, que es lo que se ve en el filtro. */
+  it("son las de hoy", () => {
+    expect(TIPOS_DE_OT.map((t) => ETIQUETA_DE_TIPO[t]))
+      .toEqual(["Programado", "Correctivo", "Predictivo", "Mejora"]);
+    expect(QUIENES_DE_OT.map((q) => ETIQUETA_DE_QUIEN[q]))
+      .toEqual(["Interno", "Contratado", "Mixto"]);
   });
 });

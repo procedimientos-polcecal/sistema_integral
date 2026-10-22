@@ -49,6 +49,45 @@ export const TIPOS_DE_OT = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"] 
 export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO", "MIXTO"] as const;
 
 /**
+ * Cómo se escriben esos dos vocabularios cuando los lee una persona.
+ *
+ * ── POR QUÉ SON UN `Record` Y NO UN TERNARIO ────────────────────────────────
+ *
+ * El filtro del listado los armaba así:
+ *
+ *     t === "PROGRAMADO" ? "Programado" : "Correctivo"
+ *     q === "INTERNO"    ? "Interno"    : "Contratado"
+ *
+ * Eso funcionaba mientras las listas tuvieran **exactamente dos** valores. El
+ * 21/10/2026 se sumaron PREDICTIVO, MEJORA y MIXTO, y al día siguiente el
+ * desplegable de tipos mostraba **«Programado, Correctivo, Correctivo,
+ * Correctivo»**: tres opciones distintas con la misma etiqueta, imposibles de
+ * distinguir y por lo tanto de usar. El de «quién lo realiza» mostraba
+ * «Contratado» dos veces.
+ *
+ * Nada lo notó. No hay test de pantallas, y para `tsc` un ternario sobre un
+ * string es perfectamente válido: el `else` se traga cualquier valor nuevo.
+ *
+ * **Un `Record` sobre el propio tuple sí lo nota, y en el compilador**: agregar
+ * un valor a `TIPOS_DE_OT` sin agregarle su etiqueta acá es un error de `tsc`,
+ * que es lo que no pasó. Por eso el tipo se escribe contra la lista
+ * —`(typeof TIPOS_DE_OT)[number]`— y no como un `Record<string, string>` suelto,
+ * que volvería a tragarse el olvido.
+ */
+export const ETIQUETA_DE_TIPO: Record<(typeof TIPOS_DE_OT)[number], string> = {
+  PROGRAMADO: "Programado",
+  CORRECTIVO: "Correctivo",
+  PREDICTIVO: "Predictivo",
+  MEJORA: "Mejora",
+};
+
+export const ETIQUETA_DE_QUIEN: Record<(typeof QUIENES_DE_OT)[number], string> = {
+  INTERNO: "Interno",
+  CONTRATADO: "Contratado",
+  MIXTO: "Mixto",
+};
+
+/**
  * La prioridad viene con el emoji adelante, tal cual la escribe la planilla:
  * "🟠 Alta". Se guarda así y se filtra así, porque cambiarla acá la separaría
  * de lo que dice la celda. Ver `pesoDePrioridad` en `prioridad.ts`, que sí
