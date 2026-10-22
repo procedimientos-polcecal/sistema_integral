@@ -41,6 +41,11 @@ export interface UsuarioConAreas {
  *
  * Es un resolvedor y no una función de un solo tiro porque la sincronización la
  * llama una vez por aviso en cada corrida, y el índice se arma una sola vez.
+ *
+ * **Espera usuarios que se puedan elegir hoy —los activos—**, igual que
+ * `indiceDeCatalogo`: un nombre repetido por una fila dada de baja vuelve
+ * ambiguo algo que en realidad es uno solo, y el aviso quedaría sin área. Quien
+ * llama decide si le pasa a todos; ver el porqué en `cargarLasAreasDeLosAvisos`.
  */
 export function resolverElArea(
   usuarios: readonly UsuarioConAreas[]

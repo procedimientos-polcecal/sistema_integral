@@ -194,6 +194,16 @@ async function porQueNoSeLeyo(
  * área**: es lo que hay que proteger, y filtrar por la condición evita tanto
  * un `.in()` con cientos de números como traer los que no aportan nada.
  *
+ * **Los usuarios se traen TODOS, también los dados de baja, y es deliberado:**
+ * `indiceDeCatalogo` documenta que se arma con las filas activas, y esto lo
+ * contradice a propósito. Filtrar por `activo` perdería el área de los avisos
+ * cargados por gente ya dada de baja —la planilla los re-trae en cada corrida,
+ * así que cada vez quedarían sin área—. El riesgo contrario, que una persona
+ * inactiva comparta nombre normalizado con una activa y vuelva ambiguo el
+ * resultado, no existe hoy entre los 14 usuarios. Si algún día pasa, el aviso
+ * queda en null y se ve: es el fallo seguro. No lo «arregles» agregando
+ * `.eq("activo", true)` sin pensar en los avisos de quien ya no está.
+ *
  * **Si cualquiera falla devuelve `{ error }` y la sincronización sigue sin tocar
  * el área.** Frenar toda la corrida por esto dejaría sin actualizar los avisos por
  * una columna secundaria; en cambio no mandar `area_id` es siempre seguro, y lo
@@ -314,9 +324,21 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
-  await registrarSincronizacion({
-    modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
-  });
+  // Si no se pudieron leer las áreas, la corrida **no se anota como limpia**: el
+  // JSON de abajo lo ve quien la dispara a mano, pero el cron corre solo, y si
+  // esa lectura fallara todos los días los avisos nuevos entrarían sin área sin
+  // que nadie se enterara. Se anota como el resto de los fallos —`ok: false` y
+  // el motivo en `error`—, que es lo que la pantalla de Avisos muestra en rojo
+  // con el texto al pasar el mouse. Los avisos sí se guardaron, y el mensaje lo
+  // dice para que no se lea como una corrida perdida.
+  await registrarSincronizacion(
+    "error" in areas
+      ? {
+          modulo: "mantenimiento", recurso: "avisos", ok: false, filas: guardados,
+          error: `Los avisos se guardaron pero no se pudieron leer las áreas: ${areas.error}`,
+        }
+      : { modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados }
+  );
   return logra({
     leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
