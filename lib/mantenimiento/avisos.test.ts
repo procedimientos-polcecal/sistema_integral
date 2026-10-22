@@ -110,6 +110,21 @@ describe("filaParaLaPlanilla", () => {
   it("llega hasta las observaciones y no más", () => {
     expect(filaParaLaPlanilla(aviso)).toHaveLength(12);
   });
+
+  it("la foto va a la columna K y no corre de lugar a las observaciones", () => {
+    const fila = filaParaLaPlanilla({
+      oa_number: "A185",
+      descripcion: "pierde aceite",
+      observaciones: "avisado al jefe",
+      reference_photos: ["https://ejemplo/foto.jpg"],
+    });
+    expect(fila[10]).toBe("https://ejemplo/foto.jpg"); // COL.imagen = K
+    expect(fila[11]).toBe("avisado al jefe"); // COL.observaciones = L
+  });
+
+  it("sin foto, la K queda vacía", () => {
+    expect(filaParaLaPlanilla({ oa_number: "A186" })[10]).toBe("");
+  });
 });
 
 describe("fechaDeLaCarga", () => {

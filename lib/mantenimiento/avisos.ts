@@ -240,6 +240,7 @@ export function filaParaLaPlanilla(aviso: {
   urgencia?: string | null;
   quien_aviso?: string | null;
   observaciones?: string | null;
+  reference_photos?: readonly string[] | null;
 }): string[] {
   // Hasta la L —las observaciones—, que es la última que se lee.
   const fila = new Array(COL.observaciones + 1).fill("");
@@ -251,6 +252,10 @@ export function filaParaLaPlanilla(aviso: {
   fila[COL.descripcion] = aviso.descripcion ?? "";
   fila[COL.urgencia] = aviso.urgencia ?? "";
   fila[COL.quien] = aviso.quien_aviso ?? "";
+  // Sólo la primera: la columna es una celda con un link y `filaDeAviso` la
+  // lee como uno solo. Sin escribirla, la próxima sincronización lee la K
+  // vacía y la foto cargada en la app desaparece de los dos lados.
+  fila[COL.imagen] = aviso.reference_photos?.[0] ?? "";
   fila[COL.observaciones] = aviso.observaciones ?? "";
 
   return fila;
