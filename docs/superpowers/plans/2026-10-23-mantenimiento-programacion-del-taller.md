@@ -197,7 +197,7 @@ it("el cuadro entero se repite recien a las 6 semanas", () => {
   expect(foto(semanaDe(REF.lunes, 6)[0])).toBe(semana1);
 });
 
-// Review Focus 1
+// El % de JS devuelve negativo con semanas anteriores a la referencia
 it("una semana anterior a la referencia no se va a negativo", () => {
   expect(turnoDelGrupo(REF, "2026-10-12", "A")).toBe("12-20");
   expect(turnoDelElectricista(REF, "2026-10-12", "e1")).toBe("12-20");
@@ -279,7 +279,7 @@ git commit -m "feat(mantenimiento): el calculo de los dos ciclos de rotacion del
 - [ ] **Step 1: Escribir los tests que fallan**
 
 ```ts
-// Review Focus 2
+// El rango de la ausencia se compara por dia, no por semana
 it("una ausencia que arranca el jueves no vacia el lunes", () => {
   const a = [{ empleado_id: "m1", fecha_desde: "2026-10-22", fecha_hasta: "2026-10-30", tipo: "PERMISO_PERSONAL" }];
   expect(estaAusente(a, "m1", "2026-10-19")).toBe(false);
@@ -298,7 +298,7 @@ it("una ausencia injustificada si lo es", () => {
   expect(estaAusente(a, "m1", "2026-10-19")).toBe(true);
 });
 
-// Review Focus 3
+// Una semana pasada no se reescribe cuando alguien se va o cambia de grupo
 it("alguien que se fue no esta vigente despues de su ultimo dia", () => {
   const p = { empleadoId: "m1", oficio: "mecanico", grupo: "A", desde: "2026-01-01", hasta: "2026-10-20" } as const;
   expect(estaVigente(p, "2026-10-20")).toBe(true);
@@ -310,7 +310,7 @@ it("sugiere del mismo oficio y que no este ya en ese turno", () => { /* el hueco
 
 it("no sugiere a quien esta ausente ese dia", () => { /* … */ });
 
-// Review Focus 5
+// Sugerirlo dos veces lo pondria en dos lugares a la vez
 it("no sugiere a quien ya fue movido a ese turno ese dia", () => { /* una asignacion con pisada: true cuenta igual que una del ciclo */ });
 
 it("sugiere a alguien del otro turno aunque eso deje corto al suyo", () => { /* el spec lo pide explicitamente: no se filtra por eso */ });
@@ -350,7 +350,9 @@ git commit -m "feat(mantenimiento): cruce de ausencias y candidatos para tapar e
 - Produces:
   ```ts
   export const TIPOS_DEL_ENCARGADO: readonly string[];
-  export function periodoEstaCerrado(liquidaciones: { periodo_desde: string; periodo_hasta: string; estado: string }[], fecha: string): boolean;
+  // `liquidaciones` es por empleado y sus columnas son `fecha_desde`/`fecha_hasta`
+  // (no `periodo_*`): la lista que entra es la de ESE empleado.
+  export function periodoEstaCerrado(liquidaciones: { fecha_desde: string; fecha_hasta: string; estado: string }[], fecha: string): boolean;
   export async function altaDeAusencia(supabase, datos: DatosDeAusencia): Promise<{ ausencia?: unknown; error?: string; status?: number }>;
   ```
 
@@ -361,15 +363,17 @@ git commit -m "feat(mantenimiento): cruce de ausencias y candidatos para tapar e
 Puros, sobre las dos funciones que no tocan la base:
 
 ```ts
-// Review Focus 4
+// Mover una liquidacion ya cerrada no se deshace
 it("una fecha dentro de una liquidacion cerrada esta cerrada", () => {
-  const liq = [{ periodo_desde: "2026-09-01", periodo_hasta: "2026-09-30", estado: "CERRADA" }];
+  const liq = [{ fecha_desde: "2026-09-01", fecha_hasta: "2026-09-30", estado: "CERRADA" }];
   expect(periodoEstaCerrado(liq, "2026-09-15")).toBe(true);
+  expect(periodoEstaCerrado(liq, "2026-09-01")).toBe(true);
+  expect(periodoEstaCerrado(liq, "2026-09-30")).toBe(true);
   expect(periodoEstaCerrado(liq, "2026-10-01")).toBe(false);
 });
 
 it("una liquidacion en borrador no cierra nada", () => {
-  const liq = [{ periodo_desde: "2026-09-01", periodo_hasta: "2026-09-30", estado: "BORRADOR" }];
+  const liq = [{ fecha_desde: "2026-09-01", fecha_hasta: "2026-09-30", estado: "BORRADOR" }];
   expect(periodoEstaCerrado(liq, "2026-09-15")).toBe(false);
 });
 
