@@ -9,7 +9,7 @@
 import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
 import { norm } from "@/lib/compras/texto";
-import { textoParaLaCelda } from "@/lib/core/sheets";
+import { comoTexto, textoParaLaCelda } from "@/lib/core/sheets";
 import type { Cumplio } from "@/lib/compras/types";
 
 /** Cómo se escribe cada juicio en la planilla. "Si" va sin tilde: es así allá. */
@@ -66,11 +66,27 @@ const fecha = (iso: string | null) => {
  *
  * La descripción y el proveedor los escribe una persona y van por
  * `textoParaLaCelda`; el resto es número, fecha o vocabulario cerrado.
+ *
+ * El CÓDIGO va por `comoTexto`, que es otra cosa: no se escapa porque pueda
+ * ser una fórmula sino porque **tiene ceros adelante y `USER_ENTERED` se los
+ * come**. Es el mismo forzado que ya tenían el kardex del almacén, el de
+ * envases y el alta de Compras; acá faltaba.
+ *
+ * Lo que lo tapaba era el formato de la columna, no el código. Medido el
+ * 23/10/2026 sobre las 448 filas con código: 438 tienen cero adelante y las
+ * 438 lo conservan, porque la `B` es `numberFormat: TEXT`. Pero **una celda
+ * se escapó de ese formato** —la fila 254, el RI 325— y quedó guardada como
+ * el número 6066. No perdió nada por pura suerte: es el único código de toda
+ * la pestaña que no arranca con cero, mientras que en el catálogo de
+ * artículos arrancan con cero **1.189 de 1.189**. O sea que el día que vuelva
+ * a pasar, el que caiga ahí sí va a perder el cero. Esto saca la garantía de
+ * la planilla y la trae al código, que es lo que dice el encabezado de
+ * `comoTexto` en el núcleo.
  */
 export function filaDeSeguimiento(r: DatosDeSeguimiento): (string | null)[] {
   return [
     String(r.nro_ri),                                    // A  NºRI
-    r.codigo ?? "",                                      // B  CODIGO
+    r.codigo ? comoTexto(r.codigo) : "",                 // B  CODIGO
     r.area ?? "",                                        // C  ÁREA
     textoParaLaCelda(r.descripcion),                     // D  Descripción
     textoParaLaCelda(r.proveedor),                       // E  Proveedor

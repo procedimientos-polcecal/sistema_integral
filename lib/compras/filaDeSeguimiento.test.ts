@@ -116,3 +116,33 @@ describe("el seguimiento no deja entrar una formula", () => {
     expect(filaDeSeguimiento(BASE)[6]).toBe("100");
   });
 });
+
+/*
+ * Otra cosa que el escape de formulas, aunque se vea igual: el codigo tiene
+ * ceros adelante y `USER_ENTERED` se los come. El 14/10/2026 un "00345" quedo
+ * guardado como 345 en la pestana de altas, y los modulos se cruzan por
+ * codigo exacto: un 345 no es el 00345 de Inventario.
+ *
+ * Aca lo tapaba el formato TEXT de la columna, no el codigo — y el 23/10/2026
+ * se midio que una celda ya se habia escapado de ese formato (la fila 254, el
+ * RI 325, guardada como el numero 6066). Sobrevivio porque es el unico codigo
+ * de la pestana sin cero adelante; en el catalogo arrancan con cero 1.189 de
+ * 1.189.
+ */
+describe("el codigo del seguimiento no pierde los ceros de adelante", () => {
+  it("va forzado a texto", () => {
+    expect(filaDeSeguimiento({ ...BASE, codigo: "00345" })[1]).toBe("'00345");
+    expect(filaDeSeguimiento({ ...BASE, codigo: "6066" })[1]).toBe("'6066");
+  });
+
+  /* Sin codigo la celda se vacia: un apostrofo solo no la vaciaria. */
+  it("sin codigo la celda queda vacia y no con un apostrofo", () => {
+    expect(filaDeSeguimiento({ ...BASE, codigo: null })[1]).toBe("");
+  });
+
+  /* Y el N de RI sigue siendo numero: es por donde se ubica la fila. */
+  it("el N de RI no se fuerza", () => {
+    expect(filaDeSeguimiento(BASE)[0]).toBe("1952");
+  });
+});
+
