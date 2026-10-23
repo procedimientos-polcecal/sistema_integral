@@ -73,6 +73,42 @@ export const ESCALAS_GUT = {
   ],
 } as const satisfies Record<string, readonly string[]>;
 
+/**
+ * Qué está preguntando cada criterio, para el `(i)` que va al lado de su
+ * desplegable en los tres formularios que puntúan.
+ *
+ * **Las tres dicen lo que el criterio NO es**, y eso es el 90% de para qué
+ * sirven. El error que arruina el método es contestar la urgencia y la
+ * tendencia mirando lo grave que es: las tres notas terminan diciendo lo
+ * mismo, el producto deja de discriminar y el orden vuelve a ser el que ya
+ * había. Un 5·5·5 sincero es rarísimo; tres cincos seguidos casi siempre son
+ * la misma respuesta escrita tres veces.
+ *
+ * Está acá y no en cada pantalla porque son tres formularios —alta, puntuar
+ * una existente y la que sale de un aviso— y un texto repetido tres veces se
+ * corrige en dos.
+ */
+/**
+ * Los nombres de las tres columnas. Sale de `NotasGut` y no de una lista
+ * escrita a mano: los tres formularios los repiten en sus tuplas, y una cuarta
+ * copia es una que se puede olvidar.
+ */
+export type CampoGut = keyof NotasGut;
+
+export const AYUDA_GUT: Record<CampoGut, string> = {
+  gut_gravedad:
+    "Qué pasa si falla: a quién o a qué afecta, y cuánto cuesta. Es lo grave " +
+    "que es el problema, no cuándo hay que resolverlo.",
+  gut_urgencia:
+    "Cuánto podés postergarla sin pagar un precio. El plazo lo fija una parada " +
+    "programada, un repuesto que llega, una fecha que no ponés vos o un " +
+    "respaldo que te cubre. No es lo grave que es: un trabajo chico puede no " +
+    "tener tiempo si la única ventana es hoy.",
+  gut_tendencia:
+    "Qué tan rápido empeora si no hacés nada. No es el plazo que tenés: algo " +
+    "puede empeorar rápido y darte un mes igual, si hay un respaldo andando.",
+};
+
 /** Lo que vale para ordenar una orden sin puntaje: 3 × 3 × 3. */
 export const SIN_PUNTAJE = 27;
 

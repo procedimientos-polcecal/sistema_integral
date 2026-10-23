@@ -6,7 +6,8 @@ import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT, TIPOS_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import InfoTip from "@/components/InfoTip";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
   cuerpoDeLaOT, loQuePropone, loQueFaltaDelAviso, loQueHayQuePreguntar,
@@ -237,7 +238,7 @@ export default function GenerarOTModal({
                 ["gut_urgencia", "Urgencia", ESCALAS_GUT.urgencia],
                 ["gut_tendencia", "Tendencia", ESCALAS_GUT.tendencia],
               ] as const).map(([campo, etiqueta, escala]) => (
-                <Campo key={campo} etiqueta={etiqueta}>
+                <Campo key={campo} etiqueta={etiqueta} ayuda={AYUDA_GUT[campo]}>
                   <Select
                     value={form[campo]}
                     onChange={(e) => cambiar({ [campo]: e.target.value })}
@@ -309,10 +310,17 @@ const CAMPOS_QUE_DIBUJA = [
   "el tipo de trabajo", "quién lo realiza", "la fecha de ejecución",
 ];
 
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Campo({ etiqueta, ayuda, children }: {
+  etiqueta: string; ayuda?: string; children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-500">{etiqueta}</span>
+      <span className="mb-1 block text-xs font-medium text-slate-500">
+        {etiqueta}
+        {/* El `(i)` es un `<button>` adentro de un `<label>`: `InfoTip` corta
+            la propagación del clic, así que abrirlo no activa el desplegable. */}
+        {ayuda && <> <InfoTip text={ayuda} /></>}
+      </span>
       {children}
     </label>
   );

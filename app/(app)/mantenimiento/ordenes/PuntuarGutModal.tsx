@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
-import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
+import { AYUDA_GUT, ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
+import InfoTip from "@/components/InfoTip";
 import PuntajeGut from "./PuntajeGut";
 
 /**
@@ -108,7 +109,9 @@ export default function PuntuarGutModal({
         <div className="space-y-3">
           {CAMPOS.map(([campo, etiqueta, escala]) => (
             <div key={campo} className="space-y-1">
-              <label htmlFor={`gut-${campo}-${orden.id}`} className="block text-xs font-medium text-slate-600">{etiqueta}</label>
+              <label htmlFor={`gut-${campo}-${orden.id}`} className="block text-xs font-medium text-slate-600">
+                {etiqueta} <InfoTip text={AYUDA_GUT[campo]} />
+              </label>
               <Select
                 id={`gut-${campo}-${orden.id}`}
                 value={notas[campo]}

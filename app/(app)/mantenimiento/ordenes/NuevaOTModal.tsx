@@ -8,7 +8,8 @@ import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimien
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import InfoTip from "@/components/InfoTip";
 import {
   copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
 } from "@/lib/mantenimiento/reutilizarOT";
@@ -409,7 +410,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 ["gut_urgencia",  "Urgencia",  ESCALAS_GUT.urgencia],
                 ["gut_tendencia", "Tendencia", ESCALAS_GUT.tendencia],
               ] as const).map(([campo, etiqueta, escala]) => (
-                <F key={campo} label={etiqueta}>
+                <F key={campo} label={etiqueta} ayuda={AYUDA_GUT[campo]}>
                   <Select value={form[campo]} onChange={e => f(campo, e.target.value)} className="input">
                     <option value="">—</option>
                     {escala.map((palabra, i) => (
@@ -500,11 +501,14 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   );
 }
 
-function F({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function F({ label, required, ayuda, children }: {
+  label: string; required?: boolean; ayuda?: string; children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
       <label className="block text-xs font-medium text-slate-600">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+        {ayuda && <> <InfoTip text={ayuda} /></>}
       </label>
       {children}
     </div>
