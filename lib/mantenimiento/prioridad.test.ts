@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   ordenSugerido, moverEnLista, asignarOrden, aplicarOrdenManual, ESTA_PENDIENTE,
-  prioridadParaLaPlanilla,
+  prioridadParaLaPlanilla, prioridadDeGut, prioridadEfectiva,
+  filtroDePrioridadConGut, CORTE_DE_PRIORIDAD,
+  PRIORIDAD_ALTA, PRIORIDAD_MEDIA, PRIORIDAD_BAJA,
 } from "./prioridad";
+import { PRIORIDADES_DE_OT } from "./filtrosOt";
 
 const HOY = "2026-08-26";
 
@@ -245,5 +248,147 @@ describe("la prioridad como la escribe la planilla", () => {
    */
   it("una prioridad que no conocemos pasa tal cual", () => {
     expect(prioridadParaLaPlanilla("URGENTE")).toBe("URGENTE");
+  });
+});
+
+/**
+ * LA PRIORIDAD QUE SALE DEL GUT, pedida el 23/10/2026: mas de 80 es Alta, de 30
+ * a 80 es Media, menos de 30 es Baja. Y manda el GUT: si la orden tiene las
+ * tres notas, su prioridad sale del puntaje aunque la planilla diga otra cosa.
+ *
+ * El motivo, medido: de 2.264 ordenes, 2.081 no tienen prioridad cargada. Solo
+ * 183 la tienen, asi que el filtro dejaba afuera al 92%.
+ */
+describe("la prioridad que sale del GUT", () => {
+  it("corta donde se pidio: mas de 80, de 30 a 80, menos de 30", () => {
+    expect(prioridadDeGut(125)).toBe(PRIORIDAD_ALTA);
+    expect(prioridadDeGut(100)).toBe(PRIORIDAD_ALTA);
+    expect(prioridadDeGut(81)).toBe(PRIORIDAD_ALTA);
+    expect(prioridadDeGut(80)).toBe(PRIORIDAD_MEDIA);
+    expect(prioridadDeGut(30)).toBe(PRIORIDAD_MEDIA);
+    expect(prioridadDeGut(29)).toBe(PRIORIDAD_BAJA);
+    expect(prioridadDeGut(1)).toBe(PRIORIDAD_BAJA);
+  });
+
+  /**
+   * LO QUE NO SE DEDUCE DEL NUMERO, y que conviene que este escrito antes de
+   * que alguien se pregunte por que casi nada sale Alta: el GUT es el producto
+   * de tres notas de 1 a 5, asi que **no es un continuo**. Entre 81 y 99 no hay
+   * ningun producto posible, de modo que con el corte en "mas de 80" las unicas
+   * Alta son 100 (4·5·5) y 125 (5·5·5).
+   *
+   * Y el 80 exacto (4·4·5) cae en Media aunque `bandaDeGut` lo llame banda 5:
+   * las bandas y las prioridades son dos escalas distintas.
+   */
+  it("los unicos puntajes posibles que dan Alta son 100 y 125", () => {
+    const posibles = new Set<number>();
+    for (let g = 1; g <= 5; g++) {
+      for (let u = 1; u <= 5; u++) {
+        for (let t = 1; t <= 5; t++) posibles.add(g * u * t);
+      }
+    }
+    const altas = [...posibles].filter((p) => prioridadDeGut(p) === PRIORIDAD_ALTA).sort((a, b) => a - b);
+    expect(altas).toEqual([100, 125]);
+    // Y no hay ningun producto posible entre el corte y el 100.
+    expect([...posibles].filter((p) => p > CORTE_DE_PRIORIDAD.alta && p < 100)).toEqual([]);
+  });
+
+  it("devuelve la forma de la planilla, con su emoji", () => {
+    expect(prioridadDeGut(125)).toBe("🟠 Alta");
+    expect(PRIORIDADES_DE_OT).toContain(prioridadDeGut(50));
+  });
+});
+
+describe("cual prioridad vale para una orden", () => {
+  /** EL PEDIDO: con las tres notas puestas, manda el GUT. */
+  it("el GUT le gana a lo que diga la planilla", () => {
+    expect(prioridadEfectiva({
+      prioridad: "🟢 Baja", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5,
+    })).toBe(PRIORIDAD_ALTA);
+  });
+
+  /** Sin las tres notas no hay puntaje, y ahi vale la celda. */
+  it("sin puntaje vale la planilla", () => {
+    expect(prioridadEfectiva({
+      prioridad: "🟠 Alta", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null,
+    })).toBe("🟠 Alta");
+    expect(prioridadEfectiva({ prioridad: "🟡 Media" })).toBe("🟡 Media");
+  });
+
+  /** Y sin ninguna de las dos, null: no se inventa una prioridad. */
+  it("sin puntaje y sin celda no hay prioridad", () => {
+    expect(prioridadEfectiva({ prioridad: null })).toBeNull();
+    expect(prioridadEfectiva({ prioridad: "   " })).toBeNull();
+    expect(prioridadEfectiva({})).toBeNull();
+  });
+
+  /** 3·3·3 = 27 es un puntaje de verdad y cae en Baja, no en "sin puntaje". */
+  it("un 3-3-3 es Baja y no es lo mismo que sin puntuar", () => {
+    expect(prioridadEfectiva({
+      prioridad: "🟠 Alta", gut_gravedad: 3, gut_urgencia: 3, gut_tendencia: 3,
+    })).toBe(PRIORIDAD_BAJA);
+  });
+});
+
+describe("el filtro de prioridad que manda a la base", () => {
+  it("sin nada elegido no filtra", () => {
+    expect(filtroDePrioridadConGut([])).toBeNull();
+    expect(filtroDePrioridadConGut(["", "  "])).toBeNull();
+  });
+
+  /**
+   * Dos clases de condicion en un `or`: el rango de puntaje de cada prioridad
+   * elegida, y las que no tienen puntaje, que se deciden por la celda.
+   */
+  it("junta el rango del puntaje y lo que dice la planilla", () => {
+    expect(filtroDePrioridadConGut(["🟠 Alta"])).toBe(
+      'gut_puntaje.gt.80,and(gut_puntaje.is.null,prioridad.in.("🟠 Alta"))'
+    );
+    expect(filtroDePrioridadConGut(["🟢 Baja"])).toBe(
+      'gut_puntaje.lt.30,and(gut_puntaje.is.null,prioridad.in.("🟢 Baja"))'
+    );
+  });
+
+  /** Media es un rango cerrado de los dos lados: el 30 y el 80 entran. */
+  it("media va entre los dos cortes, con los dos adentro", () => {
+    expect(filtroDePrioridadConGut(["🟡 Media"])).toBe(
+      'and(gut_puntaje.gte.30,gut_puntaje.lte.80),and(gut_puntaje.is.null,prioridad.in.("🟡 Media"))'
+    );
+  });
+
+  it("con varias elegidas suma los rangos y una sola lista de la planilla", () => {
+    expect(filtroDePrioridadConGut(["🟠 Alta", "🟢 Baja"])).toBe(
+      'gut_puntaje.gt.80,gut_puntaje.lt.30,' +
+      'and(gut_puntaje.is.null,prioridad.in.("🟠 Alta","🟢 Baja"))'
+    );
+  });
+
+  it("no repite una elegida dos veces", () => {
+    expect(filtroDePrioridadConGut(["🟠 Alta", "🟠 Alta"])).toBe(
+      'gut_puntaje.gt.80,and(gut_puntaje.is.null,prioridad.in.("🟠 Alta"))'
+    );
+  });
+
+  /**
+   * Los valores llevan emoji y espacio, asi que van entre comillas: un `in.()`
+   * sin comillas los parte por el espacio y el filtro deja de encontrar nada.
+   */
+  it("los valores van entre comillas", () => {
+    expect(filtroDePrioridadConGut(["🟡 Media"])).toContain('"🟡 Media"');
+  });
+
+  /**
+   * LA GUARDA: las tres prioridades tienen rango. Si manana se agrega una
+   * cuarta, el `Record` de `RANGO_DE_PRIORIDAD` deja de compilar — pero este
+   * test ademas comprueba que ninguna quede sin su condicion de puntaje, que es
+   * lo que la haria aparecer solo cuando la planilla la diga.
+   */
+  it("las tres prioridades aportan su rango de puntaje", () => {
+    for (const p of PRIORIDADES_DE_OT) {
+      const filtro = filtroDePrioridadConGut([p])!;
+      expect(filtro).toContain("gut_puntaje");
+      // Dos partes: el rango y el "sin puntaje". Nunca una sola.
+      expect(filtro.startsWith("and(gut_puntaje.is.null")).toBe(false);
+    }
   });
 });

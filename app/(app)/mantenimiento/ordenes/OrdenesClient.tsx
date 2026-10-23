@@ -8,7 +8,7 @@ import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
-  ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
+  ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN, ORDENES_DEL_LISTADO,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
@@ -21,6 +21,7 @@ import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
+import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
 import PuntajeGut from "./PuntajeGut";
 import PuntuarGutModal from "./PuntuarGutModal";
@@ -104,6 +105,10 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
+  // No es un filtro —no saca filas— pero viaja igual que ellos: va a la URL y
+  // a la consulta, porque el orden lo resuelve la base. Por eso queda afuera de
+  // `hayAlgunFiltro` y de «Limpiar»: no es algo que esconda órdenes.
+  const [orden, setOrden] = useState(arranque.orden);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [avisoSync, setAvisoSync] = useState<string | null>(null);
@@ -162,9 +167,9 @@ export default function OrdenesClient({
   const [justificadas, setJustificadas] = useState<Set<string>>(new Set());
 
   const filtros: FiltrosOt = useMemo(() => ({
-    busqueda: busquedaAplicada, campoFecha, desde, hasta,
+    busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
-  }), [busquedaAplicada, campoFecha, desde, hasta,
+  }), [busquedaAplicada, campoFecha, orden, desde, hasta,
        estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
@@ -588,6 +593,19 @@ export default function OrdenesClient({
                 Sin fechas
               </button>
             )}
+
+            {/* El orden va en esta fila y no entre los desplegables de arriba
+                porque no es un filtro: no saca ninguna orden de la lista, las
+                acomoda. Por eso tampoco cuenta para «Limpiar» ni para el cartel
+                de "hay filtros puestos". */}
+            <span className="ml-auto text-sm text-slate-400">ordenar por</span>
+            <Select
+              value={orden}
+              onChange={(e) => setOrden(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+            >
+              {ORDENES_DEL_LISTADO.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </Select>
           </div>
         </div>
       )}
@@ -650,7 +668,7 @@ export default function OrdenesClient({
               )}
             </div>
           ) : (
-            <div className="card divide-y divide-slate-100 overflow-hidden">
+            <div className="card divide-y divide-slate-300 overflow-hidden">
               {orders.map((o) => {
                 const meta   = estadoMeta(o.estado);
                 const isOpen = expanded === o.id;
@@ -662,7 +680,7 @@ export default function OrdenesClient({
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
-                        <p className="text-xs text-slate-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                        <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
                       </div>
                       {/* El recuadro abre el modal de puntuar. Va dentro del
                           botón que despliega la fila, así que no puede ser otro
@@ -891,7 +909,7 @@ function OTDetail({
         <D label="Quién realiza"   value={o.quien} />
         <D label="Contratista"     value={o.contratista} />
         <D label="Horas"           value={o.horas != null ? `${o.horas}h` : null} />
-        <D label="Prioridad"       value={o.prioridad} />
+        <D label="Prioridad"       value={prioridadEfectiva(o)} />
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
         <D label="Fecha ejecución" value={o.fecha_ejecucion ? new Date(o.fecha_ejecucion).toLocaleDateString("es-AR") : null} />

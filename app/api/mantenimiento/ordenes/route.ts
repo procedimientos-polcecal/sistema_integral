@@ -22,7 +22,8 @@ import {
 import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { paginaPedida } from "@/lib/core/paginado";
-import { columnaDeFecha } from "@/lib/mantenimiento/filtrosOt";
+import { columnaDeFecha, ordenDelListado } from "@/lib/mantenimiento/filtrosOt";
+import { filtroDePrioridadConGut } from "@/lib/mantenimiento/prioridad";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -99,16 +100,20 @@ export async function GET(request: Request) {
   // sobre mil ochocientas, y ordenarlas a mano no se puede hacer de a páginas.
   const pendientes = searchParams.get("pendientes") === "1";
 
-  let query = supabase
-    .from("ordenes_trabajo")
-    .select("*", { count: "exact" })
-    // El orden es del servidor y no del cliente: son 2.227 filas paginadas de a
-    // 50, y ordenar en el cliente ordenaría sólo la página que se está mirando —
-    // la orden más urgente podría estar en la página 40 y no aparecer nunca.
-    // `gut_orden` ya sube las abiertas por encima de las cerradas; el número de
-    // OT desempata para que el orden sea siempre el mismo.
-    .order("gut_orden", { ascending: false })
-    .order("ot_number", { ascending: false });
+  let query = supabase.from("ordenes_trabajo").select("*", { count: "exact" });
+
+  // El orden es del servidor y no del cliente: son 2.264 filas paginadas de a
+  // 50, y ordenar en el cliente ordenaría sólo la página que se está mirando —
+  // la orden más urgente podría estar en la página 40 y no aparecer nunca.
+  //
+  // El sugerido es el de siempre: `gut_orden` ya sube las abiertas por encima
+  // de las cerradas y dentro de eso ordena por puntaje, y el número desempata
+  // para que el orden sea estable. Por número sirve para lo otro que se hace
+  // con este listado, que es buscar una orden puntual — ver `ordenDelListado`.
+  query = ordenDelListado(searchParams.get("orden")) === "numero"
+    ? query.order("ot_number", { ascending: false })
+    : query.order("gut_orden", { ascending: false })
+           .order("ot_number", { ascending: false });
 
   query = pendientes
     ? query.in("estado", ESTA_PENDIENTE).limit(300)
@@ -120,7 +125,12 @@ export async function GET(request: Request) {
   if (especialidad.length) query = query.in("especialidad", especialidad);
   if (tipo.length)         query = query.in("tipo", tipo);
   if (quien.length)        query = query.in("quien", quien);
-  if (prioridad.length)    query = query.in("prioridad", prioridad);
+  // La prioridad no es un `.in()` liso como los demás desde el 23/10/2026:
+  // **manda el GUT**, así que una orden puntuada se filtra por su puntaje y no
+  // por lo que diga su celda. Qué condición sale de cada prioridad lo decide
+  // `filtroDePrioridadConGut`, que tiene los cortes y sus tests.
+  const dePrioridad = filtroDePrioridadConGut(prioridad);
+  if (dePrioridad)         query = query.or(dePrioridad);
   if (proveedor.length)    query = query.in("proveedor_id", proveedor);
   if (sector.length)       query = query.in("sector_id", sector);
   if (equipo.length)       query = query.in("equipment_id", equipo);

@@ -3,6 +3,7 @@ import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, consultaDeLaRuta,
   columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
   TIPOS_DE_OT, QUIENES_DE_OT, ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
+  ordenDelListado,
 } from "./filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 
@@ -84,6 +85,7 @@ describe("escribir los filtros en la URL", () => {
     const filtros: FiltrosOt = {
       busqueda: "rodamiento",
       campoFecha: "fecha_ejecucion",
+      orden: "numero",
       desde: "2026-08-01",
       hasta: "2026-08-31",
       estado: ["ATRASADO", "EN_PROCESO"],
@@ -282,5 +284,36 @@ describe("como se escriben los tipos y los quienes en pantalla", () => {
       .toEqual(["Programado", "Correctivo", "Predictivo", "Mejora"]);
     expect(QUIENES_DE_OT.map((q) => ETIQUETA_DE_QUIEN[q]))
       .toEqual(["Interno", "Contratado", "Mixto"]);
+  });
+});
+
+describe("en que orden se lista", () => {
+  /**
+   * Pedido el 23/10/2026: poder ordenar por numero de OT. De esto sale un
+   * nombre de columna para la consulta, asi que la lista blanca vive en `lib/`
+   * y no en la ruta — lo mismo que `columnaDeFecha`.
+   */
+  it("acepta los dos que existen y nada mas", () => {
+    expect(ordenDelListado("numero")).toBe("numero");
+    expect(ordenDelListado("")).toBe("");
+    expect(ordenDelListado("ot_number; drop table")).toBe("");
+    expect(ordenDelListado("gut_orden")).toBe("");
+    expect(ordenDelListado(null)).toBe("");
+    expect(ordenDelListado(undefined)).toBe("");
+  });
+
+  it("viaja en la URL y vuelve igual", () => {
+    const url = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, orden: "numero" });
+    expect(url).toContain("orden=numero");
+    expect(leerFiltrosDeLaUrl(new URLSearchParams(url), catalogos).orden).toBe("numero");
+  });
+
+  /**
+   * El orden NO es un filtro: no saca ninguna orden de la lista. Si contara,
+   * el cartel diria "hay filtros puestos" por haber elegido como mirar, y
+   * «Limpiar» lo devolveria al sugerido sin que nadie lo pidiera.
+   */
+  it("no cuenta como filtro puesto", () => {
+    expect(hayAlgunFiltro({ ...FILTROS_VACIOS, orden: "numero" })).toBe(false);
   });
 });
