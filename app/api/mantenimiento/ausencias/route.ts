@@ -78,8 +78,23 @@ function esFechaIso(v: unknown): v is string {
 }
 
 /**
+ * Cuántos días hay en el rango, contando los dos extremos.
+ *
+ * Se cuenta con una resta y no armando la lista: `esFechaIso` acepta hasta el
+ * año 9999, así que un `fechaHasta` con el año mal tipeado pediría una lista de
+ * **millones** de strings para después descartarla por larga. La comprobación
+ * del largo tiene que poder hacerse sin pagarla.
+ */
+function cuantosDias(desde: string, hasta: string): number {
+  return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
+/**
  * Los días del rango, con los dos extremos adentro. Se suma en UTC, que no tiene
  * horario de verano: sumar 24 horas siempre cae en el día siguiente.
+ *
+ * Sólo se llama con rangos que ya pasaron por `problemasDelRango`, o sea de
+ * `MAX_DIAS` días como mucho.
  */
 function diasDelRango(desde: string, hasta: string): string[] {
   const dias: string[] = [];
@@ -192,7 +207,7 @@ async function problemaDePeriodoCerrado(
 function problemasDelRango(desde: string, hasta: string): string[] {
   const problemas: string[] = [];
   if (hasta < desde) problemas.push("La fecha hasta no puede ser anterior a la fecha desde");
-  else if (diasDelRango(desde, hasta).length > MAX_DIAS) {
+  else if (cuantosDias(desde, hasta) > MAX_DIAS) {
     problemas.push(`Una ausencia de más de ${MAX_DIAS} días la carga RRHH`);
   }
   return problemas;
@@ -281,9 +296,16 @@ export async function POST(request: Request) {
       cargadoPorId: permiso.user.id,
     });
   } catch (e) {
-    // Lo único que tira ahí adentro es el recálculo, y corre después del insert.
+    // Lo que tira ahí adentro es el recálculo, que corre **después** del insert,
+    // así que la fila puede haber quedado escrita. No se dice que se guardó
+    // —también podría haberse caído la conexión antes—, se dice que hay que ir a
+    // mirar: lo que no puede pasar es que esto se vea igual que un alta buena.
     return NextResponse.json(
-      { error: `La ausencia se guardó pero falló el recálculo de la liquidación: ${(e as Error).message}` },
+      {
+        error:
+          "La ausencia puede haber quedado guardada sin llegar a la liquidación, " +
+          `revisala antes de volver a cargarla: ${(e as Error).message}`,
+      },
       { status: 500 }
     );
   }
@@ -319,6 +341,16 @@ async function laAusenciaDelEncargado(db: SupabaseClient, id: string, usuarioId:
   // encargado no puede juzgar.
   if (!TIPOS_DEL_ENCARGADO.includes(data.tipo)) {
     return { error: NextResponse.json({ error: TIPO_AJENO }, { status: 403 }) };
+  }
+  // El mismo `admin_sistema` pudo haberla cargado por RRHH, que no tiene tope de
+  // largo. Sin esto, el `PATCH` y el `DELETE` recalcularían ese rango entero.
+  if (cuantosDias(soloElDia(data.fecha_desde), soloElDia(data.fecha_hasta)) > MAX_DIAS) {
+    return {
+      error: NextResponse.json(
+        { error: `Esa ausencia es de más de ${MAX_DIAS} días: la tiene que ver RRHH` },
+        { status: 403 }
+      ),
+    };
   }
   return { ausencia: data };
 }
@@ -362,6 +394,9 @@ export async function PATCH(request: Request) {
     if (TIPOS_DEL_ENCARGADO.includes(String(cuerpo.tipo))) tipo = String(cuerpo.tipo);
     else problemas.push(TIPO_AJENO);
   }
+  // A diferencia del POST, acá el tipo NO decide `justificada`: esto es una
+  // corrección parcial y un campo que no se nombró no se cambia solo. Quien pase
+  // el tipo a INJUSTIFICADA y quiera que deje de estar justificada, lo dice.
   let justificada = Boolean(actual.justificada);
   if ("justificada" in cuerpo) {
     if (typeof cuerpo.justificada === "boolean") justificada = cuerpo.justificada;
@@ -382,17 +417,23 @@ export async function PATCH(request: Request) {
   problemas.push(...problemasDelRango(desde, hasta));
   if (problemas.length) return NextResponse.json({ error: problemas.join(". ") }, { status: 400 });
 
-  // La vigencia se pide sobre el rango que queda. El período cerrado, sobre la
-  // unión con el que tenía: sacar una ausencia de un período cerrado también lo
-  // toca, porque el recálculo pisa los días de los que se va.
+  // La vigencia en el padrón se pide sobre el rango que queda.
   const dias = diasDelRango(desde, hasta);
   const noEsSuyo = await problemaDePadron(db, actual.empleado_id, dias);
   if (noEsSuyo) return noEsSuyo;
 
-  const unionDesde = desde < desdeActual ? desde : desdeActual;
-  const unionHasta = hasta > hastaActual ? hasta : hastaActual;
-  const cerrado = await problemaDePeriodoCerrado(db, actual.empleado_id, diasDelRango(unionDesde, unionHasta));
-  if (cerrado) return cerrado;
+  // Los dos rangos, el que queda y el que tenía: sacar una ausencia de un
+  // período cerrado también lo toca, porque el recálculo pisa los días de los
+  // que se va. Se miran por separado y no como una unión: mover una ausencia de
+  // este año a otro dejaría una "unión" de cientos de días, y ahí el recálculo
+  // reescribiría meses enteros de `calculos_diarios` por un cambio de un día.
+  const rangos: [string, string][] = [[desde, hasta]];
+  if (desde !== desdeActual || hasta !== hastaActual) rangos.push([desdeActual, hastaActual]);
+
+  for (const [d, h] of rangos) {
+    const cerrado = await problemaDePeriodoCerrado(db, actual.empleado_id, diasDelRango(d, h));
+    if (cerrado) return cerrado;
+  }
 
   // El `cargado_por_id` va también en el `update`: ya se comprobó arriba, pero
   // así la escritura misma no puede alcanzar la fila de otro.
@@ -411,12 +452,14 @@ export async function PATCH(request: Request) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const falloElRecalculo = await recalcular(db, actual.empleado_id, unionDesde, unionHasta);
-  if (falloElRecalculo) {
-    return NextResponse.json(
-      { error: `La ausencia se modificó pero falló el recálculo de la liquidación: ${falloElRecalculo}` },
-      { status: 500 }
-    );
+  for (const [d, h] of rangos) {
+    const falloElRecalculo = await recalcular(db, actual.empleado_id, d, h);
+    if (falloElRecalculo) {
+      return NextResponse.json(
+        { error: `La ausencia se modificó pero falló el recálculo de la liquidación: ${falloElRecalculo}` },
+        { status: 500 }
+      );
+    }
   }
   return NextResponse.json({ data });
 }
