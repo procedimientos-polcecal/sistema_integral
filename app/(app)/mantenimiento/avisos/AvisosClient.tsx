@@ -9,6 +9,7 @@ import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
 import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
 import DesestimarModal from "./DesestimarModal";
+import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
 import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
@@ -144,6 +145,18 @@ export default function AvisosClient({
    */
   const [generarDe, setGenerarDe] = useState<Aviso | null>(null);
   const [desestimarA, setDesestimarA] = useState<Aviso | null>(null);
+
+  /**
+   * El tercer final de un aviso pendiente: la orden ya existe.
+   *
+   * El encargado del area se adelanta —ve la falla, carga la OT por su lado— y
+   * el aviso que alguien habia reportado queda pendiente para siempre aunque
+   * el trabajo ya este andando. Hasta el 23/10/2026 la unica forma de decirlo
+   * era escribir el numero a mano en la planilla y esperar la sincronizacion.
+   *
+   * No crea nada ni toca la orden: ver `lib/mantenimiento/enlazarOtAlAviso.ts`.
+   */
+  const [enlazarA, setEnlazarA] = useState<Aviso | null>(null);
 
   /**
    * Volver a dejarlo pendiente.
@@ -288,12 +301,18 @@ export default function AvisosClient({
                 ) : estaDesestimado(a) ? (
                   <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                 ) : puedeEditar ? (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => generarOT(a)}
                       className="flex-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
                     >
                       Generar OT
+                    </button>
+                    <button
+                      onClick={() => { setError(""); setResultado(null); setEnlazarA(a); }}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600"
+                    >
+                      Ya tiene OT
                     </button>
                     <button
                       onClick={() => setDesestimarA(a)}
@@ -347,12 +366,18 @@ export default function AvisosClient({
                     ) : estaDesestimado(a) ? (
                       <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                     ) : puedeEditar ? (
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
                         <button
                           onClick={() => generarOT(a)}
                           className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
                         >
                           Generar OT
+                        </button>
+                        <button
+                          onClick={() => { setError(""); setResultado(null); setEnlazarA(a); }}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          Ya tiene OT
                         </button>
                         <button
                           onClick={() => setDesestimarA(a)}
@@ -394,6 +419,18 @@ export default function AvisosClient({
           onClose={() => setDesestimarA(null)}
           onHecho={(mensaje) => {
             setDesestimarA(null);
+            setResultado(mensaje);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {enlazarA && (
+        <EnlazarOTModal
+          aviso={enlazarA}
+          onClose={() => setEnlazarA(null)}
+          onEnlazada={(mensaje) => {
+            setEnlazarA(null);
             setResultado(mensaje);
             router.refresh();
           }}

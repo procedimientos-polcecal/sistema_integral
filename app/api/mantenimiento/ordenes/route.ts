@@ -2,16 +2,14 @@ import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { escribirCeldas } from "@/lib/core/sheets";
 import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT, type FilaDeOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
 } from "@/lib/mantenimiento/ordenes";
-import {
-  COLUMNA_OT_ASIGNADA, fechaDeLaCarga, type FechaDeLaCarga,
-} from "@/lib/mantenimiento/avisos";
+import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
+import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
   reservarClave, anotarLaClave, respuestaDeLaReserva,
 } from "@/lib/mantenimiento/claveDeCarga";
@@ -617,54 +615,21 @@ export async function POST(request: Request) {
   }
 
   // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
-  // alguien genere dos órdenes para el mismo problema.
+  // alguien genere dos órdenes para el mismo problema. La marca la escribe
+  // `lib/mantenimiento/marcarElAviso.ts`, compartida con `avisos/enlazar` para
+  // que los dos caminos dejen exactamente lo mismo. Sus dos fallas se juntan
+  // en un solo campo porque es lo que esta ruta siempre contestó y lo que la
+  // pantalla sabe leer.
   let aviso_error: string | null = null;
   if (aviso_id) {
-    aviso_error = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
+    const marca = await marcarElAviso(admin, aviso_id, inserted.id, ot_number);
+    aviso_error = marca.error ?? marca.planillaError;
   }
 
   return NextResponse.json({
     data: inserted, ot_number, aviso_error, planilla_error, planilla_reintentando,
     clave_error, repuestos_error,
   });
-}
-
-/**
- * Deja el aviso apuntando a la OT que se generó, de los dos lados.
- *
- * En la planilla de avisos se escribe el número en la columna "OT ASIGNADA",
- * que es donde lo busca quien no entra al sistema.
- */
-async function marcarElAviso(
-  admin: ReturnType<typeof createAdminClient>,
-  avisoId: string,
-  otId: string,
-  otNumber: number
-): Promise<string | null> {
-  const { data: aviso, error } = await admin
-    .from("avisos")
-    .update({ work_order_id: otId, ot_asignada: String(otNumber) })
-    .eq("id", avisoId)
-    .select("sheets_row")
-    .single();
-
-  if (error) return error.message;
-
-  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
-  if (!planilla || !aviso?.sheets_row) return null;
-
-  try {
-    await escribirCeldas(planilla, [{
-      pestana,
-      fila: aviso.sheets_row,
-      columna: COLUMNA_OT_ASIGNADA,
-      valor: String(otNumber),
-    }]);
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
 }
 
 // ── PATCH: actualizar estado de una OT desde la app ─────────────────────────
