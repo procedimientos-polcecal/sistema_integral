@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { traerTodo } from "@/lib/core/paginado";
 import { estaVigente, type PersonaDelTaller } from "@/lib/mantenimiento/disponibilidad";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
 import { altaDeAusencia, periodoEstaCerrado, TIPOS_DEL_ENCARGADO } from "@/lib/rrhh/altaDeAusencia";
@@ -43,7 +44,9 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
  *     cerrado queda escrita y nunca llega al recibo. Ese agujero ya existe del
  *     lado de RRHH y no se arregla acá, pero tampoco se agranda.
  *   - **Sólo se corrige o se borra lo que cargó el que pide** (`cargado_por_id`)
- *     y que sea de uno de sus cuatro tipos. Lo que cargó RRHH no lo toca.
+ *     y que sea de uno de sus cuatro tipos. Lo que cargó RRHH no lo toca. El
+ *     `GET` lista eso mismo y nada más: es lo único de `ausencias` que se ve
+ *     desde Mantenimiento, y se ve porque lo escribió él.
  *
  * El alta no la hace esta ruta: la hace `altaDeAusencia()` de
  * `lib/rrhh/altaDeAusencia.ts`, que es el mismo cuerpo que usa RRHH. Dar de alta
@@ -146,19 +149,32 @@ async function problemaDePadron(
   empleadoId: string,
   dias: string[]
 ): Promise<NextResponse | null> {
+  // `every` sobre una lista vacía es **true**: un rango vacío pasaría el único
+  // permiso que tiene esta ruta. Hoy no se puede llegar acá con la lista vacía
+  // —`problemasDelRango` rechaza antes el `hasta` anterior al `desde`—, pero la
+  // defensa no puede vivir en otra función tres llamadas más arriba.
+  if (dias.length === 0) {
+    return NextResponse.json({ error: "Rango de fechas vacío: no se comprobó el padrón" }, { status: 500 });
+  }
+
   const { data, error } = await db
     .from("mant_personal_taller")
     .select("oficio, grupo, desde, hasta")
     .eq("empleado_id", empleadoId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const padron: PersonaDelTaller[] = (data ?? []).map((f) => ({
-    empleadoId,
-    oficio: f.oficio as Oficio,
-    grupo: f.grupo as Grupo | null,
-    desde: soloElDia(f.desde),
-    hasta: f.hasta === null ? null : soloElDia(f.hasta),
-  }));
+  // Una fila cuyas fechas no se entienden **no cuenta**. `soloElDia(null)` da
+  // `""`, y `"" <= dia` es cierto para cualquier día: esa persona quedaría
+  // vigente desde el principio de los tiempos. Ante la duda, no es del taller.
+  const padron: PersonaDelTaller[] = (data ?? [])
+    .map((f) => ({
+      empleadoId,
+      oficio: f.oficio as Oficio,
+      grupo: f.grupo as Grupo | null,
+      desde: soloElDia(f.desde),
+      hasta: f.hasta === null ? null : soloElDia(f.hasta),
+    }))
+    .filter((p) => esFechaIso(p.desde) && (p.hasta === null || esFechaIso(p.hasta)));
 
   if (!dias.every((dia) => padron.some((p) => estaVigente(p, dia)))) {
     return NextResponse.json(
@@ -180,6 +196,12 @@ async function problemaDePeriodoCerrado(
   empleadoId: string,
   dias: string[]
 ): Promise<NextResponse | null> {
+  // Con la lista vacía los dos extremos serían `undefined` y la consulta se
+  // armaría con basura. Misma razón que en `problemaDePadron`.
+  if (dias.length === 0) {
+    return NextResponse.json({ error: "Rango de fechas vacío: no se comprobó la liquidación" }, { status: 500 });
+  }
+
   const { data, error } = await db
     .from("liquidaciones")
     .select("fecha_desde, fecha_hasta, estado")
@@ -246,6 +268,117 @@ async function recalcular(
   }
 }
 
+/**
+ * GET ?desde=&hasta= — las ausencias **que cargó el que pide**, de gente de su
+ * padrón, que cruzan ese rango.
+ *
+ * Existe porque sin esto el `PATCH` y el `DELETE` son inalcanzables desde la
+ * pantalla: la semana (`/api/mantenimiento/programacion`) dice quién falta, pero
+ * a propósito **no trae el id de la ausencia** ni el motivo, así que no hay con
+ * qué corregir ni qué borrar.
+ *
+ * Devuelve exactamente lo que esta misma ruta lo dejaría tocar: lo suyo
+ * (`cargado_por_id`), de los cuatro tipos del encargado, de menos de `MAX_DIAS`
+ * días y de alguien vigente en el padrón todos los días de la ausencia. Así un
+ * botón que la pantalla muestre no puede terminar en un 403 — y, de paso, una
+ * ausencia que él mismo haya cargado por RRHH con otro tipo (una `SUSPENSION`,
+ * una `LICENCIA_ART`) no aparece de este lado, que es el borde que el spec
+ * cuida: la pantalla dice que no está, no por qué.
+ */
+export async function GET(request: Request) {
+  const permiso = await admitir();
+  if (permiso.error) return permiso.error;
+
+  const params = new URL(request.url).searchParams;
+  const desde = params.get("desde");
+  const hasta = params.get("hasta");
+
+  const problemas: string[] = [];
+  if (!esFechaIso(desde)) problemas.push("Falta desde, en formato AAAA-MM-DD");
+  if (!esFechaIso(hasta)) problemas.push("Falta hasta, en formato AAAA-MM-DD");
+  if (esFechaIso(desde) && esFechaIso(hasta) && hasta < desde) {
+    problemas.push("La fecha hasta no puede ser anterior a la fecha desde");
+  }
+  if (problemas.length) return NextResponse.json({ error: problemas.join(". ") }, { status: 400 });
+
+  const db = createAdminClient();
+
+  // El filtro por `cargado_por_id` va en la consulta, no después: lo de otro no
+  // llega ni a leerse. `justificada` no sale —no la pide la pantalla— y el
+  // `select()` va literal.
+  let filas;
+  try {
+    filas = await traerTodo<{
+      id: string;
+      empleado_id: string;
+      fecha_desde: string;
+      fecha_hasta: string;
+      tipo: string;
+      observaciones: string | null;
+    }>((d, h) =>
+      db
+        .from("ausencias")
+        .select("id, empleado_id, fecha_desde, fecha_hasta, tipo, observaciones")
+        .eq("cargado_por_id", permiso.user.id)
+        .in("tipo", TIPOS_DEL_ENCARGADO as string[])
+        .lte("fecha_desde", hasta as string)
+        .gte("fecha_hasta", desde as string)
+        .order("fecha_desde")
+        .order("id")
+        .range(d, h)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+
+  // El padrón de una sola consulta: una por ausencia serían tantas consultas
+  // como filas. La ventana no es la pedida sino la que abarcan las ausencias
+  // encontradas, que pueden empezar antes o terminar después: con la ventana
+  // corta, una vigencia que arranca el día después del `hasta` no se traería y
+  // esa ausencia se filtraría por una vigencia que sí existe.
+  const bordes = filas.flatMap((a) => [soloElDia(a.fecha_desde), soloElDia(a.fecha_hasta)]).filter(esFechaIso);
+  const ventanaDesde = bordes.reduce((min, f) => (f < min ? f : min), desde as string);
+  const ventanaHasta = bordes.reduce((max, f) => (f > max ? f : max), hasta as string);
+
+  let padron;
+  try {
+    padron = await traerTodo<{ empleado_id: string; oficio: string; grupo: string | null; desde: string; hasta: string | null }>(
+      (d, h) =>
+        db
+          .from("mant_personal_taller")
+          .select("empleado_id, oficio, grupo, desde, hasta")
+          .lte("desde", ventanaHasta)
+          .or(`hasta.is.null,hasta.gte.${ventanaDesde}`)
+          .order("id")
+          .range(d, h)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+
+  const vigencias: PersonaDelTaller[] = padron
+    .map((f) => ({
+      empleadoId: f.empleado_id,
+      oficio: f.oficio as Oficio,
+      grupo: f.grupo as Grupo | null,
+      desde: soloElDia(f.desde),
+      hasta: f.hasta === null ? null : soloElDia(f.hasta),
+    }))
+    .filter((p) => esFechaIso(p.desde) && (p.hasta === null || esFechaIso(p.hasta)));
+
+  const data = filas
+    .map((a) => ({ ...a, fecha_desde: soloElDia(a.fecha_desde), fecha_hasta: soloElDia(a.fecha_hasta) }))
+    .filter((a) => {
+      if (!esFechaIso(a.fecha_desde) || !esFechaIso(a.fecha_hasta) || a.fecha_hasta < a.fecha_desde) return false;
+      if (cuantosDias(a.fecha_desde, a.fecha_hasta) > MAX_DIAS) return false;
+      return diasDelRango(a.fecha_desde, a.fecha_hasta).every((dia) =>
+        vigencias.some((p) => p.empleadoId === a.empleado_id && estaVigente(p, dia))
+      );
+    });
+
+  return NextResponse.json({ data });
+}
+
 /** POST — anotar la falta de alguien del taller. */
 export async function POST(request: Request) {
   const permiso = await admitir();
@@ -256,9 +389,15 @@ export async function POST(request: Request) {
   const fechaDesde = b?.fechaDesde;
   const fechaHasta = b?.fechaHasta;
   const tipo = String(b?.tipo ?? "");
-  const observaciones = typeof b?.observaciones === "string" ? b.observaciones : null;
+  // Lo que no sea texto se rechaza, no se tira en silencio: el `PATCH` hace lo
+  // mismo, y una observación que el encargado escribió y no se guardó es
+  // exactamente el tipo de cosa que nadie nota hasta que la necesita.
+  const observaciones = b?.observaciones == null ? null : b.observaciones;
 
   const problemas: string[] = [];
+  if (observaciones !== null && typeof observaciones !== "string") {
+    problemas.push("Las observaciones tienen que ser texto");
+  }
   if (!UUID.test(empleadoId)) problemas.push("Falta elegir la persona");
   if (!esFechaIso(fechaDesde)) problemas.push("La fecha desde falta o no es válida, tiene que ser AAAA-MM-DD");
   if (!esFechaIso(fechaHasta)) problemas.push("La fecha hasta falta o no es válida, tiene que ser AAAA-MM-DD");
@@ -266,7 +405,10 @@ export async function POST(request: Request) {
   if (b?.justificada !== undefined && typeof b.justificada !== "boolean") {
     problemas.push("Si la falta es justificada o no se dice con verdadero o falso");
   }
-  if (tipo === "OTRA" && !(observaciones ?? "").trim()) problemas.push(FALTA_EL_MOTIVO);
+  // `.trim()` sobre lo que todavía puede no ser texto reventaría en un 500 con
+  // stack antes de llegar al 400 de arriba.
+  const textoDeObservaciones = typeof observaciones === "string" ? observaciones : "";
+  if (tipo === "OTRA" && !textoDeObservaciones.trim()) problemas.push(FALTA_EL_MOTIVO);
   if (esFechaIso(fechaDesde) && esFechaIso(fechaHasta)) problemas.push(...problemasDelRango(fechaDesde, fechaHasta));
   if (problemas.length) return NextResponse.json({ error: problemas.join(". ") }, { status: 400 });
 
@@ -449,17 +591,30 @@ export async function PATCH(request: Request) {
     .eq("id", id)
     .eq("cargado_por_id", permiso.user.id)
     .select("id, empleado_id, fecha_desde, fecha_hasta, tipo, justificada, observaciones")
-    .single();
+    .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Sin fila, la ausencia se fue entre la lectura y la escritura: otra pestaña
+  // la borró. Con `.single()` eso llegaba como un error interno de PostgREST.
+  if (!data) return NextResponse.json({ error: "Esa ausencia ya no existe" }, { status: 404 });
 
+  // Se intentan **los dos** rangos aunque el primero falle. Cortar en el primero
+  // dejaba el otro sin recalcular y sin nombrar: después de mover las fechas, los
+  // días viejos seguirían mostrando la ausencia que ya no los cubre, y el mensaje
+  // no decía cuáles mirar — que es lo único que sirve para ir a arreglarlo.
+  const fallados: string[] = [];
   for (const [d, h] of rangos) {
     const falloElRecalculo = await recalcular(db, actual.empleado_id, d, h);
-    if (falloElRecalculo) {
-      return NextResponse.json(
-        { error: `La ausencia se modificó pero falló el recálculo de la liquidación: ${falloElRecalculo}` },
-        { status: 500 }
-      );
-    }
+    if (falloElRecalculo) fallados.push(`del ${d} al ${h} (${falloElRecalculo})`);
+  }
+  if (fallados.length) {
+    return NextResponse.json(
+      {
+        error:
+          "La ausencia se modificó pero la liquidación no se recalculó en " +
+          `${fallados.join(" y ")}. Esos días pueden estar mostrando lo que ya no es.`,
+      },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ data });
 }
@@ -503,12 +658,21 @@ export async function DELETE(request: Request) {
     .select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Nada borrado es que ya no estaba: otra pestaña se adelantó entre la lectura
+  // y el `delete`. Devolver `{ok: true, borradas: 0}` le decía "listo" a quien
+  // no mire el número, que es cualquiera.
+  if (!data?.length) return NextResponse.json({ error: "Esa ausencia ya no existe" }, { status: 404 });
+
   const falloElRecalculo = await recalcular(db, actual.empleado_id, desde, hasta);
   if (falloElRecalculo) {
     return NextResponse.json(
-      { error: `La ausencia se borró pero falló el recálculo de la liquidación: ${falloElRecalculo}` },
+      {
+        error:
+          `La ausencia se borró pero la liquidación no se recalculó del ${desde} al ${hasta} ` +
+          `(${falloElRecalculo}). Esos días pueden estar mostrando lo que ya no es.`,
+      },
       { status: 500 }
     );
   }
-  return NextResponse.json({ ok: true, borradas: data?.length ?? 0 });
+  return NextResponse.json({ ok: true, borradas: data.length });
 }
