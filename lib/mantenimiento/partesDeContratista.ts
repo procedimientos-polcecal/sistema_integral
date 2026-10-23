@@ -19,7 +19,7 @@
  * esto sería sólo transcribir.
  *
  * Acá vive todo lo que se puede probar sin hablar con nadie: proponer el
- * reparto, controlar que cierre, y agrupar los renglones de una semana en las
+ * reparto, controlar que cierre, y agrupar los renglones de una quincena en las
  * OT que les corresponden. Lo que habla con la base y con la planilla está en
  * las rutas.
  *
@@ -194,51 +194,62 @@ export function controlarHoras(
   return { ok: true, total: suma };
 }
 
-// ── La semana ───────────────────────────────────────────────
+// ── La quincena ─────────────────────────────────────────────
+
+/** Una fecha UTC armada a mano, para no depender del huso de quien corra esto. */
+function enIso(anio: number, mes0: number, dia: number): string {
+  return `${anio}-${String(mes0 + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
 
 /**
- * El lunes de la semana de una fecha, en "YYYY-MM-DD".
+ * El día en que empieza la quincena de una fecha: el 1 o el 16.
  *
- * La semana corre **de lunes a domingo**, que es como se mira el trabajo de
- * planta y como vienen los partes. Se calcula en UTC a propósito: una fecha
- * sin hora construida como local se corre un día en Argentina, y de esa fecha
- * sale después la fecha de cierre de la OT.
+ * **La unidad es la quincena y no la semana** desde el 23/10/2026. Es como
+ * Candia entrega los partes —quince hojas cada quince días— y como se factura,
+ * así que una OT por quincena es una OT por lo que se paga. Antes corría de
+ * lunes a domingo, y eso partía una quincena en tres pedazos que no le
+ * importan a nadie: «del 1 al 15» traía además del 28/9 al 18/10.
+ *
+ * Se calcula en UTC a propósito: una fecha sin hora construida como local se
+ * corre un día en Argentina, y de esa fecha sale después la fecha de cierre
+ * de la OT.
  */
-export function lunesDeLaSemana(fecha: string): string {
+export function inicioDeLaQuincena(fecha: string): string {
   const d = new Date(`${fecha}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return "";
-  // getUTCDay(): domingo es 0. Se lo lleva al final de la semana, no al principio.
-  const dia = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - dia);
-  return d.toISOString().slice(0, 10);
+  return enIso(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() <= 15 ? 1 : 16);
 }
 
 /**
- * El domingo de la semana de una fecha.
+ * El último día de la quincena de una fecha: el 15, o el último del mes.
  *
- * Hace falta para **estirar el rango que se pide a semanas enteras**, que es lo
- * que impide que una semana cargada en dos tandas termine con dos OT para el
- * mismo sector. Ver `agruparEnOrdenes`.
+ * Hace falta para **estirar el rango que se pide a quincenas enteras**, que es
+ * lo que impide que una quincena cargada en dos tandas termine con dos OT para
+ * el mismo sector. Ver `agruparEnOrdenes`.
+ *
+ * El cierre de la segunda no es un número fijo. Lo contesta el calendario —el
+ * día 0 del mes siguiente es el último del actual— y no una tabla de 30 y 31
+ * que haya que acordarse de corregir en febrero, y menos en un bisiesto.
  */
-export function domingoDeLaSemana(fecha: string): string {
-  const lunes = lunesDeLaSemana(fecha);
-  if (!lunes) return "";
-  const d = new Date(`${lunes}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 6);
-  return d.toISOString().slice(0, 10);
+export function finDeLaQuincena(fecha: string): string {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  if (d.getUTCDate() <= 15) return enIso(d.getUTCFullYear(), d.getUTCMonth(), 15);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
+    .toISOString().slice(0, 10);
 }
 
 /**
- * Qué hace a una OT una OT: la semana, la actividad y el sector.
+ * Qué hace a una OT una OT: la quincena, la actividad y el sector.
  *
  * Está en una función y no repetida en dos lados porque **la clave se calcula
  * dos veces**: una sobre los renglones que todavía no se convirtieron y otra
  * sobre los que ya tienen orden, para saber si hay que crear una OT o sumarle
- * horas a la que ya existe. Si las dos cuentas se separaran, una semana
+ * horas a la que ya existe. Si las dos cuentas se separaran, una quincena
  * cargada en dos tandas volvería a terminar con dos órdenes del mismo sector.
  */
 export function claveDeOT(fecha: string, actividad: string, sectorId: string): string {
-  return `${lunesDeLaSemana(fecha)}|${normalizarLugar(actividad)}|${sectorId}`;
+  return `${inicioDeLaQuincena(fecha)}|${normalizarLugar(actividad)}|${sectorId}`;
 }
 
 // ── La agrupación en OT ─────────────────────────────────────
@@ -256,10 +267,10 @@ export interface RenglonParaAgrupar {
    * La OT a la que ya fue, si fue.
    *
    * Se agrupan **los convertidos junto con los que no**, que es lo contrario de
-   * lo primero que se escribió. Mirando sólo los pendientes, una semana cargada
-   * en dos tandas da dos veces la misma clave: el 1301 crea «Limpieza ·
-   * Calcinación» de la semana del 28/9, y el 1302 —mismo sector, misma semana—
-   * crea otra. El `orden_trabajo_id` impide reconvertir un renglón, no impide
+   * lo primero que se escribió. Mirando sólo los pendientes, una quincena
+   * cargada en dos tandas da dos veces la misma clave: el 1301 crea «Limpieza ·
+   * Calcinación» de la primera quincena de octubre, y el 1302 —mismo sector,
+   * misma quincena— crea otra. El `orden_trabajo_id` impide reconvertir un renglón, no impide
    * una segunda orden con la misma clave.
    *
    * Juntos, el grupo sabe que ya tiene orden y lo que corresponde es **sumarle
@@ -269,9 +280,10 @@ export interface RenglonParaAgrupar {
 }
 
 export interface GrupoDeOT {
-  /** `semana|actividad normalizada|sector`. Es lo que hace a una OT una OT. */
+  /** `quincena|actividad normalizada|sector`. Es lo que hace a una OT una OT. */
   clave: string;
-  semana: string;
+  /** El día en que empieza: el 1 o el 16. Ver `inicioDeLaQuincena`. */
+  quincena: string;
   actividad: string;
   sector_id: string;
   /**
@@ -280,7 +292,7 @@ export interface GrupoDeOT {
    * Es la única excepción a «toda OT lleva equipo», que rige desde el
    * 19/10/2026 porque de ahí viven el MTBF y la ficha de la máquina. Acá la
    * agrupación es por sector —se pidió así: "1 actividad por OT por sector"—,
-   * y una semana de limpieza que tocó el horno y además las cintas no es de
+   * y una quincena de limpieza que tocó el horno y además las cintas no es de
    * ninguna de las dos máquinas. **Poner una de ellas sería enlazar al que se
    * le parece**, con el agravante de que las horas irían a su MTBF.
    *
@@ -316,9 +328,11 @@ export interface Agrupacion {
 /**
  * Los renglones de una tanda, agrupados en las OT que les corresponden.
  *
- * Una OT por **(semana, actividad, sector)**, con las horas sumadas: es lo que
- * se pidió —"una OT cada semana, por sector"— y lo que hace que el papel se
- * pueda leer como trabajo y no como una lista de días.
+ * Una OT por **(quincena, actividad, sector)**, con las horas sumadas: es lo
+ * que se pidió —"una OT por quincena, actividad y sector", 23/10/2026— y lo
+ * que hace que el papel se pueda leer como trabajo y no como una lista de
+ * días. La quincena corre del 1 al 15 y del 16 a fin de mes, sin mirar el día
+ * de la semana: es como Candia entrega los partes y como se factura.
  *
  * **Los renglones sin sector quedan afuera y se devuelven aparte.** No se los
  * manda a un sector parecido ni a uno genérico: un enlace equivocado pone las
@@ -329,7 +343,7 @@ export interface Agrupacion {
  * no es un detalle: una quincena no se carga de una sentada, así que mirando
  * sólo los pendientes la segunda tanda vuelve a producir la clave que la
  * primera ya convirtió, y se crea una segunda OT para el mismo sector y la
- * misma semana. Juntos, el grupo trae en `ot_existentes` la orden que ya tiene
+ * misma quincena. Juntos, el grupo trae en `ot_existentes` la orden que ya tiene
  * y quien llama sabe que lo que corresponde es sumarle las horas nuevas.
  */
 export function agruparEnOrdenes(
@@ -341,7 +355,7 @@ export function agruparEnOrdenes(
   for (const r of renglones) {
     if (!r.sector_id) { sinSector.push(r); continue; }
 
-    const semana = lunesDeLaSemana(r.fecha);
+    const quincena = inicioDeLaQuincena(r.fecha);
     const actividad = r.actividad.trim();
     const clave = claveDeOT(r.fecha, actividad, r.sector_id);
 
@@ -349,7 +363,7 @@ export function agruparEnOrdenes(
     if (!grupo) {
       porClave.set(clave, {
         clave,
-        semana,
+        quincena,
         actividad,
         sector_id: r.sector_id,
         equipo_id: r.equipo_id,
@@ -387,10 +401,10 @@ export function agruparEnOrdenes(
     });
   }
 
-  // Ordenados por semana y después por actividad: es como se van a crear y
+  // Ordenados por quincena y después por actividad: es como se van a crear y
   // como se leen en la pantalla antes de confirmarlas.
   const grupos = [...porClave.values()].sort((a, b) =>
-    a.semana.localeCompare(b.semana) || a.actividad.localeCompare(b.actividad)
+    a.quincena.localeCompare(b.quincena) || a.actividad.localeCompare(b.actividad)
   );
 
   for (const g of grupos) {
@@ -416,7 +430,8 @@ export function descripcionDeLaOT(grupo: GrupoDeOT, contratista: string): string
     .join("; ");
 
   return (
-    `${grupo.actividad} — ${contratista}. Semana del ${fechaCorta(grupo.semana)}. ` +
+    `${grupo.actividad} — ${contratista}. ` +
+    `Quincena del ${fechaCorta(grupo.quincena)} al ${fechaCorta(finDeLaQuincena(grupo.quincena))}. ` +
     `${grupo.horas} h en total. Según los partes diarios: ${dias}. ` +
     `Las horas de cada renglón las anotó quien cargó el parte repartiendo el ` +
     `total escrito en la hoja, así que no son una medición por frente de trabajo.`

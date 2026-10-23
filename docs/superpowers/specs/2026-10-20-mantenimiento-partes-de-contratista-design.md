@@ -14,7 +14,8 @@ Lo que se quiere de esto, en orden:
 1. **Controlar la factura.** Las horas tienen que cerrar: lo que el sistema
    suma tiene que dar lo que Candia escribió.
 2. **Agrupar horas por actividad.**
-3. **Una OT por semana, por sector, por actividad**, ya realizada, con sus horas.
+3. **Una OT por quincena, por sector, por actividad**, ya realizada, con sus
+   horas. (Era por semana; se dio vuelta el 23/10/2026 — ver abajo.)
 
 Y una condición de forma que decide el diseño: **se carga todo en un solo lugar
 y el sistema genera las OT solo.** Cargar quince hojas y además crear veinte OT
@@ -39,6 +40,59 @@ MATERIALES
 
 Los números **son correlativos** —1301, 1302, 1303— así que un salto o un
 repetido se detecta solo.
+
+## La unidad es la quincena, no la semana (23/10/2026)
+
+El diseño del 20/10 decía «una OT cada semana, por sector», y la primera
+quincena cargada de verdad mostró que la semana no es la unidad de nada acá.
+Pedido textual: *«que me interprete desde el 1ero de cada mes al 15, no importa
+qué día de la semana sea»*.
+
+**La quincena corre del 1 al 15 y del 16 a fin de mes**, sin mirar el día de la
+semana. Es como Candia entrega los partes —quince hojas cada quince días— y es
+como se factura, así que **una OT por quincena es una OT por lo que se paga**,
+que era el objetivo número uno del documento.
+
+Cambia en dos lugares, y son el mismo:
+
+- **La clave de la OT** pasa a ser *(quincena, actividad, sector)*.
+- **El rango que se pide se estira a quincenas enteras** en vez de a semanas.
+  Pedir «del 3 al 10» trae del 1 al 15, porque la unidad es la quincena. Y
+  pedir «del 1 al 15» —que es lo que se pide siempre— ya es una quincena
+  entera, así que ahí estirar no mueve nada. Ésa fue la razón del cambio: con
+  la semana, ese mismo pedido traía **del 28/9 al 18/10**.
+
+Medido sobre la primera quincena de octubre, que son los partes 1301 a 1310 con
+32 renglones y 144 h:
+
+| | OT que salen | horas |
+|---|---|---|
+| Por semana | 20 | 144 |
+| Por quincena | **10** | 144 |
+
+Las mismas horas, la mitad de órdenes y más gordas: «Limpieza · Calcinación»
+pasa de tres OT de 8 h a **una de 24 h**.
+
+**El fin de la segunda quincena lo pone el calendario y no una tabla**: el día
+0 del mes siguiente es el último del actual, así que febrero cierra el 28 y el
+bisiesto el 29 sin que nadie tenga que acordarse. Está fijado con tests.
+
+Y aparece un caso que con la semana no existía: **el 30 y el 1 son dos
+quincenas aunque estén pegados**. Del 28/9 al 4/10 era una sola semana, así que
+el 30/9 y el 1/10 caían juntos; ahora son dos OT, y tienen que serlo, porque
+son dos facturas distintas.
+
+Lo que **no** cambió: todo lo de «Y lo que eso NO alcanzaba a impedir» sigue
+valiendo tal cual, leyendo «quincena» donde dice «semana» — un grupo que ya
+tiene orden suma en vez de crear, las horas se reescriben con el total del
+grupo, la fecha de cierre sólo avanza, y dos órdenes para la misma clave se
+denuncian en vez de elegir una.
+
+Verificado contra las filas reales el 23/10/2026: pedir 1/10→15/10 lee del 1 al
+15, agrupa 32 renglones en 10 OT y suma 144 h, que es lo que dicen los diez
+papeles.
+
+---
 
 ## Las horas las escribe quien carga el parte (22/10/2026)
 
@@ -111,7 +165,7 @@ preguntarle, que no es lo mismo que un número que salió de una división.
 
 ### La generación de las OT no se tocó
 
-Agrupa igual por *(semana, actividad, sector)*, suma las horas que estén
+Agrupa igual por *(quincena, actividad, sector)*, suma las horas que estén
 guardadas, y todo lo de «Y lo que eso NO alcanzaba a impedir» sigue valiendo
 tal cual. Lo único que cambió es de dónde salen las horas de cada renglón.
 
@@ -238,8 +292,8 @@ tiene que poder ver que da 18 antes de pasar a la siguiente.
 
 ### La generación de las OT
 
-Un botón sobre una semana: agrupa los renglones de esa semana por *(actividad,
-sector)*, suma las horas y crea **una OT realizada por grupo**, con la fecha de
+Un botón sobre un rango: agrupa los renglones de esa **quincena** por
+*(actividad, sector)*, suma las horas y crea **una OT realizada por grupo**, con la fecha de
 cierre del último parte del grupo, el contratista, y en la descripción los
 textos originales de Candia con sus números de parte.
 
@@ -259,15 +313,16 @@ impide una segunda orden con la misma clave.
 Una quincena de quince hojas no se carga de una sentada. Con la agrupación
 mirando sólo los renglones pendientes, la secuencia natural —cargo el 1301,
 genero, cargo el 1302 del jueves, genero— daba **dos OT de «Limpieza ·
-Calcinación» de la semana del 28/9**: la segunda corrida volvía a armar la
+Calcinación» de la misma quincena**: la segunda corrida volvía a armar la
 clave que la primera ya había convertido, sin ver que ya existía. Es
-exactamente lo contrario de «una OT cada semana, por sector», y no avisa: las
+exactamente lo contrario de «una OT cada quincena, por sector», y no avisa: las
 dos órdenes son válidas, cada una con sus horas.
 
 Tres cosas lo arreglan, y van juntas:
 
-- **El rango se estira a semanas enteras.** Pedir "del 1 al 3" trae la semana
-  del 28/9 completa, porque la unidad es la semana.
+- **El rango se estira a unidades enteras.** Pedir "del 3 al 10" trae del 1 al
+  15 completo, porque la unidad es la quincena. (Decía "a semanas enteras";
+  ver la sección del 23/10/2026.)
 - **Se agrupan los convertidos junto con los pendientes.** Es lo contrario de
   lo primero que se escribió, y es lo que permite que el grupo sepa que ya
   tiene orden.

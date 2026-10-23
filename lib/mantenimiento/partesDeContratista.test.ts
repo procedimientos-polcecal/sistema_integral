@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizarLugar, repartoParejo, horasTrasUnCambio, controlarHoras,
-  lunesDeLaSemana, domingoDeLaSemana, claveDeOT,
+  inicioDeLaQuincena, finDeLaQuincena, claveDeOT,
   agruparEnOrdenes, descripcionDeLaOT,
   type RenglonParaAgrupar,
 } from "./partesDeContratista";
@@ -178,18 +178,37 @@ describe("el control contra el total del papel", () => {
 });
 
 
-describe("la semana", () => {
-  it("corre de lunes a domingo", () => {
-    // 2026-10-01 es jueves.
-    expect(lunesDeLaSemana("2026-10-01")).toBe("2026-09-28");
-    expect(lunesDeLaSemana("2026-09-28")).toBe("2026-09-28");
-    // El domingo cae en la semana que termina, no en la que empieza.
-    expect(lunesDeLaSemana("2026-10-04")).toBe("2026-09-28");
-    expect(lunesDeLaSemana("2026-10-05")).toBe("2026-10-05");
+/**
+ * La unidad es la **quincena** desde el 23/10/2026, y no la semana: del 1 al
+ * 15 y del 16 a fin de mes, caiga el dia de la semana que caiga. Es como
+ * Candia entrega los partes y como se factura, asi que una OT por quincena es
+ * una OT por lo que se paga.
+ */
+describe("la quincena", () => {
+  it("del 1 al 15 es la primera, caiga el dia que caiga", () => {
+    // El 1/10/2026 es jueves y el 15 es jueves tambien: no importa.
+    expect(inicioDeLaQuincena("2026-10-01")).toBe("2026-10-01");
+    expect(inicioDeLaQuincena("2026-10-07")).toBe("2026-10-01");
+    expect(inicioDeLaQuincena("2026-10-15")).toBe("2026-10-01");
+    expect(finDeLaQuincena("2026-10-07")).toBe("2026-10-15");
   });
 
-  it("una fecha que no es fecha no inventa una semana", () => {
-    expect(lunesDeLaSemana("ayer")).toBe("");
+  it("del 16 en adelante es la segunda, y termina con el mes", () => {
+    expect(inicioDeLaQuincena("2026-10-16")).toBe("2026-10-16");
+    expect(inicioDeLaQuincena("2026-10-31")).toBe("2026-10-16");
+    expect(finDeLaQuincena("2026-10-20")).toBe("2026-10-31");
+  });
+
+  /** El fin de la segunda no es un numero fijo: lo pone el mes. */
+  it("la segunda quincena termina el 30, el 28 o el 29 segun el mes", () => {
+    expect(finDeLaQuincena("2026-04-18")).toBe("2026-04-30");
+    expect(finDeLaQuincena("2026-02-20")).toBe("2026-02-28");
+    expect(finDeLaQuincena("2028-02-20")).toBe("2028-02-29");
+  });
+
+  it("una fecha que no es fecha no inventa una quincena", () => {
+    expect(inicioDeLaQuincena("ayer")).toBe("");
+    expect(finDeLaQuincena("ayer")).toBe("");
   });
 });
 
@@ -228,22 +247,50 @@ describe("las OT que salen de los partes", () => {
     expect(grupos).toHaveLength(3);
   });
 
-  it("dos semanas no se mezclan aunque sean el mismo sector y la misma actividad", () => {
+  /**
+   * Lo que cambio el 23/10/2026: el 1 y el 6 de octubre son semanas distintas
+   * —jueves y martes— y la misma quincena, asi que ahora son **una sola OT**.
+   */
+  it("dos fechas de la misma quincena son una sola OT aunque sean semanas distintas", () => {
     const { grupos } = agruparEnOrdenes([
       renglon({ id: "a", fecha: "2026-10-01" }),
       renglon({ id: "b", fecha: "2026-10-06" }),
     ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].quincena).toBe("2026-10-01");
+  });
+
+  it("dos quincenas no se mezclan aunque sean el mismo sector y la misma actividad", () => {
+    const { grupos } = agruparEnOrdenes([
+      renglon({ id: "a", fecha: "2026-10-15" }),
+      renglon({ id: "b", fecha: "2026-10-16" }),
+    ]);
     expect(grupos).toHaveLength(2);
-    expect(grupos.map((g) => g.semana)).toEqual(["2026-09-28", "2026-10-05"]);
+    expect(grupos.map((g) => g.quincena)).toEqual(["2026-10-01", "2026-10-16"]);
   });
 
   it("la OT cierra el dia del ultimo parte del grupo", () => {
     const { grupos } = agruparEnOrdenes([
-      renglon({ id: "a", fecha: "2026-09-30", parte_numero: 1300 }),
-      renglon({ id: "b", fecha: "2026-10-02", parte_numero: 1302 }),
-      renglon({ id: "c", fecha: "2026-10-01", parte_numero: 1301 }),
+      renglon({ id: "a", fecha: "2026-10-03", parte_numero: 1300 }),
+      renglon({ id: "b", fecha: "2026-10-05", parte_numero: 1302 }),
+      renglon({ id: "c", fecha: "2026-10-04", parte_numero: 1301 }),
     ]);
-    expect(grupos[0].fecha_cierre).toBe("2026-10-02");
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].fecha_cierre).toBe("2026-10-05");
+  });
+
+  /**
+   * El cruce de mes, que con la semana no existia: del 28/9 al 4/10 era una
+   * sola semana, asi que el 30/9 y el 1/10 caian juntos. Con la quincena son
+   * dos OT, y tienen que serlo — son dos facturas distintas.
+   */
+  it("el 30 y el 1 son dos quincenas aunque esten pegados", () => {
+    const { grupos } = agruparEnOrdenes([
+      renglon({ id: "a", fecha: "2026-09-30", parte_numero: 1300 }),
+      renglon({ id: "b", fecha: "2026-10-01", parte_numero: 1301 }),
+    ]);
+    expect(grupos).toHaveLength(2);
+    expect(grupos.map((g) => g.quincena)).toEqual(["2026-09-16", "2026-10-01"]);
   });
 
   /**
@@ -333,15 +380,21 @@ describe("las OT que salen de los partes", () => {
     // Es lo que sostiene todo lo de arriba: si las dos cuentas se separaran,
     // la segunda tanda no reconoceria la orden de la primera.
     expect(claveDeOT("2026-10-01", "Limpieza", "s-1"))
-      .toBe(claveDeOT("2026-10-04", "LIMPIEZA", "s-1"));
+      .toBe(claveDeOT("2026-10-14", "LIMPIEZA", "s-1"));
     expect(claveDeOT("2026-10-01", "Limpieza", "s-1"))
-      .not.toBe(claveDeOT("2026-10-05", "Limpieza", "s-1"));
+      .not.toBe(claveDeOT("2026-10-16", "Limpieza", "s-1"));
   });
 
-  it("la semana se estira a domingo para pedir el rango entero", () => {
-    expect(domingoDeLaSemana("2026-10-01")).toBe("2026-10-04");
-    expect(domingoDeLaSemana("2026-09-28")).toBe("2026-10-04");
-    expect(domingoDeLaSemana("2026-10-05")).toBe("2026-10-11");
+  /**
+   * Pedir "del 1 al 15" ya es una quincena entera, asi que estirar no hace
+   * nada — que es justamente lo que se pidio. Lo que sigue importando es
+   * pedir "del 3 al 10": eso trae la quincena completa, porque es la unidad.
+   */
+  it("el rango se estira a quincenas enteras", () => {
+    expect(inicioDeLaQuincena("2026-10-03")).toBe("2026-10-01");
+    expect(finDeLaQuincena("2026-10-10")).toBe("2026-10-15");
+    expect(inicioDeLaQuincena("2026-10-01")).toBe("2026-10-01");
+    expect(finDeLaQuincena("2026-10-15")).toBe("2026-10-15");
   });
 
   it("la actividad agrupa sin importar como se escribio", () => {

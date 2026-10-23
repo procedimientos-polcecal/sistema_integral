@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
-  horasTrasUnCambio, controlarHoras, normalizarLugar, lunesDeLaSemana,
+  horasTrasUnCambio, controlarHoras, normalizarLugar,
+  inicioDeLaQuincena, finDeLaQuincena,
 } from "@/lib/mantenimiento/partesDeContratista";
 
 /**
@@ -322,7 +323,7 @@ export default function PartesContratistaClient({
           <h1 className="text-xl font-semibold text-slate-800">Partes diarios del contratista</h1>
           <p className="mt-1 text-sm text-slate-500">
             Se carga el papel tal como está escrito. Las órdenes de trabajo las genera el
-            sistema después, una por semana, actividad y sector.
+            sistema después, una por quincena, actividad y sector.
           </p>
         </div>
         <label className="block w-full sm:w-64">
@@ -576,8 +577,10 @@ export default function PartesContratistaClient({
             Generar las órdenes de trabajo
           </h2>
           <p className="mb-4 text-sm text-slate-500">
-            Una OT por semana, actividad y sector, ya realizada y con sus horas. Un renglón
-            que ya se convirtió no se vuelve a convertir.
+            Una OT por quincena, actividad y sector, ya realizada y con sus horas. La
+            quincena va del 1 al 15 y del 16 a fin de mes, sin mirar el día de la semana:
+            el rango que pedís se estira a quincenas enteras. Un renglón que ya se
+            convirtió no se vuelve a convertir.
           </p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -632,7 +635,7 @@ export default function PartesContratistaClient({
                 <tr>
                   <th className="px-3 py-2">N°</th>
                   <th className="px-3 py-2">Fecha</th>
-                  <th className="px-3 py-2">Semana</th>
+                  <th className="px-3 py-2">Quincena</th>
                   <th className="px-3 py-2">Horas</th>
                   <th className="px-3 py-2">Renglones</th>
                   <th className="px-3 py-2">OT</th>
@@ -651,7 +654,7 @@ export default function PartesContratistaClient({
                       <td className="px-3 py-2 font-medium">{p.numero}</td>
                       <td className="px-3 py-2">{enDiaMes(p.fecha)}</td>
                       <td className="px-3 py-2 text-slate-500">
-                        {enDiaMes(lunesDeLaSemana(p.fecha))}
+                        {rangoDeLaQuincena(p.fecha)}
                       </td>
                       <td className="px-3 py-2">{p.horas_declaradas} h</td>
                       <td className="px-3 py-2 text-slate-500">
@@ -676,11 +679,19 @@ export default function PartesContratistaClient({
   );
 }
 
+/** "1/10–15/10": la quincena de una fecha, para la lista de partes. */
+function rangoDeLaQuincena(fecha: string): string {
+  const desde = inicioDeLaQuincena(fecha);
+  if (!desde) return "—";
+  return `${enDiaMes(desde)}–${enDiaMes(finDeLaQuincena(fecha))}`;
+}
+
 // ── Lo que se va a crear ────────────────────────────────────
 
 interface Simulacion {
   grupos: {
-    clave: string; semana: string; actividad: string; sector: string;
+    clave: string; quincena: string; quincena_hasta: string;
+    actividad: string; sector: string;
     equipo: string; tiene_equipo: boolean; horas: number;
     fecha_cierre: string; partes: number[]; descripcion: string;
     ya_existe: boolean; conflicto: boolean;
@@ -726,7 +737,7 @@ function Previo({ previo }: { previo: Simulacion }) {
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-3 py-2">Qué pasa</th>
-                <th className="px-3 py-2">Semana</th>
+                <th className="px-3 py-2">Quincena</th>
                 <th className="px-3 py-2">Actividad</th>
                 <th className="px-3 py-2">Sector</th>
                 <th className="px-3 py-2">Equipo</th>
@@ -738,7 +749,7 @@ function Previo({ previo }: { previo: Simulacion }) {
               {previo.grupos.map((g) => (
                 <tr key={g.clave} className="border-t border-slate-100">
                   {/* Crear y sumar no son lo mismo y la diferencia importa:
-                      «suma» quiere decir que esa semana ya tenía su orden y
+                      «suma» quiere decir que esa quincena ya tenía su orden y
                       queda con el total de las dos tandas, no con dos órdenes. */}
                   <td className="px-3 py-2">
                     {g.conflicto ? (
@@ -749,7 +760,9 @@ function Previo({ previo }: { previo: Simulacion }) {
                       <span className="text-emerald-700">OT nueva</span>
                     )}
                   </td>
-                  <td className="px-3 py-2">{enDiaMes(g.semana)}</td>
+                  <td className="px-3 py-2">
+                    {enDiaMes(g.quincena)}–{enDiaMes(g.quincena_hasta)}
+                  </td>
                   <td className="px-3 py-2">{g.actividad}</td>
                   <td className="px-3 py-2">{g.sector}</td>
                   <td className={`px-3 py-2 ${g.tiene_equipo ? "" : "text-slate-400"}`}>
@@ -795,7 +808,7 @@ function enDiaMes(fecha: string): string {
  * El día siguiente, para encadenar las quince hojas de una quincena.
  *
  * En UTC: una fecha sin hora construida como local se corre un día en
- * Argentina, y acá eso mandaría el parte a la semana de al lado.
+ * Argentina, y acá eso mandaría el parte a la quincena de al lado.
  */
 function sumarUnDia(fecha: string): string {
   const d = new Date(`${fecha}T00:00:00Z`);

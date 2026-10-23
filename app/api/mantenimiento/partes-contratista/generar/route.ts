@@ -10,16 +10,21 @@ import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/orde
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
-  agruparEnOrdenes, descripcionDeLaOT, lunesDeLaSemana, domingoDeLaSemana,
+  agruparEnOrdenes, descripcionDeLaOT, inicioDeLaQuincena, finDeLaQuincena,
   type RenglonParaAgrupar, type GrupoDeOT,
 } from "@/lib/mantenimiento/partesDeContratista";
 
 /**
  * Las OT que salen de los partes diarios de un contratista.
  *
- * Una OT por **(semana, actividad, sector)**, ya realizada, con las horas
- * sumadas. Es lo que se pidió —"una OT cada semana, por sector"— y lo que hace
- * que quince hojas de papel se puedan leer como trabajo.
+ * Una OT por **(quincena, actividad, sector)**, ya realizada, con las horas
+ * sumadas. Es lo que se pidió —"una OT por quincena, actividad y sector",
+ * 23/10/2026— y lo que hace que quince hojas de papel se puedan leer como
+ * trabajo. La quincena corre **del 1 al 15 y del 16 a fin de mes**, sin mirar
+ * el día de la semana: es como Candia entrega los partes y como se factura,
+ * así que una OT por quincena es una OT por lo que se paga. Medido sobre la
+ * primera quincena de octubre: por semana salían 20 órdenes y por quincena
+ * salen 10, con las mismas 144 h.
  *
  * ── POR QUÉ ESTOS VALORES Y NO OTROS ────────────────────────────────────────
  *
@@ -35,9 +40,9 @@ import {
  * dos razones medidas. La primera: **118 de esas 156 ya no lo tienen** — el
  * formulario les pone `EQUIPO = "PO-A3 - Edificio"`, que es un texto de la
  * lista y no una máquina del catálogo. La segunda: la agrupación es por
- * sector, así que una semana de limpieza que tocó el horno y además las cintas
- * no es de ninguna de las dos máquinas, y quedarse con una le daría a su MTBF
- * las horas de la otra.
+ * sector, así que una quincena de limpieza que tocó el horno y además las
+ * cintas no es de ninguna de las dos máquinas, y quedarse con una le daría a
+ * su MTBF las horas de la otra.
  *
  * Así que el `equipo_raw` dice "<código> - Edificio" como viene diciendo, y el
  * `equipment_id` se llena **sólo cuando todos los renglones del grupo apuntan
@@ -126,21 +131,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ese contratista no existe" }, { status: 400 });
   }
 
-  // ── El rango se estira a semanas enteras ────────────────────
+  // ── El rango se estira a quincenas enteras ──────────────────
   //
-  // La unidad es la semana, así que pedir "del 1 al 3 de octubre" tiene que
-  // traer la semana del 28/9 completa. Sin esto, cargar una quincena en dos
-  // tandas termina con **dos OT del mismo sector y la misma semana**: la
-  // primera corrida convierte lo del 1301 y la segunda vuelve a armar la misma
-  // clave con lo del 1302, sin ver que ya existe. Se encontró el 20/10/2026
-  // cargando el 1301 de verdad.
-  const desdeEntero = lunesDeLaSemana(desde);
-  const hastaEntero = domingoDeLaSemana(hasta);
+  // La unidad es la quincena, así que pedir "del 3 al 10 de octubre" tiene que
+  // traer del 1 al 15. Sin esto, cargar una quincena en dos tandas termina con
+  // **dos OT del mismo sector y la misma quincena**: la primera corrida
+  // convierte lo del 1301 y la segunda vuelve a armar la misma clave con lo
+  // del 1302, sin ver que ya existe. Se encontró el 20/10/2026 cargando el
+  // 1301 de verdad.
+  //
+  // Pedir "del 1 al 15" —que es lo que se pide siempre— ya es una quincena
+  // entera, así que ahí estirar no mueve nada. Ésa fue la razón del cambio del
+  // 23/10/2026: con la semana, ese mismo pedido traía del 28/9 al 18/10.
+  const desdeEntero = inicioDeLaQuincena(desde);
+  const hastaEntero = finDeLaQuincena(hasta);
   if (!desdeEntero || !hastaEntero) {
     return NextResponse.json({ error: "Esas fechas no se entienden" }, { status: 400 });
   }
 
-  // **Todos los renglones de esas semanas, convertidos o no.** Los ya
+  // **Todos los renglones de esas quincenas, convertidos o no.** Los ya
   // convertidos hacen falta para reconocer la orden que el grupo ya tiene; sin
   // ellos la agrupación no puede distinguir "hay que crearla" de "hay que
   // sumarle las horas nuevas".
@@ -200,9 +209,9 @@ export async function POST(request: Request) {
   const problemas: string[] = [];
 
   for (const grupo of grupos.slice(0, TOPE_POR_CORRIDA)) {
-    // Tres caminos, y el del medio es el que faltaba: una semana cargada en dos
-    // tandas no necesita una orden más, necesita que la que ya tiene diga las
-    // horas de las dos.
+    // Tres caminos, y el del medio es el que faltaba: una quincena cargada en
+    // dos tandas no necesita una orden más, necesita que la que ya tiene diga
+    // las horas de las dos.
     if (grupo.ot_existentes.length > 1) {
       problemas.push(
         `${comoDecirla(grupo, nombres)}: los renglones de ese grupo apuntan a ${grupo.ot_existentes.length} ` +
@@ -283,7 +292,8 @@ function equipoParaLaPlanilla(grupo: GrupoDeOT, nombres: Nombres): string {
 function conNombres(grupo: GrupoDeOT, nombres: Nombres, contratista: string) {
   return {
     clave: grupo.clave,
-    semana: grupo.semana,
+    quincena: grupo.quincena,
+    quincena_hasta: finDeLaQuincena(grupo.quincena),
     actividad: grupo.actividad,
     sector: nombres.sectores.get(grupo.sector_id)?.nombre ?? "(sector desconocido)",
     equipo: equipoParaLaPlanilla(grupo, nombres),
@@ -301,7 +311,7 @@ function conNombres(grupo: GrupoDeOT, nombres: Nombres, contratista: string) {
 /** Cómo nombrar un grupo en un mensaje de error. */
 function comoDecirla(grupo: GrupoDeOT, nombres: Nombres): string {
   const sector = nombres.sectores.get(grupo.sector_id)?.nombre ?? "(sector desconocido)";
-  return `${grupo.actividad} · ${sector} · semana del ${grupo.semana}`;
+  return `${grupo.actividad} · ${sector} · quincena del ${grupo.quincena}`;
 }
 
 type Resumen = {
@@ -318,18 +328,18 @@ type Resultado =
  * Le suma a una OT que ya existe las horas de los partes nuevos.
  *
  * Es el camino que faltaba, y es el normal: una quincena de quince hojas no se
- * carga de una sentada, así que la semana del 28/9 ya tiene su orden cuando
- * entra el parte del jueves. **Crear otra sería tener dos órdenes del mismo
- * sector y la misma semana**, que es exactamente lo contrario de lo que se
- * pidió.
+ * carga de una sentada, así que la primera quincena de octubre ya tiene su
+ * orden cuando entra el parte del 1310. **Crear otra sería tener dos órdenes
+ * del mismo sector y la misma quincena**, que es exactamente lo contrario de
+ * lo que se pidió.
  *
  * Reescribe las horas y la descripción con el total del grupo —no suma sobre lo
  * que haya en la base—: el grupo ya trae todos sus renglones, los viejos y los
  * nuevos, así que leer y sumar contaría dos veces lo de antes.
  *
- * **La fecha de cierre sólo avanza.** Un parte del lunes cargado después del
- * jueves no puede mover el cierre hacia atrás: la semana se terminó el día que
- * se terminó.
+ * **La fecha de cierre sólo avanza.** Un parte del día 2 cargado después del
+ * día 9 no puede mover el cierre hacia atrás: la quincena se terminó el día
+ * que se terminó.
  */
 async function actualizarLaOT(
   admin: ReturnType<typeof createAdminClient>,
@@ -448,7 +458,7 @@ async function crearLaOT(
   const sectorNombre = sector?.nombre ?? "";
   const equipoRaw = equipoParaLaPlanilla(grupo, nombres);
   const descripcion = descripcionDeLaOT(grupo, contratista);
-  const comoDecirla = `${grupo.actividad} · ${sectorNombre} · semana del ${grupo.semana}`;
+  const comoDecirla = `${grupo.actividad} · ${sectorNombre} · quincena del ${grupo.quincena}`;
 
   // Baja a propósito: es trabajo ya hecho. Una prioridad alta en una orden
   // cerrada sólo ensucia los tableros que ordenan por ella.
