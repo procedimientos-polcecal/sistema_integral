@@ -17,6 +17,7 @@ export interface ConteosParaAvisos {
   facturacionSinVincular: number;
   canteraSinConciliar: number;
   calidadEnvasesSinPlanilla: number;
+  calidadCarbonillaBandeja: number;
   tallerVialSinEquipo: number;
   tallerVialSinService: number;
   trituracionSinPlanilla: number;
@@ -48,6 +49,20 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
   { clave: "facturacionSinVincular", id: "facturacion-sin-vincular", titulo: "Facturas en el buzón sin vincular a una compra", href: "/facturacion?estado=recibida" },
   { clave: "canteraSinConciliar", id: "cantera-sin-conciliar", titulo: "Registros de cantera con factura sin conciliar o a revisar", href: "/cantera/registros" },
   { clave: "calidadEnvasesSinPlanilla", id: "calidad-envases-sin-planilla", titulo: "Movimientos de envases que no llegaron a la planilla", href: "/calidad/envases/movimientos" },
+  /*
+   * En carbonilla manda la planilla, y desde el 23/10/2026 una fila que cambió
+   * se relee sola. Lo que queda en la bandeja es lo que el SdG **no puede**
+   * resolver y necesita una persona: una fila vaciada —que no se borra sola
+   * porque una planilla calculando se lee igual que una vacía—, un código que
+   * no es de ningún carbonillero, o un id duplicado por copiar y pegar una
+   * fila.
+   *
+   * La bandeja existe desde el 13/10 y en diez días no la miró nadie. En ese
+   * tiempo el SdG estuvo 8 t abajo y después 59 t abajo, y las dos veces se
+   * supo porque alguien preguntó. Un tablero que hay que acordarse de abrir no
+   * es un tablero: por eso esto va al resumen diario, que llega solo.
+   */
+  { clave: "calidadCarbonillaBandeja", id: "calidad-carbonilla-bandeja", titulo: "Filas de la planilla de carbonilla que el sistema no pudo leer", href: "/calidad/carbonilla" },
   { clave: "tallerVialSinEquipo", id: "taller-vial-sin-equipo", titulo: "Cargas de combustible sin un equipo reconocido", href: "/taller-vial/cargas" },
   /*
    * Reemplaza a "service de 250 hs vencido" y "service por vencer", que medían

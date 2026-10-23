@@ -57,7 +57,8 @@ async function avisosDeLosModulos(
   const [
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
-    facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla,
+    facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
+    trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
@@ -69,6 +70,15 @@ async function avisosDeLosModulos(
     contarSiTiene("despacho", () => head("despacho_ordenes_carga").not("sheets_pendiente", "is", null)),
     contarSiTiene("facturacion", () => head("facturas_proveedor").is("requerimiento_id", null).eq("estado", "recibida")),
     contarSiTiene("calidad", () => head("calidad_envases_movimientos").not("sheets_pendiente", "is", null)),
+    // La bandeja se rehace entera en cada lectura, así que su tamaño ES la
+    // divergencia de hoy: lo que la planilla dice y el SdG no pudo aplicar.
+    // La PK es `fila`, no `id`, así que el conteo va por esa columna.
+    tiene("calidad")
+      ? supabase
+          .from("calidad_planilla_sin_reconocer")
+          .select("fila", { count: "exact", head: true })
+          .then(({ count }) => count ?? 0)
+      : Promise.resolve(0),
     contarSiTiene("trituracion", () => head("trituracion_partes").not("sheets_pendiente", "is", null)),
     // Una carga con `equipo_id` en null es un texto suelto —"empresa piparo" en
     // vez de un código EM— que no entra en ningún resumen por equipo hasta que
@@ -87,7 +97,8 @@ async function avisosDeLosModulos(
   const conteos: Partial<ConteosParaAvisos> = {
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
-    facturacionSinVincular, calidadEnvasesSinPlanilla, trituracionSinPlanilla,
+    facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
+    trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService,
   };
 

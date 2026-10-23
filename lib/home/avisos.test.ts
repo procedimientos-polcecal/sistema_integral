@@ -21,6 +21,28 @@ describe("avisosDeConteos", () => {
     });
   });
 
+  /*
+   * La bandeja de carbonilla es lo único que queda sin aplicarse después del
+   * 23/10/2026, cuando una fila cambiada pasó a releerse sola. Lo que cae ahí
+   * es lo que el SdG NO puede resolver: una fila vaciada, un código que no es
+   * de ningún carbonillero, un id duplicado por copiar y pegar.
+   *
+   * Existe desde el 13/10 y no la miró nadie. Mientras tanto el SdG estuvo 8 t
+   * abajo una semana y 59 t abajo dos días después, y las dos veces me enteré
+   * porque alguien me lo pidió. Un tablero que hay que acordarse de abrir no es
+   * un tablero.
+   */
+  it("avisa de las filas de carbonilla que el SdG no pudo resolver", () => {
+    expect(avisosDeConteos({ calidadCarbonillaBandeja: 3 })).toEqual([
+      {
+        id: "calidad-carbonilla-bandeja",
+        titulo: "Filas de la planilla de carbonilla que el sistema no pudo leer",
+        cantidad: 3,
+        href: "/calidad/carbonilla",
+      },
+    ]);
+  });
+
   it("incluye los dos módulos nuevos", () => {
     const avisos = avisosDeConteos({ calidadEnvasesSinPlanilla: 2, trituracionSinPlanilla: 2 });
     expect(avisos.map((a) => a.id)).toEqual(["calidad-envases-sin-planilla", "trituracion-sin-planilla"]);
