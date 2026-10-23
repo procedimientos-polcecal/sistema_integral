@@ -228,6 +228,19 @@ Cinco reglas que costaron caro, y que valen para las cuatro:
   — la misma trampa que la anterior, por el otro lado. La fecha va como serial
   con `serialDelDia()` y los números como número; `escribirCeldas()` y
   `agregarFila()` aceptan los dos tipos. Un número no se interpreta.
+- **Y al revés: el texto que tipea una persona sí va como texto.** Es la misma
+  regla por el otro lado y se completó el 23/10/2026. `USER_ENTERED` convierte
+  en fórmula lo que arranca con `=`, `+`, `-` o `@`, así que una descripción
+  que diga `=IMPORTRANGE(...)` hace a mano lo que el 19/10/2026 dejó las once
+  pestañas de Compras en blanco todo el día. Lo resuelve `textoParaLaCelda()`
+  de [lib/core/sheets.ts](lib/core/sheets.ts) —un apóstrofo delante, que
+  Google consume y no guarda— y hoy lo usan los once caminos de escritura.
+  Lo que hay que saber antes de agregar el doceavo: **se aplica sólo a la
+  prosa.** Un número, una hora, un serial de fecha o un id prefijados dejan de
+  ser lo que son, y ahí la planilla deja de poder sumarlos — los horarios de
+  Despacho alimentan `=F2-E2`. Medido el día que se puso: de 10.816 filas, cero
+  tenían uno de esos caracteres, así que **nada se va a poner rojo el día que
+  alguien lo saque**; el porqué está en el docstring de la función.
 - **Antes de escribir una celda, comprobar el encabezado de esa columna.**
   `letraDeColumna()` es **0-based** —su primer renglón es `indice + 1`, así que
   el 0 es la A—, y el 21/10/2026 un script le pasó un `6` creyendo que era la F:
