@@ -1,0 +1,58 @@
+# Sube a Drive el zip más nuevo de cada molino, todos los días a las 09:30.
+#
+# Las credenciales del recurso compartido y la ruta de los datos salen de un
+# archivo `.env` al lado de éste — ver `.env.ejemplo`. Ese `.env` NO se
+# commitea: lleva la contraseña de la cuenta que lee el servidor.
+#
+# Arranque:
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# Para probar sin subir nada, antes de dejarlo prendido:
+#   docker compose run --rm subidor node subir-zips.mjs /config/subir-zips.config.json --seco
+
+services:
+  subidor:
+    build: .
+    container_name: sdg-pcrobot-subidor
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+    volumes:
+      # Los zips, de SÓLO LECTURA. Es la propiedad de seguridad que más
+      # importa de todo esto: aunque el script tuviera un error, no puede
+      # tocar la carpeta del robot. Lo único que sabe hacer con ella es leer.
+      - filler1:/datos/filler1:ro
+      - filler2:/datos/filler2:ro
+      # La configuración y la credencial, también de sólo lectura.
+      - ./config:/config:ro
+    logging:
+      # Sin esto el log del contenedor crece sin techo. Una línea por molino
+      # por día es poquísimo, pero "poquísimo durante tres años" tampoco es
+      # cero y nadie lo va a estar mirando.
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    security_opt:
+      - no-new-privileges:true
+
+# Docker monta el recurso compartido por sí mismo, con el driver `local` y
+# `type: cifs`. Es mejor que montarlo en el host y pasar la ruta: queda
+# declarado acá, se levanta solo con el contenedor, y no depende de un
+# `/etc/fstab` que alguien tiene que acordarse de tocar.
+#
+# El `vers=3.0` está puesto a propósito y puede haber que bajarlo: un servidor
+# viejo que sólo habla SMB 1 falla con un "mount error(112)" que no dice nada
+# sobre la versión del protocolo.
+volumes:
+  filler1:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Filler1"
+  filler2:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Filler2"

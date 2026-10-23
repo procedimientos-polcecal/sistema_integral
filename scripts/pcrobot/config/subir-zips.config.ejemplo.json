@@ -1,0 +1,17 @@
+{
+  "_comentario": "Versión para el contenedor. Copiar como subir-zips.config.json en esta misma carpeta, junto con el JSON de la cuenta de servicio. Esta carpeta se monta en /config de sólo lectura y NO se commitea: lleva la credencial.",
+
+  "_credencial": "Ruta DENTRO del contenedor. El archivo va al lado de éste, en scripts/pcrobot/config/.",
+  "credencial": "/config/cuenta-de-servicio.json",
+
+  "_carpetaDrive": "Id de la carpeta de destino. TIENE que estar dentro de una unidad compartida, no en 'Mi unidad' de nadie. Se saca de la URL: drive.google.com/drive/folders/<ESTO>",
+  "carpetaDrive": "PONER_EL_ID_DE_LA_CARPETA",
+
+  "_origenes": "Rutas DENTRO del contenedor, no del servidor: el docker-compose.yml monta los recursos compartidos en /datos. 'nombre' es lo que el SdG usa para saber de qué molino es el archivo, así que no se cambia a la ligera.",
+  "origenes": [
+    { "nombre": "Filler 1", "carpeta": "/datos/filler1" },
+    { "nombre": "Filler 2", "carpeta": "/datos/filler2" }
+  ],
+
+  "_log": "Sin definir a propósito: adentro de un contenedor el log es `docker compose logs`, que ya rota. Un archivo acá se perdería al recrear el contenedor."
+}

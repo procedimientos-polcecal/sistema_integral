@@ -1,0 +1,17 @@
+{
+  "_comentario": "Copiar como subir-zips.config.json al lado del script, en la PC que vaya a subir. NO se commitea: lleva rutas de esa máquina y la ubicación de la credencial.",
+
+  "credencial": "C:\\SdG\\pcrobot\\cuenta-de-servicio.json",
+
+  "_carpetaDrive": "Id de la carpeta de destino. TIENE que estar dentro de una unidad compartida, no en 'Mi unidad' de nadie. Se saca de la URL: drive.google.com/drive/folders/<ESTO>",
+  "carpetaDrive": "PONER_EL_ID_DE_LA_CARPETA",
+
+  "_origenes": "Una entrada por molino. 'nombre' es el que va a llevar el archivo en Drive y lo que el SdG usa para saber de qué molino es, así que no se cambia a la ligera. 'carpeta' es donde el PCRobot deja los zips en esta máquina.",
+  "origenes": [
+    { "nombre": "Filler 1", "carpeta": "\\\\server\\EXTERIOR\\Filler1" },
+    { "nombre": "Filler 2", "carpeta": "\\\\server\\EXTERIOR\\Filler2" }
+  ],
+
+  "_log": "Opcional pero muy recomendado: una tarea programada no tiene a nadie mirando la consola.",
+  "log": "C:\\SdG\\pcrobot\\subir-zips.log"
+}
