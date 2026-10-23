@@ -57,6 +57,28 @@ pegar una fila duplica su id** (las dos van a la bandeja y no se toca ninguna), 
 a entrar con otro id y el camión quedaría dos veces; para que entre hay que
 borrar la celda `K`).
 
+### Cómo se comprueba que empatan
+
+```bash
+npx tsx --env-file=.env.local scripts/empatan-carbonilla-y-la-planilla.mts
+```
+
+Compara los saldos **por tipo** y dice qué haría la lectura, sin escribir una
+sola celda. Sale 0 cuando empatan y no hay nada trabado.
+
+**No mira el `TOTAL` de la planilla**, por lo que está explicado arriba: está
+0,450 t arriba de la suma de sus propias dos columnas desde la fila 386, y
+mandan las cantidades por tipo.
+
+Existe porque la condición acordada para volver a cortar es *que los números
+empaten y eso se sostenga en el tiempo*, y esa medición no estaba en ningún
+lado: se hacía a mano. Por eso las dos veces que el libro se desempató —8 t el
+21/10/2026 y 59 t el 23/10— se supo porque alguien preguntó. Una condición que
+nadie puede medir no es una condición.
+
+Es el hermano de `scripts/simular-bajada-envases.mts`, que contesta lo mismo
+para el otro frente.
+
 ### Una fila que cambió se relee entera — corregido el 23/10/2026
 
 Hasta esa fecha una fila cambiada **se informaba y no se aplicaba**, con el
@@ -403,6 +425,7 @@ Dos cosas más que la importación dejó anotadas:
 | El cron diario, 8 UTC | `app/api/cron/calidad-sync` |
 | Pantallas | `app/(app)/calidad/{carbonilla,movimientos,conciliacion,carbonilleros,productos}` |
 | La importación, una sola vez | `scripts/importar-stock-carbonilla.mts` |
+| **¿Empatan el SdG y la planilla?** | **`scripts/empatan-carbonilla-y-la-planilla.mts`** |
 
 ## Lo que falta de una persona
 
