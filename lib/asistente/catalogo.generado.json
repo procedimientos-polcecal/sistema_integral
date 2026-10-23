@@ -303,6 +303,16 @@
         "columna": "motivo_desestimado",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "area_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "avisos_fotos": [
@@ -4973,7 +4983,7 @@
       {
         "columna": "horas_expresion",
         "tipo": "text",
-        "nuleable": false
+        "nuleable": true
       },
       {
         "columna": "horas_declaradas",
