@@ -7,7 +7,9 @@
  * y cuando falla queda anotado en vez de perderse en un log.
  */
 
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
+import {
+  leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto, textoParaLaCelda,
+} from "@/lib/core/sheets";
 import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
 /**
@@ -109,6 +111,9 @@ const numero = (n: number): string => (n > 0 ? String(n) : "");
  *
  * Va aparte de la llamada a Google para poder probarla: es la parte que decide
  * qué se toca y qué no, y tocar la G de más sería romper la planilla entera.
+ *
+ * La observación y el proveedor los tipea una persona y van por
+ * `textoParaLaCelda`; las cuatro cantidades y la fecha son número.
  */
 export function celdasDelMovimiento(
   m: MovimientoAEspejar, fila: number, pestana: string
@@ -126,8 +131,8 @@ export function celdasDelMovimiento(
     celda(COL.rotura, numero(m.rotura)),
     celda(COL.despacho, numero(m.despacho)),
     celda(COL.fecha, fechaParaLaPlanilla(m.fecha)),
-    celda(COL.observacion, m.observacion ?? ""),
-    celda(COL.proveedor, m.proveedor ?? ""),
+    celda(COL.observacion, textoParaLaCelda(m.observacion)),
+    celda(COL.proveedor, textoParaLaCelda(m.proveedor)),
   ];
 }
 

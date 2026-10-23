@@ -12,6 +12,7 @@ import { montoBochon, montoPerforacion, montoVoladura, cruce, type LecturaDeCruc
 import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { Bochon, Voladura, Yacimiento } from "./types";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /** "8/9/2026": d/m, como escribe la planilla. Nunca m/d — eso dio vuelta 885 fechas en Compras. */
 export function fechaComoSeEscribe(fecha: string | null): string {
@@ -94,7 +95,7 @@ export function filaPerforacion(v: Voladura, yac: Yacimiento | null): string[] {
     numeroComoSeEscribe(montoPerf),
     v.perf_odoo_ref ?? "",
     coincideComoSeEscribe(cruce(montoPerf, v.perf_odoo_importe).lectura),
-    v.observaciones ?? "",
+    textoParaLaCelda(v.observaciones),
   ];
 }
 
@@ -142,7 +143,7 @@ export function filaVoladura(v: Voladura, yac: Yacimiento | null, consumos: Reng
     numeroComoSeEscribe(montoVol),
     v.vol_odoo_ref ?? "",
     coincideComoSeEscribe(cruce(montoVol, v.vol_odoo_importe).lectura),
-    v.observaciones ?? "",
+    textoParaLaCelda(v.observaciones),
     numeroComoSeEscribe(pozosVol),
     numeroComoSeEscribe(metrosVol),
     numeroComoSeEscribe(burdenEfectivo),
@@ -179,6 +180,6 @@ export function filaBochon(b: Bochon, yac: Yacimiento | null): string[] {
     numeroComoSeEscribe(monto),
     b.odoo_ref ?? "",
     coincideComoSeEscribe(cruce(monto, b.odoo_importe).lectura),
-    b.observaciones ?? "",
+    textoParaLaCelda(b.observaciones),
   ];
 }

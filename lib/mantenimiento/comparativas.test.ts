@@ -428,3 +428,53 @@ describe("que fila de la planilla es una cotizacion a medias", () => {
     expect(pareceCotizacion(fila("-", "-"))).toBe(false);
   });
 });
+
+/*
+ * `USER_ENTERED` interpreta lo que arranca con `=`, `+`, `-` o `@`. El
+ * precedente es del 19/10/2026: un lazo de IMPORTRANGE dejo las once pestanas
+ * de Compras en blanco todo el dia, sin que nadie escribiera una formula.
+ */
+describe("la comparativa de una OS no deja entrar una formula", () => {
+  const cot = {
+    os_number: 16, fecha: "2025-12-03", area: "Mantenimiento",
+    sector: "Planta filler 2", equipo_raw: "PY-B1-09 – Molino vertical",
+    descripcion: "Eje", proveedor: "Met. Don Alfredo",
+    precio_unitario: "1972500", iva: 0.21, precio_total: "2386725",
+    vigencia_hasta: null, plazos: "15", condiciones_pago: "20 días F.F",
+    otras_especificaciones: null, eleccion: true,
+  };
+
+  it("escapa lo que tipea quien carga la cotizacion", () => {
+    const fila = filaParaComparativa({
+      ...cot,
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      proveedor: "-Met. Don Alfredo",
+      condiciones_pago: "@contado",
+      otras_especificaciones: "+IVA",
+    });
+
+    expect(fila[5]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(fila[6]).toBe("'-Met. Don Alfredo");
+    expect(fila[12]).toBe("'@contado");
+    expect(fila[13]).toBe("'+IVA");
+  });
+
+  it("un texto normal no cambia", () => {
+    const fila = filaParaComparativa(cot);
+    expect(fila[5]).toBe("Eje");
+    expect(fila[6]).toBe("Met. Don Alfredo");
+    expect(fila[12]).toBe("20 días F.F");
+  });
+
+  /*
+   * Los PLAZOS quedan afuera a proposito: son dias —"15", "30, 60"— y la
+   * columna tiene validacion de lista, asi que escribir "15" como texto
+   * cambiaria lo que la planilla compara. El N de OS y el IVA, igual.
+   */
+  it("los plazos, el N de OS y el IVA siguen sin escapar", () => {
+    const fila = filaParaComparativa(cot);
+    expect(fila[11]).toBe("15");
+    expect(fila[0]).toBe(16);
+    expect(fila[8]).toBe(0.21);
+  });
+});

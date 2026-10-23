@@ -39,7 +39,7 @@
 
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import {
-  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas,
+  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas, textoParaLaCelda,
 } from "@/lib/core/sheets";
 
 /** La pestaña donde caen las respuestas del formulario. */
@@ -259,7 +259,12 @@ export function celdasDelAlta(
   // `serialDelInstante` no valida —lo dice su propio docstring—: una fecha
   // inválida da NaN, que escrito es "NaN" y deja una marca temporal basura en
   // una fila que ya no se puede distinguir de una respuesta de verdad.
-  const texto = (v: string | null | undefined): string => String(v ?? "").trim();
+  // Recortado y, si hace falta, escapado: estas trece columnas son todo lo que
+  // una persona tipea en el alta, y la escritura es `USER_ENTERED`. El N° y la
+  // marca temporal no pasan por acá porque son número, y prefijarlos rompería
+  // la fórmula del RI que los lee.
+  const texto = (v: string | null | undefined): string =>
+    textoParaLaCelda(String(v ?? "").trim());
 
   const marca = serialDelInstante(datos.creado);
   if (!Number.isFinite(marca)) {

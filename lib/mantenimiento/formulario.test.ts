@@ -299,3 +299,44 @@ describe("si la pestana de altas esta sin encabezado", () => {
     expect(r.motivos.join(" ")).toContain("descripcion");
   });
 });
+
+/*
+ * El alta escribe con `USER_ENTERED` en la planilla de produccion, asi que lo
+ * que arranca con `=`, `+`, `-` o `@` entra como formula. El precedente es
+ * del 19/10/2026: un lazo de IMPORTRANGE dejo las once pestanas de Compras
+ * en blanco todo el dia, y nadie habia escrito una formula mala a mano.
+ */
+describe("el alta de una OT no deja entrar una formula", () => {
+  it("escapa lo que tipea quien pide", () => {
+    const r = celdasDelAlta(ENCABEZADO, {
+      ...datos,
+      quien: "-INTERNO",
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      repuesto: "+2 rodamientos",
+    });
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+
+    expect(valorDe(r.celdas, 23)).toBe("'-INTERNO");
+    expect(valorDe(r.celdas, 24)).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(valorDe(r.celdas, 25)).toBe("'+2 rodamientos");
+  });
+
+  it("un texto normal no cambia", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error("no armó");
+    expect(valorDe(r.celdas, 24)).toBe("Reemplazo de grillas");
+  });
+
+  /*
+   * La otra mitad de la regla: el N° y las dos fechas son numero. Escribirlos
+   * como texto es lo mismo que escribir la fecha en d/m, que es la trampa que
+   * dio vuelta 885 fechas en Compras.
+   */
+  it("el N de OT y las fechas siguen siendo numero", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error("no armó");
+    expect(valorDe(r.celdas, 0)).toBe(2786);
+    expect(typeof valorDe(r.celdas, 1)).toBe("number");
+    expect(typeof valorDe(r.celdas, 26)).toBe("number");
+  });
+});

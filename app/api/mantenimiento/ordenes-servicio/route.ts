@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { puedeAprobarOS } from "@/lib/compras/auth";
-import { leerValores, escribirCeldas, letraDeColumna } from "@/lib/core/sheets";
+import {
+  leerValores, escribirCeldas, letraDeColumna, textoParaLaCelda,
+} from "@/lib/core/sheets";
 import { ALIAS_OS, claveDeEncabezado, puedeEscribirse, pestanaDeArea } from "@/lib/mantenimiento/os";
 import {
   dondeSeEscribeElEstado, esDenegacionDeOS, faltaLaJustificacion,
@@ -285,7 +287,15 @@ export async function PATCH(request: Request) {
   }
   if (body.proveedor_elegido !== undefined) {
     update.proveedor_elegido = texto(body.proveedor_elegido);
-    enPlanilla.push({ clave: "proveedor_elegido", valor: String(update.proveedor_elegido ?? "") });
+    // A la planilla va escapado y a la base tal cual: `USER_ENTERED` convierte
+    // en fórmula lo que arranca con `=`, `+`, `-` o `@`, y el proveedor y las
+    // observaciones son las dos únicas columnas de texto libre que esta ruta
+    // escribe allá. El estado sale de un vocabulario cerrado y las fechas de
+    // `fechaAR`.
+    enPlanilla.push({
+      clave: "proveedor_elegido",
+      valor: textoParaLaCelda(String(update.proveedor_elegido ?? "")),
+    });
   }
   if (body.fecha_pedido !== undefined) {
     update.fecha_pedido = body.fecha_pedido || null;
@@ -297,7 +307,10 @@ export async function PATCH(request: Request) {
   }
   if (body.observaciones !== undefined) {
     update.observaciones = texto(body.observaciones);
-    enPlanilla.push({ clave: "observaciones", valor: String(update.observaciones ?? "") });
+    enPlanilla.push({
+      clave: "observaciones",
+      valor: textoParaLaCelda(String(update.observaciones ?? "")),
+    });
   }
   // El motivo no va a la planilla: la única columna de texto libre que la app
   // escribe allá es OBSERVACIONES, que es de uso general y tiene notas cargadas

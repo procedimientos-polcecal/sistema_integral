@@ -283,6 +283,24 @@ export const comoTexto = (valor: string): string => `'${valor}`;
  *
  * El apóstrofo no se ve en la planilla: Google lo consume y guarda el valor
  * como texto.
+ *
+ * ── POR QUÉ NO SE SACA, AUNQUE HOY NO HAGA FALTA ──────────
+ *
+ * Medido el 23/10/2026 sobre las cinco tablas que escriben texto libre —2.255
+ * OT, 2.186 requerimientos, 4.650 movimientos de inventario, 1.538 de envases
+ * y 187 avisos—: **cero** textos arrancan con uno de esos cuatro caracteres.
+ * El único en toda la base es una observación de OS que dice `--`. O sea que
+ * esto no arregla nada de lo que ya hay, y por eso se puede sacar sin que
+ * ningún test se ponga rojo y sin que nada se vea mal.
+ *
+ * Lo que defiende es lo otro. El 19/10/2026 la planilla de Compras pasó el día
+ * entera en blanco por un lazo de `IMPORTRANGE` —1.686 celdas que no resuelven
+ * nunca, y las once pestañas se vaciaron juntas porque las diez por área son
+ * `FILTER` del master—. Nadie lo escribió a propósito: se duplicó una pestaña.
+ * Un `=IMPORTRANGE(...)` tipeado en una descripción hace lo mismo a mano, y
+ * desde el 22/10/2026 el alta de avisos la puede usar cualquier autenticado
+ * —pasó de 4 personas a 14—. El costo de tenerlo puesto es un apóstrofo que no
+ * se ve; el de no tenerlo, un día de planilla.
  */
 export function textoParaLaCelda(valor: string | null | undefined): string {
   const v = String(valor ?? "");

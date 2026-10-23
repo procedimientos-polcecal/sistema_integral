@@ -233,3 +233,42 @@ describe("el cruce de medianoche contra el error de tipeo", () => {
     expect(parsearHoraDePlanilla("05:59", "2026-09-08", antes)).toBe("2026-09-09T08:59:00.000Z");
   });
 });
+
+/*
+ * `USER_ENTERED` interpreta lo que arranca con `=`, `+`, `-` o `@`. En
+ * Despacho manda el sistema, asi que lo que se escribe mal se queda mal: el
+ * precedente es del 19/10/2026, cuando un lazo de IMPORTRANGE dejo las once
+ * pestanas de Compras en blanco todo el dia.
+ */
+describe("la orden no deja entrar una formula", () => {
+  it("escapa el cliente, el material y las notas", () => {
+    const fila = filaDeLaPlanilla(
+      {
+        ...ORDEN,
+        cliente_raw: "-GT CONSTRUCCIONES S.A.",
+        producto_raw: "=IMPORTRANGE(\"https://x\";\"A1\")",
+        notas: "@porton 2",
+      },
+      null
+    );
+
+    expect(fila[2]).toBe("'-GT CONSTRUCCIONES S.A.");
+    expect(fila[3]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(fila[8]).toBe("'@porton 2");
+  });
+
+  it("un texto normal no cambia", () => {
+    const fila = filaDeLaPlanilla(ORDEN, null);
+    expect(fila[2]).toBe("GT CONSTRUCCIONES S.A.");
+    expect(fila[8]).toBe("portón 2");
+  });
+
+  /*
+   * Y los cuatro horarios siguen entrando como hora: las columnas J y K son
+   * `=F2-E2` y `=H2-G2`, y restar texto las deja en error.
+   */
+  it("los horarios no se escapan", () => {
+    const fila = filaDeLaPlanilla(ORDEN, null);
+    for (const i of [4, 5, 6, 7]) expect(fila[i]).not.toMatch(/^'/);
+  });
+});

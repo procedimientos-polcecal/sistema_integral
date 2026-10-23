@@ -18,6 +18,7 @@
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { fechaDeTexto, comoSeLee } from "@/lib/core/fechas";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {
@@ -225,32 +226,15 @@ const fechaAR = (iso: string | null | undefined): string => {
 };
 
 /**
- * Un texto libre, listo para escribirse en la planilla.
- *
- * `agregarFila()` escribe con `USER_ENTERED`, así que lo que entra **se
- * interpreta**: una descripción que empiece con `=` la toma la planilla de
- * producción como una fórmula. Hasta que el alta se abrió a todos, sólo 4
- * usuarios podían hacerlo; ahora son 14, y el 19/10/2026 un lazo de
- * `IMPORTRANGE` dejó las once pestañas de Compras en blanco todo el día.
- *
- * El apóstrofo es la marca de «esto es texto» de Sheets y **no se muestra**, así
- * que «- pierde aceite» se sigue leyendo igual. Se prefija con `-` y `+` además
- * de `=` y `@` porque los cuatro arrancan una fórmula.
- *
- * Es sólo para lo que escribe una persona: la fecha y el N° de aviso los arma
- * el sistema.
- */
-function comoTexto(valor: string | null | undefined): string {
-  const v = valor ?? "";
-  return /^[=+\-@]/.test(v) ? `'${v}` : v;
-}
-
-/**
  * Un aviso nuevo, como las celdas de la planilla.
  *
  * Las columnas H e I quedan vacías a propósito: son restos de una fórmula que
  * parte en dos el nombre de quien avisó, y escribir ahí pisaría lo que la
  * planilla calcula sola.
+ *
+ * El sector, el equipo y la urgencia salen de un desplegable y el N° y la fecha
+ * los arma el sistema; los otros tres los tipea una persona y por eso pasan por
+ * `textoParaLaCelda`.
  */
 export function filaParaLaPlanilla(aviso: {
   oa_number: string;
@@ -270,14 +254,14 @@ export function filaParaLaPlanilla(aviso: {
   fila[COL.fecha] = fechaAR(aviso.fecha);
   fila[COL.sector] = aviso.sector_raw ?? "";
   fila[COL.equipo] = aviso.equipo_raw ?? "";
-  fila[COL.descripcion] = comoTexto(aviso.descripcion);
+  fila[COL.descripcion] = textoParaLaCelda(aviso.descripcion);
   fila[COL.urgencia] = aviso.urgencia ?? "";
-  fila[COL.quien] = comoTexto(aviso.quien_aviso);
+  fila[COL.quien] = textoParaLaCelda(aviso.quien_aviso);
   // Sólo la primera: la columna es una celda con un link y `filaDeAviso` la
   // lee como uno solo. Sin escribirla, la próxima sincronización lee la K
   // vacía y la foto cargada en la app desaparece de los dos lados.
   fila[COL.imagen] = aviso.reference_photos?.[0] ?? "";
-  fila[COL.observaciones] = comoTexto(aviso.observaciones);
+  fila[COL.observaciones] = textoParaLaCelda(aviso.observaciones);
 
   return fila;
 }

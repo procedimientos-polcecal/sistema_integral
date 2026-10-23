@@ -108,3 +108,34 @@ describe("contextoDeProteccion", () => {
     expect(contextoDeProteccion("Google respondió 403: insufficient scope")).toBe("");
   });
 });
+
+/*
+ * Misma regla que en el kardex del almacen, y el mismo precedente: el
+ * 19/10/2026 un lazo de IMPORTRANGE dejo las once pestanas de Compras en
+ * blanco todo el dia. Aca el riesgo es la observacion, que es texto libre.
+ */
+describe("el kardex de envases no deja entrar una formula", () => {
+  it("escapa la observacion y el proveedor", () => {
+    const celdas = celdasDelMovimiento(
+      { ...MOV, observacion: "=IMPORTRANGE(\"https://x\";\"A1\")", proveedor: "-Flexi" },
+      1404,
+      "Entradas  Salidas"
+    );
+    const de = (columna: number) => celdas.find((c) => c.columna === columna)?.valor;
+
+    expect(de(COL.observacion)).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(de(COL.proveedor)).toBe("'-Flexi");
+  });
+
+  it("un texto normal no cambia", () => {
+    const celdas = celdasDelMovimiento(MOV, 1404, "Entradas  Salidas");
+    expect(celdas.find((c) => c.columna === COL.observacion)?.valor)
+      .toBe("Rto. Flexi Rigs: 00001 - 3290");
+  });
+
+  /* Las cuatro cantidades las suma la formula del saldo: no se tocan. */
+  it("la salida sigue siendo numero", () => {
+    const celdas = celdasDelMovimiento(MOV, 1404, "Entradas  Salidas");
+    expect(celdas.find((c) => c.columna === COL.salida)?.valor).toBe("1200");
+  });
+});

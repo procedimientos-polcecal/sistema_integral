@@ -14,6 +14,7 @@ import { monedaExacta } from "@/lib/compras/constants";
 import { numeroArgentino } from "@/lib/core/numeroArgentino";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { fechaDeTexto } from "@/lib/core/fechas";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /** Las 19 columnas de la plantilla, en orden. */
 export const COLUMNAS_COMPARATIVA = [
@@ -476,6 +477,13 @@ const porcentaje = (v: number | null | undefined) =>
  * una planilla: si alguien corrige un precio ahí, el total se recalcula. Es la
  * fórmula corregida, con el envío sumado — las filas viejas conservan la
  * original hasta que alguien las toque.
+ *
+ * Y porque acá sí se escriben fórmulas a propósito, conviene decir cuáles no:
+ * las seis celdas que tipea quien carga el presupuesto —descripción,
+ * proveedor, marca, unidad, condiciones de pago, disponibilidad y comentario—
+ * van por `textoParaLaCelda`, así que un `=` que venga de ahí entra como
+ * texto. Las fórmulas las arma esta función, con el número de fila que le
+ * pasa quien escribe.
  */
 export function filaParaPlanilla(args: {
   idx: Indice;
@@ -510,10 +518,10 @@ export function filaParaPlanilla(args: {
   // "2026-08-24T00:00:00+00:00", que es lo que venía guardado.
   poner("fecha", fechaCorta(args.fecha));
   poner("area", args.area ?? "");
-  poner("descripcion", args.descripcion ?? "");
-  poner("proveedor", c.proveedor_nombre);
-  poner("marca", c.marca ?? "");
-  poner("unidad_medida", c.unidad_medida ?? "");
+  poner("descripcion", textoParaLaCelda(args.descripcion));
+  poner("proveedor", textoParaLaCelda(c.proveedor_nombre));
+  poner("marca", textoParaLaCelda(c.marca));
+  poner("unidad_medida", textoParaLaCelda(c.unidad_medida));
   const aPesos = enPesos(args.moneda, args.dolar);
   const unitarioEnLaCelda = montoParaLaPlanilla(c.precio_unitario, aPesos);
   poner("precio_unitario", unitarioEnLaCelda);
@@ -528,9 +536,9 @@ export function filaParaPlanilla(args: {
   // esas celdas existan—, así que Google lo acepta con su triangulito de
   // advertencia en vez de rechazar la escritura.
   poner("plazos", c.plazos_pago_dias.join(", "));
-  poner("condiciones_pago", c.condiciones_pago ?? "");
-  poner("disponibilidad", c.disponibilidad ?? "");
-  poner("comentario", c.comentario ?? "");
+  poner("condiciones_pago", textoParaLaCelda(c.condiciones_pago));
+  poner("disponibilidad", textoParaLaCelda(c.disponibilidad));
+  poner("comentario", textoParaLaCelda(c.comentario));
   poner("eleccion", "FALSE");
 
   // Sin unitario en la celda no se escribe fórmula ninguna.

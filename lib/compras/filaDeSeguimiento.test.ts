@@ -87,3 +87,32 @@ describe("filaDeSeguimiento", () => {
     expect(filaDeSeguimiento(BASE)).toHaveLength(13);
   });
 });
+
+/*
+ * `COMPRAS CON RI` se escribe con `USER_ENTERED`. De las trece columnas, las
+ * dos que tipea una persona son la descripcion y el proveedor; el resto es
+ * numero, fecha o vocabulario cerrado. El precedente es del 19/10/2026: un
+ * lazo de IMPORTRANGE dejo las once pestanas de Compras en blanco un dia.
+ */
+describe("el seguimiento no deja entrar una formula", () => {
+  it("escapa la descripcion y el proveedor", () => {
+    const fila = filaDeSeguimiento({
+      ...BASE,
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      proveedor: "-SINGLA",
+    });
+    expect(fila[3]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(fila[4]).toBe("'-SINGLA");
+  });
+
+  it("un texto normal no cambia", () => {
+    const fila = filaDeSeguimiento(BASE);
+    expect(fila[3]).toBe("Cable tipo TPR 3 x 4 mm2");
+    expect(fila[4]).toBe("SINGLA");
+  });
+
+  /* La cantidad se suma en la planilla: prefijarla la volveria texto. */
+  it("la cantidad sigue siendo numero", () => {
+    expect(filaDeSeguimiento(BASE)[6]).toBe("100");
+  });
+});

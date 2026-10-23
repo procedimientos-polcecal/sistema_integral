@@ -9,6 +9,7 @@
 import { fechaDeSheets, serialDelDia } from "@/lib/core/fechaDeSheets";
 import { empresaParaPlanilla } from "@/lib/compras/sheets";
 import { norm } from "@/lib/compras/texto";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 import type { Cumplio } from "@/lib/compras/types";
 
 /** Cómo se escribe cada juicio en la planilla. "Si" va sin tilde: es así allá. */
@@ -62,14 +63,17 @@ const fecha = (iso: string | null) => {
  *
  * El SdG no puede mandar ese mail en su lugar: no hay transporte de correo en
  * el proyecto —Remises usa web push— ni dirección de mail por área en la base.
+ *
+ * La descripción y el proveedor los escribe una persona y van por
+ * `textoParaLaCelda`; el resto es número, fecha o vocabulario cerrado.
  */
 export function filaDeSeguimiento(r: DatosDeSeguimiento): (string | null)[] {
   return [
     String(r.nro_ri),                                    // A  NºRI
     r.codigo ?? "",                                      // B  CODIGO
     r.area ?? "",                                        // C  ÁREA
-    r.descripcion ?? "",                                 // D  Descripción
-    r.proveedor ?? "",                                   // E  Proveedor
+    textoParaLaCelda(r.descripcion),                     // D  Descripción
+    textoParaLaCelda(r.proveedor),                       // E  Proveedor
     empresaParaPlanilla(r.empresa, r.paga_ambas),        // F  ¿Quién compro?
     texto(r.cantidad_comprada ?? r.cantidad),            // G  Cant Pedida
     texto(r.cantidad_recibida),                          // H  Cant Recibida

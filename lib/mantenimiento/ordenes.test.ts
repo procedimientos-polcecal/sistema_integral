@@ -230,3 +230,53 @@ describe("esEstadoDeOT", () => {
     expect(esEstadoDeOT(1)).toBe(false);
   });
 });
+
+/*
+ * `escribirCeldas` manda `USER_ENTERED`, asi que la planilla de produccion
+ * interpreta lo que llega. El 19/10/2026 un lazo de IMPORTRANGE dejo las once
+ * pestanas de Compras en blanco todo el dia, y una descripcion tipeada hace
+ * lo mismo a mano. El nucleo lo resuelve con `textoParaLaCelda`; aca se fija
+ * que el registro de la ejecucion la use, y que NO la use donde rompe.
+ */
+describe("el registro no deja entrar una formula", () => {
+  it("escapa los cinco campos que tipea una persona", () => {
+    const celdas = celdasParaRegistrar({
+      contratista: "=HYPERLINK(\"http://x\")",
+      operario_1: "-Perez",
+      operario_2: "+Gomez",
+      operario_3: "@Lopez",
+      observaciones: "=IMPORTRANGE(\"https://x\";\"A1\")",
+    });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("N")).toBe("'=HYPERLINK(\"http://x\")");
+    expect(de("P")).toBe("'-Perez");
+    expect(de("Q")).toBe("'+Gomez");
+    expect(de("R")).toBe("'@Lopez");
+    expect(de("W")).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+  });
+
+  it("un texto normal no cambia", () => {
+    const celdas = celdasParaRegistrar({
+      contratista: "ConMet",
+      observaciones: "Se cambio el rodamiento a=3 - quedo bien",
+    });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("N")).toBe("ConMet");
+    expect(de("W")).toBe("Se cambio el rodamiento a=3 - quedo bien");
+  });
+
+  /*
+   * La otra mitad de la regla, y la que se olvida: prefijar un numero lo
+   * convierte en texto. Las horas se suman en la planilla y la fecha de
+   * cierre alimenta la columna de atrasado/al dia.
+   */
+  it("las horas y la fecha siguen entrando como numero y como fecha", () => {
+    const celdas = celdasParaRegistrar({ horas: 3.5, fecha_cierre: "2026-08-25" });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("O")).toBe("3.5");
+    expect(de("K")).toBe("25/08/2026");
+  });
+});

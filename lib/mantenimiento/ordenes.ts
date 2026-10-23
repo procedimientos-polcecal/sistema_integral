@@ -22,6 +22,7 @@
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /**
  * Las especialidades que usa la planilla, verificadas contra ella.
@@ -296,6 +297,12 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
  * que es distinto de no pasarlo.
  *
  * La columna L no se escribe nunca: es la fórmula que calcula atrasado/al día.
+ *
+ * Los cinco campos que tipea una persona —el contratista, los tres operarios y
+ * las observaciones— van por `textoParaLaCelda`. El estado sale de un
+ * vocabulario cerrado, la fecha y las horas son número: ésos no se tocan,
+ * porque prefijarlos los convertiría en texto y la planilla dejaría de poder
+ * sumarlos.
  */
 export function celdasParaRegistrar(
   registro: RegistroDeOT
@@ -315,12 +322,16 @@ export function celdasParaRegistrar(
   if (registro.horas !== undefined) {
     sumar(COL.horas, registro.horas === null ? "" : String(registro.horas));
   }
-  if (registro.contratista !== undefined) sumar(COL.contratista, registro.contratista ?? "");
-  if (registro.operario_1 !== undefined) sumar(COL.operario1, registro.operario_1 ?? "");
-  if (registro.operario_2 !== undefined) sumar(COL.operario2, registro.operario_2 ?? "");
-  if (registro.operario_3 !== undefined) sumar(COL.operario3, registro.operario_3 ?? "");
+  if (registro.contratista !== undefined) {
+    sumar(COL.contratista, textoParaLaCelda(registro.contratista));
+  }
+  if (registro.operario_1 !== undefined) sumar(COL.operario1, textoParaLaCelda(registro.operario_1));
+  if (registro.operario_2 !== undefined) sumar(COL.operario2, textoParaLaCelda(registro.operario_2));
+  if (registro.operario_3 !== undefined) sumar(COL.operario3, textoParaLaCelda(registro.operario_3));
   if (registro.foto_url !== undefined) sumar(COL.fotos, registro.foto_url ?? "");
-  if (registro.observaciones !== undefined) sumar(COL.observaciones, registro.observaciones ?? "");
+  if (registro.observaciones !== undefined) {
+    sumar(COL.observaciones, textoParaLaCelda(registro.observaciones));
+  }
 
   return celdas;
 }

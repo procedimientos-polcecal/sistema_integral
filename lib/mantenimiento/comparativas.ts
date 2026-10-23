@@ -17,6 +17,7 @@
 import {
   texto, fechaDeSheets, codigoDeEquipo, normalizar, monto, porcentaje, siNo,
 } from "@/lib/mantenimiento/planilla";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /**
  * Las pestañas de la planilla, verificadas contra ella.
@@ -302,6 +303,13 @@ export function elTotalLoCalculaLaPlanilla(c: {
  * tramos y la saltea—, y es lo que salva la fórmula del PRECIO TOTAL. Las
  * demás celdas van en `""` aunque estén vacías: ahí no hay fórmula que
  * cuidar, y dejarlas sin tocar heredaría lo que tuviera la fila de antes.
+ *
+ * Lo que tipea una persona pasa por `textoParaLaCelda`: el sector y el equipo
+ * los copia de la OS, pero el proveedor, la descripción, las condiciones de
+ * pago y las otras especificaciones los escribe quien carga la cotización.
+ * Los precios, el IVA y las fechas no, que son número. Los PLAZOS tampoco:
+ * son días —"30" o "30, 60"— y la columna tiene validación de lista, así que
+ * escribir "30" como texto cambiaría lo que la planilla compara.
  */
 export function filaParaComparativa(c: ParaEscribir): (string | number | null)[] {
   const fila: (string | number | null)[] = new Array(COLUMNAS_COMPARATIVA).fill("");
@@ -309,17 +317,17 @@ export function filaParaComparativa(c: ParaEscribir): (string | number | null)[]
   fila[COL.osNumber] = c.os_number;
   fila[COL.fecha] = fechaAR(c.fecha);
   fila[COL.area] = c.area ?? "";
-  fila[COL.sector] = c.sector ?? "";
-  fila[COL.equipo] = c.equipo_raw ?? "";
-  fila[COL.descripcion] = c.descripcion ?? "";
-  fila[COL.proveedor] = c.proveedor;
+  fila[COL.sector] = textoParaLaCelda(c.sector);
+  fila[COL.equipo] = textoParaLaCelda(c.equipo_raw);
+  fila[COL.descripcion] = textoParaLaCelda(c.descripcion);
+  fila[COL.proveedor] = textoParaLaCelda(c.proveedor);
   fila[COL.precioUnitario] = c.precio_unitario ?? "";
   fila[COL.iva] = c.iva ?? "";
   fila[COL.precioTotal] = elTotalLoCalculaLaPlanilla(c) ? null : c.precio_total ?? "";
   fila[COL.vigenciaHasta] = fechaAR(c.vigencia_hasta);
   fila[COL.plazos] = c.plazos ?? "";
-  fila[COL.condicionesPago] = c.condiciones_pago ?? "";
-  fila[COL.otrasEspecificaciones] = c.otras_especificaciones ?? "";
+  fila[COL.condicionesPago] = textoParaLaCelda(c.condiciones_pago);
+  fila[COL.otrasEspecificaciones] = textoParaLaCelda(c.otras_especificaciones);
   fila[COL.eleccion] = c.eleccion ? "TRUE" : "FALSE";
 
   return fila;
