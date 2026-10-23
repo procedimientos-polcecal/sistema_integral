@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tiene_acceso_check, puede_editar_check } from "@/lib/rrhh/route-utils";
-import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
-import { sincronizarPeriodoVacaciones } from "@/lib/rrhh/vacacionesDeAusencia";
+import { altaDeAusencia } from "@/lib/rrhh/altaDeAusencia";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-
-const TIPOS = [
-  "LICENCIA_ART", "VACACIONES", "LICENCIA_GREMIAL", "PERMISO_PERSONAL",
-  "ENFERMEDAD_ACCIDENTE_INCULPABLE", "LICENCIA_SIN_GOCE_SUELDO", "SUSPENSION",
-  "FALLECIMIENTO_FAMILIAR", "EXAMEN_ESTUDIO", "TARDANZA", "INJUSTIFICADA", "OTRA",
-];
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -49,32 +42,15 @@ export async function POST(request: Request) {
 
   const body = await cuerpoJson(request);
   const { employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones, anioCorrespondiente } = body;
-  if (!employeeId || !fechaDesde || !fechaHasta || !TIPOS.includes(tipo) || typeof justificada !== "boolean") {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
-  }
-  if (tipo === "OTRA" && !(observaciones ?? "").trim()) {
-    return NextResponse.json({ error: "Para el tipo 'Otra' hay que aclarar el motivo en observaciones" }, { status: 400 });
-  }
-  if (tipo === "VACACIONES" && justificada && !Number.isInteger(anioCorrespondiente)) {
-    return NextResponse.json({ error: "Para Vacaciones hay que indicar a qué año corresponden los días" }, { status: 400 });
-  }
 
-  const { data: ausencia, error } = await supabase
-    .from("ausencias")
-    .insert({
-      empleado_id: employeeId,
-      fecha_desde: fechaDesde,
-      fecha_hasta: fechaHasta,
-      tipo,
-      justificada,
-      observaciones: observaciones || null,
-      cargado_por_id: user!.id,
-    })
-    .select()
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  await sincronizarPeriodoVacaciones(supabase, ausencia, anioCorrespondiente);
-  await recalcularEmpleadoPeriodo(supabase, employeeId, new Date(fechaDesde), new Date(fechaHasta));
+  // El cuerpo vive en `lib/rrhh/altaDeAusencia.ts` porque lo comparte con la
+  // punta de Mantenimiento: ahí adentro está el insert y, sobre todo, la
+  // sincronización de vacaciones y el recálculo de la liquidación, que es lo
+  // que no puede saltearse ninguna de las dos.
+  const { ausencia, error, status } = await altaDeAusencia(supabase, {
+    employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones,
+    anioCorrespondiente, cargadoPorId: user!.id,
+  });
+  if (error) return NextResponse.json({ error }, { status });
   return NextResponse.json(ausencia, { status: 201 });
 }
