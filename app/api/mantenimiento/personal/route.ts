@@ -148,9 +148,11 @@ export async function POST(request: Request) {
   if (error) {
     // 23503: el empleado no existe.
     const noExiste = error.code === "23503";
+    // Cualquier otro error es del servidor, no de lo que se mandó: un 400 le
+    // diría a quien llama que revise su pedido cuando se cortó la conexión.
     return NextResponse.json(
       { error: noExiste ? "Esa persona no existe en el sistema" : error.message },
-      { status: 400 }
+      { status: noExiste ? 400 : 500 }
     );
   }
   return NextResponse.json({ data });
@@ -227,6 +229,6 @@ export async function PATCH(request: Request) {
     .select("id, empleado_id, oficio, grupo, desde, hasta")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }

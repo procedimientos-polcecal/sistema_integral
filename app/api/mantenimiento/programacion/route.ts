@@ -62,28 +62,6 @@ export async function GET(request: Request) {
 
   const db = createAdminClient();
 
-  // La referencia no obliga a que haya una sola fila: gana la más nueva, que es
-  // también lo que permite volver a anclar el ciclo sin borrar la historia.
-  const { data: filasRef, error: errRef } = await db
-    .from("mant_programacion_referencia")
-    .select("lunes, grupo_en_4a12, electricista_4a12_id, electricista_8a16_id, electricista_12a20_id")
-    .order("lunes", { ascending: false })
-    .limit(1);
-  if (errRef) return NextResponse.json({ error: errRef.message }, { status: 500 });
-
-  const filaRef = filasRef?.[0];
-  if (!filaRef) return NextResponse.json({ sinReferencia: true, dias });
-
-  const ref: Referencia = {
-    lunes: filaRef.lunes,
-    grupoEn4a12: filaRef.grupo_en_4a12 as Grupo,
-    electricistas: {
-      "4-12": filaRef.electricista_4a12_id,
-      "8-16": filaRef.electricista_8a16_id,
-      "12-20": filaRef.electricista_12a20_id,
-    },
-  };
-
   // El padrón que rige en algún día de esa semana (vigencia que cruza el rango).
   const { data: filasPadron, error: errPadron } = await db
     .from("mant_personal_taller")
@@ -100,6 +78,80 @@ export async function GET(request: Request) {
     desde: f.desde,
     hasta: f.hasta,
   }));
+
+  // ── Las personas, con el nombre, para que la pantalla no tenga que buscarlas ──
+  const nombreDe = new Map<string, string>();
+  for (const f of filasPadron ?? []) {
+    const e = Array.isArray(f.empleados) ? f.empleados[0] : f.empleados;
+    nombreDe.set(f.empleado_id, e ? `${e.nombre} ${e.apellido}` : "(sin nombre)");
+  }
+
+  // Una persona que cambió de grupo a mitad de semana tiene dos filas de padrón;
+  // en la lista va una sola, con la vigencia más reciente (el padrón viene por `desde`).
+  const personasPorId = new Map<
+    string,
+    { empleadoId: string; nombre: string; oficio: Oficio; grupo: Grupo | null }
+  >();
+  for (const p of padron) {
+    personasPorId.set(p.empleadoId, {
+      empleadoId: p.empleadoId,
+      nombre: nombreDe.get(p.empleadoId) ?? "(sin nombre)",
+      oficio: p.oficio,
+      grupo: p.grupo,
+    });
+  }
+  const personas = [...personasPorId.values()];
+
+  // Qué referencia rige esa semana. NO la más nueva a secas: si alguien vuelve a
+  // anclar el ciclo, una semana pasada se recalcularía con el ancla nueva y
+  // cambiaría lo que el encargado vio en su momento, que es lo mismo que la
+  // migración rechaza para el padrón. Rige la más nueva que no sea posterior a
+  // la semana pedida.
+  const { data: filasRef, error: errRef } = await db
+    .from("mant_programacion_referencia")
+    .select("lunes, grupo_en_4a12, electricista_4a12_id, electricista_8a16_id, electricista_12a20_id")
+    .lte("lunes", lunes)
+    .order("lunes", { ascending: false })
+    .limit(1);
+  if (errRef) return NextResponse.json({ error: errRef.message }, { status: 500 });
+
+  // Antes de la primera ancla no hay una que rija: se toma la más vieja y el
+  // ciclo se extrapola hacia atrás. Eso supone que la rotación corría igual
+  // entonces, y es lo que permite mirar semanas anteriores a la carga.
+  let filaRef = filasRef?.[0];
+  if (!filaRef) {
+    const { data: masVieja, error: errVieja } = await db
+      .from("mant_programacion_referencia")
+      .select("lunes, grupo_en_4a12, electricista_4a12_id, electricista_8a16_id, electricista_12a20_id")
+      .order("lunes", { ascending: true })
+      .limit(1);
+    if (errVieja) return NextResponse.json({ error: errVieja.message }, { status: 500 });
+    filaRef = masVieja?.[0];
+  }
+
+  // Sin referencia no hay ciclo, pero el padrón se lee igual: la pantalla puede
+  // decir "falta cargar la referencia" y mostrar a quién tiene el taller.
+  if (!filaRef) {
+    return NextResponse.json({
+      sinReferencia: true,
+      dias,
+      asignaciones: [],
+      ausentes: [],
+      candidatos: {},
+      sinTurno: [],
+      personas,
+    });
+  }
+
+  const ref: Referencia = {
+    lunes: filaRef.lunes,
+    grupoEn4a12: filaRef.grupo_en_4a12 as Grupo,
+    electricistas: {
+      "4-12": filaRef.electricista_4a12_id,
+      "8-16": filaRef.electricista_8a16_id,
+      "12-20": filaRef.electricista_12a20_id,
+    },
+  };
 
   const { data: filasPisadas, error: errPisadas } = await db
     .from("mant_programacion_pisadas")
@@ -137,6 +189,10 @@ export async function GET(request: Request) {
 
   const asignaciones: Asignacion[] = [];
   const yaAsignados = new Set<string>();
+  // En el padrón ese día pero sin turno por ciclo ni pisada. Hoy: un electricista
+  // que no es uno de los tres de la referencia. Se dice aparte para que la
+  // pantalla no tenga que deducirlo de lo que falta.
+  const sinTurno: { empleadoId: string; dia: string }[] = [];
 
   for (const dia of dias) {
     for (const persona of padron) {
@@ -153,9 +209,10 @@ export async function GET(request: Request) {
             : null;
 
       const turno = pisada ?? delCiclo;
-      // Un electricista que no es uno de los tres de la referencia no tiene
-      // turno por ciclo: queda sin asignar hasta que lo muevan a mano.
-      if (!turno) continue;
+      if (!turno) {
+        sinTurno.push({ empleadoId: persona.empleadoId, dia });
+        continue;
+      }
 
       yaAsignados.add(clave);
       asignaciones.push({ empleadoId: persona.empleadoId, dia, turno, pisada: pisada !== undefined });
@@ -168,14 +225,16 @@ export async function GET(request: Request) {
   const oficioEseDia = (empleadoId: string, dia: string) =>
     padron.find((p) => p.empleadoId === empleadoId && estaVigente(p, dia))!.oficio;
 
-  const ausentes: { empleadoId: string; dia: string }[] = [];
+  const ausentes: { empleadoId: string; dia: string; turno: Turno; oficio: Oficio }[] = [];
   const candidatos: Record<string, string[]> = {};
 
   for (const a of asignaciones) {
     if (!hayAusencia(a.empleadoId, a.dia)) continue;
-    ausentes.push({ empleadoId: a.empleadoId, dia: a.dia });
-
+    // Se manda el turno y el oficio *de ese día*, que son los ingredientes de la
+    // clave de `candidatos`: así la pantalla no los reconstruye desde `personas`,
+    // cuyo oficio es el de la última vigencia.
     const oficio = oficioEseDia(a.empleadoId, a.dia);
+    ausentes.push({ empleadoId: a.empleadoId, dia: a.dia, turno: a.turno, oficio });
     const clave = `${a.dia}|${a.turno}|${oficio}`;
     if (!(clave in candidatos)) {
       candidatos[clave] = candidatosParaElHueco(asignaciones, hayAusencia, padron, {
@@ -186,33 +245,12 @@ export async function GET(request: Request) {
     }
   }
 
-  // ── Las personas, con el nombre, para que la pantalla no tenga que buscarlas ──
-  const nombreDe = new Map<string, string>();
-  for (const f of filasPadron ?? []) {
-    const e = Array.isArray(f.empleados) ? f.empleados[0] : f.empleados;
-    nombreDe.set(f.empleado_id, e ? `${e.nombre} ${e.apellido}` : "(sin nombre)");
-  }
-
-  // Una persona que cambió de grupo a mitad de semana tiene dos filas de padrón;
-  // en la lista va una sola, con la vigencia más reciente (el padrón viene por `desde`).
-  const personasPorId = new Map<
-    string,
-    { empleadoId: string; nombre: string; oficio: Oficio; grupo: Grupo | null }
-  >();
-  for (const p of padron) {
-    personasPorId.set(p.empleadoId, {
-      empleadoId: p.empleadoId,
-      nombre: nombreDe.get(p.empleadoId) ?? "(sin nombre)",
-      oficio: p.oficio,
-      grupo: p.grupo,
-    });
-  }
-
   return NextResponse.json({
     dias,
     asignaciones,
     ausentes,
     candidatos,
-    personas: [...personasPorId.values()],
+    sinTurno,
+    personas,
   });
 }

@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     .select("empleado_id, dia, turno")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }
 
@@ -97,12 +97,17 @@ export async function DELETE(request: Request) {
   if (!UUID.test(empleadoId)) return NextResponse.json({ error: "Falta elegir la persona" }, { status: 400 });
   if (!esFechaIso(dia)) return NextResponse.json({ error: "Falta el día, en formato AAAA-MM-DD" }, { status: 400 });
 
-  const { error } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("mant_programacion_pisadas")
     .delete()
     .eq("empleado_id", empleadoId)
-    .eq("dia", dia);
+    .eq("dia", dia)
+    .select("id");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Se dice cuántas filas se sacaron: una pantalla desactualizada que borra una
+  // pisada que otro ya había sacado no debe recibir lo mismo que una baja real.
+  const borradas = data?.length ?? 0;
+  return NextResponse.json({ ok: true, borradas });
 }
