@@ -73,11 +73,50 @@ export interface Reubicada {
   fila: number;
 }
 
+/**
+ * Una fila ya leída que hoy dice otra cosa: **se vuelve a convertir entera**.
+ *
+ * Lleva las celdas y no un número corregido, y eso no es comodidad. Una fila
+ * puede cambiar de **tipo**: el 21/10/2026, en la fila 1146, alguien escribió
+ * una entrada de WALKIMIA de 18,04 encima de un consumo de 36. Corregirle las
+ * toneladas a ese movimiento lo rechaza el CHECK `calidad_mov_signo` —medido,
+ * al intentarlo— porque un consumo no puede ser positivo. Releer la fila
+ * resuelve los dos casos con un solo mecanismo.
+ */
+export interface Relectura {
+  /** El movimiento que hay que reemplazar. Conserva su id y su fila. */
+  id: string;
+  fila: number;
+  celdas: unknown[];
+  /** Qué cambió, para poder contarlo y mostrarlo. */
+  motivo: string;
+}
+
 export interface PorLeer {
   /** Las que hay que convertir con `movimientoDesdeElRenglon`. */
   nuevas: FilaNueva[];
-  /** Ya leídas y con otro contenido ahora. No se corrigen solas: se informan. */
-  cambiadas: FilaConProblema[];
+  /**
+   * Ya leídas y con otro contenido ahora: **se releen**.
+   *
+   * Hasta el 23/10/2026 esto se informaba y no se aplicaba, con el argumento
+   * de que corregir una fila vieja mueve el saldo de todo lo que vino después.
+   * El argumento está al revés acá: **manda la planilla**, así que su número
+   * es el correcto y mover el saldo es lo que corresponde. Lo que hacía el SdG
+   * era quedarse con un número que él mismo sabía mal y anotarlo en una bandeja
+   * que no mira nadie — entre el 21 y el 23/10 eso lo dejó 59 t abajo, a razón
+   * de una fila editada por día.
+   */
+  relecturas: Relectura[];
+  /**
+   * Ya leídas y **sin contenido** ahora. No se releen: se informan.
+   *
+   * Vaciar una fila es la única forma de borrar que tiene la planilla, y es
+   * indistinguible de una planilla que está calculando —devuelve unas celdas
+   * con `Cargando…` y las demás vacías—. `leerValores()` ya corta solo en ese
+   * caso; esto es la segunda defensa, porque un movimiento borrado de más no
+   * se recupera.
+   */
+  vaciadas: FilaConProblema[];
   /** Con número en las dos columnas: no se sabe si es entrada o salida. */
   ambiguas: FilaConProblema[];
   /** El mismo id en dos filas. Las dos quedan en disputa y no se toca ninguna. */
@@ -118,7 +157,8 @@ function igual(a: number | null, b: number | null): boolean {
 
 export function filasPorLeer(ocupadas: Map<string, FilaOcupada>, filas: unknown[][]): PorLeer {
   const nuevas: FilaNueva[] = [];
-  const cambiadas: FilaConProblema[] = [];
+  const relecturas: Relectura[] = [];
+  const vaciadas: FilaConProblema[] = [];
   const ambiguas: FilaConProblema[] = [];
   const duplicadas: FilaConProblema[] = [];
   const huerfanas: FilaConProblema[] = [];
@@ -185,18 +225,32 @@ export function filasPorLeer(ocupadas: Map<string, FilaOcupada>, filas: unknown[
 
       if (ya.fila !== fila) reubicadas.push({ id, fila });
 
-      // No se corrige sola: cambiar una fila vieja mueve el saldo de todo lo
-      // que vino después. Se informa y lo decide una persona.
-      if (!igual(ya.entradas, entradas) || !igual(ya.salidas, salidas)) {
-        cambiadas.push(
+      if (igual(ya.entradas, entradas) && igual(ya.salidas, salidas)) return;
+
+      // Sin ningún número, la fila se vació. Eso no se aplica solo.
+      if (entradas === null && salidas === null) {
+        vaciadas.push(
           describir(
             fila,
             celdas,
-            `La planilla dice entradas ${entradas ?? "—"} y salidas ${salidas ?? "—"}; ` +
-              `el SdG había leído entradas ${ya.entradas ?? "—"} y salidas ${ya.salidas ?? "—"}.`
+            "La fila quedó vacía y el SdG tiene un movimiento para ella. No se borra sola: " +
+              "una planilla calculando se lee igual que una vacía. Revisala y borrá la columna K " +
+              "si de verdad no va."
           )
         );
+        return;
       }
+
+      // Manda la planilla: su número es el que vale, y el saldo de lo que vino
+      // después se mueve, que es lo correcto.
+      relecturas.push({
+        id,
+        fila,
+        celdas,
+        motivo:
+          `La planilla dice entradas ${entradas ?? "—"} y salidas ${salidas ?? "—"}; ` +
+          `el SdG había leído entradas ${ya.entradas ?? "—"} y salidas ${ya.salidas ?? "—"}.`,
+      });
       return;
     }
 
@@ -216,7 +270,7 @@ export function filasPorLeer(ocupadas: Map<string, FilaOcupada>, filas: unknown[
   // borró la fila allá, y eso se informa.
   const desaparecidas = [...ocupadas.keys()].filter((id) => !vistos.has(id)).sort();
 
-  return { nuevas, cambiadas, ambiguas, duplicadas, huerfanas, desaparecidas, reubicadas };
+  return { nuevas, relecturas, vaciadas, ambiguas, duplicadas, huerfanas, desaparecidas, reubicadas };
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -229,7 +283,10 @@ const PLANILLA = () => process.env.GOOGLE_SHEETS_STOCK_CARBONILLA_ID ?? "";
 export interface ResumenDeLectura {
   filasLeidas: number;
   nuevos: number;
-  cambiadas: number;
+  /** Filas que cambiaron en la planilla y se volvieron a convertir. */
+  relecturas: number;
+  /** Filas que quedaron vacías: se informan, no se borran. */
+  vaciadas: number;
   ambiguas: number;
   duplicadas: number;
   huerfanas: number;
@@ -300,7 +357,7 @@ export async function leerLaPlanilla(supabase: SupabaseClient): Promise<ResumenD
   const nuevos: Record<string, unknown>[] = [];
   const marcas: { pestana: string; columna: number; fila: number; valor: string }[] = [];
   const problemas: FilaConProblema[] = [
-    ...r.cambiadas,
+    ...r.vaciadas,
     ...r.ambiguas,
     ...r.duplicadas,
     ...r.huerfanas,
@@ -325,6 +382,52 @@ export async function leerLaPlanilla(supabase: SupabaseClient): Promise<ResumenD
   // Una sola llamada para las marcas: con 1.124 filas, una por celda gastaría
   // la cuota y dejaría la planilla a medio marcar si falla la tercera.
   await escribirCeldas(PLANILLA(), marcas);
+
+  // ── Las que cambiaron en la planilla: se vuelven a convertir ──
+  //
+  // Se CONVIERTE PRIMERO y recién después se escribe. Si la fila ya no se
+  // puede interpretar —un código que no es de ningún carbonillero— el
+  // movimiento viejo **no se toca** y la fila va a la bandeja: perder el dato
+  // que había por una fila que no se entiende sería el peor de los dos males.
+  let releidos = 0;
+  for (const rel of r.relecturas) {
+    const conv = movimientoDesdeElRenglon(rel.celdas, rel.fila, catalogo);
+    if (conv.clase !== "movimiento") {
+      problemas.push(
+        describir(
+          rel.fila,
+          rel.celdas,
+          `${rel.motivo} No se pudo releer: ${conv.clase === "sin_importar" ? conv.motivo : "la fila quedó vacía"}`
+        )
+      );
+      continue;
+    }
+
+    // **Se actualiza en su lugar, conservando el id.** Borrar e insertar le
+    // daría un id nuevo y habría que reescribir la columna K; actualizar deja
+    // el ancla intacta y no toca Google.
+    //
+    // Y NO SE PISAN LOS ENGANCHES CON ODOO Y CON LA RECEPCIÓN
+    // (`odoo_purchase_line_id`, `odoo_purchase_name`, `despacho_recepcion_id`,
+    // `origen`): la planilla no los conoce, y `odoo_purchase_line_id` es lo
+    // único que evita que la recepción de Despacho vuelva a crear ese mismo
+    // camión. Se actualiza lo que la planilla sí manda.
+    const m = conv.movimiento;
+    const { error } = await supabase
+      .from("calidad_movimientos")
+      .update({
+        fecha: m.fecha,
+        tipo: m.tipo,
+        carbon: m.carbon,
+        toneladas: m.toneladas,
+        motivo: m.motivo,
+        carbonillero_id: m.carbonillero_id,
+        sheets_fila: rel.fila,
+      })
+      .eq("id", rel.id);
+    if (error) throw new Error(`Al releer la fila ${rel.fila}: ${error.message}`);
+    releidos++;
+  }
 
   for (let i = 0; i < nuevos.length; i += 500) {
     const { error } = await supabase.from("calidad_movimientos").insert(nuevos.slice(i, i + 500));
@@ -367,7 +470,8 @@ export async function leerLaPlanilla(supabase: SupabaseClient): Promise<ResumenD
   return {
     filasLeidas: filas.length,
     nuevos: nuevos.length,
-    cambiadas: r.cambiadas.length,
+    relecturas: releidos,
+    vaciadas: r.vaciadas.length,
     ambiguas: r.ambiguas.length,
     duplicadas: r.duplicadas.length,
     huerfanas: r.huerfanas.length,

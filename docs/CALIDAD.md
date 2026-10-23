@@ -49,13 +49,54 @@ con lo segundo.
 `sheets_fila` sigue existiendo, pero ya no es la clave: es **dónde está hoy esa
 fila**, y se refresca en cada corrida. La comparación de contenido tampoco se
 fue: cambió de significado, de *"es la misma fila"* a *"a esta fila conocida le
-cambiaron el número"*, que es un aviso y no una adivinanza.
+cambiaron algo"*.
 
-Dos modos de falla nuevos, los dos informados y ninguno resuelto solo: **copiar y
+Dos modos de falla, los dos informados y ninguno resuelto solo: **copiar y
 pegar una fila duplica su id** (las dos van a la bandeja y no se toca ninguna), y
 **borrar un movimiento deja el id huérfano allá** (esa fila no se relee: volvería
 a entrar con otro id y el camión quedaría dos veces; para que entre hay que
 borrar la celda `K`).
+
+### Una fila que cambió se relee entera — corregido el 23/10/2026
+
+Hasta esa fecha una fila cambiada **se informaba y no se aplicaba**, con el
+argumento de que corregir una fila vieja mueve el saldo de todo lo que vino
+después. **El argumento estaba al revés acá:** manda la planilla, así que su
+número es el que vale y mover el saldo es lo correcto. Lo que hacía el SdG era
+quedarse con un número que él mismo sabía mal y anotarlo en una bandeja que no
+mira nadie.
+
+Lo que costó, medido: **una fila editada por día**. El 21/10 eran 6 filas y 8 t;
+dos días después, 2 filas y **59 t**. Las dos veces, aplicar lo que decía la
+planilla dio su número **exacto**. Mientras eso siguiera así, la condición de
+*"que los números empaten y se sostenga"* no se podía cumplir nunca.
+
+**Se relee la fila entera, no se le corrige el número**, y la diferencia no es
+de estilo. Una fila puede cambiar de **tipo**: el 21/10, en la fila 1146,
+alguien escribió una entrada de WALKIMIA de 18,04 encima de un consumo de 36, y
+la columna `K` quedó igual —editaron la `A` a la `J`—. Un `update` de toneladas
+sobre ese movimiento lo rechaza el `CHECK calidad_mov_signo`, porque un consumo
+no puede ser positivo; **probado al intentarlo**. Releer resuelve los dos casos
+—número editado y fila reusada— con un solo mecanismo.
+
+Tres cosas de cómo está hecho, que son las que evitan perder un dato:
+
+- **Se convierte primero y se escribe después.** Si la fila ya no se entiende
+  —un código que no es de ningún carbonillero— el movimiento viejo **no se
+  toca** y la fila va a la bandeja.
+- **Se actualiza en su lugar, conservando el id.** Borrar e insertar daría un id
+  nuevo y habría que reescribir la columna `K`; así el ancla queda intacta y no
+  se toca Google.
+- **No se pisan los enganches con Odoo ni con la recepción**
+  (`odoo_purchase_line_id`, `origen`, `despacho_recepcion_id`). La planilla no
+  los conoce, y ese id de línea es lo único que evita que la recepción de
+  Despacho vuelva a crear el mismo camión.
+
+**Una fila que se vacía NO se relee**, y es la única excepción: vaciar es la
+única forma de borrar que tiene la planilla, y se lee exactamente igual que una
+planilla que está calculando —unas celdas con `Cargando…` y las demás vacías—.
+Se informa y la borra una persona. `leerValores()` ya corta solo en ese caso;
+esto es la segunda defensa, porque un movimiento borrado de más no se recupera.
 
 ### Dos permisos que no se deducen de ningún lado
 

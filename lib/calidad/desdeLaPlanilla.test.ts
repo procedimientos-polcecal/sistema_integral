@@ -74,7 +74,7 @@ describe("filasPorLeer", () => {
     ];
     const r = filasPorLeer(TODAS, conInsercion);
     expect(r.nuevas.map((n) => n.fila)).toEqual([3]);
-    expect(r.cambiadas).toEqual([]);
+    expect(r.relecturas).toEqual([]);
     // Y las dos que se corrieron quedan anotadas para actualizarles la fila.
     expect(r.reubicadas).toEqual([
       { id: "m-2", fila: 4 },
@@ -82,8 +82,10 @@ describe("filasPorLeer", () => {
     ]);
   });
 
-  it("EDITAR LA CANTIDAD de una fila ya leída se avisa, y sigue anclada", () => {
-    // Pasó cinco veces: a un consumo le cambiaron el número después de escrito.
+  it("EDITAR LA CANTIDAD de una fila ya leída manda a releerla, no a informarla", () => {
+    // Acá manda la planilla, así que su número es el que vale. Informarlo y no
+    // aplicarlo deja al SdG con un número que él mismo sabe que está mal: entre
+    // el 21 y el 23/10/2026 eso lo dejó 59 t abajo, con una fila por día.
     const editada = [
       ENCABEZADO,
       fila("00003", 21.58, "", LUNES, "m-1"),
@@ -92,16 +94,57 @@ describe("filasPorLeer", () => {
     ];
     const r = filasPorLeer(TODAS, editada);
     expect(r.nuevas).toEqual([]);
-    expect(r.cambiadas).toHaveLength(1);
-    expect(r.cambiadas[0].fila).toBe(2);
-    expect(r.cambiadas[0].motivo).toContain("21.58");
-    expect(r.cambiadas[0].motivo).toContain("20.58");
+    expect(r.relecturas).toHaveLength(1);
+    expect(r.relecturas[0].id).toBe("m-1");
+    expect(r.relecturas[0].fila).toBe(2);
+    // Lleva las celdas, porque releer es convertir la fila entera de nuevo.
+    expect(r.relecturas[0].celdas[2]).toBe(21.58);
+    expect(r.relecturas[0].motivo).toContain("21.58");
+    expect(r.relecturas[0].motivo).toContain("20.58");
   });
 
-  it("una fila ocupada que no cambió no se informa", () => {
+  it("CAMBIAR DE TIPO también se relee: un consumo que pasó a ser un camión", () => {
+    // Pasó el 21/10/2026 en la fila 1146: alguien escribió una entrada de
+    // WALKIMIA encima de un consumo de 36, y la columna K quedó igual. Por eso
+    // releer es borrar y volver a convertir, y no corregirle el número: un
+    // `update` de toneladas sobre un consumo que ahora es entrada lo rechaza el
+    // CHECK `calidad_mov_signo`, que fue exactamente lo que pasó al intentarlo.
+    const repisada = [
+      ENCABEZADO,
+      fila("00003", 20.58, "", LUNES, "m-1"),
+      fila("00007", 18.04, "", LUNES, "m-2"), // era un consumo de 37
+      fila("00007", 19.14, "", MARTES, "m-3"),
+    ];
+    const r = filasPorLeer(TODAS, repisada);
+    expect(r.relecturas).toHaveLength(1);
+    expect(r.relecturas[0].id).toBe("m-2");
+    expect(r.relecturas[0].celdas[0]).toBe("00007");
+    expect(r.relecturas[0].celdas[2]).toBe(18.04);
+  });
+
+  it("una fila ocupada que no cambió no se relee", () => {
     const r = filasPorLeer(TODAS, PLANILLA);
-    expect(r.cambiadas).toEqual([]);
+    expect(r.relecturas).toEqual([]);
     expect(r.reubicadas).toEqual([]);
+  });
+
+  it("una fila que se vació NO se relee sola: se informa", () => {
+    // Vaciar una fila es la unica forma de "borrar" que tiene la planilla, y es
+    // indistinguible de una planilla que esta calculando — que devuelve unas
+    // celdas con `Cargando…` y las demas VACIAS. Releer eso borraria el
+    // movimiento. `leerValores()` ya corta solo en ese caso; esto es la segunda
+    // defensa, porque lo que se pierde no se recupera.
+    const vaciada = [
+      ENCABEZADO,
+      fila("00003", 20.58, "", LUNES, "m-1"),
+      ["", "", "", "", "", "", "", "", "", "", "m-2"],
+      fila("00007", 19.14, "", MARTES, "m-3"),
+    ];
+    const r = filasPorLeer(TODAS, vaciada);
+    expect(r.relecturas).toEqual([]);
+    expect(r.vaciadas).toHaveLength(1);
+    expect(r.vaciadas[0].fila).toBe(3);
+    expect(r.vaciadas[0].motivo).toMatch(/vac/i);
   });
 
   /* ── Los modos de falla que trae el id ────────────────────── */
@@ -115,7 +158,7 @@ describe("filasPorLeer", () => {
     expect(r.duplicadas.map((d) => d.fila)).toEqual([2, 5]);
     expect(r.duplicadas[0].motivo).toMatch(/dos filas/i);
     // Y ninguna de las dos se toca mientras esté en disputa.
-    expect(r.cambiadas).toEqual([]);
+    expect(r.relecturas).toEqual([]);
     expect(r.reubicadas).toEqual([]);
   });
 
@@ -149,7 +192,8 @@ describe("filasPorLeer", () => {
   it("una planilla vacía no es un error", () => {
     expect(filasPorLeer(new Map(), [])).toEqual({
       nuevas: [],
-      cambiadas: [],
+      relecturas: [],
+      vaciadas: [],
       ambiguas: [],
       duplicadas: [],
       huerfanas: [],

@@ -108,7 +108,8 @@ export default function StockClient({
       // resumen que sólo dice "listo" esconde justo lo que hay que arreglar.
       const l = body.lectura;
       const partes = [`${l.nuevos} movimientos nuevos de la planilla`];
-      if (l.cambiadas) partes.push(`${l.cambiadas} filas cambiaron en la planilla`);
+      if (l.relecturas) partes.push(`${l.relecturas} filas cambiaron y se releyeron`);
+      if (l.vaciadas) partes.push(`${l.vaciadas} filas quedaron vacías (no se borran solas)`);
       if (l.ambiguas) partes.push(`${l.ambiguas} con entrada y salida a la vez`);
       if (l.duplicadas) partes.push(`${l.duplicadas} filas con el mismo id (una es copia)`);
       if (l.huerfanas) partes.push(`${l.huerfanas} filas con un id que no es de nadie`);
