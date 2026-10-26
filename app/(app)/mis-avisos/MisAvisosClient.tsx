@@ -294,7 +294,9 @@ export default function MisAvisosClient({
                   <th className="px-3 py-2 text-left">Equipo</th>
                   <th className="px-3 py-2 text-left">Área</th>
                   <th className="px-3 py-2 text-left">Avisó</th>
-                  <th className="px-3 py-2 text-left">Urgencia</th>
+                  {/* "Sugerida": la eligió quien avisó, no es la prioridad con
+                      la que Mantenimiento va a trabajar. Ver NuevoAvisoModal. */}
+                  <th className="px-3 py-2 text-left">Urgencia sugerida</th>
                   <th className="px-3 py-2 text-left">En qué terminó</th>
                 </tr>
               </thead>

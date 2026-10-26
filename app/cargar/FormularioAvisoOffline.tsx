@@ -193,8 +193,14 @@ export default function FormularioAvisoOffline({
           </Select>
         </label>
 
+        {/*
+          Mismo rótulo que el modal con señal, y tiene que seguir siéndolo:
+          son el mismo campo y la misma decisión, y dos pantallas que nombran
+          distinto a lo mismo enseñan que son cosas distintas. Ver el
+          comentario largo en `NuevoAvisoModal.tsx`.
+        */}
         <label className="block space-y-1">
-          <span className="block text-xs font-medium text-slate-600">Urgencia</span>
+          <span className="block text-xs font-medium text-slate-600">Urgencia sugerida</span>
           <Select
             value={campos.urgencia}
             onChange={(e) => set("urgencia", e.target.value)}
@@ -207,6 +213,9 @@ export default function FormularioAvisoOffline({
               </option>
             ))}
           </Select>
+          <span className="block text-xs text-slate-500">
+            Es tu sugerencia. La prioridad final la define Mantenimiento.
+          </span>
         </label>
 
         <label className="block space-y-1">

@@ -221,8 +221,20 @@ export default function NuevoAvisoModal({
             </Select>
           </label>
 
+          {/*
+            "Sugerida" y no "Urgencia" a secas, a pedido.
+            Quien avisa ve la máquina y sabe cuánto molesta, pero no sabe qué
+            más hay en cola ni qué repuesto falta: la prioridad de verdad la
+            arma Mantenimiento con el puntaje GUT de la OT. Sin esa palabra, el
+            campo se lee como una orden —"lo puse en Alta, que lo arreglen
+            hoy"— y la distancia entre lo que alguien eligió acá y lo que
+            después pasa se siente como que el sistema lo ignoró.
+
+            El VALOR no cambia: sigue siendo "🟠 Alta" tal cual, porque viaja
+            literal a la columna F de la planilla. Lo que cambia es el rótulo.
+          */}
           <label className="block space-y-1">
-            <span className="block text-xs font-medium text-slate-600">Urgencia</span>
+            <span className="block text-xs font-medium text-slate-600">Urgencia sugerida</span>
             <Select
               value={campos.urgencia}
               onChange={(e) => set("urgencia", e.target.value)}
@@ -230,6 +242,9 @@ export default function NuevoAvisoModal({
             >
               {URGENCIAS.map((u) => <option key={u} value={u}>{u}</option>)}
             </Select>
+            <span className="block text-xs text-slate-500">
+              Es tu sugerencia. La prioridad final la define Mantenimiento.
+            </span>
           </label>
 
           <label className="block space-y-1">
