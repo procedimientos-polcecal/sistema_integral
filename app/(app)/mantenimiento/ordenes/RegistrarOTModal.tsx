@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { instanteDeArgentina } from "@/lib/core/fechas";
+import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
 
 /**
  * Registrar el trabajo de una orden.
@@ -46,6 +47,9 @@ export default function RegistrarOTModal({
     operario_1: string | null;
     operario_2: string | null;
     operario_3: string | null;
+    falla_modo?: string | null;
+    falla_causa?: string | null;
+    falla_detalle?: string | null;
   };
   onCerrar: () => void;
   onRegistrada: () => void;
@@ -58,6 +62,18 @@ export default function RegistrarOTModal({
   const [operario2, setOperario2] = useState(orden.operario_2 ?? "");
   const [operario3, setOperario3] = useState(orden.operario_3 ?? "");
   const [observaciones, setObservaciones] = useState("");
+  /*
+   * Precargada y no vacía: este modal se abre cada vez que una orden se da por
+   * realizada y manda todos sus campos en cada guardado, así que arrancar en
+   * blanco le borraría la falla a quien reabre una OT para corregir las horas.
+   * Vaciar el desplegable sigue siendo "borrala": viaja como "" y la ruta lo
+   * guarda como null.
+   */
+  const [falla, setFalla] = useState<LaFalla>({
+    falla_modo: orden.falla_modo ?? "",
+    falla_causa: orden.falla_causa ?? "",
+    falla_detalle: orden.falla_detalle ?? "",
+  });
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -151,6 +167,8 @@ export default function RegistrarOTModal({
         operario_2: operario2.trim() || null,
         operario_3: operario3.trim() || null,
         observaciones: observaciones.trim() || null,
+        // Las tres claves son las de la base: viajan sin traducir.
+        ...falla,
         foto_url: foto?.link ?? undefined,
       }),
     });
@@ -278,6 +296,8 @@ export default function RegistrarOTModal({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
+
+        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={guardando} />
 
         <Campo etiqueta="Foto del trabajo">
           {foto ? (

@@ -5,6 +5,7 @@ import Select from "@/components/Select";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
 import { lineasDesdeElCuerpo, type LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
@@ -101,6 +102,17 @@ export default function FormularioOTOffline({
    * Object]»—, así que una carga parada perdería los repuestos sin decir nada.
    */
   const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>(() => lineasDesdeElCuerpo(borrador));
+  /*
+   * Los tres campos de la falla son texto plano, así que una carga que quedó
+   * parada los recupera sola: `borradorDesdeElCuerpo` copia por nombre lo que
+   * ya estaba en el cuerpo. Con los repuestos no alcanzaba porque viajan como
+   * arreglo y esa función descarta los objetos.
+   */
+  const [falla, setFalla] = useState<LaFalla>(() => ({
+    falla_modo: String(borrador?.falla_modo ?? ""),
+    falla_causa: String(borrador?.falla_causa ?? ""),
+    falla_detalle: String(borrador?.falla_detalle ?? ""),
+  }));
 
   function f(clave: keyof FormularioDeOT, valor: string | boolean) {
     setForm((previo) => {
@@ -148,6 +160,9 @@ export default function FormularioOTOffline({
         // Los renglones; la ruta arma con ellos el texto de la única celda que
         // la planilla tiene para esto.
         repuestos,
+        // Las tres claves son las de la base. Si la orden no nace cerrada no
+        // hubo falla que contar, y van vacías.
+        ...(cierraAlCrearse ? falla : FALLA_VACIA),
         horas: form.horas ? Number(form.horas) : null,
         // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
         // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
@@ -292,6 +307,10 @@ export default function FormularioOTOffline({
           deshabilitado={deshabilitado}
         />
       </F>
+
+      {cierraAlCrearse && (
+        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={deshabilitado} />
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <F label="Fecha creación">

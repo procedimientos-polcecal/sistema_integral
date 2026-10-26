@@ -14,6 +14,7 @@ import {
   copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
 } from "@/lib/mantenimiento/reutilizarOT";
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 
 /**
@@ -80,6 +81,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   onCreated: (aviso?: string | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  // Sólo se pregunta si la orden nace cerrada: en una que recién se pide, la
+  // falla todavía no pasó.
+  const [falla, setFalla] = useState<LaFalla>(FALLA_VACIA);
   const [error, setError]   = useState("");
 
   /* ── Reutilizar una OT vieja ──────────────────────────────────────────
@@ -218,6 +222,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         // Los renglones; la ruta arma con ellos el texto de la celda de la
         // planilla, que tiene una sola.
         repuestos,
+        // Las tres claves son las de la base. Si la orden no nace cerrada no
+        // hubo falla que contar, y van vacías.
+        ...(cierraAlCrearse ? falla : FALLA_VACIA),
         horas:       form.horas ? Number(form.horas) : null,
         // Sin elegir viaja como null, no como 0 ni como "": una nota que nadie
         // puso no puede quedar guardada como si fuera una.
@@ -356,6 +363,10 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           <F label="Repuestos utilizados">
             <RepuestosDeLaOT lineas={repuestos} onCambiar={setRepuestos} deshabilitado={saving} />
           </F>
+
+          {cierraAlCrearse && (
+            <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={saving} />
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <F label="Fecha creación">
