@@ -523,7 +523,6 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   });
 }
 
-/** Trae las órdenes de servicio de su planilla, una pestaña por área. */
 /**
  * Reescribe el seguimiento de las OS que no llegaron a la planilla, y devuelve
  * los números que **siguen** sin llegar.
@@ -539,16 +538,32 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
  */
 async function exportarLoPendienteDeOS(
   admin: ReturnType<typeof createAdminClient>
-): Promise<Set<number>> {
+): Promise<{ siguenPendientes: Set<number>; problema: string | null }> {
   const siguenPendientes = new Set<number>();
 
   // La cadena va literal y no armada en una variable: así Supabase infiere los
   // tipos de lo que vuelve. Es la regla del CLAUDE.md, y acá avisó con un
   // `GenericStringError` en vez de dejarlo pasar.
-  const { data: pendientes } = await admin
+  const { data: pendientes, error } = await admin
     .from("ordenes_servicio")
     .select("id, os_number, sheets_tab, sheets_row, estado, proveedor_elegido, fecha_pedido, fecha_realizacion, observaciones")
     .not("sheets_pendiente", "is", null);
+
+  // **Y si no se pudo leer la cola, se dice.** El caso concreto es la migración
+  // `20261026112137` sin aplicar: PostgREST contesta que no existe la columna,
+  // `data` viene null y el `?? []` de abajo haría que esto no reintentara nada
+  // y no salteara nada — o sea, la protección apagada, importando igual y sin
+  // una palabra. Un diagnóstico que no se distingue del éxito es peor que
+  // ninguno. No aborta la corrida: traer las OS sigue siendo mejor que no
+  // traerlas, pero quien mire la sincronización tiene que ver por qué.
+  if (error) {
+    return {
+      siguenPendientes,
+      problema:
+        `No se pudo leer la cola de exportación de las OS, así que esta corrida no ` +
+        `reintentó nada y pudo pisar un seguimiento sin exportar: ${error.message}`,
+    };
+  }
 
   for (const os of pendientes ?? []) {
     const campos = loQueHayQueExportarDeLaOS(os);
@@ -570,9 +585,10 @@ async function exportarLoPendienteDeOS(
       .eq("id", os.id);
   }
 
-  return siguenPendientes;
+  return { siguenPendientes, problema: null };
 }
 
+/** Trae las órdenes de servicio de su planilla, una pestaña por área. */
 export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OS_ID ?? "";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OS_ID");
@@ -583,7 +599,8 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
   // Primero sale lo que el sistema sabe y la planilla no, igual que en las OT:
   // así lo que acabamos de escribir vuelve con el resto en la lectura de abajo,
   // en vez de ser pisado por una columna vieja.
-  const sinExportar = await exportarLoPendienteDeOS(admin);
+  const { siguenPendientes: sinExportar, problema: colaSinLeer } =
+    await exportarLoPendienteDeOS(admin);
 
   const enlaces = await cargarEnlaces(admin);
   const cuando = new Date().toISOString();
@@ -737,6 +754,9 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
     sin_proveedor: [...sinProveedor],
     borradas: borrado.borradas,
     borrado: borrado.aviso,
+    // Sólo cuando lo hay, para que no sea un campo que está siempre en null y
+    // se deja de mirar. Hoy el único caso es la migración sin aplicar.
+    ...(colaSinLeer ? { cola_sin_leer: colaSinLeer } : {}),
     // Un 0 es lo normal: la mayoría de las corridas no traen OS nuevas y fuera
     // de la ventana 7:00–21:00 no se manda nada a propósito.
     avisos_al_instante: aviso.enviadas,
