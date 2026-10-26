@@ -53,6 +53,38 @@
  * **El aviso no se toca y la orden tampoco.** Lo único que cambia es a cuál
  * apunta el aviso: la orden ya está escrita por quien se adelantó, y el aviso
  * sigue diciendo lo que dijo quien lo cargó.
+ *
+ * ── Y SE PUEDE DESHACER, PERO NO CUALQUIERA ────────────────────────────────
+ *
+ * Desde el 26/10/2026. Hace falta justamente porque el número se tipea: la
+ * 2815 en lugar de la 2814 se arreglaba editando la base a mano, que es el
+ * mismo argumento que el DELETE de `avisos/desestimar` deja escrito.
+ *
+ * Lo que no es obvio es **qué** se puede deshacer, porque desenlazar borra:
+ * limpia la tabla y **vacía la celda de `OT ASIGNADA` en la planilla**. Hay
+ * tres maneras de que un aviso tenga OT y sólo una se deshace:
+ *
+ * 1. **Lo escribió una persona en la planilla.** Es el caso normal, no el
+ *    raro: medido el 26/10/2026, de 186 avisos con algo en esa columna, 182
+ *    no tienen `work_order_id` —«RI 1888», «Revision», «si», «1889 - 1886»—.
+ *    Vaciar esa celda es borrar lo que alguien puso donde lee quien no entra
+ *    al sistema. No se ofrece, y se distingue solo.
+ * 2. **La OT la generó el sistema desde este aviso.** Desenlazarla deja una
+ *    orden que nadie reclama, y devuelve el aviso a la lista de pendientes
+ *    invitando a que alguien genere una segunda orden para el mismo
+ *    problema. No se ofrece: si esa orden no corresponde, hay que darla de
+ *    baja a ella, que es la misma respuesta que ya da `desestimar`.
+ * 3. **Se enlazó con este botón.** La orden existía antes y sigue existiendo
+ *    sin el aviso. Deshacerlo devuelve exactamente el estado anterior.
+ *
+ * Los casos 2 y 3 dejan lo mismo en la tabla —los escribe la misma función,
+ * `marcarElAviso`—, así que distinguirlos necesitó una columna:
+ * `ot_enlazada_en`, que escribe **sólo** la ruta de enlazar. El porqué, con
+ * los números y con la trampa del `check` que no se puede poner, está en la
+ * migración `20261026080748`.
+ *
+ * **Desenlazar no se audita**, por lo mismo que no se audita retomar un aviso
+ * desestimado: es el deshacer, no lo irreversible.
  */
 
 /** Lo que del aviso hace falta para decidir si se puede enlazar. */
@@ -146,6 +178,132 @@ export function loQueHayQueMirarAntesDeEnlazar(
   }
 
   return mirar;
+}
+
+/** Lo que del aviso hace falta para decidir si se puede desenlazar. */
+export interface AvisoADesenlazar {
+  oa_number: string | null;
+  work_order_id: string | null;
+  /** Texto libre de la planilla: un N° de OT, "si", "Revision" o vacío. */
+  ot_asignada: string | null;
+  /**
+   * Cuándo se enlazó con «Ya tiene OT». `null` es que ese enlace **no** lo
+   * hizo ese botón, que es lo que vale para los 196 avisos anteriores al
+   * 26/10/2026 y para todo lo que salga de «Generar OT».
+   */
+  ot_enlazada_en?: string | null;
+}
+
+/**
+ * Lo que impide desenlazar, en castellano y listo para mostrar.
+ *
+ * Vacío es que se puede. Cada motivo dice además **dónde se arregla**, porque
+ * los tres se arreglan en lugares distintos —la planilla, la orden, ningún
+ * lado— y «no se puede» a secas devolvería a la gente a editar la base.
+ *
+ * ── EL SEGUNDO ARGUMENTO, Y POR QUÉ SE PUEDE NO SABERLO ────────────────────
+ *
+ * `otNumber` es el número de la orden a la que el aviso apunta **hoy**, y
+ * sirve para una sola cosa: comprobar que la celda de la planilla sigue
+ * diciendo lo que el sistema escribió. Si alguien la editó a mano después,
+ * vaciarla es pisarlo — y no hacerlo tampoco sirve, porque `finalDelAviso`
+ * lee esa misma columna y la próxima sincronización la traería de vuelta: el
+ * aviso seguiría con OT y el botón parecería no hacer nada.
+ *
+ * `null` quiere decir «todavía no se leyó la orden», y entonces esa
+ * comprobación se saltea. Lo usa la pantalla, que decide si **ofrecer** el
+ * botón con lo que tiene en la mano; quien decide si **hacerlo** es la ruta,
+ * que lee la orden primero. O sea que la pantalla puede ofrecer algo que la
+ * ruta rechace, y eso está bien: el rechazo es un mensaje que dice dónde
+ * arreglarlo, no un fracaso silencioso. Es la misma repartija que ya hace
+ * `loQueImpideEnlazar`, donde la ruta vuelve a buscar la OT y vuelve a correr
+ * la regla antes de escribir.
+ */
+export function loQueImpideDesenlazar(
+  aviso: AvisoADesenlazar,
+  otNumber: number | null
+): string[] {
+  const oa = texto(aviso.oa_number) || "—";
+  const dice = texto(aviso.ot_asignada);
+
+  if (!aviso.work_order_id && dice === "") {
+    return [`El aviso ${oa} no tiene ninguna orden de trabajo enlazada.`];
+  }
+
+  // El caso normal y no el raro: 182 de 186. Es texto que alguien escribió en
+  // la planilla, y desenlazar vacía esa celda.
+  if (!aviso.work_order_id) {
+    return [
+      `El aviso ${oa} dice «${dice}» en OT ASIGNADA, pero el sistema no tiene ninguna ` +
+      `orden enlazada: ese texto está sólo en la planilla y lo puso alguien a mano. ` +
+      `Borrarlo desde acá sería pisarlo — si está mal, corregilo en la planilla.`,
+    ];
+  }
+
+  if (!aviso.ot_enlazada_en) {
+    return [
+      `La OT #${dice || "—"} se generó desde el aviso ${oa}, así que desenlazarla dejaría ` +
+      `una orden que el sistema creó y que ya nadie reclama, y el aviso volvería a la ` +
+      `lista de pendientes invitando a que alguien genere una segunda. Si esa orden no ` +
+      `corresponde, hay que darla de baja a ella.`,
+    ];
+  }
+
+  // Vacía no es «alguien la cambió»: enlazar guarda primero y escribe después,
+  // así que una celda en blanco es la de un enlace cuya escritura no salió. No
+  // hay nada que pisar.
+  if (otNumber !== null && dice !== "" && dice !== String(otNumber)) {
+    return [
+      `El aviso ${oa} está enlazado a la OT #${otNumber}, pero la planilla dice ` +
+      `«${dice}». Eso lo cambió alguien a mano después de enlazar, así que no se vacía ` +
+      `desde acá: corregilo en la planilla y traela de nuevo.`,
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Si la pantalla ofrece el botón de desenlazar.
+ *
+ * Es la misma regla con lo que la pantalla puede saber —ver el segundo
+ * argumento de `loQueImpideDesenlazar`—, y no una segunda regla escrita
+ * aparte: dos listas de condiciones se separan, y la que se separa es siempre
+ * la que decide qué se muestra.
+ */
+export function sePuedeDesenlazar(aviso: AvisoADesenlazar): boolean {
+  return loQueImpideDesenlazar(aviso, null).length === 0;
+}
+
+/**
+ * Lo que se le dice a quien desenlazó.
+ *
+ * Si la planilla no se pudo vaciar, el aviso **no queda a medias: queda peor
+ * que antes**, y eso hay que decirlo. La celda sigue diciendo el número, así
+ * que la próxima sincronización lo trae de vuelta a `ot_asignada` —ahora sin
+ * `work_order_id`—, el aviso vuelve a contar como «con OT» y pasa a ser
+ * indistinguible de los 182 que alguien escribió a mano: desde ahí ya no se
+ * puede desenlazar desde el sistema nunca más. Por eso el texto pide borrar
+ * la celda a mano, y no se conforma con avisar que la planilla «no se
+ * enteró», que es lo que alcanza en `desestimar`.
+ *
+ * Va con **lo que dijo Google sin traducir**: un diagnóstico que no se
+ * distingue de otro no es un diagnóstico.
+ */
+export function avisoDeDesenlazada(
+  oaNumber: string | null,
+  otNumber: number | null,
+  planillaError: string | null
+): string {
+  const oa = texto(oaNumber) || "—";
+  const cual = otNumber === null ? "su orden de trabajo" : `la OT #${otNumber}`;
+  const base = `El aviso ${oa} ya no está enlazado a ${cual} y vuelve a estar pendiente.`;
+  if (!planillaError) return base;
+  return (
+    `${base} Ojo: la planilla sigue diciendo que tiene OT y no se pudo vaciar ` +
+    `(${planillaError}). Hay que borrar esa celda a mano: si no, la próxima ` +
+    `sincronización la trae de vuelta y el aviso vuelve a contar como que ya tiene orden.`
+  );
 }
 
 /** Un renglón de los que se leen para reconocer la orden. */

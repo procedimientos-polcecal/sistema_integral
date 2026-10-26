@@ -12,6 +12,7 @@ import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
 import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
+import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 
 /**
@@ -178,6 +179,28 @@ export default function AvisosClient({
     router.refresh();
   }
 
+  /**
+   * Deshacer el enlace: el aviso vuelve a estar pendiente.
+   *
+   * El numero de la OT se tipea, y un numero tipeado se equivoca con un dedo.
+   * Sin esto, la 2815 en lugar de la 2814 se arregla editando la base a mano —
+   * el mismo argumento por el que existe `retomar`.
+   *
+   * **No se ofrece para cualquier aviso con OT**: ver `sePuedeDesenlazar`. El
+   * caso frecuente es el numero escrito a mano en la planilla, y ahi vaciar la
+   * celda seria pisar lo que alguien puso.
+   */
+  async function desenlazar(aviso: Aviso) {
+    setError(""); setResultado(null);
+    const res = await fetch(`/api/mantenimiento/avisos/enlazar?id=${aviso.id}`, {
+      method: "DELETE",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(body.error ?? "No se pudo desenlazar la OT."); return; }
+    setResultado(body.mensaje ?? `El aviso ${aviso.oa_number} vuelve a estar pendiente.`);
+    router.refresh();
+  }
+
   function generarOT(aviso: Aviso) {
     setError("");
     setResultado(null);
@@ -295,9 +318,12 @@ export default function AvisosClient({
 
               <div className="mt-2.5 border-t border-slate-100 pt-2.5">
                 {tieneOt(a) ? (
-                  <span className="text-xs text-slate-500">
-                    {a.ot_asignada ? `OT #${a.ot_asignada}` : "Ya tiene OT"}
-                  </span>
+                  <ConOt
+                    aviso={a}
+                    sinOt="Ya tiene OT"
+                    puedeEditar={puedeEditar}
+                    onDesenlazar={desenlazar}
+                  />
                 ) : estaDesestimado(a) ? (
                   <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                 ) : puedeEditar ? (
@@ -337,7 +363,9 @@ export default function AvisosClient({
                 <th className="px-3 py-2 text-left">Fecha</th>
                 <th className="px-3 py-2 text-left">Equipo</th>
                 <th className="px-3 py-2 text-left">Qué pasa</th>
-                <th className="px-3 py-2 text-left">Urgencia</th>
+                {/* "Sugerida": la eligió quien avisó, no es la prioridad con
+                    la que Mantenimiento va a trabajar. Ver NuevoAvisoModal. */}
+                <th className="px-3 py-2 text-left">Urgencia sugerida</th>
                 <th className="px-3 py-2 text-left">Avisó</th>
                 <th className="px-3 py-2 text-left">OT</th>
               </tr>
@@ -360,9 +388,12 @@ export default function AvisosClient({
                   <td className="px-3 py-2 text-slate-600">{a.quien_aviso ?? "—"}</td>
                   <td className="px-3 py-2">
                     {tieneOt(a) ? (
-                      <span className="text-xs text-slate-500">
-                        {a.ot_asignada ? `OT #${a.ot_asignada}` : "sí"}
-                      </span>
+                      <ConOt
+                        aviso={a}
+                        sinOt="sí"
+                        puedeEditar={puedeEditar}
+                        onDesenlazar={desenlazar}
+                      />
                     ) : estaDesestimado(a) ? (
                       <Desestimado aviso={a} puedeEditar={puedeEditar} onRetomar={retomar} />
                     ) : puedeEditar ? (
@@ -482,5 +513,40 @@ function Desestimado({ aviso, puedeEditar, onRetomar }: {
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Un aviso que ya tiene orden de trabajo.
+ *
+ * **El «desenlazar» no se ofrece siempre, y eso es casi todo lo que hace este
+ * componente.** De los avisos que hoy dicen tener OT, la enorme mayoria lo
+ * dice porque alguien escribio el numero a mano en la planilla —medido el
+ * 26/10/2026: 182 de 186— y desenlazar vacia esa celda. Quien decide es
+ * `sePuedeDesenlazar`, la misma regla que corre la ruta: ver
+ * `lib/mantenimiento/enlazarOtAlAviso.ts`.
+ *
+ * Se parece a `Desestimado` a proposito —un link chiquito al lado del texto,
+ * no un boton— porque es lo mismo: deshacer algo que no es irreversible.
+ */
+function ConOt({ aviso, sinOt, puedeEditar, onDesenlazar }: {
+  aviso: Aviso;
+  /** Qué decir cuando la planilla todavía no trajo el número. */
+  sinOt: string;
+  puedeEditar: boolean;
+  onDesenlazar: (a: Aviso) => void;
+}) {
+  return (
+    <span className="text-xs text-slate-500">
+      {aviso.ot_asignada ? `OT #${aviso.ot_asignada}` : sinOt}
+      {puedeEditar && sePuedeDesenlazar(aviso) && (
+        <button
+          onClick={() => onDesenlazar(aviso)}
+          className="ml-2 text-slate-400 underline hover:text-slate-600"
+        >
+          desenlazar
+        </button>
+      )}
+    </span>
   );
 }

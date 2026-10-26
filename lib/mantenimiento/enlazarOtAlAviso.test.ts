@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   loQueImpideEnlazar, loQueHayQueMirarAntesDeEnlazar, comoSeLeeLaOT,
-  avisoDeEnlazada,
-  type AvisoAEnlazar, type OTAEnlazar,
+  avisoDeEnlazada, loQueImpideDesenlazar, sePuedeDesenlazar, avisoDeDesenlazada,
+  type AvisoAEnlazar, type OTAEnlazar, type AvisoADesenlazar,
 } from "./enlazarOtAlAviso";
 
 const AVISO: AvisoAEnlazar = {
@@ -126,5 +126,124 @@ describe("avisoDeEnlazada", () => {
   it("agrega lo que dijo Google cuando la planilla no se pudo escribir", () => {
     const texto = avisoDeEnlazada("1234", 2814, "Quota exceeded");
     expect(texto).toContain("Quota exceeded");
+  });
+});
+
+/**
+ * Desenlazar: qué enlace se deshace y cuál no.
+ *
+ * Los tres casos de la lista son estados que existen de verdad en la base,
+ * medidos el 26/10/2026 sobre 196 avisos: 182 con el número escrito a mano en
+ * la planilla, 4 enlazados por el sistema, 0 con enlace y sin texto.
+ */
+const ENLAZADO: AvisoADesenlazar = {
+  oa_number: "A189",
+  work_order_id: "ot-id",
+  ot_asignada: "2814",
+  ot_enlazada_en: "2026-10-26T10:00:00.000Z",
+};
+
+describe("loQueImpideDesenlazar", () => {
+  it("no impide nada cuando el enlace lo hizo el botón y la planilla coincide", () => {
+    expect(loQueImpideDesenlazar(ENLAZADO, 2814)).toEqual([]);
+  });
+
+  it("impide cuando el aviso no tiene nada enlazado", () => {
+    const impide = loQueImpideDesenlazar(
+      { oa_number: "A1", work_order_id: null, ot_asignada: null }, null
+    );
+    expect(impide).toHaveLength(1);
+    expect(impide[0]).toContain("no tiene ninguna orden");
+  });
+
+  it("impide cuando el número lo escribió alguien a mano en la planilla", () => {
+    // Son 182 de 186: el caso normal, no el raro. Vaciar esa celda es borrar
+    // lo que alguien puso donde lee quien no entra al sistema.
+    const impide = loQueImpideDesenlazar(
+      { oa_number: "A22", work_order_id: null, ot_asignada: "949" }, null
+    );
+    expect(impide).toHaveLength(1);
+    expect(impide[0]).toContain("949");
+    expect(impide[0]).toContain("planilla");
+  });
+
+  it("impide también cuando lo escrito a mano no es un número", () => {
+    // «RI 1888», «Revision», «si», «-», «1889 - 1886»: la columna es texto
+    // libre y todos esos existen hoy.
+    for (const texto of ["RI 1888", "Revision", "si", "-", "1889 - 1886"]) {
+      const impide = loQueImpideDesenlazar(
+        { oa_number: "A138", work_order_id: null, ot_asignada: texto }, null
+      );
+      expect(impide).toHaveLength(1);
+      expect(impide[0]).toContain(texto);
+    }
+  });
+
+  it("impide cuando la OT la generó el sistema desde este aviso", () => {
+    // Sin `ot_enlazada_en` el enlace no lo hizo este botón. Deshacerlo dejaría
+    // una orden que nadie reclama; lo que corresponde es darla de baja a ella.
+    const impide = loQueImpideDesenlazar({ ...ENLAZADO, ot_enlazada_en: null }, 2814);
+    expect(impide).toHaveLength(1);
+    expect(impide[0]).toContain("2814");
+    expect(impide[0]).toContain("darla de baja");
+  });
+
+  it("impide cuando alguien cambió a mano la celda después de enlazar", () => {
+    // Vaciarla sería pisar lo que esa persona escribió, y dejarla tampoco
+    // sirve: la próxima sincronización la trae y el aviso sigue con OT.
+    const impide = loQueImpideDesenlazar({ ...ENLAZADO, ot_asignada: "2815" }, 2814);
+    expect(impide).toHaveLength(1);
+    expect(impide[0]).toContain("2815");
+    expect(impide[0]).toContain("2814");
+  });
+
+  it("no mira la celda cuando todavía no se leyó la orden", () => {
+    // Es lo que corre la pantalla: decide si ofrecer el botón, no si hacerlo.
+    expect(loQueImpideDesenlazar({ ...ENLAZADO, ot_asignada: "2815" }, null)).toEqual([]);
+  });
+
+  it("deja desenlazar aunque la planilla nunca se haya podido escribir", () => {
+    // Enlazar guarda primero y escribe después: si Google no contestó, el
+    // enlace existe igual y la celda quedó vacía. No hay nada que pisar.
+    expect(loQueImpideDesenlazar({ ...ENLAZADO, ot_asignada: "" }, 2814)).toEqual([]);
+  });
+});
+
+describe("sePuedeDesenlazar", () => {
+  it("es sí para un enlace hecho con el botón", () => {
+    expect(sePuedeDesenlazar(ENLAZADO)).toBe(true);
+  });
+
+  it("es no para los tres que no se tocan", () => {
+    expect(sePuedeDesenlazar({ ...ENLAZADO, ot_enlazada_en: null })).toBe(false);
+    expect(sePuedeDesenlazar(
+      { oa_number: "A22", work_order_id: null, ot_asignada: "949" }
+    )).toBe(false);
+    expect(sePuedeDesenlazar(
+      { oa_number: "A1", work_order_id: null, ot_asignada: null }
+    )).toBe(false);
+  });
+});
+
+describe("avisoDeDesenlazada", () => {
+  it("dice qué aviso dejó de estar enlazado a qué orden", () => {
+    const texto = avisoDeDesenlazada("A189", 2814, null);
+    expect(texto).toContain("A189");
+    expect(texto).toContain("2814");
+    expect(texto).toContain("pendiente");
+  });
+
+  it("agrega lo que dijo Google cuando la celda no se pudo vaciar", () => {
+    const texto = avisoDeDesenlazada("A189", 2814, "Quota exceeded");
+    expect(texto).toContain("Quota exceeded");
+  });
+
+  it("pide borrar la celda a mano, porque si no la sincronización lo deshace", () => {
+    // No alcanza con avisar que la planilla «no se enteró», como en
+    // desestimar: acá la celda que quedó vuelve a entrar como `ot_asignada` y
+    // el aviso queda contando como que ya tiene orden, para siempre.
+    const texto = avisoDeDesenlazada("A189", 2814, "500 Internal Error");
+    expect(texto).toContain("a mano");
+    expect(texto).toContain("sincronización");
   });
 });

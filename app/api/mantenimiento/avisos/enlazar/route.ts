@@ -5,9 +5,12 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import { numeroDeOT } from "@/lib/mantenimiento/reutilizarOT";
+import { escribirCeldas } from "@/lib/core/sheets";
+import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
 import {
   loQueImpideEnlazar, loQueHayQueMirarAntesDeEnlazar, avisoDeEnlazada,
-  type AvisoAEnlazar, type OTAEnlazar,
+  loQueImpideDesenlazar, avisoDeDesenlazada,
+  type AvisoAEnlazar, type OTAEnlazar, type AvisoADesenlazar,
 } from "@/lib/mantenimiento/enlazarOtAlAviso";
 
 /**
@@ -155,7 +158,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: impide.join(" ") }, { status: 409 });
   }
 
-  const marca = await marcarElAviso(admin, aviso.id, ot.id, ot.ot_number);
+  // El cuarto argumento es lo que distingue este camino del de «Generar OT»,
+  // y es lo único que después habilita a desenlazar: acá la orden ya existía.
+  const marca = await marcarElAviso(admin, aviso.id, ot.id, ot.ot_number, user.id);
 
   // No se pudo guardar es un fracaso, no una advertencia: el aviso sigue
   // pendiente y quien apretó tiene que volver a intentar.
@@ -165,5 +170,113 @@ export async function POST(request: Request) {
     ot_number: ot.ot_number,
     planilla_error: marca.planillaError,
     mensaje: avisoDeEnlazada(aviso.oa_number, ot.ot_number, marca.planillaError),
+  });
+}
+
+/**
+ * DELETE: deshacer el enlace. El aviso vuelve a estar pendiente.
+ *
+ * Existe por lo mismo que el DELETE de `avisos/desestimar`: sin esto, la única
+ * forma de arreglar un número mal tipeado —la 2815 en lugar de la 2814— sería
+ * editar la base a mano. Y acá hace más falta todavía, porque enlazar es
+ * justamente escribir un número con los dedos.
+ *
+ * **Qué se puede desenlazar lo decide `loQueImpideDesenlazar`**, que es pura y
+ * tiene los tests: no todo aviso con OT se deshace, y el que no se deshace es
+ * el caso frecuente —182 de 186 tienen el número escrito a mano en la planilla
+ * y vaciar esa celda sería pisarlo—. El porqué de los tres casos está en el
+ * encabezado de `lib/mantenimiento/enlazarOtAlAviso.ts`.
+ *
+ * **Lee la orden antes de decidir.** No es por mostrarla: es para comprobar
+ * que la celda de la planilla sigue diciendo lo que el sistema escribió. La
+ * pantalla corre la misma regla sin ese dato y por eso puede ofrecer algo que
+ * acá se rechace — con un mensaje que dice dónde arreglarlo.
+ *
+ * Primero la base y después la planilla, como `desestimar`. Si Google no
+ * contesta se devuelve **lo que dijo, sin traducir**, pero el mensaje no se
+ * conforma con avisar que la planilla «no se enteró»: acá la celda que quedó
+ * escrita vuelve a entrar en la próxima sincronización y deja al aviso
+ * contando como que ya tiene orden, así que hay que borrarla a mano.
+ *
+ * **No se audita**, igual que retomar un aviso desestimado: esto *es* el
+ * deshacer, y la orden de trabajo no se toca.
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
+
+  const id = String(new URL(request.url).searchParams.get("id") ?? "").trim();
+  if (!id) return NextResponse.json({ error: "Falta el aviso." }, { status: 400 });
+
+  const admin = createAdminClient();
+
+  const { data: aviso, error: errorDelAviso } = await admin
+    .from("avisos")
+    .select("id, oa_number, work_order_id, ot_asignada, ot_enlazada_en, sheets_row")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorDelAviso) {
+    return NextResponse.json({ error: errorDelAviso.message }, { status: 500 });
+  }
+  if (!aviso) return NextResponse.json({ error: "Ese aviso no existe." }, { status: 404 });
+
+  // El número de la orden a la que apunta hoy, que es contra lo que se compara
+  // la celda. Si la orden ya no está, queda en null y esa comprobación no
+  // corre: lo que falta no puede ser lo que frene.
+  let otNumber: number | null = null;
+  if (aviso.work_order_id) {
+    const { data: ot } = await admin
+      .from("ordenes_trabajo")
+      .select("ot_number")
+      .eq("id", aviso.work_order_id)
+      .maybeSingle();
+    otNumber = ot?.ot_number ?? null;
+  }
+
+  const impide = loQueImpideDesenlazar(aviso as AvisoADesenlazar, otNumber);
+  if (impide.length > 0) {
+    return NextResponse.json({ error: impide.join(" ") }, { status: 409 });
+  }
+
+  const { data: guardado, error } = await admin
+    .from("avisos")
+    .update({
+      work_order_id: null,
+      // Se limpia también acá y no sólo en la planilla: `finalDelAviso` lee
+      // esta columna, así que dejarla escrita mantendría al aviso contando
+      // como que tiene orden hasta la próxima sincronización.
+      ot_asignada: null,
+      ot_enlazada_en: null,
+      ot_enlazada_por: null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  let planilla_error: string | null = null;
+  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
+  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
+
+  if (planilla && aviso.sheets_row) {
+    try {
+      await escribirCeldas(planilla, [{
+        pestana, fila: aviso.sheets_row, columna: COLUMNA_OT_ASIGNADA, valor: "",
+      }]);
+    } catch (e) {
+      planilla_error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  return NextResponse.json({
+    data: guardado,
+    planilla_error,
+    mensaje: avisoDeDesenlazada(aviso.oa_number, otNumber, planilla_error),
   });
 }

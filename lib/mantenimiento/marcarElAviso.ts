@@ -38,6 +38,20 @@ import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
  * cuando esto vivía dentro de la ruta de órdenes— obliga a quien llama a
  * adivinar cuál de los dos pasó, y lo normal es que llame al primero «no se
  * pudo escribir en la planilla» y dé por hecho un enlace que no existe.
+ *
+ * ── LOS DOS CAMINOS DEJAN LO MISMO, Y POR ESO HAY QUE DECIR CUÁL FUE ───────
+ *
+ * Que dejen exactamente la misma marca es lo que esta función viene a
+ * garantizar, y desde el 26/10/2026 es también lo que impedía deshacerlos:
+ * desenlazar una orden que existía antes devuelve el estado anterior, y
+ * desenlazar una que el sistema creó desde el aviso deja una OT que nadie
+ * reclama. En la tabla eran indistinguibles.
+ *
+ * Por eso `enlazadaPor` es **explícito y opcional**, y no algo que esta
+ * función deduzca: sólo lo pasa la ruta de enlazar, que es la única que sabe
+ * que la orden ya estaba. El alta de una OT no lo pasa, y así el valor por
+ * defecto —null— es el que no habilita a borrar nada. El porqué completo está
+ * en el encabezado de `lib/mantenimiento/enlazarOtAlAviso.ts`.
  */
 export interface MarcaDelAviso {
   /** No se pudo guardar: el aviso **no** quedó enlazado. */
@@ -50,11 +64,19 @@ export async function marcarElAviso(
   admin: ReturnType<typeof createAdminClient>,
   avisoId: string,
   otId: string,
-  otNumber: number
+  otNumber: number,
+  /** Quién enlazó una orden **que ya existía**. Sólo lo pasa `avisos/enlazar`. */
+  enlazadaPor?: string | null
 ): Promise<MarcaDelAviso> {
   const { data: aviso, error } = await admin
     .from("avisos")
-    .update({ work_order_id: otId, ot_asignada: String(otNumber) })
+    .update({
+      work_order_id: otId,
+      ot_asignada: String(otNumber),
+      ...(enlazadaPor
+        ? { ot_enlazada_en: new Date().toISOString(), ot_enlazada_por: enlazadaPor }
+        : {}),
+    })
     .eq("id", avisoId)
     .select("sheets_row")
     .single();

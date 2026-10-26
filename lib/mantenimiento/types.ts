@@ -286,6 +286,15 @@ export interface Aviso {
   desestimado_en: string | null;
   desestimado_por: string | null;
   motivo_desestimado: string | null;
+  /**
+   * Cuándo se le enlazó una OT **que ya existía**, con «Ya tiene OT».
+   *
+   * `null` no es "no tiene orden": es que ese enlace no lo hizo ese botón —la
+   * generó el sistema, o el número lo escribió alguien en la planilla—, y por
+   * eso no se puede deshacer. Ver `lib/mantenimiento/enlazarOtAlAviso.ts`.
+   */
+  ot_enlazada_en: string | null;
+  ot_enlazada_por: string | null;
   sheets_row: number | null;
   synced_at: string | null;
   created_at: string;
