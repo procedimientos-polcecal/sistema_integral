@@ -220,6 +220,15 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
+    // 23505: otro envío del mismo lunes ganó la carrera. Lo ataja el índice único
+    // de `20261026084938`, que es la garantía de verdad; el chequeo de arriba
+    // sólo da el mensaje cuando no hubo carrera.
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "Ya hay una referencia para ese lunes (se cargó justo ahora). Revisá la pantalla antes de volver a cargarla." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       {
         error:
