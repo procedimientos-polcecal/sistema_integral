@@ -84,6 +84,65 @@ const COL = {
 export const COLUMNA_OBSERVACION_PREVIA: number = COL.observacionPrevia;
 
 /**
+ * Las columnas del master que son **derrame** de los `IMPORTRANGE`, y la que
+ * calcula la propia planilla.
+ *
+ * ── POR QUÉ ESTO ESTÁ ACÁ Y NO EN UNA PANTALLA ──────────────────────────────
+ *
+ * Las columnas A a J y la S de la pestaña `OT` no tienen valor propio: son el
+ * derrame de cuatro `QUERY(IMPORTRANGE())` del libro de respuestas. Medido el
+ * 26/10/2026 sobre las filas de las OT 2896 y 2897: **ninguna de sus celdas de
+ * la A a la S tiene `userEnteredValue`**, o sea que no hay nada escrito ahí.
+ *
+ * Y eso tiene una consecuencia que no avisa: **escribir una corrección a mano
+ * en esas columnas no se guarda.** O bloquea el derrame con un `#REF!`, o el
+ * derrame la pisa al recalcular. Si entre las dos cosas pasa una
+ * sincronización, el sistema toma el valor nuevo y la siguiente lo devuelve al
+ * viejo — una fecha que se corrige y se descorrige sola, que es lo que se
+ * reportó ese día con la fecha de ejecución de la 2896 y la 2897.
+ *
+ * La L es otra cosa y por eso va aparte: no es derrame sino la fórmula de
+ * atrasado/al día del propio master. Tampoco se escribe, pero por otro motivo.
+ *
+ * El reparto vive **junto al mapa de columnas** a propósito. Una lista de
+ * «campos que no se pueden corregir» escrita en una pantalla se despega de la
+ * planilla el día que alguien mueve una columna, y lo haría en silencio: hay un
+ * test que exige que cada columna de `COL` esté en exactamente uno de los tres
+ * grupos, así que una columna nueva no puede quedarse sin clasificar.
+ */
+export const COLUMNAS_DE_DERRAME: readonly number[] = [
+  COL.otNumber, COL.fecha, COL.sector, COL.equipo, COL.especialidad,
+  COL.tipo, COL.quien, COL.descripcion, COL.repuesto, COL.fechaEjecucion,
+  COL.prioridad,
+];
+
+/** La que calcula la planilla sola. No se escribe, pero no es derrame. */
+export const COLUMNA_CALCULADA = 11;
+
+/** Las que sí son literales del master y el sistema puede escribir. */
+export const COLUMNAS_ESCRIBIBLES: readonly number[] = [
+  COL.fechaCierre, COL.estado, COL.contratista, COL.horas,
+  COL.operario1, COL.operario2, COL.operario3,
+  COL.frecuencia, COL.proximaFecha, COL.fotos,
+  COL.observaciones, COL.observacionPrevia,
+];
+
+/** Todas las columnas del mapa, para que el test pueda recorrerlas. */
+export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
+
+/**
+ * Cómo se nombran, para decírselo a quien mira la orden.
+ *
+ * El N° de OT no está: nadie va a querer corregirlo y nombrarlo sólo alarga la
+ * frase. Lo que importa es que estén los que una persona sí corrige.
+ */
+export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
+  "la fecha de la orden", "el sector", "el equipo", "la especialidad",
+  "el tipo", "quién lo realiza", "la descripción", "el repuesto",
+  "la fecha de ejecución", "la prioridad",
+];
+
+/**
  * El estado de la planilla, en el vocabulario del sistema.
  *
  * Lo que no se reconoce queda como "por hacer": es el estado del que se parte,
