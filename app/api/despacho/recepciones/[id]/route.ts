@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarDespacho } from "@/lib/despacho/auth";
 import { LUGARES_DE_DESCARGA, netoDeLaRecepcion } from "@/lib/despacho/recepcion";
@@ -55,7 +56,13 @@ export async function PATCH(
         { status: 409 }
       );
     }
-    return await cerrar(id, recepcion, user.id);
+    const { data: quien } = await supabase
+      .from("usuarios")
+      .select("nombre, apellido, email")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    return await cerrar(id, recepcion, user.id, nombreParaAuditoria(quien));
   }
 
   // ── Un paso, o una corrección ──────────────────────────────
@@ -104,7 +111,12 @@ export async function PATCH(
   return NextResponse.json({ data, ...(neto.aviso ? { aviso: neto.aviso } : {}) });
 }
 
-async function cerrar(id: string, recepcion: Recepcion, usuarioId: string) {
+async function cerrar(
+  id: string,
+  recepcion: Recepcion,
+  usuarioId: string,
+  usuarioNombre: string
+) {
   const admin = createAdminClient();
 
   const neto = netoDeLaRecepcion(recepcion);
@@ -123,6 +135,41 @@ async function cerrar(id: string, recepcion: Recepcion, usuarioId: string) {
   const push = await empujarRecepcion(admin, id);
   if (!push.ok) return NextResponse.json({ error: push.motivo }, { status: 400 });
   if (push.aviso) avisos.push(push.aviso);
+
+  /*
+   * ── Y queda registrado, porque esto no se deshace ──────────
+   *
+   * Cerrar una recepción dispara dos cosas en Odoo que el SdG no puede
+   * revertir: confirma la orden de compra (`button_confirm`) y **valida el
+   * remito** (`stock.picking.button_validate`), que mueve stock de verdad.
+   * Es tan irreversible como postear un asiento, y hasta el 26/10/2026 era la
+   * única de las dos que no dejaba rastro de quién la hizo.
+   *
+   * El verbo es `cerrar` —el mismo de la liquidación— y no uno nuevo: significa
+   * lo mismo, un paso que finaliza algo y no vuelve atrás, y así no hace falta
+   * una migración para agregarlo al `check` de la tabla.
+   *
+   * Va **después** del push y no antes, al revés que el borrado de espejo: acá
+   * lo irreversible ya pasó cuando volvió `push.ok`, así que registrar antes
+   * sería anotar algo que todavía podía fallar. Si la auditoría no entra, se
+   * avisa — es lo mismo que hace el posteo del asiento.
+   */
+  const registro = await auditar(admin, {
+    modulo: "despacho",
+    entidad: "despacho_recepciones",
+    entidadId: id,
+    accion: "cerrar",
+    usuario: { id: usuarioId, nombre: usuarioNombre },
+    valorNuevo: push.odooNombre ?? null,
+    contexto: {
+      orden: push.odooNombre,
+      recepcionValidada: push.recepcionValidada,
+      toneladas: neto.toneladas,
+      proveedorId: recepcion.proveedor_id,
+    },
+  });
+
+  if (!registro.ok) avisos.push(`La recepción se cerró, pero no quedó auditada: ${registro.error}`);
 
   // ── 2. La planilla ─────────────────────────────────────────
   const { data: proveedor } = await admin

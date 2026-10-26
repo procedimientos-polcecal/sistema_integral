@@ -117,13 +117,18 @@ Antes de escribir una, leer las ocho trampas del
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
   [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/10/2026 con
-  `grep`: la llaman **ocho rutas y un ayudante compartido**, no "seis rutas"
-  como decía esto antes. Las ocho: postear un asiento en Odoo, mover los permisos de
+  `grep`: la llaman **nueve rutas y un ayudante compartido** (eran ocho hasta el
+  26/10/2026). Las nueve: postear un asiento en Odoo, mover los permisos de
   un usuario, cerrar una liquidación, ajustar stock, aprobar o denegar una
-  compra, y —desde la programación del taller— corregir o borrar una
+  compra, —desde la programación del taller— corregir o borrar una
   ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
   `mantenimiento/ausencias`) y cargar una semana de referencia
-  (`mantenimiento/programacion/referencia`). El ayudante es
+  (`mantenimiento/programacion/referencia`), y **cerrar una recepción de
+  Despacho** (`despacho/recepciones/[id]`), que confirma la orden de compra y
+  **valida el remito en Odoo** — mueve stock de verdad y no se deshace. Esa
+  última faltaba: estaba al mismo nivel que postear un asiento y era la única
+  escritura irreversible a Odoo sin rastro de quién la hizo. Usa el verbo
+  `cerrar`, el mismo de la liquidación, para no necesitar una migración. El ayudante es
   [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
   registra el `borrar` de las sincronizaciones que espejan una planilla, así
   que ese verbo lo escribe un proceso y no una persona. Los verbos son
