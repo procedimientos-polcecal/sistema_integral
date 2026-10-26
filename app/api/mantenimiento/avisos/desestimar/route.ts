@@ -23,6 +23,21 @@ import {
  * El texto va a `OBSERVACIONES` y **no a `OT ASIGNADA`**: esa columna quiere
  * decir *cuál* orden, y un aviso desestimado no tiene ninguna. El porqué
  * completo está en el encabezado de `lib/mantenimiento/desestimarAviso.ts`.
+ *
+ * ── NO HAY COLA, Y UNA FRASE DE ACÁ ABAJO MIENTE. HUECO CONOCIDO ────────────
+ *
+ * Anotado el 26/10/2026. Es el mismo caso que `marcarElAviso`, que lo explica
+ * entero: `filaDeAviso` relee `OBSERVACIONES`, así que la próxima
+ * sincronización pisa el campo con la celda vacía. Sobreviven `desestimado_en`
+ * y `motivo_desestimado`, que son los que mandan en `estaDesestimado`, así que
+ * la decisión no se pierde; la planilla sí queda sin enterarse para siempre.
+ *
+ * De paso se corrigió un mensaje que **mentía**: decía «se escribe sola en la
+ * próxima sincronización», y `sincronizarAvisos` sólo lee — no exporta nada.
+ * Mandaba a esperar algo que no iba a pasar nunca, que es peor que no decir
+ * nada. Es la misma corrección que el PATCH de OT hizo el 26/10 con sus dos
+ * carteles, por el motivo contrario: aquéllos mandaban a completar a mano algo
+ * que el sistema ya estaba reintentando.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -106,7 +121,8 @@ export async function POST(request: Request) {
   } else if (!aviso.sheets_row) {
     planilla_error =
       `El aviso ${aviso.oa_number} no tiene fila conocida en la planilla, así que no se ` +
-      `pudo escribir la observación. Se escribe sola en la próxima sincronización.`;
+      `pudo escribir la observación: quedó desestimado sólo en el sistema. Sincronizá ` +
+      `los avisos para que tome su fila y volvé a desestimarlo.`;
   } else {
     try {
       await escribirCeldas(planilla, [{

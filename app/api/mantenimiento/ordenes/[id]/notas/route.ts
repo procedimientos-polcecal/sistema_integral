@@ -17,6 +17,37 @@ import {
  *
  * La distinción que importa: la columna W es lo que se encontró **al hacer** el
  * trabajo y la escribe el registro de la ejecución. Ésta es la de antes.
+ *
+ * ── POR QUÉ ACÁ EL FALLO VA A LA PANTALLA Y NO A LA COLA ────────────────────
+ *
+ * Es la excepción a «toda ruta que toque un campo que se exporta tiene que
+ * exportar, y si no puede, dejar el pendiente anotado», así que va escrito.
+ * Revisado el 26/10/2026, cuando se buscaron las rutas con el agujero del
+ * PATCH de OT.
+ *
+ * **No hay nada que proteger.** `sheets_pendiente` sirve para dos cosas, y la
+ * que importa es que la importación saltee esa orden para no pisarla. Acá no
+ * hace falta: `filaDeOrden` **no lee la columna X** —su mapa llega hasta la
+ * 23 pero sólo toma hasta `proxima_fecha`—, así que ninguna sincronización
+ * puede borrar una justificación. La nota vive en `ordenes_trabajo_notas` y de
+ * ahí no se mueve; lo único que queda desactualizado es la celda.
+ *
+ * **Y la cola no la puede rehacer entera.** `exportarLoPendiente` arma el
+ * registro desde la fila de `ordenes_trabajo` con `loQueHayQueExportar`, y la
+ * observación previa no tiene columna ahí. Se podría ir a buscar la última
+ * nota, y eso cubriría el POST — pero no el DELETE, que tiene que **vaciar**
+ * la celda cuando se borró la única justificación. La cola no sabe vaciar a
+ * propósito: su regla es que lo vacío no viaja, justamente para no borrar
+ * celdas que nadie llenó. Hacerle una excepción a la X sólo es seguro mientras
+ * nadie la escriba a mano, y nada avisaría el día que eso cambie.
+ *
+ * Que hoy nadie la escribe está medido, y por eso esto es una decisión y no
+ * una sospecha: de las 2.291 filas del master, **13 tienen texto en la X y son
+ * exactamente las 13 notas del sistema** — cero escritas a mano allá, cero sin
+ * llegar desde acá.
+ *
+ * Así que el error va a `planilla_error`, que es quien puede hacer algo:
+ * volver a guardar la justificación la reescribe.
  */
 
 type Params = { params: Promise<{ id: string }> };

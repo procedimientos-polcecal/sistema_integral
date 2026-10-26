@@ -198,6 +198,11 @@ export async function POST(request: Request) {
  * escrita vuelve a entrar en la próxima sincronización y deja al aviso
  * contando como que ya tiene orden, así que hay que borrarla a mano.
  *
+ * Ese «a mano» es el hueco que `marcarElAviso` explica entero: los avisos no
+ * tienen cola de pendientes ni drenaje, así que esto se queda en la pantalla a
+ * falta de algo mejor. Revisado el 26/10/2026 y declarado en el registro de
+ * `scripts/revisar-exportaciones.mjs`.
+ *
  * **No se audita**, igual que retomar un aviso desestimado: esto *es* el
  * deshacer, y la orden de trabajo no se toca.
  */

@@ -539,8 +539,34 @@ npx tsc --noEmit
 npm run build
 node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
 node scripts/revisar-responsive.mjs         # lo que no entra en un telefono de 375 px
+node scripts/revisar-exportaciones.mjs      # si alguna escritura a una planilla no deja nada atras
 npm run planillas                           # si alguna planilla se cayo por una formula
 ```
+
+**`revisar-exportaciones` es la sexta y es la gemela de `revisar-responsive`**:
+existe porque incumplir «toda ruta que toque un campo que se exporta tiene que
+exportar» **no rompe nada**, y ése es el problema. El cambio se guarda, la
+pantalla muestra un cartel que alguien cierra, y horas después la
+sincronización lee la celda vieja y lo borra. Pasó dos veces en el mismo día:
+el PATCH de las OT (las 2896 a 2898 y la 2908) y el de las órdenes de
+servicio, que tenía el mismo agujero y apareció buscando el primero a mano.
+
+**No decide si una ruta está bien** —eso depende de si el importador de ese
+módulo relee la columna, y eso no sale de un regex—. Lo que hace es más chico y
+más confiable: tiene **una entrada por archivo que escribe una planilla**, con
+cuál de las cinco estrategias lo protege (`cola`, `delega`, `aborta`,
+`pantalla`, `otra-direccion`) y el porqué. Si aparece un archivo que escribe y
+no está declarado, sale ROMPE y hay que contestar la pregunta. Ese momento, y
+no el regex, es la defensa. Cuenta la indirección: quien importa algo de un
+módulo `delega` también tiene que declararse, porque `delega` quiere decir que
+la obligación de anotar se mudó a quien llama.
+
+Cada corrida **lista las `pantalla`**, que son la excepción a la regla y lo
+primero que hay que mirar cuando un dato se pierde. Hoy son cinco y tres son
+los avisos, que no tienen columna de pendiente ni drenaje. Sale 1 si hay algún
+ROMPE, hoy da **ROMPE 0 · MIRAR 0**, y **todavía no está en el CI** por lo
+mismo que `revisar-responsive`: primero conviene que el registro aguante unas
+semanas de cambios.
 
 **`npm run planillas` es el único que no mira el código sino el dato del otro
 lado**, y existe porque los otros cinco no podían ver lo que pasó dos veces en
