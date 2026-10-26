@@ -7,6 +7,8 @@ import FichaTecnica from "./FichaTecnica";
 import ComponentesYRepuestos from "./ComponentesYRepuestos";
 import CostoDelEquipo, { type CostoDelEquipoProps } from "./CostoDelEquipo";
 import ConfiabilidadDelEquipo, { type ConfiabilidadProps } from "./ConfiabilidadDelEquipo";
+import FallasDelEquipo from "./FallasDelEquipo";
+import type { FallaContada } from "@/lib/mantenimiento/fallas";
 import Select from "@/components/Select";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -48,13 +50,14 @@ function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undef
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
 }
 
-export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo, confiabilidad }: {
+export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo, confiabilidad, fallas }: {
   equipo: any;
   sectores: any[];
   historial: any[];
   canEdit: boolean;
   costo: Omit<CostoDelEquipoProps, "equipoId">;
   confiabilidad: ConfiabilidadProps;
+  fallas: FallaContada[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -288,6 +291,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
       <ComponentesYRepuestos equipoId={equipo.id} puedeEditar={canEdit} />
 
       <ConfiabilidadDelEquipo {...confiabilidad} />
+
+      <FallasDelEquipo fallas={fallas} />
 
       {historial.length > 0 && (
         <section>
