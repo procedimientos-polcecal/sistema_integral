@@ -7,6 +7,8 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
+import { COMPRA_LABELS } from "@/lib/compras/constants";
+import type { EstadoCompra } from "@/lib/compras/types";
 
 /**
  * Los repuestos que hacen falta para hacer la orden.
@@ -31,11 +33,23 @@ import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
  * tiene que poder pedirlo, trabaje o no en Compras.
  */
 
+interface RiEnVuelo {
+  nro_ri: number;
+  descripcion: string | null;
+  codigo: string | null;
+  cantidad: number | null;
+  fecha: string;
+  estado_aprobacion: string | null;
+  estado_compra: string | null;
+}
+
 interface Repuesto {
   id: string;
   nombre: string;
   codigo: string | null;
   cantidad: string | null;
+  /** Los requerimientos en curso que podrian ser este mismo repuesto. */
+  ris?: { porCodigo: RiEnVuelo[]; porNombre: RiEnVuelo[] };
 }
 
 type Opcion = { id: string; nombre: string };
@@ -62,7 +76,10 @@ export default function RepuestosOTModal({
   const [inventarioConectado, setInventarioConectado] = useState<boolean | null>(null);
   const [sincronizadoEn, setSincronizadoEn] = useState<string | null>(null);
   /** El repuesto que se está pidiendo, con el formulario ya completo. */
-  const [pidiendo, setPidiendo] = useState<PedidoSugerido | null>(null);
+  /** Lo que se esta por pedir, con los RI que ya podrian cubrirlo. */
+  const [pidiendo, setPidiendo] = useState<
+    { pedido: PedidoSugerido; ris: Repuesto["ris"] } | null
+  >(null);
   const [pedido, setPedido] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -179,13 +196,23 @@ export default function RepuestosOTModal({
                         abre con el nombre, el código y la cantidad que ya están
                         acá: volver a escribirlos es donde el código se pierde y
                         el RI termina diciendo "rodamiento" a secas. */}
+                    {/* Y si ya lo pidio alguien. Va **antes** del boton, que
+                        es el momento en que sirve: despues de apretarlo el
+                        pedido ya esta escrito. No lo bloquea — un falso "ya
+                        esta pedido" que impide pedir es peor que pedir dos
+                        veces. Ver `lib/mantenimiento/riDelRepuesto.ts`. */}
+                    {d && convienePedir(d.estado) && <YaPedido ris={r.ris} />}
+
                     {d && convienePedir(d.estado) && (
                       <button
-                        onClick={() => setPidiendo(pedidoSugerido(
-                          { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
-                          d, orden, ubicaciones, areas
-                        ))}
-                        className="mt-1 text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                        onClick={() => setPidiendo({
+                          pedido: pedidoSugerido(
+                            { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                            d, orden, ubicaciones, areas
+                          ),
+                          ris: r.ris,
+                        })}
+                        className="mt-1 block text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
                       >
                         Pedir a Compras
                       </button>
@@ -220,11 +247,14 @@ export default function RepuestosOTModal({
           areas={areas}
           empresas={empresas}
           ubicaciones={ubicaciones}
-          inicial={pidiendo}
+          inicial={pidiendo.pedido}
+          /* El mismo aviso que en la fila, repetido acá a pedido: es el ultimo
+             momento antes de que el pedido exista. */
+          advertencia={<YaPedido ris={pidiendo.ris} />}
           onClose={() => setPidiendo(null)}
           onSaved={() => {
+            setPedido(`Pedido cargado: ${pidiendo.pedido.descripcion}.`);
             setPidiendo(null);
-            setPedido(`Pedido cargado: ${pidiendo.descripcion}.`);
           }}
         />
       )}
@@ -351,5 +381,64 @@ function Agregar({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * «Esto ya está pedido», cuando lo está.
+ *
+ * Dos listas y no una, porque no tienen la misma certeza: el mismo **código**
+ * es el mismo artículo, y el nombre parecido puede ser otra cosa. Mezclarlas
+ * daría una sola afirmación con dos niveles de confianza adentro, y de ahí sale
+ * el falso «ya está pedido» que termina en que la pieza no se pida nunca.
+ *
+ * Por eso tampoco bloquea nada: informa y el botón de pedir sigue estando. El
+ * porqué, con los números, está en `lib/mantenimiento/riDelRepuesto.ts`.
+ */
+function YaPedido({ ris }: { ris?: { porCodigo: RiEnVuelo[]; porNombre: RiEnVuelo[] } }) {
+  if (!ris || (ris.porCodigo.length === 0 && ris.porNombre.length === 0)) return null;
+
+  return (
+    <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+      {ris.porCodigo.length > 0 && (
+        <p>
+          <span className="font-medium">Ya pedido:</span>{" "}
+          <Numeros ris={ris.porCodigo} />
+        </p>
+      )}
+      {ris.porNombre.length > 0 && (
+        <p className={ris.porCodigo.length > 0 ? "mt-1" : undefined}>
+          {/* "Puede ser" y no "es": coincide el nombre, que lo escribio una
+              persona, y no el codigo. */}
+          <span className="font-medium">Puede que ya esté pedido:</span>{" "}
+          <Numeros ris={ris.porNombre} />
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Los RI, con su estado y su fecha: sin eso un número no dice si avanza. */
+function Numeros({ ris }: { ris: RiEnVuelo[] }) {
+  return (
+    <>
+      {ris.map((r, i) => (
+        <span key={r.nro_ri}>
+          {i > 0 && ", "}
+          <a
+            href={`/compras/requerimientos?q=${r.nro_ri}`}
+            className="underline"
+            title={r.descripcion ?? undefined}
+          >
+            RI {r.nro_ri}
+          </a>
+          {r.estado_compra && (
+            <span className="text-amber-700">
+              {" "}· {COMPRA_LABELS[r.estado_compra as EstadoCompra]?.label ?? r.estado_compra}
+            </span>
+          )}
+        </span>
+      ))}
+    </>
   );
 }

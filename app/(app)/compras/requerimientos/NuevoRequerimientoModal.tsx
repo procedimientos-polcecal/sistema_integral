@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { areaPorDefecto } from "@/lib/compras/areaDelUsuario";
 import {
@@ -46,13 +46,23 @@ export interface ValoresIniciales {
  * que se mantiene igual de corto: sólo descripción y área son obligatorias.
  */
 export default function NuevoRequerimientoModal({
-  areas, empresas, ubicaciones, inicial, onClose, onSaved,
+  areas, empresas, ubicaciones, inicial, advertencia, onClose, onSaved,
 }: {
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
   /** Precargado desde otra pantalla. Se puede editar todo antes de enviar. */
   inicial?: ValoresIniciales;
+  /**
+   * Algo que quien monta el modal quiere decir antes de que se confirme.
+   *
+   * Hoy lo usa la orden de trabajo para avisar que ese repuesto **ya tiene un
+   * requerimiento en curso**, y por eso es un nodo y no un texto: ahí van
+   * números de RI con su enlace y su estado. No bloquea nada — el formulario se
+   * envía igual, porque un falso "ya está pedido" que impida pedir es peor que
+   * pedir dos veces.
+   */
+  advertencia?: ReactNode;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -384,6 +394,10 @@ export default function NuevoRequerimientoModal({
         </div>
 
         <form onSubmit={enviar} className="space-y-4 px-6 py-5">
+          {/* Arriba de todo: es lo último que se puede mirar antes de que el
+              pedido exista. */}
+          {advertencia}
+
           <Campo label="Qué se necesita" requerido>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
