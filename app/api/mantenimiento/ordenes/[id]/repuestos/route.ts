@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { traerTodo } from "@/lib/core/paginado";
+import { risDelRepuesto, type RiPosible } from "@/lib/mantenimiento/riDelRepuesto";
 
 /**
  * Los repuestos que hacen falta para hacer una orden.
@@ -27,7 +29,38 @@ export async function GET(_request: Request, { params }: Params) {
     .order("created_at");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data });
+
+  // ── Si alguno ya está pedido ────────────────────────────────
+  //
+  // Para no pedirlo dos veces. Se traen **los requerimientos en curso una sola
+  // vez** y se cruzan acá en memoria, en vez de una consulta por repuesto: son
+  // unos quinientos —de 2.198, 1.646 están recibidos— y la coincidencia por
+  // nombre no se puede escribir como filtro de PostgREST sin volverla otra
+  // regla distinta de la que tiene los tests.
+  //
+  // `RECIBIDO` se descarta en la consulta porque es el 75% y no hace falta
+  // traerlo; el resto lo decide `estaEnVuelo`, que es la que sabe. El `or` con
+  // `is.null` está porque un `not.in` deja afuera los nulos, y un estado vacío
+  // tiene que contar como en curso.
+  //
+  // Si esto falla, la lista de repuestos se devuelve igual: saber qué hace
+  // falta no depende de saber si ya se pidió.
+  const ris = await traerTodo<RiPosible & { cantidad: number | null; fecha: string }>(
+    (desde, hasta) =>
+      supabase
+        .from("compras_requerimientos")
+        .select("nro_ri, descripcion, codigo, cantidad, fecha, estado_aprobacion, estado_compra")
+        .or("estado_compra.is.null,estado_compra.neq.RECIBIDO")
+        .order("nro_ri", { ascending: false })
+        .range(desde, hasta)
+  ).catch(() => []);
+
+  return NextResponse.json({
+    data: (data ?? []).map((r) => ({
+      ...r,
+      ris: risDelRepuesto({ nombre: r.nombre, codigo: r.codigo }, ris),
+    })),
+  });
 }
 
 /** POST — sumar un repuesto a la lista. */
