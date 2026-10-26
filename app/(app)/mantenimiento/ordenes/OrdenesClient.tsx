@@ -28,6 +28,7 @@ import PuntajeGut from "./PuntajeGut";
 import PuntuarGutModal from "./PuntuarGutModal";
 import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
@@ -347,9 +348,11 @@ export default function OrdenesClient({
       setAvisoSync(`No se pudo ${queSeHizo}: ${body.error ?? "error desconocido"}`);
       return false;
     }
-    if (body.planilla_error) {
-      setAvisoSync(`Se guardó en el sistema, pero no en la planilla: ${body.planilla_error}`);
-    }
+    // Con `planilla_reintentando` el mensaje cambia de sentido: no es "andá a
+    // completarla a mano" sino "la fila del master todavía no existe y el
+    // sistema insiste solo". Es el mismo aviso que da el alta.
+    const aviso = avisoDelPendiente(body.planilla_error, Boolean(body.planilla_reintentando));
+    if (aviso) setAvisoSync(aviso);
     return true;
   }
 

@@ -5,6 +5,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { instanteDeArgentina } from "@/lib/core/fechas";
 import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 
 /**
  * Registrar el trabajo de una orden.
@@ -186,10 +187,16 @@ export default function RegistrarOTModal({
       setError(`El trabajo quedó registrado, pero no se pudo cerrar la OT: ${body.error ?? ""}`);
       return;
     }
-    if (body.planilla_error) {
-      // Quedó todo bien en la app: lo único que falta es la planilla, y hay
-      // que decirlo con todas las letras para que alguien la complete a mano.
-      setAviso(`Se registró todo, pero no se pudo escribir en la planilla: ${body.planilla_error}`);
+    // Quedó todo bien en la app y lo único que falta es la planilla. Qué decir
+    // depende de si el sistema va a insistir: desde que el PATCH anota el
+    // pendiente, fallar acá es lo normal —la fila del master llega por
+    // `IMPORTRANGE` y tarda— y el reintento la termina solo. Pedirle a alguien
+    // que la complete a mano en ese caso era mandarlo a escribir dos veces.
+    const avisoDeLaPlanilla = avisoDelPendiente(
+      body.planilla_error, Boolean(body.planilla_reintentando)
+    );
+    if (avisoDeLaPlanilla) {
+      setAviso(`Se registró todo. ${avisoDeLaPlanilla}`);
       return;
     }
     onRegistrada();
