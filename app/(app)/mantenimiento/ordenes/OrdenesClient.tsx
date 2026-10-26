@@ -693,81 +693,100 @@ export default function OrdenesClient({
                 return (
                   <div key={o.id}>
                     <button onClick={() => setExpanded(isOpen ? null : o.id)}
-                      className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50 transition-colors">
-                      <span className="text-xs font-mono font-bold text-slate-400 w-12 shrink-0">#{o.ot_number}</span>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
-                        <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                      className="w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold text-slate-400 w-12 shrink-0">#{o.ot_number}</span>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
+                          <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                        </div>
+                        {/* El recuadro abre el modal de puntuar. Va dentro del
+                            botón que despliega la fila, así que no puede ser otro
+                            botón: es un atajo para el mouse, y con el teclado se
+                            llega por el mismo botón del detalle. */}
+                        {canEdit ? (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setPuntuando(o); }}
+                            className="shrink-0 cursor-pointer rounded-md hover:ring-2 hover:ring-violet-200"
+                          >
+                            <PuntajeGut
+                              orden={o}
+                              pista={puntajeGut(o) === null ? "clic para puntuar con GUT" : "clic para cambiar el puntaje GUT"}
+                            />
+                          </span>
+                        ) : (
+                          <PuntajeGut orden={o} />
+                        )}
+                        <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
+                          style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
+                          {meta.label}
+                        </span>
+                        {/* Mientras el trabajo no esté hecho, que pare el sector es
+                            lo más importante de esta fila: bloquea produccion. */}
+                        {o.requiere_parada_sector && o.estado !== "REALIZADO" && (
+                          <span
+                            title="Requiere parar el sector"
+                            className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+                          >
+                            Parar sector
+                          </span>
+                        )}
+                        {/* Se marca la que NO tiene, que es la que hay que ir a
+                            buscar. La que sí tiene no lleva cartel: para leerla
+                            se abre la orden, y un cartel en las cuarenta no
+                            distinguiría ninguna. */}
+                        {pideJustificacion(o.estado) && !justificadas.has(o.id) && (
+                          <span
+                            title="Sigue abierta y nadie dejó dicho por qué"
+                            className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                          >
+                            Sin justificar
+                          </span>
+                        )}
+                        {/* Las dos fechas que se miran de un vistazo: cuándo se
+                            emitió la orden y cuándo se hace. La de ejecución es
+                            la que más se busca —es la que contesta "¿cuándo
+                            toca?"— y estaba sólo adentro del detalle, así que
+                            averiguarla era abrir las órdenes de a una.
+                            Van rotuladas porque dos fechas peladas, una debajo
+                            de la otra, no se distinguen; el rótulo va más claro
+                            para que lo que se lea sigan siendo los números, y
+                            alineadas a la derecha para que los días queden en
+                            columna aunque los rótulos midan distinto. */}
+                        <span
+                          title="Fecha de la orden y fecha de ejecución"
+                          className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
+                        >
+                          <span className="block text-xs text-slate-400 whitespace-nowrap">
+                            <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                          </span>
+                          <span className="block text-xs text-slate-400 whitespace-nowrap">
+                            <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                          </span>
+                        </span>
+                        <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
-                      {/* El recuadro abre el modal de puntuar. Va dentro del
-                          botón que despliega la fila, así que no puede ser otro
-                          botón: es un atajo para el mouse, y con el teclado se
-                          llega por el mismo botón del detalle. */}
-                      {canEdit ? (
-                        <span
-                          onClick={(e) => { e.stopPropagation(); setPuntuando(o); }}
-                          className="shrink-0 cursor-pointer rounded-md hover:ring-2 hover:ring-violet-200"
-                        >
-                          <PuntajeGut
-                            orden={o}
-                            pista={puntajeGut(o) === null ? "clic para puntuar con GUT" : "clic para cambiar el puntaje GUT"}
-                          />
-                        </span>
-                      ) : (
-                        <PuntajeGut orden={o} />
-                      )}
-                      <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
-                        style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
-                        {meta.label}
-                      </span>
-                      {/* Mientras el trabajo no esté hecho, que pare el sector es
-                          lo más importante de esta fila: bloquea produccion. */}
-                      {o.requiere_parada_sector && o.estado !== "REALIZADO" && (
-                        <span
-                          title="Requiere parar el sector"
-                          className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
-                        >
-                          Parar sector
-                        </span>
-                      )}
-                      {/* Se marca la que NO tiene, que es la que hay que ir a
-                          buscar. La que sí tiene no lleva cartel: para leerla
-                          se abre la orden, y un cartel en las cuarenta no
-                          distinguiría ninguna. */}
-                      {pideJustificacion(o.estado) && !justificadas.has(o.id) && (
-                        <span
-                          title="Sigue abierta y nadie dejó dicho por qué"
-                          className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
-                        >
-                          Sin justificar
-                        </span>
-                      )}
-                      {/* Las dos fechas que se miran de un vistazo: cuándo se
-                          emitió la orden y cuándo se hace. La de ejecución es
-                          la que más se busca —es la que contesta "¿cuándo
-                          toca?"— y estaba sólo adentro del detalle, así que
-                          averiguarla era abrir las órdenes de a una.
-                          Van rotuladas porque dos fechas peladas, una debajo
-                          de la otra, no se distinguen; el rótulo va más claro
-                          para que lo que se lea sigan siendo los números, y
-                          alineadas a la derecha para que los días queden en
-                          columna aunque los rótulos midan distinto. */}
-                      <span
-                        title="Fecha de la orden y fecha de ejecución"
-                        className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
-                      >
-                        <span className="block text-xs text-slate-400 whitespace-nowrap">
-                          <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
-                        </span>
-                        <span className="block text-xs text-slate-400 whitespace-nowrap">
-                          <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
-                        </span>
-                      </span>
-                      <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      {/* Las mismas dos fechas, en el teléfono.
+                          Van en un renglón propio y no adentro de la fila
+                          porque ahí no entran, medido a 375 px: la tarjeta da
+                          342 px útiles y al bloque de la descripción le quedan
+                          158 —y 74 cuando la fila lleva el cartel "Sin
+                          justificar"—, contra los 88 que mide sola "Ejec.
+                          26/10/2026". Metidas ahí, la fecha que se busca se
+                          cortaba justo en las órdenes abiertas, que son las
+                          únicas que llevan ese cartel. A lo ancho sobran: las
+                          dos juntas miden 195 de 310.
+                          En `md:` desaparece, porque ahí las muestra la
+                          columna de la derecha. */}
+                      <p className="md:hidden mt-1.5 text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                        <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                        {" · "}
+                        <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                      </p>
                     </button>
                     {isOpen && (
                       <OTDetail
