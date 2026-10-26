@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
-import { hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
+import { esFechaIso, hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
 import { traerTodo } from "@/lib/core/paginado";
 import {
   turnoDelElectricista,
@@ -30,14 +30,21 @@ import {
  * docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md.
  */
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Una fecha "YYYY-MM-DD" que existe en el calendario. */
-function esFechaIso(v: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [a, m, d] = v.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d));
-  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
+/**
+ * Una fecha que vino de la base, como `YYYY-MM-DD` pelado.
+ *
+ * Es la misma defensa que aplican las rutas hermanas (`ausencias`,
+ * `referencia`, `personal`): las columnas son `date` y hoy PostgREST las
+ * devuelve sin hora, pero el corte cuesta nada y lo que hay del otro lado deja
+ * de depender de eso. Acá importa más que en las otras, porque lo que se hace
+ * con estas fechas no es comparar texto sino **contar semanas**: un
+ * `"2026-10-26T00:00:00"` le daría `NaN` a `semanasDesdeLaReferencia`, todos
+ * los turnos saldrían `undefined` y el taller entero caería en `sinTurno`. O
+ * sea una grilla vacía sin un solo error, que es exactamente lo que esta
+ * pantalla no puede hacer.
+ */
+function soloElDia(v: unknown): string {
+  return String(v ?? "").slice(0, 10);
 }
 
 export async function GET(request: Request) {
@@ -75,8 +82,8 @@ export async function GET(request: Request) {
     empleadoId: f.empleado_id,
     oficio: f.oficio as Oficio,
     grupo: f.grupo as Grupo | null,
-    desde: f.desde,
-    hasta: f.hasta,
+    desde: soloElDia(f.desde),
+    hasta: f.hasta === null ? null : soloElDia(f.hasta),
   }));
 
   // ── Las personas, con el nombre, para que la pantalla no tenga que buscarlas ──
@@ -144,7 +151,7 @@ export async function GET(request: Request) {
   }
 
   const ref: Referencia = {
-    lunes: filaRef.lunes,
+    lunes: soloElDia(filaRef.lunes),
     grupoEn4a12: filaRef.grupo_en_4a12 as Grupo,
     electricistas: {
       "4-12": filaRef.electricista_4a12_id,
@@ -178,14 +185,16 @@ export async function GET(request: Request) {
     );
     // Filtrar acá y no con `.in()`: una lista larga de ids arma una URL que
     // PostgREST rechaza con un 400 sin decir por qué.
-    ausencias = todas.filter((a) => idsDelPadron.has(a.empleado_id));
+    ausencias = todas
+      .filter((a) => idsDelPadron.has(a.empleado_id))
+      .map((a) => ({ ...a, fecha_desde: soloElDia(a.fecha_desde), fecha_hasta: soloElDia(a.fecha_hasta) }));
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 
   // ── Las asignaciones: el ciclo, y encima las pisadas ─────────
   const pisadasPorDia = new Map<string, Turno>();
-  for (const p of filasPisadas ?? []) pisadasPorDia.set(`${p.empleado_id}|${p.dia}`, p.turno as Turno);
+  for (const p of filasPisadas ?? []) pisadasPorDia.set(`${p.empleado_id}|${soloElDia(p.dia)}`, p.turno as Turno);
 
   const asignaciones: Asignacion[] = [];
   const yaAsignados = new Set<string>();
