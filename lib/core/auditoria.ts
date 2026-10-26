@@ -9,9 +9,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ── QUÉ SE AUDITA Y QUÉ NO ──────────────────────────────────
  *
  * Las acciones **irreversibles**, no todo cambio de todo campo. El catálogo es
- * `ACCIONES` y hoy son siete verbos sobre cinco circuitos: postear un asiento
+ * `ACCIONES` y hoy son nueve verbos sobre siete circuitos: postear un asiento
  * en Odoo, mover los permisos de un usuario, cerrar una liquidación, ajustar
- * stock y aprobar o denegar una compra.
+ * stock, aprobar o denegar una compra, borrar una fila que la planilla espejada
+ * dejó de tener, y corregir o borrar una ausencia (desde RRHH o desde el taller).
  *
  * Lo que ya tiene su propio registro no se duplica: el kardex de Inventario es
  * append-only con `creado_por` desde la 046, y `compras_historial` guarda cada
@@ -34,7 +35,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Los verbos que se auditan. Agregar uno pide tocar también el check de la
- * tabla: el octavo, `borrar`, lo agrega la migración `20261018134754`.
+ * tabla: el octavo, `borrar`, lo agrega la migración `20261018134754`, y el
+ * noveno, `corregir`, la `20261026080102`.
  */
 export const ACCIONES = [
   "postear",
@@ -49,6 +51,15 @@ export const ACCIONES = [
   // persona, y por eso el que mas necesita quedar registrado: sin esto, el dia
   // que alguien pregunte donde fue a parar la OT 1843 no hay donde mirar.
   "borrar",
+  // Lo escriben las dos rutas que tocan una ausencia —la de RRHH y la del
+  // encargado del taller— cuando alguien le cambia las fechas o el tipo. Es el
+  // único de los nueve que no es un acto de una sola dirección sino un cambio
+  // de un valor a otro, y por eso es el único que **necesita** `valor_anterior`
+  // y `valor_nuevo`: no hay historial de `ausencias`, y `calculos_diarios` se
+  // recalcula sobre las fechas nuevas, así que los días de los que la ausencia
+  // se fue vuelven a verse como si nunca hubiera pasado nada. Sin el par, el
+  // registro dice que alguien corrigió algo y no qué.
+  "corregir",
 ] as const;
 export type Accion = (typeof ACCIONES)[number];
 

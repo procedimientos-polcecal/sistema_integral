@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { traerTodo } from "@/lib/core/paginado";
+import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 import { estaVigente, type PersonaDelTaller } from "@/lib/mantenimiento/disponibilidad";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
 import { altaDeAusencia, periodoEstaCerrado, TIPOS_DEL_ENCARGADO } from "@/lib/rrhh/altaDeAusencia";
@@ -47,6 +48,9 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
  *     y que sea de uno de sus cuatro tipos. Lo que cargó RRHH no lo toca. El
  *     `GET` lista eso mismo y nada más: es lo único de `ausencias` que se ve
  *     desde Mantenimiento, y se ve porque lo escribió él.
+ *   - **Corregir y borrar se auditan, y el registro va antes.** Si no entra, el
+ *     cambio no se hace: lo que se pierde al corregir o borrar no se puede
+ *     reconstruir después. Ver `problemaDeAuditoria()` más abajo.
  *
  * El alta no la hace esta ruta: la hace `altaDeAusencia()` de
  * `lib/rrhh/altaDeAusencia.ts`, que es el mismo cuerpo que usa RRHH. Dar de alta
@@ -266,6 +270,89 @@ async function recalcular(
   } catch (e) {
     return (e as Error).message;
   }
+}
+
+/** Una ausencia en una línea, para el registro: lo que era, no sólo que pasó algo. */
+function comoSeLee(a: {
+  tipo: unknown;
+  fecha_desde: unknown;
+  fecha_hasta: unknown;
+  justificada: unknown;
+  observaciones: unknown;
+}): string {
+  const obs = typeof a.observaciones === "string" && a.observaciones.trim() ? ` — ${a.observaciones.trim()}` : "";
+  const sinJustificar = a.justificada ? "" : " (sin justificar)";
+  return `${String(a.tipo)} del ${soloElDia(a.fecha_desde)} al ${soloElDia(a.fecha_hasta)}${sinJustificar}${obs}`;
+}
+
+/**
+ * El registro de auditoría, que va **antes** del cambio: si no entra, el cambio
+ * no se hace.
+ *
+ * Es el orden que esta casa fijó en `lib/core/borradoDeEspejo.ts`, y acá vale
+ * por la misma razón: corregir o borrar una ausencia **pierde lo que había**.
+ * No hay historial de `ausencias`, y `calculos_diarios` se recalcula sobre las
+ * fechas nuevas, así que los días de los que la ausencia se fue vuelven a verse
+ * como si nunca hubiera pasado nada. Auditar después sería auditar lo que ya no
+ * se puede reconstruir el día que el registro falle.
+ *
+ * Se guarda la fila **anterior** —en una línea legible, y entera en el
+ * `contexto`—, que es lo que contesta "qué decía antes", la pregunta para la
+ * que existe la tabla.
+ *
+ * Devuelve la respuesta de error, o null si quedó registrado.
+ */
+async function problemaDeAuditoria(
+  db: SupabaseClient,
+  usuarioId: string,
+  accion: "corregir" | "borrar",
+  anterior: {
+    id: string;
+    empleado_id: string;
+    fecha_desde: unknown;
+    fecha_hasta: unknown;
+    tipo: unknown;
+    justificada: unknown;
+    observaciones: unknown;
+  },
+  valorNuevo: string | null
+): Promise<NextResponse | null> {
+  const { data: quien } = await db
+    .from("usuarios")
+    .select("nombre, apellido, email")
+    .eq("id", usuarioId)
+    .maybeSingle();
+
+  const registro = await auditar(db, {
+    modulo: "mantenimiento",
+    entidad: "ausencias",
+    entidadId: anterior.id,
+    accion,
+    usuario: { id: usuarioId, nombre: nombreParaAuditoria(quien) },
+    valorAnterior: comoSeLee(anterior),
+    valorNuevo,
+    contexto: {
+      ruta: "mantenimiento/ausencias",
+      empleado_id: anterior.empleado_id,
+      anterior: {
+        fecha_desde: soloElDia(anterior.fecha_desde),
+        fecha_hasta: soloElDia(anterior.fecha_hasta),
+        tipo: String(anterior.tipo),
+        justificada: Boolean(anterior.justificada),
+        observaciones: typeof anterior.observaciones === "string" ? anterior.observaciones : null,
+      },
+    },
+  });
+
+  if (!registro.ok) {
+    const que = accion === "borrar" ? "el borrado" : "la corrección";
+    const y = accion === "borrar" ? "no se borró" : "no se cambió nada";
+    return NextResponse.json(
+      { error: `No se pudo registrar ${que} en la auditoría, así que ${y}: ${registro.error}` },
+      { status: 500 }
+    );
+  }
+  return null;
 }
 
 /**
@@ -577,6 +664,13 @@ export async function PATCH(request: Request) {
     if (cerrado) return cerrado;
   }
 
+  // El registro va antes del cambio: sin él, la fila no se toca. Guarda lo que
+  // decía y lo que va a decir, que es lo que después no se puede reconstruir.
+  const sinRegistro = await problemaDeAuditoria(db, permiso.user.id, "corregir", actual, comoSeLee({
+    tipo, fecha_desde: desde, fecha_hasta: hasta, justificada, observaciones,
+  }));
+  if (sinRegistro) return sinRegistro;
+
   // El `cargado_por_id` va también en el `update`: ya se comprobó arriba, pero
   // así la escritura misma no puede alcanzar la fila de otro.
   const { data, error } = await db
@@ -641,15 +735,16 @@ export async function DELETE(request: Request) {
   const cerrado = await problemaDePeriodoCerrado(db, actual.empleado_id, dias);
   if (cerrado) return cerrado;
 
-  // No se llama a `auditar()`, y conviene que esté dicho: borrar la fila no deja
-  // rastro —`calculos_diarios` se recalcula y el día vuelve a verse como si nunca
-  // hubiera habido una ausencia—, pero **se deshace desde el sistema**: el mismo
-  // encargado la vuelve a cargar con el POST de arriba y queda igual. Eso es lo
-  // que separa a esta acción de las ocho que sí se auditan, que no se pueden
-  // deshacer de ningún modo. El `DELETE` de RRHH, que hace exactamente lo mismo
-  // con cualquier empleado, tampoco audita: auditar sólo de este lado haría
-  // creer que la tabla tiene el registro de los borrados de ausencias, cuando
-  // tendría el de una punta sola.
+  // El registro va antes del borrado: si no entra, no se borra. Borrar la fila
+  // no deja rastro en ningún lado —`calculos_diarios` se recalcula y el día
+  // vuelve a verse como si nunca hubiera habido una ausencia—, así que esto es
+  // lo único que después puede decir qué había. El `DELETE` de RRHH, que hace
+  // lo mismo con cualquier empleado, audita igual desde hoy: con una sola punta
+  // registrando, la tabla diría tener el registro de los borrados de ausencias
+  // y tendría el de la mitad.
+  const sinRegistro = await problemaDeAuditoria(db, permiso.user.id, "borrar", actual, null);
+  if (sinRegistro) return sinRegistro;
+
   const { data, error } = await db
     .from("ausencias")
     .delete()
