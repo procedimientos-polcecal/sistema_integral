@@ -115,6 +115,41 @@ export const CAMPOS_DE_FECHA = [
 const CAMPOS_VALIDOS: readonly string[] = CAMPOS_DE_FECHA.map(([v]) => v);
 
 /**
+ * En qué orden se listan las órdenes.
+ *
+ * El default es el sugerido —`gut_orden` descendente—, que sube lo abierto por
+ * encima de lo cerrado y dentro de eso lo de más puntaje GUT. Sirve para
+ * repartir trabajo, que es para lo que se mira el listado casi siempre.
+ *
+ * **Pero no sirve para buscar una orden puntual**, y eso es lo que faltaba: con
+ * el sugerido, la OT 2884 puede estar en cualquier página. Por número va de la
+ * más nueva a la más vieja, que es como se las nombra cuando alguien pregunta
+ * "¿qué pasó con la 2884?".
+ *
+ * Ordenar **en la base y no en el cliente**, igual que el resto: son 2.264
+ * filas paginadas de a 50, y ordenar la página que se está mirando no es
+ * ordenar nada.
+ */
+export const ORDENES_DEL_LISTADO = [
+  ["", "Sugerido (GUT)"],
+  ["numero", "N° de OT"],
+] as const;
+
+const ORDENES_VALIDOS: readonly string[] = ORDENES_DEL_LISTADO.map(([v]) => v);
+
+/**
+ * El orden pedido, o `""` —el sugerido— si no se reconoce.
+ *
+ * La lista blanca vive acá y no en la ruta por lo mismo que `columnaDeFecha`:
+ * de esto sale un nombre de columna para la consulta, y dejar que quien lo use
+ * se acuerde de validarlo es cómo alguna vez no se acuerda.
+ */
+export function ordenDelListado(valor: string | null | undefined): string {
+  const elegido = String(valor ?? "");
+  return ORDENES_VALIDOS.includes(elegido) ? elegido : "";
+}
+
+/**
  * La columna que hay que filtrar. Lo que no está en la lista cae en `fecha`.
  *
  * La lista blanca vive **acá y no en la ruta**, aunque sea la ruta la que
@@ -141,6 +176,8 @@ export interface FiltrosOt {
   busqueda: string;
   /** Sobre cuál de las tres fechas corre el rango. `""` es `fecha`. */
   campoFecha: string;
+  /** En qué orden se listan. `""` es el sugerido. Ver `ORDENES_DEL_LISTADO`. */
+  orden: string;
   /** "YYYY-MM-DD", los dos inclusive. `""` es sin límite de ese lado. */
   desde: string;
   hasta: string;
@@ -160,7 +197,7 @@ export interface FiltrosOt {
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
-  busqueda: "", campoFecha: "", desde: "", hasta: "",
+  busqueda: "", campoFecha: "", orden: "", desde: "", hasta: "",
   estado: [], especialidad: [], tipo: [], quien: [],
   prioridad: [], proveedor: [], sector: [], equipo: [],
 };
@@ -183,6 +220,7 @@ export function leerFiltrosDeLaUrl(
     campoFecha: CAMPOS_VALIDOS.includes(params.get("campo_fecha") ?? "")
       ? params.get("campo_fecha") ?? ""
       : "",
+    orden: ordenDelListado(params.get("orden")),
     desde: laFecha(params, "desde"),
     hasta: laFecha(params, "hasta"),
     estado: losQueEstanEnLaLista(params, "estado", ESTADOS_DE_OT),
@@ -204,12 +242,13 @@ export function leerFiltrosDeLaUrl(
  * cuando no los hay.
  */
 export const hayAlgunFiltro = (f: FiltrosOt): boolean =>
-  hayAlguno({ ...f, campoFecha: "" });
+  hayAlguno({ ...f, campoFecha: "", orden: "" });
 
 /** El orden en que van los filtros en la URL, y con qué nombre. */
 const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["busqueda", "q"],
   ["campoFecha", "campo_fecha"],
+  ["orden", "orden"],
   ["desde", "desde"],
   ["hasta", "hasta"],
   ["estado", "estado"],

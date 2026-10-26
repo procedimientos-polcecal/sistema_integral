@@ -12,7 +12,8 @@
  */
 
 import { estaAtrasada, type Atrasable } from "@/lib/mantenimiento/alertas";
-import { claveDeOrdenGut, type NotasGut } from "@/lib/mantenimiento/gut";
+import { claveDeOrdenGut, puntajeGut, type NotasGut } from "@/lib/mantenimiento/gut";
+import { PRIORIDADES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 
 /** Los estados en los que la orden todavía espera algo de alguien. */
 export const ESTA_PENDIENTE = ["ATRASADO", "EN_PROCESO", "POR_HACER"] as const;
@@ -64,6 +65,118 @@ export function prioridadParaLaPlanilla(valor: unknown): string | null {
   const palabra = soloLaPalabra(valor);
   if (!palabra) return null;
   return COMO_LA_ESCRIBE_LA_PLANILLA[palabra] ?? (String(valor).trim() || null);
+}
+
+/* ── La prioridad que sale del GUT ──────────────────────────────────────── */
+
+/**
+ * Los dos cortes que convierten un puntaje GUT en una de las tres prioridades.
+ *
+ * Pedidos así el 23/10/2026: **más de 80 es Alta, de 30 a 80 es Media, menos de
+ * 30 es Baja.** Son los únicos dos números de esta traducción y viven acá y en
+ * ningún otro lado — la migración `20261023113310` guarda el producto y no la
+ * palabra justamente para que no haya una segunda copia en SQL.
+ *
+ * Dos cosas que conviene saber al mirarlos, porque no se deducen del número:
+ *
+ * - El GUT es el producto de tres notas de 1 a 5, así que **no es un continuo**:
+ *   entre 81 y 99 no hay ningún producto posible. Con el corte en "más de 80",
+ *   Alta son exactamente los puntajes **100 (4·5·5) y 125 (5·5·5)**.
+ * - El 80 exacto (4·4·5) cae en Media, aunque `bandaDeGut` lo llame banda 5.
+ *   Las bandas y las prioridades son dos escalas distintas y no tienen por qué
+ *   coincidir; si algún día tienen que hacerlo, se mueve el `>` a `>=` acá.
+ */
+export const CORTE_DE_PRIORIDAD = { alta: 80, media: 30 } as const;
+
+/** Las tres, con el emoji que les pone la planilla. */
+export const PRIORIDAD_ALTA = COMO_LA_ESCRIBE_LA_PLANILLA.ALTA;
+export const PRIORIDAD_MEDIA = COMO_LA_ESCRIBE_LA_PLANILLA.MEDIA;
+export const PRIORIDAD_BAJA = COMO_LA_ESCRIBE_LA_PLANILLA.BAJA;
+
+/**
+ * Qué prioridad le corresponde a un puntaje GUT.
+ *
+ * Devuelve la forma de la planilla —"🟠 Alta"— y no la palabra pelada, porque
+ * es la que el filtro compara y la que la pantalla muestra. Una sola forma.
+ */
+export function prioridadDeGut(puntaje: number): string {
+  if (puntaje > CORTE_DE_PRIORIDAD.alta) return PRIORIDAD_ALTA;
+  if (puntaje >= CORTE_DE_PRIORIDAD.media) return PRIORIDAD_MEDIA;
+  return PRIORIDAD_BAJA;
+}
+
+/**
+ * La prioridad que vale para una orden: **el GUT manda**.
+ *
+ * Si tiene las tres notas, la prioridad sale del puntaje aunque la celda de la
+ * planilla diga otra cosa. Si no las tiene, vale lo que diga la planilla; y si
+ * tampoco hay eso, `null`.
+ *
+ * Se decidió así a pedido, el 23/10/2026, sabiendo lo que cuesta: en una orden
+ * puntuada, **la app va a mostrar una prioridad distinta de la que dice su
+ * planilla**, y nada lo avisa. Se acepta porque la prioridad de la planilla
+ * casi no existe —2.081 de 2.264 órdenes no la tienen— y porque el GUT es una
+ * medición con tres notas detrás, mientras que la otra es una palabra suelta
+ * que alguien escribió.
+ */
+export function prioridadEfectiva(
+  orden: NotasGut & { prioridad?: string | null }
+): string | null {
+  const puntaje = puntajeGut(orden);
+  if (puntaje !== null) return prioridadDeGut(puntaje);
+  return String(orden.prioridad ?? "").trim() || null;
+}
+
+/**
+ * El rango de puntajes de cada prioridad, como lo entiende PostgREST.
+ *
+ * Es un `Record` tipado **contra `PRIORIDADES_DE_OT`**, así que agregar una
+ * prioridad sin decir qué puntajes le tocan deja de compilar. Es la lección del
+ * 22/10/2026, cuando el filtro de tipos mostró «Correctivo» tres veces porque
+ * un ternario se tragó los valores nuevos.
+ *
+ * Un `null` no entra en ninguno de los tres: en SQL `null > 80` no es verdadero
+ * sino nulo, así que una orden sin puntaje no cae en ningún rango por accidente
+ * — que es justo lo que se quiere, porque a ésa la decide la planilla.
+ */
+const RANGO_DE_PRIORIDAD: Record<(typeof PRIORIDADES_DE_OT)[number], string> = {
+  "🟠 Alta": `gut_puntaje.gt.${CORTE_DE_PRIORIDAD.alta}`,
+  "🟡 Media": `and(gut_puntaje.gte.${CORTE_DE_PRIORIDAD.media},gut_puntaje.lte.${CORTE_DE_PRIORIDAD.alta})`,
+  "🟢 Baja": `gut_puntaje.lt.${CORTE_DE_PRIORIDAD.media}`,
+};
+
+/**
+ * El filtro que hay que mandarle a PostgREST para "estas prioridades",
+ * contando el GUT. `null` si no se eligió ninguna.
+ *
+ * **Por qué no es un `.in()` liso como los otros filtros.** Porque desde el
+ * 23/10 la prioridad de una orden puntuada no está en ninguna columna de texto:
+ * sale de su puntaje. Y el listado se pagina en la base —2.264 filas de a 50—,
+ * así que esto tiene que resolverse allá: filtrar en el cliente filtraría sólo
+ * la página que se está mirando, y la orden más urgente podría estar en la 40.
+ *
+ * Lo que arma es un `or` de dos clases de condición:
+ *
+ *   - los rangos de puntaje de las prioridades elegidas, para las puntuadas;
+ *   - y `gut_puntaje is null and prioridad in (…)`, para las que no tienen
+ *     puntaje y se deciden por lo que diga la planilla.
+ *
+ * Los valores van entre comillas dobles porque llevan un emoji y un espacio, y
+ * un `in.()` sin comillas los parte.
+ */
+export function filtroDePrioridadConGut(elegidas: readonly string[]): string | null {
+  const quiere = [...new Set(elegidas.map((p) => String(p ?? "").trim()).filter(Boolean))];
+  if (quiere.length === 0) return null;
+
+  const partes = quiere
+    .map((p) => RANGO_DE_PRIORIDAD[p as (typeof PRIORIDADES_DE_OT)[number]])
+    .filter(Boolean);
+
+  // Las que nadie puntuó: manda la planilla. Va siempre, porque cualquiera de
+  // las tres elegidas puede estar escrita en esa celda.
+  partes.push(`and(gut_puntaje.is.null,prioridad.in.(${quiere.map((p) => `"${p}"`).join(",")}))`);
+
+  return partes.join(",");
 }
 
 export interface Ordenable extends Atrasable, NotasGut {
