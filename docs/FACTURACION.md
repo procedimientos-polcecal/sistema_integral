@@ -675,6 +675,93 @@ quedó afuera ni por qué. Lo mismo vale para el botón "No es una factura" de l
 pantalla, que pide el motivo y guarda quién y cuándo — porque "alguien la
 descartó el martes" es una respuesta muy distinta de "nunca llegó".
 
+## La factura sin detalle legible también se imputa (26/10/2026)
+
+Cuando el lector no saca el detalle del PDF, el alta **no guardaba ninguna
+línea**. La pantalla decía "Líneas de factura 0" y no había a qué ponerle
+producto ni distribución analítica — los dos campos que deciden dónde queda el
+gasto. El borrador salía igual, con una línea por el total **inventada en el
+momento del push**, que nunca existió en la base y por eso nadie podía tocar.
+
+Ahora esa línea es una fila de verdad, y el editor que ya estaba funciona sin
+cambios.
+
+**La trampa: guarda el total, pero sale por el neto.** La fila lleva el total
+—es lo que dice el papel y lo que la pantalla muestra—, pero el armador manda
+el neto y deja que Odoo agregue el IVA con `tax_ids`. El neto no se puede
+calcular en el alta porque depende de si la empresa tiene configurado el IVA
+Compras 21%, que se sabe recién al pushear: si esa línea entrara por el camino
+de las demás, una Factura A saldría por 121 donde van 100. El armador la
+reconoce (`esLaLineaDelTotal`) y la valoriza él.
+
+Y la regla de qué líneas van al borrador salió de la ruta a
+[lib/facturacion/lineaPorElTotal.ts](lib/facturacion/lineaPorElTotal.ts). Era un
+`detalle_leido === "cuadra"` suelto, que dejaba afuera la línea del total por
+ser de otra categoría:
+
+| | |
+|---|---|
+| `cuadra` | va el detalle entero |
+| una línea por el total | **va**, con lo que le hayan puesto |
+| `no cuadra` | **no va** — armaría un borrador por un importe que no es el de la factura |
+
+### Y si el proveedor siempre factura lo mismo, viene puesta
+
+Hay proveedores que facturan lo mismo todos los meses. Para ésos, la línea del
+total **nace imputada**: producto, cuenta y reparto analítico.
+
+**El aprendizaje que ya había no servía acá, y vale saber por qué.**
+`sugerirProducto` aprende por **descripción** (`compras_producto_odoo`), y la
+descripción de esta línea es `Factura C 0003-00000108` — única por factura, no
+coincide con nada nunca. La clave tiene que ser el proveedor.
+
+**La regla es la unanimidad**, y parte en dos la vara que ya existía. El resto
+de las propuestas no se pre-llenan porque aciertan 89% y 78%; esto se pone
+**sólo si las últimas 3 facturas de ese proveedor fueron todas al mismo lugar**.
+Cualquier otra cosa —poca historia, una factura con dos imputaciones adentro,
+dos facturas distintas— no pone nada y siguen valiendo las sugerencias por
+mayoría.
+
+Medido el 26/10/2026 sobre las **5.419 líneas de 3.144 facturas posteadas** de
+2026, de 419 proveedores:
+
+| últimas | proveedores con esa historia | unánimes | facturas que cubren |
+|---|---|---|---|
+| 2 | 280 | 112 (40%) | 37% |
+| **3** | **220** | **72 (33%)** | **30%** |
+| 5 | 171 | 44 (26%) | 22% |
+| 10 | 98 | 12 (12%) | 11% |
+
+Se eligió 3. Con 2 se ganan siete puntos a cambio de que dos casualidades
+alcancen para dar algo por sabido.
+
+Lo que convenció más que el porcentaje fue **quién cae de cada lado**: unánimes
+son RUBIALES, EXPRESO 7400, TELEFÓNICA y LOMA NEGRA —fletes y servicios—; no
+unánimes son ZITO Y PRIOLA (166 facturas) y REPUESTOS AGRÍCOLAS COLON
+—materiales, distintos cada vez—. La regla separa sola lo que una persona
+separaría.
+
+**Se acota por (proveedor, empresa), y no es decorativo**: medido contra Odoo,
+EXPRESO 7400 reparte a la analítica `327` en Polcecal y a la `329` en Polysan.
+Mezclando las dos empresas no sería unánime y no dispararía nunca.
+
+Tres cosas más que no se deducen del código:
+
+- **Es el único consumidor que no puede usar `read_group`.** La unanimidad se
+  mide por factura, no en el agregado: un proveedor con 40 imputaciones a
+  Fletes y 1 a Repuestos sale 97% agregado y **no es unánime** si esa una es la
+  última. Son dos viajes —los ids de las tres facturas, después sus líneas— y
+  no uno con `limit`, porque agrupar después deja un borde feo: la factura más
+  vieja de la ventana puede venir cortada y parecer unánime.
+- **Tres facturas sin imputar son unánimes en no decir nada**, y eso no es un
+  antecedente. Se devuelve `null`.
+- **Nunca bloquea el alta.** Si Odoo no contesta o la factura todavía no tiene
+  partner, la línea entra sin imputar.
+
+El riesgo asumido: hoy una imputación equivocada necesita que alguien elija mal;
+con esto puede pasar sin que nadie elija. Lo acotan que sean sólo los unánimes,
+que la línea diga que vino `aprendido`, y que siga siendo editable.
+
 ### Dos copias del mismo PDF, a propósito
 
 La de la bandeja es **la evidencia de lo que llegó**, con su remitente y su
