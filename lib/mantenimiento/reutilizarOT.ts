@@ -90,7 +90,12 @@ export interface OTVieja {
   /** El texto de la celda de la planilla, para las OT anteriores a los renglones. */
   repuesto: string | null;
   /** Los renglones, cuando la OT los tiene. */
-  repuestos?: ReadonlyArray<{ nombre: string; cantidad: string | null }> | null;
+  repuestos?: ReadonlyArray<{
+    nombre: string;
+    cantidad: string | null;
+    /** El del inventario, cuando la OT vieja lo tenía. */
+    codigo?: string | null;
+  }> | null;
 }
 
 /** Lo que cada desplegable del formulario puede mostrar. */
@@ -191,7 +196,17 @@ export function copiarDeLaOT(vieja: OTVieja, vocabulario: Vocabulario): LoQueSeC
  */
 export function lineasDeLaOT(vieja: OTVieja): LineaDeRepuesto[] {
   const renglones = (vieja.repuestos ?? [])
-    .map((r) => ({ cantidad: texto(r?.cantidad), nombre: texto(r?.nombre) }))
+    .map((r) => {
+      // El código viaja desde el 26/10/2026: es el mismo repuesto, así que el
+      // enlace al pañol que tenía la orden vieja sigue valiendo. Perderlo
+      // dejaría un renglón idéntico pero desenlazado, y eso no se ve.
+      const codigo = texto(r?.codigo);
+      return {
+        cantidad: texto(r?.cantidad),
+        nombre: texto(r?.nombre),
+        ...(codigo ? { codigo } : {}),
+      };
+    })
     .filter((r) => r.nombre !== "");
   if (renglones.length > 0) return renglones;
 

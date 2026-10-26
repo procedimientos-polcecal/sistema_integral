@@ -187,3 +187,61 @@ describe("lineasDesdeElCuerpo", () => {
       .toEqual([{ cantidad: "", nombre: "" }]);
   });
 });
+
+/**
+ * EL CODIGO DEL INVENTARIO, desde el 26/10/2026. El alta ahora busca contra el
+ * inventario igual que el modal de "Repuestos que hacen falta", asi que el
+ * renglon puede traer el codigo de la fila que la persona eligio.
+ *
+ * Hasta ese dia `filasParaLaBase` escribia `null` fijo, y el motivo —«un codigo
+ * inventado es peor que un codigo vacio»— seguia siendo bueno: lo que cambio es
+ * que ya no lo inventa nadie.
+ */
+describe("el codigo del inventario en el renglon", () => {
+  it("viaja a la base cuando salio de la busqueda", () => {
+    expect(filasParaLaBase("ot-1", [
+      { cantidad: "2", nombre: "Rodamiento 6206", codigo: "RD-6206" },
+    ])).toEqual([
+      { work_order_id: "ot-1", nombre: "Rodamiento 6206", codigo: "RD-6206", cantidad: "2" },
+    ]);
+  });
+
+  /** Lo escrito a mano sigue yendo en null, como estaba todo hasta ese dia. */
+  it("lo escrito a mano sigue sin codigo", () => {
+    expect(filasParaLaBase("ot-1", [{ cantidad: "1", nombre: "Correa B-75" }]))
+      .toEqual([{ work_order_id: "ot-1", nombre: "Correa B-75", codigo: null, cantidad: "1" }]);
+    expect(filasParaLaBase("ot-1", [{ cantidad: "1", nombre: "Correa", codigo: "   " }])[0].codigo)
+      .toBeNull();
+  });
+
+  /**
+   * LA CELDA DE LA PLANILLA NO CAMBIA. Su vara no es "que se entienda" sino que
+   * `itemsDeRepuesto()` la pueda volver a leer, y ese parseo saca los repuestos
+   * de las 277 OT viejas. Meterle el codigo ahi cambiaria lo que vuelve a
+   * entrar por la sincronizacion.
+   */
+  it("el codigo no se cuela en el texto de la planilla", () => {
+    expect(textoParaLaPlanilla([
+      { cantidad: "2", nombre: "Rodamiento 6206", codigo: "RD-6206" },
+    ])).toBe("2 Rodamiento 6206");
+  });
+
+  /** Una carga parada que ya tenia codigo lo recupera, no lo pierde. */
+  it("una carga parada recupera su codigo", () => {
+    expect(lineasDesdeElCuerpo({
+      repuestos: [{ cantidad: "2", nombre: "Rodamiento 6206", codigo: "RD-6206" }],
+    })).toEqual([{ cantidad: "2", nombre: "Rodamiento 6206", codigo: "RD-6206" }]);
+  });
+
+  /**
+   * Y sin codigo la clave NO esta, en vez de estar vacia. Es la misma
+   * distincion que `filasParaLaBase` lleva a `null`, y es lo que deja intactos
+   * los renglones de todo lo que ya existia.
+   */
+  it("sin codigo la clave no esta", () => {
+    expect(lineasQueValen([{ cantidad: "1", nombre: "Correa" }]))
+      .toEqual([{ cantidad: "1", nombre: "Correa" }]);
+    expect(lineasQueValen([{ cantidad: "1", nombre: "Correa", codigo: "  " }]))
+      .toEqual([{ cantidad: "1", nombre: "Correa" }]);
+  });
+});
