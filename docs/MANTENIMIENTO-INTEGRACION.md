@@ -401,6 +401,49 @@ recién creada: su M dice "Atrasado" sin que nadie lo haya decidido.
 acá y montarlo es un proyecto aparte. La columna V ya está mapeada, así que
 cuando haya dónde subirla es sumar el campo.
 
+## La falla que tuvo el equipo
+
+Desde el 26/10/2026, al dar una OT por realizada se puede anotar **qué falla
+tuvo la máquina**: dos desplegables cortos —*qué le pasó* y *por qué*— y un
+detalle libre, los tres opcionales. La ficha del equipo muestra con eso **cuál
+se repite más**, que es lo que se pidió.
+
+La OT ya contaba qué se hizo; esto cuenta por qué falló, que no es lo mismo:
+"cambio de eje" no dice si el eje se rompió por fricción, por un golpe o porque
+nunca se lubricó, y esas tres cosas se arreglan distinto.
+
+**No ordena algo que ya existía: lo empieza a juntar.** Medido sobre las 2.264
+OT de ese día: el MTBF ya contaba 976 fallas —toda correctiva— pero sin causa;
+sólo 99 descripciones nombran qué le pasó a la pieza y **ninguna** nombra el
+motivo. Las 40 que lo parecían dicen "se repuso térmico" o "se cambia
+contactor", que es otra vez el trabajo.
+
+**Por qué dos listas y no un campo de texto.** Contar "cuál se repite" exige que
+la misma falla se escriba igual dos veces, y el texto libre no lo logra: de 178
+equipos, sólo 18 tenían dos veces la misma descripción exacta, y lo que sí se
+repetía aparecía como `SE ROTAN MARTILLOS`, `ROTACION DE MARTILLOS` y `CAMBIO DE
+MARTILLOS` — 23 órdenes del mismo evento en el mismo equipo, tres fallas
+distintas para cualquier conteo. El vocabulario vive en
+[lib/mantenimiento/fallas.ts](../lib/mantenimiento/fallas.ts) y **la ruta
+rechaza con 400 lo que no esté en él**: sin eso vuelve el texto libre por la
+ventana. No hay "Otro" a propósito; una falla con sólo detalle cuenta igual,
+como «Sin clasificar».
+
+Tres cosas que no se deducen del código:
+
+- **Se carga en las tres puertas** por las que una OT queda realizada: el modal
+  de registrar el trabajo, la OT nueva que nace cerrada —5 de las 6 creadas
+  desde la app nacieron así— y el formulario sin señal. La única que queda
+  afuera es la generación en lote de los partes de contratista, donde no hay
+  nadie a quien preguntarle por cada orden.
+- **No viaja a la planilla.** Riesgo asumido y no olvido, igual que el GUT:
+  exportarla sería escribir en el libro que está por darse vuelta, y la regla
+  de "toda ruta que toque un campo que se exporta tiene que exportar" no aplica
+  a un campo que no se exporta. Quien lee la planilla no ve la falla. La
+  sincronización tampoco la pisa: su `upsert` nunca nombra esas columnas.
+- **Una OT ya cerrada no puede cargar su falla sin reabrirla**, así que las 976
+  correctivas que ya existen se quedan sin causa. Esto empieza de cero.
+
 ## Crear una OT desde el sistema: la planilla primero, y en su propia pestaña
 
 **Una OT creada desde la app se escribe en el libro de respuestas del
