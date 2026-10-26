@@ -364,9 +364,6 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             <RepuestosDeLaOT lineas={repuestos} onCambiar={setRepuestos} deshabilitado={saving} />
           </F>
 
-          {cierraAlCrearse && (
-            <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={saving} />
-          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <F label="Fecha creación">
@@ -379,6 +376,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
+
+          {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
+              aparecer, y en un teléfono una sección que se abre más arriba
+              empuja hacia abajo el campo que se está completando. */}
+          {cierraAlCrearse && (
+            <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={saving} />
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Con fecha de cierre el estado deja de ser una pregunta: la orden

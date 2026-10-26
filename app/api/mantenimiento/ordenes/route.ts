@@ -101,6 +101,11 @@ export async function GET(request: Request) {
   // sobre mil ochocientas, y ordenarlas a mano no se puede hacer de a páginas.
   const pendientes = searchParams.get("pendientes") === "1";
 
+  // `*` y no una lista de columnas: el modal de registrar el trabajo precarga
+  // la falla de la orden desde acá, y si dejaran de llegar `falla_modo`,
+  // `falla_causa` y `falla_detalle`, reabrir una OT y volver a cerrarla se la
+  // borraría sin un solo error. Si alguna vez hay que acotar el select, esas
+  // tres tienen que seguir estando.
   let query = supabase.from("ordenes_trabajo").select("*", { count: "exact" });
 
   // El orden es del servidor y no del cliente: son 2.264 filas paginadas de a

@@ -1,7 +1,7 @@
 "use client";
 
 import Select from "@/components/Select";
-import { MODOS_DE_FALLA, CAUSAS_DE_FALLA } from "@/lib/mantenimiento/fallas";
+import { MODOS_DE_FALLA, CAUSAS_DE_FALLA, opcionesConLaActual } from "@/lib/mantenimiento/fallas";
 
 /**
  * La falla que tuvo el equipo, al cerrar una OT.
@@ -22,6 +22,13 @@ import { MODOS_DE_FALLA, CAUSAS_DE_FALLA } from "@/lib/mantenimiento/fallas";
  * "Otro": si la falla no entra en ninguna de las dos listas, se deja el
  * desplegable vacío y se escribe el detalle, que igual cuenta en el ranking
  * como «Sin clasificar».
+ *
+ * LA CLAVE QUE YA NO ESTA EN LA LISTA SE MUESTRA IGUAL
+ *
+ * `opcionesConLaActual` agrega al desplegable el valor que la orden ya tiene
+ * cuando el vocabulario dejo de tenerlo. Sin eso el campo se ve vacio con el
+ * valor viejo todavia en el estado, y al guardar sale un 400 por algo que en
+ * pantalla parecia no tener nada.
  *
  * EL ANCHO VA EN EL ENVOLTORIO
  *
@@ -71,7 +78,7 @@ export default function FallaDeLaOT({
             className="input"
           >
             <option value="">—</option>
-            {MODOS_DE_FALLA.map((m) => (
+            {opcionesConLaActual(MODOS_DE_FALLA, falla.falla_modo).map((m) => (
               <option key={m.clave} value={m.clave}>{m.etiqueta}</option>
             ))}
           </Select>
@@ -86,7 +93,7 @@ export default function FallaDeLaOT({
             className="input"
           >
             <option value="">—</option>
-            {CAUSAS_DE_FALLA.map((c) => (
+            {opcionesConLaActual(CAUSAS_DE_FALLA, falla.falla_causa).map((c) => (
               <option key={c.clave} value={c.clave}>{c.etiqueta}</option>
             ))}
           </Select>

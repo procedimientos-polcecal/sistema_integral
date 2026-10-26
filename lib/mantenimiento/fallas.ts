@@ -112,6 +112,28 @@ export const esquemaFalla = z.object({
     .transform((v) => (typeof v === "string" ? v.trim() || null : null)),
 });
 
+/**
+ * Las opciones de un desplegable, contando la que la orden ya tiene.
+ *
+ * El vocabulario se va a tocar —por eso la columna no lleva `check`—, y el día
+ * que una clave se retire van a quedar OT que la tienen escrita. Sin esto el
+ * desplegable se ve **vacío** con el valor viejo todavía en el estado: al
+ * guardar sale un 400 por un campo que en pantalla parecía no tener nada, y
+ * encima la ejecución ya se registró. Mostrarla, aunque sea marcada, deja ver
+ * qué hay que cambiar.
+ *
+ * Quien retire una clave igual tiene que mover las filas que la usan: esto es
+ * la red, no el plan.
+ */
+export function opcionesConLaActual(
+  lista: readonly OpcionDeFalla[],
+  actual: string | null | undefined
+): OpcionDeFalla[] {
+  const clave = actual?.trim();
+  if (!clave || buscar(lista, clave)) return [...lista];
+  return [...lista, { clave, etiqueta: `${clave} (ya no está en la lista)`, corta: clave }];
+}
+
 /** Lo que el ranking necesita de una orden. */
 export interface OtConFalla {
   ot_number: number;
@@ -137,7 +159,11 @@ function tituloDe(modo: string | null, causa: string | null): string {
   const m = buscar(MODOS_DE_FALLA, modo);
   const c = buscar(CAUSAS_DE_FALLA, causa);
   if (m && c) return `${m.corta} por ${c.corta}`;
-  if (m) return m.etiqueta;
+  // La misma forma corta que cuando tiene causa. Con la etiqueta entera, el
+  // mismo modo aparecería con dos nombres —"Rotura / quebradura" solo y
+  // "Rotura por fricción" acompañado— en la lista que existe justo para ver
+  // qué se repite.
+  if (m) return m.corta;
   if (c) return `Por ${c.corta}`;
   return "Sin clasificar";
 }

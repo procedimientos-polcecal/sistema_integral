@@ -103,10 +103,12 @@ export default function FormularioOTOffline({
    */
   const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>(() => lineasDesdeElCuerpo(borrador));
   /*
-   * Los tres campos de la falla son texto plano, así que una carga que quedó
-   * parada los recupera sola: `borradorDesdeElCuerpo` copia por nombre lo que
-   * ya estaba en el cuerpo. Con los repuestos no alcanzaba porque viajan como
-   * arreglo y esa función descarta los objetos.
+   * La falla de una carga que quedó parada se recupera **acá**, leyendo el
+   * cuerpo guardado, y no por `borradorDesdeElCuerpo`: esa función copia los
+   * campos que estén en `vacio()`, y los tres de la falla no viven en el
+   * formulario sino en su propio estado. Son texto plano, así que alcanza con
+   * leerlos; es lo que con los repuestos no alcanzaba, porque viajan como
+   * arreglo.
    */
   const [falla, setFalla] = useState<LaFalla>(() => ({
     falla_modo: String(borrador?.falla_modo ?? ""),
@@ -308,9 +310,6 @@ export default function FormularioOTOffline({
         />
       </F>
 
-      {cierraAlCrearse && (
-        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={deshabilitado} />
-      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <F label="Fecha creación">
@@ -343,6 +342,13 @@ export default function FormularioOTOffline({
           />
         </F>
       </div>
+
+      {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
+          aparecer, y en un teléfono una sección que se abre más arriba empuja
+          hacia abajo el campo que se está completando. */}
+      {cierraAlCrearse && (
+        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={deshabilitado} />
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {/* Con fecha de cierre el estado deja de ser una pregunta: la orden ya

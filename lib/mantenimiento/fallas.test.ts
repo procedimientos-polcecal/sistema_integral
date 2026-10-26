@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   MODOS_DE_FALLA, CAUSAS_DE_FALLA, esModoDeFalla, esCausaDeFalla,
   etiquetaDeModo, etiquetaDeCausa, esquemaFalla, rankingDeFallas,
+  opcionesConLaActual,
   type OtConFalla,
 } from "@/lib/mantenimiento/fallas";
 
@@ -95,7 +96,10 @@ describe("rankingDeFallas", () => {
   it("cuenta la falla a medias, con la mitad vacía", () => {
     // Exigir las dos tiraría lo que alguien se tomó el trabajo de anotar.
     const r = rankingDeFallas([ot({ falla_modo: "ROTURA", falla_causa: null })]);
-    expect(r[0].titulo).toBe("Rotura / quebradura");
+    // La misma forma corta que cuando tiene causa: si sola dijera "Rotura /
+    // quebradura" y con causa "Rotura por fricción", el mismo modo aparecería
+    // con dos nombres en la lista que existe justo para ver qué se repite.
+    expect(r[0].titulo).toBe("Rotura");
   });
 
   it("la que sólo tiene detalle entra como «Sin clasificar»", () => {
@@ -134,5 +138,26 @@ describe("rankingDeFallas", () => {
     expect(r).toHaveLength(2);
     expect(r[0].ots[0].numero).toBe(2);
     expect(r[1].ultimaFecha).toBeNull();
+  });
+});
+
+describe("opcionesConLaActual", () => {
+  /*
+   * El vocabulario se va a tocar —por eso la columna no tiene `check`—, y el
+   * día que una clave se retire quedan OT que la tienen escrita. Si el
+   * desplegable no la muestra, se ve vacío pero el valor sigue ahí: al guardar
+   * sale un 400 por un campo que en pantalla parecía no tener nada.
+   */
+  it("agrega la clave que ya no está en la lista, al final", () => {
+    const opciones = opcionesConLaActual(MODOS_DE_FALLA, "SE_DESARMO");
+    expect(opciones).toHaveLength(MODOS_DE_FALLA.length + 1);
+    expect(opciones[opciones.length - 1]).toMatchObject({ clave: "SE_DESARMO" });
+    expect(opciones[opciones.length - 1].etiqueta).toContain("SE_DESARMO");
+  });
+
+  it("no duplica la que sí está, ni agrega nada si no hay valor", () => {
+    expect(opcionesConLaActual(MODOS_DE_FALLA, "ROTURA")).toHaveLength(MODOS_DE_FALLA.length);
+    expect(opcionesConLaActual(MODOS_DE_FALLA, "")).toHaveLength(MODOS_DE_FALLA.length);
+    expect(opcionesConLaActual(MODOS_DE_FALLA, null)).toHaveLength(MODOS_DE_FALLA.length);
   });
 });

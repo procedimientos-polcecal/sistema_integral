@@ -47,9 +47,16 @@ export default function RegistrarOTModal({
     operario_1: string | null;
     operario_2: string | null;
     operario_3: string | null;
-    falla_modo?: string | null;
-    falla_causa?: string | null;
-    falla_detalle?: string | null;
+    /*
+     * Obligatorias y no opcionales: si el listado dejara de traerlas, reabrir
+     * una OT y volver a cerrarla le borraria la falla sin un solo error. Que
+     * esten declaradas asi deja dicho de que depende este modal. (La pantalla
+     * guarda la orden como `any`, asi que esto documenta mas de lo que obliga;
+     * la lectura que las trae es el `select("*")` de GET /ordenes.)
+     */
+    falla_modo: string | null;
+    falla_causa: string | null;
+    falla_detalle: string | null;
   };
   onCerrar: () => void;
   onRegistrada: () => void;
