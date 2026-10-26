@@ -28,6 +28,7 @@ import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
+import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 
 /**
@@ -279,6 +280,22 @@ export async function POST(request: Request) {
     return errorDeValidacion(gut.problemas);
   }
 
+  // La falla del equipo es opcional, pero lo que venga tiene que ser del
+  // vocabulario: `esquemaFalla` no acepta un modo ni una causa que no estén en
+  // las listas. Sin eso vuelve el texto libre por la ventana y el conteo de
+  // "qué falla se repite más" se muere en silencio — ver fallas.ts.
+  const laFalla = validar(esquemaFalla, {
+    falla_modo:    vacioANull(body.falla_modo),
+    falla_causa:   vacioANull(body.falla_causa),
+    falla_detalle: vacioANull(body.falla_detalle),
+  });
+  if (!laFalla.ok) {
+    avisarDeLaCarga(request, user.id, {
+      ...deEstaCarga, status: 400, error: laFalla.problemas.join(" "), enDuda: false,
+    });
+    return errorDeValidacion(laFalla.problemas);
+  }
+
   const admin = createAdminClient();
 
   // Antes de la planilla, para no consumir un número por una orden incompleta.
@@ -500,6 +517,9 @@ export async function POST(request: Request) {
     gut_gravedad:    gut.datos.gut_gravedad ?? null,
     gut_urgencia:    gut.datos.gut_urgencia ?? null,
     gut_tendencia:   gut.datos.gut_tendencia ?? null,
+    falla_modo:      laFalla.datos.falla_modo ?? null,
+    falla_causa:     laFalla.datos.falla_causa ?? null,
+    falla_detalle:   laFalla.datos.falla_detalle ?? null,
     schedule_id:     schedule_id || null,
     app_created:     true,
     created_by:      user.id,
@@ -666,6 +686,16 @@ export async function PATCH(request: Request) {
     }
     update.estado = estado;
   }
+
+  // La falla, si viene, tiene que ser del vocabulario. Se valida **antes** del
+  // reparto: `repartirRegistroDeOT` copia lo que le den, y una ruta que acepte
+  // texto arbitrario acá convierte las dos listas cortas en un campo libre.
+  const laFalla = validar(esquemaFalla, {
+    falla_modo:    body.falla_modo,
+    falla_causa:   body.falla_causa,
+    falla_detalle: body.falla_detalle,
+  });
+  if (!laFalla.ok) return errorDeValidacion(laFalla.problemas);
 
   // Qué va a la tabla y qué a la planilla no es lo mismo: las observaciones y
   // la foto no tienen columna en `ordenes_trabajo`. El reparto vive en

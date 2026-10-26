@@ -249,6 +249,15 @@ export function esEstadoDeOT(valor: unknown): valor is EstadoDeOT {
 /** Los que tienen columna propia en `ordenes_trabajo` y también en la planilla. */
 const EN_LOS_DOS_LADOS = ["contratista", "operario_1", "operario_2", "operario_3"] as const;
 
+/**
+ * Los que tienen columna en la tabla y **no** en la planilla.
+ *
+ * La falla del equipo no se exporta —riesgo asumido y escrito, igual que el
+ * GUT: el libro está por darse vuelta—, así que si se colaran en `registro` la
+ * ruta intentaría escribir celdas que esa planilla no tiene.
+ */
+const SOLO_EN_LA_TABLA = ["falla_modo", "falla_causa", "falla_detalle"] as const;
+
 export function repartirRegistroDeOT(body: Record<string, unknown>): {
   update: Record<string, unknown>;
   registro: RegistroDeOT;
@@ -267,6 +276,10 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
       update[campo] = texto(body[campo]);
       registro[campo] = update[campo] as string | null;
     }
+  }
+
+  for (const campo of SOLO_EN_LA_TABLA) {
+    if (body[campo] !== undefined) update[campo] = texto(body[campo]);
   }
 
   if (body.horas !== undefined) {

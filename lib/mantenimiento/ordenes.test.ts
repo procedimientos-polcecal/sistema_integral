@@ -280,3 +280,30 @@ describe("el registro no deja entrar una formula", () => {
     expect(de("K")).toBe("25/08/2026");
   });
 });
+
+describe("repartirRegistroDeOT y la falla", () => {
+  /*
+   * Las tres columnas de la falla son del sistema y no de la planilla: si se
+   * colaran en `registro`, la ruta intentaria escribir celdas que no existen.
+   */
+  it("manda los tres campos a la tabla y ninguno a la planilla", () => {
+    const { update, registro } = repartirRegistroDeOT({
+      falla_modo: "ROTURA", falla_causa: "FRICCION", falla_detalle: "eje lado motor",
+    });
+    expect(update).toMatchObject({
+      falla_modo: "ROTURA", falla_causa: "FRICCION", falla_detalle: "eje lado motor",
+    });
+    expect(registro).toEqual({});
+  });
+
+  /*
+   * El modal manda todos sus campos en cada guardado. Que "no vino" y "vino
+   * vacio" sean lo mismo es como alguien que reabre una OT para corregir las
+   * horas le borra la falla sin enterarse.
+   */
+  it("no mandar un campo deja lo que habia; mandarlo vacio lo borra", () => {
+    expect(repartirRegistroDeOT({ horas: 2 }).update).not.toHaveProperty("falla_modo");
+    expect(repartirRegistroDeOT({ falla_modo: "" }).update.falla_modo).toBeNull();
+    expect(repartirRegistroDeOT({ falla_detalle: "   " }).update.falla_detalle).toBeNull();
+  });
+});
