@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { esFechaIso } from "@/lib/core/fechas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,14 +76,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * pase de tres meses es una licencia larga, y eso lo carga RRHH.
  */
 const MAX_DIAS = 90;
-
-/** Una fecha "YYYY-MM-DD" que existe en el calendario (no el 31 de abril). */
-function esFechaIso(v: unknown): v is string {
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [a, m, d] = v.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d));
-  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
-}
 
 /**
  * Cuántos días hay en el rango, contando los dos extremos.

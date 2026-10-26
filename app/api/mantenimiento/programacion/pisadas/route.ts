@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { esFechaIso } from "@/lib/core/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
@@ -16,14 +17,6 @@ import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 
 const TURNOS = ["4-12", "8-16", "12-20"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Una fecha "YYYY-MM-DD" que existe en el calendario. */
-function esFechaIso(v: unknown): v is string {
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [a, m, d] = v.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d));
-  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
-}
 
 async function admitir() {
   const supabase = await createClient();

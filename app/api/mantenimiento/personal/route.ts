@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
-import { hoyEnArgentina } from "@/lib/core/fechas";
+import { esFechaIso, hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
  * El padrón del taller: quién es mecánico, electricista o lubricador, de qué
@@ -24,14 +24,6 @@ const OFICIOS = ["mecanico", "electricista", "lubricador"];
 const GRUPOS = ["A", "B"];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Una fecha "YYYY-MM-DD" que existe en el calendario (no el 31 de abril). */
-function esFechaIso(v: unknown): v is string {
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [a, m, d] = v.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d));
-  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
-}
 
 interface Vigencia {
   desde: string;

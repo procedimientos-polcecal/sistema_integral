@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { diaDeLaSemana } from "@/lib/core/fechas";
+import { diaDeLaSemana, esFechaIso } from "@/lib/core/fechas";
 import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 import { estaVigente, type PersonaDelTaller } from "@/lib/mantenimiento/disponibilidad";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
@@ -50,14 +50,6 @@ import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Una fecha "YYYY-MM-DD" que existe en el calendario. */
-function esFechaIso(v: unknown): v is string {
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const [a, m, d] = v.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d));
-  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
-}
 
 /** Una fecha que vino de la base, como `YYYY-MM-DD` pelado. */
 function soloElDia(v: unknown): string {

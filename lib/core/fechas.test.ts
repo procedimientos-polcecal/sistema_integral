@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   fechaEnArgentina, hoyEnArgentina, diaEnArgentina, ahoraEnArgentina, instanteDeArgentina,
   sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
-  rangoDelMes, mesRelativo, esMesValido, horaEnArgentina,
+  rangoDelMes, mesRelativo, esMesValido, horaEnArgentina, esFechaIso,
 } from "./fechas";
 
 /**
@@ -280,5 +280,34 @@ describe("horaEnArgentina", () => {
   // `getUTCHours()` pelado.
   it("la medianoche UTC son las nueve de la noche de aca", () => {
     expect(horaEnArgentina(new Date("2026-10-19T00:30:00Z"))).toBe(21);
+  });
+});
+
+describe("esFechaIso", () => {
+  it("acepta una fecha real, incluido el 29 de febrero de un año bisiesto", () => {
+    expect(esFechaIso("2026-10-26")).toBe(true);
+    expect(esFechaIso("2028-02-29")).toBe(true);
+    expect(esFechaIso("2026-12-31")).toBe(true);
+  });
+
+  // La regex sola las deja pasar: es lo que hace que la guarda reconstruya la fecha.
+  it("rechaza las que tienen forma de fecha y no existen", () => {
+    expect(esFechaIso("2026-02-30")).toBe(false);
+    expect(esFechaIso("2026-02-29")).toBe(false);
+    expect(esFechaIso("2026-04-31")).toBe(false);
+    expect(esFechaIso("2026-13-01")).toBe(false);
+    expect(esFechaIso("2026-00-10")).toBe(false);
+    expect(esFechaIso("2026-10-00")).toBe(false);
+  });
+
+  it("rechaza lo que no es una fecha pelada, que es lo que no puede llegar a un filtro", () => {
+    expect(esFechaIso("2026-10-26T00:00:00")).toBe(false);
+    expect(esFechaIso("26/10/2026")).toBe(false);
+    expect(esFechaIso("2026-1-5")).toBe(false);
+    expect(esFechaIso("2026-10-26,or.id.eq.1")).toBe(false);
+    expect(esFechaIso("")).toBe(false);
+    expect(esFechaIso(null)).toBe(false);
+    expect(esFechaIso(undefined)).toBe(false);
+    expect(esFechaIso(20261026)).toBe(false);
   });
 });

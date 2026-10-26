@@ -144,6 +144,24 @@ export function esMesValido(valor: unknown): valor is string {
   return mes >= 1 && mes <= 12;
 }
 
+/**
+ * Si el texto es una fecha "YYYY-MM-DD" que existe en el calendario: el 31 de
+ * abril y el 30 de febrero no.
+ *
+ * Es la única guarda antes de que un valor de la URL o del cuerpo se
+ * interpole en un filtro de PostgREST (`.gte("fecha", v)`, `.or("...")`), así
+ * que la forma sola no alcanza —`2026-02-30` cumple la regex— y por eso se
+ * reconstruye la fecha y se comprueba que dé lo mismo. Estaba copiada
+ * palabra por palabra en cuatro rutas de Mantenimiento; lo que merece
+ * confianza vive acá, donde se puede probar.
+ */
+export function esFechaIso(v: unknown): v is string {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [a, m, d] = v.split("-").map(Number);
+  const f = new Date(Date.UTC(a, m - 1, d));
+  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
+}
+
 /** El día de la semana de una fecha "YYYY-MM-DD". 0 = domingo, 6 = sábado. */
 export function diaDeLaSemana(iso: string): number {
   return comoUtc(iso).getUTCDay();
