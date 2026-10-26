@@ -189,6 +189,20 @@ columna sola.
 > nadie más. No se le toca el permiso de RRHH, y la ausencia queda indistinguible
 > de una cargada por RRHH — `cargado_por_id` ya guarda quién fue.
 
+> **Corregido el 26/10/2026.** Donde arriba dice *"nivel de edición en
+> Mantenimiento"*, hoy la ruta pide **admin de Mantenimiento**
+> (`esAdminMantenimiento`). Esa frase se escribió antes de que se decidiera que
+> la pantalla de programación la vea sólo el admin, y las dos mitades quedaron
+> diciendo cosas distintas: la pantalla, la entrada del menú y las otras cuatro
+> rutas del módulo piden `admin`, mientras esta ruta aceptaba `edicion` —el
+> nivel de todos los que cargan OT y ejecuciones, bastante más gente—. Como
+> escribe en `ausencias` con el cliente admin, eso le daba a `edicion`
+> escritura sobre una tabla de RRHH que mueve `calculos_diarios` y por ahí el
+> recibo de alguien, **sin ninguna pantalla que se la ofreciera ni menú que la
+> revelara**. Superficie de escritura que nadie puede alcanzar por la interfaz
+> no es una funcionalidad, es un agujero que nadie va a mirar. El día que la
+> programación se le abra a `edicion`, esto se revisa con ella.
+
 Tres cosas que esa ruta tiene que hacer bien, y que no son obvias:
 
 - **Tiene que correr los efectos, no sólo insertar la fila.** La ruta de RRHH no
