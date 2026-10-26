@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { crearEn, llamar, mensajeDeOdoo } from "./client";
 import { resolverContextoDeFacturas } from "./contexto";
+import { lineasParaElBorrador } from "@/lib/facturacion/lineaPorElTotal";
 import { armarBorradorDeFactura, type BorradorArmado } from "@/lib/facturacion/borradorEnOdoo";
 import { discriminaIva } from "@/lib/facturacion/comprobante";
 import type { LineaDeFactura } from "@/lib/facturacion/lineas";
@@ -235,15 +236,23 @@ async function prepararElBorrador(
    * peor que no tener detalle: el borrador saldría por un importe que no es el
    * de la factura, y eso lo tendría que descubrir alguien a mano.
    */
-  let lineas: LineaDeFactura[] = [];
-  if (factura.detalle_leido === "cuadra") {
-    const { data } = await admin
-      .from("facturas_proveedor_lineas")
-      .select("*")
-      .eq("factura_id", facturaId)
-      .order("orden");
-    lineas = (data ?? []) as unknown as LineaDeFactura[];
-  }
+  const { data: guardadas } = await admin
+    .from("facturas_proveedor_lineas")
+    .select("*")
+    .eq("factura_id", facturaId)
+    .order("orden");
+
+  /*
+   * Cuáles de esas van al borrador lo decide `lineasParaElBorrador`, y no un
+   * `=== "cuadra"` escrito acá. La regla vieja dejaba afuera la línea del total
+   * —la de una factura sin detalle legible— por ser de otra categoría, así que
+   * el producto y la analítica que alguien le ponía no llegaban nunca a Odoo.
+   */
+  const lineas = lineasParaElBorrador(
+    factura.detalle_leido,
+    (guardadas ?? []) as unknown as LineaDeFactura[],
+    factura.importe_total
+  );
 
   const armado = armarBorradorDeFactura(factura, {
     partnerId,

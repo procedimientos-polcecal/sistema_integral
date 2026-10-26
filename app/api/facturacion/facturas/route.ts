@@ -5,6 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import type { ProductoDeOdoo } from "@/lib/compras/productoOdoo";
+import {
+  lineaPorElTotal,
+  type CabeceraDeLaFactura,
+} from "@/lib/facturacion/lineaPorElTotal";
 import { prepararLineas } from "@/lib/facturacion/lineas";
 import { resolverElEmisor } from "@/lib/odoo/emisor";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
@@ -325,7 +329,33 @@ async function guardarElDetalle(
   facturaId: string,
   detalle: PedidoDeAlta["detalle"]
 ): Promise<string[]> {
-  if (!detalle || detalle.lineas.length === 0) return [];
+  /*
+   * Sin detalle legible **igual se guarda una línea**: la del total.
+   *
+   * Antes esto devolvía `[]` y la factura quedaba sin ninguna fila, así que la
+   * pantalla mostraba "Líneas de factura 0" y no había a qué ponerle producto
+   * ni distribución analítica — los dos campos que deciden dónde queda imputado
+   * el gasto. El borrador se armaba igual, con una línea inventada en el
+   * momento del push que nadie podía tocar.
+   */
+  if (!detalle || detalle.lineas.length === 0) {
+    const { data: cabecera } = await supabase
+      .from("facturas_proveedor")
+      .select("tipo_comprobante, punto_venta, numero, importe_total")
+      .eq("id", facturaId)
+      .single();
+
+    const sola = cabecera ? lineaPorElTotal(cabecera as CabeceraDeLaFactura) : null;
+    if (!sola) return [];
+
+    const { error } = await supabase
+      .from("facturas_proveedor_lineas")
+      .insert({ ...sola, factura_id: facturaId });
+
+    return error
+      ? [`La factura entró, pero su línea por el total no se pudo guardar: ${error.message}`]
+      : [];
+  }
 
   let catalogo: ProductoDeOdoo[] = [];
   let aprendidos = new Map<string, number>();
