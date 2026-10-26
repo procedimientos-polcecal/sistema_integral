@@ -72,6 +72,36 @@ describe("queSeBorra", () => {
       expect(v.borrar).toHaveLength(1);
     });
 
+    it("NO protege la que quedó pendiente de exportar, y por eso el que llama tiene que contarla como leída", () => {
+      // Éste es el caso que casi cuesta una OT el 26/10/2026, y vale escribirlo
+      // porque la trampa no está acá sino en quien llama.
+      //
+      // Una OT que vino de la planilla y cuyo cambio no se pudo exportar queda
+      // con `sheets_pendiente`, y la importación la **saltea** para no pisarla.
+      // Hasta ahí, bien. El problema es que saltearla la dejaba afuera de
+      // `clavesLeidas`, o sea: "la planilla ya no la tiene". Y acá no hay nada
+      // que la salve — `nuncaEstuvoEnLaPlanilla` es `app_created && sin fila`,
+      // y ésta tiene las dos al revés: nació en la planilla y tiene su fila.
+      //
+      // O sea que la marca que existe para protegerla de que la pisen la
+      // mandaba a borrar, con sus notas, sus repuestos y su aviso en cascada.
+      // La protección no puede vivir acá: `clavesLeidas` es **lo que la
+      // planilla trajo**, no lo que la corrida escribió, y así lo dice su
+      // docstring. Es la misma lección que Compras ya había pagado con las
+      // 1.678 filas `editado_en_app`.
+      const pendienteDeExportar = fila(2896, {
+        nuncaEstuvoEnLaPlanilla: false,
+        creadaEn: "2026-01-01T00:00:00.000Z",
+      });
+      const v = queSeBorra({
+        candidatas: [pendienteDeExportar],
+        totalEnLaBase: 2201,
+        inicioDeLaCorrida: ARRANQUE,
+      });
+      expect(v.protegidas).toEqual([]);
+      expect(v.borrar.map((f) => f.numero)).toEqual([2896]);
+    });
+
     it("NO protege la que la app editó: si la planilla manda, manda para borrar", () => {
       const v = queSeBorra({
         candidatas: [fila(1850, { editadaEnLaApp: true })],

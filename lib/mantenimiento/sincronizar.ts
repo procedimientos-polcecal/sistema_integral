@@ -33,6 +33,8 @@ import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAvis
 import { filaDeOrden, celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
+import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
+import { loQueHayQueExportarDeLaOS } from "@/lib/mantenimiento/pendienteDeLaOS";
 import { cualesReintentar } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
@@ -450,9 +452,24 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   const sinProveedor = new Set<string>();
   let sinEquipo = 0;
 
+  // Lo que la planilla trajo, **esté o no entre lo que vamos a escribir**.
+  //
+  // Es lo que después decide quién sobra, y por eso se cuenta acá arriba y no
+  // de `unicos`: una orden salteada por tener la exportación pendiente sigue
+  // estando en la planilla, así que contarla como ausente es decir que alguien
+  // la borró de ahí. Eso la mandaba a `borrarLoQueLaPlanillaNoTrajo`, donde no
+  // la protege nada —`nuncaEstuvoEnLaPlanilla` pide `app_created` y fila nula,
+  // y ésta tiene las dos al revés— y se la llevaba con sus notas, sus repuestos
+  // y su aviso en cascada. O sea: la marca que existe para que no la pisen la
+  // mandaba a borrar. Es la misma lección que Compras pagó con las 1.678 filas
+  // `editado_en_app`, y está fijada con un test en `borradoDeEspejo.test.ts`.
+  const trajoLaPlanilla = new Set<number>();
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
+
+    trajoLaPlanilla.add(orden.ot_number);
 
     // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
     // que el sistema sabe, y leerla ahora le borraría el estado y las horas.
@@ -488,7 +505,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   }
 
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
-    clavesLeidas: new Set(unicos.map((r) => r.ot_number as number)),
+    clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
@@ -507,18 +524,75 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
 }
 
 /** Trae las órdenes de servicio de su planilla, una pestaña por área. */
+/**
+ * Reescribe el seguimiento de las OS que no llegaron a la planilla, y devuelve
+ * los números que **siguen** sin llegar.
+ *
+ * Gemela de `exportarLoPendiente` para las órdenes de trabajo, y existe por lo
+ * mismo: `filaDeOS` vuelve a leer las cinco columnas del seguimiento, así que
+ * importar una OS cuyo cambio todavía no se exportó la pisa con la celda vieja.
+ * Los números que vuelven son los que la importación tiene que saltear.
+ *
+ * Sin freno de tiempo, a diferencia de la de OT: acá no hay un botón de
+ * pantalla que la dispare: la llama sólo la sincronización, que es el piso y
+ * tiene que intentarlo todo.
+ */
+async function exportarLoPendienteDeOS(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<Set<number>> {
+  const siguenPendientes = new Set<number>();
+
+  // La cadena va literal y no armada en una variable: así Supabase infiere los
+  // tipos de lo que vuelve. Es la regla del CLAUDE.md, y acá avisó con un
+  // `GenericStringError` en vez de dejarlo pasar.
+  const { data: pendientes } = await admin
+    .from("ordenes_servicio")
+    .select("id, os_number, sheets_tab, sheets_row, estado, proveedor_elegido, fecha_pedido, fecha_realizacion, observaciones")
+    .not("sheets_pendiente", "is", null);
+
+  for (const os of pendientes ?? []) {
+    const campos = loQueHayQueExportarDeLaOS(os);
+
+    // Dejó de tener algo que exportar: alguien lo borró o lo cambió en el
+    // sistema. Se limpia la marca en vez de reintentar para siempre.
+    if (!campos) {
+      await admin.from("ordenes_servicio")
+        .update({ sheets_pendiente: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", os.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDeLaOS(os, campos);
+    if (fallo) siguenPendientes.add(os.os_number as number);
+
+    await admin.from("ordenes_servicio")
+      .update({ sheets_pendiente: fallo, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", os.id);
+  }
+
+  return siguenPendientes;
+}
+
 export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OS_ID ?? "";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OS_ID");
 
   const inicio = new Date().toISOString();
   const admin = createAdminClient();
+
+  // Primero sale lo que el sistema sabe y la planilla no, igual que en las OT:
+  // así lo que acabamos de escribir vuelve con el resto en la lectura de abajo,
+  // en vez de ser pisado por una columna vieja.
+  const sinExportar = await exportarLoPendienteDeOS(admin);
+
   const enlaces = await cargarEnlaces(admin);
   const cuando = new Date().toISOString();
 
   // Una OS puede aparecer en la hoja maestra y en la de su área: se queda la
   // última leída, que es la que trae el seguimiento.
   const porNumero = new Map<number, Datos>();
+  /** Lo que la planilla trajo, esté o no entre lo que vamos a escribir. */
+  const trajoLaPlanilla = new Set<number>();
   const sinLeer: string[] = [];
   const huerfanas: string[] = [];
   const sinProveedor = new Set<string>();
@@ -551,6 +625,15 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
         if (seguimientoHuerfano(filas[i])) huerfanas.push(`${pestana}!${i + 1}`);
         continue;
       }
+
+      // Contada como traída antes del salteo, no después: una OS salteada
+      // sigue estando en la planilla, y dejarla afuera de `clavesLeidas` la
+      // manda a borrar. Ver el comentario largo en `sincronizarOrdenes`.
+      trajoLaPlanilla.add(os.os_number);
+
+      // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
+      // que el sistema sabe, y leerla ahora le borraría el seguimiento.
+      if (sinExportar.has(os.os_number)) continue;
 
       const link = linkDeCelda(formulas[i]?.[idx.comparativa], null);
       const { equipment_id, sector_id } = resolver(enlaces, os);
@@ -617,7 +700,7 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
   // de Calcinación sus órdenes faltan en bloque. Borrarlas sería vaciar un
   // área entera por un error de red.
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OS, {
-    clavesLeidas: new Set(porNumero.keys()),
+    clavesLeidas: trajoLaPlanilla,
     cuando, inicio, fuentesSinLeer: sinLeer,
     sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
