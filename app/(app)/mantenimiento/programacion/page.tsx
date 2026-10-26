@@ -17,5 +17,14 @@ export default async function ProgramacionPage() {
   if (!user) redirect("/login");
   if (!(await esAdminMantenimiento(supabase, user.id))) redirect("/mantenimiento");
 
-  return <ProgramacionClient />;
+  // Para sumar a alguien al padrón del taller. `empleados` es un catálogo del
+  // núcleo con lectura abierta a cualquier autenticado: se lee, no se toca.
+  const { data: empleados } = await supabase
+    .from("empleados")
+    .select("id, nombre, apellido")
+    .eq("activo", true)
+    .order("apellido")
+    .order("nombre");
+
+  return <ProgramacionClient empleados={empleados ?? []} />;
 }
