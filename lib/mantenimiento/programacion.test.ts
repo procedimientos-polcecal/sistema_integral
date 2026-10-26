@@ -46,10 +46,15 @@ it("el cuadro entero se repite recien a las 6 semanas", () => {
   expect(foto(semanaDe(REF.lunes, 6)[0])).toBe(semana1);
 });
 
-// Review Focus 1
+// En JavaScript `-1 % 3` es `-1` y no `2`: sin normalizar, una semana anterior a
+// la referencia daría un índice negativo y un turno `undefined`. Con -1 sólo se
+// ve si falta la normalización; con -2 se ve también si está mal hecha (por
+// ejemplo, tomando el valor absoluto, que da bien en -1 y mal en -2).
 it("una semana anterior a la referencia no se va a negativo", () => {
   expect(turnoDelGrupo(REF, "2026-10-12", "A")).toBe("12-20");
   expect(turnoDelElectricista(REF, "2026-10-12", "e1")).toBe("12-20");
+  expect(turnoDelElectricista(REF, "2026-10-05", "e1")).toBe("8-16");
+  expect(turnoDelGrupo(REF, "2026-10-05", "A")).toBe("4-12");
   expect(semanasDesdeLaReferencia("2026-10-19", "2026-09-21")).toBe(-4);
 });
 

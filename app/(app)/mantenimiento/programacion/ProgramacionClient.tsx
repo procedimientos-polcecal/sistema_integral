@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Select from "@/components/Select";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@/lib/core/fechas";

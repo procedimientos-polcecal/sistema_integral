@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recalcularEmpleadoPeriodo } from "./engine/recalcular";
 import { sincronizarPeriodoVacaciones } from "./vacacionesDeAusencia";
+import { TIPOS_AUSENCIA } from "./tiposAusencia";
 
 /**
  * El alta de una ausencia, fuera de la ruta de RRHH para que la compartan las
@@ -18,12 +19,15 @@ import { sincronizarPeriodoVacaciones } from "./vacacionesDeAusencia";
  * ruta arma su propia respuesta, y así esto se puede probar sin Next.
  */
 
-/** Los tipos que acepta la base (`tipo_ausencia` de `008_rrhh_schema.sql`). */
-export const TIPOS_DE_AUSENCIA: readonly string[] = [
-  "LICENCIA_ART", "VACACIONES", "LICENCIA_GREMIAL", "PERMISO_PERSONAL",
-  "ENFERMEDAD_ACCIDENTE_INCULPABLE", "LICENCIA_SIN_GOCE_SUELDO", "SUSPENSION",
-  "FALLECIMIENTO_FAMILIAR", "EXAMEN_ESTUDIO", "TARDANZA", "INJUSTIFICADA", "OTRA",
-];
+/**
+ * Los tipos que acepta la base (`tipo_ausencia` de `008_rrhh_schema.sql`).
+ *
+ * Sale de `TIPOS_AUSENCIA` de `tiposAusencia.ts`, que es la lista de la
+ * pantalla de RRHH: había tres copias de los mismos doce valores (la base, la
+ * pantalla y ésta) y cualquiera podía quedar atrás sin que nada lo notara. Se
+ * deriva en vez de copiarse, así un tipo nuevo se agrega en un solo lugar.
+ */
+export const TIPOS_DE_AUSENCIA: readonly string[] = TIPOS_AUSENCIA.map(([valor]) => valor);
 
 /**
  * Los cuatro tipos que puede elegir el encargado del taller desde
