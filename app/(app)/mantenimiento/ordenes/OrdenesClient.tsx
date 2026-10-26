@@ -12,6 +12,7 @@ import {
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
+import { comoSeLee } from "@/lib/core/fechas";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
@@ -46,19 +47,18 @@ export function estadoMeta(v: string) {
 /**
  * Una de las fechas de la orden como la lee una persona: 12/10/2026.
  *
- * El `T00:00:00` no es decoración. `fecha`, `fecha_ejecucion` y `fecha_cierre`
- * son columnas `date`, así que llegan como "2026-10-12", y `new Date()` sobre
- * una fecha pelada la interpreta como **medianoche UTC**: en Argentina —UTC-3—
- * eso cae a las 21:00 del día anterior, y la pantalla mostraba **un día menos
- * que la planilla** en las tres. Con la hora pegada se parsea en hora local y
- * el día es el que dice la celda, lo mire quien lo mire y desde donde lo mire.
+ * Envuelve a `comoSeLee` nada más que para aceptar el null: las tres fechas
+ * pueden faltar, y qué se pone en su lugar lo decide cada lugar de la pantalla.
  *
- * Es la misma trampa que ya explica `fechaCorta` en `lib/compras/comparativa.ts`
- * y que el resto de Mantenimiento esquiva con este mismo `+ "T00:00:00"` —el
- * dashboard, ejecuciones, mantenimientos—. Acá faltaba.
+ * Lo que no hay que volver a escribir acá es `new Date(valor)`. `fecha`,
+ * `fecha_ejecucion` y `fecha_cierre` son columnas `date`, así que llegan como
+ * "2026-10-12", y `new Date()` sobre una fecha pelada la toma como **medianoche
+ * UTC**: en Argentina —UTC-3— eso cae a las 21:00 del día anterior, y las tres
+ * se leían **un día menos que la planilla**. `comoSeLee` no pasa por `Date`, así
+ * que el día es el que dice la celda desde cualquier huso.
  */
 function fechaDeLaOT(valor: string | null | undefined): string | null {
-  return valor ? new Date(valor + "T00:00:00").toLocaleDateString("es-AR") : null;
+  return valor ? comoSeLee(valor) : null;
 }
 
 export default function OrdenesClient({

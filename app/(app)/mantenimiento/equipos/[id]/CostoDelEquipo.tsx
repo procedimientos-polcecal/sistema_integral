@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { CostoDelEquipo as Costo } from "@/lib/mantenimiento/costoEquipo";
+import { comoSeLee } from "@/lib/core/fechas";
 
 /** Un requerimiento, con lo justo para listarlo. */
 export interface RequerimientoDelEquipo {
@@ -114,11 +115,24 @@ export default function CostoDelEquipo({
                           ? "—"
                           : pesos(Number(r.costo_iva))}
                       </p>
-                      {(r.fecha_pedido ?? r.fecha) && (
+                      {/* Las dos fechas se formatean distinto porque son
+                          columnas distintas, y meterlas en un solo `new Date()`
+                          —como estaban— daba mal una de las dos.
+                          `fecha_pedido` es `date`: llega como "2026-10-26" y
+                          `new Date()` la toma como medianoche UTC, que en
+                          Argentina —UTC-3— es el día anterior, así que el
+                          pedido se leía un día antes que en Compras. `fecha`
+                          es `timestamptz`: ahí sí hay un instante que convertir
+                          al huso de quien mira, y recortarle los diez primeros
+                          caracteres daría el día **en UTC**, que para un
+                          requerimiento cargado de noche es el de mañana. */}
+                      {r.fecha_pedido ? (
+                        <p className="text-xs text-slate-400">{comoSeLee(r.fecha_pedido)}</p>
+                      ) : r.fecha ? (
                         <p className="text-xs text-slate-400">
-                          {new Date(r.fecha_pedido ?? (r.fecha as string)).toLocaleDateString("es-AR")}
+                          {new Date(r.fecha).toLocaleDateString("es-AR")}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ))}
