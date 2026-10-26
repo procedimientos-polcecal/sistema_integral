@@ -313,6 +313,16 @@
         "columna": "creado_por",
         "tipo": "uuid",
         "nuleable": true
+      },
+      {
+        "columna": "ot_enlazada_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_enlazada_por",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "avisos_fotos": [
@@ -5068,6 +5078,107 @@
         "nuleable": false
       }
     ],
+    "mant_personal_taller": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "oficio",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "grupo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "hasta",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mant_programacion_pisadas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "dia",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "pisado_por_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mant_programacion_referencia": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "lunes",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "grupo_en_4a12",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "electricista_4a12_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "electricista_8a16_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "electricista_12a20_id",
+        "tipo": "uuid",
+        "nuleable": false
+      }
+    ],
     "mantenimiento_tarifas_hora": [
       {
         "columna": "id",
@@ -5674,6 +5785,26 @@
       {
         "columna": "gut_orden",
         "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "gut_puntaje",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "falla_modo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "falla_causa",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "falla_detalle",
+        "tipo": "text",
         "nuleable": true
       }
     ],
@@ -6915,6 +7046,16 @@
         "columna": "created_at",
         "tipo": "timestamptz",
         "nuleable": false
+      },
+      {
+        "columna": "entorno",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "host",
+        "tipo": "text",
+        "nuleable": true
       }
     ],
     "taller_vial_cargas": [
