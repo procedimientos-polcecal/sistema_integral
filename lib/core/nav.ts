@@ -137,6 +137,9 @@ export const NAV: NavItem[] = [
       // con el que un tercero dice qué hizo cada día.
       { label: "Partes de contratista", href: "/mantenimiento/partes-contratista", modulo: "mantenimiento" },
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+      // La ve sólo el admin de Mantenimiento, que es el encargado del taller: la
+      // semana de turnos y quién falta. No es una pantalla de consulta general.
+      { label: "Programación", href: "/mantenimiento/programacion", modulo: "mantenimiento", soloAdmin: true },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       {
