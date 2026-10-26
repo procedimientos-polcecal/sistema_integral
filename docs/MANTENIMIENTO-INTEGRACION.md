@@ -1683,6 +1683,160 @@ El aviso queda **dentro de la app**: no sale por mail ni por push. Lo ve quien
 entra a mirar. Si hiciera falta que llegue solo, la lógica ya está separada en
 `lib/mantenimiento/alertas.ts` y sirve igual para cualquier canal.
 
+## La programación semanal del taller (26/10/2026)
+
+`/mantenimiento/programacion`: la semana del taller mecánico y del eléctrico —tres
+turnos por siete días—, los huecos que dejan las ausencias y quién puede
+taparlos. Hasta ahora la armaba el encargado de memoria y no existía escrita en
+ningún lado. El diseño, con lo que se midió, está en el
+[spec](superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md)
+y el recorrido de la construcción en el
+[plan](superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md).
+Lo que sigue es lo que **no se deduce del código**.
+
+**Qué hay.** Tres tablas (`20261023105615`) y un índice único
+(`20261026084938`): el padrón `mant_personal_taller`, la semana de referencia
+`mant_programacion_referencia` y las pisadas `mant_programacion_pisadas`. La
+cuenta vive en `lib/mantenimiento/programacion.ts` (la rotación) y
+`lib/mantenimiento/disponibilidad.ts` (el cruce con las ausencias y los
+candidatos), todo funciones puras con sus tests. Cinco rutas bajo
+`/api/mantenimiento`: `programacion` (la semana), `programacion/pisadas`,
+`programacion/referencia`, `personal` (el padrón) y `ausencias` (la carga del
+encargado). No hay planilla de Google de ningún lado: nace adentro y se queda
+adentro, como Ensayos.
+
+### Son dos ciclos, y el cuadro entero se repite a las **6** semanas
+
+No a las 2 ni a las 3. Los dos grupos de mecánicos se dan vuelta cada semana
+entre 4-12 y 12-20, así que su ciclo tiene **período 2**; los tres electricistas
+avanzan un turno por semana y vuelven al que tenían a las 3, **período 3**. El
+cuadro completo recién coincide consigo mismo en el mínimo común múltiplo: 6.
+Modelar "la rotación" como un solo ciclo da bien las primeras dos semanas y mal
+después, sin un error que lo diga. Hay un test que mira las seis semanas contra
+el cuadro que se validó con el encargado, y otro que exige que ninguna de las
+semanas 2 a 6 sea igual a la primera y que la séptima sí. El 8-16 no lleva
+mecánicos: sólo electricista.
+
+**La rotación no se guarda, se calcula.** No hay una tabla con la grilla de cada
+semana: sale de la referencia y de la cuenta, hacia adelante y hacia atrás. Por
+eso las semanas anteriores a la referencia se pueden mirar, y por eso importa un
+detalle de JavaScript: `-1 % 3` es `-1` y no `2`, así que la distancia en
+semanas se normaliza antes de indexar. El test lo ejercita en -1 y en -2, porque
+con -1 solo no se distingue una normalización que falta de una mal hecha.
+
+**Qué ancla rige una semana.** No la más nueva a secas, sino la más nueva que no
+sea posterior a esa semana. Si alguien vuelve a anclar el ciclo, las semanas ya
+pasadas se recalcularían con el ancla nueva y cambiaría lo que el encargado vio
+en su momento. Antes de la primera ancla se toma la más vieja y se extrapola
+hacia atrás. Y para que "la más nueva que no sea posterior" tenga una sola
+respuesta, **no puede haber dos anclas del mismo lunes**: la ruta lo chequea
+leyendo antes de escribir, y eso no alcanza —dos envíos simultáneos pasan los
+dos—, así que la garantía es el índice único `20261026084938`. Sin él, la
+pantalla elegía entre las dos de forma indefinida y cambiaba **todas** las
+semanas desde ese lunes sin dar un error.
+
+**El padrón lleva vigencia (`desde`/`hasta`) y no es opcional.** Una semana
+pasada se arma con el padrón que regía entonces; si alguien entra, se va o
+cambia de grupo, recalcularla con el padrón de hoy reescribiría lo que se vio.
+Es la misma razón por la que la tarifa hora tiene historia. El oficio no está en
+`empleados` —mecánico, electricista y lubricador son oficios, no sectores— por
+lo que ya dijo la migración `20260903090920` del pañol.
+
+**Las pisadas son por día.** La rotación es semanal pero las faltas son por día
+(la gente de Mantenimiento trabaja 27 de 33 sábados), así que cuando el
+encargado mueve a alguien para tapar un hueco lo mueve ese día, y las semanas
+siguientes siguen saliendo del ciclo. El `unique (empleado_id, dia)` impide que
+una persona quede en dos turnos el mismo día.
+
+### De dónde salen las ausencias, y qué se deja afuera a propósito
+
+Sólo de `ausencias`, la tabla de RRHH. Tres decisiones que parecen omisiones y
+no lo son:
+
+- **`francos` está afuera del cruce.** `fecha_tomado` no es el día de descanso:
+  es **el día en que alguien apretó el botón** de "tomado"
+  (`FrancosClient.tsx` manda `hoyEnArgentina()`). Medido: de 217 francos hay 56
+  tomados y sus fechas caen en **tres días**, 35 de ellos el 01/09/2026. Cruzarlo
+  pintaría 35 huecos un lunes cualquiera, y es el mismo error que este proyecto
+  ya evita en las planillas: enlazar al que se le parece es peor que dejar en
+  null. **La consecuencia, asumida:** un franco tomado no abre hueco, y el
+  encargado puede ver programada a alguien que ese día no viene. Las 56 filas
+  viejas no se recuperan —la fecha real no quedó escrita en ningún lado—; el
+  arreglo es de RRHH (pedir el día real al marcarlo) y está nombrado en el spec.
+- **`TARDANZA` no cuenta como falta.** Está en el mismo enum que `VACACIONES`,
+  pero quien llega tarde viene a trabajar: pintarlo como hueco muestra un
+  agujero donde hay una persona, y la primera vez que pase el encargado deja de
+  creerle a la pantalla. Hoy no hay ni una en las 144 ausencias; la exclusión es
+  una defensa para el día en que se cargue la primera. Los otros once tipos sí
+  cuentan, justificados o no.
+- **`vacaciones` no se lee.** Las vacaciones entran como una `ausencia` de tipo
+  `VACACIONES` y la ruta sincroniza la fila de `vacaciones` desde ahí; leer las
+  dos contaría lo mismo dos veces.
+
+**El hueco dice que no está, no por qué.** `ausencias` está cerrada con
+`tiene_acceso_rrhh()` y `ENFERMEDAD_ACCIDENTE_INCULPABLE`, `LICENCIA_ART` o
+`SUSPENSION` son dato médico y disciplinario. El cruce lee con el cliente admin y
+devuelve un booleano por persona y día; no se abrió ninguna policy sobre
+`ausencias` porque eso expondría las 70 fichas y no las nueve.
+
+### Por qué el encargado carga las ausencias, y cómo se le deja
+
+**Medido sobre las 144 ausencias cargadas: la mediana entre el día en que
+empieza la ausencia y el día en que alguien la carga es de 39 días tarde, y una
+sola se cargó con un día o más de anticipación.** Una pantalla que sólo lee lo
+que RRHH cargó no avisaría nada: mostraría la semana limpia y los huecos
+aparecerían cuando ya pasaron. Por eso la carga del encargado, en el momento en
+que el operario le avisa y desde el teléfono, **es la puerta principal por la que
+entra el dato** y no un accesorio, y la pantalla se armó alrededor de eso.
+
+La ruta es `POST /api/mantenimiento/ausencias` y escribe con el cliente admin,
+así que **ahí no corre RLS: lo único que lo separa de las fichas de los 70
+empleados son los chequeos del archivo**. Son el nivel de edición en
+Mantenimiento, que la persona esté en el padrón y vigente todo el rango, y que
+el tipo sea uno de cuatro (`PERMISO_PERSONAL`, `ENFERMEDAD_ACCIDENTE_INCULPABLE`,
+`INJUSTIFICADA`, `OTRA`; `altaDeAusencia` NO restringe, valida contra los doce de
+la base). Tres cosas más, que son las que evitan un daño:
+
+- **Dar de alta no es insertar una fila.** El cuerpo se sacó de la ruta de RRHH
+  a `lib/rrhh/altaDeAusencia.ts` y lo comparten las dos puntas, porque después
+  del insert hay que sincronizar vacaciones y recalcular `calculos_diarios`. Una
+  ruta que sólo insertara dejaría una ausencia visible que la liquidación no ve,
+  y eso se nota en el sueldo de alguien.
+- **Un período liquidado no se toca**: se rechaza con un 400. El agujero
+  —`recalcular.ts` no mira `estado_liquidacion`— sigue del lado de RRHH, que no
+  se tocó en este proyecto; lo que se evitó es agrandarlo.
+- **Sólo se corrige o se borra lo que cargó el que pide** y de uno de esos
+  cuatro tipos. Corregir y borrar **se auditan** (`corregir`, `borrar`) y el
+  registro va **antes** del cambio: si no entra, no se hace, porque `ausencias`
+  no tiene historial y lo que se pierde no se reconstruye.
+
+### Quién la ve, y lo que no hace
+
+La pantalla y las tres tablas se cierran a **admin de Mantenimiento**
+(`mant_es_admin()`), que es el nivel que ya existía para configurar catálogos y
+el padrón es un catálogo. El encargado pidió que no la vea nadie más y eso no
+existe como permiso: **la ve todo el que tenga admin de Mantenimiento, hoy
+incluido cualquier `admin_sistema`**. Si mañana hay dos con admin y uno no debe
+verla, hace falta una marca en el padrón o un nivel nuevo; inventarlo hoy para
+una persona sería construir un mecanismo que nadie pidió.
+
+No decide nada solo: **sugiere** quién tapa un hueco con dos criterios, que sea
+del mismo oficio y que no esté ya trabajando ese turno. No equilibra, no puntúa y
+no modela cuánta anticipación hubo. El turno de 20 a 4 no existe en este diseño
+(no tiene operarios designados) y los feriados no tienen trato especial. La
+palabra "turnos" ya estaba ocupada: `/rrhh/turnos` es el catálogo de horarios con
+tolerancia con el que el motor de RRHH **adivina el turno a partir de la
+marcación**, que va al revés; por eso esto se llama *programación* y no toca
+`jornadas`.
+
+### Estado
+
+**Falta cargar la semana de referencia** (la tabla estaba vacía al cerrar esto,
+26/10/2026): hasta que el encargado la cargue, la pantalla muestra el padrón y
+dice que falta la referencia, sin grilla. La migración `20261026084938`
+**la corre una persona a mano** en el editor SQL; si para entonces alguien cargó
+dos anclas del mismo lunes, falla al crear el índice y hay que borrar una a mano.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo

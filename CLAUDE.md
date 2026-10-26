@@ -36,6 +36,7 @@ código.
 |---|---|
 | Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md) |
+| Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` queda **afuera del cruce a propósito**, porque `fecha_tomado` es el día en que alguien apretó el botón y no el día de descanso (56 francos tomados caen en tres fechas: cruzarlos pintaría 35 huecos un lunes) |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
@@ -115,12 +116,27 @@ Antes de escribir una, leer las ocho trampas del
   `remises_empleados_datos.direccion`.
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
-  [lib/core/auditoria.ts](lib/core/auditoria.ts). Hoy la llaman seis rutas:
-  postear un asiento en Odoo, mover los permisos de un usuario, cerrar una
-  liquidación, ajustar stock y aprobar o denegar una compra. **Si agregás una
-  acción irreversible, agregá la llamada** — la escribe la aplicación y no un
-  trigger, así que es lo único que puede olvidarse. El porqué de esa decisión,
-  medido, está en el
+  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/10/2026 con
+  `grep`: la llaman **ocho rutas y un ayudante compartido**, no "seis rutas"
+  como decía esto antes. Las ocho: postear un asiento en Odoo, mover los permisos de
+  un usuario, cerrar una liquidación, ajustar stock, aprobar o denegar una
+  compra, y —desde la programación del taller— corregir o borrar una
+  ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
+  `mantenimiento/ausencias`) y cargar una semana de referencia
+  (`mantenimiento/programacion/referencia`). El ayudante es
+  [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
+  registra el `borrar` de las sincronizaciones que espejan una planilla, así
+  que ese verbo lo escribe un proceso y no una persona. Los verbos son
+  **nueve** (`ACCIONES` en `auditoria.ts`): `postear`, `aprobar`, `denegar`,
+  `cerrar`, `ajustar`, `conceder_acceso`, `quitar_acceso`, `borrar` y
+  `corregir`. Este último es el único que no es un acto en una dirección sino
+  el paso de un valor a otro, y por eso **necesita** `valor_anterior` y
+  `valor_nuevo` (la función no lo obliga: lo obliga la ruta que lo llama): sin
+  el par el registro dice que alguien corrigió algo y no qué. Para contar de nuevo: `grep -rln "auditar(" app lib` y descartar las
+  que sólo lo nombran en un comentario (`mantenimiento/ordenes/[id]/gut`).
+  **Si agregás una acción irreversible, agregá la llamada** — la escribe la
+  aplicación y no un trigger, así que es lo único que puede olvidarse. El
+  porqué de esa decisión, medido, está en el
   [spec](docs/superpowers/specs/2026-09-22-auditoria-de-lo-irreversible-design.md)
   y en el encabezado de la migración `20261005090646`. La tabla es inmutable de
   verdad: no tiene policy de update ni de delete, y además un trigger las

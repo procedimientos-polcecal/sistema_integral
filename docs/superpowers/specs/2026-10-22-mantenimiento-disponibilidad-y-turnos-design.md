@@ -1,7 +1,9 @@
 # Mantenimiento — disponibilidad del taller y programación semanal de turnos
 
 Acordado el 22/10/2026 con el encargado. Medido contra la base real y cerrado el
-23/10/2026. Sin empezar.
+23/10/2026. Construido entre el 23 y el 26/10/2026: lo que quedó
+escrito del resultado está en la sección "La programación semanal del taller" de
+[MANTENIMIENTO-INTEGRACION.md](../../MANTENIMIENTO-INTEGRACION.md).
 
 ## Qué problema resuelve
 
