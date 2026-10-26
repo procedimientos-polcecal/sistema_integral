@@ -51,6 +51,11 @@ export async function POST(request: Request) {
     employeeId, fechaDesde, fechaHasta, tipo, justificada, observaciones,
     anioCorrespondiente, cargadoPorId: user!.id,
   });
-  if (error) return NextResponse.json({ error }, { status });
+  // Se mira el `status` y no si `error` tiene texto: un mensaje vacío de
+  // Postgres haría caer un error adentro de un 201 con el cuerpo en undefined.
+  // La punta de Mantenimiento ya estaba así; ésta es de donde salió aquélla y
+  // había quedado sin el arreglo, que es la peor forma de tener un contrato
+  // compartido: una mitad defendida y la otra no.
+  if (status) return NextResponse.json({ error }, { status });
   return NextResponse.json(ausencia, { status: 201 });
 }

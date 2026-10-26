@@ -153,6 +153,31 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (body.justificada !== undefined) data.justificada = body.justificada;
   if (body.observaciones !== undefined) data.observaciones = body.observaciones || null;
 
+  /*
+   * Un PUT que no cambia nada no se escribe.
+   *
+   * Todos los campos del `Cuerpo` son opcionales porque esto es un PUT parcial,
+   * así que un `{}` llegaba hasta acá con `data` vacío, el `update` no tocaba
+   * una sola columna... y el registro de auditoría se escribía igual. La tabla
+   * `auditoria` no tiene policy de update ni de delete y un trigger las
+   * rechaza: cada fila que entra ahí es para siempre, así que una por no-op es
+   * ruido permanente en la única tabla que no se puede limpiar.
+   *
+   * La punta de Mantenimiento ya se defendía así (su `hayCambios`); esta no, y
+   * la necesita más: allá la pantalla apaga el botón cuando no hay cambios y
+   * acá no hay freno del lado del navegador.
+   */
+  if (!Object.keys(data).length) {
+    return NextResponse.json(
+      {
+        error:
+          "No hay nada para cambiar: mandá al menos uno de empleado, fechaDesde, fechaHasta, " +
+          "tipo, justificada u observaciones",
+      },
+      { status: 400 }
+    );
+  }
+
   // Lo que decía antes, que es lo que el registro guarda y lo que después no se
   // puede reconstruir. De paso, una ausencia que no existe ahora contesta 404 en
   // vez del error interno que devolvía el `.single()` sobre cero filas.
