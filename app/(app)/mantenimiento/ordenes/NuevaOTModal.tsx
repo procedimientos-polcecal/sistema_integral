@@ -361,7 +361,15 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
 
           <F label="Repuestos utilizados">
-            <RepuestosDeLaOT lineas={repuestos} onCambiar={setRepuestos} deshabilitado={saving} />
+            {/* Acá sí busca contra el inventario: esta pantalla ya depende del
+                servidor para dibujarse. El formulario sin señal usa el mismo
+                componente con la búsqueda apagada — ver su encabezado. */}
+            <RepuestosDeLaOT
+              lineas={repuestos}
+              onCambiar={setRepuestos}
+              deshabilitado={saving}
+              buscarEnInventario
+            />
           </F>
 
 

@@ -261,3 +261,33 @@ describe("el puntaje GUT de la orden vieja", () => {
     expect(noEntraron).toEqual([]);
   });
 });
+
+describe("el codigo del inventario al copiar", () => {
+  /**
+   * Desde el 26/10/2026 el alta busca contra el inventario y el renglon puede
+   * llevar codigo. Copiar una OT tiene que traerlo: es el mismo repuesto, asi
+   * que el enlace al panol sigue valiendo. Sin esto el renglon copiado se ve
+   * identico al original pero queda desenlazado, y eso no se nota.
+   */
+  it("se copia el codigo que tenia la orden vieja", () => {
+    expect(lineasDeLaOT(ot({
+      repuestos: [{ nombre: "Rodamiento 6206", cantidad: "2", codigo: "RD-6206" }],
+    }))).toEqual([{ nombre: "Rodamiento 6206", cantidad: "2", codigo: "RD-6206" }]);
+  });
+
+  /** Una OT vieja sin codigo se copia sin la clave, no con una vacia. */
+  it("sin codigo la clave no esta", () => {
+    expect(lineasDeLaOT(ot({
+      repuestos: [{ nombre: "Correa B-75", cantidad: "1", codigo: null }],
+    }))).toEqual([{ nombre: "Correa B-75", cantidad: "1" }]);
+    expect(lineasDeLaOT(ot({
+      repuestos: [{ nombre: "Correa B-75", cantidad: "1" }],
+    }))).toEqual([{ nombre: "Correa B-75", cantidad: "1" }]);
+  });
+
+  /** Y el texto suelto de las OT anteriores a los renglones sigue sin codigo. */
+  it("el repuesto suelto de una OT vieja no inventa un codigo", () => {
+    expect(lineasDeLaOT(ot({ repuesto: "2 grillas 2 mm", repuestos: [] })))
+      .toEqual([{ cantidad: "", nombre: "2 grillas 2 mm" }]);
+  });
+});

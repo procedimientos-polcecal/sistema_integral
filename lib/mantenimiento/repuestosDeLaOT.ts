@@ -47,19 +47,41 @@ export interface LineaDeRepuesto {
   /** Texto y no número: la planilla recibe "2", "1/2", "20 cm". */
   cantidad: string;
   nombre: string;
+  /**
+   * El código del inventario, **sólo cuando se eligió de la búsqueda**.
+   *
+   * Hasta el 26/10/2026 esto no existía y `filasParaLaBase` escribía `null`
+   * fijo, con este motivo: «el formulario de alta no lo pide (…) y un código
+   * inventado es peor que un código vacío». El motivo era bueno y dejó de
+   * aplicar cuando el alta pasó a buscar contra el inventario: el código ya no
+   * lo inventa nadie, sale de la fila que la persona eligió.
+   *
+   * Sigue vacío cuando el nombre se escribió a mano, que es el mismo caso de
+   * antes — y la pantalla lo **borra si después editan el nombre**, porque un
+   * código que quedó pegado de otra pieza es justo el enlace equivocado que
+   * «enlazar al que se le parece es peor que dejar en null» viene a evitar.
+   */
+  codigo?: string;
 }
 
 /** Los renglones que valen: los que dicen qué repuesto es. */
 export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | null): LineaDeRepuesto[] {
   if (!Array.isArray(lineas)) return [];
   return lineas
-    .map((l) => ({
-      cantidad: String(l?.cantidad ?? "").trim(),
-      // El `;` separa los renglones del texto de la planilla y la `,` también
-      // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
-      // partiría ese renglón en dos.
-      nombre: String(l?.nombre ?? "").replace(/[,;]/g, " ").replace(/\s+/g, " ").trim(),
-    }))
+    .map((l) => {
+      const codigo = String(l?.codigo ?? "").trim();
+      return {
+        cantidad: String(l?.cantidad ?? "").trim(),
+        // El `;` separa los renglones del texto de la planilla y la `,` también
+        // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
+        // partiría ese renglón en dos.
+        nombre: String(l?.nombre ?? "").replace(/[,;]/g, " ").replace(/\s+/g, " ").trim(),
+        // Sin código la clave **no está**, en vez de estar vacía: es la misma
+        // distinción que `filasParaLaBase` lleva a `null`, y deja intactos los
+        // renglones de todo lo que ya existía.
+        ...(codigo ? { codigo } : {}),
+      };
+    })
     .filter((l) => l.nombre !== "");
 }
 
@@ -82,18 +104,19 @@ export function textoParaLaPlanilla(lineas: readonly LineaDeRepuesto[] | undefin
 /**
  * Las filas para `ordenes_trabajo_repuestos`.
  *
- * `codigo` queda en null a propósito: el formulario de alta no lo pide. Se
- * completa después desde el modal de repuestos de la orden, que además busca
- * contra el inventario — y un código inventado es peor que un código vacío.
+ * `codigo` viaja desde el 26/10/2026, y **sólo el que salió de la búsqueda**:
+ * el alta ahora busca contra el inventario igual que el modal de repuestos de
+ * la orden. Lo que se escribió a mano sigue yendo en null, que es como estaba
+ * todo hasta ese día — un código inventado sigue siendo peor que uno vacío.
  */
 export function filasParaLaBase(
   workOrderId: string,
   lineas: readonly LineaDeRepuesto[] | undefined | null
-): Array<{ work_order_id: string; nombre: string; codigo: null; cantidad: string | null }> {
+): Array<{ work_order_id: string; nombre: string; codigo: string | null; cantidad: string | null }> {
   return lineasQueValen(lineas).map((l) => ({
     work_order_id: workOrderId,
     nombre: l.nombre,
-    codigo: null,
+    codigo: l.codigo || null,
     cantidad: l.cantidad || null,
   }));
 }

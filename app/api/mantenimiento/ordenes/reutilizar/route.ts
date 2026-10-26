@@ -54,7 +54,7 @@ export async function GET(request: Request) {
   // que es de donde salen las 2.200 órdenes anteriores a los renglones.
   const { data: repuestos } = await supabase
     .from("ordenes_trabajo_repuestos")
-    .select("nombre, cantidad")
+    .select("nombre, cantidad, codigo")
     .eq("work_order_id", data.id)
     .order("created_at");
 

@@ -43,6 +43,24 @@ export function estadoMeta(v: string) {
   return ESTADOS.find((e) => e.value === v) ?? { label: v, color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" };
 }
 
+/**
+ * Una de las fechas de la orden como la lee una persona: 12/10/2026.
+ *
+ * El `T00:00:00` no es decoración. `fecha`, `fecha_ejecucion` y `fecha_cierre`
+ * son columnas `date`, así que llegan como "2026-10-12", y `new Date()` sobre
+ * una fecha pelada la interpreta como **medianoche UTC**: en Argentina —UTC-3—
+ * eso cae a las 21:00 del día anterior, y la pantalla mostraba **un día menos
+ * que la planilla** en las tres. Con la hora pegada se parsea en hora local y
+ * el día es el que dice la celda, lo mire quien lo mire y desde donde lo mire.
+ *
+ * Es la misma trampa que ya explica `fechaCorta` en `lib/compras/comparativa.ts`
+ * y que el resto de Mantenimiento esquiva con este mismo `+ "T00:00:00"` —el
+ * dashboard, ejecuciones, mantenimientos—. Acá faltaba.
+ */
+function fechaDeLaOT(valor: string | null | undefined): string | null {
+  return valor ? new Date(valor + "T00:00:00").toLocaleDateString("es-AR") : null;
+}
+
 export default function OrdenesClient({
   canEdit, sectores, equipos, contratistas, areas, empresas, ubicaciones, sync
 }: {
@@ -725,8 +743,26 @@ export default function OrdenesClient({
                           Sin justificar
                         </span>
                       )}
-                      <span className="text-xs text-slate-400 shrink-0 hidden md:block">
-                        {o.fecha ? new Date(o.fecha).toLocaleDateString("es-AR") : "—"}
+                      {/* Las dos fechas que se miran de un vistazo: cuándo se
+                          emitió la orden y cuándo se hace. La de ejecución es
+                          la que más se busca —es la que contesta "¿cuándo
+                          toca?"— y estaba sólo adentro del detalle, así que
+                          averiguarla era abrir las órdenes de a una.
+                          Van rotuladas porque dos fechas peladas, una debajo
+                          de la otra, no se distinguen; el rótulo va más claro
+                          para que lo que se lea sigan siendo los números, y
+                          alineadas a la derecha para que los días queden en
+                          columna aunque los rótulos midan distinto. */}
+                      <span
+                        title="Fecha de la orden y fecha de ejecución"
+                        className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
+                      >
+                        <span className="block text-xs text-slate-400 whitespace-nowrap">
+                          <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                        </span>
+                        <span className="block text-xs text-slate-400 whitespace-nowrap">
+                          <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                        </span>
                       </span>
                       <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -912,8 +948,8 @@ function OTDetail({
         <D label="Prioridad"       value={prioridadEfectiva(o)} />
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
-        <D label="Fecha ejecución" value={o.fecha_ejecucion ? new Date(o.fecha_ejecucion).toLocaleDateString("es-AR") : null} />
-        <D label="Fecha cierre"    value={o.fecha_cierre   ? new Date(o.fecha_cierre).toLocaleDateString("es-AR")   : null} />
+        <D label="Fecha ejecución" value={fechaDeLaOT(o.fecha_ejecucion)} />
+        <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>
 
@@ -1054,7 +1090,7 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
       {/* Cada columna son las 50 de más puntaje GUT y no las 50 más nuevas:
           sin el recuadro, el orden de las tarjetas no tendría explicación. */}
       <div className="flex items-center justify-between gap-2">
-        {o.fecha ? <p className="text-xs text-slate-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p> : <span />}
+        {o.fecha ? <p className="text-xs text-slate-300">{fechaDeLaOT(o.fecha)}</p> : <span />}
         <PuntajeGut orden={o} />
       </div>
     </div>
