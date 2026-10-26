@@ -425,11 +425,26 @@ git commit -m "feat(rrhh): el alta de ausencia sale de la ruta a lib para compar
   {
     dias: string[];                    // los siete, de lunes a domingo
     asignaciones: Asignacion[];
-    ausentes: { empleadoId: string; dia: string }[];   // sin el motivo
+    // Sin el motivo, nunca. Lleva turno y oficio **del día**, para que la
+    // pantalla no tenga que rearmar la clave de `candidatos` buscando a la
+    // persona en otro lado: si alguien cambia de oficio a mitad de semana, esa
+    // reconstrucción compone una clave que no existe y no muestra candidatos,
+    // sin avisar.
+    ausentes: { empleadoId: string; dia: string; turno: Turno; oficio: Oficio }[];
     candidatos: Record<string, string[]>;              // "dia|turno|oficio" -> empleadoId[]
     personas: { empleadoId: string; nombre: string; oficio: Oficio; grupo: Grupo | null }[];
+    // Quién está en el padrón ese día pero el ciclo no le da turno — hoy, un
+    // electricista que no es uno de los tres de la referencia. Sin esto queda
+    // invisible: no aparece asignado y tampoco como ausente.
+    sinTurno: { empleadoId: string; dia: string }[];
     sinReferencia?: true;
   }
+  ```
+  Cuando no hay referencia, **los campos siguen estando**: listas vacías y
+  `personas` lleno, porque el padrón se lee igual. Así la pantalla puede decir
+  "falta cargar la referencia, el taller tiene estas N personas" en vez de
+  romperse al mapear.
+  ```ts
   ```
 
 **Depende de la tarea 1 aplicada.** No empezar hasta que el usuario confirme que corrió la migración.
