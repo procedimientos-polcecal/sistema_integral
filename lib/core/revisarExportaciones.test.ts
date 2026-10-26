@@ -26,10 +26,23 @@ const quienesEscriben = revisor.quienesEscriben as unknown as (
   archivos: Archivo[], registro: Record<string, Entrada>
 ) => Set<string>;
 
+/**
+ * Arma la línea de import de un archivo inventado, **partida en dos**.
+ *
+ * No es capricho: `scripts/revisar-arbol-commiteado.mjs` busca `from "…"` con
+ * un regex sobre el texto crudo, así que un import de mentira escrito entero
+ * acá lo manda a resolver `@/lib/modulo/espejo`, que no existe, y el chequeo
+ * que el repo corre antes de cada deploy sale rojo por un fixture. Partida, la
+ * cadena se arma igual en tiempo de ejecución —que es cuando el test la
+ * necesita— y deja de parecer un import de verdad para quien lee el archivo.
+ */
+const importa = (nombres: string, modulo: string) =>
+  `import { ${nombres} } ` + "from " + `"@/${modulo}";`;
+
 const ESPEJO: Archivo = {
   ruta: "lib/modulo/espejo.ts",
   texto: `
-    import { escribirCeldas } from "@/lib/core/sheets";
+    ${importa("escribirCeldas", "lib/core/sheets")}
     export async function espejarCosa(c) { await escribirCeldas("id", c); }
   `,
 };
@@ -40,12 +53,13 @@ const REGISTRO_BASE = {
 
 const rompe = (h: Hallazgo[]) => h.filter((x) => x.severidad === "ROMPE");
 
+
 describe("revisarExportaciones", () => {
   it("un archivo declarado y en regla no dice nada", () => {
     const ruta: Archivo = {
       ruta: "app/api/modulo/route.ts",
       texto: `
-        import { espejarCosa } from "@/lib/modulo/espejo";
+        ${importa("espejarCosa", "lib/modulo/espejo")}
         const r = await espejarCosa(x);
         await admin.update({ sheets_pendiente: r.error });
       `,
@@ -65,7 +79,7 @@ describe("revisarExportaciones", () => {
     const ruta: Archivo = {
       ruta: "app/api/modulo/nueva/route.ts",
       texto: `
-        import { espejarCosa } from "@/lib/modulo/espejo";
+        ${importa("espejarCosa", "lib/modulo/espejo")}
         const r = await espejarCosa(x);
         return NextResponse.json({ planilla_error: r.error });
       `,
@@ -79,7 +93,7 @@ describe("revisarExportaciones", () => {
   it("y también la que llama a la primitiva derecho", () => {
     const suelta: Archivo = {
       ruta: "app/api/otro/route.ts",
-      texto: `import { escribirCeldas } from "@/lib/core/sheets"; await escribirCeldas("id", []);`,
+      texto: `${importa("escribirCeldas", "lib/core/sheets")} await escribirCeldas("id", []);`,
     };
     const h = rompe(revisarExportaciones([suelta], {}));
     expect(h.map((x) => x.ruta)).toEqual(["app/api/otro/route.ts"]);
@@ -89,7 +103,7 @@ describe("revisarExportaciones", () => {
     const ruta: Archivo = {
       ruta: "app/api/modulo/route.ts",
       texto: `
-        import { espejarCosa } from "@/lib/modulo/espejo";
+        ${importa("espejarCosa", "lib/modulo/espejo")}
         const r = await espejarCosa(x);
         return NextResponse.json({ planilla_error: r.error });
       `,
@@ -140,7 +154,7 @@ describe("quienesEscriben", () => {
     const cola: Archivo = {
       ruta: "lib/modulo/conCola.ts",
       texto: `
-        import { escribirCeldas } from "@/lib/core/sheets";
+        ${importa("escribirCeldas", "lib/core/sheets")}
         export async function exportarCosa(id) {
           await escribirCeldas("id", []);
           await admin.update({ sheets_pendiente: null });
@@ -149,7 +163,7 @@ describe("quienesEscriben", () => {
     };
     const llamador: Archivo = {
       ruta: "app/api/modulo/route.ts",
-      texto: `import { exportarCosa } from "@/lib/modulo/conCola"; await exportarCosa(1);`,
+      texto: `${importa("exportarCosa", "lib/modulo/conCola")} await exportarCosa(1);`,
     };
     const escriben = quienesEscriben([cola, llamador], {
       "lib/modulo/conCola.ts": { estrategia: "cola", porque: "anota ella misma" },
