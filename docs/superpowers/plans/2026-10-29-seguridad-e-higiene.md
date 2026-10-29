@@ -342,6 +342,9 @@ Más el encabezado que explica el `55P04`, calcado de
    (1,2,3)`, `controles in (1,3,5)`, `magnitud_dano in (3,7,9)`,
    `legislacion in (1,3,5)`. Todos admiten null.
 4. `check (num_nonnulls(sector_id, equipo_id) <= 1)`.
+4b. **`clave text unique`**, nullable — la clave de idempotencia que manda la
+   cola offline. Va acá y no en una migración posterior porque la Tarea 3 la
+   necesita y una migración aplicada no se edita.
 5. `syh_fotos` — `id`, `condicion_id` (`on delete cascade`), `ruta`,
    `subida_por`, `subida_el`, `respaldada_en_drive_el`.
 6. Las tres funciones `tiene_acceso_syh()`, `puede_editar_syh()`,
@@ -417,7 +420,9 @@ avanzar a la Tarea 3 hasta que conteste.
 
 **Interfaces:**
 - Consumes: `puedeEditarSyh()` (Tarea 2); `validar()` y `errorDeValidacion()`
-  de `lib/core/validar.ts`; `clasificar()` (Tarea 1).
+  de `lib/core/validar.ts`. **No consume `clasificar()`**: el nivel lo calcula
+  la base con sus columnas generadas y la clasificación la hace la pantalla
+  (Tarea 4). La ruta no clasifica nada.
 - Produces: `POST /api/seguridad-higiene/condiciones` devuelve
   `{ numero: string }` — el campo se llama **`numero`** y la cola lo lee de ahí
   (Tarea 5). `POST /api/seguridad-higiene/fotos` devuelve `{ ruta, link }`.
@@ -501,8 +506,13 @@ que llega del formulario termina siendo una ruta.
 
 - [ ] **Step 7: Escribir la ruta del glosario**
 
-`GET /api/seguridad-higiene/peligros` devuelve `{ data: [{id, nombre}] }` de los
-activos. La consume el catálogo offline (Tarea 5).
+`GET /api/seguridad-higiene/peligros` **exige `puedeEditarSyh()`** y devuelve
+`{ data: [{id, nombre}], puedeCargar: true }`. Quien no pueda editar recibe 403.
+
+Las dos cosas que devuelve son a propósito: la Tarea 5 usa este mismo endpoint
+para saber si al teléfono hay que mostrarle la tarjeta de condición. Un 403 acá
+**es** la respuesta de «esta persona no puede cargar», así que no hace falta un
+endpoint de permisos aparte.
 
 - [ ] **Step 8: Ejercitar el alta dos veces con la misma clave**
 
@@ -616,7 +626,7 @@ En `lib/core/colaOffline.test.ts`:
 it("la condición tiene su nombre, su artículo y su concordancia", () => {
   expect(comoSeLlama("condicion")).toBe("Condición insegura");
   expect(conSuArticulo("condicion")).toBe("la condición insegura");
-  expect(concordado("condicion", "parad")).toBe("a");
+  expect(concordado("condicion", "parad")).toBe("parada");
 });
 
 it("la condición va a su ruta de alta", () => {
