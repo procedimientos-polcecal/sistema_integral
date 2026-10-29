@@ -5,8 +5,9 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import { numeroDeOT } from "@/lib/mantenimiento/reutilizarOT";
-import { escribirCeldas } from "@/lib/core/sheets";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
+import { escribirEnLaFilaDelAviso } from "@/lib/mantenimiento/planillaDelAviso";
+import { camposDelPendiente, elIntentoDelAviso } from "@/lib/mantenimiento/pendienteDelAviso";
 import {
   loQueImpideEnlazar, loQueHayQueMirarAntesDeEnlazar, avisoDeEnlazada,
   loQueImpideDesenlazar, avisoDeDesenlazada,
@@ -198,10 +199,11 @@ export async function POST(request: Request) {
  * escrita vuelve a entrar en la próxima sincronización y deja al aviso
  * contando como que ya tiene orden, así que hay que borrarla a mano.
  *
- * Ese «a mano» es el hueco que `marcarElAviso` explica entero: los avisos no
- * tienen cola de pendientes ni drenaje, así que esto se queda en la pantalla a
- * falta de algo mejor. Revisado el 26/10/2026 y declarado en el registro de
- * `scripts/revisar-exportaciones.mjs`.
+ * Ese «a mano» dejó de hacer falta el 29/10/2026: si la escritura no sale,
+ * queda anotada en `sheets_pendiente` y la reescribe el drenaje de la
+ * sincronización, que además no importa ese aviso hasta lograrlo. Lo que sigue
+ * siendo cierto es el riesgo si eso fallara para siempre, y por eso el mensaje
+ * no cambia de tono.
  *
  * **No se audita**, igual que retomar un aviso desestimado: esto *es* el
  * deshacer, y la orden de trabajo no se toca.
@@ -265,19 +267,24 @@ export async function DELETE(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  let planilla_error: string | null = null;
-  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
+  // Vaciar la celda **es** el desenlace, no un efecto suyo, así que si no sale
+  // queda anotado y lo termina el drenaje. Vaciar acá es seguro —y no lo es en
+  // general— porque `loQueImpideDesenlazar` ya se negó arriba cuando el número
+  // lo escribió una persona: lo único que se borra es lo que el sistema puso.
+  const planilla_error = await escribirEnLaFilaDelAviso(aviso, [
+    { columna: COLUMNA_OT_ASIGNADA, valor: "" },
+  ]);
 
-  if (planilla && aviso.sheets_row) {
-    try {
-      await escribirCeldas(planilla, [{
-        pestana, fila: aviso.sheets_row, columna: COLUMNA_OT_ASIGNADA, valor: "",
-      }]);
-    } catch (e) {
-      planilla_error = e instanceof Error ? e.message : String(e);
-    }
-  }
+  await admin
+    .from("avisos")
+    .update(
+      elIntentoDelAviso(
+        planilla_error,
+        ["ot_asignada"],
+        camposDelPendiente(guardado.sheets_pendiente_campos)
+      )
+    )
+    .eq("id", id);
 
   return NextResponse.json({
     data: guardado,

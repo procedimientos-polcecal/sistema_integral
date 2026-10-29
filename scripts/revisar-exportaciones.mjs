@@ -158,27 +158,31 @@ export const REGISTRO = {
       "es que lo vacío no viaja—. El porqué largo y lo medido están en el " +
       "encabezado de la ruta.",
   },
-  "lib/mantenimiento/marcarElAviso.ts": {
-    estrategia: "pantalla",
+  "lib/mantenimiento/planillaDelAviso.ts": {
+    estrategia: "delega",
     porque:
-      "HUECO CONOCIDO, anotado el 26/10/2026. Escribe `OT ASIGNADA` y `filaDeAviso` " +
-      "la vuelve a leer, así que el próximo sync pisa `ot_asignada` con la celda " +
-      "vacía. No pierde la decisión —`work_order_id` no se importa, y es el que " +
-      "manda en `finalDelAviso`—, pero la planilla no se entera nunca. Encolarlo " +
-      "pide una columna en `avisos` y un drenaje: ver las notas de la tarea.",
+      "La escritura compartida de los tres caminos de avisos. Devuelve el motivo y " +
+      "no lanza; lo anota quien la llama.",
+  },
+  "lib/mantenimiento/marcarElAviso.ts": {
+    estrategia: "cola",
+    porque:
+      "Anota el pendiente de `ot_asignada` desde el 29/10/2026. Era un hueco: " +
+      "`filaDeAviso` relee `OT ASIGNADA`, así que el sync pisaba el enlace con la " +
+      "celda vacía.",
   },
   "app/api/mantenimiento/avisos/desestimar/route.ts": {
-    estrategia: "pantalla",
+    estrategia: "cola",
     porque:
-      "HUECO CONOCIDO, mismo caso que `marcarElAviso`: escribe OBSERVACIONES, que " +
-      "`filaDeAviso` relee. Sobreviven `desestimado_en` y `motivo_desestimado`, " +
-      "así que la decisión no se pierde; la planilla sí queda sin enterarse.",
+      "Los dos caminos anotan el pendiente de `observaciones`. El DELETE **vacía** " +
+      "la celda, que es la mitad de por qué esta cola guarda el campo en vez de " +
+      "rearmar todo desde la fila.",
   },
   "app/api/mantenimiento/avisos/enlazar/route.ts": {
-    estrategia: "pantalla",
+    estrategia: "cola",
     porque:
-      "HUECO CONOCIDO: el DELETE vacía `OT ASIGNADA` y `filaDeAviso` la relee. " +
-      "Mismo caso que `marcarElAviso`.",
+      "El DELETE vacía `OT ASIGNADA` y lo anota. Vaciar es seguro acá porque " +
+      "`loQueImpideDesenlazar` ya se negó cuando el número lo escribió una persona.",
   },
 
   // ── Compras ──────────────────────────────────────────────────────────────
@@ -360,8 +364,19 @@ export const REGISTRO = {
   },
 };
 
-/** Las columnas donde se anota que algo no llegó a la planilla. */
-const COLUMNAS_DE_PENDIENTE = /\bsheets_pendiente\b|\bseguimiento_pendiente\b/;
+/**
+ * Las columnas donde se anota que algo no llegó a la planilla.
+ *
+ * Son tres nombres y no uno porque las colas no son iguales:
+ * `seguimiento_pendiente` es la de Compras, que va aparte a propósito —es otro
+ * libro—, y `sheets_pendiente_campos` es la de los avisos, que guarda **qué
+ * campo** falló. El `\b` no alcanzaba para esa última: `_` es carácter de
+ * palabra, así que `sheets_pendiente` no hace borde dentro de
+ * `sheets_pendiente_campos` y los dos archivos que sólo la nombraban a ella
+ * salían como «dice cola y no anota». Se nombran las tres.
+ */
+const COLUMNAS_DE_PENDIENTE =
+  /\bsheets_pendiente\b|\bsheets_pendiente_campos\b|\bseguimiento_pendiente\b/;
 
 const ESTRATEGIAS = ["cola", "delega", "aborta", "pantalla", "otra-direccion"];
 

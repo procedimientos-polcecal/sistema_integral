@@ -35,6 +35,8 @@ import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
 import { loQueHayQueExportarDeLaOS } from "@/lib/mantenimiento/pendienteDeLaOS";
+import { escribirEnLaFilaDelAviso } from "@/lib/mantenimiento/planillaDelAviso";
+import { camposDelPendiente, celdasDelAviso, elIntentoDelAviso } from "@/lib/mantenimiento/pendienteDelAviso";
 import { cualesReintentar } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
@@ -248,6 +250,66 @@ async function cargarLasAreasDeLosAvisos(admin: ReturnType<typeof createAdminCli
   }
 }
 
+/**
+ * Reescribe lo que no llegó a la planilla de avisos, y devuelve los N° OA que
+ * **siguen** sin llegar.
+ *
+ * Hermana de `exportarLoPendiente` (OT) y `exportarLoPendienteDeOS`, con una
+ * diferencia que no se deduce: acá no se rearma el registro entero desde la
+ * fila, sino **sólo el campo que falló**, porque `OT ASIGNADA` la escriben a
+ * mano —182 de 186— y reescribirla por un fallo de la otra columna podría
+ * vaciar un número que el sync todavía no importó. El porqué completo está en
+ * `lib/mantenimiento/pendienteDelAviso.ts`.
+ */
+async function exportarLoPendienteDeAvisos(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<{ siguenPendientes: Set<string>; problema: string | null }> {
+  const siguenPendientes = new Set<string>();
+
+  // La cadena va literal: armada en una variable, Supabase pierde la inferencia.
+  const { data: pendientes, error } = await admin
+    .from("avisos")
+    .select("id, oa_number, sheets_row, ot_asignada, observaciones, sheets_pendiente_campos")
+    .not("sheets_pendiente", "is", null);
+
+  // Y si no se pudo leer la cola, se dice. Con la migración `20261029081402`
+  // sin aplicar, PostgREST contesta que no existe la columna y un `?? []` haría
+  // que esto no reintentara nada ni salteara nada —la protección apagada,
+  // importando igual y sin una palabra—. Mismo criterio que en las OS: no
+  // aborta la corrida, pero no se calla.
+  if (error) {
+    return {
+      siguenPendientes,
+      problema:
+        `No se pudo leer la cola de exportación de los avisos, así que esta corrida no ` +
+        `reintentó nada y pudo pisar un enlace o una desestimación: ${error.message}`,
+    };
+  }
+
+  for (const aviso of pendientes ?? []) {
+    const celdas = celdasDelAviso(aviso, camposDelPendiente(aviso.sheets_pendiente_campos));
+
+    // Sin campos reconocibles no hay nada que reescribir: se limpia la marca en
+    // vez de reintentar para siempre, igual que cuando una OT deja de tener
+    // algo que exportar.
+    if (!celdas) {
+      await admin.from("avisos")
+        .update({ sheets_pendiente: null, sheets_pendiente_campos: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", aviso.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDelAviso(aviso, celdas);
+    if (fallo) siguenPendientes.add(aviso.oa_number as string);
+
+    await admin.from("avisos")
+      .update(elIntentoDelAviso(fallo, camposDelPendiente(aviso.sheets_pendiente_campos)))
+      .eq("id", aviso.id);
+  }
+
+  return { siguenPendientes, problema: null };
+}
+
 /** Trae los avisos de su planilla. */
 export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
@@ -257,6 +319,13 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   // Antes de leer: lo que aparezca después de este instante no estaba en lo
   // que leímos, y su ausencia no prueba que alguien lo haya borrado.
   const inicio = new Date().toISOString();
+  const admin = createAdminClient();
+
+  // Primero sale lo que el sistema sabe y la planilla no, igual que en las OT y
+  // las OS: así lo que acabamos de escribir vuelve con el resto en la lectura
+  // de abajo, en vez de ser pisado por una columna vieja.
+  const { siguenPendientes: sinExportar, problema: colaSinLeer } =
+    await exportarLoPendienteDeAvisos(admin);
 
   let filas: string[][];
   try {
@@ -267,7 +336,6 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
 
   if (filas.length < 2) return logra({ leidas: 0, guardados: 0, sin_equipo: 0 });
 
-  const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
   // Uno solo para toda la corrida: es el sello que después distingue lo que la
   // planilla trajo de lo que sobra. Con un `toISOString()` por fila, cada una
@@ -275,11 +343,22 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   const cuando = new Date().toISOString();
 
   const registros: Datos[] = [];
+  /** Lo que la planilla trajo, esté o no entre lo que vamos a escribir. */
+  const trajoLaPlanilla = new Set<string>();
   let sinEquipo = 0;
 
   for (let i = 0; i < filas.length - 1; i++) {
     const aviso = filaDeAviso(filas[i + 1], i + 2);
     if (!aviso) continue;
+
+    // Contado antes del salteo, no después: un aviso salteado sigue estando en
+    // la planilla, y dejarlo fuera de `clavesLeidas` lo manda a borrar. Ver el
+    // comentario largo en `sincronizarOrdenes`.
+    trajoLaPlanilla.add(aviso.oa_number);
+
+    // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo que
+    // el sistema sabe, y leerla ahora le borraría el enlace o la observación.
+    if (sinExportar.has(aviso.oa_number)) continue;
 
     const { equipment_id, sector_id } = resolver(enlaces, aviso);
     if (!equipment_id) sinEquipo += 1;
@@ -322,7 +401,7 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   }
 
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_AVISOS, {
-    clavesLeidas: new Set(unicos.map((r) => r.oa_number as string)),
+    clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
@@ -345,6 +424,9 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
     areas_completadas: conArea.length,
+    // Sólo cuando lo hay, para que no sea un campo que está siempre en null y
+    // se deja de mirar. Hoy el único caso es la migración sin aplicar.
+    ...(colaSinLeer ? { cola_sin_leer: colaSinLeer } : {}),
     // Un fallo acá no frena la corrida, así que se dice en el resultado: si no,
     // los avisos nuevos quedarían sin área sin que nadie supiera por qué.
     ...("error" in areas ? { area_sin_leer: areas.error } : {}),

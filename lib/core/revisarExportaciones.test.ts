@@ -116,6 +116,25 @@ describe("revisarExportaciones", () => {
     expect(h[0].que).toContain("no nombra ninguna columna de pendiente");
   });
 
+  it("cuenta como anotar nombrar la columna de campos de los avisos", () => {
+    // Casi muerde el 29/10/2026: `\bsheets_pendiente\b` no hace borde dentro de
+    // `sheets_pendiente_campos` —`_` es carácter de palabra—, así que los dos
+    // archivos que sólo nombran esa columna salían como «dice cola y no anota».
+    const ruta: Archivo = {
+      ruta: "app/api/modulo/route.ts",
+      texto: `
+        ${importa("espejarCosa", "lib/modulo/espejo")}
+        const r = await espejarCosa(x);
+        await admin.update({ sheets_pendiente_campos: "ot_asignada" });
+      `,
+    };
+    const h = rompe(revisarExportaciones([ESPEJO, ruta], {
+      ...REGISTRO_BASE,
+      "app/api/modulo/route.ts": { estrategia: "cola", porque: "anota por campo" },
+    }));
+    expect(h).toEqual([]);
+  });
+
   it("una entrada sin porqué no alcanza: la excepción hay que explicarla", () => {
     const h = rompe(revisarExportaciones([ESPEJO], {
       "lib/modulo/espejo.ts": { estrategia: "pantalla", porque: "  " },

@@ -562,11 +562,20 @@ módulo `delega` también tiene que declararse, porque `delega` quiere decir que
 la obligación de anotar se mudó a quien llama.
 
 Cada corrida **lista las `pantalla`**, que son la excepción a la regla y lo
-primero que hay que mirar cuando un dato se pierde. Hoy son cinco y tres son
-los avisos, que no tienen columna de pendiente ni drenaje. Sale 1 si hay algún
+primero que hay que mirar cuando un dato se pierde. Eran cinco; desde que los
+avisos tienen su cola (29/10/2026) **son dos**: las notas de una OT y el libro
+de comparativa de un RI, las dos con su porqué medido. Sale 1 si hay algún
 ROMPE, hoy da **ROMPE 0 · MIRAR 0**, y **todavía no está en el CI** por lo
 mismo que `revisar-responsive`: primero conviene que el registro aguante unas
 semanas de cambios.
+
+**Las tres colas no son iguales, y la de los avisos es la rara.** Las OT y las
+OS rearman el registro entero desde la fila; los avisos guardan además **qué
+campo** falló (`sheets_pendiente_campos`), porque una de sus dos columnas
+—`OT ASIGNADA`— la escriben a mano: 182 de 186 números los tipeó una persona
+en la planilla, y reescribirla por un fallo de la otra columna podría vaciar
+uno que la sincronización todavía no importó. El porqué completo está en
+[lib/mantenimiento/pendienteDelAviso.ts](lib/mantenimiento/pendienteDelAviso.ts).
 
 **`npm run planillas` es el único que no mira el código sino el dato del otro
 lado**, y existe porque los otros cinco no podían ver lo que pasó dos veces en
