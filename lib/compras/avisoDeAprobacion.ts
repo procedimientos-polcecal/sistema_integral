@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   avisarAQuienDecide,
+  VERBO_DE_APROBACION,
   type ItemQueEspera,
   type ResultadoDelAviso,
 } from "@/lib/core/avisoAlInstante";
@@ -37,7 +38,7 @@ export async function avisarDeLosPedidosQueEsperan(
   return avisarAQuienDecide(createAdminClient(), {
     lista: "compras_aprobadores",
     items,
-    nombre: { singular: "Un pedido", plural: "pedidos" },
+    nombre: { singular: "Un pedido", plural: "pedidos", verbo: VERBO_DE_APROBACION },
     url: "/compras/aprobaciones",
     excepto,
   });
