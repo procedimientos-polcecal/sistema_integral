@@ -775,6 +775,21 @@ equivocado.
 
 La ruta de alta tiene que aceptar `multipart/form-data` además de JSON.
 
+**Y acá se cierra el hueco que la Tarea 3 dejó abierto: nadie escribe en
+`syh_fotos`.** Hoy `/api/seguridad-higiene/fotos` guarda el archivo y devuelve
+`{ruta, link}`, y ahí termina — la foto queda en el bucket sin enlace a ninguna
+condición, invisible para la pantalla y para el cron de respaldo, que lee esa
+tabla. **El insert en `syh_fotos` es de esta tarea.** Va con el cliente del
+usuario, porque su policy exige `respaldada_en_drive_el is null` y que
+`subida_por` sea `auth.uid()`.
+
+El caso que hay que no olvidarse, y que es la razón de que esto se escriba acá:
+**si la condición ya existía por un reintento** —la rama de idempotencia por
+`clave`, cuando el segundo disparo encuentra la fila en vez de crearla— **la
+foto tiene que enlazarse igual**. Si sólo se enlaza en el camino de alta nueva,
+el segundo disparo sube el archivo y lo pierde, que es exactamente el campo que
+no se puede volver a sacar.
+
 - [ ] **Step 6: La prueba de verdad, en un navegador**
 
 Esto no lo prueba vitest. Con `npm run dev`, en el navegador:
