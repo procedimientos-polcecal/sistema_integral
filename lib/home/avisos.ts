@@ -9,6 +9,7 @@ import { cantidadDelAviso, type Ritmo } from "./ritmo";
 export interface ConteosParaAvisos {
   rrhhSinClasificar: number;
   mantenimientoAtrasadas: number;
+  mantenimientoDivergencias: number;
   comprasEsperandoAprobacion: number;
   inventarioSinPlanilla: number;
   produccionSinPlanilla: number;
@@ -34,6 +35,10 @@ export interface ConteosParaAvisos {
 const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href: string }[] = [
   { clave: "rrhhSinClasificar", id: "rrhh-sin-clasificar", titulo: "Ausencias sin clasificar", href: "/rrhh/asistencia?tab=dia" },
   { clave: "mantenimientoAtrasadas", id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", href: "/mantenimiento/ordenes?estado=ATRASADO" },
+  // Órdenes en las que el sistema y la planilla dicen cosas distintas. La
+  // tabla se rehace en cada sincronización, así que su tamaño es la
+  // divergencia de hoy y no un acumulado: lo que se arregla desaparece solo.
+  { clave: "mantenimientoDivergencias", id: "mant-divergencias", titulo: "Órdenes que dicen distinto en el sistema y en la planilla", href: "/mantenimiento/ordenes" },
   { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", href: "/compras/aprobaciones" },
   { clave: "inventarioSinPlanilla", id: "inv-sin-planilla", titulo: "Movimientos que no llegaron a la planilla", href: "/inventario/movimientos" },
   { clave: "produccionSinPlanilla", id: "produccion-sin-planilla", titulo: "Partes de producción que no llegaron a la planilla", href: "/produccion" },

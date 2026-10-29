@@ -30,7 +30,9 @@ import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
-import { filaDeOrden, celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
+import { filaDeOrden, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
+import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
+import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
@@ -505,6 +507,59 @@ export async function exportarLoPendiente(
   return siguenPendientes;
 }
 
+/**
+ * Contrasta los dos lados y deja anotado lo que no coincide.
+ *
+ * Corre dentro de la sincronización y **antes del upsert**, que es el único
+ * momento en que las dos versiones existen a la vez: después, el sistema es la
+ * planilla por construcción. Lo que queda anotado es, entonces, exactamente lo
+ * que esta corrida está por reemplazar sin que nadie se entere.
+ *
+ * **La tabla se rehace entera**: una divergencia que se arregló tiene que
+ * desaparecer sola, porque su tamaño es lo que cuenta el aviso. Si las filas se
+ * acumularan, el aviso contaría problemas viejos y dejaría de mirarse.
+ *
+ * **Nunca tira.** Si la tabla todavía no existe —la migración la corre una
+ * persona— o la escritura falla, se devuelve el motivo y la sincronización
+ * sigue. Importar las órdenes es lo que no puede fallar; anotar lo que hay que
+ * mirar es valioso y es secundario, y romper lo primero por lo segundo sería
+ * exactamente el mal negocio que este módulo ya aprendió con los carteles del
+ * listado.
+ */
+async function anotarLasDivergencias(
+  admin: ReturnType<typeof createAdminClient>,
+  deLaPlanilla: readonly OrdenLeida[]
+): Promise<{ cuantas: number; recortadas: number; error: string | null }> {
+  const vacio = { cuantas: 0, recortadas: 0 };
+  try {
+    // `traerTodo` porque son 2.300 y PostgREST corta en 1.000 sin avisar.
+    const delSistema = await traerTodo<OrdenDelSistema>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente")
+        .range(desde, hasta)
+    );
+
+    const { filas, total, recortadas } = loQueSeGuardaDelContraste(
+      contrastar(delSistema, deLaPlanilla)
+    );
+
+    // Se vacía y se vuelve a llenar. PostgREST exige un filtro para borrar, y
+    // `ot_number >= 0` las toma todas: los números de OT son positivos.
+    const borrado = await admin.from("mantenimiento_divergencias").delete().gte("ot_number", 0);
+    if (borrado.error) return { ...vacio, error: borrado.error.message };
+
+    if (filas.length > 0) {
+      const alta = await admin.from("mantenimiento_divergencias").insert(filas);
+      if (alta.error) return { ...vacio, error: alta.error.message };
+    }
+
+    return { cuantas: total, recortadas, error: null };
+  } catch (e) {
+    return { ...vacio, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
@@ -547,11 +602,15 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // `editado_en_app`, y está fijada con un test en `borradoDeEspejo.test.ts`.
   const trajoLaPlanilla = new Set<number>();
 
+  /** Todas las de la planilla, para contrastarlas antes de pisar nada. */
+  const leidasDeLaPlanilla: OrdenLeida[] = [];
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
 
     trajoLaPlanilla.add(orden.ot_number);
+    leidasDeLaPlanilla.push(orden);
 
     // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
     // que el sistema sabe, y leerla ahora le borraría el estado y las horas.
@@ -567,6 +626,19 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
 
     registros.push({ ...orden, equipment_id, sector_id, proveedor_id, synced_at: cuando });
   }
+
+  // ── EL CONTRASTE VA ACÁ: ANTES DE PISAR, NO DESPUÉS ───────────────────────
+  //
+  // Después del upsert los dos lados coinciden por construcción, así que
+  // contrastar ahí sólo encontraría lo que la importación salteó. Lo que
+  // importa es justamente lo otro: la orden que decía algo distinto y que esta
+  // misma corrida está por reemplazar con lo de la planilla. Eso es lo que se
+  // perdía en silencio, y es lo que queda anotado.
+  //
+  // No cuesta ninguna lectura de Google: la planilla ya está leída. Lo único
+  // que suma es traer las columnas del sistema, que es lo que `contrastar`
+  // necesita del otro lado.
+  const divergencias = await anotarLasDivergencias(admin, leidasDeLaPlanilla);
 
   let guardadas = 0;
   const { unicos, repetidos } = unaPorNumero(registros, "ot_number");
@@ -602,6 +674,13 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     sin_proveedor: [...sinProveedor],
     borradas: borrado.borradas,
     borrado: borrado.aviso,
+    // Cuántas dicen distinto los dos lados. Va en el resultado aunque el aviso
+    // ya lo cuente: quien corre la sincronización a mano lo ve en el momento.
+    divergencias: divergencias.cuantas,
+    ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),
+    // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
+    // que se dice. Mientras la migración no esté corrida, esto dice por qué.
+    ...(divergencias.error ? { divergencias_sin_anotar: divergencias.error } : {}),
   });
 }
 

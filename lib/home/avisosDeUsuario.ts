@@ -55,7 +55,8 @@ async function avisosDeLosModulos(
     supabase.from(tabla).select("id", { count: "exact", head: true });
 
   const [
-    rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
+    rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
+    comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
@@ -63,6 +64,20 @@ async function avisosDeLosModulos(
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
+    // La tabla se rehace entera en cada sincronización, así que su tamaño ES
+    // la divergencia de hoy. Su PK es `(ot_number, campo)` y no `id`, así que
+    // el conteo va por una de esas columnas.
+    //
+    // Y si la tabla todavía no existe —la migración la corre una persona—,
+    // PostgREST devuelve el error en el resultado en vez de tirar, así que
+    // `count` llega en null y esto da 0: sin aviso y sin romper la campana,
+    // que es el modo correcto de fallar mientras la migración no esté.
+    tiene("mantenimiento")
+      ? supabase
+          .from("mantenimiento_divergencias")
+          .select("ot_number", { count: "exact", head: true })
+          .then(({ count }) => count ?? 0)
+      : Promise.resolve(0),
     contarSiTiene("compras", () => head("compras_requerimientos").in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])),
     contarSiTiene("inventario", () => head("inventario_movimientos").not("sheets_pendiente", "is", null)),
     contarSiTiene("produccion", () => head("produccion_partes").not("sheets_pendiente", "is", null)),
@@ -95,7 +110,8 @@ async function avisosDeLosModulos(
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
-    rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
+    rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
+    comprasEsperandoAprobacion,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
