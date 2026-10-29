@@ -675,6 +675,47 @@ quedó afuera ni por qué. Lo mismo vale para el botón "No es una factura" de l
 pantalla, que pide el motivo y guarda quién y cuándo — porque "alguien la
 descartó el martes" es una respuesta muy distinta de "nunca llegó".
 
+## Vaciar el buzón: "Cargar las próximas 25" (29/10/2026)
+
+El buzón traía bien —398 adjuntos pendientes— y el sistema tenía **3 facturas
+cargadas**. El cuello no era el lector, que lee el QR al 98%: era que cada
+pendiente son **dos clics en serie** —uno en la bandeja, que baja y lee, y otro
+en la fila, que guarda— y la bandeja deshabilitaba todo mientras una estaba en
+curso. 796 clics. Nadie iba a hacer eso.
+
+El botón baja una tanda y, **a medida que cada archivo termina de leerse**,
+decide si se guarda sola:
+
+| | |
+|---|---|
+| QR limpio, importe que coincide y empresa reconocida | **se guarda sola** |
+| sin cabecera (el escaneo) | queda en la cola |
+| la cabecera salió del texto impreso y no del QR | queda en la cola |
+| el importe del QR no coincide con el impreso | queda en la cola |
+| el comprobante no está emitido a Polcecal ni a Polysan | queda en la cola |
+
+Las cuatro condiciones son **conjuntas** y la decisión vive en
+[lib/facturacion/sePuedeGuardarSola.ts](lib/facturacion/sePuedeGuardarSola.ts),
+que es pura y está testeada. Cuando dice que no **dice por qué**, y ese motivo
+va a la fila: es lo que distingue una de otra cuando quedan diez en la cola.
+
+Tres cosas que no se deducen del código:
+
+- **De a 25 y no las 398.** Leer un QR rasteriza la página a 3600 px y ocupa el
+  hilo del navegador; todas de una dejarían la pestaña congelada varios minutos
+  **sin poder parar**, que es peor que el problema que esto resuelve. Hay un
+  botón Parar que termina la que está en curso y no arranca la siguiente.
+- **Se guarda factura por factura y no al final**, de a una y en orden. En
+  orden por lo mismo que `guardarTodas`: el índice único de la base es el que
+  detecta un duplicado, y en paralelo dos copias del mismo archivo pasarían las
+  dos. Y una por una para que la cola se vacíe mientras avanza.
+- **Un archivo que no baja no corta la tanda**: se anota y sigue. Cortar
+  dejaría veinticuatro sin cargar por uno.
+
+El riesgo asumido: esto escribe cientos de facturas de un saque, y no hay
+deshacer en lote — se descartan de a una. El duplicado sí está cubierto por el
+índice único, así que volver a correrlo no duplica nada.
+
 ## La factura sin detalle legible también se imputa (26/10/2026)
 
 Cuando el lector no saca el detalle del PDF, el alta **no guardaba ninguna
