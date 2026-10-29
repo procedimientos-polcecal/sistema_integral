@@ -60,7 +60,8 @@ export function cantidadDelAviso(diasSinCargar: number | null, umbral: number): 
 }
 
 /**
- * Las trece fuentes de la vista contra los doce módulos del sistema.
+ * Las trece fuentes de la vista contra los trece módulos del sistema —Seguridad
+ * e Higiene es el que no tiene ninguna—.
  *
  * Calidad es la única con dos: carbonilla y envases se cargan por separado y
  * tienen una sola tarjeta, que muestra **la peor de las dos**. Un módulo que no
@@ -80,6 +81,11 @@ const FUENTES_POR_MODULO: Record<Modulo, string[]> = {
   calidad: ["calidad", "calidad_envases"],
   taller_vial: ["taller_vial"],
   trituracion: ["trituracion"],
+  // Sin fuentes A PROPÓSITO, y no por olvido: deja a Seguridad e Higiene fuera
+  // del aviso de ritmo («hace N días que no se carga»). Sus dos avisos cuentan
+  // otra cosa —condiciones sin completar y vencidas—, y que pasen días sin
+  // cargar una condición insegura no es una falla del ritmo.
+  seguridad_higiene: [],
 };
 
 /** El ritmo de una sola fuente, con el umbral calculado sobre su propio hueco. */

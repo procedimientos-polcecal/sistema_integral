@@ -378,6 +378,18 @@ export const NAV: NavItem[] = [
       { label: "Plantas", href: "/trituracion/plantas", modulo: "trituracion", soloAdmin: true },
     ],
   },
+  {
+    label: "Seguridad e Higiene",
+    href: "/seguridad-higiene",
+    modulo: "seguridad_higiene",
+    // La raíz del módulo es un tablero con una tarjeta por frente, y hoy hay
+    // uno solo; queda fuera de esta lista — mismo caso que Calidad y Cantera.
+    // Cuando llegue el segundo frente (accidentes, capacitaciones…) se agrega
+    // acá junto con su tarjeta, sin mudar el primero.
+    children: [
+      { label: "Condiciones inseguras", href: "/seguridad-higiene/condiciones", modulo: "seguridad_higiene" },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.

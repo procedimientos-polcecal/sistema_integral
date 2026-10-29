@@ -96,14 +96,14 @@ const NOMBRE: Record<Modulo, string> = {
   rrhh: "RRHH", mantenimiento: "Mantenimiento", remises: "Remises", compras: "Compras",
   inventario: "Inventario", produccion: "Producción", despacho: "Despacho",
   facturacion: "Facturación", cantera: "Cantera", calidad: "Calidad",
-  taller_vial: "Taller Vial", trituracion: "Trituración",
+  taller_vial: "Taller Vial", trituracion: "Trituración", seguridad_higiene: "Seguridad e Higiene",
 };
 
 const HREF: Record<Modulo, string> = {
   rrhh: "/rrhh", mantenimiento: "/mantenimiento", remises: "/remises", compras: "/compras",
   inventario: "/inventario", produccion: "/produccion", despacho: "/despacho",
   facturacion: "/facturacion", cantera: "/cantera", calidad: "/calidad",
-  taller_vial: "/taller-vial", trituracion: "/trituracion",
+  taller_vial: "/taller-vial", trituracion: "/trituracion", seguridad_higiene: "/seguridad-higiene",
 };
 
 /**
