@@ -90,6 +90,7 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_RESPALDO_ID` | El libro de **respaldo legible**, que tiene que ser uno **nuevo y vacío** creado a mano. Lo escribe el cron `respaldo-sheets` todas las noches a las 00:00 de Argentina, con una pestaña por módulo **que no tiene planilla**: RRHH (padrón, asistencia y marcaciones), Remises, los ensayos de Calidad y el buzón de Facturación. Los módulos donde **manda la planilla** no entran, y no es un olvido: ésos ya tienen este respaldo por construcción, y escribirles encima el estado del sistema sería darle de comer al importador su propia salida — desde el 18/10/2026 su sincronización **borra** lo que la planilla dejó de tener. Ver [RESPALDO.md](RESPALDO.md) | La cuenta de servicio necesita **Editor**. **No puede ser ninguna de las planillas de arriba**: cada pestaña se borra entera y se reescribe. Sin la variable el cron devuelve 500 con el nombre de la variable en el mensaje — a propósito: un respaldo que se omite en silencio es peor que no tenerlo |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
+| `GOOGLE_DRIVE_PCROBOT_FOLDER_ID` | La unidad compartida de Drive `PC Robot`, donde una tarea programada sube todos los días a las 09:30 un zip por molino (`Filler 1 2026-10-29.zip`, `Filler 2 ...`). Lo lee el cron `produccion-molinos-sync` (13:00 UTC, las 10 de Argentina) y el botón de importar: `0AH83x2YPTJdbUk9PVA`. **La cuenta de servicio sólo necesita ser Lector** y el SdG nunca escribe ahí. Al ser una unidad compartida, toda llamada a Drive va con `supportsAllDrives=true`; sin eso Drive contesta 404 sin explicar por qué. Sin la variable la importación falla con su nombre en el mensaje, y queda anotada en `sincronizaciones` | El id de la unidad: el tramo después de `/folders/` en la URL |
 
 Para la carpeta de comparativas hace falta además **habilitar la Google Drive
 API** en el proyecto de Google Cloud: es un servicio aparte del de Sheets. Sin
@@ -301,6 +302,7 @@ GOOGLE_SHEETS_SEGUIMIENTO_ID=1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8
 GOOGLE_SHEETS_RESPALDO_ID=
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
+GOOGLE_DRIVE_PCROBOT_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
 WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
