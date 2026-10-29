@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  La tarea programada que sube los zips del PC Robot, todos los dias a las 09:30.
+
+  Se importa con:
+    schtasks /create /tn "SdG - Subir zips del PC Robot" /xml tarea-programada.xml /f
+
+  OJO: schtasks pide el XML en UTF-16. Si se edita con un editor que guarda en
+  UTF-8, hay que reconvertirlo o falla con un error de formato que no menciona
+  la codificacion.
+
+  Se usa XML y no `schtasks /create` a secas por tres opciones que la linea de
+  comandos no expone y que deciden si esto corre o no:
+
+  - DisallowStartIfOnBatteries=false. Por defecto el Programador NO ejecuta
+    nada cuando la maquina esta a bateria. En una notebook eso significa que no
+    corre la mitad de los dias, y no avisa.
+  - StartWhenAvailable=true. Si la maquina estaba apagada a las 09:30, corre
+    cuando vuelve en vez de esperar a manana. Sale gratis porque la subida es
+    idempotente.
+  - RestartOnFailure. Tres reintentos cada 15 minutos, para el caso de que la
+    red no este lista.
+
+  LogonType=InteractiveToken significa que corre SOLO con la sesion iniciada.
+  Es la unica opcion posible cuando la cuenta de Windows no tiene contrasena:
+  el modo desatendido (`/ru` + `/rp`) exige una, y un inicio de sesion por
+  lotes con clave vacia esta bloqueado por politica. En la maquina definitiva,
+  con una cuenta con contrasena, conviene pasar a Password/S4U.
+
+  Las rutas son absolutas y apuntan al checkout del repo. En la maquina
+  definitiva deberian apuntar a una carpeta fuera del repo (C:\SdG\pcrobot\),
+  porque un `git clean -xdf` se lleva los archivos ignorados: el .env, la
+  credencial y la configuracion.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Sube a Drive el zip mas nuevo de cada molino (PC Robot). Ver docs/PRODUCCION-FILLERS-SUBIDA.md en el repo del SdG.</Description>
+    <URI>\SdG - Subir zips del PC Robot</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-10-29T09:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT15M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Program Files\nodejs\node.exe</Command>
+      <Arguments>"C:\Users\Usuario\Desktop\SdG PP\scripts\pcrobot\subir-zips.mjs" "C:\Users\Usuario\Desktop\SdG PP\scripts\pcrobot\subir-zips.config.json"</Arguments>
+      <WorkingDirectory>C:\Users\Usuario\Desktop\SdG PP\scripts\pcrobot</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
