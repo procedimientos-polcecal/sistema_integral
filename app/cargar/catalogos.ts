@@ -19,6 +19,12 @@
  * los otros no: si esta persona puede cargar condiciones inseguras.** `/cargar`
  * no filtra por módulo, así que ese permiso se anota acá, junto con la lista, y
  * es lo que decide si se muestra la tarjeta. Ver `lib/seguridadHigiene/glosarioOffline.ts`.
+ *
+ * **Y ES DEL APARATO, NO DE LA PERSONA**, como los otros catálogos: dos usuarios
+ * con distinto nivel que comparten un teléfono ven lo que dejó la última sesión
+ * que bajó con señal. Es un riesgo acotado —la carga que no corresponda queda
+ * parada y visible con el 403 de la ruta, nunca se pierde en silencio—, y se
+ * acepta a cambio de no tener un endpoint de permisos aparte.
  */
 
 import { guardarCatalogo, leerCatalogo } from "@/public/cola/idb.js";

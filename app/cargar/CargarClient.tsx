@@ -583,7 +583,10 @@ export default function CargarClient() {
               aparece lleno sin motivo visible y quien lo mira puede creer que
               está cargando una segunda cosa — que es el duplicado que todo
               esto existe para evitar. */}
-          {borrador && (
+          {/* Sólo si el formulario de abajo es el de esa carga: con el permiso de
+              condiciones retirado, un borrador de condición no tiene formulario
+              y el cartel diría que se corrige algo que no se está corrigiendo. */}
+          {borrador && borrador.tipo === formulario && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <span className="min-w-0 flex-1">
                 Estás corrigiendo {conSuArticulo(borrador.tipo)} que quedó {concordado(borrador.tipo, "parad")}.

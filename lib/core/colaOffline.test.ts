@@ -569,12 +569,32 @@ describe("el tercer tipo de carga: la condición insegura", () => {
   // Hasta que entró la condición, `comoSeLlama`, `conSuArticulo` y `concordado`
   // eran `tipo === "aviso" ? x : y`: un tercer tipo caía en la rama de «orden»
   // por accidente, y en dos de los tres casos daba una frase que suena bien. Estos
-  // tests fijan lo que dice cada una para el tercero; el mapa exhaustivo hace que
-  // el cuarto falle en `tsc` y no acá.
+  // tests fijan lo que dice cada una para el tercero. Que un cuarto tipo no se
+  // olvide de ninguna lo cubre el test de más abajo, no `tsc`: los mapas de
+  // `colaOffline.js` no se comprueban (`allowJs` sin `checkJs`).
   it("la condición tiene su nombre, su artículo y su concordancia", () => {
     expect(comoSeLlama("condicion")).toBe("Condición insegura");
     expect(conSuArticulo("condicion")).toBe("la condición insegura");
     expect(concordado("condicion", "parad")).toBe("parada");
+  });
+
+  it("todos los tipos tienen su nombre, su artículo, su vocal y su campo", () => {
+    // `RUTA_DE` es la lista de los tipos que existen. Un cuarto tipo que se
+    // agregue ahí y se olvide en cualquiera de los otros cuatro mapas falla acá,
+    // que es la única garantía real: `tsc` no mira ese archivo.
+    const tipos = Object.keys(RUTA_DE) as Array<keyof typeof RUTA_DE>;
+    expect(tipos.length).toBeGreaterThanOrEqual(3);
+    // Un cuerpo con todos los campos de número que existen: `comoContesto` lo da
+    // por cargado sólo si el tipo tiene el suyo definido.
+    const cuerpo = { oa_number: "1", ot_number: "1", numero: "1" };
+    for (const tipo of tipos) {
+      expect(comoSeLlama(tipo), tipo).toEqual(expect.any(String));
+      expect(conSuArticulo(tipo), tipo).toEqual(expect.any(String));
+      expect(comoSeLlama(tipo).trim(), tipo).not.toBe("");
+      expect(conSuArticulo(tipo).trim(), tipo).not.toBe("");
+      expect(concordado(tipo, "parad"), tipo).toMatch(/^parad[oa]$/);
+      expect(comoContesto(tipo, { status: 200, redirigida: false, cuerpo }).ok, tipo).toBe(true);
+    }
   });
 
   it("la condición va a su ruta de alta", () => {

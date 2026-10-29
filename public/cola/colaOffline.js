@@ -328,8 +328,17 @@ export function puedeEmpujarla(carga, usuarioActualId, ahora) {
  * **LAS TRES FUNCIONES DE NOMBRE LEEN DE UN MAPA, NO DE UN `tipo === "aviso"`.**
  * Con dos tipos el ternario alcanzaba; con el tercero la condición habría caído
  * en la rama de «orden» sin que nada fallara, y dos de las tres frases habrían
- * sonado bien. Un `Record<TipoDeCarga, …>` es exhaustivo: el cuarto tipo no
- * compila hasta que tenga su nombre, su artículo y su género.
+ * sonado bien. Con un mapa, un tipo sin entrada ya no cae en la rama de otro.
+ *
+ * **LO QUE ESTO NO GARANTIZA, PARA QUE NADIE CONFÍE DE MÁS:** los
+ * `@type {Record<TipoDeCarga, …>}` de acá son documentación, no una
+ * comprobación. `tsconfig.json` tiene `allowJs` y no `checkJs`, y este archivo
+ * no lleva `// @ts-check` (se probó: prende errores que ya estaban, en
+ * `comoContesto` y `loQueQuedoPendiente`), así que un cuarto tipo sin entrada
+ * **compila igual** y devuelve `undefined` —y `concordado` armaría
+ * «parad» + «undefined»—. Lo que sí falla es el test «todos los tipos tienen su
+ * nombre, su artículo, su vocal y su campo» de `lib/core/colaOffline.test.ts`,
+ * que recorre las claves de `RUTA_DE`: al agregar un tipo, empezar por `RUTA_DE`.
  *
  * @type {Record<TipoDeCarga, string>}
  */

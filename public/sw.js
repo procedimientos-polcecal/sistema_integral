@@ -786,7 +786,7 @@ async function mandarUna(carga, disparo) {
  * necesita— devuelve false y quien llama se encarga de que el texto no se
  * pierda.
  *
- * @param {"aviso" | "orden"} tipo
+ * @param {import("/cola/colaOffline.js").TipoDeCarga} tipo
  * @param {string} numero
  * @param {string} advertencia
  * @returns {Promise<boolean>} Si quedó dicho.
@@ -815,7 +815,7 @@ async function contarLaAdvertencia(tipo, numero, advertencia) {
  * es ninguna decisión** —quién contestó y si eso fue un éxito lo dice
  * `comoContesto`, la misma función en los dos lados—; acá sólo se habla HTTP.
  *
- * @param {"aviso" | "orden"} tipo
+ * @param {import("/cola/colaOffline.js").TipoDeCarga} tipo
  * @param {Record<string, unknown>} cuerpo
  */
 async function mandarALaRuta(tipo, cuerpo, disparo) {
