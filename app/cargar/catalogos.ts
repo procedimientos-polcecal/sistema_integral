@@ -14,11 +14,22 @@
  * equipos, 40 sectores, 10 operarios— y no son secretos para quien ya tiene
  * acceso al módulo. Esto NO es la fase 3: no se guardan listados, ni el
  * tablero, ni el historial.
+ *
+ * El cuarto es el glosario de peligros de Seguridad e Higiene, y **trae algo que
+ * los otros no: si esta persona puede cargar condiciones inseguras.** `/cargar`
+ * no filtra por módulo, así que ese permiso se anota acá, junto con la lista, y
+ * es lo que decide si se muestra la tarjeta. Ver `lib/seguridadHigiene/glosarioOffline.ts`.
  */
 
 import { guardarCatalogo, leerCatalogo } from "@/public/cola/idb.js";
 import { recordarQuienEs, type SesionRecordada } from "@/lib/core/sesionDelTelefono";
 import { createClient } from "@/lib/supabase/client";
+import {
+  SIN_GLOSARIO,
+  queHacerConElGlosario,
+  type GlosarioGuardado,
+  type PeligroDelCatalogo,
+} from "@/lib/seguridadHigiene/glosarioOffline";
 
 // Se re-exportan para que `CargarClient` siga teniendo un solo lugar de dónde
 // traer lo que necesita el arranque de la pantalla.
@@ -48,37 +59,57 @@ export interface OperarioDelCatalogo {
   nombre: string;
 }
 
+export type { PeligroDelCatalogo };
+
 export interface Catalogos {
   equipos: EquipoDelCatalogo[];
   sectores: SectorDelCatalogo[];
   operarios: OperarioDelCatalogo[];
+  peligros: PeligroDelCatalogo[];
+  /**
+   * Si este teléfono tiene anotado que la persona puede cargar condiciones
+   * inseguras. **Sin la anotación es false**: la tarjeta no se muestra, que es
+   * lo seguro cuando no se sabe.
+   */
+  puedeCargarCondiciones: boolean;
 }
 
 /** Lo que hay antes de leer el teléfono, y lo que queda si nunca se bajó nada. */
-export const SIN_CATALOGOS: Catalogos = { equipos: [], sectores: [], operarios: [] };
+export const SIN_CATALOGOS: Catalogos = {
+  equipos: [],
+  sectores: [],
+  operarios: [],
+  peligros: SIN_GLOSARIO.peligros,
+  puedeCargarCondiciones: SIN_GLOSARIO.puedeCargar,
+};
 
 // Un almacén por endpoint, con el nombre del endpoint: así se ve de un vistazo
 // qué catálogo quedó viejo y de dónde se vuelve a bajar.
 const EQUIPOS_Y_SECTORES = "mantenimiento/equipos-y-sectores";
 const OPERARIOS = "mantenimiento/operarios";
+const PELIGROS = "seguridad-higiene/peligros";
 
 /** Lo que haya guardado. Un catálogo que nunca se bajó queda como lista vacía. */
 export async function catalogosGuardados(): Promise<Catalogos> {
-  const [equiposYSectores, operarios] = await Promise.all([
+  const [equiposYSectores, operarios, glosario] = await Promise.all([
     leerCatalogo<{ equipos: EquipoDelCatalogo[]; sectores: SectorDelCatalogo[] }>(
       EQUIPOS_Y_SECTORES,
     ),
     leerCatalogo<OperarioDelCatalogo[]>(OPERARIOS),
+    leerCatalogo<GlosarioGuardado>(PELIGROS),
   ]);
   return {
     equipos: equiposYSectores?.equipos ?? [],
     sectores: equiposYSectores?.sectores ?? [],
     operarios: operarios ?? [],
+    // Lo que nunca se bajó no da permiso: sin anotación, la tarjeta no se ve.
+    peligros: glosario?.peligros ?? [],
+    puedeCargarCondiciones: glosario?.puedeCargar === true,
   };
 }
 
 /**
- * Baja los tres catálogos y los guarda. Sólo tiene sentido llamarla con señal.
+ * Baja los catálogos y los guarda. Sólo tiene sentido llamarla con señal.
  *
  * **Lo que no se pudo bajar no se pisa con una lista vacía**: recibe lo que ya
  * había y lo devuelve tal cual para esa lista. Un desplegable vacío no sirve
@@ -109,6 +140,18 @@ export async function refrescarCatalogos(guardados: Catalogos): Promise<Catalogo
   if (operarios?.data) {
     await guardarCatalogo(OPERARIOS, operarios.data);
     refrescados.operarios = operarios.data;
+  }
+
+  // El glosario es el único que **puede borrar** lo guardado, y sólo con un 403
+  // de la ruta: ahí la persona ya no puede cargar y la tarjeta tiene que
+  // esconderse. Todo lo demás deja lo que había. Qué cuenta como qué lo decide
+  // `queHacerConElGlosario`, que está probada.
+  const glosario = await traerConStatus("/api/seguridad-higiene/peligros");
+  const queHacer = queHacerConElGlosario(glosario.status, glosario.cuerpo);
+  if (queHacer.accion === "guardar") {
+    await guardarCatalogo(PELIGROS, queHacer.glosario);
+    refrescados.peligros = queHacer.glosario.peligros;
+    refrescados.puedeCargarCondiciones = queHacer.glosario.puedeCargar;
   }
 
   return refrescados;
@@ -176,5 +219,23 @@ async function traer<T>(url: string): Promise<T | null> {
     return (await respuesta.json()) as T;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Un GET que cuenta qué contestó el servidor, sea lo que sea.
+ *
+ * `traer` devuelve null ante un 403 y eso aquí no alcanza: el 403 del glosario
+ * **es** la respuesta. Tampoco lanza: sin señal da `status: null`.
+ */
+async function traerConStatus(
+  url: string,
+): Promise<{ status: number | null; cuerpo: unknown }> {
+  try {
+    const respuesta = await fetch(url);
+    const cuerpo: unknown = await respuesta.json().catch(() => null);
+    return { status: respuesta.status, cuerpo };
+  } catch {
+    return { status: null, cuerpo: null };
   }
 }

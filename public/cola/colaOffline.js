@@ -33,7 +33,7 @@
  * misma persona que la cargó).
  */
 
-/** @typedef {"aviso" | "orden"} TipoDeCarga */
+/** @typedef {"aviso" | "orden" | "condicion"} TipoDeCarga */
 
 // ── El pegamento que los dos mundos tienen que escribir igual ────────────────
 //
@@ -58,13 +58,15 @@
 export const SESION = "sesion";
 
 /**
- * A dónde va cada tipo de carga. Son las rutas de siempre, sin ninguna nueva.
+ * A dónde va cada tipo de carga. Las dos de Mantenimiento son las de siempre; la
+ * de la condición insegura es la del módulo Seguridad e Higiene.
  *
  * @type {Record<TipoDeCarga, string>}
  */
 export const RUTA_DE = {
   aviso: "/api/mantenimiento/avisos",
   orden: "/api/mantenimiento/ordenes",
+  condicion: "/api/seguridad-higiene/condiciones",
 };
 
 /**
@@ -323,22 +325,46 @@ export function puedeEmpujarla(carga, usuarioActualId, ahora) {
  * una porque el castellano necesita las dos formas, pero **son dos y no tres**:
  * el que necesite nombrarla tiene que usar una de éstas.
  *
+ * **LAS TRES FUNCIONES DE NOMBRE LEEN DE UN MAPA, NO DE UN `tipo === "aviso"`.**
+ * Con dos tipos el ternario alcanzaba; con el tercero la condición habría caído
+ * en la rama de «orden» sin que nada fallara, y dos de las tres frases habrían
+ * sonado bien. Un `Record<TipoDeCarga, …>` es exhaustivo: el cuarto tipo no
+ * compila hasta que tenga su nombre, su artículo y su género.
+ *
+ * @type {Record<TipoDeCarga, string>}
+ */
+const NOMBRE_DE = {
+  aviso: "Aviso",
+  orden: "Orden de trabajo",
+  condicion: "Condición insegura",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @returns {string}
  */
 export function comoSeLlama(tipo) {
-  return tipo === "aviso" ? "Aviso" : "Orden de trabajo";
+  return NOMBRE_DE[tipo];
 }
 
 /**
  * Lo mismo, para cuando va en medio de una oración: «Se cargó la orden de
  * trabajo OT-12».
  *
+ * @type {Record<TipoDeCarga, string>}
+ */
+const CON_SU_ARTICULO = {
+  aviso: "el aviso",
+  orden: "la orden de trabajo",
+  condicion: "la condición insegura",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @returns {string}
  */
 export function conSuArticulo(tipo) {
-  return tipo === "aviso" ? "el aviso" : "la orden de trabajo";
+  return CON_SU_ARTICULO[tipo];
 }
 
 /**
@@ -349,22 +375,37 @@ export function conSuArticulo(tipo) {
  * Vive junto al artículo y no en la pantalla porque el género es de la palabra
  * («aviso» es masculino, «orden» femenino), y quien escribe la oración no tiene
  * por qué acordarse: sin esto, un cartel que decía «que quedó parada» salía mal
- * con el aviso y bien con la orden, sin que nada lo notara.
+ * con el aviso y bien con la orden, sin que nada lo notara. «Condición» es
+ * femenino, como «orden».
  *
+ * @type {Record<TipoDeCarga, "o" | "a">}
+ */
+const VOCAL_DE = {
+  aviso: "o",
+  orden: "a",
+  condicion: "a",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @param {string} raiz La palabra sin su vocal final, por ejemplo «parad».
  * @returns {string}
  */
 export function concordado(tipo, raiz) {
-  return raiz + (tipo === "aviso" ? "o" : "a");
+  return raiz + VOCAL_DE[tipo];
 }
 
 // ── Cómo se lee lo que contestó la ruta de alta ──────────────────────────────
 
-/** Cómo se llama el número en la respuesta de cada ruta. */
+/**
+ * Cómo se llama el número en la respuesta de cada ruta.
+ *
+ * @type {Record<TipoDeCarga, string>}
+ */
 const CAMPO_DEL_NUMERO = {
   aviso: "oa_number",
   orden: "ot_number",
+  condicion: "numero",
 };
 
 /**
@@ -422,7 +463,7 @@ function laContestoOtro(redirigida, status) {
  * Qué salió de un envío.
  *
  * UN 200 SIN NÚMERO NO ES UN ÉXITO, y ésta es la razón entera de que esta
- * función exista en vez de mirar `response.ok`. Las dos rutas devuelven siempre
+ * función exista en vez de mirar `response.ok`. Las tres rutas devuelven siempre
  * su número en un 200 —el reintento que cae en "ya estaba" también, porque la
  * clave se resuelve escribiendo el número junto con la marca de resuelta—, así
  * que un 200 sin número es siempre una respuesta que **no salió de la ruta de

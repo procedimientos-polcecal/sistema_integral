@@ -18,6 +18,7 @@ import {
   siNoSePudoAvisar,
   tomarLaCarga,
   MINUTOS_PARA_SOLTAR,
+  RUTA_DE,
 } from "@/public/cola/colaOffline.js";
 
 const AHORA = new Date("2026-10-18T12:00:00.000Z");
@@ -561,6 +562,38 @@ describe("cómo se nombra una carga", () => {
     expect(`${conSuArticulo("orden")} que quedó ${concordado("orden", "parad")}`).toBe(
       "la orden de trabajo que quedó parada",
     );
+  });
+});
+
+describe("el tercer tipo de carga: la condición insegura", () => {
+  // Hasta que entró la condición, `comoSeLlama`, `conSuArticulo` y `concordado`
+  // eran `tipo === "aviso" ? x : y`: un tercer tipo caía en la rama de «orden»
+  // por accidente, y en dos de los tres casos daba una frase que suena bien. Estos
+  // tests fijan lo que dice cada una para el tercero; el mapa exhaustivo hace que
+  // el cuarto falle en `tsc` y no acá.
+  it("la condición tiene su nombre, su artículo y su concordancia", () => {
+    expect(comoSeLlama("condicion")).toBe("Condición insegura");
+    expect(conSuArticulo("condicion")).toBe("la condición insegura");
+    expect(concordado("condicion", "parad")).toBe("parada");
+  });
+
+  it("la condición va a su ruta de alta", () => {
+    expect(RUTA_DE.condicion).toBe("/api/seguridad-higiene/condiciones");
+  });
+
+  it("lee el número de la condición del campo que devuelve su ruta", () => {
+    const r = comoContesto("condicion", {
+      status: 200,
+      redirigida: false,
+      cuerpo: { numero: "CI-45" },
+    });
+    expect(r).toMatchObject({ ok: true, numero: "CI-45" });
+  });
+
+  it("y los otros dos no leen ese campo: un aviso con `numero` no se da por cargado", () => {
+    const contestacion = { status: 200, redirigida: false, cuerpo: { numero: "CI-45" } };
+    expect(comoContesto("aviso", contestacion).ok).toBe(false);
+    expect(comoContesto("orden", contestacion).ok).toBe(false);
   });
 });
 

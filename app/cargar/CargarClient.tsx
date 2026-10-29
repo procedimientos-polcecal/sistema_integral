@@ -36,13 +36,18 @@ import {
 } from "./catalogos";
 import { loQueDijo, mandarALaRuta, type Resultado } from "./envio";
 import FormularioAvisoOffline from "./FormularioAvisoOffline";
+import FormularioCondicionOffline from "./FormularioCondicionOffline";
+import { formularioQueSeVe, tiposQueSeOfrecen } from "@/lib/seguridadHigiene/glosarioOffline";
 import FormularioOTOffline from "./FormularioOTOffline";
 
 /** En qué estado quedó la lectura del teléfono al abrir la pantalla. */
 type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
 
 /**
- * La pantalla que anda sin señal: dos formularios y lo que está esperando.
+ * La pantalla que anda sin señal: los formularios y lo que está esperando. Son
+ * dos —aviso y orden de trabajo— y un tercero, la condición insegura de
+ * Seguridad e Higiene, que sólo aparece si el teléfono tiene anotado que la
+ * persona puede cargarla.
  *
  * TODO SALE DEL TELÉFONO. Los desplegables son los que quedaron guardados en
  * IndexedDB, quién es la sesión también, y la cola es lo que todavía no pudo
@@ -476,14 +481,21 @@ export default function CargarClient() {
   const sinSesion = arranque === "listo" && sesionResuelta && !sesion;
   const averiguandoQuienSos = arranque === "listo" && !sesionResuelta && !sesion;
   const deshabilitado = arranque !== "listo" || !sesion;
+  // Qué pestañas hay y cuál se ve. Se calcula acá y no se guarda en el estado:
+  // si el permiso se retira mientras la pantalla está abierta, la pestaña de
+  // condición desaparece y el formulario vuelve solo a uno que se pueda cargar.
+  const ofrecidos = tiposQueSeOfrecen(catalogos.puedeCargarCondiciones);
+  const formulario = formularioQueSeVe(queFormulario, ofrecidos);
 
   return (
     <main className="mx-auto w-full max-w-xl space-y-4 p-4">
       <header>
         <h1 className="text-lg font-bold text-slate-900">Cargar sin señal</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Un aviso o una orden de trabajo de Mantenimiento. Si no hay señal,
-          queda esperando acá abajo hasta que vuelva.
+          {catalogos.puedeCargarCondiciones
+            ? "Un aviso o una orden de trabajo de Mantenimiento, o una condición insegura. "
+            : "Un aviso o una orden de trabajo de Mantenimiento. "}
+          Si no hay señal, queda esperando acá abajo hasta que vuelva.
         </p>
       </header>
 
@@ -547,17 +559,22 @@ export default function CargarClient() {
       ) : (
         <>
           <div className="flex gap-2">
-            {(["aviso", "orden"] as const).map((tipo) => (
+            {/* La condición insegura sólo se ofrece si este teléfono tiene
+                anotado que la persona puede cargarla: `/cargar` no filtra por
+                módulo, y sin esto alguien sin Seguridad e Higiene sacaría la
+                carga y se comería un 403 cuando vuelva la señal. Sin la
+                anotación no se muestra: es lo seguro cuando no se sabe. */}
+            {ofrecidos.map((tipo) => (
               <button
                 key={tipo}
                 onClick={() => setQueFormulario(tipo)}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${
-                  queFormulario === tipo
+                  formulario === tipo
                     ? "bg-slate-900 text-white"
                     : "border border-slate-300 bg-white text-slate-700"
                 }`}
               >
-                {tipo === "aviso" ? "Aviso" : "Orden de trabajo"}
+                {comoSeLlama(tipo)}
               </button>
             ))}
           </div>
@@ -589,7 +606,7 @@ export default function CargarClient() {
               de la carga que se eligió corregir. Sube **sólo** al empezar o
               dejar una corrección: al guardar no, porque remontar ahí borraría
               el cartel que acaba de decir con qué número entró. */}
-          {queFormulario === "aviso" ? (
+          {formulario === "aviso" ? (
             <FormularioAvisoOffline
               key={generacion}
               equipos={catalogos.equipos}
@@ -600,7 +617,7 @@ export default function CargarClient() {
                 mandar("aviso", cuerpo, borrador?.tipo === "aviso" ? borrador.clave : null)
               }
             />
-          ) : (
+          ) : formulario === "orden" ? (
             <FormularioOTOffline
               key={generacion}
               equipos={catalogos.equipos}
@@ -610,6 +627,16 @@ export default function CargarClient() {
               borrador={borrador?.tipo === "orden" ? borrador.cuerpo : null}
               onMandar={(cuerpo) =>
                 mandar("orden", cuerpo, borrador?.tipo === "orden" ? borrador.clave : null)
+              }
+            />
+          ) : (
+            <FormularioCondicionOffline
+              key={generacion}
+              catalogos={catalogos}
+              deshabilitado={deshabilitado}
+              borrador={borrador?.tipo === "condicion" ? borrador.cuerpo : null}
+              onMandar={(cuerpo) =>
+                mandar("condicion", cuerpo, borrador?.tipo === "condicion" ? borrador.clave : null)
               }
             />
           )}
