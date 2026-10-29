@@ -32,19 +32,38 @@
 --                esperando dos piezas de dos pedidos distintos y la pregunta
 --                tiene que decir cuál. `on delete set null` y **no cascade**:
 --                sacar un repuesto de la lista no puede llevarse la conversación
---                que hubo sobre él.
+--                que hubo sobre él. Una PREGUNTA con `repuesto_id` en null es
+--                una a cuyo repuesto sacaron de la lista, y por eso ya no está
+--                abierta.
 --
---   responde_a   a qué nota contesta ésta: una RESPUESTA apunta a su PREGUNTA.
---                Ésta sí es cascade, porque una respuesta sin su pregunta no
---                dice de qué habla.
+--   responde_a   a qué nota se refiere ésta, y no siempre es una respuesta: lleva
+--                tres casos. La RESPUESTA de Compras, que apunta a su PREGUNTA;
+--                una PREGUNTA de seguimiento («sigue sin llegar»), que apunta a
+--                la primera; y el «ya llegó» de quien preguntó, que es una
+--                RESPUESTA suya. Por eso `responde_a is not null` no quiere
+--                decir «tiene respuesta»: eso lo dice el tipo.
 --
--- **No hay columna «cerrada».** Si una pregunta sigue abierta se deriva de lo que
--- ya está en las filas —si alguien la contestó, si la OT ya se hizo, si el
--- repuesto sigue en la lista—, y esa regla vive en TypeScript, con tests, en un
--- solo lugar. Una marca guardada sería un segundo dato para algo que ya está dicho
--- en otro lado, y además no habría cómo cambiarla: esta tabla no tiene policy de
--- update y es a propósito —un historial que se puede reescribir no es un
--- historial—. Lo que cierra una pregunta es una fila nueva, que queda a la vista.
+-- **`responde_a` no borra en cascada, y el límite está en la base.** La ruta de
+-- notas deja borrar la nota propia (filtra por `creado_por`). Con `on delete
+-- cascade`, quien preguntó podría borrar su pregunta y llevarse puesta la
+-- respuesta que escribió Compras, y la ruta, además, reescribiría la columna X
+-- sin ella. Sin cascade, la base se niega: una nota a la que otra apunta no se
+-- puede borrar (`23503`). Va acá y no en cada ruta para que ninguna se lo pueda
+-- olvidar. Borrar la OT entera sigue andando: las notas se van todas juntas por
+-- `orden_id`. Lo que queda a cargo de la ruta que escribe es que `responde_a`
+-- apunte a una nota de la misma OT: una que apuntara a otra haría fallar el
+-- borrado de esa otra OT.
+--
+-- **No hay columna «cerrada».** Si una pregunta sigue abierta se deriva de lo
+-- que ya está en las filas —por ejemplo, si una RESPUESTA apunta a ella, si la
+-- OT ya se hizo o si sacaron el repuesto de la lista—, y esa regla se escribe en
+-- TypeScript, con tests, en un solo lugar:
+-- `lib/mantenimiento/consultaDeRepuesto.ts`, que al escribir esta migración
+-- todavía no existe. Una marca guardada sería un segundo dato para algo que ya
+-- está dicho en otro lado, y además no habría cómo cambiarla: esta tabla no
+-- tiene policy de update y es a propósito —un historial que se puede
+-- reescribir no es un historial—. Lo que cierra una pregunta es una fila nueva,
+-- que queda a la vista.
 --
 -- **Las policies de `ordenes_trabajo_notas` no se tocan.** Todas las escrituras
 -- entran por rutas que usan el cliente admin y comprueban el permiso ellas
@@ -72,9 +91,8 @@
 -- de Compras o del sistema. No es una tabla puente —tiene una sola clave foránea,
 -- a `usuarios`—, así que no abre un segundo camino para PostgREST.
 --
--- **Lo que se probó antes de escribirla**, el 29/10/2026: este archivo, tal cual,
--- contra un Postgres 15 limpio con las tablas como están hoy y PostgREST 12.2.8
--- adelante.
+-- **Lo que se probó**, el 29/10/2026: este archivo, tal cual, contra un Postgres
+-- 15 limpio con las tablas como están hoy y PostgREST 12.2.8 adelante.
 --
 --   - Dos corridas seguidas, cada una en una transacción como la corre el editor
 --     de Supabase: la segunda no cambia nada. Eso incluye el `check` y los
@@ -92,11 +110,12 @@
 --     `PGRST201` en esas pantallas, se arregla nombrando la FK
 --     (`usuarios!creado_por`), no sacando la columna.
 --
---   - Que `set null` conserva la pregunta, que `cascade` se lleva la respuesta,
---     que borrar la OT —lo que hace el espejo— no choca con las claves nuevas, y
---     las policies de `compras_consultados` con cinco sesiones: la escriben el
---     admin del sistema y el admin de Compras; no quien sólo edita Mantenimiento,
---     ni quien sólo edita Compras, ni quien no tiene sesión.
+--   - Que `set null` conserva la pregunta; que una nota a la que otra apunta no
+--     se puede borrar y la OT entera sí, con una pregunta, su respuesta y un
+--     seguimiento adentro; y las policies de `compras_consultados` con cinco
+--     sesiones: la escriben el admin del sistema y el admin de Compras; no quien
+--     sólo edita Mantenimiento, ni quien sólo edita Compras, ni quien no tiene
+--     sesión.
 -- ============================================================
 
 -- ── Las tres columnas ────────────────────────────────────────
@@ -106,20 +125,21 @@ alter table ordenes_trabajo_notas
     check (tipo in ('JUSTIFICACION', 'PREGUNTA', 'RESPUESTA')),
   add column if not exists repuesto_id uuid
     references ordenes_trabajo_repuestos(id) on delete set null,
+  -- Sin `on delete`, a propósito: ver el encabezado.
   add column if not exists responde_a uuid
-    references ordenes_trabajo_notas(id) on delete cascade;
+    references ordenes_trabajo_notas(id);
 
 comment on table ordenes_trabajo_notas is
   'El historial de una orden de trabajo: por qué todavía no se hizo, y lo que Mantenimiento le preguntó a Compras por un repuesto y lo que Compras contestó. Cada entrada queda, no se edita. A la columna X de la planilla va la última, sea del tipo que sea.';
 
 comment on column ordenes_trabajo_notas.tipo is
-  'JUSTIFICACION (por qué la OT sigue abierta), PREGUNTA (de Mantenimiento a Compras por un repuesto) o RESPUESTA (de Compras a una PREGUNTA). Las tres cuentan como justificación. Si una PREGUNTA sigue abierta no se guarda: se deriva.';
+  'JUSTIFICACION (por qué la OT sigue abierta), PREGUNTA (de Mantenimiento a Compras por un repuesto) o RESPUESTA (a una PREGUNTA: la de Compras, o el «ya llegó» de quien preguntó). Las tres cuentan como justificación. Si una PREGUNTA sigue abierta no se guarda: se deriva.';
 
 comment on column ordenes_trabajo_notas.repuesto_id is
-  'De qué repuesto de la OT es la PREGUNTA. Null en las demás, y también si el repuesto salió de la lista: la conversación queda, sólo se suelta del repuesto.';
+  'De qué repuesto de la OT es la PREGUNTA. Una PREGUNTA con repuesto_id en null es una a cuyo repuesto sacaron de la lista: la conversación queda, sólo se suelta del repuesto, y por eso ya no está abierta.';
 
 comment on column ordenes_trabajo_notas.responde_a is
-  'La nota a la que contesta ésta: una RESPUESTA apunta a su PREGUNTA. Si la nota original se borra, ésta se va con ella.';
+  'A qué nota se refiere ésta. Lleva tres casos: la RESPUESTA de Compras a su PREGUNTA, una PREGUNTA de seguimiento («sigue sin llegar») que apunta a la primera, y el «ya llegó» de quien preguntó, que es una RESPUESTA suya. Por eso responde_a no nulo NO quiere decir «tiene respuesta»: eso lo dice el tipo. No borra en cascada: una nota a la que otra apunta no se puede borrar, así quien borra su pregunta no se lleva puesta la respuesta de otro.';
 
 -- ── A quién se le pregunta ───────────────────────────────────
 
@@ -143,7 +163,8 @@ create policy compras_consultados_select on compras_consultados
 -- tiene nivel `admin` en el módulo. Es la misma condición de `compras_aprobadores`
 -- (migración 028) y de `compras_ajustes` (20261019094903), con las llamadas
 -- envueltas en un `select` —así Postgres las evalúa una vez y no por fila— y las
--- columnas calificadas, porque `usuario_id` existe en las dos tablas.
+-- columnas calificadas con el nombre de la tabla, sólo por claridad: `usuario_id`
+-- está en las dos tablas y, sin calificar, también resolvería a `usuario_modulos`.
 drop policy if exists compras_consultados_write on compras_consultados;
 create policy compras_consultados_write on compras_consultados
   for all to authenticated
