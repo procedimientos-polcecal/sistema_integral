@@ -79,8 +79,9 @@ describe("armarTurnos: un cero es una parada", () => {
 
 describe("armarTurnos: exceso de marcha", () => {
   it("una fila que excede su duración se cubre con la racha de turnos faltantes", () => {
-    // 2026-03-09 11:59, 631 minutos en un bloque de 480. El domingo 08/03 no
-    // tiene ni una fila y el 3:59 del lunes tampoco: cinco turnos faltantes.
+    // 2026-03-09 11:59, 631 minutos en un bloque de 480. Hacia atrás sólo falta
+    // el 3:59 del lunes: antes está el domingo 08/03, sin una fila, donde la
+    // racha se corta. 631 <= 480 + 240 + 10.
     const { turnos } = armarTurnos([
       ...diaCompleto("2026-03-07"),
       fila("2026-03-09", "11:59", 631, 20000),
@@ -89,7 +90,7 @@ describe("armarTurnos: exceso de marcha", () => {
     ]);
     const t = turnoDe(turnos, "2026-03-09", "04_12");
     expect(t.estado).toBe("acumulado");
-    expect(t.minutosTeoricos).toBe(2160); // 480 propios + 240 + 480 + 480 + 240 + 240
+    expect(t.minutosTeoricos).toBe(720); // 480 propios + el 3:59 faltante, NO 2160
     expect(t.minutosMarcha).toBe(631);
     expect(t.kg).toBe(20000);
     // Lo que absorbe no aparece como turno propio: ni parada ni huérfano.
@@ -98,17 +99,51 @@ describe("armarTurnos: exceso de marcha", () => {
     expect(turnos.some((x) => x.estado === "huerfano")).toBe(false);
   });
 
-  it("los días parados que cubrió una fila no le sirven a la siguiente", () => {
-    // El lunes cruza el domingo; el 19:59 del mismo lunes excede sin tener nada
-    // faltante antes, y no puede heredar los 1.440 minutos del domingo.
+  it("la racha se corta en un día sin filas: no suma sus 1.440 minutos", () => {
+    // Es la decisión que separa 85,3 % de 82,0 % de utilización en Filler 1: el
+    // día que la planta estuvo cerrada no se sabe cuánto de la marcha informada
+    // ocurrió entonces, y contarlo inflaría el denominador con horas que nadie
+    // pudo trabajar. 900 minutos no entran en 480 + 240 + 10 y el domingo no
+    // ayuda: queda inconsistente, conserva los kilos, y no se vuelve acumulado.
     const { turnos } = armarTurnos([
       ...diaCompleto("2026-03-07"),
-      fila("2026-03-09", "11:59", 631),
-      fila("2026-03-09", "19:59", 700, 42000),
+      fila("2026-03-09", "11:59", 900, 31000),
+      fila("2026-03-09", "19:59", 480),
       fila("2026-03-09", "23:59", 240),
     ]);
-    expect(turnoDe(turnos, "2026-03-09", "04_12").estado).toBe("acumulado");
-    expect(turnoDe(turnos, "2026-03-09", "12_20")).toMatchObject({ estado: "inconsistente", kg: 42000 });
+    expect(turnoDe(turnos, "2026-03-09", "04_12")).toMatchObject({
+      estado: "inconsistente",
+      minutosTeoricos: 480,
+      kg: 31000,
+    });
+    // El 3:59 del lunes quedó sin quién lo absorba.
+    expect(turnoDe(turnos, "2026-03-09", "00_04").estado).toBe("huerfano");
+  });
+
+  it("lo que quedó antes del corte tampoco lo absorbe una fila posterior", () => {
+    // Faltan el 19:59 y el 23:59 del sábado, el domingo está vacío y del lunes
+    // falta el 3:59. Sin el corte la racha del 11:59 sería 480+240+240+480 y
+    // cubriría los 900 minutos; con el corte sólo cuenta el 3:59 del lunes
+    // (480+240 = 720) y el turno queda inconsistente.
+    const { turnos } = armarTurnos([
+      fila("2026-03-07", "3:59", 240),
+      fila("2026-03-07", "11:59", 480),
+      fila("2026-03-09", "11:59", 900),
+      fila("2026-03-09", "19:59", 480),
+      fila("2026-03-09", "23:59", 240),
+    ]);
+    expect(turnoDe(turnos, "2026-03-09", "04_12").estado).toBe("inconsistente");
+    // Salen en su lugar cronológico: los del sábado y el 3:59 del lunes.
+    expect(turnos.map((t) => `${t.fecha} ${t.turno} ${t.estado}`)).toEqual([
+      "2026-03-07 00_04 normal",
+      "2026-03-07 04_12 normal",
+      "2026-03-07 12_20 huerfano",
+      "2026-03-07 20_00 huerfano",
+      "2026-03-09 00_04 huerfano",
+      "2026-03-09 04_12 inconsistente",
+      "2026-03-09 12_20 normal",
+      "2026-03-09 20_00 normal",
+    ]);
   });
 
   it("la racha también se arma con faltantes de días que sí tienen filas", () => {

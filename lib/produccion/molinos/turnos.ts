@@ -10,6 +10,7 @@
  *    es una planta que no trabajó (los 22 de Filler 1 son domingo o feriado), y
  *    contarlo inventaría 528 horas de molino parado. Ni numerador ni
  *    denominador: no genera turnos de ningún tipo.
+ *    Y corta las rachas: ver el comentario dentro de `armarTurnos`.
  * 2. **Un turno en cero dentro de un día con filas es una parada normal.** No es
  *    lo mismo que la regla anterior y la diferencia es la trampa: Filler 2 deja
  *    cuatro ceros donde Filler 1 deja el día vacío. Acá el cero es un dato.
@@ -42,8 +43,6 @@ export const DURACION: Record<CorteDeTurno, number> = {
  * 23:59 la cierra. Es orden de reloj, no el del archivo: cada molino numera los
  * suyos distinto.
  */
-const MINUTOS_DE_UN_DIA = 240 + 480 + 480 + 240;
-
 const CORTES_EN_ORDEN: readonly CorteDeTurno[] = ["3:59", "11:59", "19:59", "23:59"];
 
 /** El turno lo decide la hora de cierre y nunca la posición de la columna. */
@@ -155,15 +154,21 @@ export function armarTurnos(
   // Los faltantes desde la última fila presente, que son los candidatos a ser
   // absorbidos por la próxima.
   let racha: Casilla[] = [];
-  // Los minutos de los días sin filas que la racha atraviesa. Cuentan para
-  // explicar un exceso —el robot no corta nada mientras la planta está parada, y
-  // la fila que sigue lo carga todo— pero no son huérfanos: ese día no existe.
-  // Es lo que da los 2.160 minutos del 09/03/2026, que cruza el domingo 08/03.
-  let minutosDeDiasParados = 0;
   let diaAnterior = secuencia[0].fecha;
 
   for (const casilla of secuencia) {
-    minutosDeDiasParados += Math.max(0, diasEntre(diaAnterior, casilla.fecha) - 1) * MINUTOS_DE_UN_DIA;
+    // **La racha se corta en un día sin filas: no lo atraviesa ni suma sus
+    // 1.440 minutos.** De lo que el robot informó después de una planta cerrada
+    // no se sabe cuánto ocurrió durante el cierre, y contar esas 24 horas como
+    // disponibles infla el denominador con horas que nadie pudo trabajar. Si el
+    // exceso sigue sin explicarse queda `inconsistente`, que es para lo que
+    // existe ese estado. Medido sobre Filler 1: atravesarlo da 82,0 % de
+    // utilización y cortarlo 85,3 %, que es lo que dice el spec. Lo que quedó
+    // antes del corte ya no tiene quién lo absorba: son huérfanos.
+    if (diasEntre(diaAnterior, casilla.fecha) > 1) {
+      for (const c of racha) turnos.push(huerfano(c));
+      racha = [];
+    }
     diaAnterior = casilla.fecha;
     const fila = casilla.fila;
     if (!fila) {
@@ -179,8 +184,7 @@ export function armarTurnos(
     if (fila.minutos > teorica + toleranciaMin) {
       // Sin racha el `reduce` da 0 y el exceso queda sin cubrir: es justamente
       // el caso `inconsistente`.
-      const cubierta =
-        teorica + racha.reduce((s, c) => s + DURACION[c.corte], 0) + minutosDeDiasParados;
+      const cubierta = teorica + racha.reduce((s, c) => s + DURACION[c.corte], 0);
       if (fila.minutos <= cubierta + toleranciaMin) {
         estado = "acumulado";
         minutosTeoricos = cubierta;
@@ -197,7 +201,6 @@ export function armarTurnos(
     // Lo que la fila no absorbió queda como huérfano, en su lugar cronológico.
     if (!absorbida) for (const c of racha) turnos.push(huerfano(c));
     racha = [];
-    minutosDeDiasParados = 0;
 
     turnos.push({
       fecha: fila.fecha,
