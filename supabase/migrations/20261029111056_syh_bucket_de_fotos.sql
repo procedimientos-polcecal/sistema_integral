@@ -10,10 +10,13 @@
 --   * BUCKET NUEVO, no se reusa `execution-photos`: ése es de Mantenimiento y
 --     tiene sus propias reglas y su propia lista de tipos.
 --
---   * PRIVADO (`public = false`), y los links se firman al pedirlos. En
---     Mantenimiento tenía que ser público porque el link se escribe en una
---     planilla que mira gente sin sesión; este módulo no tiene planilla, y no
---     hay nadie sin sesión que deba ver una foto de una condición insegura.
+--   * PRIVADO (`public = false`), y los links se firman al pedirlos.
+--     `execution-photos` también nace privado en la 006 —y así sigue—, pero en
+--     Mantenimiento hay una razón para querer hacerlo público: el link se escribe
+--     en una planilla que mira gente sin sesión (ver «El link y la planilla» en
+--     docs/MANTENIMIENTO-INTEGRACION.md; la decisión está en manos de quien
+--     maneja los datos). Este módulo no tiene planilla, y no hay nadie sin
+--     sesión que deba ver una foto de una condición insegura.
 --
 --   * LA LISTA DE TIPOS TIENE QUE DECIR LO MISMO QUE `TIPOS` DE LA RUTA DE
 --     FOTOS (app/api/seguridad-higiene/fotos/route.ts, Tarea 3 del plan).
