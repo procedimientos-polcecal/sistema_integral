@@ -190,6 +190,18 @@ export interface OrdenLeida {
   fecha_ejecucion: string | null;
   fecha_cierre: string | null;
   estado: string;
+  /**
+   * La celda del estado **tal cual**, sin interpretar.
+   *
+   * `estado` pasa por `estadoDeTexto`, que a lo que no reconoce le pone «por
+   * hacer» — y eso incluye la celda vacía. Es lo correcto para importar: una
+   * orden sin clasificar es una orden que falta hacer. Pero borra la
+   * diferencia entre «la planilla dice Por hacer» y «la planilla no dice
+   * nada», y ésa es justamente la que hizo falta el 29/10/2026: ocho órdenes
+   * con el ESTADO en blanco que el contraste no podía ver, porque las leía
+   * como «por hacer» y el sistema también decía «por hacer».
+   */
+  estado_raw: string | null;
   contratista: string | null;
   horas: number | null;
   operario_1: string | null;
@@ -222,6 +234,7 @@ export function filaDeOrden(fila: unknown[], numeroFila: number): OrdenLeida | n
     fecha_ejecucion: fechaDeSheets(fila[COL.fechaEjecucion]),
     fecha_cierre: fechaDeSheets(fila[COL.fechaCierre]),
     estado: estadoDeTexto(fila[COL.estado]),
+    estado_raw: campo(fila[COL.estado]),
     contratista: campo(fila[COL.contratista]),
     horas: numero(fila[COL.horas]),
     operario_1: campo(fila[COL.operario1]),

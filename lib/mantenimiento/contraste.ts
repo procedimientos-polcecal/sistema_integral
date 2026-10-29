@@ -102,16 +102,41 @@ function comparable(v: unknown): string {
 /**
  * Los estados que la planilla calcula sola cuando el sistema dice «por hacer».
  *
- * `POR_HACER` es el único que no se exporta nunca: la `M` del master trae
- * `=IF(J="","",L)` y escribirla la reemplaza por un literal, dejando la orden
- * fija el día que se pase de fecha. Así que la planilla dice lo que la fórmula
- * calcula, y eso no es una divergencia.
+ * La `M` de una orden por hacer lleva `=IF(J="","",L)`, así que muestra lo que
+ * la `L` calcula: «Por hacer» hasta que la fecha se vence y «Atrasado»
+ * después. El sistema sigue diciendo `POR_HACER` en los dos casos, y eso no es
+ * una divergencia sino la fórmula haciendo su trabajo.
+ *
+ * **Hasta el 29/10/2026 esta excusa tapaba un defecto**, y conviene saber por
+ * qué: el sistema NO escribía la `M` de una orden por hacer, creyendo que la
+ * columna ya traía esa fórmula. No la traía. Entonces la celda quedaba vacía,
+ * `estadoDeTexto` la leía como «por hacer», el sistema también decía «por
+ * hacer», y esto la dejaba pasar. Ocho órdenes sin estado en la planilla que
+ * el contraste no podía ver. De ahí sale `laCeldaDelEstadoEstaVacia`.
  */
 const LOS_QUE_CALCULA_LA_PLANILLA = new Set(["POR_HACER", "ATRASADO"]);
 
 function esElEstadoQueCalculaLaPlanilla(sistema: unknown, planilla: unknown): boolean {
   return comparable(sistema) === "POR_HACER"
     && LOS_QUE_CALCULA_LA_PLANILLA.has(comparable(planilla));
+}
+
+/**
+ * La celda del ESTADO está vacía y no debería.
+ *
+ * Es un defecto distinto de los demás y por eso se mira aparte: no es que los
+ * dos lados digan cosas distintas —el sistema dice «por hacer» y la celda
+ * vacía también se lee «por hacer»—, es que **a la celda le falta la
+ * fórmula**. Quien mire la planilla ve una orden sin estado, y cuando la
+ * fecha se venza va a seguir sin verlo.
+ *
+ * **Sin fecha de ejecución no cuenta**, y ésa es la mitad que importa de esta
+ * función: ahí `=IF(J="","",L)` devuelve vacío *porque corresponde* —no hay
+ * nada que calcular—, así que marcarla sería ruido permanente. Es el caso de
+ * la OT 622, la única del libro sin fecha.
+ */
+export function laCeldaDelEstadoEstaVacia(p: OrdenLeida): boolean {
+  return comparable(p.estado_raw) === "" && comparable(p.fecha_ejecucion) !== "";
 }
 
 /**
@@ -144,6 +169,19 @@ export function contrastar(
     // planilla todavía no. Se informa aparte y no se compara, porque comparar
     // la contaría como problema cada vez.
     if (comparable(s.sheets_pendiente) !== "") { enLaCola.push(s.ot_number); continue; }
+
+    // Va antes de comparar campo por campo porque no es una comparación: los
+    // dos lados dicen «por hacer» y aun así la planilla está mal. Se informa
+    // con el nombre del problema y no con el del campo, para que quien lo lea
+    // sepa que lo que falta es la fórmula y no un dato.
+    if (laCeldaDelEstadoEstaVacia(p)) {
+      divergencias.push({
+        ot_number: s.ot_number,
+        campo: "la celda del estado, sin la fórmula",
+        enElSistema: comparable(s.estado) || "(vacío)",
+        enLaPlanilla: "(vacía: no dice nada y no se va a actualizar sola)",
+      });
+    }
 
     for (const [campo, nombre] of CAMPOS) {
       const a = comparable(s[campo]);

@@ -18,7 +18,10 @@ const enLaPlanilla = (p: Partial<OrdenLeida> & { ot_number: number }): OrdenLeid
   especialidad: "ELÉCTRICO", tipo: "CORRECTIVO", quien: "INTERNO",
   descripcion: "Inversión de giro de alimentador", repuesto: null,
   fecha_ejecucion: "2026-10-01", fecha_cierre: "2026-10-01",
-  estado: "REALIZADO", contratista: null, horas: 1,
+  // `estado` es lo interpretado y `estado_raw` la celda tal cual. Los dos van
+  // en el fixture porque la diferencia entre ellos es un caso de prueba: una
+  // celda vacía se interpreta «por hacer» y hay que poder distinguirla.
+  estado: "REALIZADO", estado_raw: "Realizado", contratista: null, horas: 1,
   operario_1: "Agosta", operario_2: "Garcia", operario_3: null,
   prioridad: "🟡 Media", frecuencia: null, proxima_fecha: null,
   sheets_row: 2225, ...p,
@@ -145,5 +148,69 @@ describe("las que están de un solo lado", () => {
     expect(r.soloEnElSistema).toEqual([1]);
     expect(r.soloEnLaPlanilla).toEqual([3]);
     expect(r.divergencias.map((d) => d.ot_number)).toEqual([2]);
+  });
+});
+
+/**
+ * El defecto que este contraste NO veía, y que lo hizo falta construir.
+ *
+ * El sistema decía «por hacer» y la celda del ESTADO estaba vacía. Como
+ * `estadoDeTexto` lee una celda vacía como «por hacer», los dos lados
+ * coincidían y no se informaba nada. Mientras tanto, quien miraba la planilla
+ * veía ocho órdenes sin estado — y dos de ellas ya vencidas, sin que la celda
+ * fuera a enterarse nunca, porque la fórmula que lo calcula no estaba.
+ */
+describe("la celda del estado vacía", () => {
+  const porHacer = { estado: "POR_HACER", estado_raw: "Por hacer" };
+
+  it("se informa aunque los dos lados se lean igual", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2896, ...porHacer, fecha_cierre: null, horas: null,
+        operario_1: null, operario_2: null })],
+      [enLaPlanilla({ ot_number: 2896, ...porHacer, estado_raw: null, fecha_cierre: null,
+        horas: null, operario_1: null, operario_2: null })]
+    );
+    expect(r.divergencias).toHaveLength(1);
+    expect(r.divergencias[0].campo).toContain("fórmula");
+    expect(r.divergencias[0].ot_number).toBe(2896);
+  });
+
+  it("con la fórmula puesta no se informa nada", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2896, ...porHacer, fecha_cierre: null, horas: null,
+        operario_1: null, operario_2: null })],
+      [enLaPlanilla({ ot_number: 2896, ...porHacer, fecha_cierre: null, horas: null,
+        operario_1: null, operario_2: null })]
+    );
+    expect(r.divergencias).toEqual([]);
+  });
+
+  /**
+   * «Atrasado» en la planilla contra «por hacer» en el sistema sigue siendo la
+   * fórmula trabajando, no una divergencia: la L pasa sola de una a otra.
+   */
+  it("atrasado contra por hacer no es una divergencia", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2914, ...porHacer, fecha_cierre: null, horas: null,
+        operario_1: null, operario_2: null })],
+      [enLaPlanilla({ ot_number: 2914, estado: "ATRASADO", estado_raw: "Atrasado",
+        fecha_cierre: null, horas: null, operario_1: null, operario_2: null })]
+    );
+    expect(r.divergencias).toEqual([]);
+  });
+
+  /**
+   * Sin fecha de ejecución la celda vacía es lo correcto: `=IF(J="","",L)` no
+   * tiene nada que calcular. Marcarla sería ruido para siempre — es el caso de
+   * la OT 622, la única del libro sin fecha.
+   */
+  it("sin fecha de ejecución, una celda vacía no se marca", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 622, ...porHacer, fecha_ejecucion: null, fecha_cierre: null,
+        horas: null, operario_1: null, operario_2: null })],
+      [enLaPlanilla({ ot_number: 622, ...porHacer, estado_raw: null, fecha_ejecucion: null,
+        fecha_cierre: null, horas: null, operario_1: null, operario_2: null })]
+    );
+    expect(r.divergencias).toEqual([]);
   });
 });
