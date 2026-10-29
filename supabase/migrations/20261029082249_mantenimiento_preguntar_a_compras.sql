@@ -39,9 +39,10 @@
 --   responde_a   a qué nota se refiere ésta, y no siempre es una respuesta: lleva
 --                tres casos. La RESPUESTA de Compras, que apunta a su PREGUNTA;
 --                una PREGUNTA de seguimiento («sigue sin llegar»), que apunta a
---                la primera; y el «ya llegó» de quien preguntó, que es una
---                RESPUESTA suya. Por eso `responde_a is not null` no quiere
---                decir «tiene respuesta»: eso lo dice el tipo.
+--                la que está abierta y la supera; y el «ya llegó» de quien
+--                preguntó, que es una RESPUESTA suya. Por eso
+--                `responde_a is not null` no quiere decir «tiene respuesta»:
+--                eso lo dice el tipo.
 --
 -- **`responde_a` no borra en cascada, y el límite está en la base.** La ruta de
 -- notas deja borrar la nota propia (filtra por `creado_por`). Con `on delete
@@ -55,15 +56,15 @@
 -- borrado de esa otra OT.
 --
 -- **No hay columna «cerrada».** Si una pregunta sigue abierta se deriva de lo
--- que ya está en las filas —por ejemplo, si una RESPUESTA apunta a ella, si la
--- OT ya se hizo o si sacaron el repuesto de la lista—, y esa regla se escribe en
--- TypeScript, con tests, en un solo lugar:
--- `lib/mantenimiento/consultaDeRepuesto.ts`, que al escribir esta migración
--- todavía no existe. Una marca guardada sería un segundo dato para algo que ya
--- está dicho en otro lado, y además no habría cómo cambiarla: esta tabla no
--- tiene policy de update y es a propósito —un historial que se puede
--- reescribir no es un historial—. Lo que cierra una pregunta es una fila nueva,
--- que queda a la vista.
+-- que ya está en las filas —por ejemplo, si una RESPUESTA la apunta, si otra
+-- PREGUNTA del hilo la superó, si la OT ya no espera nada o si sacaron el
+-- repuesto de la lista—, y esa regla está escrita en TypeScript, con tests, en
+-- un solo lugar: `lib/mantenimiento/consultaDeRepuesto.ts`. Una marca guardada
+-- sería un segundo dato para algo que ya está dicho en otro lado, y además no
+-- habría cómo cambiarla: esta tabla no tiene policy de update y es a propósito
+-- —un historial que se puede reescribir no es un historial—. Una pregunta
+-- cerrada no desaparece: sigue en el historial de la OT, y lo único que cambia
+-- es que deja de contarse como abierta.
 --
 -- **Las policies de `ordenes_trabajo_notas` no se tocan.** Todas las escrituras
 -- entran por rutas que usan el cliente admin y comprueban el permiso ellas
@@ -92,7 +93,10 @@
 -- a `usuarios`—, así que no abre un segundo camino para PostgREST.
 --
 -- **Lo que se probó**, el 29/10/2026: este archivo, tal cual, contra un Postgres
--- 15 limpio con las tablas como están hoy y PostgREST 12.2.8 adelante.
+-- 15 limpio y PostgREST 12.2.8 adelante. `ordenes_trabajo_notas` era la que dejó
+-- la migración del 16/10; las otras tablas (`usuarios`, `usuario_modulos`,
+-- `ordenes_trabajo`, `ordenes_trabajo_repuestos`) se reconstruyeron a partir del
+-- catálogo del Asistente, con sus `on delete` supuestos y no leídos de la base.
 --
 --   - Dos corridas seguidas, cada una en una transacción como la corre el editor
 --     de Supabase: la segunda no cambia nada. Eso incluye el `check` y los
@@ -139,7 +143,7 @@ comment on column ordenes_trabajo_notas.repuesto_id is
   'De qué repuesto de la OT es la PREGUNTA. Una PREGUNTA con repuesto_id en null es una a cuyo repuesto sacaron de la lista: la conversación queda, sólo se suelta del repuesto, y por eso ya no está abierta.';
 
 comment on column ordenes_trabajo_notas.responde_a is
-  'A qué nota se refiere ésta. Lleva tres casos: la RESPUESTA de Compras a su PREGUNTA, una PREGUNTA de seguimiento («sigue sin llegar») que apunta a la primera, y el «ya llegó» de quien preguntó, que es una RESPUESTA suya. Por eso responde_a no nulo NO quiere decir «tiene respuesta»: eso lo dice el tipo. No borra en cascada: una nota a la que otra apunta no se puede borrar, así quien borra su pregunta no se lleva puesta la respuesta de otro.';
+  'A qué nota se refiere ésta. Lleva tres casos: la RESPUESTA de Compras a su PREGUNTA, una PREGUNTA de seguimiento («sigue sin llegar») que apunta a la que está abierta y la supera, y el «ya llegó» de quien preguntó, que es una RESPUESTA suya. Por eso responde_a no nulo NO quiere decir «tiene respuesta»: eso lo dice el tipo. No borra en cascada: una nota a la que otra apunta no se puede borrar, así quien borra su pregunta no se lleva puesta la respuesta de otro.';
 
 -- ── A quién se le pregunta ───────────────────────────────────
 
