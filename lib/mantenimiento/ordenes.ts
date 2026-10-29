@@ -362,6 +362,52 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
 }
 
 /**
+ * El valor de una celda. Puede depender de en qué fila va a caer.
+ *
+ * Existe por la columna del estado: lo que se escribe para una orden «por
+ * hacer» es una fórmula que nombra a su propia fila —`=IF(J2276="","",L2276)`—
+ * y esa fila no se conoce acá, sino recién cuando `escribirEnLaFilaDeLaOT`
+ * busca la OT en el master. Una función es la forma de decir «esto lo completa
+ * quien sepa la fila» sin que `celdasParaRegistrar` tenga que recibirla.
+ */
+export type ValorDeCelda = string | ((fila: number) => string);
+
+/**
+ * Qué va en la columna **M (ESTADO)** para un estado del sistema.
+ *
+ * ── POR QUÉ «POR HACER» ES UNA FÓRMULA Y NO UNA PALABRA ─────────────────────
+ *
+ * Hasta el 29/10/2026 el sistema **no escribía nada** cuando la orden estaba
+ * por hacer, y el motivo que dejó escrito el código era que «la M trae
+ * `=IF(J="","",L)` y escribirla la reemplazaría por un literal». **Ese motivo
+ * era falso**, y medirlo lo dejó claro: la M no tiene fórmula de columna —de
+ * sus 2.299 celdas, 2.291 son literales («Realizado») y sólo cinco sueltas
+ * (M1266, M1269, M1368, M1682, M1770) llevan ese `=IF(...)`, puestas a mano de
+ * a una—. La que sí es una fórmula de verdad es la **L**: una sola
+ * `ARRAYFORMULA` en L3 que llena la columna entera.
+ *
+ * O sea que no escribir nada no dejaba la celda «calculándose»: la dejaba **en
+ * blanco**. Al 29/10/2026 había ocho órdenes así —2838, 2843, 2896, 2897,
+ * 2898, 2914, 2915 y 2928—, y dos de ellas ya mostraban «Atrasado» en la L con
+ * el ESTADO vacío al lado. Para quien mira la planilla, una orden sin estado.
+ *
+ * La fórmula arregla las dos puntas: la celda dice lo que la L calcula y **se
+ * actualiza sola** el día que la fecha se pasa, que es justo lo que el literal
+ * no hace. Y tiene una ventaja que el literal tampoco tiene: como nombra a su
+ * **propia** fila, sigue estando bien aunque el master se reordene —y se
+ * reordena, por N° de OT desde el 16/10/2026—, porque lo que lee es el J y el
+ * L que tenga al lado, sea de la orden que sea.
+ *
+ * Los demás estados van como palabra: «En proceso» y «Realizado» no se deducen
+ * de una fecha, así que ahí la L no sabe nada y la fórmula mentiría.
+ */
+export function celdaDeEstado(estado: string | null | undefined, fila: number): string {
+  if (!estado) return "";
+  if (estado === "POR_HACER") return `=IF(J${fila}="","",L${fila})`;
+  return EN_LA_PLANILLA[estado] ?? estado;
+}
+
+/**
  * Qué celdas hay que escribir en la planilla al registrar el trabajo.
  *
  * Sólo las que se pasaron: la planilla es la fuente y no se toca lo que nadie
@@ -374,19 +420,21 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
  * las observaciones— van por `textoParaLaCelda`. El estado sale de un
  * vocabulario cerrado, la fecha y las horas son número: ésos no se tocan,
  * porque prefijarlos los convertiría en texto y la planilla dejaría de poder
- * sumarlos.
+ * sumarlos. **Y el estado además puede ser una fórmula** —ver `celdaDeEstado`—,
+ * que es otra razón para que no lo toque `textoParaLaCelda`: le pondría el
+ * apóstrofo delante y la escribiría como texto.
  */
 export function celdasParaRegistrar(
   registro: RegistroDeOT
-): { letra: string; columna: number; valor: string }[] {
-  const celdas: { letra: string; columna: number; valor: string }[] = [];
+): { letra: string; columna: number; valor: ValorDeCelda }[] {
+  const celdas: { letra: string; columna: number; valor: ValorDeCelda }[] = [];
 
-  const sumar = (columna: number, valor: string) =>
+  const sumar = (columna: number, valor: ValorDeCelda) =>
     celdas.push({ letra: letra(columna), columna, valor });
 
   if (registro.estado !== undefined) {
     const v = registro.estado;
-    sumar(COL.estado, v ? EN_LA_PLANILLA[v] ?? v : "");
+    sumar(COL.estado, (fila) => celdaDeEstado(v, fila));
   }
   if (registro.fecha_cierre !== undefined) {
     sumar(COL.fechaCierre, fechaParaLaPlanilla(registro.fecha_cierre));

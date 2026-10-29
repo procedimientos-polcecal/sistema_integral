@@ -131,8 +131,22 @@ describe("que hay que exportarle a la planilla", () => {
     operario_3: null,
   };
 
-  it("una orden que nace por hacer y vacia no tiene nada que exportar", () => {
-    expect(loQueHayQueExportar(base)).toBeNull();
+  /**
+   * Hasta el 29/10/2026 esto devolvia null: «por hacer» era el unico estado
+   * que no se exportaba, porque se creia que la M traia la formula
+   * `=IF(J="","",L)` y escribirla la reemplazaria por un literal. La M no
+   * tiene esa formula —2.291 de sus 2.299 celdas son literales—, asi que no
+   * escribir dejaba la celda EN BLANCO: ocho ordenes sin estado en la
+   * planilla, dos ya atrasadas. Ahora viaja, y lo que se escribe es la formula
+   * de esa fila (ver `celdaDeEstado`), que se sigue actualizando sola.
+   */
+  it("una orden que nace por hacer exporta su estado igual", () => {
+    expect(loQueHayQueExportar(base)?.estado).toBe("POR_HACER");
+  });
+
+  /** Sin estado no hay nada: es el unico caso que sigue dando null. */
+  it("sin estado y sin nada cargado no hay nada que exportar", () => {
+    expect(loQueHayQueExportar({ ...base, estado: null })).toBeNull();
   });
 
   /** El estado es lo primero: con la M vacia, el cron la pisa. */
@@ -147,11 +161,11 @@ describe("que hay que exportarle a la planilla", () => {
    * marcar sola lo atrasado: la OT quedaria fija en "por hacer" el dia que se
    * pase de fecha. Por eso POR_HACER es el unico estado que no se exporta.
    */
-  it("las horas y los operarios viajan sin el estado por hacer", () => {
+  it("las horas y los operarios viajan junto con el estado por hacer", () => {
     const r = loQueHayQueExportar({ ...base, horas: 2, operario_1: "Aguirre" });
     expect(r?.horas).toBe(2);
     expect(r?.operario_1).toBe("Aguirre");
-    expect("estado" in r!).toBe(false);
+    expect(r?.estado).toBe("POR_HACER");
   });
 
   it("y la fecha de cierre y el contratista", () => {

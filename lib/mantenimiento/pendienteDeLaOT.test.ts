@@ -12,9 +12,18 @@ const registrada = {
   operario_3: null,
 };
 
-/** Una recién creada: sin nada que la planilla no sepa ya. */
-const reciencreada = {
-  estado: "POR_HACER",
+/**
+ * Una fila sin nada que la cola pueda rehacer.
+ *
+ * **Era `estado: "POR_HACER"` y dejó de servir el 29/10/2026.** Hasta
+ * entonces «por hacer» no se exportaba, así que una orden recién creada no
+ * tenía nada que mandar; desde que su estado viaja como fórmula, sí lo tiene
+ * —y encolarla es lo correcto—. El único caso que sigue dando null es una
+ * fila **sin estado** y sin nada cargado, que es lo que queda acá: el ejemplo
+ * cambió, lo que el test afirma no.
+ */
+const sinNadaQueRehacer = {
+  estado: null,
   fecha_cierre: null,
   horas: null,
   contratista: null,
@@ -48,16 +57,28 @@ describe("elPendienteDelIntento", () => {
    * importación por una razón que ya no existe.
    */
   it("no encola un fallo que la cola no puede rehacer desde la fila", () => {
-    expect(elPendienteDelIntento(reciencreada, LO_QUE_DIJO_GOOGLE)).toBeNull();
+    expect(elPendienteDelIntento(sinNadaQueRehacer, LO_QUE_DIJO_GOOGLE)).toBeNull();
   });
 
   /**
-   * «Por hacer» no se exporta —la `M` trae la fórmula de atrasado/al día— pero
-   * las horas y los operarios viajan solos. Una orden así SÍ tiene qué
-   * reintentar, así que el fallo se anota.
+   * Las horas y los operarios viajan solos, sin estado. Una fila así SÍ tiene
+   * qué reintentar, así que el fallo se anota. Cero horas cuenta: hay trabajos
+   * de minutos y ese dato tiene que llegar.
    */
-  it("encola aunque el estado sea POR_HACER, si hay horas u operarios", () => {
-    const soloHoras = { ...reciencreada, horas: 0, operario_1: "Lopez" };
+  it("encola si hay horas u operarios, aunque no haya estado", () => {
+    const soloHoras = { ...sinNadaQueRehacer, horas: 0, operario_1: "Lopez" };
     expect(elPendienteDelIntento(soloHoras, LO_QUE_DIJO_GOOGLE)).toBe(LO_QUE_DIJO_GOOGLE);
+  });
+
+  /**
+   * Y desde el 29/10/2026 una orden recién creada también: su «por hacer» va a
+   * la planilla como fórmula, así que si la escritura falla —y al crear falla
+   * casi siempre, porque la fila del master llega por `IMPORTRANGE`— hay que
+   * encolarla. Si no, la celda del ESTADO se queda en blanco para siempre, que
+   * es exactamente lo que pasó con ocho órdenes.
+   */
+  it("encola una orden recién creada, que ahora sí tiene estado que exportar", () => {
+    const reciencreada = { ...sinNadaQueRehacer, estado: "POR_HACER" };
+    expect(elPendienteDelIntento(reciencreada, LO_QUE_DIJO_GOOGLE)).toBe(LO_QUE_DIJO_GOOGLE);
   });
 });

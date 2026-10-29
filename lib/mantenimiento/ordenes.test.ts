@@ -104,7 +104,10 @@ describe("celdasParaRegistrar", () => {
     const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
 
     // Verificado contra la planilla: M estado, K cierre, O horas, W observaciones.
-    expect(de("M")).toBe("Realizado");
+    // La M llega como función porque puede depender de la fila; con un estado
+    // que no sea «por hacer» da la palabra, cualquiera sea el renglón.
+    expect(typeof de("M") === "function" ? (de("M") as (f: number) => string)(9) : de("M"))
+      .toBe("Realizado");
     expect(de("K")).toBe("25/08/2026");
     expect(de("O")).toBe("3.5");
     expect(de("N")).toBe("ConMet");
@@ -118,11 +121,41 @@ describe("celdasParaRegistrar", () => {
     expect(celdasParaRegistrar(registro).map((c) => c.letra)).not.toContain("L");
   });
 
+  /** El valor de la M depende de la fila, así que llega como función. */
+  const estadoEnLaFila = (estado: string, fila: number) => {
+    const m = celdasParaRegistrar({ estado }).find((c) => c.letra === "M")!;
+    return typeof m.valor === "function" ? m.valor(fila) : m.valor;
+  };
+
   it("escribe el estado como lo escribe la planilla, no como lo guarda la app", () => {
-    expect(celdasParaRegistrar({ estado: "EN_PROCESO" }).find((c) => c.letra === "M")?.valor)
-      .toBe("En proceso");
-    expect(celdasParaRegistrar({ estado: "POR_HACER" }).find((c) => c.letra === "M")?.valor)
-      .toBe("Por hacer");
+    expect(estadoEnLaFila("EN_PROCESO", 2276)).toBe("En proceso");
+    expect(estadoEnLaFila("REALIZADO", 2276)).toBe("Realizado");
+  });
+
+  /**
+   * «Por hacer» no va como palabra: va la fórmula de la planilla, que lee la
+   * fecha de ejecución y la L de **esa misma fila**. Así la celda pasa sola a
+   * «Atrasado» el día que la fecha se vence, que es lo que un literal no hace.
+   * Hasta el 29/10/2026 no se escribía nada y la celda quedaba en blanco: ocho
+   * órdenes sin estado en la planilla, dos de ellas ya atrasadas.
+   */
+  it("por hacer va como la fórmula de su propia fila, no como palabra", () => {
+    expect(estadoEnLaFila("POR_HACER", 2276)).toBe('=IF(J2276="","",L2276)');
+    expect(estadoEnLaFila("POR_HACER", 7)).toBe('=IF(J7="","",L7)');
+  });
+
+  /**
+   * Que nombre a su propia fila no es un detalle: el master se reordena por N°
+   * de OT, y una fórmula que apuntara a una fila fija empezaría a leer el J de
+   * otra orden. Ésta lee siempre el renglón donde está.
+   */
+  it("la fórmula del estado nombra la fila donde cae, no una fija", () => {
+    expect(estadoEnLaFila("POR_HACER", 100)).toContain("J100");
+    expect(estadoEnLaFila("POR_HACER", 100)).not.toContain("J101");
+  });
+
+  it("vaciar el estado vacía la celda, sin fórmula", () => {
+    expect(estadoEnLaFila("", 2276)).toBe("");
   });
 
   it("sólo manda lo que se pasó", () => {
