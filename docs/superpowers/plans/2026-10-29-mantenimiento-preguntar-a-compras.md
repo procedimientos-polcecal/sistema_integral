@@ -75,7 +75,7 @@ dueña del código.
 | `app/(app)/compras/consultas/page.tsx` + `ConsultasClient.tsx` | La bandeja de Facundo. |
 | `app/(app)/mantenimiento/ordenes/RepuestosOTModal.tsx` | El botón «Preguntar a Compras». |
 | `app/(app)/mantenimiento/ordenes/JustificacionOT.tsx` | La línea de tiempo distingue pregunta de respuesta. |
-| `lib/home/avisos.ts` + `lib/home/conteos.ts` | La línea del resumen diario. |
+| `lib/home/avisos.ts` + `lib/home/avisosDeUsuario.ts` | La línea del resumen diario. |
 | `app/(app)/compras/configuracion/ConfiguracionClient.tsx` | Administrar la lista. |
 
 ---
@@ -436,6 +436,15 @@ En la ruta, el POST:
   lista vacía vuelve `motivo: "nadie aprueba"`, y la pantalla lo dice —«se
   guardó, pero no hay nadie configurado para contestar»— en vez de callarlo.
 
+**Los dos `select` de esa ruta** —el del GET y el del POST— tienen que traer
+`tipo`, `repuesto_id` y `responde_a`. Hoy piden `id, texto, creado_en,
+creado_por, autor`: sin extenderlos, `preguntasAbiertas` devuelve `[]` para
+todo **sin un solo error**. Y el POST valida `tipo` contra `TIPOS_DE_NOTA`.
+
+**El servidor también defiende «una abierta por repuesto»**: si ya hay una,
+el POST de una `PREGUNTA` nueva sin `responde_a` contesta 409. Con una pantalla
+vieja, dos personas abren dos hilos de la misma pieza y la regla se pierde.
+
 Y el **DELETE** de esa misma ruta traduce el `23503` que ahora devuelve la base
 a un **409 legible**: desde la migración, `responde_a` no borra en cascada, así
 que quien preguntó ya no puede llevarse la respuesta de Compras al borrar su
@@ -451,12 +460,15 @@ repuesto y, si `risDelRepuesto` encontró uno en curso, con el número de RI.
 
 **Una pregunta abierta por repuesto**: si `preguntaAbiertaDelRepuesto` devuelve
 una, el botón no abre otra — ofrece sumar al mismo hilo («sigue sin llegar»), lo
-que manda un `tipo: "PREGUNTA"` con `responde_a` apuntando a la primera. Dos
+que manda un `tipo: "PREGUNTA"` con `responde_a` apuntando **a esa pregunta
+abierta y no «a la primera»**. Con tres en un hilo, si el segundo seguimiento
+apunta a la primera quedan dos abiertas: medido, `["B","C"]` contra `["C"]`. Dos
 preguntas vivas sobre la misma pieza son dos entradas en la bandeja de Facundo
 diciendo lo mismo, que es el anti-objetivo del spec.
 
-En `JustificacionOT`, cada entrada muestra su tipo y, en una pregunta sin
-respuesta, **«preguntado hace N días, sin respuesta»** y un **«ya llegó»** que
+En `JustificacionOT`, cada entrada muestra su tipo y, **en las que
+`preguntasAbiertas` devuelve** —no en las que no tienen respuesta, que incluye
+a las superadas—, **«preguntado hace N días, sin respuesta»** y un **«ya llegó»** que
 la cierra: escribe una `RESPUESTA` del que preguntó. Es la misma fila que
 escribiría Compras, así que no hace falta un cuarto tipo — quién la escribió lo
 dice `creado_por`.
@@ -514,8 +526,9 @@ it("una pregunta ya respondida no se vuelve a contestar", () => {
 
 - [ ] **Step 3: Implementar**
 
-El POST inserta una fila `tipo: "RESPUESTA"` con `responde_a` apuntando a la
-pregunta, **escribe la columna X** con `celdaDeObservacionPrevia` (la respuesta
+El POST **comprueba `pregunta_id` contra `preguntasAbiertas`** en vez de darlo
+por bueno —una pregunta ya contestada o superada no se vuelve a contestar— e
+inserta una fila `tipo: "RESPUESTA"` con `responde_a` apuntando a la pregunta, **escribe la columna X** con `celdaDeObservacionPrevia` (la respuesta
 pasa a ser la justificación vigente) y llama a `avisarAUnaPersona` con el
 `creado_por` de la pregunta.
 
@@ -544,7 +557,7 @@ git commit -m "feat(compras): contestar las consultas de repuestos de Mantenimie
 **Depende de las Tareas 1 y 6.**
 
 **Files:**
-- Modify: `lib/home/avisos.ts`, `lib/home/conteos.ts`
+- Modify: `lib/home/avisos.ts`, `lib/home/avisosDeUsuario.ts`
 - Test: `lib/home/avisos.test.ts`
 
 - [ ] **Step 1: Test que falla**
@@ -563,7 +576,9 @@ it("a quien no ve Compras no le llega", () => { /* … */ });
 
 - [ ] **Step 3: Implementar**
 
-Sumar `comprasConsultasAbiertas` a `ConteosParaAvisos` y la entrada a `AVISOS`,
+Sumar `comprasConsultasAbiertas` a `ConteosParaAvisos` y la entrada a `AVISOS`.
+El conteo vive en `lib/home/avisosDeUsuario.ts` —`conteos.ts` no existe— donde
+casi todos son `count … head`;
 con `href: "/compras/consultas"`. **Id nuevo**: la regla de `avisos_fotos` es que
 un conteo nuevo pide un id nuevo, o el día del cambio sale una novedad falsa.
 
@@ -575,7 +590,7 @@ mismo que `compras-por-aprobar` va a los aprobadores.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/home/avisos.ts lib/home/conteos.ts lib/home/avisos.test.ts
+git add lib/home/avisos.ts lib/home/avisosDeUsuario.ts lib/home/avisos.test.ts
 git commit -m "feat(compras): las consultas de repuestos sin responder entran al resumen"
 ```
 
