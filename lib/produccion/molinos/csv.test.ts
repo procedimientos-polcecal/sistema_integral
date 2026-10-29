@@ -20,8 +20,10 @@ describe("leerFiller1", () => {
   });
 
   it("ignora las lineas en blanco", () => {
-    const { filas } = leerFiller1("\n\n26/2/2026;19:59;0;0;0;51530;451;min;MEMBRANERO;X\n\n", {});
+    const { filas, avisos } = leerFiller1("\n\n26/2/2026;19:59;0;0;0;51530;451;min;MEMBRANERO;X\n\n", {});
     expect(filas).toHaveLength(1);
+    // Sin esto el test pasaria aunque la linea vacia se tratara como renglon incompleto.
+    expect(avisos).toEqual([]);
   });
 
   it("avisa de una hora que no es uno de los cuatro cortes, y no la incluye", () => {
@@ -30,16 +32,31 @@ describe("leerFiller1", () => {
     expect(avisos[0]).toContain("7:30");
   });
 
+  it("la hora invalida se avisa como venia en el archivo, no normalizada", () => {
+    const { avisos } = leerFiller1("26/2/2026;07:30;0;0;0;100;60;min;M;X", {});
+    expect(avisos[0]).toContain("07:30");
+  });
+
+  it("acepta 03:59 como 3:59", () => {
+    const { filas, avisos } = leerFiller1("26/2/2026;03:59;0;0;0;100;60;min;M;X", {});
+    expect(avisos).toEqual([]);
+    expect(filas[0].corte).toBe("3:59");
+  });
+
   it("no cruza el reparto de otro dia ni de otro corte", () => {
     const dat1 = "2/3/2026;3:59;0;0;0;100;60;min;CALIZA;X";
     const { filas } = leerFiller1(dat1, { "3:59": "1/3/2026;3:59;1;2;3", "11:59": "2/3/2026;11:59;4;5;6" });
     expect(filas[0].porMaterial).toEqual({});
   });
 
-  it("tolera el fin de linea de Windows", () => {
-    const { filas, avisos } = leerFiller1("26/2/2026;19:59;0;0;0;51530;451;min;M;X\r\n", {});
-    expect(filas).toHaveLength(1);
+  it("tolera el fin de linea de Windows donde el ultimo campo si es numerico", () => {
+    // En DAT1 el ultimo campo (MODO) no se lee, asi que ahi el \r no prueba
+    // nada: se prueba en el desglose, que termina en el kg de caliza.
+    const dat1 = "1/3/2026;3:59;0;33643;0;0;232;min;DOLOMITA;AUTOMATICO\r\n";
+    const dat3 = "1/3/2026;3:59;17682;15961;0\r\n";
+    const { filas, avisos } = leerFiller1(dat1, { "3:59": dat3 });
     expect(avisos).toEqual([]);
+    expect(filas[0].porMaterial).toEqual({ membranero: 17682, dolomita: 15961, caliza: 0 });
   });
 
   it("avisa de un renglon incompleto y no lo completa con ceros", () => {
@@ -52,6 +69,28 @@ describe("leerFiller1", () => {
     const { filas, avisos } = leerFiller1("31/2/2026;19:59;0;0;0;100;60;min;M;X", {});
     expect(filas).toHaveLength(0);
     expect(avisos[0]).toContain("31/2/2026");
+  });
+
+  it("avisa de un valor que no es un numero y no incluye la fila", () => {
+    const { filas, avisos } = leerFiller1("26/2/2026;19:59;0;0;0;abc;451;min;M;X", {});
+    expect(filas).toHaveLength(0);
+    expect(avisos[0]).toContain("no es un número");
+  });
+
+  it("avisa cuando la hora del renglon no es la del archivo del desglose y usa la del renglon", () => {
+    const dat1 = "1/3/2026;11:59;0;0;0;100;60;min;M;X";
+    const { filas, avisos } = leerFiller1(dat1, { "3:59": "1/3/2026;11:59;1;2;3" });
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toContain("11:59");
+    expect(filas[0].porMaterial).toEqual({ membranero: 1, dolomita: 2, caliza: 3 });
+  });
+
+  it("avisa de un renglon duplicado en el desglose y se queda con el ultimo", () => {
+    const dat1 = "1/3/2026;3:59;0;0;0;100;60;min;M;X";
+    const dat3 = "1/3/2026;3:59;1;0;0\n1/3/2026;3:59;0;5;0";
+    const { filas, avisos } = leerFiller1(dat1, { "3:59": dat3 });
+    expect(avisos).toHaveLength(1);
+    expect(filas[0].porMaterial.dolomita).toBe(5);
   });
 });
 
@@ -76,8 +115,28 @@ describe("leerFiller2", () => {
     expect(filas[1].corte).toBe("23:59");
   });
 
+  it("tolera el fin de linea de Windows en el ultimo par", () => {
+    const { filas, avisos } = leerFiller2({ "3:59": "13/2/2026;3:59;0;0;0;0;0;0;0;0;0;0;500;10\r\n" });
+    expect(avisos).toEqual([]);
+    expect(filas[0]).toMatchObject({ kg: 500, minutos: 10 });
+  });
+
+  it("el turno lo decide la hora del renglon y no la clave del archivo, y avisa", () => {
+    const { filas, avisos } = leerFiller2({ "3:59": "13/2/2026;11:59;0;0;0;0;0;0;0;0;0;0;0;0" });
+    expect(filas[0].corte).toBe("11:59");
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toContain("11:59");
+  });
+
+  it("avisa de un valor que no es un numero y no incluye la fila", () => {
+    const { filas, avisos } = leerFiller2({ "3:59": "13/2/2026;3:59;x;0;0;0;0;0;0;0;0;0;0;0" });
+    expect(filas).toHaveLength(0);
+    expect(avisos[0]).toContain("no es un número");
+  });
+
   it("ignora las lineas en blanco", () => {
-    const { filas } = leerFiller2({ "3:59": "\n\n13/2/2026;3:59;0;0;0;0;0;0;0;0;0;0;0;0\n\n\n" });
+    const { filas, avisos } = leerFiller2({ "3:59": "\n\n13/2/2026;3:59;0;0;0;0;0;0;0;0;0;0;0;0\n\n\n" });
     expect(filas).toHaveLength(1);
+    expect(avisos).toEqual([]);
   });
 });

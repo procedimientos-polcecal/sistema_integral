@@ -90,11 +90,13 @@ function leerRenglones(
 ): Renglon[] {
   const salida: Renglon[] = [];
   for (const [i, linea] of texto.split("\n").entries()) {
-    const limpia = linea.replace(/\r$/, "");
-    if (limpia.trim() === "") continue;
+    // Un fin de línea CRLF deja un `\r` pegado al último campo. No se lo saca
+    // aparte: el último campo que se lee es siempre numérico y `numero()` hace
+    // `trim()`; en DAT1 el que queda con `\r` es MODO, que no se lee.
+    if (linea.trim() === "") continue;
     const donde = `${archivo}, línea ${i + 1}`;
 
-    const partes = limpia.split(";");
+    const partes = linea.split(";");
     if (partes.length < 2 + camposEsperados) {
       avisos.push(`${donde}: tiene ${partes.length} campos y se esperaban al menos ${2 + camposEsperados}.`);
       continue;
@@ -106,7 +108,9 @@ function leerRenglones(
     }
     const hora = normalizarHora(partes[1]);
     if (!esCorte(hora)) {
-      avisos.push(`${donde}: la hora ${hora} no es ninguno de los cuatro cortes (${CORTES.join(", ")}).`);
+      // Se imprime lo que traía el archivo, no la hora normalizada: es lo que
+      // alguien va a buscar en el CSV.
+      avisos.push(`${donde}: la hora ${partes[1].trim()} no es ninguno de los cuatro cortes (${CORTES.join(", ")}).`);
       continue;
     }
     salida.push({ fecha, corte: hora, campos: partes.slice(2, 2 + camposEsperados) });
@@ -151,7 +155,11 @@ export function leerFiller1(
       }
       const v = numeros(r, archivo, avisos);
       if (!v) continue;
-      repartos.set(`${r.fecha}|${r.corte}`, Object.fromEntries(MATERIALES_FILLER_1.map((m, i) => [m, v[i]])));
+      const clave = `${r.fecha}|${r.corte}`;
+      if (repartos.has(clave)) {
+        avisos.push(`${archivo}: el ${r.fecha} ${r.corte} aparece más de una vez; se usa el último.`);
+      }
+      repartos.set(clave, Object.fromEntries(MATERIALES_FILLER_1.map((m, i) => [m, v[i]])));
     }
   }
 
