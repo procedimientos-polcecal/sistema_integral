@@ -88,7 +88,29 @@ Lo que la spec implica y ningún test obvio ejercita. Cada línea tiene su test 
 
 ---
 
-### Tarea 4: El alta de una OT, fuera de la ruta
+### Tarea 4: ~~El alta de una OT, fuera de la ruta~~ — NO SE HACE
+
+**Descartada el 29/10/2026, después del Paso 1** (que pedía leer el POST entero
+antes de tocar nada, y por eso existía).
+
+El POST son 470 líneas y la mitad de lo que hace **el cron no lo tiene ni lo
+quiere**: la clave de la carga sin señal, el correo de `avisarDeLaCarga`, la
+validación de GUT y de la falla, los renglones de repuestos, el `after()` de
+reintento. Lo único realmente compartido es el `record` del insert, y de sus 35
+campos el cron llena la mitad.
+
+Y lo que sí tenía que estar en `lib/` **ya está**: `altaEnLaPlanilla` reparte el
+número y escribe la fila, `loQueFaltaParaCrear` valida, `estadoSegunElCierre`
+decide el estado, `celdasParaRegistrar` arma las celdas de la K en adelante y
+`elPendienteDelIntento` decide qué se encola. El cron compone esas cinco.
+
+Extraer el POST habría sido tocar el camino de escritura más importante del
+módulo —mientras otra sesión trabaja en él— para ganar un objeto literal.
+La Tarea 5 lo absorbe.
+
+<details><summary>El plan original, para que se vea qué se descartó</summary>
+
+### Tarea 4 (original): El alta de una OT, fuera de la ruta
 
 **Archivos:**
 - Crear: `lib/mantenimiento/altaDeLaOrden.ts`
@@ -110,6 +132,8 @@ export async function crearLaOrden(
 - [ ] **Paso 4:** `npm test` completo y `npx tsc --noEmit`. **No hay test nuevo acá**: es un movimiento, y lo que lo cubre es que los 4.387 que hay sigan en verde.
 - [ ] **Paso 5:** `node scripts/revisar-exportaciones.mjs` → ROMPE 0 (declarar `lib/mantenimiento/altaDeLaOrden.ts` con estrategia `cola`).
 - [ ] **Paso 6:** commit.
+
+</details>
 
 ---
 

@@ -8,13 +8,25 @@ import { SINCRONIZACIONES, unaPorNumero, unaPorCelda } from "./sincronizar";
  * silencio y sin error.
  */
 describe("los recursos que se sincronizan", () => {
-  it("son los cuatro, con los nombres que espera el Apps Script", () => {
+  it("son los cinco, con los nombres que espera el Apps Script", () => {
     expect(SINCRONIZACIONES.map((s) => s.recurso)).toEqual([
       "avisos",
       "ordenes",
       "ordenes-servicio",
       "comparativas",
+      // `periodicas` se sumó el 29/10/2026 y **no** espeja ninguna planilla:
+      // genera las OT de los mantenimientos programados. Va en esta lista
+      // porque lo que la tiene que llamar es el mismo reloj, y al final porque
+      // una OT recién creada todavía no está en el master.
+      "periodicas",
     ]);
+  });
+
+  /** Lo nuevo no puede pisar a lo que ya se espeja: las cuatro siguen primero. */
+  it("las cuatro que espejan una planilla siguen yendo antes", () => {
+    const recursos = SINCRONIZACIONES.map((s) => s.recurso);
+    expect(recursos.indexOf("periodicas")).toBe(recursos.length - 1);
+    expect(recursos.indexOf("ordenes")).toBeLessThan(recursos.indexOf("periodicas"));
   });
 
   it("las órdenes de servicio van antes que sus comparativas", () => {

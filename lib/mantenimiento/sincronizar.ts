@@ -33,6 +33,7 @@ import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAvis
 import { filaDeOrden, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
+import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
@@ -1132,4 +1133,29 @@ export const SINCRONIZACIONES = [
   { recurso: "ordenes", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenes(o) },
   { recurso: "ordenes-servicio", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenesDeServicio(o) },
   { recurso: "comparativas", correr: (_o?: OpcionesDeCorrida) => sincronizarComparativas() },
+  // ── Y AL FINAL, LAS PERIÓDICAS ────────────────────────────────────────────
+  //
+  // Va **después** de `ordenes` y no antes, y es la única razón por la que
+  // tiene un lugar fijo en esta lista: una OT recién creada todavía no está en
+  // el master —su fila llega por `IMPORTRANGE`—, así que si la importación
+  // corriera después la encontraría ausente. No la borra, porque `app_created`
+  // con `sheets_row` en null la protege, pero igual no tiene sentido crear algo
+  // y leer la planilla sin eso adentro en la misma corrida.
+  //
+  // No tira: `generarLasPeriodicas` devuelve qué pasó con cada programado y
+  // esto lo pasa a `Resultado`. Un programado que no se pudo crear no frena al
+  // siguiente, y ninguno frena las cuatro sincronizaciones de arriba.
+  {
+    recurso: "periodicas",
+    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
+      const r = await generarLasPeriodicas();
+      return logra({
+        generadas: r.generadas.length,
+        ot: r.generadas.map((g) => g.ot_number),
+        incompletos: r.incompletos,
+        fallaron: r.fallaron,
+        cerrados: r.cerrados,
+      });
+    },
+  },
 ] as const;
