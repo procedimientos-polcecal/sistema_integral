@@ -263,7 +263,7 @@ async function cargarLasAreasDeLosAvisos(admin: ReturnType<typeof createAdminCli
  * vaciar un número que el sync todavía no importó. El porqué completo está en
  * `lib/mantenimiento/pendienteDelAviso.ts`.
  */
-async function exportarLoPendienteDeAvisos(
+export async function exportarLoPendienteDeAvisos(
   admin: ReturnType<typeof createAdminClient>
 ): Promise<{ siguenPendientes: Set<string>; problema: string | null }> {
   const siguenPendientes = new Set<string>();
@@ -697,7 +697,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
  * pantalla que la dispare: la llama sólo la sincronización, que es el piso y
  * tiene que intentarlo todo.
  */
-async function exportarLoPendienteDeOS(
+export async function exportarLoPendienteDeOS(
   admin: ReturnType<typeof createAdminClient>
 ): Promise<{ siguenPendientes: Set<number>; problema: string | null }> {
   const siguenPendientes = new Set<number>();
