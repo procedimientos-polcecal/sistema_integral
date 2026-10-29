@@ -790,6 +790,20 @@ foto tiene que enlazarse igual**. Si sólo se enlaza en el camino de alta nueva,
 el segundo disparo sube el archivo y lo pierde, que es exactamente el campo que
 no se puede volver a sacar.
 
+- [ ] **Step 5b: Agregar y sacar fotos desde la ficha**
+
+El otro lado del mismo hueco, que tampoco tenía dueño. La spec le da a `edicion`
+agregar y sacar fotos de una condición, y las policies `syh_fotos_agregar` y
+`syh_fotos_sacar` ya existen desde la Tarea 2 — lo que falta es la pantalla.
+
+No es un extra: **las 44 condiciones que migra la Tarea 9 entran sin foto**,
+porque las del Excel son links a un disco. Sin esto, la ficha dice «Esta
+condición no tiene fotos» y nadie puede cambiarlo nunca.
+
+Va en `FichaDeCondicion.tsx`. Conviene extraer antes el bloque de fotos a su
+propio componente —estado, carga, copiar link—: hoy son unas 60 líneas dentro
+de un archivo de 628, y el botón de agregar vive ahí.
+
 - [ ] **Step 6: La prueba de verdad, en un navegador**
 
 Esto no lo prueba vitest. Con `npm run dev`, en el navegador:
