@@ -48,6 +48,15 @@
 -- que edita una persona la validación vive en la ruta que escribe, donde puede
 -- decir en castellano qué se superpone.
 --
+-- Lo que sí se impone en la base es que el rango no esté invertido,
+-- `check (hasta is null or hasta >= desde)`: es una línea, no pide extensión,
+-- y un rango invertido no falla en ningún lado, simplemente no coincide con ningún mes, y
+-- el sector se queda sin divisor en el reporte para el que existe esta tabla.
+--
+-- El FK a `sectores` no lleva `on delete` a propósito: borrar un sector que
+-- tiene filas acá se rechaza, que es lo que se quiere, porque `sectores` es un
+-- catálogo del núcleo que los módulos leen y no borran.
+--
 -- LA LECTURA ES ABIERTA, SÓLO LA ESCRITURA SE CIERRA. Es lo contrario de lo que
 -- hace el resto de RRHH —sus tablas se leen con `tiene_acceso_rrhh()` porque
 -- guardan sueldos y motivos de ausencia— y es a propósito: el porcentaje de
@@ -81,7 +90,8 @@ create table if not exists rrhh_horas_a_realizar (
   horas_por_empleado numeric not null check (horas_por_empleado > 0),
   desde              date not null,
   hasta              date,
-  created_at         timestamptz not null default now()
+  created_at         timestamptz not null default now(),
+  check (hasta is null or hasta >= desde)
 );
 
 comment on table rrhh_horas_a_realizar is
