@@ -3,6 +3,7 @@ import {
   cuerpoDeLaOT, loQueFaltaDelMantenimiento, loQueHayQuePreguntar, loQueNoSeArreglaAca,
   especialidadDeTipo, etiquetaDeTipo, nombreDelAsignado, respuestasIniciales,
   RESPUESTAS_VACIAS, TIPOS_DE_MANTENIMIENTO,
+  loQueFaltaParaGenerar, especialidadDelProgramado,
   type MantenimientoParaLaOT,
 } from "./otDesdeMantenimiento";
 import { ESPECIALIDADES } from "./ordenes";
@@ -291,5 +292,50 @@ describe("lo que el formulario no puede arreglar", () => {
 
   it("el que hoy existe no tiene nada de eso", () => {
     expect(loQueNoSeArreglaAca(MANTENIMIENTO)).toEqual([]);
+  });
+});
+
+/**
+ * Lo que le falta a un programado para que lo genere **un proceso**.
+ *
+ * Es distinto de lo que le falta para que lo genere una persona: un cron no
+ * está mirando el formulario, así que lo que no venga puesto no se completa,
+ * se saltea. Y lo que puede faltar es la especialidad, porque
+ * `especialidadDeTipo` sólo resuelve dos de los siete tipos.
+ */
+describe("lo que le falta a un programado para generar solo", () => {
+  it("a uno de lubricación no le falta nada: el tipo resuelve la especialidad", () => {
+    expect(loQueFaltaParaGenerar(MANTENIMIENTO)).toEqual([]);
+  });
+
+  it("a una inspección le falta la especialidad, porque el tipo no la dice", () => {
+    expect(loQueFaltaParaGenerar({ ...MANTENIMIENTO, maintenance_type: "Inspeccion" }))
+      .toEqual(["la especialidad"]);
+  });
+
+  it("con la especialidad propia cargada, esa misma inspección ya puede", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Inspeccion", especialidad: "ELÉCTRICO",
+    })).toEqual([]);
+  });
+
+  /** La propia le gana al tipo: es la que alguien eligió a mano. */
+  it("la especialidad propia manda sobre la que deduce el tipo", () => {
+    expect(especialidadDelProgramado({ ...MANTENIMIENTO, especialidad: "CIVIL" })).toBe("CIVIL");
+    // Sin la propia cae en la del tipo: «Lubricacion» coincide por nombre con
+    // la especialidad LUBRICACIÓN, que es uno de los dos tipos que resuelven.
+    expect(especialidadDelProgramado(MANTENIMIENTO)).toBe("LUBRICACIÓN");
+  });
+
+  it("una especialidad en blanco no cuenta como cargada", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Otro", especialidad: "   ",
+    })).toEqual(["la especialidad"]);
+  });
+
+  it("sin equipo tampoco genera, y lo dice junto con lo otro", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Limpieza", equipment_id: null,
+    })).toEqual(["la especialidad", "el equipo"]);
   });
 });

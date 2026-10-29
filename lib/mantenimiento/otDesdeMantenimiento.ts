@@ -155,6 +155,49 @@ export interface MantenimientoParaLaOT {
     sectores: { nombre: string | null } | null;
   } | null;
   assigned_user: { nombre?: string | null; apellido?: string | null } | null;
+  /**
+   * La especialidad que el programado trae puesta, desde el 29/10/2026.
+   *
+   * Existe para que un proceso pueda generar sin preguntarle a nadie: ver
+   * `loQueFaltaParaGenerar`. Opcional porque la pantalla vieja no la manda, y
+   * ahí sigue valiendo lo de siempre —se ofrece lo que el tipo resuelva y la
+   * persona elige—.
+   */
+  especialidad?: string | null;
+}
+
+/**
+ * La especialidad con la que este programado va a nacer.
+ *
+ * Primero la suya, si la tiene; si no, la que el tipo resuelva solo. Y si
+ * ninguna, `""`: **enlazar al que se le parece es peor que dejar en null**.
+ */
+export function especialidadDelProgramado(m: MantenimientoParaLaOT): string {
+  return m.especialidad?.trim() || especialidadDeTipo(m.maintenance_type);
+}
+
+/**
+ * Qué le falta a un programado para que lo pueda generar **un proceso**, que
+ * es distinto de lo que le falta para que lo genere una persona.
+ *
+ * ── POR QUÉ NO ALCANZA CON `loQueFaltaDelMantenimiento` ─────────────────────
+ *
+ * Aquélla contesta «qué tiene que completar quien está mirando el formulario».
+ * Un cron no está mirando nada: lo que no venga puesto no se completa, se
+ * saltea. Y lo que puede no venir puesto es la especialidad, porque
+ * `especialidadDeTipo` sólo la resuelve con certeza para **dos de los siete**
+ * tipos —`Lubricacion` y `Revision_electrica`—; para Inspección, Limpieza,
+ * Ajuste, Reemplazo y Otro devuelve vacío a propósito.
+ *
+ * Así que un programado de esos cinco **no genera** hasta que alguien le cargue
+ * su especialidad, y eso se informa en vez de inventarla. Es la misma decisión
+ * que ya está escrita en `especialidadDeTipo`, sostenida un escalón más arriba.
+ */
+export function loQueFaltaParaGenerar(m: MantenimientoParaLaOT): string[] {
+  const falta: string[] = [];
+  if (!especialidadDelProgramado(m)) falta.push("la especialidad");
+  if (!m.equipment_id) falta.push("el equipo");
+  return falta;
 }
 
 /** Lo que el mantenimiento no contesta solo y confirma una persona. */
