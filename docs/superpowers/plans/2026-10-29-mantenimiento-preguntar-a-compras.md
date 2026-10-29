@@ -103,7 +103,7 @@ alter table ordenes_trabajo_notas
   add column if not exists repuesto_id uuid
     references ordenes_trabajo_repuestos(id) on delete set null,
   add column if not exists responde_a uuid
-    references ordenes_trabajo_notas(id) on delete cascade;
+    references ordenes_trabajo_notas(id);
 
 create table if not exists compras_consultados (
   usuario_id uuid primary key references usuarios(id) on delete cascade,
@@ -114,7 +114,12 @@ alter table compras_consultados enable row level security;
 ```
 
 `on delete set null` en `repuesto_id` y **no cascade**: sacar un repuesto de la
-lista no puede borrar la conversación que hubo sobre él. El `default
+lista no puede borrar la conversación que hubo sobre él.
+
+Y `responde_a` **sin `on delete`**: con cascade, quien preguntó podía borrar su
+pregunta —la ruta de notas deja borrar la propia— y llevarse la respuesta de
+Compras. El límite lo pone la base, así que ninguna ruta se lo puede olvidar.
+Borrar la OT entera sigue andando por el cascade de `orden_id`. El `default
 'JUSTIFICACION'` es lo que deja intactas las filas que ya existen.
 
 Las policies de `compras_consultados` copian las de `compras_aprobadores`
@@ -153,9 +158,9 @@ esto; las 2, 3 y 4 sí.
   - `export const TIPOS_DE_NOTA = ["JUSTIFICACION", "PREGUNTA", "RESPUESTA"] as const`
   - `export type TipoDeNota = (typeof TIPOS_DE_NOTA)[number]`
   - `export interface NotaDeLaOT { id: string; tipo: TipoDeNota; texto: string; creado_en: string; creado_por: string | null; repuesto_id: string | null; responde_a: string | null }`
-  - `export function preguntasAbiertas(notas: readonly NotaDeLaOT[], estadoDeLaOrden: string | null, repuestosVigentes: ReadonlySet<string>): NotaDeLaOT[]`
+  - `export function preguntasAbiertas(notas: readonly NotaDeLaOT[], estadoDeLaOrden: string | null): NotaDeLaOT[]`
   - `export function tieneRespuesta(pregunta: NotaDeLaOT, notas: readonly NotaDeLaOT[]): boolean`
-  - `export function preguntaAbiertaDelRepuesto(notas: readonly NotaDeLaOT[], repuestoId: string, estadoDeLaOrden: string | null, repuestosVigentes: ReadonlySet<string>): NotaDeLaOT | null`
+  - `export function preguntaAbiertaDelRepuesto(notas: readonly NotaDeLaOT[], repuestoId: string, estadoDeLaOrden: string | null): NotaDeLaOT | null`
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
@@ -167,13 +172,13 @@ const pregunta = (p: Partial<NotaDeLaOT> = {}): NotaDeLaOT => ({
 });
 
 it("una pregunta sin respuesta, sobre una OT abierta, esta abierta", () => {
-  expect(preguntasAbiertas([pregunta()], "POR_HACER", new Set(["r1"])))
+  expect(preguntasAbiertas([pregunta()], "POR_HACER"))
     .toHaveLength(1);
 });
 
 it("con una respuesta deja de estar abierta", () => {
   const r = pregunta({ id: "n2", tipo: "RESPUESTA", responde_a: "n1" });
-  expect(preguntasAbiertas([pregunta(), r], "POR_HACER", new Set(["r1"])))
+  expect(preguntasAbiertas([pregunta(), r], "POR_HACER"))
     .toEqual([]);
 });
 
@@ -181,36 +186,40 @@ it("con una respuesta deja de estar abierta", () => {
 it("dos respuestas a la misma pregunta la cierran una sola vez", () => {
   const r1 = pregunta({ id: "n2", tipo: "RESPUESTA", responde_a: "n1" });
   const r2 = pregunta({ id: "n3", tipo: "RESPUESTA", responde_a: "n1" });
-  expect(preguntasAbiertas([pregunta(), r1, r2], "ATRASADO", new Set(["r1"])))
+  expect(preguntasAbiertas([pregunta(), r1, r2], "ATRASADO"))
     .toEqual([]);
 });
 
 // Review Focus 4: la OT realizada ya no espera nada.
 it("una OT realizada no tiene preguntas abiertas", () => {
-  expect(preguntasAbiertas([pregunta()], "REALIZADO", new Set(["r1"])))
+  expect(preguntasAbiertas([pregunta()], "REALIZADO"))
     .toEqual([]);
 });
 
+// `repuesto_id` en null en una PREGUNTA significa que sacaron ese repuesto:
+// la FK es `on delete set null`, y T5 exige el id al preguntar.
 it("si sacaron el repuesto, la pregunta deja de estar abierta", () => {
-  expect(preguntasAbiertas([pregunta()], "POR_HACER", new Set())).toEqual([]);
+  expect(preguntasAbiertas([pregunta({ repuesto_id: null })], "POR_HACER")).toEqual([]);
 });
 
 it("una justificacion no es una pregunta", () => {
-  expect(preguntasAbiertas([pregunta({ tipo: "JUSTIFICACION" })], "POR_HACER", new Set(["r1"])))
+  expect(preguntasAbiertas([pregunta({ tipo: "JUSTIFICACION" })], "POR_HACER"))
     .toEqual([]);
 });
 
-it("una pregunta sin repuesto enlazado sigue abierta", () => {
-  expect(preguntasAbiertas([pregunta({ repuesto_id: null })], "POR_HACER", new Set()))
-    .toHaveLength(1);
+// Conflicto 2 del barrido previo: el hilo que agrega T5 no puede dejar dos
+// abiertas diciendo lo mismo en la bandeja de Facundo.
+it("una pregunta superada por otra del mismo hilo no esta abierta", () => {
+  const seguimiento = pregunta({ id: "n2", tipo: "PREGUNTA", responde_a: "n1" });
+  expect(preguntasAbiertas([pregunta(), seguimiento], "POR_HACER").map((p) => p.id))
+    .toEqual(["n2"]);
 });
 
 // Una pregunta abierta por repuesto: el boton no abre la segunda.
 it("dice si ese repuesto ya tiene una pregunta esperando", () => {
-  expect(preguntaAbiertaDelRepuesto([pregunta()], "r1", "POR_HACER", new Set(["r1"])))
+  expect(preguntaAbiertaDelRepuesto([pregunta()], "r1", "POR_HACER"))
     .toMatchObject({ id: "n1" });
-  expect(preguntaAbiertaDelRepuesto([pregunta()], "r2", "POR_HACER", new Set(["r1", "r2"])))
-    .toBeNull();
+  expect(preguntaAbiertaDelRepuesto([pregunta()], "r2", "POR_HACER")).toBeNull();
 });
 ```
 
@@ -221,10 +230,12 @@ Expected: FAIL, "preguntasAbiertas is not a function".
 
 - [ ] **Step 3: Implementar**
 
-`preguntasAbiertas` filtra `tipo === "PREGUNTA"`, descarta las que tienen
-respuesta, y descarta todo si la OT está `REALIZADO` o si su `repuesto_id` ya no
-está en `repuestosVigentes` (con `repuesto_id` en null **no** se descarta: no se
-puede probar que dejó de aplicar).
+`preguntasAbiertas` filtra `tipo === "PREGUNTA"` y descarta: las que tienen una
+`RESPUESTA` apuntándolas, las superadas por otra `PREGUNTA` del mismo hilo, las
+de una OT `REALIZADO`, y **las que tienen `repuesto_id` en null** — la FK es
+`on delete set null` y T5 exige el id al preguntar, así que un null quiere decir
+que sacaron ese repuesto de la lista. No hace falta recibir qué repuestos siguen
+vigentes: un id no nulo siempre apunta a una fila viva.
 
 El docstring tiene que decir **por qué no hay columna `cerrada_en`**: el
 historial no tiene policy de `update` a propósito —«un historial que se puede
@@ -406,7 +417,15 @@ Run: `npx vitest run lib/mantenimiento/consultaDeRepuesto.test.ts` → FAIL
 - [ ] **Step 3: Implementar `itemDeLaConsulta` y la ruta**
 
 En la ruta, el POST:
-- acepta `tipo` (default `"JUSTIFICACION"`) y `repuesto_id`;
+- acepta `tipo` (default `"JUSTIFICACION"`), `repuesto_id` y `responde_a`;
+- con `tipo === "PREGUNTA"` **exige `repuesto_id`** y comprueba que ese repuesto
+  sea de esta OT: el spec dice que la pregunta nace de un repuesto concreto, y
+  de eso depende que después se pueda cerrar sola cuando lo saquen;
+- y comprueba que `responde_a`, cuando viene, **sea una nota de esta misma OT**.
+  Sin cascade, una nota que apunte a otra orden traba el borrado de esa otra:
+  `delete` da `23503`, y el borrado de espejo borra OT de a 200 con un `.in()`,
+  así que la tanda entera falla y se repite en cada corrida hasta arreglar el
+  dato. No se llega desde la pantalla, y la ruta es lo único que lo impide;
 - sigue exigiendo `puedeEditarMantenimiento` **también para preguntar** —es la
   decisión del spec—;
 - con `tipo === "PREGUNTA"`, después de guardar e **igual que hoy** escribir la
@@ -416,6 +435,11 @@ En la ruta, el POST:
 - devuelve en `aviso` lo que contestó esa función. **Review Focus 1:** con la
   lista vacía vuelve `motivo: "nadie aprueba"`, y la pantalla lo dice —«se
   guardó, pero no hay nadie configurado para contestar»— en vez de callarlo.
+
+Y el **DELETE** de esa misma ruta traduce el `23503` que ahora devuelve la base
+a un **409 legible**: desde la migración, `responde_a` no borra en cascada, así
+que quien preguntó ya no puede llevarse la respuesta de Compras al borrar su
+pregunta. Sin traducir, eso llega como un error de base de datos crudo.
 
 `consultadosDeCompras(supabase)` en `lib/compras/auth.ts` es la gemela de
 `aprobadoresDeCompras`, sin alias.
@@ -596,3 +620,9 @@ git commit -m "feat(compras): configurar quien contesta las consultas de repuest
 - [ ] `node scripts/revisar-responsive.mjs`
 - [ ] Agregar a `docs/MANTENIMIENTO-INTEGRACION.md` la sección de la consulta a
       Compras, y la fila a la tabla de CLAUDE.md.
+- [ ] **El Asistente**, en este orden, que es el que pide su README: la nota de
+      `ordenes_trabajo_notas` en `lib/asistente/notas.ts` —la que hay dice «la
+      última es la que vale» y se queda corta con los tres tipos—, después
+      `npm run catalogo`, y mapear `compras_consultados` en
+      `lib/asistente/modulos.ts`. Es el atraso que ese archivo documenta que ya
+      se repitió.
