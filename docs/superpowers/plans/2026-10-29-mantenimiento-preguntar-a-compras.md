@@ -635,6 +635,10 @@ git commit -m "feat(compras): configurar quien contesta las consultas de repuest
 - [ ] `node scripts/revisar-responsive.mjs`
 - [ ] Agregar a `docs/MANTENIMIENTO-INTEGRACION.md` la sección de la consulta a
       Compras, y la fila a la tabla de CLAUDE.md.
+- [ ] **Los dos textos que la Tarea 5 deja falsos al sumar el tercer emisor del
+      aviso al instante:** el encabezado de `lib/core/avisoAlInstante.ts`, que
+      dice «hoy las cumplen dos cosas», y el párrafo de CLAUDE.md sobre el aviso
+      al instante, que nombra dos. Pasan a ser tres.
 - [ ] **El Asistente**, en este orden, que es el que pide su README: la nota de
       `ordenes_trabajo_notas` en `lib/asistente/notas.ts` —la que hay dice «la
       última es la que vale» y se queda corta con los tres tipos—, después
