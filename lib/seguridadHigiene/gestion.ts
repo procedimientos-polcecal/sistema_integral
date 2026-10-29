@@ -86,6 +86,20 @@ export function nivelDeRiesgo(
 }
 
 /**
+ * Lo que le falta a una condición **que todavía se puede completar**: una
+ * cerrada no pide nada, aunque le falte evaluar o asignar.
+ *
+ * Es el único criterio de «le falta algo» de la pantalla: lo usan el filtro, los
+ * números del resumen, las marcas de la tabla y las de la ficha. Cuando cada
+ * lugar decidía por su cuenta, el botón «sin completar» contaba una cosa y
+ * filtraba otra, y una vencida sin evaluar —justo lo que el módulo existe para
+ * mostrar— sumaba al número y no aparecía al apretarlo.
+ */
+export function faltasPendientes(c: CondicionParaFaltantes & { fecha_ejecucion: string | null; fecha_maxima: string | null }, hoy: string): Falta[] {
+  return estadoDe(c, hoy) === "Cerrada" ? [] : loQueFalta(c);
+}
+
+/**
  * En qué tramo del orden cae una condición. Menor se ve antes.
  *
  *   0  vencida
@@ -144,7 +158,8 @@ export function ordenarParaGestion(filas: FilaDeCondicion[], hoy: string): FilaD
 }
 
 export interface FiltrosDeGestion {
-  estado: Estado | "";
+  /** «abierta» es cualquiera que no esté cerrada: pendiente o vencida. */
+  estado: Estado | "abierta" | "";
   /** «alguna» es cualquiera de las tres. */
   falta: Falta | "alguna" | "";
   /** `s:<id>` un sector (con sus equipos) o `e:<id>` un equipo. Vacío es todos. */
@@ -166,10 +181,13 @@ export function filtrarCondiciones(
   sectorDeEquipo: ReadonlyMap<string, string | null>
 ): FilaDeCondicion[] {
   return filas.filter((c) => {
-    if (filtros.estado && estadoDe(c, hoy) !== filtros.estado) return false;
+    if (filtros.estado) {
+      const estado = estadoDe(c, hoy);
+      if (filtros.estado === "abierta" ? estado === "Cerrada" : estado !== filtros.estado) return false;
+    }
 
     if (filtros.falta) {
-      const faltas = loQueFalta(c);
+      const faltas = faltasPendientes(c, hoy);
       if (filtros.falta === "alguna" ? faltas.length === 0 : !faltas.includes(filtros.falta)) {
         return false;
       }
@@ -216,7 +234,7 @@ export function resumenDeCondiciones(
     if (estado === "Cerrada") continue;
     abiertas++;
     if (estado === "Vencida") vencidas++;
-    if (loQueFalta(c).length > 0) sinCompletar++;
+    if (faltasPendientes(c, hoy).length > 0) sinCompletar++;
   }
   return { total: filas.length, abiertas, cerradas: filas.length - abiertas, vencidas, sinCompletar };
 }

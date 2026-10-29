@@ -5,9 +5,10 @@ import Select from "@/components/Select";
 import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
-import { estadoDe, loQueFalta } from "@/lib/seguridadHigiene/condicion";
+import { estadoDe } from "@/lib/seguridadHigiene/condicion";
 import {
   borradorDe,
+  faltasPendientes,
   cambiosDe,
   nivelDeRiesgo,
   type Borrador,
@@ -103,7 +104,7 @@ export default function FichaDeCondicion({
   const [aviso, setAviso] = useState<string | null>(null);
 
   const estado = estadoDe(fila, hoy);
-  const faltas = loQueFalta(fila);
+  const faltas = faltasPendientes(fila, hoy);
   const cerrada = estado === "Cerrada";
 
   // Una cerrada sólo la corrige un admin: la policy de `edicion` la deja afuera.

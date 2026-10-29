@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   borradorDe,
   cambiosDe,
+  faltasPendientes,
   filtrarCondiciones,
   nivelDeRiesgo,
   ordenarParaGestion,
@@ -176,6 +177,56 @@ describe("filtrarCondiciones", () => {
   });
 });
 
+describe("un solo criterio para «le falta algo»: el número, el filtro y las marcas dicen lo mismo", () => {
+  const sinNada = { sector_id: null, equipo_id: null };
+  // Las dos que se escapaban: la vencida a la que le falta evaluar, y la cerrada a la que también.
+  const vencidaSinEvaluar = { ...SIN_EVALUAR(21), fecha_maxima: "2026-10-01" };
+  const cerradaSinEvaluar = { ...SIN_EVALUAR(22), fecha_ejecucion: "2026-10-25" };
+  const lista = [condicion(1), VENCIDA(2), vencidaSinEvaluar, SIN_EVALUAR(3), cerradaSinEvaluar, CERRADA(4)];
+  const sinEquipos = new Map<string, string | null>();
+
+  it("faltasPendientes: una cerrada no pide nada aunque le falte todo; una vencida sí", () => {
+    expect(faltasPendientes(cerradaSinEvaluar, HOY)).toEqual([]);
+    expect(faltasPendientes({ ...cerradaSinEvaluar, ...sinNada }, HOY)).toEqual([]);
+    expect(faltasPendientes(vencidaSinEvaluar, HOY)).toEqual(["sin_evaluar"]);
+  });
+
+  it("el filtro «les falta algo» trae la vencida sin evaluar y deja afuera la cerrada sin evaluar", () => {
+    const numeros = filtrarCondiciones(lista, { ...SIN_FILTROS, falta: "alguna" }, HOY, sinEquipos).map((c) => c.numero);
+    expect(numeros).toContain(21);
+    expect(numeros).not.toContain(22);
+    expect(numeros.sort((a, b) => a - b)).toEqual([3, 21]);
+  });
+
+  it("«sin_evaluar» también ignora las cerradas", () => {
+    const numeros = filtrarCondiciones(lista, { ...SIN_FILTROS, falta: "sin_evaluar" }, HOY, sinEquipos).map((c) => c.numero);
+    expect(numeros.sort((a, b) => a - b)).toEqual([3, 21]);
+  });
+
+  it("el estado «abierta» es pendiente o vencida, nunca cerrada", () => {
+    const numeros = filtrarCondiciones(lista, { ...SIN_FILTROS, estado: "abierta" }, HOY, sinEquipos).map((c) => c.numero);
+    expect(numeros.sort((a, b) => a - b)).toEqual([1, 2, 3, 21]);
+  });
+
+  it("el número de «sin completar» es exactamente lo que muestra el botón que lo filtra", () => {
+    const r = resumenDeCondiciones(lista, HOY);
+    const alApretar = filtrarCondiciones(lista, { ...SIN_FILTROS, falta: "alguna", estado: "abierta" }, HOY, sinEquipos);
+    expect(alApretar).toHaveLength(r.sinCompletar);
+    expect(r.sinCompletar).toBe(2);
+  });
+
+  it("el número de «abiertas» es exactamente lo que muestra el botón que lo filtra", () => {
+    const r = resumenDeCondiciones(lista, HOY);
+    expect(filtrarCondiciones(lista, { ...SIN_FILTROS, estado: "abierta" }, HOY, sinEquipos)).toHaveLength(r.abiertas);
+  });
+
+  it("el número de «vencidas» es exactamente lo que muestra el botón que lo filtra", () => {
+    const r = resumenDeCondiciones(lista, HOY);
+    expect(filtrarCondiciones(lista, { ...SIN_FILTROS, estado: "Vencida" }, HOY, sinEquipos)).toHaveLength(r.vencidas);
+    expect(r.vencidas).toBe(2); // la completa vencida y la vencida sin evaluar
+  });
+});
+
 describe("resumenDeCondiciones", () => {
   it("cuenta las abiertas, las vencidas y las que les falta algo; las cerradas no cuentan como pendientes", () => {
     const r = resumenDeCondiciones(
@@ -183,6 +234,14 @@ describe("resumenDeCondiciones", () => {
       HOY
     );
     expect(r).toEqual({ total: 5, abiertas: 3, cerradas: 2, vencidas: 1, sinCompletar: 1 });
+  });
+
+  it("una vencida a la que le falta algo cuenta en las dos; una cerrada a la que le falta algo, en ninguna", () => {
+    const vencidaSinEvaluar = { ...SIN_EVALUAR(1), fecha_maxima: "2026-10-01" };
+    const cerradaSinEvaluar = { ...SIN_EVALUAR(2), fecha_ejecucion: "2026-10-25" };
+    expect(resumenDeCondiciones([vencidaSinEvaluar, cerradaSinEvaluar], HOY)).toEqual({
+      total: 2, abiertas: 1, cerradas: 1, vencidas: 1, sinCompletar: 1,
+    });
   });
 });
 

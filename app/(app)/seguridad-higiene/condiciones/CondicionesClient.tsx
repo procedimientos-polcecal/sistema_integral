@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
 import { clasificar, type Clasificacion } from "@/lib/seguridadHigiene/riesgo";
-import { estadoDe, loQueFalta, type Estado, type Falta } from "@/lib/seguridadHigiene/condicion";
+import { estadoDe, type Estado, type Falta } from "@/lib/seguridadHigiene/condicion";
 import {
+  faltasPendientes,
   filtrarCondiciones,
   NOMBRE_DE_CLASIFICACION,
   NOMBRE_DE_FALTA,
@@ -53,7 +54,7 @@ function Marcas({ c, hoy }: { c: FilaDeCondicion; hoy: string }) {
   return (
     <span className="flex flex-wrap items-center gap-1">
       <InsigniaDeEstado estado={estado} />
-      {estado !== "Cerrada" && loQueFalta(c).map((f) => <InsigniaDeFalta key={f} falta={f} />)}
+      {faltasPendientes(c, hoy).map((f) => <InsigniaDeFalta key={f} falta={f} />)}
     </span>
   );
 }
@@ -148,7 +149,7 @@ export default function CondicionesClient({
         </button>
         <button
           type="button"
-          onClick={() => setFiltros({ ...SIN_FILTROS, falta: "alguna", estado: "Pendiente" })}
+          onClick={() => setFiltros({ ...SIN_FILTROS, falta: "alguna", estado: "abierta" })}
           className={`card px-3 py-2 text-left text-sm ${resumen.sinCompletar > 0 ? "border-amber-300" : ""}`}
         >
           <span className={`text-lg font-bold ${resumen.sinCompletar > 0 ? "text-amber-700" : "text-slate-900"}`}>
@@ -158,7 +159,7 @@ export default function CondicionesClient({
         </button>
         <button
           type="button"
-          onClick={() => setFiltros(SIN_FILTROS)}
+          onClick={() => setFiltros({ ...SIN_FILTROS, estado: "abierta" })}
           className="card px-3 py-2 text-left text-sm"
         >
           <span className="text-lg font-bold text-slate-900">{resumen.abiertas}</span> abiertas
@@ -169,10 +170,11 @@ export default function CondicionesClient({
         <Select
           className="input"
           value={filtros.estado}
-          onChange={(e) => poner("estado", e.target.value as Estado | "")}
+          onChange={(e) => poner("estado", e.target.value as Estado | "abierta" | "")}
           aria-label="Estado"
         >
           <option value="">Todos los estados</option>
+          <option value="abierta">Abiertas (pendientes y vencidas)</option>
           <option value="Pendiente">Pendientes</option>
           <option value="Vencida">Vencidas</option>
           <option value="Cerrada">Cerradas</option>
