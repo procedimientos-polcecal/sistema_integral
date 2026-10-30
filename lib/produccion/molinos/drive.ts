@@ -157,9 +157,6 @@ export async function listarArchivos(
   return emparejar(todos, molinos);
 }
 
-/** Cota de lo que se descomprime de un solo archivo: un CSV de estos pesa unos cientos de KB. */
-const MAX_BYTES_POR_CSV = 20 * 1024 * 1024;
-
 /**
  * Baja el zip y devuelve cada CSV por su nombre, **ya decodificado**.
  *
@@ -185,9 +182,6 @@ export async function bajarYDescomprimir(id: string): Promise<Record<string, str
     const nombre = ruta.split("/").pop() ?? ruta;
     if (!nombre.toLowerCase().endsWith(".csv")) continue;
     const bytes = await entrada.async("uint8array");
-    if (bytes.length > MAX_BYTES_POR_CSV) {
-      throw new Error(`${nombre} pesa ${bytes.length} bytes y se esperaba un CSV de unos cientos de KB`);
-    }
     salida[nombre] = decodificador.decode(bytes);
   }
   return salida;
