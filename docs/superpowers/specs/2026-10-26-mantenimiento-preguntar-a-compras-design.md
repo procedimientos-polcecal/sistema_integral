@@ -144,9 +144,13 @@ persona.
 
 **Y tampoco hace falta el resumen diario**, que es por donde esto se habría
 puesto caro: `avisosDeUsuario()` cuenta cosas globales y `avisos_fotos` guarda
-una foto global, así que «mi pregunta fue respondida y no la leí» habría sido el
-primer aviso con estado por persona del sistema, y habría roto el modelo de
+una foto global, así que «mi pregunta fue respondida y no la leí» habría pedido
+estado por persona **dentro del resumen**, y eso rompe el modelo de
 movimiento-contra-stock del [spec del 18/10](2026-10-18-a-quien-le-avisa-el-sdg-design.md).
+(No sería el primero del sistema, como decía antes esta frase:
+`notificaciones_descartes` ya guarda estado por persona, con clave
+`(usuario_id, notificacion_id)`. Lo que no existe es estado por persona en lo
+que el resumen **cuenta**.)
 
 La salida es que **esto es un evento, no un conteo**: se manda una vez, a una
 persona, en el momento en que contesta. Con eso no hace falta ni foto ni marca
@@ -155,6 +159,11 @@ de leído. Se arma con las piezas que ya están exportadas en
 `aparatosAAvisar()` para los aparatos de esa persona, `esHoraDeAvisar()` para no
 despertar a nadie a las tres de la mañana, y `enviarPush()` con el `Aviso` plano
 de siempre —`{title, body, url}`, la url en el primer nivel— apuntando a la OT.
+
+Y el costo que eso tiene, dicho: la ventana del aviso al instante es de 7:00 a
+21:00, así que **una respuesta de las 22:00 no avisa nunca** — quien preguntó la
+ve al abrir la orden. Si eso no alcanzara, la salida no es un reintento: es
+guardar algo por persona, que es justo lo que se decidió no hacer.
 
 Si la persona que preguntó ya no tiene aparatos suscritos, no pasa nada: la
 respuesta está en la OT igual. El envío va en un `try/catch` que no relanza,
