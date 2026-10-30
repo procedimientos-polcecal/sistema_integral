@@ -57,7 +57,12 @@ export default async function SinExplicarPage() {
       cola: await colaDeMolino(admin, m),
     })),
   );
-  const ots: OtParaEnlazar[] | null = conMantenimiento ? await otsParaEnlazar(admin, hoyEnArgentina()) : null;
+  // Las OT ya enlazadas entran en la lista aunque caigan fuera de la ventana:
+  // si no, editar esa parada mostraría "Seleccionar…" al lado de "OT 2929".
+  const enlazadas = porMolino.flatMap((m) => m.cola.explicadas.flatMap((e) => (e.ordenTrabajoId ? [e.ordenTrabajoId] : [])));
+  const ots: OtParaEnlazar[] | null = conMantenimiento
+    ? await otsParaEnlazar(admin, hoyEnArgentina(), enlazadas)
+    : null;
 
   return <ColaClient molinos={porMolino} ots={ots} puedeEditar={puedeEditar} />;
 }

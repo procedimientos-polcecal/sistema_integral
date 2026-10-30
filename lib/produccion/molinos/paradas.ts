@@ -49,3 +49,16 @@ export const EdicionDeParada = z.object({
 });
 
 export const BajaDeParada = z.object({ id: z.string().uuid() });
+
+/**
+ * Lo que se le dice a quien intenta cargar algo que ya está cargado. **Son dos
+ * cosas distintas**: un turno con motivo y un día con la planta parada. Con
+ * `unique nulls not distinct` la base los rechaza igual, y el mismo cartel para
+ * los dos le diría a quien marcó el día entero que "ese turno" ya tiene motivo,
+ * cuando lo que hay es una planta parada de ese día.
+ */
+export function mensajeDeDuplicada(turno: string | null): string {
+  return turno === null
+    ? "Ese día ya tiene marcada la planta parada: recargá la pantalla para verla."
+    : "Ese turno ya tiene un motivo cargado: recargá la pantalla para verlo.";
+}

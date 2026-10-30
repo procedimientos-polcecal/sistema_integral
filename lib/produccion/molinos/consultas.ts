@@ -401,30 +401,67 @@ export interface OtParaEnlazar {
   descripcion: string | null;
 }
 
+/** Cuántos días hacia atrás llegan las OT ya realizadas que se ofrecen para enlazar. */
+export const DIAS_DE_VENTANA_DE_OT = 90;
+
 /**
- * Las OT entre las que una persona puede elegir: las abiertas, sea cual sea su
- * fecha, y las de los últimos `diasAtras` días. Una parada se explica con una
- * orden reciente o en curso; las 2.900 del historial sólo harían el desplegable
- * más lento. **Sólo se llama con quien tiene acceso a Mantenimiento**: lee con
- * el cliente admin, y ahí RLS no corre. Quien no lo tiene recibe el aviso en la
- * pantalla y no una lista vacía.
+ * El filtro de PostgREST de las OT que se ofrecen: las abiertas de cualquier
+ * fecha **o** las de los últimos `diasAtras` días. Aparte de la consulta para
+ * poder fijarlo con un test: cambiar el criterio no rompe nada y el
+ * desplegable simplemente cambia de tamaño.
  */
-export async function otsParaEnlazar(admin: Admin, hoy: string, diasAtras = 90): Promise<OtParaEnlazar[]> {
-  const corte = sumarDias(hoy, -diasAtras);
+export function filtroDeVentanaDeOt(hoy: string, diasAtras = DIAS_DE_VENTANA_DE_OT): string {
+  return `fecha.gte.${sumarDias(hoy, -diasAtras)},estado.neq.REALIZADO`;
+}
+
+/**
+ * Las OT entre las que una persona puede elegir: las de la ventana
+ * (`filtroDeVentanaDeOt`) **más las que ya están enlazadas a una parada**, caigan
+ * donde caigan. Una parada se explica con una orden reciente o en curso; las
+ * 2.900 del historial sólo harían el desplegable más lento. Pero una parada
+ * vieja puede tener una OT ya realizada de hace seis meses, y si esa orden no
+ * está en la lista el desplegable no encuentra su valor y dice "Seleccionar…"
+ * mientras la etiqueta de al lado dice "OT 2929": la pantalla se contradice.
+ *
+ * **Sólo se llama con quien tiene acceso a Mantenimiento**: lee con el cliente
+ * admin, y ahí RLS no corre. Quien no lo tiene recibe el aviso en la pantalla y
+ * no una lista vacía.
+ */
+export async function otsParaEnlazar(
+  admin: Admin,
+  hoy: string,
+  enlazadas: string[] = [],
+  diasAtras = DIAS_DE_VENTANA_DE_OT,
+): Promise<OtParaEnlazar[]> {
   const filas = await traerTodo((desde, hasta) =>
     admin
       .from("ordenes_trabajo")
       .select("id, ot_number, fecha, estado, equipo_raw, descripcion")
-      .or(`fecha.gte.${corte},estado.neq.REALIZADO`)
+      .or(filtroDeVentanaDeOt(hoy, diasAtras))
       .order("ot_number", { ascending: false })
       .range(desde, hasta),
   );
-  return filas.map((o) => ({
-    id: o.id,
-    numero: o.ot_number,
-    fecha: o.fecha,
-    estado: o.estado,
-    equipo: o.equipo_raw,
-    descripcion: o.descripcion,
-  }));
+
+  // Las enlazadas que la ventana no trajo, de a lotes de 200 (ver el encabezado).
+  const traidas = new Set(filas.map((o) => o.id));
+  const faltan = [...new Set(enlazadas)].filter((id) => !traidas.has(id));
+  for (let i = 0; i < faltan.length; i += 200) {
+    const { data, error } = await admin
+      .from("ordenes_trabajo")
+      .select("id, ot_number, fecha, estado, equipo_raw, descripcion")
+      .in("id", faltan.slice(i, i + 200));
+    if (error) throw new Error(`No se pudo leer las órdenes de trabajo enlazadas: ${error.message}`);
+    filas.push(...(data ?? []));
+  }
+
+  return filas
+    .map((o) => ({
+      id: o.id,
+      numero: o.ot_number,
+      fecha: o.fecha,
+      estado: o.estado,
+      equipo: o.equipo_raw,
+      descripcion: o.descripcion,
+    }))
+    .sort((a, b) => b.numero - a.numero);
 }

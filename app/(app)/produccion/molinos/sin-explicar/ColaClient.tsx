@@ -66,7 +66,7 @@ function CampoDeOt({
     );
   }
   return (
-    <Select value={valor} onChange={(e) => onCambio(e.target.value)} aria-label="Orden de trabajo">
+    <Select className="input" value={valor} onChange={(e) => onCambio(e.target.value)} aria-label="Orden de trabajo">
       <option value="">Sin orden de trabajo</option>
       {ots.map((o) => (
         <option key={o.id} value={o.id}>

@@ -4,7 +4,7 @@ import { cuerpoJson } from "@/lib/core/cuerpo";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { puedeEditarProduccion } from "@/lib/produccion/auth";
 import { puedeVerMantenimiento } from "@/lib/mantenimiento/auth";
-import { AltaDeParada, BajaDeParada, EdicionDeParada } from "@/lib/produccion/molinos/paradas";
+import { AltaDeParada, BajaDeParada, EdicionDeParada, mensajeDeDuplicada } from "@/lib/produccion/molinos/paradas";
 
 /**
  * El motivo de una parada de molino: lo único de este módulo que escribe una
@@ -59,12 +59,9 @@ async function exigirMantenimientoSiHayOt(
 }
 
 /** Lo que Postgres dice cuando falla una clave foránea o la unicidad, dicho en castellano. */
-function errorDeLaBase(error: { code?: string; message: string }): NextResponse {
+function errorDeLaBase(error: { code?: string; message: string }, turno: string | null = null): NextResponse {
   if (error.code === "23505") {
-    return NextResponse.json(
-      { error: "Ese turno ya tiene un motivo cargado: recargá la pantalla para verlo." },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: mensajeDeDuplicada(turno) }, { status: 409 });
   }
   if (error.code === "23503") {
     return NextResponse.json({ error: "El molino o la orden de trabajo no existe." }, { status: 400 });
@@ -97,7 +94,7 @@ export async function POST(request: Request) {
     .insert(fila)
     .select("id, molino_id, fecha, turno, motivo, orden_trabajo_id")
     .single();
-  if (error) return errorDeLaBase(error);
+  if (error) return errorDeLaBase(error, turno);
   return NextResponse.json({ parada: data }, { status: 201 });
 }
 
