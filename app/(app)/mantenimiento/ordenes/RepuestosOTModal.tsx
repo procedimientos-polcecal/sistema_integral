@@ -3,9 +3,15 @@
 import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
+import { haceCuanto } from "@/lib/core/haceCuanto";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
+import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
+import {
+  preguntaAbiertaDelRepuesto, sePuedePreguntarEn, encabezadoDeLaPregunta, queDecirDelAviso,
+  TEXTO_DEL_SEGUIMIENTO, type NotaDeLaOT,
+} from "@/lib/mantenimiento/consultaDeRepuesto";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -31,6 +37,13 @@ import type { EstadoCompra } from "@/lib/compras/types";
  * usuario del SdG, así que ese botón **no depende del permiso de edición de
  * Mantenimiento**: quien mira la orden y ve que falta algo es justamente quien
  * tiene que poder pedirlo, trabaje o no en Compras.
+ *
+ * Y ofrece **preguntar**: «Preguntar a Compras» escribe una pregunta en el
+ * historial de la orden e interrumpe a quien contesta por los repuestos. A
+ * diferencia de pedir, **sí exige el permiso de edición**: es la decisión del
+ * diseño, porque escribe en la orden e interrumpe a una persona nombrada.
+ * Preguntar no pide el repuesto —el requerimiento es el pedido y la pregunta es
+ * por el pedido—, así que los dos botones conviven.
  */
 
 interface RiEnVuelo {
@@ -54,8 +67,18 @@ interface Repuesto {
 
 type Opcion = { id: string; nombre: string };
 
+/** La pregunta que se está escribiendo, y a qué repuesto es. */
+interface Escribiendo {
+  repuestoId: string;
+  /** Lo que arrancó escrito: el repuesto y los RI. Sirve para no mandar sólo eso. */
+  encabezado: string;
+  texto: string;
+  /** La pregunta abierta de ese repuesto, si ya había una: esto es su seguimiento. */
+  abierta: NotaDeLaOT | null;
+}
+
 export default function RepuestosOTModal({
-  orden, puedeEditar, areas, empresas, ubicaciones, onCerrar,
+  orden, puedeEditar, areas, empresas, ubicaciones, onCerrar, onCambioEnElHistorial,
 }: {
   orden: {
     id: string; ot_number: number | null; descripcion: string | null;
@@ -63,6 +86,9 @@ export default function RepuestosOTModal({
     /** El sector de la OT: de ahí sale dónde se necesita cuando la máquina no
         tiene una ubicación propia, y de la ubicación sale quién paga. */
     sector_id: string | null;
+    /** Si la orden espera algo decide si se ofrece preguntar, y si una pregunta
+        sigue abierta. */
+    estado: string | null;
   };
   puedeEditar: boolean;
   /** Los catálogos del formulario de requerimiento, para poder pedir de acá. */
@@ -70,6 +96,12 @@ export default function RepuestosOTModal({
   empresas: Opcion[];
   ubicaciones: UbicacionEnlazada[];
   onCerrar: () => void;
+  /**
+   * Se escribió o cambió algo que el historial de la orden muestra: una pregunta
+   * nueva, o un repuesto sacado —que cierra la suya—. El historial está en otra
+   * parte de la pantalla, detrás de este modal, y no se entera solo.
+   */
+  onCambioEnElHistorial?: () => void;
 }) {
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
   const [disponibilidad, setDisponibilidad] = useState<Record<string, Disponibilidad>>({});
@@ -83,6 +115,16 @@ export default function RepuestosOTModal({
   const [pedido, setPedido] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+
+  /** El historial de la orden: de ahí sale qué repuesto ya tiene una pregunta esperando. */
+  const [notas, setNotas] = useState<NotaDeLaOT[]>([]);
+  const [escribiendo, setEscribiendo] = useState<Escribiendo | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [errorDeLaPregunta, setErrorDeLaPregunta] = useState("");
+  /** Lo que se le dice a quien acaba de preguntar: si el aviso llegó, y si la planilla. */
+  const [seEnvio, setSeEnvio] = useState<
+    { llego: boolean; texto: string; planilla: string | null } | null
+  >(null);
 
   const traer = useCargar(async (vigente) => {
     setCargando(true);
@@ -115,12 +157,88 @@ export default function RepuestosOTModal({
     setDisponibilidad(porClave);
   }, [orden.id]);
 
+  // El historial, aparte de la lista: saber qué hace falta no depende de saber
+  // qué se preguntó. Si no se puede leer, el botón ofrece abrir una pregunta como
+  // si no hubiera ninguna, y la ruta defiende la regla de una abierta por repuesto.
+  const recargarNotas = useCargar(async (vigente) => {
+    const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`);
+    if (!res.ok) return;
+    const body = await res.json().catch(() => ({}));
+    if (!vigente()) return;
+    setNotas(body.data ?? []);
+  }, [orden.id]);
+
   async function sacar(id: string) {
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos?repuesto=${id}`, {
       method: "DELETE",
     });
     if (!res.ok) { setError((await res.json().catch(() => ({}))).error ?? "No se pudo sacar."); return; }
     traer();
+    // Sacar un repuesto cierra su pregunta, si tenía una abierta: el historial de
+    // atrás tiene que dejar de mostrarla esperando.
+    onCambioEnElHistorial?.();
+  }
+
+  /**
+   * Abre la caja de la pregunta, escrita hasta donde se sabe.
+   *
+   * Arranca con el repuesto y los RI en curso, y si el repuesto ya tiene una pregunta
+   * esperando es **su seguimiento**: se le suma al mismo hilo en vez de abrir otra, que
+   * son dos entradas en la bandeja de Compras diciendo lo mismo.
+   */
+  function abrirPregunta(r: Repuesto, abierta: NotaDeLaOT | null) {
+    const encabezado = encabezadoDeLaPregunta({ nombre: r.nombre, codigo: r.codigo }, r.ris);
+    setError("");
+    setErrorDeLaPregunta("");
+    setSeEnvio(null);
+    setEscribiendo({
+      repuestoId: r.id,
+      encabezado,
+      abierta,
+      texto: abierta ? `${encabezado}${TEXTO_DEL_SEGUIMIENTO} ` : encabezado,
+    });
+  }
+
+  async function enviarPregunta() {
+    if (!escribiendo) return;
+    setEnviando(true);
+    setErrorDeLaPregunta("");
+
+    const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        texto: escribiendo.texto.trim(),
+        tipo: "PREGUNTA",
+        repuesto_id: escribiendo.repuestoId,
+        // El seguimiento apunta a LA pregunta abierta y no a la primera del hilo:
+        // con tres en un hilo, apuntar a la primera deja dos abiertas.
+        ...(escribiendo.abierta ? { responde_a: escribiendo.abierta.id } : {}),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setEnviando(false);
+
+    if (!res.ok) {
+      const motivo = body.error ?? "No se pudo enviar la pregunta.";
+      if (res.status === 409) {
+        // La pantalla estaba vieja —alguien ya preguntó, o contestó—: lo que se
+        // iba a mandar ya no corresponde. Se cierra la caja y se vuelve a leer,
+        // para que el botón ofrezca lo que hoy sí se puede.
+        setEscribiendo(null);
+        setError(motivo);
+        recargarNotas();
+      } else {
+        setErrorDeLaPregunta(motivo);
+      }
+      return;
+    }
+
+    setEscribiendo(null);
+    setError("");
+    setSeEnvio({ ...queDecirDelAviso(body.aviso), planilla: body.planilla_error ?? null });
+    recargarNotas();
+    onCambioEnElHistorial?.();
   }
 
   return (
@@ -176,9 +294,19 @@ export default function RepuestosOTModal({
             {repuestos.map((r) => {
               const d = disponibilidad[r.id];
               const estado = d ? ESTADO_DE_STOCK[d.estado] : null;
+
+              // La pregunta que este repuesto ya tiene esperando, si tiene. Decide si
+              // el botón abre una nueva o le suma al hilo.
+              const abierta = preguntaAbiertaDelRepuesto(notas, r.id, orden.estado);
+              // Las condiciones de «Pedir a Compras» —que falte stock— más las de
+              // preguntar: poder editar la orden, y que la orden espere algo.
+              const puedePreguntar =
+                puedeEditar && sePuedePreguntarEn(orden.estado) && Boolean(d && convienePedir(d.estado));
+              const escribiendoEste = escribiendo?.repuestoId === r.id;
+
               return (
                 <li key={r.id} className="flex items-start justify-between gap-2 py-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm text-slate-800">
                       {r.nombre}
                       {r.cantidad && <span className="text-slate-400"> ×{r.cantidad}</span>}
@@ -203,19 +331,92 @@ export default function RepuestosOTModal({
                         veces. Ver `lib/mantenimiento/riDelRepuesto.ts`. */}
                     {d && convienePedir(d.estado) && <YaPedido ris={r.ris} />}
 
+                    {/* La pregunta que ya se hizo, a la vista aunque el stock haya
+                        cambiado o no se pueda editar: «una pregunta sin responder se
+                        ve» es lo que esto existe para hacer. */}
+                    {abierta && !escribiendoEste && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Preguntado {haceCuanto(abierta.creado_en)}, sin respuesta.
+                      </p>
+                    )}
+
                     {d && convienePedir(d.estado) && (
-                      <button
-                        onClick={() => setPidiendo({
-                          pedido: pedidoSugerido(
-                            { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
-                            d, orden, ubicaciones, areas
-                          ),
-                          ris: r.ris,
-                        })}
-                        className="mt-1 block text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
-                      >
-                        Pedir a Compras
-                      </button>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <button
+                          onClick={() => setPidiendo({
+                            pedido: pedidoSugerido(
+                              { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                              d, orden, ubicaciones, areas
+                            ),
+                            ris: r.ris,
+                          })}
+                          className="text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                        >
+                          Pedir a Compras
+                        </button>
+
+                        {/* Una pregunta abierta por repuesto: si ya hay una, el
+                            botón no abre otra y ofrece sumar al mismo hilo. Dos
+                            preguntas vivas por la misma pieza son dos entradas en
+                            la bandeja de Compras que dicen lo mismo. */}
+                        {puedePreguntar && !escribiendoEste && (
+                          <button
+                            onClick={() => abrirPregunta(r, abierta)}
+                            className="text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                          >
+                            {abierta ? "Sigue sin llegar" : "Preguntar a Compras"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {escribiendoEste && escribiendo && (
+                      <div className="mt-2 space-y-2">
+                        <textarea
+                          value={escribiendo.texto}
+                          onChange={(e) => {
+                            setEscribiendo({ ...escribiendo, texto: e.target.value });
+                            setErrorDeLaPregunta("");
+                          }}
+                          // Arranca escrita —el repuesto y los RI—, y lo que sigue es lo
+                          // que se agrega a continuación: con el cursor al principio
+                          // quedaría la pregunta antes del encabezado.
+                          autoFocus
+                          onFocus={(e) => {
+                            const caja = e.currentTarget;
+                            caja.setSelectionRange(caja.value.length, caja.value.length);
+                          }}
+                          maxLength={MAXIMO_DE_NOTA}
+                          rows={4}
+                          aria-label="Pregunta para Compras"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                        />
+                        {errorDeLaPregunta && (
+                          <p className="text-xs text-red-600">{errorDeLaPregunta}</p>
+                        )}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={enviarPregunta}
+                            // Con sólo el encabezado no hay pregunta: es el repuesto
+                            // y nada que preguntar de él.
+                            disabled={
+                              enviando ||
+                              escribiendo.texto.trim() === "" ||
+                              escribiendo.texto.trim() === escribiendo.encabezado.trim()
+                            }
+                            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                          >
+                            {enviando ? "Enviando…" : "Enviar a Compras"}
+                          </button>
+                          <button
+                            onClick={() => setEscribiendo(null)}
+                            disabled={enviando}
+                            className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-40"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                   {puedeEditar && (
@@ -235,6 +436,26 @@ export default function RepuestosOTModal({
           <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
             {pedido} Lo vas a ver en <a href="/mis-pedidos" className="underline">Mis pedidos</a>.
           </p>
+        )}
+
+        {/* Lo que pasó con la pregunta. Verde sólo si salió el aviso y llegó a la
+            planilla; si no, ámbar, y dice qué: que no haya a quién avisarle no
+            puede quedar callado, porque quien preguntó cree que Compras lo sabe. */}
+        {seEnvio && (
+          <div
+            className={`rounded-lg px-3 py-2 text-xs ${
+              seEnvio.llego && !seEnvio.planilla
+                ? "bg-green-50 text-green-800"
+                : "bg-amber-50 text-amber-800"
+            }`}
+          >
+            <p>{seEnvio.texto}</p>
+            {seEnvio.planilla && (
+              <p className="mt-1">
+                Quedó guardada en el sistema, pero no llegó a la planilla: {seEnvio.planilla}
+              </p>
+            )}
+          </div>
         )}
 
         {puedeEditar && <Agregar ordenId={orden.id} onAgregado={traer} onError={setError} />}

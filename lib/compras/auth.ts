@@ -159,6 +159,41 @@ export async function aprobadoresDeOS(
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
+/**
+ * Quiénes contestan cuando Mantenimiento le pregunta a Compras por un repuesto.
+ *
+ * Es la gemela de `aprobadoresDeCompras()`, sin alias, que es lo que la hace
+ * igual a `aprobadoresDeOS()`: esta lista no firma nada en ninguna planilla, así
+ * que `compras_consultados` no tiene `alias_planilla` y no hay nada que traer.
+ *
+ * Pertenecer a la lista ES el destino del aviso: a quien está acá le llega el push
+ * en el momento en que alguien pregunta. Por eso es una lista propia y **no
+ * `compras_aprobadores`**: medido el 26/10/2026, Facundo Ortiz —el encargado de
+ * compras, a quien contesta esto— ya estaba ahí, pero esa lista tiene cuatro
+ * personas y las otras tres no son quien contesta. Reusarla es repetir el error
+ * que `compras-por-aprobar` ya pagó por el otro lado: le llegaba a 6 personas y 3
+ * no podían aprobar. Lo explica el encabezado de la migración 20261029082249.
+ *
+ * Una cuenta dada de baja no figura, igual que en las otras dos: `avisarAQuienDecide`
+ * tampoco le manda. Y estar en la lista no abre el módulo: la bandeja vive bajo
+ * `/compras`, así que sumar a alguien sin darle Compras no le hace nada visible.
+ */
+export async function consultadosDeCompras(
+  supabase: SupabaseClient
+): Promise<Omit<Aprobador, "alias">[]> {
+  const { data } = await supabase
+    .from("compras_consultados")
+    .select("usuarios(id, nombre, apellido, email, activo)");
+
+  type Usuario = { id: string; nombre: string; apellido: string; email: string; activo: boolean };
+
+  return (data ?? [])
+    .map((fila) => fila.usuarios as unknown as Usuario | null)
+    .filter((u): u is Usuario => Boolean(u?.activo))
+    .map((u) => ({ id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
 export async function tieneAccesoCompras(
   supabase: SupabaseClient,
   userId: string
