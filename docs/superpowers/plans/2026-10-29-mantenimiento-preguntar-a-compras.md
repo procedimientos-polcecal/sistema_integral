@@ -497,18 +497,49 @@ git commit -m "feat(mantenimiento): preguntarle a Compras por un repuesto desde 
 **Files:**
 - Create: `app/api/compras/consultas/route.ts`
 - Create: `app/(app)/compras/consultas/page.tsx`, `ConsultasClient.tsx`
+- Create: `lib/compras/consultas.ts` y `lib/compras/consultas.test.ts`
 
 **Interfaces:**
 - Consumes: `preguntasAbiertas` (Tarea 2), `avisarAUnaPersona` (Tarea 4).
 - Produces: `GET /api/compras/consultas` → las abiertas con su OT y su repuesto;
-  `POST` con `{ pregunta_id, texto }`; y en `lib/compras/auth.ts`,
-  `export function puedeResponderConsulta(quien: { accesoCompras: boolean }, preguntaAbierta: { id: string } | null): boolean`.
+  `POST` con `{ pregunta_id, texto }`; y en `lib/compras/consultas.ts`,
+  `puedeResponderConsulta` y `aQuienAvisarDeLaRespuesta` (firmas abajo).
 
-- [ ] **Step 1: Test de la regla de permiso**
+**Corregido el 30/10, antes de despachar la tarea. Lo puro NO va en
+`lib/compras/auth.ts`:** ese archivo es íntegramente I/O async con
+`SupabaseClient` —ocho funciones, todas `await`— y **no tiene test**. Meterle la
+única función pura del módulo y crear `auth.test.ts` dejaría un archivo de test
+que cubre una función y parece cubrir nueve. Va en `lib/compras/consultas.ts`,
+que además es el patrón dominante de la carpeta (`<tema>.ts` + `<tema>.test.ts`,
+decenas de pares). `consultadosDeCompras` se queda en `auth.ts`: es I/O.
 
-En `lib/compras/auth.test.ts` o donde viva lo puro: **se puede responder si se
-tiene acceso a Compras y hay una pregunta abierta en esa orden** — no hace falta
-nivel de Mantenimiento.
+**Y cambia qué merece ser una función.** `puedeResponderConsulta` es
+`accesoCompras && pregunta !== null`, un AND que repite su call site: lo que
+decide de verdad ya está probado en `preguntasAbiertas` y en
+`tieneAccesoCompras`. Se conserva porque nombrar «no hace falta nivel de
+Mantenimiento» vale, pero no es ahí donde hay que poner el esfuerzo. **Las dos
+condiciones del aviso sí son la trampa, y el plan las había dejado sin función y
+sin test** — son las que fallan en silencio.
+
+```ts
+export function puedeResponderConsulta(
+  quien: { accesoCompras: boolean },
+  preguntaAbierta: { id: string } | null
+): boolean;
+
+/**
+ * A quién avisarle de esta respuesta, o `null` si no hay a quién.
+ * Devuelve el id del autor de la pregunta: nunca el de quien contesta.
+ */
+export function aQuienAvisarDeLaRespuesta(
+  pregunta: { creado_por: string | null },
+  quienContesta: { id: string }
+): string | null;
+```
+
+- [ ] **Step 1: Tests de las dos reglas**
+
+En `lib/compras/consultas.test.ts`. **La segunda es la que importa.**
 
 ```ts
 it("sin acceso a Compras no se contesta aunque la pregunta este abierta", () => {
@@ -520,17 +551,29 @@ it("con acceso a Compras se contesta, sin permiso de Mantenimiento", () => {
 it("una pregunta ya respondida no se vuelve a contestar", () => {
   expect(puedeResponderConsulta({ accesoCompras: true }, null)).toBe(false);
 });
+
+it("le avisa a quien pregunto", () => {
+  expect(aQuienAvisarDeLaRespuesta({ creado_por: "ana" }, { id: "facundo" })).toBe("ana");
+});
+it("no se avisa a si mismo: un admin de las dos puntas se contesta solo", () => {
+  expect(aQuienAvisarDeLaRespuesta({ creado_por: "ana" }, { id: "ana" })).toBe(null);
+});
+it("una pregunta sin autor no avisa a nadie, y no rompe", () => {
+  expect(aQuienAvisarDeLaRespuesta({ creado_por: null }, { id: "facundo" })).toBe(null);
+});
 ```
 
 - [ ] **Step 2: Correr y verificar que falla** → FAIL
 
 - [ ] **Step 3: Implementar**
 
-**Dos condiciones antes de avisar**, que `avisarAUnaPersona` no puede tomar por
-su cuenta: que la pregunta **tenga** `creado_por` —la columna es nullable, así
-que `tsc` va a obligar a decidirlo— y que ese autor **no sea quien contesta**.
-Sin la segunda, un administrador con acceso a las dos puntas recibe «Compras
-contestó tu pregunta» de algo que escribió él un segundo antes.
+**Las dos condiciones antes de avisar las resuelve `aQuienAvisarDeLaRespuesta`**,
+que `avisarAUnaPersona` no puede tomar por su cuenta: que la pregunta **tenga**
+`creado_por` —la columna es nullable, así que `tsc` va a obligar a decidirlo— y
+que ese autor **no sea quien contesta**. Sin la segunda, un administrador con
+acceso a las dos puntas recibe «Compras contestó tu pregunta» de algo que
+escribió él un segundo antes. La ruta no repite esas condiciones a mano: pide el
+destinatario y, si viene `null`, no avisa.
 
 El POST **comprueba `pregunta_id` contra `preguntasAbiertas`** en vez de darlo
 por bueno —una pregunta ya contestada o superada no se vuelve a contestar— e
@@ -552,7 +595,7 @@ Run: `npm test && npx tsc --noEmit && node scripts/revisar-responsive.mjs`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/api/compras/consultas/route.ts app/\(app\)/compras/consultas/ lib/compras/auth.ts
+git add app/api/compras/consultas/route.ts app/\(app\)/compras/consultas/ lib/compras/consultas.ts lib/compras/consultas.test.ts
 git commit -m "feat(compras): contestar las consultas de repuestos de Mantenimiento"
 ```
 
