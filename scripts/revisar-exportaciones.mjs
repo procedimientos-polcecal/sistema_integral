@@ -158,6 +158,25 @@ export const REGISTRO = {
       "es que lo vacío no viaja—. El porqué largo y lo medido están en el " +
       "encabezado de la ruta.",
   },
+  "app/api/mantenimiento/ordenes/[id]/postergar/route.ts": {
+    estrategia: "aborta",
+    porque:
+      "Escribe la fecha de ejecución en «Altas del sistema» ANTES de tocar la base, " +
+      "y si la planilla no contesta no mueve nada: devuelve 502 con lo que dijo " +
+      "Google sin traducir. Por eso no necesita cola — no puede quedar una fecha " +
+      "nueva acá y la vieja allá, que es el orden inverso del que la haría falta. " +
+      "Lo que sí anota es `fecha_ejecucion_pendiente`, pero eso no es una cola de " +
+      "exportación: es lo que evita que la importación pise la fecha durante las 3 " +
+      "a 53 horas que tarda el derrame del master en reflejarla.",
+  },
+  "lib/mantenimiento/generarPeriodicas.ts": {
+    estrategia: "delega",
+    porque:
+      "Compone `altaEnLaPlanilla` para crear la OT del mantenimiento periódico. No " +
+      "escribe por su cuenta: la fila la escribe el alta, y si falla no se crea nada " +
+      "en ningún lado ni se consume un número. Lo que genera después lo protege del " +
+      "borrado de espejo con `app_created` y `created_at_app`.",
+  },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
     porque:

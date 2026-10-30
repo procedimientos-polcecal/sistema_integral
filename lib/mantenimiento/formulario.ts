@@ -39,7 +39,7 @@
 
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import {
-  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas, textoParaLaCelda,
+  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas, leerValores, textoParaLaCelda,
 } from "@/lib/core/sheets";
 
 /** La pestaña donde caen las respuestas del formulario. */
@@ -489,5 +489,88 @@ export async function altaEnLaPlanilla(
     // que todavía no existe dice "Unable to parse range", que no le sirve a
     // nadie si no se sabe qué rango se pidió.
     return { ok: false, error: `No se pudo escribir en «${HOJA_DE_ALTAS}»: ${porque}` };
+  }
+}
+
+/**
+ * Dónde está la celda de la fecha comprometida de una OT, y qué escribirle.
+ *
+ * ── POR QUÉ NO ALCANZA CON UN UPDATE EN LA BASE ─────────────────────────────
+ *
+ * La fecha de ejecución de una OT en el master es la columna **J**, y esa
+ * columna es derrame de un `QUERY(IMPORTRANGE())`: escribirla no queda. La
+ * fecha de verdad está acá, en `Altas del sistema`, y de acá derrama al master.
+ * Así que postergar una orden es reescribir **esta** celda.
+ *
+ * La fila **se busca por el N° de OT**, no se calcula. Es la misma lección que
+ * dejó escrita `filaDeLaOTenElMaster`: una cuenta que deja de valer no avisa,
+ * sigue devolviendo un número plausible y la escritura se va a la fila de otra
+ * orden.
+ *
+ * Y el valor va como **serial**, no como texto: `USER_ENTERED` interpreta un
+ * "5/11/2026" según el locale de la planilla —que hoy es `es_MX`— y eso es la
+ * trampa que dio vuelta 885 fechas en Compras.
+ *
+ * Es pura para poder probarla: recibe las filas ya leídas y devuelve qué
+ * escribir, o por qué no se puede.
+ */
+export function celdaDeLaFechaComprometida(
+  filas: readonly (readonly unknown[])[],
+  ot_number: number,
+  iso: string
+): { ok: true; fila: number; columna: number; valor: number } | { ok: false; error: string } {
+  const idx = indiceDeColumnas((filas[0] ?? []).map((c) => String(c ?? "")));
+  if (idx.fecha < 0) {
+    return {
+      ok: false,
+      error: `El encabezado de «${HOJA_DE_ALTAS}» no tiene ${ALIAS.fecha.join(" ni ")}.`,
+    };
+  }
+
+  const serial = serialDelDia(iso);
+  if (serial === null) return { ok: false, error: `La fecha ${iso} no existe.` };
+
+  for (let i = 1; i < filas.length; i++) {
+    if (Number(String(filas[i]?.[0] ?? "").trim()) === ot_number) {
+      // La planilla cuenta desde 1 y la fila 0 es el encabezado.
+      return { ok: true, fila: i + 1, columna: idx.fecha, valor: serial };
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      `La OT ${ot_number} no está en «${HOJA_DE_ALTAS}». Sólo se puede correr la ` +
+      `fecha de las órdenes que creó el sistema: las del formulario viven en otra ` +
+      `pestaña, que maneja Forms, y escribir ahí corre las filas de los demás.`,
+  };
+}
+
+/**
+ * Reescribe la fecha comprometida de una OT. Devuelve el motivo si no se pudo.
+ *
+ * No lanza: la pantalla tiene que poder mostrar **lo que dijo Google, sin
+ * traducir**. Un diagnóstico que no se distingue de otro no es un diagnóstico.
+ */
+export async function corregirLaFechaComprometida(
+  ot_number: number,
+  iso: string
+): Promise<string | null> {
+  const planilla = PLANILLA();
+  if (!planilla) {
+    return "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay dónde escribir la fecha.";
+  }
+
+  try {
+    const filas = await leerValores(planilla, HOJA_DE_ALTAS, { sinFormato: true });
+    const donde = celdaDeLaFechaComprometida(filas, ot_number, iso);
+    if (!donde.ok) return donde.error;
+
+    await escribirCeldas(planilla, [{
+      pestana: HOJA_DE_ALTAS, fila: donde.fila, columna: donde.columna, valor: donde.valor,
+    }]);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
