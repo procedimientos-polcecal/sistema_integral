@@ -4,9 +4,12 @@ import { diaDeLaSemana, rangoDelMes, sumarDias } from "@/lib/core/fechas";
  * Los días hábiles del calendario, para el denominador del ausentismo.
  *
  * La planilla de Google divide por un 145 fijo para todos, todo el año. Acá el
- * denominador son los días hábiles de los meses que ya pasaron, acumulados. Con
- * eso el porcentaje cambia de escala: los hábiles reales andan por 182 por
- * persona, así que cada porcentaje sale a la mitad. Es lo que se quiere.
+ * denominador son los días hábiles de los meses que ya pasaron, acumulados, y
+ * el porcentaje baja. NO se parte al medio, y cuánto baja depende de cuánto del
+ * año ya pasó. Medido con los feriados reales de 2026, 141 ausencias sobre 145
+ * dan 97,2 %; sobre los 204 hábiles acumulados a octubre dan 69,1 %, y sobre los
+ * 245 del año entero, 57,6 %. El numerador es el mismo en las tres cuentas: lo
+ * que cambia es sólo el denominador.
  *
  * LOS HÁBILES SALEN DEL CALENDARIO Y DE `feriados`, NO DE `calculos_diarios`.
  * Esa tabla arranca en febrero de 2026: enero no existe en ella, y no puede dar
@@ -16,6 +19,13 @@ import { diaDeLaSemana, rangoDelMes, sumarDias } from "@/lib/core/fechas";
  *
  * Los meses son "YYYY-MM" y las fechas "YYYY-MM-DD", como en el resto de
  * `lib/core`.
+ *
+ * QUIEN LLAMA DEBE PASAR UN "YYYY-MM" VÁLIDO. Estas funciones no lo validan, a
+ * propósito: la validación es del borde, que es la ruta que las llama. Un mes
+ * mal escrito no tira un error claro. `"abc"` revienta más abajo, en
+ * `toISOString`, con un mensaje que no dice qué pasó; `"2026-1"` (sin cero)
+ * no revienta y da un resultado equivocado en silencio. Para chequearlo antes
+ * de llamar, usar `esMesValido` de `lib/core/fechas.ts`.
  */
 
 /**
@@ -39,8 +49,8 @@ export function habilesDelMes(mes: string, feriados: readonly string[]): number 
 /**
  * Los sábados del mes. El reporte porcentual los suma aparte.
  *
- * No están en `habilesDelMes`: se cuentan a parte porque el porcentaje del
- * anual los necesita por separado.
+ * No están en `habilesDelMes`: van en su propia función porque el reporte los
+ * necesita sin mezclarlos con los hábiles.
  */
 export function sabadosDelMes(mes: string): number {
   const { primerDia, ultimoDia } = rangoDelMes(mes);
@@ -84,4 +94,20 @@ export function mesesSinFeriados(anio: number, feriados: readonly string[]): str
     if (!conFeriado.has(mes)) sinFeriado.push(mes);
   }
   return sinFeriado;
+}
+
+/**
+ * Si el año no tiene ningún feriado cargado. Es la alerta que el reporte debe
+ * mostrar, no `mesesSinFeriados`.
+ *
+ * Por qué no alcanza con mirar los meses: Argentina no tiene feriado nacional
+ * en septiembre. Con los 17 feriados reales de 2026, `mesesSinFeriados` da
+ * `["2026-09"]`, y ese mes sin feriado es lo normal. Si la alerta saltara por
+ * cada mes así, todos aprenderían a ignorarla, y el año que de verdad no tiene
+ * feriados cargados (2027, hoy) quedaría escondido entre esos avisos. Esta
+ * función responde sólo a eso: si ningún feriado cae en `anio`.
+ */
+export function anioSinFeriadosCargados(anio: number, feriados: readonly string[]): boolean {
+  const prefijo = `${anio}-`;
+  return !feriados.some((f) => f.startsWith(prefijo));
 }
