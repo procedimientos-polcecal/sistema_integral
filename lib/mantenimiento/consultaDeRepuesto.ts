@@ -17,9 +17,12 @@
  *
  * Debajo de eso vive lo que la OT hace con una pregunta nueva —leer lo que llega a
  * la ruta de notas, comprobarlo contra la orden, cuándo se ofrece preguntar y qué
- * se le dice a quien preguntó—, por la misma razón: ni la ruta ni los componentes
- * tienen tests, y una regla escrita adentro de ellos es una segunda definición que
- * se separa de la que sí los tiene.
+ * se le dice a quien preguntó—, por la misma razón: la ruta y los componentes casi
+ * no tienen tests, y una regla escrita adentro de ellos es una segunda definición
+ * que se separa de la que sí está probada. Las dos excepciones prueban lo único que
+ * esto no puede ver: `rutaDeNotas.test.ts` (qué columnas lee la ruta y qué hace con
+ * lo que rechaza) e `historialDeLaOT.test.ts` (a qué entradas de la lista les
+ * ofrece «Ya llegó»).
  *
  * POR QUÉ NO HAY UNA COLUMNA `cerrada_en`
  *
@@ -215,6 +218,44 @@ export function preguntaAbiertaDelRepuesto(
     preguntasAbiertas(notas, estadoDeLaOrden).filter(
       (pregunta) => pregunta.repuesto_id === repuestoId
     )
+  );
+}
+
+/**
+ * Las preguntas que dejaron de esperar sin que nadie las contestara: las que
+ * «quedaron sin responder».
+ *
+ * El diseño pide que una pregunta que se cierra sola —porque sacaron el repuesto de
+ * la lista, o porque la orden ya no espera nada— no desaparezca: **queda registrada
+ * como «quedó sin responder»**. Se deriva igual que «abierta», de las filas que ya
+ * están, y por las mismas tres razones del encabezado: la tabla no se actualiza, una
+ * fila nueva al cerrarla terminaría en la celda X de la planilla, y una marca
+ * guardada sería un segundo dato. A la pregunta a cuyo repuesto sacaron la delata el
+ * `repuesto_id` en null; a la de una orden suspendida o realizada, el estado.
+ *
+ * Es lo que `preguntasAbiertas` descarta, menos lo que **tuvo su final**:
+ *
+ *  - una RESPUESTA que la apunta: la contestaron, o quien preguntó la cerró con «ya
+ *    llegó» —la misma fila—;
+ *  - otra PREGUNTA que la apunta: un seguimiento la superó. El hilo sigue en la
+ *    última, y es ésa la que queda sin responder si el hilo termina así: marcar
+ *    también a la primera diría dos veces lo mismo sobre una sola conversación.
+ *
+ * Filtra y nada más, como `preguntasAbiertas`: no ordena ni toca lo que recibe. Y una
+ * pregunta no puede estar en las dos listas.
+ */
+export function preguntasSinResponder(
+  notas: readonly NotaDeLaOT[],
+  estadoDeLaOrden: string | null
+): NotaDeLaOT[] {
+  const abiertas = new Set(preguntasAbiertas(notas, estadoDeLaOrden).map((p) => p.id));
+
+  return notas.filter(
+    (nota) =>
+      nota.tipo === "PREGUNTA" &&
+      !abiertas.has(nota.id) &&
+      !tieneRespuesta(nota, notas) &&
+      !estaSuperada(nota, notas)
   );
 }
 

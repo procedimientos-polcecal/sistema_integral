@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
-import { haceCuanto } from "@/lib/core/haceCuanto";
 import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
-import {
-  preguntasAbiertas, TEXTO_DE_YA_LLEGO, type NotaDeLaOT, type TipoDeNota,
-} from "@/lib/mantenimiento/consultaDeRepuesto";
+import { TEXTO_DE_YA_LLEGO } from "@/lib/mantenimiento/consultaDeRepuesto";
+import HistorialDeLaOT, { type NotaDelHistorial } from "./HistorialDeLaOT";
 
 /**
  * Por qué una orden todavía no se hizo, y lo que Mantenimiento le preguntó a
@@ -29,18 +27,10 @@ import {
  * esperando se ve** —«preguntado hace 3 días, sin respuesta»—, que es el estado
  * que todo esto existe para hacer visible, y trae el botón «Ya llegó»: la
  * respuesta de quien preguntó, cuando la pieza llegó por otro lado.
+ *
+ * Acá viven la lectura y las escrituras. La lista, con la regla de a qué entradas
+ * se les ofrece «Ya llegó», está en `HistorialDeLaOT`, que se puede dibujar sola.
  */
-
-interface Nota extends NotaDeLaOT {
-  autor: { nombre: string } | null;
-}
-
-/** Cómo se rotula cada tipo de entrada. */
-const ROTULO: Record<TipoDeNota, { texto: string; color: string }> = {
-  JUSTIFICACION: { texto: "Justificación", color: "bg-slate-100 text-slate-500" },
-  PREGUNTA: { texto: "Pregunta a Compras", color: "bg-amber-100 text-amber-800" },
-  RESPUESTA: { texto: "Respuesta", color: "bg-green-100 text-green-800" },
-};
 
 export default function JustificacionOT({
   ordenId, estado, puedeEditar, onCambio, version,
@@ -62,7 +52,7 @@ export default function JustificacionOT({
    */
   version?: number;
 }) {
-  const [notas, setNotas] = useState<Nota[]>([]);
+  const [notas, setNotas] = useState<NotaDelHistorial[]>([]);
   const [cargando, setCargando] = useState(true);
   // Por qué no se pudo leer, y vacío cuando se pudo. Sin esto una lectura rota
   // se veía igual que una orden sin justificar —«nadie dejó dicho por qué»—, que
@@ -88,14 +78,12 @@ export default function JustificacionOT({
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
 
-  // Las que siguen esperando. NO es «las que no tienen respuesta»: una pregunta
-  // superada por un seguimiento tampoco la tiene y ya no espera, y un «Ya llegó»
-  // escrito sobre ella no cierra el hilo —el seguimiento sigue abierto—. La
-  // pertenencia a `preguntasAbiertas` es lo único que sabe las dos cosas.
-  const esperando = new Set(preguntasAbiertas(notas, estado).map((p) => p.id));
-
   /**
    * Escribe una entrada en el historial y vuelve a leerlo. Devuelve si se guardó.
+   *
+   * **No tira.** Si `fetch` rechaza —sin conexión, el servidor que corta— no hay
+   * respuesta que leer, y eso se dice en vez de dejar que escape: quien llama apaga
+   * su botón en un `finally`, pero la persona tiene que saber por qué no pasó nada.
    *
    * Un 409 es que la pantalla estaba vieja —alguien contestó, o siguió el hilo—:
    * se vuelve a leer para mostrar lo que pasó, y no sólo el cartel de error.
@@ -104,11 +92,17 @@ export default function JustificacionOT({
     setError("");
     setAviso("");
 
-    const res = await fetch(`/api/mantenimiento/ordenes/${ordenId}/notas`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cuerpo),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/mantenimiento/ordenes/${ordenId}/notas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+    } catch {
+      setError("No se pudo conectar con el servidor. Revisá la conexión y probá de nuevo.");
+      return false;
+    }
     const body = await res.json().catch(() => ({}));
 
     if (!res.ok) {
@@ -135,9 +129,14 @@ export default function JustificacionOT({
       return;
     }
     setGuardando(true);
-    const guardada = await publicar({ texto: limpio }, "No se pudo guardar la justificación.");
-    setGuardando(false);
-    if (guardada) setTexto("");
+    // El `finally` es lo que devuelve el botón: sin él, un fallo que escapara dejaba
+    // «Guardando…» para siempre y la persona sin poder reintentar.
+    try {
+      const guardada = await publicar({ texto: limpio }, "No se pudo guardar la justificación.");
+      if (guardada) setTexto("");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   /**
@@ -147,16 +146,19 @@ export default function JustificacionOT({
    * `creado_por`—, y apunta a **esta** pregunta, que es la abierta: el servidor
    * rechaza una que ya no lo sea.
    */
-  async function yaLlego(pregunta: Nota) {
+  async function yaLlego(pregunta: NotaDelHistorial) {
     setCerrando(pregunta.id);
-    await publicar(
-      { texto: TEXTO_DE_YA_LLEGO, tipo: "RESPUESTA", responde_a: pregunta.id },
-      "No se pudo cerrar la pregunta."
-    );
-    setCerrando(null);
+    try {
+      await publicar(
+        { texto: TEXTO_DE_YA_LLEGO, tipo: "RESPUESTA", responde_a: pregunta.id },
+        "No se pudo cerrar la pregunta."
+      );
+    } finally {
+      setCerrando(null);
+    }
   }
 
-  async function borrar(nota: Nota) {
+  async function borrar(nota: NotaDelHistorial) {
     setError("");
     setAviso("");
     const res = await fetch(
@@ -195,61 +197,14 @@ export default function JustificacionOT({
         </p>
       )}
 
-      {notas.length > 0 && (
-        <ul className="space-y-1.5">
-          {notas.map((n) => {
-            // Un tipo que no conocemos se lee como lo que eran todas hasta ahora.
-            const rotulo = ROTULO[n.tipo] ?? ROTULO.JUSTIFICACION;
-            return (
-              <li key={n.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <p className="mb-1">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${rotulo.color}`}
-                  >
-                    {rotulo.texto}
-                  </span>
-                </p>
-                <p className="text-sm text-slate-800 whitespace-pre-wrap">{n.texto}</p>
-
-                {esperando.has(n.id) && (
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-amber-700">
-                    <span>Preguntado {haceCuanto(n.creado_en)}, sin respuesta</span>
-                    {puedeEditar && (
-                      <button
-                        onClick={() => yaLlego(n)}
-                        disabled={cerrando !== null}
-                        className="rounded border border-amber-300 px-2 py-0.5 font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-                      >
-                        {cerrando === n.id ? "Cerrando…" : "Ya llegó"}
-                      </button>
-                    )}
-                  </p>
-                )}
-
-                <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-                  <span>
-                    {n.autor?.nombre ?? "—"} · <span title={new Date(n.creado_en).toLocaleString("es-AR")}>
-                      {haceCuanto(n.creado_en)}
-                    </span>
-                  </span>
-                  {/* Sólo la propia, igual que la policy. El botón aparece para
-                      todos los que pueden editar y el servidor es el que decide:
-                      esconderlo según el usuario acá sería repetir la regla en un
-                      segundo lugar, que es donde se desincronizan. */}
-                  {puedeEditar && (
-                    <button
-                      onClick={() => borrar(n)}
-                      className="text-slate-300 underline hover:text-red-600"
-                    >
-                      Borrar
-                    </button>
-                  )}
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <HistorialDeLaOT
+        notas={notas}
+        estado={estado}
+        puedeEditar={puedeEditar}
+        cerrando={cerrando}
+        onYaLlego={yaLlego}
+        onBorrar={borrar}
+      />
 
       {puedeEditar && (
         <div className="flex items-start gap-2">

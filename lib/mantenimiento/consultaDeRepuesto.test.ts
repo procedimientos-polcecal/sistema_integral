@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   TIPOS_DE_NOTA, preguntasAbiertas, tieneRespuesta, preguntaAbiertaDelRepuesto,
+  preguntasSinResponder,
   itemDeLaConsulta, NOMBRE_DE_LA_CONSULTA, URL_DE_LAS_CONSULTAS,
   leerNotaNueva, comprobarNotaNueva, errorDeBorrarNota, queDecirDelAviso,
   encabezadoDeLaPregunta, sePuedePreguntarEn, TEXTO_DE_YA_LLEGO, TEXTO_DEL_SEGUIMIENTO,
@@ -303,6 +304,87 @@ describe("el orden de las notas y quién las escribió no cambian qué está abi
   });
 });
 
+describe("las preguntas que quedaron sin responder", () => {
+  const ids = (notas: NotaDeLaOT[], estado: string | null = "POR_HACER") =>
+    preguntasSinResponder(notas, estado).map((p) => p.id);
+
+  // El diseño pide que una pregunta que se cierra sola no desaparezca: «queda
+  // registrada como "quedó sin responder"». A la que le sacaron el repuesto se la
+  // reconoce por el `repuesto_id` en null (la FK es `on delete set null`), y se
+  // deriva de las filas como «abierta»: no hay una marca guardada.
+  it("una pregunta a cuyo repuesto sacaron, y que nadie contestó, quedó sin responder", () => {
+    expect(ids([pregunta({ repuesto_id: null })])).toEqual(["n1"]);
+  });
+
+  it("una que todavía espera no quedó sin responder: espera", () => {
+    expect(ids([pregunta()])).toEqual([]);
+  });
+
+  // La RESPUESTA puede ser la de Compras o el «ya llegó» de quien preguntó: la misma
+  // fila. Contestada, la pregunta tuvo su final aunque después le saquen el repuesto.
+  it("una contestada no, aunque después le hayan sacado el repuesto", () => {
+    const r = respuesta({ id: "n2", responde_a: "n1" });
+    expect(ids([pregunta({ repuesto_id: null }), r])).toEqual([]);
+  });
+
+  // Un seguimiento la supera: el hilo sigue en la última, y es ésa la que queda sin
+  // responder si el hilo termina así. Marcar también a la primera diría dos veces lo
+  // mismo sobre una sola conversación.
+  it("una superada por un seguimiento no: queda la última del hilo", () => {
+    const primera = pregunta({ repuesto_id: null });
+    const segunda = pregunta({ id: "n2", responde_a: "n1", repuesto_id: null });
+    expect(ids([primera, segunda])).toEqual(["n2"]);
+  });
+
+  // La orden que ya no espera cierra sus preguntas por la misma cuenta que
+  // `preguntasAbiertas` (los estados de `CERRADAS_GUT`), así que la que nadie había
+  // contestado queda sin responder igual que si hubieran sacado el repuesto.
+  it("en una orden suspendida o realizada, la que nadie contestó quedó sin responder", () => {
+    for (const estado of ["SUSPENDIDA", "REALIZADO"]) {
+      expect(ids([pregunta()], estado), estado).toEqual(["n1"]);
+    }
+  });
+
+  it("y en esa misma orden, la que sí contestaron no", () => {
+    const r = respuesta({ id: "n2", responde_a: "n1" });
+    expect(ids([pregunta(), r], "SUSPENDIDA")).toEqual([]);
+  });
+
+  it("una justificación no es una pregunta", () => {
+    expect(ids([pregunta({ tipo: "JUSTIFICACION", repuesto_id: null })])).toEqual([]);
+  });
+
+  // Igual que para «abierta»: una columna que el `select` no trajo llega como
+  // `undefined`, y esa pregunta tiene que seguir a la vista como abierta, no
+  // rotularse «sin responder» por un dato que no está.
+  it("un repuesto_id que no vino en la fila no la da por sin responder", () => {
+    const fila: Partial<NotaDeLaOT> = pregunta();
+    delete fila.repuesto_id;
+    expect(ids([fila as NotaDeLaOT])).toEqual([]);
+  });
+
+  // Cinco notas en las 120 formas de ordenarlas. `n2` es el final de un hilo que
+  // nadie contestó, `n3` espera, `n4` se contestó (`n5`) y `n1` fue superada.
+  it("de cualquier orden da lo mismo, y ninguna es a la vez abierta y sin responder", () => {
+    const hilo = [
+      pregunta({ id: "n1", repuesto_id: null }),
+      pregunta({ id: "n2", repuesto_id: null, responde_a: "n1", creado_por: "u3" }),
+      pregunta({ id: "n3", repuesto_id: "r2", creado_por: "u4" }),
+      pregunta({ id: "n4", repuesto_id: null }),
+      respuesta({ id: "n5", responde_a: "n4" }),
+    ];
+    let vistas = 0;
+    for (const notas of permutaciones(hilo)) {
+      expect(ids(notas), ordenDe(notas)).toEqual(["n2"]);
+
+      const abiertas = preguntasAbiertas(notas, "POR_HACER").map((p) => p.id);
+      expect(abiertas, ordenDe(notas)).toEqual(["n3"]);
+      vistas++;
+    }
+    expect(vistas).toBe(120);
+  });
+});
+
 describe("los tipos de nota", () => {
   // Este test no mira ninguna migración: repite los tres literales del `check` de
   // `ordenes_trabajo_notas.tipo` (migración 20261029082249), como `gut.test.ts`
@@ -316,10 +398,13 @@ describe("los tipos de nota", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Preguntar desde la OT (Tarea 5): lo que decide la ruta de notas y lo que dice
-// la pantalla. La ruta y los componentes no tienen tests —hablan con la base y
+// Preguntar desde la OT: lo que decide la ruta de notas y lo que dice la
+// pantalla. La ruta y los componentes casi no tienen tests —hablan con la base y
 // con React—, así que cada decisión que importa vive en una función pura de
-// `consultaDeRepuesto.ts` y se prueba acá.
+// `consultaDeRepuesto.ts` y se prueba acá. Hay dos excepciones, y las dos prueban
+// lo único que esto no puede ver: `rutaDeNotas.test.ts` (qué columnas lee la ruta
+// y qué hace con lo que rechaza) e `historialDeLaOT.test.ts` (a qué entradas de la
+// lista les ofrece «Ya llegó»).
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("lo que se le avisa a quien contesta", () => {
