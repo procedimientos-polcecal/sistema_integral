@@ -375,6 +375,44 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
 }
 
 /**
+ * La orden **como la espera la tabla**: sin los campos que existen sólo para
+ * leer la planilla.
+ *
+ * ── POR QUÉ HACE FALTA UN FILTRO Y NO ALCANZA CON `...orden` ────────────────
+ *
+ * `OrdenLeida` fue uno a uno con las columnas de `ordenes_trabajo` desde que
+ * nació, y por eso la sincronización manda la orden entera al `upsert`. El
+ * 29/10/2026 entró `estado_raw` —la celda del ESTADO sin interpretar, que es
+ * lo que le faltaba al contraste para distinguir «dice Por hacer» de «no dice
+ * nada»— y con eso dejó de serlo. PostgREST no ignora un campo que no es
+ * columna: **corta el lote entero** con «Could not find the 'estado_raw'
+ * column of 'ordenes_trabajo' in the schema cache», así que la importación de
+ * OT no entró más hasta que se arregló.
+ *
+ * Y no lo vio nadie porque lo que se probó fue el parseo, que es puro y
+ * seguía bien. Lo que rompió es el empalme con la base, y eso no lo prueba
+ * ningún test del lado de acá.
+ *
+ * ── QUE NO SE GUARDE ES LA DECISIÓN, NO UN OLVIDO ──────────────────────────
+ *
+ * La celda cruda sirve durante la corrida, que es el único momento en que las
+ * dos versiones existen a la vez —la de la planilla y la del sistema—. Después
+ * los dos lados coinciden por construcción. Guardarla sería una columna que
+ * repite a `estado` en todas las filas menos en las ocho a las que les falta
+ * la fórmula, y que nadie volvería a leer.
+ *
+ * Vive **al lado de la interfaz** a propósito: lo que hay que acordarse al
+ * agregar un campo a `OrdenLeida` es si es columna o no, y ésta es la lista.
+ */
+export function paraLaBase(orden: OrdenLeida): Omit<OrdenLeida, "estado_raw"> {
+  // Nombrar `estado_raw` es justamente lo que lo saca del resto, así que el
+  // "no se usa" de acá es el efecto buscado y no un descuido.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { estado_raw, ...columnas } = orden;
+  return columnas;
+}
+
+/**
  * El valor de una celda. Puede depender de en qué fila va a caer.
  *
  * Existe por la columna del estado: lo que se escribe para una orden «por

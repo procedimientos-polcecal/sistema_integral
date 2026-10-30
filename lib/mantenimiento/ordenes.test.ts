@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeTexto, filaDeOrden, celdasParaRegistrar,
+  estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar,
   repartirRegistroDeOT,
   esEstadoDeOT,
   ESTADOS_DE_OT,
@@ -83,6 +83,36 @@ describe("una fila de la planilla como orden de trabajo", () => {
     const o = filaDeOrden(fila, 3);
     expect(o?.contratista).toBeNull();
     expect(o?.operario_1).toBeNull();
+  });
+});
+
+/**
+ * `OrdenLeida` no es uno a uno con `ordenes_trabajo`, y la sincronizacion la
+ * manda entera al `upsert`. Lo que esto fija es el filtro del medio: un campo
+ * que existe solo para leer la planilla no puede viajar a la base, porque
+ * PostgREST no lo ignora -corta el lote entero con un 400-.
+ */
+describe("paraLaBase", () => {
+  const fila = [
+    623, 45992, "Planta de trituración 1", "PO-A1-07 – Rompedora de cono",
+    "MECÁNICO", "PROGRAMADO", "INTERNO", "Cambio de rodamientos del eje",
+    "Dos rodamientos 32222", 45992, 45994, "Atrasado", "Realizado", "-", "-",
+  ];
+
+  it("deja afuera el campo que no es columna", () => {
+    const o = filaDeOrden(fila, 3);
+    expect(o).not.toBeNull();
+    if (!o) return;
+    expect(o.estado_raw).toBe("Realizado");
+    expect("estado_raw" in paraLaBase(o)).toBe(false);
+  });
+
+  it("no toca ningun otro campo", () => {
+    const o = filaDeOrden(fila, 3);
+    if (!o) return;
+    const { estado_raw, ...resto } = o;
+    expect(estado_raw).not.toBeUndefined();
+    expect(paraLaBase(o)).toEqual(resto);
   });
 });
 

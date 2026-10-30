@@ -30,7 +30,7 @@ import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
-import { filaDeOrden, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
+import { filaDeOrden, paraLaBase, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
 import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
@@ -657,8 +657,11 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
       : orden.fecha_ejecucion;
     if (esperando && esperando === orden.fecha_ejecucion) yaDerramaron.push(orden.ot_number);
 
+    // `paraLaBase` y no `...orden`: la orden leída lleva campos que no son
+    // columnas —hoy `estado_raw`, que es del contraste— y PostgREST corta el
+    // lote entero si le llega uno. Ver el comentario de esa función.
     registros.push({
-      ...orden, fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
+      ...paraLaBase(orden), fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
     });
   }
 
