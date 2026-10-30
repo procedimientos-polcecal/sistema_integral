@@ -4,7 +4,7 @@ import { useState } from "react";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
-import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { MAXIMO_EN_LA_COLA, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import type { Catalogos } from "./catalogos";
 import { CartelDelResultado, loQueDijo, type Resultado } from "./envio";
 
@@ -115,7 +115,12 @@ export default function FormularioCondicionOffline({
       setGeneracionDeLaFoto((n) => n + 1);
       return;
     }
-    const problema = problemaDeLaFoto(archivo);
+    // El máximo de **la cola**, que es más chico que el del bucket: por este
+    // camino la foto viaja adentro del multipart del alta y Vercel corta el
+    // cuerpo en 4,5 MB antes de que la ruta exista. Rechazarla acá es la
+    // diferencia entre decírselo a alguien que todavía tiene el teléfono en la
+    // mano y que la carga rebote dentro de tres días. Ver `MAXIMO_EN_LA_COLA`.
+    const problema = problemaDeLaFoto(archivo, MAXIMO_EN_LA_COLA);
     if (problema) {
       setError(problema);
       setFoto(null);
@@ -235,7 +240,9 @@ export default function FormularioCondicionOffline({
           </div>
         ) : (
           <span className="block text-xs text-slate-500">
-            Es opcional, pero es lo único que después no se puede volver a sacar.
+            Es opcional, pero es lo único que después no se puede volver a
+            sacar. Hasta {Math.round(MAXIMO_EN_LA_COLA / 1024 / 1024)} MB: una
+            más grande no sale del teléfono.
           </span>
         )}
       </div>

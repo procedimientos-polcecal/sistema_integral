@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puedeEditarSyh, tieneAccesoSyh } from "@/lib/seguridadHigiene/auth";
 import { esquemaDeCondicion, problemaDelLugar } from "@/lib/seguridadHigiene/cuerpoDeCondicion";
-import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { MAXIMO_EN_LA_COLA, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import { guardarLaFoto } from "@/lib/seguridadHigiene/guardarLaFoto";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { traerTodo } from "@/lib/core/paginado";
-import { CAMPO_DEL_CUERPO, CAMPO_DE_LA_FOTO } from "@/public/cola/colaOffline.js";
+import {
+  CAMPO_DEL_CUERPO,
+  CAMPO_DE_LA_FOTO,
+  clasificarFallo,
+} from "@/public/cola/colaOffline.js";
 
 /**
  * Condiciones inseguras: cargar una (POST) y listarlas para la gestión (GET).
@@ -80,8 +84,14 @@ export async function POST(request: Request) {
   // Antes de escribir nada: una foto que no entra no puede dejar una condición
   // cargada sin ella. Y el mensaje es el de `problemaDeLaFoto`, que dice cuánto
   // pesa y cuánto entra.
+  //
+  // **EL MÁXIMO ES EL DE LA COLA Y NO EL DEL BUCKET**, que es más chico: por
+  // acá la foto viaja adentro del multipart del alta, y Vercel corta el cuerpo
+  // de un pedido en 4,5 MB **antes de invocar la función**. Una foto de 6 MB
+  // aceptada acá nunca llegaría a este `if`: rebotaría con un 413 que esta
+  // ruta no contesta. Ver `MAXIMO_EN_LA_COLA`.
   if (foto) {
-    const problemaDeLaSuya = problemaDeLaFoto(foto);
+    const problemaDeLaSuya = problemaDeLaFoto(foto, MAXIMO_EN_LA_COLA);
     if (problemaDeLaSuya) {
       return NextResponse.json({ error: problemaDeLaSuya }, { status: 400 });
     }
@@ -214,6 +224,24 @@ export async function POST(request: Request) {
  * Un fallo al subir es un 502 (pasajero: se reintenta solo); uno de la policy
  * es un 403 (definitivo: la carga queda parada y a la vista). Lo que no puede
  * pasar nunca es un 400 acá, porque la foto ya se comprobó antes de insertar.
+ *
+ * ── EL TEXTO LO DECIDE EL STATUS, Y NO AL REVÉS ────────────────────────────
+ *
+ * La frase se armaba una sola vez y decía siempre «se reintenta sola». Con un
+ * 403 eso es **lo contrario** de lo que pasa: `clasificarFallo` lo da por
+ * definitivo y la carga queda `parada`, que es por definición la que no se
+ * reintenta sola. Decirle a alguien que espere algo que no va a pasar es peor
+ * que no decirle nada, así que quién lo decide es la misma función que decide
+ * el estado de la carga — importada de `colaOffline.js`, no reescrita acá.
+ *
+ * ── Y `ya_entro`, QUE NO ES DECORATIVO ─────────────────────────────────────
+ *
+ * La respuesta lleva el número también fuera del texto. Es la única señal que
+ * tiene la pantalla de que **esta carga, aunque siga en la cola, ya tiene su
+ * fila escrita**: sobre una de ésas, «corregir y volver a mandar» genera una
+ * clave nueva y crea una segunda condición. El nombre `ya_entro` no lo usa
+ * ninguna otra ruta, justamente para que nada cambie para el aviso ni para la
+ * orden de trabajo.
  */
 async function conLaFoto(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -226,11 +254,16 @@ async function conLaFoto(
 
   const guardada = await guardarLaFoto(supabase, condicion.id, usuarioId, foto);
   if (!guardada.ok) {
+    const seReintentaSola = clasificarFallo(guardada.status) === "pasajero";
     return NextResponse.json(
       {
         error:
           `La condición entró con el número ${numero}, así que no hay que volver a ` +
-          `cargarla. Lo que faltó es la foto, y se reintenta sola: ${guardada.error}`,
+          `cargarla ni corregirla. Lo que faltó es la foto` +
+          (seReintentaSola
+            ? `, y se reintenta sola: ${guardada.error}`
+            : `, y esto no se arregla reintentando: ${guardada.error}`),
+        ya_entro: numero,
       },
       { status: guardada.status }
     );

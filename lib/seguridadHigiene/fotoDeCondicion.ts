@@ -23,8 +23,36 @@
  */
 export const TIPOS_DE_FOTO = ["image/jpeg", "image/png", "image/webp", "image/heic"] as const;
 
-/** Diez megas, que es también el `file_size_limit` del bucket. */
+/**
+ * Diez megas, que es también el `file_size_limit` del bucket. **Es el techo
+ * del almacenamiento, no el de todos los caminos**: ver abajo.
+ */
 export const MAXIMO_DE_FOTO = 10 * 1024 * 1024;
+
+/**
+ * Lo que entra por el alta de una condición, que es el camino de la cola sin
+ * señal. **Es más chico que el del bucket a propósito, y la diferencia no es
+ * una precaución: es un límite de otra cosa.**
+ *
+ * Vercel corta el cuerpo de un pedido en 4,5 MB **antes de invocar la
+ * función**. Por este camino la foto no viaja sola: viaja adentro del
+ * `multipart` del alta, junto al cuerpo y al overhead de las partes. Si se
+ * acepta una de 6 MB, la carga entra a la cola del teléfono, sale, y rebota
+ * con un 413 que el código de la ruta **nunca llega a contestar** — así que
+ * ninguno de los mensajes de este archivo se usa, y lo que queda es una foto
+ * que no va a entrar nunca por más que se reintente.
+ *
+ * Cuatro megas deja margen para el resto del multipart. Por la ruta de fotos
+ * —desde la ficha, con señal, en su propio pedido— sigue valiendo el techo del
+ * bucket: ahí el pedido lleva la foto y poco más, y si rebota hay una persona
+ * mirando que puede elegir otra.
+ *
+ * El otro lado de esta defensa es `clasificarFallo` en
+ * `public/cola/colaOffline.js`, que desde el 30/10/2026 trata un 413 como
+ * definitivo: éste evita que la foto grande salga, y aquél evita que una que
+ * igual rebote se reintente para siempre.
+ */
+export const MAXIMO_EN_LA_COLA = 4 * 1024 * 1024;
 
 /**
  * La extensión que le corresponde al archivo **por su tipo**, y no por cómo se
@@ -46,6 +74,11 @@ export function extensionDeLaFoto(tipo: string): string {
   return "jpg";
 }
 
+/** «4», «4,2»: los megas de un tamaño, sin el «,0» de los redondos. */
+function enMegas(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1).replace(/\.0$/, "").replace(".", ",");
+}
+
 /**
  * Lo que está mal con esta foto, **con las palabras que va a leer quien la
  * sacó**, o null si está bien.
@@ -54,14 +87,27 @@ export function extensionDeLaFoto(tipo: string): string {
  * 400 es definitivo, así que la carga queda parada y este texto es lo único
  * que va a leer quien tenga que decidir si vuelve a la planta a sacarla de
  * nuevo. «No se pudo guardar la foto» no alcanza; «pesa 14 MB y el máximo son
- * 10» se puede accionar.
+ * 10» se puede accionar, porque dice **cuánto entra** y no sólo que no entra.
+ *
+ * **El máximo lo pone quien llama, y por eso es un parámetro.** No es el mismo
+ * por los dos caminos: ver `MAXIMO_EN_LA_COLA`. El que se pasa es el del
+ * camino por el que va a viajar **esta** foto, así que el número del mensaje
+ * es el que de verdad le aplica — decirle «el máximo son 10» a alguien cuya
+ * foto de 6 MB no va a entrar por la cola es peor que no decirle nada.
+ *
+ * El valor por omisión es el del bucket, que es el último portón: cualquiera
+ * que llame sin pensarlo queda con el límite del almacenamiento, que es el que
+ * nunca se puede pasar.
  */
-export function problemaDeLaFoto(foto: { type: string; size: number }): string | null {
+export function problemaDeLaFoto(
+  foto: { type: string; size: number },
+  maximo: number = MAXIMO_DE_FOTO
+): string | null {
   if (!(TIPOS_DE_FOTO as readonly string[]).includes(foto.type)) {
     return `"${foto.type || "el archivo"}" no es una foto.`;
   }
-  if (foto.size > MAXIMO_DE_FOTO) {
-    return `La foto pesa ${Math.round(foto.size / 1024 / 1024)} MB y el máximo son 10.`;
+  if (foto.size > maximo) {
+    return `La foto pesa ${enMegas(foto.size)} MB y el máximo son ${enMegas(maximo)}.`;
   }
   // Un archivo de cero bytes pasa los dos chequeos de arriba y llega al bucket
   // sin que nada falle: queda una foto que no se puede abrir, indistinguible

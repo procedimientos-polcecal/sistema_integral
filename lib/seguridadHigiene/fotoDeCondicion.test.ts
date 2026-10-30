@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MAXIMO_DE_FOTO,
+  MAXIMO_EN_LA_COLA,
   TIPOS_DE_FOTO,
   extensionDeLaFoto,
   problemaDeLaFoto,
@@ -45,6 +46,51 @@ describe("problemaDeLaFoto", () => {
     expect(problemaDeLaFoto({ type: "image/jpeg", size: 0 })).toBe(
       "La foto llegó vacía: volvé a sacarla."
     );
+  });
+});
+
+/*
+ * ── EL LÍMITE DE LA COLA, QUE NO ES EL DEL BUCKET ──────────────────────────
+ *
+ * Por el alta de una condición la foto viaja adentro del multipart, y Vercel
+ * corta el cuerpo de un pedido en 4,5 MB **antes de invocar la función**. Una
+ * de 6 MB aceptada acá entra a la cola del teléfono y después rebota con un
+ * 413 que esta ruta nunca contesta: ninguno de los mensajes de este archivo se
+ * usaría. Por la ruta de fotos —con señal, en su propio pedido, con una
+ * persona mirando— sigue valiendo el techo del bucket.
+ */
+describe("los dos máximos", () => {
+  const seisMegas = { type: "image/jpeg", size: 6 * 1024 * 1024 };
+
+  it("el de la cola es más chico que el del bucket, que es el del almacenamiento", () => {
+    expect(MAXIMO_EN_LA_COLA).toBeLessThan(MAXIMO_DE_FOTO);
+    // Y por debajo del corte de Vercel (4,5 MB), con margen para el resto del
+    // multipart: el cuerpo no es sólo la foto.
+    expect(MAXIMO_EN_LA_COLA).toBeLessThan(4.5 * 1024 * 1024);
+  });
+
+  it("seis megas pasan por la ficha y NO pasan por la cola", () => {
+    expect(problemaDeLaFoto(seisMegas)).toBeNull();
+    expect(problemaDeLaFoto(seisMegas, MAXIMO_EN_LA_COLA)).not.toBeNull();
+  });
+
+  it("el mensaje dice cuánto entra **por ese camino**, no cuánto entra en el bucket", () => {
+    // Decirle «el máximo son 10» a alguien cuya foto de 6 MB no va a salir del
+    // teléfono es mandarlo a probar de nuevo con la misma foto.
+    expect(problemaDeLaFoto(seisMegas, MAXIMO_EN_LA_COLA)).toBe(
+      "La foto pesa 6 MB y el máximo son 4."
+    );
+  });
+
+  it("un tamaño con decimales se dice con decimales, y los redondos sin «,0»", () => {
+    // «pesa 4 MB y el máximo son 4» no se entiende; «pesa 4,2» sí.
+    expect(problemaDeLaFoto({ type: "image/jpeg", size: 4.2 * 1024 * 1024 }, MAXIMO_EN_LA_COLA))
+      .toBe("La foto pesa 4,2 MB y el máximo son 4.");
+  });
+
+  it("sin decir nada, el máximo es el del bucket: el portón que nunca se pasa", () => {
+    expect(problemaDeLaFoto({ type: "image/jpeg", size: MAXIMO_DE_FOTO })).toBeNull();
+    expect(problemaDeLaFoto({ type: "image/jpeg", size: MAXIMO_DE_FOTO + 1 })).not.toBeNull();
   });
 });
 

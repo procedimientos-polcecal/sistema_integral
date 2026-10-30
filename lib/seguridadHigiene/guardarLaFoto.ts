@@ -111,13 +111,29 @@ export async function guardarLaFoto(
     const huerfano = errorAlLimpiar
       ? ` El archivo quedó en el bucket (${ruta}) y no se pudo sacar: ${errorAlLimpiar.message}.`
       : "";
-    // 42501 es la policy: la condición se cerró, o `subida_por` no es quien
-    // tiene la sesión. Es definitivo y reintentar daría lo mismo.
-    const status = errorDelEnlace.code === "42501" ? 403 : 502;
+    // 42501 es la policy, y acá **sí se traduce**, que es la excepción a la
+    // regla de «lo que dijo la base va sin tocar». Esa regla vale cuando el
+    // texto distingue un caso de otro —lo que contesta Storage, arriba, es lo
+    // único que separa «el bucket no acepta este tipo» de «se cortó»—; acá el
+    // código ya se reconoció y sólo puede querer decir dos cosas, las dos
+    // accionables. «new row violates row-level security policy for table
+    // "syh_fotos"» es la única frase de este camino que alguien parado en la
+    // planta no puede hacer nada con ella.
+    if (errorDelEnlace.code === "42501") {
+      return {
+        ok: false,
+        error:
+          `La foto no se pudo enlazar a la condición: o la condición ya está ` +
+          `cerrada —y entonces sólo un admin de Seguridad e Higiene puede ` +
+          `reabrirla para agregarle fotos—, o la sesión con la que se mandó no ` +
+          `es la de quien la sacó.${huerfano}`,
+        status: 403,
+      };
+    }
     return {
       ok: false,
       error: `La foto se subió pero no se pudo enlazar a la condición: ${errorDelEnlace.message}.${huerfano}`,
-      status,
+      status: 502,
     };
   }
 

@@ -194,6 +194,33 @@ export const DISPARO = {
  * @property {number} intentos
  * @property {string | null} ultimoError Lo último que pasó con la carga, para mostrarlo tal cual: casi siempre lo que dijo el servidor sin traducir, y en un caso lo que compuso `siNoSePudoAvisar` —una carga que entró y cuya advertencia no se pudo decir—.
  * @property {"esperando" | "parada"} estado "parada" es una carga que no se reintenta sola: necesita que una persona la mire.
+ * @property {string | null} [yaEntro] El número con el que la fila **ya quedó escrita del lado del servidor**, cuando la carga sigue en la cola porque faltó terminar algo (hoy: la foto de una condición insegura, que entró con la condición pero no se pudo guardar). Ver abajo.
+ */
+
+/*
+ * ── `yaEntro`, Y POR QUÉ HIZO FALTA UN CAMPO NUEVO ──────────────────────────
+ *
+ * Hasta el 30/10/2026 una carga que seguía en la cola era, sin excepción, una
+ * carga que **no** estaba escrita del otro lado: por eso «corregir y volver a
+ * mandar» le da una clave nueva a propósito —es otra carga, con otro cuerpo, y
+ * la vieja puede haber quedado reservada—.
+ *
+ * La foto de una condición insegura rompió ese invariante y es la primera que
+ * lo hace: la condición se crea, la foto no se puede guardar, y se contesta un
+ * error **a propósito**, porque el `Blob` vive en la cola y sacarla de ahí lo
+ * pierde para siempre. O sea que ahora hay cargas en la cola cuya fila ya
+ * existe. Sobre una de ésas, corregir **crea una segunda condición** con la
+ * misma descripción y la misma foto: el duplicado exacto que la idempotencia
+ * por `clave` existe para evitar. Empujarla, en cambio, reusa la clave y cae
+ * en la rama de idempotencia, que es justo lo que tiene que pasar.
+ *
+ * Por eso el número viaja: no es decorativo, es lo que le dice a la pantalla
+ * que sobre esta carga el camino de corregir no se ofrece. Lo manda la ruta en
+ * `ya_entro` —un nombre que ninguna otra ruta usa, para que nada cambie para
+ * el aviso ni para la orden de trabajo— y lo lee `comoContesto`.
+ *
+ * **Una vez puesto no se saca.** Lo que entró no se des-entra, así que los dos
+ * veredictos lo escriben sólo cuando viene, y nunca lo pisan con null.
  */
 
 /**
@@ -224,11 +251,24 @@ const MS_POR_MINUTO = 60_000;
  * pasajero —un 502 porque Google no contestó, un 500, un corte a mitad de
  * camino— y, sobre todo, el 401: ver la cabecera del archivo.
  *
+ * **EL 413 ES EL CUARTO, Y ES DISTINTO DE LOS OTROS TRES: no lo contesta la
+ * ruta.** Lo contesta la infraestructura —Vercel corta el cuerpo de un pedido
+ * antes de invocar la función— así que el código de la ruta nunca corre y la
+ * respuesta no trae el `error` que mandan todas. Entró acá el 30/10/2026, con
+ * la foto de una condición insegura: una foto grande viaja adentro del alta,
+ * rebota con 413, y como el 413 caía en «no salió de la ruta» se reintentaba
+ * **para siempre** —no hay tope de intentos, sólo un techo de espera— mandando
+ * megas con los datos de la planta, y el texto que se guardaba le echaba la
+ * culpa al WiFi. Un cuerpo demasiado grande es una propiedad **de la carga** y
+ * no del camino: el próximo intento lleva exactamente los mismos bytes.
+ *
  * @param {number | null} status El código HTTP, o null si ni se llegó a hablar con el servidor.
  * @returns {"definitivo" | "pasajero"}
  */
 export function clasificarFallo(status) {
-  if (status === 400 || status === 403 || status === 409) return "definitivo";
+  if (status === 400 || status === 403 || status === 409 || status === 413) {
+    return "definitivo";
+  }
   return "pasajero";
 }
 
@@ -516,8 +556,12 @@ const CAMPO_DEL_NUMERO = {
  * de Vercel no dice nada sobre la carga, y tratarlo como definitivo la deja
  * parada para siempre por algo que se arregla saliendo del WiFi del bar.
  *
+ * `yaEntro` es el número con el que la fila quedó escrita pese al fallo: hoy lo
+ * manda sólo el alta de una condición insegura cuando la condición entró y la
+ * foto no. Ver el bloque de `CargaEnCola`.
+ *
  * @typedef {{ ok: true, numero: string, advertencia: string | null }
- *         | { ok: false, status: number | null, deLaRuta: boolean, error: string }} ResultadoDelEnvio
+ *         | { ok: false, status: number | null, deLaRuta: boolean, error: string, yaEntro?: string | null }} ResultadoDelEnvio
  */
 
 /** Si el valor es un objeto con el que se puede trabajar. `null` no lo es. */
@@ -536,6 +580,19 @@ function esObjeto(valor) {
  * @returns {string}
  */
 function laContestoOtro(redirigida, status) {
+  // El 413 primero, porque es el único de acá que **no** es un problema del
+  // camino y que no se arregla esperando: lo contesta la infraestructura
+  // —Vercel corta el cuerpo antes de invocar la función, así que la ruta no
+  // llega a decir nada— y quiere decir que lo que se manda es demasiado
+  // grande. Decirle «portal de WiFi» a eso es mandar a alguien a buscar señal
+  // por una foto que no va a entrar nunca.
+  if (status === 413) {
+    return (
+      "Lo que se mandó es demasiado grande y el servidor lo cortó antes de " +
+      "leerlo, casi seguro por la foto. Esta carga no se reintenta sola: " +
+      "corregila con una foto más chica, o sacale la foto y mandala así."
+    );
+  }
   if (redirigida) {
     return (
       "El pedido terminó en otra pantalla, casi seguro el login: la sesión de " +
@@ -609,13 +666,25 @@ export function comoContesto(tipo, contestacion) {
       status,
       deLaRuta: false,
       error: laContestoOtro(redirigida, status),
+      yaEntro: null,
     };
   }
 
+  // `ya_entro` sólo puede venir de la ruta, así que se lee únicamente en la
+  // rama que la reconoce: una respuesta que no salió de ella no puede afirmar
+  // que algo quedó escrito.
   const dicho = texto(cuerpo.error);
-  if (dicho !== null) return { ok: false, status, deLaRuta: true, error: dicho };
+  if (dicho !== null) {
+    return { ok: false, status, deLaRuta: true, error: dicho, yaEntro: texto(cuerpo.ya_entro) };
+  }
 
-  return { ok: false, status, deLaRuta: false, error: laContestoOtro(redirigida, status) };
+  return {
+    ok: false,
+    status,
+    deLaRuta: false,
+    error: laContestoOtro(redirigida, status),
+    yaEntro: null,
+  };
 }
 
 /**
@@ -632,6 +701,12 @@ export function comoContesto(tipo, contestacion) {
  */
 export function convieneReintentar(resultado) {
   if (resultado.ok) return false;
+  // **EL 413 ES LA EXCEPCIÓN A LA REGLA DE ARRIBA, Y VA ANTES QUE ELLA.** Es
+  // el único código que significa algo aunque no lo haya contestado la ruta:
+  // dice que el cuerpo no entra, y el cuerpo es el mismo en cada intento. Sin
+  // esto, una foto de 6 MB sale por la rama de «lo contestó otro» y se
+  // reintenta sin fin. Ver `clasificarFallo`.
+  if (resultado.status === 413) return false;
   if (!resultado.deLaRuta) return true;
   return clasificarFallo(resultado.status) === "pasajero";
 }
@@ -688,7 +763,7 @@ function texto(valor) {
  *
  * @typedef {{ accion: "listo", numero: string, advertencia: string | null }
  *         | { accion: "rechazar", error: string }
- *         | { accion: "encolar", intentos: number, ultimoError: string | null }} QueHacerConLaNueva
+ *         | { accion: "encolar", intentos: number, ultimoError: string | null, yaEntro?: string }} QueHacerConLaNueva
  */
 
 /**
@@ -712,7 +787,15 @@ export function queHacerConLaNueva(resultado) {
     return { accion: "listo", numero: resultado.numero, advertencia: resultado.advertencia };
   }
   if (!convieneReintentar(resultado)) return { accion: "rechazar", error: resultado.error };
-  return { accion: "encolar", intentos: 1, ultimoError: resultado.error };
+  return {
+    accion: "encolar",
+    intentos: 1,
+    ultimoError: resultado.error,
+    // El campo va **sólo si vino**: una carga que todavía no está escrita de
+    // ningún lado no puede nacer diciendo que sí. Ver el bloque de
+    // `CargaEnCola`.
+    ...(resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {}),
+  };
 }
 
 /**
@@ -782,6 +865,10 @@ export function despuesDelIntento(resultado) {
       tomadaEn: null,
       ultimoError: resultado.error,
       estado: convieneReintentar(resultado) ? "esperando" : "parada",
+      // Sólo si vino, y nunca pisándolo con null: lo que entró no se
+      // des-entra, y los dos lados aplican estos `cambios` con un spread sobre
+      // la fila guardada. Ver el bloque de `CargaEnCola`.
+      ...(resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {}),
     },
   };
 }

@@ -359,7 +359,16 @@ export default function CargarClient() {
         };
       }
       const salida = await encolar(
-        { ...carga, intentos: queHacer.intentos, ultimoError: queHacer.ultimoError },
+        {
+          ...carga,
+          intentos: queHacer.intentos,
+          ultimoError: queHacer.ultimoError,
+          // Si la ruta dijo que la fila ya quedó escrita pese al fallo —hoy
+          // sólo la condición cuya foto no se pudo guardar—, la carga nace
+          // sabiéndolo: es lo que después le saca el botón de corregir, que
+          // sobre una de éstas crearía una segunda fila.
+          ...(queHacer.yaEntro ? { yaEntro: queHacer.yaEntro } : {}),
+        },
         queHacer.ultimoError,
         !laPusoUnaPersona,
       );
@@ -805,6 +814,22 @@ function LaCola({
                 </p>
               )}
 
+              {/* UNA CARGA QUE YA TIENE SU FILA ESCRITA, Y ES LA PRIMERA DE
+                  ESTE SISTEMA QUE PUEDE ESTARLO MIENTRAS SIGUE EN LA COLA.
+                  Pasa con la condición insegura cuya foto no se pudo guardar:
+                  se contesta un error a propósito, porque el `Blob` vive acá
+                  y sacar la carga de la cola lo pierde para siempre. Hay que
+                  decirlo con todas las letras, porque la lista entera está
+                  escrita sobre el supuesto contrario —«todavía no tiene
+                  número»— y alguien que lea eso va a cargarla de nuevo. */}
+              {carga.yaEntro && (
+                <p className="mt-1 text-xs text-amber-800">
+                  Esto ya entró con el número {carga.yaEntro}: <b>no lo cargues
+                  de nuevo</b>. Lo que falta es la foto, y para eso está
+                  «Mandar ahora».
+                </p>
+              )}
+
               <div className="mt-2 flex flex-wrap gap-2">
                 {/* El botón se ofrece sobre las propias, incluidas las
                     paradas: que una parada no se reintente **sola** no quiere
@@ -833,8 +858,17 @@ function LaCola({
                     tirar lo escrito. Se ofrece sólo sobre las paradas propias:
                     una que **espera** va a salir sola y tocarla sería cambiarle
                     el cuerpo a algo que puede estar saliendo en este momento, y
-                    una ajena no se puede corregir en nombre de otro. */}
-                {!ajena && carga.estado === "parada" && editando !== carga.clave && (
+                    una ajena no se puede corregir en nombre de otro.
+
+                    **Y NO SE OFRECE SOBRE UNA QUE YA ENTRÓ.** Corregir le da a
+                    la carga una clave nueva a propósito —es otra carga, y la
+                    vieja puede haber quedado reservada del lado del
+                    servidor—, lo cual es correcto para todas menos para ésta:
+                    su fila **ya existe**, así que una clave nueva no cae en la
+                    rama de idempotencia y crea una segunda condición con la
+                    misma descripción y la misma foto. «Mandar ahora» sí reusa
+                    la clave, y es el camino que termina de subir la foto. */}
+                {!ajena && carga.estado === "parada" && !carga.yaEntro && editando !== carga.clave && (
                   <button
                     onClick={() => onEditar(carga)}
                     disabled={ocupada !== null}
