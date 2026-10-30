@@ -42,7 +42,7 @@ decisiones de personas distintas:
    | En comparativa | Compras | carga los presupuestos y elige la planilla |
    | Para comprar | **NICO o MAXI** | eligen un presupuesto: elegir **es** aprobar |
    | Compra aprobada | Compras | quién la aprobó y cuándo |
-   | Pedido | — | fecha, proveedor, costo + IVA y envío |
+   | Pedido | — | fecha, proveedor, costo + IVA y envío, y **para cuándo se espera que llegue** |
 
    En la planilla el estado dice a quién le toca: `PARA COMPRAR (NICO)`. Ese
    nombre no es decorativo — **sólo esa persona puede aprobar esa compra**. Si
@@ -54,6 +54,59 @@ decisiones de personas distintas:
 
    `RECIBIDO` existe en la app pero **no en el desplegable de la planilla**, así
    que no se escribe. Se define al desarrollar el seguimiento de compra.
+
+### La fecha estimada se pide al registrar el pedido (30/10/2026)
+
+Vivía sólo en el formulario de recepción, o sea que se cargaba **cuando la cosa
+ya había llegado**, que es justo cuando esa fecha no le sirve a nadie. Medido el
+30/10/2026: de los **356 RI que estaban en PEDIDO** —los que alguien está
+esperando— **7** tenían fecha estimada; de las 1.550 cargadas, casi todas eran
+de RI ya recibidos. Quien pregunta «¿cuándo llega?» es el que no puede cerrar su
+OT sin el repuesto, y la respuesta tiene que existir mientras todavía es una
+espera.
+
+Ahora la pide el modal **«Registrar el pedido»**, junto al proveedor y al costo,
+y se exige para avanzar: es la misma regla de siempre —cada paso deja cargado lo
+suyo—. Del formulario de recepción salió el campo editable, pero **la fecha se
+sigue mostrando ahí**, al lado de «¿Cumplió Compras?»: es contra ella que se
+juzga ese cumplimiento, y sin verla el juicio se da a ciegas. Corregirla —un
+proveedor que avisa que se atrasa— se hace en **Gestión de compra**, en la ficha
+del RI.
+
+Tres cosas que no se deducen del código:
+
+- **La exigencia es al *entrar* a PEDIDO, no en cada guardado que lo nombre.**
+  No está en la tabla `FALTA` de la ruta por eso: el formulario de recepción
+  manda `estado_compra: "PEDIDO"` en cada guardado sin fecha de recepción, así
+  que metida ahí habría dejado sin poder cargarse los **349** RI que ya estaban
+  en PEDIDO sin fecha. La condición es la misma con la que se dispara la orden
+  de Odoo, y vive en [lib/compras/registrarElPedido.ts](../lib/compras/registrarElPedido.ts).
+- **Volver de `EN_ESPERA` no la exige**, igual que no exige el proveedor ni el
+  costo: volver de la espera es retomar donde estaba, y exigirle algo deja
+  atrapado adentro al pedido que se frenó justamente porque le faltaba.
+- **El modal se abre mucho menos de lo que parece.** Medido el 30/10/2026: de
+  las **503 transiciones a PEDIDO** registradas, **5** tienen autor, y en los
+  últimos 60 días fueron **299 y 1**. `fecha_pedido` está en null en los 2.220
+  RI. El estado llega a PEDIDO por la **sincronización con la planilla**, casi
+  siempre saltando `SIN_INICIAR → PEDIDO` de una — el mismo motivo por el que la
+  orden de Odoo se mudó al importador el 02/10. Mientras mande la planilla, la
+  mayoría de los pedidos va a seguir sin fecha estimada: esto la pide donde una
+  persona la puede contestar, no en todos los casos. **Es el riesgo asumido y
+  está decidido a pedido.**
+
+### Y la orden de compra en Odoo se ofrece en el mismo modal
+
+Ya se creaba sola al entrar a PEDIDO, **y en silencio**: el listado tiraba a la
+basura el `orden_odoo` y el `aviso_odoo` que devuelve la ruta, así que ni el
+número que contabilidad necesita ni el fallo llegaban a nadie — sólo se veían
+entrando a la ficha de ese RI, y había **12 con `odoo_pendiente`**.
+
+Ahora el modal lo dice, con un casillero **tildado por defecto** (que es lo que
+el sistema venía haciendo). Lo nuevo no es crearla: es poder decir que no, y
+enterarse de cómo salió. Sólo un `false` explícito la saltea — cualquier llamada
+que no mande `crear_orden_odoo` la crea, como siempre. El casillero no aparece
+si no hay credenciales de Odoo: ofrecer algo que no se va a hacer es peor que no
+ofrecerlo.
 
 Por eso cada requerimiento lleva **dos estados independientes**:
 

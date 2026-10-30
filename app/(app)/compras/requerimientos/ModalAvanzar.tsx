@@ -37,7 +37,7 @@ export interface ResumenComparativa {
  * exige cada paso no cambió.
  */
 export default function ModalAvanzar({
-  requerimiento: r, ficha, aprobadores, proveedores, comparativa, onClose, onConfirmar,
+  requerimiento: r, ficha, aprobadores, proveedores, comparativa, hayOdoo, onClose, onConfirmar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** La ficha del RI, con el listado al que volver desde ahí. */
@@ -45,6 +45,12 @@ export default function ModalAvanzar({
   aprobadores: Persona[];
   proveedores: { id: string; nombre: string }[];
   comparativa: ResumenComparativa;
+  /**
+   * Si el sistema tiene con qué hablarle a Odoo. Lo resuelve el servidor: sin
+   * esto el modal ofrecería crear una orden que no se va a crear, y el fallo
+   * aparecería recién después de confirmar.
+   */
+  hayOdoo: boolean;
   onClose: () => void;
   onConfirmar: (extra: Record<string, unknown>) => Promise<boolean>;
 }) {
@@ -66,6 +72,10 @@ export default function ModalAvanzar({
   const [costoEnvio, setCostoEnvio] = useState(
     r.costo_envio !== null ? String(r.costo_envio) : elegida ? String(elegida.costo_envio) : ""
   );
+  const [fechaEstimada, setFechaEstimada] = useState(r.fecha_estimada_recepcion ?? "");
+  // Tildado por defecto porque es lo que el sistema venía haciendo solo al
+  // pasar a PEDIDO. Lo nuevo no es crearla: es poder decir que no.
+  const [crearOrden, setCrearOrden] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
   // Cuántos presupuestos alcanza lo decide Compras. Lo que hace falta es que
@@ -73,9 +83,13 @@ export default function ModalAvanzar({
   // planilla, que es como quedaron los RI históricos.
   const hayPresupuestos = comparativa.cuantos > 0;
 
+  // La fecha estimada se exige igual que el proveedor y el costo: cada paso
+  // deja cargado lo suyo. La misma regla la vuelve a aplicar la ruta, porque
+  // una validación que vive sólo en el botón deja de existir apenas alguien
+  // llame a la API de otra forma.
   const listo = esComparativa
     ? Boolean(asignadoA && (hayPresupuestos || enlace.trim()))
-    : Boolean(proveedorId && costoIva);
+    : Boolean(proveedorId && costoIva && fechaEstimada);
 
   async function confirmar() {
     setGuardando(true);
@@ -91,6 +105,10 @@ export default function ModalAvanzar({
             proveedor_id: proveedorId,
             costo_iva: Number(costoIva),
             costo_envio: costoEnvio === "" ? null : Number(costoEnvio),
+            fecha_estimada_recepcion: fechaEstimada,
+            // Sólo un `false` explícito saltea la orden. Cuando Odoo no está
+            // configurado no se manda nada: no hay nada que saltear.
+            ...(hayOdoo ? { crear_orden_odoo: crearOrden } : {}),
           }
     );
     setGuardando(false);
@@ -220,9 +238,54 @@ export default function ModalAvanzar({
                 </label>
               </div>
 
+              {/*
+                Para cuándo se espera que llegue.
+                Va acá y no en el formulario de recepción, que es donde vivía:
+                allá se cargaba cuando la cosa ya había llegado. Es la pregunta
+                que no se podía contestar cuando Mantenimiento llamaba por un
+                repuesto que traba una OT.
+              */}
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Fecha estimada de recepción
+                </span>
+                <input
+                  type="date"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={fechaEstimada}
+                  onChange={(e) => setFechaEstimada(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Es lo que ve quien lo pidió. Si después cambia, se corrige en la ficha.
+                </p>
+              </label>
+
               <p className="text-xs text-slate-500">
                 La fecha de pedido se registra sola con la de hoy.
               </p>
+
+              {/*
+                La orden de compra en Odoo ya se creaba sola al pasar a PEDIDO,
+                y en silencio: ni el que apretaba el botón se enteraba. Decirlo
+                acá es lo que la convierte en algo que se decide.
+              */}
+              {hayOdoo && (
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    checked={crearOrden}
+                    onChange={(e) => setCrearOrden(e.target.checked)}
+                  />
+                  <span className="text-sm text-slate-700">
+                    Crear la orden de compra en Odoo
+                    <span className="block text-xs text-slate-500">
+                      Queda en borrador, para que contabilidad facture desde ahí en vez de
+                      tipearla de cero. Confirmarla es otra decisión, en la ficha.
+                    </span>
+                  </span>
+                </label>
+              )}
             </>
           )}
 

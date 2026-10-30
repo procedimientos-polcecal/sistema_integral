@@ -67,6 +67,11 @@ export default function RequerimientoDetalle({
   const [comparativaUrl, setComparativaUrl] = useState(r.comparativa_url ?? "");
   const [ocNumero, setOcNumero] = useState(r.oc_numero ?? "");
   const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
+  // Se carga al registrar el pedido. Acá está para poder corregirla: un
+  // proveedor que avisa que se atrasa no tiene por qué dejar en pantalla una
+  // fecha que ya no va a cumplir, y éste es el único lugar donde se edita
+  // desde que salió del formulario de recepción.
+  const [fechaEstimada, setFechaEstimada] = useState(r.fecha_estimada_recepcion ?? "");
 
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
@@ -264,6 +269,14 @@ export default function RequerimientoDetalle({
                     persona puede aprobar la compra.
                   </p>
                 </Campo>
+                <Campo label="Fecha estimada de recepción">
+                  <input type="date"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={fechaEstimada} onChange={(e) => setFechaEstimada(e.target.value)} />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Es lo que ve quien lo pidió. Si el proveedor se atrasa, se corrige acá.
+                  </p>
+                </Campo>
                 <Campo label="Enlace a la comparativa">
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={comparativaUrl} onChange={(e) => setComparativaUrl(e.target.value)} placeholder="https://…" />
@@ -280,6 +293,7 @@ export default function RequerimientoDetalle({
                     comparativa_url: comparativaUrl.trim() || null,
                     oc_numero: ocNumero.trim() || null,
                     compra_asignada_a: asignadoA || null,
+                    fecha_estimada_recepcion: fechaEstimada || null,
                   })
                 }
                 disabled={guardando}

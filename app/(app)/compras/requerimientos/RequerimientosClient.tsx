@@ -9,6 +9,7 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
+import { avisoDelPedido } from "@/lib/compras/registrarElPedido";
 import type { ResumenComparativa } from "./ModalAvanzar";
 import AprobarSinComparativa from "../AprobarSinComparativa";
 import {
@@ -47,7 +48,7 @@ function nombreCorto(p: Persona): string {
 
 export default function RequerimientosClient({
   areas, proveedores, empresas, ubicaciones, equipos, sectores, aprobadores,
-  usuarioId, canEdit, filtrosIniciales, paginaInicial, sync, umbralMontoAlto,
+  usuarioId, canEdit, filtrosIniciales, paginaInicial, sync, umbralMontoAlto, hayOdoo,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
@@ -71,6 +72,8 @@ export default function RequerimientosClient({
    * decidir si se pinta: los dos tienen que usar el mismo número.
    */
   umbralMontoAlto: number;
+  /** Si el sistema tiene credenciales de Odoo. Lo resuelve el servidor. */
+  hayOdoo: boolean;
 }) {
   const confirmar = useConfirm();
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
@@ -177,6 +180,16 @@ export default function RequerimientosClient({
   const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
   const [errorAccion, setErrorAccion] = useState("");
+  /*
+   * Lo que la ruta contesta cuando el pedido se guarda bien pero algo del otro
+   * lado no: la orden de compra en Odoo, o una celda protegida de la planilla.
+   *
+   * Hasta hoy esta pantalla lo tiraba. La orden se creaba y nadie se enteraba
+   * —ni del número que contabilidad necesita, ni del fallo—, y eso sólo se veía
+   * entrando a la ficha de ese RI: había doce con `odoo_pendiente` el día que
+   * esto se escribió. No es un error, así que no va en rojo.
+   */
+  const [avisoAccion, setAvisoAccion] = useState<string | null>(null);
 
   // La búsqueda espera un momento para no consultar en cada tecla.
   useEffect(() => {
@@ -371,6 +384,7 @@ export default function RequerimientosClient({
 
     setProcesando(r.id);
     setErrorAccion("");
+    setAvisoAccion(null);
     const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -378,11 +392,12 @@ export default function RequerimientosClient({
     });
     setProcesando(null);
 
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setErrorAccion(body.error ?? "No se pudo actualizar el estado.");
       return false;
     }
+    setAvisoAccion(avisoDelPedido(body));
     await cargar();
     return true;
   }
@@ -612,6 +627,18 @@ export default function RequerimientosClient({
         </div>
       )}
 
+      {avisoAccion && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{avisoAccion}</span>
+          <button
+            onClick={() => setAvisoAccion(null)}
+            className="shrink-0 text-xs font-semibold hover:underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       {/* En un teléfono, tarjetas. Trece columnas no entran en 343 px, y con
           scroll horizontal hay que arrastrar cuatro pantallas para leer una
           fila. La tarjeta muestra lo que se necesita para decidir y esconde el
@@ -803,6 +830,7 @@ export default function RequerimientosClient({
           aprobadores={aprobadores}
           proveedores={proveedores}
           comparativa={resumenes[avanzando.id] ?? { cuantos: 0, elegida: null }}
+          hayOdoo={hayOdoo}
           onClose={() => setAvanzando(null)}
           onConfirmar={(extra) => avanzar(avanzando, extra)}
         />
