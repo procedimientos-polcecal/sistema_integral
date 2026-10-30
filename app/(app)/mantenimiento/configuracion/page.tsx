@@ -23,7 +23,7 @@ export default async function ConfiguracionMantenimientoPage() {
 
   const [
     { data: operarios }, { data: contratistas }, { data: tipos }, { data: sectores },
-    { data: tarifas },
+    { data: tarifas }, { data: razones },
   ] = await Promise.all([
       supabase.from("operarios").select("id, slot, nombre").order("slot").order("nombre"),
       supabase
@@ -47,6 +47,13 @@ export default async function ConfiguracionMantenimientoPage() {
         .from("mantenimiento_tarifas_hora")
         .select("id, valor, vigente_desde")
         .order("vigente_desde", { ascending: false }),
+      // Cuántos días corre una OT según por qué se posterga. El código de cada
+      // razón es vocabulario cerrado del servidor; acá se calibran los días.
+      supabase
+        .from("mant_razones_de_postergacion")
+        .select("codigo, etiqueta, dias, activa, orden")
+        .order("orden")
+        .order("etiqueta"),
     ]);
 
   return (
@@ -57,6 +64,7 @@ export default async function ConfiguracionMantenimientoPage() {
       contratistas={contratistas ?? []}
       tipos={tipos ?? []}
       tarifas={tarifas ?? []}
+      razones={razones ?? []}
       sectores={(sectores ?? []).map((s) => ({
         id: s.id as string,
         codigo: s.codigo as string | null,

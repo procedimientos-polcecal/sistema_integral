@@ -21,6 +21,7 @@ import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
+import PostergarOTModal from "./PostergarOTModal";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
@@ -800,6 +801,7 @@ export default function OrdenesClient({
                         onPuntuar={() => setPuntuando(o)}
                         onCambiarParada={cambiarParada}
                         onJustificacion={() => cargarJustificadas(orders)}
+                        onPostergada={load}
                       />
                     )}
                   </div>
@@ -965,6 +967,7 @@ const NO_SE_CORRIGE_EN_EL_MASTER =
 
 function OTDetail({
   order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
+  onPostergada,
 }: {
   onVerRepuestos?: () => void;
   onPuntuar?: () => void;
@@ -974,7 +977,10 @@ function OTDetail({
   onCambiarParada: (id: string, valor: boolean) => void;
   /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
   onJustificacion?: () => void;
+  /** Se corrió la fecha: el listado tiene que volver a leerse. */
+  onPostergada?: () => void;
 }) {
+  const [postergando, setPostergando] = useState(false);
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
@@ -1061,14 +1067,44 @@ function OTDetail({
           <p className="text-sm text-slate-800">{o.descripcion}</p>
         </div>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onVerRepuestos}
           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Repuestos que hacen falta
         </button>
+
+        {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
+            La fecha de ejecución de una OT del formulario vive en la pestaña
+            que maneja Google Forms, y escribir ahí corre las filas de las
+            demás — es lo que dejó el registro de la OT 2796 pegado a la 2798
+            el 16/10/2026. Las que creó el SdG tienen su fila en «Altas del
+            sistema», que sí se puede reescribir.
+            En vez de esconder el botón sin más, se dice: un botón que no está
+            no se distingue de uno que falta. */}
+        {canEdit && o.app_created && pideJustificacion(o.estado) && (
+          <button
+            onClick={() => setPostergando(true)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Postergar
+          </button>
+        )}
+        {canEdit && !o.app_created && pideJustificacion(o.estado) && (
+          <span className="text-xs text-slate-400">
+            La fecha de esta orden se cambia en la planilla: entró por el formulario.
+          </span>
+        )}
       </div>
+
+      {postergando && (
+        <PostergarOTModal
+          orden={o}
+          onCerrar={() => setPostergando(false)}
+          onPostergada={() => { setPostergando(false); onPostergada?.(); }}
+        />
+      )}
 
       {/* Sólo en las que siguen abiertas: una realizada ya no debe ninguna
           explicación, y lo que se encontró al hacerla va en la observación de
