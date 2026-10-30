@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { reporteAnual, reporteMensual, reportePorcentual } from "./reportes";
 import type { EmpleadoDelReporte, HorasDeSector } from "./reportes";
 import type { Ausencia } from "./diasDeAusencia";
+import { FERIADOS_2026 } from "./feriados2026.fixture";
 
 const emp = (
   id: string,
@@ -92,6 +93,40 @@ describe("reporteMensual", () => {
     expect(m.porMotivo).toEqual({});
   });
 
+  it("cada fila trae su sectorId, para distinguir dos sectores con el mismo nombre", () => {
+    // El catálogo tiene tres "Mantenimiento": sin el id, dos filas serían idénticas.
+    const m1 = emp("m1", "s-mant-a", "Mantenimiento");
+    const m2 = emp("m2", "s-mant-b", "Mantenimiento");
+    const r = reporteMensual([], [m1, m2, sinSector], "2026-10");
+    expect(r.filas.map((f) => [f.sector, f.sectorId])).toEqual([
+      ["Mantenimiento", "s-mant-a"],
+      ["Mantenimiento", "s-mant-b"],
+      ["Sin sector", null],
+    ]);
+  });
+
+  it("cuenta las ausencias de alguien que no está en la lista de empleados", () => {
+    const ausencias = [
+      aus("e1", "2026-10-05", "2026-10-05", "ENFERMEDAD"),
+      aus("fantasma", "2026-10-06", "2026-10-07", "ENFERMEDAD"), // huérfana, cae en octubre
+      aus("fantasma", "2026-03-06", "2026-03-07", "ENFERMEDAD"), // huérfana pero de otro mes: no cambia este reporte
+    ];
+    const r = reporteMensual(ausencias, [cantera], "2026-10");
+    expect(r.ausenciasHuerfanas).toBe(1);
+    expect(r.total).toBe(1); // y no suma en ningún sector
+    expect(reporteMensual(ausencias.slice(0, 1), [cantera], "2026-10").ausenciasHuerfanas).toBe(0);
+  });
+
+  it("rechaza un mes mal escrito en vez de devolver un número equivocado", () => {
+    expect(() => reporteMensual([], [cantera], "2026-1")).toThrow();
+    expect(() => reporteMensual([], [cantera], "2026-13")).toThrow();
+  });
+
+  it("un motivo sin días no tiene clave: la lista de columnas no sale de totalPorMotivo", () => {
+    const r = reporteMensual([aus("e1", "2026-09-05", "2026-09-05", "ENFERMEDAD")], [cantera], "2026-10");
+    expect(r.totalPorMotivo).toEqual({});
+  });
+
   it("'Sin sector' va al final", () => {
     const r = reporteMensual([], [sinSector, molienda, cantera], "2026-10");
     expect(r.filas.map((f) => f.sector)).toEqual(["Cantera", "Molienda", "Sin sector"]);
@@ -104,19 +139,19 @@ describe("reporteAnual", () => {
   it("el anual imputa la ausencia entera al mes en que empieza", () => {
     // 19/12 al 2/1: exclusive son 14 días, y todos caen en diciembre.
     const a = [aus("e1", "2026-12-19", "2027-01-02", "LICENCIA")];
-    const [fila] = reporteAnual(a, [cantera], 2026, "2026-12", sinFeriados);
+    const [fila] = reporteAnual(a, [cantera], 2026, "2026-12", sinFeriados).filas;
     expect(fila.porMes[11]).toBe(14);
     expect(fila.porMes.slice(0, 11).every((n) => n === 0)).toBe(true);
     expect(fila.total).toBe(14);
     // Y en el anual de 2027 no aparece nada: no se parte.
-    const [f27] = reporteAnual(a, [cantera], 2027, "2027-01", sinFeriados);
+    const [f27] = reporteAnual(a, [cantera], 2027, "2027-01", sinFeriados).filas;
     expect(f27.porMes[0]).toBe(0);
     expect(f27.total).toBe(0);
   });
 
   it("usa la regla exclusive: una ausencia de un solo día vale cero", () => {
     const a = [aus("e1", "2026-03-10", "2026-03-10", "ENFERMEDAD"), aus("e1", "2026-03-05", "2026-03-12", "ENFERMEDAD")];
-    const [fila] = reporteAnual(a, [cantera], 2026, "2026-03", sinFeriados);
+    const [fila] = reporteAnual(a, [cantera], 2026, "2026-03", sinFeriados).filas;
     // 0 + 7 (y no 1 + 8 como daría el mensual)
     expect(fila.porMes[2]).toBe(7);
   });
@@ -124,7 +159,7 @@ describe("reporteAnual", () => {
   it("suma el total, los hábiles acumulados y el porcentual", () => {
     // Enero 2026 tiene 22 hábiles y febrero 20, sin feriados: 42 acumulados.
     const a = [aus("e1", "2026-01-05", "2026-01-15", "ENFERMEDAD"), aus("e1", "2026-02-02", "2026-02-12", "ENFERMEDAD")];
-    const [fila] = reporteAnual(a, [cantera], 2026, "2026-02", sinFeriados);
+    const [fila] = reporteAnual(a, [cantera], 2026, "2026-02", sinFeriados).filas;
     expect(fila.porMes[0]).toBe(10);
     expect(fila.porMes[1]).toBe(10);
     expect(fila.total).toBe(20);
@@ -134,34 +169,29 @@ describe("reporteAnual", () => {
 
   it("los meses posteriores a hastaMes no cuentan en el total", () => {
     const a = [aus("e1", "2026-01-05", "2026-01-10", "ENFERMEDAD"), aus("e1", "2026-06-01", "2026-06-11", "ENFERMEDAD")];
-    const [fila] = reporteAnual(a, [cantera], 2026, "2026-03", sinFeriados);
+    const [fila] = reporteAnual(a, [cantera], 2026, "2026-03", sinFeriados).filas;
     expect(fila.total).toBe(5);
     expect(fila.porMes[5]).toBe(0);
   });
 
-  it("el porcentual puede pasar de 100 y no se topea", () => {
-    // 141 días contra 120 hábiles acumulados a junio de 2026 = 117,5 %.
-    // Se parte en ausencias de 47 días exclusive, cada una en un mes distinto.
-    const feriados2026 = [
-      "2026-01-01", "2026-02-16", "2026-02-17", "2026-03-23", "2026-03-24", "2026-04-02",
-      "2026-04-03", "2026-05-01", "2026-05-25", "2026-06-15", "2026-06-20",
-    ];
+  it("el porcentual puede pasar de 100 y no se topea: 141 sobre 120 es 117,5", () => {
+    // El ejemplo medido del diseño. Con los 17 feriados reales de 2026 los
+    // hábiles de enero a junio son 120, y se fijan acá como constante: si el
+    // denominador se moviera, este test tiene que avisar.
+    // Tres ausencias de 47 días exclusive, cada una imputada a un mes distinto.
     const a = [
       aus("e1", "2026-01-01", "2026-02-17", "LICENCIA"), // 47, todo a enero
       aus("e1", "2026-03-01", "2026-04-17", "LICENCIA"), // 47, a marzo
       aus("e1", "2026-05-01", "2026-06-17", "LICENCIA"), // 47, a mayo
     ];
-    const [fila] = reporteAnual(a, [cantera], 2026, "2026-06", feriados2026);
+    const [fila] = reporteAnual(a, [cantera], 2026, "2026-06", FERIADOS_2026).filas;
     expect(fila.total).toBe(141);
-    expect(fila.habiles).toBeGreaterThan(0);
-    expect(fila.porcentual).toBeCloseTo((141 / fila.habiles) * 100, 10);
-    // 141 días de calendario sobre los hábiles a junio (menos de 141): pasa de 100.
-    expect(fila.habiles).toBeLessThan(141);
-    expect(fila.porcentual).toBeGreaterThan(100);
+    expect(fila.habiles).toBe(120);
+    expect(fila.porcentual).toBe(117.5);
   });
 
   it("incluye a todos los empleados, también al que no tiene sector ni ausencias", () => {
-    const r = reporteAnual([], [cantera, sinSector], 2026, "2026-03", sinFeriados);
+    const r = reporteAnual([], [cantera, sinSector], 2026, "2026-03", sinFeriados).filas;
     expect(r).toHaveLength(2);
     const s = r.find((f) => f.empleadoId === "e3")!;
     expect(s.sector).toBeNull();
@@ -177,9 +207,26 @@ describe("reporteAnual", () => {
       2026,
       "2026-01",
       sinFeriados,
-    );
+    ).filas;
     expect(r.map((f) => f.empleadoId)).toEqual(["b", "a"]);
     expect(r[0].nombre).toBe("GOMEZ, Ana");
+  });
+
+  it("cuenta las ausencias huérfanas que caen en el período del reporte", () => {
+    const ausencias = [
+      aus("fantasma", "2026-02-03", "2026-02-09", "ENFERMEDAD"), // dentro
+      aus("fantasma", "2026-08-03", "2026-08-09", "ENFERMEDAD"), // después de hastaMes
+      aus("fantasma", "2025-02-03", "2025-02-09", "ENFERMEDAD"), // de otro año
+      aus("e1", "2026-02-03", "2026-02-09", "ENFERMEDAD"),
+    ];
+    const r = reporteAnual(ausencias, [cantera], 2026, "2026-03", sinFeriados);
+    expect(r.ausenciasHuerfanas).toBe(1);
+    expect(r.filas[0].total).toBe(6);
+  });
+
+  it("rechaza un mes mal escrito, no sólo uno de otro año", () => {
+    expect(() => reporteAnual([], [cantera], 2026, "2026-1", sinFeriados)).toThrow();
+    expect(() => reporteAnual([], [cantera], 2026, "2026-13", sinFeriados)).toThrow();
   });
 
   it("se niega si hastaMes no es del año pedido", () => {
@@ -199,6 +246,7 @@ describe("reportePorcentual", () => {
     const r = reportePorcentual(ausencias, [cantera, e1b, molienda], "2026-10", horas, []);
 
     const c = r.filas.find((f) => f.sector === "Cantera")!;
+    expect(c.sectorId).toBe("s-cantera");
     expect(c.personal).toBe(2);
     expect(c.horasARealizar).toBe(2 * 208);
     expect(c.horasPerdidas).toBe(5 * 8);
@@ -213,17 +261,49 @@ describe("reportePorcentual", () => {
     expect(r.general).toBeCloseTo((40 / (416 + 200)) * 100, 10);
   });
 
-  it("una vigencia de horas que no cubre el mes no se usa", () => {
+  it("un sector sin fila en el catálogo usa (hábiles + sábados) x 8, y varía con el mes", () => {
+    // Febrero de 2026 con los feriados reales: 18 hábiles + 4 sábados = 22 x 8 = 176.
+    const feb = reportePorcentual([], [cantera], "2026-02", [], FERIADOS_2026);
+    expect(feb.filas[0].horasARealizar).toBe(176);
+    // Octubre: 20 hábiles + 5 sábados = 25 x 8 = 200. No es el mismo número.
+    const oct = reportePorcentual([], [cantera], "2026-10", [], FERIADOS_2026);
+    expect(oct.filas[0].horasARealizar).toBe(200);
+  });
+
+  it("el calculado se multiplica por el personal", () => {
+    const e1b = emp("e1b", "s-cantera", "Cantera");
+    const r = reportePorcentual([], [cantera, e1b], "2026-02", [], FERIADOS_2026);
+    expect(r.filas[0].horasARealizar).toBe(2 * 176);
+  });
+
+  it("una fila del catálogo gana sobre el cálculo (el 200 de oficina es una decisión)", () => {
+    const oficina: HorasDeSector[] = [{ sectorId: "s-cantera", horasPorEmpleado: 200, desde: "2026-01-01", hasta: null }];
+    const r = reportePorcentual([], [cantera], "2026-02", oficina, FERIADOS_2026);
+    expect(r.filas[0].horasARealizar).toBe(200); // y no 176
+  });
+
+  it("una vigencia de horas que no cubre el mes no se usa y vuelve el cálculo", () => {
     const vieja: HorasDeSector[] = [
       { sectorId: "s-cantera", horasPorEmpleado: 999, desde: "2025-01-01", hasta: "2025-12-31" },
       { sectorId: "s-cantera", horasPorEmpleado: 208, desde: "2026-01-01", hasta: null },
     ];
     const r = reportePorcentual([], [cantera], "2026-10", vieja, []);
     expect(r.filas[0].horasARealizar).toBe(208);
-    // Una vigencia que todavía no empezó tampoco.
+    // Una vigencia que todavía no empezó tampoco: cae al cálculo, no a 0.
     const futura: HorasDeSector[] = [{ sectorId: "s-cantera", horasPorEmpleado: 120, desde: "2026-11-01", hasta: null }];
-    const r2 = reportePorcentual([], [cantera], "2026-10", futura, []);
-    expect(r2.filas[0].horasARealizar).toBe(0);
+    const r2 = reportePorcentual([], [cantera], "2026-02", futura, FERIADOS_2026);
+    expect(r2.filas[0].horasARealizar).toBe(176);
+    // Y una que ya venció, sola, tampoco: no queda ninguna aplicable.
+    const vencida: HorasDeSector[] = [{ sectorId: "s-cantera", horasPorEmpleado: 999, desde: "2025-01-01", hasta: "2025-12-31" }];
+    expect(reportePorcentual([], [cantera], "2026-02", vencida, FERIADOS_2026).filas[0].horasARealizar).toBe(176);
+  });
+
+  it("la vigencia es cualquier solapamiento: una fila que empieza el 20 cuenta para todo el mes", () => {
+    const desdeElVeinte: HorasDeSector[] = [{ sectorId: "s-cantera", horasPorEmpleado: 150, desde: "2026-10-20", hasta: null }];
+    const r = reportePorcentual([], [cantera], "2026-10", desdeElVeinte, []);
+    expect(r.filas[0].horasARealizar).toBe(150);
+    const hastaElDos: HorasDeSector[] = [{ sectorId: "s-cantera", horasPorEmpleado: 150, desde: "2026-01-01", hasta: "2026-10-02" }];
+    expect(reportePorcentual([], [cantera], "2026-10", hastaElDos, []).filas[0].horasARealizar).toBe(150);
   });
 
   it("usa la regla inclusive y prorrateada del mensual, no la del anual", () => {
@@ -239,14 +319,42 @@ describe("reportePorcentual", () => {
     expect(r.filas[0].porcentual).toBeGreaterThan(100);
   });
 
-  it("un sector sin horas cargadas aparece, con su personal y sus horas perdidas, sin dividir por cero", () => {
-    const r = reportePorcentual([aus("e3", "2026-10-05", "2026-10-06", "ENFERMEDAD")], [sinSector], "2026-10", horas, []);
+  it("quien no tiene sector también usa el cálculo y entra al general", () => {
+    // Febrero 2026: 176 horas a realizar; 2 días de ausencia = 16 horas perdidas.
+    const r = reportePorcentual([aus("e3", "2026-02-05", "2026-02-06", "ENFERMEDAD")], [sinSector], "2026-02", [], FERIADOS_2026);
     const fila = r.filas.find((f) => f.sector === "Sin sector")!;
+    expect(fila.sectorId).toBeNull();
     expect(fila.personal).toBe(1);
     expect(fila.horasPerdidas).toBe(16);
-    expect(fila.horasARealizar).toBe(0);
-    expect(fila.porcentual).toBe(0);
-    expect(Number.isFinite(r.general)).toBe(true);
+    expect(fila.horasARealizar).toBe(176);
+    expect(r.general).toBeCloseTo((16 / 176) * 100, 10);
+  });
+
+  it("con el catálogo vacío el titular no queda en cero si hubo ausencias", () => {
+    const r = reportePorcentual([aus("e1", "2026-02-05", "2026-02-06", "ENFERMEDAD")], [cantera, molienda], "2026-02", [], FERIADOS_2026);
+    expect(r.general).toBeGreaterThan(0);
+    expect(r.general).toBeCloseTo((16 / (2 * 176)) * 100, 10);
+  });
+
+  it("sin personal no hay con qué dividir y el general es 0", () => {
+    const r = reportePorcentual([], [], "2026-02", [], FERIADOS_2026);
+    expect(r.filas).toEqual([]);
+    expect(r.general).toBe(0);
+  });
+
+  it("cuenta las ausencias de alguien que no está en la lista de empleados", () => {
+    const ausencias = [
+      aus("fantasma", "2026-10-06", "2026-10-07", "ENFERMEDAD"),
+      aus("fantasma", "2026-03-06", "2026-03-07", "ENFERMEDAD"), // de otro mes
+      aus("e1", "2026-10-05", "2026-10-05", "ENFERMEDAD"),
+    ];
+    const r = reportePorcentual(ausencias, [cantera], "2026-10", horas, []);
+    expect(r.ausenciasHuerfanas).toBe(1);
+    expect(r.filas[0].horasPerdidas).toBe(8);
+  });
+
+  it("rechaza un mes mal escrito", () => {
+    expect(() => reportePorcentual([], [cantera], "2026-1", horas, [])).toThrow();
   });
 
   it("la tardanza cuenta como dia", () => {
