@@ -37,8 +37,10 @@
 
 // ── El pegamento que los dos mundos tienen que escribir igual ────────────────
 //
-// No son reglas —no deciden nada— pero son los dos nombres que la pantalla y el
-// service worker **tienen** que escribir idénticos, y hasta el 19/10/2026
+// No son reglas —no deciden nada— pero son los nombres y las formas que la
+// pantalla y el service worker **tienen** que escribir idénticos (y en el caso
+// de los dos campos del `FormData`, también la ruta de alta, que es un tercer
+// mundo sin tipos compartidos), y hasta el 19/10/2026
 // estaban copiados a mano en los dos lados. El modo de fallar de `SESION` es el
 // peor que tiene esta cola: el worker lee quién sos de esa clave, así que una
 // letra distinta deja el vaciado sin sesión conocida y **no sale ninguna
@@ -68,6 +70,87 @@ export const RUTA_DE = {
   orden: "/api/mantenimiento/ordenes",
   condicion: "/api/seguridad-higiene/condiciones",
 };
+
+/**
+ * Si el cuerpo de este tipo de carga puede traer un archivo, y por lo tanto
+ * tiene que salir como `multipart/form-data` en vez de como JSON.
+ *
+ * **ES UN MAPA Y NO UN `tipo === "condicion"`, Y ESA ES LA PROMESA DE ESTA
+ * TAREA:** el aviso y la orden de trabajo son lo que la gente usa todos los
+ * días, y su pedido tiene que salir **byte por byte igual que antes**. Con un
+ * mapa, el `if` de las dos `mandarALaRuta` va *alrededor* de la construcción
+ * del pedido y la rama vieja queda intacta; una condición adentro de la
+ * construcción es cómo una cabecera cambia para los tres tipos sin que nadie
+ * lo note.
+ *
+ * Un tipo sin entrada devuelve `undefined`, que es falso: sale como JSON, que
+ * es lo que hacía hoy. El modo de fallar es el seguro, y que el mapa esté
+ * completo lo fija el test de `lib/core/colaOffline.test.ts` que recorre
+ * `RUTA_DE`.
+ *
+ * @type {Record<TipoDeCarga, boolean>}
+ */
+const LLEVA_ARCHIVO = {
+  aviso: false,
+  orden: false,
+  condicion: true,
+};
+
+/**
+ * @param {TipoDeCarga} tipo
+ * @returns {boolean}
+ */
+export function llevaArchivo(tipo) {
+  return LLEVA_ARCHIVO[tipo];
+}
+
+/**
+ * Cómo se llama, dentro del `FormData`, el campo que lleva el cuerpo entero.
+ *
+ * **EL CUERPO VA EN UN SOLO CAMPO DE JSON Y NO UN CAMPO POR CLAVE.** En un
+ * `FormData` todo es texto: `prioridad: 2` llegaría como `"2"` y `peligro_id:
+ * null` como `"null"`, así que la ruta tendría que reconvertirlos uno por uno
+ * y su esquema de zod —el mismo que valida el camino JSON— vería otra cosa
+ * según si la carga trajo foto o no. Con el cuerpo en un campo, la ruta hace
+ * un `JSON.parse` y de ahí en adelante **es exactamente el mismo objeto**: un
+ * solo camino de validación y un solo juego de mensajes.
+ *
+ * Lo escriben los dos mundos (la pantalla y el service worker) y lo lee la
+ * ruta de alta, que es TypeScript: tres lugares que no comparten tipos, así
+ * que el nombre vive acá y en ningún otro lado.
+ */
+export const CAMPO_DEL_CUERPO = "cuerpo";
+
+/** Y así se llama el archivo. Mismo motivo que el de arriba. */
+export const CAMPO_DE_LA_FOTO = "foto";
+
+/**
+ * El cuerpo de una carga con archivo, armado para mandarlo.
+ *
+ * La foto sale del cuerpo y va aparte: adentro del JSON un `Blob` se
+ * serializa como `{}` —sin error y sin aviso—, que es perder el único campo
+ * de una condición que no se puede volver a conseguir.
+ *
+ * **Vive acá, con todo lo demás que los dos mundos tienen que escribir
+ * igual.** No es HTTP: es la forma del cuerpo, o sea el contrato con la ruta.
+ * Escrita dos veces, un día una de las dos manda la foto con otro nombre de
+ * campo y lo que se rompe es sólo el camino sin señal, que es el que nadie
+ * mira.
+ *
+ * @param {Record<string, unknown>} cuerpo El cuerpo de la carga, con la foto adentro si la hay.
+ * @returns {FormData}
+ */
+export function cuerpoComoFormData(cuerpo) {
+  const { [CAMPO_DE_LA_FOTO]: foto, ...resto } = cuerpo;
+  const forma = new FormData();
+  forma.append(CAMPO_DEL_CUERPO, JSON.stringify(resto));
+  // Sin foto el campo **no se manda**, en vez de mandarlo vacío: que no esté
+  // es inequívoco. El tercer argumento es el nombre del archivo, que un `Blob`
+  // no tiene; la ruta decide la extensión por el tipo del archivo y no por
+  // este nombre, pero sin él algunos servidores tratan la parte como texto.
+  if (foto instanceof Blob) forma.append(CAMPO_DE_LA_FOTO, foto, "foto");
+  return forma;
+}
 
 /**
  * De dónde salió una carga: si la mandó el teléfono solo o si alguien estaba

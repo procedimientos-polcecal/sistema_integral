@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Select from "@/components/Select";
-import { useCargar } from "@/lib/core/useCargar";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
 import { estadoDe } from "@/lib/seguridadHigiene/condicion";
@@ -15,20 +15,13 @@ import {
   type FilaDeCondicion,
 } from "@/lib/seguridadHigiene/gestion";
 import { InsigniaDeClasificacion, InsigniaDeEstado, InsigniaDeFalta } from "./Insignias";
+import FotosDeLaCondicion from "./FotosDeLaCondicion";
 
 export interface Catalogos {
   sectores: { id: string; nombre: string; activo: boolean }[];
   equipos: { id: string; nombre: string; sector_id: string | null; activo: boolean }[];
   peligros: { id: string; nombre: string; activo: boolean }[];
   usuarios: { id: string; nombre: string; activo: boolean }[];
-}
-
-interface Foto {
-  id: string;
-  subida_el: string;
-  link: string | null;
-  descarga: string | null;
-  error: string | null;
 }
 
 const CRITERIOS_EN_ORDEN: { clave: Criterio; titulo: string }[] = [
@@ -116,33 +109,6 @@ export default function FichaDeCondicion({
   function poner<K extends keyof Borrador>(campo: K, valor: Borrador[K]) {
     setBorrador((b) => ({ ...b, [campo]: valor }));
     setAviso(null);
-  }
-
-  // ── Las fotos ──
-  const [fotos, setFotos] = useState<Foto[] | null>(null);
-  const [errorDeFotos, setErrorDeFotos] = useState<string | null>(null);
-  const [copiada, setCopiada] = useState<string | null>(null);
-
-  useCargar(async (vigente) => {
-    const r = await fetch(`/api/seguridad-higiene/condiciones/${fila.id}`).catch(() => null);
-    const j = r ? await r.json().catch(() => null) : null;
-    if (!vigente()) return;
-    if (!r || !r.ok) {
-      setErrorDeFotos(j?.error ?? "No se pudieron traer las fotos");
-      return;
-    }
-    setFotos(j.data as Foto[]);
-  }, [fila.id]);
-
-  async function copiarLink(foto: Foto) {
-    if (!foto.link) return;
-    try {
-      await navigator.clipboard.writeText(foto.link);
-      setCopiada(foto.id);
-      setTimeout(() => setCopiada((actual) => (actual === foto.id ? null : actual)), 2000);
-    } catch {
-      setErrorDeFotos("No se pudo copiar el link. Abrí la foto y copialo desde la barra del navegador.");
-    }
   }
 
   // ── El nivel, mientras se elige ──
@@ -250,55 +216,21 @@ export default function FichaDeCondicion({
         </div>
 
         <div className="space-y-6 p-4">
-          {/* Fotos */}
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-900">Fotos</h3>
-            {errorDeFotos && <p className="text-sm text-red-700">{errorDeFotos}</p>}
-            {fotos === null && !errorDeFotos && <p className="text-sm text-slate-500">Cargando fotos…</p>}
-            {fotos && fotos.length === 0 && (
-              <p className="text-sm text-slate-500">Esta condición no tiene fotos.</p>
-            )}
-            {fotos && fotos.length > 0 && (
-              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {fotos.map((foto) => (
-                  <li key={foto.id} className="space-y-1.5 rounded-lg border border-slate-200 p-2">
-                    {foto.link ? (
-                      <a href={foto.link} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={foto.link}
-                          alt={`Foto de la condición ${fila.numero}`}
-                          loading="lazy"
-                          className="h-48 w-full rounded object-cover"
-                        />
-                      </a>
-                    ) : (
-                      <p className="flex h-48 items-center justify-center rounded bg-slate-100 px-2 text-center text-xs text-red-700">
-                        No se pudo abrir esta foto{foto.error ? `: ${foto.error}` : ""}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {foto.descarga && (
-                        <a href={foto.descarga} className="btn-secondary text-xs">
-                          Descargar
-                        </a>
-                      )}
-                      {foto.link && (
-                        <button type="button" onClick={() => copiarLink(foto)} className="btn-secondary text-xs">
-                          {copiada === foto.id ? "Link copiado" : "Copiar link"}
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {fotos && fotos.length > 0 && (
-              <p className="text-xs text-slate-500">
-                El link dura una hora: pasado ese tiempo, abrí la condición de nuevo y copiá otro.
-              </p>
-            )}
-          </section>
+          {/* Las fotos viven en su propio componente: tienen estado propio (la
+              lista, lo que se está subiendo, el link copiado) y esta ficha ya
+              lleva tres etapas de formulario. Va adentro de un
+              `<ConfirmProvider>` porque sacar una foto la pierde para siempre y
+              `useConfirm()` rompe sin proveedor arriba, que es lo que se
+              quiere. El permiso es el mismo que el de la primera etapa, y no
+              por parecido: las policies `syh_fotos_agregar` y `syh_fotos_sacar`
+              piden `edicion` y que la condición no esté cerrada. */}
+          <ConfirmProvider>
+            <FotosDeLaCondicion
+              condicionId={fila.id}
+              numero={fila.numero}
+              puedeTocar={puedePrimera}
+            />
+          </ConfirmProvider>
 
           {/* Primera etapa */}
           <section className="space-y-3">

@@ -20,6 +20,8 @@ import {
   RUTA_DE,
   comoContesto,
   conSuArticulo,
+  cuerpoComoFormData,
+  llevaArchivo,
   type ResultadoDelEnvio,
   type TipoDeCarga,
 } from "@/public/cola/colaOffline.js";
@@ -49,6 +51,21 @@ export type Resultado =
  * decir ("el aviso quedó escrito en la planilla pero no se pudo guardar en el
  * sistema"), y quien cargó necesita exactamente eso para saber si mirar la
  * planilla.
+ *
+ * ── LAS DOS RAMAS, Y POR QUÉ EL `if` ESTÁ DONDE ESTÁ ────────────────────────
+ *
+ * Una carga que puede traer un archivo sale como `multipart/form-data`; todas
+ * las demás salen como salían. **El `if` va alrededor de la construcción del
+ * pedido y no adentro**, a propósito: el aviso y la orden de trabajo se usan
+ * todos los días, y la promesa de esta tarea es que su pedido salga byte por
+ * byte igual que antes. Un `headers` armado con un ternario adentro es un
+ * lugar donde un día cambia algo para los tres tipos sin que nadie lo note.
+ *
+ * **Y EL `Content-Type` DE LA RAMA DEL ARCHIVO NO SE ESCRIBE**: lo pone el
+ * navegador, con el `boundary` que separa las partes. Escribirlo a mano lo
+ * deja sin `boundary` y el servidor no puede partir el cuerpo —`formData()`
+ * rechaza y la ruta contesta que falta todo—, que es un 400 definitivo sobre
+ * una carga que estaba bien.
  */
 export async function mandarALaRuta(
   tipo: TipoDeCarga,
@@ -56,15 +73,24 @@ export async function mandarALaRuta(
 ): Promise<ResultadoDelEnvio> {
   let respuesta: Response;
   try {
-    respuesta = await fetch(RUTA_DE[tipo], {
-      method: "POST",
-      // Todo lo que sale de esta pantalla sale con alguien mirando, así que
-      // nunca pide correo: el cartel de abajo ya le va a decir lo mismo, y un
-      // correo que repite lo que la persona está leyendo es cómo se aprende a
-      // ignorar los correos del sistema.
-      headers: { "Content-Type": "application/json", [CABECERA_DEL_DISPARO]: DISPARO.pantalla },
-      body: JSON.stringify(cuerpo),
-    });
+    respuesta = llevaArchivo(tipo)
+      ? await fetch(RUTA_DE[tipo], {
+          method: "POST",
+          headers: { [CABECERA_DEL_DISPARO]: DISPARO.pantalla },
+          body: cuerpoComoFormData(cuerpo),
+        })
+      : await fetch(RUTA_DE[tipo], {
+          method: "POST",
+          // Todo lo que sale de esta pantalla sale con alguien mirando, así que
+          // nunca pide correo: el cartel de abajo ya le va a decir lo mismo, y un
+          // correo que repite lo que la persona está leyendo es cómo se aprende a
+          // ignorar los correos del sistema.
+          headers: {
+            "Content-Type": "application/json",
+            [CABECERA_DEL_DISPARO]: DISPARO.pantalla,
+          },
+          body: JSON.stringify(cuerpo),
+        });
   } catch (e) {
     // Ni se llegó a hablar con nadie, así que esto no salió de la ruta y es
     // pasajero: sin señal, o el túnel que corta a mitad de camino.

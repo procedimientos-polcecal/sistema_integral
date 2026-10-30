@@ -1,54 +1,46 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarSyh } from "@/lib/seguridadHigiene/auth";
+import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { guardarLaFoto } from "@/lib/seguridadHigiene/guardarLaFoto";
 
 export const maxDuration = 120;
 
 /**
- * Guarda la foto de una condición insegura en Supabase Storage.
+ * Agregar una foto a una condición insegura que ya existe: es el camino de la
+ * ficha. La foto que viaja con el alta desde la cola sin señal no pasa por acá
+ * —va adentro del mismo pedido, en `/api/seguridad-higiene/condiciones`—, pero
+ * **las dos guardan igual**: con `guardarLaFoto`, que sube el archivo y escribe
+ * la fila de `syh_fotos` en una sola operación.
  *
- * Calcada de `app/api/mantenimiento/fotos/route.ts`, con tres diferencias que
- * son decisiones y no descuidos:
+ * ── QUÉ CAMBIÓ EL 30/10/2026, Y POR QUÉ IMPORTA ────────────────────────────
  *
- *   1. BUCKET `syh-fotos`, no `execution-photos`: ése es de Mantenimiento y
- *      tiene sus propias reglas y su propia lista de tipos.
+ * Antes esta ruta subía el archivo al bucket y devolvía `{ruta, link}`, y ahí
+ * terminaba: **nadie escribía en `syh_fotos`**. Una foto sin esa fila es un
+ * archivo perdido — la ficha lee la tabla y no el bucket, así que no la
+ * muestra, y el cron de respaldo también lee la tabla, así que no la respalda.
+ * El enlace es de acá.
  *
- *   2. EL BUCKET ES PRIVADO, así que el link es **siempre firmado** y nunca
- *      `getPublicUrl`. Mantenimiento lo necesita público porque su link se
- *      escribe en una planilla que mira gente sin sesión. Este módulo no tiene
- *      planilla, y no hay nadie sin sesión que deba ver una foto de una
- *      condición insegura. El link dura una hora: alcanza para mostrar la foto
- *      que se acaba de subir, y quien la vea después pide uno nuevo.
+ * Y con eso cambiaron dos cosas más, las dos a propósito:
  *
- *   3. LA RUTA DENTRO DEL BUCKET es `condiciones/<id>/<timestamp>.<ext>`, donde
- *      `<id>` es lo que mande el formulario en `condicion` (el id de la
- *      condición, o la clave de la carga si todavía no existe). Se limpia igual
- *      que allá: lo que llega del formulario termina siendo una ruta.
+ *   * **`condicion` tiene que ser el id de una condición que exista.** Antes
+ *     podía ser cualquier texto —la idea era que fuera la clave de la carga
+ *     cuando la condición todavía no existía—, y ahora eso no tiene sentido:
+ *     la fila necesita un `condicion_id` de verdad, y el camino de la cola lo
+ *     resuelve el alta. Un id que no existe es un 400 y no un archivo huérfano.
+ *   * **Se sube con el cliente del usuario y no con el admin.** El bucket
+ *     tiene policies para `authenticated` (`20261029111056`) y la fila las
+ *     necesita sí o sí (`syh_fotos_agregar` mira `auth.uid()`), así que el
+ *     admin sólo serviría para saltearse las dos comprobaciones que queremos.
  *
- * Esta ruta sólo guarda el archivo. Devuelve la `ruta` y quien la usa se
- * ocupa de enlazarla a la condición en `syh_fotos`.
+ * El bucket es privado: el link es siempre firmado y dura una hora.
  *
  * Puede subir una foto quien puede cargar una condición (`edicion` o `admin`).
- * Se comprueba acá porque el cliente admin de Storage no pasa por las policies
- * del bucket.
+ * Se comprueba acá para contestar con un texto en castellano; la policy lo
+ * vuelve a comprobar del otro lado.
  */
 
-const BUCKET = "syh-fotos";
-
-/**
- * Lo que una cámara de teléfono puede producir. Nada más.
- *
- * **Tiene que decir lo mismo que `allowed_mime_types` del bucket**
- * (`20261029111056_syh_bucket_de_fotos.sql`). `image/heif` no va: cuando la ruta
- * de Mantenimiento lo aceptaba y el bucket no, una foto HEIF pasaba el chequeo
- * de la ruta y la rechazaba Storage con un 502 que no explicaba nada. Si se suma
- * un tipo, va en los dos lados.
- */
-const TIPOS = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-
-/** Diez megas, que es también el `file_size_limit` del bucket. */
-const MAXIMO = 10 * 1024 * 1024;
+const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -83,52 +75,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falta la foto" }, { status: 400 });
   }
 
-  if (!TIPOS.includes(archivo.type)) {
+  const condicionId = String(formulario.get("condicion") ?? "").trim();
+  if (!ES_UUID.test(condicionId)) {
     return NextResponse.json(
-      { error: `"${archivo.type || "el archivo"}" no es una foto.` },
-      { status: 400 }
-    );
-  }
-  if (archivo.size > MAXIMO) {
-    return NextResponse.json(
-      { error: `La foto pesa ${Math.round(archivo.size / 1024 / 1024)} MB y el máximo son 10.` },
+      { error: "Falta decir a qué condición es esta foto" },
       { status: 400 }
     );
   }
 
-  // Lo que llega en `condicion` y en el nombre del archivo termina siendo parte
-  // de una ruta del bucket, así que se limpian: un archivo llamado `a./../x`
-  // daría extensión `/x`.
-  const limpio = (texto: string) => texto.trim().replace(/[^A-Za-z0-9_-]/g, "-");
-  const condicion = limpio(String(formulario.get("condicion") ?? "")) || "sin-condicion";
-  const extensionCruda = archivo.name.includes(".")
-    ? (archivo.name.split(".").pop()?.toLowerCase() ?? "")
-    : "";
-  const extension = /^[a-z0-9]{1,5}$/.test(extensionCruda) ? extensionCruda : "jpg";
-  const ruta = `condiciones/${condicion}/${Date.now()}.${extension}`;
+  // Lo que está mal con la foto se dice antes de hablar con Storage, y con las
+  // palabras que va a leer quien la sacó: «pesa 14 MB y el máximo son 10».
+  const problema = problemaDeLaFoto(archivo);
+  if (problema) return NextResponse.json({ error: problema }, { status: 400 });
 
-  const admin = createAdminClient();
-
-  const { error } = await admin.storage
-    .from(BUCKET)
-    .upload(ruta, new Uint8Array(await archivo.arrayBuffer()), {
-      contentType: archivo.type,
-      upsert: false,
-    });
-
-  if (error) {
+  // Que la condición exista se comprueba acá y no se deja para el 23503 del
+  // insert: ese fallo llegaría **después** de subir el archivo, o sea con un
+  // huérfano ya en el bucket.
+  const { data: condicion, error: errorDeCondicion } = await supabase
+    .from("syh_condiciones")
+    .select("id")
+    .eq("id", condicionId)
+    .maybeSingle();
+  if (errorDeCondicion) {
     return NextResponse.json(
-      { error: `No se pudo guardar la foto: ${error.message}` },
-      { status: 502 }
+      { error: `No se pudo leer la condición: ${errorDeCondicion.message}` },
+      { status: 500 }
     );
   }
+  if (!condicion) {
+    return NextResponse.json({ error: "No existe esa condición" }, { status: 404 });
+  }
 
-  // Siempre firmado, nunca `getPublicUrl`: el bucket es privado. Si firmar
-  // falla la foto **ya está guardada**, así que no se contesta un error —quien
-  // llama reintentaría y quedarían dos—: se devuelve la ruta y sin link.
-  const { data: firmado } = await admin.storage
-    .from(BUCKET)
-    .createSignedUrl(ruta, 60 * 60);
+  const guardada = await guardarLaFoto(supabase, condicionId, user.id, archivo);
+  if (!guardada.ok) {
+    return NextResponse.json({ error: guardada.error }, { status: guardada.status });
+  }
 
-  return NextResponse.json({ ruta, link: firmado?.signedUrl ?? null });
+  return NextResponse.json({ ruta: guardada.ruta, link: guardada.link });
 }

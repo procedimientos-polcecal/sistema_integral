@@ -6,9 +6,11 @@ import {
   concordado,
   conSuArticulo,
   convieneReintentar,
+  cuerpoComoFormData,
   despuesDelIntento,
   esperaAntesDeReintentar,
   esperandoDesdeAyer,
+  llevaArchivo,
   loQueQuedoPendiente,
   paradas,
   proximaAMandar,
@@ -17,6 +19,8 @@ import {
   queHacerConLaNueva,
   siNoSePudoAvisar,
   tomarLaCarga,
+  CAMPO_DEL_CUERPO,
+  CAMPO_DE_LA_FOTO,
   MINUTOS_PARA_SOLTAR,
   RUTA_DE,
 } from "@/public/cola/colaOffline.js";
@@ -530,6 +534,29 @@ describe("despuesDelIntento", () => {
     });
   });
 
+  // La foto es el único campo de una condición que no se recupera después: se
+  // saca parado frente al cardán sin protección, y cuando el cardán se protege
+  // ya no hay nada que fotografiar. Así que cuando la ruta la rechaza —pesa 14
+  // MB, es un PDF— lo que tiene que quedar guardado es **lo que dijo la ruta**,
+  // sin traducir: es lo único que va a leer quien mire la carga parada y tenga
+  // que decidir si vuelve a sacarla.
+  it("una foto rechazada deja la carga parada con lo que dijo la ruta", () => {
+    const r = despuesDelIntento({
+      ok: false,
+      status: 400,
+      deLaRuta: true,
+      error: "La foto pesa 14 MB y el máximo son 10.",
+    });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: {
+        tomadaEn: null,
+        ultimoError: "La foto pesa 14 MB y el máximo son 10.",
+        estado: "parada",
+      },
+    });
+  });
+
   it("un fallo pasajero la deja esperando, y suelta la marca de tomada", () => {
     expect(
       despuesDelIntento({ ok: false, status: 500, deLaRuta: true, error: "se cayó" }),
@@ -594,7 +621,21 @@ describe("el tercer tipo de carga: la condición insegura", () => {
       expect(conSuArticulo(tipo).trim(), tipo).not.toBe("");
       expect(concordado(tipo, "parad"), tipo).toMatch(/^parad[oa]$/);
       expect(comoContesto(tipo, { status: 200, redirigida: false, cuerpo }).ok, tipo).toBe(true);
+      // `llevaArchivo` es el quinto mapa y se comprueba igual que los otros
+      // cuatro. Se mira el **tipo** y no la verdad: un tipo sin entrada
+      // devuelve `undefined`, que es falso y por lo tanto seguro —sale como
+      // JSON, igual que hoy—, pero sigue siendo un mapa incompleto.
+      expect(typeof llevaArchivo(tipo), tipo).toBe("boolean");
     }
+  });
+
+  it("sólo la condición lleva archivo", () => {
+    // Es lo que decide si el pedido sale como JSON o como `FormData`, y por eso
+    // es un mapa y no un `tipo === "condicion"`: las dos cargas de
+    // Mantenimiento tienen que salir **byte por byte** como salían antes.
+    expect(llevaArchivo("aviso")).toBe(false);
+    expect(llevaArchivo("orden")).toBe(false);
+    expect(llevaArchivo("condicion")).toBe(true);
   });
 
   it("la condición va a su ruta de alta", () => {
@@ -614,6 +655,51 @@ describe("el tercer tipo de carga: la condición insegura", () => {
     const contestacion = { status: 200, redirigida: false, cuerpo: { numero: "CI-45" } };
     expect(comoContesto("aviso", contestacion).ok).toBe(false);
     expect(comoContesto("orden", contestacion).ok).toBe(false);
+  });
+});
+
+describe("cuerpoComoFormData", () => {
+  const foto = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+
+  it("el cuerpo viaja como un solo campo de JSON, y la foto aparte", () => {
+    // El cuerpo entero en un campo y no un campo por clave: así la ruta valida
+    // **exactamente el mismo objeto** que valida en el camino JSON, sin tener
+    // que volver a convertir «2» en 2 ni «null» en null. Un número que
+    // atravesara el multipart como texto rebotaría con un 400 que sólo le pasa
+    // a la carga con foto.
+    const forma = cuerpoComoFormData({ descripcion: "falta la guarda", prioridad: 2, foto });
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).toEqual({
+      descripcion: "falta la guarda",
+      prioridad: 2,
+    });
+  });
+
+  it("la foto no va adentro del JSON: iría como `{}`", () => {
+    const forma = cuerpoComoFormData({ descripcion: "x", prioridad: 1, foto });
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).not.toHaveProperty("foto");
+    expect(forma.get(CAMPO_DE_LA_FOTO)).toBeInstanceOf(Blob);
+  });
+
+  it("sin foto no se manda el campo de la foto, en vez de mandarlo vacío", () => {
+    // Un campo vacío llegaría como el texto "null" o como un archivo de cero
+    // bytes, y la ruta tendría que distinguir «no sacó foto» de «la foto se
+    // rompió en el camino». Que no esté es inequívoco.
+    const forma = cuerpoComoFormData({ descripcion: "x", prioridad: 1, foto: null });
+    expect(forma.has(CAMPO_DE_LA_FOTO)).toBe(false);
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).toEqual({
+      descripcion: "x",
+      prioridad: 1,
+    });
+  });
+
+  it("la foto viaja con un nombre, que es de donde la ruta saca la extensión", () => {
+    const forma = cuerpoComoFormData({ foto });
+    const archivo = forma.get(CAMPO_DE_LA_FOTO);
+    expect(archivo).toBeInstanceOf(Blob);
+    // En `FormData` un `Blob` sin nombre viaja como "blob" y se pierde el tipo
+    // del archivo. Lo que importa es que llegue con algo: la ruta decide la
+    // extensión por el `type`, no por el nombre.
+    expect((archivo as File).name).not.toBe("");
   });
 });
 

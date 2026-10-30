@@ -44,7 +44,9 @@ import {
   SESION,
   comoContesto,
   conSuArticulo,
+  cuerpoComoFormData,
   despuesDelIntento,
+  llevaArchivo,
   proximaAMandar,
   siNoSePudoAvisar,
   tomarLaCarga,
@@ -815,17 +817,34 @@ async function contarLaAdvertencia(tipo, numero, advertencia) {
  * es ninguna decisión** —quién contestó y si eso fue un éxito lo dice
  * `comoContesto`, la misma función en los dos lados—; acá sólo se habla HTTP.
  *
+ * Las dos ramas son las mismas de allá y por el mismo motivo: una carga que
+ * puede traer un archivo sale como `multipart/form-data` y las demás salen
+ * como salían. **El `if` va alrededor de la construcción del pedido**, para
+ * que el pedido del aviso y el de la OT —lo que la gente usa todos los días—
+ * salga byte por byte igual que antes. Qué tipo lleva archivo y cómo se arma
+ * ese cuerpo lo dicen `llevaArchivo` y `cuerpoComoFormData`, que son las
+ * mismas funciones que corre la pantalla.
+ *
+ * El `Content-Type` de la rama del archivo **no se escribe**: lo pone el
+ * navegador con su `boundary`, y escribirlo a mano lo deja sin él.
+ *
  * @param {import("/cola/colaOffline.js").TipoDeCarga} tipo
  * @param {Record<string, unknown>} cuerpo
  */
 async function mandarALaRuta(tipo, cuerpo, disparo) {
   let respuesta;
   try {
-    respuesta = await fetch(RUTA_DE[tipo], {
-      method: "POST",
-      headers: { "Content-Type": "application/json", [CABECERA_DEL_DISPARO]: disparo },
-      body: JSON.stringify(cuerpo),
-    });
+    respuesta = llevaArchivo(tipo)
+      ? await fetch(RUTA_DE[tipo], {
+          method: "POST",
+          headers: { [CABECERA_DEL_DISPARO]: disparo },
+          body: cuerpoComoFormData(cuerpo),
+        })
+      : await fetch(RUTA_DE[tipo], {
+          method: "POST",
+          headers: { "Content-Type": "application/json", [CABECERA_DEL_DISPARO]: disparo },
+          body: JSON.stringify(cuerpo),
+        });
   } catch (e) {
     // Un `fetch` que tira es un fallo sin status, y eso es pasajero. El mensaje
     // va **sin traducir**: es lo único que después va a poder leer quien mire
