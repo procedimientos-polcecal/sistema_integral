@@ -244,13 +244,37 @@ hace útil esta nota:
 - **Conjetura, sin confirmar**: las 5 filas con «Planta 02» (N° 2, 8, 9, 10, 11)
   hablan de sinfines y zaranda, y `docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md`
   ubica «Sin fin 1» y «Zaranda vibratoria» en «Planta 02» = `PY-C1`, la planta
-  0-2 mm. **Tienden a ser 0-2 mm**, no trituración.
+  0-2 mm. **Tienden a ser 0-2 mm**, no trituración. **Acción: dejarlas en null
+  hasta que alguien de planta lo confirme**; no se asignan por la conjetura.
 - **Conjetura, sin confirmar**: «Planta 2» (8 filas, N° 30 a 37) y «Planta 3»
-  (7 filas, N° 38 a 44) parecen las plantas de trituración 2 y 3 —las filas
-  hablan de mandíbula, trituración primaria y cintas, y `lib/trituracion/` usa
-  esos mismos nombres cortos—. Son 15 filas; una persona tiene que confirmarlo
-  y después se resuelve con un `UPDATE syh_condiciones … where clave like
-  'excel-21-10-26-%'` y el `sector_id` que corresponda.
+  (7 filas, N° 38 a 44) parecen las plantas de trituración 2 y 3. Las filas
+  hablan de mandíbula, trituración primaria y cintas; `lib/trituracion/` tiene
+  «Planta 2» como nombre en un fixture de test (`informeExcel.test.ts`) y
+  «Planta 3» en un comentario (`informeMensual.ts`), que es menos que un uso; y
+  `scripts/sectores-de-la-ot.mts` mapea «Trituración 2/3» a «Planta de
+  trituración 2/3», que refuerza la lectura sin probarla.
+- **Dónde confirmarlo**: contra el `21-10-26.xlsm` original (lo que circulaba
+  por mail, es la única fuente que hay) con quien lo armó o alguien de planta.
+  Una vez confirmado, el `WHERE` **nombra las claves del grupo y nunca el
+  prefijo**: `like 'excel-21-10-26-%'` alcanza a las 44 y le escribiría un solo
+  sector a todas, pisando las 7 que ya están bien enlazadas. Las claves llevan
+  el N° **sin ceros** (`excel-21-10-26-30`, no `…-030`), y `and sector_id is
+  null` hace que una fila ya enlazada no entre aunque se nombre por error:
+
+  ```sql
+  update public.syh_condiciones
+     set sector_id = (select id from public.sectores
+                       where nombre = 'Planta de trituración 2' and activo)
+   where sector_id is null
+     and clave in ('excel-21-10-26-30', 'excel-21-10-26-31', 'excel-21-10-26-32',
+                   'excel-21-10-26-33', 'excel-21-10-26-34', 'excel-21-10-26-35',
+                   'excel-21-10-26-36', 'excel-21-10-26-37');
+  ```
+
+  y lo mismo para «Planta de trituración 3» con las claves 38 a 44. Cada uno
+  actualiza 8 y 7 filas: si el editor dice otro número, algo no coincide.
+  Las 7 ya enlazadas (N° 5, 7, 15, 26, 27, 28, 29) no entran en ninguna de las
+  dos.
 
 Los 37 y las fechas dudosas (N° 6, 7, 42, 43, 44) son decisiones de datos que
 quedan pendientes del usuario: la importación no las resolvió.
