@@ -112,11 +112,10 @@ const seSolapan = (aDesde: string, aHasta: string, bDesde: string, bHasta: strin
 /**
  * Las ausencias ya cargadas de esa persona que tocan el rango de la novedad.
  *
- * Es lo que hace que «ya estaba» se pueda revisar: `clasificar` descarta una
- * novedad por tocar cualquier ausencia de la persona **sin mirar el tipo**, así
- * que una enfermedad de un día que cae dentro de unas vacaciones de quince se
- * descarta en silencio. El script imprime con qué chocó cada una, tipo
- * incluido, para que la diferencia de tipo se vea.
+ * De **cualquier** tipo, a propósito: es lo que deja revisar los dos lados. Con
+ * las del mismo tipo se decide «ya estaba»; con las de otro tipo, el script
+ * arma la lista de lo que se importa aunque se solape, para que una persona
+ * la vea antes de aprobar.
  */
 export function ausenciasQueSeTocan(
   n: NovedadDePlanilla,
@@ -146,12 +145,16 @@ export const esJustificada = (tipo: string): boolean => tipo !== TIPO_INJUSTIFIC
 /**
  * Qué hacer con cada novedad.
  *
- * - `yaEstaban`: la misma persona ya tiene una ausencia que se solapa con ese
- *   rango. **El tipo no cuenta**: de las 60 que están en los dos lados, 57
- *   coinciden en el tipo y 3 no, y las 3 siguen siendo la misma ausencia
- *   cargada con otro nombre. También cae acá una novedad idéntica a otra que
- *   esta misma corrida ya va a importar, para que una fila repetida en la
- *   planilla no entre dos veces.
+ * - `yaEstaban`: la misma persona ya tiene una ausencia **del mismo tipo** que se
+ *   solapa con ese rango. El tipo SÍ cuenta, y la primera versión lo ignoraba:
+ *   unas vacaciones de 15 días se descartaban porque un permiso de un día caía
+ *   adentro, y eran dos hechos distintos. Un descarte no deja rastro en ningún
+ *   lado; un duplicado se ve y se borra, porque cada fila importada lleva su
+ *   marca en `observaciones`. Entre los dos errores, descartar es el peor. Una
+ *   que se solapa con otro tipo se importa, y el script la lista aparte para
+ *   que una persona la vea (`ausenciasQueSeTocan` da los dos lados).
+ *   También cae acá una novedad idéntica a otra que esta misma corrida ya va a
+ *   importar, para que una fila repetida en la planilla no entre dos veces.
  * - `sinReconocer`: nombre que no empareja con certeza, motivo que no es uno de
  *   los doce, fecha ilegible, o **rango invertido** (`hasta` antes de `desde`).
  *   Este último no se importa aunque la persona y el motivo estén claros: la
@@ -195,7 +198,8 @@ export function clasificar(
       continue;
     }
 
-    const yaCargada = ausenciasQueSeTocan(n, empleadoId, porEmpleado.get(empleadoId) ?? []).length > 0;
+    const yaCargada = ausenciasQueSeTocan(n, empleadoId, porEmpleado.get(empleadoId) ?? [])
+      .some((a) => a.tipo === tipo);
     const clave = `${empleadoId}|${n.desde}|${n.hasta}|${tipo}`;
     if (yaCargada || importadas.has(clave)) {
       yaEstaban.push(n);

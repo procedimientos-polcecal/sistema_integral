@@ -200,18 +200,30 @@ for (const n of sinReconocer) {
 
 const rango = (n: { desde: string; hasta: string }) => `${n.desde || "?"} → ${n.hasta || "?"}`;
 
-titulo(`Ya estaban (${yaEstaban.length}): descartadas por solaparse, SIN mirar el tipo`);
-console.log("  Una marca ‹≠tipo› avisa que el tipo de la planilla no es el de la ausencia que ya estaba.");
+titulo(`Se importan aunque se solapan con una ausencia de OTRO tipo`);
+console.log("  Estas SE IMPORTAN. Se listan porque ahí es donde se escondería un duplicado de verdad:");
+console.log("  si la ausencia que ya está es la misma que la de la planilla con otro motivo, hay que sacarla antes de --escribir.");
+const seSolapanConOtroTipo = aImportar
+  .map((n) => ({ n, choques: ausenciasQueSeTocan(n, n.empleadoId, existentes).filter((a) => a.tipo !== n.tipo) }))
+  .filter((x) => x.choques.length > 0);
+console.log(`  (${seSolapanConOtroTipo.length})`);
+for (const { n, choques } of seSolapanConOtroTipo) {
+  console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}   <- planilla, SE IMPORTA`);
+  for (const a of choques) {
+    console.log(`           ya está: ${a.fecha_desde} → ${a.fecha_hasta}  ${labelTipoAusencia(a.tipo)}`);
+  }
+}
+
+titulo(`Ya estaban (${yaEstaban.length}): descartadas por solaparse con una del MISMO tipo`);
 for (const n of yaEstaban) {
   const empleadoId = emparejarEmpleado(n.nombre, empleados)!;
-  const tipo = tipoDeLaNovedad(n);
   const choques = ausenciasQueSeTocan(n, empleadoId, existentes);
   console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}`);
   if (!choques.length) {
     console.log("           choca con: otra novedad idéntica de la misma planilla (entra una sola vez)");
   }
   for (const a of choques) {
-    const marca = a.tipo !== tipo ? "  ‹≠tipo›" : "";
+    const marca = a.tipo !== tipoDeLaNovedad(n) ? "   (otro tipo; no es lo que la descartó)" : "";
     console.log(`           choca con: ${a.fecha_desde} → ${a.fecha_hasta}  ${labelTipoAusencia(a.tipo)}${marca}`);
   }
 }

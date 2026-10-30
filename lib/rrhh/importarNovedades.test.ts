@@ -92,14 +92,28 @@ describe("clasificar", () => {
 
   it("el solapamiento incluye los dos extremos: terminar el día que otra empieza ya es solaparse", () => {
     const existentes = [
-      { empleado_id: "e1", fecha_desde: "2026-03-12", fecha_hasta: "2026-03-14", tipo: "OTRA" },
+      { empleado_id: "e1", fecha_desde: "2026-03-12", fecha_hasta: "2026-03-14", tipo: "VACACIONES" },
     ];
     expect(clasificar([nov()], emp, existentes).yaEstaban).toHaveLength(1);
   });
 
-  it("el tipo no cuenta para saber si ya estaba: 60 se solapan y sólo 57 con el mismo tipo", () => {
+  // La regla original decía «misma persona y rango que se solapa» y NO miraba el tipo.
+  // Se corrigió al ver lo que costaba: unas vacaciones de 15 días se descartaban porque
+  // un permiso de un día caía adentro, y un descarte no deja rastro en ningún lado. Un
+  // duplicado, en cambio, se ve y se borra: cada fila importada lleva su marca. Entre
+  // los dos errores, descartar es el peor.
+  it("un solapamiento con OTRO tipo no es la misma ausencia: se importa", () => {
     const existentes = [
-      { empleado_id: "e1", fecha_desde: "2026-03-10", fecha_hasta: "2026-03-12", tipo: "PERMISO_PERSONAL" },
+      { empleado_id: "e1", fecha_desde: "2026-03-11", fecha_hasta: "2026-03-11", tipo: "PERMISO_PERSONAL" },
+    ];
+    const r = clasificar([nov({ motivo: "Vacaciones" })], emp, existentes);
+    expect(r.aImportar).toHaveLength(1);
+    expect(r.yaEstaban).toHaveLength(0);
+  });
+
+  it("el mismo tipo sí cuenta aunque el rango sólo se toque en parte", () => {
+    const existentes = [
+      { empleado_id: "e1", fecha_desde: "2026-03-01", fecha_hasta: "2026-03-10", tipo: "VACACIONES" },
     ];
     expect(clasificar([nov()], emp, existentes).yaEstaban).toHaveLength(1);
   });
