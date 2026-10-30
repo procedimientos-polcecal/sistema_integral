@@ -24,6 +24,7 @@ export interface ConteosParaAvisos {
   trituracionSinPlanilla: number;
   syhVencidas: number;
   syhSinCompletar: number;
+  syhFotosSinRespaldar: number;
 }
 
 /**
@@ -100,6 +101,23 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * ata `lib/seguridadHigiene/filtrosUrl.test.ts`.
    */
   { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
+  /*
+   * La foto que lleva más de tres días sin copia en Drive: el respaldo está
+   * **atascado**, que no es lo mismo que «todavía no corrió el cron».
+   *
+   * Existe porque el cron (`syh-respaldo-de-fotos`) falla en silencio por
+   * diseño —la carpeta que falta, la carpeta en «Mi unidad», una foto que no
+   * sale— y el único rastro es una fila en `sincronizaciones` que ninguna
+   * pantalla lee. Las 52 fotos del Excel se perdieron exactamente así: un
+   * respaldo que no respalda y nadie se entera. Este aviso mira **el dato y no
+   * el log**: cuenta fotos, así que cubre los tres casos de una vez.
+   *
+   * **El umbral de tres días es lo que lo hace tolerable**, y no un detalle: el
+   * aviso sale también por push, y sin el umbral sonaría todas las mañanas con
+   * las fotos de ayer, que el cron de esta noche todavía no alcanzó. La cuenta
+   * está en `corteDeFotosAtascadas`, que tiene su test.
+   */
+  { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", href: "/seguridad-higiene" },
 ];
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {

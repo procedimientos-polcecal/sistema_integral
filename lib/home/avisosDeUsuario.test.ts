@@ -47,18 +47,19 @@ describe("sinLoQueNoPuedeAtender — Seguridad e Higiene", () => {
   const syh: Notificacion[] = [
     { id: "syh-vencidas", titulo: "x", cantidad: 1, href: "/x" },
     { id: "syh-sin-completar", titulo: "y", cantidad: 1, href: "/y" },
+    { id: "syh-fotos-sin-respaldar", titulo: "z", cantidad: 1, href: "/z" },
   ];
 
-  it("los dos van sólo a quien puede evaluar y cerrar", () => {
+  it("los tres van sólo a quien puede evaluar y cerrar", () => {
     expect(sinLoQueNoPuedeAtender(syh, { apruebaCompras: true, evaluaSyh: false })).toEqual([]);
-    expect(sinLoQueNoPuedeAtender(syh, { apruebaCompras: true, evaluaSyh: true })).toHaveLength(2);
+    expect(sinLoQueNoPuedeAtender(syh, { apruebaCompras: true, evaluaSyh: true })).toHaveLength(3);
   });
 
   it("evaluar condiciones no habilita los avisos de aprobación, ni al revés", () => {
     const todos = [...avisos, ...syh];
     expect(
       sinLoQueNoPuedeAtender(todos, { apruebaCompras: false, evaluaSyh: true }).map((a) => a.id)
-    ).toEqual(["mant-atrasadas", "syh-vencidas", "syh-sin-completar"]);
+    ).toEqual(["mant-atrasadas", "syh-vencidas", "syh-sin-completar", "syh-fotos-sin-respaldar"]);
     expect(
       sinLoQueNoPuedeAtender(todos, { apruebaCompras: true, evaluaSyh: false }).map((a) => a.id)
     ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);

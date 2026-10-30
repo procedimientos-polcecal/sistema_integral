@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  corteDeFotosAtascadas,
   cualesRespaldar,
+  DIAS_ANTES_DE_AVISAR,
   diagnosticoDeDrive,
   fallaEsDeLaCarpeta,
   MAXIMO_POR_CORRIDA,
@@ -35,15 +37,15 @@ describe("cualesRespaldar", () => {
   });
 
   it("compara instantes y no textos: la zona horaria no cambia el orden", () => {
-    // 23:00 en -03 es 02:00Z del día siguiente: es POSTERIOR a las 12:00Z.
-    const fotos = [foto("tarde", "2026-10-28T23:00:00-03:00"), foto("temprano", "2026-10-29T12:00:00Z")];
+    // Por TEXTO, "2026-10-29T23:00:00-03:00" < "2026-10-30T01:00:00Z" y la
+    // primera iría antes. Por INSTANTE es al revés: 23:00 en -03 son las 02:00Z
+    // del 30, o sea POSTERIOR a la 01:00Z. Sólo un orden por instante da
+    // ["b", "a"]; uno por texto daría ["a", "b"].
+    const a = foto("a", "2026-10-29T23:00:00-03:00");
+    const b = foto("b", "2026-10-30T01:00:00Z");
 
-    // Como texto "2026-10-28…" iría primero igual; como instante, "tarde" (02:00Z
-    // del 29) es anterior a "temprano" (12:00Z del 29): el orden es el mismo,
-    // pero se invierte si se pone la hora de "tarde" a las 23:00 del 29 en -03.
-    expect(cualesRespaldar(fotos, 5).map((f) => f.id)).toEqual(["tarde", "temprano"]);
-    const invertidas = [foto("tarde", "2026-10-29T23:00:00-03:00"), foto("temprano", "2026-10-29T12:00:00Z")];
-    expect(cualesRespaldar(invertidas, 5).map((f) => f.id)).toEqual(["temprano", "tarde"]);
+    expect(cualesRespaldar([a, b], 5).map((f) => f.id)).toEqual(["b", "a"]);
+    expect(cualesRespaldar([b, a], 5).map((f) => f.id)).toEqual(["b", "a"]);
   });
 
   it("desempata por id, para que dos corridas no discutan el orden", () => {
@@ -150,5 +152,18 @@ describe("diagnosticoDeDrive", () => {
     const d = diagnosticoDeDrive(500, "x".repeat(5000));
     expect(d.length).toBeLessThan(900);
     expect(d).toContain("…");
+  });
+});
+
+describe("corteDeFotosAtascadas", () => {
+  it("es tres días antes de ahora, en ISO UTC", () => {
+    expect(DIAS_ANTES_DE_AVISAR).toBe(3);
+    expect(corteDeFotosAtascadas(new Date("2026-11-03T12:00:00Z"))).toBe("2026-10-31T12:00:00.000Z");
+  });
+
+  it("la foto de ayer no es atascada y la de hace cuatro días sí", () => {
+    const corte = corteDeFotosAtascadas(new Date("2026-11-03T12:00:00Z"));
+    expect("2026-11-02T12:00:00.000Z" < corte).toBe(false);
+    expect("2026-10-30T12:00:00.000Z" < corte).toBe(true);
   });
 });

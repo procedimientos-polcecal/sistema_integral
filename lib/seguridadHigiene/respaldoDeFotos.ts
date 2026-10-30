@@ -31,6 +31,25 @@ import { mensajeDeGoogle } from "@/lib/core/google";
  */
 export const MAXIMO_POR_CORRIDA = 40;
 
+/**
+ * Cuántos días puede esperar una foto sin copia antes de que se avise.
+ *
+ * Tres, y es lo que separa «todavía no corrió el cron» de «esto está atascado»:
+ * el cron es diario y toma 40 por corrida, así que una foto sana tarda una
+ * noche, dos si hubo un atraso. Pasados tres días sin copia, algo falla —la
+ * variable, la carpeta, la foto— y alguien tiene que mirar. Sin este margen el
+ * aviso sonaría (también por push) todas las mañanas con las fotos de ayer.
+ */
+export const DIAS_ANTES_DE_AVISAR = 3;
+
+/**
+ * El instante a partir del cual una foto sin respaldar cuenta como atascada: lo
+ * que se compara con `subida_el` (`subida_el < corte`). Devuelve ISO UTC.
+ */
+export function corteDeFotosAtascadas(ahora: Date): string {
+  return new Date(ahora.getTime() - DIAS_ANTES_DE_AVISAR * 86_400_000).toISOString();
+}
+
 export interface FotoParaRespaldar {
   id: string;
   subida_el: string;

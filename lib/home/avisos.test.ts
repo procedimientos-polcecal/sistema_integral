@@ -15,6 +15,21 @@ describe("avisosDeConteos", () => {
     expect(avisos.map((a) => a.id)).toEqual(["rrhh-sin-clasificar", "trituracion-sin-planilla", "syh-sin-completar"]);
   });
 
+  it("las fotos sin respaldar salen como su propio aviso, con id estable, y al final de todo", () => {
+    const avisos = avisosDeConteos({ syhFotosSinRespaldar: 2, syhSinCompletar: 1, rrhhSinClasificar: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["rrhh-sin-clasificar", "syh-sin-completar", "syh-fotos-sin-respaldar"]);
+    expect(avisos[2]).toEqual({
+      id: "syh-fotos-sin-respaldar",
+      titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive",
+      cantidad: 2,
+      href: "/seguridad-higiene",
+    });
+  });
+
+  it("con cero fotos atascadas no avisa", () => {
+    expect(avisosDeConteos({ syhFotosSinRespaldar: 0 })).toEqual([]);
+  });
+
   it("no genera avisos cuando está todo en cero", () => {
     expect(avisosDeConteos({ mantenimientoAtrasadas: 0, comprasEsperandoAprobacion: 0 })).toEqual([]);
   });

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
 import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
+import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -61,7 +62,7 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, filasRitmo,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -115,6 +116,12 @@ async function avisosDeLosModulos(
     // Por eso es una consulta propia: son varias condiciones `or` sobre columnas
     // nullables. `FILTRO_FALTA_ALGO` vive junto a `loQueFalta` y un test las ata.
     contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).or(FILTRO_FALTA_ALGO)),
+    // Las que nunca se respaldaron y llevan más de tres días: ver el aviso en
+    // `avisos.ts`. `subida_el` y no una fecha de corrida, porque lo que importa es
+    // cuánto hace que esa foto está expuesta.
+    contarSiTiene("seguridad_higiene", () =>
+      head("syh_fotos").is("respaldada_en_drive_el", null).lt("subida_el", corteDeFotosAtascadas(new Date()))
+    ),
     traerRitmo(supabase),
   ]);
 
@@ -124,7 +131,7 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
   };
 
   return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
@@ -172,6 +179,7 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
   "syh-vencidas": "evaluaSyh",
   "syh-sin-completar": "evaluaSyh",
+  "syh-fotos-sin-respaldar": "evaluaSyh",
 };
 
 /**

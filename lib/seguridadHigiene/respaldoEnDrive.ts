@@ -55,6 +55,38 @@ const LIMITE_MULTIPART = 5 * 1024 * 1024;
  */
 const PRESUPUESTO_MS = 240_000;
 
+/**
+ * Lo que espera cada pedido a Drive antes de darlo por colgado.
+ *
+ * Sin esto, el corte de `PRESUPUESTO_MS` sólo se mira **entre** fotos: un pedido
+ * que no contesta llegaría a los 300 s de Vercel y la corrida moriría sin pasar
+ * por `registrarSincronizacion` — sin dejar rastro, que es lo contrario de
+ * lo que busca todo esto. Con el tiempo acotado, el pedido colgado es un fallo
+ * de esa foto (un `TimeoutError`) y la corrida sigue y anota.
+ */
+const ESPERA_POR_PEDIDO_MS = 30_000;
+
+/**
+ * Acota una espera que no acepta `AbortSignal` —la bajada de Storage no lo
+ * trae—. No cancela el pedido de fondo, pero libera a la corrida, que es lo que
+ * importa: que llegue a anotar.
+ */
+async function conLimite<T>(espera: PromiseLike<T>, ms: number): Promise<T> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const vencio = new Promise<never>((_, rechazar) => {
+    temporizador = setTimeout(() => {
+      const e = new Error("timeout");
+      e.name = "TimeoutError";
+      rechazar(e);
+    }, ms);
+  });
+  try {
+    return await Promise.race([Promise.resolve(espera), vencio]);
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
 export interface ResultadoDelRespaldo {
   /** Cuántas había sin respaldar al empezar. */
   pendientes: number;
@@ -99,6 +131,7 @@ async function buscarEnLaCarpeta(token: string, carpeta: string, nombre: string)
   });
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(ESPERA_POR_PEDIDO_MS),
   });
   if (!res.ok) {
     const cuerpo = await res.text();
@@ -135,6 +168,7 @@ async function subirALaCarpeta(
         "Content-Type": `multipart/related; boundary=${limite}`,
       },
       body: new Uint8Array(cuerpo),
+      signal: AbortSignal.timeout(ESPERA_POR_PEDIDO_MS),
     }
   );
   if (!res.ok) {
@@ -180,12 +214,12 @@ export async function respaldarLasFotos(admin: Admin, carpeta: string): Promise<
       const yaSubida = await buscarEnLaCarpeta(token, carpeta, nombre);
 
       if (!yaSubida) {
-        const bajada = await admin.storage.from(BUCKET_DE_FOTOS).download(foto.ruta);
+        const bajada = await conLimite(admin.storage.from(BUCKET_DE_FOTOS).download(foto.ruta), ESPERA_POR_PEDIDO_MS);
         if (bajada.error || !bajada.data) {
           // De esta foto y no de la carpeta: se sigue con la siguiente.
           throw new Error(`No se pudo bajar de Storage (${foto.ruta}): ${bajada.error?.message ?? "sin datos"}`);
         }
-        const contenido = Buffer.from(await bajada.data.arrayBuffer());
+        const contenido = Buffer.from(await conLimite(bajada.data.arrayBuffer(), ESPERA_POR_PEDIDO_MS));
         if (contenido.length > LIMITE_MULTIPART) {
           throw new Error(
             `La foto pesa ${(contenido.length / 1024 / 1024).toFixed(1)} MB y el respaldo sube hasta 5 MB en un pedido: ` +
@@ -209,7 +243,12 @@ export async function respaldarLasFotos(admin: Admin, carpeta: string): Promise<
 
       resultado.respaldadas += 1;
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
+      const error =
+        e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")
+          ? `No contestó en ${ESPERA_POR_PEDIDO_MS / 1000} s (${e.message}): se reintenta en la próxima corrida.`
+          : e instanceof Error
+            ? e.message
+            : String(e);
       resultado.fallaron.push({ foto_id: foto.id, error });
 
       if (e instanceof FallaDeDrive && fallaEsDeLaCarpeta(e.estado, e.cuerpo)) {
