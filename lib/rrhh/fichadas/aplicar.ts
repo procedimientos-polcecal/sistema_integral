@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { recalcularEmpleadoPeriodo } from "../engine/recalcular";
-import { diaIso, fechaArgentinaDe } from "../dates";
+import { diaIso, fechaArgentinaDe, localDateTime } from "../dates";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
   rangoDeRecalculo, diasLiquidadosDe, armarLote, legajoPorEmpleadoDe, textoDeMotivo, avisosDeSalteados,
+  marcasYaContadas,
   type TramoImputado, type ContextoDeDecision, type FichadaGuardada, type FichadaAbierta, type DiaSalteado,
-  type DiasDeEmpleado, type LoteAAplicar, type TurnoNuevo,
+  type DiasDeEmpleado, type LoteAAplicar, type TurnoNuevo, type SalidaCerradaPrevia,
 } from "./decidir";
 
 export type { DiasDeEmpleado, TurnoNuevo, LoteAAplicar };
@@ -121,12 +122,12 @@ export async function aplicarDias(
   // Si de una carga anterior quedó un turno sin marcación de salida, se
   // encadena para que el primer dato de este lote pueda cerrarlo en vez de
   // quedar abierto para siempre. Una consulta para todos, no una por empleado.
-  const { encadenables, pendiente } =
+  const { encadenables, pendiente, yaContadas } =
     lote.tipo === "marcas"
       ? await abiertasPrevias(admin, lote.empleados)
-      : { encadenables: new Map<string, FichadaAbierta>(), pendiente: null };
+      : { encadenables: new Map<string, FichadaAbierta>(), pendiente: null, yaContadas: new Map<string, string>() };
 
-  const { turnos, cierres, imputados, avisos } = armarLote(lote, encadenables);
+  const { turnos, cierres, imputados, avisos } = armarLote(lote, encadenables, yaContadas);
   const legajoPorEmpleado = legajoPorEmpleadoDe(lote);
 
   const ctx = await contextoDe(admin, [
@@ -307,10 +308,14 @@ export async function aplicarDias(
 async function abiertasPrevias(
   admin: SupabaseClient,
   todos: DiasDeEmpleado[]
-): Promise<{ encadenables: Map<string, FichadaAbierta>; pendiente: string | null }> {
+): Promise<{
+  encadenables: Map<string, FichadaAbierta>;
+  pendiente: string | null;
+  yaContadas: Map<string, string>;
+}> {
   // Un empleado sin días no tiene primer día desde el cual mirar hacia atrás.
   const empleados = todos.filter((e) => e.dias.length > 0);
-  if (empleados.length === 0) return { encadenables: new Map(), pendiente: null };
+  if (empleados.length === 0) return { encadenables: new Map(), pendiente: null, yaContadas: new Map() };
 
   const primerDia = new Map(empleados.map((e) => [e.empleadoId, diaIso(e.dias[0].fecha)]));
   const legajos = new Map(empleados.map((e) => [e.empleadoId, e.legajo]));
@@ -322,9 +327,30 @@ async function abiertasPrevias(
   );
   const abiertas = filas.map((f) => ({ id: f.id, empleadoId: f.empleado_id, fecha: f.fecha, horaEntrada: f.hora_entrada }));
 
+  // La otra mitad, y es la que arregla el turno de noche: los turnos YA
+  // CERRADOS de antes del lote cuya salida cae DENTRO del lote. Esa salida es
+  // una marca del primer día que ya está contada, y si no se la saca,
+  // `reconciliarTokens` la toma por una entrada (ver `marcasYaContadas`).
+  //
+  // El filtro por `hora_salida` es lo que mantiene la consulta chica: sólo
+  // trae los turnos que cruzan el borde de la ventana, no todos los cerrados
+  // que hay antes. El piso es la medianoche de Argentina del primer día más
+  // temprano del lote.
+  const primerDiaMasTemprano = [...primerDia.values()].sort()[0];
+  const pisoDeSalida = localDateTime(new Date(primerDiaMasTemprano), 0, 0).toISOString();
+  const cerradas = await traerTodo<{ empleado_id: string; fecha: string; hora_salida: string }>((d, h) =>
+    admin.from("fichadas").select("empleado_id, fecha, hora_salida")
+      .not("hora_salida", "is", null).lt("fecha", tope).gte("hora_salida", pisoDeSalida)
+      .order("id").range(d, h)
+  );
+
   return {
     encadenables: elegirAbiertoPrevio(abiertas, primerDia),
     pendiente: avisoDeAbiertasViejas(abiertas, primerDia, legajos),
+    yaContadas: marcasYaContadas(
+      cerradas.map((c): SalidaCerradaPrevia => ({ empleadoId: c.empleado_id, fecha: c.fecha, horaSalida: c.hora_salida })),
+      primerDia
+    ),
   };
 }
 
