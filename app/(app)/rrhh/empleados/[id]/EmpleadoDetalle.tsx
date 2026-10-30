@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -46,8 +46,14 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   const [tab, setTab] = useState<Tab>("fichadas");
   const [editando, setEditando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
-  const [desde, setDesde] = useState(firstOfMonth());
-  const [hasta, setHasta] = useState(today());
+  // El rango puede venir por la URL, y eso es lo que permite que Asistencia
+  // traiga acá el mes que se estaba mirando: sin esto, al entrar desde un
+  // listado de septiembre la ficha abría octubre y parecía que no había datos.
+  // Si no viene, o viene cualquier cosa, el mes en curso como siempre.
+  const params = useSearchParams();
+  const esDia = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const [desde, setDesde] = useState(esDia(params.get("desde")) ?? firstOfMonth());
+  const [hasta, setHasta] = useState(esDia(params.get("hasta")) ?? today());
 
   const [dias, setDias] = useState<any[] | null>(null);
   const [cargandoDias, setCargandoDias] = useState(false);
