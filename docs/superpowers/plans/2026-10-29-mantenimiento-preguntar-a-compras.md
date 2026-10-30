@@ -526,6 +526,12 @@ it("una pregunta ya respondida no se vuelve a contestar", () => {
 
 - [ ] **Step 3: Implementar**
 
+**Dos condiciones antes de avisar**, que `avisarAUnaPersona` no puede tomar por
+su cuenta: que la pregunta **tenga** `creado_por` —la columna es nullable, así
+que `tsc` va a obligar a decidirlo— y que ese autor **no sea quien contesta**.
+Sin la segunda, un administrador con acceso a las dos puntas recibe «Compras
+contestó tu pregunta» de algo que escribió él un segundo antes.
+
 El POST **comprueba `pregunta_id` contra `preguntasAbiertas`** en vez de darlo
 por bueno —una pregunta ya contestada o superada no se vuelve a contestar— e
 inserta una fila `tipo: "RESPUESTA"` con `responde_a` apuntando a la pregunta, **escribe la columna X** con `celdaDeObservacionPrevia` (la respuesta
@@ -635,6 +641,8 @@ git commit -m "feat(compras): configurar quien contesta las consultas de repuest
 - [ ] `node scripts/revisar-responsive.mjs`
 - [ ] Agregar a `docs/MANTENIMIENTO-INTEGRACION.md` la sección de la consulta a
       Compras, y la fila a la tabla de CLAUDE.md.
+- [ ] **`CLAUDE.md:487`** dice que el payload plano «lo mandan los **tres**
+      emisores que hay». Con `avisarAUnaPersona` son cuatro.
 - [ ] **Los dos textos que la Tarea 5 deja falsos al sumar el tercer emisor del
       aviso al instante:** el encabezado de `lib/core/avisoAlInstante.ts`, que
       dice «hoy las cumplen dos cosas», y el párrafo de CLAUDE.md sobre el aviso

@@ -146,7 +146,7 @@ persona.
 puesto caro: `avisosDeUsuario()` cuenta cosas globales y `avisos_fotos` guarda
 una foto global, así que «mi pregunta fue respondida y no la leí» habría sido el
 primer aviso con estado por persona del sistema, y habría roto el modelo de
-movimiento-contra-stock del [spec del 18/10](2026-10-18-avisos-al-instante-design.md).
+movimiento-contra-stock del [spec del 18/10](2026-10-18-a-quien-le-avisa-el-sdg-design.md).
 
 La salida es que **esto es un evento, no un conteo**: se manda una vez, a una
 persona, en el momento en que contesta. Con eso no hace falta ni foto ni marca
