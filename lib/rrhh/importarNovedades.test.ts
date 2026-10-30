@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { TIPOS_AUSENCIA } from "./tiposAusencia";
 import {
-  clasificar, emparejarEmpleado, porQueNoSeReconoce, tipoDesdeElMotivo, type NovedadDePlanilla,
+  ausenciasQueSeTocan, clasificar, emparejarEmpleado, esJustificada, porQueNoSeReconoce,
+  tipoDesdeElMotivo, type NovedadDePlanilla,
 } from "./importarNovedades";
 
 const emp = [
@@ -176,5 +178,31 @@ describe("porQueNoSeReconoce", () => {
     expect(porQueNoSeReconoce(nov({ motivo: "Cualquier cosa" }), emp)).toContain("motivo");
     expect(porQueNoSeReconoce(nov({ desde: "2026-03-12", hasta: "2026-03-10" }), emp)).toContain("invertido");
     expect(porQueNoSeReconoce(nov({ desde: "" }), emp)).toContain("fecha ilegible");
+  });
+});
+
+describe("ausenciasQueSeTocan", () => {
+  const existentes = [
+    { empleado_id: "e1", fecha_desde: "2026-03-01", fecha_hasta: "2026-03-15", tipo: "VACACIONES" },
+    { empleado_id: "e1", fecha_desde: "2026-04-01", fecha_hasta: "2026-04-02", tipo: "OTRA" },
+    { empleado_id: "e2", fecha_desde: "2026-03-10", fecha_hasta: "2026-03-10", tipo: "OTRA" },
+  ];
+
+  it("devuelve las de esa persona que tocan el rango, con su tipo, para que un tipo distinto se vea", () => {
+    const r = ausenciasQueSeTocan(nov({ desde: "2026-03-10", hasta: "2026-03-10", motivo: "Enfermedad/accidente inculpable" }), "e1", existentes);
+    expect(r).toEqual([existentes[0]]);
+  });
+
+  it("no devuelve nada si no se tocan o son de otra persona", () => {
+    expect(ausenciasQueSeTocan(nov({ desde: "2026-05-01", hasta: "2026-05-02" }), "e1", existentes)).toEqual([]);
+  });
+});
+
+describe("esJustificada", () => {
+  it("sólo la ausencia injustificada no lo es: NOVEDADES no tiene columna justificada", () => {
+    expect(esJustificada("INJUSTIFICADA")).toBe(false);
+    for (const [valor] of TIPOS_AUSENCIA) {
+      if (valor !== "INJUSTIFICADA") expect(esJustificada(valor)).toBe(true);
+    }
   });
 });

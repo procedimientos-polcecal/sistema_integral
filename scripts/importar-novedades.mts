@@ -48,7 +48,8 @@ const { fechaDeSheets } = await import("../lib/core/fechaDeSheets.ts");
 const { norm } = await import("../lib/core/texto.ts");
 const { traerTodo } = await import("../lib/core/paginado.ts");
 const { createAdminClient } = await import("../lib/supabase/admin.ts");
-const { clasificar, porQueNoSeReconoce } = await import("../lib/rrhh/importarNovedades.ts");
+const { clasificar, porQueNoSeReconoce, ausenciasQueSeTocan, esJustificada, emparejarEmpleado } = await import("../lib/rrhh/importarNovedades.ts");
+const { tipoDesdeElMotivo } = await import("../lib/rrhh/importarNovedades.ts");
 const { labelTipoAusencia } = await import("../lib/rrhh/tiposAusencia.ts");
 type NovedadDePlanilla = import("../lib/rrhh/importarNovedades.ts").NovedadDePlanilla;
 
@@ -57,8 +58,17 @@ const PESTANA = "NOVEDADES";
 
 const args = process.argv.slice(2);
 const escribir = args.includes("--escribir");
-const valorDe = (nombre: string) => args.find((a) => a.startsWith(`--${nombre}=`))?.split("=")[1];
+// Todo lo que sigue al primer «=» es el valor: un id o una fecha no llevan otro, pero cortar en el
+// segundo callaría un valor mal escrito en vez de rechazarlo.
+const valorDe = (nombre: string) => {
+  const a = args.find((x) => x.startsWith(`--${nombre}=`));
+  return a ? a.slice(nombre.length + 3) : undefined;
+};
 const desdeCorte = valorDe("desde") ?? "2026-01-01";
+if (!/^\d{4}-\d{2}-\d{2}$/.test(desdeCorte) || isNaN(Date.parse(`${desdeCorte}T00:00:00Z`))) {
+  console.error(`--desde tiene que ser una fecha AAAA-MM-DD y llegó «${desdeCorte}».`);
+  process.exit(1);
+}
 const cargadoPorElegido = valorDe("cargado-por");
 
 const db = createAdminClient();
@@ -129,7 +139,11 @@ async function quienCarga(): Promise<{ id: string; etiqueta: string } | null> {
   let id = cargadoPorElegido;
   if (!id) {
     const cuenta = new Map<string, number>();
-    for (const a of existentes) cuenta.set(a.cargado_por_id, (cuenta.get(a.cargado_por_id) ?? 0) + 1);
+    // Una clave vacía o nula no es una persona: no puede ganar la cuenta.
+    for (const a of existentes) {
+      if (!a.cargado_por_id) continue;
+      cuenta.set(a.cargado_por_id, (cuenta.get(a.cargado_por_id) ?? 0) + 1);
+    }
     const ordenado = [...cuenta.entries()].sort((a, b) => b[1] - a[1]);
     if (!ordenado.length) return null;
     // Empate arriba: no se elige, se pide.
@@ -141,6 +155,9 @@ async function quienCarga(): Promise<{ id: string; etiqueta: string } | null> {
   return { id, etiqueta: `${data.nombre} ${data.apellido} <${data.email}>` };
 }
 const quien = await quienCarga();
+
+/** El tipo del enum de una novedad, para comparar contra el de lo que ya estaba. */
+const tipoDeLaNovedad = (n: NovedadDePlanilla) => tipoDesdeElMotivo(n.motivo);
 
 // ── El resumen ──────────────────────────────────────────────
 const titulo = (t: string) => console.log(`\n── ${t} ${"─".repeat(Math.max(0, 70 - t.length))}`);
@@ -154,7 +171,7 @@ titulo("Resultado");
 console.log(`  a importar     ${String(aImportar.length).padStart(4)}`);
 console.log(`  ya estaban     ${String(yaEstaban.length).padStart(4)}`);
 console.log(`  sin reconocer  ${String(sinReconocer.length).padStart(4)}`);
-console.log(`  fuera del corte${String(fueraDelCorte.length).padStart(4)}`);
+console.log(`  fuera del corte${String(fueraDelCorte.length).padStart(4)}   (aparte: no pasaron por la clasificación)`);
 
 titulo("A importar, por mes de inicio");
 const porMes = new Map<string, number>();
@@ -181,44 +198,77 @@ for (const n of sinReconocer) {
   }
 }
 
+const rango = (n: { desde: string; hasta: string }) => `${n.desde || "?"} → ${n.hasta || "?"}`;
+
+titulo(`Ya estaban (${yaEstaban.length}): descartadas por solaparse, SIN mirar el tipo`);
+console.log("  Una marca ‹≠tipo› avisa que el tipo de la planilla no es el de la ausencia que ya estaba.");
+for (const n of yaEstaban) {
+  const empleadoId = emparejarEmpleado(n.nombre, empleados)!;
+  const tipo = tipoDeLaNovedad(n);
+  const choques = ausenciasQueSeTocan(n, empleadoId, existentes);
+  console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}`);
+  if (!choques.length) {
+    console.log("           choca con: otra novedad idéntica de la misma planilla (entra una sola vez)");
+  }
+  for (const a of choques) {
+    const marca = a.tipo !== tipo ? "  ‹≠tipo›" : "";
+    console.log(`           choca con: ${a.fecha_desde} → ${a.fecha_hasta}  ${labelTipoAusencia(a.tipo)}${marca}`);
+  }
+}
+
+titulo(`Fuera del corte (${fueraDelCorte.length}): terminaron antes del ${desdeCorte}`);
+console.log("  Se sacan antes de clasificar. El sistema no tiene datos de 2025 y los reportes son por año:");
+console.log("  una ausencia que termina antes del corte no cambia ningún número de 2026. --desde=AAAA-MM-DD mueve la línea.");
+for (const n of fueraDelCorte) {
+  console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}`);
+}
+
 titulo("Quién figura como cargado por");
 console.log(quien ? `  ${quien.etiqueta}` : "  (no se pudo deducir: pasá --cargado-por=<id de usuario>)");
 
+// Ningún `process.exit` desde acá: con stdout redirigido a un archivo (que es como se
+// guarda la lista de revisión) no vacía lo que se imprimió. Se deja `exitCode` y se termina.
 if (!escribir) {
   console.log("\nNo se escribió nada. Para importar: --escribir");
-  process.exit(0);
+} else {
+  await escribirEnLaBase();
 }
 
-// ── Escribir ────────────────────────────────────────────────
-if (!quien) {
-  console.error("\nNo se puede escribir sin saber quién figura como cargado por.");
-  process.exit(1);
-}
-
-const filas = aImportar.map((n) => {
-  const obs = observacionDeFila.get(n.fila);
-  return {
-    empleado_id: n.empleadoId,
-    fecha_desde: n.desde,
-    fecha_hasta: n.hasta,
-    tipo: n.tipo,
-    // Lo único injustificado por definición es «Ausencia injustificada»: el resto
-    // se cargó como un motivo de la lista y por eso se justifica.
-    justificada: n.tipo !== "INJUSTIFICADA",
-    observaciones: `Importada de la planilla NOVEDADES (fila ${n.fila}).${obs ? ` ${obs}` : ""}`,
-    cargado_por_id: quien.id,
-  };
-});
-
-let insertadas = 0;
-for (let i = 0; i < filas.length; i += 100) {
-  const lote = filas.slice(i, i + 100);
-  const { error } = await db.from("ausencias").insert(lote);
-  if (error) {
-    console.error(`\nFalló el lote que empieza en la ${i + 1}: ${error.message}`);
-    console.error(`Ya estaban insertadas ${insertadas}. Volver a correr es seguro: las que entraron figuran como «ya estaban».`);
-    process.exit(1);
+async function escribirEnLaBase() {
+  if (!quien) {
+    console.error("\nNo se puede escribir sin saber quién figura como cargado por.");
+    process.exitCode = 1;
+    return;
   }
-  insertadas += lote.length;
+
+  const filas = aImportar.map((n) => {
+    const obs = observacionDeFila.get(n.fila);
+    return {
+      empleado_id: n.empleadoId,
+      fecha_desde: n.desde,
+      fecha_hasta: n.hasta,
+      tipo: n.tipo,
+      // NOVEDADES no tiene columna «justificada»: la regla es de esta importación (ver
+      // `esJustificada`) y no algo copiado de la app.
+      justificada: esJustificada(n.tipo),
+      // La marca de la fila es lo que permite deshacer: cada una es identificable y se
+      // borra con un DELETE dirigido. No hay llamada a `auditar()` en este camino.
+      observaciones: `Importada de la planilla NOVEDADES (fila ${n.fila}).${obs ? ` ${obs}` : ""}`,
+      cargado_por_id: quien.id,
+    };
+  });
+
+  let insertadas = 0;
+  for (let i = 0; i < filas.length; i += 100) {
+    const lote = filas.slice(i, i + 100);
+    const { error } = await db.from("ausencias").insert(lote);
+    if (error) {
+      console.error(`\nFalló el lote que empieza en la ${i + 1}: ${error.message}`);
+      console.error(`Ya estaban insertadas ${insertadas}. Volver a correr es seguro: las que entraron figuran como «ya estaban».`);
+      process.exitCode = 1;
+      return;
+    }
+    insertadas += lote.length;
+  }
+  console.log(`\nInsertadas ${insertadas} ausencias. No se recalculó calculos_diarios (a propósito).`);
 }
-console.log(`\nInsertadas ${insertadas} ausencias. No se recalculó calculos_diarios (a propósito).`);

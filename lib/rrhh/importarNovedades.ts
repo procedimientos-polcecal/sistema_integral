@@ -110,6 +110,40 @@ const seSolapan = (aDesde: string, aHasta: string, bDesde: string, bHasta: strin
   aDesde <= bHasta && bDesde <= aHasta;
 
 /**
+ * Las ausencias ya cargadas de esa persona que tocan el rango de la novedad.
+ *
+ * Es lo que hace que «ya estaba» se pueda revisar: `clasificar` descarta una
+ * novedad por tocar cualquier ausencia de la persona **sin mirar el tipo**, así
+ * que una enfermedad de un día que cae dentro de unas vacaciones de quince se
+ * descarta en silencio. El script imprime con qué chocó cada una, tipo
+ * incluido, para que la diferencia de tipo se vea.
+ */
+export function ausenciasQueSeTocan(
+  n: NovedadDePlanilla,
+  empleadoId: string,
+  existentes: Ausencia[]
+): Ausencia[] {
+  return existentes.filter(
+    (a) => a.empleado_id === empleadoId && seSolapan(n.desde, n.hasta, a.fecha_desde, a.fecha_hasta)
+  );
+}
+
+/**
+ * Si la ausencia importada se carga como justificada.
+ *
+ * **NOVEDADES no tiene columna «justificada»**, así que esta regla es de la
+ * importación y no algo copiado de la app: lo único injustificado por
+ * definición es el motivo «Ausencia injustificada»; el resto se cargó como un
+ * motivo de la lista.
+ *
+ * La constante lleva el tipo del enum de `TIPOS_AUSENCIA`: si ese valor se
+ * renombra, esto deja de compilar en vez de marcar como justificada, sin
+ * avisar, una ausencia que no lo es.
+ */
+const TIPO_INJUSTIFICADO: (typeof TIPOS_AUSENCIA)[number][0] = "INJUSTIFICADA";
+export const esJustificada = (tipo: string): boolean => tipo !== TIPO_INJUSTIFICADO;
+
+/**
  * Qué hacer con cada novedad.
  *
  * - `yaEstaban`: la misma persona ya tiene una ausencia que se solapa con ese
@@ -161,9 +195,7 @@ export function clasificar(
       continue;
     }
 
-    const yaCargada = (porEmpleado.get(empleadoId) ?? []).some((a) =>
-      seSolapan(n.desde, n.hasta, a.fecha_desde, a.fecha_hasta)
-    );
+    const yaCargada = ausenciasQueSeTocan(n, empleadoId, porEmpleado.get(empleadoId) ?? []).length > 0;
     const clave = `${empleadoId}|${n.desde}|${n.hasta}|${tipo}`;
     if (yaCargada || importadas.has(clave)) {
       yaEstaban.push(n);
