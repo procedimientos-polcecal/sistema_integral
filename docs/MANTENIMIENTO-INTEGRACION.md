@@ -1750,19 +1750,30 @@ una persona quede en dos turnos el mismo día.
 
 ### De dónde salen las ausencias, y qué se deja afuera a propósito
 
-Sólo de `ausencias`, la tabla de RRHH. Tres decisiones que parecen omisiones y
-no lo son:
+De `ausencias` y de `francos`, las dos tablas de RRHH. Tres decisiones que
+parecen omisiones y no lo son:
 
-- **`francos` está afuera del cruce.** `fecha_tomado` no es el día de descanso:
-  es **el día en que alguien apretó el botón** de "tomado"
-  (`FrancosClient.tsx` manda `hoyEnArgentina()`). Medido: de 217 francos hay 56
-  tomados y sus fechas caen en **tres días**, 35 de ellos el 01/09/2026. Cruzarlo
-  pintaría 35 huecos un lunes cualquiera, y es el mismo error que este proyecto
-  ya evita en las planillas: enlazar al que se le parece es peor que dejar en
-  null. **La consecuencia, asumida:** un franco tomado no abre hueco, y el
-  encargado puede ver programada a alguien que ese día no viene. Las 56 filas
-  viejas no se recuperan —la fecha real no quedó escrita en ningún lado—; el
-  arreglo es de RRHH (pedir el día real al marcarlo) y está nombrado en el spec.
+- **Un franco abre hueco por `fecha_descanso`, nunca por `fecha_tomado`**, y la
+  distinción es el arreglo del 26/10/2026. `fecha_tomado` es **el día en que
+  alguien apretó el botón** de "tomado": hasta esa fecha la pantalla mandaba
+  `hoyEnArgentina()` a mano, así que de 217 francos los 56 tomados caían en
+  **tres días**, 35 de ellos el 01/09/2026 — tres sesiones de alguien
+  poniéndose al día, no tres días en que descansó medio taller. Cruzar por ahí
+  habría pintado 35 huecos un lunes cualquiera.
+  Desde el 26/10/2026 marcar un franco **pide el día que se descansa** y lo
+  guarda en `fecha_descanso`, que es el que este cruce mira. Se puede pedir
+  porque el franco se marca **cuando se formaliza**, así que el día ya se sabe
+  y casi siempre está adelante.
+  **Los 56 viejos quedan con `fecha_descanso` en null y no abren hueco**: su
+  día real no quedó escrito en ningún lado y se dieron por perdidos a pedido.
+  Null es la verdad ahí —el sistema no sabe— y es la misma regla que el
+  proyecto aplica en las planillas: enlazar al que se le parece es peor que
+  dejar en null. Comprobado contra la base el 26/10/2026: filtrando por
+  `fecha_descanso`, la semana del 01/09 devuelve **cero** filas.
+  Lo que pregunta la programación es `noViene()` de
+  `lib/mantenimiento/disponibilidad.ts`, que junta las dos razones —ausencia
+  cargada y franco que se descansa— en un solo lugar, para que la grilla y los
+  candidatos no puedan calcularlas distinto.
 - **`TARDANZA` no cuenta como falta.** Está en el mismo enum que `VACACIONES`,
   pero quien llega tarde viene a trabajar: pintarlo como hueco muestra un
   agujero donde hay una persona, y la primera vez que pase el encargado deja de
