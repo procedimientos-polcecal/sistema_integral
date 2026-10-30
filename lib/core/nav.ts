@@ -229,6 +229,10 @@ export const NAV: NavItem[] = [
     children: [
       { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
+      // Lo que midió el PC Robot en los molinos: no es el parte de fábrica de las
+      // dos de arriba (aquel cuenta producto terminado, éste lo que se muele).
+      { label: "Molinos", href: "/produccion/molinos", modulo: "produccion" },
+      { label: "Molinos del mes", href: "/produccion/molinos/mes", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
