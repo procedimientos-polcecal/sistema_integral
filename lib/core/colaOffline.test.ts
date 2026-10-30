@@ -521,6 +521,33 @@ describe("queHacerConLaNueva", () => {
     });
   });
 
+  it("y un RECHAZO que igual entró también lo lleva: ahí es donde se duplicaba", () => {
+    // Un rechazo deja el formulario cargado para corregir, que es lo correcto
+    // para un 400 y lo peor posible cuando la fila ya existe: el próximo envío
+    // lleva una clave nueva y crea una segunda condición. El 403 de la policy
+    // sobre una condición recién creada es casi inalcanzable, pero la rama no
+    // puede quedar descosida mientras la otra está cerrada.
+    expect(
+      queHacerConLaNueva({
+        ok: false,
+        status: 403,
+        deLaRuta: true,
+        error: "La condición entró con el número 7… la foto no.",
+        yaEntro: "7",
+      }),
+    ).toEqual({
+      accion: "rechazar",
+      error: "La condición entró con el número 7… la foto no.",
+      yaEntro: "7",
+    });
+  });
+
+  it("y un rechazo común sigue sin el campo", () => {
+    expect(
+      queHacerConLaNueva({ ok: false, status: 400, deLaRuta: true, error: "Contá qué viste" }),
+    ).not.toHaveProperty("yaEntro");
+  });
+
   it("y la que no entró no lleva el campo, en vez de llevarlo vacío", () => {
     // Que no esté es inequívoco: la pantalla pregunta por la verdad del campo
     // para decidir si ofrece corregir, y un `yaEntro: null` escrito encima de

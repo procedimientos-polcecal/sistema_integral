@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
-import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { MAXIMO_POR_PEDIDO, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 
 /**
  * Las fotos de una condición: verlas, agregar y sacar.
@@ -228,8 +228,18 @@ export default function FotosDeLaCondicion({
               className="input text-sm"
             />
           </div>
+          {/* El tamaño sale de la constante y no escrito a mano: decía «hasta
+              10 MB» —el techo del bucket— y ese margen no existe por ningún
+              camino, porque todos pasan por una función de Vercel y Vercel
+              corta el cuerpo en 4,5 MB. Prometerlo acá era mandar a alguien a
+              elegir un archivo que iba a rebotar con un error que no es
+              ninguno de los nuestros. */}
           <p className="text-xs text-slate-500">
-            {ocupado ? "Subiendo…" : "Agregar una foto: JPG, PNG, WEBP o HEIC, hasta 10 MB."}
+            {ocupado
+              ? "Subiendo…"
+              : `Agregar una foto: JPG, PNG, WEBP o HEIC, hasta ${Math.round(
+                  MAXIMO_POR_PEDIDO / 1024 / 1024,
+                )} MB.`}
           </p>
         </div>
       )}

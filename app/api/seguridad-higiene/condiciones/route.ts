@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { puedeEditarSyh, tieneAccesoSyh } from "@/lib/seguridadHigiene/auth";
 import { esquemaDeCondicion, problemaDelLugar } from "@/lib/seguridadHigiene/cuerpoDeCondicion";
-import { MAXIMO_EN_LA_COLA, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import { guardarLaFoto } from "@/lib/seguridadHigiene/guardarLaFoto";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { traerTodo } from "@/lib/core/paginado";
@@ -39,7 +39,7 @@ import {
  * que decidir si vuelve a la planta a sacarla: dice cuánto pesa y cuánto entra.
  */
 
-/** Una foto de hasta 10 MB tarda, y el peor caso es la señal de la planta. */
+/** Subir una foto tarda, y el peor caso es la señal de la planta. */
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
@@ -85,13 +85,13 @@ export async function POST(request: Request) {
   // cargada sin ella. Y el mensaje es el de `problemaDeLaFoto`, que dice cuánto
   // pesa y cuánto entra.
   //
-  // **EL MÁXIMO ES EL DE LA COLA Y NO EL DEL BUCKET**, que es más chico: por
-  // acá la foto viaja adentro del multipart del alta, y Vercel corta el cuerpo
-  // de un pedido en 4,5 MB **antes de invocar la función**. Una foto de 6 MB
-  // aceptada acá nunca llegaría a este `if`: rebotaría con un 413 que esta
-  // ruta no contesta. Ver `MAXIMO_EN_LA_COLA`.
+  // **EL MÁXIMO NO ES EL DEL BUCKET SINO EL DE UN PEDIDO**, que es más chico:
+  // Vercel corta el cuerpo en 4,5 MB **antes de invocar la función**, así que
+  // una foto de 6 MB nunca llegaría a este `if` —rebotaría con un 413 que esta
+  // ruta no contesta—. Es uno solo para todos los caminos, y por eso no se
+  // pasa: ver `MAXIMO_POR_PEDIDO`.
   if (foto) {
-    const problemaDeLaSuya = problemaDeLaFoto(foto, MAXIMO_EN_LA_COLA);
+    const problemaDeLaSuya = problemaDeLaFoto(foto);
     if (problemaDeLaSuya) {
       return NextResponse.json({ error: problemaDeLaSuya }, { status: 400 });
     }

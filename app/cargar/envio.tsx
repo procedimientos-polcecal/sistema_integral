@@ -40,6 +40,15 @@ export type Resultado =
        * contesta 400 y quien cargó no tiene dónde corregirlo.
        */
       fechaDelReloj: boolean;
+      /**
+       * El número con el que la fila **ya quedó escrita** aunque el pedido
+       * haya fallado. Un rechazo deja lo escrito en el formulario para
+       * corregirlo, que es lo correcto cuando falta un campo y lo peor
+       * posible cuando la fila ya existe: apretar «Cargar» de nuevo manda una
+       * clave nueva y crea una segunda. Con esto el cartel lo dice y el
+       * formulario se vacía.
+       */
+      yaEntro?: string | null;
     };
 
 /**
@@ -145,7 +154,20 @@ export function CartelDelResultado({
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
         <p>{resultado.error}</p>
-        {resultado.fechaDelReloj && (
+        {/* UN RECHAZO QUE IGUAL DEJÓ LA FILA ESCRITA. Todo lo demás de este
+            cartel está dicho para que alguien corrija y vuelva a apretar el
+            botón, que es lo que hay que hacer cuando falta un campo — y es lo
+            peor posible acá, porque el próximo envío lleva una clave nueva y
+            crea una segunda. Por eso se dice primero y en negrita, y por eso
+            el formulario se vacía en vez de quedar cargado. */}
+        {resultado.yaEntro && (
+          <p className="mt-1 font-semibold">
+            Igual entró, con el número {resultado.yaEntro}: no vuelvas a
+            apretar el botón o van a quedar dos. Lo que faltó fue la foto, y se
+            le puede agregar después desde su ficha.
+          </p>
+        )}
+        {resultado.fechaDelReloj && !resultado.yaEntro && (
           <p className="mt-1 text-xs">
             La fecha de esta carga la pone el reloj de este teléfono, que es el
             único que hay sin señal. Si el servidor habla de la fecha: corregí la

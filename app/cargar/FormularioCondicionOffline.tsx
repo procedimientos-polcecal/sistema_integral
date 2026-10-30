@@ -4,7 +4,7 @@ import { useState } from "react";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
-import { MAXIMO_EN_LA_COLA, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
+import { MAXIMO_POR_PEDIDO, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import type { Catalogos } from "./catalogos";
 import { CartelDelResultado, loQueDijo, type Resultado } from "./envio";
 
@@ -115,12 +115,10 @@ export default function FormularioCondicionOffline({
       setGeneracionDeLaFoto((n) => n + 1);
       return;
     }
-    // El máximo de **la cola**, que es más chico que el del bucket: por este
-    // camino la foto viaja adentro del multipart del alta y Vercel corta el
-    // cuerpo en 4,5 MB antes de que la ruta exista. Rechazarla acá es la
-    // diferencia entre decírselo a alguien que todavía tiene el teléfono en la
-    // mano y que la carga rebote dentro de tres días. Ver `MAXIMO_EN_LA_COLA`.
-    const problema = problemaDeLaFoto(archivo, MAXIMO_EN_LA_COLA);
+    // Rechazarla acá es la diferencia entre decírselo a alguien que todavía
+    // tiene el teléfono en la mano y que la carga rebote dentro de tres días.
+    // El máximo es el de un pedido y no el del bucket: ver `MAXIMO_POR_PEDIDO`.
+    const problema = problemaDeLaFoto(archivo);
     if (problema) {
       setError(problema);
       setFoto(null);
@@ -177,7 +175,11 @@ export default function FormularioCondicionOffline({
       // es lo único que hay, y borrarlo obligaría a tipear todo de nuevo. La
       // foto se va con lo demás: dejarla puesta la mandaría pegada a la
       // condición siguiente, que es de otra cosa.
-      if (salida.estado !== "rechazada") {
+      // **Y TAMBIÉN SE VACÍA CUANDO EL RECHAZO DICE QUE IGUAL ENTRÓ.** Dejarlo
+      // cargado es la invitación a apretar de nuevo, y de ese segundo envío
+      // sale una clave nueva y una segunda condición con el mismo texto. El
+      // cartel queda arriba diciendo con qué número entró.
+      if (salida.estado !== "rechazada" || salida.yaEntro) {
         setCampos(VACIO);
         setFoto(null);
         setEsHeredada(false);
@@ -241,7 +243,7 @@ export default function FormularioCondicionOffline({
         ) : (
           <span className="block text-xs text-slate-500">
             Es opcional, pero es lo único que después no se puede volver a
-            sacar. Hasta {Math.round(MAXIMO_EN_LA_COLA / 1024 / 1024)} MB: una
+            sacar. Hasta {Math.round(MAXIMO_POR_PEDIDO / 1024 / 1024)} MB: una
             más grande no sale del teléfono.
           </span>
         )}

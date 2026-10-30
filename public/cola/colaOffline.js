@@ -762,7 +762,7 @@ function texto(valor) {
  * decidir— para saber qué número mostrar o qué error guardar.
  *
  * @typedef {{ accion: "listo", numero: string, advertencia: string | null }
- *         | { accion: "rechazar", error: string }
+ *         | { accion: "rechazar", error: string, yaEntro?: string }
  *         | { accion: "encolar", intentos: number, ultimoError: string | null, yaEntro?: string }} QueHacerConLaNueva
  */
 
@@ -786,15 +786,28 @@ export function queHacerConLaNueva(resultado) {
   if (resultado.ok) {
     return { accion: "listo", numero: resultado.numero, advertencia: resultado.advertencia };
   }
-  if (!convieneReintentar(resultado)) return { accion: "rechazar", error: resultado.error };
+  // El campo va **sólo si vino**, en los dos veredictos: una carga que todavía
+  // no está escrita de ningún lado no puede nacer diciendo que sí. Ver el
+  // bloque de `CargaEnCola`.
+  const loQueYaEntro = resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {};
+
+  // **Y TAMBIÉN EN EL RECHAZO, QUE ES LA RAMA FÁCIL DE OLVIDAR.** Un rechazo
+  // deja el formulario abierto con todo lo escrito adentro, para corregirlo:
+  // es lo correcto para un 400 —falta un campo— y es exactamente lo que no hay
+  // que hacer cuando la fila ya existe, porque el próximo envío lleva una
+  // clave nueva y crea una segunda condición. Sin este campo la pantalla no
+  // tiene cómo saberlo. Hoy sólo se llega acá con un 403 de la policy sobre
+  // una condición recién creada por la misma sesión, que es casi imposible;
+  // dejarlo descosido en una sola de las dos ramas es lo que hace que un día
+  // deje de serlo.
+  if (!convieneReintentar(resultado)) {
+    return { accion: "rechazar", error: resultado.error, ...loQueYaEntro };
+  }
   return {
     accion: "encolar",
     intentos: 1,
     ultimoError: resultado.error,
-    // El campo va **sólo si vino**: una carga que todavía no está escrita de
-    // ningún lado no puede nacer diciendo que sí. Ver el bloque de
-    // `CargaEnCola`.
-    ...(resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {}),
+    ...loQueYaEntro,
   };
 }
 

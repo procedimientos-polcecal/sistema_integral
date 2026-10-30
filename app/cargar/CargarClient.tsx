@@ -351,11 +351,14 @@ export default function CargarClient() {
         };
       }
       if (queHacer.accion === "rechazar") {
-        // El texto de la ruta, sin traducir.
+        // El texto de la ruta, sin traducir. Y, si la ruta dijo que la fila ya
+        // quedó escrita pese al fallo, eso viaja aparte: es lo que evita que
+        // el formulario quede listo para mandar un duplicado.
         return {
           estado: "rechazada",
           error: queHacer.error,
           fechaDelReloj: !laPusoUnaPersona,
+          yaEntro: queHacer.yaEntro ?? null,
         };
       }
       const salida = await encolar(
@@ -822,11 +825,30 @@ function LaCola({
                   decirlo con todas las letras, porque la lista entera está
                   escrita sobre el supuesto contrario —«todavía no tiene
                   número»— y alguien que lea eso va a cargarla de nuevo. */}
+              {/* Y QUÉ HACER DEPENDE DE SI SE REINTENTA SOLA, que es lo mismo
+                  que decir `estado`. No se vuelve a mirar el código HTTP acá:
+                  `estado` **es** el resultado de `clasificarFallo`, ya
+                  materializado por `despuesDelIntento`, y volver a decidirlo
+                  en la pantalla sería la misma regla escrita dos veces — que
+                  es justo de lo que este archivo se cuida. Decía siempre «para
+                  eso está Mandar ahora»: con una `parada` eso contradice al
+                  texto del servidor que está dos renglones más arriba, porque
+                  reintentar no la va a guardar nunca. */}
               {carga.yaEntro && (
                 <p className="mt-1 text-xs text-amber-800">
-                  Esto ya entró con el número {carga.yaEntro}: <b>no lo cargues
-                  de nuevo</b>. Lo que falta es la foto, y para eso está
-                  «Mandar ahora».
+                  Esto ya entró con el número {carga.yaEntro}:{" "}
+                  <b>no lo cargues de nuevo</b>.{" "}
+                  {carga.estado === "parada" ? (
+                    <>
+                      Lo que falta es la foto, y <b>reintentar no la va a
+                      guardar</b>: mirá arriba qué dijo el servidor. Borrar
+                      esta carga <b>no borra la condición</b> — la foto se le
+                      puede agregar después desde su ficha, en Seguridad e
+                      Higiene.
+                    </>
+                  ) : (
+                    <>Lo que falta es la foto, y para eso está «Mandar ahora».</>
+                  )}
                 </p>
               )}
 
