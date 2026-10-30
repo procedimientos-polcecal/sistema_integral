@@ -183,6 +183,26 @@ describe("clasificar", () => {
     );
     expect(r.aImportar.map((n) => n.fila)).toEqual([2, 3]);
   });
+
+  it("dos novedades de la misma persona con LAS MISMAS fechas y distinto tipo entran las dos", () => {
+    // El hueco que R30 abrió por el otro lado, escrito a propósito. El freno
+    // intra-corrida es la igualdad exacta de persona, fechas y tipo, así que un
+    // motivo distinto la deja pasar; y `clasificar` compara contra lo que está
+    // en la base, nunca contra lo que esta misma corrida encoló. Si las dos
+    // filas son el mismo hecho tipeado con dos motivos, entran las dos.
+    // No se resuelve acá —adivinar cuál es la buena es enlazar al que se le
+    // parece—: el script las imprime en su propia lista para que se vean.
+    const r = clasificar(
+      [
+        nov({ fila: 2, desde: "2026-03-10", hasta: "2026-03-12", motivo: "Vacaciones" }),
+        nov({ fila: 3, desde: "2026-03-10", hasta: "2026-03-12", motivo: "Permiso personal" }),
+      ],
+      emp,
+      []
+    );
+    expect(r.aImportar.map((n) => n.fila)).toEqual([2, 3]);
+    expect(r.yaEstaban).toEqual([]);
+  });
 });
 
 describe("porQueNoSeReconoce", () => {
@@ -215,8 +235,25 @@ describe("ausenciasQueSeTocan", () => {
 describe("esJustificada", () => {
   it("sólo la ausencia injustificada no lo es: NOVEDADES no tiene columna justificada", () => {
     expect(esJustificada("INJUSTIFICADA")).toBe(false);
-    for (const [valor] of TIPOS_AUSENCIA) {
-      if (valor !== "INJUSTIFICADA") expect(esJustificada(valor)).toBe(true);
-    }
+    // Los once se listan a mano a propósito. Recorrer `TIPOS_AUSENCIA` saltando
+    // el que cumple `valor !== "INJUSTIFICADA"` es escribir la implementación
+    // del otro lado del `expect`: no podría fallar nunca, y con el catálogo
+    // vacío el bucle no afirmaría nada y el test pasaría igual.
+    expect(TIPOS_AUSENCIA).toHaveLength(12);
+    const justificados = [
+      "LICENCIA_ART",
+      "VACACIONES",
+      "LICENCIA_GREMIAL",
+      "PERMISO_PERSONAL",
+      "ENFERMEDAD_ACCIDENTE_INCULPABLE",
+      "LICENCIA_SIN_GOCE_SUELDO",
+      "SUSPENSION",
+      "FALLECIMIENTO_FAMILIAR",
+      "EXAMEN_ESTUDIO",
+      "TARDANZA",
+      "OTRA",
+    ];
+    expect(justificados).toHaveLength(11);
+    for (const valor of justificados) expect(esJustificada(valor)).toBe(true);
   });
 });

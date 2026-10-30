@@ -28,6 +28,9 @@
 //   npx tsx scripts/importar-novedades.mts --escribir         inserta
 //   --desde=2026-01-01   ignora lo que terminó antes (por defecto, el 1/1/2026)
 //   --cargado-por=<id>   usuario que figura como quien las cargó
+//   --esperaba=N         no escribe si la lista dejó de tener N filas. La
+//                        planilla sigue viva mientras alguien revisa: se corre
+//                        en seco, se mira, y se pasa ese número al escribir.
 //
 // Necesita `GOOGLE_SERVICE_ACCOUNT_JSON` y las claves de Supabase en `.env.local`.
 import { readFileSync, existsSync } from "node:fs";
@@ -48,8 +51,7 @@ const { fechaDeSheets } = await import("../lib/core/fechaDeSheets.ts");
 const { norm } = await import("../lib/core/texto.ts");
 const { traerTodo } = await import("../lib/core/paginado.ts");
 const { createAdminClient } = await import("../lib/supabase/admin.ts");
-const { clasificar, porQueNoSeReconoce, ausenciasQueSeTocan, esJustificada, emparejarEmpleado } = await import("../lib/rrhh/importarNovedades.ts");
-const { tipoDesdeElMotivo } = await import("../lib/rrhh/importarNovedades.ts");
+const { clasificar, porQueNoSeReconoce, ausenciasQueSeTocan, esJustificada, emparejarEmpleado, tipoDesdeElMotivo } = await import("../lib/rrhh/importarNovedades.ts");
 const { labelTipoAusencia } = await import("../lib/rrhh/tiposAusencia.ts");
 type NovedadDePlanilla = import("../lib/rrhh/importarNovedades.ts").NovedadDePlanilla;
 
@@ -70,6 +72,25 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(desdeCorte) || isNaN(Date.parse(`${desdeCorte}T0
   process.exit(1);
 }
 const cargadoPorElegido = valorDe("cargado-por");
+
+/*
+ * `--esperaba=N` ata la corrida que se revisó con la que escribe.
+ *
+ * Son dos lecturas distintas de una planilla que sigue viva, y YA DIVERGIERON:
+ * la corrida del 30/10/2026 a las 09:42 clasificó 133 a importar y la de esa
+ * misma tarde, 136 — RRHH cargó tres filas en el medio. Sin esto, alguien lee
+ * la lista, dice que sí, corre `--escribir` al otro día y entran filas que
+ * nunca pasaron por un ojo humano, que es exactamente lo que las listas
+ * completas de este script existen para evitar.
+ *
+ * No alcanza con mirar el total de la planilla: lo que importa es cuántas
+ * entran, y eso también se mueve cuando alguien carga una ausencia en el SdG.
+ */
+const esperaba = valorDe("esperaba");
+if (esperaba !== undefined && !/^\d+$/.test(esperaba)) {
+  console.error(`--esperaba tiene que ser un número entero y llegó «${esperaba}».`);
+  process.exit(1);
+}
 
 const db = createAdminClient();
 
@@ -183,6 +204,20 @@ const porTipo = new Map<string, number>();
 for (const n of aImportar) porTipo.set(n.tipo, (porTipo.get(n.tipo) ?? 0) + 1);
 for (const [t, c] of [...porTipo].sort((a, b) => b[1] - a[1])) console.log(`  ${String(c).padStart(4)}  ${labelTipoAusencia(t)}`);
 
+// La lista que SE ESCRIBE, fila por fila. Las otras cuatro son lo que queda
+// afuera, y se imprimieron enteras antes que ésta; que la que termina en la
+// base saliera sólo como dos tablas de conteo era el mismo agujero que esas
+// cuatro cerraron, en el único lugar donde una fila mal leída es irreversible.
+titulo(`A importar (${aImportar.length}): esto es lo que se escribe`);
+for (const n of aImportar) {
+  const obs = observacionDeFila.get(n.fila);
+  console.log(
+    `  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${n.desde} → ${n.hasta}  ${labelTipoAusencia(n.tipo)}` +
+      (esJustificada(n.tipo) ? "" : "   (se carga como NO justificada)") +
+      (obs ? `\n           obs: ${obs}` : "")
+  );
+}
+
 titulo(`Sin reconocer (${sinReconocer.length}): las resuelve una persona`);
 const normApellido = (e: { apellido: string }) => norm(e.apellido);
 for (const n of sinReconocer) {
@@ -200,13 +235,14 @@ for (const n of sinReconocer) {
 
 const rango = (n: { desde: string; hasta: string }) => `${n.desde || "?"} → ${n.hasta || "?"}`;
 
-titulo(`Se importan aunque se solapan con una ausencia de OTRO tipo`);
-console.log("  Estas SE IMPORTAN. Se listan porque ahí es donde se escondería un duplicado de verdad:");
-console.log("  si la ausencia que ya está es la misma que la de la planilla con otro motivo, hay que sacarla antes de --escribir.");
 const seSolapanConOtroTipo = aImportar
   .map((n) => ({ n, choques: ausenciasQueSeTocan(n, n.empleadoId, existentes).filter((a) => a.tipo !== n.tipo) }))
   .filter((x) => x.choques.length > 0);
-console.log(`  (${seSolapanConOtroTipo.length})`);
+titulo(`Se importan aunque se solapan con una ausencia de OTRO tipo (${seSolapanConOtroTipo.length})`);
+console.log("  Estas SE IMPORTAN. Se listan porque ahí es donde se escondería un duplicado de verdad:");
+console.log("  si la ausencia que ya está es la misma que la de la planilla con otro motivo, hay que sacarla antes de --escribir.");
+console.log("  Y cuesta más que una fila de más: el reporte mensual suma por ausencia y no unifica rangos,");
+console.log("  así que cada día compartido se cuenta DOS VECES mientras las dos sigan cargadas.");
 for (const { n, choques } of seSolapanConOtroTipo) {
   console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}   <- planilla, SE IMPORTA`);
   for (const a of choques) {
@@ -214,12 +250,35 @@ for (const { n, choques } of seSolapanConOtroTipo) {
   }
 }
 
+// El mismo riesgo, pero entre dos filas de la planilla. El freno intra-corrida es la
+// igualdad EXACTA de persona, fechas y tipo, y `clasificar` compara sólo contra lo que
+// ya está en la base, nunca contra lo que esta corrida encoló: dos filas del mismo
+// hecho tipeadas con motivos distintos entran las dos y no caen en ninguna otra lista.
+const seTocanEntreSi: { a: (typeof aImportar)[number]; b: (typeof aImportar)[number] }[] = [];
+for (let i = 0; i < aImportar.length; i++) {
+  for (let j = i + 1; j < aImportar.length; j++) {
+    const a = aImportar[i];
+    const b = aImportar[j];
+    if (a.empleadoId === b.empleadoId && a.desde <= b.hasta && b.desde <= a.hasta) seTocanEntreSi.push({ a, b });
+  }
+}
+titulo(`Se pisan entre sí, dentro de esta misma corrida (${seTocanEntreSi.length})`);
+console.log("  Las dos ENTRAN: no se adivina cuál es la buena. Si son el mismo hecho con dos motivos, sacar una.");
+for (const { a, b } of seTocanEntreSi) {
+  console.log(`  filas ${a.fila} y ${b.fila}  ${a.nombre}`);
+  console.log(`           ${a.desde} → ${a.hasta}  ${labelTipoAusencia(a.tipo)}`);
+  console.log(`           ${b.desde} → ${b.hasta}  ${labelTipoAusencia(b.tipo)}`);
+}
+
 titulo(`Ya estaban (${yaEstaban.length}): descartadas por solaparse con una del MISMO tipo`);
 for (const n of yaEstaban) {
   const empleadoId = emparejarEmpleado(n.nombre, empleados)!;
   const choques = ausenciasQueSeTocan(n, empleadoId, existentes);
   console.log(`  fila ${String(n.fila).padStart(3)}  ${n.nombre}  ${rango(n)}  ${n.motivo}`);
-  if (!choques.length) {
+  // Lo que la descartó es un choque del MISMO tipo; si no hay ninguno, la descartó
+  // una fila idéntica de esta misma planilla. Mirar `choques` entero escondía el
+  // motivo verdadero cuando además había choques de otro tipo, que no descartan nada.
+  if (!choques.some((a) => a.tipo === tipoDeLaNovedad(n))) {
     console.log("           choca con: otra novedad idéntica de la misma planilla (entra una sola vez)");
   }
   for (const a of choques) {
@@ -238,9 +297,23 @@ for (const n of fueraDelCorte) {
 titulo("Quién figura como cargado por");
 console.log(quien ? `  ${quien.etiqueta}` : "  (no se pudo deducir: pasá --cargado-por=<id de usuario>)");
 
+const desajuste = esperaba !== undefined && aImportar.length !== Number(esperaba);
+if (esperaba !== undefined) {
+  titulo("Control contra la lista que se revisó");
+  console.log(
+    desajuste
+      ? `  --esperaba=${esperaba}, y hoy son ${aImportar.length}. La lista se movió desde que se revisó.`
+      : `  --esperaba=${esperaba}: coincide con lo que se va a escribir.`
+  );
+}
+
 // Ningún `process.exit` desde acá: con stdout redirigido a un archivo (que es como se
 // guarda la lista de revisión) no vacía lo que se imprimió. Se deja `exitCode` y se termina.
-if (!escribir) {
+if (escribir && desajuste) {
+  console.error("\nNo se escribe nada: la lista cambió desde que se revisó.");
+  console.error("Volvé a correr en seco, mirá las filas nuevas, y pasá el número nuevo en --esperaba.");
+  process.exitCode = 1;
+} else if (!escribir) {
   console.log("\nNo se escribió nada. Para importar: --escribir");
 } else {
   await escribirEnLaBase();
