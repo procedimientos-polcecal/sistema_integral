@@ -233,6 +233,7 @@ export const NAV: NavItem[] = [
       // dos de arriba (aquel cuenta producto terminado, éste lo que se muele).
       { label: "Molinos", href: "/produccion/molinos", modulo: "produccion" },
       { label: "Molinos del mes", href: "/produccion/molinos/mes", modulo: "produccion" },
+      { label: "Paradas sin explicar", href: "/produccion/molinos/sin-explicar", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
