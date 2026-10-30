@@ -327,3 +327,203 @@ Producción, y porque el spec y el plan viven con ese nombre:
 [spec](superpowers/specs/2026-09-15-produccion-envases-design.md) ·
 [plan](superpowers/plans/2026-09-15-produccion-envases.md). Lo que hay que saber
 de él está en [docs/CALIDAD-ENVASES.md](CALIDAD-ENVASES.md).
+
+## Los molinos: lo que mide el robot, y por qué no se suma con el parte (30/10/2026)
+
+Un frente aparte dentro de Producción, que no toca nada de lo anterior. El
+diseño está en
+[el spec](superpowers/specs/2026-10-21-produccion-molinos-desde-el-robot-design.md),
+el plan en
+[el plan](superpowers/plans/2026-10-29-produccion-molinos-desde-el-robot.md), y el
+libro de Excel que esto reemplaza, con los cuatro errores que se le encontraron,
+en [PRODUCCION-FILLERS-MACRO.md](PRODUCCION-FILLERS-MACRO.md). Cómo llegan los
+zips a Drive está en [PRODUCCION-FILLERS-SUBIDA.md](PRODUCCION-FILLERS-SUBIDA.md).
+Acá quedan las decisiones y las trampas que no se deducen del código.
+
+### Qué mide, y por qué no se suma con el parte de fábrica
+
+El `PCRobot.exe` de cada molino (**molino Filler 1** y **molino Filler 2
+(Calera)**; la palabra va siempre acompañada, porque en `/calidad/ensayos`
+"Filler 1" es un producto) cuenta **lo que entra al molino**. El parte del
+capataz, que es todo lo de arriba, mide **producto terminado**. Son dos
+mediciones del mismo día y **no se suman ni se restan**: una es piedra y la otra
+es lo que salió de la planta, con stock en el medio. Si alguna pantalla llega a
+mostrar las dos, la columna tiene que decir de cuál habla.
+
+Lo que sí agrega es lo que el parte no tiene: **los turnos 20→00 y 00→04 sólo
+existen acá**. El parte registra 4→12 y 12→20 y las otras ocho horas no se
+anotan en ningún lado. Y por eso "turno" tiene en este frente un significado
+propio: **los cuatro cortes del contador del robot**, con los mismos números de
+reloj que el turno del parte (4→12, 12→20) pero sin ser lo mismo. El sello de
+cada fila es la hora de **cierre** —23:59, 3:59, 11:59 y 19:59—, y hay una sola
+duración teórica por corte: 240, 240, 480 y 480 minutos.
+
+Los cinco indicadores salen de dos números del robot, toneladas y minutos de
+marcha. **Las horas no trabajadas no se tipean: se despejan** (duración teórica
+menos marcha), por la misma razón que en Trituración — un número tipeado al lado
+es el que queda viejo. Lo único que carga una persona es **el motivo de una
+parada**.
+
+### Las cuatro patologías del dato, y cómo se resuelve cada una
+
+Las cuatro se encontraron midiendo y las cuatro tienen que seguir resueltas
+antes de mostrar un indicador, porque ninguna avisa: un número mal no se
+distingue de uno bien. Están fijadas como tests con los casos reales en
+`lib/produccion/molinos/turnos.test.ts`.
+
+1. **El turno lo decide la hora de cierre y nunca la posición de la columna.**
+   La macro viejaba los encabezados en el orden en que venían las columnas, y el
+   renglón de las 19:59 aparecía bajo "Turno 20-00". Con las cuatro columnas
+   siempre sumadas juntas no cambiaba ningún total; acá sí, porque el turno es el
+   grano que se guarda. (El orden del enum `20_00` primero tampoco es el del
+   reloj: todo se ordena en JS por `TURNOS_EN_ORDEN_DE_RELOJ`.)
+2. **Un día sin ninguna fila es planta cerrada**, no 24 horas de parada.
+   Filler 1 tiene 22 días así en ocho meses —domingos y feriados nacionales— y
+   contarlos como parada inventaría 528 horas de molino detenido. Ese día no
+   cuenta ni en el numerador ni en el denominador. Un día no operativo **no
+   existe en la base**: se reconstruye, y sólo **estrictamente entre** el primer
+   y el último día con datos; fuera de ese rango se dice "sin datos", porque un
+   día que el zip todavía no trae no es una planta parada.
+3. **Pero un turno en cero dentro de un día con filas SÍ es una parada.** Los
+   dos robots dicen lo mismo de maneras distintas: Filler 1 no deja filas el
+   domingo, Filler 2 **nunca** deja un día sin filas y en cambio escribe ceros.
+   El 12/10, feriado, Filler 1 no tiene filas (queda bien excluido) y Filler 2
+   tiene cuatro ceros. La tentación es leer "cuatro ceros" como "no operó"; se
+   decidió que no, porque los 34 días en cero de Filler 2 no son domingos (hay
+   11 domingos, pero también ocho lunes y cuatro martes), y si la Calera no
+   muele un martes alguien lo tiene que explicar. Para el caso real que esa
+   regla deja afuera —el domingo, el feriado, la parada de planta programada—
+   hay una salida explícita: **una persona marca el día como "planta parada"**,
+   que cubre los cuatro turnos de una vez. El sistema no lo infiere porque no
+   puede: la utilización de Filler 2 sube a 87 % si se marcan esos 34 días, y esa
+   diferencia es exactamente la decisión humana.
+4. **Un turno que falta se acumula en el siguiente.** Cuando el robot no corta
+   un turno, sus minutos y sus kilos aparecen en la fila que sigue, y esa fila
+   mide más que su duración teórica (hay una de 1.013 minutos en un bloque de
+   480). Se resuelve así, en este orden: bajo 10 minutos de exceso es deriva del
+   reloj y la teórica se toma como la marcha; por encima, se mira hacia atrás
+   hasta la última fila presente y, si los faltantes explican el exceso, la fila
+   queda **acumulada** y su teórica es la suma de la racha; si no, queda
+   **inconsistente**. No se promedia nunca.
+
+**La racha se corta en un día no operativo y no lo atraviesa.** Es la decisión
+más cara de las cuatro y la que más fácil se "simplifica" después, así que va con
+el número: contar las 24 horas de un domingo cerrado como disponibilidad **baja
+la utilización de Filler 1 de 85,3 % a 82,0 %** y convierte en acumulados a
+turnos que no se pueden explicar. El motivo es que del día que la planta estuvo
+cerrada **no se sabe** cuánto de la marcha informada ocurrió entonces: esas horas
+no son disponibilidad sino una suposición. Lo que quedó antes del corte pasa a
+huérfano, y si el exceso sigue sin explicarse, el turno es inconsistente. Hubo
+una versión que sí la atravesaba —era la única que daba los 2.160 minutos de un
+caso del spec—, y el costo fue 949 horas no trabajadas contra las 737 reales:
+**el test que la exigía estaba mal y se corrigió**; el 09/03 queda acumulado con
+720 minutos teóricos, no 2.160.
+
+**Un turno inconsistente pierde sus horas y conserva sus toneladas.** Las
+toneladas las pesó una balanza y el problema es del reloj; descartarlas sería
+perder producción real. En pantalla muestra la marcha tachada y la parada en
+"—": sus horas no se afirman, sus toneladas cuentan. **Un huérfano no aporta
+nada**: es un turno que falta sin que ninguna fila posterior lo absorba, no es
+parada y no entra en ningún indicador, pero **se lista** ("el robot no informó
+este turno"). El caso de todos los días es el de hoy: el zip se corta a las
+09:00, así que el día en curso llega con un solo turno, y contar los otros tres
+como parada le pondría al día de hoy dieciséis horas de detención fija y dos o
+tres "turnos sin explicar" falsos, para siempre. Un turno que una racha absorbe
+no tiene renglón propio (la pantalla lo muestra "Cubierto", apuntando al
+acumulado), y **los huérfanos son los que ninguna racha absorbió, no todos los
+faltantes**: contados de la segunda manera dan 44 en vez de 23, y ese 44 estuvo
+en el spec hasta el 29/10/2026.
+
+### Lo que no se guarda, y lo que se guarda pero no se muestra
+
+**La etiqueta `MATERIAL` cruda de `DAT00000001` no se guarda.** Es confiable sólo
+cuando el turno molió un material solo, y 127 de 809 turnos (15,7 %) mezclaron
+dos; la macro manda el turno entero al de la etiqueta, y eso deja **4.034 de
+35.797 toneladas (11,3 %) en el material equivocado**, con la caliza inflada un
+21 %. El reparto bueno está en `DAT00000003..06` y es lo que se guarda en
+`porMaterial`, sin mostrarse —nada por material en las pantallas—. Tener la
+etiqueta cruda al lado es ofrecer el camino corto y equivocado, así que no está.
+
+Y una trampa del reparto: **`porMaterial` no es una descomposición exacta de
+`kg`.** En 65 de 842 turnos de Filler 1 la suma del reparto difiere de los kg de
+`DAT00000001` —en 64 el kg es mayor, en uno menor, hasta 695 kg— porque son
+contadores distintos del robot. El parser no lo fuerza. **Quien lo consuma
+normaliza por su propia suma y nunca por `kg`.**
+
+### Importación
+
+El zip es una foto completa desde febrero, no las novedades, así que la
+importación **no acumula: reconcilia**, y correrla dos veces no cambia nada
+(releer el mismo zip escribe 0 filas; se comprobó contra la base real). Corre por
+cron a las 13:00 UTC y con un botón, y lee la carpeta de Drive de la variable
+`GOOGLE_DRIVE_PCROBOT_FOLDER_ID` (con `supportsAllDrives=true`: sin eso Drive
+contesta 404 sin explicar). Tres frenos que no son opcionales:
+
+- **Lo que una persona cargó no se pisa nunca.** El motivo, la OT y la marca de
+  planta parada viven en `produccion_molino_paradas`, y la importación **no
+  referencia esa tabla ni para leerla**. Si un turno cambia de kilos, lo cargado
+  sigue ahí. Una reimportación que lo borre es la peor falla posible del frente.
+- **Un zip que trae menos días de los que la base ya tiene no se aplica**: es el
+  `laPlanillaEncogio` de las planillas, por la misma razón. Un archivo truncado o
+  un robot reinstalado no puede borrar ocho meses.
+- **Un zip de más de un día es un fallo**, no un aviso: lo que dejó de correr es
+  la tarea que sube el archivo, y es el único control que mira el resultado y no
+  el intento.
+
+Un molino sin zip, o con el zip roto o encogido, no frena al otro. El motivo de
+una parada se pide **desde 5 minutos** y **desde la puesta en servicio** del
+molino, y los dos son datos del catálogo (`umbral_minutos`, `desde`) y no
+constantes: con el corte en 5 se cubre el 98,7 % de las horas perdidas de Filler
+1 y se deja de pedir explicación por el 47 % de turnos que tienen una detención
+de uno a cinco minutos; y sin la fecha, el primer día habría traído cerca de mil
+turnos sin explicar. El umbral es `>=`: 5 minutos sí, 4 no.
+
+**No hay aviso en `lib/home/avisos.ts` a propósito**: el resumen push sale a las
+11:30 UTC y la importación es posterior, así que cualquier aviso de este frente
+nacería un día atrasado en el teléfono de alguien.
+
+### La trampa de permisos
+
+La lista de OT para enlazar una parada sale de tablas de Mantenimiento, cerradas
+con su propia función de acceso. **A quien carga un motivo sin acceso a
+Mantenimiento la lista le llegaría vacía y sin error**, y una lista vacía se lee
+"no hay OT" — es la misma trampa que el valor hora en `rrhh_empleados_datos`. Por
+eso la pantalla de la cola no la lee en ese caso y dice **"No tenés acceso a
+Mantenimiento"**, la ruta contesta 403 si igual se intenta tocar el enlace, y una
+parada que ya tiene OT enlazada muestra el número aunque quien mira no pueda ver
+el detalle. Y **`orden_trabajo_id` ausente no es null**: ausente es "no se toca
+el enlace". Sin esa distinción, quien edita un motivo sin Mantenimiento —que no
+manda el campo— le borraría la OT a cualquiera que corrigiera.
+
+### Los números de control
+
+Sirven para saber si una importación está bien. **Son de un archivo con fecha,
+no constantes**: lo que tiene que reproducirse es el orden de magnitud y el
+reparto de estados, no el decimal.
+
+| Sobre el zip del 19/10/2026 | molino Filler 1 | molino Filler 2 (Calera) |
+|---|---|---|
+| Toneladas | 36.028 | 23.217 |
+| Horas de marcha | 4.243 | 3.852 |
+| Horas no trabajadas | 737 | 2.144 |
+| Utilización | 85,2 % | 64,2 % |
+| Productividad | 8,49 t/h | 6,03 t/h |
+| Días no operativos | 22 | 0 |
+
+Con todo lo que hay en la base hasta el 29/10 la utilización da 85,3 % y 64,8 %,
+y aparece un cuarto turno inconsistente en Filler 1 (el 21/10 19:59, 704 minutos
+en un bloque de 480): los otros tres son 26/05 3:59, 04/06 11:59 y 10/08 11:59.
+Un resultado lejos de eso es un error de la importación y no una novedad de la
+planta.
+
+### Dónde está cada cosa
+
+| | |
+|---|---|
+| Módulo | `app/(app)/produccion/molinos` (el día, `mes`, `sin-explicar`), `lib/produccion/molinos`, `app/api/produccion/molinos/{importar,paradas}`, `app/api/cron/produccion-molinos-sync` |
+| Los cuatro turnos, la racha, huérfanos | `turnos.ts` — `armarTurnos` |
+| Los cinco indicadores | `indicadores.ts` — `indicadoresDe` |
+| Reconciliar el zip con la base, los frenos | `importar.ts` |
+| Qué parada pide motivo | `cola.ts` — `turnosSinExplicar` |
+| Cómo se nombra cada cosa en pantalla | `formato.ts` — `nombreDelMolino` |
+| Migraciones | `20261029091840_produccion_molinos_enums` y `20261029092611_produccion_molinos_schema`, ya aplicadas |
