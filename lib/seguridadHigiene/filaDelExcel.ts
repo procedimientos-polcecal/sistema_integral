@@ -57,11 +57,11 @@ function comparable(texto: string): string {
  *
  * **Lo que NO está acá importa más.** «Planta 02» fue, hasta ese mismo
  * renombre, el nombre de lo que hoy es «Planta 0-2 mm». Un alias por nombre
- * viejo la habría mandado a ese sector, y la planilla no habla de él: habla de
- * «Planta 2», «Planta 02» y «Planta 3», la serie de las plantas de trituración
- * (mandíbula, zaranda, cintas). El mismo texto es el nombre viejo de un sector
- * y el nombre corto de otro, y ninguna regla lo decide: queda en null y lo
- * resuelve una persona.
+ * viejo la habría mandado a ese sector, y eso es una conjetura y no un dato:
+ * las filas con «Planta 02» hablan de sinfines y zaranda, que el repo ubica en
+ * la planta 0-2 mm, pero el mismo texto también podría leerse como trituración
+ * 2 (y existe un sector `Producción - Planta 02`). Ninguna regla lo decide:
+ * queda en null y lo resuelve una persona.
  */
 const ALIAS_DE_SECTOR: Record<string, string> = {
   [comparable("Filler 1")]: "Planta filler 1",

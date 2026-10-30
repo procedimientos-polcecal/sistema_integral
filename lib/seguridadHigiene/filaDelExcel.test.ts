@@ -72,10 +72,10 @@ describe("sectorDe", () => {
   });
 
   // La trampa que tiene el catálogo real: «Planta 02» fue hasta el 19/10/2026 el
-  // nombre de lo que hoy se llama «Planta 0-2 mm». La planilla habla de «Planta
-  // 2», «Planta 02» y «Planta 3»: es la serie de las plantas de trituración. Un
-  // alias por nombre viejo la habría mandado a la planta equivocada, y en
-  // silencio.
+  // nombre de lo que hoy se llama «Planta 0-2 mm», pero el texto es ambiguo (el
+  // repo ubica los sinfines y la zaranda en la 0-2 mm; también podría ser
+  // trituración 2). Un alias por nombre viejo sería una conjetura escrita como
+  // dato, y un enlace equivocado no se nota nunca.
   it("«Planta 02» no se enlaza con «Planta 0-2 mm» aunque ése haya sido su nombre", () => {
     expect(sectorDe("Planta 02", CATALOGO)).toBeNull();
     expect(sectorDe("Planta 2", CATALOGO)).toBeNull();
