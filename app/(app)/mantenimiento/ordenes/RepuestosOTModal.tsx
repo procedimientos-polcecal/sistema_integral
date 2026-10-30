@@ -44,6 +44,9 @@ import type { EstadoCompra } from "@/lib/compras/types";
  * diseño, porque escribe en la orden e interrumpe a una persona nombrada.
  * Preguntar no pide el repuesto —el requerimiento es el pedido y la pregunta es
  * por el pedido—, así que los dos botones conviven.
+ *
+ * Cada repuesto tiene **su propia caja** de pregunta: abrir la de uno no pisa lo que
+ * se venía escribiendo en la de otro, y lo escrito sobrevive a un envío que falla.
  */
 
 interface RiEnVuelo {
@@ -67,14 +70,13 @@ interface Repuesto {
 
 type Opcion = { id: string; nombre: string };
 
-/** La pregunta que se está escribiendo, y a qué repuesto es. */
-interface Escribiendo {
-  repuestoId: string;
+/** La pregunta que se está escribiendo para un repuesto. */
+interface Caja {
   /** Lo que arrancó escrito: el repuesto y los RI. Sirve para no mandar sólo eso. */
   encabezado: string;
   texto: string;
-  /** La pregunta abierta de ese repuesto, si ya había una: esto es su seguimiento. */
-  abierta: NotaDeLaOT | null;
+  /** Por qué no se pudo enviar, si no se pudo: se dice acá, donde la persona está actuando. */
+  error: string;
 }
 
 export default function RepuestosOTModal({
@@ -118,9 +120,14 @@ export default function RepuestosOTModal({
 
   /** El historial de la orden: de ahí sale qué repuesto ya tiene una pregunta esperando. */
   const [notas, setNotas] = useState<NotaDeLaOT[]>([]);
-  const [escribiendo, setEscribiendo] = useState<Escribiendo | null>(null);
-  const [enviando, setEnviando] = useState(false);
-  const [errorDeLaPregunta, setErrorDeLaPregunta] = useState("");
+  /**
+   * Las preguntas que se están escribiendo, **una caja por repuesto** (la clave es el
+   * id del repuesto). Una sola caja para toda la lista hacía que abrir «Preguntar» en
+   * otro repuesto tirara en silencio lo que ya se había escrito en el primero.
+   */
+  const [cajas, setCajas] = useState<Record<string, Caja>>({});
+  /** El repuesto cuya pregunta está viajando. Una a la vez: el resto no se puede apretar. */
+  const [enviando, setEnviando] = useState<string | null>(null);
   /** Lo que se le dice a quien acaba de preguntar: si el aviso llegó, y si la planilla. */
   const [seEnvio, setSeEnvio] = useState<
     { llego: boolean; texto: string; planilla: string | null } | null
@@ -180,65 +187,95 @@ export default function RepuestosOTModal({
   }
 
   /**
-   * Abre la caja de la pregunta, escrita hasta donde se sabe.
+   * Abre la caja de la pregunta de un repuesto, escrita hasta donde se sabe.
    *
    * Arranca con el repuesto y los RI en curso, y si el repuesto ya tiene una pregunta
    * esperando es **su seguimiento**: se le suma al mismo hilo en vez de abrir otra, que
-   * son dos entradas en la bandeja de Compras diciendo lo mismo.
+   * son dos entradas en la bandeja de Compras diciendo lo mismo. Las cajas de los demás
+   * repuestos no se tocan.
    */
   function abrirPregunta(r: Repuesto, abierta: NotaDeLaOT | null) {
     const encabezado = encabezadoDeLaPregunta({ nombre: r.nombre, codigo: r.codigo }, r.ris);
     setError("");
-    setErrorDeLaPregunta("");
     setSeEnvio(null);
-    setEscribiendo({
-      repuestoId: r.id,
-      encabezado,
-      abierta,
-      texto: abierta ? `${encabezado}${TEXTO_DEL_SEGUIMIENTO} ` : encabezado,
+    setCajas((actuales) => ({
+      ...actuales,
+      [r.id]: {
+        encabezado,
+        error: "",
+        texto: abierta ? `${encabezado}${TEXTO_DEL_SEGUIMIENTO} ` : encabezado,
+      },
+    }));
+  }
+
+  function cambiarCaja(repuestoId: string, cambios: Partial<Caja>) {
+    setCajas((actuales) =>
+      actuales[repuestoId]
+        ? { ...actuales, [repuestoId]: { ...actuales[repuestoId], ...cambios } }
+        : actuales
+    );
+  }
+
+  function cerrarCaja(repuestoId: string) {
+    setCajas((actuales) => {
+      const resto = { ...actuales };
+      delete resto[repuestoId];
+      return resto;
     });
   }
 
-  async function enviarPregunta() {
-    if (!escribiendo) return;
-    setEnviando(true);
-    setErrorDeLaPregunta("");
+  async function enviarPregunta(repuestoId: string) {
+    const caja = cajas[repuestoId];
+    if (!caja) return;
 
-    const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        texto: escribiendo.texto.trim(),
-        tipo: "PREGUNTA",
-        repuesto_id: escribiendo.repuestoId,
-        // El seguimiento apunta a LA pregunta abierta y no a la primera del hilo:
-        // con tres en un hilo, apuntar a la primera deja dos abiertas.
-        ...(escribiendo.abierta ? { responde_a: escribiendo.abierta.id } : {}),
-      }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setEnviando(false);
+    // La pregunta abierta se mira **ahora** y no cuando se abrió la caja: si mientras
+    // se escribía alguien contestó o siguió el hilo, lo que se manda tiene que apuntar
+    // a lo de hoy. Apunta a LA abierta y no a la primera del hilo: con tres en un hilo,
+    // apuntar a la primera deja dos abiertas.
+    const abierta = preguntaAbiertaDelRepuesto(notas, repuestoId, orden.estado);
 
-    if (!res.ok) {
-      const motivo = body.error ?? "No se pudo enviar la pregunta.";
-      if (res.status === 409) {
-        // La pantalla estaba vieja —alguien ya preguntó, o contestó—: lo que se
-        // iba a mandar ya no corresponde. Se cierra la caja y se vuelve a leer,
-        // para que el botón ofrezca lo que hoy sí se puede.
-        setEscribiendo(null);
-        setError(motivo);
-        recargarNotas();
-      } else {
-        setErrorDeLaPregunta(motivo);
+    setEnviando(repuestoId);
+    cambiarCaja(repuestoId, { error: "" });
+
+    // El `finally` es lo que devuelve los botones: sin él, un `fetch` que rechaza
+    // —sin conexión— dejaba «Enviando…» para siempre y a la persona sin poder
+    // reintentar.
+    try {
+      const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          texto: caja.texto.trim(),
+          tipo: "PREGUNTA",
+          repuesto_id: repuestoId,
+          ...(abierta ? { responde_a: abierta.id } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        // La caja queda abierta, con lo escrito. Un 409 es que la pantalla estaba
+        // vieja —alguien ya preguntó por esta pieza, o contestó—: se vuelve a leer el
+        // historial, y al mandar de nuevo el texto va como seguimiento de lo de hoy.
+        cambiarCaja(repuestoId, { error: body.error ?? "No se pudo enviar la pregunta." });
+        if (res.status === 409) recargarNotas();
+        return;
       }
-      return;
-    }
 
-    setEscribiendo(null);
-    setError("");
-    setSeEnvio({ ...queDecirDelAviso(body.aviso), planilla: body.planilla_error ?? null });
-    recargarNotas();
-    onCambioEnElHistorial?.();
+      cerrarCaja(repuestoId);
+      setError("");
+      setSeEnvio({ ...queDecirDelAviso(body.aviso), planilla: body.planilla_error ?? null });
+      recargarNotas();
+      onCambioEnElHistorial?.();
+    } catch {
+      cambiarCaja(repuestoId, {
+        error:
+          "No se pudo enviar: no hay conexión con el servidor. Revisá la conexión y " +
+          "probá de nuevo; lo que escribiste sigue acá.",
+      });
+    } finally {
+      setEnviando(null);
+    }
   }
 
   return (
@@ -302,7 +339,8 @@ export default function RepuestosOTModal({
               // preguntar: poder editar la orden, y que la orden espere algo.
               const puedePreguntar =
                 puedeEditar && sePuedePreguntarEn(orden.estado) && Boolean(d && convienePedir(d.estado));
-              const escribiendoEste = escribiendo?.repuestoId === r.id;
+              // La pregunta que se está escribiendo de este repuesto, si hay una.
+              const caja = cajas[r.id];
 
               return (
                 <li key={r.id} className="flex items-start justify-between gap-2 py-2">
@@ -332,9 +370,10 @@ export default function RepuestosOTModal({
                     {d && convienePedir(d.estado) && <YaPedido ris={r.ris} />}
 
                     {/* La pregunta que ya se hizo, a la vista aunque el stock haya
-                        cambiado o no se pueda editar: «una pregunta sin responder se
-                        ve» es lo que esto existe para hacer. */}
-                    {abierta && !escribiendoEste && (
+                        cambiado o no se pueda editar, y también mientras se escribe
+                        el seguimiento: «una pregunta sin responder se ve» es lo que
+                        esto existe para hacer. */}
+                    {abierta && (
                       <p className="mt-1 text-xs text-amber-700">
                         Preguntado {haceCuanto(abierta.creado_en)}, sin respuesta.
                       </p>
@@ -359,7 +398,7 @@ export default function RepuestosOTModal({
                             botón no abre otra y ofrece sumar al mismo hilo. Dos
                             preguntas vivas por la misma pieza son dos entradas en
                             la bandeja de Compras que dicen lo mismo. */}
-                        {puedePreguntar && !escribiendoEste && (
+                        {puedePreguntar && !caja && (
                           <button
                             onClick={() => abrirPregunta(r, abierta)}
                             className="text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
@@ -370,47 +409,42 @@ export default function RepuestosOTModal({
                       </div>
                     )}
 
-                    {escribiendoEste && escribiendo && (
+                    {caja && (
                       <div className="mt-2 space-y-2">
                         <textarea
-                          value={escribiendo.texto}
-                          onChange={(e) => {
-                            setEscribiendo({ ...escribiendo, texto: e.target.value });
-                            setErrorDeLaPregunta("");
-                          }}
+                          value={caja.texto}
+                          onChange={(e) => cambiarCaja(r.id, { texto: e.target.value, error: "" })}
                           // Arranca escrita —el repuesto y los RI—, y lo que sigue es lo
                           // que se agrega a continuación: con el cursor al principio
                           // quedaría la pregunta antes del encabezado.
                           autoFocus
                           onFocus={(e) => {
-                            const caja = e.currentTarget;
-                            caja.setSelectionRange(caja.value.length, caja.value.length);
+                            const area = e.currentTarget;
+                            area.setSelectionRange(area.value.length, area.value.length);
                           }}
                           maxLength={MAXIMO_DE_NOTA}
                           rows={4}
-                          aria-label="Pregunta para Compras"
+                          aria-label={`Pregunta para Compras sobre ${r.nombre}`}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
                         />
-                        {errorDeLaPregunta && (
-                          <p className="text-xs text-red-600">{errorDeLaPregunta}</p>
-                        )}
+                        {caja.error && <p className="text-xs text-red-600">{caja.error}</p>}
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={enviarPregunta}
+                            onClick={() => enviarPregunta(r.id)}
                             // Con sólo el encabezado no hay pregunta: es el repuesto
-                            // y nada que preguntar de él.
+                            // y nada que preguntar de él. Y una sola viaja a la vez.
                             disabled={
-                              enviando ||
-                              escribiendo.texto.trim() === "" ||
-                              escribiendo.texto.trim() === escribiendo.encabezado.trim()
+                              enviando !== null ||
+                              caja.texto.trim() === "" ||
+                              caja.texto.trim() === caja.encabezado.trim()
                             }
                             className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
                           >
-                            {enviando ? "Enviando…" : "Enviar a Compras"}
+                            {enviando === r.id ? "Enviando…" : "Enviar a Compras"}
                           </button>
                           <button
-                            onClick={() => setEscribiendo(null)}
-                            disabled={enviando}
+                            onClick={() => cerrarCaja(r.id)}
+                            disabled={enviando === r.id}
                             className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-40"
                           >
                             Cancelar
