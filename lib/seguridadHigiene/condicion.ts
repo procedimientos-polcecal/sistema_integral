@@ -72,8 +72,14 @@ export function loQueFalta(c: CondicionParaFaltantes): Falta[] {
  * (`condicion.test.ts`): nombra las nueve columnas que lee `loQueFalta`, y el
  * lugar va como un `and` porque sólo falta cuando **faltan los dos**.
  *
- * Lo que **no** dice es «y no está cerrada»: eso es `faltasPendientes`, y el
- * llamador lo agrega con `.is("fecha_ejecucion", null)`.
+ * Lo que **no** dice es «y no está cerrada», y es a propósito: eso es lo que
+ * separa a `loQueFalta` de `faltasPendientes` (gestion.ts), el criterio único
+ * del módulo, y el llamador lo agrega con `.is("fecha_ejecucion", null)`.
+ * Cerrada es tener fecha de ejecución (`estadoDe`), así que
+ * `fecha_ejecucion is null AND FILTRO_FALTA_ALGO` cuenta exactamente las filas
+ * donde `faltasPendientes(c, hoy).length > 0`: las abiertas con algo por
+ * completar, que es lo que la pantalla muestra con `falta=alguna`. Usar la
+ * constante sola contaría también las cerradas.
  */
 export const FILTRO_FALTA_ALGO = [
   "frecuencia.is.null",

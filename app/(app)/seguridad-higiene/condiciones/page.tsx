@@ -5,6 +5,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { nivelSyhDe } from "@/lib/seguridadHigiene/auth";
 import type { FilaDeCondicion } from "@/lib/seguridadHigiene/gestion";
+import { leerFiltrosDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
 import CondicionesClient from "./CondicionesClient";
 
 /**
@@ -16,11 +17,25 @@ import CondicionesClient from "./CondicionesClient";
  * funciones puras de `lib/seguridadHigiene/gestion.ts`, así al guardar una
  * ficha la fila se reubica sin volver a pedir nada.
  *
+ * Los filtros arrancan de la URL —es adonde apuntan los avisos del resumen
+ * diario— y se validan contra los catálogos, que ya están cargados abajo.
+ *
  * Los catálogos —sectores, equipos, peligros, usuarios— se piden enteros porque
  * son chicos y porque la ficha tiene que poder mostrar el valor actual de una
  * condición aunque ese sector o ese usuario ya no esté activo.
  */
-export default async function CondicionesPage() {
+export default async function CondicionesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const crudos = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(crudos)) {
+    if (typeof v === "string") params.set(k, v);
+    else if (Array.isArray(v) && v[0] !== undefined) params.set(k, v[0]);
+  }
+
   const supabase = await createClient();
 
   const user = await usuarioActual();
@@ -59,8 +74,14 @@ export default async function CondicionesPage() {
     ),
   ]);
 
+  const filtrosIniciales = leerFiltrosDeGestion(params, {
+    sectores: sectores.map((s) => s.id as string),
+    equipos: equipos.map((e) => e.id as string),
+  });
+
   return (
     <CondicionesClient
+      filtrosIniciales={filtrosIniciales}
       condicionesIniciales={condiciones}
       sectores={sectores.map((s) => ({ id: s.id as string, nombre: s.nombre as string, activo: s.activo as boolean }))}
       equipos={equipos.map((e) => ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
 import { clasificar, type Clasificacion } from "@/lib/seguridadHigiene/riesgo";
@@ -16,6 +16,7 @@ import {
   type FiltrosDeGestion,
   type FilaDeCondicion,
 } from "@/lib/seguridadHigiene/gestion";
+import { escribirFiltrosDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
 import FichaDeCondicion, { type Catalogos } from "./FichaDeCondicion";
 import { InsigniaDeClasificacion, InsigniaDeEstado, InsigniaDeFalta } from "./Insignias";
 
@@ -60,6 +61,7 @@ function Marcas({ c, hoy }: { c: FilaDeCondicion; hoy: string }) {
 }
 
 export default function CondicionesClient({
+  filtrosIniciales,
   condicionesIniciales,
   sectores,
   equipos,
@@ -69,19 +71,33 @@ export default function CondicionesClient({
   puedeEditar,
   esAdmin,
 }: Catalogos & {
+  filtrosIniciales: FiltrosDeGestion;
   condicionesIniciales: FilaDeCondicion[];
   hoy: string;
   puedeEditar: boolean;
   esAdmin: boolean;
 }) {
   const [filas, setFilas] = useState(condicionesIniciales);
-  const [filtros, setFiltros] = useState<FiltrosDeGestion>(SIN_FILTROS);
+  const [filtros, setFiltros] = useState<FiltrosDeGestion>(filtrosIniciales);
   const [abierta, setAbierta] = useState<string | null>(null);
 
   const sectorDeEquipo = useMemo(
     () => new Map(equipos.map((e) => [e.id, e.sector_id] as const)),
     [equipos]
   );
+
+  // La URL va detrás de los filtros, como en las OT de Mantenimiento: con
+  // `history` y no `router.replace`, que le pediría la página entera al servidor
+  // —todas las condiciones y los cuatro catálogos— para cambiar un query string
+  // que la pantalla ya tiene resuelto en memoria. Con `replace` y no `push`:
+  // salir con el botón de atrás no obliga a deshacer cada filtro.
+  const query = escribirFiltrosDeGestion(filtros);
+  useEffect(() => {
+    const destino = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    if (destino === window.location.pathname + window.location.search) return;
+    // El estado que va es el que ya estaba: ahí guarda Next su árbol de rutas.
+    window.history.replaceState(window.history.state, "", destino);
+  }, [query]);
 
   const resumen = useMemo(() => resumenDeCondiciones(filas, hoy), [filas, hoy]);
 

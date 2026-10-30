@@ -85,7 +85,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    */
   { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", href: "/taller-vial/services" },
   { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", href: "/trituracion/partes" },
-  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", href: "/seguridad-higiene/condiciones?estado=vencida" },
+  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", href: "/seguridad-higiene/condiciones?estado=Vencida" },
   /*
    * Es **un** aviso y no tres («sin evaluar», «sin asignar», «sin lugar»), a
    * propósito. Una condición a la que le pusieron los cinco puntajes pero
@@ -94,8 +94,12 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * cosa, esa fila desaparecería de todos y del push para siempre. Juntos no
    * hay por dónde escaparse. Cuenta lo mismo que `faltasPendientes`: las
    * abiertas a las que les falta algo.
+   *
+   * Los href usan el vocabulario de los filtros de la pantalla (`Vencida`,
+   * `alguna`) y son lo que hacen los botones del encabezado de esa pantalla: lo
+   * ata `lib/seguridadHigiene/filtrosUrl.test.ts`.
    */
-  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?falta=cualquiera" },
+  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
 ];
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
