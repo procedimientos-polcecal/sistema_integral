@@ -349,12 +349,31 @@ oráculo** y hay que compararlos uno por uno:
 
 | | |
 |---|---|
-| valores totales | 3.511 |
-| `fraccion` en las cinco tabulares | 958 |
-| `porcentaje` en las cinco tabulares | 1.544 |
-| filas con `revisar` | 12 |
-| agregaciones descartadas | 22 |
+| valores totales | 3.304 |
+| etiquetados `fraccion` (las cinco tabulares) | 958 |
+| etiquetados `porcentaje` (las cinco tabulares) | 1.544 |
+| etiquetados `absoluto` (las cinco tabulares) | 585 |
+| filas con `revisar` | 28 |
+| celdas de agregación descartadas | 22 |
+| orígenes distintos | 47, de los cuales 7 enlazan a producto |
 | rango | 06/11/2023 → 21/10/2026 |
+
+**Dos de esos números cambiaron el 30/10/2026, al correr el parser de verdad
+contra el archivo.** Los anteriores —3.511 valores y 12 filas con `revisar`—
+salían de un prototipo que todavía convertía las escalas e inventaba nombres de
+muestra, y los dos se movieron por decisiones que el propio diseño tomó después:
+
+- **3.304 y no 3.511**, y **47 orígenes y no 55**, porque un bloque sin nombre de
+  muestra ya no genera fila. Los 8 orígenes que desaparecieron eran basura del
+  prototipo (`30.9`, `Feb`, `col 3`).
+- **28 filas con `revisar` y no 12**, porque sin conversión la aritmética ve lo
+  que la conversión tapaba: **23 filas de `Filler 1` entre febrero y mayo de 2026
+  tienen el `Ret #50` en porcentaje y el `Ret #100` en fracción, en el mismo
+  renglón.** Es el mismo fenómeno que el spec de Ensayos midió por su cuenta
+  —«27 filas de Filler 1 tienen las dos escalas EN EL MISMO RENGLÓN»— y que la
+  regla por columna no puede distinguir: un 0,6% y una fracción de 0,6 se
+  escriben igual. Quedan marcadas, que es lo correcto: quien conteste un reclamo
+  con una de esas filas tiene que mirarla antes.
 
 Si un conteo no da, la regla cambió de significado: mirar antes de seguir.
 

@@ -54,8 +54,22 @@ export function escalaDeLaColumna(
  *
  * Una columna `fraccion` lo es **sólo antes** del cambio de planilla; desde ese
  * día la misma columna se anota en porcentaje.
+ *
+ * **Salvo la humedad, que no cambió nunca.** El cambio de planilla movió los
+ * retenidos y los acumulados; la humedad siguió escribiéndose como fracción
+ * —0,0102 el 06/10/2026—. Sin esta excepción, 251 humedades posteriores a junio
+ * quedan etiquetadas como porcentaje y un 0,0102 se lee como 0,01% en vez de
+ * 1,02%. Lo encontró la comparación contra el archivo real.
+ *
+ * `etiqueta` es opcional porque la regla sólo necesita distinguir la humedad;
+ * sin ella, el corte se aplica como a cualquier otra columna.
  */
-export function escalaDelValor(escalaDeColumna: Escala, fecha: string): Escala {
+export function escalaDelValor(
+  escalaDeColumna: Escala,
+  fecha: string,
+  etiqueta?: string
+): Escala {
   if (escalaDeColumna !== "fraccion") return escalaDeColumna;
+  if (etiqueta && /humedad/i.test(etiqueta)) return "fraccion";
   return fecha < CORTE_DE_PLANILLA ? "fraccion" : "porcentaje";
 }

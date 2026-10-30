@@ -42,6 +42,14 @@ describe("escalaDelValor", () => {
     expect(escalaDelValor("absoluto", "2026-10-07")).toBe("absoluto");
   });
 
+  it("la humedad NO cambia en el corte: es fraccion siempre", () => {
+    // El corte movió los retenidos y los acumulados, no la humedad. Sin esta
+    // excepción, 251 humedades posteriores a junio quedan etiquetadas como
+    // porcentaje y un 0,0102 se lee como 0,01% en vez de 1,02%.
+    expect(escalaDelValor("fraccion", "2026-10-07", "Humedad bh (%)")).toBe("fraccion");
+    expect(escalaDelValor("fraccion", "2026-10-07", "Acumulado en #200 (%)")).toBe("porcentaje");
+  });
+
   it("porcentaje sigue siendo porcentaje antes del corte", () => {
     // Una columna que nació después no deja de ser porcentaje por la fecha.
     expect(escalaDelValor("porcentaje", "2024-01-01")).toBe("porcentaje");
