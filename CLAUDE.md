@@ -232,8 +232,28 @@ con número explícito **no adelanta la secuencia** —el script lo resolvió
 consumiendo números hasta pasar el 44, por eso la primera condición nueva es la
 46 y no la 45—; y las 44 entraron **sin foto**, porque eran vínculos al disco de
 quien armó el Excel. El enlace de sector y de persona es por igualdad de nombre
-y deja en null lo dudoso: «Planta 02» es el nombre viejo de «Planta 0-2 mm» **y**
-el nombre corto de las plantas de trituración, y por eso no se enlaza sola.
+y deja en null lo dudoso: de las 44, 37 entraron sin sector. Lo que sigue
+separa lo que se sabe de lo que es conjetura, porque esa distinción es lo que
+hace útil esta nota:
+
+- **Se sabe**: «Planta 02» es ambiguo y por eso no se enlaza. Fue el nombre
+  viejo de «Planta 0-2 mm» hasta el 19/10/2026 (`scripts/sectores-de-la-ot.mts`),
+  existe además un sector `Producción - Planta 02`, y el mismo texto podría
+  leerse como trituración 2. Un alias por nombre viejo habría sido enlazar al
+  que se le parece.
+- **Conjetura, sin confirmar**: las 5 filas con «Planta 02» (N° 2, 8, 9, 10, 11)
+  hablan de sinfines y zaranda, y `docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md`
+  ubica «Sin fin 1» y «Zaranda vibratoria» en «Planta 02» = `PY-C1`, la planta
+  0-2 mm. **Tienden a ser 0-2 mm**, no trituración.
+- **Conjetura, sin confirmar**: «Planta 2» (8 filas, N° 30 a 37) y «Planta 3»
+  (7 filas, N° 38 a 44) parecen las plantas de trituración 2 y 3 —las filas
+  hablan de mandíbula, trituración primaria y cintas, y `lib/trituracion/` usa
+  esos mismos nombres cortos—. Son 15 filas; una persona tiene que confirmarlo
+  y después se resuelve con un `UPDATE syh_condiciones … where clave like
+  'excel-21-10-26-%'` y el `sector_id` que corresponda.
+
+Los 37 y las fechas dudosas (N° 6, 7, 42, 43, 44) son decisiones de datos que
+quedan pendientes del usuario: la importación no las resolvió.
 
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
