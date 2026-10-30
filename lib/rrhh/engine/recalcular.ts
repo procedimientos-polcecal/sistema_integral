@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularDia, mismasHoras, type PayrollConfigLike } from "./calculo";
-import { ajustarFichadasPorTurno, intervalsParaDia, type FichadaLike, type TurnoLike } from "./recalcular-puro";
+import { ajustarFichadasPorTurno, cubiertoPorTurnoDeLaVispera, intervalsParaDia, type FichadaLike, type TurnoLike } from "./recalcular-puro";
 import { addUtcDays, dayOfWeekUtc, diaIso, utcDateOnlyFrom } from "../dates";
 import { SECTORES_LUNES_A_VIERNES } from "../constants";
 import { traerPaginado } from "../paginado";
@@ -237,7 +237,13 @@ async function recalcularLote(
         let tipoAusencia: string | null = null;
         let observaciones: string | null = null;
 
-        if (!tieneFichada && !esDomingoLibre && !esSabadoNoLaboral) {
+        // El turno de la víspera que siguió hasta la madrugada cuenta como
+        // presencia: sus horas se imputan al día en que arrancó, pero la
+        // persona estuvo acá, y marcarla ausente es falso (ver
+        // cubiertoPorTurnoDeLaVispera).
+        const vinoDeLaVispera = cubiertoPorTurnoDeLaVispera(dia, fichadas);
+
+        if (!tieneFichada && !vinoDeLaVispera && !esDomingoLibre && !esSabadoNoLaboral) {
           if (vacacion) {
             ausente = false;
           } else if (ausenciaCargada) {
