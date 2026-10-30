@@ -306,6 +306,11 @@ export const NAV: NavItem[] = [
           { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
         ],
       },
+      // Lo de antes del SdG: los tres años que vivían en el Excel del
+      // laboratorio. De sólo lectura, y la búsqueda encuentra también lo que
+      // Ensayos carga hoy — quien atiende un reclamo no tiene por qué saber de
+      // qué año es el dato antes de buscarlo. Ver docs/CALIDAD-HISTORICO.md.
+      { label: "Histórico", href: "/calidad/historico", modulo: "calidad" },
     ],
   },
   {

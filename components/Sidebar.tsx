@@ -62,6 +62,8 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Stock": IconList,
   "Movimientos": IconBolt,
   "Proveedores": IconUsers,
+  // El histórico del laboratorio: lo de antes del SdG.
+  "Histórico": IconFile,
   // Compras.
   "Compras": IconCart,
   "Tablero": IconKanban,
