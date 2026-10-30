@@ -3,9 +3,12 @@ import {
   type Asignacion,
   type PersonaDelTaller,
   TIPOS_QUE_NO_SON_FALTA,
+  type FrancoCrudo,
   candidatosParaElHueco,
   estaAusente,
+  estaDeFranco,
   estaVigente,
+  noViene,
 } from "./disponibilidad";
 
 const persona = (
@@ -147,5 +150,53 @@ it("sugiere a alguien del otro turno aunque eso deje corto al suyo", () => {
     turno: "4-12",
     oficio: "mecanico",
   });
+  expect(r).toEqual(["m1"]);
+});
+
+// ── El franco que se descansa ────────────────────────────────
+
+const franco = (
+  empleado_id: string,
+  fecha_descanso: string | null,
+  estado = "TOMADO",
+): FrancoCrudo => ({ empleado_id, estado, fecha_descanso });
+
+it("un franco tomado abre hueco el dia que se descansa", () => {
+  const f = [franco("m1", "2026-11-03")];
+  expect(estaDeFranco(f, "m1", "2026-11-03")).toBe(true);
+  expect(estaDeFranco(f, "m1", "2026-11-02")).toBe(false);
+  expect(estaDeFranco(f, "m2", "2026-11-03")).toBe(false);
+});
+
+// Los 56 francos marcados antes del 26/10/2026 no tienen dia de descanso: su
+// fecha real nunca se registro. Null no abre hueco, que es la verdad.
+it("un franco viejo, sin dia de descanso, no abre hueco", () => {
+  expect(estaDeFranco([franco("m1", null)], "m1", "2026-11-03")).toBe(false);
+});
+
+it("un franco pendiente no abre hueco aunque tenga dia", () => {
+  expect(estaDeFranco([franco("m1", "2026-11-03", "PENDIENTE")], "m1", "2026-11-03")).toBe(false);
+});
+
+it("noViene junta las dos razones y no las confunde", () => {
+  const ausencias = [
+    { empleado_id: "m1", fecha_desde: "2026-11-10", fecha_hasta: "2026-11-10", tipo: "PERMISO_PERSONAL" },
+  ];
+  const francos = [franco("m2", "2026-11-03")];
+  expect(noViene(ausencias, francos, "m1", "2026-11-10")).toBe(true);
+  expect(noViene(ausencias, francos, "m2", "2026-11-03")).toBe(true);
+  expect(noViene(ausencias, francos, "m1", "2026-11-03")).toBe(false);
+  expect(noViene(ausencias, francos, "m2", "2026-11-10")).toBe(false);
+});
+
+it("quien descansa un franco no se sugiere como candidato", () => {
+  const padron = [persona("m1", "mecanico", "A"), persona("m2", "mecanico", "A")];
+  const francos = [franco("m2", "2026-11-03")];
+  const r = candidatosParaElHueco(
+    [],
+    (id, dia) => noViene([], francos, id, dia),
+    padron,
+    { dia: "2026-11-03", turno: "4-12", oficio: "mecanico" },
+  );
   expect(r).toEqual(["m1"]);
 });
