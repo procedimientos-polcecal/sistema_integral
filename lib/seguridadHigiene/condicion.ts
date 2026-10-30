@@ -62,3 +62,26 @@ export function loQueFalta(c: CondicionParaFaltantes): Falta[] {
 
   return faltas;
 }
+
+/**
+ * `loQueFalta(c).length > 0` dicho como filtro de PostgREST (`.or(...)`), para
+ * contar en la base sin traer las filas. Lo usa el aviso «sin completar» del
+ * resumen diario.
+ *
+ * Son dos implementaciones de la misma regla y por eso hay un test que las ata
+ * (`condicion.test.ts`): nombra las nueve columnas que lee `loQueFalta`, y el
+ * lugar va como un `and` porque sólo falta cuando **faltan los dos**.
+ *
+ * Lo que **no** dice es «y no está cerrada»: eso es `faltasPendientes`, y el
+ * llamador lo agrega con `.is("fecha_ejecucion", null)`.
+ */
+export const FILTRO_FALTA_ALGO = [
+  "frecuencia.is.null",
+  "antecedentes.is.null",
+  "controles.is.null",
+  "magnitud_dano.is.null",
+  "legislacion.is.null",
+  "responsable_id.is.null",
+  "fecha_maxima.is.null",
+  "and(sector_id.is.null,equipo_id.is.null)",
+].join(",");

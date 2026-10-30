@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { avisosDeConteos, avisosDeRitmo } from "./avisos";
 
 describe("avisosDeConteos", () => {
+  it("los dos avisos de Seguridad e Higiene salen con sus títulos y links", () => {
+    const avisos = avisosDeConteos({ syhVencidas: 3, syhSinCompletar: 12 });
+    expect(avisos).toEqual([
+      { id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", cantidad: 3, href: "/seguridad-higiene/condiciones?estado=vencida" },
+      { id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", cantidad: 12, href: "/seguridad-higiene/condiciones?falta=cualquiera" },
+    ]);
+  });
+
+  it("los de Seguridad e Higiene salen al final, después de todo lo demás", () => {
+    const avisos = avisosDeConteos({ syhSinCompletar: 1, trituracionSinPlanilla: 1, rrhhSinClasificar: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["rrhh-sin-clasificar", "trituracion-sin-planilla", "syh-sin-completar"]);
+  });
+
   it("no genera avisos cuando está todo en cero", () => {
     expect(avisosDeConteos({ mantenimientoAtrasadas: 0, comprasEsperandoAprobacion: 0 })).toEqual([]);
   });

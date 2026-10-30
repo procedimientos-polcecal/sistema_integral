@@ -15,13 +15,13 @@ describe("sinLoQueNoPuedeAtender", () => {
    */
   it("quien no aprueba no recibe el aviso de aprobacion", () => {
     expect(
-      sinLoQueNoPuedeAtender(avisos, { apruebaCompras: false }).map((a) => a.id)
+      sinLoQueNoPuedeAtender(avisos, { apruebaCompras: false, evaluaSyh: false }).map((a) => a.id)
     ).toEqual(["mant-atrasadas"]);
   });
 
   it("quien aprueba lo recibe", () => {
     expect(
-      sinLoQueNoPuedeAtender(avisos, { apruebaCompras: true }).map((a) => a.id)
+      sinLoQueNoPuedeAtender(avisos, { apruebaCompras: true, evaluaSyh: false }).map((a) => a.id)
     ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);
   });
 
@@ -35,10 +35,32 @@ describe("sinLoQueNoPuedeAtender", () => {
       { id: "ritmo-remises", titulo: "Remises: hace 82 días que no se carga", cantidad: 1, href: "/c" },
       { id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", cantidad: 15, href: "/d" },
     ];
-    expect(sinLoQueNoPuedeAtender(otros, { apruebaCompras: false })).toEqual(otros);
+    expect(sinLoQueNoPuedeAtender(otros, { apruebaCompras: false, evaluaSyh: false })).toEqual(otros);
   });
 
   it("sin avisos no devuelve nada y no rompe", () => {
-    expect(sinLoQueNoPuedeAtender([], { apruebaCompras: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender([], { apruebaCompras: true, evaluaSyh: false })).toEqual([]);
+  });
+});
+
+describe("sinLoQueNoPuedeAtender — Seguridad e Higiene", () => {
+  const syh: Notificacion[] = [
+    { id: "syh-vencidas", titulo: "x", cantidad: 1, href: "/x" },
+    { id: "syh-sin-completar", titulo: "y", cantidad: 1, href: "/y" },
+  ];
+
+  it("los dos van sólo a quien puede evaluar y cerrar", () => {
+    expect(sinLoQueNoPuedeAtender(syh, { apruebaCompras: true, evaluaSyh: false })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(syh, { apruebaCompras: true, evaluaSyh: true })).toHaveLength(2);
+  });
+
+  it("evaluar condiciones no habilita los avisos de aprobación, ni al revés", () => {
+    const todos = [...avisos, ...syh];
+    expect(
+      sinLoQueNoPuedeAtender(todos, { apruebaCompras: false, evaluaSyh: true }).map((a) => a.id)
+    ).toEqual(["mant-atrasadas", "syh-vencidas", "syh-sin-completar"]);
+    expect(
+      sinLoQueNoPuedeAtender(todos, { apruebaCompras: true, evaluaSyh: false }).map((a) => a.id)
+    ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);
   });
 });

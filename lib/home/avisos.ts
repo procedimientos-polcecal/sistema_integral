@@ -22,6 +22,8 @@ export interface ConteosParaAvisos {
   tallerVialSinEquipo: number;
   tallerVialSinService: number;
   trituracionSinPlanilla: number;
+  syhVencidas: number;
+  syhSinCompletar: number;
 }
 
 /**
@@ -83,6 +85,17 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    */
   { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", href: "/taller-vial/services" },
   { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", href: "/trituracion/partes" },
+  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", href: "/seguridad-higiene/condiciones?estado=vencida" },
+  /*
+   * Es **un** aviso y no tres («sin evaluar», «sin asignar», «sin lugar»), a
+   * propósito. Una condición a la que le pusieron los cinco puntajes pero
+   * nunca le asignaron responsable ni fecha máxima **no puede vencer nunca** —no
+   * hay fecha que pase— y deja de ser «sin evaluar»: con un aviso por cada
+   * cosa, esa fila desaparecería de todos y del push para siempre. Juntos no
+   * hay por dónde escaparse. Cuenta lo mismo que `faltasPendientes`: las
+   * abiertas a las que les falta algo.
+   */
+  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?falta=cualquiera" },
 ];
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {

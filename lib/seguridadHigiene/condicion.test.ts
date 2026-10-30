@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estadoDe, loQueFalta, type CondicionParaFaltantes } from "./condicion";
+import { estadoDe, FILTRO_FALTA_ALGO, loQueFalta, type CondicionParaFaltantes } from "./condicion";
 
 const HOY = "2026-10-29";
 
@@ -50,5 +50,33 @@ describe("loQueFalta", () => {
 
   it("una condición completa no tiene faltantes", () => {
     expect(loQueFalta(COMPLETA)).toEqual([]);
+  });
+});
+
+/*
+ * El aviso «sin completar» cuenta con la base, no con `loQueFalta`, así que son
+ * dos implementaciones de la misma regla. Esto las ata: si alguien suma una
+ * columna a una y no a la otra, rompe acá y no en el número de un push.
+ */
+describe("FILTRO_FALTA_ALGO", () => {
+  const columnas = Object.keys(COMPLETA) as (keyof CondicionParaFaltantes)[];
+  const mencionadas = [...FILTRO_FALTA_ALGO.matchAll(/([a-z_]+)\.is\.null/g)].map((m) => m[1]);
+
+  it("nombra todas las columnas que mira loQueFalta, y ninguna más", () => {
+    expect([...new Set(mencionadas)].sort()).toEqual([...columnas].sort());
+  });
+
+  it("anular cualquiera de las que nombra hace que loQueFalta diga algo, salvo el lugar a medias", () => {
+    for (const col of columnas) {
+      const c = { ...COMPLETA, [col]: null };
+      const dice = loQueFalta(c).length > 0;
+      // El lugar es «sector Y equipo en null»: con uno solo en null ya se sabe dónde ir.
+      expect(dice, col).toBe(col !== "sector_id" && col !== "equipo_id");
+    }
+    expect(loQueFalta({ ...COMPLETA, sector_id: null, equipo_id: null })).toContain("sin_lugar");
+  });
+
+  it("el lugar va como un `and`, no como dos columnas sueltas", () => {
+    expect(FILTRO_FALTA_ALGO).toContain("and(sector_id.is.null,equipo_id.is.null)");
   });
 });

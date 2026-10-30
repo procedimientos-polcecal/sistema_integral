@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
+import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
+import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -60,7 +61,7 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, filasRitmo,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -106,6 +107,14 @@ async function avisosDeLosModulos(
     tiene("taller_vial")
       ? equiposTallerVialSinService(supabase).then((r) => r.equiposSinService)
       : Promise.resolve(0),
+    // Vencida es no cerrada y con la fecha máxima ya pasada: la misma que
+    // `estadoDe` (`<` y no `<=`, porque la máxima de hoy todavía vence mañana).
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).lt("fecha_maxima", hoy)),
+    // Tiene que decir lo mismo que `faltasPendientes` (gestion.ts): no cerrada y
+    // con algo de `loQueFalta()` (condicion.ts, la versión probada de esa regla).
+    // Por eso es una consulta propia: son varias condiciones `or` sobre columnas
+    // nullables. `FILTRO_FALTA_ALGO` vive junto a `loQueFalta` y un test las ata.
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).or(FILTRO_FALTA_ALGO)),
     traerRitmo(supabase),
   ]);
 
@@ -115,7 +124,7 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar,
   };
 
   return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
@@ -140,41 +149,52 @@ export async function avisosDeTodoElSistema(
 }
 
 /**
- * Qué listas de responsables integra quien mira.
+ * Qué puede atender quien mira: las listas de responsables que integra y los
+ * niveles que le habilitan una acción.
  *
- * Hoy hay una sola porque hoy hay un solo aviso con lista. **Falta el de las
+ * Hay una lista porque hoy hay un solo aviso con lista. **Falta el de las
  * órdenes de servicio**: `os_aprobadores` existe y el aviso al instante ya la
  * usa, pero la campana no tiene un aviso de OS esperando aprobación. El día que
  * se agregue, va acá con su `apruebaOS` — no se deja preparado porque sería una
  * consulta por persona y por día que hoy no la usa nadie.
+ *
+ * `evaluaSyh` no sale de una lista sino de un **nivel**: evaluar y cerrar una
+ * condición insegura lo puede hacer el `admin` de Seguridad e Higiene. Sale sin
+ * consulta, porque los grants ya vienen en `QuienMira`.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
+  evaluaSyh: boolean;
 }
 
-/** Los avisos que tienen una lista de responsables, y cuál. */
+/** Los avisos que piden algo que no todos pueden hacer, y qué lo habilita. */
 const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
+  "syh-vencidas": "evaluaSyh",
+  "syh-sin-completar": "evaluaSyh",
 };
 
 /**
  * Saca los avisos que esta persona no puede atender.
  *
- * **Esto no es repartir por permiso.** Lo que mira es una **lista de
- * responsables** que ya existe —`compras_aprobadores`, `os_aprobadores`—, que
- * es la misma regla que usa el aviso al instante en
- * `lib/core/avisoAlInstante.ts`. Aprobar un gasto no lo habilita el nivel del
+ * **Esto no es repartir por rol.** Lo que se mira es quién puede **hacer** lo
+ * que el aviso pide, y eso es de dos clases: una **lista de responsables** que
+ * ya existe —`compras_aprobadores`, `os_aprobadores`, la misma regla que usa el
+ * aviso al instante en `lib/core/avisoAlInstante.ts`— o el **nivel** que
+ * habilita la acción —acá, `admin` en Seguridad e Higiene, que es quien evalúa
+ * y cierra las condiciones—. Aprobar un gasto no lo habilita el nivel del
  * módulo ni ser admin del sistema: lo habilita estar en la lista, y eso ya lo
  * explica `puedeAprobarCompras` en `lib/compras/auth.ts`.
  *
  * Por qué hizo falta: medido el 18/10/2026, «Requerimientos esperando
- * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Pedirle a
- * alguien que haga algo que no puede hacer enseña que un aviso tuyo puede no
- * ser tuyo, y esa lección se paga en todos los demás avisos.
+ * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Un push
+ * diario sobre trabajo que uno no tiene permiso de hacer enseña que un aviso
+ * tuyo puede no ser tuyo, y esa lección se paga en todos los demás avisos. Con
+ * los de Seguridad e Higiene es la misma razón: quien sólo carga condiciones
+ * desde el teléfono no puede evaluarlas ni cerrarlas.
  *
  * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
- * 18/10/2026. Acá no se filtra por rol ni por nivel: sólo los avisos que están
- * en `DE_UNA_LISTA`, y hoy ésos son los dos de aprobación.
+ * 18/10/2026: sólo se filtran los avisos que están en `DE_UNA_LISTA`.
  */
 export function sinLoQueNoPuedeAtender(
   avisos: Notificacion[],
@@ -204,5 +224,7 @@ export async function avisosDeUsuario(
     puedeAprobarCompras(supabase, quien.id),
   ]);
 
-  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras });
+  const evaluaSyh = nivelEnModulo(quien.rol, quien.grants, "seguridad_higiene") === "admin";
+
+  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras, evaluaSyh });
 }
