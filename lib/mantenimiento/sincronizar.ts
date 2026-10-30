@@ -537,7 +537,7 @@ async function anotarLasDivergencias(
     const delSistema = await traerTodo<OrdenDelSistema>((desde, hasta) =>
       admin
         .from("ordenes_trabajo")
-        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente")
+        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente, fecha_ejecucion_pendiente")
         .range(desde, hasta)
     );
 
@@ -606,6 +606,28 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   /** Todas las de la planilla, para contrastarlas antes de pisar nada. */
   const leidasDeLaPlanilla: OrdenLeida[] = [];
 
+  // ── LAS FECHAS QUE YA SALIERON Y TODAVIA NO DERRAMARON ────────────────────
+  //
+  // Postergar una OT escribe su fecha en «Altas del sistema», y de ahi al
+  // master derrama entre 3 y 53 horas despues (medido el 21/10/2026). En esa
+  // ventana la J del master sigue diciendo la fecha vieja: importarla seria
+  // deshacer la postergacion, y a la corrida siguiente volver a deshacerla.
+  //
+  // `fecha_ejecucion_pendiente` es lo que lo evita. Se lee entero y no por OT
+  // porque son dos columnas de una tabla que ya se consulta igual.
+  const enCamino = new Map<number, string>();
+  {
+    const { data } = await admin
+      .from("ordenes_trabajo")
+      .select("ot_number, fecha_ejecucion_pendiente")
+      .not("fecha_ejecucion_pendiente", "is", null);
+    for (const o of data ?? []) {
+      enCamino.set(o.ot_number as number, String(o.fecha_ejecucion_pendiente));
+    }
+  }
+  /** Las que el derrame ya alcanzo: se les limpia la marca al final. */
+  const yaDerramaron: number[] = [];
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
@@ -625,7 +647,19 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     const proveedor_id = proveedorDe(enlaces, orden.contratista);
     if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
 
-    registros.push({ ...orden, equipment_id, sector_id, proveedor_id, synced_at: cuando });
+    // Una fecha en camino no se pisa con la del master. Y si el master YA la
+    // trae, el derrame llego: se importa normal y la marca se limpia al final.
+    // Limpiarla acá, antes de que el upsert entre, dejaría la OT descubierta
+    // si el lote falla.
+    const esperando = enCamino.get(orden.ot_number);
+    const fecha_ejecucion = esperando && esperando !== orden.fecha_ejecucion
+      ? esperando
+      : orden.fecha_ejecucion;
+    if (esperando && esperando === orden.fecha_ejecucion) yaDerramaron.push(orden.ot_number);
+
+    registros.push({
+      ...orden, fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
+    });
   }
 
   // ── EL CONTRASTE VA ACÁ: ANTES DE PISAR, NO DESPUÉS ───────────────────────
@@ -659,6 +693,18 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     guardadas += lote.length;
   }
 
+  // El derrame alcanzó a estas: el master ya dice la fecha que se había
+  // escrito, así que la marca dejó de proteger algo y se saca. Va DESPUÉS del
+  // upsert a propósito —si el lote hubiera fallado, la OT tiene que seguir
+  // protegida— y es lo único que cierra el ciclo: sin esto la marca quedaría
+  // puesta para siempre y la OT invisible para el contraste.
+  if (yaDerramaron.length > 0) {
+    await admin
+      .from("ordenes_trabajo")
+      .update({ fecha_ejecucion_pendiente: null })
+      .in("ot_number", yaDerramaron);
+  }
+
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
     clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
@@ -677,6 +723,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     borrado: borrado.aviso,
     // Cuántas dicen distinto los dos lados. Va en el resultado aunque el aviso
     // ya lo cuente: quien corre la sincronización a mano lo ve en el momento.
+    fechas_que_derramaron: yaDerramaron.length,
     divergencias: divergencias.cuantas,
     ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así

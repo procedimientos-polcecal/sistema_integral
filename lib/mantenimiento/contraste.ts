@@ -53,6 +53,13 @@ export interface OrdenDelSistema {
   prioridad: string | null;
   /** Lo que el alta no pudo exportar. Mientras tenga algo, diferir es normal. */
   sheets_pendiente?: string | null;
+  /**
+   * La fecha de ejecución ya escrita en «Altas del sistema» que el derrame
+   * del master todavía no refleja. Mientras tenga valor, que los dos lados
+   * digan fechas distintas es lo normal y no un problema: el derrame tarda
+   * de 3 a 53 horas, medido el 21/10/2026.
+   */
+  fecha_ejecucion_pendiente?: string | null;
 }
 
 export interface Divergencia {
@@ -169,6 +176,12 @@ export function contrastar(
     // planilla todavía no. Se informa aparte y no se compara, porque comparar
     // la contaría como problema cada vez.
     if (comparable(s.sheets_pendiente) !== "") { enLaCola.push(s.ot_number); continue; }
+
+    // Lo mismo para una fecha que ya salió y todavía no derramó. Va acá y no
+    // como una excepción del campo porque mientras esté en camino **toda** la
+    // fila está en tránsito: compararle el resto sería informar diferencias
+    // de una foto que se está moviendo.
+    if (comparable(s.fecha_ejecucion_pendiente) !== "") { enLaCola.push(s.ot_number); continue; }
 
     // Va antes de comparar campo por campo porque no es una comparación: los
     // dos lados dicen «por hacer» y aun así la planilla está mal. Se informa
