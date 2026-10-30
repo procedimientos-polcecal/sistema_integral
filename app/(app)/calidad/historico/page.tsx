@@ -1,0 +1,43 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/core/sesion";
+import { nivelCalidadDe } from "@/lib/calidad/auth";
+import { buscar } from "@/lib/calidad/historico/consultas";
+import HistoricoClient from "./HistoricoClient";
+
+/** El primer día del mes en curso, y hoy. Sin pasar por UTC. */
+function arranque(): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: iso(hoy) };
+}
+
+/**
+ * El histórico del laboratorio.
+ *
+ * La búsqueda corre en el servidor y vuelve por la URL, así que un resultado se
+ * puede mandar por chat: quien atiende un reclamo comparte el enlace en vez de
+ * explicar qué filtros puso.
+ */
+export default async function HistoricoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; desde?: string; hasta?: string }>;
+}) {
+  const supabase = await createClient();
+
+  const user = await usuarioActual();
+  if (!user) redirect("/login");
+  if (!(await nivelCalidadDe(supabase, user.id))) redirect("/");
+
+  const params = await searchParams;
+  const inicial = arranque();
+  const texto = params.q ?? "";
+  const desde = params.desde ?? inicial.desde;
+  const hasta = params.hasta ?? inicial.hasta;
+
+  const filas = await buscar(supabase, { texto, desde, hasta });
+
+  return <HistoricoClient filas={filas} texto={texto} desde={desde} hasta={hasta} />;
+}
