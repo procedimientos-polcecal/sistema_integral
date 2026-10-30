@@ -24,12 +24,14 @@ function comoSeEscribe(f: FilaDeLaBusqueda): string {
 }
 
 export default function HistoricoClient({
-  filas, texto, desde, hasta,
+  filas, texto, desde, hasta, error,
 }: {
   filas: FilaDeLaBusqueda[];
   texto: string;
   desde: string;
   hasta: string;
+  /** Lo que dijo la base, sin traducir. Null si anduvo. */
+  error: string | null;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(texto);
@@ -59,6 +61,12 @@ export default function HistoricoClient({
           Los tres años del laboratorio, junto con lo que se carga hoy en Ensayos.
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Todavía no se puede consultar el histórico: {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <input

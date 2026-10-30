@@ -14,11 +14,18 @@
  * Sin IO: recibe celdas ya leídas. Es lo que permite probarlo.
  */
 
-import { escalaDeLaColumna, escalaDelValor } from "./escala";
+import { escalaDeLaEpoca, escalaDelValor, CORTE_DE_PLANILLA } from "./escala";
+import type { Escala } from "./escala";
 import type { Celda, FilaHistorica } from "./types";
 
-/** La hoja cuyo origen es el cliente de cada fila y no la pestaña. */
-const HOJA_POR_CLIENTE = "Despachos cal fillerizada";
+/**
+ * Cómo se llama la columna que dice de qué es la fila, en las hojas donde el
+ * origen no es la pestaña.
+ *
+ * `Despachos cal fillerizada` lo pone en «Cliente» y `Calcio` en «Muestra». En
+ * las otras cinco el origen es el nombre de la hoja.
+ */
+const COLUMNA_DE_ORIGEN = /^(cliente|muestra)$/i;
 
 /** Cuánto puede separarse un acumulado de la suma de sus retenidos. */
 const TOLERANCIA = 0.15;
@@ -54,21 +61,92 @@ export function unidadDeLaEtiqueta(etiqueta: string): string | null {
   return m ? m[1].trim() : null;
 }
 
-/** Los valores anteriores al corte de cada columna, para decidir su escala. */
-function escalasDeLasColumnas(encabezado: string[], filas: Celda[][]): Map<number, ReturnType<typeof escalaDeLaColumna>> {
-  const escalas = new Map<number, ReturnType<typeof escalaDeLaColumna>>();
+/** La escala de cada columna **en cada época**, decidida con sus propios datos. */
+function escalasDeLasColumnas(
+  encabezado: string[],
+  filas: Celda[][]
+): Map<number, { antes: Escala; desde: Escala }> {
+  const escalas = new Map<number, { antes: Escala; desde: Escala }>();
   for (let i = 1; i < encabezado.length; i++) {
     const etiqueta = encabezado[i];
     if (!etiqueta) continue;
-    const previos: number[] = [];
+    const antes: number[] = [];
+    const desde: number[] = [];
     for (const fila of filas) {
       const fecha = texto(fila[0]);
-      if (!esFecha(fecha) || fecha >= "2026-06-02") continue;
+      if (!esFecha(fecha)) continue;
       const v = numero(fila[i]);
-      if (v !== null && v !== 0) previos.push(v);
+      if (v === null || v === 0) continue;
+      (fecha < CORTE_DE_PLANILLA ? antes : desde).push(v);
     }
-    escalas.set(i, escalaDeLaColumna(etiqueta, previos));
+    escalas.set(i, {
+      antes: escalaDeLaEpoca(etiqueta, antes),
+      desde: escalaDeLaEpoca(etiqueta, desde),
+    });
   }
+  return escalas;
+}
+
+/**
+ * Corrige la etiqueta de una columna ambigua preguntándole a la aritmética.
+ *
+ * La regla por columna no puede distinguir un 0,6% de una fracción de 0,6: las
+ * dos se escriben igual. Pasa de verdad con el `Ret #50` de `Kartonsec` y de
+ * `Emapi`, donde **todos** los valores son menores a 1 y aun así son
+ * porcentajes —sus hermanos de la misma fila son 5,5 y 22,7—.
+ *
+ * Lo que sí puede decidirlo es la fila: el acumulado tiene que dar la suma de
+ * sus retenidos. Se prueban las dos lecturas y gana la que hace cerrar más
+ * filas. Si ninguna cierra más que la otra, no se toca nada: la aritmética no
+ * siempre tiene algo que decir, y donde no lo tiene no se inventa.
+ */
+function desambiguarPorAritmetica(
+  escalas: Map<number, { antes: Escala; desde: Escala }>,
+  encabezado: string[],
+  filas: Celda[][]
+): Map<number, { antes: Escala; desde: Escala }> {
+  const iAcum = encabezado.findIndex((e) => e && /Acum/i.test(e));
+  if (iAcum < 0) return escalas;
+  const mallaAcum = mallaDeLaEtiqueta(encabezado[iAcum]);
+  if (mallaAcum === null) return escalas;
+
+  const retenidos = encabezado
+    .map((e, i) => ({ i, malla: e ? mallaDeLaEtiqueta(e) : null, esRet: Boolean(e && /^Ret/i.test(e)) }))
+    .filter((c) => c.esRet && c.malla !== null && c.malla <= mallaAcum);
+
+  for (const epoca of ["antes", "desde"] as const) {
+    const enEsaEpoca = (f: string) =>
+      epoca === "antes" ? f < CORTE_DE_PLANILLA : f >= CORTE_DE_PLANILLA;
+    if (escalas.get(iAcum)?.[epoca] !== "porcentaje") continue;
+
+    for (const col of retenidos) {
+      const actual = escalas.get(col.i)?.[epoca];
+      if (actual !== "fraccion") continue;
+
+      let cierraComoEsta = 0;
+      let cierraComoPorcentaje = 0;
+      for (const fila of filas) {
+        const fecha = texto(fila[0]);
+        if (!esFecha(fecha) || !enEsaEpoca(fecha)) continue;
+        const acum = numero(fila[iAcum]);
+        const mio = numero(fila[col.i]);
+        if (acum === null || mio === null) continue;
+        const otros = retenidos
+          .filter((r) => r.i !== col.i)
+          .map((r) => numero(fila[r.i]))
+          .filter((v): v is number => v !== null);
+        if (otros.length === 0) continue;
+        const suma = otros.reduce((a, b) => a + b, 0);
+        if (Math.abs(suma + mio * 100 - acum) <= TOLERANCIA) cierraComoEsta++;
+        if (Math.abs(suma + mio - acum) <= TOLERANCIA) cierraComoPorcentaje++;
+      }
+
+      if (cierraComoPorcentaje > cierraComoEsta) {
+        escalas.set(col.i, { ...escalas.get(col.i)!, [epoca]: "porcentaje" });
+      }
+    }
+  }
+
   return escalas;
 }
 
@@ -83,11 +161,13 @@ export function filasDeHojaTabular(
   encabezado: string[],
   filas: Celda[][]
 ): FilaHistorica[] {
-  const escalas = escalasDeLasColumnas(encabezado, filas);
-  const porCliente = hoja === HOJA_POR_CLIENTE;
-  const iCliente = porCliente
-    ? encabezado.findIndex((e) => /cliente/i.test(e ?? ""))
-    : -1;
+  const escalas = desambiguarPorAritmetica(
+    escalasDeLasColumnas(encabezado, filas),
+    encabezado,
+    filas
+  );
+  // La columna que dice de qué es la fila, si la hoja la tiene.
+  const iOrigen = encabezado.findIndex((e) => COLUMNA_DE_ORIGEN.test((e ?? "").trim()));
 
   const salida: FilaHistorica[] = [];
 
@@ -95,14 +175,22 @@ export function filasDeHojaTabular(
     const fecha = texto(fila[0]);
     if (!esFecha(fecha)) return;
 
-    // Sin origen no hay a qué colgar el valor. En la hoja por cliente eso
-    // significa perder la fila: preferible a inventarle dueño a una tonelada.
-    const origen = porCliente ? texto(fila[iCliente]) : hoja;
+    // Sin origen no hay a qué colgar el valor. En las hojas que lo traen por
+    // fila eso significa perderla: preferible a inventarle dueño.
+    const origen = iOrigen >= 0 ? texto(fila[iOrigen]) : hoja;
     if (!origen) return;
 
     for (let i = 1; i < encabezado.length; i++) {
       const etiqueta = encabezado[i];
-      if (!etiqueta || i === iCliente) continue;
+      if (!etiqueta || i === iOrigen) continue;
+      // Un encabezado que es una fecha no nombra una determinación: nombra
+      // OTRA tabla, puesta al costado de ésta. `Calcio` tiene tres —columnas 10
+      // a 18, una granulometría por fecha, con su propio encabezado dos filas
+      // más abajo—, y leerlas como columnas metía 233 números de tamiz como si
+      // fueran mediciones, cada uno con la fecha y la muestra de la fila de la
+      // izquierda, que son de otro análisis. No se pierde nada que estuviera
+      // bien: esas tablas no tienen forma de ninguna de las dos que se leen.
+      if (esFecha(etiqueta.trim())) continue;
       const celda = fila[i];
       if (!celda || esAgregacion(celda)) continue;
       const valor = numero(celda);
@@ -115,7 +203,11 @@ export function filasDeHojaTabular(
         determinacion: etiqueta,
         malla: mallaDeLaEtiqueta(etiqueta),
         valor,
-        escala: escalaDelValor(escalas.get(i) ?? "absoluto", fecha, etiqueta),
+        escala: escalaDelValor(
+          (fecha < CORTE_DE_PLANILLA ? escalas.get(i)?.antes : escalas.get(i)?.desde) ?? "absoluto",
+          fecha,
+          etiqueta
+        ),
         unidad: unidadDeLaEtiqueta(etiqueta),
         revisar: null,
         fila_excel: indice + 2,
@@ -129,28 +221,53 @@ export function filasDeHojaTabular(
 /**
  * Las filas de una hoja en bloques.
  *
- * Un bloque empieza en una fila cuya primera celda es una fecha; las celdas a su
- * derecha son los nombres de muestra. Las filas siguientes son
- * `(determinación, valor por muestra)` hasta la próxima fila con fecha.
+ * Un bloque empieza en una fila cuya primera celda es una fecha. Los nombres de
+ * muestra son las celdas a su derecha —y **si la fecha va sola, los de la fila
+ * siguiente**: en `Otros` pasa dos veces, y leerlo mal pierde 66 valores, entre
+ * ellos la granulometría completa de seis productos—.
  *
- * Acá no hay encabezado del que sacar la escala, así que se decide por la
- * etiqueta sola: la humedad es fracción y lo demás, absoluto —son gramos—.
+ * **Una fecha nunca es un nombre de muestra.** `Separadoras` tiene una en un
+ * casillero de nombre; sin esta guarda queda un origen llamado `2026-06-24` y,
+ * debajo, un 50 de número de malla leído como humedad en fracción, que la
+ * pantalla imprime como 5000%.
+ *
+ * Acá no hay encabezado del que sacar la escala, así que la decide la etiqueta
+ * sola, con los mismos criterios que en una hoja tabular.
  */
 export function filasDeHojaEnBloques(hoja: string, filas: Celda[][]): FilaHistorica[] {
   const salida: FilaHistorica[] = [];
   let fecha: string | null = null;
   let muestras: string[] = [];
+  /** La fila que se consumió como encabezado del bloque, si hubo una. */
+  let encabezadoEn = -1;
+
+  /** Los nombres de una fila, sin las fechas, que no nombran a nadie. */
+  const nombresDe = (fila: Celda[]): string[] =>
+    fila.map((c) => {
+      const t = texto(c);
+      return esFecha(t) ? "" : t;
+    });
 
   filas.forEach((fila, indice) => {
     const primera = texto(fila[0]);
 
     if (esFecha(primera)) {
       fecha = primera;
-      muestras = fila.map((c) => texto(c));
+      muestras = nombresDe(fila);
+      // La fecha puede venir sola y los nombres en la fila de abajo.
+      encabezadoEn = -1;
+      if (!muestras.slice(1).some(Boolean)) {
+        const siguiente = filas[indice + 1];
+        if (siguiente && !esFecha(texto(siguiente[0]))) {
+          muestras = nombresDe(siguiente);
+          encabezadoEn = indice + 1;
+        }
+      }
       return;
     }
 
-    if (!fecha || !primera) return;
+    // La fila que se consumió como encabezado no vuelve a leerse.
+    if (!fecha || !primera || indice === encabezadoEn) return;
 
     for (let i = 1; i < fila.length; i++) {
       const muestra = muestras[i];
@@ -168,7 +285,7 @@ export function filasDeHojaEnBloques(hoja: string, filas: Celda[][]): FilaHistor
         determinacion: primera,
         malla: mallaDeLaEtiqueta(primera),
         valor,
-        escala: escalaDeLaColumna(primera, []) === "fraccion" ? "fraccion" : "absoluto",
+        escala: escalaDelValor(escalaDeLaEpoca(primera, [valor]), fecha, primera),
         unidad: unidadDeLaEtiqueta(primera),
         revisar: null,
         fila_excel: indice + 1,

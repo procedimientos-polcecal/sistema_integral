@@ -34,14 +34,22 @@ interface FilaDeLaTabla {
 /**
  * Lo que se midió entre dos fechas, de las dos fuentes.
  *
- * **El histórico se filtra en la base y no en memoria.** Son 3.511 filas hoy y
- * van a crecer poco, pero traerlas enteras para filtrarlas acá es el
- * `.limit(3000)` de este módulo: funciona hasta que deja de funcionar, y sin
- * avisar.
+ * **Las dos se acotan por fecha en la base y se filtran por texto acá.**
  *
- * El lado de Ensayos se acota por fecha antes de aplanarse —aplanar una muestra
- * cuesta tres cuentas y una granulometría— y recién ahí se filtra por texto,
- * porque sus determinaciones no existen como columna hasta que se las despeja.
+ * El texto no puede ir a SQL, y eso se midió: `ilike` de Postgres **no ignora
+ * acentos** y el repo no tiene `unaccent`, así que buscar «galpon» no
+ * encontraba `Caliza galpón` — el dato existía y no aparecía, que es la peor
+ * forma de que un buscador falle. Interpolar el término en un `.or()` tenía
+ * además un segundo filo: una coma lo rompe («failed to parse logic tree») y
+ * tiraba la pantalla entera, y un `%` tipeado actuaba de comodín.
+ *
+ * Lo que cuesta: traer las filas del rango antes de filtrarlas. Son 3.908 en
+ * todo el libro, así que el peor caso —el rango completo— es eso, medido y no
+ * estimado. Si algún día esta tabla creciera de verdad, la salida es una
+ * columna normalizada con su índice, no volver a `ilike`.
+ *
+ * El lado de Ensayos ya se filtraba acá por otro motivo: sus determinaciones no
+ * existen como columna hasta que `aplanarMuestra` las despeja de los gramos.
  */
 export async function buscar(
   supabase: SupabaseClient,
@@ -49,21 +57,27 @@ export async function buscar(
 ): Promise<FilaDeLaBusqueda[]> {
   const termino = texto.trim();
 
-  const delHistorico = await traerTodo<FilaDeLaTabla>((d, h) => {
+  const delHistorico = await traerTodo<FilaDeLaTabla>((d, h) =>
     // La cadena del select va literal: armada en una variable, Supabase pierde
     // la inferencia y todo lo que sale queda como error de string.
-    let q = supabase
+    supabase
       .from("calidad_historico_determinaciones")
       .select("fecha, hoja, origen_raw, determinacion, valor, escala, unidad, revisar, fila_excel")
       .gte("fecha", desde)
-      .lte("fecha", hasta);
-    if (termino) {
-      q = q.or(`origen_raw.ilike.%${termino}%,determinacion.ilike.%${termino}%`);
-    }
-    return q.order("fecha", { ascending: false }).range(d, h);
-  });
+      .lte("fecha", hasta)
+      .order("fecha", { ascending: false })
+      .range(d, h)
+  );
 
-  const historico: FilaDeLaBusqueda[] = delHistorico.map((f) => ({
+  const aguja = normalizarParaBuscar(termino);
+  const coincide = (origen: string, determinacion: string) =>
+    !aguja ||
+    normalizarParaBuscar(origen).includes(aguja) ||
+    normalizarParaBuscar(determinacion).includes(aguja);
+
+  const historico: FilaDeLaBusqueda[] = delHistorico
+    .filter((f) => coincide(f.origen_raw, f.determinacion))
+    .map((f) => ({
     fecha: f.fecha,
     origen: f.origen_raw,
     determinacion: f.determinacion,
@@ -75,18 +89,10 @@ export async function buscar(
     fila_excel: f.fila_excel,
   }));
 
-  const deEnsayos = await deEnsayosEnElRango(supabase, desde, hasta);
-
-  // El filtro de texto de Ensayos corre acá: sus determinaciones no existen como
-  // columna hasta que `aplanarMuestra` las despeja de los gramos.
-  const aguja = normalizarParaBuscar(termino);
-  const filtradas = aguja
-    ? deEnsayos.filter(
-        (f) =>
-          normalizarParaBuscar(f.origen).includes(aguja) ||
-          normalizarParaBuscar(f.determinacion).includes(aguja)
-      )
-    : deEnsayos;
+  const deEnsayos = (await deEnsayosEnElRango(supabase, desde, hasta)).filter((f) =>
+    coincide(f.origen, f.determinacion)
+  );
+  const filtradas = deEnsayos;
 
   return [...historico, ...filtradas].sort(
     (a, b) => b.fecha.localeCompare(a.fecha) || a.origen.localeCompare(b.origen)

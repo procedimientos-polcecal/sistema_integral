@@ -225,10 +225,13 @@ gramos. Las etiquetas se reusan de `lib/calidad/ensayos/reporte.ts` para que las
 dos mitades digan `"Humedad bh (%)"` igual. Lo de Ensayos sale siempre con escala
 `porcentaje`, que es lo que sus cuentas devuelven.
 
-El filtro de texto corre **en SQL sobre el histórico** —son 3.511 filas que van a
-crecer poco, pero la tabla no tiene por qué viajar entera— y el lado de Ensayos se
-filtra por producto y fecha antes de aplanar. Un buscador que traiga tres años de
-retenidos a memoria para filtrarlos es el `.limit(3000)` de este módulo.
+El filtro de **fechas** corre en SQL y el de **texto no**, y eso se decidió al
+construirlo: `ilike` de Postgres no ignora acentos y el repo no tiene `unaccent`,
+así que buscar «galpon» no encontraba `Caliza galpón` —el dato existía y no
+aparecía, que es el peor resultado posible para una pantalla que contesta
+reclamos—. El término se compara en memoria con el mismo normalizador que usa
+`<Select>`. Lo que la acota sigue siendo el rango de fechas, y el lado de Ensayos
+se filtra por producto y fecha antes de aplanar.
 
 ## El solape, chico y a la vista
 
@@ -280,6 +283,30 @@ muestra, y los dos se movieron por decisiones que el propio diseño tomó despu�
 Si un conteo no da, la regla cambió de significado y hay que mirar antes de
 escribir. El archivo no se versiona en el repo —es de Calidad, no del sistema—,
 así que estos números son lo único que permite reproducir la corrida.
+
+**Y volvieron a moverse el 30/10/2026, al revisar lo construido. El oráculo
+vigente vive en [docs/CALIDAD-HISTORICO.md](../../CALIDAD-HISTORICO.md); la tabla
+de arriba es la de este diseño y se deja como estaba.** Lo que cambió, y por qué:
+
+| | aquí | hoy |
+|---|---|---|
+| valores totales | 3.304 | **3.685** |
+| orígenes distintos | 47 | **64** |
+| agregaciones descartadas | 22 | **27** |
+
+Tres hallazgos, los tres medidos contra el archivo y ninguno deducido del código:
+
+- **`Calcio` no es una hoja en bloques sino tabular** —su fila 1 dice
+  `Fecha | Muestra | Humedad bh (%) | …`—, y leerla mal perdía **245 valores** y
+  dejaba entrar tres cuyo origen era un número suelto. Esa sola corrección sube
+  `Calcio` de 3 valores a 240.
+- **A la derecha de `Calcio` hay otras tres tablas**, una granulometría por fecha.
+  Entraban como columnas, metiendo **223 números de tamiz** como mediciones con la
+  fecha y la muestra de la fila de al lado, que son de otro análisis. Lo que las
+  delata es que su encabezado es una fecha.
+- **171 celdas con fórmula arrastrada** (`sharedFormula`) se perdían: ExcelJS no
+  les pone `formula` en `cell.value`, sólo en el getter `cell.formula`. Entre
+  ellas estaban cinco de las agregaciones, que por eso ahora son 27 y no 22.
 
 **Detección de bloques** en las tres hojas sueltas: un bloque empieza en una fila
 cuya primera celda es una fecha; las celdas a su derecha son los nombres de

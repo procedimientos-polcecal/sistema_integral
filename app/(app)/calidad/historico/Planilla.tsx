@@ -85,9 +85,14 @@ export default function Planilla({ filas }: { filas: FilaDeLaBusqueda[] }) {
       ))}
       {/* En esta vista los números van pelados, así que la escala se dice una
           vez por tabla en vez de en cada celda. */}
+      {/* La nota decía «los anteriores al 02/06/2026», y era falsa: las 251
+          humedades posteriores al corte también son fracción. En esta vista los
+          números van pelados, así que la nota es toda la defensa que hay. */}
       <p className="text-xs text-slate-500">
-        Los valores anteriores al 02/06/2026 están escritos como fracción: un 0,19 quiere
-        decir 19%. La lista de arriba lo aclara valor por valor.
+        Acá los valores van pelados. Hay dos escalas conviviendo: los retenidos y
+        acumulados anteriores al 02/06/2026 están escritos como fracción —un 0,19 quiere
+        decir 19%—, y <strong>la humedad es fracción siempre</strong>, también después de
+        esa fecha. La lista de arriba lo aclara valor por valor.
       </p>
     </div>
   );

@@ -99,6 +99,30 @@ describe("filasDeHojaTabular", () => {
   });
 });
 
+describe("filasDeHojaTabular: la tabla de al lado", () => {
+  // Datos reales de `Calcio`. A la derecha de su tabla hay OTRA tabla: tres
+  // granulometrías, cada una con su fecha en la fila 1 y su propio encabezado
+  // dos filas más abajo. El parseo tabular leía esa fecha como si fuera el
+  // nombre de una determinación, así que un número de tamiz —4, 10, 18—
+  // entraba como medición, con la fecha y la muestra de la fila de la
+  // izquierda, que son de otro análisis.
+  const ENC = [
+    "Fecha", "Muestra", "Humedad bh (%)", "P recipiente (g)", "", "", "",
+    "2026-07-31", "2026-08-28",
+  ];
+  const FILA = [
+    { valor: "2026-07-28" }, { valor: "Caliza galpón" }, { valor: 0.0086 },
+    { valor: 433.25 }, {}, {}, {}, { valor: 4 }, { valor: 0 },
+  ];
+
+  it("una columna cuyo encabezado es una fecha no es una determinación", () => {
+    const r = filasDeHojaTabular("Calcio", ENC, [FILA]);
+    expect(r.map((f) => f.determinacion).sort()).toEqual([
+      "Humedad bh (%)", "P recipiente (g)",
+    ]);
+  });
+});
+
 describe("filasDeHojaEnBloques", () => {
   // El bloque de ejemplo del spec, tal cual.
   const BLOQUE = [
@@ -136,6 +160,40 @@ describe("filasDeHojaEnBloques", () => {
       [{ valor: "Humedad bh (%)" }, { valor: 0.0068 }],
     ];
     expect(filasDeHojaEnBloques("Otros", sinNombre)).toHaveLength(0);
+  });
+
+  it("toma los nombres de la fila siguiente cuando la fecha va sola", () => {
+    // Pasa dos veces en `Otros`: la fila 13 es sólo la fecha y la 14 trae los
+    // nombres. Leerlo mal pierde 66 valores, entre ellos la granulometria
+    // completa de seis productos.
+    const nombresAbajo = [
+      [{ valor: "2026-10-02" }],
+      [{ valor: "Tamiz" }, { valor: "Calcio 0-2" }, { valor: "Dolomita 0-2" }],
+      [{ valor: "#50" }, { valor: 3.8 }, { valor: 2.3 }],
+    ];
+    const r = filasDeHojaEnBloques("Otros", nombresAbajo);
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ origen_raw: "Calcio 0-2", determinacion: "#50", valor: 3.8 });
+  });
+
+  it("una fecha no es un nombre de muestra", () => {
+    // `Separadoras` fila 2 tiene una fecha en un casillero de nombre. Sin esto
+    // queda un origen llamado "2026-06-24" y, debajo, un 50 de malla leido como
+    // humedad en fraccion: la pantalla imprime 5000%.
+    const conFecha = [
+      [{ valor: "2026-06-22" }, { valor: "Cal falla" }, { valor: "2026-06-24" }],
+      [{ valor: "Humedad bh (%)" }, { valor: 0.0026 }, { valor: 50 }],
+    ];
+    const r = filasDeHojaEnBloques("Separadoras", conFecha);
+    expect(r.map((f) => f.origen_raw)).toEqual(["Cal falla"]);
+  });
+
+  it("respeta el porcentaje de la etiqueta en vez de forzar absoluto", () => {
+    const r = filasDeHojaEnBloques("Separadoras", [
+      [{ valor: "2026-06-25" }, { valor: "Retorno" }],
+      [{ valor: "Ret #50 (%)" }, { valor: 6.4 }],
+    ]);
+    expect(r[0]).toMatchObject({ escala: "porcentaje", unidad: "%", malla: 50 });
   });
 
   it("ignora la celda sin valor numerico", () => {
@@ -204,5 +262,36 @@ describe("revisarAritmetica", () => {
   it("no marca la que cierra dentro de la tolerancia de 0,15", () => {
     // 4,3 + 19,3 = 23,6, que es lo que dice el acumulado.
     expect(revisarAritmetica(fila({ ret100: 4.3, ret200: 19.3, acum200: 23.6 }))).toBeNull();
+  });
+});
+
+describe("desambiguarPorAritmetica", () => {
+  // `Ret #50` de Kartonsec: todos sus valores son menores a 1, asi que la regla
+  // por columna lo llama fraccion. Pero sus hermanos de la misma fila son
+  // porcentajes claros, y la suma solo cierra si tambien lo es.
+  const ENC = ["Fecha", "Ret #50 (%)", "Ret #100 (%)", "Ret #200(%)", "Acumulado en #200 (%)"];
+  const FILAS = [
+    [{ valor: "2026-06-02" }, { valor: 0.8 }, { valor: 5.5 }, { valor: 22.7 }, { valor: 29.0 }],
+    [{ valor: "2026-06-03" }, { valor: 0.4 }, { valor: 5.4 }, { valor: 20.3 }, { valor: 26.1 }],
+  ];
+
+  it("lee como porcentaje la columna chica cuya suma solo cierra asi", () => {
+    const r = filasDeHojaTabular("Despacho a Kartonsec", ENC, FILAS);
+    const ret50 = r.filter((f) => f.determinacion === "Ret #50 (%)");
+    expect(ret50).toHaveLength(2);
+    expect(ret50.every((f) => f.escala === "porcentaje")).toBe(true);
+  });
+
+  it("y entonces la fila cierra y no queda marcada", () => {
+    const r = filasDeHojaTabular("Despacho a Kartonsec", ENC, FILAS);
+    const deLaPrimera = r.filter((f) => f.fecha === "2026-06-02");
+    expect(revisarAritmetica(deLaPrimera)).toBeNull();
+  });
+
+  it("no toca la columna chica cuando la aritmetica no puede decir nada", () => {
+    // Sin acumulado contra el cual probar, la regla por columna se respeta.
+    const sinAcum = [[{ valor: "2026-06-02" }, { valor: 0.8 }, { valor: 0.5 }]];
+    const r = filasDeHojaTabular("Despacho a Kartonsec", ["Fecha", "Ret #50 (%)", "Ret #100 (%)"], sinAcum);
+    expect(r.every((f) => f.escala === "fraccion")).toBe(true);
   });
 });

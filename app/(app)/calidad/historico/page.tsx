@@ -5,12 +5,20 @@ import { nivelCalidadDe } from "@/lib/calidad/auth";
 import { buscar } from "@/lib/calidad/historico/consultas";
 import HistoricoClient from "./HistoricoClient";
 
-/** El primer día del mes en curso, y hoy. Sin pasar por UTC. */
+/**
+ * El rango de arranque: **todo**, no el mes en curso.
+ *
+ * Este módulo existe para mirar tres años atrás. Arrancar en octubre hacía que
+ * un reclamo por un despacho de 2024 devolviera «no hay determinaciones» sin
+ * ninguna señal de que el problema eran las fechas.
+ */
+const DESDE_SIEMPRE = "2023-01-01";
+
 function arranque(): { desde: string; hasta: string } {
   const hoy = new Date();
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: iso(hoy) };
+  return { desde: DESDE_SIEMPRE, hasta: iso(hoy) };
 }
 
 /**
@@ -37,7 +45,18 @@ export default async function HistoricoPage({
   const desde = params.desde ?? inicial.desde;
   const hasta = params.hasta ?? inicial.hasta;
 
-  const filas = await buscar(supabase, { texto, desde, hasta });
+  // La migración la corre una persona, así que entre el deploy y esa corrida la
+  // tabla puede no existir. Sin esto, `traerTodo` lanza y la pantalla se cae en
+  // vez de decir qué falta — y el estreno del módulo sería un error.
+  let filas: Awaited<ReturnType<typeof buscar>> = [];
+  let error: string | null = null;
+  try {
+    filas = await buscar(supabase, { texto, desde, hasta });
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
 
-  return <HistoricoClient filas={filas} texto={texto} desde={desde} hasta={hasta} />;
+  return (
+    <HistoricoClient filas={filas} texto={texto} desde={desde} hasta={hasta} error={error} />
+  );
 }

@@ -34,29 +34,54 @@ if (!ruta) {
   process.exit(1);
 }
 
-/** Las cinco de una fila por día, más la de despachos, que también es tabular. */
+/**
+ * Las tabulares: una fila por día y encabezado en la fila 1.
+ *
+ * `Calcio` está acá y no en los bloques, aunque el spec la contara entre las
+ * sueltas: su fila 1 dice `Fecha | Muestra | Humedad bh (%) | P recipiente (g) |
+ * P inicial (g) | P final (g)` y tiene 65 filas con fecha. Leerla como bloques
+ * consumía cada fila de datos como encabezado y **perdía 245 valores**, dejando
+ * entrar tres cuyo origen era un número suelto. Su columna «Muestra» es el
+ * origen de cada fila, igual que «Cliente» en la de despachos.
+ *
+ * Lo que `Calcio` sigue dejando afuera es su bloque de la derecha —columnas 10
+ * en adelante, con fechas por encabezado—, que no es ninguna de las dos formas.
+ */
 const TABULARES = [
   "Filler 1", "Cal", "Filler 2", "Despacho a Kartonsec", "Despacho a Emapi",
-  "Despachos cal fillerizada",
+  "Despachos cal fillerizada", "Calcio",
 ];
 /** Las que vienen en bloques: fecha arriba, muestras de costado. */
-const EN_BLOQUES = ["Calcio", "Otros", "Separadoras"];
+const EN_BLOQUES = ["Otros", "Separadoras"];
 
 const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(ruta);
 
-/** Una celda de exceljs a la forma que el parser entiende. */
+/**
+ * Una celda de exceljs a la forma que el parser entiende.
+ *
+ * **La fórmula se lee de `c.formula` y no del `value`.** Una celda con fórmula
+ * arrastrada llega como `{result, sharedFormula}` **sin** `formula` propia:
+ * mirando el `value` cae fuera de todas las ramas, el valor queda siendo el
+ * objeto y se descarta en silencio. Son **171 celdas numéricas** del libro,
+ * entre ellas las dos columnas de porcentaje enteras de `Despachos cal
+ * fillerizada`. El getter `c.formula` traduce la compartida y devuelve la
+ * fórmula real, que además es lo que `esAgregacion` necesita para que un
+ * `AVERAGE` arrastrado no se cuele.
+ */
 const aCelda = (c: ExcelJS.Cell): Celda => {
+  const formula = (c as unknown as { formula?: string }).formula;
+  if (formula !== undefined) {
+    return { valor: (c as unknown as { result?: unknown }).result, formula };
+  }
   let v: unknown = c.value;
-  let formula: string | undefined;
   if (v && typeof v === "object") {
     const o = v as Record<string, unknown>;
     if (v instanceof Date) v = v.toISOString().slice(0, 10);
-    else if ("formula" in o) { formula = String(o.formula); v = o.result; }
     else if ("richText" in o) v = (o.richText as { text: string }[]).map((t) => t.text).join("");
     else if ("text" in o) v = o.text;
   }
-  return { valor: v, formula };
+  return { valor: v };
 };
 
 const filasDe = (ws: ExcelJS.Worksheet, desde: number): Celda[][] => {
@@ -134,16 +159,33 @@ const origenes = new Set(todas.map((f) => f.origen_raw));
 console.log("── Contra el oráculo del spec ──");
 const linea = (que: string, dio: unknown, esp: unknown) =>
   console.log(`  ${que.padEnd(40)} ${String(dio).padStart(12)}  esperado ${String(esp).padStart(12)}  ${String(dio) === String(esp) ? "OK" : "<<< NO DA"}`);
-linea("valores totales", todas.length, 3304);
+linea("valores totales", todas.length, 3685);
 linea("fraccion (cinco tabulares)", cuenta("fraccion"), 958);
 linea("porcentaje (cinco tabulares)", cuenta("porcentaje"), 1544);
 linea("absoluto (cinco tabulares)", cuenta("absoluto"), 585);
 linea("filas con revisar", conRevisar, 28);
-linea("agregaciones descartadas", agregaciones, 22);
-linea("orígenes distintos", origenes.size, 47);
-linea("orígenes sin producto", sinProducto.size, 40);
+linea("agregaciones descartadas", agregaciones, 27);
+linea("orígenes distintos", origenes.size, 64);
+linea("orígenes sin producto", sinProducto.size, 50);
 linea("rango desde", fechas[0], "2023-11-06");
 linea("rango hasta", fechas[fechas.length - 1], "2026-10-21");
+
+// La clave natural, que es lo que hace repetible la importación.
+//
+// `(hoja, fila_excel, determinacion, fecha, origen_raw)` es **una celda** del
+// Excel: la hoja y la fila la ubican, la determinación es la columna, y las
+// otras dos distinguen los bloques, donde una misma fila lleva varias muestras
+// de costado. La tabla tiene un unique sobre esas cinco, así que una repetida
+// acá es un error del parseo y no de la planilla — y conviene verlo en seco,
+// antes de que lo diga Postgres a la mitad de un lote.
+const claves = new Map<string, number>();
+for (const f of todas) {
+  const k = [f.hoja, f.fila_excel, f.determinacion, f.fecha, f.origen_raw].join("|");
+  claves.set(k, (claves.get(k) ?? 0) + 1);
+}
+const repetidas = [...claves].filter(([, n]) => n > 1);
+linea("claves repetidas", repetidas.length, 0);
+for (const [k, n] of repetidas.slice(0, 5)) console.log(`     ${k} x${n}`);
 
 console.log(`\npor hoja:`);
 const porHoja = new Map<string, number>();
@@ -155,7 +197,31 @@ if (seco) {
   process.exit(0);
 }
 
+if (repetidas.length > 0) {
+  console.error("\nHay claves repetidas: el unique de la tabla las va a rechazar. No se escribió nada.");
+  process.exit(1);
+}
+
 // ── Escribir ─────────────────────────────────────────────────
+//
+// Se borra todo antes de insertar, a propósito. Esto importa **un archivo
+// entero**, así que correrlo de nuevo tiene que dejar la tabla como la dejaría
+// la primera vez: sin el delete, un segundo intento —y hubo varios mientras se
+// afinaba el parseo— deja cada valor dos veces y la pantalla se los muestra
+// repetidos a quien contesta un reclamo. «CORRE UNA SOLA VEZ» era un comentario,
+// no una defensa.
+const { count: habia } = await admin
+  .from("calidad_historico_determinaciones")
+  .select("id", { count: "exact", head: true });
+if (habia) {
+  console.log(`había ${habia} filas: se borran antes de insertar.`);
+  const { error } = await admin
+    .from("calidad_historico_determinaciones")
+    .delete()
+    .not("id", "is", null);
+  if (error) { console.error(`No se pudo limpiar: ${error.message}`); process.exit(1); }
+}
+
 let guardadas = 0;
 for (let i = 0; i < paraGuardar.length; i += 500) {
   const lote = paraGuardar.slice(i, i + 500);

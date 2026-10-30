@@ -2,7 +2,7 @@
 -- SdG — Calidad: el histórico de determinaciones, de sólo lectura
 --
 -- Los tres años de laboratorio de `Determinaciones 2026.xlsx` — nueve hojas,
--- 3.511 valores entre el 06/11/2023 y el 21/10/2026. Calidad los consulta
+-- 3.685 valores entre el 06/11/2023 y el 21/10/2026. Calidad los consulta
 -- cuando un cliente reclama, y hoy eso obliga a abrir el archivo y saber en qué
 -- hoja mirar.
 --
@@ -56,7 +56,7 @@ create table if not exists public.calidad_historico_determinaciones (
   unidad        text,
 
   -- Por qué hay que mirar esta fila. Hoy sólo lo escribe la comprobación
-  -- aritmética: 12 filas del libro tienen un acumulado que no da la suma de sus
+  -- aritmética: 28 filas del libro tienen un acumulado que no da la suma de sus
   -- retenidos. Entran como están y quedan marcadas — corregirlas sería
   -- interpretar.
   revisar       text,
@@ -64,6 +64,23 @@ create table if not exists public.calidad_historico_determinaciones (
   fila_excel    integer not null,
   created_at    timestamptz not null default now()
 );
+
+-- La celda del Excel de la que salió cada fila, y la defensa contra el único
+-- accidente que esta tabla puede sufrir: **volver a importar**.
+--
+-- El importador lee un archivo entero, así que correrlo dos veces —y se corrió
+-- varias mientras se afinaba el parseo— dejaba cada valor duplicado y la
+-- pantalla se los mostraba repetidos a quien contesta un reclamo. El script
+-- ahora borra antes de insertar; esto es lo que lo hace imposible igual.
+--
+-- Las cinco columnas son lo que ubica una celda: la hoja y la fila la
+-- encuentran, la determinación es la columna, y la fecha y el origen separan
+-- los bloques, donde una misma fila del Excel lleva varias muestras de costado.
+-- No es parcial, a propósito: un índice parcial no sirve de destino de un
+-- `ON CONFLICT` (en este repo ya pasó tres veces).
+create unique index if not exists calidad_historico_celda_uq
+  on public.calidad_historico_determinaciones
+     (hoja, fila_excel, determinacion, fecha, origen_raw);
 
 create index if not exists calidad_historico_fecha_idx
   on public.calidad_historico_determinaciones (fecha desc);
@@ -96,7 +113,7 @@ comment on column public.calidad_historico_determinaciones.producto_id is
 --
 -- La función va envuelta en un subselect: Postgres evalúa el USING una vez por
 -- fila aunque la función sea STABLE, y el subselect lo convierte en un InitPlan
--- que corre una sola vez. Son 3.511 filas que se filtran por texto.
+-- que corre una sola vez. Son 3.685 filas que se filtran por texto.
 
 alter table public.calidad_historico_determinaciones enable row level security;
 

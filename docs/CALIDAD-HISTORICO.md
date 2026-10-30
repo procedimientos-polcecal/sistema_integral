@@ -53,13 +53,13 @@ siendo el bueno y se corrige con un `update`. Si se hubiera convertido, no.
 
 | | |
 |---|---|
-| valores totales | 3.304 |
+| valores totales | 3.685 |
 | `fraccion` (cinco tabulares) | 958 |
 | `porcentaje` (cinco tabulares) | 1.544 |
 | `absoluto` (cinco tabulares) | 585 |
 | filas con `revisar` | 28 |
-| agregaciones descartadas | 22 |
-| orígenes distintos | 47, de los cuales 7 enlazan a producto |
+| agregaciones descartadas | 27 |
+| orígenes distintos | 64, de los cuales 14 enlazan a producto |
 | rango | 06/11/2023 → 21/10/2026 |
 
 `npx tsx scripts/importar-determinaciones-historico.mts --secar <ruta.xlsx>` los
@@ -67,7 +67,15 @@ imprime sin escribir nada.
 
 ## Lo que entra y lo que no
 
-Entran las nueve hojas. Las 22 celdas `=AVERAGE()` de `Calcio` **no**: se
+Entran las nueve hojas, pero **no todo lo que hay dentro de una hoja es la
+hoja**: a la derecha de `Calcio` hay otras tres tablas —una granulometría por
+fecha, con su encabezado dos filas más abajo— y leerlas como columnas metía 223
+números de tamiz como si fueran mediciones, cada uno con la fecha y la muestra
+de la fila de la izquierda, que son de otro análisis. Lo que las delata es que
+**su encabezado es una fecha**, y ésa es la regla que las deja afuera. De paso
+desaparecieron tres «orígenes» que eran promedios (`Promedio`, `Promedio 0-1`,
+`Caliza promedio`): sus propios valores ya se descartaban por fórmula, y lo
+único que los mantenía vivos eran esos números de tamiz. Las 22 celdas `=AVERAGE()` de `Calcio` **no**: se
 detectan por la fórmula —nunca por el valor, que es un número como cualquier
 otro— porque un promedio guardado como medición haría que alguien le conteste a
 un cliente con un promedio creyendo que es un ensayo.
