@@ -3,24 +3,32 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 /**
  * La ruta de notas de una OT, con un Supabase de mentira.
  *
- * **Es el único test de una ruta del repo**, y existe por un solo motivo: la lógica
- * que decide —qué pregunta es válida, qué se avisa, qué se le dice a quien
- * preguntó— está sacada a `consultaDeRepuesto.ts` y tiene sus propios tests, pero
- * hay una falla que no vive ahí y es la peor que tiene esta funcionalidad: **los
- * `select` de la ruta tienen que traer `tipo`, `repuesto_id` y `responde_a`**. Sin
- * ellos `preguntasAbiertas` devuelve `[]` para todo —ninguna pregunta se ve
- * abierta, el botón ofrece abrir una segunda, la regla de «una abierta por
- * repuesto» deja de defenderse— y no hay un solo error: se ve igual que una orden
- * sin preguntas. Los tests de la función pura no pueden verla, porque a ella le
- * llegan las notas ya traídas.
+ * **Es el único test de una ruta del repo, y no es una plantilla.** Las rutas siguen
+ * sin tener tests, y la lógica que decide sigue sacándose a `lib/` y probándose ahí:
+ * `consultaDeRepuesto.test.ts` tiene qué pregunta es válida, qué se rechaza y por qué, y
+ * qué se le dice a quien preguntó. Acá no se repite nada de eso. Lo propio de este
+ * archivo es lo que pasa *entre* la ruta y la base y `lib/` no puede ver: qué columnas
+ * lee, qué inserta, qué escribe en la planilla y a quién avisa —y que lo que se
+ * rechaza no inserta, no escribe la planilla y no avisa—. Quien tenga otra ruta con una
+ * regla para probar, que la saque a `lib/`; esto no es un modelo a copiar.
  *
- * Por eso el cliente falso hace lo que hace PostgREST y lo que cualquier fake
- * ingenuo se saltea: **entrega sólo las columnas que se le pidieron**. Con uno que
- * devuelve la fila entera, quitar `tipo` del `select` no rompía nada y el test
- * pasaba (se comprobó: sobrevivía).
+ * Existe por una falla, la peor de esta funcionalidad: **los `select` de la ruta tienen
+ * que traer `tipo`, `repuesto_id` y `responde_a`**. Sin ellos `preguntasAbiertas`
+ * devuelve `[]` para todo —ninguna pregunta se ve abierta, el botón ofrece abrir una
+ * segunda, la regla de «una abierta por repuesto» deja de defenderse— y no hay un solo
+ * error: se ve igual que una orden sin preguntas. Y nadie más la puede ver. El cliente
+ * admin no recibe el tipo `Database` (`lib/supabase/admin.ts`), así que lo que trae un
+ * `select` llega sin tipos, y la ruta lo pasa a `NotaDeLaOT[]` con un cast: ni el
+ * compilador ni un test de `lib/`, a los que les llegan las notas ya traídas, pueden
+ * notar que a un `select` le falta `tipo`.
  *
- * Lo que este test NO prueba, y conviene no creerle: que las tablas y columnas
- * existan con esos nombres, ni las claves foráneas. Para eso hace falta la base, y la
+ * Por eso el cliente falso entrega sólo las columnas que se le piden, como PostgREST,
+ * que es lo que cualquier fake ingenuo se saltea. Con uno que devolvía la fila entera,
+ * sacar `tipo` del select de contexto del POST no rompía nada y el test pasaba (se
+ * comprobó: la mutación sobrevivía).
+ *
+ * Lo que este test NO prueba, y conviene no creerle: que las tablas y columnas existan
+ * con esos nombres, ni las claves foráneas. Para eso hace falta la base, y la
  * migración 20261029082249 todavía no estaba aplicada cuando se escribió.
  */
 
@@ -290,59 +298,6 @@ describe("preguntarle a Compras", () => {
     expect(h.estado.inserts[0]).toMatchObject({ tipo: "PREGUNTA", responde_a: "n1" });
     expect(h.avisar).toHaveBeenCalledTimes(1);
   });
-
-  describe("lo que se rechaza no guarda, ni escribe la planilla, ni avisa", () => {
-    async function seRechaza(cuerpo: unknown, status: number, error: RegExp) {
-      const res = await post(cuerpo);
-      expect(res.status).toBe(status);
-      expect((await res.json()).error).toMatch(error);
-      expect(h.estado.inserts).toHaveLength(0);
-      expect(h.escribirPlanilla).not.toHaveBeenCalled();
-      expect(h.avisar).not.toHaveBeenCalled();
-    }
-
-    // Con una pantalla vieja, dos personas abren dos hilos por la misma pieza.
-    it("otra pregunta por un repuesto que ya tiene una abierta: 409", async () => {
-      h.estado.tablas.ordenes_trabajo_notas = [pregunta()];
-      await seRechaza({ texto: "otra vez", tipo: "PREGUNTA", repuesto_id: "r1" }, 409, /ya hay una pregunta abierta/i);
-    });
-
-    it("un seguimiento a la primera de un hilo que ya tiene seguimiento: 409", async () => {
-      h.estado.tablas.ordenes_trabajo_notas = [pregunta(), pregunta({ id: "n2", responde_a: "n1" })];
-      await seRechaza(
-        { texto: "otra vez", tipo: "PREGUNTA", repuesto_id: "r1", responde_a: "n1" }, 409, /última del hilo/i
-      );
-    });
-
-    it("un repuesto de otra orden: 400", async () => {
-      await seRechaza({ texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r-ajeno" }, 400, /repuesto/i);
-    });
-
-    it("una pregunta sin repuesto: 400", async () => {
-      await seRechaza({ texto: "¿?", tipo: "PREGUNTA" }, 400, /repuesto/i);
-    });
-
-    // Una que apuntara a otra orden trabaría el borrado de esa otra.
-    it("un seguimiento a una nota de otra orden: 400", async () => {
-      await seRechaza(
-        { texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1", responde_a: "n-de-otra-orden" }, 400, /no es de esta orden/i
-      );
-    });
-
-    it("sobre una orden realizada: 409", async () => {
-      h.estado.tablas.ordenes_trabajo = [{ id: "ot1", ot_number: 2885, sheets_row: 5, estado: "REALIZADO" }];
-      await seRechaza({ texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1" }, 409, /ya no espera/i);
-    });
-
-    it("sin nivel de edición en Mantenimiento: 403, preguntando también", async () => {
-      h.estado.edita = false;
-      await seRechaza({ texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1" }, 403, /nivel de edición/i);
-    });
-
-    it("un tipo que no existe: 400", async () => {
-      await seRechaza({ texto: "hola", tipo: "CHARLA" }, 400, /tipo/i);
-    });
-  });
 });
 
 describe("«ya llegó»", () => {
@@ -360,15 +315,73 @@ describe("«ya llegó»", () => {
     expect(h.avisar).not.toHaveBeenCalled();
     expect(cuerpo.aviso).toBeNull();
   });
+});
 
-  it("a una pregunta que ya tiene respuesta: 409, y no se guarda otra", async () => {
-    h.estado.tablas.ordenes_trabajo_notas = [pregunta(), respuestaAN1()];
-    const res = await post({ texto: "Ya llegó el repuesto.", tipo: "RESPUESTA", responde_a: "n1" });
+/*
+ * Qué se rechaza y por qué lo deciden `leerNotaNueva` y `comprobarNotaNueva`, con sus
+ * tests en `lib/`. Lo que se prueba acá es sólo que la ruta les hace caso: lo que
+ * rechazan no se guarda, no escribe la planilla, no avisa, y sale con el status que
+ * dijeron. Cada caso existe porque mata una rotura que sólo se ve en la ruta:
+ *
+ *  - la pregunta con una abierta: la ruta tiene que LEER las notas de la orden, con
+ *    `tipo` en el select (es el caso que mata la lectura de contexto sin `tipo`);
+ *  - el «ya llegó» sobre una pregunta respondida: la ruta comprueba también las
+ *    respuestas, no sólo las preguntas;
+ *  - la orden realizada: la ruta tiene que pasarle a la regla el estado de la orden;
+ *  - el cuerpo ilegible: la ruta tiene que leerlo ANTES de tocar la base;
+ *  - el 403: el permiso se comprueba en la ruta, y también para preguntar.
+ */
+describe("lo que la ruta rechaza no se guarda, ni se escribe en la planilla, ni se avisa", () => {
+  const casos: {
+    nombre: string;
+    status: number;
+    preparar?: () => void;
+    cuerpo: unknown;
+  }[] = [
+    {
+      nombre: "otra pregunta por un repuesto que ya tiene una abierta",
+      status: 409,
+      preparar: () => { h.estado.tablas.ordenes_trabajo_notas = [pregunta()]; },
+      cuerpo: { texto: "otra vez", tipo: "PREGUNTA", repuesto_id: "r1" },
+    },
+    {
+      nombre: "«ya llegó» sobre una pregunta que ya tiene respuesta",
+      status: 409,
+      preparar: () => { h.estado.tablas.ordenes_trabajo_notas = [pregunta(), respuestaAN1()]; },
+      cuerpo: { texto: "Ya llegó el repuesto.", tipo: "RESPUESTA", responde_a: "n1" },
+    },
+    {
+      nombre: "una pregunta sobre una orden realizada",
+      status: 409,
+      preparar: () => {
+        h.estado.tablas.ordenes_trabajo = [{ id: "ot1", ot_number: 2885, sheets_row: 5, estado: "REALIZADO" }];
+      },
+      cuerpo: { texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1" },
+    },
+    {
+      nombre: "un cuerpo que no se entiende",
+      status: 400,
+      cuerpo: { texto: "hola", tipo: "CHARLA" },
+    },
+    {
+      nombre: "quien sólo mira, preguntando también",
+      status: 403,
+      preparar: () => { h.estado.edita = false; },
+      cuerpo: { texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1" },
+    },
+  ];
 
-    expect(res.status).toBe(409);
-    expect(h.estado.inserts).toHaveLength(0);
-    expect(h.escribirPlanilla).not.toHaveBeenCalled();
-  });
+  for (const caso of casos) {
+    it(`${caso.nombre}: ${caso.status}`, async () => {
+      caso.preparar?.();
+      const res = await post(caso.cuerpo);
+
+      expect(res.status).toBe(caso.status);
+      expect(h.estado.inserts).toHaveLength(0);
+      expect(h.escribirPlanilla).not.toHaveBeenCalled();
+      expect(h.avisar).not.toHaveBeenCalled();
+    });
+  }
 });
 
 describe("borrar una entrada", () => {
