@@ -54,9 +54,9 @@ export function sabadosDelMes(mes: string): number {
 /**
  * Hábiles de enero hasta el mes de `hasta`, inclusive. El denominador del anual.
  *
- * `hasta` es un "YYYY-MM": el mes en curso cuenta entero, aunque todavía no
- * haya terminado. Es el mismo criterio que el reporte mensual, que también
- * toma el mes completo.
+ * `hasta` es un "YYYY-MM" y el mes que indica cuenta entero, aunque todavía
+ * no haya terminado: la función no sabe qué día es hoy, así que no recorta.
+ * Quien quiera hasta la fecha de hoy tiene que pedir otra cosa.
  */
 export function habilesAcumulados(hasta: string, feriados: readonly string[]): number {
   const anio = hasta.slice(0, 4);
