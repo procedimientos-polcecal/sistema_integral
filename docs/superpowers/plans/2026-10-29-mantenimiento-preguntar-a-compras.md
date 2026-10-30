@@ -625,11 +625,33 @@ it("a quien no ve Compras no le llega", () => { /* … */ });
 
 - [ ] **Step 3: Implementar**
 
-Sumar `comprasConsultasAbiertas` a `ConteosParaAvisos` y la entrada a `AVISOS`.
-El conteo vive en `lib/home/avisosDeUsuario.ts` —`conteos.ts` no existe— donde
-casi todos son `count … head`;
+Sumar `comprasConsultasAbiertas` a `ConteosParaAvisos` y la entrada a `AVISOS`,
 con `href: "/compras/consultas"`. **Id nuevo**: la regla de `avisos_fotos` es que
 un conteo nuevo pide un id nuevo, o el día del cambio sale una novedad falsa.
+
+El conteo vive en `lib/home/avisosDeUsuario.ts` —`conteos.ts` no existe—, donde
+casi todos los conteos son `count … head`. **Éste no puede serlo, y es la
+decisión de esta tarea** (CONFLICTO 1 del barrido previo, restaurado acá el
+30/10 porque una edición anterior le había comido la cláusula y dejó la frase
+apuntando al patrón que justamente no va).
+
+«Pregunta abierta» es una anti-unión —sin `RESPUESTA` que la apunte, sin otra
+`PREGUNTA` que la supere, OT no cerrada, repuesto todavía en la lista— y
+PostgREST no la sabe expresar. Escribirla en SQL sería una **segunda definición
+de «abierta»**, separada de la que tiene los 32 tests: exactamente el error del
+27 escrito en dos lugares que el GUT ya documentó. **Así que se traen las
+preguntas candidatas y se cuenta en TypeScript con `preguntasAbiertas`**, que es
+la única función que define «abierta».
+
+Y al traerlas, dos reglas de la casa que muerden justo acá: **`traerTodo()` de
+`lib/core/paginado.ts`**, porque PostgREST corta en 1000 filas sin avisar y un
+conteo que se topa con el tope miente hacia abajo en silencio; y filtrar del
+lado del servidor lo que se pueda (`tipo` y la OT) para no traer el historial
+entero de notas a contar tres.
+
+Si esto resulta caro, el costo es una consulta más pesada en el cron de las
+11:30 —medible y reversible—; la alternativa cuesta dos definiciones que se
+separan sin que nada avise.
 
 Va a la lista de `compras_consultados` y no a todo el que vea Compras, por lo
 mismo que `compras-por-aprobar` va a los aprobadores.
