@@ -44,3 +44,23 @@ export function problemaDeLaFila(entrada: string | null, salida: string | null):
   }
   return null;
 }
+
+/**
+ * La salida que de verdad cierra el turno, corrida al día siguiente si hace
+ * falta.
+ *
+ * Es `diaDeLaSalida` para los caminos que ya trabajan con instantes y no con
+ * los dos campos de un formulario: hoy, el Excel en **modo separado**, que
+ * trae una columna de hora de entrada y otra de salida pero **un solo día**.
+ * Con un turno de 20 a 4 eso daba la salida dieciséis horas antes de la
+ * entrada, igual que el modal — el mismo defecto por otra puerta.
+ *
+ * Se corre **un solo día**, nunca hasta que dé positivo: si con un día todavía
+ * queda antes, lo que hay es un dato roto y no un turno de 32 horas. Eso lo
+ * frena `problemaDeLaFila` del lado de las rutas.
+ */
+export function salidaDelTurno(entrada: Date, salida: Date | null): Date | null {
+  if (!salida) return null;
+  if (salida.getTime() > entrada.getTime()) return salida;
+  return new Date(salida.getTime() + 24 * 60 * 60 * 1000);
+}

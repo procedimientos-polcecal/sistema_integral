@@ -7,6 +7,7 @@ import { tokenizeMarcaciones, toDateOnlyFromCell, type ParsedSheet } from "@/lib
 import { localDateTime } from "@/lib/rrhh/dates";
 import { aplicarDias, type DiasDeEmpleado, type LoteAAplicar, type ResultadoAplicar, type TurnoNuevo } from "@/lib/rrhh/fichadas/aplicar";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { salidaDelTurno } from "@/lib/rrhh/fichadas/turnoDeNoche";
 
 interface Mapping {
   legajo: string;
@@ -114,7 +115,13 @@ export async function POST(request: Request) {
         errores.push(`Fila ${f.idx + 2}: hora de entrada inválida`);
         continue;
       }
-      const horaSalida = mapping.horaSalida ? combineFechaHora(f.fecha, f.row[mapping.horaSalida]) : null;
+      // `combineFechaHora` arma la salida sobre el día de la ENTRADA, que es
+      // el único que trae el archivo. En un turno de 20 a 4 eso la deja
+      // dieciséis horas antes: `salidaDelTurno` la corre al día siguiente.
+      const horaSalida = salidaDelTurno(
+        horaEntrada,
+        mapping.horaSalida ? combineFechaHora(f.fecha, f.row[mapping.horaSalida]) : null
+      );
       turnos.push({ empleadoId: f.employeeId, legajo: f.legajo, fecha: f.fecha, horaEntrada, horaSalida });
     }
     lote = { tipo: "turnos", turnos };

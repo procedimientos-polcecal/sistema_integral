@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diaDeLaSalida, problemaDeLaFila } from "./turnoDeNoche";
+import { diaDeLaSalida, problemaDeLaFila, salidaDelTurno } from "./turnoDeNoche";
 
 describe("diaDeLaSalida", () => {
   /** El caso que se repite: turno de 20 a 4. */
@@ -69,5 +69,33 @@ describe("problemaDeLaFila", () => {
   /** El turno de noche bien cargado sí pasa: la salida es del día siguiente. */
   it("un turno que cruza medianoche pasa", () => {
     expect(problemaDeLaFila(t("2026-10-20T22:52:00Z"), t("2026-10-21T06:45:00Z"))).toBeNull();
+  });
+});
+
+describe("salidaDelTurno", () => {
+  const d = (iso: string) => new Date(iso);
+
+  it("una salida posterior queda como está", () => {
+    const entrada = d("2026-10-20T11:00:00Z");
+    const salida = d("2026-10-20T19:00:00Z");
+    expect(salidaDelTurno(entrada, salida)?.toISOString()).toBe(salida.toISOString());
+  });
+
+  /** El Excel en modo separado da dos horas y UN día: el de la entrada. */
+  it("una salida anterior se corre al día siguiente", () => {
+    const entrada = d("2026-10-20T22:52:00Z"); // 19:52 de Argentina
+    const salida = d("2026-10-20T06:45:00Z"); // 03:45 del MISMO día, imposible
+    expect(salidaDelTurno(entrada, salida)?.toISOString()).toBe("2026-10-21T06:45:00.000Z");
+  });
+
+  it("sin salida no hay nada que correr", () => {
+    expect(salidaDelTurno(d("2026-10-20T22:52:00Z"), null)).toBeNull();
+  });
+
+  /** Una sola vez: correrla dos días sería inventar un turno de 32 horas. */
+  it("se corre un solo día, no hasta que dé positivo", () => {
+    const entrada = d("2026-10-20T22:52:00Z");
+    const salida = d("2026-10-18T06:45:00Z");
+    expect(salidaDelTurno(entrada, salida)?.toISOString()).toBe("2026-10-19T06:45:00.000Z");
   });
 });
