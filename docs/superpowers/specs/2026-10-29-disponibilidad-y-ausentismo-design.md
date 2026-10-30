@@ -164,11 +164,28 @@ del año. `feriados` tiene 17 filas, todas de 2026: el día que haga falta 2027
 hay que cargarlas, y el reporte tiene que decirlo en vez de contar de menos en
 silencio.)*
 
-**Consecuencia asumida, y es grande:** el porcentaje anual **se va a mover**. La
-mediana de días hábiles reales por empleado es 182 contra el 145 de la planilla,
-así que los porcentajes bajan cerca de la mitad — el renglón que hoy dice 97,24%
-va a decir algo del orden de 55%. Es lo que se pidió y es lo que hace que el
-número signifique algo; pero conviene avisarle a RRHH **antes** de que lo vea.
+**Consecuencia asumida, y es grande:** el porcentaje anual **se va a mover.**
+
+La primera versión de este documento decía que "baja cerca de la mitad".
+**Medido el 30/10/2026 contra los 17 feriados reales, eso es falso**, y cuánto
+baja depende de cuánto año haya pasado. Los hábiles de 2026 acumulados son 120 a
+junio, 204 a octubre y 245 al cerrar el año, contra el 145 fijo de la planilla.
+Un caso de 141 días que hoy lee 97,2% pasa a **69,1%** en octubre y a **57,6%**
+recién con el año entero.
+
+Y hay una consecuencia que ninguna de las dos decisiones implica por separado, y
+que sale de las dos juntas: **el porcentaje puede pasar de 100%.** El numerador
+cuenta días de **calendario** —fines de semana incluidos, porque se pidió que los
+números no se muevan— y el denominador cuenta días **hábiles**. Ese mismo caso de
+141 días contra los 120 hábiles de junio da **117,5%**.
+
+*(Decisión mía: no se topea ni se maquilla — un número inventado es peor que uno
+incómodo. La pantalla explica la mezcla donde se ve el número. La salida limpia
+sería que el numerador contara también sólo días hábiles, pero eso mueve los
+números que RRHH conoce, que es justo lo que se pidió no hacer; queda planteado
+para que lo decida quien corresponda.)*
+
+Conviene avisarle a RRHH de todo esto **antes** de que lo vea.
 
 ### La tabla de horas a realizar, que hay que crear
 
