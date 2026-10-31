@@ -233,9 +233,12 @@ const LOTE = 200;
  * movimiento de mañana se calcularía contra la de anteayer—.
  */
 export async function consultasDeRepuestosAbiertas(): Promise<number> {
-  const admin = createAdminClient();
-
   try {
+    // Adentro del `try` y no arriba: `createAdminClient()` tira si falta la URL de
+    // Supabase, y un camino que escapa por afuera contradice lo que dice el párrafo
+    // anterior —y es justo el fallo de entorno que haría caer al cron entero—.
+    const admin = createAdminClient();
+
     const notas = (await traerTodo((desde, hasta) =>
       admin
         .from("ordenes_trabajo_notas")

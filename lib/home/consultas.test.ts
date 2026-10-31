@@ -27,12 +27,21 @@ import { supabaseDeMentira, type Fila } from "@/lib/core/supabaseDeMentira";
 
 const base = supabaseDeMentira();
 
-/** Lo que devuelve `createAdminClient()`: el fake, o uno que se niega a leer. */
+/**
+ * Lo que devuelve `createAdminClient()`: el fake, uno que se niega a leer, o
+ * `"rompe"`, que es armar el cliente fallando —`normalizarUrlSupabase` tira si
+ * falta la URL—.
+ */
 const cliente: { actual: unknown } = { actual: null };
 
 // El factory se evalúa al importar el módulo, antes que las constantes de arriba:
 // por eso lee `cliente` **adentro de la función** y no en su cuerpo.
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => cliente.actual }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => {
+    if (cliente.actual === "rompe") throw new Error("falta NEXT_PUBLIC_SUPABASE_URL");
+    return cliente.actual;
+  },
+}));
 
 import { consultasDeRepuestosAbiertas } from "./consultas";
 
@@ -185,6 +194,21 @@ describe("cuántas consultas de repuestos esperan respuesta", () => {
         return consulta;
       },
     };
+
+    expect(await consultasDeRepuestosAbiertas()).toBe(0);
+    expect(anotado).toHaveBeenCalled();
+  });
+
+  /*
+   * Y lo mismo si falla **armar** el cliente, que es el otro camino al mismo lugar:
+   * `createAdminClient()` pasa la URL por `normalizarUrlSupabase`, que tira si falta.
+   * Por eso la llamada va adentro del `try` y no arriba: afuera, un entorno sin la
+   * variable se lleva puesto el cron entero, que es justo lo que el párrafo del
+   * «devuelve 0 y se anota» promete que no pasa.
+   */
+  it("si ni siquiera se puede armar el cliente, tampoco apaga nada", async () => {
+    const anotado = vi.spyOn(console, "error").mockImplementation(() => {});
+    cliente.actual = "rompe";
 
     expect(await consultasDeRepuestosAbiertas()).toBe(0);
     expect(anotado).toHaveBeenCalled();
