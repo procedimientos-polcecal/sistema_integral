@@ -43,6 +43,40 @@ describe("avisosDeConteos", () => {
     ]);
   });
 
+  /*
+   * Una pregunta que nadie contestó es el estado que el diseño del 26/10 existe
+   * para hacer visible, así que no puede quedar sólo en el push del momento, que
+   * se pierde: fuera de la ventana de 7:00 a 21:00 no se manda y no se reintenta
+   * nunca.
+   *
+   * El id es **nuevo** y no reusa ninguno. La `cantidad` de un aviso se compara
+   * contra la foto del día anterior (`avisos_fotos`), así que un conteo nuevo
+   * colgado de un id viejo sale como una novedad falsa del tamaño del salto.
+   */
+  it("avisa de las consultas de repuestos que esperan respuesta, con un id propio", () => {
+    expect(avisosDeConteos({ comprasConsultasAbiertas: 3 })).toEqual([
+      {
+        id: "compras-consultas-repuestos",
+        titulo: "Consultas de repuestos sin responder",
+        cantidad: 3,
+        href: "/compras/consultas",
+      },
+    ]);
+  });
+
+  it("sale con los de Compras y no al final de la lista", () => {
+    const avisos = avisosDeConteos({
+      comprasEsperandoAprobacion: 11,
+      comprasConsultasAbiertas: 3,
+      inventarioSinPlanilla: 1,
+    });
+    expect(avisos.map((a) => a.id)).toEqual([
+      "compras-por-aprobar",
+      "compras-consultas-repuestos",
+      "inv-sin-planilla",
+    ]);
+  });
+
   it("incluye los dos módulos nuevos", () => {
     const avisos = avisosDeConteos({ calidadEnvasesSinPlanilla: 2, trituracionSinPlanilla: 2 });
     expect(avisos.map((a) => a.id)).toEqual(["calidad-envases-sin-planilla", "trituracion-sin-planilla"]);

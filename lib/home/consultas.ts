@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sumarDias } from "@/lib/core/fechas";
 import { traerTodo } from "@/lib/core/paginado";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ultimoDiaHabilConFichadas } from "@/lib/rrhh/diaHabil";
+import {
+  preguntasQueEsperan, TIPOS_QUE_DECIDEN_SI_UNA_PREGUNTA_ESPERA,
+} from "@/lib/compras/consultas";
+import type { NotaDeLaOT } from "@/lib/mantenimiento/consultaDeRepuesto";
 import { contarPresentes } from "./tarjetaRrhh";
 import type { FilaRitmo } from "./ritmo";
 
@@ -158,4 +163,104 @@ export async function equiposTallerVialSinService(
     equiposSinService: ids.filter((id) => !conService.has(id)).length,
     equiposTotal: ids.length,
   };
+}
+
+/** De a cuántos ids se pide: un `.in()` con muchos arma una URL que PostgREST rechaza. */
+const LOTE = 200;
+
+/**
+ * Cuántas preguntas de Mantenimiento a Compras siguen esperando respuesta.
+ *
+ * ── POR QUÉ NO ES UN `count … head` ──────────────────────────────────────────
+ *
+ * Es la decisión de este conteo, y la única razón de que ocupe cuarenta renglones
+ * en vez de uno. «Pregunta abierta» es una **anti-unión** —una PREGUNTA sin
+ * RESPUESTA que la apunte, sin otra PREGUNTA que la supere, con la OT todavía
+ * esperando y el repuesto todavía en la lista— y PostgREST no la sabe expresar.
+ * Escribirla en SQL sería una **segunda definición de «abierta»**, separada de la
+ * que tiene los tests en `lib/mantenimiento/consultaDeRepuesto.ts`: exactamente el
+ * error del 27 escrito en dos lugares que el GUT documenta, pero sin el test que
+ * allá ata las dos copias. Y las dos copias no se separarían de golpe: lo haría la
+ * primera vez que alguien agregue algo que cierra una pregunta y toque sólo el
+ * TypeScript, porque es el único que tiene tests.
+ *
+ * Así que se traen las candidatas y se cuenta con `preguntasQueEsperan`, que es la
+ * misma función que arma la bandeja de `/compras/consultas`: el número del aviso y
+ * la lista que se abre al tocarlo no pueden decir cosas distintas.
+ *
+ * ── POR QUÉ CON EL CLIENTE ADMIN, Y NO CON EL QUE LE PASAN A `avisosDeLosModulos` ─
+ *
+ * Porque las dos tablas que esto lee son de **Mantenimiento** y el aviso es de
+ * **Compras**. `ordenes_trabajo_notas` y `ordenes_trabajo` tienen su `select`
+ * cerrado con `mant_puede_ver()`, así que con la sesión de quien contesta la
+ * lectura vuelve vacía —**sin error**— y el conteo da 0.
+ *
+ * No es hipotético: medido el 31/10/2026 contra producción, Facundo Ortiz —el
+ * encargado de compras, la persona para la que existe este aviso— tiene
+ * `compras:edicion`, `inventario:edicion`, `facturacion:edicion` y `remises:lectura`,
+ * y **nada de Mantenimiento**. Con el cliente de sesión, su campana diría que no
+ * hay nada mientras el push del cron —que corre con el admin— le dice que hay tres.
+ * Los dos salen de `avisosDeUsuario()` justamente para que no puedan decir cosas
+ * distintas.
+ *
+ * Esto no abre nada que no estuviera abierto: `/api/compras/consultas` ya lee las
+ * mismas filas con el admin para cualquiera que tenga Compras, y el conteo sale
+ * sólo para quien tiene el módulo (`avisosDeLosModulos`) y le llega sólo a quien
+ * está en `compras_consultados` (`sinLoQueNoPuedeAtender`).
+ *
+ * ── QUÉ SE LEE Y QUÉ NO ──────────────────────────────────────────────────────
+ *
+ * El historial entero no: sólo PREGUNTA y RESPUESTA, que es lo único que puede
+ * abrir o cerrar una pregunta. Las órdenes, sólo las de las notas que vinieron, y
+ * de a lotes de 200. Las dos lecturas van con `traerTodo` porque PostgREST corta en
+ * 1000 filas sin avisar, y un conteo que se topa con el tope miente **hacia abajo**:
+ * un aviso que dice 1.000 cuando son 1.200 sigue sonando razonable.
+ *
+ * El `select` de las notas trae la fila entera que declara `NotaDeLaOT` —`texto` y
+ * `creado_por` incluidos, que acá no se miran— y no una versión recortada: recortarlo
+ * pediría un cast, y un cast es justo lo que el compilador no puede revisar. Las
+ * columnas sin las que esto se equivoca en silencio las comprueba
+ * `lib/mantenimiento/selectsDeLasNotas.test.ts`, leyendo este archivo.
+ *
+ * ── UN FALLO DEVUELVE 0 Y SE ANOTA ───────────────────────────────────────────
+ *
+ * No es la decisión cómoda: un 0 por un fallo se lee igual que «no hay nada que
+ * contestar». Es la que ya tomaron `traerRitmo` y `traerPresentesDeHoy` acá arriba,
+ * y acá pesa más que allá: este conteo corre dentro del `Promise.all` de
+ * `avisosDeLosModulos`, que a su vez corre **una vez por persona adentro del cron
+ * del resumen diario**. Un rechazo no apagaría un aviso: apagaría la campana entera
+ * y el push de todo el mundo, y dejaría sin guardar la foto del día —con lo que el
+ * movimiento de mañana se calcularía contra la de anteayer—.
+ */
+export async function consultasDeRepuestosAbiertas(): Promise<number> {
+  const admin = createAdminClient();
+
+  try {
+    const notas = (await traerTodo((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo_notas")
+        .select("id, orden_id, tipo, texto, creado_en, creado_por, repuesto_id, responde_a")
+        .in("tipo", [...TIPOS_QUE_DECIDEN_SI_UNA_PREGUNTA_ESPERA])
+        .range(desde, hasta)
+    )) as unknown as (NotaDeLaOT & { orden_id: string })[];
+
+    const idsDeOrdenes = [...new Set(notas.map((n) => n.orden_id))];
+    const ordenes: { id: string; estado: string | null }[] = [];
+    for (let i = 0; i < idsDeOrdenes.length; i += LOTE) {
+      const lote = idsDeOrdenes.slice(i, i + LOTE);
+      ordenes.push(
+        ...((await traerTodo((desde, hasta) =>
+          admin.from("ordenes_trabajo").select("id, estado").in("id", lote).range(desde, hasta)
+        )) as unknown as { id: string; estado: string | null }[])
+      );
+    }
+
+    return preguntasQueEsperan(notas, ordenes).length;
+  } catch (e) {
+    console.error(
+      "inicio: no se pudieron contar las consultas de repuestos:",
+      e instanceof Error ? e.message : e
+    );
+    return 0;
+  }
 }

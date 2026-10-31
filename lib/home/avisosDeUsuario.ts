@@ -1,12 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
-import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { puedeAprobarCompras, esConsultadoDeCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
 import { ritmoPorModulo } from "./ritmo";
-import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
+import {
+  traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService,
+  consultasDeRepuestosAbiertas,
+} from "./consultas";
 
 /** Lo que hace falta saber de alguien para armarle sus avisos. */
 export interface QuienMira {
@@ -34,6 +37,17 @@ export interface QuienMira {
  * Mantenimiento ve todas las órdenes; quien no lo tiene no cuenta ninguna, con
  * sesión o sin ella. Si algún día alguna tabla pasara a filtrar por fila, esto
  * deja de ser cierto y hay que volver acá.
+ *
+ * **Y UN CONTEO NO USA ESTE CLIENTE, SINO SIEMPRE EL ADMIN.** Es
+ * `consultasDeRepuestosAbiertas`, el de las consultas de repuestos: su aviso es de
+ * Compras y las dos tablas que lee son de Mantenimiento, cerradas con
+ * `mant_puede_ver()`. Con el cliente de sesión de quien contesta —medido el
+ * 31/10/2026: el encargado de compras no tiene Mantenimiento— la lectura vuelve
+ * vacía **sin error** y el conteo da 0, así que la campana diría que no hay nada
+ * mientras el push del cron dice que hay tres. El porqué entero está en su
+ * encabezado; acá importa que es la excepción al párrafo de arriba y que no
+ * amplía lo que alguien ve: el conteo sale sólo con el módulo Compras, y el aviso
+ * sólo para quien está en `compras_consultados`.
  */
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
@@ -56,6 +70,7 @@ async function avisosDeLosModulos(
 
   const [
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
+    comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
@@ -64,6 +79,13 @@ async function avisosDeLosModulos(
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
     contarSiTiene("compras", () => head("compras_requerimientos").in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])),
+    // No es un `count … head`, y es la decisión de ese conteo: «pregunta abierta»
+    // es una anti-unión que PostgREST no sabe expresar, así que las candidatas se
+    // traen y se cuentan con la única función que define «abierta». Y **lee con el
+    // cliente admin y no con éste**, porque las dos tablas que mira son de
+    // Mantenimiento y quien contesta no lo tiene: el porqué, medido, está en su
+    // encabezado.
+    tiene("compras") ? consultasDeRepuestosAbiertas() : Promise.resolve(0),
     contarSiTiene("inventario", () => head("inventario_movimientos").not("sheets_pendiente", "is", null)),
     contarSiTiene("produccion", () => head("produccion_partes").not("sheets_pendiente", "is", null)),
     contarSiTiene("despacho", () => head("despacho_ordenes_carga").lt("fecha", hoy).is("salida_predio", null).not("cargado_por", "is", null)),
@@ -96,6 +118,7 @@ async function avisosDeLosModulos(
 
   const conteos: Partial<ConteosParaAvisos> = {
     rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
+    comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
@@ -126,19 +149,27 @@ export async function avisosDeTodoElSistema(
 /**
  * Qué listas de responsables integra quien mira.
  *
- * Hoy hay una sola porque hoy hay un solo aviso con lista. **Falta el de las
- * órdenes de servicio**: `os_aprobadores` existe y el aviso al instante ya la
- * usa, pero la campana no tiene un aviso de OS esperando aprobación. El día que
- * se agregue, va acá con su `apruebaOS` — no se deja preparado porque sería una
- * consulta por persona y por día que hoy no la usa nadie.
+ * Son dos, y son **distintas a propósito**: `compras_aprobadores` decide el
+ * gasto y `compras_consultados` contesta qué pasa con un repuesto, y no es la
+ * misma gente. Medido el 26/10/2026 al acordar el diseño: la de aprobadores
+ * tiene cuatro personas y sólo una es quien contesta.
+ *
+ * **Falta el de las órdenes de servicio**: `os_aprobadores` existe y el aviso al
+ * instante ya la usa, pero la campana no tiene un aviso de OS esperando
+ * aprobación. El día que se agregue, va acá con su `apruebaOS` — no se deja
+ * preparado porque sería una consulta por persona y por día que hoy no la usa
+ * nadie.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
+  /** Está en `compras_consultados`: contesta lo que Mantenimiento pregunta. */
+  contestaConsultas: boolean;
 }
 
 /** Los avisos que tienen una lista de responsables, y cuál. */
 const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
+  "compras-consultas-repuestos": "contestaConsultas",
 };
 
 /**
@@ -158,7 +189,7 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
  *
  * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
  * 18/10/2026. Acá no se filtra por rol ni por nivel: sólo los avisos que están
- * en `DE_UNA_LISTA`, y hoy ésos son los dos de aprobación.
+ * en `DE_UNA_LISTA`.
  */
 export function sinLoQueNoPuedeAtender(
   avisos: Notificacion[],
@@ -178,7 +209,7 @@ export async function avisosDeUsuario(
   supabase: SupabaseClient,
   quien: QuienMira
 ): Promise<Notificacion[]> {
-  const [avisos, descartes, apruebaCompras] = await Promise.all([
+  const [avisos, descartes, apruebaCompras, contestaConsultas] = await Promise.all([
     avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants)),
     supabase
       .from("notificaciones_descartes")
@@ -186,7 +217,14 @@ export async function avisosDeUsuario(
       .eq("usuario_id", quien.id)
       .then((r) => r.data ?? []),
     puedeAprobarCompras(supabase, quien.id),
+    // `compras_consultados` la lee cualquier autenticado —su policy de select es
+    // `using (true)`, como la de los aprobadores—, así que acá sí sirve el cliente
+    // que llegó, tenga sesión o sea el admin del cron.
+    esConsultadoDeCompras(supabase, quien.id),
   ]);
 
-  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras });
+  return sinLoQueNoPuedeAtender(
+    filtrarDescartadas(avisos, descartes),
+    { apruebaCompras, contestaConsultas }
+  );
 }

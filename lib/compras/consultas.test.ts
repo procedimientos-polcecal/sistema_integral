@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   puedeResponderConsulta, aQuienAvisarDeLaRespuesta, bandejaDeConsultas,
+  preguntasQueEsperan,
   avisoDeLaRespuesta, urlDeLaOrden, queDecirDeLaRespuesta, cambiarRespuesta,
   TIPOS_QUE_DECIDEN_SI_UNA_PREGUNTA_ESPERA,
   type NotaDeLaBandeja, type OrdenConsultada, type RepuestoConsultado,
@@ -77,6 +78,73 @@ describe("a quién se le avisa de la respuesta", () => {
     const sinLaColumna = {} as { creado_por: string | null };
     expect(aQuienAvisarDeLaRespuesta(sinLaColumna, { id: "facundo" })).toBe(null);
     expect(aQuienAvisarDeLaRespuesta({ creado_por: "" }, { id: "facundo" })).toBe(null);
+  });
+});
+
+/*
+ * Juntar cada nota con SU orden es lo que la bandeja y el conteo del resumen
+ * diario tienen en común, y es el único lugar del sistema donde las notas de
+ * varias órdenes se miran juntas. Está probado acá, aparte de la bandeja, porque
+ * desde el 31/10/2026 lo usan dos: escribirlo una segunda vez para contar habría
+ * sido una segunda definición de «abierta», que es justo lo que
+ * `consultaDeRepuesto.ts` existe para que no pase.
+ */
+describe("qué preguntas esperan, de todas las órdenes a la vez", () => {
+  it("devuelve cada pregunta abierta con la orden que le toca", () => {
+    const esperan = preguntasQueEsperan([pregunta()], [orden()]);
+
+    expect(esperan).toHaveLength(1);
+    expect(esperan[0].pregunta.id).toBe("n1");
+    expect(esperan[0].orden.ot_number).toBe(2885);
+  });
+
+  /*
+   * La trampa, y la razón de que esto sea una función: «abierta» depende de las
+   * notas de UNA orden y del estado de ESA orden. Con todas las notas y un solo
+   * estado, la pregunta de una orden realizada se cuenta como abierta porque otra
+   * orden sigue por hacer. No tira ningún error: devuelve un número plausible.
+   */
+  it("cada orden se juzga con SU estado", () => {
+    const notas = [
+      pregunta({ id: "n1", orden_id: "porHacer" }),
+      pregunta({ id: "n2", orden_id: "realizada" }),
+      pregunta({ id: "n3", orden_id: "suspendida" }),
+    ];
+    const ordenes = [
+      orden({ id: "porHacer", estado: "POR_HACER" }),
+      orden({ id: "realizada", estado: "REALIZADO" }),
+      orden({ id: "suspendida", estado: "SUSPENDIDA" }),
+    ];
+
+    expect(preguntasQueEsperan(notas, ordenes).map((e) => e.pregunta.id)).toEqual(["n1"]);
+  });
+
+  /*
+   * Y la trampa por el otro lado: una pregunta juzgada sola —sin las demás notas de
+   * su orden— no la cierra nada nunca, porque su respuesta y su seguimiento están en
+   * otras filas. Contando así, el número sube para siempre y el aviso se vuelve ruido.
+   */
+  it("la respuesta y el seguimiento cierran aunque estén en otras filas", () => {
+    const contestada = [pregunta(), respuesta()];
+    expect(preguntasQueEsperan(contestada, [orden()])).toEqual([]);
+
+    const conSeguimiento = [pregunta(), pregunta({ id: "n3", responde_a: "n1" })];
+    expect(preguntasQueEsperan(conSeguimiento, [orden()]).map((e) => e.pregunta.id)).toEqual(["n3"]);
+  });
+
+  it("una nota cuya orden no vino no se cuelga de ninguna", () => {
+    expect(preguntasQueEsperan([pregunta({ orden_id: "no-vino" })], [orden()])).toEqual([]);
+  });
+
+  it("no toca lo que recibe", () => {
+    const notas = [pregunta(), respuesta()];
+    const ordenes = [orden()];
+    const copiaNotas = notas.map((n) => ({ ...n }));
+    const copiaOrdenes = ordenes.map((o) => ({ ...o }));
+
+    preguntasQueEsperan(notas, ordenes);
+    expect(notas).toEqual(copiaNotas);
+    expect(ordenes).toEqual(copiaOrdenes);
   });
 });
 

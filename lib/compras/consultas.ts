@@ -153,9 +153,14 @@ function cuando(creado_en: string): number {
   return isNaN(t) ? 0 : t;
 }
 
+/** Una nota como la leen los dos consumidores: de cualquier orden. */
+type NotaConSuOrden = NotaDeLaOT & { orden_id: string };
+
+/** Una orden como la miran los dos: lo justo para decidir si todavía espera. */
+type OrdenConEstado = { id: string; estado: string | null };
+
 /**
- * Las preguntas que esperan respuesta, de todas las órdenes, de la que más
- * espera a la que menos.
+ * Las preguntas que esperan respuesta, cada una con su orden, sin ordenar.
  *
  * ── POR QUÉ ESTO ES UNA FUNCIÓN ──────────────────────────────────────────────
  *
@@ -173,16 +178,57 @@ function cuando(creado_en: string): number {
  *
  * Ninguna de las dos tira un error ni se ve rara en la pantalla.
  *
- * ── LO QUE SE DESCARTA Y LO QUE NO ───────────────────────────────────────────
+ * **Y desde el 31/10/2026 lo usan dos**: la bandeja de acá abajo y el conteo del
+ * resumen diario (`consultasDeRepuestosAbiertas`, en `lib/home/consultas.ts`).
+ * Esto se separó de `bandejaDeConsultas` para que el conteo no volviera a
+ * escribir el agrupado: contar con un estado para todas las órdenes da un número
+ * plausible y equivocado, y un número no se ve raro en ninguna pantalla.
+ *
+ * ── LO QUE SE DESCARTA ───────────────────────────────────────────────────────
  *
  * Se recorre por **orden** y no por nota, así que una nota cuya orden no vino en
  * la lectura queda afuera: sin la orden no hay número que mostrar ni estado con
  * el que decidir, y colgarla de otra sería peor. Eso le pone una obligación a
  * quien llama: traer las órdenes de todas las notas que trajo.
  *
- * Un repuesto que no vino, en cambio, **no saca la consulta**: queda sin pieza. No
- * debería pasar —la FK es `on delete set null` y un `repuesto_id` en null cierra
- * la pregunta—, pero esconder una pregunta que espera es peor que mostrarla
+ * Es genérica —como `preguntasAbiertas`— para que cada consumidor reciba de
+ * vuelta lo suyo: la bandeja las trae con el nombre del autor y con la
+ * descripción de la orden, y el conteo con lo mínimo.
+ *
+ * No toca ni ordena lo que recibe.
+ */
+export function preguntasQueEsperan<N extends NotaConSuOrden, O extends OrdenConEstado>(
+  notas: readonly N[],
+  ordenes: readonly O[]
+): { pregunta: N; orden: O }[] {
+  const porOrden = new Map<string, N[]>();
+  for (const nota of notas) {
+    const suyas = porOrden.get(nota.orden_id);
+    if (suyas) suyas.push(nota);
+    else porOrden.set(nota.orden_id, [nota]);
+  }
+
+  const esperan: { pregunta: N; orden: O }[] = [];
+  for (const orden of ordenes) {
+    // Las notas de ESTA orden y el estado de ESTA orden. Es la línea que importa.
+    for (const pregunta of preguntasAbiertas(porOrden.get(orden.id) ?? [], orden.estado)) {
+      esperan.push({ pregunta, orden });
+    }
+  }
+  return esperan;
+}
+
+/**
+ * Las preguntas que esperan respuesta, de todas las órdenes, de la que más
+ * espera a la que menos.
+ *
+ * Quién espera lo decide `preguntasQueEsperan`, acá arriba, que es donde está la
+ * trampa. Esto le pone encima lo que la pantalla necesita: el nombre de quien
+ * preguntó, la pieza y el orden.
+ *
+ * Un repuesto que no vino **no saca la consulta**: queda sin pieza. No debería
+ * pasar —la FK es `on delete set null` y un `repuesto_id` en null cierra la
+ * pregunta—, pero esconder una pregunta que espera es peor que mostrarla
  * incompleta.
  *
  * No toca ni ordena lo que recibe.
@@ -192,29 +238,16 @@ export function bandejaDeConsultas(
   ordenes: readonly OrdenConsultada[],
   repuestos: readonly RepuestoConsultado[]
 ): ConsultaAbierta[] {
-  const porOrden = new Map<string, NotaDeLaBandeja[]>();
-  for (const nota of notas) {
-    const suyas = porOrden.get(nota.orden_id);
-    if (suyas) suyas.push(nota);
-    else porOrden.set(nota.orden_id, [nota]);
-  }
-
   const porRepuesto = new Map(repuestos.map((r) => [r.id, r]));
 
-  const abiertas: ConsultaAbierta[] = [];
-  for (const orden of ordenes) {
-    // Las notas de ESTA orden y el estado de ESTA orden. Es la línea que importa.
-    for (const p of preguntasAbiertas(porOrden.get(orden.id) ?? [], orden.estado)) {
-      abiertas.push({
-        id: p.id,
-        texto: p.texto,
-        creado_en: p.creado_en,
-        autor: p.autor?.nombre ?? null,
-        orden,
-        repuesto: (p.repuesto_id && porRepuesto.get(p.repuesto_id)) || null,
-      });
-    }
-  }
+  const abiertas = preguntasQueEsperan(notas, ordenes).map(({ pregunta: p, orden }) => ({
+    id: p.id,
+    texto: p.texto,
+    creado_en: p.creado_en,
+    autor: p.autor?.nombre ?? null,
+    orden,
+    repuesto: (p.repuesto_id && porRepuesto.get(p.repuesto_id)) || null,
+  }));
 
   // La más vieja arriba: es la que lleva más tiempo esperando, y la razón por la
   // que esta pantalla existe. Al revés, la que se olvidó queda al final.

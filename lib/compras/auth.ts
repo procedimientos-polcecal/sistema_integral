@@ -97,6 +97,35 @@ export async function puedeAprobarOS(
   return Boolean(data);
 }
 
+/**
+ * Si a esta persona le toca contestar lo que Mantenimiento pregunta por un
+ * repuesto: está en `compras_consultados`.
+ *
+ * Es la gemela de `puedeAprobarCompras`, y la lista es otra a propósito —medido
+ * el 26/10/2026, `compras_aprobadores` tiene cuatro personas y sólo una es quien
+ * contesta—. Lo que decide no es el nivel en el módulo ni ser admin del sistema:
+ * es estar en la lista.
+ *
+ * **No es un permiso: es un destinatario.** Contestar lo habilita
+ * `puedeResponderConsulta` —acceso a Compras y la pregunta abierta, y nada más—,
+ * así que quien cubre a alguien de licencia contesta sin que nadie edite la
+ * lista. Esto decide a quién se le **avisa**: el push del momento
+ * (`avisarAQuienDecide`) y el aviso `compras-consultas-repuestos` del resumen
+ * diario y la campana.
+ */
+export async function esConsultadoDeCompras(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("compras_consultados")
+    .select("usuario_id")
+    .eq("usuario_id", userId)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
 /** Administrar el módulo: entre otras cosas, quién está en la lista. */
 export async function esAdminCompras(
   supabase: SupabaseClient,
