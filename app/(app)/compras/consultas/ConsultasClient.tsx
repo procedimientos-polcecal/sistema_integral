@@ -117,18 +117,22 @@ export default function ConsultasClient({ puedeAbrirLaOrden }: { puedeAbrirLaOrd
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
+      {/* Verde sólo si salió el aviso **y** llegó a la planilla, igual que del otro
+          lado (`RepuestosOTModal`). Un fallo de escritura nunca es un `console.warn`:
+          se le dice a quien hizo la acción, y decírselo como letra chica adentro de
+          un cartel que dice «salió todo bien» no cuenta como decírselo. */}
       {seEnvio && (
         <div
           className={`rounded-lg px-3 py-2 text-sm ${
-            seEnvio.llego ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"
+            seEnvio.llego && !seEnvio.planilla
+              ? "bg-green-50 text-green-800"
+              : "bg-amber-50 text-amber-800"
           }`}
         >
           <p>{seEnvio.texto}</p>
-          {/* Un fallo de escritura nunca es un `console.warn`: se le dice a quien lo
-              hizo, y con lo que dijo Google sin traducir. */}
           {seEnvio.planilla && (
             <p className="mt-1 text-xs">
-              La planilla no se pudo actualizar: {seEnvio.planilla}
+              Quedó guardada en el sistema, pero no llegó a la planilla: {seEnvio.planilla}
             </p>
           )}
         </div>

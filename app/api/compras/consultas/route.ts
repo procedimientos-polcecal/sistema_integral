@@ -81,10 +81,12 @@ export async function GET() {
      *
      * **Las columnas no son decoración.** Sin `orden_id` ninguna nota se agrupa con
      * su orden; sin `tipo`, `repuesto_id` o `responde_a`, `preguntasAbiertas`
-     * devuelve `[]`. En los dos casos la bandeja sale vacía **sin un solo error**, y
-     * eso se lee igual que «no hay nada que contestar». El select va literal y
-     * repetido —armado en una variable, Supabase pierde la inferencia de tipos— y
-     * hay un test que lo mira columna por columna.
+     * devuelve `[]`; sin `creado_en`, el orden se va a cero y la pantalla imprime
+     * «Preguntó Ana · nunca». En todos los casos la bandeja sale mal **sin un solo
+     * error**, y vacía se lee igual que «no hay nada que contestar». El select va
+     * literal —armado en una variable, Supabase pierde la inferencia de tipos—, así
+     * que la lista de columnas no puede ser una constante: quien la comprueba es
+     * `lib/mantenimiento/selectsDeLasNotas.test.ts`, leyendo este archivo.
      */
     const notas = (await traerTodo((desde, hasta) =>
       admin
@@ -285,15 +287,24 @@ export async function POST(request: Request) {
 
   if (aQuien) {
     try {
-      // El repuesto, sólo para nombrarlo en el push. Si no se pudo leer, el aviso
-      // sale igual nombrando la orden: un push sin la pieza sirve, uno que no sale
-      // no. `repuesto_id` nunca es null en una pregunta abierta —una a cuyo repuesto
-      // sacaron ya no está abierta—, y el `?? ""` es por si el select no lo trajo.
-      const { data: repuesto } = await admin
-        .from("ordenes_trabajo_repuestos")
-        .select("id, nombre, codigo")
-        .eq("id", abierta.repuesto_id ?? "")
-        .maybeSingle();
+      /*
+       * El repuesto, sólo para nombrarlo en el push. Si no se pudo leer, el aviso
+       * sale igual nombrando la orden: un push sin la pieza sirve, uno que no sale
+       * no.
+       *
+       * El `if` y no un `?? ""`: `repuesto_id` nunca es null en una pregunta abierta
+       * —una a cuyo repuesto sacaron ya no está abierta—, pero si alguna vez lo
+       * fuera, `.eq("id", "")` manda un texto vacío contra una columna `uuid` y
+       * Postgres contesta `22P02`, que acá se descartaría con el resto del error.
+       * Preguntar antes dice lo mismo sin mandar a propósito una consulta inválida.
+       */
+      const { data: repuesto } = abierta.repuesto_id
+        ? await admin
+            .from("ordenes_trabajo_repuestos")
+            .select("id, nombre, codigo")
+            .eq("id", abierta.repuesto_id)
+            .maybeSingle()
+        : { data: null };
 
       aviso = await avisarAUnaPersona(admin, {
         usuarioId: aQuien,
