@@ -1205,6 +1205,7 @@ export const SINCRONIZACIONES = [
         incompletos: r.incompletos,
         fallaron: r.fallaron,
         cerrados: r.cerrados,
+        sin_estado_todavia: r.sinEstadoTodavia,
       });
     },
   },

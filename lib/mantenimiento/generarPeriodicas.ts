@@ -40,7 +40,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
-import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
+import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import { celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
+import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
+import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import { leToca, proximaFecha } from "@/lib/mantenimiento/vencimiento";
 import {
   cuerpoDeLaOT, respuestasIniciales, loQueFaltaParaGenerar, especialidadDelProgramado,
@@ -97,6 +100,12 @@ export interface ResultadoDeGenerar {
   fallaron: { schedule_id: string; error: string }[];
   /** Los que dejaron de repetirse: una fecha fija, o un personalizado sin intervalo. */
   cerrados: string[];
+  /**
+   * Las que se crearon pero cuyo ESTADO todavía no llegó al master, porque su
+   * fila viene por `IMPORTRANGE`. No es un error: quedan encoladas y las
+   * termina `exportarLoPendiente` en la corrida siguiente.
+   */
+  sinEstadoTodavia: number[];
 }
 
 /** Las columnas que hacen falta para decidir y para armar la orden. */
@@ -122,7 +131,7 @@ export async function generarLasPeriodicas(
   hoy = hoyEnArgentina()
 ): Promise<ResultadoDeGenerar> {
   const r: ResultadoDeGenerar = {
-    generadas: [], incompletos: [], fallaron: [], cerrados: [],
+    generadas: [], incompletos: [], fallaron: [], cerrados: [], sinEstadoTodavia: [],
   };
 
   const { data } = await admin
@@ -206,6 +215,51 @@ export async function generarLasPeriodicas(
     }
 
     r.generadas.push({ ot_number: alta.ot_number, schedule_id: p.id });
+
+    // ── Y LA COLUMNA DEL ESTADO, QUE ESTO NO ESCRIBÍA ─────────────────────
+    //
+    // Faltaba, y lo encontró el detector de divergencias a las horas: la OT
+    // 2935 —la primera que generó esto, el 30/10/2026— nació con su celda de
+    // ESTADO vacía en el master. Es **el mismo agujero que el PATCH tenía el
+    // 26/10**, repetido acá: `altaEnLaPlanilla` escribe la fila del libro de
+    // respuestas, que derrama a las columnas A..J, pero la M vive sólo en el
+    // master y hay que escribirla aparte.
+    //
+    // Y no alcanza con intentarlo: si falla —y acá **falla casi siempre**,
+    // porque la fila del master llega por `IMPORTRANGE` segundos después de
+    // crear— hay que anotar el pendiente. Esa marca es lo único que encola el
+    // reintento **y** lo que evita que la importación siguiente pise el
+    // estado con la celda vacía.
+    //
+    // Sin `after()`, a diferencia de la ruta: un cron no le está contestando a
+    // nadie que espere, y `exportarLoPendiente` corre al principio de la
+    // sincronización siguiente, que es dentro de 3 a 5 horas. Insistir cuatro
+    // minutos acá sólo alargaría la corrida.
+    const paraLaPlanilla = loQueHayQueExportar({
+      estado: "POR_HACER",
+      fecha_cierre: null,
+      horas: p.estimated_hours === null || p.estimated_hours === undefined
+        ? null : Number(p.estimated_hours),
+      contratista: null,
+      operario_1: String(cuerpo.operario_1 ?? "").trim() || null,
+      operario_2: null,
+      operario_3: null,
+    });
+
+    if (paraLaPlanilla) {
+      const orden = { id: "", ot_number: alta.ot_number };
+      const falloLaM = await escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(paraLaPlanilla));
+      const pendiente = elPendienteDelIntento(
+        { estado: "POR_HACER", fecha_cierre: null, horas: null,
+          contratista: null, operario_1: null, operario_2: null, operario_3: null },
+        falloLaM
+      );
+      await admin
+        .from("ordenes_trabajo")
+        .update({ sheets_pendiente: pendiente, sheets_intentado_en: new Date().toISOString() })
+        .eq("ot_number", alta.ot_number);
+      if (falloLaM) r.sinEstadoTodavia.push(alta.ot_number);
+    }
 
     // Recién ahora se corre la fecha. `proximaFecha` saltea los ciclos
     // perdidos: de un mensual vencido hace tres meses sale UNA orden y la
