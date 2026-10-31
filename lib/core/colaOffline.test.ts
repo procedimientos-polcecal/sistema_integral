@@ -21,6 +21,7 @@ import {
   tomarLaCarga,
   CAMPO_DEL_CUERPO,
   CAMPO_DE_LA_FOTO,
+  INTENTOS_ANTES_DE_PARAR,
   MINUTOS_PARA_SOLTAR,
   RUTA_DE,
 } from "@/public/cola/colaOffline.js";
@@ -732,6 +733,93 @@ describe("despuesDelIntento", () => {
     ).toEqual({
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
+    });
+  });
+});
+
+/*
+ * ── EL TOPE DE LAS QUE YA ENTRARON ──────────────────────────────────────────
+ *
+ * El vaciado corta en el primer fallo y la fila se ordena por `creadaEn`, así
+ * que una carga que falla para siempre tapa a todas las de atrás. Con la foto
+ * de una condición insegura eso dejó de ser un accidente: la ruta contesta
+ * error **a propósito** para no perder el `Blob`, y un Storage caído da 502,
+ * que es pasajero, que es para siempre.
+ *
+ * El tope es sólo para las que traen `yaEntro` y eso es lo que lo vuelve
+ * inofensivo: su fila ya está escrita del otro lado, así que pararla no pierde
+ * ningún alta — pide una persona para algo que una persona puede hacer desde la
+ * ficha.
+ */
+describe("despuesDelIntento — el tope de las que ya entraron", () => {
+  const falloPasajero = {
+    ok: false as const,
+    status: 502,
+    deLaRuta: true,
+    error: "La condición entró con el número 7… y se reintenta sola: Storage no contestó.",
+    yaEntro: "7",
+  };
+
+  it("antes del tope sigue esperando y sale sola", () => {
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR - 1 });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: expect.objectContaining({ estado: "esperando", yaEntro: "7" }),
+    });
+  });
+
+  it("en el tope pasa a parada, sin perder el número", () => {
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: expect.objectContaining({ estado: "parada", yaEntro: "7" }),
+    });
+  });
+
+  it("y el texto deja de prometer el reintento que ya no va a pasar", () => {
+    // El que compone la ruta termina en «y se reintenta sola» cuando el fallo
+    // es pasajero: verdad hasta este intento y mentira a partir de acá.
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR });
+    const dicho = (r as { cambios: { ultimoError: string } }).cambios.ultimoError;
+    expect(dicho).toContain("entró con el número 7");
+    expect(dicho).toContain("deja de reintentarse sola");
+    expect(dicho).toContain("desde la ficha");
+  });
+
+  /*
+   * LA MITAD QUE IMPORTA MÁS: una carga que NO entró no se para nunca por el
+   * contador. Pararla sería tirar un alta que nadie escribió en ningún lado —
+   * lo contrario de lo que el tope viene a comprar.
+   */
+  it("una carga que NO entró no se para por muchos intentos que lleve", () => {
+    const r = despuesDelIntento(
+      { ok: false, status: 502, deLaRuta: true, error: "se cayó" },
+      { intentos: INTENTOS_ANTES_DE_PARAR * 10 },
+    );
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
+    });
+  });
+
+  it("el número que ya traía la carga cuenta aunque este intento no lo repita", () => {
+    // El reintento puede fallar sin llegar a la ruta —sin señal— y entonces no
+    // viene `ya_entro`. Lo que entró no se des-entra: el tope igual aplica.
+    const r = despuesDelIntento(
+      { ok: false, status: null, deLaRuta: false, error: "sin señal" },
+      { intentos: INTENTOS_ANTES_DE_PARAR, yaEntro: "7" },
+    );
+    expect((r as { cambios: { estado: string } }).cambios.estado).toBe("parada");
+  });
+
+  it("un fallo definitivo sigue parando en el primer intento, con su texto intacto", () => {
+    const r = despuesDelIntento(
+      { ok: false, status: 400, deLaRuta: true, error: "La foto pesa 14 MB.", yaEntro: "7" },
+      { intentos: 1 },
+    );
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: { tomadaEn: null, ultimoError: "La foto pesa 14 MB.", estado: "parada", yaEntro: "7" },
     });
   });
 });

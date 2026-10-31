@@ -266,7 +266,10 @@ export default function CargarClient() {
       // arreglar.
       void pedirVaciadoEnSegundoPlano();
       await releerLaCola();
-      return { estado: "encolada", motivo };
+      // `yaEntro` sale de la carga que se acaba de guardar y no de un
+      // parámetro: es el mismo dato, y el cartel lo necesita para no decir
+      // «todavía no tiene número» sobre una condición que ya tiene el suyo.
+      return { estado: "encolada", motivo, yaEntro: carga.yaEntro ?? null };
     },
     [releerLaCola],
   );
@@ -416,14 +419,20 @@ export default function CargarClient() {
         // Queda tomada mientras sale, que es lo que evita que dos disparos
         // manden lo mismo. `puedeEmpujarla` lee esa marca, y
         // `MINUTOS_PARA_SOLTAR` la suelta si esto muere a mitad de camino.
-        await actualizarCarga(carga.clave, tomarLaCarga(carga, new Date()));
+        const tomada = tomarLaCarga(carga, new Date());
+        await actualizarCarga(carga.clave, tomada);
         await releerLaCola();
 
         // Todo lo que hay que hacer sale de `despuesDelIntento`: acá no se
         // vuelve a mirar la respuesta, porque volver a mirarla es volver a
         // decidir. `borrar-y-avisar` es un veredicto aparte justamente para que
-        // no se pueda borrar la carga sin decir lo que quedó a medias.
-        const queHacer = despuesDelIntento(await mandarALaRuta(carga.tipo, carga.cuerpo));
+        // no se pueda borrar la carga sin decir lo que quedó a medias. Va
+        // `tomada` y no `carga` porque el contador que decide el tope es el de
+        // **después** de este intento.
+        const queHacer = despuesDelIntento(await mandarALaRuta(carga.tipo, carga.cuerpo), {
+          ...carga,
+          ...tomada,
+        });
 
         if (queHacer.accion === "borrar") {
           await borrarCarga(carga.clave);

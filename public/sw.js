@@ -726,7 +726,12 @@ async function vaciarLaCola(disparo) {
  * @returns {Promise<boolean>} Si tiene sentido seguir con la siguiente.
  */
 async function mandarUna(carga, disparo) {
-  await actualizarCarga(carga.clave, tomarLaCarga(carga, new Date()));
+  // `tomada` se guarda y además se usa abajo: `despuesDelIntento` necesita el
+  // contador **de después de este intento** para decidir si una carga que ya
+  // entró deja de reintentarse sola. `carga.intentos` acá todavía es el de
+  // antes.
+  const tomada = tomarLaCarga(carga, new Date());
+  await actualizarCarga(carga.clave, tomada);
 
   let resultado;
   try {
@@ -738,7 +743,7 @@ async function mandarUna(carga, disparo) {
     return false;
   }
 
-  const veredicto = despuesDelIntento(resultado);
+  const veredicto = despuesDelIntento(resultado, { ...carga, ...tomada });
 
   if (veredicto.accion === "actualizar") {
     await actualizarCarga(carga.clave, veredicto.cambios);

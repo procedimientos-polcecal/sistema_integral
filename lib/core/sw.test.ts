@@ -16,6 +16,7 @@ import {
   tomarLaCarga,
   CAMPO_DEL_CUERPO,
   CAMPO_DE_LA_FOTO,
+  INTENTOS_ANTES_DE_PARAR,
 } from "@/public/cola/colaOffline.js";
 import type { CargaEnCola } from "@/public/cola/colaOffline.js";
 // Sólo el mensaje, no la etiqueta del `sync`: `public/sw.js` no filtra por
@@ -1470,6 +1471,68 @@ describe("public/sw.js", () => {
         JSON.stringify({ descripcion: "la de las ocho" }),
         JSON.stringify({ descripcion: "la de las doce" }),
       ]);
+    });
+
+    /*
+     * UNA CONDICIÓN TRABADA NO PUEDE TAPAR A LAS DE ATRÁS PARA SIEMPRE.
+     *
+     * El vaciado corta en el primer fallo y `proximaAMandar` ordena por
+     * `creadaEn`, así que la carga más vieja que falla bloquea la fila. Hasta
+     * el 30/10/2026 una carga permanentemente `esperando` era un accidente;
+     * con la foto de una condición insegura es un **resultado de diseño**: la
+     * ruta contesta error a propósito para no perder el `Blob`, y si lo que
+     * falla es Storage ese error es un 502, o sea pasajero, o sea para
+     * siempre. El aviso de Mantenimiento que alguien cargó esa mañana no salía
+     * hasta que una persona entrara a borrar la condición.
+     *
+     * El tope sólo aplica a las que ya entraron —su fila está escrita del otro
+     * lado, así que pararlas no pierde nada— y lo que prueba este test es la
+     * consecuencia, no el contador: **después del tope, la de atrás sale**.
+     */
+    it("una condición que ya entró y no sale deja de tapar a las de atrás", async () => {
+      const foto = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [
+          unaCarga({
+            clave: "trabada",
+            tipo: "condicion",
+            creadaEn: "2026-10-18T08:00:00.000Z",
+            cuerpo: { descripcion: "falta la guarda", foto },
+            // Cuatro intentos: éste es el quinto y es el que agota el tope.
+            intentos: INTENTOS_ANTES_DE_PARAR - 1,
+            yaEntro: "7",
+          }),
+          unaCarga({
+            clave: "el-aviso-de-la-mañana",
+            creadaEn: "2026-10-18T09:00:00.000Z",
+            cuerpo: { descripcion: "pérdida de aceite" },
+          }),
+        ],
+        red: async (url) => {
+          // Storage caído: la condición entra y la foto no, una y otra vez.
+          if (url === CONDICIONES) {
+            return contesta(502, { error: "faltó la foto", ya_entro: "7" });
+          }
+          if (url === AVISOS) return contesta(200, { oa_number: "OA-1" });
+          return RESPUESTA;
+        },
+      });
+
+      // Primer disparo: la trabada falla y corta el vaciado, como siempre.
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
+      const trabada = cola.filas.get("trabada")!;
+      expect(trabada.estado).toBe("parada");
+      // Y el texto deja de prometer el reintento que ya no va a pasar.
+      expect(trabada.ultimoError).toContain("deja de reintentarse sola");
+
+      // Segundo disparo: `proximaAMandar` saltea las `parada`, así que el
+      // aviso de la mañana sale. Es lo que antes no pasaba nunca.
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
+      expect(cola.filas.has("el-aviso-de-la-mañana")).toBe(false);
+      // La condición sigue ahí, con su número: no se perdió nada.
+      expect(cola.filas.get("trabada")?.yaEntro).toBe("7");
     });
 
     it("dos disparos a la vez no mandan la misma carga dos veces", async () => {

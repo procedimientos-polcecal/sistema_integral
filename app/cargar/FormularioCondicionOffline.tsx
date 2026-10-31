@@ -107,8 +107,18 @@ export default function FormularioCondicionOffline({
   /**
    * La foto elegida, comprobada acá mismo. Un archivo que la ruta rechazaría
    * no entra a la cola: ahí el rechazo llega días después y es definitivo.
+   *
+   * **LO QUE SE GUARDA ES UN `Blob` CON LOS BYTES ADENTRO, Y NO EL `File`.**
+   * Un `File` es una referencia al archivo temporal que dejó la cámara: el
+   * objeto sobrevive al clonado estructurado de IndexedDB, pero el archivo
+   * detrás no tiene por qué —Android e iOS limpian esa carpeta—, y entonces
+   * leerlo falla. El caso de diseño de esta cola es exactamente ése: la carga
+   * sale **horas después, con la app cerrada**, cuando vuelve la señal.
+   * `arrayBuffer()` copia los bytes acá, con el archivo todavía vivo, y lo que
+   * queda en la cola ya no depende de nada de afuera. Es el único camino que
+   * nadie ejercitó, así que no iba a aparecer en ninguna prueba.
    */
-  function elegirFoto(archivo: File | null) {
+  async function elegirFoto(archivo: File | null) {
     setEsHeredada(false);
     if (!archivo) {
       setFoto(null);
@@ -125,8 +135,18 @@ export default function FormularioCondicionOffline({
       setGeneracionDeLaFoto((n) => n + 1);
       return;
     }
+    let bytes: Blob;
+    try {
+      bytes = new Blob([await archivo.arrayBuffer()], { type: archivo.type });
+    } catch (e) {
+      // Si no se puede leer ahora, menos se va a poder dentro de tres horas.
+      setError(`No se pudo leer la foto de este teléfono: ${loQueDijo(e)}. Volvé a sacarla.`);
+      setFoto(null);
+      setGeneracionDeLaFoto((n) => n + 1);
+      return;
+    }
     setError("");
-    setFoto(archivo);
+    setFoto(bytes);
   }
 
   /** Elegir uno de los dos lugares borra el otro: la ruta sólo acepta uno. */
@@ -222,7 +242,7 @@ export default function FormularioCondicionOffline({
           type="file"
           accept="image/*"
           disabled={deshabilitado}
-          onChange={(e) => elegirFoto(e.target.files?.[0] ?? null)}
+          onChange={(e) => void elegirFoto(e.target.files?.[0] ?? null)}
           className={CLASE_DEL_CAMPO}
         />
         {foto ? (
@@ -234,7 +254,7 @@ export default function FormularioCondicionOffline({
             </span>
             <button
               type="button"
-              onClick={() => elegirFoto(null)}
+              onClick={() => void elegirFoto(null)}
               className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-700"
             >
               Sacarla

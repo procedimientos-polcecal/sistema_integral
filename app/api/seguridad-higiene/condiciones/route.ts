@@ -145,7 +145,7 @@ export async function POST(request: Request) {
     const ya = await buscarPorClave(supabase, clave);
     if (ya.error) return errorDeLectura(ya.error);
     if (ya.fila !== null) {
-      return conLaFoto(supabase, user.id, ya.fila, foto);
+      return conLaFoto(supabase, user.id, ya.fila, foto, true);
     }
   }
 
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
     // foto se enlaza igual, por lo mismo que en la rama de arriba.
     if (error.code === "23505" && clave) {
       const ya = await buscarPorClave(supabase, clave);
-      if (ya.fila !== null) return conLaFoto(supabase, user.id, ya.fila, foto);
+      if (ya.fila !== null) return conLaFoto(supabase, user.id, ya.fila, foto, true);
     }
     // Un id que no existe (23503) es un 400: para la cola un 500 se reintenta
     // para siempre y el mismo pedido nunca va a pasar.
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
     );
   }
 
-  return conLaFoto(supabase, user.id, data, foto);
+  return conLaFoto(supabase, user.id, data, foto, false);
 }
 
 /**
@@ -248,15 +248,53 @@ export async function POST(request: Request) {
  * clave nueva y crea una segunda condición. El nombre `ya_entro` no lo usa
  * ninguna otra ruta, justamente para que nada cambie para el aviso ni para la
  * orden de trabajo.
+ *
+ * ── Y EL REINTENTO NO PUEDE SUBIR LA FOTO DOS VECES ────────────────────────
+ *
+ * El caso que esta cola existe para cubrir es que **la respuesta se pierda**:
+ * la condición entra, la foto se enlaza, y el teléfono nunca se entera. El
+ * disparo siguiente cae en la rama de idempotencia de arriba —la clave ya
+ * existe— y, sin esto, subía el archivo otra vez e insertaba una **segunda
+ * fila** en `syh_fotos`. La idempotencia por `clave` cubría la condición y
+ * dejaba la foto afuera.
+ *
+ * Por eso `yaExistia`: cuando se llega acá porque la condición ya estaba, se
+ * mira primero si esa condición ya tiene una foto **de quien está mandando**.
+ * Si la tiene, la carga se da por entregada y el archivo no vuelve a subir.
+ *
+ * **Lo que esto cuesta, dicho:** si entre el primer intento y el reintento la
+ * misma persona agregó *otra* foto desde la ficha, el reintento se saltea la
+ * suya. Es cambiar una foto por otra de la misma condición y la misma persona,
+ * contra un duplicado exacto garantizado en el camino que esta cola existe
+ * para cubrir. Se eligió esto. No se filtra por «cualquier foto» para que una
+ * que haya puesto un admin desde la ficha no se lleve puesta la de quien estuvo
+ * parado frente al problema.
  */
 async function conLaFoto(
   supabase: Awaited<ReturnType<typeof createClient>>,
   usuarioId: string,
   condicion: { id: string; numero: number },
-  foto: Foto | null
+  foto: Foto | null,
+  /** Si se llegó acá porque la condición ya existía: o sea, un reintento. */
+  yaExistia: boolean
 ) {
   const numero = String(condicion.numero);
   if (!foto) return NextResponse.json({ numero });
+
+  if (yaExistia) {
+    const { data: suyas, error } = await supabase
+      .from("syh_fotos")
+      .select("id")
+      .eq("condicion_id", condicion.id)
+      .eq("subida_por", usuarioId)
+      .limit(1);
+    // Un fallo de la lectura no es «no hay ninguna»: seguir subiría la
+    // duplicada que esto viene a evitar. 503 es lo que la cola reintenta.
+    if (error) {
+      return errorDeLectura(`no se pudieron mirar las fotos ya cargadas (${error.message})`);
+    }
+    if ((suyas ?? []).length > 0) return NextResponse.json({ numero });
+  }
 
   const guardada = await guardarLaFoto(supabase, condicion.id, usuarioId, foto);
   if (!guardada.ok) {

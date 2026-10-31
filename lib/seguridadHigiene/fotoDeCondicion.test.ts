@@ -72,7 +72,13 @@ describe("el máximo", () => {
   it("está por debajo del corte de Vercel, con margen para el resto del multipart", () => {
     // El cuerpo del alta no es sólo la foto: lleva también el JSON de la
     // condición y el overhead de las partes.
-    expect(MAXIMO_POR_PEDIDO).toBeLessThan(4.5 * 1024 * 1024);
+    //
+    // **4.500.000 y no `4.5 * 1024 * 1024`.** Los 4,5 MB de Vercel son
+    // decimales: en MiB serían 4.718.592, o sea 218 KB de más, y la baranda
+    // quedaba por encima de la pared. No cambia nada hoy —el máximo son 4
+    // MiB— y ésa es justamente la razón de escribirlo bien ahora: el día que
+    // alguien lo suba, este test tiene que ser el que frene.
+    expect(MAXIMO_POR_PEDIDO).toBeLessThan(4_500_000);
   });
 
   it("y por debajo del techo del bucket, que es lo único que ese número describe", () => {

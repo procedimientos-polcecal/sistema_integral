@@ -842,6 +842,38 @@ export function tomarLaCarga(carga, ahora) {
  */
 
 /**
+ * Cuántos intentos aguanta una carga **que ya entró** antes de pedir una
+ * persona.
+ *
+ * ── POR QUÉ HAY UN TOPE, Y POR QUÉ SÓLO PARA ÉSAS ──────────────────────────
+ *
+ * El vaciado corta en el primer fallo (ver el punto 3 de `public/sw.js`) y
+ * `proximaAMandar` ordena por `creadaEn`, así que **la carga más vieja que
+ * falla tapa a todas las de atrás**. Hasta el 30/10/2026 una carga
+ * permanentemente `esperando` era un accidente; con la foto de una condición
+ * insegura es un **resultado de diseño**: la ruta contesta error a propósito
+ * para no perder el `Blob`, y si lo que falla es Storage ese error es un 502,
+ * o sea pasajero, o sea para siempre —no hay nada que cambie solo—. Una
+ * condición trabada así deja sin salir al aviso de Mantenimiento que alguien
+ * cargó esa mañana, hasta que una persona entre y la borre.
+ *
+ * El tope es sólo para las que traen `yaEntro` y eso es lo que lo hace
+ * inofensivo: **su fila ya está escrita del otro lado**, así que pararla no
+ * pierde nada —no hay un alta esperando—. Lo único que falta es la foto, y
+ * para eso la ficha de la condición tiene un botón.
+ *
+ * La otra salida que se miró era que `mandarUna` siguiera con la siguiente
+ * cuando el fallo es de la carga y no del camino. Se descartó: sin señal
+ * fallan todas, así que «seguir» gastaría un pedido por carga, que es
+ * exactamente lo que el corte en el primer fallo compró.
+ *
+ * Cinco y no tres: con un disparo por push, por `sync` y por pantalla abierta,
+ * tres se consumen en una mañana y un Storage que estuvo caído diez minutos
+ * pararía una carga que iba a salir sola.
+ */
+export const INTENTOS_ANTES_DE_PARAR = 5;
+
+/**
  * Cómo queda una carga **que ya estaba en la cola** después de intentarla.
  *
  * Sale de la cola sólo cuando el envío salió bien de verdad —y qué es "bien" lo
@@ -857,12 +889,14 @@ export function tomarLaCarga(carga, ahora) {
  * Si falló, la marca de tomada se suelta sí o sí: dejarla puesta la trabaría
  * `MINUTOS_PARA_SOLTAR` minutos por un fallo que ya se conoce. Y el estado
  * depende de si reintentar tiene sentido: `parada` es la que necesita que una
- * persona la mire, `esperando` la que sale sola cuando vuelva la señal.
+ * persona la mire, `esperando` la que sale sola cuando vuelva la señal — con
+ * el tope de `INTENTOS_ANTES_DE_PARAR` para las que ya entraron.
  *
  * @param {ResultadoDelEnvio} resultado
+ * @param {{ intentos?: number, yaEntro?: string | null }} [carga] La carga **como queda después de este intento** (o sea con `tomarLaCarga` ya aplicado). Sin ella no hay tope: el veredicto es el de siempre.
  * @returns {QueHacerDespues}
  */
-export function despuesDelIntento(resultado) {
+export function despuesDelIntento(resultado, carga) {
   if (resultado.ok) {
     return resultado.advertencia === null
       ? { accion: "borrar", numero: resultado.numero }
@@ -872,12 +906,31 @@ export function despuesDelIntento(resultado) {
           advertencia: resultado.advertencia,
         };
   }
+
+  // Lo que entró no se des-entra: vale el número de este intento o el que la
+  // carga ya traía de uno anterior.
+  const yaEntro = resultado.yaEntro || carga?.yaEntro || null;
+  const intentos = Number.isFinite(carga?.intentos) ? Number(carga?.intentos) : 0;
+  const seAgoto = Boolean(yaEntro) && intentos >= INTENTOS_ANTES_DE_PARAR;
+  const sigueSola = convieneReintentar(resultado) && !seAgoto;
+
+  // **Y EL TEXTO TIENE QUE DEJAR DE PROMETER EL REINTENTO.** El que compone la
+  // ruta termina en «y se reintenta sola» cuando el fallo es pasajero, que es
+  // verdad hasta este intento y mentira a partir de acá. Se dice que paró y
+  // por qué, y cuál es la salida —que no es volver a cargarla—.
+  const ultimoError =
+    seAgoto && convieneReintentar(resultado)
+      ? `${resultado.error} Van ${intentos} intentos y sigue sin salir, así que deja ` +
+        `de reintentarse sola para no tapar a las que están atrás. Lo que entró ya está: ` +
+        `lo que falta es la foto, y se le puede agregar desde la ficha de la condición.`
+      : resultado.error;
+
   return {
     accion: "actualizar",
     cambios: {
       tomadaEn: null,
-      ultimoError: resultado.error,
-      estado: convieneReintentar(resultado) ? "esperando" : "parada",
+      ultimoError,
+      estado: sigueSola ? "esperando" : "parada",
       // Sólo si vino, y nunca pisándolo con null: lo que entró no se
       // des-entra, y los dos lados aplican estos `cambios` con un spread sobre
       // la fila guardada. Ver el bloque de `CargaEnCola`.

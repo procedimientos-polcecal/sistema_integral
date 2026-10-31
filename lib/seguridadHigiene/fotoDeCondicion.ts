@@ -56,6 +56,13 @@ export const MAXIMO_DE_FOTO = 10 * 1024 * 1024;
  * era un cartel que le prometía 10 MB. Una validación que promete un margen
  * que no existe es peor que no tener ninguna.
  *
+ * **Y los 4,5 MB de Vercel son decimales: 4.500.000 bytes, no 4,5 MiB.** La
+ * diferencia son 218 KB y hoy no cambia nada —4 MiB son 4.194.304, debajo de
+ * los dos números—, pero el test que ata este máximo contra ese corte
+ * comparaba contra `4.5 * 1024 * 1024`, o sea una baranda puesta más arriba
+ * que la pared. Si algún día alguien sube el de acá, el que tiene que frenar
+ * es ese test.
+ *
  * Cuatro megas, debajo de los 4,5 con margen para el resto del multipart —por
  * el alta la foto viaja junto al cuerpo de la condición—. El margen vale para
  * los dos caminos aunque uno lo necesite menos: dos números distintos acá

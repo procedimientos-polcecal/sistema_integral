@@ -29,7 +29,19 @@ import {
 /** Qué pasó con una carga. Es lo único que el formulario tiene que mostrar. */
 export type Resultado =
   | { estado: "mandada"; numero: string; advertencia: string | null }
-  | { estado: "encolada"; motivo: string | null }
+  | {
+      estado: "encolada";
+      motivo: string | null;
+      /**
+       * El número con el que la fila **ya quedó escrita** aunque la carga siga
+       * en la cola. Es el mismo campo que la variante de abajo y por el mismo
+       * motivo, y el que faltaba: cuando la condición entra y la foto no, el
+       * veredicto es **`encolar`** y no `rechazada` —un 502 es pasajero—, así
+       * que ésta es la rama más probable de este camino y la que decía
+       * «todavía no tiene número» arriba de un texto chico que daba el número.
+       */
+      yaEntro?: string | null;
+    }
   | {
       estado: "rechazada";
       error: string;
@@ -182,13 +194,34 @@ export function CartelDelResultado({
   if (resultado.estado === "encolada") {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        <p className="font-semibold">
-          Queda para mandarse y todavía no tiene número.
-        </p>
-        <p className="mt-1">
-          Quedó guardada en este teléfono y aparece abajo, en lo que está
-          esperando. De ahí sale cuando haya señal.
-        </p>
+        {/* EL TITULAR DEPENDE DE SI LA FILA YA ESTÁ ESCRITA, y ésa es la rama
+            más probable de este camino: cuando la condición entra y la foto no,
+            el fallo es un 502, o sea pasajero, o sea `encolar`. Decir «todavía
+            no tiene número» ahí es lo peor que se puede decir —invita a
+            cargarla de nuevo a mano, y la segunda lleva una clave nueva— y
+            encima lo contradecía el texto chico de abajo, que daba el número. */}
+        {resultado.yaEntro ? (
+          <>
+            <p className="font-semibold">
+              Entró con el número {resultado.yaEntro}: no la vuelvas a cargar.
+            </p>
+            <p className="mt-1">
+              Lo que falta es la foto. La carga queda abajo, en lo que está
+              esperando, y la foto sale sola cuando haya señal; también se le
+              puede agregar después desde su ficha.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold">
+              Queda para mandarse y todavía no tiene número.
+            </p>
+            <p className="mt-1">
+              Quedó guardada en este teléfono y aparece abajo, en lo que está
+              esperando. De ahí sale cuando haya señal.
+            </p>
+          </>
+        )}
         {resultado.motivo && (
           <p className="mt-1 text-xs">El servidor dijo: {resultado.motivo}</p>
         )}
