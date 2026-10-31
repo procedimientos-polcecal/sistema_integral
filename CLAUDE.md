@@ -701,15 +701,29 @@ existen por el mismo motivo, que es el único que los justifica. Son para el
 el próximo es la misma: que la regla no se pueda sacar a `lib/`, no que probarla
 ahí sea incómodo.
 
-**Y una señal que conviene mirar antes de escribir el cuarto:** los dos tests de
-ruta nacieron en tareas consecutivas y los dos existen por **el mismo** motivo
-—que nadie puede ver un `select` incompleto—. Dos veces es una coincidencia; la
-tercera dice que la guarda está en el lugar equivocado. Lo que cubriría a todas
-las rutas de una es una comprobación que lea el **texto** de los archivos y
-exija que cada `select()` sobre una tabla conocida traiga las columnas que su
-consumidor usa, en vez de un Supabase de mentira por ruta. Nadie lo escribió
-todavía, y no hace falta hasta que aparezca el tercer caso — pero cuando
-aparezca, es eso y no otro test de ruta.
+**Y la parte que NO se prueba así, porque ya se intentó y falló:** que un
+`select` traiga las columnas que su consumidor necesita. Eso lo comprueba
+[lib/mantenimiento/selectsDeLasNotas.ts](lib/mantenimiento/selectsDeLasNotas.ts),
+que lee **el texto** de los archivos y exige que todo `select` sobre
+`ordenes_trabajo_notas` que nombre una columna de la conversación las traiga
+todas. Cubre las dos rutas y la tercera que nadie escribió.
+
+Vale la pena saber por qué existe, porque la lección es más general que esta
+tabla. La guarda era al principio una **lista de columnas escrita a mano en cada
+test de ruta**. Falló la segunda vez que se usó: a la de Compras le faltaba
+`creado_en`, así que sacar esa columna pasaba los 164 tests y mataba en silencio
+«la más vieja arriba», que es la razón declarada de esa pantalla. Una lista a
+mano que hay que acordarse de completar en cada ruta nueva no es una guarda: es
+el mismo olvido que viene a tapar, movido de lugar. Si aparece otra tabla con
+este problema, la respuesta es otro chequeo como ése y **no** otro test de ruta.
+
+Dos cosas suyas que no se deducen de leerlo. El disparador es **nombrar alguna
+columna de la conversación**, no «todo select»: con «todo select» el
+`select("id")` del DELETE y el de `laUltimaNota` lo dejaban rojo el primer día,
+y un chequeo siempre rojo no lo mira nadie — es la misma razón por la que el
+lint todavía no está en el CI. Y es un lector de cadenas, no un compilador: un
+`select` concatenado lo reporta como «no va literal» en vez de leerlo, que es la
+respuesta correcta según la regla de la casa, pero conviene saberlo.
 
 ## Commits
 
