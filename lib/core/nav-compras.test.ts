@@ -37,10 +37,23 @@ describe("menu de Compras", () => {
       "Órdenes de servicio",
       "Aprobaciones",
       "Para aprobar",
+      // Al lado de las otras dos bandejas de trabajo: lo que hay que contestar,
+      // junto a lo que hay que aprobar.
+      "Consultas de repuestos",
       "Proveedores",
       "Ubicaciones",
       "Configuración",
     ]);
+  });
+
+  /**
+   * Contestar pide acceso a Compras y nada mas: ni nivel de Mantenimiento —esa es
+   * la decision del diseño— ni estar en `compras_consultados`, que decide a quien
+   * se le avisa y no quien puede entrar. Gatearlo por esa lista esconderia la
+   * pantalla justo al que tiene que cubrir una licencia del encargado.
+   */
+  it("las consultas de repuestos las ve cualquiera que tenga Compras", () => {
+    expect(visibles(ctx())).toContain("Consultas de repuestos");
   });
 
   it("quien tiene el modulo ve el trabajo del dia a dia", () => {

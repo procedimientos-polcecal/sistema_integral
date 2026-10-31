@@ -186,6 +186,21 @@ export const NAV: NavItem[] = [
       },
       { label: "Aprobaciones", href: "/compras/aprobaciones", modulo: "compras", soloAprobadorDeAlgo: true },
       { label: "Para aprobar", href: "/compras/para-aprobar", modulo: "compras", soloAprobadorCompras: true },
+      /*
+       * Lo que Mantenimiento preguntó por un repuesto, y dónde se contesta.
+       *
+       * Al lado de las otras dos bandejas de trabajo, que es lo que es. **No lleva
+       * ningún `solo…`**, y no es un olvido: contestar pide acceso a Compras y nada
+       * más —lo dice `puedeResponderConsulta`—, a propósito, para que una licencia
+       * del encargado no deje las preguntas sin contestar. `compras_consultados`
+       * decide a quién se le **avisa**, no quién puede entrar; gatear el ítem por
+       * esa lista escondería la pantalla justo al que la tiene que cubrir.
+       *
+       * Y va en el menú aunque el push lleve derecho acá: una pantalla a la que sólo
+       * se llega desde una notificación es una pantalla que no existe el día que la
+       * notificación no sale —fuera de 7:00 a 21:00 no sale—.
+       */
+      { label: "Consultas de repuestos", href: "/compras/consultas", modulo: "compras" },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
       { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
       { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },

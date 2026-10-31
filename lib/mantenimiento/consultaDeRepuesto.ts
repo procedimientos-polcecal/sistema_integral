@@ -171,11 +171,17 @@ function laOrdenYaNoEspera(estado: string | null): boolean {
  * Filtra y nada más: no ordena, no toca lo que recibe y no borra nada. Una
  * pregunta que deja de estar abierta sigue en el historial; lo único que cambia
  * es que esta lista ya no la trae.
+ *
+ * Es genérica en el tipo de la nota —como `laUltimaNota`— para que quien le pase
+ * notas con algo más encima las reciba de vuelta con eso: la bandeja de Compras
+ * las trae con el nombre del autor y con su `orden_id`, y sin esto tendría que
+ * recuperarlos con un cast, que es justamente lo que el compilador no puede
+ * revisar.
  */
-export function preguntasAbiertas(
-  notas: readonly NotaDeLaOT[],
+export function preguntasAbiertas<T extends NotaDeLaOT>(
+  notas: readonly T[],
   estadoDeLaOrden: string | null
-): NotaDeLaOT[] {
+): T[] {
   if (laOrdenYaNoEspera(estadoDeLaOrden)) return [];
 
   // El recorrido anidado es a propósito: así «tiene respuesta» y «superada»

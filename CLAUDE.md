@@ -484,9 +484,19 @@ la lista de los candidatos que **no** pasan el filtro y por qué — que es lo q
 permite decirle que no al próximo módulo que lo pida.
 
 **El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
-[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los tres emisores que
-hay —el resumen diario, el aviso al instante y el de Remises—. La `url` va en
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los cuatro emisores que
+hay —el resumen diario, el aviso al instante, el de Remises y, desde el
+31/10/2026, el aviso **a una sola persona nombrada**
+([lib/core/avisoAUnaPersona.ts](lib/core/avisoAUnaPersona.ts): Compras contestó
+tu consulta por un repuesto, y le llega sólo a quien preguntó)—. La `url` va en
 el primer nivel, no adentro de un `data`.
+
+Ese cuarto es el único que no le habla a una lista: los otros tres salen a
+todos los aparatos de un conjunto de gente —los que ven un módulo, los que
+aprueban— y éste a los de **una** persona, decidida por quien lo llama. De ahí
+sus dos condiciones, que la función no puede tomar sola y por eso están en
+`aQuienAvisarDeLaRespuesta`: que haya a quién —`creado_por` es nullable— y que
+no sea quien acaba de escribir la respuesta.
 
 Esto parece un detalle y costó un mes de notificaciones que no llevaban a
 ningún lado: el handler de `push` de `public/sw.js` guardaba `data: data.data`,
