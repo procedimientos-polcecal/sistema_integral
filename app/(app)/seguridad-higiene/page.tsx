@@ -45,8 +45,14 @@ export default async function SeguridadHigienePage() {
   const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const nivel = await nivelSyhDe(supabase, user.id);
-  if (!nivel) redirect("/");
+  // Un fallo de la lectura de permisos no es «no tenés acceso»: redirigir a la
+  // portada le diría a alguien que sí lo tiene que no lo tiene, y no dejaría
+  // rastro. Se rompe a la vista, que es lo que se puede reintentar.
+  const permiso = await nivelSyhDe(supabase, user.id);
+  if (!permiso.ok) {
+    throw new Error(`No se pudieron comprobar tus permisos de Seguridad e Higiene: ${permiso.error}`);
+  }
+  if (!permiso.nivel) redirect("/");
 
   // Se traen las filas, aunque sólo se cuenten, porque «le falta algo» es una
   // regla de varias columnas que vive en una función y no en un filtro de SQL:

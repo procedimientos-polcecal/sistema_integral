@@ -40,6 +40,27 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // Borrar una foto es la única escritura de este módulo que **no se deshace**
+  // —la foto es el único campo de una condición que no se puede volver a
+  // conseguir— y era la que no miraba si el usuario sigue activo. Ninguna
+  // función de la base lo mira: `puede_editar_syh()` sólo mira los grants, así
+  // que alguien desactivado con la sesión viva podía borrar fotos. El fallo de
+  // la lectura es un 503 y no un 403, con el criterio del alta.
+  const { data: usuario, error: errorDelUsuario } = await supabase
+    .from("usuarios")
+    .select("activo")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (errorDelUsuario) {
+    return NextResponse.json(
+      { error: `No se pudo comprobar tu usuario: ${errorDelUsuario.message}` },
+      { status: 503 }
+    );
+  }
+  if (!usuario?.activo) {
+    return NextResponse.json({ error: "Tu usuario está desactivado" }, { status: 403 });
+  }
+
   // `delete().select()` devuelve lo borrado, así que la ruta del archivo sale
   // del mismo pedido que la borró: leerla antes sería una lectura de más y
   // además dejaría abierta la ventana en la que otro la borra en el medio.

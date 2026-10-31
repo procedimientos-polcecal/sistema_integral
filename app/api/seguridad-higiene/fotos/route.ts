@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { puedeEditarSyh } from "@/lib/seguridadHigiene/auth";
+import { noSePudoAveriguar, puedeEditarSyh } from "@/lib/seguridadHigiene/auth";
 import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import { guardarLaFoto } from "@/lib/seguridadHigiene/guardarLaFoto";
 
@@ -62,7 +62,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tu usuario está desactivado" }, { status: 403 });
   }
 
-  if (!(await puedeEditarSyh(supabase, user.id))) {
+  const permiso = await puedeEditarSyh(supabase, user.id);
+  if (!permiso.ok) return noSePudoAveriguar(permiso);
+  if (!permiso.si) {
     return NextResponse.json(
       { error: "No tenés permiso para subir fotos de condiciones inseguras" },
       { status: 403 }

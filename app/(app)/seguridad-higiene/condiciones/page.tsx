@@ -41,7 +41,12 @@ export default async function CondicionesPage({
   const user = await usuarioActual();
   if (!user) redirect("/login");
 
-  const nivel = await nivelSyhDe(supabase, user.id);
+  // Un fallo de la lectura de permisos no es «no tenés acceso»: ver el tablero.
+  const permiso = await nivelSyhDe(supabase, user.id);
+  if (!permiso.ok) {
+    throw new Error(`No se pudieron comprobar tus permisos de Seguridad e Higiene: ${permiso.error}`);
+  }
+  const nivel = permiso.nivel;
   if (!nivel) redirect("/");
 
   const [condiciones, sectores, equipos, peligros, usuarios] = await Promise.all([

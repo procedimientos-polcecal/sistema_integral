@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { puedeEditarSyh, tieneAccesoSyh } from "@/lib/seguridadHigiene/auth";
+import { noSePudoAveriguar, puedeEditarSyh, tieneAccesoSyh } from "@/lib/seguridadHigiene/auth";
 import { esquemaDeCondicion, problemaDelLugar } from "@/lib/seguridadHigiene/cuerpoDeCondicion";
 import { problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 import { guardarLaFoto } from "@/lib/seguridadHigiene/guardarLaFoto";
@@ -66,7 +66,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tu usuario está desactivado" }, { status: 403 });
   }
 
-  if (!(await puedeEditarSyh(supabase, user.id))) {
+  // Y el nivel con el mismo criterio que el `activo` de arriba: un fallo de la
+  // lectura de `usuario_modulos` es un 503 y no un 403. Hasta el 31/10/2026
+  // esto contestaba 403 —`nivelSyhDe` descartaba el error—, o sea que la ruta
+  // explicaba en cinco renglones una regla que rompía dos llamadas después.
+  const permiso = await puedeEditarSyh(supabase, user.id);
+  if (!permiso.ok) return noSePudoAveriguar(permiso);
+  if (!permiso.si) {
     return NextResponse.json(
       { error: "No tenés permiso para cargar condiciones inseguras" },
       { status: 403 }
@@ -324,7 +330,9 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await tieneAccesoSyh(supabase, user.id))) {
+  const permiso = await tieneAccesoSyh(supabase, user.id);
+  if (!permiso.ok) return noSePudoAveriguar(permiso);
+  if (!permiso.si) {
     return NextResponse.json({ error: "Sin acceso a Seguridad e Higiene" }, { status: 403 });
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { puedeEditarSyh } from "@/lib/seguridadHigiene/auth";
+import { noSePudoAveriguar, puedeEditarSyh } from "@/lib/seguridadHigiene/auth";
 import { traerTodo } from "@/lib/core/paginado";
 
 /**
@@ -14,6 +14,11 @@ import { traerTodo } from "@/lib/core/paginado";
  * devuelve `puedeCargar: true` junto a la lista: lo que el teléfono guarda es
  * esa respuesta entera.
  *
+ * **Y por eso mismo un fallo de la base tiene que salir por otra puerta.** El
+ * teléfono trata el 403 como el dato de que esta persona no carga: borra el
+ * permiso cacheado y la lista de peligros. Con un 503 deja lo que tenía
+ * guardado, que es lo único que sirve cuando después no hay señal.
+ *
  * Sólo los peligros activos, que son los que se pueden elegir.
  */
 export async function GET() {
@@ -21,7 +26,9 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await puedeEditarSyh(supabase, user.id))) {
+  const permiso = await puedeEditarSyh(supabase, user.id);
+  if (!permiso.ok) return noSePudoAveriguar(permiso);
+  if (!permiso.si) {
     return NextResponse.json(
       { error: "No tenés permiso para cargar condiciones inseguras" },
       { status: 403 }
