@@ -455,6 +455,28 @@ antes y después:
 `.card` no declara ni `width` ni `max-width`: lo que choca es la **misma**
 propiedad, no cualquier utilidad de tamaño.
 
+**Y no es sólo el ancho de `.input`: es toda propiedad que una de esas clases
+declare.** La regla es la capa, así que vale para cada declaración de cada
+clase sin capa, y las otras dos muerden igual de callado:
+
+| Clase | Declara | Lo que no se aplica al lado |
+|---|---|---|
+| `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
+| `.card` | `box-shadow` | `ring-*`, `shadow-*` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary` | `color` y `font-size` | `text-red-700`, `text-xs` |
+
+Medido el 31/10/2026 en Seguridad e Higiene: los dos botones del resumen de
+condiciones declaraban su borde de alerta y lo pintaban gris, «Sacar» —lo
+único irreversible de esa pantalla— pedía `text-red-700` y se veía gris, y
+cinco `text-xs` medían 14 px. **Ninguna de las tres cosas rompe nada y ésa es
+la trampa**: la pantalla se ve bien, sólo que no dice lo que el código dice que
+dice.
+
+Qué hacer según el caso: un color de estado va por `style` —es lo que ya hacen
+los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
+utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
+promete que sí es peor que no tenerla.
+
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una

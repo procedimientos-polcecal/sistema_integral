@@ -168,10 +168,13 @@ export async function avisosDeTodoElSistema(
  * `evaluaSyh` no sale de una lista sino de un **nivel**: evaluar y cerrar una
  * condición insegura lo puede hacer el `admin` de Seguridad e Higiene. Sale sin
  * consulta, porque los grants ya vienen en `QuienMira`.
+ *
+ * Y `administraElSistema` es el rol pelado, por un solo aviso: ver abajo.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
   evaluaSyh: boolean;
+  administraElSistema: boolean;
 }
 
 /** Los avisos que piden algo que no todos pueden hacer, y qué lo habilita. */
@@ -179,7 +182,20 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
   "syh-vencidas": "evaluaSyh",
   "syh-sin-completar": "evaluaSyh",
-  "syh-fotos-sin-respaldar": "evaluaSyh",
+  /*
+   * **NO ES `evaluaSyh`, Y ÉSA ES LA CORRECCIÓN.** El aviso dice que hay fotos
+   * sin copia en Drive, y eso **no lo arregla un admin del módulo**: lo
+   * arregla quien crea la carpeta en una unidad compartida y pone
+   * `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID` en Vercel, que es `admin_sistema`.
+   * Mandado al admin del módulo era el patrón de `compras-por-aprobar` que
+   * este repo ya midió —6 personas, 3 sin poder aprobar— y que termina en que
+   * alguien apaga las notificaciones. Peor todavía al estrenar el módulo: si
+   * la carpeta no existe, el push empieza a sonar al cuarto día y no para.
+   *
+   * El `admin_sistema` tiene `admin` en todos los módulos, así que sigue
+   * recibiéndolo; lo que se saca es a los demás.
+   */
+  "syh-fotos-sin-respaldar": "administraElSistema",
 };
 
 /**
@@ -234,5 +250,9 @@ export async function avisosDeUsuario(
 
   const evaluaSyh = nivelEnModulo(quien.rol, quien.grants, "seguridad_higiene") === "admin";
 
-  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras, evaluaSyh });
+  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), {
+    apruebaCompras,
+    evaluaSyh,
+    administraElSistema: quien.rol === "admin_sistema",
+  });
 }

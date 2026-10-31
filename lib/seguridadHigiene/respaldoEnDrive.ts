@@ -50,10 +50,22 @@ type Admin = ReturnType<typeof createAdminClient>;
 const LIMITE_MULTIPART = 5 * 1024 * 1024;
 
 /**
- * Margen de tiempo: la ruta declara 300 s y a los 240 se corta sola, para
- * devolver el resultado y anotarlo antes de que Vercel mate la función.
+ * Margen de tiempo: la ruta declara `maxDuration = 300` y a los 180 se corta
+ * sola, para devolver el resultado y anotarlo antes de que Vercel mate la
+ * función.
+ *
+ * **CIENTO OCHENTA Y NO DOSCIENTOS CUARENTA, Y LA CUENTA ES LA RAZÓN.** El
+ * corte se mira **entre** fotos, así que después de pasarlo todavía puede
+ * empezar una foto entera: son hasta cuatro esperas de `ESPERA_POR_PEDIDO_MS`
+ * —buscar en la carpeta, bajar de Storage, leer el cuerpo, subir—, o sea 120 s
+ * más. Con 240 eso da 360 > 300 y Vercel mata la función **sin pasar por
+ * `registrarSincronizacion`**: exactamente el no-dejar-rastro que este control
+ * existe para evitar. Con 180 cierra: 180 + 120 = 300.
+ *
+ * Si cambia `ESPERA_POR_PEDIDO_MS` o el `maxDuration` de la ruta, esta cuenta
+ * se rehace.
  */
-const PRESUPUESTO_MS = 240_000;
+const PRESUPUESTO_MS = 180_000;
 
 /**
  * Lo que espera cada pedido a Drive antes de darlo por colgado.

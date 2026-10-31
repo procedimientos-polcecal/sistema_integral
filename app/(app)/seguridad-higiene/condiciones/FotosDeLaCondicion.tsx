@@ -180,14 +180,19 @@ export default function FotosDeLaCondicion({
                   No se pudo abrir esta foto{foto.error ? `: ${foto.error}` : ""}
                 </p>
               )}
+              {/* SIN `text-xs` EN NINGUNO DE LOS TRES: `.btn-secondary`
+                  declara `font-size` en `app/globals.css` fuera de toda capa,
+                  así que le gana a cualquier utilidad de Tailwind —que vive en
+                  `@layer utilities`— y estos botones siempre midieron 14 px.
+                  La clase no hacía nada y prometía que sí. Ver CLAUDE.md. */}
               <div className="flex flex-wrap gap-2">
                 {foto.descarga && (
-                  <a href={foto.descarga} className="btn-secondary text-xs">
+                  <a href={foto.descarga} className="btn-secondary">
                     Descargar
                   </a>
                 )}
                 {foto.link && (
-                  <button type="button" onClick={() => copiarLink(foto)} className="btn-secondary text-xs">
+                  <button type="button" onClick={() => copiarLink(foto)} className="btn-secondary">
                     {copiada === foto.id ? "Link copiado" : "Copiar link"}
                   </button>
                 )}
@@ -196,7 +201,11 @@ export default function FotosDeLaCondicion({
                     type="button"
                     onClick={() => sacar(foto)}
                     disabled={ocupado}
-                    className="btn-secondary text-xs text-red-700 disabled:opacity-50"
+                    // `.btn-danger` y no `btn-secondary text-red-700`: esa
+                    // clase declara `color` sin capa, así que el rojo nunca se
+                    // aplicaba y «Sacar» —lo único irreversible de esta
+                    // pantalla— se veía gris como los otros dos.
+                    className="btn-danger disabled:opacity-50"
                   >
                     Sacar
                   </button>

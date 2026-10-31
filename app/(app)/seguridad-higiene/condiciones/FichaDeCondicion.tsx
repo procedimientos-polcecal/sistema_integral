@@ -490,11 +490,15 @@ export default function FichaDeCondicion({
                       value={borrador.fecha_ejecucion}
                       onChange={(e) => poner("fecha_ejecucion", e.target.value)}
                     />
+                    {/* Sin `text-xs`: `.btn-secondary` declara `font-size`
+                        fuera de toda capa y le gana a las utilidades de
+                        Tailwind, así que estos botones siempre midieron 14 px.
+                        Ver la regla en CLAUDE.md. */}
                     <div className="flex flex-wrap gap-2">
                       {!borrador.fecha_ejecucion && (
                         <button
                           type="button"
-                          className="btn-secondary text-xs"
+                          className="btn-secondary"
                           onClick={() => poner("fecha_ejecucion", hoy)}
                         >
                           Marcar como ejecutada hoy
@@ -503,7 +507,7 @@ export default function FichaDeCondicion({
                       {borrador.fecha_ejecucion && (
                         <button
                           type="button"
-                          className="btn-secondary text-xs"
+                          className="btn-secondary"
                           onClick={() => poner("fecha_ejecucion", "")}
                         >
                           {cerrada ? "Reabrir" : "Quitar la fecha"}

@@ -85,7 +85,18 @@ export default async function CondicionesPage({
   });
 
   return (
+    // `key` CON LOS PARÁMETROS DE LA URL, Y NO ES COSMÉTICO. El link de la
+    // campana («vencidas», «sin completar») es una navegación suave: React no
+    // remonta el cliente, el servidor re-renderiza con filtros nuevos y el
+    // `useState(filtrosIniciales)` de adentro los ignora. O sea que tocar un
+    // aviso **estando en esta pantalla** no filtraba nada, y tocar el menú con
+    // la tabla filtrada dejaba la tabla filtrada con la URL limpia: la barra de
+    // direcciones diciendo una cosa y la pantalla otra. Con la `key`, cambiar
+    // los parámetros es una pantalla nueva. Y alcanza para los dos estados
+    // sembrados —`condicionesIniciales` tiene el mismo problema—, que es la
+    // razón de ponerla acá y no de pasar los filtros como prop controlada.
     <CondicionesClient
+      key={params.toString()}
       filtrosIniciales={filtrosIniciales}
       condicionesIniciales={condiciones}
       sectores={sectores.map((s) => ({ id: s.id as string, nombre: s.nombre as string, activo: s.activo as boolean }))}

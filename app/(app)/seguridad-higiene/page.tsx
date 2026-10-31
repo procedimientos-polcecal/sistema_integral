@@ -5,6 +5,10 @@ import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { nivelSyhDe } from "@/lib/seguridadHigiene/auth";
 import { resumenDeCondiciones } from "@/lib/seguridadHigiene/gestion";
+import {
+  corteDeFotosAtascadas,
+  DIAS_ANTES_DE_AVISAR,
+} from "@/lib/seguridadHigiene/respaldoDeFotos";
 import KpiCard from "@/components/KpiCard";
 
 /**
@@ -75,6 +79,17 @@ export default async function SeguridadHigienePage() {
     resumen = null;
   }
 
+  // Las fotos atascadas: el mismo conteo y el mismo corte que el aviso
+  // `syh-fotos-sin-respaldar` de `lib/home/avisos.ts`, porque ése apunta acá.
+  // Hasta el 31/10/2026 ese aviso llevaba a esta pantalla y acá no había nada
+  // de fotos: un push diario a un lugar donde no se ve de qué habla.
+  // Un fallo del conteo deja la tarjeta afuera: no se inventa un cero.
+  const { count: fotosSinRespaldar } = await supabase
+    .from("syh_fotos")
+    .select("id", { count: "exact", head: true })
+    .is("respaldada_en_drive_el", null)
+    .lt("subida_el", corteDeFotosAtascadas(new Date()));
+
   return (
     <div className="space-y-6">
       <div>
@@ -105,6 +120,27 @@ export default async function SeguridadHigienePage() {
             }
             href="/seguridad-higiene/condiciones"
           />
+
+          {/* Sólo cuando hay: una tarjeta que dice «0 sin respaldar» todos los
+              días es ruido, y lo que esto tiene que hacer es que el aviso del
+              resumen aterrice en algo. No es un link: no hay pantalla de fotos,
+              y lo que hay que hacer no se hace desde el SdG. */}
+          {(fotosSinRespaldar ?? 0) > 0 && (
+            <KpiCard
+              color={ALERTA}
+              icon={<IconAviso />}
+              label="Fotos sin respaldar en Drive"
+              value={fotosSinRespaldar ?? 0}
+              sub={
+                <>
+                  hace más de {DIAS_ANTES_DE_AVISAR} días
+                  <br />
+                  el respaldo está atascado: lo mira un administrador del
+                  sistema (falta la carpeta de Drive o su variable)
+                </>
+              }
+            />
+          )}
         </div>
       </section>
     </div>

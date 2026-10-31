@@ -31,6 +31,24 @@ import { InsigniaDeClasificacion, InsigniaDeEstado, InsigniaDeFalta } from "./In
  * encabezado dice cuántas son de cada una, con un botón para ir directo.
  */
 
+/**
+ * El borde de alerta de las tarjetas del resumen, **por `style` y no por una
+ * clase**.
+ *
+ * `.card` declara `border` en `app/globals.css` **fuera de toda capa**, y las
+ * utilidades de Tailwind v4 viven en `@layer utilities`: entre una regla sin
+ * capa y una con capa gana siempre la que no tiene capa, pase lo que pase con
+ * la especificidad. O sea que `border-red-300` al lado de `card` **no se
+ * aplica nunca** —es la misma trampa que `className="input w-20"`, por el lado
+ * del borde en vez del ancho—. Un `style` sí gana, y es lo que ya hacen los
+ * badges de Mantenimiento.
+ *
+ * Son los hex de `red-300` y `amber-300` de Tailwind, escritos acá porque un
+ * `style` no puede nombrar una clase.
+ */
+const BORDE_VENCIDAS = "#FCA5A5";
+const BORDE_SIN_COMPLETAR = "#FCD34D";
+
 function lugarDe(c: FilaDeCondicion): string {
   if (c.sectores?.nombre) return c.sectores.nombre;
   if (c.equipos) return `${c.equipos.code ? `${c.equipos.code} · ` : ""}${c.equipos.name}`;
@@ -156,7 +174,8 @@ export default function CondicionesClient({
         <button
           type="button"
           onClick={() => setFiltros({ ...SIN_FILTROS, estado: "Vencida" })}
-          className={`card px-3 py-2 text-left text-sm ${resumen.vencidas > 0 ? "border-red-300" : ""}`}
+          className="card px-3 py-2 text-left text-sm"
+          style={resumen.vencidas > 0 ? { borderColor: BORDE_VENCIDAS } : undefined}
         >
           <span className={`text-lg font-bold ${resumen.vencidas > 0 ? "text-red-700" : "text-slate-900"}`}>
             {resumen.vencidas}
@@ -166,7 +185,8 @@ export default function CondicionesClient({
         <button
           type="button"
           onClick={() => setFiltros({ ...SIN_FILTROS, falta: "alguna", estado: "abierta" })}
-          className={`card px-3 py-2 text-left text-sm ${resumen.sinCompletar > 0 ? "border-amber-300" : ""}`}
+          className="card px-3 py-2 text-left text-sm"
+          style={resumen.sinCompletar > 0 ? { borderColor: BORDE_SIN_COMPLETAR } : undefined}
         >
           <span className={`text-lg font-bold ${resumen.sinCompletar > 0 ? "text-amber-700" : "text-slate-900"}`}>
             {resumen.sinCompletar}
