@@ -659,10 +659,32 @@ MIRAR 0**: cualquier cosa que aparezca es de lo que uno acaba de escribir.
 ## Qué se testea
 
 Vitest sobre **funciones puras**: parseo de planillas, cálculos, permisos,
-filtros. Las rutas y las pantallas no tienen tests, así que la lógica que
-importa se saca de la ruta a `lib/` para poder probarla — es lo que hizo
-`repartirRegistroDeOT` después de que un campo se colara del lado equivocado sin
-que nada lo notara.
+filtros. La lógica que importa se saca de la ruta a `lib/` para poder probarla —
+es lo que hizo `repartirRegistroDeOT` después de que un campo se colara del lado
+equivocado sin que nada lo notara. **Ésa sigue siendo la estrategia y no
+cambió.**
+
+Lo que cambió el 30/10/2026 es que dejó de ser cierto que *no haya* ni un test
+de ruta ni uno de pantalla: hay **uno de cada uno**, y los dos existen por el
+mismo motivo, que es el único que los justifica. Son para el **residuo que no se
+puede mover a `lib/`**:
+
+- `lib/mantenimiento/rutaDeNotas.test.ts` — las cadenas del `select` van
+  literales por obligación de la casa (armadas en una variable se pierde la
+  inferencia de Supabase) y el cliente admin **no recibe el tipo `Database`**,
+  así que la ruta castea lo que trae. Entre las dos cosas, **ni `tsc` ni ningún
+  test de `lib/` pueden ver un `select` al que le falte una columna** — y ése es
+  el fallo más caro que tiene esta forma de trabajar: sin `tipo`,
+  `preguntasAbiertas` devuelve `[]` para todo sin un solo error.
+- `lib/mantenimiento/historialDeLaOT.test.ts` — una regla que vive en el
+  *cableado* de la pantalla: a qué entradas del historial se les ofrece «Ya
+  llegó». Se dibuja con `renderToStaticMarkup` en el entorno node, sin jsdom y
+  sin tocar la configuración de vitest. Sólo se mira el HTML que sale, nunca los
+  clics.
+
+**Ninguno de los dos es una plantilla**, y los dos lo dicen en su encabezado. La
+vara para escribir el tercero es la misma: que la regla no se pueda sacar a
+`lib/`, no que probarla ahí sea incómodo.
 
 ## Commits
 
