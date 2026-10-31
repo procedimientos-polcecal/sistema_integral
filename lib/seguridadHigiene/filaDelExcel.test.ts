@@ -34,11 +34,29 @@ describe("sectorDe", () => {
     expect(sectorDe("  CALCINACIÓN ", CATALOGO)).toBe("calcinacion");
   });
 
-  it("ignora los ceros a la izquierda de un número: Planta 02 y Planta 2 son el mismo nombre", () => {
+  /*
+   * Es una regla de **escritura** y no una afirmación sobre la planta: dice que
+   * «Planta 02» y «Planta 2» se escriben distinto y se comparan igual, nada
+   * más. El catálogo de este test es inventado; en el real no hay ningún
+   * sector «Planta 2», y por eso el test de abajo —contra el `CATALOGO` de
+   * verdad— deja las dos en null. Ver CLAUDE.md, que separa lo que se sabe
+   * («Planta 02» es ambiguo) de lo que es conjetura.
+   */
+  it("ignora los ceros a la izquierda al comparar: «Planta 02» y «Planta 2» cruzan igual", () => {
     const catalogo: Sector[] = [{ id: "p2", nombre: "Planta 2", activo: true }];
     expect(sectorDe("Planta 02", catalogo)).toBe("p2");
     expect(sectorDe("Planta 2", catalogo)).toBe("p2");
     expect(sectorDe("planta 002", catalogo)).toBe("p2");
+  });
+
+  // `norm` borra puntos y símbolos de grado, porque nació para los encabezados
+  // de las planillas, donde «N°» y «Nº» son la misma columna. Acá eso entra de
+  // arrastre: no hace daño y no se deduce de leer `filaDelExcel.ts`, así que
+  // queda fijado en vez de sólo escrito.
+  it("y también los puntos y los símbolos de grado, que los borra `norm`", () => {
+    const catalogo: Sector[] = [{ id: "p2", nombre: "Planta 2", activo: true }];
+    expect(sectorDe("Planta 2.", catalogo)).toBe("p2");
+    expect(sectorDe("Planta N° 2", catalogo)).toBeNull(); // La «N» sigue estando.
   });
 
   it("no deja que quitar ceros convierta 0-2 o 10 en otra cosa", () => {

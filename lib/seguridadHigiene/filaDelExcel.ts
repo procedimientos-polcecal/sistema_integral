@@ -15,8 +15,13 @@ import { CRITERIOS, type Criterio } from "./riesgo";
  *
  * Por eso el enlace es una **igualdad** y no un «se parece»: sin contener, sin
  * distancia de edición, sin el nombre de pila solo. Lo único que se perdona es
- * lo que no cambia de qué se habla: mayúsculas, acentos, espacios de más y ceros
- * a la izquierda.
+ * lo que no cambia de qué se habla, y son **seis** cosas: mayúsculas, acentos,
+ * espacios de más, los ceros a la izquierda de un número y —esto lo hace `norm`
+ * de `lib/core/texto.ts`, no este archivo— los puntos y los símbolos de grado
+ * (`.`, `°`, `º`). Los tres últimos se borran porque `norm` nació para los
+ * encabezados de las planillas, donde «N°» y «Nº» son la misma columna; acá
+ * entran de arrastre y no hacen daño, pero la lista tiene que nombrarlos:
+ * «Planta 2.» y «Planta 2» se enlazan, y eso no se deduce de leer este archivo.
  */
 
 export interface Sector {
@@ -34,8 +39,16 @@ export interface Persona {
 
 /**
  * Para comparar dos nombres: sin acentos, en mayúsculas, con los espacios
- * normalizados, y **sin los ceros a la izquierda de un número** —«Planta 02» y
- * «Planta 2» son el mismo nombre escrito dos veces—.
+ * normalizados, sin puntos ni símbolos de grado (eso lo hace `norm`), y **sin
+ * los ceros a la izquierda de un número**: «Planta 02» y «Planta 2» se
+ * comparan iguales, o sea que un catálogo que tuviera un sector llamado
+ * «Planta 2» se enlazaría con las filas que dicen «Planta 02».
+ *
+ * **Eso es una regla de escritura y NO una afirmación sobre la planta.** En el
+ * catálogo real no hay ningún sector «Planta 2», así que las dos se quedan en
+ * null, que es lo correcto: «Planta 02» fue el nombre viejo de «Planta 0-2 mm»
+ * y además podría leerse como trituración 2 — ver la tabla de alias de abajo y
+ * CLAUDE.md, que separa lo que se sabe de lo que es conjetura.
  *
  * El `\b` es lo que impide que «Planta 10» pierda su cero, y el `(?=\d)` lo que
  * impide que «Planta 0-2 mm» pierda el suyo: un cero se quita sólo si lo sigue

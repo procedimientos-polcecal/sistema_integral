@@ -4,10 +4,18 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://www.polcecalpolysan.app
 
-Once módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+Doce módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 **Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,
-**Cantera**, **Calidad** y **Seguridad e Higiene**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>`
-y `app/api/<modulo>`.
+**Cantera**, **Calidad**, **Taller Vial**, **Trituración** y **Seguridad e
+Higiene**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y
+`app/api/<modulo>`.
+
+El número y la lista salen de `MODULOS_ORDEN` en
+[lib/core/access.ts](lib/core/access.ts), que tiene trece entradas contando
+`remises`: ahí está la cuenta de verdad, y de ahí se corrige ésta. Ya se
+separaron dos veces —decía «Diez» y listaba nueve, después «Once» y listaba
+diez sin Taller Vial ni Trituración—, así que si el número y los nombres no
+coinciden, el que manda es el archivo.
 
 **Producción y Calidad son dos cosas distintas y se confunden fácil**, porque las
 carga la misma gente: Producción es el parte de fábrica por turno, y Calidad es
@@ -262,22 +270,90 @@ hace útil esta nota:
   null` hace que una fila ya enlazada no entre aunque se nombre por error:
 
   ```sql
-  update public.syh_condiciones
-     set sector_id = (select id from public.sectores
-                       where nombre = 'Planta de trituración 2' and activo)
-   where sector_id is null
-     and clave in ('excel-21-10-26-30', 'excel-21-10-26-31', 'excel-21-10-26-32',
-                   'excel-21-10-26-33', 'excel-21-10-26-34', 'excel-21-10-26-35',
-                   'excel-21-10-26-36', 'excel-21-10-26-37');
+  update public.syh_condiciones c
+     set sector_id = s.id
+    from public.sectores s
+   where s.nombre = 'Planta de trituración 2'
+     and s.activo
+     and c.sector_id is null
+     and c.clave in ('excel-21-10-26-30', 'excel-21-10-26-31', 'excel-21-10-26-32',
+                     'excel-21-10-26-33', 'excel-21-10-26-34', 'excel-21-10-26-35',
+                     'excel-21-10-26-36', 'excel-21-10-26-37')
+  returning c.numero, s.nombre;
   ```
 
   y lo mismo para «Planta de trituración 3» con las claves 38 a 44. Cada uno
-  actualiza 8 y 7 filas: si el editor dice otro número, algo no coincide.
-  Las 7 ya enlazadas (N° 5, 7, 15, 26, 27, 28, 29) no entran en ninguna de las
-  dos.
+  actualiza 8 y 7 filas, y el `returning` las imprime: si no son ésas, algo no
+  coincide. Las 7 ya enlazadas (N° 5, 7, 15, 26, 27, 28, 29) no entran en
+  ninguna de las dos.
 
-Los 37 y las fechas dudosas (N° 6, 7, 42, 43, 44) son decisiones de datos que
-quedan pendientes del usuario: la importación no las resolvió.
+  **La forma importa y no es cosmética.** Con el `set sector_id = (select id …)`
+  que esto decía antes, un nombre mal escrito —«trituracion» sin tilde, que es
+  el error más probable tipeando a mano— devuelve NULL, el editor dice
+  **«UPDATE 8»** y deja `sector_id` en null sobre filas que ya eran null: es
+  **indistinguible de un éxito**, y la salvaguarda de «si el editor dice otro
+  número, algo no coincide» era falsa justo ahí. Con el `from`, un nombre que
+  no existe no produce fila para cruzar y sale **«UPDATE 0»**.
+
+  Lo que esta forma sí pierde, dicho: si hubiera **dos sectores activos con el
+  mismo nombre**, el `from` cruza contra los dos y escribe uno cualquiera en
+  vez de fallar —el subselect escalar reventaba—. Hoy no pasa; antes de
+  correrlo conviene mirarlo:
+  `select id, nombre from public.sectores where nombre = '…' and activo;`
+
+**El texto de lugar que traía la planilla está en `observaciones`.** Son estos
+14, y están escritos acá porque sólo sobrevivían en el `.xlsm` de `Downloads` y
+en un reporte gitignoreado — y porque para 22 de las 37 sin sector no hay
+ninguna otra guía: quien complete el sector desde la ficha tendría sólo la
+descripción. Es el mismo argumento que preservó «Detectó: Pedro Arias».
+
+| Texto de la planilla | N° |
+|---|---|
+| Taller equipos moviles | 1 |
+| Planta 02 | 2, 8, 9, 10, 11 |
+| Molino de cal | 3 |
+| Molienda | 4, 6, 12 |
+| Carga de bolsones | 13 |
+| Depositode aceites *(sic)* | 14 |
+| Deposito abierto | 16 |
+| Pileta decantadora | 17 |
+| Cal | 18 |
+| Descarga de horno | 19, 20, 21, 22 |
+| Camino descarga de hornos | 23, 24 |
+| Deposito de cilindros | 25 |
+| Planta 2 | 30 a 37 |
+| Planta 3 | 38 a 44 |
+
+(Los otros cuatro textos son los de las 7 que sí se enlazaron: «Filler 1» en
+5, 15, 28 y 29; «Filler 2» en 7; «Taller» en 26 y 27.)
+
+El 31/10/2026 se copió a `observaciones` de las 37, como un renglón más al
+final: `Lugar según la planilla: «Planta 2».` Es DML y se aplicó por PostgREST.
+**Para deshacerlo**, esa línea es la última y empieza siempre igual:
+
+```sql
+update public.syh_condiciones
+   set observaciones = nullif(regexp_replace(observaciones,
+         '\n?Lugar según la planilla: «[^»]*»\.$', ''), '')
+ where clave like 'excel-21-10-26-%'
+   and observaciones like '%Lugar según la planilla%'
+returning numero, observaciones;
+```
+
+**Las cinco fechas dudosas, con su evidencia.** Hasta ahora estaban listadas
+sin decir qué le pasa a cada una, y la única señal que quedaba en los datos
+—que tres son futuras— **se borra sola el 13/11/2026**. Las fotos del Excel
+llevan la fecha en el nombre (`IMG_AAAAMMDD_…`) y eso es lo que hay:
+
+| N° | Dice | La foto | Qué parece |
+|---|---|---|---|
+| 42, 43, 44 | 2026-11-13 | `IMG_20261013_…` | **Un 11 por un 10**: son de «Planta 3», y las otras cuatro de ese bloque (38 a 41) dicen 2026-10-13, que es lo que dicen sus fotos. Es lo más firme de las cinco |
+| 7 | 2026-01-10 | `2.jpg`, sin fecha | La única de enero entre 43 de octubre. Parece **01/10 leído al revés** (m/d en vez de d/m), la misma trampa que dio vuelta 885 fechas en Compras |
+| 6 | 2026-10-10 | `IMG_20261006_…` | **Lo más flojo de los cinco y por eso se dice aparte**: la foto es del 06/10 y la fila dice 10/10. No prueba nada por sí solo — el N° 5 tiene dos fotos, del 06/10 y del 13/10, y su fila dice 10/10, así que en esta planilla la foto no es del día de la detección |
+
+Nada de esto se corrigió: son conjeturas sobre el dato de otro. **Acción:
+confirmarlo con quien armó el `21-10-26.xlsm`** y corregir desde la ficha. Los
+37 sin sector son la otra decisión de datos que queda pendiente del usuario.
 
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
