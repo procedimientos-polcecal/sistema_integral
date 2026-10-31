@@ -14,7 +14,14 @@ import type { NextConfig } from "next";
  *
  * - `fonts.googleapis.com` / `fonts.gstatic.com`: Public Sans y JetBrains Mono,
  *   que se importan desde globals.css.
- * - `*.basemaps.cartocdn.com`: los tiles de los mapas de Remises.
+ * - `tile.openstreetmap.org`: los tiles de los mapas de Remises. Era
+ *   `*.basemaps.cartocdn.com` hasta el 31/10/2026, cuando CARTO cerró su capa
+ *   gratuita y empezó a devolver un PNG de «API KEY REQUIRED» con HTTP 200
+ *   para toda coordenada. **Este host tiene que coincidir con el de
+ *   `components/remises/tiles.ts`**, que es donde los mapas lo leen; los ata
+ *   `components/remises/tiles.test.ts`, porque son dos archivos que no se
+ *   parecen en nada y acá un host viejo deja el mapa en blanco el día que esta
+ *   política pase a bloquear.
  * - `unpkg.com`: los PNG del marcador de Leaflet (sólo imágenes; Leaflet mismo
  *   viene del bundle, no de la CDN).
  * - El proyecto de Supabase, para la API y el login. Se arma desde la variable
@@ -34,7 +41,7 @@ const csp = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  `img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://unpkg.com`,
+  `img-src 'self' data: blob: https://tile.openstreetmap.org https://unpkg.com`,
   `connect-src 'self' ${supabase} ${supabaseWs}`.trim(),
   "worker-src 'self'",
   // El PDF de html2pdf y las descargas de Excel se abren como blob.
