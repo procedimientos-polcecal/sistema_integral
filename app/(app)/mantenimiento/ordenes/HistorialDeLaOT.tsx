@@ -23,9 +23,16 @@ import {
  * escrito sobre ella no cierra nada —el seguimiento sigue abierto—. Tampoco la tiene la
  * de una orden suspendida, ni la de un repuesto que sacaron de la lista.
  *
- * Esas dos últimas, y las que cerró un seguimiento sin respuesta, son las que
- * «quedaron sin responder»: se rotulan en vez de desaparecer, que es lo que pide el
- * diseño, y se derivan de las filas sin guardar nada (`preguntasSinResponder`).
+ * Esas dos últimas —la orden suspendida y el repuesto que sacaron de la lista— son
+ * las que «quedaron sin responder»: se rotulan en vez de desaparecer, que es lo que
+ * pide el diseño, y se derivan de las filas sin guardar nada
+ * (`preguntasSinResponder`).
+ *
+ * **La superada por un seguimiento no lleva ese rótulo**, aunque tampoco tenga
+ * respuesta: el hilo sigue vivo en la última, y es ésa la que queda sin responder si
+ * termina así. Rotular también a la primera diría dos veces lo mismo sobre una sola
+ * conversación. Lo decide `preguntasSinResponder` con `!estaSuperada` y hay un test
+ * que lo fija; este comentario decía lo contrario hasta el 31/10/2026.
  */
 
 export interface NotaDelHistorial extends NotaDeLaOT {

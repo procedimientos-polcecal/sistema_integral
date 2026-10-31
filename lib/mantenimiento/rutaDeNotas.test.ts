@@ -328,8 +328,18 @@ describe("«ya llegó»", () => {
  *  - el «ya llegó» sobre una pregunta respondida: la ruta comprueba también las
  *    respuestas, no sólo las preguntas;
  *  - la orden realizada: la ruta tiene que pasarle a la regla el estado de la orden;
+ *  - el repuesto de otra orden: la ruta tiene que FILTRAR los repuestos por
+ *    `work_order_id`. `comprobarNotaNueva` recibe la lista ya traída, así que si la
+ *    ruta no filtra, la regla ve un repuesto ajeno como propio y lo acepta — y eso
+ *    es justo lo que el docstring de la ruta dice que no puede pasar: sin cascade,
+ *    una nota que apunte a otra orden traba el borrado de espejo de esa otra;
  *  - el cuerpo ilegible: la ruta tiene que leerlo ANTES de tocar la base;
  *  - el 403: el permiso se comprueba en la ruta, y también para preguntar.
+ *
+ * Este caso del repuesto ajeno se había perdido en el recorte del 30/10 —que sacó
+ * los que repetían `lib/`— y con él se podía sacar el `.eq("work_order_id", id)` del
+ * select sin que nada se pusiera rojo. Volvió el 31/10: la vara del recorte era «lo
+ * que sólo se ve acá», y éste lo es.
  */
 describe("lo que la ruta rechaza no se guarda, ni se escribe en la planilla, ni se avisa", () => {
   const casos: {
@@ -357,6 +367,11 @@ describe("lo que la ruta rechaza no se guarda, ni se escribe en la planilla, ni 
         h.estado.tablas.ordenes_trabajo = [{ id: "ot1", ot_number: 2885, sheets_row: 5, estado: "REALIZADO" }];
       },
       cuerpo: { texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r1" },
+    },
+    {
+      nombre: "una pregunta por un repuesto que es de otra orden",
+      status: 400,
+      cuerpo: { texto: "¿?", tipo: "PREGUNTA", repuesto_id: "r-ajeno" },
     },
     {
       nombre: "un cuerpo que no se entiende",

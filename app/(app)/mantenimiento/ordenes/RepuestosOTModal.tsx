@@ -10,8 +10,11 @@ import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/manten
 import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
 import {
   preguntaAbiertaDelRepuesto, sePuedePreguntarEn, encabezadoDeLaPregunta, queDecirDelAviso,
-  TEXTO_DEL_SEGUIMIENTO, type NotaDeLaOT,
+  type NotaDeLaOT,
 } from "@/lib/mantenimiento/consultaDeRepuesto";
+import {
+  abrirCaja, cambiarCaja as cambiarLaCaja, cerrarCaja as cerrarLaCaja, type Caja,
+} from "@/lib/mantenimiento/cajasDePregunta";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -69,15 +72,6 @@ interface Repuesto {
 }
 
 type Opcion = { id: string; nombre: string };
-
-/** La pregunta que se está escribiendo para un repuesto. */
-interface Caja {
-  /** Lo que arrancó escrito: el repuesto y los RI. Sirve para no mandar sólo eso. */
-  encabezado: string;
-  texto: string;
-  /** Por qué no se pudo enviar, si no se pudo: se dice acá, donde la persona está actuando. */
-  error: string;
-}
 
 export default function RepuestosOTModal({
   orden, puedeEditar, areas, empresas, ubicaciones, onCerrar, onCambioEnElHistorial,
@@ -198,30 +192,15 @@ export default function RepuestosOTModal({
     const encabezado = encabezadoDeLaPregunta({ nombre: r.nombre, codigo: r.codigo }, r.ris);
     setError("");
     setSeEnvio(null);
-    setCajas((actuales) => ({
-      ...actuales,
-      [r.id]: {
-        encabezado,
-        error: "",
-        texto: abierta ? `${encabezado}${TEXTO_DEL_SEGUIMIENTO} ` : encabezado,
-      },
-    }));
+    setCajas((actuales) => abrirCaja(actuales, r.id, encabezado, Boolean(abierta)));
   }
 
   function cambiarCaja(repuestoId: string, cambios: Partial<Caja>) {
-    setCajas((actuales) =>
-      actuales[repuestoId]
-        ? { ...actuales, [repuestoId]: { ...actuales[repuestoId], ...cambios } }
-        : actuales
-    );
+    setCajas((actuales) => cambiarLaCaja(actuales, repuestoId, cambios));
   }
 
   function cerrarCaja(repuestoId: string) {
-    setCajas((actuales) => {
-      const resto = { ...actuales };
-      delete resto[repuestoId];
-      return resto;
-    });
+    setCajas((actuales) => cerrarLaCaja(actuales, repuestoId));
   }
 
   async function enviarPregunta(repuestoId: string) {
@@ -257,8 +236,17 @@ export default function RepuestosOTModal({
         // La caja queda abierta, con lo escrito. Un 409 es que la pantalla estaba
         // vieja —alguien ya preguntó por esta pieza, o contestó—: se vuelve a leer el
         // historial, y al mandar de nuevo el texto va como seguimiento de lo de hoy.
+        //
+        // Se refrescan **los dos**: `recargarNotas` son las notas de este modal, y
+        // `onCambioEnElHistorial` es lo único que sube la versión del historial de
+        // atrás. Avisar sólo acá dejaba la pantalla de la OT mostrando la pregunta
+        // que el servidor acaba de rechazar por vieja, que es justo lo que el 409
+        // vino a contar.
         cambiarCaja(repuestoId, { error: body.error ?? "No se pudo enviar la pregunta." });
-        if (res.status === 409) recargarNotas();
+        if (res.status === 409) {
+          recargarNotas();
+          onCambioEnElHistorial?.();
+        }
         return;
       }
 
