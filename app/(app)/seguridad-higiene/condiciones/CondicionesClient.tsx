@@ -264,8 +264,10 @@ export default function CondicionesClient({
         </Select>
       </div>
 
+      {/* El botón va sin `text-sm`: `.btn-ghost` también declara `font-size`
+          fuera de toda capa, así que siempre midió 13 px. Ver CLAUDE.md. */}
       {hayFiltros && (
-        <button type="button" className="btn-ghost text-sm" onClick={() => setFiltros(SIN_FILTROS)}>
+        <button type="button" className="btn-ghost" onClick={() => setFiltros(SIN_FILTROS)}>
           Quitar los filtros
         </button>
       )}

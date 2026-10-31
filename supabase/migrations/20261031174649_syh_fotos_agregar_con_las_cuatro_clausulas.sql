@@ -30,8 +30,13 @@
 --   * Sin el chequeo de `subida_por`, una foto se puede firmar a nombre de
 --     otro.
 --
--- La aplicación no las necesita para funcionar —nunca manda esas columnas— y
--- por eso nada falló ni va a fallar al aplicar esto.
+-- **NADA FALLÓ NI VA A FALLAR AL APLICAR ESTO, Y EL MOTIVO ES DISTINTO PARA
+-- CADA UNA DE LAS DOS.** `respaldada_en_drive_el` la aplicación **no la manda
+-- nunca** —es del cron de respaldo—, así que entra en null sola.
+-- `subida_por`, en cambio, **se manda siempre**: `lib/seguridadHigiene/
+-- guardarLaFoto.ts` la escribe en los dos caminos, y pasa la cláusula porque
+-- lo que le llega es el `user.id` de la sesión con la que corre el insert, o
+-- sea `auth.uid()`.
 --
 -- ES IDEMPOTENTE A PROPÓSITO. Acá las migraciones las aplica una persona a mano
 -- y no hay tabla de control: si producción ya coincidiera, esto la deja igual.

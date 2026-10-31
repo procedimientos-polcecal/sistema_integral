@@ -539,7 +539,13 @@ clase sin capa, y las otras dos muerden igual de callado:
 |---|---|---|
 | `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
 | `.card` | `box-shadow` | `ring-*`, `shadow-*` |
-| `.btn-secondary`, `.btn-danger`, `.btn-primary` | `color` y `font-size` | `text-red-700`, `text-xs` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+
+**Los cuatro `.btn-*` están en la lista a propósito, y `.btn-ghost` entró
+último.** Una tabla incompleta es lo que hace que el próximo lector la dé por
+segura: si falta una clase, el que la use va a creer que la suya sí deja pasar
+las utilidades. Antes de agregar un `.btn-*` nuevo a `globals.css`, va también
+acá con lo que declare.
 
 Medido el 31/10/2026 en Seguridad e Higiene: los dos botones del resumen de
 condiciones declaraban su borde de alerta y lo pintaban gris, «Sacar» —lo
