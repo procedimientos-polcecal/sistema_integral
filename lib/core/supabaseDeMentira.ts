@@ -10,7 +10,7 @@
  *
  * ── POR QUÉ NO ES UN `{ data: [...] }` FIJO ──────────────────────────────────
  *
- * Se porta como el de verdad en cinco cosas, y cada una decide si un test sirve:
+ * Se porta como el de verdad en seis cosas, y cada una decide si un test sirve:
  *
  *  - **Aplica los filtros.** Un fake que devolviera siempre todas las filas no
  *    distinguiría una consulta acotada de una que no lo está —y es justo lo que un
@@ -24,6 +24,9 @@
  *    repo usa para armar los lotes, porque lo que hay que impedir es pedir todo
  *    junto. Sin esto, `traerTodo` tapa la falta de lotes paginando.
  *  - **Borra de verdad**, así los tests pueden mirar qué quedó y no sólo qué se pidió.
+ *  - **Un `upsert` que choca actualiza en vez de agregar.** Si siempre insertara, un
+ *    test no podría distinguir una ruta idempotente de una que duplica la fila cada
+ *    vez que alguien aprieta el botón dos veces.
  *  - **Falla donde el test le diga** (`alBorrar`), que es como se prueba qué hace una
  *    ruta cuando la base se niega.
  *
@@ -89,13 +92,14 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
   /** El constructor de consultas de supabase-js, con lo que usan las rutas. */
   class Consulta {
-    private accion: "select" | "insert" | "delete" = "select";
+    private accion: "select" | "insert" | "upsert" | "delete" = "select";
     private igualdades: [string, unknown][] = [];
     private enLista: [string, readonly unknown[]] | null = null;
     private columnas = "";
     private fila: Fila | null = null;
     private unica: "single" | "maybeSingle" | null = null;
     private rango: [number, number] | null = null;
+    private conflicto: string | null = null;
 
     constructor(private tabla: string) {}
 
@@ -114,6 +118,18 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
     // error** y `single` devuelve un error.
     maybeSingle() { this.unica = "maybeSingle"; return this; }
     insert(fila: Fila) { this.accion = "insert"; this.fila = fila; return this; }
+    /**
+     * Sólo el `onConflict` de una columna, que es como lo usan las tres listas de
+     * Compras. Sin él se porta como un `insert`: no se simula la clave primaria
+     * de cada tabla, así que un upsert sin decir sobre qué columna choca no tiene
+     * con qué chocar.
+     */
+    upsert(fila: Fila, opciones?: { onConflict?: string }) {
+      this.accion = "upsert";
+      this.fila = fila;
+      this.conflicto = opciones?.onConflict ?? null;
+      return this;
+    }
     delete() { this.accion = "delete"; return this; }
 
     then(resolver: (r: unknown) => unknown, rechazar?: (e: unknown) => unknown) {
@@ -148,7 +164,17 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
         };
       }
 
-      if (this.accion === "insert") {
+      if (this.accion === "upsert" && this.conflicto) {
+        const choca = filas.find((f) => f[this.conflicto!] === this.fila![this.conflicto!]);
+        // La fila que ya estaba se actualiza y no se anota en `inserts`: lo que un
+        // test quiere saber de un upsert repetido es justamente que no agregó nada.
+        if (choca) {
+          Object.assign(choca, this.fila);
+          return { data: this.proyectar(choca), error: null };
+        }
+      }
+
+      if (this.accion === "insert" || this.accion === "upsert") {
         const nueva = {
           id: `nueva-${filas.length + 1}`, creado_en: "2026-10-31T15:00:00Z", ...this.fila,
         };
