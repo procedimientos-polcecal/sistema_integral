@@ -24,13 +24,23 @@ const CUENTA = JSON.stringify({
 });
 
 let pedidos = 0;
+// El cuerpo de cada POST a oauth2.googleapis.com, para poder leer el JWT que viajó.
+let cuerpos: string[] = [];
+
+/** El payload del JWT (`cabecera.payload.firma`, en base64url) del pedido `n`. */
+function cargaDelPedido(n: number): Record<string, unknown> {
+  const assertion = new URLSearchParams(cuerpos[n]).get("assertion") ?? "";
+  return JSON.parse(Buffer.from(assertion.split(".")[1], "base64url").toString());
+}
 
 beforeEach(() => {
   pedidos = 0;
+  cuerpos = [];
   olvidarLosTokens();
   process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CUENTA;
-  vi.stubGlobal("fetch", async () => {
+  vi.stubGlobal("fetch", async (_url: unknown, init?: { body?: unknown }) => {
     pedidos++;
+    cuerpos.push(String(init?.body ?? ""));
     return new Response(
       JSON.stringify({ access_token: `token-${pedidos}`, expires_in: 3600 }),
       { status: 200, headers: { "Content-Type": "application/json" } }
@@ -93,6 +103,24 @@ describe("obtenerToken", () => {
     await obtenerToken([SCOPE_CALENDAR]);
     await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
     expect(pedidos).toBe(2);
+  });
+
+  /**
+   * Los tres casos de arriba prueban que las claves del caché son distintas, no
+   * que el JWT impersone: si `sub` no llegara al payload seguirían en verde y la
+   * Agenda escribiría en el calendario de la cuenta de servicio, con el síntoma
+   * —"los eventos no le aparecen a nadie"— lejos de la causa. Éste lee el JWT
+   * que de verdad viajó a Google.
+   */
+  it("con comoQuien el JWT lleva sub, y sin él no", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR]);
+
+    expect(cargaDelPedido(0).sub).toBe("a@polcecal.com");
+
+    // Sin la clave `sub` —no vacía— es lo que deja igual a los 21 llamadores
+    // que no impersonan.
+    expect("sub" in cargaDelPedido(1)).toBe(false);
   });
 
   /** Uno que ya vencio no se reusa: se pide de nuevo. */
