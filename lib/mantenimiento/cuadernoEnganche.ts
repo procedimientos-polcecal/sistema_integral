@@ -36,7 +36,9 @@ import { normalizarLugar } from "./partesDeContratista";
 
 /** Lo que la base guarda de un lugar enseñado: a qué sector y equipo va. */
 export type LugarAprendido = {
-  sector_id: string | null;
+  // `mant_contratista_lugares.sector_id` es `not null`: un lugar enseñado
+  // siempre trae sector. El tipo no finge un caso que el esquema prohíbe.
+  sector_id: string;
   equipo_id: string | null;
 };
 
@@ -55,7 +57,9 @@ export type Enganche = {
   sector_propuesto: boolean;
 };
 
-const SIN_ENGANCHE: Enganche = { sector_id: null, equipo_id: null, sector_propuesto: false };
+// Congelado: se devuelve tal cual a todos los renglones, y un llamador que lo
+// modificara corrompería los siguientes.
+const SIN_ENGANCHE: Enganche = Object.freeze({ sector_id: null, equipo_id: null, sector_propuesto: false });
 
 /**
  * La cinta N de un sector. La búsqueda es por sector **y** número, nunca por
@@ -75,21 +79,34 @@ function cintaDelSector(numero: number, sectorId: string, equipos: EquipoDelCata
 
 /**
  * El equipo cuyo código aparece como palabra suelta en el renglón
- * («Tranqueras D6» → el equipo `D6`). Con límites de palabra: `d6` no está en
- * «ad6a». Si el código lo comparten dos equipos, no se elige ninguno.
+ * («Tranqueras D6» → el equipo `D6`).
  *
- * Los códigos de una sola letra o dígito se ignoran: aparecerían en cualquier
- * renglón y no prueban nada.
+ * Tres reglas, medidas contra los 269 códigos del catálogo (30/10/2026):
+ *
+ * - **Los límites incluyen `-` y `/`**, no sólo letras y dígitos: en «PO-D1-12»
+ *   el `D1` queda rodeado de guiones y, con límites sólo alfanuméricos, aparecía.
+ *   247 códigos están contenidos dentro de otro.
+ * - **Gana el match más largo**: `PO-D1-12` le gana a `D1`. Si dos equipos
+ *   empatan en el más largo (mismo código repetido), no se elige ninguno.
+ * - **El código tiene que llevar un dígito.** Sin él entran `Bombas` y
+ *   `Mangueras`, que aparecerían en cualquier renglón que hable de bombas o
+ *   mangueras. No hay códigos sólo numéricos, así que no hace falta más.
  */
 function equipoPorCodigo(texto: string, equipos: EquipoDelCatalogo[]): EquipoDelCatalogo | null {
   const t = normalizarLugar(texto);
-  const candidatos = equipos.filter((e) => {
+  const encontrados: Array<{ equipo: EquipoDelCatalogo; largo: number }> = [];
+  for (const e of equipos) {
     const codigo = normalizarLugar(e.code);
-    if (codigo.length < 2) return false;
+    if (codigo.length < 2 || !/\d/.test(codigo)) continue;
     const escapado = codigo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?<![a-z0-9ñ])${escapado}(?![a-z0-9ñ])`).test(t);
-  });
-  return candidatos.length === 1 ? candidatos[0] : null;
+    if (new RegExp(`(?<![a-z0-9ñ/-])${escapado}(?![a-z0-9ñ/-])`).test(t)) {
+      encontrados.push({ equipo: e, largo: codigo.length });
+    }
+  }
+  if (encontrados.length === 0) return null;
+  const mayor = Math.max(...encontrados.map((x) => x.largo));
+  const ganadores = encontrados.filter((x) => x.largo === mayor);
+  return ganadores.length === 1 ? ganadores[0].equipo : null;
 }
 
 /** Completa el sector desde el equipo: la única deducción, y por eso `propuesto`. */
@@ -109,14 +126,10 @@ export function engancharRenglon(
   const clave = normalizarLugar(texto);
   if (!clave) return SIN_ENGANCHE;
 
-  // 1. Lo aprendido gana. Una entrada con las dos puntas vacías no contesta
-  //    nada, así que no corta el camino.
+  // 1. Lo aprendido gana, y siempre trae sector: nada se deduce.
   const aprendido = catalogo.get(clave);
-  if (aprendido && (aprendido.sector_id || aprendido.equipo_id)) {
-    if (aprendido.sector_id) {
-      return { sector_id: aprendido.sector_id, equipo_id: aprendido.equipo_id, sector_propuesto: false };
-    }
-    return conSectorDelEquipo(aprendido.equipo_id, equipos);
+  if (aprendido) {
+    return { sector_id: aprendido.sector_id, equipo_id: aprendido.equipo_id, sector_propuesto: false };
   }
 
   // 2. El intérprete. Un código que el catálogo no tiene no se enlaza a otro.

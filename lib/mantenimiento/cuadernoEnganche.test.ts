@@ -138,14 +138,50 @@ describe("engancharRenglon", () => {
     expect(r.sector_propuesto).toBe(false);
   });
 
-  it("un aprendido con equipo y sin sector propone el del equipo", () => {
-    const catalogo = new Map<string, LugarAprendido>([
-      [normalizarLugar("Tranqueras"), { sector_id: null, equipo_id: D6 }],
-    ]);
-    const r = engancharRenglon("Tranqueras", catalogo, sectores, equipos);
-    expect(r.equipo_id).toBe(D6);
-    expect(r.sector_id).toBe(CANTERA);
+  it("un codigo largo gana sobre el corto que contiene", () => {
+    // «PO-D1-12» contiene a «D1»: con guiones alrededor, el corto tambien
+    // aparece. Gana el mas largo y no se descarta por ambiguedad.
+    const conteniendo: EquipoDelCatalogo[] = [
+      { id: "corto", code: "D1", name: "Topadora D1", sector_id: CANTERA },
+      { id: "largo", code: "PO-D1-12", name: "Bomba de agua", sector_id: CALCINACION },
+    ];
+    const r = engancharRenglon("Reparar bomba PO-D1-12", vacio, sectores, conteniendo);
+    expect(r.equipo_id).toBe("largo");
+    expect(r.sector_id).toBe(CALCINACION);
     expect(r.sector_propuesto).toBe(true);
+  });
+
+  it("un codigo corto sigue valiendo cuando no esta dentro de uno largo", () => {
+    const conteniendo: EquipoDelCatalogo[] = [
+      { id: "corto", code: "D1", name: "Topadora D1", sector_id: CANTERA },
+      { id: "largo", code: "PO-D1-12", name: "Bomba de agua", sector_id: CALCINACION },
+    ];
+    expect(engancharRenglon("Tranqueras D1", vacio, sectores, conteniendo).equipo_id).toBe("corto");
+  });
+
+  it("un codigo que es una palabra corriente no se engancha", () => {
+    // Sin ningun digito, «Mangueras» aparece en cualquier renglon que hable de mangueras.
+    const palabras: EquipoDelCatalogo[] = [{ id: "m", code: "Mangueras", name: "Mangueras", sector_id: CANTERA }];
+    const r = engancharRenglon("Cambiar mangueras", vacio, sectores, palabras);
+    expect(r.equipo_id).toBeNull();
+    expect(r.sector_id).toBeNull();
+  });
+
+  it("dos cintas con el mismo numero en la misma planta no se resuelven por la primera", () => {
+    const duplicadas: EquipoDelCatalogo[] = [
+      ...equipos,
+      { id: "eq-cinta9-tr3-bis", code: "PO-A3-99", name: "Cinta transportadora 9", sector_id: TRITURACION_3 },
+    ];
+    const r = engancharRenglon("Cinta 9 P/Trit N°3", vacio, sectores, duplicadas);
+    expect(r.sector_id).toBe(TRITURACION_3);
+    expect(r.equipo_id).toBeNull();
+  });
+
+  it("el resultado vacio no se comparte entre renglones", () => {
+    const a = engancharRenglon("Hormigonar Dep 05", vacio, sectores, equipos);
+    expect(Object.isFrozen(a)).toBe(true);
+    const b = engancharRenglon("Otra cosa", vacio, sectores, equipos);
+    expect(b).toEqual({ sector_id: null, equipo_id: null, sector_propuesto: false });
   });
 
   it("un renglon vacio queda sin nada", () => {
