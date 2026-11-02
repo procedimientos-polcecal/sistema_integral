@@ -1950,9 +1950,14 @@ igual es lo que depende del papel y del código, no del modelo.
 | Enganche de esa página | 11 de 15 con sector, 5 con equipo, 4 en rojo (en la segunda corrida: 10, 4 y 5) |
 | Las diez | 37 de 140 con sector y **103 en rojo, con el catálogo de PIPARO vacío** (hay 23 lugares aprendidos y son todos de Candia) |
 
-El 74% en rojo **no es el código fallando**: es un catálogo que nadie enseñó
-todavía y un modelo que en las páginas 3 y 8 leyó «P/suls tut N°L» donde dice
-«P/Trit N°1». «Horno 4 Rastro» queda en rojo porque ninguna abreviatura nombra
+**El rojo de la primera carga es sobre todo un catálogo vacío.** El 74% en rojo
+(103 de 140) **no es el código fallando**: es un catálogo de PIPARO que nadie
+enseñó todavía y un modelo que en las páginas 3 y 8 leyó «P/suls tut N°L» donde
+dice «P/Trit N°1». Al lado está la página 2, donde la letra es legible y los
+lugares son los de siempre: **11 de 15 con sector** con el mismo catálogo
+vacío. La diferencia entre las dos cifras es la letra y no el enganche; y cada
+sector que alguien confirma queda aprendido, así que la segunda carga arranca
+con menos rojo que la primera. «Horno 4 Rastro» queda en rojo porque ninguna abreviatura nombra
 los hornos —el sector es Calcinación, `PO-B1`— y es justo lo que el catálogo
 aprendido está para absorber.
 
@@ -1971,8 +1976,10 @@ decidió el Ruling 2 del plan.
   marcarlo dudoso**. Nada del sistema avisa que el orden de los días quedó 24,
   22, 23: las OT de ese día saldrían con otra fecha.
 - **El 23/09 salió «27» en una corrida y bien en la otra.** Con `temperature: 0`
-  la misma foto da dos lecturas distintas, y por eso la ruta se niega a
-  releer una página que ya tiene renglones.
+  la misma foto da dos lecturas distintas, y eso no se arregla con código: es la
+  prueba medida de por qué la pantalla pone **la foto fija al lado de los
+  renglones** (el 21 se leyó 24 las dos veces, el 23 se leyó 27 y 23), y por qué
+  la ruta se niega a releer una página que ya tiene renglones.
 - **La página trae un tercer día que el spec no transcribe** (23/09, una llave de
   24 Hs) **y una línea entera tachada.** El prompt, que usa esa misma hoja como
   ejemplo, tampoco las nombra: el modelo la devolvió como renglón dudoso en
@@ -1984,12 +1991,13 @@ decidió el Ruling 2 del plan.
   líneas físicas del papel, encabezados incluidos, y en la otra no. Sirve para
   volver a la foto y para ordenar dentro de un día, no para contar.
 - **Un número se pegó a su unidad: «= 18 Hs» salió `1845` horas** (página 9,
-  «Cartelería P/Trit N°3»). **`normalizarRenglones` no pone tope a las horas**,
-  así que ese renglón entra sin marca y, si alguien confirma sin mirar, sería una
-  OT de 1.845 horas. Lo frena sólo que el cartel de confirmación suma el total
-  de horas. Un renglón de más de unas decenas de horas es una pregunta que
-  conviene hacer en `normalizarRenglones`; no se agregó porque el umbral es una
-  decisión y porque esta tarea no tocaba código.
+  «Cartelería P/Trit N°3»), y entró sin ninguna marca: sin eso, confirmar sin
+  mirar daba una OT de 1.845 horas. **Se arregló ahí mismo**:
+  `normalizarRenglones` marca dudoso todo renglón de más de **200 horas**
+  (`TOPE_DE_HORAS_POR_RENGLON`), nombra el número en el motivo y lo deja entrar
+  igual —nada se descarta ni se redondea—. El 200 está medido: lo más grande
+  que trae el cuaderno es una llave de 46 h, y después 40, 38 y 32. **A los
+  pesos no se les pone tope**: un importe grande es normal.
 - **El año se leyó «24» en diez renglones de la página 11** y el mes entero se
   corrió a 2024. Ese sí lo atajó `normalizarRenglones`: «cae fuera del mes de la
   carga» y quedó dudoso. Es la única validación de fecha que hay, y funcionó.
@@ -2042,6 +2050,9 @@ no puede ser septiembre (ver más abajo).
   pendientes (`sin_sector` o `sin_horas`). Las horas están bien y las tareas
   mal repartidas, sin ninguna marca. Los que quedaron en blanco de una llave se
   ven en los pendientes, no en una advertencia de «esto venía de una llave».
+  **Es el comportamiento pedido y queda como riesgo asumido, no como defecto**:
+  quien carga decide si las junta, y la vista previa lo muestra antes de crear
+  nada.
 - **Primero se juntan los renglones, y después se confirma el sector.** Al
   revés, confirmar le saca al renglón el estado «sin sector confirmado» y con eso
   **sale de la propuesta de acumulación** (`propuestaDeGrupos` sólo mira los
@@ -2069,21 +2080,25 @@ es la primera foto que se sube. `CUADERNO_MODELO` es **opcional**: sin ella usa
 ese modelo**. Borrarla vuelve al bueno.
 
 Cada foto es una llamada de hasta 240 s dentro de una función de 300, y se mandan
-de a una: una página lenta como la 6 no tumba a las otras nueve.
+de a una: una página lenta como la 6 no tumba a las otras nueve. **Pero el margen
+es de 26 segundos**: con Gemini, una página densa tardó 201 y 214 s contra el
+corte de 240, y las otras nueve entre 15 y 49. Una página así puede quedar justo
+del lado equivocado y terminar en `fallo`; se reintenta. Con un modelo que no
+razona tanto no debería pasar, pero no se pudo medir.
 
 ### Lo que quedó anotado
 
-- **`npm run catalogo` no se corrió y conviene que lo corra quien termine
-  último.** Hoy el Asistente no conoce `ordenes_trabajo.costo`,
+- **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
+  tranquilo.** Hoy el Asistente no conoce `ordenes_trabajo.costo`,
   `proveedores.modo_de_carga` ni las tres tablas nuevas. Regenerarlo arrastra de
   una vez lo de las otras sesiones (nueve tablas nuevas y columnas nuevas en
   `avisos`, `francos`, `mantenimientos_programados` y `ordenes_servicio`), y las
   15 tablas sin mapear en `lib/asistente/modulos.ts` piden decidir cada una:
   mapearla o ponerla en `SIN_MAPEAR_A_PROPOSITO`. Las del cuaderno son de
   `mantenimiento`.
-- **Pendientes del plan**, sin arreglar a pedido de terminar: un tope a las horas
-  de un renglón, qué hacer con una línea tachada, y avisar cuando un día sale
-  fuera de orden.
+- **Pendientes del plan**: qué hacer con una línea tachada, y avisar cuando un
+  día sale fuera de orden. (El tope a las horas de un renglón ya está: ver más
+  arriba.)
 
 ## Los datos: qué está y qué no
 

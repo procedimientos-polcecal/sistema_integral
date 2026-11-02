@@ -79,6 +79,16 @@ export type RenglonLeido = {
   motivo_dudoso: string | null;
 };
 
+/**
+ * Más horas que éstas en un solo renglón no es un dato: es un número mal leído.
+ * Medido el 02/11/2026 sobre las diez páginas reales, el valor legítimo más
+ * grande es 46 h (una llave de tres tareas), y después 40, 38 y 32. Un «= 18 Hs»
+ * salió como 1845 porque el modelo pegó la unidad al número. 200 deja pasar
+ * cualquier llave concebible. **Sólo marca dudoso**: un importe grande en pesos
+ * es normal y no pasa por acá.
+ */
+export const TOPE_DE_HORAS_POR_RENGLON = 200;
+
 /** Tope de lo que se transcribe de la respuesta del modelo en un problema. */
 const TOPE_DE_LO_QUE_DIJO = 2000;
 
@@ -212,6 +222,13 @@ export function normalizarRenglones(
       } else {
         horas = x.valor;
         if (x.unidad == null) motivos.push("El número no trae unidad; se tomó como horas");
+        // Un dígito pegado («= 18 Hs» leído como 1845) entra sin marca si nadie lo
+        // mira. Entra igual —nada se descarta ni se redondea—, pero dudoso.
+        if (x.valor > TOPE_DE_HORAS_POR_RENGLON) {
+          motivos.push(
+            `El número ${x.valor} no parece horas: son más de ${TOPE_DE_HORAS_POR_RENGLON} en un solo renglón, y lo más grande que trae el cuaderno es una llave de 46 h (¿un dígito pegado a la unidad?)`
+          );
+        }
       }
     }
     // Si el formato falló, el número pudo venir y haberse descartado: ya está

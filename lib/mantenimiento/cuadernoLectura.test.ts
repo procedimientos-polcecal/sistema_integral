@@ -346,3 +346,48 @@ describe("rescatarDelTexto", () => {
     expect(r.renglones).toHaveLength(1);
   });
 });
+
+/**
+ * El tope de horas. Medido el 02/11/2026 sobre las diez páginas reales: «= 18 Hs»
+ * salió como 1845 horas porque el modelo pegó la unidad al número, y entró sin
+ * ninguna marca. El valor legítimo más grande del cuaderno es 46 h (una llave de
+ * tres tareas); 200 deja pasar cualquier llave y atrapa un dígito pegado.
+ */
+describe("un número de horas que no puede ser", () => {
+  const una = (valor: number, unidad: "horas" | "pesos" | null) =>
+    normalizarRenglones(
+      { renglones: [{ fecha: "2026-09-15", tarea: "Cartelería P/Trit N°3", valor, unidad, linea: 5 }] },
+      "2026-09"
+    ).renglones[0];
+
+  it("1845 horas entra igual, dudoso, y el motivo nombra el número", () => {
+    const r = una(1845, "horas");
+    expect(r.horas).toBe(1845); // no se descarta ni se redondea
+    expect(r.dudoso).toBe(true);
+    expect(r.motivo_dudoso).toContain("1845");
+  });
+
+  it("46 horas —el máximo real, una llave— no levanta la mano", () => {
+    const r = una(46, "horas");
+    expect(r.horas).toBe(46);
+    expect(r.dudoso).toBe(false);
+  });
+
+  it("200 horas pasa y 201 no: el tope es inclusivo", () => {
+    expect(una(200, "horas").dudoso).toBe(false);
+    expect(una(201, "horas").dudoso).toBe(true);
+  });
+
+  it("un importe grande es normal: 920000 pesos no es dudoso por grande", () => {
+    const r = una(920000, "pesos");
+    expect(r.costo).toBe(920000);
+    expect(r.dudoso).toBe(false);
+  });
+
+  it("un número grande sin unidad se toma como horas y suma los dos motivos", () => {
+    const r = una(1845, null);
+    expect(r.horas).toBe(1845);
+    expect(r.motivo_dudoso).toContain("no trae unidad");
+    expect(r.motivo_dudoso).toContain("1845");
+  });
+});
