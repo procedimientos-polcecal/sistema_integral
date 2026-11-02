@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { engancharRenglon, type EquipoDelCatalogo, type LugarAprendido, type SectorDelCatalogo } from "./cuadernoEnganche";
+import { engancharRenglon, engancharRenglonLeido, type EquipoDelCatalogo, type LugarAprendido, type SectorDelCatalogo } from "./cuadernoEnganche";
 import { normalizarLugar } from "./partesDeContratista";
 
 const TRITURACION_1 = "sec-tr1";
@@ -201,5 +201,35 @@ describe("engancharRenglon", () => {
       equipo_id: null,
       sector_propuesto: false,
     });
+  });
+});
+
+describe("engancharRenglonLeido", () => {
+  it("la cinta esta en la tarea y la planta en el lugar: se enganchan juntas", () => {
+    // Asi parte el modelo «Reparar rodillos 2/cinta 9 P/Trit N°3».
+    const r = engancharRenglonLeido(
+      { tarea: "Reparar rodillos 2/cinta 9", lugar_raw: "P/Trit N°3" }, vacio, sectores, equipos);
+    expect(r).toEqual({ sector_id: TRITURACION_3, equipo_id: CINTA_9_DE_TRITURACION_3, sector_propuesto: false });
+  });
+
+  it("lo aprendido se busca por el lugar solo y gana", () => {
+    const catalogo = new Map<string, LugarAprendido>([
+      [normalizarLugar("Horno 4 Rastro"), { sector_id: CALCINACION, equipo_id: null }],
+    ]);
+    const r = engancharRenglonLeido(
+      { tarea: "Limpieza cinta 9", lugar_raw: "Horno 4 Rastro" }, catalogo, sectores, equipos);
+    expect(r).toEqual({ sector_id: CALCINACION, equipo_id: null, sector_propuesto: false });
+  });
+
+  it("sin lugar, la tarea sola puede nombrar el equipo", () => {
+    const r = engancharRenglonLeido({ tarea: "Tranqueras D6", lugar_raw: "" }, vacio, sectores, equipos);
+    expect(r.equipo_id).toBe(D6);
+    expect(r.sector_id).toBe(CANTERA);
+    expect(r.sector_propuesto).toBe(true);
+  });
+
+  it("sin nada que enganchar queda en null", () => {
+    const r = engancharRenglonLeido({ tarea: "Hormigonar Dep 05", lugar_raw: "" }, vacio, sectores, equipos);
+    expect(r).toEqual({ sector_id: null, equipo_id: null, sector_propuesto: false });
   });
 });

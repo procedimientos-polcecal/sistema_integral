@@ -168,3 +168,32 @@ export function engancharRenglon(
 
   return SIN_ENGANCHE;
 }
+
+/**
+ * Engancha un renglón tal como lo devuelve el modelo, que parte la línea del
+ * papel en `tarea` y `lugar`.
+ *
+ * **Por qué no alcanza con pasarle el lugar.** El modelo pone en `lugar` lo que
+ * está pegado a la planta («P/Trit N°3») y deja en la tarea lo demás, y la
+ * cinta es parte de la tarea: «Reparar rodillos 2/cinta 9 P/Trit N°3» llega
+ * como tarea `Reparar rodillos 2/cinta 9` y lugar `P/Trit N°3`. Sólo con el
+ * lugar el sector sale y el equipo no, y la cinta 9 de la planta 3 quedaría sin
+ * enlazar siempre. Por eso el intérprete lee la **línea entera**.
+ *
+ * **Y el catálogo aprendido se busca primero por el lugar solo.** Lo que una
+ * persona enseña es «P/Trit N°3» o «Horno 4 Rastro», que se repite de un día
+ * al otro; una clave con la tarea pegada no volvería a aparecer nunca. Quien
+ * guarde lo aprendido tiene que guardar el `lugar_raw`, no la línea.
+ */
+export function engancharRenglonLeido(
+  renglon: { tarea: string; lugar_raw: string },
+  catalogo: Map<string, LugarAprendido>,
+  sectores: SectorDelCatalogo[],
+  equipos: EquipoDelCatalogo[],
+): Enganche {
+  const lugar = renglon.lugar_raw.trim();
+  if (lugar && catalogo.has(normalizarLugar(lugar))) {
+    return engancharRenglon(lugar, catalogo, sectores, equipos);
+  }
+  return engancharRenglon(`${renglon.tarea} ${lugar}`.trim(), catalogo, sectores, equipos);
+}
