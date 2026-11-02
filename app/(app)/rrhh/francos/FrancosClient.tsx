@@ -22,8 +22,6 @@ export default function FrancosClient() {
   const [hasta, setHasta] = useState(today());
   const [francos, setFrancos] = useState<any[] | null>(null);
   const [cargando, setCargando] = useState(false);
-  // Qué franco se está marcando y con qué día. Null = ninguno abierto.
-  const [marcando, setMarcando] = useState<{ id: string; dia: string } | null>(null);
   const [errorDeMarca, setErrorDeMarca] = useState<string | null>(null);
 
   function queryParams() {
@@ -43,28 +41,25 @@ export default function FrancosClient() {
   }, [estado, desde, hasta]);
 
   /*
-   * Marcar un franco pide el día que la persona descansa, y no lo resuelve
-   * sola con `hoy`. Eso último es lo que hacía antes, y por eso los 56 francos
-   * tomados hasta el 26/10/2026 caen en tres fechas: eran tres sesiones de
-   * alguien poniéndose al día con el botón, no tres días de descanso.
-   *
-   * El franco se marca cuando se acuerda, así que el día ya se sabe y casi
-   * siempre está adelante. La programación del taller cruza ese día para saber
-   * quién no viene.
+   * Marcar tomado no pide ninguna fecha. Entre el 26/10 y el 02/11/2026 pedía
+   * el día que la persona descansaba, para que la programación del taller
+   * pudiera cruzarlo; se sacó a pedido porque en el circuito real el franco
+   * **es** el día que ya tiene esas horas —el que muestra la columna
+   * «Generado»— y no hay otro día que anotar. La columna «Descansa el» queda
+   * para leer lo que se haya cargado mientras el campo estuvo vivo.
    */
-  async function marcarTomado(id: string, dia: string) {
+  async function marcarTomado(id: string) {
     setErrorDeMarca(null);
     const res = await fetch(`/api/rrhh/francos/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado: "TOMADO", fechaDescanso: dia }),
+      body: JSON.stringify({ estado: "TOMADO" }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => null);
       setErrorDeMarca(d?.error ?? "No se pudo marcar el franco");
       return;
     }
-    setMarcando(null);
     cargar();
   }
 
@@ -159,11 +154,7 @@ export default function FrancosClient() {
               {francos.length === 0 && (
                 <tr><td colSpan={7} className="py-3 text-center text-slate-400">No hay francos en el período elegido.</td></tr>
               )}
-              {francos.map((f) => {
-                // Capturado acá: adentro de los callbacks TypeScript ya no sabe
-                // que `marcando` no es null.
-                const enMarca = marcando && marcando.id === f.id ? marcando : null;
-                return (
+              {francos.map((f) => (
                 <tr key={f.id} className="border-b last:border-0">
                   <td className="py-2">{f.empleados?.legajo}</td>
                   <td className="py-2">{f.empleados?.apellido}, {f.empleados?.nombre}</td>
@@ -188,27 +179,13 @@ export default function FrancosClient() {
                     )}
                   </td>
                   <td className="py-2 text-right whitespace-nowrap">
-                    {f.estado === "PENDIENTE" && !enMarca && (
+                    {f.estado === "PENDIENTE" && (
                       <button
-                        onClick={() => { setErrorDeMarca(null); setMarcando({ id: f.id, dia: hoyEnArgentina() }); }}
+                        onClick={() => marcarTomado(f.id)}
                         className="text-slate-700 underline text-sm"
                       >
                         Marcar tomado
                       </button>
-                    )}
-                    {enMarca && (
-                      <span className="inline-flex items-center gap-2">
-                        <label className="text-xs text-slate-500">Descansa el</label>
-                        <input
-                          type="date"
-                          autoFocus
-                          value={enMarca.dia}
-                          onChange={(e) => setMarcando({ id: f.id, dia: e.target.value })}
-                          className="border border-slate-300 rounded-md px-2 py-1 text-sm"
-                        />
-                        <button onClick={() => marcarTomado(f.id, enMarca.dia)} className="text-slate-700 underline text-sm">Guardar</button>
-                        <button onClick={() => { setMarcando(null); setErrorDeMarca(null); }} className="text-slate-400 underline text-sm">Cancelar</button>
-                      </span>
                     )}
                     {f.estado === "TOMADO" && (
                       <button onClick={() => volverAPendiente(f)} className="text-slate-700 underline text-sm">Volver a pendiente</button>
@@ -216,8 +193,7 @@ export default function FrancosClient() {
                     <button onClick={() => eliminar(f)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                   </td>
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
           </div>
