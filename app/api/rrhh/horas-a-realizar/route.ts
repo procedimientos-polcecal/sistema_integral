@@ -15,9 +15,15 @@ import {
  * Las horas que debería trabajar una persona de cada sector en el mes: el
  * divisor del reporte porcentual de ausentismo.
  *
- * `GET` lo lee cualquiera que entre al sistema —el porcentual lo ve todo el
- * mundo y el catálogo que lo calcula tiene que poder leerse con el mismo
- * permiso—. `POST` y `PATCH` sólo con **edición** de RRHH, no cualquier nivel:
+ * `GET` lo lee cualquiera que entre al sistema. **El porqué cambió el
+ * 02/11/2026 y conviene que quede dicho acá**, porque el encabezado de la
+ * migración `20261029112043` guarda el motivo viejo y una migración aplicada no
+ * se edita: decía que el porcentual lo veía todo el mundo, y desde que se cerró
+ * el desglose por motivo (ver `reportesQueVe`) ya no es así. La lectura abierta
+ * se sostiene igual, por una razón más simple: **cuántas horas debería trabajar
+ * un sector no es un dato sensible**, y la policy de la tabla es `using (true)`.
+ *
+ * `POST` y `PATCH` sólo con **edición** de RRHH, no cualquier nivel:
  * `lectura` no cambia el divisor del titular. La policy de la tabla dice lo
  * mismo (`puede_editar_rrhh()`); acá se repite para contestar un 403 claro en
  * vez del error mudo de RLS.

@@ -10,9 +10,9 @@ import type { EmpleadoDelReporte, HorasDeSector } from "./reportes";
  * Las lecturas de la base detrás de `/api/disponibilidad` y de
  * `/api/disponibilidad/reportes`.
  *
- * Reciben el cliente **admin**: `ausencias` y `francos` están cerradas con
+ * Reciben el cliente **admin**: `ausencias` está cerrada con
  * `tiene_acceso_rrhh()` y las dos rutas están abiertas a gente que no lo
- * tiene. Con el cliente admin RLS no corre, así que el permiso lo comprueba la
+ * tiene. (`francos` no se lee acá: eso es de la programación del taller.) Con el cliente admin RLS no corre, así que el permiso lo comprueba la
  * ruta ANTES de llamar acá, y lo que sale de cada función es lo que puede
  * verse: la disponibilidad ya proyectada, los reportes sólo para quien pasó el
  * control.

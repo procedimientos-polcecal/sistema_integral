@@ -122,6 +122,31 @@ describe("reportesQueVe", () => {
     expect(JSON.stringify(recortado)).not.toContain("Pérez");
   });
 
+  it("ningún aviso nombra a una persona ni a un motivo, aunque los haya cerca", () => {
+    // `avisos` es el ÚNICO campo que pasa entero al lado abierto: todo lo demás
+    // se arma campo por campo. Así que lo que lo protege no es la forma sino
+    // este test, y por eso se fuerza el caso que más tienta a nombrar algo —las
+    // huérfanas, que son ausencias de alguien que no está en el padrón— con los
+    // dos motivos más sensibles que hay.
+    const conHuerfanas = armarReportes({
+      ausencias: [
+        { empleado_id: "fantasma", fecha_desde: "2026-03-10", fecha_hasta: "2026-03-12", tipo: "ENFERMEDAD_ACCIDENTE_INCULPABLE" },
+        { empleado_id: "fantasma", fecha_desde: "2026-03-20", fecha_hasta: "2026-03-21", tipo: "LICENCIA_ART" },
+        { empleado_id: "e1", fecha_desde: "2026-03-01", fecha_hasta: "2026-03-02", tipo: "SUSPENSION" },
+      ],
+      empleados: [ana],
+      feriados: feriados2026,
+      horas: [],
+      mes: "2026-03",
+    });
+
+    const avisos = JSON.stringify(reportesQueVe(conHuerfanas, false).avisos);
+    expect(avisos).toContain("2 ausencias"); // el conteo sí sale: es lo útil
+    for (const prohibido of ["ENFERMEDAD", "LICENCIA_ART", "SUSPENSION", "fantasma", "Pérez", "Ana"]) {
+      expect(avisos).not.toContain(prohibido);
+    }
+  });
+
   it("quien pasa el control recibe los tres, con los motivos", () => {
     const completo = reportesQueVe(todo, true);
     expect("anual" in completo && completo.anual.filas).toHaveLength(1);
