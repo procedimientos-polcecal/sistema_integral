@@ -6,7 +6,7 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { normalizarLugar } from "@/lib/mantenimiento/partesDeContratista";
 import {
-  esquemaDeLaLectura, normalizarRenglones, PROMPT_DEL_CUADERNO,
+  esquemaDeLaLectura, normalizarRenglones, PROMPT_DEL_CUADERNO, rescatarDelTexto,
 } from "@/lib/mantenimiento/cuadernoLectura";
 import {
   engancharRenglonLeido,
@@ -243,6 +243,8 @@ export async function POST(request: Request) {
   };
 
   let leido: unknown;
+  let leidos: ReturnType<typeof normalizarRenglones>["renglones"];
+  let problemas: string[];
   try {
     const resultado = await generateObject({
       model: modeloDelCuaderno(),
@@ -264,15 +266,34 @@ export async function POST(request: Request) {
       abortSignal: AbortSignal.timeout(ESPERA_MAXIMA_MS),
     });
     leido = resultado.object;
+    ({ renglones: leidos, problemas } = normalizarRenglones(leido, mes));
   } catch (e) {
-    // Si el modelo contestó pero no validó, lo que dijo es lo único que
-    // permite ver qué pasó: se guarda. Si no hubo respuesta (red, gateway,
-    // 403 del tier gratuito) no hay nada que guardar y queda en null.
-    const cruda = NoObjectGeneratedError.isInstance(e) && e.text != null ? { texto_sin_validar: e.text } : null;
-    return fallar(loQueDijoElFallo(e), cruda);
-  }
+    // Un modelo que no contestó (red, gateway, 403 del tier gratuito) no deja
+    // nada que guardar ni que rescatar: la foto falla y se reintenta.
+    if (!NoObjectGeneratedError.isInstance(e) || typeof e.text !== "string" || !e.text.trim()) {
+      return fallar(loQueDijoElFallo(e), null);
+    }
 
-  const { renglones: leidos, problemas } = normalizarRenglones(leido, mes);
+    // El modelo contestó pero `generateObject` lo rechazó. Con **un solo**
+    // renglón que no valida tira la lista entera, y eso anularía la tolerancia
+    // de `normalizarRenglones`: el renglón que el modelo no entendió tiene que
+    // entrar igual, dudoso y con lo que dijo, no descartarse. Se rescata del
+    // texto que el error trae (`text`; `cause` dice si fue el JSON o el
+    // esquema).
+    const rescate = rescatarDelTexto(e.text, mes);
+    if (!rescate.esJson) {
+      // Prosa, un rechazo o una respuesta cortada: no hay nada que rescatar.
+      // Se guarda tal cual lo dijo el modelo, y `finishReason` dice si se cortó
+      // por largo.
+      return fallar(`${rescate.problemas[0]} (terminó por: ${e.finishReason})`, rescate.crudo);
+    }
+    leido = rescate.crudo;
+    leidos = rescate.renglones;
+    problemas = [
+      `El modelo contestó una lista que no valida contra el esquema; se rescató lo que se pudo y los renglones dudosos llevan lo que dijo (${loQueDijoElFallo(e)})`,
+      ...rescate.problemas,
+    ];
+  }
 
   if (leidos.length === 0 && problemas.length > 0) {
     // La respuesta no era la lista esperada: la foto queda en «falló».

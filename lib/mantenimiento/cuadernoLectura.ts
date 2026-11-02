@@ -249,6 +249,46 @@ export function normalizarRenglones(
 }
 
 /**
+ * Rescata lo que dijo el modelo cuando `generateObject` lo rechazó.
+ *
+ * `generateObject` valida la lista entera contra `esquemaDeLaLectura` y, si
+ * **un solo** renglón no cumple, lanza `NoObjectGeneratedError` y no devuelve
+ * ninguno: sin esto, una `linea` que llegó como «11» tiraría la página de
+ * quince renglones. El error trae lo que el modelo dijo en `text`, y esa es la
+ * entrada de esta función: se lo interpreta como JSON y se lo pasa por
+ * `normalizarRenglones`, que sabe dejar entrar al renglón raro como dudoso.
+ *
+ * Son dos casos distintos y el mensaje los distingue:
+ *
+ * - **No es JSON** (prosa, un rechazo, una respuesta cortada por largo): no hay
+ *   nada que rescatar, `esJson` es false y la foto tiene que quedar en «falló».
+ * - **Es JSON pero no valida** (un renglón raro, un campo con otro tipo): se
+ *   rescata lo que se pueda, y lo que no, queda dicho en `problemas`.
+ *
+ * Tolera la valla de código (```json ... ```) que algunos modelos agregan.
+ */
+export function rescatarDelTexto(
+  texto: string,
+  mes: string
+): { esJson: boolean; crudo: unknown; renglones: RenglonLeido[]; problemas: string[] } {
+  const limpio = texto.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, "$1");
+  let crudo: unknown;
+  try {
+    crudo = JSON.parse(limpio);
+  } catch {
+    return {
+      esJson: false,
+      crudo: { texto_sin_validar: texto },
+      renglones: [],
+      problemas: [
+        `El modelo no devolvió una lista en JSON (prosa o respuesta cortada). El modelo dijo: ${loQueDijo(texto)}`,
+      ],
+    };
+  }
+  return { esJson: true, crudo, ...normalizarRenglones(crudo, mes) };
+}
+
+/**
  * De un renglón que no validó, los campos que sí validan por separado. Un
  * `linea` que llegó como «11» no debería llevarse con él una fecha y unas
  * horas bien leídas.
