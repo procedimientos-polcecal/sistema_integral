@@ -5,6 +5,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
 import Reportes from "./Reportes";
+import CargarAusencia, { type EmpleadoParaCargar } from "./CargarAusencia";
 
 /** Lo que devuelve `GET /api/disponibilidad`. El motivo no viene y no se pide. */
 interface Ausente {
@@ -38,7 +39,14 @@ type Vista = "quien" | "ausentismo";
  * extremos: la pantalla tiene que saber qué rango está mostrando para poder
  * moverlo. Un solo extremo es un 400, y el tope es de 93 días.
  */
-export default function DisponibilidadClient() {
+export default function DisponibilidadClient({
+  puedeCargar,
+  empleados,
+}: {
+  /** Si tiene edición en RRHH. Decide si se dibuja el alta, no si puede hacerla. */
+  puedeCargar: boolean;
+  empleados: EmpleadoParaCargar[];
+}) {
   const [vista, setVista] = useState<Vista>("quien");
 
   return (
@@ -67,12 +75,22 @@ export default function DisponibilidadClient() {
         ))}
       </div>
 
-      {vista === "quien" ? <QuienNoViene /> : <Reportes />}
+      {vista === "quien" ? (
+        <QuienNoViene puedeCargar={puedeCargar} empleados={empleados} />
+      ) : (
+        <Reportes />
+      )}
     </div>
   );
 }
 
-function QuienNoViene() {
+function QuienNoViene({
+  puedeCargar,
+  empleados,
+}: {
+  puedeCargar: boolean;
+  empleados: EmpleadoParaCargar[];
+}) {
   // La semana de hoy, de lunes a domingo: es lo que mira quien dirige un área.
   const [desde, setDesde] = useState(() => semanaDe(hoyEnArgentina())[0]);
   const [hasta, setHasta] = useState(() => semanaDe(hoyEnArgentina())[6]);
@@ -86,7 +104,10 @@ function QuienNoViene() {
   // teclado dispara un pedido por cada una, y sin descartar el que llega tarde
   // la pantalla queda mostrando el rango anterior sin ningún indicio. Hay que
   // consultar `vigente()` después de cada `await`. Ver `lib/core/useCargar.ts`.
-  useCargar(async (vigente) => {
+  // Se queda con `recargar` para poder volver a pedir la semana después de un
+  // alta: sin eso, cargar una ausencia del rango que está en pantalla no se
+  // vería hasta recargar la página, y parecería que no se guardó.
+  const recargar = useCargar(async (vigente) => {
     if (!desde || !hasta) {
       // Un campo de fecha vaciado a medio escribir: no se pide nada, y la
       // pantalla no se queda cargando.
@@ -136,6 +157,8 @@ function QuienNoViene() {
 
   return (
     <div className="space-y-4">
+      {puedeCargar ? <CargarAusencia empleados={empleados} alGuardar={recargar} /> : null}
+
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex overflow-hidden rounded-lg border border-slate-300">
           <button
