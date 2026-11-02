@@ -1892,6 +1892,199 @@ bug nuevo.
   `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
   RRHH, no de acá.
 
+## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
+
+Piparo entrega su mes en un **cuaderno manuscrito** y no con partes preimpresos
+como Candia. De ahí salen unas 35 OT por mes cargadas a mano, mientras que el
+cuaderno tiene unos 118 renglones: lo que no se cargaba, no existía. Esto lee las
+fotos con un modelo, deja los renglones para chequear contra el papel y genera
+las OT. El diseño está en el
+[spec del 30/10](superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md)
+y el plan en
+[docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md](superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md);
+acá está lo que no se deduce del código y lo que se midió cuando por fin hubo
+una foto real.
+
+**Dónde vive.** La pantalla es `/mantenimiento/partes-contratista` (la misma
+ruta que Candia; `CuadernoClient.tsx`), las rutas están en
+`app/api/mantenimiento/cuaderno/` (`fotos`, `renglones`, `repetidos`, `generar`),
+la lógica pura en `lib/mantenimiento/cuaderno*.ts`, y las tablas son
+`mant_cuadernos`, `mant_cuadernos_fotos` y `mant_cuadernos_renglones` más el
+bucket privado `cuaderno-contratista` (10 MB, creado por SQL en la primera
+migración).
+
+### El modo lo decide `proveedores.modo_de_carga`
+
+El desplegable de contratista elige la pantalla: **PIPARO está en `cuaderno` y
+CANDIA en `parte_diario`**. Lo decide esa columna y no el nombre ni un id en una
+constante, así que el tercer contratista con cuaderno es un `update` y no un
+deploy. Lo que hay que saber: `ordenes_trabajo.contratista` es **texto** y no
+una FK, y el nombre del proveedor tiene que coincidir con él (medido: `PIPARO`
+exacto en el proveedor y en las 380 OT). El freno de los duplicados compara
+por ese texto, sin distinguir mayúsculas.
+
+### Lo que se midió contra el papel real (02/11/2026)
+
+Hasta acá todo se había probado con respuestas del modelo inventadas, y esa fue
+la excusa para no ver el papel: la pantalla está detrás del login. Se hizo de
+otra manera, **en sólo lectura**: un script llamó a `generateObject` con
+`esquemaDeLaLectura` y `PROMPT_DEL_CUADERNO` tal como los usa la ruta, le pasó
+cada una de las diez fotos de septiembre de 2026, y puso el resultado por
+`normalizarRenglones`, `engancharRenglonLeido` contra los **41 sectores y 269
+equipos reales**, y `enOrdenes`. No escribió nada en la base ni en el bucket.
+
+**Lo primero: con la llave de `.env.local` no se puede probar el modelo que
+manda.** `anthropic/claude-sonnet-5` devuelve **403 `RestrictedModelsError`**
+("Free tier users do not have access to this model") antes de llegar al modelo,
+igual que `claude-sonnet-4.6`, `claude-sonnet-4.5` y `claude-haiku-4.5`. Todo lo
+que sigue se midió con **`google/gemini-2.5-flash`**, el único de los probados
+que entra en el tier gratuito. **Eso no dice cómo lee Sonnet 5**: la letra de
+Piparo es justo donde más se nota la diferencia de modelo. Lo que sí vale
+igual es lo que depende del papel y del código, no del modelo.
+
+| | |
+|---|---|
+| Diez páginas | **140 renglones** (el spec calcula ~118), 28 OT saldrían y el resto queda pendiente |
+| Tiempo por página | 15 a 49 s, **salvo la 6: 201 y 214 s en dos corridas** (62.911 tokens de razonamiento sobre letra ilegible), a 26 s del tope de 240 s de la ruta |
+| Página 2 (la del 21–23/09) | 15 renglones, las dos veces; 24 y 41 s |
+| Enganche de esa página | 11 de 15 con sector, 5 con equipo, 4 en rojo (en la segunda corrida: 10, 4 y 5) |
+| Las diez | 37 de 140 con sector y **103 en rojo, con el catálogo de PIPARO vacío** (hay 23 lugares aprendidos y son todos de Candia) |
+
+El 74% en rojo **no es el código fallando**: es un catálogo que nadie enseñó
+todavía y un modelo que en las páginas 3 y 8 leyó «P/suls tut N°L» donde dice
+«P/Trit N°1». «Horno 4 Rastro» queda en rojo porque ninguna abreviatura nombra
+los hornos —el sector es Calcinación, `PO-B1`— y es justo lo que el catálogo
+aprendido está para absorber.
+
+**Qué leyó bien, en la página 2**, que es la que el spec transcribe: las horas
+y los pesos (`= 920000` salió como 920.000 pesos y no como horas; `= 4` sin
+unidad quedó `unidad: null` y entró dudoso), las **dos llaves** con su total
+en un solo renglón y `en_llave` en todos, las comillas expandidas y marcadas
+`heredado`, y el sector de los renglones que nombran una planta. `Tranqueras
+D6` salió con equipo D6, sector **Cantera** y `sector_propuesto`, que es lo que
+decidió el Ruling 2 del plan.
+
+**Qué leyó mal o raro, y qué quedó sin red:**
+
+- **El encabezado del primer día está pisado a mano en el papel** (un dígito
+  escrito sobre otro). El spec lo lee 21; el modelo leyó **24, las dos veces, sin
+  marcarlo dudoso**. Nada del sistema avisa que el orden de los días quedó 24,
+  22, 23: las OT de ese día saldrían con otra fecha.
+- **El 23/09 salió «27» en una corrida y bien en la otra.** Con `temperature: 0`
+  la misma foto da dos lecturas distintas, y por eso la ruta se niega a
+  releer una página que ya tiene renglones.
+- **La página trae un tercer día que el spec no transcribe** (23/09, una llave de
+  24 Hs) **y una línea entera tachada.** El prompt, que usa esa misma hoja como
+  ejemplo, tampoco las nombra: el modelo la devolvió como renglón dudoso en
+  una corrida y no la devolvió en la otra. Falta decidir qué es una línea
+  tachada, y no se resolvió acá porque no se puede validar contra Sonnet 5.
+- **La comilla se expandió a medias**: «Reparar rodillos 5 P/Trit N°1» perdió el
+  «2/cinta», así que la cinta 5 de ese renglón quedó sin equipo.
+- **`linea` no es el número de renglón.** En una corrida el modelo contó las
+  líneas físicas del papel, encabezados incluidos, y en la otra no. Sirve para
+  volver a la foto y para ordenar dentro de un día, no para contar.
+- **Un número se pegó a su unidad: «= 18 Hs» salió `1845` horas** (página 9,
+  «Cartelería P/Trit N°3»). **`normalizarRenglones` no pone tope a las horas**,
+  así que ese renglón entra sin marca y, si alguien confirma sin mirar, sería una
+  OT de 1.845 horas. Lo frena sólo que el cartel de confirmación suma el total
+  de horas. Un renglón de más de unas decenas de horas es una pregunta que
+  conviene hacer en `normalizarRenglones`; no se agregó porque el umbral es una
+  decisión y porque esta tarea no tocaba código.
+- **El año se leyó «24» en diez renglones de la página 11** y el mes entero se
+  corrió a 2024. Ese sí lo atajó `normalizarRenglones`: «cae fuera del mes de la
+  carga» y quedó dudoso. Es la única validación de fecha que hay, y funcionó.
+
+**Lo que se sabe y no se probó.** La pantalla, la subida, la reducción en el
+cliente, el desplegable de equipos con 269 opciones, la vista previa y la
+generación están detrás del login y no se ejercitaron: lo que hay son las
+funciones puras y la lectura del modelo. **Falta una corrida real de `simular`
+desde la pantalla antes de la primera generación**, y esa primera generación
+no puede ser septiembre (ver más abajo).
+
+### Las trampas que cuestan caro
+
+- **El costo vive en dos lugares y nadie los ata**: `ordenes_trabajo.costo` es un
+  número en la base, y el mismo monto va escrito dentro del texto de
+  `REPUESTO UTILIZADO` (columna I de la planilla). La planilla no tiene columna de
+  costo y es de donde lee quien no entra al sistema, así que se usó la que ya
+  existía: de las 380 OT de PIPARO, **58 ya traían el monto escrito a mano ahí**,
+  de tres formas distintas. Si alguien edita uno y no el otro, divergen. Y
+  **`costoEquipo.ts` no suma este costo**: ese informe saltea toda OT con
+  contratista, y se decidió no tocarlo. Todo lo que se le pagó a Piparo era
+  invisible para el costo de la máquina y lo sigue siendo.
+- **La columna I del master es derrame y no guarda lo que se le escribe.** Es el
+  resultado de un `QUERY(IMPORTRANGE())` del libro de respuestas; escribirle
+  bloquea el derrame con un `#REF!` o lo pisa el próximo recálculo, y la
+  sincronización le devuelve a la base el texto viejo. Por eso, **al sumar horas
+  a una OT que ya existe se corrige en «Altas del sistema»** —de ahí derrama—
+  con `corregirLaAlta`, y **antes** de tocar la base: si Google falla, no se
+  toca nada. Vale para la H (descripción) y la J (fecha de ejecución) también, y
+  sólo para las OT que creó el sistema: las del formulario no están en esa
+  pestaña. Quien agregue otro campo editable que viaje por H, I o J pasa por la
+  misma puerta.
+- **Septiembre de 2026 ya está cargado a mano: 29 OT de PIPARO, 28 fechadas el
+  01/09.** Generar el cuaderno de septiembre las duplica, y una OT escrita en la
+  planilla se borra a mano, fila por fila. Hay un freno: la generación **se
+  niega con un 409** si el mes del cuaderno ya tiene OT del contratista que no
+  salieron de ningún cuaderno, y se levanta con `confirmar_duplicados: true`. Mira
+  **el mes entero y no el rango de los renglones**: con el rango justo, un
+  cuaderno que arrancaba el 02/09 no atrapaba las 28 del 01/09, que son
+  justo las que motivaron el freno. La vista previa (`simular`) no se niega:
+  informa. Una segunda corrida de la misma carga no se frena a sí misma, porque
+  lo que generó el sistema está enlazado a renglones. **La prueba real no
+  puede ser septiembre**: hay que usar un mes sin cargar.
+- **`en_llave` no existe como columna.** Se lo pide al modelo y se lo usa al
+  normalizar, pero no se guarda: cuando se agregó el campo no se pidió una
+  cuarta migración. Consecuencia, y es la más fea de la prueba real: **una llave
+  que nadie junta no se frena.** Las 46 h de la página 2 están escritas en
+  «Limpieza P/Trit N°1»; ese renglón tiene sector y horas, así que **sale como
+  una OT de 46 h por sí solo**, y los otros dos de la llave quedan
+  pendientes (`sin_sector` o `sin_horas`). Las horas están bien y las tareas
+  mal repartidas, sin ninguna marca. Los que quedaron en blanco de una llave se
+  ven en los pendientes, no en una advertencia de «esto venía de una llave».
+- **Primero se juntan los renglones, y después se confirma el sector.** Al
+  revés, confirmar le saca al renglón el estado «sin sector confirmado» y con eso
+  **sale de la propuesta de acumulación** (`propuestaDeGrupos` sólo mira los
+  que no lo tienen confirmado): «Tranqueras D6» del 17, el 21 y el 23 dejan de
+  proponerse juntas y salen como tres OT. Tampoco se hereda: un grupo sale sólo
+  si **todos** sus renglones traen sector y ninguno propuesto.
+- **Una foto leída no se relee.** Pisaría lo que una persona corrigió en
+  pantalla, y como el modelo no da lo mismo dos veces, tampoco sería la misma
+  lectura. Reintentar sólo vale para una foto que quedó en `fallo`.
+- **Lo dudoso no frena nada**, sólo pinta y tiene su filtro. Lo que frena la
+  generación es la falta de sector, de fecha o de horas y precio.
+- **Una OT sin equipo no es un error**: `equipment_id` admite null (118 de 156
+  OT de Candia lo tienen) y `equipo_raw` va como `<código del sector> - Edificio`,
+  la misma convención que la generación de Candia.
+
+### Lo que hay que tener en Vercel
+
+`AI_GATEWAY_API_KEY` tiene que estar cargada (está en Production y Preview desde
+el 05/10/2026 por el Asistente). **Con una llave del tier gratuito la lectura
+falla con el 403 de arriba**, y se ve en la foto como `fallo` con lo que dijo el
+Gateway sin traducir; no sé si la cuenta de producción tiene saldo, y comprobarlo
+es la primera foto que se sube. `CUADERNO_MODELO` es **opcional**: sin ella usa
+`anthropic/claude-sonnet-5`. Se carga para probar la cañería sin créditos
+(`google/gemini-2.5-flash` anduvo) y **la calidad de la lectura no se juzga con
+ese modelo**. Borrarla vuelve al bueno.
+
+Cada foto es una llamada de hasta 240 s dentro de una función de 300, y se mandan
+de a una: una página lenta como la 6 no tumba a las otras nueve.
+
+### Lo que quedó anotado
+
+- **`npm run catalogo` no se corrió y conviene que lo corra quien termine
+  último.** Hoy el Asistente no conoce `ordenes_trabajo.costo`,
+  `proveedores.modo_de_carga` ni las tres tablas nuevas. Regenerarlo arrastra de
+  una vez lo de las otras sesiones (nueve tablas nuevas y columnas nuevas en
+  `avisos`, `francos`, `mantenimientos_programados` y `ordenes_servicio`), y las
+  15 tablas sin mapear en `lib/asistente/modulos.ts` piden decidir cada una:
+  mapearla o ponerla en `SIN_MAPEAR_A_PROPOSITO`. Las del cuaderno son de
+  `mantenimiento`.
+- **Pendientes del plan**, sin arreglar a pedido de terminar: un tope a las horas
+  de un renglón, qué hacer con una línea tachada, y avisar cuando un día sale
+  fuera de orden.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
