@@ -41,8 +41,20 @@ export const ZONA_ARGENTINA = "America/Argentina/Buenos_Aires";
 const BASE = "https://www.googleapis.com/calendar/v3";
 const EVENTOS = `${BASE}/calendars/primary/events`;
 
-/** Fechas como "2026-11-03T08:00:00", sin offset: la zona la pone ZONA_ARGENTINA. */
+/**
+ * Fechas como "2026-11-03T08:00:00", sin offset: la zona la pone ZONA_ARGENTINA.
+ *
+ * `id` es el que elige el SdG, y **sólo cuenta al crear** (un PATCH lo ignora).
+ * Sirve para que crear se pueda reintentar sin duplicar: un POST que cortó a los
+ * 30 segundos puede haberse creado igual, y el reintento (la cola de escrituras
+ * fallidas) con `sendUpdates=all` le mandaría la invitación otra vez a cada
+ * invitado. Con el mismo id, Google contesta 409 y `crearEvento` lo toma como
+ * "ya estaba". Google exige base32hex: sólo `a`–`v` y `0`–`9` en minúscula, de 5
+ * a 1024 caracteres. Un uuid sin guiones sirve (los dígitos hex son `0`–`9` y
+ * `a`–`f`, todos dentro de `a`–`v`); con guiones o en mayúscula, no.
+ */
 export interface EventoParaGoogle {
+  id?: string;
   titulo: string;
   descripcion?: string;
   lugar?: string;
@@ -128,15 +140,26 @@ const CLIENT_ID_DELEGACION = "101499089090401417948";
 /**
  * El error de una llamada que falló.
  *
- * El 403 va aparte a propósito. `mensajeDeGoogle` lo explica como "la carpeta no
- * está compartida con la cuenta de servicio", que es la causa en Drive y Sheets
- * y manda a mirar donde no es: en Calendar la cuenta entra impersonando, así que
- * un 403 es que **la delegación de todo el dominio** no cubre el scope o el
- * client ID. La frase propia dice eso, y detrás va el texto de Google tal cual.
+ * El 403 va aparte a propósito, porque `mensajeDeGoogle` lo explica como "la
+ * carpeta no está compartida con la cuenta de servicio", que es la causa en
+ * Drive y Sheets y manda a mirar donde no es. En Calendar un 403 es, por motivo
+ * (`error.errors[].reason`):
  *
- * Una excepción: si la API de Calendar no está habilitada en el proyecto, el 403
- * trae `SERVICE_DISABLED` y `mensajeDeGoogle` ya sabe decirlo con el enlace para
- * habilitarla; ahí la pista de la delegación sería la equivocada.
+ *   - de cuota (`rateLimitExceeded`, `userRateLimitExceeded`, `quotaExceeded`,
+ *     `dailyLimitExceeded`): Google está limitando. Con catorce calendarios
+ *     sincronizando es donde aparece, y se reintenta;
+ *   - `forbiddenForNonOrganizer`: se quiso tocar un evento que organiza otra
+ *     persona;
+ *   - `SERVICE_DISABLED` / `accessNotConfigured`: la API de Calendar no está
+ *     habilitada en el proyecto. `mensajeDeGoogle` ya lo dice con el enlace para
+ *     habilitarla, así que ahí se le deja la palabra;
+ *   - cualquier otro: recién ahí se sugiere mirar la delegación.
+ *
+ * **Una delegación faltante NO se ve acá.** Falla antes, en el canje del token,
+ * con `unauthorized_client` desde `oauth2.googleapis.com` (medido el 02/11/2026,
+ * antes de que el administrador la autorizara), y `obtenerToken` lo tira como
+ * "Google OAuth: ...". Un 403 de Calendar significa que el token se obtuvo bien;
+ * achacarlo a la delegación es mandar a mirar donde no es.
  */
 async function fallo(res: Response, operacion: "leer" | "escribir"): Promise<Error> {
   const cuerpo = await res.text();
@@ -144,17 +167,31 @@ async function fallo(res: Response, operacion: "leer" | "escribir"): Promise<Err
   if (res.status !== 403 || /SERVICE_DISABLED|accessNotConfigured/.test(cuerpo)) return new Error(general);
 
   let dijoGoogle = "";
+  const motivos = new Set<string>();
   try {
-    dijoGoogle = JSON.parse(cuerpo)?.error?.message ?? "";
+    const error = JSON.parse(cuerpo)?.error ?? {};
+    dijoGoogle = error.message ?? "";
+    for (const e of error.errors ?? []) if (e.reason) motivos.add(e.reason);
   } catch {
     // No era JSON: se muestra el cuerpo crudo más abajo.
   }
+  const textoDeGoogle = `Google dijo: ${dijoGoogle || cuerpo.slice(0, 200) || 403}`;
+
+  if (["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded"].some((m) => motivos.has(m))) {
+    return new Error(`Google está limitando el ritmo de llamadas a Calendar; se reintenta solo. ${textoDeGoogle}`);
+  }
+  if (motivos.has("forbiddenForNonOrganizer")) {
+    return new Error(
+      `Ese evento lo organiza otra persona y esta casilla no puede modificarlo (forbiddenForNonOrganizer). ${textoDeGoogle}`
+    );
+  }
+
   const cuenta = cuentaDeServicio();
   return new Error(
-    `Google no dio acceso al calendario: lo más probable es que falte la delegación de ` +
-      `todo el dominio para ${cuenta ? `la cuenta de servicio ${cuenta}` : "la cuenta de servicio"} ` +
-      `(client ID ${CLIENT_ID_DELEGACION}) con el scope ${SCOPE_CALENDAR}. ` +
-      `Google dijo: ${dijoGoogle || cuerpo.slice(0, 200) || 403}`
+    `Google no dio acceso al calendario por un motivo que no es de cuota ni de organizador; ` +
+      `conviene revisar la delegación de todo el dominio de ` +
+      `${cuenta ? `la cuenta de servicio ${cuenta}` : "la cuenta de servicio"} ` +
+      `(client ID ${CLIENT_ID_DELEGACION}) para el scope ${SCOPE_CALENDAR}. ${textoDeGoogle}`
   );
 }
 
@@ -163,13 +200,32 @@ const comoJson = (token: string) => ({
   "Content-Type": "application/json",
 });
 
+const ID_VALIDO = /^[a-v0-9]{5,1024}$/;
+
+/**
+ * Con `evento.id`, crear es idempotente: un 409 es que ese id ya existe, o sea
+ * que el intento anterior sí entró, y se devuelve el evento leyéndolo. Ojo: Google
+ * reserva el id también de un evento borrado, así que el 409 puede traer un
+ * evento con `cancelado: true`; quien llama tiene que mirarlo. Sin `id`, un 409
+ * se propaga como cualquier otro error.
+ */
 export async function crearEvento(casilla: string, evento: EventoParaGoogle): Promise<EventoEnGoogle> {
+  if (evento.id !== undefined && !ID_VALIDO.test(evento.id)) {
+    throw new Error(
+      `El id de evento "${evento.id}" no es válido para Google: tiene que ser base32hex ` +
+        `(sólo a-v y 0-9 en minúscula, de 5 a 1024 caracteres)`
+    );
+  }
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
   const res = await pedir(`${EVENTOS}?sendUpdates=all`, {
     method: "POST",
     headers: comoJson(token),
-    body: JSON.stringify(cuerpoDeEvento(evento)),
+    body: JSON.stringify({ ...(evento.id ? { id: evento.id } : {}), ...cuerpoDeEvento(evento) }),
   });
+  if (res.status === 409 && evento.id) {
+    const existente = await leerEvento(casilla, evento.id);
+    if (existente) return existente;
+  }
   if (!res.ok) throw await fallo(res, "escribir");
   return recortar(await res.json());
 }
@@ -191,6 +247,11 @@ export async function leerEvento(casilla: string, idEvento: string): Promise<Eve
 /**
  * PATCH: sólo viaja lo que se pasa. Los invitados, si se pasan, **reemplazan** la
  * lista entera (así lo hace Google con `attendees`), no se suman.
+ *
+ * **Sobre un evento borrado miente: contesta 200 y no resucita nada.** Mirá el
+ * `cancelado` de lo que devuelve: si es `true`, el cambio se guardó pero el
+ * evento sigue invisible en el calendario de todos, y lo que corresponde es
+ * `restaurarEvento`. Las mediciones están en `restaurarEvento`.
  */
 export async function actualizarEvento(
   casilla: string,
@@ -202,6 +263,43 @@ export async function actualizarEvento(
     method: "PATCH",
     headers: comoJson(token),
     body: JSON.stringify(cuerpoDeEvento(evento)),
+  });
+  if (!res.ok) throw await fallo(res, "escribir");
+  return recortar(await res.json());
+}
+
+/**
+ * Vuelve a dejar **confirmado** un evento, con el cuerpo completo: es el camino
+ * para un evento que alguien borró a mano. `PUT` y no `PATCH`, con
+ * `status: "confirmed"`. Recibe el evento entero (no un `Partial`) porque `PUT`
+ * reemplaza el recurso, y sirve igual sobre uno vivo.
+ *
+ * POR QUÉ EXISTE, MEDIDO CONTRA GOOGLE EL 02/11/2026 (impersonando a una casilla
+ * del dominio, sobre un evento de prueba):
+ *
+ *   crear                              -> 200
+ *   borrar (como lo haría una persona) -> 204
+ *   PATCH sobre el borrado             -> 200, y el evento queda status "cancelled"
+ *   leerlo después del PATCH           -> 200, status "cancelled", con la hora NUEVA
+ *   PUT con status "confirmed"         -> 200, status "confirmed"
+ *
+ * O sea que el PATCH sobre un borrado acepta el cambio de hora, lo guarda y **no
+ * resucita nada**: informa éxito y el evento sigue invisible. Es la pantalla
+ * confirmando lo que no pasó, y nada en la documentación de Google lo dice.
+ *
+ * Sin medir: si el PUT conserva las respuestas (`responseStatus`) de los
+ * invitados de un evento que sigue vivo.
+ */
+export async function restaurarEvento(
+  casilla: string,
+  idEvento: string,
+  evento: EventoParaGoogle
+): Promise<EventoEnGoogle> {
+  const token = await obtenerToken([SCOPE_CALENDAR], casilla);
+  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=all`, {
+    method: "PUT",
+    headers: comoJson(token),
+    body: JSON.stringify({ ...cuerpoDeEvento(evento), status: "confirmed" }),
   });
   if (!res.ok) throw await fallo(res, "escribir");
   return recortar(await res.json());
@@ -257,8 +355,19 @@ export async function abrirCanal(
     body: JSON.stringify({ id: canalId, type: "web_hook", address: url, token: secreto }),
   });
   if (!res.ok) throw await fallo(res, "escribir");
-  const datos = (await res.json()) as { resourceId: string; expiration: string };
-  return { recursoId: datos.resourceId, vence: new Date(Number(datos.expiration)).toISOString() };
+  const datos = (await res.json()) as { resourceId?: string; expiration?: string };
+  const vence = new Date(Number(datos.expiration));
+  if (!datos.resourceId || !datos.expiration || isNaN(vence.getTime())) {
+    // Google ya abrió el canal: sin esto el error borraría el rastro y quedaría
+    // un canal vivo que nadie sabe que existe ni puede cerrar.
+    throw new Error(
+      `El canal "${canalId}" quedó abierto en Google pero su respuesta no trajo ` +
+        `${!datos.resourceId ? "resourceId" : "un expiration válido"}` +
+        (datos.resourceId ? ` (resourceId ${datos.resourceId}, ciérrese con cerrarCanal)` : "; sin resourceId no se puede cerrar y se apaga solo al vencer") +
+        `. Respuesta: ${JSON.stringify(datos).slice(0, 200)}`
+    );
+  }
+  return { recursoId: datos.resourceId, vence: vence.toISOString() };
 }
 
 /**

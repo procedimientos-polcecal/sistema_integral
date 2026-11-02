@@ -7,7 +7,7 @@ vi.mock("./google", async (importOriginal) => ({
 
 import { obtenerToken } from "./google";
 import {
-  ZONA_ARGENTINA, crearEvento, leerEvento, actualizarEvento, borrarEvento, abrirCanal, cerrarCanal,
+  ZONA_ARGENTINA, crearEvento, leerEvento, actualizarEvento, restaurarEvento, borrarEvento, abrirCanal, cerrarCanal,
 } from "./calendar";
 
 /**
@@ -101,6 +101,47 @@ describe("crearEvento", () => {
   });
 });
 
+describe("crearEvento con id propio", () => {
+  const ID = "0123456789abcdef0123456789abcdef";
+
+  it("manda el id elegido por el SdG", async () => {
+    fetchMock.mockResolvedValue(json(200, { id: ID }));
+    await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+    expect(pedido().cuerpo.id).toBe(ID);
+  });
+
+  it("sin id no manda ninguno", async () => {
+    fetchMock.mockResolvedValue(json(200, { id: "e1" }));
+    await crearEvento("ana@polcecal.com", EVENTO);
+    expect("id" in pedido().cuerpo).toBe(false);
+  });
+
+  it("un 409 es que el intento anterior sí entró: devuelve el evento leyéndolo", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(409, { error: { code: 409, message: "The requested identifier already exists." } }))
+      .mockResolvedValueOnce(json(200, { id: ID, status: "confirmed", summary: "OT 2901" }));
+    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+
+    expect(evento.id).toBe(ID);
+    expect(evento.cancelado).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(pedido(1).metodo).toBe("GET");
+    expect(pedido(1).url).toBe(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ID}`);
+  });
+
+  it("un 409 sin id propio se propaga: no hay nada que releer", async () => {
+    fetchMock.mockResolvedValue(json(409, { error: { message: "Conflict" } }));
+    await expect(crearEvento("ana@polcecal.com", EVENTO)).rejects.toThrow("Conflict");
+  });
+
+  it("un id fuera de base32hex se rechaza antes de llamar a Google", async () => {
+    for (const id of ["ABCDE12345", "con-guiones-123", "abcd", "wxyz1234"]) {
+      await expect(crearEvento("ana@polcecal.com", { ...EVENTO, id })).rejects.toThrow("base32hex");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("leerEvento", () => {
   it("un evento cancelado se lee como cancelado y no como ausente", async () => {
     // Medido: el GET de un evento borrado es un 200, no un 404.
@@ -137,6 +178,26 @@ describe("leerEvento", () => {
     expect(e.message).not.toContain("carpeta");
   });
 
+  it("un 403 de cuota dice que Google está limitando y no habla de delegación", async () => {
+    for (const reason of ["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"]) {
+      fetchMock.mockResolvedValue(json(403, { error: { code: 403, message: "Rate Limit Exceeded", errors: [{ reason }] } }));
+      const e = (await leerEvento("ana@polcecal.com", "e1").catch((x: Error) => x)) as Error;
+      expect(e.message).toContain("limitando");
+      expect(e.message).toContain("Rate Limit Exceeded");
+      expect(e.message).not.toContain("delegación");
+    }
+  });
+
+  it("un 403 forbiddenForNonOrganizer dice que el evento es de otra persona", async () => {
+    fetchMock.mockResolvedValue(
+      json(403, { error: { code: 403, message: "Only the organizer can do that", errors: [{ reason: "forbiddenForNonOrganizer" }] } })
+    );
+    const e = (await actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" }).catch((x: Error) => x)) as Error;
+    expect(e.message).toContain("organiza otra persona");
+    expect(e.message).toContain("Only the organizer can do that");
+    expect(e.message).not.toContain("delegación");
+  });
+
   it("un 403 por la API sin habilitar conserva su explicación propia", async () => {
     fetchMock.mockResolvedValue(
       json(403, {
@@ -170,6 +231,29 @@ describe("actualizarEvento", () => {
   it("un 403 se propaga con lo que dijo Google", async () => {
     fetchMock.mockResolvedValue(json(403, { error: { message: "Not a delegate" } }));
     await expect(actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" })).rejects.toThrow("Not a delegate");
+  });
+});
+
+describe("restaurarEvento", () => {
+  it("resucita con PUT, el cuerpo completo y status confirmed", async () => {
+    // Medido el 02/11/2026: un PATCH sobre un borrado da 200 y sigue cancelled.
+    fetchMock.mockResolvedValue(json(200, { id: "e1", status: "confirmed" }));
+    const evento = await restaurarEvento("ana@polcecal.com", "e1", EVENTO);
+
+    const { url, metodo, cuerpo } = pedido();
+    expect(metodo).toBe("PUT");
+    expect(url).toBe("https://www.googleapis.com/calendar/v3/calendars/primary/events/e1?sendUpdates=all");
+    expect(cuerpo.status).toBe("confirmed");
+    expect(cuerpo.summary).toBe("OT 2901 — Mantenimiento");
+    expect(cuerpo.start).toEqual({ dateTime: "2026-11-03T08:00:00", timeZone: ZONA_ARGENTINA });
+    expect(cuerpo.end).toEqual({ dateTime: "2026-11-03T12:00:00", timeZone: ZONA_ARGENTINA });
+    expect(cuerpo.attendees).toHaveLength(2);
+    expect(evento.cancelado).toBe(false);
+  });
+
+  it("un fallo se propaga con lo que dijo Google", async () => {
+    fetchMock.mockResolvedValue(json(500, { error: { message: "Backend Error" } }));
+    await expect(restaurarEvento("ana@polcecal.com", "e1", EVENTO)).rejects.toThrow("Backend Error");
   });
 });
 
@@ -210,6 +294,24 @@ describe("canales", () => {
       id: "canal-1", type: "web_hook", address: "https://sdg.example/api/agenda/aviso", token: "secreto",
     });
     expect(r).toEqual({ recursoId: "recurso-1", vence: "2030-01-01T00:00:00.000Z" });
+  });
+
+  it("abrirCanal sin resourceId avisa que el canal quedó abierto, con su id", async () => {
+    fetchMock.mockResolvedValue(json(200, { expiration: "1893456000000" }));
+    const e = (await abrirCanal("ana@polcecal.com", "canal-1", "s", "https://x.example/a").catch((x: Error) => x)) as Error;
+    expect(e).toBeInstanceOf(Error);
+    expect(e.message).toContain("canal-1");
+    expect(e.message).toContain("quedó abierto");
+  });
+
+  it("abrirCanal sin expiration válido avisa que quedó abierto y da el resourceId para cerrarlo", async () => {
+    for (const expiration of [undefined, "no-es-un-numero"]) {
+      fetchMock.mockResolvedValue(json(200, { resourceId: "recurso-1", expiration }));
+      const e = (await abrirCanal("ana@polcecal.com", "canal-1", "s", "https://x.example/a").catch((x: Error) => x)) as Error;
+      expect(e.message).toContain("canal-1");
+      expect(e.message).toContain("quedó abierto");
+      expect(e.message).toContain("recurso-1");
+    }
   });
 
   it("cerrarCanal impersona a la casilla y manda id y recurso", async () => {
