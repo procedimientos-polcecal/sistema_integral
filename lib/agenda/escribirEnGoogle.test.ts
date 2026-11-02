@@ -96,48 +96,35 @@ describe("escribirEnGoogle — crear", () => {
     await expect(escribirEnGoogle("crear", FILA, EVENTO)).resolves.toEqual({ pendiente: "se cayó la red" });
   });
 
-  describe("el reintento de crear cuando el id ya existía vivo", () => {
+  describe("reintentar: volver a escribir un alta que pudo haber entrado", () => {
     // `crearEvento` ante un 409 devuelve el evento que había SIN aplicarle el
-    // cuerpo nuevo. Darlo por bueno dejaba la fila y Google distintos para
-    // siempre: `inicio_escrito` con lo viejo de Google, sin divergencia y sin pendiente.
-    it("si el horario que volvió no es el que se mandó, lo pisa con el PUT y anota lo nuevo", async () => {
+    // cuerpo nuevo, y desde afuera es indistinguible de una creación recién hecha.
+    // Darlo por bueno dejaba la fila y Google distintos para siempre.
+    it("pisa siempre con el PUT y anota lo que devolvió el PUT, no lo viejo", async () => {
       vi.mocked(crearEvento).mockResolvedValue({
         ...ENGOOGLE,
         inicio: "2026-11-03T07:00:00-03:00",
         fin: "2026-11-03T08:30:00-03:00",
       });
       vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
-      const r = await escribirEnGoogle("crear", FILA, EVENTO);
+      const r = await escribirEnGoogle("reintentar", FILA, EVENTO);
       expect(restaurarEvento).toHaveBeenCalledOnce();
       expect(r.inicio_escrito).toBe(ENGOOGLE.inicio);
       expect(r.inicio_escrito).not.toBe("2026-11-03T07:00:00-03:00");
     });
 
-    it("si cambió sólo el título, también", async () => {
-      vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, titulo: "El título de antes" });
-      vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
-      await escribirEnGoogle("crear", FILA, EVENTO);
-      expect(restaurarEvento).toHaveBeenCalledOnce();
-    });
-
-    it("si cambiaron los invitados, también", async () => {
-      vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, invitados: [{ email: "otro@polcecal.com" }] });
-      vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
-      await escribirEnGoogle("crear", FILA, EVENTO);
-      expect(restaurarEvento).toHaveBeenCalledOnce();
-    });
-
-    it("un alta que salió como se mandó no se vuelve a escribir", async () => {
+    it("pisa aunque lo que volvió se vea idéntico: lo que no se ve (descripción, lugar) puede haber cambiado", async () => {
+      // El caso que una comparación incompleta daba por bueno: horario, título e
+      // invitados iguales, y sólo cambió la descripción.
       vi.mocked(crearEvento).mockResolvedValue(ENGOOGLE);
-      await escribirEnGoogle("crear", FILA, EVENTO);
-      expect(restaurarEvento).not.toHaveBeenCalled();
+      vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+      await escribirEnGoogle("reintentar", FILA, { ...EVENTO, descripcion: "La nueva" });
+      expect(restaurarEvento).toHaveBeenCalledOnce();
+      expect(vi.mocked(restaurarEvento).mock.calls[0][2].descripcion).toBe("La nueva");
     });
 
-    it("que Google sume a la casilla dueña como organizadora no cuenta como cambio", async () => {
-      vi.mocked(crearEvento).mockResolvedValue({
-        ...ENGOOGLE,
-        invitados: [{ email: "ana@polcecal.com" }, { email: "Mantenimiento@polcecal.com" }],
-      });
+    it("el alta nueva, en cambio, no se vuelve a escribir", async () => {
+      vi.mocked(crearEvento).mockResolvedValue(ENGOOGLE);
       await escribirEnGoogle("crear", FILA, EVENTO);
       expect(restaurarEvento).not.toHaveBeenCalled();
     });
@@ -145,9 +132,16 @@ describe("escribirEnGoogle — crear", () => {
     it("si el PUT falla vuelve el pendiente con lo que dijo Google, sin anotar lo viejo", async () => {
       vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, inicio: "2026-11-03T07:00:00-03:00" });
       vi.mocked(restaurarEvento).mockRejectedValue(new Error("Google dijo: 500"));
-      const r = await escribirEnGoogle("crear", FILA, EVENTO);
+      const r = await escribirEnGoogle("reintentar", FILA, EVENTO);
       expect(r.pendiente).toContain("Google dijo: 500");
       expect(r).not.toHaveProperty("inicio_escrito");
+    });
+
+    it("si el crear falla no sigue con el PUT", async () => {
+      vi.mocked(crearEvento).mockRejectedValue(new Error("Google dijo: 403"));
+      const r = await escribirEnGoogle("reintentar", FILA, EVENTO);
+      expect(r.pendiente).toContain("403");
+      expect(restaurarEvento).not.toHaveBeenCalled();
     });
   });
 
@@ -162,10 +156,7 @@ describe("escribirEnGoogle — crear", () => {
   });
 
   it("una respuesta sin horario no anota la mitad: es un pendiente", async () => {
-    // Sin horario no se puede verificar que sea lo que se mandó: se pisa con el
-    // PUT, y si tampoco ahí vuelve horario, es un pendiente.
     vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, inicio: "" });
-    vi.mocked(restaurarEvento).mockResolvedValue({ ...ENGOOGLE, inicio: "" });
     const r = await escribirEnGoogle("crear", FILA, EVENTO);
     expect(r.pendiente).toMatch(/sin horario/);
     expect(r).not.toHaveProperty("inicio_escrito");

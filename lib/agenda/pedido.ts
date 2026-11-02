@@ -45,16 +45,6 @@ export function conSegundos(texto: string): string {
 }
 
 /**
- * ¿Es el mismo instante? Una cadena sin zona es hora de pared de Argentina,
- * igual que en `aInstanteISO`. Si alguna no es una fecha-hora, no.
- */
-export function mismoInstante(a: string, b: string): boolean {
-  const x = aInstanteISO(a);
-  const y = aInstanteISO(b);
-  return x !== null && y !== null && x === y;
-}
-
-/**
  * Lo inverso, para mandarle a Google: un instante (lo que devuelve la base,
  * `2026-11-03T11:00:00+00:00`) como hora de pared de Argentina y **sin offset**
  * (`2026-11-03T08:00:00`). El cliente de Calendar agrega la zona aparte, y un

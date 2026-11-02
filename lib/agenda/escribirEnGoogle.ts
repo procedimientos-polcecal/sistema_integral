@@ -3,7 +3,6 @@ import {
   type EventoParaGoogle, type EventoEnGoogle,
 } from "@/lib/core/calendar";
 import { instanteDe } from "./evento";
-import { mismoInstante } from "./pedido";
 import type { Divergencia } from "./divergencia";
 
 /**
@@ -13,7 +12,7 @@ import type { Divergencia } from "./divergencia";
  * no tienen tests en este repo. Las rutas leen, llaman y guardan.
  */
 
-export type AccionEnGoogle = "crear" | "actualizar" | "restaurar" | "borrar";
+export type AccionEnGoogle = "crear" | "reintentar" | "actualizar" | "restaurar" | "borrar";
 
 export interface FilaParaGoogle {
   casilla: string;
@@ -67,13 +66,26 @@ function comoEscrito(e: EventoEnGoogle): ResultadoDeEscritura {
  * con lo que dijo Google, sin traducir, y quien llama lo guarda y se lo dice a
  * la persona. Un diagnóstico que no se distingue de otro no es un diagnóstico.
  *
- * LAS CUATRO ACCIONES
+ * LAS CINCO ACCIONES
  *
  * - `crear` usa el `id` del evento (`evento.id`, o el `google_event_id` de la
- *   fila si ya había uno): con id propio crear es idempotente y se puede
- *   reintentar. Google reserva el id **también de un evento borrado**: si el
- *   409 trae uno cancelado, se restaura, porque lo que se pidió es un evento
- *   vivo.
+ *   fila si ya había uno): con id propio crear es idempotente. Es para un alta
+ *   **nueva**, cuyo id no pudo existir antes. Google reserva el id **también de
+ *   un evento borrado**: si lo que vuelve está cancelado, se restaura, porque lo
+ *   que se pidió es un evento vivo.
+ * - `reintentar` es `crear` seguido **siempre** de un `PUT` (`restaurar`), y es
+ *   para quien vuelve a escribir un alta que pudo haber entrado: la fila sin
+ *   `google_event_id` que se edita, el cron de pendientes. Ante un id que ya
+ *   existe, `crearEvento` toma el 409 por «ya estaba» y **devuelve el evento
+ *   viejo sin aplicarle el cuerpo nuevo**, y desde afuera es indistinguible de
+ *   una creación recién hecha. Darlo por bueno dejaría la fila y Google
+ *   distintos para siempre, sin divergencia (`inicio_escrito` sería lo viejo de
+ *   Google) y sin pendiente. **No se compara lo que volvió con lo que se mandó**,
+ *   a propósito: lo que Google devuelve no alcanza para saber si algo cambió
+ *   (no trae descripción ni lugar), y una comparación incompleta es peor que
+ *   ninguna, porque decide «no hace falta» sobre información que no tiene. El
+ *   costo es un `PUT` de más —y un aviso de modificación a los invitados— en un
+ *   camino que casi no se recorre.
  * - `actualizar` es un `PATCH`, y **sobre un evento borrado miente**: contesta
  *   200 y lo deja cancelado. Si lo que vuelve está cancelado, no es una
  *   escritura que salió bien sino una divergencia por borrado
@@ -106,18 +118,12 @@ export async function escribirEnGoogle(
       return { pendiente: `Falta el evento para ${accion} en Google: es un error del SdG, no de Google` };
     }
 
-    if (accion === "crear") {
+    if (accion === "crear" || accion === "reintentar") {
       const id = evento.id ?? fila.google_event_id ?? undefined;
       const creado = await crearEvento(fila.casilla, { ...evento, id });
-      // Crear con un id que ya existe devuelve el evento que había, **sin
-      // aplicarle el cuerpo nuevo**: un reintento después de que Google sí
-      // escribió, con cambios de por medio, daría lo viejo por bueno. La
-      // respuesta diría que salió bien, `inicio_escrito` quedaría con el horario
-      // viejo de Google (así que `queDivergio` daría null para siempre) y no
-      // habría pendiente: una fila y un Google distintos sin un solo registro.
-      // Si lo que volvió no es lo que se mandó —o está borrado— se lo pisa
-      // entero con el `PUT`, que sirve también sobre uno vivo.
-      if (creado.cancelado || !esLoQueSeMando(evento, creado, fila.casilla)) {
+      // Un evento cancelado es un id reservado y borrado: se restaura siempre.
+      // `reintentar` pisa también el vivo: ver el docstring.
+      if (creado.cancelado || accion === "reintentar") {
         return await restaurar(fila.casilla, creado.id, evento);
       }
       return comoEscrito(creado);
@@ -137,23 +143,6 @@ export async function escribirEnGoogle(
     // Nunca vacío: `pendiente` vacío se leería como «no hubo fallo».
     return { pendiente: textoDelFallo(e) || SIN_MENSAJE };
   }
-}
-
-/**
- * ¿Lo que Google devolvió tras `crear` es lo que se mandó? Compara el horario,
- * el título y los invitados: lo que `EventoEnGoogle` deja ver. **La descripción
- * y el lugar no vuelven, así que un reintento que sólo los cambió no se
- * detecta**; es el hueco que queda. Los invitados se comparan sin la casilla
- * dueña, que Google puede agregar sola como organizadora. Un falso «no
- * coincide» cuesta un `PUT` de más; un falso «coincide» cuesta un cambio perdido.
- */
-function esLoQueSeMando(evento: EventoParaGoogle, devuelto: EventoEnGoogle, casilla: string): boolean {
-  if (!mismoInstante(evento.inicio, devuelto.inicio) || !mismoInstante(evento.fin, devuelto.fin)) return false;
-  if (devuelto.titulo !== evento.titulo) return false;
-  const dueno = casilla.toLowerCase();
-  const hay = new Set(devuelto.invitados.map((i) => i.email.toLowerCase()).filter((e) => e !== dueno));
-  const mandados = new Set(evento.invitados.map((e) => e.toLowerCase()).filter((e) => e !== dueno));
-  return hay.size === mandados.size && [...mandados].every((e) => hay.has(e));
 }
 
 async function restaurar(casilla: string, id: string, evento: EventoParaGoogle): Promise<ResultadoDeEscritura> {

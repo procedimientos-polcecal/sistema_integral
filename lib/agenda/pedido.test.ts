@@ -3,7 +3,7 @@ import { validar } from "@/lib/core/validar";
 import {
   aInstanteISO, aHoraDePared, idDeGoogleDe, invitadosLimpios, eventoParaGoogle, divergenciaVista,
   esquemaDeAlta, esquemaDeCambio, esquemaDeDestrabar, mensajeDeEventoDeOT,
-  conSegundos, mismoInstante,
+  conSegundos,
 } from "./pedido";
 
 describe("las horas", () => {
@@ -52,18 +52,6 @@ describe("las horas sin segundos (datetime-local)", () => {
     expect(cambio.ok && cambio.datos.inicio).toBe("2026-11-03T08:00:00");
     const sin = validar(esquemaDeCambio, { titulo: "x" });
     expect(sin.ok && sin.datos.inicio).toBeUndefined();
-  });
-});
-
-describe("mismoInstante", () => {
-  it("compara por instante, y una hora sin zona es de Argentina", () => {
-    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T08:00:00-03:00")).toBe(true);
-    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T11:00:00Z")).toBe(true);
-    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T09:00:00-03:00")).toBe(false);
-  });
-  it("lo que no es una hora no es igual a nada", () => {
-    expect(mismoInstante("2026-11-03", "2026-11-03")).toBe(false);
-    expect(mismoInstante("", "")).toBe(false);
   });
 });
 
