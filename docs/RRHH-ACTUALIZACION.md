@@ -713,3 +713,105 @@ punta por separado**, no al total. Alguien que entra 29 minutos tarde y se va
 margen en 20 el regalo máximo era de 40 minutos; con 30 es de una hora. Si eso
 molesta, lo que hay que cambiar es la regla —pasar el margen al total— y no el
 número.
+
+## Disponibilidad y ausentismo (02/11/2026)
+
+Una sección **transversal**, en `/disponibilidad`, fuera de todo módulo: la ve
+cualquiera que entre al sistema. Reemplaza una planilla de Google que RRHH
+llevaba a mano. Vive en `app/(app)/disponibilidad`, `app/api/disponibilidad` y
+`lib/rrhh/ausentismo`; el diseño está en
+[el spec](superpowers/specs/2026-10-29-disponibilidad-y-ausentismo-design.md).
+
+### Lo que no se deduce del código
+
+**El motivo de una ausencia no sale nunca del lado abierto, y ésa es la razón
+de ser de la sección.** `/api/disponibilidad` dice *quién no viene y qué día*, y
+nada más. Lee `ausencias` con el **cliente admin** —la tabla está cerrada con
+`tiene_acceso_rrhh()` y hoy la leen 6 de 14 usuarios—, así que **RLS no corre y
+el único permiso es el que escribió la ruta**. El `tipo` entra sólo para
+descartar la `TARDANZA` y se tira antes de armar el JSON.
+
+La proyección **se arma campo por campo y nunca borrando los prohibidos**. No es
+estilo: un `delete fila.tipo` o un `{...fila, tipo: undefined}` dejan pasar lo
+que alguien agregue mañana a la consulta. Lo mismo vale para `mensualSinMotivos`.
+Y los tests preguntan **sobre el JSON serializado**, no sobre la forma del
+objeto, porque lo único que llega del otro lado es ese JSON: una proyección
+incompleta se lee bien y filtra igual.
+
+**«Agregado» no es lo mismo que anónimo cuando el grupo es chico.** El spec
+abría el mensual entero —sector × motivo— a cualquiera, por ser «agregado, sin
+nombres». Medido el 02/11/2026: **71 empleados en 15 sectores, y «Producción -
+Hidratación» tiene UNA sola persona**; otros seis tienen dos. Ahí la celda
+«Enfermedad: 5» **es** un nombre. Peor: cruzando los dos endpoints abiertos
+—disponibilidad da nombre + sector + día— **42 de 78 celdas con motivo (54 %)
+quedaban atribuidas a una persona concreta, incluidos sectores de 9 y de 13**,
+porque lo que hace atribuible una celda no es el tamaño del sector sino cuántos
+de ese sector faltaron ese mes. Por eso un umbral de personal no habría
+alcanzado y se sacó el desglose entero.
+
+Hoy quien no pasa el control recibe el mensual **sólo con el total por sector**,
+con 200 y no con 403. El total no agrega nada que no se sepa ya; lo que se tapa
+es el porqué. **La respuesta de `/api/disponibilidad/reportes` tiene dos formas
+y quien la consuma tiene que bancarse las dos** (`ReportesCompletos |
+ReportesRecortados`).
+
+**La asimetría de la `TARDANZA` es a propósito y es el único lugar donde la
+misma fila cuenta distinto según quién pregunta.** No aparece en disponibilidad
+—esa persona vino— y sí suma un día en el mensual, porque RRHH la cuenta.
+*Queda un canal residual conocido*: en el lado abierto, `total del sector −
+días que muestra la disponibilidad` da las tardanzas de ese sector, y en un
+sector de una persona eso la nombra. Hoy no filtra nada —**0 tardanzas en la
+base**— y aparece el día que RRHH cargue la primera. Está sin resolver a
+propósito: taparlo mueve un número y restarlo también.
+
+**Los empleados inactivos entran enteros, y no filtrar por `activo` es
+deliberado.** Quien se fue en agosto igual faltó en marzo; filtrándolo, sus
+ausencias se vuelven huérfanas y salen del número **sin avisar**. La
+contrapartida asumida: `personal` del porcentual cuenta a los 2 inactivos de 71.
+`ausenciasHuerfanas` en 0 sobre las 153 filas reales es la prueba por el otro
+lado.
+
+**El porcentual puede pasar de 100 y no se topea.** El numerador cuenta días de
+calendario —se pidió que los números que RRHH ya conoce no se muevan— y el
+denominador cuenta días hábiles: 141 días contra 120 hábiles da 117,5 %. La
+pantalla explica la mezcla. Un número tapado sería inventado.
+
+**El anual acumula los hábiles del año a la fecha**, no los 12 meses: los meses
+posteriores al elegido van en 0 y no entran en el total.
+
+**Los avisos van donde se ve el número y no al pie.** Uno dice que el total
+incluye a todos los sectores y no la lista fija de 17 de la planilla vieja, así
+que **no va a coincidir**; si eso está al pie, la conclusión natural de quien
+compare es que el sistema está mal. Y `avisos` es el **único** campo que pasa
+entero al lado abierto —todo lo demás se arma campo por campo—, así que lo que
+lo protege es un test que fuerza huérfanas con los motivos más sensibles y
+afirma que el conteo sale y el motivo no.
+
+**El aviso de feriados mira dos meses vacíos seguidos, no uno.** Un mes suelto
+sin feriado es normal: Argentina no tiene feriado nacional en septiembre, y
+medido sobre los 17 feriados reales de 2026 **todos los meses tienen al menos
+uno salvo ése**. Avisar por cada mes vacío haría que todos aprendieran a
+ignorarlo; mirar sólo el año entero vacío dejaba pasar el año cargado a medias,
+que falla igual de callado.
+
+### Cómo se comprueba
+
+Las tres rutas piden sesión, así que no se pueden llamar por HTTP desde un
+script. Por eso las lecturas viven en `lib/rrhh/ausentismo/lecturas.ts`,
+separadas de las rutas:
+
+```bash
+npx tsx scripts/probar-rutas-de-disponibilidad.mts --mes=2026-10
+```
+
+Sólo lee. Busca los motivos **que hay hoy en la tabla** y los nombres de los 71
+empleados dentro de los JSON que devolverían las rutas, así que un valor nuevo
+del enum queda cubierto solo. Sale 1 si algo que no puede verse salió.
+
+### Lo que queda del lado de una persona
+
+- **Sembrar `rrhh_horas_a_realizar`**, ~15 filas, una por sector. Mientras esté
+  vacía el porcentual usa el cálculo de planta —(hábiles + sábados) × 8— para
+  todos, que es un supuesto y no el dato de cada sector.
+- **La importación de NOVEDADES** (`scripts/importar-novedades.mts`), que es de
+  una sola vez y todavía no se corrió.
