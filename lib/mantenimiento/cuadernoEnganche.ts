@@ -184,6 +184,9 @@ export function engancharRenglon(
  * persona enseña es «P/Trit N°3» o «Horno 4 Rastro», que se repite de un día
  * al otro; una clave con la tarea pegada no volvería a aparecer nunca. Quien
  * guarde lo aprendido tiene que guardar el `lugar_raw`, no la línea.
+ *
+ * Si lo aprendido trae sector pero no equipo, el equipo se busca igual en la
+ * línea entera, y sólo vale si es de ese sector.
  */
 export function engancharRenglonLeido(
   renglon: { tarea: string; lugar_raw: string },
@@ -192,8 +195,23 @@ export function engancharRenglonLeido(
   equipos: EquipoDelCatalogo[],
 ): Enganche {
   const lugar = renglon.lugar_raw.trim();
+  const linea = `${renglon.tarea} ${lugar}`.trim();
   if (lugar && catalogo.has(normalizarLugar(lugar))) {
-    return engancharRenglon(lugar, catalogo, sectores, equipos);
+    const aprendido = engancharRenglon(lugar, catalogo, sectores, equipos);
+    if (aprendido.equipo_id !== null) return aprendido;
+
+    // Lo aprendido nombra la planta pero no la máquina, y la máquina puede venir
+    // en la tarea: «P/Trit N°3» es el lugar más repetido de la hoja, y sin esto
+    // todos sus renglones saldrían sin equipo aunque digan «cinta 9» —y, peor,
+    // quien enseñe el equipo del primero se lo pegaría a todos los demás.
+    // Sólo se queda con el que es **del sector aprendido**: uno de otro sector
+    // es una contradicción, y ahí no se elige.
+    const numero = numeroDeCinta(linea);
+    let equipo: EquipoDelCatalogo | null =
+      numero !== null ? cintaDelSector(numero, aprendido.sector_id!, equipos) : null;
+    if (!equipo) equipo = equipoPorCodigo(linea, equipos);
+    if (equipo && equipo.sector_id !== aprendido.sector_id) equipo = null;
+    return { ...aprendido, equipo_id: equipo?.id ?? null };
   }
-  return engancharRenglon(`${renglon.tarea} ${lugar}`.trim(), catalogo, sectores, equipos);
+  return engancharRenglon(linea, catalogo, sectores, equipos);
 }

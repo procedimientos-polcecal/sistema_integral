@@ -139,11 +139,20 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (existente) {
-    const { data: previos } = await admin
+    const { data: previos, error: errorPrevios } = await admin
       .from("mant_cuadernos_renglones")
       .select("id, orden_trabajo_id")
       .eq("foto_id", existente.id)
       .limit(1000);
+    // Si esta lectura falla, `previos ?? []` parecería «ninguno tiene OT» y se
+    // seguiría derecho al borrado de más abajo: es la guarda de una acción que
+    // no se deshace, así que ante la duda no se sigue.
+    if (errorPrevios) {
+      return NextResponse.json(
+        { error: `No se pudo comprobar si la página ya generó órdenes de trabajo: ${errorPrevios.message}` },
+        { status: 500 }
+      );
+    }
     if ((previos ?? []).some((r) => r.orden_trabajo_id)) {
       return NextResponse.json(
         { error: `La página ${orden} ya generó órdenes de trabajo, así que no se puede volver a leer.` },
@@ -216,7 +225,13 @@ export async function POST(request: Request) {
     }
     // Una relectura de una foto que falló o salió vacía: lo que hubiera de ella
     // se reemplaza, nunca se duplica.
-    await admin.from("mant_cuadernos_renglones").delete().eq("foto_id", fotoId);
+    const { error: errorBorrado } = await admin.from("mant_cuadernos_renglones").delete().eq("foto_id", fotoId);
+    if (errorBorrado) {
+      return NextResponse.json(
+        { error: `No se pudieron reemplazar los renglones anteriores de la página: ${errorBorrado.message}` },
+        { status: 500 }
+      );
+    }
   } else {
     const { data, error } = await admin
       .from("mant_cuadernos_fotos")

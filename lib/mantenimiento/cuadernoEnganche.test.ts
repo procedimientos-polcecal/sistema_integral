@@ -232,4 +232,48 @@ describe("engancharRenglonLeido", () => {
     const r = engancharRenglonLeido({ tarea: "Hormigonar Dep 05", lugar_raw: "" }, vacio, sectores, equipos);
     expect(r).toEqual({ sector_id: null, equipo_id: null, sector_propuesto: false });
   });
+
+  it("un lugar aprendido sin equipo no tapa la cinta que viene en la tarea", () => {
+    // «P/Trit N°3» enseñado como sector solo: es el lugar mas repetido de la hoja.
+    const catalogo = new Map<string, LugarAprendido>([
+      [normalizarLugar("P/Trit N°3"), { sector_id: TRITURACION_3, equipo_id: null }],
+    ]);
+    const nueve = engancharRenglonLeido(
+      { tarea: "Reparar rodillos 2/cinta 9", lugar_raw: "P/Trit N°3" }, catalogo, sectores, equipos);
+    expect(nueve).toEqual({ sector_id: TRITURACION_3, equipo_id: CINTA_9_DE_TRITURACION_3, sector_propuesto: false });
+    // Y otro renglon del mismo lugar sin cinta sigue sin equipo: no se pega el del primero.
+    const sinCinta = engancharRenglonLeido(
+      { tarea: "Limpieza tolva de zaranda", lugar_raw: "P/Trit N°3" }, catalogo, sectores, equipos);
+    expect(sinCinta).toEqual({ sector_id: TRITURACION_3, equipo_id: null, sector_propuesto: false });
+  });
+
+  it("una cinta de otro sector no se cuela en un lugar aprendido", () => {
+    // La cinta 5 existe sólo en Trituración 1; el lugar aprendido es Trituración 3.
+    const con5: EquipoDelCatalogo[] = [
+      ...equipos,
+      { id: "eq-cinta5-tr1", code: "PO-A1-10", name: "Cinta transportadora 5", sector_id: TRITURACION_1 },
+    ];
+    const catalogo = new Map<string, LugarAprendido>([
+      [normalizarLugar("P/Trit N°3"), { sector_id: TRITURACION_3, equipo_id: null }],
+    ]);
+    const r = engancharRenglonLeido({ tarea: "Reparar cinta 5", lugar_raw: "P/Trit N°3" }, catalogo, sectores, con5);
+    expect(r).toEqual({ sector_id: TRITURACION_3, equipo_id: null, sector_propuesto: false });
+  });
+
+  it("un equipo por codigo de otro sector tampoco se cuela en un lugar aprendido", () => {
+    const catalogo = new Map<string, LugarAprendido>([
+      [normalizarLugar("P/Trit N°3"), { sector_id: TRITURACION_3, equipo_id: null }],
+    ]);
+    // D6 es de Cantera.
+    const r = engancharRenglonLeido({ tarea: "Tranqueras D6", lugar_raw: "P/Trit N°3" }, catalogo, sectores, equipos);
+    expect(r).toEqual({ sector_id: TRITURACION_3, equipo_id: null, sector_propuesto: false });
+  });
+
+  it("un lugar aprendido con equipo no se toca", () => {
+    const catalogo = new Map<string, LugarAprendido>([
+      [normalizarLugar("P/Trit N°3"), { sector_id: TRITURACION_3, equipo_id: CINTA_4_DE_TRITURACION_3 }],
+    ]);
+    const r = engancharRenglonLeido({ tarea: "Reparar cinta 9", lugar_raw: "P/Trit N°3" }, catalogo, sectores, equipos);
+    expect(r.equipo_id).toBe(CINTA_4_DE_TRITURACION_3);
+  });
 });

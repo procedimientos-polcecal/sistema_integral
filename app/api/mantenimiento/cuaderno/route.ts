@@ -123,12 +123,21 @@ export async function DELETE(request: Request) {
 
   // Una carga que ya generó OT no se borra: borrarla dejaría órdenes contando
   // horas que ya no tienen de dónde salir, y la OT no se deshace desde acá.
-  const { data: generados } = await admin
+  const { data: generados, error: errorGenerados } = await admin
     .from("mant_cuadernos_renglones")
     .select("id")
     .eq("cuaderno_id", id)
     .not("orden_trabajo_id", "is", null)
     .limit(1);
+
+  // Si la lectura falla, «ninguno generó OT» sería una conclusión falsa y el
+  // borrado seguiría: se corta acá.
+  if (errorGenerados) {
+    return NextResponse.json(
+      { error: `No se pudo comprobar si la carga ya generó órdenes de trabajo: ${errorGenerados.message}` },
+      { status: 500 }
+    );
+  }
 
   if (generados && generados.length > 0) {
     return NextResponse.json(
