@@ -77,11 +77,29 @@ describe("calcularDia", () => {
     expect(r.horasExtra100).toBe(0);
   });
 
-  it("feriado con feriadoComoDomingo=true: se comporta como domingo", () => {
+  /**
+   * EL FERIADO PAGA COMO DOMINGO PERO NO GENERA FRANCO.
+   *
+   * Son dos cosas distintas y estaban pegadas: `feriadoComoDomingo` decidía el
+   * recargo **y** el franco de una sola vez. El recargo del 100 % no se toca
+   * —un feriado trabajado se paga doble—, pero el franco compensatorio sale
+   * sólo del domingo, por pedido del 02/11/2026. Medido ese día: de los 259
+   * francos de la base, 39 los había generado un feriado.
+   */
+  it("feriado con feriadoComoDomingo=true: paga como domingo pero NO genera franco", () => {
     // 2026-07-09 es feriado (día de la independencia) y jueves
     const fecha = d(2026, 7, 9, 0, 0);
     const r = calcularDia(fecha, [{ start: d(2026, 7, 9, 8), end: d(2026, 7, 9, 16) }], true, config);
     expect(r.tipoDia).toBe("FERIADO");
+    expect(r.horasExtra100).toBe(8);
+    expect(r.francoGenerado).toBe(false);
+  });
+
+  /** Un feriado que además cae domingo sí lo genera: lo genera el domingo. */
+  it("un feriado que cae domingo genera franco igual", () => {
+    // 2026-11-22 es domingo; se lo pasa además como feriado.
+    const fecha = d(2026, 11, 22, 0, 0);
+    const r = calcularDia(fecha, [{ start: d(2026, 11, 22, 8), end: d(2026, 11, 22, 16) }], true, config);
     expect(r.horasExtra100).toBe(8);
     expect(r.francoGenerado).toBe(true);
   });
