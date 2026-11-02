@@ -178,7 +178,7 @@ export function rangoDelFreno(grupos: readonly GrupoDeCuaderno[]): { desde: stri
 
 /**
  * Las OT **del proveedor** que ya existen dentro del período que están por
- * cubrir las órdenes nuevas, y que **no son de este cuaderno**.
+ * cubrir las órdenes nuevas, y que **no salieron de ningún cuaderno**.
  *
  * ── POR QUÉ ESTÁ ACÁ Y NO EN UN DOCUMENTO ───────────────────────────────────
  *
@@ -192,14 +192,18 @@ export function rangoDelFreno(grupos: readonly GrupoDeCuaderno[]): { desde: stri
  *
  * El período es el de `rangoDelFreno`: los meses enteros de los grupos que
  * **se van a crear** (los que suman a una orden existente no crean nada). Las OT enlazadas a un
- * renglón de este cuaderno quedan afuera: son lo que una corrida anterior
- * generó, y por eso una segunda corrida no se frena a sí misma. Es pura: la
- * ruta trae las candidatas de la base.
+ * renglón de **cualquier carga del contratista** quedan afuera: son lo que
+ * generó el propio sistema. No sólo las de esta carga: si un mes se carga en
+ * dos cuadernos (una quincena cada uno), lo que creó el primero cae dentro del
+ * mes del segundo, y un freno que salta cuando no corresponde enseña a tildar
+ * siempre «confirmar» y deja de proteger. El freno apunta a lo que no salió de
+ * ningún cuaderno, que es lo que son las 29 de septiembre cargadas a mano. Es
+ * pura: la ruta trae las candidatas y los ids de la base.
  */
 export function posiblesDuplicados(
   grupos: readonly GrupoDeCuaderno[],
   existentes: readonly OrdenParaComparar[],
-  idsDeEsteCuaderno: ReadonlySet<string>
+  idsGeneradosPorCuadernos: ReadonlySet<string>
 ): OrdenParaComparar[] {
   const rango = rangoDelFreno(grupos);
   if (!rango) return [];
@@ -208,7 +212,7 @@ export function posiblesDuplicados(
   const vistas = new Map<string, OrdenParaComparar>();
   for (const o of existentes) {
     if (!o.fecha || o.fecha < desde || o.fecha > hasta) continue;
-    if (idsDeEsteCuaderno.has(o.id)) continue;
+    if (idsGeneradosPorCuadernos.has(o.id)) continue;
     vistas.set(o.id, o);
   }
   return [...vistas.values()].sort((a, b) => a.ot_number - b.ot_number);
@@ -228,7 +232,7 @@ export function avisoDeDuplicados(contratista: string, ordenes: readonly OrdenPa
   const resto = n > NUMEROS_A_LA_VISTA ? ` y ${n - NUMEROS_A_LA_VISTA} más` : "";
   return (
     `Ya hay ${n} ${n === 1 ? "orden" : "órdenes"} de ${contratista} en el período que cubren las órdenes ` +
-    `nuevas y que no vienen de este cuaderno (OT ${numeros}${resto}). Ese período ya se cargó por otro ` +
+    `nuevas y que no salieron de ningún cuaderno (OT ${numeros}${resto}). Ese período ya se cargó por otro ` +
     `camino, y generar ahora lo duplica: una orden escrita en la planilla se borra a mano, fila por fila. ` +
     `Si es lo que querés, confirmalo de forma explícita.`
   );

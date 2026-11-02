@@ -78,7 +78,9 @@ import {
  * contratista** cuya `fecha` cae en el período de las órdenes que va a crear
  * —los **meses enteros**: 28 de las 29 manuales de septiembre están del 01/09,
  * y un rango justo no las atrapaba si el cuaderno arrancaba el 02— y
- * que **no están enlazadas a ningún renglón de esta carga**. Si hay alguna, la
+ * que **no están enlazadas a ningún renglón de ninguna carga del contratista**
+ * (no sólo de ésta: un mes cargado en dos cuadernos no se frena contra lo que
+ * creó el primero; el freno apunta a lo que no salió de ningún cuaderno). Si hay alguna, la
  * generación **se niega** (409) y dice cuántas son y sus números; se levanta
  * con `confirmar_duplicados: true` en el cuerpo. La vista previa no se niega:
  * informa, con el mismo aviso, para que la decisión se tome mirando.
@@ -86,8 +88,8 @@ import {
  * Es la forma del freno de los 50 renglones del borrado de espejo
  * (`?confirmar_borrado=1`), y existe por la misma razón: lo irreversible no se
  * puede apostar a que alguien se acuerde de un documento. Una segunda corrida
- * de la misma carga **no se frena a sí misma**: lo que generó la primera está
- * enlazado a sus renglones.
+ * de la misma carga, o de otra del mismo contratista, **no se frena contra lo
+ * que generó el sistema**: está enlazado a renglones de algún cuaderno.
  *
  * ── SIN AUDITORÍA, A PROPÓSITO ──────────────────────────────────────────────
  *
@@ -199,7 +201,7 @@ export async function POST(request: Request) {
 
     // Sobre lo que **entra en esta corrida**: es lo que se va a crear de verdad.
     const duplicados = await buscarPosiblesDuplicados(
-      admin, renglones, plan.filter((p) => p.entra).map((p) => p.grupo), contratista
+      admin, renglones, plan.filter((p) => p.entra).map((p) => p.grupo), contratista, carga.proveedor_id as string
     );
     const avisoDeDuplicadosOCero = duplicados.length > 0 ? avisoDeDuplicados(contratista, duplicados) : null;
 
@@ -374,7 +376,7 @@ async function armarElPlan(
 
 /**
  * Las OT del contratista que ya existen en el período de las órdenes que se
- * van a crear y que no son de esta carga (ver «El freno de los duplicados»).
+ * van a crear y que no salieron de ningún cuaderno del contratista (ver «El freno de los duplicados»).
  *
  * El contratista se busca por **nombre** —`ordenes_trabajo.contratista` es
  * texto, no un id— y sin distinguir mayúsculas, porque las que se cargaron a
@@ -385,7 +387,8 @@ async function buscarPosiblesDuplicados(
   admin: Admin,
   renglones: readonly RenglonDelCuaderno[],
   seCrean: readonly GrupoDeCuaderno[],
-  contratista: string
+  contratista: string,
+  proveedorId: string
 ): Promise<OrdenParaComparar[]> {
   const nuevas = seCrean.filter((g) => g.accion === "crear");
   // El mismo período que usa `posiblesDuplicados`: los meses enteros. Si la
@@ -407,8 +410,25 @@ async function buscarPosiblesDuplicados(
       .range(d, h)
   );
 
-  const deEstaCarga = new Set(renglones.map((r) => r.orden_trabajo_id).filter((o): o is string => !!o));
-  return posiblesDuplicados(nuevas, candidatas, deEstaCarga);
+  // Las OT que salieron de **cualquier** carga del contratista, no sólo de ésta.
+  const deCuadernos = await traerTodo<{ orden_trabajo_id: string }>((d, h) =>
+    admin
+      .from("mant_cuadernos_renglones")
+      // La cadena va literal: un `select()` armado en una variable pierde la
+      // inferencia de tipos de Supabase.
+      .select("orden_trabajo_id, mant_cuadernos!inner(proveedor_id)")
+      .eq("mant_cuadernos.proveedor_id", proveedorId)
+      .not("orden_trabajo_id", "is", null)
+      .order("id")
+      .range(d, h)
+  );
+  const generadas = new Set([
+    ...deCuadernos.map((r) => r.orden_trabajo_id),
+    // Las de esta carga ya vienen leídas; sumarlas no cuesta nada y no depende
+    // de que la consulta de arriba las alcance.
+    ...renglones.map((r) => r.orden_trabajo_id).filter((o): o is string => !!o),
+  ]);
+  return posiblesDuplicados(nuevas, candidatas, generadas);
 }
 
 /** Lo que la pantalla muestra de cada orden de la vista previa. */

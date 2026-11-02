@@ -190,10 +190,26 @@ describe("posiblesDuplicados", () => {
     expect(r.map((o) => o.ot_number)).toEqual([1, 2]);
   });
 
-  it("las que ya son de este cuaderno no cuentan: son lo que se generó antes", () => {
+  it("las que salieron de un cuaderno no cuentan: son lo que generó el sistema", () => {
     const grupos = crear([renglon("a", { fecha: "2026-09-02" })]);
     const r = posiblesDuplicados(grupos, [ot("x", 2501, "2026-09-02"), ot("y", 2502, "2026-09-02")], new Set(["x"]));
     expect(r.map((o) => o.ot_number)).toEqual([2502]);
+  });
+
+  /**
+   * Un mes cargado en dos cuadernos (una quincena cada uno): lo que creó el
+   * primero cae en el mes del segundo. Si el freno saltara contra eso, enseñaría
+   * a tildar siempre «confirmar», y ahí deja de proteger. El conjunto que recibe
+   * son las OT enlazadas a renglones de **cualquier** carga del contratista, no
+   * sólo de ésta; lo que queda es lo que no salió de ningún cuaderno.
+   */
+  it("una OT generada por OTRA carga del contratista no frena; una cargada a mano sí", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-20" })]);
+    const generadaPorLaPrimeraQuincena = ot("q1", 2601, "2026-09-12");
+    const cargadaAMano = ot("m1", 2410, "2026-09-01");
+    const deAlgunCuaderno = new Set(["q1"]);
+    const r = posiblesDuplicados(grupos, [generadaPorLaPrimeraQuincena, cargadaAMano], deAlgunCuaderno);
+    expect(r.map((o) => o.ot_number)).toEqual([2410]);
   });
 
   it("fuera del rango no hay nada que avisar", () => {
@@ -213,7 +229,7 @@ describe("posiblesDuplicados", () => {
 });
 
 describe("avisoDeDuplicados", () => {
-  it("dice cuántas son, sus números y qué significa", () => {
+  it("dice cuántas son, sus números y que no salieron de ningún cuaderno", () => {
     const m = avisoDeDuplicados("PIPARO", [
       { id: "x", ot_number: 2501, fecha: "2026-09-01" }, { id: "y", ot_number: 2502, fecha: "2026-09-01" },
     ]);
@@ -222,6 +238,7 @@ describe("avisoDeDuplicados", () => {
     expect(m).toContain("2502");
     expect(m).toContain("PIPARO");
     expect(m).toMatch(/ya se cargó|ya está cargado/);
+    expect(m).toContain("ningún cuaderno");
     expect(m).toContain("duplica");
   });
 
