@@ -18,11 +18,16 @@ import { z } from "zod";
  * hueco del papel es un hueco en la respuesta, y es el código —no el modelo—
  * el que decide qué hacer con él (horas, y dudoso).
  *
- * POR QUÉ SE TOLERAN IGUAL `horas` Y `costo`
+ * EL LÍMITE QUE QUEDA, Y QUE NINGÚN TEST PUEDE CUBRIR
  *
- * No se piden, pero un modelo puede devolverlos de todos modos. Si los trae se
- * respetan los dos y el renglón queda dudoso: ni se descarta uno ni se elige
- * por él. Ese esquema más ancho es interno y no se le manda al modelo.
+ * Si el papel trajera horas **y** precio en el mismo renglón, el modelo
+ * elegiría uno de los dos y el sistema no tiene cómo enterarse: con un solo
+ * número por renglón, el otro se pierde antes de llegar acá. No hay test
+ * posible porque no hay entrada que lo represente. En las diez hojas medidas
+ * ese renglón no existe —los de precio nunca traen horas—, pero si aparece, es
+ * por acá que se pierde. Pedir `horas` y `costo` sueltos no lo arregla:
+ * `generateObject` descarta con zod las claves que el esquema no declara, así
+ * que no llegarían a `normalizarRenglones` por el camino real.
  *
  * NADA SE TIRA EN SILENCIO
  *
@@ -56,15 +61,6 @@ const renglonPedido = z.object({
 /** Lo que se le pide al modelo: la lista de renglones de la foto. */
 export const esquemaDeLaLectura = z.object({
   renglones: z.array(renglonPedido).describe("Todos los renglones de la hoja, en el orden en que están escritos."),
-});
-
-/**
- * Lo que se acepta de vuelta: lo mismo, más `horas` y `costo` por si el modelo
- * los devuelve. No se le pide; sólo se evita perderlos.
- */
-const renglonAceptado = renglonPedido.extend({
-  horas: z.number().nullish(),
-  costo: z.number().nullish(),
 });
 
 /** Un renglón del cuaderno ya traducido a lo que guarda el sistema. */
@@ -174,7 +170,10 @@ export function normalizarRenglones(
   const problemas: string[] = [];
 
   lista.data.renglones.forEach((item, i) => {
-    const r = renglonAceptado.safeParse(item);
+    let r = renglonPedido.safeParse(item);
+    // Si el renglón no validó pero tiene tarea, entra con lo que sí se pudo
+    // leer y con lo que dijo el que falló: sin `linea` nadie vuelve al papel.
+    let formato: string | null = null;
 
     if (!r.success) {
       const dicho = loQueDijoZod(r.error);
@@ -184,13 +183,10 @@ export function normalizarRenglones(
         problemas.push(`${donde} sin tarea y con un formato inesperado (${dicho}). El modelo dijo: ${loQueDijo(item)}`);
         return;
       }
-      problemas.push(`${donde} con un formato inesperado (${dicho}). Entra dudoso.`);
-      renglones.push({
-        fecha: null, tarea, lugar_raw: "", horas: null, costo: null, linea: null,
-        heredado: false, en_llave: false, dudoso: true,
-        motivo_dudoso: `El modelo lo devolvió en un formato inesperado (${dicho})`,
-      });
-      return;
+      formato = `formato inesperado (${dicho}). El modelo dijo: ${loQueDijo(item)}`;
+      problemas.push(`${donde} con ${formato}. Entra dudoso con lo que sí se pudo leer.`);
+      r = renglonPedido.safeParse(rescatable(item));
+      if (!r.success) return; // no pasa: la tarea ya se comprobó como texto
     }
 
     const x = r.data;
@@ -201,7 +197,7 @@ export function normalizarRenglones(
       return;
     }
 
-    const motivos: string[] = [];
+    const motivos: string[] = formato ? [`El modelo lo devolvió con ${formato}`] : [];
     const enLlave = x.en_llave === true;
 
     // El número y su unidad. Un blanco dentro de una llave es lo correcto: el
@@ -218,12 +214,9 @@ export function normalizarRenglones(
         if (x.unidad == null) motivos.push("El número no trae unidad; se tomó como horas");
       }
     }
-    // `horas` y `costo` sueltos: no se piden, pero si vienen no se pierden.
-    if (x.horas != null && x.horas >= 0) horas = x.horas;
-    if (x.costo != null && x.costo >= 0) costo = x.costo;
-
-    if (horas != null && costo != null) motivos.push("Trae horas y costo a la vez; se guardaron los dos");
-    if (horas == null && costo == null && x.valor == null && !enLlave) {
+    // Si el formato falló, el número pudo venir y haberse descartado: ya está
+    // dicho en el motivo, y «no trae número» sería falso.
+    if (horas == null && costo == null && x.valor == null && !enLlave && !formato) {
       motivos.push("No trae número");
     }
 
@@ -253,6 +246,22 @@ export function normalizarRenglones(
   });
 
   return { renglones, problemas };
+}
+
+/**
+ * De un renglón que no validó, los campos que sí validan por separado. Un
+ * `linea` que llegó como «11» no debería llevarse con él una fecha y unas
+ * horas bien leídas.
+ */
+function rescatable(item: unknown): Record<string, unknown> {
+  const origen = (item ?? {}) as Record<string, unknown>;
+  const salvado: Record<string, unknown> = {};
+  for (const [campo, esquema] of Object.entries(renglonPedido.shape)) {
+    if (campo in origen && (esquema as z.ZodType).safeParse(origen[campo]).success) {
+      salvado[campo] = origen[campo];
+    }
+  }
+  return salvado;
 }
 
 /** La tarea de un renglón que no validó, si al menos eso se puede rescatar. */
@@ -297,7 +306,7 @@ Lo que tenés que saber del papel:
 
 2. El número de la derecha no siempre son horas. «= 920000» son pesos: los empalmes y los parches a veces se cobran por trabajo y no por hora. Devolvelo siempre en dos campos: "valor" con el número tal cual lo escribieron, y "unidad" con "horas" si dice Hs o H, "pesos" si es un importe, o null si el papel no dice qué es («= 4» no dice nada: unidad null). No adivines la unidad: si no está escrita, es null. Y si un renglón no tiene número, valor y unidad van en null.
 
-3. Una llave reúne varios renglones bajo un solo total. En el ejemplo, los tres renglones del 22 comparten «= 46 Hs». Poné el total en el renglón donde está escrito, dejá valor y unidad en null en los otros, y marcá en_llave en true en todos los de la llave. No repartas el total entre ellos.
+3. Una llave reúne varios renglones bajo un solo total. En el ejemplo, los tres renglones del 22 comparten «= 46 Hs». Poné el total en el renglón donde lo veas escrito, que puede ser cualquiera de ellos (arriba, en el medio o abajo), dejá valor y unidad en null en los otros, y marcá en_llave en true en todos los de la llave. No repartas el total entre ellos.
 
 4. Las comillas (") repiten lo del renglón de arriba. La línea «"  "  5 P/ " " 1» es «Reparar rodillos 2/cinta 5 P/Trit N°1». Vos ves la hoja entera: completá el renglón y marcá heredado en true para que alguien pueda mirarlo.
 

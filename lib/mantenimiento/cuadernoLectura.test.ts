@@ -43,15 +43,26 @@ describe("el numero de la derecha", () => {
     expect(renglones[0].motivo_dudoso).toBeNull();
   });
 
-  it("horas y costo a la vez entran los dos, marcados dudosos", () => {
-    // El modelo no debería devolver los dos, pero si lo hace no se elige por él.
+  it("el esquema no deja pasar horas ni costo sueltos: el contrato es valor y unidad", () => {
+    // generateObject parsea con este esquema, y zod descarta las claves que no
+    // declara: horas y costo no pueden llegar nunca a normalizarRenglones.
+    const r = esquemaDeLaLectura.parse({
+      renglones: [{ tarea: "Empalme", valor: 8, unidad: "horas", horas: 8, costo: 920000 }],
+    });
+    expect(r.renglones[0]).not.toHaveProperty("horas");
+    expect(r.renglones[0]).not.toHaveProperty("costo");
+    expect(r.renglones[0].valor).toBe(8);
+  });
+
+  it("un numero negativo no se toma como horas ni como costo, y queda dudoso", () => {
     const { renglones } = normalizarRenglones(
-      { renglones: [{ fecha: "2026-09-22", tarea: "1 Empalme cinta 5", horas: 8, costo: 920000, linea: 12 }] },
+      { renglones: [{ fecha: "2026-09-21", tarea: "Tranqueras D6", valor: -2, unidad: "horas", linea: 5 }] },
       "2026-09"
     );
-    expect(renglones[0].horas).toBe(8);
-    expect(renglones[0].costo).toBe(920000);
+    expect(renglones[0].horas).toBeNull();
+    expect(renglones[0].costo).toBeNull();
     expect(renglones[0].dudoso).toBe(true);
+    expect(renglones[0].motivo_dudoso).toContain("negativo");
   });
 
   it("un renglon sin numero y fuera de una llave queda dudoso", () => {
@@ -106,6 +117,17 @@ describe("la fecha", () => {
     expect(renglones[0].dudoso).toBe(false);
   });
 
+  it("el siglo sale del mes de la carga y no esta fijo", () => {
+    // Con un 2000 + yy fijo, la primera daria 2026 y la segunda 2126.
+    const una = (fecha: string, mes: string) => normalizarRenglones(
+      { renglones: [{ fecha, tarea: "Tranqueras D6", valor: 2, unidad: "horas" }] }, mes
+    ).renglones[0];
+    expect(una("21-09-26", "2126-09").fecha).toBe("2126-09-21");
+    expect(una("21/09/26", "2026-09").fecha).toBe("2026-09-21");
+    // Y un ano de cuatro digitos se respeta tal cual venga.
+    expect(una("21-09-2026", "2026-09").fecha).toBe("2026-09-21");
+  });
+
   it("una fecha que el modelo no pudo leer queda en null y dudosa", () => {
     const { renglones } = normalizarRenglones(
       { renglones: [{ fecha: null, tarea: "Tranqueras D6", valor: 2, unidad: "horas" }] },
@@ -157,7 +179,7 @@ describe("lo que no se entiende no se tira en silencio", () => {
     );
     expect(r.renglones.map((x) => x.tarea)).toEqual(["Tranqueras D6"]);
     expect(r.problemas).toHaveLength(1);
-    expect(r.problemas[0]).toContain("4");
+    expect(r.problemas[0]).toContain("la línea 4");
   });
 
   it("un renglon mal formado pero con tarea entra dudoso con lo que dijo el esquema", () => {
@@ -170,6 +192,22 @@ describe("lo que no se entiende no se tira en silencio", () => {
     expect(r.renglones[0].dudoso).toBe(true);
     expect(r.renglones[0].motivo_dudoso).toContain("valor");
     expect(r.problemas[0]).toContain("valor");
+  });
+
+  it("un renglon con un campo mal formado conserva los que si validan y dice lo que dijo el modelo", () => {
+    // `linea` llega como texto: no debe llevarse con ella la fecha ni las horas.
+    const r = normalizarRenglones(
+      { renglones: [{ fecha: "2026-09-21", tarea: "Tranqueras D6", lugar: "D6", valor: 2, unidad: "horas", linea: "11" }] },
+      "2026-09"
+    );
+    expect(r.renglones).toHaveLength(1);
+    expect(r.renglones[0]).toMatchObject({
+      fecha: "2026-09-21", lugar_raw: "D6", horas: 2, costo: null, linea: null, dudoso: true,
+    });
+    expect(r.renglones[0].motivo_dudoso).toContain("linea");
+    // Con lo que dijo el modelo, sin traducir: el "11" que no se pudo leer como numero.
+    expect(r.renglones[0].motivo_dudoso).toContain('"linea":"11"');
+    expect(r.problemas[0]).toContain('"linea":"11"');
   });
 
   it("un renglon que el modelo marco como dudoso lo sigue estando, con su motivo", () => {
@@ -239,11 +277,12 @@ describe("el contrato con el modelo", () => {
 
   it("el prompt nombra las rarezas del papel", () => {
     const p = PROMPT_DEL_CUADERNO.toLowerCase();
-    expect(p).toContain("920000");          // el número que son pesos
-    expect(p).toContain("llave");
-    expect(p).toContain("comillas");
-    expect(p).toContain("sin traducir");    // el lugar va como está
-    expect(p).toContain("línea");
-    expect(p).toContain("varios días");
+    expect(p).toContain("son pesos");                  // «= 920000» no son horas
+    expect(p).toContain("reúne varios renglones");     // la llave
+    expect(p).toContain("repiten lo del renglón de arriba"); // las comillas
+    expect(p).toContain("sin traducir ni interpretar"); // el lugar va como está
+    expect(p).toContain("pedí el número de línea");    // para volver al papel
+    expect(p).toContain("trae varios días");           // el día es un encabezado
+    expect(p).toContain("cualquiera de ellos");        // la llave no promete posición
   });
 });
