@@ -22,7 +22,7 @@ import { normalizarLugar } from "./partesDeContratista";
  * modelo que lee la foto no distingue el grado del ordinal, así que se aceptan
  * los dos. (`normalizarLugar` ya pasó todo a minúsculas.)
  */
-const NUMERO = String.raw`\s*(?:n\s*[°º.]?\s*)?`;
+const SEPARADOR_DE_NUMERO = String.raw`\s*(?:n\s*[°º.]?\s*)?`;
 
 /** Plantas de trituración por número: PO-A1, PO-A2 y PO-A3. */
 const TRITURACION: Record<string, string> = { "1": "PO-A1", "2": "PO-A2", "3": "PO-A3" };
@@ -33,21 +33,23 @@ const FILLER: Record<string, string> = { "1": "PY-A1", "2": "PY-B1", "3": "PY-D1
 /**
  * Qué escribe Piparo a la izquierda, qué código del catálogo va a la derecha.
  *
- * Se prueba en orden y gana la primera que coincide; ninguna se pisa con otra
- * porque cada una exige su palabra completa.
+ * Se prueban todas y se juntan los códigos distintos que aparezcan: ver
+ * `codigoDeSector`. El orden de la tabla no decide nada: si lo decidiera, un
+ * renglón que nombra dos sectores se resolvería por una fila de esta tabla, que
+ * no tiene nada que ver con lo que escribió Piparo.
  */
 const SECTORES: ReadonlyArray<readonly [RegExp, (numero: string) => string | null]> = [
   // «P/Trit N°1», «P/TRT Nº2», «p/ trit 1»: planta de trituración. El número
   // es obligatorio y de 1 a 3, que son las plantas que existen.
-  [new RegExp(String.raw`\bp\s*/\s*(?:trit\w*|trt)${NUMERO}([123])\b`), (n) => TRITURACION[n] ?? null],
+  [new RegExp(String.raw`\bp\s*/\s*(?:trit[a-z]*|trt)${SEPARADOR_DE_NUMERO}([123])\b`, "g"), (n) => TRITURACION[n] ?? null],
   // «Molino cal»: la molienda de cal (PO-D1).
-  [/\bmolino (?:de )?cal\b/, () => "PO-D1"],
+  [/\bmolino (?:de )?cal\b/g, () => "PO-D1"],
   // «Idratación», así, sin la hache: Piparo la escribe como suena. Con hache
   // también, por si el modelo la corrige.
-  [/\bh?idrataci(?:on|ones)\b/, () => "PO-C1"],
+  [/\bh?idrataci(?:on|ones)\b/g, () => "PO-C1"],
   // «Filer 02», «filer 1»: planta filler. Una sola «l» en el cuaderno; dos si
   // el modelo la completa.
-  [new RegExp(String.raw`\bfil{1,2}er${NUMERO}0?([123])\b`), (n) => FILLER[n] ?? null],
+  [new RegExp(String.raw`\bfil{1,2}er${SEPARADOR_DE_NUMERO}0?([123])\b`, "g"), (n) => FILLER[n] ?? null],
 ];
 
 /**
@@ -56,17 +58,24 @@ const SECTORES: ReadonlyArray<readonly [RegExp, (numero: string) => string | nul
  *
  * «Tranqueras D6», «Hormigonar Dep 05» o «Clasificar manganeso» no dicen
  * dónde se trabajó, y está bien que así sea: el renglón queda sin sector y lo
- * completa una persona.
+ * completa una persona. Lo mismo si nombra **dos** sectores distintos
+ * («filer 1 … P/Trit N°3»): no hay manera de saber cuál es el del trabajo.
  */
 export function codigoDeSector(texto: string): string | null {
   const t = normalizarLugar(texto);
   if (!t) return null;
 
+  const codigos = new Set<string>();
   for (const [patron, aCodigo] of SECTORES) {
-    const m = patron.exec(t);
-    if (m) return aCodigo(m[1]);
+    for (const m of t.matchAll(patron)) {
+      const codigo = aCodigo(m[1]);
+      if (codigo) codigos.add(codigo);
+    }
   }
-  return null;
+  // Dos sectores distintos en el mismo renglón: elegir uno es adivinar, y las
+  // horas irían al centro de costo que no es sin que se note nunca. Nombrar
+  // dos veces el mismo sector sigue siendo uno solo.
+  return codigos.size === 1 ? [...codigos][0] : null;
 }
 
 /**

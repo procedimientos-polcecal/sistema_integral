@@ -23,6 +23,27 @@ describe("codigoDeSector", () => {
     expect(codigoDeSector("")).toBeNull();
   });
 
+  it("cada fila del mapa se ejercita", () => {
+    expect(codigoDeSector("Limpieza techo filer 3")).toBe("PY-D1");
+    expect(codigoDeSector("Limpieza techo Molino de cal")).toBe("PO-D1");
+    expect(codigoDeSector("Bomba de Hidratación")).toBe("PO-C1");
+  });
+
+  it("un renglon que nombra dos sectores no elige uno", () => {
+    expect(codigoDeSector("filer 1 y cinta 4 P/Trit N°3")).toBeNull();
+    expect(codigoDeSector("Molino cal e Idratación")).toBeNull();
+    expect(codigoDeSector("P/Trit N°1 y P/Trit N°3")).toBeNull();
+  });
+
+  it("el mismo sector nombrado dos veces sigue siendo uno", () => {
+    expect(codigoDeSector("P/Trit N°2 cinta 4, P/TRT Nº2")).toBe("PO-A2");
+  });
+
+  it("un numero pegado no es la planta de al lado", () => {
+    expect(codigoDeSector("P/Trit12")).toBeNull();
+    expect(codigoDeSector("filer 12")).toBeNull();
+  });
+
   it("una planta de trituracion sin numero no se adivina", () => {
     expect(codigoDeSector("Revisar P/Trit")).toBeNull();
     expect(codigoDeSector("Revisar P/Trit N°7")).toBeNull();
