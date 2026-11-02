@@ -122,8 +122,40 @@ function recortar(crudo: EventoCrudo): EventoEnGoogle {
   };
 }
 
+/** El client ID de la cuenta de servicio, el que figura en la delegación de dominio del admin de Google. */
+const CLIENT_ID_DELEGACION = "101499089090401417948";
+
+/**
+ * El error de una llamada que falló.
+ *
+ * El 403 va aparte a propósito. `mensajeDeGoogle` lo explica como "la carpeta no
+ * está compartida con la cuenta de servicio", que es la causa en Drive y Sheets
+ * y manda a mirar donde no es: en Calendar la cuenta entra impersonando, así que
+ * un 403 es que **la delegación de todo el dominio** no cubre el scope o el
+ * client ID. La frase propia dice eso, y detrás va el texto de Google tal cual.
+ *
+ * Una excepción: si la API de Calendar no está habilitada en el proyecto, el 403
+ * trae `SERVICE_DISABLED` y `mensajeDeGoogle` ya sabe decirlo con el enlace para
+ * habilitarla; ahí la pista de la delegación sería la equivocada.
+ */
 async function fallo(res: Response, operacion: "leer" | "escribir"): Promise<Error> {
-  return new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), operacion));
+  const cuerpo = await res.text();
+  const general = mensajeDeGoogle(res.status, cuerpo, cuentaDeServicio(), operacion);
+  if (res.status !== 403 || /SERVICE_DISABLED|accessNotConfigured/.test(cuerpo)) return new Error(general);
+
+  let dijoGoogle = "";
+  try {
+    dijoGoogle = JSON.parse(cuerpo)?.error?.message ?? "";
+  } catch {
+    // No era JSON: se muestra el cuerpo crudo más abajo.
+  }
+  const cuenta = cuentaDeServicio();
+  return new Error(
+    `Google no dio acceso al calendario: lo más probable es que falte la delegación de ` +
+      `todo el dominio para ${cuenta ? `la cuenta de servicio ${cuenta}` : "la cuenta de servicio"} ` +
+      `(client ID ${CLIENT_ID_DELEGACION}) con el scope ${SCOPE_CALENDAR}. ` +
+      `Google dijo: ${dijoGoogle || cuerpo.slice(0, 200) || 403}`
+  );
 }
 
 const comoJson = (token: string) => ({
@@ -176,9 +208,14 @@ export async function actualizarEvento(
 }
 
 /**
- * Borrar es idempotente: un 410 (`Gone`) es que el evento ya estaba borrado, que
- * es el estado al que se quería llegar, y no un error. Un 404 sí se propaga:
- * ese id nunca existió y quien llama se equivocó de evento o de casilla.
+ * Borrar es idempotente: lo que se quiere lograr es "que ese evento no esté en el
+ * calendario", y tanto el 410 (`Gone`, ya estaba borrado) como el 404 (Google no
+ * lo conoce) dicen exactamente eso. Los dos son éxito, no error.
+ *
+ * Esto no es un caso raro sino uno que se espera frecuente: alguien borra el
+ * evento a mano desde Google y después el SdG intenta borrarlo, sea por la ruta
+ * de borrado o porque desapareció la OT que lo originó. Tirar ahí sería un fallo
+ * inventado sobre algo que ya está como se quería.
  */
 export async function borrarEvento(casilla: string, idEvento: string): Promise<void> {
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
@@ -186,7 +223,7 @@ export async function borrarEvento(casilla: string, idEvento: string): Promise<v
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (res.status === 410) return;
+  if (res.status === 404 || res.status === 410) return;
   if (!res.ok) throw await fallo(res, "escribir");
 }
 
@@ -214,11 +251,11 @@ export async function abrirCanal(
 }
 
 /**
- * Cierra un canal. No recibe la casilla (la firma no la lleva), así que pide el
- * token de la cuenta de servicio sin impersonar.
+ * Cierra un canal. Recibe la casilla porque el canal se abrió impersonándola y
+ * `channels.stop` se autoriza igual: un token sin `sub` no ve los canales de nadie.
  */
-export async function cerrarCanal(canalId: string, recursoId: string): Promise<void> {
-  const token = await obtenerToken([SCOPE_CALENDAR]);
+export async function cerrarCanal(casilla: string, canalId: string, recursoId: string): Promise<void> {
+  const token = await obtenerToken([SCOPE_CALENDAR], casilla);
   const res = await pedir(`${BASE}/channels/stop`, {
     method: "POST",
     headers: comoJson(token),

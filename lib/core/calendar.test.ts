@@ -128,6 +128,30 @@ describe("leerEvento", () => {
     expect((e as Error).message).toContain("Forbidden for domain delegation");
     expect((e as Error).message).toContain("sdg@proyecto.iam.gserviceaccount.com");
   });
+
+  it("un 403 manda a la delegación de dominio y no a una carpeta compartida", async () => {
+    fetchMock.mockResolvedValue(json(403, { error: { code: 403, message: "Forbidden for domain delegation" } }));
+    const e = (await leerEvento("ana@polcecal.com", "e1").catch((x: Error) => x)) as Error;
+    expect(e.message).toContain("delegación de todo el dominio");
+    expect(e.message).toContain("101499089090401417948");
+    expect(e.message).not.toContain("carpeta");
+  });
+
+  it("un 403 por la API sin habilitar conserva su explicación propia", async () => {
+    fetchMock.mockResolvedValue(
+      json(403, {
+        error: {
+          code: 403,
+          message: "Google Calendar API has not been used",
+          details: [{ reason: "SERVICE_DISABLED", metadata: { serviceTitle: "Google Calendar API", activationUrl: "https://console.cloud.google.com/x" } }],
+        },
+      })
+    );
+    const e = (await leerEvento("ana@polcecal.com", "e1").catch((x: Error) => x)) as Error;
+    expect(e.message).toContain("no está habilitada");
+    expect(e.message).toContain("https://console.cloud.google.com/x");
+    expect(e.message).not.toContain("delegación");
+  });
 });
 
 describe("actualizarEvento", () => {
@@ -163,6 +187,11 @@ describe("borrarEvento", () => {
     await expect(borrarEvento("ana@polcecal.com", "e1")).resolves.toBeUndefined();
   });
 
+  it("uno que Google no conoce (404) tampoco: ya no está, que es lo que se quería", async () => {
+    fetchMock.mockResolvedValue(json(404, { error: { code: 404, message: "Not Found" } }));
+    await expect(borrarEvento("ana@polcecal.com", "e1")).resolves.toBeUndefined();
+  });
+
   it("otro fallo se propaga", async () => {
     fetchMock.mockResolvedValue(json(500, { error: { message: "Backend Error" } }));
     await expect(borrarEvento("ana@polcecal.com", "e1")).rejects.toThrow("Backend Error");
@@ -183,9 +212,10 @@ describe("canales", () => {
     expect(r).toEqual({ recursoId: "recurso-1", vence: "2030-01-01T00:00:00.000Z" });
   });
 
-  it("cerrarCanal manda id y recurso", async () => {
+  it("cerrarCanal impersona a la casilla y manda id y recurso", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await cerrarCanal("canal-1", "recurso-1");
+    await cerrarCanal("ana@polcecal.com", "canal-1", "recurso-1");
+    expect(obtenerToken).toHaveBeenCalledWith(["https://www.googleapis.com/auth/calendar"], "ana@polcecal.com");
     const { url, cuerpo } = pedido();
     expect(url).toBe("https://www.googleapis.com/calendar/v3/channels/stop");
     expect(cuerpo).toEqual({ id: "canal-1", resourceId: "recurso-1" });
