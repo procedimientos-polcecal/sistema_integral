@@ -136,3 +136,69 @@ export function valoresDeLaOrden(
     repuesto: textoDeRepuesto(grupo.costo, base),
   };
 }
+
+// ── El freno de los duplicados ──────────────────────────────
+
+/** Una OT que ya existe, vista sólo para decidir si es un duplicado. */
+export type OrdenParaComparar = { id: string; ot_number: number; fecha: string | null };
+
+/**
+ * Las OT **del proveedor** que ya existen dentro del período que están por
+ * cubrir las órdenes nuevas, y que **no son de este cuaderno**.
+ *
+ * ── POR QUÉ ESTÁ ACÁ Y NO EN UN DOCUMENTO ───────────────────────────────────
+ *
+ * Septiembre de 2026 ya tiene 29 OT de PIPARO cargadas a mano —todas del
+ * 01/09, agrupadas, «Limpieza general de la planta · 32 h»— y el cuaderno de
+ * ese mes tiene ~118 renglones: generarlo las duplica. El spec lo dejaba como
+ * advertencia operativa, y confiar en que alguien se acuerde es apostar lo
+ * irreversible a la memoria de una persona apurada: una OT escrita en la
+ * planilla se borra a mano, fila por fila. Es la misma forma y la misma razón
+ * que el freno de los 50 renglones del borrado de espejo.
+ *
+ * El rango va del primer al último día de los grupos que **se van a crear**
+ * (los que suman a una orden existente no crean nada). Las OT enlazadas a un
+ * renglón de este cuaderno quedan afuera: son lo que una corrida anterior
+ * generó, y por eso una segunda corrida no se frena a sí misma. Es pura: la
+ * ruta trae las candidatas de la base.
+ */
+export function posiblesDuplicados(
+  grupos: readonly GrupoDeCuaderno[],
+  existentes: readonly OrdenParaComparar[],
+  idsDeEsteCuaderno: ReadonlySet<string>
+): OrdenParaComparar[] {
+  const desdes = grupos.filter((g) => g.accion === "crear" && g.desde).map((g) => g.desde as string).sort();
+  const hastas = grupos.filter((g) => g.accion === "crear" && g.hasta).map((g) => g.hasta as string).sort();
+  if (desdes.length === 0 || hastas.length === 0) return [];
+
+  const desde = desdes[0];
+  const hasta = hastas[hastas.length - 1];
+
+  const vistas = new Map<string, OrdenParaComparar>();
+  for (const o of existentes) {
+    if (!o.fecha || o.fecha < desde || o.fecha > hasta) continue;
+    if (idsDeEsteCuaderno.has(o.id)) continue;
+    vistas.set(o.id, o);
+  }
+  return [...vistas.values()].sort((a, b) => a.ot_number - b.ot_number);
+}
+
+/** Cuántos números se imprimen antes de decir «y N más». */
+const NUMEROS_A_LA_VISTA = 10;
+
+/**
+ * Qué dice el freno: cuántas son, cuáles, y qué significa. Es lo que se le
+ * muestra a quien mira la vista previa y lo que devuelve la generación cuando
+ * se niega, para que la decisión se tome mirando y no a ciegas.
+ */
+export function avisoDeDuplicados(contratista: string, ordenes: readonly OrdenParaComparar[]): string {
+  const n = ordenes.length;
+  const numeros = ordenes.slice(0, NUMEROS_A_LA_VISTA).map((o) => o.ot_number).join(", ");
+  const resto = n > NUMEROS_A_LA_VISTA ? ` y ${n - NUMEROS_A_LA_VISTA} más` : "";
+  return (
+    `Ya hay ${n} ${n === 1 ? "orden" : "órdenes"} de ${contratista} en el período que cubren las órdenes ` +
+    `nuevas y que no vienen de este cuaderno (OT ${numeros}${resto}). Ese período ya se cargó por otro ` +
+    `camino, y generar ahora lo duplica: una orden escrita en la planilla se borra a mano, fila por fila. ` +
+    `Si es lo que querés, confirmalo de forma explícita.`
+  );
+}

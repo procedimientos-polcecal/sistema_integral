@@ -13,7 +13,8 @@ import {
   enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import {
-  valoresDeLaOrden, type EquipoConNombre, type SectorConNombre, type ValoresDeLaOrden,
+  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados,
+  type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
 } from "@/lib/mantenimiento/cuadernoOrden";
 
 /**
@@ -69,6 +70,28 @@ import {
  * PIPARO (~47 órdenes) pide dos corridas y tarda minutos. El tope existe para
  * que un pedido no se corte a la mitad sin que nadie sepa por dónde iba. Lo
  * que **no** cuenta contra el tope es denunciar: no llama a Google.
+ *
+ * ── EL FRENO DE LOS DUPLICADOS ──────────────────────────────────────────────
+ *
+ * Septiembre de 2026 ya tiene 29 OT de PIPARO cargadas a mano, y generar su
+ * cuaderno las duplica. Antes de crear, la ruta cuenta las OT **del
+ * contratista** cuya `fecha` cae en el período de las órdenes que va a crear y
+ * que **no están enlazadas a ningún renglón de esta carga**. Si hay alguna, la
+ * generación **se niega** (409) y dice cuántas son y sus números; se levanta
+ * con `confirmar_duplicados: true` en el cuerpo. La vista previa no se niega:
+ * informa, con el mismo aviso, para que la decisión se tome mirando.
+ *
+ * Es la forma del freno de los 50 renglones del borrado de espejo
+ * (`?confirmar_borrado=1`), y existe por la misma razón: lo irreversible no se
+ * puede apostar a que alguien se acuerde de un documento. Una segunda corrida
+ * de la misma carga **no se frena a sí misma**: lo que generó la primera está
+ * enlazado a sus renglones.
+ *
+ * ── SIN AUDITORÍA, A PROPÓSITO ──────────────────────────────────────────────
+ *
+ * La lista de acciones que pasan por `auditar()` es corta y deliberada, y la
+ * generación del otro contratista tampoco audita. El rastro de quién la creó
+ * existe igual: cada OT guarda `created_by` y `created_at_app`.
  *
  * ── LO QUE NO SE PUEDE EVITAR ───────────────────────────────────────────────
  *
@@ -128,6 +151,8 @@ export async function POST(request: Request) {
   const cuaderno_id = String(body?.cuaderno_id ?? "").trim();
   // Sin esto el botón genera lo que ve y además lo que no ve.
   const simular = body?.simular === true;
+  // El freno de los duplicados se levanta con esto, y sólo esto.
+  const confirmarDuplicados = body?.confirmar_duplicados === true;
 
   if (!cuaderno_id) {
     return NextResponse.json({ error: "Falta decir de qué carga" }, { status: 400 });
@@ -170,13 +195,37 @@ export async function POST(request: Request) {
     const plan = await armarElPlan(admin, renglones, contratista);
     const pendientes = pendientesDeOrdenes(renglones);
 
+    // Sobre lo que **entra en esta corrida**: es lo que se va a crear de verdad.
+    const duplicados = await buscarPosiblesDuplicados(
+      admin, renglones, plan.filter((p) => p.entra).map((p) => p.grupo), contratista
+    );
+    const avisoDeDuplicadosOCero = duplicados.length > 0 ? avisoDeDuplicados(contratista, duplicados) : null;
+
     if (simular) {
       return NextResponse.json({
         simulado: true,
         ordenes: plan.map((p) => paraMostrar(p)),
         pendientes,
         tope: TOPE_POR_CORRIDA,
+        duplicados: avisoDeDuplicadosOCero
+          ? { cantidad: duplicados.length, ot_numbers: duplicados.map((d) => d.ot_number), aviso: avisoDeDuplicadosOCero }
+          : null,
       });
+    }
+
+    // La generación real se niega. No se creó nada, y lo dice.
+    if (avisoDeDuplicadosOCero && !confirmarDuplicados) {
+      return NextResponse.json(
+        {
+          error: `No se generó nada. ${avisoDeDuplicadosOCero}`,
+          duplicados: {
+            cantidad: duplicados.length,
+            ot_numbers: duplicados.map((d) => d.ot_number),
+            aviso: avisoDeDuplicadosOCero,
+          },
+        },
+        { status: 409 }
+      );
     }
 
     const inicio = Date.now();
@@ -303,6 +352,44 @@ async function armarElPlan(
     if (entra) entradas++;
     return { grupo, valores, existente, entra };
   });
+}
+
+/**
+ * Las OT del contratista que ya existen en el período de las órdenes que se
+ * van a crear y que no son de esta carga (ver «El freno de los duplicados»).
+ *
+ * El contratista se busca por **nombre** —`ordenes_trabajo.contratista` es
+ * texto, no un id— y sin distinguir mayúsculas, porque las que se cargaron a
+ * mano lo escribieron como quisieron. Con `traerTodo()`: un año de un
+ * contratista pasa las 1000 filas.
+ */
+async function buscarPosiblesDuplicados(
+  admin: Admin,
+  renglones: readonly RenglonDelCuaderno[],
+  seCrean: readonly GrupoDeCuaderno[],
+  contratista: string
+): Promise<OrdenParaComparar[]> {
+  const nuevas = seCrean.filter((g) => g.accion === "crear");
+  const desdes = nuevas.map((g) => g.desde).filter((f): f is string => !!f).sort();
+  const hastas = nuevas.map((g) => g.hasta).filter((f): f is string => !!f).sort();
+  if (desdes.length === 0 || hastas.length === 0) return [];
+
+  // \, % y _ son comodines de ilike: un nombre con uno no debe leerse como patrón.
+  const patron = contratista.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+  const candidatas = await traerTodo<{ id: string; ot_number: number; fecha: string | null }>((d, h) =>
+    admin
+      .from("ordenes_trabajo")
+      .select("id, ot_number, fecha")
+      .ilike("contratista", patron)
+      .gte("fecha", desdes[0])
+      .lte("fecha", hastas[hastas.length - 1])
+      .order("id")
+      .range(d, h)
+  );
+
+  const deEstaCarga = new Set(renglones.map((r) => r.orden_trabajo_id).filter((o): o is string => !!o));
+  return posiblesDuplicados(nuevas, candidatas, deEstaCarga);
 }
 
 /** Lo que la pantalla muestra de cada orden de la vista previa. */

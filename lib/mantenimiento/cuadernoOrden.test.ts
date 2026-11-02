@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { enOrdenes, type RenglonDelCuaderno } from "./cuadernoGrupos";
 import {
   VALORES_DE_PIPARO, descripcionDeLaOrden, equipoParaLaPlanilla, valoresDeLaOrden,
+  posiblesDuplicados, avisoDeDuplicados,
 } from "./cuadernoOrden";
 
 const SECTOR = { nombre: "Planta de trituración 3", codigo: "PO-A3" };
@@ -130,5 +131,76 @@ describe("valoresDeLaOrden — lo único que escribe la generación", () => {
       { costo: 240000, repuesto: "Empalme ($240.000)" }
     );
     expect(v.repuesto).toBe("Empalme ($740.000)");
+  });
+});
+
+/**
+ * El freno de los duplicados. Septiembre de 2026 ya tiene 29 OT de PIPARO
+ * cargadas a mano, todas del 01/09: generar ese cuaderno las duplica, y una OT
+ * escrita en la planilla se borra a mano, fila por fila.
+ */
+describe("posiblesDuplicados", () => {
+  const crear = (rs: RenglonDelCuaderno[]) => enOrdenes(rs).filter((g) => g.accion === "crear");
+  const ot = (id: string, n: number, fecha: string) => ({ id, ot_number: n, fecha });
+
+  it("una OT del proveedor dentro del rango, sin enlazar a este cuaderno, es un posible duplicado", () => {
+    const grupos = crear([
+      renglon("a", { fecha: "2026-09-02" }), renglon("b", { fecha: "2026-09-25", tarea: "Otra" }),
+    ]);
+    const r = posiblesDuplicados(grupos, [ot("x", 2501, "2026-09-01"), ot("y", 2502, "2026-09-10")], new Set());
+    // El 01/09 queda afuera del rango 02/09–25/09: sólo cuenta lo que cae adentro.
+    expect(r.map((o) => o.ot_number)).toEqual([2502]);
+  });
+
+  it("los bordes del rango cuentan", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-01" }), renglon("b", { fecha: "2026-09-30", tarea: "Otra" })]);
+    const r = posiblesDuplicados(grupos, [ot("x", 1, "2026-09-01"), ot("y", 2, "2026-09-30")], new Set());
+    expect(r.map((o) => o.ot_number)).toEqual([1, 2]);
+  });
+
+  it("las que ya son de este cuaderno no cuentan: son lo que se generó antes", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-02" })]);
+    const r = posiblesDuplicados(grupos, [ot("x", 2501, "2026-09-02"), ot("y", 2502, "2026-09-02")], new Set(["x"]));
+    expect(r.map((o) => o.ot_number)).toEqual([2502]);
+  });
+
+  it("fuera del rango no hay nada que avisar", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-11-05" })]);
+    expect(posiblesDuplicados(grupos, [ot("x", 1, "2026-09-01")], new Set())).toEqual([]);
+  });
+
+  it("sin grupos para crear no hay freno", () => {
+    expect(posiblesDuplicados([], [ot("x", 1, "2026-09-01")], new Set())).toEqual([]);
+  });
+
+  it("las OT vienen ordenadas por número y sin repetirse", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-02" })]);
+    const r = posiblesDuplicados(grupos, [ot("y", 9, "2026-09-02"), ot("x", 3, "2026-09-02"), ot("x", 3, "2026-09-02")], new Set());
+    expect(r.map((o) => o.ot_number)).toEqual([3, 9]);
+  });
+});
+
+describe("avisoDeDuplicados", () => {
+  it("dice cuántas son, sus números y qué significa", () => {
+    const m = avisoDeDuplicados("PIPARO", [
+      { id: "x", ot_number: 2501, fecha: "2026-09-01" }, { id: "y", ot_number: 2502, fecha: "2026-09-01" },
+    ]);
+    expect(m).toContain("2 órdenes");
+    expect(m).toContain("2501");
+    expect(m).toContain("2502");
+    expect(m).toContain("PIPARO");
+    expect(m).toMatch(/ya se cargó|ya está cargado/);
+    expect(m).toContain("duplica");
+  });
+
+  it("con una sola, en singular", () => {
+    expect(avisoDeDuplicados("PIPARO", [{ id: "x", ot_number: 7, fecha: "2026-09-01" }])).toContain("1 orden ");
+  });
+
+  it("con muchas no imprime una lista interminable", () => {
+    const ots = Array.from({ length: 29 }, (_, i) => ({ id: String(i), ot_number: 3000 + i, fecha: "2026-09-01" }));
+    const m = avisoDeDuplicados("PIPARO", ots);
+    expect(m).toContain("29 órdenes");
+    expect(m).toContain("y 19 más");
   });
 });

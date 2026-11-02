@@ -719,11 +719,14 @@ export default function CuadernoClient({
 
   // ── Generar las órdenes ───────────────────────────────────
 
-  async function pedirGenerar(simular: boolean) {
+  async function pedirGenerar(simular: boolean, confirmarDuplicados = false) {
     const res = await fetch("/api/mantenimiento/cuaderno/generar", {
-      method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ cuaderno_id: cargaId, simular }),
+      method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ cuaderno_id: cargaId, simular, confirmar_duplicados: confirmarDuplicados }),
     });
-    const cuerpo = await leerJson<Partial<ResultadoDeGenerar> & { ordenes?: OrdenDelPlan[] }>(res);
+    const cuerpo = await leerJson<
+      Partial<ResultadoDeGenerar> & { ordenes?: OrdenDelPlan[]; duplicados?: { aviso: string } | null }
+    >(res);
     if (!res.ok && !cuerpo.error) cuerpo.error = `HTTP ${res.status}`;
     return cuerpo;
   }
@@ -777,20 +780,26 @@ export default function CuadernoClient({
       const costo = redondear(entran.reduce((s, o) => s + (o.costo ?? 0), 0));
       const quedan = previa.ordenes.filter((o) => o.accion !== "denunciar" && !o.entra).length;
 
+      // El freno de los duplicados: la vista previa **informa**, y levantarlo es
+      // una decisión que se toma mirando el aviso, en el mismo cartel.
+      const duplicados = previa.duplicados?.aviso ?? null;
+
       const ok = await confirm({
-        title: "Generar las órdenes de trabajo",
+        title: duplicados ? "Ese período ya tiene órdenes cargadas" : "Generar las órdenes de trabajo",
         message:
+          (duplicados ? `${duplicados} ` : "") +
           `Se van a escribir en la planilla de producción: ${nuevas} órdenes nuevas` +
           `${sumadas > 0 ? ` y ${sumadas} que suman a una que ya existe` : ""}, con ${verHoras(horas)} h` +
           `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}. ` +
           `Una orden escrita ahí no se deshace desde el sistema: se borra a mano, fila por fila. ` +
           `${quedan > 0 ? `Van ${entran.length} en esta corrida y quedan ${quedan} para apretar de nuevo. ` : ""}` +
           `Tarda: son varias llamadas a Google por orden, así que no cierres la pantalla.`,
-        confirmText: `Generar ${entran.length}`, cancelText: "Volver", danger: true,
+        confirmText: duplicados ? `Generar ${entran.length} igual` : `Generar ${entran.length}`,
+        cancelText: "Volver", danger: true,
       });
       if (!ok) return;
 
-      const hecho = await pedirGenerar(false);
+      const hecho = await pedirGenerar(false, Boolean(duplicados));
       if (hecho.error && !hecho.creadas) {
         setError(hecho.error);
         return;
