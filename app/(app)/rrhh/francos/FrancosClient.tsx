@@ -41,12 +41,11 @@ export default function FrancosClient() {
   }, [estado, desde, hasta]);
 
   /*
-   * Marcar tomado no pide ninguna fecha. Entre el 26/10 y el 02/11/2026 pedía
-   * el día que la persona descansaba, para que la programación del taller
-   * pudiera cruzarlo; se sacó a pedido porque en el circuito real el franco
-   * **es** el día que ya tiene esas horas —el que muestra la columna
-   * «Generado»— y no hay otro día que anotar. La columna «Descansa el» queda
-   * para leer lo que se haya cargado mientras el campo estuvo vivo.
+   * Marcar tomado no pide ninguna fecha, y la pantalla no muestra ningún día
+   * de descanso. Entre el 26/10 y el 02/11/2026 sí: se pedía el día que la
+   * persona no venía, para que la programación del taller pudiera cruzarlo.
+   * Se revirtió a pedido — en el circuito real el franco **es** el día que ya
+   * tiene esas horas, el que muestra «Generado el», y no hay otro que anotar.
    */
   async function marcarTomado(id: string) {
     setErrorDeMarca(null);
@@ -67,7 +66,7 @@ export default function FrancosClient() {
   async function volverAPendiente(f: any) {
     const ok = await confirmar({
       title: "Volver el franco a pendiente",
-      message: `El franco de ${f.empleados?.apellido}, ${f.empleados?.nombre} vuelve a quedar sin tomar, y se borra el día de descanso que tenía cargado. Sirve para corregir una marca con el día equivocado: después se vuelve a marcar con el día bueno.`,
+      message: `El franco de ${f.empleados?.apellido}, ${f.empleados?.nombre} vuelve a quedar sin tomar. Mientras esté pendiente sus horas no entran en la liquidación.`,
       confirmText: "Volver a pendiente",
     });
     if (!ok) return;
@@ -146,13 +145,12 @@ export default function FrancosClient() {
                 <th className="pb-2">Generado el</th>
                 <th className="pb-2">Horas</th>
                 <th className="pb-2">Estado</th>
-                <th className="pb-2">Descansa el</th>
                 <th className="pb-2"></th>
               </tr>
             </thead>
             <tbody>
               {francos.length === 0 && (
-                <tr><td colSpan={7} className="py-3 text-center text-slate-400">No hay francos en el período elegido.</td></tr>
+                <tr><td colSpan={6} className="py-3 text-center text-slate-400">No hay francos en el período elegido.</td></tr>
               )}
               {francos.map((f) => (
                 <tr key={f.id} className="border-b last:border-0">
@@ -161,23 +159,6 @@ export default function FrancosClient() {
                   <td className="py-2">{new Date(f.fecha_generado).toLocaleDateString("es-AR", { timeZone: "UTC" })}</td>
                   <td className="py-2">{f.horas}</td>
                   <td className="py-2">{f.estado}</td>
-                  <td className="py-2">
-                    {f.fecha_descanso ? (
-                      new Date(f.fecha_descanso).toLocaleDateString("es-AR", { timeZone: "UTC" })
-                    ) : f.estado === "TOMADO" ? (
-                      /*
-                       * Un franco marcado antes del 26/10/2026: su día real no
-                       * se registró nunca y no se puede reconstruir. Se dice,
-                       * en vez de mostrar la fecha del trámite como si fuera
-                       * el descanso.
-                       */
-                      <span className="text-slate-400" title="Se marcó antes de que el sistema pidiera el día; el dato no quedó registrado.">
-                        sin registrar
-                      </span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
-                  </td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {f.estado === "PENDIENTE" && (
                       <button
