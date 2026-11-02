@@ -86,27 +86,40 @@ function cintaDelSector(numero: number, sectorId: string, equipos: EquipoDelCata
  * - **Los límites incluyen `-` y `/`**, no sólo letras y dígitos: en «PO-D1-12»
  *   el `D1` queda rodeado de guiones y, con límites sólo alfanuméricos, aparecía.
  *   247 códigos están contenidos dentro de otro.
- * - **Gana el match más largo**: `PO-D1-12` le gana a `D1`. Si dos equipos
- *   empatan en el más largo (mismo código repetido), no se elige ninguno.
- * - **El código tiene que llevar un dígito.** Sin él entran `Bombas` y
- *   `Mangueras`, que aparecerían en cualquier renglón que hable de bombas o
- *   mangueras. No hay códigos sólo numéricos, así que no hace falta más.
+ * - **Gana el match más largo sólo si contiene a todos los demás**: `PO-D1-12`
+ *   le gana a `D1` porque lo lleva adentro, y es el mismo lugar nombrado dos
+ *   veces. Pero «D6 y PO-A3-99» son dos lugares distintos en un renglón y
+ *   ninguno contiene al otro: elegir el largo sería descartar uno en silencio,
+ *   así que da `null`. Lo mismo si dos equipos repiten el código más largo.
+ * - **El código tiene que llevar un dígito.** Sin esa regla quedan seis
+ *   códigos, medidos el 01/11/2026 sobre 269 equipos: `Bombas` y `Mangueras`
+ *   —que aparecerían en cualquier renglón que hable de bombas o mangueras— y
+ *   los cuatro «Edificio» por sector (`AMB-EM`, `CANTERA-ED`, `SERV-AUX-ED`,
+ *   `TALLER-ED`), pseudo-equipos de la limpieza de sector entera del otro
+ *   contratista. Perderlos no cuesta nada: nadie escribe «TALLER-ED» en el
+ *   cuaderno, y enganchar un renglón a un «Edificio» genérico no diría nada.
+ *   No hay códigos sólo numéricos, así que no hace falta más.
  */
 function equipoPorCodigo(texto: string, equipos: EquipoDelCatalogo[]): EquipoDelCatalogo | null {
   const t = normalizarLugar(texto);
-  const encontrados: Array<{ equipo: EquipoDelCatalogo; largo: number }> = [];
+  const encontrados: Array<{ equipo: EquipoDelCatalogo; codigo: string }> = [];
   for (const e of equipos) {
     const codigo = normalizarLugar(e.code);
     if (codigo.length < 2 || !/\d/.test(codigo)) continue;
     const escapado = codigo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (new RegExp(`(?<![a-z0-9ñ/-])${escapado}(?![a-z0-9ñ/-])`).test(t)) {
-      encontrados.push({ equipo: e, largo: codigo.length });
+      encontrados.push({ equipo: e, codigo });
     }
   }
   if (encontrados.length === 0) return null;
-  const mayor = Math.max(...encontrados.map((x) => x.largo));
-  const ganadores = encontrados.filter((x) => x.largo === mayor);
-  return ganadores.length === 1 ? ganadores[0].equipo : null;
+  const mayor = Math.max(...encontrados.map((x) => x.codigo.length));
+  const ganadores = encontrados.filter((x) => x.codigo.length === mayor);
+  if (ganadores.length !== 1) return null;
+  // El más largo gana sólo si lleva adentro a todos los demás: si no, son dos
+  // lugares distintos y no hay cómo elegir.
+  const ganador = ganadores[0];
+  const contieneATodos = encontrados.every((x) => ganador.codigo.includes(x.codigo));
+  return contieneATodos ? ganador.equipo : null;
 }
 
 /** Completa el sector desde el equipo: la única deducción, y por eso `propuesto`. */

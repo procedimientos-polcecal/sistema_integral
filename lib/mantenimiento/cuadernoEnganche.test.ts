@@ -151,6 +151,17 @@ describe("engancharRenglon", () => {
     expect(r.sector_propuesto).toBe(true);
   });
 
+  it("dos codigos sueltos en el mismo renglon no se resuelven por el mas largo", () => {
+    // «D6» y «PO-A3-99» son dos lugares distintos: ninguno contiene al otro, asi
+    // que elegir el largo seria descartar uno en silencio.
+    const dos: EquipoDelCatalogo[] = [
+      { id: "d6", code: "D6", name: "Topadora D6", sector_id: CANTERA },
+      { id: "cinta", code: "PO-A3-99", name: "Zaranda", sector_id: TRITURACION_3 },
+    ];
+    const r = engancharRenglon("Reparar D6 y PO-A3-99", vacio, sectores, dos);
+    expect(r).toEqual({ sector_id: null, equipo_id: null, sector_propuesto: false });
+  });
+
   it("un codigo corto sigue valiendo cuando no esta dentro de uno largo", () => {
     const conteniendo: EquipoDelCatalogo[] = [
       { id: "corto", code: "D1", name: "Topadora D1", sector_id: CANTERA },
