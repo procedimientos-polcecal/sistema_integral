@@ -79,6 +79,8 @@ interface ItemDeCola {
   renglones?: number;
   /** Lo que dijo quien falló, o lo que el modelo no pudo leer. */
   mensaje?: string;
+  /** La página ya existe en la carga (tiene fila y archivo en el bucket). */
+  enElBucket?: boolean;
 }
 
 type IdDeFiltro = "todos" | "sin_sector" | "por_confirmar" | "con_costo" | "dudosos" | "juntados";
@@ -205,6 +207,13 @@ export default function CuadernoClient({
   const [cola, setCola] = useState<ItemDeCola[]>([]);
   const [leyendo, setLeyendo] = useState(false);
   const achicadas = useRef(new Map<string, File>());
+  /**
+   * Las fotos tal como las eligió la persona, por clave. Reintentar una que
+   * falló **al achicar** necesita el original: sin él el reintento mandaría una
+   * subida sin archivo, que la ruta entiende como «releé lo que ya está en el
+   * bucket», y esa foto nunca llegó a subirse.
+   */
+  const originalesElegidos = useRef(new Map<string, File>());
   const [repetidos, setRepetidos] = useState<{ cargaId: string; fotoIds: string[]; dias: DiaRepetido[] } | null>(null);
 
   // Las fotos firmadas
@@ -517,17 +526,37 @@ export default function CuadernoClient({
   }
 
   /** Una foto, de punta a punta. Devuelve el id de la foto si salió con renglones. */
-  async function leerUna(idDeCarga: string, item: ItemDeCola, original: File | null): Promise<string | null> {
+  async function leerUna(idDeCarga: string, item: ItemDeCola): Promise<string | null> {
     let archivo = achicadas.current.get(item.clave) ?? null;
+    const original = originalesElegidos.current.get(item.clave) ?? null;
     if (!archivo && original) {
       actualizarItem(item.clave, { estado: "achicando", mensaje: undefined });
       try {
         archivo = await reducirFoto(original, `pagina-${item.orden}.jpg`);
         achicadas.current.set(item.clave, archivo);
       } catch (e) {
-        actualizarItem(item.clave, { estado: "fallo", mensaje: e instanceof Error ? e.message : String(e) });
+        // Una foto que falla al achicar no crea fila, pero las siguientes ya
+        // tienen su número: queda un hueco en las páginas, y la fecha y el
+        // lugar que una línea hereda de la anterior cruzan ese borde.
+        actualizarItem(item.clave, {
+          estado: "fallo",
+          mensaje:
+            `${e instanceof Error ? e.message : String(e)} ` +
+            `Volvé a subir esa página; las siguientes ya quedaron numeradas y la ${item.orden} queda vacía hasta entonces.`,
+        });
         return null;
       }
+    }
+
+    // Sin archivo, la ruta relee el del bucket: sólo vale si esa foto ya está
+    // ahí. Si no, no se manda una subida que va a fallar con un error de
+    // servidor que tapa el motivo de verdad.
+    if (!archivo && !item.foto_id && !item.enElBucket) {
+      actualizarItem(item.clave, {
+        estado: "fallo",
+        mensaje: "Esta foto no llegó a subirse y ya no está en memoria: volvé a elegirla.",
+      });
+      return null;
     }
 
     actualizarItem(item.clave, { estado: "leyendo", mensaje: undefined });
@@ -604,14 +633,14 @@ export default function CuadernoClient({
         estado: "esperando",
       }));
       setCola(items);
-      const originales = new Map(items.map((it, i) => [it.clave, elegidas[i]]));
+      items.forEach((it, i) => originalesElegidos.current.set(it.clave, elegidas[i]));
       setElegidas([]);
       setClaveDelInput((k) => k + 1);
 
       // De a una: si la cuarta falla, las otras nueve ya están leídas.
       const leidas: string[] = [];
       for (const item of items) {
-        const id = await leerUna(idDeCarga, item, originales.get(item.clave) ?? null);
+        const id = await leerUna(idDeCarga, item);
         if (id) leidas.push(id);
         recargar();
       }
@@ -625,7 +654,7 @@ export default function CuadernoClient({
     if (cargaId === NUEVA) return;
     setError(""); setLeyendo(true);
     try {
-      const id = await leerUna(cargaId, item, null);
+      const id = await leerUna(cargaId, item);
       recargar();
       if (id) await buscarRepetidos(cargaId, [id]);
     } finally {
@@ -635,7 +664,7 @@ export default function CuadernoClient({
 
   function reintentarFoto(f: FotoDeCarga) {
     const item: ItemDeCola = {
-      clave: `${cargaId}:${f.orden}`, nombre: `Página ${f.orden}`, orden: f.orden, estado: "esperando",
+      clave: `${cargaId}:${f.orden}`, nombre: `Página ${f.orden}`, orden: f.orden, estado: "esperando", enElBucket: true,
     };
     setCola((c) => [...c.filter((i) => i.clave !== item.clave), item]);
     return reintentar(item);

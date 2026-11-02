@@ -64,13 +64,16 @@ async function calcular(
     if (!fechasPedidas) {
       fechasNuevas = [];
       for (const lote of lotes(fotoIds)) {
-        const { data, error: e } = await supabase
-          .from("mant_cuadernos_renglones")
-          .select("fecha")
-          .in("foto_id", lote)
-          .limit(1000);
-        if (e) return error(e.message);
-        fechasNuevas.push(...(data ?? []).map((r) => r.fecha));
+        // `traerTodo` y no `.limit()`: PostgREST corta en 1000 filas sin avisar.
+        const filas = await traerTodo((d, h) =>
+          supabase
+            .from("mant_cuadernos_renglones")
+            .select("id, fecha")
+            .in("foto_id", lote)
+            .order("id")
+            .range(d, h)
+        );
+        fechasNuevas.push(...filas.map((r) => r.fecha));
       }
     }
     const fechas = [...new Set(fechasNuevas.filter((f): f is string => !!f))];
@@ -157,6 +160,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: bloqueados.map((d) => `${d.fecha}: ${d.motivo}`).join(" ") }, { status: 409 });
   }
 
+  // No lleva `auditar()` a propósito: la lista de acciones auditadas es la de lo
+  // que no se deshace, y estos renglones se rehacen —la foto sigue en el bucket y
+  // `respuesta_cruda` guarda lo que leyó el modelo—. La guarda que importa es la
+  // de arriba: se niega si alguno ya generó una OT.
   const ids = dias.flatMap((d) => d.renglon_ids);
   if (ids.length === 0) return NextResponse.json({ ok: true, borrados: 0 });
 
