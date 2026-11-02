@@ -409,6 +409,15 @@ export const NAV: NavItem[] = [
   // mal no compromete nada; decidir qué se hace con eso —generar la OT,
   // desestimarlo— sí, y eso queda adentro del módulo.
   { label: "Mis avisos", href: "/mis-avisos" },
+  // Sin `modulo`, por lo mismo: quién no viene y qué día lo necesita saber quien
+  // arma un turno o pide un camión, tenga o no RRHH. El motivo no sale en
+  // ninguna de las dos pestañas; qué se ve del ausentismo lo decide la ruta.
+  //
+  // **Se llama «Disponibilidad» y nunca «Avisos»**: esa palabra ya está
+  // ocupada dos veces —los avisos de Mantenimiento y la campana de
+  // notificaciones— y un tercer significado es el tipo de confusión que ya
+  // costó caro acá.
+  { label: "Disponibilidad", href: "/disponibilidad" },
   // Los usuarios y las empresas son de todo el SdG, no de un módulo: se
   // administran acá y no repetidos dentro de cada uno. Estaban colgados de RRHH
   // y de Mantenimiento, que es donde alguien los fue necesitando primero.
