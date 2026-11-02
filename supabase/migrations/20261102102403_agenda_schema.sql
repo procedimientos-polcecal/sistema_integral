@@ -47,6 +47,44 @@
 -- sincronización de OT (`borradoDeEspejo`). Decidido: si el borrado en Google
 -- falla, esa OT NO se borra en esa corrida y se reintenta en la siguiente.
 --
+-- EL `on delete cascade` DE `dueno_id` TIENE EL MISMO AGUJERO Y ES PEOR, porque
+-- los usuarios SE BORRAN DE VERDAD: `app/api/administracion/usuarios/[id]/route.ts`
+-- hace un `delete` real. Borrar una persona se lleva en silencio todos sus
+-- eventos y deja las copias vivas en el calendario de los invitados, sin ninguna
+-- fila que las encuentre. LA RUTA DE BORRADO DE USUARIO NO LO CONTEMPLA HOY y
+-- queda pendiente: tiene que borrar los eventos de Google de esa persona antes de
+-- borrarla.
+--
+-- EL EVENTO DE UNA OT NO ES LA AGENDA PERSONAL DE NADIE: PERTENECE A LA ORDEN
+-- (lo prueban los cinco invitados fijos que trae). Cuando una persona manda al
+-- calendario una OT que ya tenía evento en OTRA casilla, el `update` lo hace el
+-- cliente admin y el dueño NO cambia. Por eso esta tabla tiene una escritura que
+-- no pasa por RLS: la policy de editar sólo deja al dueño, y quien manda la OT
+-- puede no serlo.
+--
+-- `agenda_divergencias_vistas` ES UNA TABLA PUENTE PARA POSTGREST. Su clave
+-- `(evento_id, usuario_id)` es el patrón que lee como muchos-a-muchos entre
+-- `agenda_eventos` y `usuarios`, y como `agenda_eventos.dueno_id` ya apunta a
+-- `usuarios`, a partir de ahora todo `agenda_eventos?select=…,usuarios(nombre)`
+-- falla con `PGRST201`. Hay que nombrar por dónde ir: `usuarios!dueno_id(nombre)`.
+-- No rompe nada de lo que existe, pero los `select` nuevos lo necesitan.
+--
+-- LOS PARES DE COLUMNAS VAN ATADOS. `divergencia` / `divergencia_el` y
+-- `google_pendiente` / `google_pendiente_el` se escriben juntos o ninguno: con
+-- `divergencia` puesta y `divergencia_el` en null, la comparación contra
+-- `agenda_divergencias_vistas` deja de funcionar en silencio y una divergencia no
+-- vuelve a aparecer nunca. Los `check` están como `alter table` en un bloque que
+-- mira antes de agregar, y no dentro del `create table`, para que la segunda
+-- corrida los traiga si la tabla ya existía.
+--
+-- PARA QUIEN LA APLIQUE: ESTA MIGRACIÓN SE PUEDE CORRER DE NUEVO Y ES SEGURO.
+-- «Todavía no se aplicó» no es un estado que se pueda conocer desde acá: si una
+-- versión anterior de este archivo ya corrió, la segunda corrida es la que trae
+-- las policies de escritura de los invitados, el `with check` de editar eventos,
+-- el `agenda_veo_evento` en `agenda_eventos_ver`, los índices nuevos y los
+-- `check` de los pares. (Las columnas y las tablas no cambian de una versión a
+-- otra.)
+--
 -- ANTES DE DAR POR BUENA ESTA MIGRACIÓN, QUIEN LA APLIQUE TIENE QUE HACER UN
 -- `select` DE CADA TABLA CON DOS USUARIOS: uno ajeno al evento (que no tiene que
 -- ver ni el evento ni sus invitados) y uno invitado (que tiene que ver los dos).
@@ -54,17 +92,18 @@
 -- sale al crear las policies sino en el primer `select`, y ningún test de este
 -- repo corre contra la base con RLS.
 --
--- LA POLICY DE LOS INVITADOS NO PUEDE MIRAR A `agenda_eventos` DIRECTAMENTE.
--- `agenda_eventos_ver` consulta `agenda_invitados` y, si la policy de
--- `agenda_invitados` consultara `agenda_eventos`, cada una dispararía a la otra:
--- Postgres lo corta con `42P17: infinite recursion detected in policy`, y lo
--- hace al primer `select`, no al crear la policy. Por eso la de los invitados
--- pregunta por la función `agenda_veo_evento()`, que lee las dos tablas como
--- `security definer` y sin pasar por RLS. Va sin envolver en `(select …)` por la
--- razón de abajo. Escribir invitados es del dueño y se resuelve igual, con su
--- hermana `agenda_soy_dueno()`: un `exists` directo sobre `agenda_eventos`
--- también terminaría, pero así las policies de invitados dicen lo mismo de la
--- misma forma.
+-- LAS POLICIES DE EVENTOS Y DE INVITADOS NO SE MIRAN ENTRE SÍ DIRECTAMENTE.
+-- Quién ve un evento depende de sus invitados, y quién ve a los invitados
+-- depende del evento: con un `exists` en cada punta, cada policy dispararía a la
+-- otra y Postgres lo corta con `42P17: infinite recursion detected in policy`,
+-- y lo hace al primer `select`, no al crear la policy. Por eso las dos preguntan
+-- por la función `agenda_veo_evento()`, que lee las dos tablas como `security
+-- definer` y sin pasar por RLS: una sola fuente de verdad para «quién ve un
+-- evento», que además evita pagar una expansión de RLS por cada fila de
+-- invitados examinada. Va sin envolver en `(select …)` por la razón de abajo.
+-- Escribir invitados es del dueño y se resuelve igual, con su hermana
+-- `agenda_soy_dueno()`: un `exists` directo sobre `agenda_eventos` también
+-- terminaría, pero así las policies de invitados dicen lo mismo de la misma forma.
 --
 -- VER NO ES PODER TOCAR. Un invitado ve el evento y a sus invitados, y no los
 -- cambia: insertar y borrar invitados es del dueño. Y la de editar un evento
@@ -74,12 +113,12 @@
 --
 -- LAS POLICIES LLAMAN A `auth.uid()` ENVUELTO —`(select auth.uid())`— SALVO
 -- CUANDO LA CONDICIÓN DEPENDE DE UNA COLUMNA DE LA FILA. Envolver evalúa una sola
--- vez, y eso es una optimización para lo que no cambia de fila en fila. El
--- `exists` sobre los invitados de `agenda_eventos_ver` y la llamada a
--- `agenda_veo_evento(evento_id)` dependen de la fila: envueltos, se evaluarían
--- con la del primero y a cada uno le mostrarían los eventos del primero. Es el
--- único error de este tema que es un agujero de permisos y no una lentitud. Las
--- dos van sin envolver y con el comentario encima.
+-- vez, y eso es una optimización para lo que no cambia de fila en fila. Las
+-- llamadas a `agenda_veo_evento(…)` y a `agenda_soy_dueno(…)` reciben una columna
+-- de la fila: envueltas, se evaluarían con la del primero y a cada uno le
+-- mostrarían los eventos del primero. Es el único error de este tema que es un
+-- agujero de permisos y no una lentitud. Van sin envolver y con el comentario
+-- encima de cada policy.
 --
 -- `agenda_canales` NO SE EXPONE: tiene RLS activada y ninguna policy, así que
 -- ningún cliente con sesión la lee ni la escribe. Guarda el `secreto` con el que
@@ -117,9 +156,35 @@ create table if not exists public.agenda_eventos (
   check (fin > inicio)
 );
 
+-- Los pares atados (ver el encabezado). Va acá, antes de crear las tablas que
+-- referencian a `agenda_eventos`: un `alter table` después de un `create table …
+-- references` sobre ella sería la subida de lock que da `40P01` (README). En una
+-- segunda corrida la tabla ya existe y el bloque agrega lo que falte.
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.agenda_eventos'::regclass
+                    and conname = 'agenda_eventos_divergencia_par') then
+    alter table public.agenda_eventos
+      add constraint agenda_eventos_divergencia_par
+      check ((divergencia is null) = (divergencia_el is null));
+  end if;
+
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.agenda_eventos'::regclass
+                    and conname = 'agenda_eventos_google_pendiente_par') then
+    alter table public.agenda_eventos
+      add constraint agenda_eventos_google_pendiente_par
+      check ((google_pendiente is null) = (google_pendiente_el is null));
+  end if;
+end $$;
+
 create index if not exists agenda_eventos_dueno_idx   on public.agenda_eventos (dueno_id);
 create index if not exists agenda_eventos_inicio_idx  on public.agenda_eventos (inicio);
 create index if not exists agenda_eventos_casilla_idx on public.agenda_eventos (casilla);
+-- El aviso de Google llega con este id (Tarea 9). No es único: un evento sin
+-- escribir todavía lo tiene en null.
+create index if not exists agenda_eventos_google_event_idx on public.agenda_eventos (google_event_id);
 
 create table if not exists public.agenda_invitados (
   id         uuid primary key default gen_random_uuid(),
@@ -138,6 +203,11 @@ create table if not exists public.agenda_divergencias_vistas (
   primary key (evento_id, usuario_id)
 );
 
+-- Las tres policies filtran por `usuario_id` y la clave empieza por `evento_id`,
+-- así que no les sirve.
+create index if not exists agenda_divergencias_vistas_usuario_idx
+  on public.agenda_divergencias_vistas (usuario_id);
+
 create table if not exists public.agenda_canales (
   id         uuid primary key default gen_random_uuid(),
   casilla    text not null unique,
@@ -148,11 +218,16 @@ create table if not exists public.agenda_canales (
   created_at timestamptz not null default now()
 );
 
+-- El aviso de Google entra por el canal, así que se busca por `canal_id`. Un
+-- índice único común y no parcial (README, trampa del `ON CONFLICT`).
+create unique index if not exists agenda_canales_canal_idx
+  on public.agenda_canales (canal_id);
+
 -- ── 2. Quién ve un evento ────────────────────────────────────
 -- `security definer` para leer `agenda_eventos` y `agenda_invitados` sin pasar
--- por sus policies: es lo que corta la recursión (ver el encabezado). Hace lo
--- mismo que `agenda_eventos_ver` y tienen que seguir diciendo lo mismo: dueño o
--- invitado.
+-- por sus policies: es lo que corta la recursión (ver el encabezado). Es la única
+-- definición de «ver un evento»: dueño o invitado. La usan `agenda_eventos_ver` y
+-- `agenda_invitados_ver`, y si cambia, cambia para las dos.
 
 create or replace function public.agenda_veo_evento(p_evento_id uuid)
 returns boolean
@@ -201,20 +276,13 @@ alter table public.agenda_canales              enable row level security;
 
 -- Un evento lo ve su dueño o quien esté invitado y sea usuario del SdG.
 --
--- OJO: ESTE `exists` NO SE ENVUELVE EN `(select …)`. Depende de una columna de la
--- fila (`agenda_eventos.id`), así que evaluarlo una sola vez le mostraría a cada
--- uno los eventos del primero que consultó. Es un agujero y no una lentitud. El
--- `auth.uid()` de adentro sí va envuelto: ése no cambia de fila en fila.
+-- OJO: ESTA LLAMADA NO SE ENVUELVE EN `(select …)`. `agenda_veo_evento(id)`
+-- recibe una columna de la fila, así que evaluarla una sola vez le mostraría a
+-- cada uno los eventos del primero que consultó. Es un agujero y no una lentitud.
+-- No hay recursión: la función es `security definer` y no pasa por RLS.
 drop policy if exists agenda_eventos_ver on public.agenda_eventos;
 create policy agenda_eventos_ver on public.agenda_eventos
-  for select using (
-    dueno_id = (select auth.uid())
-    or exists (
-      select 1 from public.agenda_invitados i
-       where i.evento_id = agenda_eventos.id
-         and i.usuario_id = (select auth.uid())
-    )
-  );
+  for select using (public.agenda_veo_evento(id));
 
 -- Crear, editar y borrar: sólo el dueño. Un invitado lo ve y no lo toca.
 drop policy if exists agenda_eventos_crear on public.agenda_eventos;
