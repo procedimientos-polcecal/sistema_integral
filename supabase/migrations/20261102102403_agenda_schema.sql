@@ -43,6 +43,16 @@
 -- que diga dónde está (`google_event_id` se fue con ella). Quien borra el evento
 -- de Google es la aplicación, ANTES de que la OT se borre (Tarea 8 del plan). La
 -- cascada sólo evita una fila colgando si ese paso falla; no hace lo que parece.
+-- Eso incluye el camino que no pasa por una ruta: el borrado de espejo de la
+-- sincronización de OT (`borradoDeEspejo`). Decidido: si el borrado en Google
+-- falla, esa OT NO se borra en esa corrida y se reintenta en la siguiente.
+--
+-- ANTES DE DAR POR BUENA ESTA MIGRACIÓN, QUIEN LA APLIQUE TIENE QUE HACER UN
+-- `select` DE CADA TABLA CON DOS USUARIOS: uno ajeno al evento (que no tiene que
+-- ver ni el evento ni sus invitados) y uno invitado (que tiene que ver los dos).
+-- Es lo único que prueba de verdad que no hay recursión: el error `42P17` no
+-- sale al crear las policies sino en el primer `select`, y ningún test de este
+-- repo corre contra la base con RLS.
 --
 -- LA POLICY DE LOS INVITADOS NO PUEDE MIRAR A `agenda_eventos` DIRECTAMENTE.
 -- `agenda_eventos_ver` consulta `agenda_invitados` y, si la policy de
@@ -51,7 +61,16 @@
 -- hace al primer `select`, no al crear la policy. Por eso la de los invitados
 -- pregunta por la función `agenda_veo_evento()`, que lee las dos tablas como
 -- `security definer` y sin pasar por RLS. Va sin envolver en `(select …)` por la
--- razón de abajo.
+-- razón de abajo. Escribir invitados es del dueño y se resuelve igual, con su
+-- hermana `agenda_soy_dueno()`: un `exists` directo sobre `agenda_eventos`
+-- también terminaría, pero así las policies de invitados dicen lo mismo de la
+-- misma forma.
+--
+-- VER NO ES PODER TOCAR. Un invitado ve el evento y a sus invitados, y no los
+-- cambia: insertar y borrar invitados es del dueño. Y la de editar un evento
+-- lleva `with check` además de `using`: el `using` mira la fila vieja, así que
+-- sin el `with check` un dueño puede mandar un update que cambie `dueno_id` a
+-- otra persona y pasa.
 --
 -- LAS POLICIES LLAMAN A `auth.uid()` ENVUELTO —`(select auth.uid())`— SALVO
 -- CUANDO LA CONDICIÓN DEPENDE DE UNA COLUMNA DE LA FILA. Envolver evalúa una sola
@@ -154,6 +173,25 @@ as $$
   )
 $$;
 
+-- Quién es el dueño de un evento. Hermana de la anterior y por el mismo motivo:
+-- las policies de escritura de `agenda_invitados` necesitan saber de quién es el
+-- evento sin pasar por la policy de `agenda_eventos`, que a su vez mira a los
+-- invitados.
+
+create or replace function public.agenda_soy_dueno(p_evento_id uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select coalesce(
+    exists (
+      select 1 from agenda_eventos e
+       where e.id = p_evento_id
+         and e.dueno_id = auth.uid()
+    ),
+    false
+  )
+$$;
+
 -- ── 3. RLS ───────────────────────────────────────────────────
 
 alter table public.agenda_eventos              enable row level security;
@@ -185,7 +223,8 @@ create policy agenda_eventos_crear on public.agenda_eventos
 
 drop policy if exists agenda_eventos_editar on public.agenda_eventos;
 create policy agenda_eventos_editar on public.agenda_eventos
-  for update using (dueno_id = (select auth.uid()));
+  for update using (dueno_id = (select auth.uid()))
+  with check (dueno_id = (select auth.uid()));
 
 drop policy if exists agenda_eventos_borrar on public.agenda_eventos;
 create policy agenda_eventos_borrar on public.agenda_eventos
@@ -198,11 +237,22 @@ create policy agenda_eventos_borrar on public.agenda_eventos
 -- invitados de los eventos del primero. Y no puede ser un `exists` sobre
 -- `agenda_eventos`: eso es la recursión del encabezado.
 --
--- Sólo hay policy de lectura. Quien escribe invitados es la aplicación, con el
--- cliente admin, junto con el evento de Google que los invita.
 drop policy if exists agenda_invitados_ver on public.agenda_invitados;
 create policy agenda_invitados_ver on public.agenda_invitados
   for select using (public.agenda_veo_evento(evento_id));
+
+-- Agregar y sacar invitados: sólo el dueño del evento. Ver no es poder tocar. La
+-- ruta de alta los inserta con la sesión de la persona, no con el cliente admin.
+-- Mismo motivo de no envolver que arriba: `agenda_soy_dueno(evento_id)` recibe una
+-- columna de la fila. No hay policy de update: un invitado se agrega o se saca,
+-- no se reescribe.
+drop policy if exists agenda_invitados_agregar on public.agenda_invitados;
+create policy agenda_invitados_agregar on public.agenda_invitados
+  for insert with check (public.agenda_soy_dueno(evento_id));
+
+drop policy if exists agenda_invitados_sacar on public.agenda_invitados;
+create policy agenda_invitados_sacar on public.agenda_invitados
+  for delete using (public.agenda_soy_dueno(evento_id));
 
 -- Cada uno da por vistas las suyas. Las tres con `usuario_id` propio: nadie
 -- marca como vista una divergencia a nombre de otro.
