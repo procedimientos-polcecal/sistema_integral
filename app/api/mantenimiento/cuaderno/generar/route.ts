@@ -10,10 +10,10 @@ import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/orde
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
-  enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
+  enOrdenes, estadoDeLaCarga, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import {
-  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
+  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
   type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
 } from "@/lib/mantenimiento/cuadernoOrden";
 
@@ -293,11 +293,47 @@ export async function POST(request: Request) {
       }
     }
 
+    // **El estado de la carga se mueve cuando sale algo**: `GENERADA` si ya no
+    // queda ningún renglón sin orden. Se lee de nuevo en vez de deducirlo de lo
+    // que se hizo recién, porque lo que importa es lo que quedó en la base. Si
+    // falla no tira la corrida —las OT ya están escritas y eso es lo que
+    // cuenta—: se dice en `problemas` para que no pase por silencio.
+    if (creadas.length + actualizadas.length > 0) {
+      const falloElEstado = await actualizarElEstado(admin, cuaderno_id);
+      if (falloElEstado) problemas.push(falloElEstado);
+    }
+
     const quedaron = plan.filter((p) => p.grupo.accion !== "denunciar" && !p.entra).length + sinEmpezar;
 
     return NextResponse.json({ creadas, actualizadas, problemas, quedaron, pendientes });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
+}
+
+/**
+ * Recalcula `mant_cuadernos.estado` desde los renglones y lo escribe. Devuelve
+ * el motivo si no pudo, sin traducir.
+ */
+async function actualizarElEstado(admin: Admin, cuadernoId: string): Promise<string | null> {
+  try {
+    const filas = await traerTodo<{ orden_trabajo_id: string | null }>((d, h) =>
+      admin
+        .from("mant_cuadernos_renglones")
+        .select("orden_trabajo_id")
+        .eq("cuaderno_id", cuadernoId)
+        .order("id")
+        .range(d, h)
+    );
+    const { error } = await admin
+      .from("mant_cuadernos")
+      .update({ estado: estadoDeLaCarga(filas) })
+      .eq("id", cuadernoId);
+    return error
+      ? `Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${error.message}`
+      : null;
+  } catch (e) {
+    return `Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
@@ -397,18 +433,26 @@ async function buscarPosiblesDuplicados(
   if (!rango) return [];
 
   // \, % y _ son comodines de ilike: un nombre con uno no debe leerse como patrón.
-  const patron = contratista.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const patron = contratista.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
 
-  const candidatas = await traerTodo<{ id: string; ot_number: number; fecha: string | null }>((d, h) =>
+  // `ordenes_trabajo.contratista` es texto libre escrito a mano (377 de 380 OT):
+  // un espacio de más y `ilike` con el nombre exacto devolvería cero **en
+  // silencio**, y éste es el único freno contra duplicar. Por eso la consulta
+  // trae de más (`%nombre%`, que tolera cualquier espacio alrededor) y la
+  // igualdad —recortada de los dos lados— se decide acá con `mismoContratista`.
+  const traidas = await traerTodo<{ id: string; ot_number: number; fecha: string | null; contratista: string | null }>((d, h) =>
     admin
       .from("ordenes_trabajo")
-      .select("id, ot_number, fecha")
-      .ilike("contratista", patron)
+      .select("id, ot_number, fecha, contratista")
+      .ilike("contratista", `%${patron}%`)
       .gte("fecha", rango.desde)
       .lte("fecha", rango.hasta)
       .order("id")
       .range(d, h)
   );
+  const candidatas = traidas
+    .filter((o) => mismoContratista(o.contratista, contratista))
+    .map(({ id, ot_number, fecha }) => ({ id, ot_number, fecha }));
 
   // Las OT que salieron de **cualquier** carga del contratista, no sólo de ésta.
   const deCuadernos = await traerTodo<{ orden_trabajo_id: string }>((d, h) =>
@@ -431,7 +475,17 @@ async function buscarPosiblesDuplicados(
   return posiblesDuplicados(nuevas, candidatas, generadas);
 }
 
-/** Lo que la pantalla muestra de cada orden de la vista previa. */
+/**
+ * Lo que la pantalla muestra de cada orden de la vista previa: **sólo lo que
+ * usa**. Antes viajaban catorce campos y la pantalla leía cinco; los demás
+ * (sector, equipo, descripción, especialidad…) eran una promesa de que alguien
+ * los iba a mostrar, y un payload que dice más de lo que se usa es el que el
+ * próximo lector cree que importa.
+ *
+ * Lo que decide el confirm es esto: qué orden (`ot_existente`, para las que
+ * suman a una que ya existe), cuánto (`horas`, `costo`) y qué va a quedar en
+ * `REPUESTO UTILIZADO` (`repuesto`, el mismo texto que se escribe).
+ */
 function paraMostrar({ grupo, valores, existente, entra }: ItemDelPlan) {
   return {
     clave: grupo.clave,
@@ -439,24 +493,12 @@ function paraMostrar({ grupo, valores, existente, entra }: ItemDelPlan) {
     /** Va en esta corrida; el resto queda para apretar de nuevo. */
     entra,
     tarea: grupo.tarea,
-    sector: valores.sector_nombre,
-    equipo: valores.equipo_raw,
-    tiene_equipo: Boolean(valores.equipment_id),
     horas: valores.horas,
     costo: valores.costo,
-    /** Lo que va en `REPUESTO UTILIZADO`: el mismo texto que se escribe. */
     repuesto: valores.repuesto,
-    fecha_cierre: valores.fecha_cierre,
-    renglones: grupo.renglon_ids.length,
-    renglones_nuevos: grupo.renglon_ids_sin_ot.length,
+    /** El N° de la OT a la que suma; null si crea una o la denuncia. */
     ot_existente: existente?.ot_number ?? null,
-    descripcion: valores.descripcion,
-    ...valoresFijos(valores),
   };
-}
-
-function valoresFijos(v: ValoresDeLaOrden) {
-  return { especialidad: v.especialidad, tipo: v.tipo, quien: v.quien, estado: v.estado };
 }
 
 /** Cómo nombrar un grupo en un mensaje de error. */
@@ -547,8 +589,12 @@ async function actualizarLaOT(
 
   const falloLaPlanilla = await corregirLaAlta(existente.ot_number, {
     descripcion: valores.descripcion,
-    // Sin repuesto no hay nada que escribir: vaciarlo no es una decisión de acá.
-    ...(valores.repuesto !== null ? { repuesto: valores.repuesto } : {}),
+    // **Siempre**, también cuando es null. `valoresDeLaOrden` ya sacó el monto
+    // viejo y conservó el repuesto de verdad, así que null quiere decir «no
+    // queda nada»: no escribirlo dejaría «$920.000» en la columna I de la
+    // planilla —de donde lee quien no entra al sistema— mientras la base dice
+    // `costo = null`. «» es como se vacía la celda.
+    repuesto: valores.repuesto ?? "",
     fecha_ejecucion: cierre,
   });
   if (falloLaPlanilla) {
@@ -565,7 +611,7 @@ async function actualizarLaOT(
     .update({
       horas: valores.horas,
       costo: valores.costo,
-      ...(valores.repuesto !== null ? { repuesto: valores.repuesto } : {}),
+      repuesto: valores.repuesto,
       descripcion: valores.descripcion,
       fecha_cierre: cierre,
       fecha_ejecucion: cierre,

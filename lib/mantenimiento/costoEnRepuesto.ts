@@ -34,8 +34,14 @@ const redondear = (n: number) => Math.round(n * 100) / 100;
  * A mano y no con `Intl`: los locales `es` no agrupan los números de cuatro
  * cifras («1000»), y una columna de montos que mezcla «1000» con «10.000» se
  * lee como dos formatos. Acá el punto va siempre.
+ *
+ * **Es el único formateador de plata del cuaderno**: la pantalla
+ * (`costoParaElCampo`) usa éste y no `Intl`, para decir lo mismo que va a quedar
+ * escrito en la planilla. En Node con ICU completo `es-AR` sí agrupa los de
+ * cuatro cifras, pero depende de los datos de locale del navegador de cada uno,
+ * y esto no.
  */
-function conMiles(n: number): string {
+export function conMiles(n: number): string {
   const [entero, decimales] = String(redondear(n)).split(".");
   const conPuntos = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return decimales ? `${conPuntos},${decimales}` : conPuntos;

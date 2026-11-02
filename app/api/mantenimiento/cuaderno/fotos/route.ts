@@ -123,20 +123,34 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   // La carga, para saber de qué contratista es el catálogo aprendido.
-  const { data: carga } = await supabase
+  const { data: carga, error: errorCarga } = await supabase
     .from("mant_cuadernos")
     .select("id, proveedor_id")
     .eq("id", cuadernoId)
     .maybeSingle();
+  if (errorCarga) {
+    return NextResponse.json({ error: `No se pudo leer la carga: ${errorCarga.message}` }, { status: 500 });
+  }
   if (!carga) return NextResponse.json({ error: "No existe esa carga" }, { status: 404 });
 
   // ── ¿Es una página nueva o un reintento? ────────────────────
-  const { data: existente } = await admin
+  const { data: existente, error: errorExistente } = await admin
     .from("mant_cuadernos_fotos")
     .select("id, ruta, fallo")
     .eq("cuaderno_id", cuadernoId)
     .eq("orden", orden)
     .maybeSingle();
+  // **Esta lectura es la puerta de las tres guardas de abajo.** Si falla y se
+  // descarta su error, `existente` queda `undefined` y la ruta toma la rama de
+  // «página nueva»: inserta una segunda foto y un segundo juego de renglones sin
+  // pasar por «la página N ya generó órdenes de trabajo». Y `maybeSingle()`
+  // falla justo cuando hay dos filas para el mismo par, que es el caso peor.
+  if (errorExistente) {
+    return NextResponse.json(
+      { error: `No se pudo comprobar si la página ${orden} ya estaba cargada: ${errorExistente.message}` },
+      { status: 500 }
+    );
+  }
 
   if (existente) {
     const { data: previos, error: errorPrevios } = await admin
@@ -190,10 +204,6 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: `No se pudo guardar la foto: ${error.message}` }, { status: 502 });
     }
-    // Un reintento con otra extensión dejaría el archivo viejo sin dueño.
-    if (existente?.ruta && existente.ruta !== ruta) {
-      await admin.storage.from(BUCKET).remove([existente.ruta]);
-    }
   } else {
     // Reintento sin volver a subir: se relee el archivo que ya está.
     ruta = existente!.ruta;
@@ -216,6 +226,19 @@ export async function POST(request: Request) {
   let fotoId: string;
   if (existente) {
     fotoId = existente.id;
+    // **Los renglones se borran antes de tocar la foto.** Una relectura de una
+    // foto que falló o salió vacía reemplaza lo que hubiera de ella, nunca lo
+    // duplica. Si el borrado falla, la foto sigue como estaba —con su `fallo`
+    // puesto— y se puede reintentar; al revés, una foto con `fallo: null` y los
+    // renglones viejos todavía ahí cae en el 409 de «ya está leída» y deja el
+    // archivo nuevo huérfano en el bucket.
+    const { error: errorBorrado } = await admin.from("mant_cuadernos_renglones").delete().eq("foto_id", fotoId);
+    if (errorBorrado) {
+      return NextResponse.json(
+        { error: `No se pudieron reemplazar los renglones anteriores de la página: ${errorBorrado.message}` },
+        { status: 500 }
+      );
+    }
     const { error } = await admin
       .from("mant_cuadernos_fotos")
       .update({ ruta, fallo: null, respuesta_cruda: null })
@@ -223,14 +246,11 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: `No se pudo registrar la foto: ${error.message}` }, { status: 500 });
     }
-    // Una relectura de una foto que falló o salió vacía: lo que hubiera de ella
-    // se reemplaza, nunca se duplica.
-    const { error: errorBorrado } = await admin.from("mant_cuadernos_renglones").delete().eq("foto_id", fotoId);
-    if (errorBorrado) {
-      return NextResponse.json(
-        { error: `No se pudieron reemplazar los renglones anteriores de la página: ${errorBorrado.message}` },
-        { status: 500 }
-      );
+    // Un reintento con otra extensión dejaría el archivo viejo sin dueño. Se
+    // saca recién ahora que la fila ya apunta al nuevo: antes, un fallo en el
+    // update la dejaría apuntando a un archivo que ya no está.
+    if (existente.ruta && existente.ruta !== ruta) {
+      await admin.storage.from(BUCKET).remove([existente.ruta]);
     }
   } else {
     const { data, error } = await admin
@@ -250,10 +270,24 @@ export async function POST(request: Request) {
   // Todo lo que sigue puede fallar sin tirar la carga: se anota en la foto, se
   // devuelve 200 con `problemas` y quien llama sigue con la próxima página.
   const fallar = async (fallo: string, cruda: unknown) => {
-    await admin
+    const { error } = await admin
       .from("mant_cuadernos_fotos")
       .update({ fallo, respuesta_cruda: cruda ?? null })
       .eq("id", fotoId);
+    // Si el fallo no se anota, la foto queda sin `fallo` y sin renglones, y el
+    // reintento cae en el 409 de «ya está leída» sobre una página vacía: la
+    // única salida sería borrar la carga entera. Con el 500 la pantalla lo
+    // dice, y lo que dijo el modelo viaja igual para no perderlo.
+    if (error) {
+      return NextResponse.json(
+        {
+          error:
+            `La página no se pudo leer (${fallo}) y además no se pudo anotar el fallo en la foto: ${error.message}. ` +
+            `Reintentá la página.`,
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ foto_id: fotoId, renglones: [], problemas: [fallo] });
   };
 
@@ -349,6 +383,7 @@ export async function POST(request: Request) {
 
   // ── Guardar ─────────────────────────────────────────────────
   let guardados: Array<Record<string, unknown>> = [];
+  let reabrirFallo: string | null = null;
   if (leidos.length > 0) {
     const { data, error } = await admin
       .from("mant_cuadernos_renglones")
@@ -376,6 +411,18 @@ export async function POST(request: Request) {
       return fallar(`La foto se leyó pero no se pudieron guardar los renglones: ${error.message}`, leido);
     }
     guardados = (data ?? []) as unknown as Array<Record<string, unknown>>;
+
+    // Renglones nuevos en una carga que ya estaba generada: queda algo por
+    // generar, así que vuelve a chequeo. Sin esto el estado diría «generada»
+    // sobre una carga con renglones sin orden.
+    const { error: errorDeEstado } = await admin
+      .from("mant_cuadernos")
+      .update({ estado: "EN_CHEQUEO" })
+      .eq("id", cuadernoId)
+      .eq("estado", "GENERADA");
+    if (errorDeEstado) {
+      reabrirFallo = `La carga estaba marcada como generada y no se pudo volver a chequeo: ${errorDeEstado.message}`;
+    }
   }
 
   // La respuesta cruda se guarda siempre, y con éxito también: es lo que
@@ -385,6 +432,7 @@ export async function POST(request: Request) {
     .update({ respuesta_cruda: leido, fallo: null })
     .eq("id", fotoId);
 
+  if (reabrirFallo) problemas.push(reabrirFallo);
   if (leidos.length === 0) {
     problemas.push("El modelo no encontró ningún renglón en esta foto. Si es una hoja con tareas, reintentá.");
   }

@@ -6,7 +6,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { createClient } from "@/lib/supabase/client";
 import { useCargar } from "@/lib/core/useCargar";
 import {
-  enOrdenes, pendientesDeOrdenes, propuestaDeGrupos, sePuedenJuntar, sePuedeSeparar,
+  enOrdenes, pendientesDeOrdenes, propuestaDeGrupos, sePuedenJuntar, sePuedeSeparar, totalesDeRenglones,
   type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import type { DiaRepetido } from "@/lib/mantenimiento/cuadernoRepetidos";
@@ -92,7 +92,10 @@ interface OrdenDelPlan {
   tarea: string;
   horas: number;
   costo: number | null;
+  /** Lo que va a quedar en `REPUESTO UTILIZADO`: el mismo texto que se escribe. */
   repuesto: string | null;
+  /** El N° de la OT a la que suma (`accion` «sumar»); null en las demás. */
+  ot_existente: number | null;
 }
 
 interface ResumenGenerado { ot_number: number; tarea: string; sector: string; horas: number; costo: number | null }
@@ -130,20 +133,19 @@ const verHoras = (n: number) => String(redondear(n)).replace(".", ",");
  * Lo que quedaría si se juntan estos renglones: «Tranqueras D6 · 16 h · del
  * 17/9 al 23/9». Es la vista previa de abajo y la del botón: tiene que ser lo
  * que después sale en la OT.
+ *
+ * **No hace la cuenta: la pide.** `totalesDeRenglones` es la misma función con
+ * la que `enOrdenes` arma la orden que sale; una copia acá sería la única
+ * cuenta paralela del cuaderno, y el día que difiriera la pantalla prometería
+ * «16 h» y la OT saldría con otro número.
  */
 function vistaPrevia(rs: readonly Renglon[]): string {
-  const orden = [...rs].sort(
-    (a, b) => (a.fecha ?? "9999").localeCompare(b.fecha ?? "9999") || (a.linea ?? 0) - (b.linea ?? 0)
-  );
-  const tareas = [...new Set(orden.map((r) => r.tarea.trim()))];
-  const horas = redondear(orden.reduce((s, r) => s + (Number(r.horas) || 0), 0));
-  const costos = orden.filter((r) => Number(r.costo) > 0);
-  const costo = costos.length > 0 ? redondear(costos.reduce((s, r) => s + Number(r.costo), 0)) : null;
+  const t = totalesDeRenglones(rs);
   return [
-    tareas[0] + (tareas.length > 1 ? ` (+${tareas.length - 1} más)` : ""),
-    `${verHoras(horas)} h`,
-    rangoDeFechas(orden.map((r) => r.fecha)),
-    ...(costo !== null ? [`$${costoParaElCampo(costo)}`] : []),
+    t.tareas[0] + (t.tareas.length > 1 ? ` (+${t.tareas.length - 1} más)` : ""),
+    `${verHoras(t.horas)} h`,
+    rangoDeFechas([t.desde, t.hasta]),
+    ...(t.costo !== null ? [`$${costoParaElCampo(t.costo)}`] : []),
   ].join(" · ");
 }
 
@@ -263,7 +265,13 @@ export default function CuadernoClient({
       setErrorDeCarga(cuerpo.error ?? "La carga no llegó.");
       return;
     }
-    const d = cuerpo.data as { id: string; mant_cuadernos_fotos?: FotoDeCarga[]; renglones?: Renglon[] };
+    const d = cuerpo.data as {
+      id: string; estado?: string; mant_cuadernos_fotos?: FotoDeCarga[]; renglones?: Renglon[];
+    };
+    // El estado de la lista se vuelve a leer con la carga: la generación lo
+    // mueve, y la lista se trajo una sola vez al abrir la pantalla.
+    const estado = d.estado;
+    if (estado) setCargas((cs) => cs.map((c) => (c.id === d.id && c.estado !== estado ? { ...c, estado } : c)));
     setCarga({
       id: d.id,
       fotos: [...(d.mant_cuadernos_fotos ?? [])].sort((a, b) => a.orden - b.orden),
@@ -780,6 +788,24 @@ export default function CuadernoClient({
       const costo = redondear(entran.reduce((s, o) => s + (o.costo ?? 0), 0));
       const quedan = previa.ordenes.filter((o) => o.accion !== "denunciar" && !o.entra).length;
 
+      // **A qué órdenes se les suma, dicho.** Sumar no agrega: reescribe la
+      // descripción, las horas y la fecha de cierre de una OT que ya existe, y
+      // deja en `REPUESTO UTILIZADO` el texto que dice el servidor. Quien
+      // confirma tiene que ver cuáles son y cómo queda ese texto.
+      const aLasQueSuma = entran.filter((o) => o.accion === "sumar");
+      const MAXIMO_LISTADAS = 8;
+      const listadas = aLasQueSuma.slice(0, MAXIMO_LISTADAS).map(
+        (o) =>
+          `• OT ${o.ot_existente ?? "?"} «${o.tarea}»: ${verHoras(o.horas)} h, repuesto ` +
+          `${o.repuesto ? `«${o.repuesto}»` : "vacío"}`
+      );
+      if (aLasQueSuma.length > MAXIMO_LISTADAS) listadas.push(`• y ${aLasQueSuma.length - MAXIMO_LISTADAS} más`);
+      const lasQueSuman = aLasQueSuma.length > 0
+        ? `\n\nSe reescribe la descripción, las horas, el repuesto y la fecha de cierre de ${
+            aLasQueSuma.length === 1 ? "esta OT que ya existe" : "estas OT que ya existen"
+          } (sus horas pasan a ser el total del grupo, no se acumulan):\n${listadas.join("\n")}\n\n`
+        : " ";
+
       // El freno de los duplicados: la vista previa **informa**, y levantarlo es
       // una decisión que se toma mirando el aviso, en el mismo cartel.
       const duplicados = previa.duplicados?.aviso ?? null;
@@ -790,7 +816,8 @@ export default function CuadernoClient({
           (duplicados ? `${duplicados} ` : "") +
           `Se van a escribir en la planilla de producción: ${nuevas} órdenes nuevas` +
           `${sumadas > 0 ? ` y ${sumadas} que suman a una que ya existe` : ""}, con ${verHoras(horas)} h` +
-          `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}. ` +
+          `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}.` +
+          lasQueSuman +
           `Una orden escrita ahí no se deshace desde el sistema: se borra a mano, fila por fila. ` +
           `${quedan > 0 ? `Van ${entran.length} en esta corrida y quedan ${quedan} para apretar de nuevo. ` : ""}` +
           `Tarda: son varias llamadas a Google por orden, así que no cierres la pantalla.`,
@@ -901,6 +928,7 @@ export default function CuadernoClient({
               <option key={c.id} value={c.id}>
                 Carga del {fechaDeCarga(c.created_at)}
                 {c.mant_cuadernos_fotos ? ` · ${c.mant_cuadernos_fotos.length} pág.` : ""}
+                {c.estado === "GENERADA" ? " · generada" : c.estado === "EN_CHEQUEO" ? " · en chequeo" : ""}
               </option>
             ))}
             {puedeEditar && <option value={NUEVA}>Nueva carga…</option>}

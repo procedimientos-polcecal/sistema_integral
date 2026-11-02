@@ -139,6 +139,20 @@ export function valoresDeLaOrden(
 
 // ── El freno de los duplicados ──────────────────────────────
 
+/**
+ * ¿Es el mismo contratista? Sin mayúsculas y **sin los espacios de los
+ * costados**: `ordenes_trabajo.contratista` es texto libre escrito a mano en 377
+ * de 380 OT, y un «PIPARO » con un espacio de más hacía que el freno de
+ * duplicados no viera la OT y devolviera cero **en silencio**, siendo la única
+ * defensa contra duplicar. Es igualdad y no «contiene»: «PIPARO HNOS» no es
+ * PIPARO.
+ */
+export function mismoContratista(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a == null || b == null) return false;
+  const x = a.trim().toLowerCase();
+  return x !== "" && x === b.trim().toLowerCase();
+}
+
 /** Una OT que ya existe, vista sólo para decidir si es un duplicado. */
 export type OrdenParaComparar = { id: string; ot_number: number; fecha: string | null };
 

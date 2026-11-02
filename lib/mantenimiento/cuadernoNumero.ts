@@ -12,6 +12,8 @@
  * se rechaza con el motivo.
  */
 
+import { conMiles } from "./costoEnRepuesto";
+
 export type NumeroLeido =
   | { tipo: "vacio" }
   | { tipo: "numero"; valor: number }
@@ -45,5 +47,7 @@ export function horasParaElCampo(n: number | null | undefined): string {
 /** Cómo se muestra un precio en el campo: con puntos de miles, que es como se escribe. */
 export function costoParaElCampo(n: number | null | undefined): string {
   if (n === null || n === undefined) return "";
-  return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(n);
+  // `conMiles` y no `Intl`: es el mismo formato que `textoDeRepuesto` escribe en
+  // la planilla, sin depender de los datos de locale del navegador.
+  return conMiles(n);
 }

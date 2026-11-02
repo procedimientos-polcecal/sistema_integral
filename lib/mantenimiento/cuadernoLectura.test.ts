@@ -391,3 +391,66 @@ describe("un número de horas que no puede ser", () => {
     expect(r.motivo_dudoso).toContain("1845");
   });
 });
+
+/**
+ * Medido contra el papel real: el encabezado del 21/09 está pisado a mano y el
+ * modelo lo leyó 24 las dos corridas, sin marcar nada. Un 24 dentro de
+ * septiembre pasa todas las demás validaciones; lo que lo delata es que la
+ * hoja corre hacia adelante y el día siguiente aparece «antes».
+ */
+describe("un día fuera de orden", () => {
+  const reng = (fecha: string, linea: number, tarea = `Tarea ${linea}`) =>
+    ({ fecha, tarea, valor: 2, unidad: "horas" as const, linea });
+
+  it("el día que vuelve para atrás queda dudoso, y el motivo nombra las dos fechas", () => {
+    const { renglones } = normalizarRenglones(
+      { renglones: [reng("2026-09-24", 1), reng("2026-09-24", 2), reng("2026-09-22", 3)] },
+      "2026-09"
+    );
+    expect(renglones[0].dudoso).toBe(false);
+    expect(renglones[1].dudoso).toBe(false);
+    expect(renglones[2].dudoso).toBe(true);
+    expect(renglones[2].motivo_dudoso).toContain("2026-09-22");
+    expect(renglones[2].motivo_dudoso).toContain("2026-09-24");
+  });
+
+  it("los días que avanzan, o se repiten, no levantan la mano", () => {
+    const { renglones } = normalizarRenglones(
+      { renglones: [reng("2026-09-21", 1), reng("2026-09-21", 2), reng("2026-09-22", 3), reng("2026-09-22", 4)] },
+      "2026-09"
+    );
+    expect(renglones.map((r) => r.dudoso)).toEqual([false, false, false, false]);
+  });
+
+  it("sólo marca el renglón donde el día vuelve para atrás, no todos los que siguen", () => {
+    const { renglones } = normalizarRenglones(
+      { renglones: [reng("2026-09-24", 1), reng("2026-09-22", 2), reng("2026-09-22", 3), reng("2026-09-23", 4)] },
+      "2026-09"
+    );
+    expect(renglones.map((r) => r.dudoso)).toEqual([false, true, false, false]);
+  });
+
+  it("un renglón sin fecha legible no cuenta como el de arriba: se compara con el último que sí tiene", () => {
+    const { renglones } = normalizarRenglones(
+      {
+        renglones: [
+          reng("2026-09-24", 1),
+          { fecha: null, tarea: "Ilegible", valor: 2, unidad: "horas", linea: 2 },
+          reng("2026-09-22", 3),
+        ],
+      },
+      "2026-09"
+    );
+    expect(renglones[2].dudoso).toBe(true);
+    expect(renglones[2].motivo_dudoso).toContain("2026-09-24");
+  });
+
+  it("suma el motivo a los que ya tenía el renglón", () => {
+    const { renglones } = normalizarRenglones(
+      { renglones: [reng("2026-09-24", 1), { ...reng("2026-09-22", 2), valor: 4, unidad: null }] },
+      "2026-09"
+    );
+    expect(renglones[1].motivo_dudoso).toContain("no trae unidad");
+    expect(renglones[1].motivo_dudoso).toContain("2026-09-24");
+  });
+});

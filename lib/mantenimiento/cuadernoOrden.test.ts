@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { enOrdenes, type RenglonDelCuaderno } from "./cuadernoGrupos";
 import {
   VALORES_DE_PIPARO, descripcionDeLaOrden, equipoParaLaPlanilla, valoresDeLaOrden,
-  posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
+  posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
 } from "./cuadernoOrden";
 
 const SECTOR = { nombre: "Planta de trituración 3", codigo: "PO-A3" };
@@ -118,6 +118,18 @@ describe("valoresDeLaOrden — lo único que escribe la generación", () => {
   it("especialidad, tipo, quien y estado son los de PIPARO", () => {
     const v = valoresDeLaOrden(unGrupo([renglon("a")]), ctx);
     expect(v).toMatchObject(VALORES_DE_PIPARO);
+  });
+
+  it("una orden que pierde el precio se queda sólo con el repuesto de verdad —o con nada—", () => {
+    // La ruta escribe `repuesto` siempre que suma a una orden, y confía en esto:
+    // `null` quiere decir «ya no hay nada que mostrar», y es lo que vacía la
+    // columna I de la planilla donde antes decía «$920.000».
+    const sinPrecio = unGrupo([renglon("a")]);
+    expect(valoresDeLaOrden(sinPrecio, ctx, { costo: 920000, repuesto: "$920.000" }).repuesto).toBeNull();
+    // Y lo que una persona escribió como repuesto se conserva.
+    expect(
+      valoresDeLaOrden(sinPrecio, ctx, { costo: 240000, repuesto: "2 parches de 200 ($240.000)" }).repuesto
+    ).toBe("2 parches de 200");
   });
 
   it("si la orden ya tenía el costo anterior en el texto, el repuesto nuevo no lo repite", () => {
@@ -251,5 +263,23 @@ describe("avisoDeDuplicados", () => {
     const m = avisoDeDuplicados("PIPARO", ots);
     expect(m).toContain("29 órdenes");
     expect(m).toContain("y 19 más");
+  });
+});
+
+describe("mismoContratista — el nombre de las OT es texto libre", () => {
+  it("un espacio de más, de un lado o del otro, no lo vuelve otro contratista", () => {
+    // `ordenes_trabajo.contratista` está escrito a mano en 377 de 380 OT: sin
+    // recortar, el freno de duplicados devolvía cero en silencio.
+    expect(mismoContratista("PIPARO ", "PIPARO")).toBe(true);
+    expect(mismoContratista(" piparo", "PIPARO")).toBe(true);
+    expect(mismoContratista("PIPARO", "PIPARO  ")).toBe(true);
+  });
+  it("no distingue mayúsculas", () => {
+    expect(mismoContratista("Piparo", "PIPARO")).toBe(true);
+  });
+  it("otro nombre, o un nombre que lo contiene, no es el mismo", () => {
+    expect(mismoContratista("PIPARO HNOS", "PIPARO")).toBe(false);
+    expect(mismoContratista("CANDIA", "PIPARO")).toBe(false);
+    expect(mismoContratista(null, "PIPARO")).toBe(false);
   });
 });

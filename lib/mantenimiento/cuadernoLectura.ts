@@ -262,7 +262,40 @@ export function normalizarRenglones(
     });
   });
 
+  marcarLosDiasFueraDeOrden(renglones);
+
   return { renglones, problemas };
+}
+
+/**
+ * Los días de una hoja corren hacia adelante: si la fecha de un renglón es
+ * anterior a la del renglón de arriba, una de las dos está mal leída.
+ *
+ * Existe porque el encabezado del 21/09 del papel real está pisado a mano y el
+ * modelo lo leyó 24 las dos veces, sin dudar: un 24 dentro de septiembre pasa
+ * todas las demás validaciones (es un día real y cae en el mes). Lo que lo
+ * delata es que el día siguiente, el 22, aparece «antes».
+ *
+ * Compara con el último renglón **que tiene fecha** (uno ilegible no cuenta como
+ * «el de arriba») y marca sólo **el renglón donde el día vuelve para atrás**: no
+ * se sabe cuál de los dos lados es el mal leído, así que el motivo nombra las
+ * dos fechas y quien chequea decide. Marcar de ahí en adelante pintaría de
+ * dudosos renglones que están bien. Muta la lista que recibe.
+ */
+function marcarLosDiasFueraDeOrden(renglones: RenglonLeido[]): void {
+  let deArriba: string | null = null;
+  for (const r of renglones) {
+    if (r.fecha == null) continue;
+    // AAAA-MM-DD ordena igual como texto que como fecha.
+    if (deArriba != null && r.fecha < deArriba) {
+      const motivo =
+        `La fecha ${r.fecha} es anterior a la del renglón de arriba (${deArriba}): ` +
+        `los días de la hoja corren hacia adelante, así que una de las dos está mal leída`;
+      r.dudoso = true;
+      r.motivo_dudoso = r.motivo_dudoso ? `${r.motivo_dudoso}; ${motivo}` : motivo;
+    }
+    deArriba = r.fecha;
+  }
 }
 
 /**
