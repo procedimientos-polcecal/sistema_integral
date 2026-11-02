@@ -254,7 +254,7 @@ export default function GenerarOTModal({
             </div>
           </div>
 
-          <Campo etiqueta="Fecha de ejecución">
+          <Campo etiqueta="Fecha de inicio">
             <input
               type="date"
               value={form.fecha_ejecucion}
@@ -263,6 +263,19 @@ export default function GenerarOTModal({
             />
             <span className="mt-1 block text-xs text-slate-400">
               Para cuándo se compromete. Sin ella la orden no se atrasa nunca.
+            </span>
+          </Campo>
+
+          <Campo etiqueta="Fecha de fin (estimada)">
+            <input
+              type="date"
+              value={form.fecha_fin}
+              onChange={(e) => cambiar({ fecha_fin: e.target.value })}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm sm:w-56"
+            />
+            <span className="mt-1 block text-xs text-slate-400">
+              Cuándo se calcula que termina. Es una estimación: la real es la
+              fecha de cierre.
             </span>
           </Campo>
 
@@ -307,7 +320,7 @@ export default function GenerarOTModal({
 /** Los que este formulario sabe dibujar, con el nombre que les da la regla. */
 const CAMPOS_QUE_DIBUJA = [
   "el sector", "el equipo", "la descripción", "la especialidad",
-  "el tipo de trabajo", "quién lo realiza", "la fecha de ejecución",
+  "el tipo de trabajo", "quién lo realiza", "la fecha de inicio",
 ];
 
 function Campo({ etiqueta, ayuda, children }: {

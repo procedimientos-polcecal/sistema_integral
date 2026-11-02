@@ -19,8 +19,24 @@ export interface DatosDelAltaDeOT extends DatosDelCierre {
   descripcion: string | null | undefined;
   especialidad: string | null | undefined;
   tipo: string | null | undefined;
-  /** Cuándo se compromete a hacerse. Sin ella la OT no se atrasa nunca. */
+  /**
+   * Cuándo se compromete a **empezar**. Sin ella la OT no se atrasa nunca.
+   *
+   * Por dentro se sigue llamando `fecha_ejecucion` y en pantalla es «la fecha
+   * de inicio» desde el 02/11/2026, cuando la columna J de la planilla pasó de
+   * «FECHA DE EJECUCIÓN» a «FECHA DE INICIO». Es la misma fecha con mejor
+   * nombre: renombrar la columna arrastraría el MTBF, el contraste, el GUT y
+   * la programación del taller sin cambiar nada de lo que hacen.
+   */
   fecha_ejecucion: string | null | undefined;
+  /**
+   * Cuándo se estima que **termina**, y es opcional a propósito.
+   *
+   * No es la de cierre: ésa es la real, y ésta la estimación que se carga al
+   * crear la orden. Quien carga una OT no siempre sabe cuándo termina, y un
+   * campo obligatorio que no se sabe se llena con cualquier cosa.
+   */
+  fecha_fin?: string | null | undefined;
 }
 
 /**
@@ -35,7 +51,7 @@ const IMPRESCINDIBLES: readonly [keyof DatosDelAltaDeOT, string][] = [
   ["especialidad", "la especialidad"],
   ["tipo", "el tipo de trabajo"],
   ["quien", "quién lo realiza"],
-  ["fecha_ejecucion", "la fecha de ejecución"],
+  ["fecha_ejecucion", "la fecha de inicio"],
 ];
 
 /**
@@ -56,4 +72,30 @@ export function loQueFaltaParaCrear(datos: DatosDelAltaDeOT): string[] {
     .map(([, nombre]) => nombre);
 
   return [...falta, ...loQueFaltaParaCerrar(datos)];
+}
+
+/**
+ * Lo que una orden nueva dice y se contradice.
+ *
+ * Va aparte de `loQueFaltaParaCrear` porque es otra clase de problema, y
+ * mezclarlas daría un mensaje falso: aquello dice que **falta** un dato, y un
+ * «Falta cargar la fecha de fin» cuando la fecha está cargada —sólo que dada
+ * vuelta— manda a buscar lo que no es.
+ *
+ * Nombra **las dos fechas**: decir «la fecha de fin es anterior» obliga a
+ * volver al formulario a ver contra qué, y la que está mal puede ser
+ * cualquiera de las dos.
+ *
+ * No mira la de cierre, que es la fecha real: esto compara la ventana
+ * estimada contra sí misma. Y si falta la de inicio se calla, porque de eso ya
+ * habla `loQueFaltaParaCrear` y dos mensajes por un solo hueco es ruido.
+ */
+export function loQueSeContradice(datos: DatosDelAltaDeOT): string[] {
+  const inicio = String(datos.fecha_ejecucion ?? "").trim();
+  const fin = String(datos.fecha_fin ?? "").trim();
+  if (!inicio || !fin) return [];
+
+  return fin < inicio
+    ? [`la fecha de fin (${fin}) es anterior a la de inicio (${inicio})`]
+    : [];
 }

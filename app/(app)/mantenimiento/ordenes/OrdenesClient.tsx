@@ -759,7 +759,7 @@ export default function OrdenesClient({
                             alineadas a la derecha para que los días queden en
                             columna aunque los rótulos midan distinto. */}
                         <span
-                          title="Fecha de la orden y fecha de ejecución"
+                          title="Fecha de la orden y fecha de inicio"
                           className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
                         >
                           <span className="block text-xs text-slate-400 whitespace-nowrap">
@@ -993,7 +993,7 @@ function OTDetail({
         <D label="Prioridad"       value={prioridadEfectiva(o)} />
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
-        <D label="Fecha ejecución" value={fechaDeLaOT(o.fecha_ejecucion)} />
+        <D label="Fecha de inicio" value={fechaDeLaOT(o.fecha_ejecucion)} />
         <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>

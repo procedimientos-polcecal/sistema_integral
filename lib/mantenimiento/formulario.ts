@@ -86,6 +86,7 @@ const ALIAS = {
   descripcion: ["DESCRIPCIÓN DEL TRABAJO", "DESCRIPCION DEL TRABAJO"],
   repuesto: ["REPUESTO UTILIZADO"],
   fecha: ["FECHA COMPROMETIDA"],
+  fechaFin: ["FECHA DE FIN"],
   prioridad: ["PRIORIDAD"],
 } as const;
 
@@ -218,8 +219,20 @@ export interface DatosDelAlta {
   quien: string | null;
   descripcion: string;
   repuesto: string | null;
-  /** "YYYY-MM-DD". Es la fecha de ejecución comprometida. */
+  /**
+   * "YYYY-MM-DD". La fecha comprometida, que en el master es la J y desde el
+   * 02/11/2026 se llama «FECHA DE INICIO».
+   */
   fecha_ejecucion: string | null;
+  /**
+   * "YYYY-MM-DD". Cuándo se estima que termina — la Y del master.
+   *
+   * **Si el encabezado no trae la columna, esto no se escribe y el alta no se
+   * cae**, que es la regla que ya vale para toda columna que el formulario
+   * puede no tener. O sea que hasta que «FECHA DE FIN» exista en las dos
+   * pestañas, cargarla en la app no deja nada del otro lado.
+   */
+  fecha_fin: string | null;
   prioridad: string | null;
 }
 
@@ -287,10 +300,14 @@ export function celdasDelAlta(
     prioridad: texto(datos.prioridad),
   };
 
-  // La fecha va como serial o no va. Un "14/10/2026" lo interpreta la planilla
-  // según su locale, que es la trampa que dio vuelta 885 fechas en Compras.
+  // Las fechas van como serial o no van. Un "14/10/2026" lo interpreta la
+  // planilla según su locale, que es la trampa que dio vuelta 885 fechas en
+  // Compras.
   const serial = datos.fecha_ejecucion ? serialDelDia(datos.fecha_ejecucion) : null;
   if (serial !== null) valores.fecha = serial;
+
+  const serialFin = datos.fecha_fin ? serialDelDia(datos.fecha_fin) : null;
+  if (serialFin !== null) valores.fechaFin = serialFin;
 
   const celdas: Celda[] = [];
   for (const [clave, valor] of Object.entries(valores) as [Clave, string | number][]) {
@@ -588,7 +605,7 @@ export interface CorreccionDeLaAlta {
  * que ya está ahí. Pura: recibe las filas ya leídas.
  *
  * Es la hermana de `celdaDeLaFechaComprometida`, y existe por lo mismo: la
- * descripción (H), el repuesto (I) y la fecha de ejecución (J) del master son
+ * descripción (H), el repuesto (I) y la fecha de inicio (J) del master son
  * **derrame** de los `QUERY(IMPORTRANGE())`, así que escribirlas ahí no queda y
  * la próxima sincronización las lee como estaban. La de verdad está en esta
  * pestaña. Se necesita cuando la generación del cuaderno **le suma** un

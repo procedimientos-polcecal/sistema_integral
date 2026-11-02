@@ -79,6 +79,16 @@ describe("lo que se escribe es lo que se guarda", () => {
     expect(c.descripcion).toBe("Ajustar transmisión del horno 4: salta la cadena");
   });
 
+  /** Estimada y opcional: la real es la de cierre, que acá va siempre vacía. */
+  it("la fecha de fin viaja en el cuerpo", () => {
+    const c = cuerpoDeLaOT(AVISO, { ...completo(), fecha_fin: "2026-10-25" });
+    expect(c.fecha_fin).toBe("2026-10-25");
+  });
+
+  it("sin fecha de fin viaja vacia y no rompe nada", () => {
+    expect(cuerpoDeLaOT(AVISO, completo()).fecha_fin).toBe("");
+  });
+
   it("tambien el tipo, la prioridad, el sector y el equipo", () => {
     const c = cuerpoDeLaOT(AVISO, {
       ...completo(),
@@ -138,7 +148,7 @@ describe("lo que hay que preguntar", () => {
   it("son los que no vienen de ningun lado", () => {
     expect(loQueHayQuePreguntar(AVISO)).toContain("la especialidad");
     expect(loQueHayQuePreguntar(AVISO)).toContain("quién lo realiza");
-    expect(loQueHayQuePreguntar(AVISO)).toContain("la fecha de ejecución");
+    expect(loQueHayQuePreguntar(AVISO)).toContain("la fecha de inicio");
   });
 
   /**
@@ -159,7 +169,7 @@ describe("lo que hay que preguntar", () => {
 
   it("contestando de a una, la lista se achica", () => {
     expect(loQueFaltaDelAviso(AVISO, { ...completo(), fecha_ejecucion: "" }))
-      .toEqual(["la fecha de ejecución"]);
+      .toEqual(["la fecha de inicio"]);
     expect(loQueFaltaDelAviso(AVISO, { ...completo(), descripcion: "", especialidad: "" }))
       .toEqual(["la descripción", "la especialidad"]);
   });

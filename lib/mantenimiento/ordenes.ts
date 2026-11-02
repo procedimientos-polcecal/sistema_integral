@@ -139,7 +139,7 @@ export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
 export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
   "la fecha de la orden", "el sector", "el equipo", "la especialidad",
   "el tipo", "quién lo realiza", "la descripción", "el repuesto",
-  "la fecha de ejecución", "la prioridad",
+  "la fecha de inicio", "la prioridad",
 ];
 
 /**

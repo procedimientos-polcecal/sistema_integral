@@ -162,6 +162,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     descripcion:    "",
     fecha:          hoyEnArgentina(),
     fecha_ejecucion: "",
+    fecha_fin:      "",
     fecha_cierre:   "",
     estado:         "POR_HACER",
     contratista:    "",
@@ -373,12 +374,20 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </F>
 
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Dos columnas y no tres desde que son cuatro fechas: en tres, la
+              de cierre quedaba sola en un segundo renglón. En el teléfono va
+              una por renglón, como todo el resto. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <F label="Fecha creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
-            <F label="Fecha ejecución" required>
+            <F label="Fecha de inicio" required>
               <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
+            </F>
+            {/* Estimada, y por eso opcional: quien carga la orden no siempre
+                sabe cuándo termina. La real es la de cierre. */}
+            <F label="Fecha de fin (estimada)">
+              <input type="date" value={form.fecha_fin} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
               <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />

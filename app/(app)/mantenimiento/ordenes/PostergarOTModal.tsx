@@ -97,7 +97,7 @@ export default function PostergarOTModal({
           <p className="mt-0.5 text-xs text-slate-500">
             {orden.fecha_ejecucion
               ? `Hoy está para el ${orden.fecha_ejecucion.split("-").reverse().join("/")}.`
-              : "Esta orden no tiene fecha de ejecución."}
+              : "Esta orden no tiene fecha de inicio."}
           </p>
         </div>
 

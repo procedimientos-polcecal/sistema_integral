@@ -164,12 +164,50 @@ Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portar
 Sus columnas coinciden con lo que leía el código de origen:
 
 `A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
-H descripción · I repuesto · J ejecución · K cierre · L (calculada) · M estado ·
+H descripción · I repuesto · J inicio · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
-U próxima fecha · V fotos · W observaciones · X observación previa`
+U próxima fecha · V fotos · W observaciones · X observación previa ·
+Y fin (estimada)`
 
 La **X se agregó el 16/10/2026** y es la única que no estaba en el origen. Ver
 "Por qué una OT todavía no se hizo", más abajo.
+
+### Tres fechas que se confunden, y la Y que llegó el 02/11/2026
+
+Ese día la **J pasó de llamarse «FECHA DE EJECUCIÓN» a «FECHA DE INICIO»** y
+apareció la **Y, «FECHA DE FIN»**. Con eso la planilla pasó a tener tres fechas
+de trabajo y conviene leerlas juntas, porque dos son estimaciones y una no:
+
+| Columna | Qué es |
+|---|---|
+| **J — fecha de inicio** | Cuándo se compromete a **empezar**. Estimada. Es la que decide si una OT está atrasada |
+| **Y — fecha de fin** | Cuándo se calcula que **termina**. Estimada y **opcional** |
+| **K — fecha de cierre** | Cuándo se cerró **de verdad**. No es una estimación |
+
+Tres cosas que no se deducen del código:
+
+- **Por dentro la J se sigue llamando `fecha_ejecucion`**, en la base y en todo
+  `lib/mantenimiento`. Es la misma fecha con mejor nombre: renombrar la columna
+  habría arrastrado el MTBF, el contraste, el GUT y la programación del taller
+  sin cambiar nada de lo que hacen. Lo que sí se renombró es **el nombre que se
+  ve**, y vive en un solo lugar —`IMPRESCINDIBLES` de
+  [lib/mantenimiento/altaDeOT.ts](../lib/mantenimiento/altaDeOT.ts)— del que lo
+  toman los cuatro formularios, el contraste y los avisos.
+- **La Y no se guarda en `ordenes_trabajo`.** No hay columna ni migración: la
+  fecha de fin viaja del formulario a la planilla y se queda ahí, que es donde
+  manda. El día que haga falta verla en el sistema son una columna nueva y
+  leerla en `filaDeOrden`.
+- **Si el encabezado no trae «FECHA DE FIN», el dato no se escribe y el alta no
+  se cae.** Es la regla que ya valía para toda columna que el formulario puede
+  no tener, y acá tiene una consecuencia: hasta que esa columna exista en las
+  **dos** pestañas del libro de respuestas —`Respuestas de formulario` y
+  `Altas del sistema`—, cargar la fecha en la app no deja nada del otro lado.
+  El par está fijado con un test en `formulario.test.ts`.
+
+Y del lado de la planilla, la Y del master **no es derrame todavía**: nació
+vacía, sin fórmula. Para que traiga lo que cargan las dos pestañas necesita su
+propio `QUERY(IMPORTRANGE(...))` en la `Y2`, con la misma forma que la `S2` y
+—esto es lo que las alinea— el mismo `ORDER BY Col1`.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media

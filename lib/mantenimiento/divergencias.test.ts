@@ -4,7 +4,7 @@ import {
 } from "./divergencias";
 import type { Contraste, Divergencia } from "./contraste";
 
-const una = (ot_number: number, campo = "la fecha de ejecución"): Divergencia => ({
+const una = (ot_number: number, campo = "la fecha de inicio"): Divergencia => ({
   ot_number, campo, enElSistema: "2026-11-03", enLaPlanilla: "2026-11-02",
 });
 
@@ -16,7 +16,7 @@ describe("loQueSeGuardaDelContraste", () => {
   it("guarda cada divergencia con los dos lados", () => {
     const r = loQueSeGuardaDelContraste(contraste({ divergencias: [una(2896)] }));
     expect(r.filas).toEqual([{
-      ot_number: 2896, campo: "la fecha de ejecución",
+      ot_number: 2896, campo: "la fecha de inicio",
       en_el_sistema: "2026-11-03", en_la_planilla: "2026-11-02",
     }]);
     expect(r.total).toBe(1);
@@ -30,10 +30,10 @@ describe("loQueSeGuardaDelContraste", () => {
    */
   it("una orden con dos problemas deja dos filas", () => {
     const r = loQueSeGuardaDelContraste(contraste({
-      divergencias: [una(2896, "la fecha de ejecución"), una(2896, "el estado")],
+      divergencias: [una(2896, "la fecha de inicio"), una(2896, "el estado")],
     }));
     expect(r.filas).toHaveLength(2);
-    expect(r.filas.map((f) => f.campo)).toEqual(["la fecha de ejecución", "el estado"]);
+    expect(r.filas.map((f) => f.campo)).toEqual(["la fecha de inicio", "el estado"]);
   });
 
   /**

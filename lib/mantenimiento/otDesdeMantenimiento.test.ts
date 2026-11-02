@@ -211,6 +211,20 @@ describe("lo que el mantenimiento ya contesta", () => {
   });
 });
 
+describe("la fecha de fin del cuerpo", () => {
+  /** Estimada y opcional: el mantenimiento sabe cuando arranca, no cuanto dura. */
+  it("viaja la que se cargo", () => {
+    const c = cuerpoDeLaOT(MANTENIMIENTO, {
+      ...respuestasIniciales(MANTENIMIENTO), fecha_fin: "2026-11-20",
+    });
+    expect(c.fecha_fin).toBe("2026-11-20");
+  });
+
+  it("sin cargarla viaja vacia", () => {
+    expect(cuerpoDeLaOT(MANTENIMIENTO, respuestasIniciales(MANTENIMIENTO)).fecha_fin).toBe("");
+  });
+});
+
 describe("lo que hay que preguntar", () => {
   /**
    * EL BUG DEL 21/10/2026, FIJADO. El único mantenimiento programado que existe
@@ -230,7 +244,7 @@ describe("lo que hay que preguntar", () => {
 
   it("son las tres que el mantenimiento contesta por su cuenta", () => {
     expect(loQueHayQuePreguntar(MANTENIMIENTO))
-      .toEqual(["la especialidad", "quién lo realiza", "la fecha de ejecución"]);
+      .toEqual(["la especialidad", "quién lo realiza", "la fecha de inicio"]);
   });
 
   /**
@@ -259,7 +273,7 @@ describe("lo que hay que preguntar", () => {
   it("sin próxima fecha queda pendiente la de ejecución", () => {
     const m = { ...MANTENIMIENTO, next_date: null };
     expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m)))
-      .toEqual(["la fecha de ejecución"]);
+      .toEqual(["la fecha de inicio"]);
   });
 
   it("los espacios no cuentan como contestado", () => {

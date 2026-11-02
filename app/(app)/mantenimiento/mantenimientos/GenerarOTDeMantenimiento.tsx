@@ -159,10 +159,10 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
               </label>
             )}
 
-            {preguntas.includes("la fecha de ejecución") && (
+            {preguntas.includes("la fecha de inicio") && (
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-slate-500">
-                  Fecha de ejecución
+                  Fecha de inicio
                 </span>
                 <input
                   type="date"
@@ -174,6 +174,27 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
                   {fechaVencida
                     ? "Es la próxima fecha del mantenimiento y ya pasó: la orden va a nacer atrasada."
                     : "Es para cuándo se compromete. Sin ella la orden no se atrasa nunca."}
+                </span>
+              </label>
+            )}
+
+            {/* Va pegada a la de inicio y con su misma condición: son el par
+                de una ventana estimada, y preguntar cuándo termina algo cuyo
+                comienzo no se preguntó es preguntar por la mitad. Como es
+                opcional, nunca entra en `preguntas` por sí sola. */}
+            {preguntas.includes("la fecha de inicio") && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">
+                  Fecha de fin (estimada)
+                </span>
+                <input
+                  type="date"
+                  value={respuestas.fecha_fin}
+                  onChange={(e) => cambiar({ fecha_fin: e.target.value })}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+                <span className="mt-1 block text-xs text-slate-400">
+                  Cuándo se calcula que termina. La real es la fecha de cierre.
                 </span>
               </label>
             )}
@@ -219,7 +240,7 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
 
 /** Los que este formulario sabe dibujar, con el nombre que les da la regla. */
 const CAMPOS_QUE_DIBUJA = [
-  "la especialidad", "quién lo realiza", "la fecha de ejecución",
+  "la especialidad", "quién lo realiza", "la fecha de inicio",
   // Éstos los nombra la regla pero los contesta el mantenimiento; si faltan, se
   // avisa arriba con `loQueNoSeArreglaAca` en vez de dibujar un campo.
   "el sector", "el equipo", "la descripción", "el tipo de trabajo",

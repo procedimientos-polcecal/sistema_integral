@@ -88,7 +88,7 @@ const CAMPOS: readonly [keyof OrdenDelSistema & keyof OrdenLeida, string][] = [
   ["tipo", "el tipo"],
   ["quien", "quién lo realiza"],
   ["descripcion", "la descripción"],
-  ["fecha_ejecucion", "la fecha de ejecución"],
+  ["fecha_ejecucion", "la fecha de inicio"],
   ["fecha_cierre", "la fecha de cierre"],
   ["estado", "el estado"],
   ["contratista", "el contratista"],
@@ -226,7 +226,7 @@ export function contrastar(
 /**
  * Las divergencias agrupadas por orden, que es como se leen.
  *
- * Una OT con la fecha de ejecución y la de cierre corridas es **un** problema
+ * Una OT con la fecha de inicio y la de cierre corridas es **un** problema
  * con dos síntomas, no dos problemas: imprimirlas de a una hace que tres
  * órdenes parezcan nueve.
  */

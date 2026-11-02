@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loQueFaltaParaCrear } from "./altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "./altaDeOT";
 
 /**
  * Lo que una OT tiene que decir si o si. Son los campos de los que viven
@@ -25,6 +25,41 @@ const completa = {
   operario_3: "",
 };
 
+/**
+ * La fecha de fin es una estimacion y la de cierre es la real, asi que esto no
+ * mira el cierre: mira que la ventana estimada no este dada vuelta.
+ *
+ * Es aparte de `loQueFaltaParaCrear` porque es otra clase de problema. Aquello
+ * dice que falta un dato; esto dice que los dos que hay se contradicen, y un
+ * "Falta cargar la fecha de fin" cuando la fecha esta cargada seria mentira.
+ */
+describe("lo que se contradice en una orden nueva", () => {
+  it("una ventana al derecho no se queja", () => {
+    expect(loQueSeContradice({ ...completa, fecha_fin: "2026-10-25" })).toEqual([]);
+  });
+
+  it("terminar el mismo dia que empieza esta bien", () => {
+    expect(loQueSeContradice({ ...completa, fecha_fin: "2026-10-20" })).toEqual([]);
+  });
+
+  it("la fecha de fin anterior a la de inicio se nombra con las dos fechas", () => {
+    expect(loQueSeContradice({ ...completa, fecha_fin: "2026-10-19" }))
+      .toEqual(["la fecha de fin (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
+  });
+
+  /** Es opcional: sin ella no hay nada que contradecir. */
+  it("sin fecha de fin no hay problema", () => {
+    expect(loQueSeContradice(completa)).toEqual([]);
+    expect(loQueSeContradice({ ...completa, fecha_fin: "" })).toEqual([]);
+  });
+
+  /** Sin fecha de inicio el que habla es `loQueFaltaParaCrear`, no este. */
+  it("sin fecha de inicio no opina", () => {
+    expect(loQueSeContradice({ ...completa, fecha_ejecucion: "", fecha_fin: "2026-10-19" }))
+      .toEqual([]);
+  });
+});
+
 describe("que le falta a una orden nueva", () => {
   it("completa no falta nada", () => {
     expect(loQueFaltaParaCrear(completa)).toEqual([]);
@@ -38,14 +73,14 @@ describe("que le falta a una orden nueva", () => {
     expect(loQueFaltaParaCrear({ ...completa, tipo: "" })).toEqual(["el tipo de trabajo"]);
     expect(loQueFaltaParaCrear({ ...completa, quien: "" })).toEqual(["quién lo realiza"]);
     expect(loQueFaltaParaCrear({ ...completa, fecha_ejecucion: "" }))
-      .toEqual(["la fecha de ejecución"]);
+      .toEqual(["la fecha de inicio"]);
   });
 
   /** La vara de `validar()` del nucleo: todo junto, no de a uno. */
   it("dice todo lo que falta de una sola vez, y en el orden del formulario", () => {
     expect(loQueFaltaParaCrear({
       ...completa, sector_id: "", especialidad: "", fecha_ejecucion: "",
-    })).toEqual(["el sector", "la especialidad", "la fecha de ejecución"]);
+    })).toEqual(["el sector", "la especialidad", "la fecha de inicio"]);
   });
 
   it("los espacios no cuentan como cargado", () => {

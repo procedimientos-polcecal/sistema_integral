@@ -712,6 +712,8 @@ async function crearLaOT(
     // El costo viaja acá: es la columna I, donde ya se lo escribía a mano.
     repuesto: valores.repuesto,
     fecha_ejecucion: valores.fecha_cierre,
+    // Nadie estima el fin acá: la OT nace de un renglón ya trabajado.
+    fecha_fin: null,
     prioridad,
   });
 
