@@ -1,143 +1,23 @@
 "use client";
 
 /*
- * Mandar una carga a la ruta de alta, y contarle a la persona cómo salió.
+ * El cartel que le cuenta a la persona cómo salió la carga.
  *
- * ACÁ NO SE DECIDE NADA. Esto habla HTTP —arma el pedido, lee el JSON— y le
- * pasa lo que recibió a `comoContesto` de `public/cola/colaOffline.js`, que es
- * quien dice si eso fue un éxito y qué quedó a medias. La razón es que el
- * service worker manda la misma carga con la app cerrada y necesita esas mismas
- * reglas; desde un service worker no se puede importar un componente de React,
- * así que una regla escrita acá se escribiría dos veces.
+ * LO QUE ERA ESTE ARCHIVO SE MUDÓ a `lib/core/mandarOEncolar.ts` el
+ * 02/11/2026. Mandar la carga y, si el camino falla, dejarla en la cola es
+ * ahora lo que hacen también los botones de siempre —«Avisar de una falla»,
+ * «Nueva orden de trabajo» y «Nueva condición»—, así que esa regla no podía
+ * seguir viviendo adentro de `/cargar`: habrían quedado tres versiones de
+ * «¿esto fue un corte de conexión o un rechazo de la ruta?».
  *
- * Lo único que sí es de acá: un `fetch` que tira —sin señal, el túnel que corta
- * a mitad de camino— es un fallo sin status, y eso es pasajero.
+ * Acá queda el cartel, que sí es de esta pantalla. Las tres piezas que se
+ * fueron se re-exportan para no romper a quien las importaba de acá.
  */
 
-import {
-  CABECERA_DEL_DISPARO,
-  DISPARO,
-  RUTA_DE,
-  comoContesto,
-  conSuArticulo,
-  cuerpoComoFormData,
-  llevaArchivo,
-  type ResultadoDelEnvio,
-  type TipoDeCarga,
-} from "@/public/cola/colaOffline.js";
+import { conSuArticulo, type TipoDeCarga } from "@/public/cola/colaOffline.js";
+import type { Resultado } from "@/lib/core/mandarOEncolar";
 
-/** Qué pasó con una carga. Es lo único que el formulario tiene que mostrar. */
-export type Resultado =
-  | { estado: "mandada"; numero: string; advertencia: string | null }
-  | {
-      estado: "encolada";
-      motivo: string | null;
-      /**
-       * El número con el que la fila **ya quedó escrita** aunque la carga siga
-       * en la cola. Es el mismo campo que la variante de abajo y por el mismo
-       * motivo, y el que faltaba: cuando la condición entra y la foto no, el
-       * veredicto es **`encolar`** y no `rechazada` —un 502 es pasajero—, así
-       * que ésta es la rama más probable de este camino y la que decía
-       * «todavía no tiene número» arriba de un texto chico que daba el número.
-       */
-      yaEntro?: string | null;
-    }
-  | {
-      estado: "rechazada";
-      error: string;
-      /**
-       * Si la fecha que viajó la puso el reloj del teléfono y no una persona.
-       * Es lo que decide si el cartel ofrece la salida: el formulario de aviso
-       * no tiene campo de fecha, así que con el reloj adelantado la ruta
-       * contesta 400 y quien cargó no tiene dónde corregirlo.
-       */
-      fechaDelReloj: boolean;
-      /**
-       * El número con el que la fila **ya quedó escrita** aunque el pedido
-       * haya fallado. Un rechazo deja lo escrito en el formulario para
-       * corregirlo, que es lo correcto cuando falta un campo y lo peor
-       * posible cuando la fila ya existe: apretar «Cargar» de nuevo manda una
-       * clave nueva y crea una segunda. Con esto el cartel lo dice y el
-       * formulario se vacía.
-       */
-      yaEntro?: string | null;
-    };
-
-/**
- * Manda el cuerpo tal cual y devuelve qué salió de eso.
- *
- * El `status` viaja hasta el final porque es lo que `clasificarFallo` mira para
- * decidir si reintentar tiene sentido, y el error se devuelve **sin traducir**:
- * los mensajes de las dos rutas dicen cosas que ninguna frase genérica puede
- * decir ("el aviso quedó escrito en la planilla pero no se pudo guardar en el
- * sistema"), y quien cargó necesita exactamente eso para saber si mirar la
- * planilla.
- *
- * ── LAS DOS RAMAS, Y POR QUÉ EL `if` ESTÁ DONDE ESTÁ ────────────────────────
- *
- * Una carga que puede traer un archivo sale como `multipart/form-data`; todas
- * las demás salen como salían. **El `if` va alrededor de la construcción del
- * pedido y no adentro**, a propósito: el aviso y la orden de trabajo se usan
- * todos los días, y la promesa de esta tarea es que su pedido salga byte por
- * byte igual que antes. Un `headers` armado con un ternario adentro es un
- * lugar donde un día cambia algo para los tres tipos sin que nadie lo note.
- *
- * **Y EL `Content-Type` DE LA RAMA DEL ARCHIVO NO SE ESCRIBE**: lo pone el
- * navegador, con el `boundary` que separa las partes. Escribirlo a mano lo
- * deja sin `boundary` y el servidor no puede partir el cuerpo —`formData()`
- * rechaza y la ruta contesta que falta todo—, que es un 400 definitivo sobre
- * una carga que estaba bien.
- */
-export async function mandarALaRuta(
-  tipo: TipoDeCarga,
-  cuerpo: Record<string, unknown>,
-): Promise<ResultadoDelEnvio> {
-  let respuesta: Response;
-  try {
-    respuesta = llevaArchivo(tipo)
-      ? await fetch(RUTA_DE[tipo], {
-          method: "POST",
-          headers: { [CABECERA_DEL_DISPARO]: DISPARO.pantalla },
-          body: cuerpoComoFormData(cuerpo),
-        })
-      : await fetch(RUTA_DE[tipo], {
-          method: "POST",
-          // Todo lo que sale de esta pantalla sale con alguien mirando, así que
-          // nunca pide correo: el cartel de abajo ya le va a decir lo mismo, y un
-          // correo que repite lo que la persona está leyendo es cómo se aprende a
-          // ignorar los correos del sistema.
-          headers: {
-            "Content-Type": "application/json",
-            [CABECERA_DEL_DISPARO]: DISPARO.pantalla,
-          },
-          body: JSON.stringify(cuerpo),
-        });
-  } catch (e) {
-    // Ni se llegó a hablar con nadie, así que esto no salió de la ruta y es
-    // pasajero: sin señal, o el túnel que corta a mitad de camino.
-    return { ok: false, status: null, deLaRuta: false, error: loQueDijo(e) };
-  }
-
-  // Un cuerpo que no es JSON no es un error a propagar: es el HTML del login o
-  // el de un portal de WiFi, y `comoContesto` lo reconoce por lo que falta. Va
-  // tal cual y sin cast —puede ser `null`, que es lo que da `JSON.parse("null")`—
-  // porque contemplarlo es trabajo de ahí y no de acá.
-  const devuelto: unknown = await respuesta.json().catch(() => ({}));
-
-  return comoContesto(tipo, {
-    status: respuesta.status,
-    // `redirected` es lo que separa "me mandaron al login" de "el servidor
-    // contestó cualquier cosa", y lo primero se le puede decir a la persona con
-    // todas las letras.
-    redirigida: respuesta.redirected,
-    cuerpo: devuelto,
-  });
-}
-
-/** El mensaje de un error, sea lo que sea lo que se haya tirado. */
-export function loQueDijo(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+export { loQueDijo, mandarALaRuta, type Resultado } from "@/lib/core/mandarOEncolar";
 
 /**
  * El cartel que cuenta cómo salió la carga.

@@ -451,17 +451,45 @@ describe("loQueQuedoPendiente", () => {
     expect(loQueQuedoPendiente({ advertencia: "Ya estaba." })).toBe("Ya estaba.");
   });
 
-  it("los cuatro salen juntos: decir uno dejaría los otros sin que nadie se entere", () => {
+  it("los cinco salen juntos: decir uno dejaría los otros sin que nadie se entere", () => {
     const texto = loQueQuedoPendiente({
       advertencia: "Ya estaba.",
       clave_error: "no estaba reservada",
       planilla_error: "429 de Google",
       aviso_error: "El aviso quedó sin el enlace.",
+      repuestos_error: "Dos repuestos no entraron.",
     });
     expect(texto).toContain("Ya estaba.");
     expect(texto).toContain("no estaba reservada");
     expect(texto).toContain("429 de Google");
     expect(texto).toContain("El aviso quedó sin el enlace.");
+    expect(texto).toContain("Dos repuestos no entraron.");
+  });
+
+  /*
+   * LOS DOS DE ABAJO SON LA MISMA REGRESIÓN POR LAS DOS PUNTAS, y es la que
+   * hizo falta cuando el modal de «Nueva orden de trabajo» pasó a mandar por
+   * esta cola: hasta entonces leía por su cuenta `repuestos_error` y armaba su
+   * propio texto para la planilla, así que **la misma OT contaba una cosa
+   * cargada con la app abierta y otra cuando salía de la cola**.
+   */
+  it("los repuestos que no entraron se dicen: antes sólo los veía el modal", () => {
+    expect(loQueQuedoPendiente({ repuestos_error: "Dos repuestos no entraron." })).toBe(
+      "Dos repuestos no entraron.",
+    );
+  });
+
+  it("si la planilla todavía reintenta, no se promete una sincronización lejana", () => {
+    const reintentando = loQueQuedoPendiente({
+      planilla_error: "la fila del master no existe",
+      planilla_reintentando: true,
+    });
+    expect(reintentando).toContain("unos minutos");
+    expect(reintentando).toContain("reintenta solo");
+    // Y sin reintento, el texto nombra el error para que se pueda ir a mirar.
+    const yaNo = loQueQuedoPendiente({ planilla_error: "429 de Google" });
+    expect(yaNo).toContain("429 de Google");
+    expect(yaNo).not.toContain("reintenta solo");
   });
 
   it("un campo que no es texto no se imprime como objeto", () => {

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ConfirmProvider, useConfirm } from "@/components/ConfirmProvider";
-import { hoyEnArgentina } from "@/lib/core/fechas";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { useCargar } from "@/lib/core/useCargar";
-import { pedirVaciadoAhora, pedirVaciadoEnSegundoPlano } from "@/lib/core/vaciarLaCola";
+import { pedirVaciadoAhora } from "@/lib/core/vaciarLaCola";
 import {
   comoSeLlama,
   concordado,
@@ -13,14 +12,12 @@ import {
   despuesDelIntento,
   paradas,
   puedeEmpujarla,
-  queHacerConLaNueva,
   tomarLaCarga,
 } from "@/public/cola/colaOffline.js";
 import type { CargaEnCola, TipoDeCarga } from "@/public/cola/colaOffline.js";
 import {
   actualizarCarga,
   borrarCarga,
-  guardarCarga,
   leerCola,
 } from "@/public/cola/idb.js";
 import {
@@ -34,7 +31,12 @@ import {
   type GenteConocida,
   type SesionRecordada,
 } from "./catalogos";
-import { loQueDijo, mandarALaRuta, type Resultado } from "./envio";
+import {
+  loQueDijo,
+  mandarALaRuta,
+  mandarOEncolar,
+  type Resultado,
+} from "@/lib/core/mandarOEncolar";
 import FormularioAvisoOffline from "./FormularioAvisoOffline";
 import FormularioCondicionOffline from "./FormularioCondicionOffline";
 import { formularioQueSeVe, tiposQueSeOfrecen } from "@/lib/seguridadHigiene/glosarioOffline";
@@ -238,42 +240,20 @@ export default function CargarClient() {
     };
   }, [volverALeer]);
 
-  const encolar = useCallback(
-    async (
-      carga: CargaEnCola,
-      motivo: string | null,
-      fechaDelReloj: boolean,
-    ): Promise<Resultado> => {
-      try {
-        await guardarCarga(carga);
-      } catch (e) {
-        return {
-          estado: "rechazada",
-          error:
-            `No se pudo guardar la carga en el teléfono: ${loQueDijo(e)}. ` +
-            `No quedó anotada en ningún lado, así que no se cargó nada.`,
-          fechaDelReloj,
-        };
-      }
-      // Recién con la carga guardada: pedirlo antes dejaría registrado un
-      // vaciado para una cola a la que no entró nada. Y acá y no sólo en la
-      // barra del layout, porque esa barra **no se monta en esta pantalla** —
-      // `/cargar` vive fuera del grupo `(app)`, justamente para poder dibujarse
-      // sin servidor—, así que éste es el único lugar del camino que importa
-      // desde donde se puede pedir. En Android es lo que hace que la carga
-      // salga sola cuando vuelva la señal, con la app cerrada; en iPhone no
-      // hace nada y falla callado, porque no es algo que la persona pueda
-      // arreglar.
-      void pedirVaciadoEnSegundoPlano();
-      await releerLaCola();
-      // `yaEntro` sale de la carga que se acaba de guardar y no de un
-      // parámetro: es el mismo dato, y el cartel lo necesita para no decir
-      // «todavía no tiene número» sobre una condición que ya tiene el suyo.
-      return { estado: "encolada", motivo, yaEntro: carga.yaEntro ?? null };
-    },
-    [releerLaCola],
-  );
-
+  /**
+   * Manda una carga y, si el camino falló, la deja en la cola del teléfono.
+   *
+   * **LA DECISIÓN DE MANDAR O ENCOLAR YA NO VIVE ACÁ.** Desde el 02/11/2026
+   * está en `lib/core/mandarOEncolar.ts`, porque la comparten esta pantalla y
+   * los botones de siempre —«Avisar de una falla», «Nueva orden de trabajo» y
+   * «Nueva condición»—, que antes tenían un `fetch` suelto y sin `try`: sin
+   * señal el modal quedaba colgado con lo escrito adentro. Copiar la regla en
+   * cada uno habría dejado tres versiones de «¿esto fue un corte de conexión o
+   * un rechazo?», y la que se desactualiza es la que nadie mira.
+   *
+   * Lo que queda acá es lo único que es de esta pantalla: qué hacer con la
+   * carga parada que se estaba corrigiendo.
+   */
   const mandar = useCallback(
     async (
       tipo: TipoDeCarga,
@@ -281,43 +261,7 @@ export default function CargarClient() {
       /** La clave de la carga parada que esto viene a reemplazar, si es una corrección. */
       reemplaza: string | null = null,
     ): Promise<Resultado> => {
-      // UNA CLAVE POR CARGA, generada acá y **nunca derivada del contenido**:
-      // dos avisos iguales el mismo día son dos avisos y no un duplicado. Es la
-      // misma clave en cada reintento, y es lo que hace que el servidor
-      // reconozca al reintento en vez de escribir una segunda fila con un
-      // segundo número.
-      const clave = crypto.randomUUID();
-      const laPusoUnaPersona = typeof cuerpo.fecha === "string" && cuerpo.fecha !== "";
-      const cuerpoCompleto = {
-        ...cuerpo,
-        clave,
-        // La fecha que viaja es la del día en que se cargó, no la del día en
-        // que entra: un aviso del viernes que recién llega el lunes dice
-        // viernes, porque de esa fecha salen el historial del equipo y el MTBF.
-        // El formulario de OT la pregunta («Fecha creación») y el de aviso no,
-        // así que acá se completa con hoy cuando no vino. Las dos rutas
-        // rechazan con 400 una fecha futura o ilegible, y para la cola un 400
-        // es definitivo: esa carga queda parada y a la vista.
-        fecha: laPusoUnaPersona ? cuerpo.fecha : hoyEnArgentina(),
-      };
-
-      const carga: CargaEnCola = {
-        clave,
-        tipo,
-        cuerpo: cuerpoCompleto,
-        usuarioId: sesion?.id ?? "",
-        creadaEn: new Date().toISOString(),
-        tomadaEn: null,
-        intentos: 0,
-        ultimoError: null,
-        estado: "esperando",
-      };
-
-      // `null` es "ni se intentó": sin señal va derecho a la cola. Qué hacer
-      // con lo que haya contestado el servidor lo decide `queHacerConLaNueva`,
-      // que es pura y está probada; acá sólo se ejecuta lo que dijo.
-      const respuesta = navigator.onLine ? await mandarALaRuta(tipo, cuerpoCompleto) : null;
-      const queHacer = queHacerConLaNueva(respuesta);
+      const salida = await mandarOEncolar(tipo, cuerpo);
 
       /**
        * La carga parada que se estaba corrigiendo sale de la cola **recién
@@ -331,60 +275,24 @@ export default function CargarClient() {
        * reusada chocaría contra esa reserva y recibiría un 409 «en duda» que no
        * es cierto.
        */
-      async function soltarLaQueSeEditaba() {
-        if (!reemplaza) return;
-        try {
-          await borrarCarga(reemplaza);
-        } catch {
-          // Lo nuevo ya está guardado o mandado. Que la vieja siga en la lista
-          // es visible y lo arregla el botón de borrar; perderla no.
+      if (salida.estado !== "rechazada") {
+        if (reemplaza) {
+          try {
+            await borrarCarga(reemplaza);
+          } catch {
+            // Lo nuevo ya está guardado o mandado. Que la vieja siga en la
+            // lista es visible y lo arregla el botón de borrar; perderla no.
+          }
+          // Sin tocar `generacion`: el formulario no se remonta, así que el
+          // cartel que dice con qué número entró se queda en pantalla.
+          setBorrador(null);
         }
-        // Sin tocar `generacion`: el formulario no se remonta, así que el
-        // cartel que dice con qué número entró se queda en pantalla.
-        setBorrador(null);
+        await releerLaCola();
       }
 
-      if (queHacer.accion === "listo") {
-        await soltarLaQueSeEditaba();
-        await releerLaCola();
-        return {
-          estado: "mandada",
-          numero: queHacer.numero,
-          advertencia: queHacer.advertencia,
-        };
-      }
-      if (queHacer.accion === "rechazar") {
-        // El texto de la ruta, sin traducir. Y, si la ruta dijo que la fila ya
-        // quedó escrita pese al fallo, eso viaja aparte: es lo que evita que
-        // el formulario quede listo para mandar un duplicado.
-        return {
-          estado: "rechazada",
-          error: queHacer.error,
-          fechaDelReloj: !laPusoUnaPersona,
-          yaEntro: queHacer.yaEntro ?? null,
-        };
-      }
-      const salida = await encolar(
-        {
-          ...carga,
-          intentos: queHacer.intentos,
-          ultimoError: queHacer.ultimoError,
-          // Si la ruta dijo que la fila ya quedó escrita pese al fallo —hoy
-          // sólo la condición cuya foto no se pudo guardar—, la carga nace
-          // sabiéndolo: es lo que después le saca el botón de corregir, que
-          // sobre una de éstas crearía una segunda fila.
-          ...(queHacer.yaEntro ? { yaEntro: queHacer.yaEntro } : {}),
-        },
-        queHacer.ultimoError,
-        !laPusoUnaPersona,
-      );
-      if (salida.estado === "encolada") {
-        await soltarLaQueSeEditaba();
-        await releerLaCola();
-      }
       return salida;
     },
-    [sesion, encolar, releerLaCola],
+    [releerLaCola],
   );
 
   /**

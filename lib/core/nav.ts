@@ -112,25 +112,23 @@ export const NAV: NavItem[] = [
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
       /*
-       * La única entrada estable a `/cargar`. Hasta acá no había ninguna: a esa
-       * pantalla se llegaba porque el service worker la servía cuando no había
-       * señal, o porque la barra de «hay algo esperando» aparecía. O sea que
-       * quien quisiera abrirla **antes** de salir a la planta —que es cuando
-       * sirve bajar los desplegables y dejar la sesión recordada— no tenía
-       * cómo.
+       * ACÁ VIVÍA «Cargar sin señal», Y SE SACÓ EL 02/11/2026.
        *
-       * Vive en el menú de Mantenimiento y no en el de otro módulo porque lo
-       * que carga son avisos y órdenes de trabajo. Y cae debajo de las dos
-       * pantallas de esas cosas, no arriba: con señal se carga por los modales
-       * de siempre, y ésta es la de la excepción.
+       * `/cargar` sigue existiendo y no se tocó: es donde se ve y se corrige
+       * lo que quedó esperando, y se llega por la barra que el layout monta
+       * sola cuando hay algo pendiente. Lo que dejó de tener sentido es que
+       * fuera un **destino de menú**, porque eso obligaba a acordarse de ir
+       * ahí *antes* de quedarse sin red, que es justo lo que nadie hace.
        *
-       * OJO CON LA RUTA: `/cargar` está **fuera** del grupo `(app)`, así que
-       * `estaDentroDe("/mantenimiento", "/cargar")` es falso y el menú de
-       * Mantenimiento no se va a desplegar parado ahí. Es correcto y es a
-       * propósito: esa pantalla tampoco tiene este menú, porque tiene que poder
-       * dibujarse sin servidor.
+       * Ahora los botones de siempre —«Avisar de una falla», «Nueva orden de
+       * trabajo» y «Nueva condición»— caen solos a la cola cuando el envío no
+       * sale. El camino sin señal dejó de ser algo que se elige.
+       *
+       * Y de paso se arregló un efecto que nadie había mirado: esta entrada
+       * estaba bajo `modulo: "mantenimiento"`, así que quien tenía Seguridad e
+       * Higiene y no Mantenimiento **no veía ningún link** a la única pantalla
+       * desde la que se podía cargar una condición insegura.
        */
-      { label: "Cargar sin señal", href: "/cargar", modulo: "mantenimiento" },
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
       // Debajo de las órdenes de servicio porque es lo mismo visto por el otro
       // lado: allá se le pide un trabajo a un tercero, acá se carga el papel
