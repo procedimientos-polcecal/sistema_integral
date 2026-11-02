@@ -143,6 +143,40 @@ export function valoresDeLaOrden(
 export type OrdenParaComparar = { id: string; ot_number: number; fecha: string | null };
 
 /**
+ * El período que mira el freno: **del primer día del mes del grupo más
+ * temprano al último día del mes del más tardío**, entre los que se crean.
+ *
+ * Es el mes entero y no los días exactos de los grupos a propósito. Medido el
+ * 01/11/2026: de las 29 OT manuales de septiembre, **28 están fechadas el
+ * 01/09**. Con el rango justo, un cuaderno cuyo primer renglón cae el 02/09 —o
+ * cuyos grupos más tempranos quedaron para la segunda corrida por el tope de
+ * 25— no la atrapa, y se duplica exactamente lo que el freno existe para
+ * evitar. Un período que se carga por cuaderno es un mes o una quincena, así
+ * que mirar el mes es mirar lo que de verdad se está cubriendo.
+ *
+ * Null si no hay ningún grupo que se cree.
+ */
+export function rangoDelFreno(grupos: readonly GrupoDeCuaderno[]): { desde: string; hasta: string } | null {
+  const nuevas = grupos.filter((g) => g.accion === "crear");
+  const desdes = nuevas.map((g) => g.desde).filter((f): f is string => !!f).sort();
+  const hastas = nuevas.map((g) => g.hasta).filter((f): f is string => !!f).sort();
+  if (desdes.length === 0 || hastas.length === 0) return null;
+
+  const [anioD, mesD] = desdes[0].split("-").map(Number);
+  const [anioH, mesH] = hastas[hastas.length - 1].split("-").map(Number);
+  if (![anioD, mesD, anioH, mesH].every(Number.isFinite)) return null;
+
+  // El día 0 del mes siguiente es el último de éste: no hace falta saber
+  // cuántos días tiene ni si el año es bisiesto.
+  const ultimo = new Date(Date.UTC(anioH, mesH, 0)).getUTCDate();
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return {
+    desde: `${anioD}-${dos(mesD)}-01`,
+    hasta: `${anioH}-${dos(mesH)}-${dos(ultimo)}`,
+  };
+}
+
+/**
  * Las OT **del proveedor** que ya existen dentro del período que están por
  * cubrir las órdenes nuevas, y que **no son de este cuaderno**.
  *
@@ -156,8 +190,8 @@ export type OrdenParaComparar = { id: string; ot_number: number; fecha: string |
  * planilla se borra a mano, fila por fila. Es la misma forma y la misma razón
  * que el freno de los 50 renglones del borrado de espejo.
  *
- * El rango va del primer al último día de los grupos que **se van a crear**
- * (los que suman a una orden existente no crean nada). Las OT enlazadas a un
+ * El período es el de `rangoDelFreno`: los meses enteros de los grupos que
+ * **se van a crear** (los que suman a una orden existente no crean nada). Las OT enlazadas a un
  * renglón de este cuaderno quedan afuera: son lo que una corrida anterior
  * generó, y por eso una segunda corrida no se frena a sí misma. Es pura: la
  * ruta trae las candidatas de la base.
@@ -167,12 +201,9 @@ export function posiblesDuplicados(
   existentes: readonly OrdenParaComparar[],
   idsDeEsteCuaderno: ReadonlySet<string>
 ): OrdenParaComparar[] {
-  const desdes = grupos.filter((g) => g.accion === "crear" && g.desde).map((g) => g.desde as string).sort();
-  const hastas = grupos.filter((g) => g.accion === "crear" && g.hasta).map((g) => g.hasta as string).sort();
-  if (desdes.length === 0 || hastas.length === 0) return [];
-
-  const desde = desdes[0];
-  const hasta = hastas[hastas.length - 1];
+  const rango = rangoDelFreno(grupos);
+  if (!rango) return [];
+  const { desde, hasta } = rango;
 
   const vistas = new Map<string, OrdenParaComparar>();
   for (const o of existentes) {

@@ -13,7 +13,7 @@ import {
   enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import {
-  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados,
+  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
   type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
 } from "@/lib/mantenimiento/cuadernoOrden";
 
@@ -75,7 +75,9 @@ import {
  *
  * Septiembre de 2026 ya tiene 29 OT de PIPARO cargadas a mano, y generar su
  * cuaderno las duplica. Antes de crear, la ruta cuenta las OT **del
- * contratista** cuya `fecha` cae en el período de las órdenes que va a crear y
+ * contratista** cuya `fecha` cae en el período de las órdenes que va a crear
+ * —los **meses enteros**: 28 de las 29 manuales de septiembre están del 01/09,
+ * y un rango justo no las atrapaba si el cuaderno arrancaba el 02— y
  * que **no están enlazadas a ningún renglón de esta carga**. Si hay alguna, la
  * generación **se niega** (409) y dice cuántas son y sus números; se levanta
  * con `confirmar_duplicados: true` en el cuerpo. La vista previa no se niega:
@@ -265,12 +267,28 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const resultado = item.existente
-        ? await actualizarLaOT(admin, item, item.existente)
-        : await crearLaOT(admin, user.id, item, contratista);
+      // **Cada orden en su propio try/catch.** Si algo lanza entre el alta en la
+      // planilla y el marcado de los renglones, el catch de afuera devolvería
+      // sólo `{ error }` y se perdería la lista de lo que ya se escribió: una OT
+      // en la planilla, sin marcar, sin que nadie sepa cuál. Y eso se borra a
+      // mano, fila por fila. Acá el error va a `problemas`, con esas palabras,
+      // y las demás órdenes siguen sin perder `creadas`.
+      try {
+        const resultado = item.existente
+          ? await actualizarLaOT(admin, item, item.existente)
+          : await crearLaOT(admin, user.id, item, contratista);
 
-      if (!resultado.ok) { problemas.push(resultado.error); continue; }
-      (item.existente ? actualizadas : creadas).push(resultado.resumen);
+        if (!resultado.ok) { problemas.push(resultado.error); continue; }
+        (item.existente ? actualizadas : creadas).push(resultado.resumen);
+      } catch (e) {
+        problemas.push(
+          `${comoDecirla(grupo)}: falló de forma inesperada mientras se generaba ` +
+          `(${e instanceof Error ? e.message : String(e)}). **Puede haber quedado escrita en la ` +
+          `planilla una orden de este grupo sin marcar sus renglones**: antes de volver a ` +
+          `generar, mirá las últimas OT de ${contratista} en la planilla; si apareció una de ` +
+          `este grupo, volver a generar la crea otra vez.`
+        );
+      }
     }
 
     const quedaron = plan.filter((p) => p.grupo.accion !== "denunciar" && !p.entra).length + sinEmpezar;
@@ -370,9 +388,10 @@ async function buscarPosiblesDuplicados(
   contratista: string
 ): Promise<OrdenParaComparar[]> {
   const nuevas = seCrean.filter((g) => g.accion === "crear");
-  const desdes = nuevas.map((g) => g.desde).filter((f): f is string => !!f).sort();
-  const hastas = nuevas.map((g) => g.hasta).filter((f): f is string => !!f).sort();
-  if (desdes.length === 0 || hastas.length === 0) return [];
+  // El mismo período que usa `posiblesDuplicados`: los meses enteros. Si la
+  // consulta trajera menos que la función mira, el freno no vería lo de afuera.
+  const rango = rangoDelFreno(nuevas);
+  if (!rango) return [];
 
   // \, % y _ son comodines de ilike: un nombre con uno no debe leerse como patrón.
   const patron = contratista.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -382,8 +401,8 @@ async function buscarPosiblesDuplicados(
       .from("ordenes_trabajo")
       .select("id, ot_number, fecha")
       .ilike("contratista", patron)
-      .gte("fecha", desdes[0])
-      .lte("fecha", hastas[hastas.length - 1])
+      .gte("fecha", rango.desde)
+      .lte("fecha", rango.hasta)
       .order("id")
       .range(d, h)
   );

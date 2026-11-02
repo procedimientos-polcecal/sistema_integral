@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { enOrdenes, type RenglonDelCuaderno } from "./cuadernoGrupos";
 import {
   VALORES_DE_PIPARO, descripcionDeLaOrden, equipoParaLaPlanilla, valoresDeLaOrden,
-  posiblesDuplicados, avisoDeDuplicados,
+  posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
 } from "./cuadernoOrden";
 
 const SECTOR = { nombre: "Planta de trituración 3", codigo: "PO-A3" };
@@ -143,13 +143,45 @@ describe("posiblesDuplicados", () => {
   const crear = (rs: RenglonDelCuaderno[]) => enOrdenes(rs).filter((g) => g.accion === "crear");
   const ot = (id: string, n: number, fecha: string) => ({ id, ot_number: n, fecha });
 
-  it("una OT del proveedor dentro del rango, sin enlazar a este cuaderno, es un posible duplicado", () => {
+  it("una OT del proveedor en el período, sin enlazar a este cuaderno, es un posible duplicado", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-10" })]);
+    const r = posiblesDuplicados(grupos, [ot("y", 2502, "2026-09-10")], new Set());
+    expect(r.map((o) => o.ot_number)).toEqual([2502]);
+  });
+
+  /**
+   * EL CASO REAL QUE MOTIVÓ EL FRENO. De las 29 OT manuales de septiembre de
+   * 2026, 28 están fechadas el 01/09. Con el rango justo de los grupos, un
+   * cuaderno cuyo primer renglón cae el 02/09 —o cuyos grupos más tempranos
+   * quedaron para la segunda corrida por el tope— no la atrapaba, y duplicaba
+   * exactamente lo que el freno existe para evitar.
+   */
+  it("una OT manual del 01/09 frena a un cuaderno que empieza el 02/09", () => {
     const grupos = crear([
       renglon("a", { fecha: "2026-09-02" }), renglon("b", { fecha: "2026-09-25", tarea: "Otra" }),
     ]);
-    const r = posiblesDuplicados(grupos, [ot("x", 2501, "2026-09-01"), ot("y", 2502, "2026-09-10")], new Set());
-    // El 01/09 queda afuera del rango 02/09–25/09: sólo cuenta lo que cae adentro.
-    expect(r.map((o) => o.ot_number)).toEqual([2502]);
+    const r = posiblesDuplicados(grupos, [ot("x", 2501, "2026-09-01"), ot("y", 2502, "2026-09-24")], new Set());
+    expect(r.map((o) => o.ot_number)).toEqual([2501, 2502]);
+  });
+
+  it("el período es el mes entero: llega al último día aunque los grupos terminen antes", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-09-10" })]);
+    const r = posiblesDuplicados(grupos, [ot("x", 1, "2026-09-30"), ot("y", 2, "2026-10-01"), ot("z", 3, "2026-08-31")], new Set());
+    expect(r.map((o) => o.ot_number)).toEqual([1]);
+  });
+
+  it("un cuaderno que cruza dos meses mira los dos enteros", () => {
+    const grupos = crear([renglon("a", { fecha: "2026-08-28" }), renglon("b", { fecha: "2026-09-03", tarea: "Otra" })]);
+    expect(rangoDelFreno(grupos)).toEqual({ desde: "2026-08-01", hasta: "2026-09-30" });
+  });
+
+  it("febrero de un año bisiesto termina el 29", () => {
+    const grupos = crear([renglon("a", { fecha: "2028-02-10" })]);
+    expect(rangoDelFreno(grupos)).toEqual({ desde: "2028-02-01", hasta: "2028-02-29" });
+  });
+
+  it("sin grupos para crear no hay rango", () => {
+    expect(rangoDelFreno([])).toBeNull();
   });
 
   it("los bordes del rango cuentan", () => {
