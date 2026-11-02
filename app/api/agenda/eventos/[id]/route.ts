@@ -9,12 +9,23 @@ import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura,
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados, sacarInvitados, diferenciaDeInvitados } from "@/lib/agenda/invitados";
-import { cargarEvento } from "@/lib/agenda/cargar";
+import { cargarEvento, rechazoDeEventoDeOT } from "@/lib/agenda/cargar";
 import { quienLlama } from "@/lib/agenda/sesion";
 
 /**
  * Un evento de la Agenda: modificarlo (PATCH) y borrarlo (DELETE). **Sólo el
  * dueño**; un invitado lo ve y recibe un 403 con el motivo.
+ *
+ * ── EL EVENTO DE UNA OT NO SE TOCA DESDE ACÁ ───────────────────────────────
+ *
+ * Un evento con `ot_id` es de sólo lectura para las dos rutas, en todas sus
+ * partes, y contesta 409 con el número de la OT. **No es del que lo mira: es de
+ * la orden.** Su horario sale de la fecha de ejecución y la sincronización lo
+ * reescribe cuando la planilla la mueve; si se pudiera editar, la persona vería
+ * su cambio guardado y después desaparecer sin aviso, que es la misma mentira
+ * que evita el no pisar un evento divergido. La condición es `ot_id` y no «tocó
+ * el horario» porque la OT reescribe también el título y los invitados. Ver
+ * `rechazoDeEventoDeOT` en `lib/agenda/cargar.ts`.
  *
  * ── MODIFICAR ───────────────────────────────────────────────────────────────
  *
@@ -61,6 +72,8 @@ export async function PATCH(
   const cargado = await cargarEvento(supabase, id, quien.id, { accion: "modificarlo" });
   if (!cargado.ok) return cargado.respuesta;
   const actual = cargado.evento;
+  const deUnaOT = await rechazoDeEventoDeOT(supabase, actual, "modificar");
+  if (deUnaOT) return deUnaOT;
 
   // El evento como quedaría, para validarlo entero y no sólo lo que cambió: mover
   // sólo el fin puede dejarlo antes del inicio que ya tenía. Las horas que
@@ -195,6 +208,8 @@ export async function DELETE(
   const cargado = await cargarEvento(supabase, id, quien.id, { accion: "borrarlo" });
   if (!cargado.ok) return cargado.respuesta;
   const actual = cargado.evento;
+  const deUnaOT = await rechazoDeEventoDeOT(supabase, actual, "borrar");
+  if (deUnaOT) return deUnaOT;
 
   // Sin id en Google igual se intenta borrar el derivado de la fila: un alta que
   // cortó a los 30 segundos puede haberse creado de todos modos, y borrar un id

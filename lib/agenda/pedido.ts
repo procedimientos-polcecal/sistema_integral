@@ -57,6 +57,21 @@ export function idDeGoogleDe(filaId: string): string {
   return filaId.replace(/-/g, "").toLowerCase();
 }
 
+/**
+ * Lo que se le dice a quien quiere modificar o borrar el evento de una OT.
+ * `numero` es el de la orden (`ot_number`); null si no se pudo averiguar —la
+ * persona puede no tener acceso a Mantenimiento y no leer la OT—, y entonces el
+ * mensaje la nombra sin número en vez de inventarlo.
+ */
+export function mensajeDeEventoDeOT(accion: "modificar" | "borrar", numero: number | null): string {
+  const cual = numero === null ? "una orden de trabajo" : `la orden de trabajo ${numero}`;
+  return (
+    `No se puede ${accion} este evento desde la Agenda: lo maneja ${cual}. ` +
+    `Su horario sale de la fecha de ejecución de la orden y se vuelve a escribir cuando esa fecha cambia, ` +
+    `así que un cambio hecho acá se perdería sin avisar. Se cambia desde la orden.`
+  );
+}
+
 /** Texto libre del cuerpo: acepta vacío o null para «sin valor». */
 const textoOpcional = (max: number) => z.string().max(max).nullish();
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { validar } from "@/lib/core/validar";
 import {
   aInstanteISO, aHoraDePared, idDeGoogleDe, invitadosLimpios, eventoParaGoogle, divergenciaVista,
-  esquemaDeAlta, esquemaDeCambio, esquemaDeDestrabar,
+  esquemaDeAlta, esquemaDeCambio, esquemaDeDestrabar, mensajeDeEventoDeOT,
 } from "./pedido";
 
 describe("las horas", () => {
@@ -67,6 +67,21 @@ describe("eventoParaGoogle", () => {
       fin: "2026-11-03T09:30:00",
       invitados: ["ana@polcecal.com"],
     });
+  });
+});
+
+describe("mensajeDeEventoDeOT", () => {
+  it("nombra la orden con su número y dice por qué", () => {
+    const m = mensajeDeEventoDeOT("modificar", 2901);
+    expect(m).toContain("la orden de trabajo 2901");
+    expect(m).toContain("No se puede modificar");
+    expect(m).toMatch(/se perdería sin avisar/);
+  });
+  it("sin número no lo inventa", () => {
+    const m = mensajeDeEventoDeOT("borrar", null);
+    expect(m).toContain("una orden de trabajo");
+    expect(m).not.toMatch(/\d{3,}/);
+    expect(m).toContain("No se puede borrar");
   });
 });
 

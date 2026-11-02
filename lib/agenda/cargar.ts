@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Divergencia } from "./divergencia";
 import { ES_UUID } from "./sesion";
+import { mensajeDeEventoDeOT } from "./pedido";
 
 /** Lo que las rutas de un evento necesitan de su fila. */
 export interface EventoCargado {
@@ -19,6 +20,41 @@ export interface EventoCargado {
   ot_id: string | null;
   /** Los correos de los invitados, en minúscula. */
   invitados: string[];
+}
+
+/**
+ * El 409 con que se rechaza modificar o borrar el evento de una OT, o `null` si
+ * el evento no es de una OT.
+ *
+ * **El evento de una OT no es de quien lo mira: es de la orden.** Su horario
+ * sale de la `fecha_ejecucion` y la sincronización lo reescribe cuando la
+ * planilla la mueve. Si la Agenda dejara editarlo, la persona vería que su
+ * cambio se guardó y después, en la corrida siguiente, desaparecer sin que nada
+ * avise: la misma mentira que este diseño evita al no pisar un evento
+ * divergido. Por eso es de sólo lectura en todas sus partes, no sólo en la hora
+ * —el título, los invitados y el lugar los reescribe la OT igual—, y por eso la
+ * condición es `ot_id` y no «cambió el horario».
+ *
+ * No alcanza a `visto` ni a `destrabar`: son la forma de resolver una
+ * divergencia, y esa ruta no es editar el evento sino volver a atarlo.
+ */
+export async function rechazoDeEventoDeOT(
+  supabase: SupabaseClient,
+  evento: Pick<EventoCargado, "ot_id">,
+  accion: "modificar" | "borrar"
+): Promise<NextResponse | null> {
+  if (!evento.ot_id) return null;
+  // Si la lectura falla o no se tiene acceso a la OT, el rechazo sale igual: el
+  // número es lo único que se pierde.
+  const { data } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number")
+    .eq("id", evento.ot_id)
+    .maybeSingle();
+  return NextResponse.json(
+    { error: mensajeDeEventoDeOT(accion, data?.ot_number ?? null) },
+    { status: 409 }
+  );
 }
 
 /**
