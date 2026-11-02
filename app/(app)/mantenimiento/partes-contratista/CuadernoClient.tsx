@@ -83,6 +83,28 @@ interface ItemDeCola {
   enElBucket?: boolean;
 }
 
+/** Una orden de la vista previa que arma el servidor: la misma cuenta que la generación. */
+interface OrdenDelPlan {
+  clave: string;
+  accion: "crear" | "sumar" | "denunciar";
+  /** Va en esta corrida; el resto queda para apretar de nuevo. */
+  entra: boolean;
+  tarea: string;
+  horas: number;
+  costo: number | null;
+  repuesto: string | null;
+}
+
+interface ResumenGenerado { ot_number: number; tarea: string; sector: string; horas: number; costo: number | null }
+
+/** Lo que devolvió la última generación, para dejarlo a la vista. */
+interface ResultadoDeGenerar {
+  creadas: ResumenGenerado[];
+  actualizadas: ResumenGenerado[];
+  problemas: string[];
+  quedaron: number;
+}
+
 type IdDeFiltro = "todos" | "sin_sector" | "por_confirmar" | "con_costo" | "dudosos" | "juntados";
 
 const NUEVA = "nueva";
@@ -194,6 +216,7 @@ export default function CuadernoClient({
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoDeGenerar | null>(null);
 
   const [filtro, setFiltro] = useState<IdDeFiltro>("todos");
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
@@ -694,6 +717,103 @@ export default function CuadernoClient({
     }
   }
 
+  // ── Generar las órdenes ───────────────────────────────────
+
+  async function pedirGenerar(simular: boolean) {
+    const res = await fetch("/api/mantenimiento/cuaderno/generar", {
+      method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ cuaderno_id: cargaId, simular }),
+    });
+    const cuerpo = await leerJson<Partial<ResultadoDeGenerar> & { ordenes?: OrdenDelPlan[] }>(res);
+    if (!res.ok && !cuerpo.error) cuerpo.error = `HTTP ${res.status}`;
+    return cuerpo;
+  }
+
+  /**
+   * Generar es **irreversible**: una OT escrita en la planilla se borra a mano,
+   * fila por fila. Por eso nunca se genera sin haber pedido antes la vista
+   * previa **al servidor** —la misma cuenta que va a correr— y haberla puesto
+   * delante de una persona.
+   *
+   * Y si lo que calcula el servidor no coincide con lo que esta pantalla
+   * muestra, no se genera: alguien más tocó la carga, y confirmar un número
+   * que ya no es el que se ve es lo que esta pantalla existe para evitar.
+   */
+  async function generar() {
+    if (cargaId === NUEVA) return;
+    setError(""); setAviso(""); setResultado(null); setOcupado(true);
+    try {
+      const previa = await pedirGenerar(true);
+      if (previa.error || !previa.ordenes) {
+        setError(previa.error ?? "La vista previa no llegó.");
+        return;
+      }
+
+      const delServidor = new Set(previa.ordenes.map((o) => `${o.clave}|${o.accion}`));
+      const deLaPantalla = new Set(salida.ordenes.map((o) => `${o.clave}|${o.accion}`));
+      const coincide =
+        delServidor.size === deLaPantalla.size && [...delServidor].every((k) => deLaPantalla.has(k));
+      if (!coincide) {
+        setError(
+          `Lo que calcula el servidor (${delServidor.size} órdenes) no coincide con lo que muestra esta pantalla ` +
+          `(${deLaPantalla.size}): alguien más tocó la carga. No se generó nada; se la volvió a leer, mirala de nuevo.`
+        );
+        recargar();
+        return;
+      }
+
+      const entran = previa.ordenes.filter((o) => o.entra);
+      if (entran.length === 0) {
+        setAviso(
+          previa.ordenes.some((o) => o.accion === "denunciar")
+            ? "Lo único que hay para generar son grupos con dos órdenes, que hay que mirar a mano."
+            : "No hay nada para generar."
+        );
+        return;
+      }
+
+      const nuevas = entran.filter((o) => o.accion === "crear").length;
+      const sumadas = entran.filter((o) => o.accion === "sumar").length;
+      const horas = redondear(entran.reduce((s, o) => s + o.horas, 0));
+      const costo = redondear(entran.reduce((s, o) => s + (o.costo ?? 0), 0));
+      const quedan = previa.ordenes.filter((o) => o.accion !== "denunciar" && !o.entra).length;
+
+      const ok = await confirm({
+        title: "Generar las órdenes de trabajo",
+        message:
+          `Se van a escribir en la planilla de producción: ${nuevas} órdenes nuevas` +
+          `${sumadas > 0 ? ` y ${sumadas} que suman a una que ya existe` : ""}, con ${verHoras(horas)} h` +
+          `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}. ` +
+          `Una orden escrita ahí no se deshace desde el sistema: se borra a mano, fila por fila. ` +
+          `${quedan > 0 ? `Van ${entran.length} en esta corrida y quedan ${quedan} para apretar de nuevo. ` : ""}` +
+          `Tarda: son varias llamadas a Google por orden, así que no cierres la pantalla.`,
+        confirmText: `Generar ${entran.length}`, cancelText: "Volver", danger: true,
+      });
+      if (!ok) return;
+
+      const hecho = await pedirGenerar(false);
+      if (hecho.error && !hecho.creadas) {
+        setError(hecho.error);
+        return;
+      }
+      setResultado({
+        creadas: hecho.creadas ?? [],
+        actualizadas: hecho.actualizadas ?? [],
+        problemas: hecho.problemas ?? [],
+        quedaron: hecho.quedaron ?? 0,
+      });
+    } catch (e) {
+      // Un corte a mitad de una corrida no dice qué órdenes se escribieron: se
+      // vuelve a leer la carga, que sí lo sabe (cada renglón lleva su orden).
+      setError(
+        `Se cortó la conexión mientras se generaba: ${e instanceof Error ? e.message : String(e)}. ` +
+        `Puede que algunas órdenes sí se hayan escrito; mirá qué renglones quedaron marcados antes de volver a generar.`
+      );
+    } finally {
+      recargar();
+      setOcupado(false);
+    }
+  }
+
   // ── Borrar la carga ───────────────────────────────────────
   async function borrarLaCarga() {
     if (cargaId === NUEVA) return;
@@ -726,6 +846,7 @@ export default function CuadernoClient({
 
   function cambiarDeCarga(id: string) {
     setCargaId(id);
+    setResultado(null);
     setSeleccion(new Set());
     setRenglonActivo(null);
     setFotoElegida(null);
@@ -1229,8 +1350,44 @@ export default function CuadernoClient({
               {pendientesSinSalir > 0 && ` · ${pendientesSinSalir} renglones todavía no salen`}
             </summary>
             <p className="mt-2 text-xs text-slate-500">
-              Es la misma cuenta que va a hacer la generación. Esta pantalla todavía no genera nada.
+              Es la misma cuenta que hace la generación: antes de escribir, el servidor la vuelve a
+              calcular y se te muestra para confirmar. Generar no se deshace desde acá.
             </p>
+            {puedeEditar && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={generar}
+                  disabled={ocupado || salida.ordenes.every((o) => o.accion === "denunciar")}
+                  className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  {ocupado ? "Generando…" : "Generar las órdenes de trabajo"}
+                </button>
+                <p className="mt-1 text-xs text-slate-500">
+                  Hasta 25 por vez; si hay más, se aprieta de nuevo y lo ya generado no se repite.
+                </p>
+              </div>
+            )}
+            {resultado && (
+              <div className="mt-3 space-y-2 rounded border border-slate-200 p-3 text-sm">
+                <p className="font-medium text-slate-800">
+                  {resultado.creadas.length} creadas · {resultado.actualizadas.length} actualizadas
+                  {resultado.quedaron > 0 && ` · quedan ${resultado.quedaron} para otra corrida`}
+                </p>
+                {resultado.creadas.length + resultado.actualizadas.length > 0 && (
+                  <p className="text-xs text-slate-600">
+                    OT:{" "}
+                    {[...resultado.creadas, ...resultado.actualizadas]
+                      .map((o) => o.ot_number).sort((a, b) => a - b).join(", ")}
+                  </p>
+                )}
+                {resultado.problemas.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5 text-xs text-rose-700">
+                    {resultado.problemas.map((p, i) => <li key={i}>{p}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
             {salida.ordenes.length > 0 && (
               <ul className="mt-3 space-y-1 text-sm">
                 {salida.ordenes.map((o) => (
