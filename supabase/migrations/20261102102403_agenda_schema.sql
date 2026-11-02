@@ -69,11 +69,12 @@
 -- falla con `PGRST201`. Hay que nombrar por dónde ir: `usuarios!dueno_id(nombre)`.
 -- No rompe nada de lo que existe, pero los `select` nuevos lo necesitan.
 --
--- LOS PARES DE COLUMNAS VAN ATADOS. `divergencia` / `divergencia_el` y
--- `google_pendiente` / `google_pendiente_el` se escriben juntos o ninguno: con
--- `divergencia` puesta y `divergencia_el` en null, la comparación contra
--- `agenda_divergencias_vistas` deja de funcionar en silencio y una divergencia no
--- vuelve a aparecer nunca. Los `check` están como `alter table` en un bloque que
+-- LOS PARES DE COLUMNAS VAN ATADOS. `divergencia` / `divergencia_el`,
+-- `google_pendiente` / `google_pendiente_el` e `inicio_escrito` / `fin_escrito`
+-- se escriben juntos o ninguno: con `divergencia` puesta y `divergencia_el` en
+-- null, la comparación contra `agenda_divergencias_vistas` deja de funcionar en
+-- silencio y una divergencia no vuelve a aparecer nunca; con medio par de
+-- `*_escrito`, la detección del eco falla con el mismo silencio. Los `check` están como `alter table` en un bloque que
 -- mira antes de agregar, y no dentro del `create table`, para que la segunda
 -- corrida los traiga si la tabla ya existía.
 --
@@ -101,6 +102,14 @@
 -- definer` y sin pasar por RLS: una sola fuente de verdad para «quién ve un
 -- evento», que además evita pagar una expansión de RLS por cada fila de
 -- invitados examinada. Va sin envolver en `(select …)` por la razón de abajo.
+--
+-- DE QUÉ DEPENDE QUE NO HAYA RECURSIÓN: de que el cuerpo de esas funciones corre
+-- como el dueño de las tablas, y el dueño no paga sus propias policies. Eso se
+-- rompe si alguien pone `force row level security` en `agenda_eventos` o en
+-- `agenda_invitados`: la recursión vuelve, y vuelve peor. Con un `exists` inline
+-- Postgres la detecta al planificar y da `42P17`; con una llamada a función no
+-- hay detección y se va hasta `54001 stack depth limit exceeded`. No se pone.
+--
 -- Escribir invitados es del dueño y se resuelve igual, con su hermana
 -- `agenda_soy_dueno()`: un `exists` directo sobre `agenda_eventos` también
 -- terminaría, pero así las policies de invitados dicen lo mismo de la misma forma.
@@ -176,6 +185,14 @@ begin
     alter table public.agenda_eventos
       add constraint agenda_eventos_google_pendiente_par
       check ((google_pendiente is null) = (google_pendiente_el is null));
+  end if;
+
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.agenda_eventos'::regclass
+                    and conname = 'agenda_eventos_escrito_par') then
+    alter table public.agenda_eventos
+      add constraint agenda_eventos_escrito_par
+      check ((inicio_escrito is null) = (fin_escrito is null));
   end if;
 end $$;
 
@@ -276,13 +293,29 @@ alter table public.agenda_canales              enable row level security;
 
 -- Un evento lo ve su dueño o quien esté invitado y sea usuario del SdG.
 --
--- OJO: ESTA LLAMADA NO SE ENVUELVE EN `(select …)`. `agenda_veo_evento(id)`
+-- OJO 1: LA LLAMADA NO SE ENVUELVE EN `(select …)`. `agenda_veo_evento(id)`
 -- recibe una columna de la fila, así que evaluarla una sola vez le mostraría a
 -- cada uno los eventos del primero que consultó. Es un agujero y no una lentitud.
--- No hay recursión: la función es `security definer` y no pasa por RLS.
+-- No hay recursión mientras la función corra como el dueño de las tablas (ver el
+-- encabezado).
+--
+-- OJO 2: EL DISYUNTO `dueno_id = (select auth.uid())` NO ES REDUNDANTE, Y NO SE
+-- «SIMPLIFICA». Cuando un comando lleva `RETURNING`, Postgres aplica las policies
+-- de `select` como `with check` sobre la fila nueva, y ahí no filtra: aborta con
+-- `42501`. PostgREST escribe siempre el `RETURNING`, incluso con
+-- `return=minimal`. Con sólo la llamada a la función, todo `insert … returning`
+-- hecho con la sesión de una persona se cae, porque la función vuelve a buscar la
+-- fila en la tabla y, siendo `stable`, usa el snapshot de la sentencia que la
+-- llama, donde la fila recién insertada todavía no se ve. El disyunto mira la
+-- tupla nueva, que está ahí mismo. De paso es el camino barato del dueño: listar
+-- sus eventos no paga una llamada a función por fila. Mismo patrón que
+-- `asientos_select` en 013_remises_rls.sql.
 drop policy if exists agenda_eventos_ver on public.agenda_eventos;
 create policy agenda_eventos_ver on public.agenda_eventos
-  for select using (public.agenda_veo_evento(id));
+  for select using (
+    dueno_id = (select auth.uid())
+    or public.agenda_veo_evento(id)
+  );
 
 -- Crear, editar y borrar: sólo el dueño. Un invitado lo ve y no lo toca.
 drop policy if exists agenda_eventos_crear on public.agenda_eventos;
