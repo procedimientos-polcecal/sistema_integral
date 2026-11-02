@@ -23,6 +23,34 @@ export interface EventoCargado {
 }
 
 /**
+ * Anota en la fila lo que pasó con Google, y **reintenta una vez** si falla.
+ *
+ * Importa porque es el `update` que corre después de que Google ya escribió: si
+ * se pierde, `inicio_escrito` queda con lo anterior mientras Google tiene lo
+ * nuevo, y la relectura que dispara el aviso de Google lo toma por un
+ * «movido»: notificación instantánea al dueño y a los invitados, y el evento
+ * trabado hasta que alguien lo destrabe, todo por un parpadeo de la base.
+ * Devuelve el mensaje del último error, o `null` si quedó anotado.
+ */
+export async function anotarEnLaFila(
+  supabase: SupabaseClient,
+  id: string,
+  columnas: Record<string, unknown>
+): Promise<string | null> {
+  let ultimo = "";
+  for (let intento = 0; intento < 2; intento++) {
+    const { error } = await supabase.from("agenda_eventos").update(columnas).eq("id", id);
+    if (!error) return null;
+    ultimo = error.message;
+  }
+  return ultimo;
+}
+
+/** Lo que se le agrega a un aviso cuando Google ya tiene el cambio y no se pudo anotar. */
+export const POR_SI_YA_ESCRIBIO =
+  "Si Google ya tiene el cambio, el SdG puede avisar de un movimiento que no es real: volvé a guardar el evento.";
+
+/**
  * El 409 con que se rechaza modificar o borrar el evento de una OT, o `null` si
  * el evento no es de una OT.
  *
@@ -35,13 +63,17 @@ export interface EventoCargado {
  * —el título, los invitados y el lugar los reescribe la OT igual—, y por eso la
  * condición es `ot_id` y no «cambió el horario».
  *
- * No alcanza a `visto` ni a `destrabar`: son la forma de resolver una
- * divergencia, y esa ruta no es editar el evento sino volver a atarlo.
+ * No alcanza a `visto` ni a `destrabar` con `reescribir`: son la forma de
+ * resolver una divergencia, y `reescribir` es lo único que resucita un evento de
+ * OT que alguien borró en Google. **Sí alcanza a `destrabar` con `aceptar`**
+ * (`accion: "aceptar"`): trae la hora de Google a `inicio`/`fin` de la fila, que
+ * para una OT salen de la `fecha_ejecucion`, y la sincronización los volvería a
+ * pisar: es la misma mentira que el 409 del PATCH existe para evitar.
  */
 export async function rechazoDeEventoDeOT(
   supabase: SupabaseClient,
   evento: Pick<EventoCargado, "ot_id">,
-  accion: "modificar" | "borrar"
+  accion: "modificar" | "borrar" | "aceptar"
 ): Promise<NextResponse | null> {
   if (!evento.ot_id) return null;
   // Si la lectura falla o no se tiene acceso a la OT, el rechazo sale igual: el

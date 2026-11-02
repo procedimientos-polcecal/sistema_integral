@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { esquemaDeDestrabar, eventoParaGoogle } from "@/lib/agenda/pedido";
 import { destrabar } from "@/lib/agenda/escribirEnGoogle";
-import { cargarEvento } from "@/lib/agenda/cargar";
+import { cargarEvento, rechazoDeEventoDeOT, anotarEnLaFila } from "@/lib/agenda/cargar";
 import { quienLlama } from "@/lib/agenda/sesion";
 
 /**
@@ -48,6 +48,14 @@ export async function POST(
     return NextResponse.json({ error: "Ese evento no está divergido: no hay nada que destrabar" }, { status: 409 });
   }
 
+  // `aceptar` en un evento de OT cambiaría `inicio`/`fin`, que salen de la
+  // `fecha_ejecucion` y la sincronización volvería a pisar. `reescribir` sí
+  // pasa: es lo único que resucita un evento de OT que alguien borró en Google.
+  if (r.datos.como === "aceptar") {
+    const deUnaOT = await rechazoDeEventoDeOT(supabase, actual, "aceptar");
+    if (deUnaOT) return deUnaOT;
+  }
+
   const resultado = await destrabar(
     r.datos.como,
     {
@@ -62,19 +70,17 @@ export async function POST(
 
   if (!resultado.ok) {
     // Un fallo de escritura se guarda con lo que dijo Google, aunque no destrabe.
-    if (resultado.columnas) {
-      await supabase.from("agenda_eventos").update(resultado.columnas).eq("id", id);
-    }
+    if (resultado.columnas) await anotarEnLaFila(supabase, id, resultado.columnas);
     return NextResponse.json({ error: resultado.error }, { status: resultado.estado });
   }
 
-  const { error } = await supabase.from("agenda_eventos").update(resultado.columnas).eq("id", id);
+  const error = await anotarEnLaFila(supabase, id, resultado.columnas);
   if (error) {
     return NextResponse.json(
       {
         error:
-          `Google quedó como se pidió, pero no se pudo anotar en el evento y sigue figurando divergido: ` +
-          `${error.message}. Volvé a destrabarlo: repetirlo no cambia nada.`,
+          `Google quedó como se pidió, pero no se pudo anotar en el evento ni en dos intentos y sigue ` +
+          `figurando divergido: ${error}. Volvé a destrabarlo: repetirlo no cambia nada.`,
       },
       { status: 500 }
     );

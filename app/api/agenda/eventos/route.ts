@@ -10,6 +10,7 @@ import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura,
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados } from "@/lib/agenda/invitados";
+import { anotarEnLaFila } from "@/lib/agenda/cargar";
 import { quienLlama } from "@/lib/agenda/sesion";
 
 /**
@@ -31,11 +32,14 @@ import { quienLlama } from "@/lib/agenda/sesion";
  * (`idDeGoogleDe`), así que si Google contesta pero la anotación en la fila
  * falla, el reintento da con el mismo evento y no manda la invitación otra vez.
  *
- * **El insert no pide la fila de vuelta.** `agenda_eventos_ver` pregunta por
- * `agenda_veo_evento(id)`, que es `STABLE` y lee la tabla con el snapshot del
- * comienzo de la sentencia: no ve la fila que esa misma sentencia está
- * insertando, y un `insert … returning` se rechazaría como violación de RLS.
- * La relectura es otra sentencia.
+ * **El insert no pide la fila de vuelta, pero no porque no pueda.**
+ * `agenda_eventos_ver` pregunta por `agenda_veo_evento(id)`, que es `STABLE` y
+ * lee la tabla con el snapshot del comienzo de la sentencia, así que no ve la
+ * fila que esa misma sentencia está insertando; la migración lo resuelve con el
+ * disyunto `dueno_id = (select auth.uid())` delante de la función, y con él un
+ * `insert … returning` anda. La relectura es aparte porque trae los embeds
+ * (invitados y nombre del dueño) y porque hay que esperar a que Google conteste
+ * para devolver la fila ya anotada.
  *
  * **El evento y sus invitados van en sentencias separadas, nunca en una sola**
  * (ni con un CTE): el `with check` de `agenda_invitados` llama a
@@ -156,17 +160,18 @@ export async function POST(request: Request) {
     { casilla: quien.casilla, google_event_id: null, inicio, fin },
     eventoParaGoogle(fila, invitados, quien.casilla)
   );
-  const { error: errorAlAnotar } = await supabase
-    .from("agenda_eventos")
-    .update(columnasDespuesDeEscribir(enGoogle, new Date().toISOString()))
-    .eq("id", id);
+  const errorAlAnotar = await anotarEnLaFila(
+    supabase,
+    id,
+    columnasDespuesDeEscribir(enGoogle, new Date().toISOString())
+  );
 
   const advertencias: string[] = [];
   const dePendiente = advertenciaDeLaEscritura(enGoogle, "El evento");
   if (dePendiente) advertencias.push(dePendiente);
   if (errorAlAnotar) {
     advertencias.push(
-      `No se pudo anotar en el evento lo que pasó con Google (${errorAlAnotar.message}). ` +
+      `No se pudo anotar en el evento lo que pasó con Google, ni en dos intentos (${errorAlAnotar}). ` +
         (enGoogle.pendiente
           ? "El evento sigue sin estar en Google."
           : "El evento sí está en Google, y volver a guardarlo no lo duplica.")

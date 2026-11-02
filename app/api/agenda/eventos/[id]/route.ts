@@ -6,10 +6,10 @@ import {
   aInstanteISO, esquemaDeCambio, eventoParaGoogle, idDeGoogleDe, invitadosLimpios,
 } from "@/lib/agenda/pedido";
 import {
-  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura,
+  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parPendiente,
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados, sacarInvitados, diferenciaDeInvitados } from "@/lib/agenda/invitados";
-import { cargarEvento, rechazoDeEventoDeOT } from "@/lib/agenda/cargar";
+import { cargarEvento, rechazoDeEventoDeOT, anotarEnLaFila, POR_SI_YA_ESCRIBIO } from "@/lib/agenda/cargar";
 import { quienLlama } from "@/lib/agenda/sesion";
 
 /**
@@ -121,17 +121,30 @@ export async function PATCH(
   if (cambio.invitados !== undefined) {
     const { sacar, agregar } = diferenciaDeInvitados(actual.invitados, invitados);
     // Primero los que se suman: si falla un insert, nadie quedó afuera.
-    const falloAgregar = await agregarInvitados(supabase, id, agregar);
-    if (falloAgregar) {
-      return NextResponse.json(
-        { error: `${falloAgregar}. Los demás cambios del evento sí se guardaron.` },
-        { status: 500 }
+    const falloDeInvitados =
+      (await agregarInvitados(supabase, id, agregar)) ?? (await sacarInvitados(supabase, id, sacar));
+    if (falloDeInvitados) {
+      // **La fila ya va adelantada de Google** (el `update` de arriba corrió) y,
+      // si se contesta acá sin más, nada lo registra: sin pendiente el cron no
+      // la levanta, y `inicio_escrito` sigue siendo lo que Google tiene, así que
+      // tampoco hay divergencia. Se anota el pendiente: el reintento escribe en
+      // Google lo que la fila dice ahora.
+      const sinAnotar = await anotarEnLaFila(
+        supabase,
+        id,
+        parPendiente(
+          `Los cambios del evento se guardaron en el SdG pero no los invitados, y Google no recibió ` +
+            `nada: ${falloDeInvitados}`,
+          new Date().toISOString()
+        )
       );
-    }
-    const falloSacar = await sacarInvitados(supabase, id, sacar);
-    if (falloSacar) {
       return NextResponse.json(
-        { error: `${falloSacar}. Los demás cambios del evento sí se guardaron.` },
+        {
+          error:
+            `${falloDeInvitados}. Los demás cambios del evento sí se guardaron en el SdG, pero todavía ` +
+            `no están en Google: quedó pendiente.` +
+            (sinAnotar ? ` Ojo: tampoco se pudo anotar el pendiente (${sinAnotar}), así que volvé a guardar el evento.` : ""),
+        },
         { status: 500 }
       );
     }
@@ -168,15 +181,19 @@ export async function PATCH(
       { casilla: actual.casilla, google_event_id: actual.google_event_id, inicio, fin },
       sinEscribir ? { ...evento, id: idDeGoogleDe(id) } : evento
     );
-    const { error: errorAlAnotar } = await supabase
-      .from("agenda_eventos")
-      .update(columnasDespuesDeEscribir(resultado, new Date().toISOString()))
-      .eq("id", id);
+    const errorAlAnotar = await anotarEnLaFila(
+      supabase,
+      id,
+      columnasDespuesDeEscribir(resultado, new Date().toISOString())
+    );
     enGoogle = { escrito: !resultado.pendiente && !resultado.divergencia, pendiente: resultado.pendiente ?? null };
     const advertencia = advertenciaDeLaEscritura(resultado, "El cambio");
     if (advertencia) advertencias.push(advertencia);
     if (errorAlAnotar) {
-      advertencias.push(`No se pudo anotar en el evento lo que pasó con Google (${errorAlAnotar.message}).`);
+      advertencias.push(
+        `No se pudo anotar en el evento lo que pasó con Google, ni en dos intentos (${errorAlAnotar}). ` +
+          (resultado.pendiente ? "" : POR_SI_YA_ESCRIBIO)
+      );
     }
   }
 
@@ -222,10 +239,7 @@ export async function DELETE(
   });
   if (enGoogle.pendiente) {
     // La fila se queda: es lo único que sabe dónde está el evento vivo.
-    await supabase
-      .from("agenda_eventos")
-      .update(columnasDespuesDeEscribir(enGoogle, new Date().toISOString()))
-      .eq("id", id);
+    await anotarEnLaFila(supabase, id, columnasDespuesDeEscribir(enGoogle, new Date().toISOString()));
     return NextResponse.json(
       {
         error:

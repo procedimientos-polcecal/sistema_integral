@@ -25,10 +25,33 @@ const DESFASE_ARGENTINA_MS = 3 * 60 * 60_000;
  * quedaría tres horas corrido, sin error y sin aviso.
  */
 export function aInstanteISO(texto: string): string | null {
-  const i = instanteDe(texto);
+  const i = instanteDe(conSegundos(texto));
   if (!i) return null;
   const utc = i.conZona ? i.ms : i.ms + DESFASE_ARGENTINA_MS;
   return new Date(utc).toISOString();
+}
+
+/**
+ * Le pone `:00` de segundos a una fecha-hora que no los trae. `instanteDe` los
+ * exige y un `<input type="datetime-local">` **no los manda**: `2026-11-03T08:00`
+ * saldría rechazado con «no es una fecha y hora válida» en la primera prueba de
+ * la pantalla. Lo que no es de esa forma pasa sin tocar, para que
+ * `problemasDelEvento` diga qué está mal con el texto que escribió la persona.
+ */
+export function conSegundos(texto: string): string {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})?$/.test(texto)
+    ? texto.replace(/^(.{16})/, "$1:00")
+    : texto;
+}
+
+/**
+ * ¿Es el mismo instante? Una cadena sin zona es hora de pared de Argentina,
+ * igual que en `aInstanteISO`. Si alguna no es una fecha-hora, no.
+ */
+export function mismoInstante(a: string, b: string): boolean {
+  const x = aInstanteISO(a);
+  const y = aInstanteISO(b);
+  return x !== null && y !== null && x === y;
 }
 
 /**
@@ -38,7 +61,7 @@ export function aInstanteISO(texto: string): string | null {
  * `dateTime` con offset más un `timeZone` distinto es justo el lío que evita.
  */
 export function aHoraDePared(texto: string): string | null {
-  const i = instanteDe(texto);
+  const i = instanteDe(conSegundos(texto));
   if (!i) return null;
   const utc = i.conZona ? i.ms : i.ms + DESFASE_ARGENTINA_MS;
   return new Date(utc - DESFASE_ARGENTINA_MS).toISOString().slice(0, 19);
@@ -63,8 +86,16 @@ export function idDeGoogleDe(filaId: string): string {
  * persona puede no tener acceso a Mantenimiento y no leer la OT—, y entonces el
  * mensaje la nombra sin número en vez de inventarlo.
  */
-export function mensajeDeEventoDeOT(accion: "modificar" | "borrar", numero: number | null): string {
+export function mensajeDeEventoDeOT(accion: "modificar" | "borrar" | "aceptar", numero: number | null): string {
   const cual = numero === null ? "una orden de trabajo" : `la orden de trabajo ${numero}`;
+  if (accion === "aceptar") {
+    return (
+      `No se puede aceptar la hora de Google en este evento: lo maneja ${cual}, y para una orden de ` +
+      `trabajo la verdad es la orden. Aceptarla cambiaría la fecha del evento en el SdG y la próxima ` +
+      `sincronización la volvería a pisar sin avisar. Para volver a poner el evento donde dice la orden, ` +
+      `reescribilo.`
+    );
+  }
   return (
     `No se puede ${accion} este evento desde la Agenda: lo maneja ${cual}. ` +
     `Su horario sale de la fecha de ejecución de la orden y se vuelve a escribir cuando esa fecha cambia, ` +
@@ -85,8 +116,8 @@ export const esquemaDeAlta = z.object({
   titulo: z.string().max(200).default(""),
   descripcion: textoOpcional(5000),
   lugar: textoOpcional(300),
-  inicio: z.string().default(""),
-  fin: z.string().default(""),
+  inicio: z.string().default("").transform(conSegundos),
+  fin: z.string().default("").transform(conSegundos),
   invitados: z.array(z.string()).max(50).default([]),
 });
 
@@ -95,8 +126,8 @@ export const esquemaDeCambio = z.object({
   titulo: z.string().max(200).optional(),
   descripcion: textoOpcional(5000),
   lugar: textoOpcional(300),
-  inicio: z.string().optional(),
-  fin: z.string().optional(),
+  inicio: z.string().transform(conSegundos).optional(),
+  fin: z.string().transform(conSegundos).optional(),
   invitados: z.array(z.string()).max(50).optional(),
 });
 

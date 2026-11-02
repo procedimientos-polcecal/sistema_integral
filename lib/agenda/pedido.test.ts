@@ -3,6 +3,7 @@ import { validar } from "@/lib/core/validar";
 import {
   aInstanteISO, aHoraDePared, idDeGoogleDe, invitadosLimpios, eventoParaGoogle, divergenciaVista,
   esquemaDeAlta, esquemaDeCambio, esquemaDeDestrabar, mensajeDeEventoDeOT,
+  conSegundos, mismoInstante,
 } from "./pedido";
 
 describe("las horas", () => {
@@ -25,6 +26,44 @@ describe("las horas", () => {
     for (const t of ["2026-11-03T08:00:00", "2026-11-03T23:30:00", "2026-11-03T00:15:00"]) {
       expect(aHoraDePared(aInstanteISO(t)!)).toBe(t);
     }
+  });
+});
+
+describe("las horas sin segundos (datetime-local)", () => {
+  it("conSegundos completa la que no los trae, con o sin zona", () => {
+    expect(conSegundos("2026-11-03T08:00")).toBe("2026-11-03T08:00:00");
+    expect(conSegundos("2026-11-03T08:00-03:00")).toBe("2026-11-03T08:00:00-03:00");
+    expect(conSegundos("2026-11-03T08:00Z")).toBe("2026-11-03T08:00:00Z");
+  });
+  it("no toca la que ya los trae ni lo que no es una hora", () => {
+    expect(conSegundos("2026-11-03T08:00:30")).toBe("2026-11-03T08:00:30");
+    expect(conSegundos("mañana")).toBe("mañana");
+    expect(conSegundos("")).toBe("");
+  });
+  it("aInstanteISO y aHoraDePared aceptan lo que manda un <input type=datetime-local>", () => {
+    expect(aInstanteISO("2026-11-03T08:00")).toBe("2026-11-03T11:00:00.000Z");
+    expect(aHoraDePared("2026-11-03T08:00")).toBe("2026-11-03T08:00:00");
+  });
+  it("el alta y el cambio las normalizan antes de que problemasDelEvento las mire", () => {
+    const alta = validar(esquemaDeAlta, { titulo: "x", inicio: "2026-11-03T08:00", fin: "2026-11-03T09:30" });
+    expect(alta.ok && alta.datos.inicio).toBe("2026-11-03T08:00:00");
+    expect(alta.ok && alta.datos.fin).toBe("2026-11-03T09:30:00");
+    const cambio = validar(esquemaDeCambio, { inicio: "2026-11-03T08:00" });
+    expect(cambio.ok && cambio.datos.inicio).toBe("2026-11-03T08:00:00");
+    const sin = validar(esquemaDeCambio, { titulo: "x" });
+    expect(sin.ok && sin.datos.inicio).toBeUndefined();
+  });
+});
+
+describe("mismoInstante", () => {
+  it("compara por instante, y una hora sin zona es de Argentina", () => {
+    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T08:00:00-03:00")).toBe(true);
+    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T11:00:00Z")).toBe(true);
+    expect(mismoInstante("2026-11-03T08:00:00", "2026-11-03T09:00:00-03:00")).toBe(false);
+  });
+  it("lo que no es una hora no es igual a nada", () => {
+    expect(mismoInstante("2026-11-03", "2026-11-03")).toBe(false);
+    expect(mismoInstante("", "")).toBe(false);
   });
 });
 
@@ -76,6 +115,12 @@ describe("mensajeDeEventoDeOT", () => {
     expect(m).toContain("la orden de trabajo 2901");
     expect(m).toContain("No se puede modificar");
     expect(m).toMatch(/se perdería sin avisar/);
+  });
+  it("aceptar dice que la verdad es la orden y que reescribir sí se puede", () => {
+    const m = mensajeDeEventoDeOT("aceptar", 2901);
+    expect(m).toContain("la orden de trabajo 2901");
+    expect(m).toMatch(/la verdad es la orden/);
+    expect(m).toMatch(/reescribilo/);
   });
   it("sin número no lo inventa", () => {
     const m = mensajeDeEventoDeOT("borrar", null);

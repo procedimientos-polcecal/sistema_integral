@@ -3,6 +3,7 @@ import {
   type EventoParaGoogle, type EventoEnGoogle,
 } from "@/lib/core/calendar";
 import { instanteDe } from "./evento";
+import { mismoInstante } from "./pedido";
 import type { Divergencia } from "./divergencia";
 
 /**
@@ -108,8 +109,18 @@ export async function escribirEnGoogle(
     if (accion === "crear") {
       const id = evento.id ?? fila.google_event_id ?? undefined;
       const creado = await crearEvento(fila.casilla, { ...evento, id });
-      if (!creado.cancelado) return comoEscrito(creado);
-      return await restaurar(fila.casilla, creado.id, evento);
+      // Crear con un id que ya existe devuelve el evento que había, **sin
+      // aplicarle el cuerpo nuevo**: un reintento después de que Google sí
+      // escribió, con cambios de por medio, daría lo viejo por bueno. La
+      // respuesta diría que salió bien, `inicio_escrito` quedaría con el horario
+      // viejo de Google (así que `queDivergio` daría null para siempre) y no
+      // habría pendiente: una fila y un Google distintos sin un solo registro.
+      // Si lo que volvió no es lo que se mandó —o está borrado— se lo pisa
+      // entero con el `PUT`, que sirve también sobre uno vivo.
+      if (creado.cancelado || !esLoQueSeMando(evento, creado, fila.casilla)) {
+        return await restaurar(fila.casilla, creado.id, evento);
+      }
+      return comoEscrito(creado);
     }
 
     const id = fila.google_event_id;
@@ -126,6 +137,23 @@ export async function escribirEnGoogle(
     // Nunca vacío: `pendiente` vacío se leería como «no hubo fallo».
     return { pendiente: textoDelFallo(e) || SIN_MENSAJE };
   }
+}
+
+/**
+ * ¿Lo que Google devolvió tras `crear` es lo que se mandó? Compara el horario,
+ * el título y los invitados: lo que `EventoEnGoogle` deja ver. **La descripción
+ * y el lugar no vuelven, así que un reintento que sólo los cambió no se
+ * detecta**; es el hueco que queda. Los invitados se comparan sin la casilla
+ * dueña, que Google puede agregar sola como organizadora. Un falso «no
+ * coincide» cuesta un `PUT` de más; un falso «coincide» cuesta un cambio perdido.
+ */
+function esLoQueSeMando(evento: EventoParaGoogle, devuelto: EventoEnGoogle, casilla: string): boolean {
+  if (!mismoInstante(evento.inicio, devuelto.inicio) || !mismoInstante(evento.fin, devuelto.fin)) return false;
+  if (devuelto.titulo !== evento.titulo) return false;
+  const dueno = casilla.toLowerCase();
+  const hay = new Set(devuelto.invitados.map((i) => i.email.toLowerCase()).filter((e) => e !== dueno));
+  const mandados = new Set(evento.invitados.map((e) => e.toLowerCase()).filter((e) => e !== dueno));
+  return hay.size === mandados.size && [...mandados].every((e) => hay.has(e));
 }
 
 async function restaurar(casilla: string, id: string, evento: EventoParaGoogle): Promise<ResultadoDeEscritura> {
