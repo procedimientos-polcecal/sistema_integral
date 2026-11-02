@@ -124,24 +124,24 @@ el calendario equivocado, que es la peor forma de romperse.
 it("dos casillas distintas no comparten el token", async () => {
   await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
   await obtenerToken([SCOPE_CALENDAR], "b@polcecal.com");
-  expect(viajesAOauth()).toBe(2);
+  expect(pedidos).toBe(2);
 });
 
 it("la misma casilla reusa el suyo", async () => {
   await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
   await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
-  expect(viajesAOauth()).toBe(1);
+  expect(pedidos).toBe(1);
 });
 
 it("impersonar y no impersonar son entradas distintas", async () => {
   await obtenerToken([SCOPE_CALENDAR]);
   await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
-  expect(viajesAOauth()).toBe(2);
+  expect(pedidos).toBe(2);
 });
 ```
 
-(`viajesAOauth()` es el contador del mock de `fetch` que ese archivo ya usa; si
-tiene otro nombre, el que esté.)
+(`pedidos` es el contador del mock de `fetch` que ese archivo ya tiene: una
+variable de módulo que `beforeEach` pone en 0. No hace falta agregar nada.)
 
 - [ ] **Step 2: Correr y verificar que fallan**
 
