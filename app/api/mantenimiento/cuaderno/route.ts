@@ -50,11 +50,14 @@ export async function GET(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!carga) return NextResponse.json({ error: "No existe esa carga" }, { status: 404 });
 
+    // `cuaderno_id` viaja a propósito: `propuestaDeGrupos` agrupa por él para no
+    // cruzar cargas, y sin él todas las claves quedarían `undefined|tarea` y el
+    // corte entre cargas dejaría de existir sin que nadie lo notara.
     const renglones = await traerTodo((d, h) =>
       supabase
         .from("mant_cuadernos_renglones")
         .select(
-          "id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, " +
+          "id, cuaderno_id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, " +
           "horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id"
         )
         .eq("cuaderno_id", id)
