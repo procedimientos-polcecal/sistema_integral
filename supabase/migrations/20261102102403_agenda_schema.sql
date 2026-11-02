@@ -82,16 +82,25 @@
 -- «Todavía no se aplicó» no es un estado que se pueda conocer desde acá: si una
 -- versión anterior de este archivo ya corrió, la segunda corrida es la que trae
 -- las policies de escritura de los invitados, el `with check` de editar eventos,
--- el `agenda_veo_evento` en `agenda_eventos_ver`, los índices nuevos y los
--- `check` de los pares. (Las columnas y las tablas no cambian de una versión a
--- otra.)
+-- la forma actual de `agenda_eventos_ver` (el disyunto del dueño delante de
+-- `agenda_veo_evento`), los índices nuevos y los `check` de los tres pares. (Las
+-- columnas y las tablas no cambian de una versión a otra.)
 --
--- ANTES DE DAR POR BUENA ESTA MIGRACIÓN, QUIEN LA APLIQUE TIENE QUE HACER UN
--- `select` DE CADA TABLA CON DOS USUARIOS: uno ajeno al evento (que no tiene que
--- ver ni el evento ni sus invitados) y uno invitado (que tiene que ver los dos).
--- Es lo único que prueba de verdad que no hay recursión: el error `42P17` no
--- sale al crear las policies sino en el primer `select`, y ningún test de este
--- repo corre contra la base con RLS.
+-- ANTES DE DAR POR BUENA ESTA MIGRACIÓN, QUIEN LA APLIQUE TIENE QUE HACER TRES
+-- COMPROBACIONES CON SESIONES DE USUARIO REALES (no con el editor SQL, donde RLS
+-- no corre):
+--
+--   1. CREAR UN EVENTO CON LA SESIÓN DEL DUEÑO Y `RETURNING`, que es lo que hace
+--      PostgREST en cada alta. Es la que casi se rompe: sin el disyunto del dueño
+--      en `agenda_eventos_ver`, el insert aborta con `42501` y ningún `select`
+--      lo habría mostrado.
+--   2. UN `select` DE CADA TABLA CON UN USUARIO AJENO AL EVENTO: no tiene que ver
+--      ni el evento ni sus invitados.
+--   3. UN `select` DE CADA TABLA CON UN USUARIO INVITADO: tiene que ver los dos.
+--
+-- Las dos últimas prueban que no hay recursión: el `42P17` no sale al crear las
+-- policies sino en el primer `select`. Y ningún test de este repo corre contra la
+-- base con RLS, así que ésta es la única prueba que hay.
 --
 -- LAS POLICIES DE EVENTOS Y DE INVITADOS NO SE MIRAN ENTRE SÍ DIRECTAMENTE.
 -- Quién ve un evento depende de sus invitados, y quién ve a los invitados
@@ -308,8 +317,11 @@ alter table public.agenda_canales              enable row level security;
 -- fila en la tabla y, siendo `stable`, usa el snapshot de la sentencia que la
 -- llama, donde la fila recién insertada todavía no se ve. El disyunto mira la
 -- tupla nueva, que está ahí mismo. De paso es el camino barato del dueño: listar
--- sus eventos no paga una llamada a función por fila. Mismo patrón que
--- `asientos_select` en 013_remises_rls.sql.
+-- sus eventos no paga una llamada a función por fila. Se parece a
+-- `asientos_select` en 013_remises_rls.sql, que también lleva un disyunto barato
+-- delante de una función, pero no es lo mismo y no prueba que ésta ande con
+-- `RETURNING`: allá el disyunto no es sobre la tupla propia y la función lee otra
+-- tabla. Que ésta anda se comprueba con el paso 1 del encabezado.
 drop policy if exists agenda_eventos_ver on public.agenda_eventos;
 create policy agenda_eventos_ver on public.agenda_eventos
   for select using (

@@ -1,0 +1,95 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { esquemaDeDestrabar, eventoParaGoogle } from "@/lib/agenda/pedido";
+import { destrabar } from "@/lib/agenda/escribirEnGoogle";
+import { cargarEvento } from "@/lib/agenda/cargar";
+import { quienLlama } from "@/lib/agenda/sesion";
+
+/**
+ * Destrabar un evento divergido: **es lo que lo vuelve a atar al SdG**. Sin
+ * esta ruta un evento que alguien movió o borró desde Google queda muerto para
+ * siempre, porque la sincronización deja de escribirlo. Es del dueño.
+ *
+ * `{ como: "reescribir" }` manda a Google lo que dice el SdG; `{ como:
+ * "aceptar" }` trae lo que dice Google a la fila. Qué hace cada una con cada
+ * tipo de divergencia, y por qué un borrado se restaura con `PUT` y no con
+ * `PATCH`, está en `destrabar()` de `lib/agenda/escribirEnGoogle.ts`.
+ *
+ * **No es `visto`.** `visto` apaga la campana para una persona y no cambia el
+ * evento; esto cambia el evento y lo desata para todos.
+ *
+ * Si Google falla, el evento sigue divergido —no se destrabó nada— y la
+ * respuesta es un 502 con lo que dijo Google. Si Google contestó bien y lo que
+ * falla es anotarlo, el 500 lo dice con todas las letras: reintentar es seguro,
+ * reescribir lo mismo dos veces no cambia nada.
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const quien = await quienLlama(supabase);
+  if (!quien.ok) return quien.respuesta;
+
+  const cuerpo = await request.json().catch(() => null);
+  if (typeof cuerpo !== "object" || cuerpo === null || Array.isArray(cuerpo)) {
+    return NextResponse.json({ error: "El pedido no trae un cuerpo válido" }, { status: 400 });
+  }
+  const r = validar(esquemaDeDestrabar, cuerpo);
+  if (!r.ok) return errorDeValidacion(r.problemas);
+
+  const cargado = await cargarEvento(supabase, id, quien.id, { accion: "destrabarlo" });
+  if (!cargado.ok) return cargado.respuesta;
+  const actual = cargado.evento;
+
+  if (!actual.divergencia) {
+    return NextResponse.json({ error: "Ese evento no está divergido: no hay nada que destrabar" }, { status: 409 });
+  }
+
+  const resultado = await destrabar(
+    r.datos.como,
+    {
+      casilla: actual.casilla,
+      google_event_id: actual.google_event_id,
+      inicio: actual.inicio,
+      fin: actual.fin,
+      divergencia: actual.divergencia,
+    },
+    eventoParaGoogle(actual, actual.invitados, actual.casilla)
+  );
+
+  if (!resultado.ok) {
+    // Un fallo de escritura se guarda con lo que dijo Google, aunque no destrabe.
+    if (resultado.columnas) {
+      await supabase.from("agenda_eventos").update(resultado.columnas).eq("id", id);
+    }
+    return NextResponse.json({ error: resultado.error }, { status: resultado.estado });
+  }
+
+  const { error } = await supabase.from("agenda_eventos").update(resultado.columnas).eq("id", id);
+  if (error) {
+    return NextResponse.json(
+      {
+        error:
+          `Google quedó como se pidió, pero no se pudo anotar en el evento y sigue figurando divergido: ` +
+          `${error.message}. Volvé a destrabarlo: repetirlo no cambia nada.`,
+      },
+      { status: 500 }
+    );
+  }
+
+  const { data, error: errorDeLectura } = await supabase
+    .from("agenda_eventos")
+    .select("*, agenda_invitados(email, usuario_id), usuarios!dueno_id(nombre, apellido, email)")
+    .eq("id", id)
+    .maybeSingle();
+
+  return NextResponse.json({
+    data: data ?? null,
+    ...(errorDeLectura || !data
+      ? { advertencia: "El evento se destrabó, pero no se pudo volver a leer para mostrarlo. Recargá la pantalla." }
+      : {}),
+  });
+}
