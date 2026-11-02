@@ -128,8 +128,12 @@ const dos = (n: number) => String(n).padStart(2, "0");
  * no obedece —«21-09-26», «21/09/2026»— además del ISO que se le pidió. En el
  * papel el año es de dos dígitos, y se completa con el siglo del mes de la
  * carga: el cuaderno es de ese mes, así que ahí está la única pista que hay.
+ *
+ * Es pública porque la lectura del Excel (`cuadernoExcel.ts`) necesita la misma
+ * regla —día/mes/año, nunca mes/día— y en el código tiene que haber una sola.
+ * Sin mes, el año de dos dígitos es del siglo XXI.
  */
-function resolverFecha(texto: string | null | undefined, mes: string): string | null {
+export function resolverFecha(texto: string | null | undefined, mes: string): string | null {
   if (!texto) return null;
   const t = texto.trim();
   const siglo = /^(\d{2})\d{2}-\d{2}$/.exec(mes)?.[1];

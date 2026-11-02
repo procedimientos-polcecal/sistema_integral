@@ -417,3 +417,66 @@ si la planilla no estaba.
   de pedir una nueva.
 - **Nada ata el total del cuaderno contra la factura.** Candia tiene esa
   comprobación y Piparo no, porque el papel no la permite.
+
+---
+
+## Agregado el 02/11/2026: el mes también puede entrar por un Excel
+
+**El problema que apareció al usarlo.** No todos los meses vienen en el
+cuaderno: a veces quien carga arma él mismo la planilla. Fotografiar lo que ya
+está tipeado para que un modelo lo vuelva a leer es dar una vuelta entera para
+perder exactitud, y además mete los dudosos de la letra manuscrita en un dato
+que nunca fue manuscrito.
+
+**Qué es y qué no es.** Es **una alternativa a las fotos, no otro modo**. Las
+dos conviven: una carga entra por fotos o por planilla, nunca por las dos. Todo
+lo que viene después —el enganche a sector y equipo, juntar y separar, confirmar
+el sector, el freno de duplicados, generar— es el mismo código y no se entera
+de por dónde entraron los renglones.
+
+### Las cuatro decisiones
+
+1. **Las fórmulas del resumen son los grupos.** La columna `N` del archivo real
+   trae `=C47+C50+C51`, que es exactamente «estos tres renglones van en una
+   OT». Leer el valor y no la fórmula habría dejado un 46 sin forma de saber de
+   dónde salió. Por eso **los grupos entran armados** y no hay que proponerlos.
+   Un grupo de un solo renglón no se escribe: es la orden de ese renglón, y
+   marcarlo lo sacaría de la propuesta de acumular los que se llaman igual.
+2. **El control es que las horas del resumen den las del detalle.** Es el
+   criterio de quien pidió esto, y la defensa contra una fórmula que apunta una
+   fila más abajo. Si no cierra, **los renglones entran igual** —no se pierde el
+   trabajo de tipear el mes— pero **no se arma ningún grupo**, y se dice con
+   número de fila qué pasó. Nunca se arma un grupo sobre una cuenta que no da.
+3. **La procedencia no lleva columna nueva.** El archivo va al mismo bucket y a
+   la misma tabla que las fotos (`mant_cuadernos_fotos`, con `orden: 1`), y lo
+   único que lo distingue es la extensión de la ruta. Eso evitó una migración
+   de columna y dejó intactos el borrado de la carga, el reintento y el vínculo
+   de cada renglón con su origen. La migración que sí hizo falta es la del
+   bucket: `allowed_mime_types` sólo tenía los cinco tipos de imagen.
+4. **En pantalla no va el panel de la foto.** No hay hoja contra la cual
+   comparar: la transcripción la escribió la misma persona que carga. Va de qué
+   fila salió cada renglón, y lo que queda por hacer es completar los sectores.
+   **El filtro de «dudosos» se dejó** —el plan decía sacarlo—: el Excel también
+   produce dudosos (una fecha que no existe, unas horas que no son un número) y
+   esconderlos sería tapar problemas reales.
+
+### Lo que se midió (02/11/2026, `Tareas_Octubre_2026.xlsx`)
+
+Una hoja, 99 filas. 97 renglones, 1074 horas, 0 precios. 63 filas de resumen, de
+las cuales 18 juntan dos o más renglones. **La cuenta cierra exacta: 1074 =
+1074, 0 renglones contados dos veces, 0 sin cubrir, 0 referencias a celdas
+vacías, 0 dudosos.** Las dos filas de `TOTALES` usan `SUM()` y se saltean.
+
+### Los riesgos que quedan asumidos
+
+- **Si la fórmula está mal pero cierra, el grupo sale mal.** Dos referencias
+  cruzadas entre dos grupos suman lo mismo y el control no lo ve. Lo que sí
+  atrapa es lo que cambia el total: una fila contada dos veces, una sin cubrir,
+  una referencia a una celda vacía, y un término de más en la fórmula (se
+  compara lo que dice la celda contra lo que suman sus referencias).
+- **La columna `O` del resumen no se lee.** El precio sale del detalle y la OT
+  suma el de sus renglones. Si alguien escribe un precio sólo en el resumen, no
+  entra — y es a propósito: leerlo sería una segunda fuente para el mismo dato.
+- **Un archivo que Excel no recalculó no se puede comparar.** Si la celda de
+  horas no trae valor calculado, mandan las referencias. Es lo correcto, pero
+  significa que un término de más ahí no se detecta.

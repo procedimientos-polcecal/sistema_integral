@@ -2124,6 +2124,66 @@ corte de 240, y las otras nueve entre 15 y 49. Una página así puede quedar jus
 del lado equivocado y terminar en `fallo`; se reintenta. Con un modelo que no
 razona tanto no debería pasar, pero no se pudo medir.
 
+### La otra puerta: el mes en un Excel (02/11/2026)
+
+**No todos los meses vienen en el cuaderno.** Quien carga arma a veces la planilla
+él mismo, y en ese caso fotografiar lo que ya está tipeado para que un modelo lo
+vuelva a leer es dar una vuelta entera para perder exactitud. Así que un mes
+puede entrar por un `.xlsx` **como alternativa a las fotos**, no como otro modo:
+los renglones quedan iguales y todo lo de abajo —el enganche a sector y equipo,
+juntar y separar, confirmar el sector, el freno de duplicados, generar— no se
+entera de por dónde entraron.
+
+**La forma del archivo, medida sobre `Tareas_Octubre_2026.xlsx`** (una hoja, 99
+filas): a la izquierda el detalle (`A` fecha, `B` tarea, `C` horas, `D` precio),
+97 renglones; a la derecha el resumen (`K` tarea, `L` desde, `M` hasta, `N` horas,
+`O` precio), 63 filas. **La celda de `N` es una fórmula —`=C47+C50+C51`— y eso es
+exactamente un grupo, o sea una OT.** Por eso los grupos entran armados y no hay
+que proponerlos: de los 63, 18 juntan dos o más renglones y los otros 45 son la
+orden de su renglón (`gruposAJuntar` no les escribe `grupo_id`, para que un
+renglón solo no aparezca como «juntado con 0 más» y no pierda la propuesta de
+acumular los que se llaman igual). La columna `O` **no se lee**: el precio sale
+del detalle, y leerla sería una segunda fuente para el mismo dato.
+
+Cinco cosas que no se deducen del código:
+
+- **El control es que las horas del resumen den las del detalle**, sin renglones
+  contados dos veces ni renglones sin cubrir. Si no cierra, **los renglones
+  entran igual** —no se pierde el trabajo de tipear el mes— pero **no se arma
+  ningún grupo**, y se dice con número de fila qué pasó. Una fórmula que apunta
+  una fila más abajo junta dos tareas que no tienen nada que ver y manda las
+  horas a la OT equivocada sin que nadie lo note. Medido sobre el archivo real:
+  1074 = 1074, 0 duplicados, 0 sin cubrir, 0 problemas.
+- **Un renglón sólo con precio que ningún grupo toma no es un error.** Un empalme
+  o un parche se cobran por trabajo y no por hora: no tiene horas que se pierdan
+  y sale como su propia orden. Lo que sí es error es que un renglón esté en dos
+  grupos.
+- **Que una carga sea de Excel no lo dice ninguna columna: lo dice la extensión
+  de la ruta** (`esRutaDeExcel` en `lib/mantenimiento/cuadernoOrigen.ts`). El
+  archivo va al mismo bucket y a la misma tabla (`mant_cuadernos_fotos`, con
+  `orden: 1`) justo para que la procedencia de cada renglón, el borrado de la
+  carga y el freno de duplicados sigan funcionando sin tocarse. Eso evitó una
+  migración de columna; la que sí hubo es `20261102115445`, porque
+  `allowed_mime_types` del bucket sólo tenía los cinco tipos de imagen y **subir
+  el `.xlsx` sin ella falla con un error de Storage que no explica nada**.
+- **No se mezclan fotos y planilla en una misma carga**, y la guarda está en las
+  dos rutas y no sólo en la pantalla: el `accept` de un campo de archivo no
+  impide elegir nada.
+- **`lib/core/excel.ts` no sirve acá y por eso hay otro lector.** Ese aplana las
+  fórmulas a su resultado, que es lo que quieren los cinco importadores que lo
+  usan; acá la fórmula **es** el dato. El lector propio es
+  `cuadernoExcelArchivo.ts`, y está separado del intérprete
+  (`cuadernoExcel.ts`, puro, 58 tests) para poder probar todas las decisiones sin
+  armar un `.xlsx`.
+
+En pantalla, una carga de Excel **no muestra el panel de la foto**: no hay hoja
+contra la cual comparar, porque la transcripción la escribió la misma persona que
+carga. En su lugar va de qué fila salió cada renglón y lo que trajo el archivo, y
+lo que queda por hacer es completar los sectores. El filtro de «dudosos» **se
+dejó**, aunque el plan decía sacarlo: el Excel también produce dudosos —una fecha
+que no existe, unas horas que no son un número— y esconderlos sería tapar
+problemas reales.
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté

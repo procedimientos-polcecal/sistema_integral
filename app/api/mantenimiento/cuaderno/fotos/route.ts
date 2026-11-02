@@ -12,6 +12,7 @@ import {
   engancharRenglonLeido,
   type EquipoDelCatalogo, type LugarAprendido, type SectorDelCatalogo,
 } from "@/lib/mantenimiento/cuadernoEnganche";
+import { esRutaDeExcel } from "@/lib/mantenimiento/cuadernoOrigen";
 
 /**
  * Una foto del cuaderno entra, el modelo la lee y vuelve con sus renglones.
@@ -185,6 +186,32 @@ export async function POST(request: Request) {
     }
   } else if (!archivo) {
     return NextResponse.json({ error: "Falta la foto" }, { status: 400 });
+  }
+
+  // Una carga que entró por Excel no recibe fotos. Son dos formas de cargar el
+  // mismo mes y no se mezclan: la pantalla muestra una cosa o la otra, y el
+  // Excel ya ocupa el `orden` 1. La guarda va acá y no sólo en la pantalla,
+  // donde el `accept` del campo no impide elegir un archivo igual.
+  const { data: deLaCarga, error: errorDeLaCarga } = await admin
+    .from("mant_cuadernos_fotos")
+    .select("ruta")
+    .eq("cuaderno_id", cuadernoId)
+    .limit(1000);
+  if (errorDeLaCarga) {
+    return NextResponse.json(
+      { error: `No se pudo comprobar qué tiene la carga: ${errorDeLaCarga.message}` },
+      { status: 500 }
+    );
+  }
+  if ((deLaCarga ?? []).some((f) => esRutaDeExcel(f.ruta))) {
+    return NextResponse.json(
+      {
+        error:
+          "Esta carga entró por Excel: el archivo es una alternativa a las fotos y no se mezclan. " +
+          "Abrí una carga nueva para las fotos.",
+      },
+      { status: 409 }
+    );
   }
 
   // ── Los bytes, y el archivo en el bucket ────────────────────

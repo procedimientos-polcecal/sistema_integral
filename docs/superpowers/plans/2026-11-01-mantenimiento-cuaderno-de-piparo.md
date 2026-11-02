@@ -48,9 +48,16 @@ las pide. Cada una tiene su test asignado a la tarea que es dueña del código.
    misma = 4`: sin «Hs» y sin `$`. Cuatro horas y cuatro pesos son cosas
    distintas. Esperable: se guarda como horas (la unidad por defecto del
    cuaderno) y **se marca dudoso**, nunca como costo. → Tarea 3.
-2. **Un renglón con horas y costo a la vez.** El modelo puede devolver los dos.
-   Esperable: entra con los dos y se marca dudoso; no se descarta ninguno ni se
-   elige por él. → Tarea 3.
+2. ~~**Un renglón con horas y costo a la vez.**~~ **Corregido el 01/11/2026 — era
+   un defecto de este plan.** El esquema que se le pide al modelo es `valor` +
+   `unidad`, un solo número, justamente para que no invente; con esa forma el
+   modelo **no puede** devolver horas y costo a la vez, así que el caso no
+   existe por el camino real. Lo que sí hay que fijar con un test es **el
+   contrato**: que el esquema no deje pasar `horas` ni `costo` sueltos. Y lo que
+   queda como límite escrito y sin test posible: si el papel trae de verdad las
+   dos cosas en un renglón, el modelo elige una y el sistema no tiene cómo
+   saberlo. En las diez hojas medidas no hay ningún renglón así — los de precio
+   nunca traen horas. → Tarea 3.
 3. **El modelo devuelve algo que no es la lista esperada** —JSON truncado, prosa,
    una foto que no es del cuaderno—. Esperable: esa foto queda en «falló» con lo
    que dijo, sin traducir, y las otras nueve siguen. El test de la
@@ -167,8 +174,11 @@ comentario nombrando los dos valores y qué pantalla abre cada uno.
 - [ ] **Step 3: Crear el bucket**
 
 El bucket `cuaderno-contratista`, **privado**, `allowed_mime_types` =
-`image/jpeg, image/jpg, image/png, image/webp, image/heic`, límite 10 MB. Va en
-la primera migración o lo crea el usuario desde el panel, lo que prefiera.
+`image/jpeg, image/jpg, image/png, image/webp, image/heic`, límite 10 MB. **Va
+por SQL en la primera migración**, con un insert en `storage.buckets`: uno
+creado a mano en el panel no queda en el repo y el próximo entorno no lo tiene.
+Es como ya se hizo con el de las fotos de ejecución, que el comentario de
+`app/api/mantenimiento/fotos/route.ts` atribuye a «la migración 006».
 Privado a propósito: el cuaderno es un papel interno y nadie lo mira sin sesión,
 al revés que la foto de un aviso.
 
@@ -464,8 +474,13 @@ it("la cinta 9 de una planta no es la cinta 9 de otra", () => {
   // mismo número, distinto sector → distinto equipo
 });
 
-it("con equipo y sin sector, el sector sale del equipo", () => {
-  // «Tranqueras D6» → equipo D6 → sector Cantera, sector_propuesto = false
+it("con equipo y sin sector, el sector sale del equipo y queda propuesto", () => {
+  // «Tranqueras D6» → equipo D6 → sector Cantera.
+  const r = engancharRenglon("Tranqueras D6", vacio, sectores, equipos);
+  expect(r.sector_id).toBe(CANTERA);
+  expect(r.equipo_id).toBe(D6);
+  // Es una deduccion, no algo que el papel diga: quien carga tiene que verla.
+  expect(r.sector_propuesto).toBe(true);
 });
 
 it("sin sector ni equipo no inventa nada", () => {
@@ -488,11 +503,17 @@ contestó esa pregunta mirando el papel.
 El equipo se busca por `sector_id` **y** nombre «Cinta transportadora N», no
 por nombre solo: hay 63 cintas y la 9 existe en varias plantas.
 
-`sector_propuesto` queda en `true` **sólo** cuando el sector no salió ni del
-catálogo ni del código del texto ni del equipo — o sea, nunca en esta función:
-la propuesta la hace la pantalla. La función devuelve `false` siempre y el campo
-existe para que la ruta lo pueda poner. Documentarlo así para que nadie lo
-busque acá.
+`sector_propuesto` queda en `true` **sólo cuando el sector salió del equipo**,
+que es el único de los tres caminos que es una deducción y no algo que el papel
+diga. El catálogo y el intérprete devuelven `false`: ahí el texto nombra el
+sector.
+
+**Y la pantalla no inventa ninguno.** Un renglón sin sector y sin equipo
+—«Hormigonar Dep 05»— queda con `sector_id` en null y en rojo hasta que una
+persona elija: no hay de dónde sacar una propuesta, y fabricarla sería enlazar
+al que se le parece, que es la regla que gobierna todo el sistema. *(Ruling del
+barrido previo, 01/11/2026: el spec pide tres escalones y sólo da fuente para
+dos.)*
 
 - [ ] **Step 4: Correrlos y verlos pasar**
 
@@ -608,6 +629,11 @@ que decide.
 Foto fija a la izquierda (`sticky`), renglones a la derecha, filtros arriba:
 todos / sin sector / con costo / dudosos / ya juntados. Las seis columnas
 editables. El renglón en el que estás parado dice de qué foto y qué línea salió.
+
+**La pantalla no propone sectores**: el renglón sin sector muestra el
+desplegable vacío y en rojo. Lo que sí marca distinto es el **sector deducido
+del equipo** (`sector_propuesto`), que se ve como propuesta y pide confirmarse
+con un clic — es una deducción del catálogo, no algo que el papel diga.
 
 Responsive: la grilla de los renglones lleva breakpoint y la foto se va arriba
 en el teléfono, no al lado. El ancho de los campos de horas y costo va en un

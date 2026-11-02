@@ -15,6 +15,7 @@ import {
 } from "@/lib/mantenimiento/cuadernoNumero";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import type { EquipoBasico } from "./PartesContratistaClient";
+import { esRutaDeExcel } from "@/lib/mantenimiento/cuadernoOrigen";
 import { reducirFoto } from "./reducirFoto";
 
 /**
@@ -45,6 +46,15 @@ import { reducirFoto } from "./reducirFoto";
  *   pantalla la dice y frena el click que la rompe.
  * - **La foto se achica en el navegador** antes de subirla (ver `reducirFoto`):
  *   Vercel rechaza los cuerpos de más de 4,5 MB antes de llegar a la ruta.
+ * - **Un mes puede entrar por Excel en vez de por fotos**, y es una alternativa
+ *   y no otro modo: los renglones quedan iguales y todo lo de abajo —juntar,
+ *   separar, confirmar el sector, el freno de duplicados, generar— no se entera.
+ *   Lo que cambia acá es sólo lo que no tiene sentido: **no hay hoja contra la
+ *   cual comparar**, porque la transcripción la escribió la misma persona que
+ *   carga, así que en vez de la foto va lo que salió del archivo. Y **los grupos
+ *   ya vienen armados** desde las fórmulas del resumen. Que una carga sea de
+ *   Excel no lo dice ninguna columna: lo dice la extensión de la ruta
+ *   (`esRutaDeExcel`), y el porqué está en `cuadernoOrigen.ts`.
  *
  * Todo lo que escribe pasa por las rutas de `/api/mantenimiento/cuaderno`. Un
  * fallo se muestra **con lo que dijo quien falló**, sin traducir.
@@ -77,6 +87,10 @@ interface ItemDeCola {
   estado: "esperando" | "achicando" | "leyendo" | "leida" | "fallo";
   foto_id?: string;
   renglones?: number;
+  /** Cuántos grupos trajo armados el resumen del Excel. */
+  grupos?: number;
+  /** Es la planilla y no una página: no tiene número ni se reintenta sola. */
+  esPlanilla?: boolean;
   /** Lo que dijo quien falló, o lo que el modelo no pudo leer. */
   mensaje?: string;
   /** La página ya existe en la carga (tiene fila y archivo en el bucket). */
@@ -284,7 +298,22 @@ export default function CuadernoClient({
 
   const abierta = carga && carga.id === cargaId ? carga : null;
   const fotos = useMemo(() => abierta?.fotos ?? [], [abierta]);
+
+  /**
+   * La planilla de esta carga, si entró por Excel. **No hay columna que lo
+   * diga**: lo dice la extensión de la ruta, y es a propósito (el porqué está en
+   * `cuadernoOrigen.ts`). La ruta no deja mezclar fotos y planilla en una misma
+   * carga, así que con que haya una alcanza.
+   */
+  const planilla = useMemo(() => fotos.find((f) => esRutaDeExcel(f.ruta)) ?? null, [fotos]);
+  const deExcel = planilla !== null;
   const renglones = useMemo(() => abierta?.renglones ?? [], [abierta]);
+
+  /** Cuántas órdenes saldrían de varios renglones juntados. */
+  const gruposArmados = useMemo(
+    () => new Set(renglones.filter((r) => r.grupo_id).map((r) => r.grupo_id)).size,
+    [renglones]
+  );
 
   function tocarRenglones(f: (rs: Renglon[]) => Renglon[]) {
     setCarga((c) => (c ? { ...c, renglones: f(c.renglones) } : c));
@@ -542,6 +571,18 @@ export default function CuadernoClient({
   const mesValido = /^\d{4}-(0[1-9]|1[0-2])$/.test(mes);
   const proximaPagina = fotos.reduce((m, f) => Math.max(m, f.orden), 0) + 1;
 
+  /**
+   * Lo que se eligió decide por qué puerta entra, y lo decide **la extensión**:
+   * un solo `.xlsx` es la planilla, cualquier otra cosa son páginas. Se eligen
+   * en el mismo campo a propósito —son dos formas de cargar el mismo mes, no dos
+   * pantallas—, y por eso hay que decir que mezclarlas no va: la ruta las
+   * rechazaría igual, pero con un error del servidor en vez de antes de subir
+   * nada.
+   */
+  const esUnXlsx = (f: File) => /\.xlsx$/i.test(f.name);
+  const elExcelElegido = elegidas.length === 1 && esUnXlsx(elegidas[0]) ? elegidas[0] : null;
+  const hayMezcla = elegidas.length > 1 && elegidas.some(esUnXlsx);
+
   function elegirArchivos(lista: FileList | null) {
     // Por nombre, con los números en su valor: IMG_2 va antes que IMG_10. Es
     // el orden de las páginas, y lo que una línea hereda de la anterior cruza
@@ -554,6 +595,74 @@ export default function CuadernoClient({
 
   function actualizarItem(clave: string, cambios: Partial<ItemDeCola>) {
     setCola((c) => c.map((i) => (i.clave === clave ? { ...i, ...cambios } : i)));
+  }
+
+  /**
+   * La carga sobre la que se escribe: la que está abierta, o una nueva. Null si
+   * no se pudo abrir, y entonces no hay dónde subir nada.
+   */
+  async function abrirLaCarga(): Promise<string | null> {
+    if (cargaId !== NUEVA) return cargaId;
+    const res = await fetch("/api/mantenimiento/cuaderno", {
+      method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ proveedor_id: proveedor.id }),
+    });
+    const cuerpo = await leerJson<{ id?: string }>(res);
+    if (!res.ok || !cuerpo.id) {
+      setError(cuerpo.error ?? `No se pudo abrir la carga (HTTP ${res.status}).`);
+      return null;
+    }
+    const nueva = cuerpo.id;
+    setCargas((c) => [
+      { id: nueva, proveedor_id: proveedor.id, estado: "EN_CHEQUEO", created_at: new Date().toISOString(), mant_cuadernos_fotos: [] },
+      ...c,
+    ]);
+    setCargaId(nueva);
+    return nueva;
+  }
+
+  /**
+   * La planilla, de punta a punta. **Es un solo viaje y no una cola**: leer un
+   * Excel es aritmética y no llama a ningún modelo, así que no hay nada que
+   * pueda fallar a la mitad ni nada que reintentar por partes. Un archivo que no
+   * se reconoce vuelve con un 400 y no deja nada escrito.
+   */
+  async function subirLaPlanilla(archivo: File) {
+    setError(""); setAviso(""); setRepetidos(null); setLeyendo(true);
+    const base = { clave: "planilla", nombre: archivo.name, orden: 1, esPlanilla: true } as const;
+    setCola([{ ...base, estado: "leyendo" }]);
+    try {
+      const idDeCarga = await abrirLaCarga();
+      if (!idDeCarga) { setCola([]); return; }
+      setElegidas([]);
+      setClaveDelInput((k) => k + 1);
+
+      const datos = new FormData();
+      datos.set("cuaderno_id", idDeCarga);
+      datos.set("archivo", archivo);
+      const res = await fetch("/api/mantenimiento/cuaderno/excel", { method: "POST", body: datos });
+      const cuerpo = await leerJson<{
+        foto_id?: string; renglones?: unknown[]; grupos?: number; problemas?: string[];
+      }>(res);
+      if (!res.ok) {
+        setCola([{ ...base, estado: "fallo", mensaje: cuerpo.error ?? `HTTP ${res.status}` }]);
+        return;
+      }
+      setCola([{
+        ...base,
+        estado: "leida",
+        foto_id: cuerpo.foto_id,
+        renglones: cuerpo.renglones?.length ?? 0,
+        grupos: cuerpo.grupos,
+        mensaje: (cuerpo.problemas ?? []).join(" ") || undefined,
+      }]);
+      recargar();
+      // El mismo control que las fotos: un día que ya tenía renglones cargados.
+      if (cuerpo.foto_id) await buscarRepetidos(idDeCarga, [cuerpo.foto_id]);
+    } catch (e) {
+      setCola([{ ...base, estado: "fallo", mensaje: e instanceof Error ? e.message : String(e) }]);
+    } finally {
+      setLeyendo(false);
+    }
   }
 
   /** Una foto, de punta a punta. Devuelve el id de la foto si salió con renglones. */
@@ -637,25 +746,22 @@ export default function CuadernoClient({
   }
 
   async function leerLasElegidas() {
+    if (hayMezcla) return;
+    if (elExcelElegido) { await subirLaPlanilla(elExcelElegido); return; }
+    // El `accept` del campo no es una defensa: un archivo se puede elegir igual.
+    // La ruta lo rechazaría, pero recién después de subirlo.
+    if (deExcel) {
+      setError(
+        "Esta carga entró por Excel y no se le pueden agregar fotos: son dos formas de cargar el " +
+        "mismo mes, no se mezclan. Para fotos, abrí una carga nueva."
+      );
+      return;
+    }
+
     setError(""); setAviso(""); setRepetidos(null); setLeyendo(true);
     try {
-      let idDeCarga = cargaId;
-      if (idDeCarga === NUEVA) {
-        const res = await fetch("/api/mantenimiento/cuaderno", {
-          method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ proveedor_id: proveedor.id }),
-        });
-        const cuerpo = await leerJson<{ id?: string }>(res);
-        if (!res.ok || !cuerpo.id) {
-          setError(cuerpo.error ?? `No se pudo abrir la carga (HTTP ${res.status}).`);
-          return;
-        }
-        idDeCarga = cuerpo.id;
-        setCargas((c) => [
-          { id: idDeCarga, proveedor_id: proveedor.id, estado: "EN_CHEQUEO", created_at: new Date().toISOString(), mant_cuadernos_fotos: [] },
-          ...c,
-        ]);
-        setCargaId(idDeCarga);
-      }
+      const idDeCarga = await abrirLaCarga();
+      if (!idDeCarga) return;
 
       const items: ItemDeCola[] = elegidas.map((f, i) => ({
         clave: `${idDeCarga}:${proximaPagina + i}`,
@@ -856,7 +962,7 @@ export default function CuadernoClient({
     const ok = await confirm({
       title: "Borrar la carga",
       message:
-        `Se borran las ${fotos.length} fotos y los ${renglones.length} renglones de esta carga. ` +
+        `Se borran ${deExcel ? "la planilla" : `las ${fotos.length} fotos`} y los ${renglones.length} renglones de esta carga. ` +
         `No se puede borrar si alguno ya generó una orden de trabajo.`,
       confirmText: "Borrar", cancelText: "Volver", danger: true,
     });
@@ -968,26 +1074,36 @@ export default function CuadernoClient({
       {puedeEditar && (
         <section className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
-            {cargaId === NUEVA ? "Nueva carga: subir las páginas" : "Subir más páginas a esta carga"}
+            {cargaId === NUEVA
+              ? "Nueva carga: las fotos del cuaderno, o la planilla"
+              : deExcel
+                ? "Reemplazar la planilla de esta carga"
+                : "Subir más páginas a esta carga"}
           </h2>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Mes del cuaderno</span>
-              {/* El ancho va en el envoltorio y no en el campo. */}
-              <div className="w-full sm:w-44">
-                <input
-                  type="month" value={mes}
-                  onChange={(e) => setMesElegido(e.target.value)}
-                  disabled={leyendo}
-                  className={CLASE_CAMPO}
-                />
-              </div>
-            </label>
+            {/* El mes es para las fotos: el cuaderno escribe «21-09» sin año. La
+                planilla trae la fecha entera en su columna, así que no se pregunta. */}
+            {!deExcel && !elExcelElegido && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Mes del cuaderno</span>
+                {/* El ancho va en el envoltorio y no en el campo. */}
+                <div className="w-full sm:w-44">
+                  <input
+                    type="month" value={mes}
+                    onChange={(e) => setMesElegido(e.target.value)}
+                    disabled={leyendo}
+                    className={CLASE_CAMPO}
+                  />
+                </div>
+              </label>
+            )}
             <label className="block sm:min-w-0 sm:flex-1">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Fotos de las páginas</span>
+              <span className="mb-1 block text-xs font-medium text-slate-500">
+                {deExcel ? "La planilla (.xlsx)" : "Las fotos de las páginas, o la planilla (.xlsx)"}
+              </span>
               <input
                 key={claveDelInput}
-                type="file" multiple accept="image/*,.heic,.heif"
+                type="file" multiple={!deExcel} accept={deExcel ? ".xlsx" : "image/*,.heic,.heif,.xlsx"}
                 onChange={(e) => elegirArchivos(e.target.files)}
                 disabled={leyendo}
                 className="block w-full text-sm text-slate-600 file:mr-3 file:rounded file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm"
@@ -996,47 +1112,86 @@ export default function CuadernoClient({
             <button
               type="button"
               onClick={leerLasElegidas}
-              disabled={leyendo || elegidas.length === 0 || !mesValido}
+              disabled={leyendo || elegidas.length === 0 || hayMezcla || (!elExcelElegido && !mesValido)}
               className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
-              {leyendo ? "Leyendo…" : `Leer ${elegidas.length || ""} ${elegidas.length === 1 ? "foto" : "fotos"}`}
+              {leyendo
+                ? "Leyendo…"
+                : elExcelElegido
+                  ? "Leer la planilla"
+                  : `Leer ${elegidas.length || ""} ${elegidas.length === 1 ? "foto" : "fotos"}`}
             </button>
           </div>
 
-          {elegidas.length > 0 && (
+          {hayMezcla && (
+            <p className="mt-3 rounded border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              Elegiste fotos y una planilla a la vez. El Excel es una alternativa a las fotos y no se
+              mezclan en la misma carga: elegí una cosa o la otra.
+            </p>
+          )}
+          {elegidas.length > 0 && !hayMezcla && (
             <ol className="mt-3 space-y-0.5 text-xs text-slate-500">
-              {elegidas.map((f, i) => (
-                <li key={`${f.name}-${i}`}>Página {proximaPagina + i}: {f.name}</li>
-              ))}
+              {elExcelElegido ? (
+                <li>Planilla: {elExcelElegido.name}</li>
+              ) : (
+                elegidas.map((f, i) => (
+                  <li key={`${f.name}-${i}`}>Página {proximaPagina + i}: {f.name}</li>
+                ))
+              )}
             </ol>
           )}
           <p className="mt-3 text-xs text-slate-500">
-            Las fotos se achican en este navegador antes de subirse y se leen de a una: si una falla,
-            las demás quedan leídas y se reintenta sólo esa. Las páginas se numeran por el orden del
-            nombre del archivo. Las fotos del iPhone en formato HEIC sólo se pueden abrir desde Safari.
+            {deExcel || elExcelElegido ? (
+              <>
+                La planilla se lee entera de una vez y las órdenes salen de las fórmulas de la columna
+                de horas del resumen. El control es que esas horas den las del detalle: si no dan, los
+                renglones entran igual pero no se arma ningún grupo y se te dice en qué filas está el
+                problema. Volver a subirla reemplaza todo lo de esta carga.
+              </>
+            ) : (
+              <>
+                Las fotos se achican en este navegador antes de subirse y se leen de a una: si una falla,
+                las demás quedan leídas y se reintenta sólo esa. Las páginas se numeran por el orden del
+                nombre del archivo. Las fotos del iPhone en formato HEIC sólo se pueden abrir desde Safari.
+                Si en vez de fotos tenés la planilla de Excel, elegila acá mismo.
+              </>
+            )}
           </p>
 
           {cola.length > 0 && (
             <ul className="mt-3 space-y-1 text-sm">
               {cola.map((i) => (
                 <li key={i.clave} className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium text-slate-700">Página {i.orden}</span>
+                  <span className="font-medium text-slate-700">
+                    {i.esPlanilla ? "Planilla" : `Página ${i.orden}`}
+                  </span>
                   <span className="text-slate-400">{i.nombre}</span>
                   {i.estado === "esperando" && <span className="text-slate-400">esperando</span>}
                   {i.estado === "achicando" && <span className="text-slate-500">achicando la foto…</span>}
-                  {i.estado === "leyendo" && <span className="text-slate-500">leyendo la hoja (puede tardar un minuto)…</span>}
+                  {i.estado === "leyendo" && (
+                    <span className="text-slate-500">
+                      {i.esPlanilla ? "leyendo la planilla…" : "leyendo la hoja (puede tardar un minuto)…"}
+                    </span>
+                  )}
                   {i.estado === "leida" && (
-                    <span className="text-emerald-700">leída: {i.renglones} renglones</span>
+                    <span className="text-emerald-700">
+                      leída: {i.renglones} renglones
+                      {i.grupos ? `, ${i.grupos} ${i.grupos === 1 ? "grupo" : "grupos"} del resumen` : ""}
+                    </span>
                   )}
                   {i.estado === "fallo" && (
                     <>
                       <span className="text-rose-700">falló</span>
-                      <button
-                        type="button" onClick={() => reintentar(i)} disabled={leyendo}
-                        className="text-xs text-slate-600 underline disabled:opacity-40"
-                      >
-                        Reintentar
-                      </button>
+                      {/* Una planilla no se reintenta sola: no se subió nada, se
+                          vuelve a elegir el archivo y listo. */}
+                      {!i.esPlanilla && (
+                        <button
+                          type="button" onClick={() => reintentar(i)} disabled={leyendo}
+                          className="text-xs text-slate-600 underline disabled:opacity-40"
+                        >
+                          Reintentar
+                        </button>
+                      )}
                     </>
                   )}
                   {i.mensaje && (
@@ -1104,7 +1259,7 @@ export default function CuadernoClient({
       {cargaId === NUEVA && (
         <p className="rounded border border-slate-200 bg-white px-3 py-6 text-center text-sm text-slate-500">
           {puedeEditar
-            ? "Elegí las fotos del cuaderno de arriba para empezar. Después de leerlas vas a poder chequear cada renglón contra la hoja."
+            ? "Elegí arriba las fotos del cuaderno —o la planilla de Excel, si la armaste vos— para empezar. Después vas a poder chequear cada renglón y completar los sectores."
             : "Todavía no hay cargas de este contratista."}
         </p>
       )}
@@ -1134,10 +1289,55 @@ export default function CuadernoClient({
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-            {/* ── La foto, fija a la izquierda ─────────────── */}
+            {/* ── La hoja (o la planilla), fija a la izquierda ── */}
             <aside className="min-w-0 lg:sticky lg:top-0 lg:col-span-2 lg:self-start">
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                {fotos.length === 0 ? (
+                {/* Una carga de Excel no tiene hoja contra la cual comparar: la
+                    transcripción la escribió quien carga. En vez de la foto va
+                    de dónde salió cada renglón y qué trajo el archivo. */}
+                {deExcel ? (
+                  <>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Esta carga entró por Excel
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      {renglones.length} {renglones.length === 1 ? "renglón" : "renglones"} ·{" "}
+                      {gruposArmados} {gruposArmados === 1 ? "grupo armado" : "grupos armados"} desde el resumen
+                    </p>
+                    {errorDeFoto && <p className="mt-2 text-xs text-rose-700">{errorDeFoto}</p>}
+                    {planilla && urls[planilla.id] && (
+                      <a
+                        href={urls[planilla.id]}
+                        className="mt-2 inline-block text-sm text-sky-700 underline"
+                        download
+                      >
+                        Bajar la planilla
+                      </a>
+                    )}
+                    <p className="mt-3 text-xs text-slate-500">
+                      No hay hoja que mirar al lado: la transcripción la escribiste vos. Lo que queda
+                      por hacer es completar los sectores. Los renglones que van en la misma orden ya
+                      vienen juntados desde las fórmulas del resumen.
+                    </p>
+
+                    {/* De qué fila de la planilla salió el renglón en el que estás parado. */}
+                    {activo && (
+                      <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-2 text-sm">
+                        <p className="text-xs font-semibold text-sky-800">
+                          {activo.linea ? `Fila ${activo.linea} de la planilla` : "Sin fila"}
+                        </p>
+                        <p className="mt-1 text-slate-700">
+                          Dice: <mark className="rounded bg-yellow-200 px-1">{activo.tarea}</mark>
+                        </p>
+                        {activo.dudoso && (
+                          <p className="mt-1 text-xs text-amber-800">
+                            Dudoso{activo.motivo_dudoso ? `: ${activo.motivo_dudoso}` : "."}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : fotos.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">Esta carga no tiene fotos.</p>
                 ) : (
                   <>
