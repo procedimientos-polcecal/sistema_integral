@@ -210,6 +210,21 @@ describe("lo que no se entiende no se tira en silencio", () => {
     expect(r.problemas[0]).toContain('"linea":"11"');
   });
 
+  it("una unidad ilegible se lleva el numero: un importe no puede entrar como horas", () => {
+    const r = normalizarRenglones(
+      { renglones: [{ fecha: "2026-09-22", tarea: "1 Empalme cinta 5 P/Trit N°1", valor: 920000, unidad: "pesos argentinos", linea: 12 }] },
+      "2026-09"
+    );
+    expect(r.renglones).toHaveLength(1);
+    expect(r.renglones[0].horas).toBeNull();
+    expect(r.renglones[0].costo).toBeNull();
+    expect(r.renglones[0].dudoso).toBe(true);
+    expect(r.renglones[0].motivo_dudoso).toContain("unidad");
+    expect(r.renglones[0].motivo_dudoso).toContain("pesos argentinos");
+    // El resto de lo leido se conserva.
+    expect(r.renglones[0]).toMatchObject({ fecha: "2026-09-22", linea: 12 });
+  });
+
   it("un renglon que el modelo marco como dudoso lo sigue estando, con su motivo", () => {
     const { renglones } = normalizarRenglones(
       { renglones: [{ fecha: "2026-09-21", tarea: "Rep. ??? de cinta", valor: 6, unidad: "horas",

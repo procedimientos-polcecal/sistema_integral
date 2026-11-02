@@ -261,6 +261,10 @@ function rescatable(item: unknown): Record<string, unknown> {
       salvado[campo] = origen[campo];
     }
   }
+  // Un número cuya unidad no se pudo leer no se puede usar: sin ella no se sabe
+  // si son horas o pesos, y si se lo deja pasa como horas — un importe de
+  // 920000 sería una OT de 920.000 horas si alguien confirma sin mirar.
+  if ("unidad" in origen && !("unidad" in salvado)) delete salvado.valor;
   return salvado;
 }
 
