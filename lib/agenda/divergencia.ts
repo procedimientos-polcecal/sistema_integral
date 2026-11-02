@@ -2,14 +2,39 @@ import { instanteDe } from "./evento";
 
 export type Divergencia = "borrado" | "movido";
 
-/** ¿Es el mismo momento? Por instante si los dos traen zona; si no, por texto. */
+/** Argentina no tiene horario de verano: el desfase es fijo. */
+const DESFASE_ARGENTINA_MS = 3 * 60 * 60_000;
+
+/** El instante en UTC; una cadena sin zona es hora de pared de Argentina (-03:00). */
+function instanteUTC(texto: string): number | null {
+  const i = instanteDe(texto);
+  if (!i) return null;
+  return i.conZona ? i.ms : i.ms + DESFASE_ARGENTINA_MS;
+}
+
+/**
+ * ¿Es el mismo momento? Por instante, no por texto: `...-03:00` y `...Z`
+ * pueden ser la misma hora.
+ *
+ * Una cadena sin zona se lee como hora de pared de Argentina, y no hace falta
+ * que sea una convención de quien llama: es lo que el SdG escribe.
+ * `horarioDeLaOT` produce `2026-11-03T08:00:00`, el cliente de Calendar lo manda
+ * así con el `timeZone` aparte, y Google lo devuelve como
+ * `2026-11-03T08:00:00-03:00`. Comparado como texto, cada eco de una escritura
+ * propia saldría «movido». El `timeZone` va aparte porque nueve de los catorce
+ * calendarios del dominio están en UTC: por eso `horarioDeLaOT` no puede emitir
+ * el desfase.
+ *
+ * Lo que no es una fecha-hora (el `"2026-11-03"` que devuelve el cliente cuando
+ * alguien convierte el evento en uno de día completo desde Google) no tiene
+ * instante y no es igual a nada: da «movido». **Es a propósito y no un bug**: es
+ * un cambio real, el evento dejó de tener la hora que el SdG le puso.
+ */
 function mismoMomento(a: string, b: string): boolean {
-  if (a === b) return true;
-  const x = instanteDe(a);
-  const y = instanteDe(b);
-  // Sólo con zona en los dos hay instante que comparar: `...-03:00` y `...Z`
-  // pueden ser la misma hora y no tienen por qué coincidir como texto.
-  return !!x && !!y && x.conZona && y.conZona && x.ms === y.ms;
+  const x = instanteUTC(a);
+  const y = instanteUTC(b);
+  if (x === null || y === null) return false;
+  return x === y;
 }
 
 /**
@@ -34,9 +59,9 @@ function mismoMomento(a: string, b: string): boolean {
  * `null`. Quien escribe en Google tiene que actualizar `escrito` en cada
  * escritura propia; si no, cada una sonaría como un movimiento ajeno.
  *
- * Para que «igual» sea cierto, `escrito` tiene que guardarse con la misma forma
- * con que Google la devuelve (con zona). Una cadena sin zona contra una con
- * zona no se puede decidir y se cuenta como movida.
+ * Conviene que `escrito` se guarde con lo que Google devolvió, con zona: es lo
+ * que tiene que hacer la escritura. Si no lo hace, igual no se rompe —una
+ * cadena sin zona se lee como hora de Argentina, ver `mismoMomento`—.
  *
  * Un evento que el SdG todavía no escribió (`escrito` null) no diverge de
  * nada: no hay contra qué comparar.

@@ -31,6 +31,30 @@ describe("queDivergio", () => {
     const e = { inicio: "2026-11-03T12:00:00-03:00", fin: "2026-11-03T13:30:00-03:00" };
     expect(queDivergio(e, { ...e, cancelado: false, invitados: [] })).toBeNull();
   });
+  it("lo que el SdG manda sin zona y Google devuelve con -03:00 es el mismo momento", () => {
+    // Es el eco real: horarioDeLaOT no lleva desfase, Google lo agrega al devolverlo.
+    expect(queDivergio(
+      { inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00" },
+      { inicio: "2026-11-03T08:00:00-03:00", fin: "2026-11-03T09:30:00-03:00", cancelado: false, invitados: [] },
+    )).toBeNull();
+  });
+  it("sin zona se lee como hora de Argentina: la misma hora en UTC es otra", () => {
+    expect(queDivergio(
+      { inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00" },
+      { inicio: "2026-11-03T08:00:00Z", fin: "2026-11-03T09:30:00Z", cancelado: false, invitados: [] },
+    )).toBe("movido");
+  });
+  it("sin zona de los dos lados se compara como hora de pared", () => {
+    expect(queDivergio(
+      { inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00" },
+      { inicio: "2026-11-03T08:00:00", fin: "2026-11-03T10:00:00", cancelado: false, invitados: [] },
+    )).toBe("movido");
+  });
+  it("un evento convertido en uno de día completo es movido, a propósito", () => {
+    // El cliente devuelve «2026-11-03» sin hora: no hay instante, y el evento
+    // dejó de tener la hora que el SdG le puso. Es un cambio real, no un bug.
+    expect(queDivergio(escrito, { ...igual, inicio: "2026-11-03", fin: "2026-11-04" })).toBe("movido");
+  });
   it("la misma hora en otra zona es el mismo momento", () => {
     expect(queDivergio(escrito, { ...igual, inicio: "2026-11-03T11:00:00Z", fin: "2026-11-03T12:30:00Z" })).toBeNull();
   });
