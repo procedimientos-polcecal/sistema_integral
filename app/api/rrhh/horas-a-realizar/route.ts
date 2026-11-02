@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { puede_editar_check } from "@/lib/rrhh/route-utils";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { traerTodo } from "@/lib/core/paginado";
 import { errorDeValidacion } from "@/lib/core/validar";
 import { comoSeLee } from "@/lib/core/fechas";
 import {
@@ -70,11 +71,27 @@ async function choque(
   vigencia: { desde: string; hasta: string | null },
   salvo?: string,
 ): Promise<{ respuesta: NextResponse } | { mensaje: string | null }> {
-  const { data, error } = await supabase
-    .from("rrhh_horas_a_realizar")
-    .select("id, desde, hasta")
-    .eq("sector_id", sectorId);
-  if (error) return { respuesta: NextResponse.json({ error: error.message }, { status: 500 }) };
+  /*
+   * Pagina aunque hoy la tabla tenga cero filas. PostgREST corta en 1000 **y no
+   * avisa**, y acá el corte no daría un error sino una respuesta tranquila: una
+   * vigencia que pisa a otra pasaría el control porque la fila que choca quedó
+   * del otro lado del corte. Un divisor pisado sin aviso es justo lo que este
+   * control existe para evitar, y la regla del proyecto es explícita en no
+   * razonar «esta tabla es chica».
+   */
+  let data: { id: string; desde: string; hasta: string | null }[];
+  try {
+    data = await traerTodo<{ id: string; desde: string; hasta: string | null }>((desde, hasta) =>
+      supabase
+        .from("rrhh_horas_a_realizar")
+        .select("id, desde, hasta")
+        .eq("sector_id", sectorId)
+        .order("id")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    return { respuesta: NextResponse.json({ error: (e as Error).message }, { status: 500 }) };
+  }
 
   const otras = (data ?? [])
     .filter((o) => o.id !== salvo)
@@ -97,14 +114,33 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from("rrhh_horas_a_realizar")
-    .select("id, sector_id, horas_por_empleado, desde, hasta, created_at, sectores(nombre)")
-    .order("desde", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Igual que en `choque`: el catálogo crece una fila por cada cambio de
+  // vigencia de cada sector, así que la cuenta no está acotada por los 15
+  // sectores sino por cuántas veces se los corrigió.
+  type FilaConSector = {
+    id: string;
+    sector_id: string;
+    horas_por_empleado: number | string;
+    desde: string;
+    hasta: string | null;
+    created_at: string;
+    sectores: unknown;
+  };
+  let data: FilaConSector[];
+  try {
+    data = await traerTodo<FilaConSector>((desde, hasta) =>
+      supabase
+        .from("rrhh_horas_a_realizar")
+        .select("id, sector_id, horas_por_empleado, desde, hasta, created_at, sectores(nombre)")
+        .order("desde", { ascending: false })
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 
   return NextResponse.json({
-    data: (data ?? []).map((f) => {
+    data: data.map((f) => {
       const s = Array.isArray(f.sectores) ? f.sectores[0] : f.sectores;
       return { ...filaLimpia(f), sector: s?.nombre ?? null };
     }),

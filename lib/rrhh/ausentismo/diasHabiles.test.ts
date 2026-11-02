@@ -5,6 +5,7 @@ import {
   mesesSinFeriados,
   sabadosDelMes,
   anioSinFeriadosCargados,
+  anioParcialmenteCargado,
 } from "./diasHabiles";
 import { FERIADOS_2026 } from "./feriados2026.fixture";
 
@@ -66,4 +67,24 @@ it("sin ningún feriado cargado, el año está sin cargar", () => {
 
 it("con sólo feriados de 2026, el año 2027 está sin cargar", () => {
   expect(anioSinFeriadosCargados(2027, FERIADOS_2026)).toBe(true);
+});
+
+it("el ano completo no parece cargado a medias: septiembre solo no alcanza", () => {
+  // Medido sobre los 17 feriados reales: todos los meses de 2026 tienen al
+  // menos uno salvo septiembre. Si un mes suelto disparara el aviso, saltaria
+  // todos los anios y todos aprenderian a ignorarlo.
+  expect(anioParcialmenteCargado(2026, "2026-12", FERIADOS_2026)).toBe(false);
+});
+
+it("un ano cargado hasta junio y nada mas si parece cargado a medias", () => {
+  const hastaJunio = FERIADOS_2026.filter((f) => f <= "2026-06-30");
+  expect(hastaJunio.length).toBe(10);
+  expect(anioParcialmenteCargado(2026, "2026-10", hastaJunio)).toBe(true);
+  // Pero mirando solo hasta junio todavia no se nota, y es correcto: los meses
+  // posteriores no entran en ningun denominador todavia.
+  expect(anioParcialmenteCargado(2026, "2026-06", hastaJunio)).toBe(false);
+});
+
+it("un ano vacio no dispara este aviso, porque ya lo dice el otro", () => {
+  expect(anioParcialmenteCargado(2027, "2027-10", FERIADOS_2026)).toBe(false);
 });

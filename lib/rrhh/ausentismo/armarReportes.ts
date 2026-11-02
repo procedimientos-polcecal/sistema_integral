@@ -1,4 +1,4 @@
-import { anioSinFeriadosCargados } from "./diasHabiles";
+import { anioParcialmenteCargado, anioSinFeriadosCargados } from "./diasHabiles";
 import type { Ausencia } from "./diasDeAusencia";
 import {
   reporteAnual,
@@ -51,6 +51,13 @@ export function armarReportes(datos: {
     avisos.push(
       `El año ${anio} no tiene ningún feriado cargado: los días hábiles salen de más y el porcentual sale más bajo de lo que es. ` +
         "Hay que cargar los feriados en RRHH.",
+    );
+  } else if (anioParcialmenteCargado(anio, mes, feriados)) {
+    // El caso que el aviso de arriba no veía: el año tiene feriados pero se
+    // cortan en el medio. Falla igual de callado y del mismo lado.
+    avisos.push(
+      `El año ${anio} parece tener los feriados cargados sólo hasta la mitad: hay dos meses seguidos sin ninguno. ` +
+        "Mientras falten, los días hábiles salen de más y el porcentual sale más bajo de lo que es.",
     );
   }
 

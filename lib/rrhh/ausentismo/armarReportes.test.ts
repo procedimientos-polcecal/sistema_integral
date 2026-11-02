@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import { armarReportes, AVISO_TODOS_LOS_SECTORES, puedeVerLosReportes, reportesQueVe } from "./armarReportes";
 import { ausentesPublicos } from "./disponibilidadPublica";
 import type { EmpleadoDelReporte } from "./reportes";
+import { FERIADOS_2026 } from "./feriados2026.fixture";
 
 const ana: EmpleadoDelReporte = { id: "e1", nombre: "Ana", apellido: "Pérez", sectorId: "s1", sector: "Taller" };
 const sinSector: EmpleadoDelReporte = { id: "e2", nombre: "Beto", apellido: "Gómez", sectorId: null, sector: null };
-const feriados2026 = ["2026-01-01", "2026-05-01", "2026-12-25"];
+// Los 17 feriados reales de 2026, los mismos que ve el código en producción.
+// Antes acá había tres inventados, y al existir el aviso de «año cargado a
+// medias» esos tres pasaron a ser —con razón— un año a medio cargar: tenían
+// enero, mayo y diciembre, o sea tres meses vacíos seguidos. El dato falso era
+// el del test. Un fixture que no se parece al dato real sostiene afirmaciones
+// que el dato real no sostiene.
+const feriados2026 = FERIADOS_2026;
 
 describe("armarReportes", () => {
   it("dice siempre que el total incluye a todos los sectores y que no va a dar igual que la planilla", () => {
