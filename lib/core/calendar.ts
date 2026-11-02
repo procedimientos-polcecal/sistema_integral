@@ -212,6 +212,17 @@ export async function actualizarEvento(
  * calendario", y tanto el 410 (`Gone`, ya estaba borrado) como el 404 (Google no
  * lo conoce) dicen exactamente eso. Los dos son éxito, no error.
  *
+ * MEDIDO contra Google el 02/11/2026, impersonando a una casilla del dominio
+ * sobre un evento de prueba:
+ *   - borrar un evento que existe        -> 204
+ *   - borrar el mismo otra vez           -> 410, reason "deleted"
+ *                                           ("Resource has been deleted")
+ *   - borrar un id que nunca existió     -> 404, reason "notFound"
+ *   - GET de un id que nunca existió     -> 404 (por eso `leerEvento` da null)
+ * Lo que **no** está medido son `abrirCanal` y `cerrarCanal`: no se pueden
+ * probar desde local, porque Google valida el dominio del endpoint antes de
+ * abrir el canal.
+ *
  * Esto no es un caso raro sino uno que se espera frecuente: alguien borra el
  * evento a mano desde Google y después el SdG intenta borrarlo, sea por la ruta
  * de borrado o porque desapareció la OT que lo originó. Tirar ahí sería un fallo
