@@ -95,25 +95,38 @@ describe("reportesQueVe", () => {
     mes: "2026-03",
   });
 
-  it("quien no pasa el control igual ve el mensual, que es agregado y sin nombres", () => {
+  it("quien no pasa el control ve CUÁNTO se faltó por sector", () => {
     const recortado = reportesQueVe(todo, false);
     expect(recortado.mensual.total).toBe(3);
+    expect(recortado.mensual.filas[0].total).toBe(3);
+    expect(recortado.mensual.filas[0].sector).toBe("Taller");
     expect(recortado.avisos).toContain(AVISO_TODOS_LOS_SECTORES);
   });
 
-  it("el anual NOMBRA personas, así que no sale para quien no pasa el control", () => {
+  it("pero NO de qué: en un sector de una persona el motivo la nombraría", () => {
     const recortado = reportesQueVe(todo, false);
-    // Las dos formas de preguntarlo: que la clave no esté, y que el nombre de
-    // la persona no aparezca en ninguna parte del JSON que se manda.
-    expect(recortado.anual).toBeUndefined();
-    expect(recortado.porcentual).toBeUndefined();
+    // Lo que se pregunta no es que falte la clave sino que el motivo no esté en
+    // ninguna parte del JSON que se manda, que es lo único que llega del otro
+    // lado. «Producción - Hidratación» tiene una sola persona: ahí «Enfermedad:
+    // 5» dice quién estuvo enfermo.
+    const json = JSON.stringify(recortado);
+    expect(json).not.toContain("VACACIONES");
+    expect(json).not.toContain("porMotivo");
+    expect(json).not.toContain("totalPorMotivo");
+  });
+
+  it("el anual y el porcentual nombran personas, así que tampoco salen", () => {
+    const recortado = reportesQueVe(todo, false);
+    expect("anual" in recortado).toBe(false);
+    expect("porcentual" in recortado).toBe(false);
     expect(JSON.stringify(recortado)).not.toContain("Pérez");
   });
 
-  it("quien pasa el control recibe los tres", () => {
+  it("quien pasa el control recibe los tres, con los motivos", () => {
     const completo = reportesQueVe(todo, true);
-    expect(completo.anual?.filas).toHaveLength(1);
-    expect(completo.porcentual?.filas).toHaveLength(1);
+    expect("anual" in completo && completo.anual.filas).toHaveLength(1);
+    expect("porcentual" in completo && completo.porcentual.filas).toHaveLength(1);
     expect(completo.mensual.total).toBe(3);
+    expect(JSON.stringify(completo)).toContain("VACACIONES");
   });
 });

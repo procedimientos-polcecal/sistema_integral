@@ -243,9 +243,31 @@ una historia de duplicados que lo explique.
 | Qué | Quién |
 |---|---|
 | **La disponibilidad**: quién no viene y qué día | Cualquiera que entre al sistema |
-| **El mensual por sector** (agregado, sin nombres) | Cualquiera que entre al sistema |
+| **El mensual por sector**, sólo el total | Cualquiera que entre al sistema |
+| **El mensual desglosado por motivo** | Los `encargado`, los `admin_sistema` y quien tenga acceso a RRHH |
 | **El anual por persona** | Los `encargado`, los `admin_sistema` y quien tenga acceso a RRHH |
+| **El porcentual por sector** | Los `encargado`, los `admin_sistema` y quien tenga acceso a RRHH |
 | El motivo de una ausencia | Sólo RRHH, como hasta ahora |
+
+**Corregido el 02/11/2026, y el motivo vale más que la corrección.** Esta tabla
+decía que el mensual entero lo veía cualquiera, «agregado, sin nombres». Al
+implementarlo se midió el padrón: **71 empleados en 15 sectores, y "Producción -
+Hidratación" tiene UNA sola persona**; otros seis tienen dos. En un sector de
+uno, la celda «Enfermedad: 5» **es** un nombre: dice exactamente quién estuvo
+enfermo y cuántos días. O sea que **«agregado» no es lo mismo que anónimo cuando
+el grupo es chico**, y esta tabla se apoyaba en esa equivalencia para abrir
+justo el dato que el propio spec quiere cerrado.
+
+Decidido a pedido: **el total por sector sí, el desglose por motivo no.** El
+total no agrega nada que no se sepa ya —quién no vino y qué día está abierto
+igual, por diseño—; lo que se tapa es el porqué. *Si está mal cuesta:* quien no
+es encargado ve cuánto se faltó en su sector pero no de qué, y tiene que
+pedírselo a RRHH.
+
+El **porcentual** se suma al lado cerrado por una razón distinta y más floja: la
+tabla original no lo nombraba. Ante un permiso que el spec no abrió
+explícitamente se deja cerrado, porque abrirlo después es un renglón y enterarse
+de que se filtró no se deshace.
 
 **La disponibilidad no dice por qué.** Dice que alguien no está, y nada más. Es
 la misma regla que ya rige en la programación del taller, por el mismo motivo:

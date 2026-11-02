@@ -88,29 +88,67 @@ export function puedeVerLosReportes(
   return rol === "encargado" || rol === "admin_sistema" || nivelRrhh !== null;
 }
 
+/** El mensual tal como lo ve quien no puede ver los motivos: cuánto, no de qué. */
+export interface MensualSinMotivos {
+  filas: { sector: string; sectorId: string | null; total: number }[];
+  total: number;
+  ausenciasHuerfanas: number;
+}
+
+export type ReportesCompletos = ReturnType<typeof armarReportes>;
+export interface ReportesRecortados {
+  mensual: MensualSinMotivos;
+  avisos: string[];
+}
+
+/**
+ * El mensual sin el desglose por motivo.
+ *
+ * **Se arma campo por campo y no borrando `porMotivo`**, por lo mismo que la
+ * proyección de `disponibilidadPublica.ts`: lo que alguien agregue mañana al
+ * reporte no se cuela solo. Un `delete` o un `...resto` hacen lo contrario.
+ */
+export function mensualSinMotivos(mensual: ReportesCompletos["mensual"]): MensualSinMotivos {
+  return {
+    filas: mensual.filas.map((f) => ({ sector: f.sector, sectorId: f.sectorId, total: f.total })),
+    total: mensual.total,
+    ausenciasHuerfanas: mensual.ausenciasHuerfanas,
+  };
+}
+
 /**
  * Qué parte de los reportes le toca a quien pregunta.
  *
- * El spec reparte por **si el número nombra a alguien**, no por reporte: el
- * mensual es sector × motivo, agregado y sin nombres, y lo ve cualquiera que
- * entre al sistema; el anual es una fila por persona con sus días de ausencia
- * y ése sí está gateado. Esa tabla es la autoridad y dice, textual: «El
- * mensual por sector (agregado, sin nombres) → cualquiera que entre al
- * sistema».
+ * El spec reparte por **si el número nombra a alguien**: el anual es una fila
+ * por persona y está gateado; el mensual es sector × motivo y su tabla de
+ * permisos dice, textual, «cualquiera que entre al sistema».
+ *
+ * **PERO «AGREGADO» NO ES LO MISMO QUE ANÓNIMO CUANDO EL GRUPO ES CHICO**, y
+ * ahí el spec se apoyaba en una equivalencia que no se cumple. Medido el
+ * 02/11/2026: 71 empleados en 15 sectores, y **«Producción - Hidratación»
+ * tiene UNA sola persona** y otros seis tienen dos. Una celda «Hidratación ·
+ * Enfermedad: 5» dice exactamente quién estuvo enfermo y cuántos días, que es
+ * el dato que el spec quiere que sea sólo de RRHH —de 218 novedades, 74 son
+ * enfermedad y 3 son ART—.
+ *
+ * Decidido a pedido: **el total por sector sí, el motivo no.** El total no
+ * agrega nada que no se sepa ya, porque quién no vino y qué día está abierto
+ * igual, por diseño; lo que se tapa es el porqué. Quien no pasa el control
+ * recibe el mensual sin `porMotivo` ni `totalPorMotivo`, y el anual y el
+ * porcentual no van.
  *
  * **El porcentual queda del lado cerrado aunque tampoco nombre a nadie**, y es
  * una decisión, no un descuido: el spec no lo nombra en esa tabla. Ante un
  * permiso que el spec no abrió explícitamente, se deja cerrado — abrirlo
- * después es un renglón, y enterarse de que se filtró no se deshace. Si se
- * quiere abierto, se abre acá y se dice en el spec.
+ * después es un renglón, y enterarse de que se filtró no se deshace.
  *
  * Los `avisos` van de los dos lados: explican el número del mensual, que es
  * justamente el que todos van a comparar contra la planilla.
  */
 export function reportesQueVe(
-  todo: ReturnType<typeof armarReportes>,
+  todo: ReportesCompletos,
   puedeVerPorPersona: boolean,
-): Partial<ReturnType<typeof armarReportes>> & Pick<ReturnType<typeof armarReportes>, "mensual" | "avisos"> {
+): ReportesCompletos | ReportesRecortados {
   if (puedeVerPorPersona) return todo;
-  return { mensual: todo.mensual, avisos: todo.avisos };
+  return { mensual: mensualSinMotivos(todo.mensual), avisos: todo.avisos };
 }

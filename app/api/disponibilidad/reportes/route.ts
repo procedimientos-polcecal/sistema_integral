@@ -13,13 +13,14 @@ import { leerReportes } from "@/lib/rrhh/ausentismo/lecturas";
  *
  * `GET ?mes=AAAA-MM` (sin parámetro, el mes de hoy).
  *
- * **La respuesta no es la misma para todos, y eso es del spec.** El reparto es
- * por si el número nombra a alguien: el mensual es sector × motivo, agregado y
- * sin nombres, y lo ve cualquiera que entre al sistema; el anual es una fila
- * por persona y está gateado a los `encargado`, los `admin_sistema` y quien
- * tenga acceso a RRHH. Así que quien no pasa el control recibe
- * `{ mensual, avisos }` —con 200, no con 403— y quien pasa recibe además
- * `anual` y `porcentual`. Quien consuma esto tiene que bancarse las dos formas.
+ * **La respuesta no es la misma para todos.** Quien no pasa el control recibe
+ * `{ mensual, avisos }` —con 200, no con 403—, y ese mensual viene **sin el
+ * desglose por motivo**: cuánto se faltó en cada sector, no de qué. Quien pasa
+ * recibe además `anual` y `porcentual`, y los motivos. Quien consuma esto
+ * tiene que bancarse las dos formas.
+ *
+ * El porqué de ese recorte está en `reportesQueVe`, y en una frase: «agregado»
+ * no es lo mismo que anónimo cuando el sector tiene una sola persona.
  *
  * Como lee con el cliente admin (`ausencias` está cerrada con
  * `tiene_acceso_rrhh()`), RLS no corre y **el permiso es el de acá**: no hay
