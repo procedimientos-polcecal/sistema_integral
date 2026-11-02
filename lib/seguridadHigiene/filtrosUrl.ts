@@ -1,5 +1,11 @@
 import { escribirEnLaUrl, losQueEstanEnLaLista } from "@/lib/core/filtrosUrl";
 import type { FiltrosDeGestion } from "./gestion";
+import {
+  COLUMNAS_ORDENABLES,
+  ORDEN_POR_DEFECTO,
+  SIN_COLUMNA,
+  type OrdenDeColumna,
+} from "./ordenDeColumna";
 
 /**
  * Los filtros de la gestión de condiciones, leídos y escritos en la URL.
@@ -57,3 +63,32 @@ const NOMBRES: readonly [keyof FiltrosDeGestion, string][] = [
 
 export const escribirFiltrosDeGestion = (f: FiltrosDeGestion): string =>
   escribirEnLaUrl(f, NOMBRES);
+
+/**
+ * El orden elegido también viaja en la URL, por el mismo motivo que los
+ * filtros: una tabla ordenada por fecha máxima es algo que alguien manda por
+ * chat, y recargar no tiene por qué deshacerlo.
+ *
+ * Va en dos parámetros y no en uno (`orden=riesgo&dir=desc`) para que cada uno
+ * se valide contra su propia lista: un `dir` raro cae en ascendente y no se
+ * lleva puesta la columna.
+ *
+ * **Sin `orden` en la URL, el orden es el de la pantalla** —el que sube lo
+ * vencido y lo incompleto—, que es el anti-objetivo del módulo y por eso es lo
+ * que vale cuando nadie pidió otra cosa.
+ */
+export function leerOrdenDeGestion(params: URLSearchParams): OrdenDeColumna {
+  const columna = losQueEstanEnLaLista(params, "orden", COLUMNAS_ORDENABLES)[0];
+  if (!columna) return ORDEN_POR_DEFECTO;
+  const dir = losQueEstanEnLaLista(params, "dir", ["asc", "desc"])[0];
+  return { columna: columna as OrdenDeColumna["columna"], ascendente: dir !== "desc" };
+}
+
+/** Vacío cuando es el orden por defecto: la URL limpia es la de siempre. */
+export function escribirOrdenDeGestion(o: OrdenDeColumna): string {
+  if (o.columna === SIN_COLUMNA) return "";
+  return escribirEnLaUrl(
+    { orden: o.columna, dir: o.ascendente ? "asc" : "desc" },
+    [["orden", "orden"], ["dir", "dir"]]
+  );
+}

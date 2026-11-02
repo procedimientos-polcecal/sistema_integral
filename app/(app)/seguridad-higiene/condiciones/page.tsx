@@ -5,7 +5,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { nivelSyhDe } from "@/lib/seguridadHigiene/auth";
 import type { FilaDeCondicion } from "@/lib/seguridadHigiene/gestion";
-import { leerFiltrosDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
+import { leerFiltrosDeGestion, leerOrdenDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
 import CondicionesClient from "./CondicionesClient";
 
 /**
@@ -84,6 +84,11 @@ export default async function CondicionesPage({
     equipos: equipos.map((e) => e.id as string),
   });
 
+  // El orden también sale de la URL, así que un enlace a la tabla ordenada por
+  // fecha máxima abre ordenado. Sin `orden`, vale el de la pantalla: el que
+  // sube lo vencido y lo incompleto.
+  const ordenInicial = leerOrdenDeGestion(params);
+
   return (
     // `key` CON LOS PARÁMETROS DE LA URL, Y NO ES COSMÉTICO. El link de la
     // campana («vencidas», «sin completar») es una navegación suave: React no
@@ -98,6 +103,7 @@ export default async function CondicionesPage({
     <CondicionesClient
       key={params.toString()}
       filtrosIniciales={filtrosIniciales}
+      ordenInicial={ordenInicial}
       condicionesIniciales={condiciones}
       sectores={sectores.map((s) => ({ id: s.id as string, nombre: s.nombre as string, activo: s.activo as boolean }))}
       equipos={equipos.map((e) => ({

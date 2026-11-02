@@ -16,7 +16,15 @@ import {
   type FiltrosDeGestion,
   type FilaDeCondicion,
 } from "@/lib/seguridadHigiene/gestion";
-import { escribirFiltrosDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
+import { escribirFiltrosDeGestion, escribirOrdenDeGestion } from "@/lib/seguridadHigiene/filtrosUrl";
+import {
+  ORDEN_POR_DEFECTO,
+  SIN_COLUMNA,
+  ordenarPorColumna,
+  siguienteOrden,
+  type ColumnaOrdenable,
+  type OrdenDeColumna,
+} from "@/lib/seguridadHigiene/ordenDeColumna";
 import FichaDeCondicion, { type Catalogos } from "./FichaDeCondicion";
 import { InsigniaDeClasificacion, InsigniaDeEstado, InsigniaDeFalta } from "./Insignias";
 
@@ -78,6 +86,36 @@ function Marcas({ c, hoy }: { c: FilaDeCondicion; hoy: string }) {
   );
 }
 
+/**
+ * Un encabezado que ordena al tocarlo.
+ *
+ * Calcado del de MTBF (`mantenimiento/mtbf/MtbfClient.tsx`), que es la otra
+ * tabla del sistema que ordena por columna. `aria-sort` va en el `th` y el
+ * botón adentro: así un lector de pantalla dice por cuál está ordenada sin
+ * que la flecha sea la única señal.
+ */
+function Encabezado({
+  columna, orden, onOrdenar, children,
+}: {
+  columna: ColumnaOrdenable;
+  orden: OrdenDeColumna;
+  onOrdenar: (c: ColumnaOrdenable) => void;
+  children: React.ReactNode;
+}) {
+  const activa = orden.columna === columna;
+  return (
+    <th
+      className="px-3 py-2"
+      aria-sort={activa ? (orden.ascendente ? "ascending" : "descending") : "none"}
+    >
+      <button type="button" onClick={() => onOrdenar(columna)} className="hover:text-slate-900">
+        {children}
+        <span className="ml-1 text-xs text-slate-400">{activa ? (orden.ascendente ? "▲" : "▼") : ""}</span>
+      </button>
+    </th>
+  );
+}
+
 export default function CondicionesClient({
   filtrosIniciales,
   condicionesIniciales,
@@ -88,8 +126,10 @@ export default function CondicionesClient({
   hoy,
   puedeEditar,
   esAdmin,
+  ordenInicial,
 }: Catalogos & {
   filtrosIniciales: FiltrosDeGestion;
+  ordenInicial: OrdenDeColumna;
   condicionesIniciales: FilaDeCondicion[];
   hoy: string;
   puedeEditar: boolean;
@@ -97,6 +137,7 @@ export default function CondicionesClient({
 }) {
   const [filas, setFilas] = useState(condicionesIniciales);
   const [filtros, setFiltros] = useState<FiltrosDeGestion>(filtrosIniciales);
+  const [orden, setOrden] = useState<OrdenDeColumna>(ordenInicial);
   const [abierta, setAbierta] = useState<string | null>(null);
 
   const sectorDeEquipo = useMemo(
@@ -109,7 +150,9 @@ export default function CondicionesClient({
   // —todas las condiciones y los cuatro catálogos— para cambiar un query string
   // que la pantalla ya tiene resuelto en memoria. Con `replace` y no `push`:
   // salir con el botón de atrás no obliga a deshacer cada filtro.
-  const query = escribirFiltrosDeGestion(filtros);
+  const query = [escribirFiltrosDeGestion(filtros), escribirOrdenDeGestion(orden)]
+    .filter(Boolean)
+    .join("&");
   useEffect(() => {
     const destino = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     if (destino === window.location.pathname + window.location.search) return;
@@ -117,12 +160,24 @@ export default function CondicionesClient({
     window.history.replaceState(window.history.state, "", destino);
   }, [query]);
 
+  const nombreDeUsuario = useMemo(
+    () => new Map(usuarios.map((u) => [u.id, u.nombre] as const)),
+    [usuarios]
+  );
+
   const resumen = useMemo(() => resumenDeCondiciones(filas, hoy), [filas, hoy]);
 
-  const visibles = useMemo(
-    () => ordenarParaGestion(filtrarCondiciones(filas, filtros, hoy, sectorDeEquipo), hoy),
-    [filas, filtros, hoy, sectorDeEquipo]
-  );
+  // El orden por defecto es el de la pantalla, no el de una columna: sube lo
+  // vencido y lo incompleto, que es el anti-objetivo del módulo. Tocar un
+  // encabezado lo reemplaza **mientras dure**, y por eso hay un botón para
+  // volver: si ordenar por N° dejara sin salida, la tabla perdería la única
+  // garantía que tiene que dar.
+  const visibles = useMemo(() => {
+    const filtradas = filtrarCondiciones(filas, filtros, hoy, sectorDeEquipo);
+    return orden.columna === SIN_COLUMNA
+      ? ordenarParaGestion(filtradas, hoy)
+      : ordenarPorColumna(filtradas, orden, hoy, nombreDeUsuario);
+  }, [filas, filtros, orden, hoy, sectorDeEquipo, nombreDeUsuario]);
 
   // Del filtro de lugar sólo se ofrece donde hay algo: 273 equipos con tres
   // condiciones cargadas serían 270 opciones que dan una tabla vacía.
@@ -143,12 +198,13 @@ export default function CondicionesClient({
     };
   }, [filas, sectores, equipos, sectorDeEquipo]);
 
-  const nombreDeUsuario = useMemo(
-    () => new Map(usuarios.map((u) => [u.id, u.nombre] as const)),
-    [usuarios]
-  );
 
   const hayFiltros = Object.values(filtros).some((v) => v !== "");
+  const hayOtroOrden = orden.columna !== SIN_COLUMNA;
+
+  function cambiarOrden(columna: ColumnaOrdenable) {
+    setOrden((o) => siguienteOrden(o, columna));
+  }
   const fichaAbierta = abierta ? (filas.find((c) => c.id === abierta) ?? null) : null;
 
   function poner<K extends keyof FiltrosDeGestion>(campo: K, valor: FiltrosDeGestion[K]) {
@@ -266,10 +322,21 @@ export default function CondicionesClient({
 
       {/* El botón va sin `text-sm`: `.btn-ghost` también declara `font-size`
           fuera de toda capa, así que siempre midió 13 px. Ver CLAUDE.md. */}
-      {hayFiltros && (
-        <button type="button" className="btn-ghost" onClick={() => setFiltros(SIN_FILTROS)}>
-          Quitar los filtros
-        </button>
+      {(hayFiltros || hayOtroOrden) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {hayFiltros && (
+            <button type="button" className="btn-ghost" onClick={() => setFiltros(SIN_FILTROS)}>
+              Quitar los filtros
+            </button>
+          )}
+          {/* El camino de vuelta al orden que sube lo que falta. Sin esto,
+              ordenar por una columna sería una puerta de ida. */}
+          {hayOtroOrden && (
+            <button type="button" className="btn-ghost" onClick={() => setOrden(ORDEN_POR_DEFECTO)}>
+              Volver al orden sugerido
+            </button>
+          )}
+        </div>
       )}
 
       {visibles.length === 0 ? (
@@ -285,14 +352,14 @@ export default function CondicionesClient({
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">N°</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2">Lugar</th>
-                  <th className="px-3 py-2">Qué se vio</th>
-                  <th className="px-3 py-2">Peligro</th>
-                  <th className="px-3 py-2">Riesgo</th>
-                  <th className="px-3 py-2">Responsable</th>
-                  <th className="px-3 py-2">Fecha máxima</th>
+                  <Encabezado columna="numero" orden={orden} onOrdenar={cambiarOrden}>N°</Encabezado>
+                  <Encabezado columna="estado" orden={orden} onOrdenar={cambiarOrden}>Estado</Encabezado>
+                  <Encabezado columna="lugar" orden={orden} onOrdenar={cambiarOrden}>Lugar</Encabezado>
+                  <Encabezado columna="descripcion" orden={orden} onOrdenar={cambiarOrden}>Qué se vio</Encabezado>
+                  <Encabezado columna="peligro" orden={orden} onOrdenar={cambiarOrden}>Peligro</Encabezado>
+                  <Encabezado columna="riesgo" orden={orden} onOrdenar={cambiarOrden}>Riesgo</Encabezado>
+                  <Encabezado columna="responsable" orden={orden} onOrdenar={cambiarOrden}>Responsable</Encabezado>
+                  <Encabezado columna="fecha_maxima" orden={orden} onOrdenar={cambiarOrden}>Fecha máxima</Encabezado>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
