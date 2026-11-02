@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { obtenerToken, olvidarLosTokens, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA } from "./google";
+import { obtenerToken, olvidarLosTokens, SCOPE_CALENDAR, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA } from "./google";
 
 /**
  * El caché de tokens.
@@ -69,6 +69,30 @@ describe("obtenerToken", () => {
     await obtenerToken([SCOPE_SHEETS, SCOPE_SHEETS_LECTURA]);
     await obtenerToken([SCOPE_SHEETS_LECTURA, SCOPE_SHEETS]);
     expect(pedidos).toBe(1);
+  });
+
+  /**
+   * Con impersonación el token ya no es el mismo para todos: es el de esa
+   * casilla. Si el caché ignorara a quién se impersona, a un usuario se le
+   * entregaría el token de otro y la escritura iría al calendario equivocado
+   * sin ningún error.
+   */
+  it("dos casillas distintas no comparten el token", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR], "b@polcecal.com");
+    expect(pedidos).toBe(2);
+  });
+
+  it("la misma casilla reusa el suyo", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    expect(pedidos).toBe(1);
+  });
+
+  it("impersonar y no impersonar son entradas distintas", async () => {
+    await obtenerToken([SCOPE_CALENDAR]);
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    expect(pedidos).toBe(2);
   });
 
   /** Uno que ya vencio no se reusa: se pide de nuevo. */

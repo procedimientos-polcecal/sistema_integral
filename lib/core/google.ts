@@ -26,13 +26,22 @@ export const SCOPE_DRIVE_LECTURA = "https://www.googleapis.com/auth/drive.readon
  * compartida a propósito.
  */
 export const SCOPE_DRIVE = "https://www.googleapis.com/auth/drive";
+/*
+ * Calendar, y a diferencia de los otros **sólo sirve impersonando**: la cuenta
+ * de servicio no tiene calendario propio donde escribir, así que las llamadas
+ * con este scope pasan `comoQuien` a `obtenerToken` —la casilla del dominio en
+ * cuyo nombre se escribe— y la delegación de dominio de Workspace ya autoriza
+ * este scope exacto. Sin impersonar, el token existe pero no ve ningún
+ * calendario de nadie.
+ */
+export const SCOPE_CALENDAR = "https://www.googleapis.com/auth/calendar";
 
 export function hayCredencialesGoogle(): boolean {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
 }
 
 /**
- * Los tokens que ya se pidieron, por juego de scopes.
+ * Los tokens que ya se pidieron, por juego de scopes y por a quién se impersona.
  *
  * POR QUÉ HACE FALTA
  *
@@ -49,9 +58,22 @@ export function hayCredencialesGoogle(): boolean {
  * QUÉ TIENE DE SEGURO
  *
  * El caché vive en memoria del proceso, o sea de una instancia de función de
- * Vercel: no cruza usuarios —el token es de la cuenta de servicio, el mismo
- * para todos— ni sobrevive a un redeploy. Se guarda por juego de scopes,
- * porque un token de `spreadsheets.readonly` no sirve para escribir.
+ * Vercel: no sobrevive a un redeploy. Se guarda por juego de scopes, porque un
+ * token de `spreadsheets.readonly` no sirve para escribir.
+ *
+ * POR QUÉ EL SUBJECT VA EN LA CLAVE
+ *
+ * Sin `comoQuien` el token es de la cuenta de servicio y el mismo para todos, y
+ * por eso alcanzaba con los scopes. Con impersonación (`sub` en el JWT) es el
+ * token **de esa casilla**: si la clave no incluyera a quién se impersona, la
+ * segunda persona en pedir uno recibiría el de la primera y su escritura iría
+ * al calendario de otro. No falla ni avisa —Google acepta el token, que es
+ * válido—: es la peor forma de romperse. Impersonar y no impersonar también son
+ * entradas distintas, porque un token sin `sub` no ve ningún calendario.
+ *
+ * La clave separa las dos partes con un `\n`, que no puede aparecer ni en un
+ * scope ni en un mail, así que `[a, b]` sin subject nunca se confunde con
+ * `[a]` impersonando a `b`.
  *
  * Se descarta un minuto antes de que Google lo venza: si se apurara justo en el
  * borde, la llamada volvería con un 401 que nadie sabría leer.
@@ -59,7 +81,7 @@ export function hayCredencialesGoogle(): boolean {
 const MARGEN_SEGUNDOS = 60;
 const tokensEnMemoria = new Map<string, { token: string; vence: number }>();
 
-export async function obtenerToken(scopes: string[]): Promise<string> {
+export async function obtenerToken(scopes: string[], comoQuien?: string): Promise<string> {
   const crudo = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
   if (!crudo) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON no configurado");
 
@@ -67,7 +89,7 @@ export async function obtenerToken(scopes: string[]): Promise<string> {
 
   // Ordenados: pedir [SHEETS, DRIVE] y [DRIVE, SHEETS] es lo mismo y tiene que
   // dar en la misma entrada.
-  const claveDeCache = [...scopes].sort().join(" ");
+  const claveDeCache = `${[...scopes].sort().join(" ")}\n${comoQuien ?? ""}`;
   const guardado = tokensEnMemoria.get(claveDeCache);
   if (guardado && guardado.vence > ahora + MARGEN_SEGUNDOS) return guardado.token;
 
@@ -78,6 +100,9 @@ export async function obtenerToken(scopes: string[]): Promise<string> {
     aud: "https://oauth2.googleapis.com/token",
     iat: ahora,
     exp: ahora + 3600,
+    // Impersonar es sólo esto: el JWT sigue firmado por la cuenta de servicio y
+    // `sub` le pide a Google un token en nombre de esa casilla del dominio.
+    ...(comoQuien ? { sub: comoQuien } : {}),
   };
 
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
