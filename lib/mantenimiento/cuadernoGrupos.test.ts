@@ -18,6 +18,7 @@ function r(parcial: Partial<RenglonDelCuaderno> = {}): RenglonDelCuaderno {
   contador += 1;
   return {
     id: `r${contador}`,
+    cuaderno_id: "c1",
     fecha: "2026-09-17",
     tarea: "Tarea",
     lugar_raw: "",
@@ -127,7 +128,7 @@ describe("propuestaDeGrupos", () => {
     expect([...propuestaDeGrupos([a, b]).values()][0]).toEqual([a.id, b.id]);
   });
 
-  it("no propone lo que una persona ya juntó ni lo que ya se convirtio", () => {
+  it("no propone lo que una persona ya junto ni lo que ya se convirtio", () => {
     const propuesta = propuestaDeGrupos([
       r({ tarea: "Alambrado", grupo_id: "g" }),
       r({ tarea: "Alambrado", grupo_id: "g" }),
@@ -135,6 +136,22 @@ describe("propuestaDeGrupos", () => {
       r({ tarea: "Alambrado" }),
     ]);
     expect(propuesta.size).toBe(0);
+  });
+
+  it("la propuesta no cruza cargas", () => {
+    const sep = (c: string, f: string) => r({ tarea: "Tranqueras D6", cuaderno_id: c, fecha: f });
+    const a = sep("septiembre", "2026-09-17"), b = sep("septiembre", "2026-09-21");
+    const c = sep("noviembre", "2026-11-03"), d = sep("noviembre", "2026-11-05");
+    const propuesta = [...propuestaDeGrupos([a, c, b, d]).values()];
+    expect(propuesta).toHaveLength(2);
+    expect(propuesta).toContainEqual([a.id, b.id]);
+    expect(propuesta).toContainEqual([c.id, d.id]);
+  });
+
+  it("una tarea que aparece una vez por carga no se propone", () => {
+    const a = r({ tarea: "Alambrado", cuaderno_id: "septiembre" });
+    const b = r({ tarea: "Alambrado", cuaderno_id: "noviembre" });
+    expect(propuestaDeGrupos([a, b]).size).toBe(0);
   });
 
   it("no propone juntar lo que sePuedenJuntar rechazaria", () => {
@@ -199,14 +216,14 @@ describe("enOrdenes", () => {
     expect(salida).toHaveLength(0);
   });
 
-  it("los renglones sin sector de un grupo toman el sector del grupo", () => {
+  it("un grupo con un renglon sin sector no sale, aunque otro tenga sector confirmado", () => {
     const g = "g";
-    const [orden] = enOrdenes([
+    const renglones = [
       r({ sector_id: CANTERA, grupo_id: g, horas: 3 }),
       r({ sector_id: null, grupo_id: g, horas: 4 }),
-    ]);
-    expect(orden.sector_id).toBe(CANTERA);
-    expect(orden.horas).toBe(7);
+    ];
+    expect(enOrdenes(renglones)).toHaveLength(0);
+    expect(pendientesDeOrdenes(renglones)[0].motivo).toBe("sin_sector");
   });
 
   it("un grupo cuyos renglones quedaron en sectores distintos no sale", () => {

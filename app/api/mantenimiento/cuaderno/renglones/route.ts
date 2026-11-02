@@ -151,14 +151,17 @@ export async function PATCH(request: Request) {
   // línea entera: lo que se repite de un día al otro es el lugar («P/Trit N°3»),
   // y una clave con la tarea pegada no volvería a aparecer nunca.
   //
-  // **El equipo no se aprende.** El `equipo_id` de este renglón es el de *esta*
-  // tarea («cinta 9»), pero el lugar casi siempre es un sector entero: guardarlo
-  // se le pegaría a todos los renglones futuros de ese lugar. El enganche lo
-  // vuelve a leer de la línea cuando el texto lo nombra. El costo de no
-  // guardarlo es elegirlo otra vez en un lugar que sea una sola máquina; el de
-  // guardarlo mal es un equipo equivocado que nadie nota. Y como el upsert pisa
-  // la fila, un equipo que hubiera quedado de antes se borra: «el último
-  // enganche gana», igual que en los partes de Candia.
+  // **Nunca se escribe el equipo del renglón.** Es el de *esta* tarea («cinta
+  // 9»), pero el lugar casi siempre es un sector entero: guardarlo se le
+  // pegaría a todos los renglones futuros de ese lugar. El enganche lo vuelve
+  // a leer de la línea cuando el texto lo nombra.
+  //
+  // Tampoco se borra el que el catálogo ya tenía: confirmar un sector que el
+  // sistema propuso desde esa misma fila es el caso más común, y pisarla con
+  // `equipo_id: null` le sacaría al próximo cuaderno una deducción que
+  // funcionaba. Si el sector es el mismo, la columna **no viaja** en el upsert
+  // y la fila la conserva; sólo si el sector cambia se pone en null, porque el
+  // equipo viejo sería de otro sector.
   //
   // Un fallo acá no tumba la corrección: lo que se pierde es la comodidad de la
   // próxima carga, no el dato. Se dice igual.
@@ -174,17 +177,27 @@ export async function PATCH(request: Request) {
         .maybeSingle();
       if (errorCarga || !carga) throw new Error(errorCarga?.message ?? "no se encontró la carga");
 
-      const { error: e } = await admin.from("mant_contratista_lugares").upsert(
-        {
-          proveedor_id: carga.proveedor_id,
-          texto: normalizarLugar(lugar),
-          texto_original: lugar,
-          sector_id: sectorFinal,
-          equipo_id: null,
-          cargado_por: user.id,
-        },
-        { onConflict: "proveedor_id,texto" }
-      );
+      const texto = normalizarLugar(lugar);
+      const { data: sabido, error: errorSabido } = await supabase
+        .from("mant_contratista_lugares")
+        .select("sector_id")
+        .eq("proveedor_id", carga.proveedor_id)
+        .eq("texto", texto)
+        .maybeSingle();
+      if (errorSabido) throw new Error(errorSabido.message);
+
+      const fila: Record<string, unknown> = {
+        proveedor_id: carga.proveedor_id,
+        texto,
+        texto_original: lugar,
+        sector_id: sectorFinal,
+        cargado_por: user.id,
+      };
+      if (sabido && sabido.sector_id !== sectorFinal) fila.equipo_id = null;
+
+      const { error: e } = await admin
+        .from("mant_contratista_lugares")
+        .upsert(fila, { onConflict: "proveedor_id,texto" });
       if (e) throw new Error(e.message);
     } catch (e) {
       catalogo_error =
@@ -227,7 +240,7 @@ export async function POST(request: Request) {
       .in("id", ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const elegidos = (filas ?? []) as unknown as (RenglonDelCuaderno & { cuaderno_id: string })[];
+    const elegidos = (filas ?? []) as unknown as RenglonDelCuaderno[];
     if (elegidos.length !== ids.length) {
       return NextResponse.json({ error: "Alguno de los renglones ya no existe." }, { status: 404 });
     }

@@ -23,6 +23,8 @@ import { normalizarLugar } from "./partesDeContratista";
 /** El renglón tal como lo comparten la pantalla y la generación. */
 export type RenglonDelCuaderno = {
   id: string;
+  /** De qué carga es. La propuesta de acumular no cruza cargas. */
+  cuaderno_id: string;
   foto_id?: string | null;
   linea?: number | null;
   fecha: string | null;
@@ -212,6 +214,13 @@ export function sePuedeSeparar(renglonesDelGrupo: readonly RenglonDelCuaderno[])
  *
  * Entran los renglones sin sector confirmado (ver `sinSectorConfirmado`) que
  * no están ya juntados por una persona —eso ya está decidido— ni convertidos.
+ * **La propuesta no cruza cargas**: agrupa dentro de cada `cuaderno_id` y
+ * nunca entre dos. Sin ese corte, «Tranqueras D6» de septiembre y la de
+ * noviembre se propondrían juntas, y eso sería una OT que cruza dos meses sin
+ * que nadie lo haya pedido. (`POST` de renglones ya impide juntar a mano entre
+ * cargas: éste es el otro lado.) La clave del mapa lleva el cuaderno por lo
+ * mismo.
+ *
  * Dos renglones son «la misma tarea» cuando su tarea normalizada coincide;
  * **el lugar no cuenta**, porque en los renglones sin sector casi siempre está
  * vacío: «Tranqueras D6» lleva el equipo en la tarea. El riesgo es que
@@ -225,8 +234,9 @@ export function propuestaDeGrupos(renglones: readonly RenglonDelCuaderno[]): Map
   const porTarea = new Map<string, RenglonDelCuaderno[]>();
   for (const r of renglones) {
     if (r.orden_trabajo_id || r.grupo_id || !sinSectorConfirmado(r)) continue;
-    const clave = claveDeTarea(r.tarea);
-    if (!clave) continue;
+    const tarea = claveDeTarea(r.tarea);
+    if (!tarea) continue;
+    const clave = `${r.cuaderno_id}|${tarea}`;
     const lista = porTarea.get(clave);
     if (lista) lista.push(r);
     else porTarea.set(clave, [r]);
@@ -277,10 +287,12 @@ function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
     );
     const sinOT = miembros.filter((m) => !m.orden_trabajo_id);
 
-    // Qué sector tiene la unidad. Los renglones sin sector de un grupo toman el
-    // del grupo: lo juntó una persona y ésa es la decisión. Pero **un sector
-    // propuesto sin confirmar en cualquiera de ellos frena todo el grupo**:
-    // «lo que nadie confirmó no se genera».
+    // Qué sector tiene la unidad. Una sola vara, la estricta: **todos** los
+    // renglones tienen que traer sector y ninguno propuesto sin confirmar. Un
+    // renglón sin sector no hereda el del grupo —sería dejar pasar la peor
+    // suposición mientras la mejor, una propuesta del catálogo, se frena— y
+    // «lo que nadie confirmó no se genera». Juntar y después fijarle el sector
+    // a cada uno es el camino.
     const sectores = distintos(miembros.map((m) => m.sector_id).filter((s): s is string => !!s));
     const sector_id = sectores.length === 1 ? sectores[0] : null;
 
@@ -337,8 +349,13 @@ function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
       );
       continue;
     }
-    if (!sector_id) {
-      pendiente("sin_sector", "No tiene sector: sin sector no hay orden de trabajo.");
+    if (!sector_id || miembros.some((m) => !m.sector_id)) {
+      pendiente(
+        "sin_sector",
+        miembros.length > 1
+          ? "Algún renglón del grupo no tiene sector: sin sector no hay orden de trabajo. Hay que fijárselo a cada uno."
+          : "No tiene sector: sin sector no hay orden de trabajo."
+      );
       continue;
     }
     if (fechas.length === 0) {
@@ -376,8 +393,10 @@ function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
  * —comprobado el 01/11/2026—, arma el registro y lo inserta. Esta función es la
  * que escribe la regla «lo que nadie confirmó no se genera». Quedan afuera:
  *
- * - los renglones **sin sector**;
- * - los de **sector propuesto sin confirmar** (`sector_propuesto = true`);
+ * - los renglones **sin sector**, y los grupos en los que **alguno** no lo
+ *   tiene (el sector no se hereda del grupo);
+ * - los de **sector propuesto sin confirmar** (`sector_propuesto = true`), y
+ *   los grupos en los que alguno lo está;
  * - los grupos cuyos renglones quedaron en **sectores distintos**;
  * - los renglones **sin fecha**.
  *
