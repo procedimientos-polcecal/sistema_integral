@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarReportes, AVISO_TODOS_LOS_SECTORES, puedeVerLosReportes } from "./armarReportes";
+import { armarReportes, AVISO_TODOS_LOS_SECTORES, puedeVerLosReportes, reportesQueVe } from "./armarReportes";
 import { ausentesPublicos } from "./disponibilidadPublica";
 import type { EmpleadoDelReporte } from "./reportes";
 
@@ -83,5 +83,37 @@ describe("puedeVerLosReportes", () => {
 
   it("sin rol y sin RRHH no pasa", () => {
     expect(puedeVerLosReportes(undefined, null)).toBe(false);
+  });
+});
+
+describe("reportesQueVe", () => {
+  const todo = armarReportes({
+    ausencias: [{ empleado_id: "e1", fecha_desde: "2026-03-10", fecha_hasta: "2026-03-12", tipo: "VACACIONES" }],
+    empleados: [ana],
+    feriados: feriados2026,
+    horas: [],
+    mes: "2026-03",
+  });
+
+  it("quien no pasa el control igual ve el mensual, que es agregado y sin nombres", () => {
+    const recortado = reportesQueVe(todo, false);
+    expect(recortado.mensual.total).toBe(3);
+    expect(recortado.avisos).toContain(AVISO_TODOS_LOS_SECTORES);
+  });
+
+  it("el anual NOMBRA personas, así que no sale para quien no pasa el control", () => {
+    const recortado = reportesQueVe(todo, false);
+    // Las dos formas de preguntarlo: que la clave no esté, y que el nombre de
+    // la persona no aparezca en ninguna parte del JSON que se manda.
+    expect(recortado.anual).toBeUndefined();
+    expect(recortado.porcentual).toBeUndefined();
+    expect(JSON.stringify(recortado)).not.toContain("Pérez");
+  });
+
+  it("quien pasa el control recibe los tres", () => {
+    const completo = reportesQueVe(todo, true);
+    expect(completo.anual?.filas).toHaveLength(1);
+    expect(completo.porcentual?.filas).toHaveLength(1);
+    expect(completo.mensual.total).toBe(3);
   });
 });

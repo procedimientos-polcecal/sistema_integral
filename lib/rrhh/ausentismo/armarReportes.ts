@@ -72,15 +72,45 @@ export function armarReportes(datos: {
 }
 
 /**
- * Quién ve los reportes: los `encargado`, los `admin_sistema` y quien tenga
- * acceso a RRHH, en cualquier nivel.
+ * Quién ve los reportes **que nombran personas**: los `encargado`, los
+ * `admin_sistema` y quien tenga acceso a RRHH, en cualquier nivel.
  *
  * El `rol` viene de `usuarios` y el nivel de `nivelRrhhDe` (null si no tiene
  * el módulo; un `admin_sistema` ya viene como `admin`).
+ *
+ * **No gobierna el mensual**, que es agregado por sector y sin nombres y lo ve
+ * cualquiera que entre al sistema: ver `reportesQueVe`.
  */
 export function puedeVerLosReportes(
   rol: string | null | undefined,
   nivelRrhh: "lectura" | "edicion" | "admin" | null,
 ): boolean {
   return rol === "encargado" || rol === "admin_sistema" || nivelRrhh !== null;
+}
+
+/**
+ * Qué parte de los reportes le toca a quien pregunta.
+ *
+ * El spec reparte por **si el número nombra a alguien**, no por reporte: el
+ * mensual es sector × motivo, agregado y sin nombres, y lo ve cualquiera que
+ * entre al sistema; el anual es una fila por persona con sus días de ausencia
+ * y ése sí está gateado. Esa tabla es la autoridad y dice, textual: «El
+ * mensual por sector (agregado, sin nombres) → cualquiera que entre al
+ * sistema».
+ *
+ * **El porcentual queda del lado cerrado aunque tampoco nombre a nadie**, y es
+ * una decisión, no un descuido: el spec no lo nombra en esa tabla. Ante un
+ * permiso que el spec no abrió explícitamente, se deja cerrado — abrirlo
+ * después es un renglón, y enterarse de que se filtró no se deshace. Si se
+ * quiere abierto, se abre acá y se dice en el spec.
+ *
+ * Los `avisos` van de los dos lados: explican el número del mensual, que es
+ * justamente el que todos van a comparar contra la planilla.
+ */
+export function reportesQueVe(
+  todo: ReturnType<typeof armarReportes>,
+  puedeVerPorPersona: boolean,
+): Partial<ReturnType<typeof armarReportes>> & Pick<ReturnType<typeof armarReportes>, "mensual" | "avisos"> {
+  if (puedeVerPorPersona) return todo;
+  return { mensual: todo.mensual, avisos: todo.avisos };
 }
