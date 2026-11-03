@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
+import { ESPECIALIDADES, LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER } from "@/lib/mantenimiento/ordenes";
 import MultiSelect from "@/components/MultiSelect";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import {
@@ -21,6 +21,7 @@ import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
+import PostergarOTModal from "./PostergarOTModal";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
@@ -28,6 +29,7 @@ import PuntajeGut from "./PuntajeGut";
 import PuntuarGutModal from "./PuntuarGutModal";
 import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
@@ -354,9 +356,11 @@ export default function OrdenesClient({
       setAvisoSync(`No se pudo ${queSeHizo}: ${body.error ?? "error desconocido"}`);
       return false;
     }
-    if (body.planilla_error) {
-      setAvisoSync(`Se guardó en el sistema, pero no en la planilla: ${body.planilla_error}`);
-    }
+    // Con `planilla_reintentando` el mensaje cambia de sentido: no es "andá a
+    // completarla a mano" sino "la fila del master todavía no existe y el
+    // sistema insiste solo". Es el mismo aviso que da el alta.
+    const aviso = avisoDelPendiente(body.planilla_error, Boolean(body.planilla_reintentando));
+    if (aviso) setAvisoSync(aviso);
     return true;
   }
 
@@ -805,6 +809,7 @@ export default function OrdenesClient({
                         onCambiarParada={cambiarParada}
                         onJustificacion={() => cargarJustificadas(orders)}
                         versionDelHistorial={versionDelHistorial}
+                        onPostergada={load}
                       />
                     )}
                   </div>
@@ -957,9 +962,27 @@ function SugerenciaGut({ pendientes, onPuntuar }: {
   );
 }
 
+/**
+ * Lo que hay que saber antes de ir a arreglar un dato a la planilla.
+ *
+ * Se arma con la lista de `ordenes.ts` para que no pueda nombrar un campo de
+ * menos: ahí vive junto al mapa de columnas, con un test que exige que cada
+ * columna esté clasificada.
+ */
+const NO_SE_CORRIGE_EN_EL_MASTER =
+  `${LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER.join(", ")} no son datos del master: las ` +
+  `columnas A a J y la S de la pestaña OT son el derrame de un IMPORTRANGE del ` +
+  `libro de respuestas del formulario. Lo que se escriba ahí a mano no queda —o ` +
+  `rompe el derrame con un #REF!, o el derrame lo pisa al recalcular—, y si en el ` +
+  `medio corre una sincronización el sistema toma el valor nuevo y después vuelve ` +
+  `solo al viejo. Se corrigen en la respuesta del formulario, o en la pestaña ` +
+  `«Altas del sistema» si la OT la creó el SdG. El cierre, el estado, las horas, ` +
+  `el contratista y los operarios sí son del master: ésos se corrigen allá o acá.`;
+
 function OTDetail({
   order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
   versionDelHistorial,
+  onPostergada,
 }: {
   onVerRepuestos?: () => void;
   onPuntuar?: () => void;
@@ -971,7 +994,10 @@ function OTDetail({
   onJustificacion?: () => void;
   /** Cambia cuando algo de afuera escribió en el historial: hay que leerlo de nuevo. */
   versionDelHistorial?: number;
+  /** Se corrió la fecha: el listado tiene que volver a leerse. */
+  onPostergada?: () => void;
 }) {
+  const [postergando, setPostergando] = useState(false);
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
@@ -988,6 +1014,21 @@ function OTDetail({
         <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>
+
+      {/* Qué de esto NO se arregla escribiendo en la planilla.
+          Va acá —en el detalle y no en el encabezado de la pantalla— porque
+          éste es el momento en que alguien mira un dato, ve que está mal y se
+          va a la pestaña OT a corregirlo. Hacer eso no deja nada: esas
+          columnas son derrame de un IMPORTRANGE y se revierten solas, sin
+          error y sin aviso. Eso fue lo que el 26/10/2026 dio vuelta dos veces
+          la fecha de ejecución de la 2896 y la 2897.
+          La frase se arma con la lista de `ordenes.ts`, que está pegada al
+          mapa de columnas y tiene un test que no deja que se despeguen. */}
+      <p className="text-xs text-slate-400">
+        {LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER.length} de estos datos no se corrigen
+        escribiendo en la planilla{" "}
+        <InfoTip text={NO_SE_CORRIGE_EN_EL_MASTER} />
+      </p>
 
       {/* En una pantalla táctil no hay "pasar por encima": acá las tres notas
           van escritas, con las palabras de la escala. */}
@@ -1043,14 +1084,44 @@ function OTDetail({
           <p className="text-sm text-slate-800">{o.descripcion}</p>
         </div>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onVerRepuestos}
           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Repuestos que hacen falta
         </button>
+
+        {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
+            La fecha de ejecución de una OT del formulario vive en la pestaña
+            que maneja Google Forms, y escribir ahí corre las filas de las
+            demás — es lo que dejó el registro de la OT 2796 pegado a la 2798
+            el 16/10/2026. Las que creó el SdG tienen su fila en «Altas del
+            sistema», que sí se puede reescribir.
+            En vez de esconder el botón sin más, se dice: un botón que no está
+            no se distingue de uno que falta. */}
+        {canEdit && o.app_created && pideJustificacion(o.estado) && (
+          <button
+            onClick={() => setPostergando(true)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Postergar
+          </button>
+        )}
+        {canEdit && !o.app_created && pideJustificacion(o.estado) && (
+          <span className="text-xs text-slate-400">
+            La fecha de esta orden se cambia en la planilla: entró por el formulario.
+          </span>
+        )}
       </div>
+
+      {postergando && (
+        <PostergarOTModal
+          orden={o}
+          onCerrar={() => setPostergando(false)}
+          onPostergada={() => { setPostergando(false); onPostergada?.(); }}
+        />
+      )}
 
       {/* Sólo en las que siguen abiertas: una realizada ya no debe ninguna
           explicación, y lo que se encontró al hacerla va en la observación de

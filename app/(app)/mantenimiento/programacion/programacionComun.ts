@@ -101,7 +101,7 @@ export function rangoComoSeLee(desde: string, hasta: string): string {
  */
 export async function llamar(
   url: string,
-  metodo: "GET" | "POST" | "PATCH" | "DELETE",
+  metodo: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   cuerpo?: unknown
 ): Promise<{ ok: true; data: any } | { ok: false; error: string }> {
   try {

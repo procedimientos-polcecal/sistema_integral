@@ -16,6 +16,7 @@ import {
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import {
   reintentarHastaQueSalga, hacePocoQueSeDreno,
 } from "@/lib/mantenimiento/reintentoDePendientes";
@@ -729,7 +730,49 @@ export async function PATCH(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const planilla_error = await escribirEnLaPlanilla(updated, registro);
-  return NextResponse.json({ data: updated, planilla_error });
+
+  // ── Y SI NO SALIÓ, SE ANOTA Y SE INSISTE ──────────────────────────────────
+  //
+  // Esto faltaba, y es lo que hacía que registrar el trabajo en la app se
+  // perdiera solo. `sheets_pendiente` no es nada más una cola: la importación
+  // saltea las órdenes que no se pudieron exportar —`sinExportar` en
+  // `sincronizar.ts`—, y ese conjunto sale de las que tienen la marca puesta.
+  // Sin anotarla, el registro no se reintentaba **y además** quedaba expuesto:
+  // la sincronización siguiente leía la `M` vacía y lo borraba.
+  //
+  // Fallar acá es lo normal y no la excepción, por lo mismo que en el alta: la
+  // fila del master llega por `IMPORTRANGE` y tarda. El `after()` insiste
+  // cuatro minutos después de haberle contestado a la persona, igual que allá,
+  // y lo que no salga lo termina el drenaje o la sincronización.
+  //
+  // Qué se anota y qué no lo decide `elPendienteDelIntento`, con sus tests: un
+  // fallo que la cola no sabe rehacer desde la fila —un PATCH que sólo cambió
+  // las observaciones— no se encola, porque se limpiaría solo.
+  const pendiente = elPendienteDelIntento(updated, planilla_error);
+  let planilla_reintentando = false;
+
+  if (pendiente) {
+    planilla_reintentando = true;
+    await admin
+      .from("ordenes_trabajo")
+      .update({ sheets_pendiente: pendiente, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", id);
+
+    after(async () => {
+      const r = await reintentarHastaQueSalga({
+        intentar: () => escribirEnLaPlanilla(updated, registro),
+      });
+      await admin
+        .from("ordenes_trabajo")
+        .update({
+          sheets_pendiente: elPendienteDelIntento(updated, r.error),
+          sheets_intentado_en: new Date().toISOString(),
+        })
+        .eq("id", id);
+    });
+  }
+
+  return NextResponse.json({ data: updated, planilla_error, planilla_reintentando });
 }
 
 /**

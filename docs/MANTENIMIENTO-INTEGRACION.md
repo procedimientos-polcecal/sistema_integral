@@ -1750,19 +1750,30 @@ una persona quede en dos turnos el mismo día.
 
 ### De dónde salen las ausencias, y qué se deja afuera a propósito
 
-Sólo de `ausencias`, la tabla de RRHH. Tres decisiones que parecen omisiones y
-no lo son:
+De `ausencias` y de `francos`, las dos tablas de RRHH. Tres decisiones que
+parecen omisiones y no lo son:
 
-- **`francos` está afuera del cruce.** `fecha_tomado` no es el día de descanso:
-  es **el día en que alguien apretó el botón** de "tomado"
-  (`FrancosClient.tsx` manda `hoyEnArgentina()`). Medido: de 217 francos hay 56
-  tomados y sus fechas caen en **tres días**, 35 de ellos el 01/09/2026. Cruzarlo
-  pintaría 35 huecos un lunes cualquiera, y es el mismo error que este proyecto
-  ya evita en las planillas: enlazar al que se le parece es peor que dejar en
-  null. **La consecuencia, asumida:** un franco tomado no abre hueco, y el
-  encargado puede ver programada a alguien que ese día no viene. Las 56 filas
-  viejas no se recuperan —la fecha real no quedó escrita en ningún lado—; el
-  arreglo es de RRHH (pedir el día real al marcarlo) y está nombrado en el spec.
+- **Un franco abre hueco por `fecha_descanso`, nunca por `fecha_tomado`**, y la
+  distinción es el arreglo del 26/10/2026. `fecha_tomado` es **el día en que
+  alguien apretó el botón** de "tomado": hasta esa fecha la pantalla mandaba
+  `hoyEnArgentina()` a mano, así que de 217 francos los 56 tomados caían en
+  **tres días**, 35 de ellos el 01/09/2026 — tres sesiones de alguien
+  poniéndose al día, no tres días en que descansó medio taller. Cruzar por ahí
+  habría pintado 35 huecos un lunes cualquiera.
+  Desde el 26/10/2026 marcar un franco **pide el día que se descansa** y lo
+  guarda en `fecha_descanso`, que es el que este cruce mira. Se puede pedir
+  porque el franco se marca **cuando se formaliza**, así que el día ya se sabe
+  y casi siempre está adelante.
+  **Los 56 viejos quedan con `fecha_descanso` en null y no abren hueco**: su
+  día real no quedó escrito en ningún lado y se dieron por perdidos a pedido.
+  Null es la verdad ahí —el sistema no sabe— y es la misma regla que el
+  proyecto aplica en las planillas: enlazar al que se le parece es peor que
+  dejar en null. Comprobado contra la base el 26/10/2026: filtrando por
+  `fecha_descanso`, la semana del 01/09 devuelve **cero** filas.
+  Lo que pregunta la programación es `noViene()` de
+  `lib/mantenimiento/disponibilidad.ts`, que junta las dos razones —ausencia
+  cargada y franco que se descansa— en un solo lugar, para que la grilla y los
+  candidatos no puedan calcularlas distinto.
 - **`TARDANZA` no cuenta como falta.** Está en el mismo enum que `VACACIONES`,
   pero quien llega tarde viene a trabajar: pintarlo como hueco muestra un
   agujero donde hay una persona, y la primera vez que pase el encargado deja de
@@ -1836,6 +1847,50 @@ marcación**, que va al revés; por eso esto se llama *programación* y no toca
 dice que falta la referencia, sin grilla. La migración `20261026084938`
 **la corre una persona a mano** en el editor SQL; si para entonces alguien cargó
 dos anclas del mismo lunes, falla al crear el índice y hay que borrar una a mano.
+
+### Lo que ningún test pudo verificar: hay que abrirlo
+
+Esta pantalla **nunca se abrió en un navegador**, porque todo está detrás del
+login. La lógica pura tiene tests, las rutas se ejercitaron contra la base real
+llamando a los handlers, y el escaneo responsive pasa — pero nadie la vio. Lo que
+hay que mirar, en orden de lo que más duele si está mal:
+
+1. **La referencia, antes que nada.** Es el único camino de escritura que ningún
+   test ejercitó end-to-end desde la pantalla, y de él sale toda la grilla.
+   Cargarla y **verificar con el encargado que la semana que muestra es la que
+   él dice que es**, antes de darla por buena. Si queda mal, se corrige desde la
+   misma sección —para eso se hizo—, pero el error no avisa: la grilla se ve
+   perfectamente bien y dice gente en turnos en los que no está.
+2. **Cargar el padrón primero**, las nueve personas con su oficio y su grupo. El
+   desplegable de empleados tiene 70 opciones, así que tiene que abrir el panel
+   con buscador y no la rueda nativa.
+3. **Anotar una falta desde un hueco, en un teléfono de 375 px.** La promesa son
+   dos toques: la persona y el tipo. Y que el "Deshacer" del aviso la saque.
+4. **"Otra"** pide el motivo y no deja anotar sin él.
+5. **Pasar a alguien de turno y volverlo al ciclo**, y que la marca aparezca y se
+   limpie.
+6. **Corregir y sacar una falta propia**, y abrir una que cargó RRHH: ahí no
+   tiene que verse el motivo ni los botones. Es el límite de privacidad visto
+   desde afuera.
+7. **La tabla de siete días a 375 px**, que scrollea de costado sin empujar la
+   página.
+8. **Una semana anterior y una posterior a la referencia**, con las flechas.
+
+### Tres cosas chicas que quedaron sabidas
+
+Ninguna rompe nada; están acá para que quien las vea no crea que descubrió un
+bug nuevo.
+
+- En la sección de la referencia, **«Lo que rige hoy» es la ancla más nueva**, y
+  nada impide anclar hacia adelante. Si alguien carga un ancla con un lunes
+  futuro, esa etiqueta nombra algo que todavía no rige. Al lado está el lunes
+  impreso, así que se lee raro y no falso.
+- **Corregir un ancla también puede moverle la semana**, que es lo que el PUT
+  hace a propósito; el cartel rojo lo avisa, pero el diálogo de confirmación
+  nombra el lunes nuevo y no el que se deja vacío.
+- **Borrar una ausencia futura deja sus días marcados como ausente** en
+  `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
+  RRHH, no de acá.
 
 ## Los datos: qué está y qué no
 

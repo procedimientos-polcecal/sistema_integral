@@ -5,6 +5,7 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
 import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido, diasAMarcarAlEditar } from "@/lib/rrhh/fichadas/marcarDia";
+import { problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoche";
 
 function parseHoraDePared(value: string): Date | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
@@ -45,6 +46,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   // update de abajo falla con el 500 de siempre y no se marca nada.
   const { data: previa } = await supabase
     .from("fichadas").select("empleado_id, fecha, hora_entrada, hora_salida, observaciones").eq("id", id).maybeSingle();
+
+  // El cinturón, con los valores que van a QUEDAR y no con los que vinieron:
+  // este PUT es parcial, así que mandar sólo la salida tiene que validarse
+  // contra la entrada que ya está guardada. Va en la ruta y no sólo en la
+  // pantalla porque una salida anterior a su entrada se guardaba sin un solo
+  // error y dejaba un día con horas imposibles: hubo 23 así, 18 a mano.
+  if (previa) {
+    const entradaFinal = (data.hora_entrada as string | undefined) ?? previa.hora_entrada;
+    const salidaFinal = "hora_salida" in data ? (data.hora_salida as string | null) : previa.hora_salida;
+    const problema = problemaDeLaFila(entradaFinal, salidaFinal);
+    if (problema) return NextResponse.json({ error: problema }, { status: 400 });
+  }
 
   const { data: fichada, error } = await supabase.from("fichadas").update(data).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

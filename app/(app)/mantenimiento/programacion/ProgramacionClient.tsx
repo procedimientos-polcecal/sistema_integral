@@ -6,8 +6,8 @@ import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@/lib/core/fechas";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import HojaDePersona from "./HojaDePersona";
+import LaReferencia from "./LaReferencia";
 import PadronDelTaller, { type EmpleadoElegible } from "./PadronDelTaller";
-import SinReferencia from "./SinReferencia";
 import {
   DIA_CORTO, OFICIO_TEXTO, ORDEN_OFICIO, TURNOS, TURNO_TEXTO,
   diaLargo, diaMes, llamar, rangoComoSeLee, tipoTexto,
@@ -149,7 +149,7 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
 
   async function corregirAusencia(
     id: string,
-    cambios: { tipo: string; fechaHasta: string; observaciones: string | null }
+    cambios: { tipo: string; fechaDesde: string; fechaHasta: string; observaciones: string | null }
   ): Promise<string | null> {
     const r = await llamar("/api/mantenimiento/ausencias", "PATCH", { id, ...cambios });
     recargar();
@@ -257,10 +257,6 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
       )}
 
       {!semana && !errorDeCarga && <p className="text-sm text-slate-400">Cargando…</p>}
-
-      {semana?.sinReferencia && (
-        <SinReferencia lunes={semanaDe(hoy)[0]} personas={semana.personas} alCargar={recargar} />
-      )}
 
       {semana && !semana.sinReferencia && (
         <>
@@ -470,6 +466,20 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
             </div>
           </section>
         </>
+      )}
+
+      {/*
+        La referencia se ve **siempre**, plegada, y no sólo cuando falta: un
+        ancla mal cargada no se distingue de una buena mirando la grilla, que
+        se dibuja igual de completa. Acá se ve qué rige y se corrige.
+      */}
+      {semana && (
+        <LaReferencia
+          lunesDeHoy={semanaDe(hoy)[0]}
+          personas={semana.personas}
+          abiertaAlPrincipio={Boolean(semana.sinReferencia)}
+          alCambiar={recargar}
+        />
       )}
 
       {/* Sin el padrón no hay semana: se carga y se mantiene acá. */}

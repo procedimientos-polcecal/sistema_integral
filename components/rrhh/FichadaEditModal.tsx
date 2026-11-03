@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 import { acreditarDia, instanteDePared, type CalculoDelDia } from "@/lib/rrhh/fichadas/acreditado";
+import { diaDeLaSalida, problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoche";
 import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
 import { useCargar } from "@/lib/core/useCargar";
 import AcreditadoDeFichada from "./AcreditadoDeFichada";
@@ -132,7 +133,22 @@ export default function FichadaEditModal({
     : undefined;
 
   function actualizarFila(idx: number, cambios: Partial<FilaFichada>) {
-    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
+    setFilas((prev) =>
+      prev.map((f, i) => {
+        if (i !== idx) return f;
+        const fila = { ...f, ...cambios };
+        // Al tipear la hora de salida, el día se acomoda solo: una salida
+        // anterior a la entrada es del día siguiente, porque un turno no
+        // termina antes de empezar. Es lo que hacía falta escribir a mano
+        // en el turno de 20 a 4 y lo que nadie se acordaba de hacer.
+        // Se recalcula sólo cuando se tocó una hora: si alguien edita la
+        // FECHA de salida a propósito, no se la pisamos.
+        if (cambios.horaSalida !== undefined || cambios.horaEntrada !== undefined) {
+          fila.fechaSalida = diaDeLaSalida(fila.fechaEntrada, fila.horaEntrada, fila.horaSalida);
+        }
+        return fila;
+      })
+    );
   }
   function agregarFila() {
     setFilas((prev) => [...prev, { id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false }]);
@@ -157,6 +173,14 @@ export default function FichadaEditModal({
           continue;
         }
         if (fila.eliminar || !fila.horaEntrada) continue;
+        // Antes de mandar nada: una salida anterior a la entrada se guarda
+        // sin error y deja un día con horas imposibles. Hay 18 así en la
+        // base, todas escritas a mano (ver `turnoDeNoche.ts`).
+        const problema = problemaDeLaFila(
+          instanteDePared(fila.fechaEntrada, fila.horaEntrada),
+          instanteDePared(fila.fechaSalida, fila.horaSalida)
+        );
+        if (problema) throw new Error(problema);
         const body = {
           employeeId,
           fecha: fila.fechaEntrada,

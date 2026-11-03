@@ -6,6 +6,7 @@ import { localDateTime, toUtcDateOnly } from "@/lib/rrhh/dates";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { marcarDiaCorregido } from "@/lib/rrhh/fichadas/marcarDia";
 import { conCalculoDelDia } from "@/lib/rrhh/fichadas/calculoDelDia";
+import { problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoche";
 import { traerTodo } from "@/lib/core/paginado";
 
 // El frontend manda la hora como "YYYY-MM-DDTHH:MM:SS" sin zona horaria (hora
@@ -71,6 +72,12 @@ export async function POST(request: Request) {
   const entrada = parseHoraDePared(horaEntrada);
   if (!employeeId || !fecha || !entrada) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   const salida = horaSalida ? parseHoraDePared(horaSalida) : null;
+  // El cinturón, y va en la ruta y no sólo en la pantalla: una salida anterior
+  // a su entrada se guardaba sin un solo error y dejaba un día con horas
+  // imposibles. Hubo 23 así, 18 escritas a mano. Que lo frene acá quiere decir
+  // que no entra por ningún camino, ni por uno nuevo que todavía no existe.
+  const problema = problemaDeLaFila(entrada.toISOString(), salida ? salida.toISOString() : null);
+  if (problema) return NextResponse.json({ error: problema }, { status: 400 });
 
   const { data: fichada, error } = await supabase
     .from("fichadas")

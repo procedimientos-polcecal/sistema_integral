@@ -21,6 +21,17 @@ import { OFICIO_TEXTO, ORDEN_OFICIO, llamar } from "./programacionComun";
  *
  * Todas las reglas (fechas, vigencias que no se superponen, grupo según oficio)
  * las pone `/api/mantenimiento/personal`; acá sólo se muestran sus mensajes.
+ *
+ * ── POR QUÉ HAY UN "VER TAMBIÉN A LOS QUE YA NO ESTÁN" ──────
+ *
+ * Porque sin él una baja mal cargada no tenía arreglo desde la app. El `GET`
+ * traía sólo lo vigente, así que una fila cuyo `hasta` quedaba en el pasado
+ * **desaparecía de esta lista** — y el `PATCH` pide el `id` de la fila, que
+ * sólo se sabe por esta lista—. Tipear la baja del mes pasado en vez de la del
+ * mes que viene sacaba a la persona del padrón, le vaciaba las semanas
+ * anteriores y no dejaba camino de vuelta. Desde el 26/10/2026 la casilla pide
+ * el padrón entero (`?incluirBajas=1`) y, con la fila a la vista, se le puede
+ * cambiar la fecha o sacarle la baja del todo.
  */
 
 interface FilaDelPadron {
@@ -53,6 +64,11 @@ export default function PadronDelTaller({
   const [filas, setFilas] = useState<FilaDelPadron[] | null>(null);
   const [errorDeCarga, setErrorDeCarga] = useState<string | null>(null);
 
+  // Las bajas no se traen por defecto —el padrón de todos los días son los que
+  // están—, pero tienen que poder traerse: una fila con `hasta` en el pasado es
+  // justo la que hay que poder corregir, y el `PATCH` necesita su `id`.
+  const [verBajas, setVerBajas] = useState(false);
+
   const [empleadoId, setEmpleadoId] = useState("");
   const [oficio, setOficio] = useState<Oficio>("mecanico");
   const [grupo, setGrupo] = useState<Grupo>("A");
@@ -63,7 +79,7 @@ export default function PadronDelTaller({
   const [error, setError] = useState<string | null>(null);
 
   const recargar = useCargar(async (vigente) => {
-    const r = await llamar("/api/mantenimiento/personal", "GET");
+    const r = await llamar(`/api/mantenimiento/personal${verBajas ? "?incluirBajas=1" : ""}`, "GET");
     if (!vigente()) return;
     if (!r.ok) {
       setErrorDeCarga(r.error);
@@ -71,7 +87,7 @@ export default function PadronDelTaller({
     }
     setErrorDeCarga(null);
     setFilas(r.data.data as FilaDelPadron[]);
-  }, []);
+  }, [verBajas]);
 
   const ordenadas = [...(filas ?? [])].sort(
     (a, b) =>
@@ -119,6 +135,15 @@ export default function PadronDelTaller({
     });
   }
 
+  /** La baja que fue un error: la fila vuelve a no tener fin. */
+  async function sacarLaBaja(id: string) {
+    await hacer(async () => {
+      const r = await llamar("/api/mantenimiento/personal", "PATCH", { id, hasta: null });
+      if (r.ok) setCerrando(null);
+      return r;
+    });
+  }
+
   return (
     <section className="card">
       <button
@@ -137,15 +162,46 @@ export default function PadronDelTaller({
         <div className="space-y-4 border-t border-slate-100 p-4">
           {errorDeCarga && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{errorDeCarga}</p>}
           {filas && filas.length === 0 && (
-            <p className="text-sm text-slate-500">Todavía no hay nadie cargado en el padrón del taller.</p>
+            <p className="text-sm text-slate-500">
+              {verBajas
+                ? "No hay ninguna fila en el padrón del taller."
+                : "Todavía no hay nadie cargado en el padrón del taller."}
+            </p>
           )}
+
+          {/*
+            Sin esto, una fila cuya baja quedó en el pasado desaparece de la
+            única pantalla que puede corregirla: el `PATCH` pide el `id` y el
+            `id` sale de este listado.
+          */}
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={verBajas}
+              onChange={(e) => setVerBajas(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Ver también a los que ya no están (para corregirles la baja)
+          </label>
 
           <ul className="space-y-1.5">
             {ordenadas.map((f) => (
-              <li key={f.id} className="rounded-lg border border-slate-200 px-3 py-2">
+              <li
+                key={f.id}
+                className={`rounded-lg border px-3 py-2 ${
+                  f.hasta && f.hasta < hoy ? "border-slate-200 bg-slate-50" : "border-slate-200"
+                }`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 text-sm">
-                    <span className="block truncate font-medium text-slate-900">{nombreDe(f)}</span>
+                    <span className="block truncate font-medium text-slate-900">
+                      {nombreDe(f)}
+                      {f.hasta && f.hasta < hoy && (
+                        <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                          ya no está
+                        </span>
+                      )}
+                    </span>
                     <span className="text-xs text-slate-500">
                       {OFICIO_TEXTO[f.oficio]}
                       {f.grupo && ` · grupo ${f.grupo}`} · desde {comoSeLee(f.desde)}
@@ -183,6 +239,17 @@ export default function PadronDelTaller({
                     <button type="button" className="btn-primary" disabled={enviando || !hastaDeBaja} onClick={() => void darDeBaja(f.id)}>
                       Confirmar
                     </button>
+                    {/*
+                      La baja que no tendría que haber existido: una fecha mal
+                      tipeada saca a la persona del padrón y le vacía las
+                      semanas. Cambiar el día no alcanza, hay que poder dejarla
+                      sin `hasta`.
+                    */}
+                    {f.hasta && (
+                      <button type="button" className="btn-ghost" disabled={enviando} onClick={() => void sacarLaBaja(f.id)}>
+                        Sacar la baja
+                      </button>
+                    )}
                     <button type="button" className="btn-ghost" disabled={enviando} onClick={() => setCerrando(null)}>
                       Cancelar
                     </button>

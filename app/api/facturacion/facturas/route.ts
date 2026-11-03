@@ -5,7 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
 import { leerCatalogoComprable } from "@/lib/odoo/catalogo";
 import type { ProductoDeOdoo } from "@/lib/compras/productoOdoo";
-import { prepararLineas } from "@/lib/facturacion/lineas";
+import {
+  lineaPorElTotal,
+  type CabeceraDeLaFactura,
+} from "@/lib/facturacion/lineaPorElTotal";
+import { CUANTAS, laLineaQueSeRepite } from "@/lib/facturacion/laLineaQueSeRepite";
+import { traerLasUltimasFacturas } from "@/lib/odoo/historialDeImputacion";
+import { prepararLineas, type LineaNueva } from "@/lib/facturacion/lineas";
 import { resolverElEmisor } from "@/lib/odoo/emisor";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { puedeEditarFacturacion, tieneAccesoFacturacion } from "@/lib/facturacion/auth";
@@ -325,7 +331,35 @@ async function guardarElDetalle(
   facturaId: string,
   detalle: PedidoDeAlta["detalle"]
 ): Promise<string[]> {
-  if (!detalle || detalle.lineas.length === 0) return [];
+  /*
+   * Sin detalle legible **igual se guarda una línea**: la del total.
+   *
+   * Antes esto devolvía `[]` y la factura quedaba sin ninguna fila, así que la
+   * pantalla mostraba "Líneas de factura 0" y no había a qué ponerle producto
+   * ni distribución analítica — los dos campos que deciden dónde queda imputado
+   * el gasto. El borrador se armaba igual, con una línea inventada en el
+   * momento del push que nadie podía tocar.
+   */
+  if (!detalle || detalle.lineas.length === 0) {
+    const { data: cabecera } = await supabase
+      .from("facturas_proveedor")
+      .select("tipo_comprobante, punto_venta, numero, importe_total, odoo_partner_id, empresas(odoo_company_id)")
+      .eq("id", facturaId)
+      .single();
+
+    const sola = cabecera ? lineaPorElTotal(cabecera as CabeceraDeLaFactura) : null;
+    if (!sola) return [];
+
+    const conLoAprendido = { ...sola, ...(await loQueEsteProveedorRepite(cabecera)) };
+
+    const { error } = await supabase
+      .from("facturas_proveedor_lineas")
+      .insert({ ...conLoAprendido, factura_id: facturaId });
+
+    return error
+      ? [`La factura entró, pero su línea por el total no se pudo guardar: ${error.message}`]
+      : [];
+  }
 
   let catalogo: ProductoDeOdoo[] = [];
   let aprendidos = new Map<string, number>();
@@ -363,4 +397,47 @@ async function guardarElDetalle(
   }
 
   return [];
+}
+
+/**
+ * Lo que este proveedor repite, para que la línea del total nazca imputada.
+ *
+ * Hay proveedores que facturan lo mismo todos los meses, y para una factura
+ * sin detalle legible elegir producto, cuenta y analítica es *todo* el trabajo
+ * que hay que hacer. Medido sobre las facturas posteadas de 2026, la regla de
+ * la unanimidad alcanza al **30%** de ellas — el porqué del umbral está en
+ * `laLineaQueSeRepite`.
+ *
+ * **Nunca bloquea el alta.** Si Odoo no contesta, o la factura todavía no tiene
+ * partner reconocido, la línea entra igual sin imputar: perder una factura por
+ * no poder consultar un antecedente sería cambiar lo importante por lo cómodo.
+ */
+async function loQueEsteProveedorRepite(
+  cabecera: unknown
+): Promise<Partial<LineaNueva>> {
+  const c = cabecera as {
+    odoo_partner_id: number | null;
+    empresas: { odoo_company_id: number | null } | null;
+  };
+  const companyId = c.empresas?.odoo_company_id ?? null;
+  if (!c.odoo_partner_id || !companyId) return {};
+
+  try {
+    const anteriores = await traerLasUltimasFacturas(c.odoo_partner_id, companyId, CUANTAS);
+    const repetida = laLineaQueSeRepite(anteriores);
+    if (!repetida) return {};
+
+    return {
+      odoo_product_id: repetida.productoId,
+      odoo_product_nombre: repetida.productoNombre,
+      odoo_account_id: repetida.cuentaId,
+      odoo_account_nombre: repetida.cuentaNombre,
+      analitica: repetida.analitica,
+      analitica_detalle: repetida.analitica ? repetida.porque : null,
+      // Que se vea de dónde salió: es lo que permite no aceptarlo.
+      producto_origen: repetida.productoId ? "aprendido" : null,
+    };
+  } catch {
+    return {};
+  }
 }

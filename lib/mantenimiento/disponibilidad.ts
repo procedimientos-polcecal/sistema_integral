@@ -68,6 +68,61 @@ export function estaAusente(
 }
 
 /**
+ * Una fila de `francos`, tal como la devuelve la base.
+ *
+ * `fecha_descanso` es el día que la persona efectivamente descansa, que se
+ * carga al marcar el franco —cuando se formaliza, así que suele estar
+ * adelante—. **No confundirla con `fecha_tomado`**, que es la fecha del
+ * trámite: hasta el 26/10/2026 era lo único que había y la pantalla escribía
+ * `hoy`, así que los 56 francos tomados de antes caen en tres fechas. Esos
+ * quedan con `fecha_descanso` en null y no abren hueco: el sistema no sabe
+ * cuándo descansaron, y decirlo es mejor que inventarlo.
+ */
+export interface FrancoCrudo {
+  empleado_id: string;
+  estado: string;
+  fecha_descanso: string | null;
+}
+
+/**
+ * Si `empleadoId` descansa un franco el día `dia`.
+ *
+ * Pide las dos cosas: que esté `TOMADO` —un franco pendiente todavía no tiene
+ * día— y que el día de descanso sea exactamente ése. Un franco sin
+ * `fecha_descanso` nunca abre hueco, por viejo o por pendiente.
+ */
+export function estaDeFranco(
+  francos: FrancoCrudo[],
+  empleadoId: string,
+  dia: string,
+): boolean {
+  return francos.some(
+    (f) =>
+      f.empleado_id === empleadoId &&
+      f.estado === "TOMADO" &&
+      f.fecha_descanso === dia,
+  );
+}
+
+/**
+ * Si `empleadoId` no viene el día `dia`, por lo que sea: una ausencia cargada o
+ * un franco que descansa. Es lo que mira la programación, y existe para que las
+ * dos razones no se puedan calcular en lugares distintos y decir cosas
+ * distintas.
+ */
+export function noViene(
+  ausencias: AusenciaCruda[],
+  francos: FrancoCrudo[],
+  empleadoId: string,
+  dia: string,
+): boolean {
+  return (
+    estaAusente(ausencias, empleadoId, dia) ||
+    estaDeFranco(francos, empleadoId, dia)
+  );
+}
+
+/**
  * Los empleados que pueden tapar un hueco: mismo oficio, vigentes ese día, no
  * ausentes y que no estén ya en ese turno ese día (sea por el ciclo o porque
  * ya los movieron: sugerirlo dos veces lo pondría en dos lugares a la vez).

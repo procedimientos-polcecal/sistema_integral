@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
+import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
+import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
+import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import { puedeAprobarCompras, esConsultadoDeCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -69,15 +71,29 @@ async function avisosDeLosModulos(
     supabase.from(tabla).select("id", { count: "exact", head: true });
 
   const [
-    rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
-    comprasConsultasAbiertas,
+    rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
+    comprasEsperandoAprobacion, comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, filasRitmo,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
+    // La tabla se rehace entera en cada sincronización, así que su tamaño ES
+    // la divergencia de hoy. Su PK es `(ot_number, campo)` y no `id`, así que
+    // el conteo va por una de esas columnas.
+    //
+    // Y si la tabla todavía no existe —la migración la corre una persona—,
+    // PostgREST devuelve el error en el resultado en vez de tirar, así que
+    // `count` llega en null y esto da 0: sin aviso y sin romper la campana,
+    // que es el modo correcto de fallar mientras la migración no esté.
+    tiene("mantenimiento")
+      ? supabase
+          .from("mantenimiento_divergencias")
+          .select("ot_number", { count: "exact", head: true })
+          .then(({ count }) => count ?? 0)
+      : Promise.resolve(0),
     contarSiTiene("compras", () => head("compras_requerimientos").in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])),
     // No es un `count … head`, y es la decisión de ese conteo: «pregunta abierta»
     // es una anti-unión que PostgREST no sabe expresar, así que las candidatas se
@@ -113,16 +129,30 @@ async function avisosDeLosModulos(
     tiene("taller_vial")
       ? equiposTallerVialSinService(supabase).then((r) => r.equiposSinService)
       : Promise.resolve(0),
+    // Vencida es no cerrada y con la fecha máxima ya pasada: la misma que
+    // `estadoDe` (`<` y no `<=`, porque la máxima de hoy todavía vence mañana).
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).lt("fecha_maxima", hoy)),
+    // Tiene que decir lo mismo que `faltasPendientes` (gestion.ts): no cerrada y
+    // con algo de `loQueFalta()` (condicion.ts, la versión probada de esa regla).
+    // Por eso es una consulta propia: son varias condiciones `or` sobre columnas
+    // nullables. `FILTRO_FALTA_ALGO` vive junto a `loQueFalta` y un test las ata.
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).or(FILTRO_FALTA_ALGO)),
+    // Las que nunca se respaldaron y llevan más de tres días: ver el aviso en
+    // `avisos.ts`. `subida_el` y no una fecha de corrida, porque lo que importa es
+    // cuánto hace que esa foto está expuesta.
+    contarSiTiene("seguridad_higiene", () =>
+      head("syh_fotos").is("respaldada_en_drive_el", null).lt("subida_el", corteDeFotosAtascadas(new Date()))
+    ),
     traerRitmo(supabase),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
-    rrhhSinClasificar, mantenimientoAtrasadas, comprasEsperandoAprobacion,
-    comprasConsultasAbiertas,
+    rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
+    comprasEsperandoAprobacion, comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
   };
 
   return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
@@ -147,9 +177,10 @@ export async function avisosDeTodoElSistema(
 }
 
 /**
- * Qué listas de responsables integra quien mira.
+ * Qué puede atender quien mira: las listas de responsables que integra y los
+ * niveles que le habilitan una acción.
  *
- * Son dos, y son **distintas a propósito**: `compras_aprobadores` decide el
+ * **Las dos listas son distintas a propósito**: `compras_aprobadores` decide el
  * gasto y `compras_consultados` contesta qué pasa con un repuesto, y no es la
  * misma gente. Medido el 26/10/2026 al acordar el diseño: la de aprobadores
  * tiene cuatro personas y sólo una es quien contesta.
@@ -159,37 +190,65 @@ export async function avisosDeTodoElSistema(
  * aprobación. El día que se agregue, va acá con su `apruebaOS` — no se deja
  * preparado porque sería una consulta por persona y por día que hoy no la usa
  * nadie.
+ *
+ * Y no todo lo de acá es una lista, que es lo que conviene mirar antes de sumar
+ * el próximo: `evaluaSyh` sale de un **nivel** —evaluar y cerrar una condición
+ * insegura lo puede hacer el `admin` de Seguridad e Higiene— y sale sin
+ * consulta, porque los grants ya vienen en `QuienMira`. Y `administraElSistema`
+ * es el rol pelado, por un solo aviso: ver abajo.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
   /** Está en `compras_consultados`: contesta lo que Mantenimiento pregunta. */
   contestaConsultas: boolean;
+  evaluaSyh: boolean;
+  administraElSistema: boolean;
 }
 
-/** Los avisos que tienen una lista de responsables, y cuál. */
+/** Los avisos que piden algo que no todos pueden hacer, y qué lo habilita. */
 const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
   "compras-consultas-repuestos": "contestaConsultas",
+  "syh-vencidas": "evaluaSyh",
+  "syh-sin-completar": "evaluaSyh",
+  /*
+   * **NO ES `evaluaSyh`, Y ÉSA ES LA CORRECCIÓN.** El aviso dice que hay fotos
+   * sin copia en Drive, y eso **no lo arregla un admin del módulo**: lo
+   * arregla quien crea la carpeta en una unidad compartida y pone
+   * `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID` en Vercel, que es `admin_sistema`.
+   * Mandado al admin del módulo era el patrón de `compras-por-aprobar` que
+   * este repo ya midió —6 personas, 3 sin poder aprobar— y que termina en que
+   * alguien apaga las notificaciones. Peor todavía al estrenar el módulo: si
+   * la carpeta no existe, el push empieza a sonar al cuarto día y no para.
+   *
+   * El `admin_sistema` tiene `admin` en todos los módulos, así que sigue
+   * recibiéndolo; lo que se saca es a los demás.
+   */
+  "syh-fotos-sin-respaldar": "administraElSistema",
 };
 
 /**
  * Saca los avisos que esta persona no puede atender.
  *
- * **Esto no es repartir por permiso.** Lo que mira es una **lista de
- * responsables** que ya existe —`compras_aprobadores`, `os_aprobadores`—, que
- * es la misma regla que usa el aviso al instante en
- * `lib/core/avisoAlInstante.ts`. Aprobar un gasto no lo habilita el nivel del
+ * **Esto no es repartir por rol.** Lo que se mira es quién puede **hacer** lo
+ * que el aviso pide, y eso es de dos clases: una **lista de responsables** que
+ * ya existe —`compras_aprobadores`, `os_aprobadores`, la misma regla que usa el
+ * aviso al instante en `lib/core/avisoAlInstante.ts`— o el **nivel** que
+ * habilita la acción —acá, `admin` en Seguridad e Higiene, que es quien evalúa
+ * y cierra las condiciones—. Aprobar un gasto no lo habilita el nivel del
  * módulo ni ser admin del sistema: lo habilita estar en la lista, y eso ya lo
  * explica `puedeAprobarCompras` en `lib/compras/auth.ts`.
  *
  * Por qué hizo falta: medido el 18/10/2026, «Requerimientos esperando
- * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Pedirle a
- * alguien que haga algo que no puede hacer enseña que un aviso tuyo puede no
- * ser tuyo, y esa lección se paga en todos los demás avisos.
+ * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Un push
+ * diario sobre trabajo que uno no tiene permiso de hacer enseña que un aviso
+ * tuyo puede no ser tuyo, y esa lección se paga en todos los demás avisos. Con
+ * los de Seguridad e Higiene es la misma razón: quien sólo carga condiciones
+ * desde el teléfono no puede evaluarlas ni cerrarlas.
  *
  * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
- * 18/10/2026. Acá no se filtra por rol ni por nivel: sólo los avisos que están
- * en `DE_UNA_LISTA`.
+ * 18/10/2026: sólo se filtran los avisos que están en `DE_UNA_LISTA`.
+
  */
 export function sinLoQueNoPuedeAtender(
   avisos: Notificacion[],
@@ -223,8 +282,12 @@ export async function avisosDeUsuario(
     esConsultadoDeCompras(supabase, quien.id),
   ]);
 
-  return sinLoQueNoPuedeAtender(
-    filtrarDescartadas(avisos, descartes),
-    { apruebaCompras, contestaConsultas }
-  );
+  const evaluaSyh = nivelEnModulo(quien.rol, quien.grants, "seguridad_higiene") === "admin";
+
+  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), {
+    apruebaCompras,
+    contestaConsultas,
+    evaluaSyh,
+    administraElSistema: quien.rol === "admin_sistema",
+  });
 }

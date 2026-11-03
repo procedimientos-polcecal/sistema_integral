@@ -13,6 +13,7 @@
  */
 
 import { leerValores, escribirCeldas } from "@/lib/core/sheets";
+import type { ValorDeCelda } from "@/lib/mantenimiento/ordenes";
 
 /**
  * La OT, con lo justo para encontrar su fila.
@@ -89,7 +90,7 @@ export function filaDeLaOTenElMaster(
  */
 export async function escribirEnLaFilaDeLaOT(
   orden: FilaDeOT,
-  celdas: { columna: number; valor: string }[]
+  celdas: { columna: number; valor: ValorDeCelda }[]
 ): Promise<string | null> {
   if (celdas.length === 0) return null;
 
@@ -110,9 +111,15 @@ export async function escribirEnLaFilaDeLaOT(
              `sistema. Probá de nuevo en un rato o sincronizá las órdenes.`;
     }
 
+    // Acá —y sólo acá— se sabe en qué fila cae la escritura, así que es donde
+    // se resuelve un valor que depende de ella: hoy, la fórmula del estado,
+    // que nombra al J y al L de su propio renglón. Ver `ValorDeCelda`.
     await escribirCeldas(
       planilla,
-      celdas.map((c) => ({ pestana, fila, columna: c.columna, valor: c.valor }))
+      celdas.map((c) => ({
+        pestana, fila, columna: c.columna,
+        valor: typeof c.valor === "function" ? c.valor(fila) : c.valor,
+      }))
     );
     return null;
   } catch (e) {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { sumarDias } from "@/lib/core/fechas";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import {
   TIPOS, TURNOS, TURNO_TEXTO, OFICIO_TEXTO,
@@ -31,7 +32,10 @@ export default function HojaDePersona({
   nombreDe: (id: string) => string;
   alCerrar: () => void;
   alAnotar: (empleadoId: string, desde: string, hasta: string, tipo: string, obs: string | null) => Promise<string | null>;
-  alCorregir: (id: string, c: { tipo: string; fechaHasta: string; observaciones: string | null }) => Promise<string | null>;
+  alCorregir: (
+    id: string,
+    c: { tipo: string; fechaDesde: string; fechaHasta: string; observaciones: string | null }
+  ) => Promise<string | null>;
   alBorrar: (a: AusenciaPropia) => Promise<string | null>;
   alMover: (empleadoId: string, dia: string, turno: Turno) => Promise<string | null>;
   alVolverAlCiclo: (empleadoId: string, dia: string) => Promise<string | null>;
@@ -41,6 +45,7 @@ export default function HojaDePersona({
   const [motivo, setMotivo] = useState("");
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [tipoNuevo, setTipoNuevo] = useState(propia?.tipo ?? "ENFERMEDAD_ACCIDENTE_INCULPABLE");
+  const [desdeNuevo, setDesdeNuevo] = useState(propia?.fecha_desde ?? dia);
   const [hastaNuevo, setHastaNuevo] = useState(propia?.fecha_hasta ?? dia);
   const [motivoNuevo, setMotivoNuevo] = useState(propia?.observaciones ?? "");
   const [enviando, setEnviando] = useState(false);
@@ -51,8 +56,18 @@ export default function HojaDePersona({
   const sinCambios =
     !propia ||
     (tipoNuevo === propia.tipo &&
+      desdeNuevo === propia.fecha_desde &&
       hastaNuevo === propia.fecha_hasta &&
       (motivoNuevo.trim() || null) === ((propia.observaciones ?? "").trim() || null));
+
+  /**
+   * El último día que acepta la ruta: el rango tiene tope de 90 días contando
+   * los dos extremos, así que el máximo es `desde + 89`. Va en el `max` del
+   * campo y no sólo en la validación de la ruta porque un año mal tipeado era
+   * un viaje de ida y vuelta para leer un 400 — la regla se ve donde se aplica.
+   */
+  const MAX_DIAS = 90;
+  const topeDesde = (desde: string) => sumarDias(desde, MAX_DIAS - 1);
 
   /** Corre una acción con los botones apagados y deja el error a la vista si falla. */
   async function hacer(accion: () => Promise<string | null>) {
@@ -115,6 +130,7 @@ export default function HojaDePersona({
                   id="ausencia-hasta"
                   type="date"
                   min={dia}
+                  max={topeDesde(dia)}
                   value={hasta}
                   onChange={(e) => setHasta(e.target.value || dia)}
                   className="input"
@@ -205,13 +221,32 @@ export default function HojaDePersona({
                         ))}
                       </Select>
                     </div>
-                    <div>
-                      <label htmlFor="corregir-hasta" className="mb-1 block text-xs text-slate-500">Hasta</label>
-                      <div className="w-40">
+                    {/*
+                      El desde se puede corregir: la ruta lo acepta desde
+                      siempre y este formulario no lo ofrecía, así que una
+                      ausencia anotada en el día equivocado había que borrarla
+                      y volver a cargarla — y borrar escribe una fila de
+                      auditoría que no se saca nunca.
+                    */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="corregir-desde" className="mb-1 block text-xs text-slate-500">Desde</label>
+                        <input
+                          id="corregir-desde"
+                          type="date"
+                          max={hastaNuevo}
+                          value={desdeNuevo}
+                          onChange={(e) => setDesdeNuevo(e.target.value || propia.fecha_desde)}
+                          className="input"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="corregir-hasta" className="mb-1 block text-xs text-slate-500">Hasta</label>
                         <input
                           id="corregir-hasta"
                           type="date"
-                          min={propia.fecha_desde}
+                          min={desdeNuevo}
+                          max={topeDesde(desdeNuevo)}
                           value={hastaNuevo}
                           onChange={(e) => setHastaNuevo(e.target.value || propia.fecha_hasta)}
                           className="input"
@@ -242,6 +277,7 @@ export default function HojaDePersona({
                           void hacer(() =>
                             alCorregir(propia.id, {
                               tipo: tipoNuevo,
+                              fechaDesde: desdeNuevo,
                               fechaHasta: hastaNuevo,
                               observaciones: motivoNuevo.trim() || null,
                             })

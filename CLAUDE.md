@@ -4,10 +4,18 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://www.polcecalpolysan.app
 
-Diez módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+Doce módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 **Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,
-**Cantera** y **Calidad**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>`
-y `app/api/<modulo>`.
+**Cantera**, **Calidad**, **Taller Vial**, **Trituración** y **Seguridad e
+Higiene**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y
+`app/api/<modulo>`.
+
+El número y la lista salen de `MODULOS_ORDEN` en
+[lib/core/access.ts](lib/core/access.ts), que tiene trece entradas contando
+`remises`: ahí está la cuenta de verdad, y de ahí se corrige ésta. Ya se
+separaron dos veces —decía «Diez» y listaba nueve, después «Once» y listaba
+diez sin Taller Vial ni Trituración—, así que si el número y los nombres no
+coinciden, el que manda es el archivo.
 
 **Producción y Calidad son dos cosas distintas y se confunden fácil**, porque las
 carga la misma gente: Producción es el parte de fábrica por turno, y Calidad es
@@ -36,13 +44,14 @@ código.
 |---|---|
 | Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md) |
-| Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` queda **afuera del cruce a propósito**, porque `fecha_tomado` es el día en que alguien apretó el botón y no el día de descanso (56 francos tomados caen en tres fechas: cruzarlos pintaría 35 huecos un lunes) |
+| Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` **entra al cruce por `fecha_descanso` y nunca por `fecha_tomado`**. Son dos cosas distintas y confundirlas fue el bug: `fecha_tomado` es el día en que alguien apretó el botón —los 56 francos tomados de antes del 26/10/2026 caen en tres fechas, y cruzar ésa pintaría 35 huecos un lunes—, mientras que `fecha_descanso` es el día que la persona no viene, que se carga al marcarlo y suele estar adelante. Los 56 viejos quedaron con `fecha_descanso` en null y **no abren hueco**: el sistema no sabe cuándo descansaron y decirlo es mejor que inventarlo |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
-| Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
+| Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) — molinos desde el robot (29/10): la sección `## Los molinos` de ese documento · [spec](docs/superpowers/specs/2026-10-21-produccion-molinos-desde-el-robot-design.md) · [plan](docs/superpowers/plans/2026-10-29-produccion-molinos-desde-el-robot.md). Tres cosas que no se deducen del código: **"turno" ahí son los cuatro cortes del contador del robot** (20→00, 00→04, 04→12, 12→20) y no los dos del parte de fábrica —los mismos números de reloj, otra medición: piedra que entra al molino contra producto terminado, y no se suman—; **un día sin filas es planta cerrada, pero un turno en cero dentro de un día con filas es una parada a explicar** (Filler 1 dice lo primero con la ausencia y Filler 2 con ceros); y **la racha de turnos faltantes se corta en el día no operativo y no lo atraviesa** —atravesarlo baja la utilización de Filler 1 de 85,3 % a 82,0 %—. Y la etiqueta `MATERIAL` del robot no se guarda: está mal en el 11,3 % de las toneladas |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
-| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) — histórico: [docs/CALIDAD-HISTORICO.md](docs/CALIDAD-HISTORICO.md) · [spec](docs/superpowers/specs/2026-10-29-calidad-historico-de-determinaciones-design.md) · [plan](docs/superpowers/plans/2026-10-29-calidad-historico-de-determinaciones.md). Lo que no se deduce del código: **el valor no está transformado** —`escala` es la lectura del sistema y no una propiedad del número—, y la aritmética que parece validarla alcanza a 27 de 362 filas |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
+| Seguridad e Higiene | [spec](docs/superpowers/specs/2026-10-29-seguridad-e-higiene-design.md) · [plan](docs/superpowers/plans/2026-10-29-seguridad-e-higiene.md) — vive en `app/(app)/seguridad-higiene`, `lib/seguridadHigiene` y `app/api/seguridad-higiene` |
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
@@ -117,13 +126,18 @@ Antes de escribir una, leer las ocho trampas del
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
   [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/10/2026 con
-  `grep`: la llaman **ocho rutas y un ayudante compartido**, no "seis rutas"
-  como decía esto antes. Las ocho: postear un asiento en Odoo, mover los permisos de
+  `grep`: la llaman **nueve rutas y un ayudante compartido** (eran ocho hasta el
+  26/10/2026). Las nueve: postear un asiento en Odoo, mover los permisos de
   un usuario, cerrar una liquidación, ajustar stock, aprobar o denegar una
-  compra, y —desde la programación del taller— corregir o borrar una
+  compra, —desde la programación del taller— corregir o borrar una
   ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
   `mantenimiento/ausencias`) y cargar una semana de referencia
-  (`mantenimiento/programacion/referencia`). El ayudante es
+  (`mantenimiento/programacion/referencia`), y **cerrar una recepción de
+  Despacho** (`despacho/recepciones/[id]`), que confirma la orden de compra y
+  **valida el remito en Odoo** — mueve stock de verdad y no se deshace. Esa
+  última faltaba: estaba al mismo nivel que postear un asiento y era la única
+  escritura irreversible a Odoo sin rastro de quién la hizo. Usa el verbo
+  `cerrar`, el mismo de la liquidación, para no necesitar una migración. El ayudante es
   [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
   registra el `borrar` de las sincronizaciones que espejan una planilla, así
   que ese verbo lo escribe un proceso y no una persona. Los verbos son
@@ -216,6 +230,130 @@ planilla; el número de fila no servía porque se insertan filas en el medio. Y 
 **Ensayos** (`/calidad/ensayos`, las muestras del laboratorio) **no hay planilla
 ninguna**: el SdG es el único lugar, así que ahí no existen `sheets_fila` ni
 `sheets_pendiente` — ver [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md).
+
+**Seguridad e Higiene tampoco tiene planilla**, como Ensayos: reemplaza un Excel
+(`21-10-26.xlsm`) que circulaba por mail, cuyas 44 condiciones entraron una sola
+vez con `scripts/importar-condiciones-del-excel.mts` el 30/10/2026 y que no se
+vuelve a leer. Dos cosas de esa importación que no se deducen del código:
+`numero` es `generated by default` y conserva el N° de la planilla, y un insert
+con número explícito **no adelanta la secuencia** —el script lo resolvió
+consumiendo números hasta pasar el 44, por eso la primera condición nueva es la
+46 y no la 45—; y las 44 entraron **sin foto**, porque eran vínculos al disco de
+quien armó el Excel. El enlace de sector y de persona es por igualdad de nombre
+y deja en null lo dudoso: de las 44, 37 entraron sin sector. Lo que sigue
+separa lo que se sabe de lo que es conjetura, porque esa distinción es lo que
+hace útil esta nota:
+
+- **Se sabe**: «Planta 02» es ambiguo y por eso no se enlaza. Fue el nombre
+  viejo de «Planta 0-2 mm» hasta el 19/10/2026 (`scripts/sectores-de-la-ot.mts`),
+  existe además un sector `Producción - Planta 02`, y el mismo texto podría
+  leerse como trituración 2. Un alias por nombre viejo habría sido enlazar al
+  que se le parece.
+- **Conjetura, sin confirmar**: las 5 filas con «Planta 02» (N° 2, 8, 9, 10, 11)
+  hablan de sinfines y zaranda, y `docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md`
+  ubica «Sin fin 1» y «Zaranda vibratoria» en «Planta 02» = `PY-C1`, la planta
+  0-2 mm. **Tienden a ser 0-2 mm**, no trituración. **Acción: dejarlas en null
+  hasta que alguien de planta lo confirme**; no se asignan por la conjetura.
+- **Conjetura, sin confirmar**: «Planta 2» (8 filas, N° 30 a 37) y «Planta 3»
+  (7 filas, N° 38 a 44) parecen las plantas de trituración 2 y 3. Las filas
+  hablan de mandíbula, trituración primaria y cintas; `lib/trituracion/` tiene
+  «Planta 2» como nombre en un fixture de test (`informeExcel.test.ts`) y
+  «Planta 3» en un comentario (`informeMensual.ts`), que es menos que un uso; y
+  `scripts/sectores-de-la-ot.mts` mapea «Trituración 2/3» a «Planta de
+  trituración 2/3», que refuerza la lectura sin probarla.
+- **Dónde confirmarlo**: contra el `21-10-26.xlsm` original (lo que circulaba
+  por mail, es la única fuente que hay) con quien lo armó o alguien de planta.
+  Una vez confirmado, el `WHERE` **nombra las claves del grupo y nunca el
+  prefijo**: `like 'excel-21-10-26-%'` alcanza a las 44 y le escribiría un solo
+  sector a todas, pisando las 7 que ya están bien enlazadas. Las claves llevan
+  el N° **sin ceros** (`excel-21-10-26-30`, no `…-030`), y `and sector_id is
+  null` hace que una fila ya enlazada no entre aunque se nombre por error:
+
+  ```sql
+  update public.syh_condiciones c
+     set sector_id = s.id
+    from public.sectores s
+   where s.nombre = 'Planta de trituración 2'
+     and s.activo
+     and c.sector_id is null
+     and c.clave in ('excel-21-10-26-30', 'excel-21-10-26-31', 'excel-21-10-26-32',
+                     'excel-21-10-26-33', 'excel-21-10-26-34', 'excel-21-10-26-35',
+                     'excel-21-10-26-36', 'excel-21-10-26-37')
+  returning c.numero, s.nombre;
+  ```
+
+  y lo mismo para «Planta de trituración 3» con las claves 38 a 44. Cada uno
+  actualiza 8 y 7 filas, y el `returning` las imprime: si no son ésas, algo no
+  coincide. Las 7 ya enlazadas (N° 5, 7, 15, 26, 27, 28, 29) no entran en
+  ninguna de las dos.
+
+  **La forma importa y no es cosmética.** Con el `set sector_id = (select id …)`
+  que esto decía antes, un nombre mal escrito —«trituracion» sin tilde, que es
+  el error más probable tipeando a mano— devuelve NULL, el editor dice
+  **«UPDATE 8»** y deja `sector_id` en null sobre filas que ya eran null: es
+  **indistinguible de un éxito**, y la salvaguarda de «si el editor dice otro
+  número, algo no coincide» era falsa justo ahí. Con el `from`, un nombre que
+  no existe no produce fila para cruzar y sale **«UPDATE 0»**.
+
+  Lo que esta forma sí pierde, dicho: si hubiera **dos sectores activos con el
+  mismo nombre**, el `from` cruza contra los dos y escribe uno cualquiera en
+  vez de fallar —el subselect escalar reventaba—. Hoy no pasa; antes de
+  correrlo conviene mirarlo:
+  `select id, nombre from public.sectores where nombre = '…' and activo;`
+
+**El texto de lugar que traía la planilla está en `observaciones`.** Son estos
+14, y están escritos acá porque sólo sobrevivían en el `.xlsm` de `Downloads` y
+en un reporte gitignoreado — y porque para 22 de las 37 sin sector no hay
+ninguna otra guía: quien complete el sector desde la ficha tendría sólo la
+descripción. Es el mismo argumento que preservó «Detectó: Pedro Arias».
+
+| Texto de la planilla | N° |
+|---|---|
+| Taller equipos moviles | 1 |
+| Planta 02 | 2, 8, 9, 10, 11 |
+| Molino de cal | 3 |
+| Molienda | 4, 6, 12 |
+| Carga de bolsones | 13 |
+| Depositode aceites *(sic)* | 14 |
+| Deposito abierto | 16 |
+| Pileta decantadora | 17 |
+| Cal | 18 |
+| Descarga de horno | 19, 20, 21, 22 |
+| Camino descarga de hornos | 23, 24 |
+| Deposito de cilindros | 25 |
+| Planta 2 | 30 a 37 |
+| Planta 3 | 38 a 44 |
+
+(Los otros cuatro textos son los de las 7 que sí se enlazaron: «Filler 1» en
+5, 15, 28 y 29; «Filler 2» en 7; «Taller» en 26 y 27.)
+
+El 31/10/2026 se copió a `observaciones` de las 37, como un renglón más al
+final: `Lugar según la planilla: «Planta 2».` Es DML y se aplicó por PostgREST.
+**Para deshacerlo**, esa línea es la última y empieza siempre igual:
+
+```sql
+update public.syh_condiciones
+   set observaciones = nullif(regexp_replace(observaciones,
+         '\n?Lugar según la planilla: «[^»]*»\.$', ''), '')
+ where clave like 'excel-21-10-26-%'
+   and observaciones like '%Lugar según la planilla%'
+returning numero, observaciones;
+```
+
+**Las cinco fechas dudosas, con su evidencia.** Hasta ahora estaban listadas
+sin decir qué le pasa a cada una, y la única señal que quedaba en los datos
+—que tres son futuras— **se borra sola el 13/11/2026**. Las fotos del Excel
+llevan la fecha en el nombre (`IMG_AAAAMMDD_…`) y eso es lo que hay:
+
+| N° | Dice | La foto | Qué parece |
+|---|---|---|---|
+| 42, 43, 44 | 2026-11-13 | `IMG_20261013_…` | **Un 11 por un 10**: son de «Planta 3», y las otras cuatro de ese bloque (38 a 41) dicen 2026-10-13, que es lo que dicen sus fotos. Es lo más firme de las cinco |
+| 7 | 2026-01-10 | `2.jpg`, sin fecha | La única de enero entre 43 de octubre. Parece **01/10 leído al revés** (m/d en vez de d/m), la misma trampa que dio vuelta 885 fechas en Compras |
+| 6 | 2026-10-10 | `IMG_20261006_…` | **Lo más flojo de los cinco y por eso se dice aparte**: la foto es del 06/10 y la fila dice 10/10. No prueba nada por sí solo — el N° 5 tiene dos fotos, del 06/10 y del 13/10, y su fila dice 10/10, así que en esta planilla la foto no es del día de la detección |
+
+Nada de esto se corrigió: son conjeturas sobre el dato de otro. **Acción:
+confirmarlo con quien armó el `21-10-26.xlsm`** y corregir desde la ficha. Los
+37 sin sector son la otra decisión de datos que queda pendiente del usuario.
 
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
@@ -393,6 +531,34 @@ antes y después:
 `.card` no declara ni `width` ni `max-width`: lo que choca es la **misma**
 propiedad, no cualquier utilidad de tamaño.
 
+**Y no es sólo el ancho de `.input`: es toda propiedad que una de esas clases
+declare.** La regla es la capa, así que vale para cada declaración de cada
+clase sin capa, y las otras dos muerden igual de callado:
+
+| Clase | Declara | Lo que no se aplica al lado |
+|---|---|---|
+| `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
+| `.card` | `box-shadow` | `ring-*`, `shadow-*` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+
+**Los cuatro `.btn-*` están en la lista a propósito, y `.btn-ghost` entró
+último.** Una tabla incompleta es lo que hace que el próximo lector la dé por
+segura: si falta una clase, el que la use va a creer que la suya sí deja pasar
+las utilidades. Antes de agregar un `.btn-*` nuevo a `globals.css`, va también
+acá con lo que declare.
+
+Medido el 31/10/2026 en Seguridad e Higiene: los dos botones del resumen de
+condiciones declaraban su borde de alerta y lo pintaban gris, «Sacar» —lo
+único irreversible de esa pantalla— pedía `text-red-700` y se veía gris, y
+cinco `text-xs` medían 14 px. **Ninguna de las tres cosas rompe nada y ésa es
+la trampa**: la pantalla se ve bien, sólo que no dice lo que el código dice que
+dice.
+
+Qué hacer según el caso: un color de estado va por `style` —es lo que ya hacen
+los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
+utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
+promete que sí es peor que no tenerla.
+
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
@@ -544,8 +710,43 @@ npx tsc --noEmit
 npm run build
 node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
 node scripts/revisar-responsive.mjs         # lo que no entra en un telefono de 375 px
+node scripts/revisar-exportaciones.mjs      # si alguna escritura a una planilla no deja nada atras
 npm run planillas                           # si alguna planilla se cayo por una formula
 ```
+
+**`revisar-exportaciones` es la sexta y es la gemela de `revisar-responsive`**:
+existe porque incumplir «toda ruta que toque un campo que se exporta tiene que
+exportar» **no rompe nada**, y ése es el problema. El cambio se guarda, la
+pantalla muestra un cartel que alguien cierra, y horas después la
+sincronización lee la celda vieja y lo borra. Pasó dos veces en el mismo día:
+el PATCH de las OT (las 2896 a 2898 y la 2908) y el de las órdenes de
+servicio, que tenía el mismo agujero y apareció buscando el primero a mano.
+
+**No decide si una ruta está bien** —eso depende de si el importador de ese
+módulo relee la columna, y eso no sale de un regex—. Lo que hace es más chico y
+más confiable: tiene **una entrada por archivo que escribe una planilla**, con
+cuál de las cinco estrategias lo protege (`cola`, `delega`, `aborta`,
+`pantalla`, `otra-direccion`) y el porqué. Si aparece un archivo que escribe y
+no está declarado, sale ROMPE y hay que contestar la pregunta. Ese momento, y
+no el regex, es la defensa. Cuenta la indirección: quien importa algo de un
+módulo `delega` también tiene que declararse, porque `delega` quiere decir que
+la obligación de anotar se mudó a quien llama.
+
+Cada corrida **lista las `pantalla`**, que son la excepción a la regla y lo
+primero que hay que mirar cuando un dato se pierde. Eran cinco; desde que los
+avisos tienen su cola (29/10/2026) **son dos**: las notas de una OT y el libro
+de comparativa de un RI, las dos con su porqué medido. Sale 1 si hay algún
+ROMPE, hoy da **ROMPE 0 · MIRAR 0**, y **todavía no está en el CI** por lo
+mismo que `revisar-responsive`: primero conviene que el registro aguante unas
+semanas de cambios.
+
+**Las tres colas no son iguales, y la de los avisos es la rara.** Las OT y las
+OS rearman el registro entero desde la fila; los avisos guardan además **qué
+campo** falló (`sheets_pendiente_campos`), porque una de sus dos columnas
+—`OT ASIGNADA`— la escriben a mano: 182 de 186 números los tipeó una persona
+en la planilla, y reescribirla por un fallo de la otra columna podría vaciar
+uno que la sincronización todavía no importó. El porqué completo está en
+[lib/mantenimiento/pendienteDelAviso.ts](lib/mantenimiento/pendienteDelAviso.ts).
 
 **`npm run planillas` es el único que no mira el código sino el dato del otro
 lado**, y existe porque los otros cinco no podían ver lo que pasó dos veces en
@@ -733,3 +934,13 @@ y qué riesgo queda asumido. Es la misma vara que los comentarios del código y 
 razón por la que este repo se puede retomar meses después.
 
 Se trabaja sobre `main` y se pushea al terminar cada tarea.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

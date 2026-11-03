@@ -11,6 +11,7 @@ import { puedeAprobarLaCompra, esAprobacionNueva } from "@/lib/compras/aprobarCo
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
+import { faltaLaFechaEstimada, creaLaOrdenEnOdoo } from "@/lib/compras/registrarElPedido";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 import { auditar } from "@/lib/core/auditoria";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -360,7 +361,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    generaOrdenEnOdoo = nuevoEstado === "PEDIDO" && actual.estado_compra !== "PEDIDO";
+    /*
+     * La fecha estimada de recepción va **al entrar** a PEDIDO.
+     *
+     * No está en la tabla `FALTA` de arriba a propósito: esa corre con cada
+     * cuerpo que nombre al estado, y el formulario de recepción manda
+     * `estado_compra: "PEDIDO"` en cada guardado sin fecha de recepción. Metida
+     * ahí, dejaría sin poder cargarse los 349 RI que ya están en PEDIDO sin
+     * fecha. El porqué de pedirla acá y no en la recepción está en
+     * `registrarElPedido.ts`.
+     */
+    if (
+      faltaLaFechaEstimada({
+        estadoActual: actual.estado_compra as string,
+        nuevoEstado,
+        fechaEstimada:
+          "fecha_estimada_recepcion" in cambios
+            ? (cambios.fecha_estimada_recepcion as string | null)
+            : (actual.fecha_estimada_recepcion as string | null),
+        vuelveDeLaEspera,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Antes de avanzar hay que cargar para cuándo se espera que llegue." },
+        { status: 409 }
+      );
+    }
+
+    // La orden de compra en Odoo se crea sola al entrar a PEDIDO, como siempre;
+    // lo nuevo es que el modal puede saltearla con un `false` explícito.
+    generaOrdenEnOdoo = creaLaOrdenEnOdoo({
+      estadoActual: actual.estado_compra as string,
+      nuevoEstado,
+      quiere: body.crear_orden_odoo,
+    });
 
     // Fechas automáticas al avanzar de etapa, si no vinieron explícitas.
     if (nuevoEstado === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {

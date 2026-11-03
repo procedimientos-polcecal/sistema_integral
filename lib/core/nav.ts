@@ -244,6 +244,11 @@ export const NAV: NavItem[] = [
     children: [
       { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
+      // Lo que midió el PC Robot en los molinos: no es el parte de fábrica de las
+      // dos de arriba (aquel cuenta producto terminado, éste lo que se muele).
+      { label: "Molinos", href: "/produccion/molinos", modulo: "produccion" },
+      { label: "Molinos del mes", href: "/produccion/molinos/mes", modulo: "produccion" },
+      { label: "Paradas sin explicar", href: "/produccion/molinos/sin-explicar", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
@@ -317,6 +322,11 @@ export const NAV: NavItem[] = [
           { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
         ],
       },
+      // Lo de antes del SdG: los tres años que vivían en el Excel del
+      // laboratorio. De sólo lectura, y la búsqueda encuentra también lo que
+      // Ensayos carga hoy — quien atiende un reclamo no tiene por qué saber de
+      // qué año es el dato antes de buscarlo. Ver docs/CALIDAD-HISTORICO.md.
+      { label: "Histórico", href: "/calidad/historico", modulo: "calidad" },
     ],
   },
   {
@@ -391,6 +401,18 @@ export const NAV: NavItem[] = [
       { label: "Partes", href: "/trituracion/partes", modulo: "trituracion" },
       { label: "Informe mensual", href: "/trituracion/informes", modulo: "trituracion" },
       { label: "Plantas", href: "/trituracion/plantas", modulo: "trituracion", soloAdmin: true },
+    ],
+  },
+  {
+    label: "Seguridad e Higiene",
+    href: "/seguridad-higiene",
+    modulo: "seguridad_higiene",
+    // La raíz del módulo es un tablero con una tarjeta por frente, y hoy hay
+    // uno solo; queda fuera de esta lista — mismo caso que Calidad y Cantera.
+    // Cuando llegue el segundo frente (accidentes, capacitaciones…) se agrega
+    // acá junto con su tarjeta, sin mudar el primero.
+    children: [
+      { label: "Condiciones inseguras", href: "/seguridad-higiene/condiciones", modulo: "seguridad_higiene" },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir

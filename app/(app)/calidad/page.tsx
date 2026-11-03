@@ -299,6 +299,16 @@ export default async function CalidadPage() {
             sub="muestras del período corto"
             href="/calidad/ensayos/indicadores"
           />
+          {/* Lo de antes del SdG. No lleva número: es un buscador, y cuántas
+              filas tiene el histórico no le dice nada a nadie. */}
+          <KpiCard
+            color={ENSAYOS}
+            icon={<IconTamiz />}
+            label="Histórico"
+            value="Buscar"
+            sub="los tres años del Excel"
+            href="/calidad/historico"
+          />
           {esAdmin && (
             <KpiCard
               color={ENSAYOS}

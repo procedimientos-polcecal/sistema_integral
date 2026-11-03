@@ -57,7 +57,11 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
         .select("ot_number, fecha_ejecucion, falla_modo, falla_causa, falla_detalle")
         .eq("equipment_id", id)
         .or("falla_modo.not.is.null,falla_causa.not.is.null,falla_detalle.not.is.null")
+        // El numero desempata: `fecha_ejecucion` sola no es unica y Postgres
+        // ademas pone los nulos primero al ordenar descendente, asi que sin
+        // esto dos corridas pueden devolver las mismas filas en otro orden.
         .order("fecha_ejecucion", { ascending: false })
+        .order("ot_number", { ascending: false })
         .range(desde, hasta)
     ).catch((error: unknown) => {
       // Tarjeta secundaria: si falla la lectura, la ficha se ve igual.

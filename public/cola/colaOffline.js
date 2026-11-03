@@ -33,12 +33,14 @@
  * misma persona que la cargó).
  */
 
-/** @typedef {"aviso" | "orden"} TipoDeCarga */
+/** @typedef {"aviso" | "orden" | "condicion"} TipoDeCarga */
 
 // ── El pegamento que los dos mundos tienen que escribir igual ────────────────
 //
-// No son reglas —no deciden nada— pero son los dos nombres que la pantalla y el
-// service worker **tienen** que escribir idénticos, y hasta el 19/10/2026
+// No son reglas —no deciden nada— pero son los nombres y las formas que la
+// pantalla y el service worker **tienen** que escribir idénticos (y en el caso
+// de los dos campos del `FormData`, también la ruta de alta, que es un tercer
+// mundo sin tipos compartidos), y hasta el 19/10/2026
 // estaban copiados a mano en los dos lados. El modo de fallar de `SESION` es el
 // peor que tiene esta cola: el worker lee quién sos de esa clave, así que una
 // letra distinta deja el vaciado sin sesión conocida y **no sale ninguna
@@ -58,14 +60,97 @@
 export const SESION = "sesion";
 
 /**
- * A dónde va cada tipo de carga. Son las rutas de siempre, sin ninguna nueva.
+ * A dónde va cada tipo de carga. Las dos de Mantenimiento son las de siempre; la
+ * de la condición insegura es la del módulo Seguridad e Higiene.
  *
  * @type {Record<TipoDeCarga, string>}
  */
 export const RUTA_DE = {
   aviso: "/api/mantenimiento/avisos",
   orden: "/api/mantenimiento/ordenes",
+  condicion: "/api/seguridad-higiene/condiciones",
 };
+
+/**
+ * Si el cuerpo de este tipo de carga puede traer un archivo, y por lo tanto
+ * tiene que salir como `multipart/form-data` en vez de como JSON.
+ *
+ * **ES UN MAPA Y NO UN `tipo === "condicion"`, Y ESA ES LA PROMESA DE ESTA
+ * TAREA:** el aviso y la orden de trabajo son lo que la gente usa todos los
+ * días, y su pedido tiene que salir **byte por byte igual que antes**. Con un
+ * mapa, el `if` de las dos `mandarALaRuta` va *alrededor* de la construcción
+ * del pedido y la rama vieja queda intacta; una condición adentro de la
+ * construcción es cómo una cabecera cambia para los tres tipos sin que nadie
+ * lo note.
+ *
+ * Un tipo sin entrada devuelve `undefined`, que es falso: sale como JSON, que
+ * es lo que hacía hoy. El modo de fallar es el seguro, y que el mapa esté
+ * completo lo fija el test de `lib/core/colaOffline.test.ts` que recorre
+ * `RUTA_DE`.
+ *
+ * @type {Record<TipoDeCarga, boolean>}
+ */
+const LLEVA_ARCHIVO = {
+  aviso: false,
+  orden: false,
+  condicion: true,
+};
+
+/**
+ * @param {TipoDeCarga} tipo
+ * @returns {boolean}
+ */
+export function llevaArchivo(tipo) {
+  return LLEVA_ARCHIVO[tipo];
+}
+
+/**
+ * Cómo se llama, dentro del `FormData`, el campo que lleva el cuerpo entero.
+ *
+ * **EL CUERPO VA EN UN SOLO CAMPO DE JSON Y NO UN CAMPO POR CLAVE.** En un
+ * `FormData` todo es texto: `prioridad: 2` llegaría como `"2"` y `peligro_id:
+ * null` como `"null"`, así que la ruta tendría que reconvertirlos uno por uno
+ * y su esquema de zod —el mismo que valida el camino JSON— vería otra cosa
+ * según si la carga trajo foto o no. Con el cuerpo en un campo, la ruta hace
+ * un `JSON.parse` y de ahí en adelante **es exactamente el mismo objeto**: un
+ * solo camino de validación y un solo juego de mensajes.
+ *
+ * Lo escriben los dos mundos (la pantalla y el service worker) y lo lee la
+ * ruta de alta, que es TypeScript: tres lugares que no comparten tipos, así
+ * que el nombre vive acá y en ningún otro lado.
+ */
+export const CAMPO_DEL_CUERPO = "cuerpo";
+
+/** Y así se llama el archivo. Mismo motivo que el de arriba. */
+export const CAMPO_DE_LA_FOTO = "foto";
+
+/**
+ * El cuerpo de una carga con archivo, armado para mandarlo.
+ *
+ * La foto sale del cuerpo y va aparte: adentro del JSON un `Blob` se
+ * serializa como `{}` —sin error y sin aviso—, que es perder el único campo
+ * de una condición que no se puede volver a conseguir.
+ *
+ * **Vive acá, con todo lo demás que los dos mundos tienen que escribir
+ * igual.** No es HTTP: es la forma del cuerpo, o sea el contrato con la ruta.
+ * Escrita dos veces, un día una de las dos manda la foto con otro nombre de
+ * campo y lo que se rompe es sólo el camino sin señal, que es el que nadie
+ * mira.
+ *
+ * @param {Record<string, unknown>} cuerpo El cuerpo de la carga, con la foto adentro si la hay.
+ * @returns {FormData}
+ */
+export function cuerpoComoFormData(cuerpo) {
+  const { [CAMPO_DE_LA_FOTO]: foto, ...resto } = cuerpo;
+  const forma = new FormData();
+  forma.append(CAMPO_DEL_CUERPO, JSON.stringify(resto));
+  // Sin foto el campo **no se manda**, en vez de mandarlo vacío: que no esté
+  // es inequívoco. El tercer argumento es el nombre del archivo, que un `Blob`
+  // no tiene; la ruta decide la extensión por el tipo del archivo y no por
+  // este nombre, pero sin él algunos servidores tratan la parte como texto.
+  if (foto instanceof Blob) forma.append(CAMPO_DE_LA_FOTO, foto, "foto");
+  return forma;
+}
 
 /**
  * De dónde salió una carga: si la mandó el teléfono solo o si alguien estaba
@@ -109,6 +194,33 @@ export const DISPARO = {
  * @property {number} intentos
  * @property {string | null} ultimoError Lo último que pasó con la carga, para mostrarlo tal cual: casi siempre lo que dijo el servidor sin traducir, y en un caso lo que compuso `siNoSePudoAvisar` —una carga que entró y cuya advertencia no se pudo decir—.
  * @property {"esperando" | "parada"} estado "parada" es una carga que no se reintenta sola: necesita que una persona la mire.
+ * @property {string | null} [yaEntro] El número con el que la fila **ya quedó escrita del lado del servidor**, cuando la carga sigue en la cola porque faltó terminar algo (hoy: la foto de una condición insegura, que entró con la condición pero no se pudo guardar). Ver abajo.
+ */
+
+/*
+ * ── `yaEntro`, Y POR QUÉ HIZO FALTA UN CAMPO NUEVO ──────────────────────────
+ *
+ * Hasta el 30/10/2026 una carga que seguía en la cola era, sin excepción, una
+ * carga que **no** estaba escrita del otro lado: por eso «corregir y volver a
+ * mandar» le da una clave nueva a propósito —es otra carga, con otro cuerpo, y
+ * la vieja puede haber quedado reservada—.
+ *
+ * La foto de una condición insegura rompió ese invariante y es la primera que
+ * lo hace: la condición se crea, la foto no se puede guardar, y se contesta un
+ * error **a propósito**, porque el `Blob` vive en la cola y sacarla de ahí lo
+ * pierde para siempre. O sea que ahora hay cargas en la cola cuya fila ya
+ * existe. Sobre una de ésas, corregir **crea una segunda condición** con la
+ * misma descripción y la misma foto: el duplicado exacto que la idempotencia
+ * por `clave` existe para evitar. Empujarla, en cambio, reusa la clave y cae
+ * en la rama de idempotencia, que es justo lo que tiene que pasar.
+ *
+ * Por eso el número viaja: no es decorativo, es lo que le dice a la pantalla
+ * que sobre esta carga el camino de corregir no se ofrece. Lo manda la ruta en
+ * `ya_entro` —un nombre que ninguna otra ruta usa, para que nada cambie para
+ * el aviso ni para la orden de trabajo— y lo lee `comoContesto`.
+ *
+ * **Una vez puesto no se saca.** Lo que entró no se des-entra, así que los dos
+ * veredictos lo escriben sólo cuando viene, y nunca lo pisan con null.
  */
 
 /**
@@ -139,11 +251,24 @@ const MS_POR_MINUTO = 60_000;
  * pasajero —un 502 porque Google no contestó, un 500, un corte a mitad de
  * camino— y, sobre todo, el 401: ver la cabecera del archivo.
  *
+ * **EL 413 ES EL CUARTO, Y ES DISTINTO DE LOS OTROS TRES: no lo contesta la
+ * ruta.** Lo contesta la infraestructura —Vercel corta el cuerpo de un pedido
+ * antes de invocar la función— así que el código de la ruta nunca corre y la
+ * respuesta no trae el `error` que mandan todas. Entró acá el 30/10/2026, con
+ * la foto de una condición insegura: una foto grande viaja adentro del alta,
+ * rebota con 413, y como el 413 caía en «no salió de la ruta» se reintentaba
+ * **para siempre** —no hay tope de intentos, sólo un techo de espera— mandando
+ * megas con los datos de la planta, y el texto que se guardaba le echaba la
+ * culpa al WiFi. Un cuerpo demasiado grande es una propiedad **de la carga** y
+ * no del camino: el próximo intento lleva exactamente los mismos bytes.
+ *
  * @param {number | null} status El código HTTP, o null si ni se llegó a hablar con el servidor.
  * @returns {"definitivo" | "pasajero"}
  */
 export function clasificarFallo(status) {
-  if (status === 400 || status === 403 || status === 409) return "definitivo";
+  if (status === 400 || status === 403 || status === 409 || status === 413) {
+    return "definitivo";
+  }
   return "pasajero";
 }
 
@@ -323,22 +448,55 @@ export function puedeEmpujarla(carga, usuarioActualId, ahora) {
  * una porque el castellano necesita las dos formas, pero **son dos y no tres**:
  * el que necesite nombrarla tiene que usar una de éstas.
  *
+ * **LAS TRES FUNCIONES DE NOMBRE LEEN DE UN MAPA, NO DE UN `tipo === "aviso"`.**
+ * Con dos tipos el ternario alcanzaba; con el tercero la condición habría caído
+ * en la rama de «orden» sin que nada fallara, y dos de las tres frases habrían
+ * sonado bien. Con un mapa, un tipo sin entrada ya no cae en la rama de otro.
+ *
+ * **LO QUE ESTO NO GARANTIZA, PARA QUE NADIE CONFÍE DE MÁS:** los
+ * `@type {Record<TipoDeCarga, …>}` de acá son documentación, no una
+ * comprobación. `tsconfig.json` tiene `allowJs` y no `checkJs`, y este archivo
+ * no lleva `// @ts-check` (se probó: prende errores que ya estaban, en
+ * `comoContesto` y `loQueQuedoPendiente`), así que un cuarto tipo sin entrada
+ * **compila igual** y devuelve `undefined` —y `concordado` armaría
+ * «parad» + «undefined»—. Lo que sí falla es el test «todos los tipos tienen su
+ * nombre, su artículo, su vocal y su campo» de `lib/core/colaOffline.test.ts`,
+ * que recorre las claves de `RUTA_DE`: al agregar un tipo, empezar por `RUTA_DE`.
+ *
+ * @type {Record<TipoDeCarga, string>}
+ */
+const NOMBRE_DE = {
+  aviso: "Aviso",
+  orden: "Orden de trabajo",
+  condicion: "Condición insegura",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @returns {string}
  */
 export function comoSeLlama(tipo) {
-  return tipo === "aviso" ? "Aviso" : "Orden de trabajo";
+  return NOMBRE_DE[tipo];
 }
 
 /**
  * Lo mismo, para cuando va en medio de una oración: «Se cargó la orden de
  * trabajo OT-12».
  *
+ * @type {Record<TipoDeCarga, string>}
+ */
+const CON_SU_ARTICULO = {
+  aviso: "el aviso",
+  orden: "la orden de trabajo",
+  condicion: "la condición insegura",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @returns {string}
  */
 export function conSuArticulo(tipo) {
-  return tipo === "aviso" ? "el aviso" : "la orden de trabajo";
+  return CON_SU_ARTICULO[tipo];
 }
 
 /**
@@ -349,22 +507,37 @@ export function conSuArticulo(tipo) {
  * Vive junto al artículo y no en la pantalla porque el género es de la palabra
  * («aviso» es masculino, «orden» femenino), y quien escribe la oración no tiene
  * por qué acordarse: sin esto, un cartel que decía «que quedó parada» salía mal
- * con el aviso y bien con la orden, sin que nada lo notara.
+ * con el aviso y bien con la orden, sin que nada lo notara. «Condición» es
+ * femenino, como «orden».
  *
+ * @type {Record<TipoDeCarga, "o" | "a">}
+ */
+const VOCAL_DE = {
+  aviso: "o",
+  orden: "a",
+  condicion: "a",
+};
+
+/**
  * @param {TipoDeCarga} tipo
  * @param {string} raiz La palabra sin su vocal final, por ejemplo «parad».
  * @returns {string}
  */
 export function concordado(tipo, raiz) {
-  return raiz + (tipo === "aviso" ? "o" : "a");
+  return raiz + VOCAL_DE[tipo];
 }
 
 // ── Cómo se lee lo que contestó la ruta de alta ──────────────────────────────
 
-/** Cómo se llama el número en la respuesta de cada ruta. */
+/**
+ * Cómo se llama el número en la respuesta de cada ruta.
+ *
+ * @type {Record<TipoDeCarga, string>}
+ */
 const CAMPO_DEL_NUMERO = {
   aviso: "oa_number",
   orden: "ot_number",
+  condicion: "numero",
 };
 
 /**
@@ -383,8 +556,12 @@ const CAMPO_DEL_NUMERO = {
  * de Vercel no dice nada sobre la carga, y tratarlo como definitivo la deja
  * parada para siempre por algo que se arregla saliendo del WiFi del bar.
  *
+ * `yaEntro` es el número con el que la fila quedó escrita pese al fallo: hoy lo
+ * manda sólo el alta de una condición insegura cuando la condición entró y la
+ * foto no. Ver el bloque de `CargaEnCola`.
+ *
  * @typedef {{ ok: true, numero: string, advertencia: string | null }
- *         | { ok: false, status: number | null, deLaRuta: boolean, error: string }} ResultadoDelEnvio
+ *         | { ok: false, status: number | null, deLaRuta: boolean, error: string, yaEntro?: string | null }} ResultadoDelEnvio
  */
 
 /** Si el valor es un objeto con el que se puede trabajar. `null` no lo es. */
@@ -403,6 +580,19 @@ function esObjeto(valor) {
  * @returns {string}
  */
 function laContestoOtro(redirigida, status) {
+  // El 413 primero, porque es el único de acá que **no** es un problema del
+  // camino y que no se arregla esperando: lo contesta la infraestructura
+  // —Vercel corta el cuerpo antes de invocar la función, así que la ruta no
+  // llega a decir nada— y quiere decir que lo que se manda es demasiado
+  // grande. Decirle «portal de WiFi» a eso es mandar a alguien a buscar señal
+  // por una foto que no va a entrar nunca.
+  if (status === 413) {
+    return (
+      "Lo que se mandó es demasiado grande y el servidor lo cortó antes de " +
+      "leerlo, casi seguro por la foto. Esta carga no se reintenta sola: " +
+      "corregila con una foto más chica, o sacale la foto y mandala así."
+    );
+  }
   if (redirigida) {
     return (
       "El pedido terminó en otra pantalla, casi seguro el login: la sesión de " +
@@ -422,7 +612,7 @@ function laContestoOtro(redirigida, status) {
  * Qué salió de un envío.
  *
  * UN 200 SIN NÚMERO NO ES UN ÉXITO, y ésta es la razón entera de que esta
- * función exista en vez de mirar `response.ok`. Las dos rutas devuelven siempre
+ * función exista en vez de mirar `response.ok`. Las tres rutas devuelven siempre
  * su número en un 200 —el reintento que cae en "ya estaba" también, porque la
  * clave se resuelve escribiendo el número junto con la marca de resuelta—, así
  * que un 200 sin número es siempre una respuesta que **no salió de la ruta de
@@ -476,13 +666,25 @@ export function comoContesto(tipo, contestacion) {
       status,
       deLaRuta: false,
       error: laContestoOtro(redirigida, status),
+      yaEntro: null,
     };
   }
 
+  // `ya_entro` sólo puede venir de la ruta, así que se lee únicamente en la
+  // rama que la reconoce: una respuesta que no salió de ella no puede afirmar
+  // que algo quedó escrito.
   const dicho = texto(cuerpo.error);
-  if (dicho !== null) return { ok: false, status, deLaRuta: true, error: dicho };
+  if (dicho !== null) {
+    return { ok: false, status, deLaRuta: true, error: dicho, yaEntro: texto(cuerpo.ya_entro) };
+  }
 
-  return { ok: false, status, deLaRuta: false, error: laContestoOtro(redirigida, status) };
+  return {
+    ok: false,
+    status,
+    deLaRuta: false,
+    error: laContestoOtro(redirigida, status),
+    yaEntro: null,
+  };
 }
 
 /**
@@ -499,6 +701,12 @@ export function comoContesto(tipo, contestacion) {
  */
 export function convieneReintentar(resultado) {
   if (resultado.ok) return false;
+  // **EL 413 ES LA EXCEPCIÓN A LA REGLA DE ARRIBA, Y VA ANTES QUE ELLA.** Es
+  // el único código que significa algo aunque no lo haya contestado la ruta:
+  // dice que el cuerpo no entra, y el cuerpo es el mismo en cada intento. Sin
+  // esto, una foto de 6 MB sale por la rama de «lo contestó otro» y se
+  // reintenta sin fin. Ver `clasificarFallo`.
+  if (resultado.status === 413) return false;
   if (!resultado.deLaRuta) return true;
   return clasificarFallo(resultado.status) === "pasajero";
 }
@@ -554,8 +762,8 @@ function texto(valor) {
  * decidir— para saber qué número mostrar o qué error guardar.
  *
  * @typedef {{ accion: "listo", numero: string, advertencia: string | null }
- *         | { accion: "rechazar", error: string }
- *         | { accion: "encolar", intentos: number, ultimoError: string | null }} QueHacerConLaNueva
+ *         | { accion: "rechazar", error: string, yaEntro?: string }
+ *         | { accion: "encolar", intentos: number, ultimoError: string | null, yaEntro?: string }} QueHacerConLaNueva
  */
 
 /**
@@ -578,8 +786,29 @@ export function queHacerConLaNueva(resultado) {
   if (resultado.ok) {
     return { accion: "listo", numero: resultado.numero, advertencia: resultado.advertencia };
   }
-  if (!convieneReintentar(resultado)) return { accion: "rechazar", error: resultado.error };
-  return { accion: "encolar", intentos: 1, ultimoError: resultado.error };
+  // El campo va **sólo si vino**, en los dos veredictos: una carga que todavía
+  // no está escrita de ningún lado no puede nacer diciendo que sí. Ver el
+  // bloque de `CargaEnCola`.
+  const loQueYaEntro = resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {};
+
+  // **Y TAMBIÉN EN EL RECHAZO, QUE ES LA RAMA FÁCIL DE OLVIDAR.** Un rechazo
+  // deja el formulario abierto con todo lo escrito adentro, para corregirlo:
+  // es lo correcto para un 400 —falta un campo— y es exactamente lo que no hay
+  // que hacer cuando la fila ya existe, porque el próximo envío lleva una
+  // clave nueva y crea una segunda condición. Sin este campo la pantalla no
+  // tiene cómo saberlo. Hoy sólo se llega acá con un 403 de la policy sobre
+  // una condición recién creada por la misma sesión, que es casi imposible;
+  // dejarlo descosido en una sola de las dos ramas es lo que hace que un día
+  // deje de serlo.
+  if (!convieneReintentar(resultado)) {
+    return { accion: "rechazar", error: resultado.error, ...loQueYaEntro };
+  }
+  return {
+    accion: "encolar",
+    intentos: 1,
+    ultimoError: resultado.error,
+    ...loQueYaEntro,
+  };
 }
 
 /**
@@ -613,6 +842,38 @@ export function tomarLaCarga(carga, ahora) {
  */
 
 /**
+ * Cuántos intentos aguanta una carga **que ya entró** antes de pedir una
+ * persona.
+ *
+ * ── POR QUÉ HAY UN TOPE, Y POR QUÉ SÓLO PARA ÉSAS ──────────────────────────
+ *
+ * El vaciado corta en el primer fallo (ver el punto 3 de `public/sw.js`) y
+ * `proximaAMandar` ordena por `creadaEn`, así que **la carga más vieja que
+ * falla tapa a todas las de atrás**. Hasta el 30/10/2026 una carga
+ * permanentemente `esperando` era un accidente; con la foto de una condición
+ * insegura es un **resultado de diseño**: la ruta contesta error a propósito
+ * para no perder el `Blob`, y si lo que falla es Storage ese error es un 502,
+ * o sea pasajero, o sea para siempre —no hay nada que cambie solo—. Una
+ * condición trabada así deja sin salir al aviso de Mantenimiento que alguien
+ * cargó esa mañana, hasta que una persona entre y la borre.
+ *
+ * El tope es sólo para las que traen `yaEntro` y eso es lo que lo hace
+ * inofensivo: **su fila ya está escrita del otro lado**, así que pararla no
+ * pierde nada —no hay un alta esperando—. Lo único que falta es la foto, y
+ * para eso la ficha de la condición tiene un botón.
+ *
+ * La otra salida que se miró era que `mandarUna` siguiera con la siguiente
+ * cuando el fallo es de la carga y no del camino. Se descartó: sin señal
+ * fallan todas, así que «seguir» gastaría un pedido por carga, que es
+ * exactamente lo que el corte en el primer fallo compró.
+ *
+ * Cinco y no tres: con un disparo por push, por `sync` y por pantalla abierta,
+ * tres se consumen en una mañana y un Storage que estuvo caído diez minutos
+ * pararía una carga que iba a salir sola.
+ */
+export const INTENTOS_ANTES_DE_PARAR = 5;
+
+/**
  * Cómo queda una carga **que ya estaba en la cola** después de intentarla.
  *
  * Sale de la cola sólo cuando el envío salió bien de verdad —y qué es "bien" lo
@@ -628,12 +889,14 @@ export function tomarLaCarga(carga, ahora) {
  * Si falló, la marca de tomada se suelta sí o sí: dejarla puesta la trabaría
  * `MINUTOS_PARA_SOLTAR` minutos por un fallo que ya se conoce. Y el estado
  * depende de si reintentar tiene sentido: `parada` es la que necesita que una
- * persona la mire, `esperando` la que sale sola cuando vuelva la señal.
+ * persona la mire, `esperando` la que sale sola cuando vuelva la señal — con
+ * el tope de `INTENTOS_ANTES_DE_PARAR` para las que ya entraron.
  *
  * @param {ResultadoDelEnvio} resultado
+ * @param {{ intentos?: number, yaEntro?: string | null }} [carga] La carga **como queda después de este intento** (o sea con `tomarLaCarga` ya aplicado). Sin ella no hay tope: el veredicto es el de siempre.
  * @returns {QueHacerDespues}
  */
-export function despuesDelIntento(resultado) {
+export function despuesDelIntento(resultado, carga) {
   if (resultado.ok) {
     return resultado.advertencia === null
       ? { accion: "borrar", numero: resultado.numero }
@@ -643,12 +906,35 @@ export function despuesDelIntento(resultado) {
           advertencia: resultado.advertencia,
         };
   }
+
+  // Lo que entró no se des-entra: vale el número de este intento o el que la
+  // carga ya traía de uno anterior.
+  const yaEntro = resultado.yaEntro || carga?.yaEntro || null;
+  const intentos = Number.isFinite(carga?.intentos) ? Number(carga?.intentos) : 0;
+  const seAgoto = Boolean(yaEntro) && intentos >= INTENTOS_ANTES_DE_PARAR;
+  const sigueSola = convieneReintentar(resultado) && !seAgoto;
+
+  // **Y EL TEXTO TIENE QUE DEJAR DE PROMETER EL REINTENTO.** El que compone la
+  // ruta termina en «y se reintenta sola» cuando el fallo es pasajero, que es
+  // verdad hasta este intento y mentira a partir de acá. Se dice que paró y
+  // por qué, y cuál es la salida —que no es volver a cargarla—.
+  const ultimoError =
+    seAgoto && convieneReintentar(resultado)
+      ? `${resultado.error} Van ${intentos} intentos y sigue sin salir, así que deja ` +
+        `de reintentarse sola para no tapar a las que están atrás. Lo que entró ya está: ` +
+        `lo que falta es la foto, y se le puede agregar desde la ficha de la condición.`
+      : resultado.error;
+
   return {
     accion: "actualizar",
     cambios: {
       tomadaEn: null,
-      ultimoError: resultado.error,
-      estado: convieneReintentar(resultado) ? "esperando" : "parada",
+      ultimoError,
+      estado: sigueSola ? "esperando" : "parada",
+      // Sólo si vino, y nunca pisándolo con null: lo que entró no se
+      // des-entra, y los dos lados aplican estos `cambios` con un spread sobre
+      // la fila guardada. Ver el bloque de `CargaEnCola`.
+      ...(resultado.yaEntro ? { yaEntro: resultado.yaEntro } : {}),
     },
   };
 }

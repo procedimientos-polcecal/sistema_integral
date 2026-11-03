@@ -43,16 +43,23 @@ services:
 # El `vers=3.0` está puesto a propósito y puede haber que bajarlo: un servidor
 # viejo que sólo habla SMB 1 falla con un "mount error(112)" que no dice nada
 # sobre la versión del protocolo.
+#
+# Y `domain` lleva `WORKGROUP` por defecto y NO puede quedar vacío. Un
+# `domain=` sin valor hace que el montaje falle con `invalid argument`, que no
+# dice cuál de las ocho opciones es la mala y manda a buscar por el lado
+# equivocado —parece un problema de permisos o de versión de SMB y no lo es—.
+# Comprobado el 23/10/2026: con `domain=` el error es `invalid argument`, con
+# `domain=WORKGROUP` el montaje se intenta de verdad.
 volumes:
   filler1:
     driver: local
     driver_opts:
       type: cifs
-      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
       device: "//${SMB_SERVIDOR}/EXTERIOR/Filler1"
   filler2:
     driver: local
     driver_opts:
       type: cifs
-      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
       device: "//${SMB_SERVIDOR}/EXTERIOR/Filler2"

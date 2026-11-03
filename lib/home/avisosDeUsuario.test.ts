@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseDeMentira } from "@/lib/core/supabaseDeMentira";
+import { avisosDeConteos, type ConteosParaAvisos } from "./avisos";
 import type { Notificacion } from "./notificaciones";
 import type { UsuarioModulo } from "@/lib/core/types";
 
@@ -14,13 +15,33 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => base.admin }))
 
 import { sinLoQueNoPuedeAtender, avisosDeUsuario } from "./avisosDeUsuario";
 
-const avisos: Notificacion[] = [
-  { id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", cantidad: 11, href: "/a" },
-  { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 23, href: "/b" },
-];
+/**
+ * Los avisos salen de `avisosDeConteos` y **no de una lista de ids escrita
+ * acá**, y ése es el punto de este archivo.
+ *
+ * Con los ids literales, alguien podía renombrar un id en `avisos.ts` y
+ * olvidarse de `DE_UNA_LISTA`: el filtro dejaba de reconocerlo, el aviso
+ * empezaba a llegarle a todos los que ven el módulo —y por push— y estos
+ * tests seguían verdes, porque probaban el id viejo contra el mapa viejo.
+ * Pidiéndoselos a la función que los arma, las dos puntas quedan atadas: un id
+ * renombrado sólo de un lado pone esto en rojo.
+ */
+function avisoDe(clave: keyof ConteosParaAvisos): Notificacion {
+  const [aviso] = avisosDeConteos({ [clave]: 1 });
+  if (!aviso) throw new Error(`\`${clave}\` no genera ningún aviso en avisos.ts`);
+  return aviso;
+}
+
+/** Nadie puede nada: el corte más duro. */
+const NADA = {
+  apruebaCompras: false, contestaConsultas: false, evaluaSyh: false, administraElSistema: false,
+};
+
+const COMPRAS = avisoDe("comprasEsperandoAprobacion");
+const ATRASADAS = avisoDe("mantenimientoAtrasadas");
+const avisos: Notificacion[] = [COMPRAS, ATRASADAS];
 
 /** Quien no está en ninguna de las dos listas. */
-const EN_NINGUNA = { apruebaCompras: false, contestaConsultas: false };
 
 describe("sinLoQueNoPuedeAtender", () => {
   /*
@@ -29,15 +50,13 @@ describe("sinLoQueNoPuedeAtender", () => {
    * que no puede hacer enseña que un aviso tuyo puede no ser tuyo.
    */
   it("quien no aprueba no recibe el aviso de aprobacion", () => {
-    expect(
-      sinLoQueNoPuedeAtender(avisos, EN_NINGUNA).map((a) => a.id)
-    ).toEqual(["mant-atrasadas"]);
+    expect(sinLoQueNoPuedeAtender(avisos, NADA).map((a) => a.id)).toEqual([ATRASADAS.id]);
   });
 
   it("quien aprueba lo recibe", () => {
     expect(
-      sinLoQueNoPuedeAtender(avisos, { ...EN_NINGUNA, apruebaCompras: true }).map((a) => a.id)
-    ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);
+      sinLoQueNoPuedeAtender(avisos, { ...NADA, apruebaCompras: true }).map((a) => a.id)
+    ).toEqual([COMPRAS.id, ATRASADAS.id]);
   });
 
   /*
@@ -57,13 +76,13 @@ describe("sinLoQueNoPuedeAtender", () => {
 
   it("a quien no contesta consultas no le llega la de los repuestos", () => {
     expect(
-      sinLoQueNoPuedeAtender(consultas, EN_NINGUNA).map((a) => a.id)
+      sinLoQueNoPuedeAtender(consultas, NADA).map((a) => a.id)
     ).toEqual(["mant-atrasadas"]);
   });
 
   it("a quien contesta consultas si", () => {
     expect(
-      sinLoQueNoPuedeAtender(consultas, { ...EN_NINGUNA, contestaConsultas: true }).map((a) => a.id)
+      sinLoQueNoPuedeAtender(consultas, { ...NADA, contestaConsultas: true }).map((a) => a.id)
     ).toEqual(["compras-consultas-repuestos", "mant-atrasadas"]);
   });
 
@@ -71,10 +90,10 @@ describe("sinLoQueNoPuedeAtender", () => {
     const todo = [...avisos, ...consultas.slice(0, 1)];
 
     expect(
-      sinLoQueNoPuedeAtender(todo, { apruebaCompras: true, contestaConsultas: false }).map((a) => a.id)
+      sinLoQueNoPuedeAtender(todo, { ...NADA, apruebaCompras: true }).map((a) => a.id)
     ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);
     expect(
-      sinLoQueNoPuedeAtender(todo, { apruebaCompras: false, contestaConsultas: true }).map((a) => a.id)
+      sinLoQueNoPuedeAtender(todo, { ...NADA, contestaConsultas: true }).map((a) => a.id)
     ).toEqual(["mant-atrasadas", "compras-consultas-repuestos"]);
   });
 
@@ -86,13 +105,13 @@ describe("sinLoQueNoPuedeAtender", () => {
   it("no toca ningun otro aviso", () => {
     const otros: Notificacion[] = [
       { id: "ritmo-remises", titulo: "Remises: hace 82 días que no se carga", cantidad: 1, href: "/c" },
-      { id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", cantidad: 15, href: "/d" },
+      avisoDe("tallerVialSinService"),
     ];
-    expect(sinLoQueNoPuedeAtender(otros, EN_NINGUNA)).toEqual(otros);
+    expect(sinLoQueNoPuedeAtender(otros, NADA)).toEqual(otros);
   });
 
   it("sin avisos no devuelve nada y no rompe", () => {
-    expect(sinLoQueNoPuedeAtender([], { apruebaCompras: true, contestaConsultas: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender([], { ...NADA, apruebaCompras: true })).toEqual([]);
   });
 });
 
@@ -195,5 +214,43 @@ describe("los avisos que termina recibiendo una persona", () => {
     const avisos = await avisosDe("facundo", ["compras"]);
 
     expect(avisos.map((a) => a.id)).not.toContain("compras-consultas-repuestos");
+  });
+});
+
+describe("sinLoQueNoPuedeAtender — Seguridad e Higiene", () => {
+  const VENCIDAS = avisoDe("syhVencidas");
+  const SIN_COMPLETAR = avisoDe("syhSinCompletar");
+  const deLosQueEvalua = [VENCIDAS, SIN_COMPLETAR];
+
+  it("los dos de gestión van sólo a quien puede evaluar y cerrar", () => {
+    expect(sinLoQueNoPuedeAtender(deLosQueEvalua, { ...NADA, apruebaCompras: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(deLosQueEvalua, { ...NADA, evaluaSyh: true })).toHaveLength(2);
+  });
+
+  it("evaluar condiciones no habilita los avisos de aprobación, ni al revés", () => {
+    const todos = [...avisos, ...deLosQueEvalua];
+    expect(
+      sinLoQueNoPuedeAtender(todos, { ...NADA, evaluaSyh: true }).map((a) => a.id)
+    ).toEqual([ATRASADAS.id, VENCIDAS.id, SIN_COMPLETAR.id]);
+    expect(
+      sinLoQueNoPuedeAtender(todos, { ...NADA, apruebaCompras: true }).map((a) => a.id)
+    ).toEqual([COMPRAS.id, ATRASADAS.id]);
+  });
+
+  /*
+   * EL DEL RESPALDO NO ES DEL ADMIN DEL MÓDULO, Y ÉSA ES LA DIFERENCIA.
+   *
+   * Lo que ese aviso pide —crear la carpeta en una unidad compartida de Drive
+   * y poner `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID`— no lo puede hacer nadie desde
+   * el SdG: es `admin_sistema`. Mandado al admin del módulo repetía el patrón
+   * de `compras-por-aprobar` que este repo ya midió, y peor: si la carpeta no
+   * existe al estrenar el módulo, suena todas las mañanas desde el cuarto día.
+   */
+  it("el del respaldo va a admin_sistema y no a quien evalúa condiciones", () => {
+    const respaldo = [avisoDe("syhFotosSinRespaldar")];
+    expect(sinLoQueNoPuedeAtender(respaldo, { ...NADA, evaluaSyh: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(respaldo, { ...NADA, administraElSistema: true })).toEqual(
+      respaldo
+    );
   });
 });

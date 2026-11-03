@@ -124,11 +124,20 @@ export function loQueHayQueExportar(orden: LoQueLaPlanillaNoSabe): Record<string
   const registro: Record<string, unknown> = {};
 
   const estado = String(orden.estado ?? "").trim();
-  // "Por hacer" es el único estado que NO se exporta, y no por ahorrar una
-  // escritura: la `M` trae `=IF(J="","",L)`, la fórmula con la que la planilla
-  // marca sola lo atrasado. Escribirle "Por hacer" la reemplaza por un literal
-  // y la orden queda fija en "por hacer" el día que se pase de fecha.
-  if (estado && estado !== "POR_HACER") registro.estado = estado;
+  // ── «POR HACER» TAMBIÉN SE EXPORTA, DESDE EL 29/10/2026 ──────────────────
+  //
+  // Era el único estado que no viajaba, y el motivo escrito acá era que «la M
+  // trae `=IF(J="","",L)` y escribirle "Por hacer" la reemplazaría por un
+  // literal». **Ese motivo era falso.** Medido sobre la columna entera: la M
+  // no tiene fórmula de columna —2.291 de 2.299 celdas son literales y sólo
+  // cinco sueltas llevan ese `=IF(...)`—; la fórmula de verdad es la L, una
+  // `ARRAYFORMULA` en L3.
+  //
+  // Así que no exportar no dejaba la celda calculándose: la dejaba en blanco.
+  // Al 29/10/2026 eran ocho órdenes sin estado en la planilla, dos de ellas ya
+  // atrasadas. Ahora viaja, y lo que se escribe es la fórmula de esa fila —ver
+  // `celdaDeEstado`—, así que la celda se sigue actualizando sola.
+  if (estado) registro.estado = estado;
 
   if (cargado(orden.fecha_cierre)) registro.fecha_cierre = orden.fecha_cierre;
   // Cero horas es un dato —hay trabajos de minutos— y tiene que llegar.

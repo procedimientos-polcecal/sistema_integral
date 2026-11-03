@@ -6,9 +6,11 @@ import {
   concordado,
   conSuArticulo,
   convieneReintentar,
+  cuerpoComoFormData,
   despuesDelIntento,
   esperaAntesDeReintentar,
   esperandoDesdeAyer,
+  llevaArchivo,
   loQueQuedoPendiente,
   paradas,
   proximaAMandar,
@@ -17,7 +19,11 @@ import {
   queHacerConLaNueva,
   siNoSePudoAvisar,
   tomarLaCarga,
+  CAMPO_DEL_CUERPO,
+  CAMPO_DE_LA_FOTO,
+  INTENTOS_ANTES_DE_PARAR,
   MINUTOS_PARA_SOLTAR,
+  RUTA_DE,
 } from "@/public/cola/colaOffline.js";
 
 const AHORA = new Date("2026-10-18T12:00:00.000Z");
@@ -50,6 +56,13 @@ describe("clasificarFallo", () => {
 
   it("un 409 es definitivo: la clave quedó reservada y reintentar sólo daría otro 409", () => {
     expect(clasificarFallo(409)).toBe("definitivo");
+  });
+
+  // El 413 no lo contesta la ruta: lo contesta la infraestructura, que corta
+  // el cuerpo antes de invocar la función. Pero es definitivo igual, porque el
+  // próximo intento lleva exactamente los mismos bytes.
+  it("un 413 es definitivo: el cuerpo no entra, y el que sigue pesa lo mismo", () => {
+    expect(clasificarFallo(413)).toBe("definitivo");
   });
 
   it("un 401 es PASAJERO: la sesión se vence sola mientras la carga espera", () => {
@@ -286,6 +299,29 @@ describe("comoContesto", () => {
     });
   });
 
+  it("un fallo que dice que la fila ya entró lo pasa en `yaEntro`", () => {
+    expect(
+      comoContesto(
+        "condicion",
+        contestacion({ status: 502, cuerpo: { error: "faltó la foto", ya_entro: "7" } }),
+      ),
+    ).toEqual({
+      ok: false,
+      status: 502,
+      deLaRuta: true,
+      error: "faltó la foto",
+      yaEntro: "7",
+    });
+  });
+
+  it("y uno que no salió de la ruta no puede afirmar que algo quedó escrito", () => {
+    // `ya_entro` lo manda la ruta de alta; una respuesta que no es de ella
+    // —un portal de WiFi, el HTML del login— no tiene cómo saberlo, así que
+    // ese campo no se lee en esa rama ni aunque venga.
+    const r = comoContesto("condicion", contestacion({ status: 500, cuerpo: { ya_entro: "7" } }));
+    expect(r).toMatchObject({ ok: false, deLaRuta: false, yaEntro: null });
+  });
+
   it("el campo del otro tipo no cuenta: un aviso con ot_number no se da por cargado", () => {
     expect(comoContesto("aviso", contestacion({ cuerpo: { ot_number: 2796 } })).ok).toBe(false);
   });
@@ -358,7 +394,16 @@ describe("comoContesto", () => {
       "aviso",
       contestacion({ status: 400, cuerpo: { error: "Contá qué pasa" } }),
     );
-    expect(r).toEqual({ ok: false, status: 400, deLaRuta: true, error: "Contá qué pasa" });
+    // `yaEntro` en null es lo que contestan el aviso y la orden siempre: sólo
+    // el alta de una condición manda `ya_entro`, y sólo cuando la fila quedó
+    // escrita pese al fallo.
+    expect(r).toEqual({
+      ok: false,
+      status: 400,
+      deLaRuta: true,
+      error: "Contá qué pasa",
+      yaEntro: null,
+    });
   });
 
   it("un fallo mudo dice el código, que es lo único que se sabe", () => {
@@ -459,6 +504,59 @@ describe("queHacerConLaNueva", () => {
         .accion,
     ).toBe("encolar");
   });
+
+  it("una carga que entró pero quedó a medias nace sabiendo con qué número entró", () => {
+    expect(
+      queHacerConLaNueva({
+        ok: false,
+        status: 502,
+        deLaRuta: true,
+        error: "La condición entró con el número 7… faltó la foto.",
+        yaEntro: "7",
+      }),
+    ).toEqual({
+      accion: "encolar",
+      intentos: 1,
+      ultimoError: "La condición entró con el número 7… faltó la foto.",
+      yaEntro: "7",
+    });
+  });
+
+  it("y un RECHAZO que igual entró también lo lleva: ahí es donde se duplicaba", () => {
+    // Un rechazo deja el formulario cargado para corregir, que es lo correcto
+    // para un 400 y lo peor posible cuando la fila ya existe: el próximo envío
+    // lleva una clave nueva y crea una segunda condición. El 403 de la policy
+    // sobre una condición recién creada es casi inalcanzable, pero la rama no
+    // puede quedar descosida mientras la otra está cerrada.
+    expect(
+      queHacerConLaNueva({
+        ok: false,
+        status: 403,
+        deLaRuta: true,
+        error: "La condición entró con el número 7… la foto no.",
+        yaEntro: "7",
+      }),
+    ).toEqual({
+      accion: "rechazar",
+      error: "La condición entró con el número 7… la foto no.",
+      yaEntro: "7",
+    });
+  });
+
+  it("y un rechazo común sigue sin el campo", () => {
+    expect(
+      queHacerConLaNueva({ ok: false, status: 400, deLaRuta: true, error: "Contá qué viste" }),
+    ).not.toHaveProperty("yaEntro");
+  });
+
+  it("y la que no entró no lleva el campo, en vez de llevarlo vacío", () => {
+    // Que no esté es inequívoco: la pantalla pregunta por la verdad del campo
+    // para decidir si ofrece corregir, y un `yaEntro: null` escrito encima de
+    // uno que sí tenía número sería perderlo.
+    expect(
+      queHacerConLaNueva({ ok: false, status: 502, deLaRuta: true, error: "x", yaEntro: null }),
+    ).not.toHaveProperty("yaEntro");
+  });
 });
 
 describe("convieneReintentar", () => {
@@ -474,6 +572,43 @@ describe("convieneReintentar", () => {
   it("si no salió de la ruta, el código no significa nada y se reintenta igual", () => {
     expect(convieneReintentar({ ok: false, status: 409, deLaRuta: false, error: "x" })).toBe(true);
     expect(convieneReintentar({ ok: false, status: null, deLaRuta: false, error: "x" })).toBe(true);
+  });
+
+  /*
+   * EL 413 ES LA EXCEPCIÓN, Y ES LA QUE EVITA EL LAZO.
+   *
+   * Vercel corta el cuerpo de un pedido en 4,5 MB **antes de invocar la
+   * función**, así que contesta un 413 cuyo cuerpo no es el JSON de la ruta:
+   * `comoContesto` no encuentra `error` y lo marca `deLaRuta: false`. Por la
+   * regla de arriba eso se reintenta siempre — y como no hay tope de intentos,
+   * una foto de 6 MB adentro de una condición se mandaba **para siempre**, con
+   * los datos de la planta, mientras el texto guardado le echaba la culpa al
+   * WiFi. El próximo intento pesa lo mismo: no hay nada que esperar.
+   */
+  it("un 413 NO se reintenta, aunque no haya salido de la ruta", () => {
+    expect(convieneReintentar({ ok: false, status: 413, deLaRuta: false, error: "x" })).toBe(false);
+    expect(convieneReintentar({ ok: false, status: 413, deLaRuta: true, error: "x" })).toBe(false);
+  });
+
+  it("y la carga queda parada, con un texto que no culpa al WiFi", () => {
+    // Es el camino entero, desde lo que contesta el servidor: lo que lee quien
+    // mire la carga tiene que decirle qué hacer, y lo único que se puede hacer
+    // es mandarla con una foto más chica o sin foto.
+    const resultado = comoContesto("condicion", {
+      status: 413,
+      redirigida: false,
+      cuerpo: null, // Vercel no contesta JSON: es exactamente este caso.
+    });
+    expect(resultado.ok).toBe(false);
+    const parada = despuesDelIntento(resultado);
+    expect(parada).toEqual({
+      accion: "actualizar",
+      cambios: expect.objectContaining({ estado: "parada", tomadaEn: null }),
+    });
+    const dicho = (parada as { cambios: { ultimoError: string } }).cambios.ultimoError;
+    expect(dicho).toContain("demasiado grande");
+    expect(dicho).toContain("más chica");
+    expect(dicho).not.toContain("WiFi");
   });
 });
 
@@ -529,12 +664,162 @@ describe("despuesDelIntento", () => {
     });
   });
 
+  // La foto es el único campo de una condición que no se recupera después: se
+  // saca parado frente al cardán sin protección, y cuando el cardán se protege
+  // ya no hay nada que fotografiar. Así que cuando la ruta la rechaza —pesa 14
+  // MB, es un PDF— lo que tiene que quedar guardado es **lo que dijo la ruta**,
+  // sin traducir: es lo único que va a leer quien mire la carga parada y tenga
+  // que decidir si vuelve a sacarla.
+  it("una foto rechazada deja la carga parada con lo que dijo la ruta", () => {
+    const r = despuesDelIntento({
+      ok: false,
+      status: 400,
+      deLaRuta: true,
+      error: "La foto pesa 14 MB y el máximo son 10.",
+    });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: {
+        tomadaEn: null,
+        ultimoError: "La foto pesa 14 MB y el máximo son 10.",
+        estado: "parada",
+      },
+    });
+  });
+
+  /*
+   * LA PRIMERA CARGA DE ESTE SISTEMA QUE SIGUE EN LA COLA CON SU FILA YA
+   * ESCRITA. Pasa con la condición insegura cuya foto no se pudo guardar: se
+   * contesta un error a propósito, para no perder el `Blob`. El número tiene
+   * que llegar hasta la carga, porque es lo que le saca a la pantalla el botón
+   * de corregir —que le daría una clave nueva y crearía una segunda condición—.
+   */
+  it("lo que ya entró viaja hasta la carga, para que no se la corrija y se duplique", () => {
+    expect(
+      despuesDelIntento({
+        ok: false,
+        status: 502,
+        deLaRuta: true,
+        error: "La condición entró con el número 7… faltó la foto.",
+        yaEntro: "7",
+      }),
+    ).toEqual({
+      accion: "actualizar",
+      cambios: {
+        tomadaEn: null,
+        ultimoError: "La condición entró con el número 7… faltó la foto.",
+        estado: "esperando",
+        yaEntro: "7",
+      },
+    });
+  });
+
+  it("y un intento que no dice nada de eso no lo pisa con null", () => {
+    // Los `cambios` se aplican con un spread sobre la fila guardada, así que
+    // un `yaEntro: null` acá borraría el número de una carga que **sí** entró.
+    // Lo que entró no se des-entra.
+    const cambios = despuesDelIntento({
+      ok: false,
+      status: 500,
+      deLaRuta: true,
+      error: "se cayó",
+    });
+    expect((cambios as { cambios: object }).cambios).not.toHaveProperty("yaEntro");
+  });
+
   it("un fallo pasajero la deja esperando, y suelta la marca de tomada", () => {
     expect(
       despuesDelIntento({ ok: false, status: 500, deLaRuta: true, error: "se cayó" }),
     ).toEqual({
       accion: "actualizar",
       cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
+    });
+  });
+});
+
+/*
+ * ── EL TOPE DE LAS QUE YA ENTRARON ──────────────────────────────────────────
+ *
+ * El vaciado corta en el primer fallo y la fila se ordena por `creadaEn`, así
+ * que una carga que falla para siempre tapa a todas las de atrás. Con la foto
+ * de una condición insegura eso dejó de ser un accidente: la ruta contesta
+ * error **a propósito** para no perder el `Blob`, y un Storage caído da 502,
+ * que es pasajero, que es para siempre.
+ *
+ * El tope es sólo para las que traen `yaEntro` y eso es lo que lo vuelve
+ * inofensivo: su fila ya está escrita del otro lado, así que pararla no pierde
+ * ningún alta — pide una persona para algo que una persona puede hacer desde la
+ * ficha.
+ */
+describe("despuesDelIntento — el tope de las que ya entraron", () => {
+  const falloPasajero = {
+    ok: false as const,
+    status: 502,
+    deLaRuta: true,
+    error: "La condición entró con el número 7… y se reintenta sola: Storage no contestó.",
+    yaEntro: "7",
+  };
+
+  it("antes del tope sigue esperando y sale sola", () => {
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR - 1 });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: expect.objectContaining({ estado: "esperando", yaEntro: "7" }),
+    });
+  });
+
+  it("en el tope pasa a parada, sin perder el número", () => {
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR });
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: expect.objectContaining({ estado: "parada", yaEntro: "7" }),
+    });
+  });
+
+  it("y el texto deja de prometer el reintento que ya no va a pasar", () => {
+    // El que compone la ruta termina en «y se reintenta sola» cuando el fallo
+    // es pasajero: verdad hasta este intento y mentira a partir de acá.
+    const r = despuesDelIntento(falloPasajero, { intentos: INTENTOS_ANTES_DE_PARAR });
+    const dicho = (r as { cambios: { ultimoError: string } }).cambios.ultimoError;
+    expect(dicho).toContain("entró con el número 7");
+    expect(dicho).toContain("deja de reintentarse sola");
+    expect(dicho).toContain("desde la ficha");
+  });
+
+  /*
+   * LA MITAD QUE IMPORTA MÁS: una carga que NO entró no se para nunca por el
+   * contador. Pararla sería tirar un alta que nadie escribió en ningún lado —
+   * lo contrario de lo que el tope viene a comprar.
+   */
+  it("una carga que NO entró no se para por muchos intentos que lleve", () => {
+    const r = despuesDelIntento(
+      { ok: false, status: 502, deLaRuta: true, error: "se cayó" },
+      { intentos: INTENTOS_ANTES_DE_PARAR * 10 },
+    );
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: { tomadaEn: null, ultimoError: "se cayó", estado: "esperando" },
+    });
+  });
+
+  it("el número que ya traía la carga cuenta aunque este intento no lo repita", () => {
+    // El reintento puede fallar sin llegar a la ruta —sin señal— y entonces no
+    // viene `ya_entro`. Lo que entró no se des-entra: el tope igual aplica.
+    const r = despuesDelIntento(
+      { ok: false, status: null, deLaRuta: false, error: "sin señal" },
+      { intentos: INTENTOS_ANTES_DE_PARAR, yaEntro: "7" },
+    );
+    expect((r as { cambios: { estado: string } }).cambios.estado).toBe("parada");
+  });
+
+  it("un fallo definitivo sigue parando en el primer intento, con su texto intacto", () => {
+    const r = despuesDelIntento(
+      { ok: false, status: 400, deLaRuta: true, error: "La foto pesa 14 MB.", yaEntro: "7" },
+      { intentos: 1 },
+    );
+    expect(r).toEqual({
+      accion: "actualizar",
+      cambios: { tomadaEn: null, ultimoError: "La foto pesa 14 MB.", estado: "parada", yaEntro: "7" },
     });
   });
 });
@@ -561,6 +846,117 @@ describe("cómo se nombra una carga", () => {
     expect(`${conSuArticulo("orden")} que quedó ${concordado("orden", "parad")}`).toBe(
       "la orden de trabajo que quedó parada",
     );
+  });
+});
+
+describe("el tercer tipo de carga: la condición insegura", () => {
+  // Hasta que entró la condición, `comoSeLlama`, `conSuArticulo` y `concordado`
+  // eran `tipo === "aviso" ? x : y`: un tercer tipo caía en la rama de «orden»
+  // por accidente, y en dos de los tres casos daba una frase que suena bien. Estos
+  // tests fijan lo que dice cada una para el tercero. Que un cuarto tipo no se
+  // olvide de ninguna lo cubre el test de más abajo, no `tsc`: los mapas de
+  // `colaOffline.js` no se comprueban (`allowJs` sin `checkJs`).
+  it("la condición tiene su nombre, su artículo y su concordancia", () => {
+    expect(comoSeLlama("condicion")).toBe("Condición insegura");
+    expect(conSuArticulo("condicion")).toBe("la condición insegura");
+    expect(concordado("condicion", "parad")).toBe("parada");
+  });
+
+  it("todos los tipos tienen su nombre, su artículo, su vocal y su campo", () => {
+    // `RUTA_DE` es la lista de los tipos que existen. Un cuarto tipo que se
+    // agregue ahí y se olvide en cualquiera de los otros cuatro mapas falla acá,
+    // que es la única garantía real: `tsc` no mira ese archivo.
+    const tipos = Object.keys(RUTA_DE) as Array<keyof typeof RUTA_DE>;
+    expect(tipos.length).toBeGreaterThanOrEqual(3);
+    // Un cuerpo con todos los campos de número que existen: `comoContesto` lo da
+    // por cargado sólo si el tipo tiene el suyo definido.
+    const cuerpo = { oa_number: "1", ot_number: "1", numero: "1" };
+    for (const tipo of tipos) {
+      expect(comoSeLlama(tipo), tipo).toEqual(expect.any(String));
+      expect(conSuArticulo(tipo), tipo).toEqual(expect.any(String));
+      expect(comoSeLlama(tipo).trim(), tipo).not.toBe("");
+      expect(conSuArticulo(tipo).trim(), tipo).not.toBe("");
+      expect(concordado(tipo, "parad"), tipo).toMatch(/^parad[oa]$/);
+      expect(comoContesto(tipo, { status: 200, redirigida: false, cuerpo }).ok, tipo).toBe(true);
+      // `llevaArchivo` es el quinto mapa y se comprueba igual que los otros
+      // cuatro. Se mira el **tipo** y no la verdad: un tipo sin entrada
+      // devuelve `undefined`, que es falso y por lo tanto seguro —sale como
+      // JSON, igual que hoy—, pero sigue siendo un mapa incompleto.
+      expect(typeof llevaArchivo(tipo), tipo).toBe("boolean");
+    }
+  });
+
+  it("sólo la condición lleva archivo", () => {
+    // Es lo que decide si el pedido sale como JSON o como `FormData`, y por eso
+    // es un mapa y no un `tipo === "condicion"`: las dos cargas de
+    // Mantenimiento tienen que salir **byte por byte** como salían antes.
+    expect(llevaArchivo("aviso")).toBe(false);
+    expect(llevaArchivo("orden")).toBe(false);
+    expect(llevaArchivo("condicion")).toBe(true);
+  });
+
+  it("la condición va a su ruta de alta", () => {
+    expect(RUTA_DE.condicion).toBe("/api/seguridad-higiene/condiciones");
+  });
+
+  it("lee el número de la condición del campo que devuelve su ruta", () => {
+    const r = comoContesto("condicion", {
+      status: 200,
+      redirigida: false,
+      cuerpo: { numero: "CI-45" },
+    });
+    expect(r).toMatchObject({ ok: true, numero: "CI-45" });
+  });
+
+  it("y los otros dos no leen ese campo: un aviso con `numero` no se da por cargado", () => {
+    const contestacion = { status: 200, redirigida: false, cuerpo: { numero: "CI-45" } };
+    expect(comoContesto("aviso", contestacion).ok).toBe(false);
+    expect(comoContesto("orden", contestacion).ok).toBe(false);
+  });
+});
+
+describe("cuerpoComoFormData", () => {
+  const foto = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+
+  it("el cuerpo viaja como un solo campo de JSON, y la foto aparte", () => {
+    // El cuerpo entero en un campo y no un campo por clave: así la ruta valida
+    // **exactamente el mismo objeto** que valida en el camino JSON, sin tener
+    // que volver a convertir «2» en 2 ni «null» en null. Un número que
+    // atravesara el multipart como texto rebotaría con un 400 que sólo le pasa
+    // a la carga con foto.
+    const forma = cuerpoComoFormData({ descripcion: "falta la guarda", prioridad: 2, foto });
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).toEqual({
+      descripcion: "falta la guarda",
+      prioridad: 2,
+    });
+  });
+
+  it("la foto no va adentro del JSON: iría como `{}`", () => {
+    const forma = cuerpoComoFormData({ descripcion: "x", prioridad: 1, foto });
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).not.toHaveProperty("foto");
+    expect(forma.get(CAMPO_DE_LA_FOTO)).toBeInstanceOf(Blob);
+  });
+
+  it("sin foto no se manda el campo de la foto, en vez de mandarlo vacío", () => {
+    // Un campo vacío llegaría como el texto "null" o como un archivo de cero
+    // bytes, y la ruta tendría que distinguir «no sacó foto» de «la foto se
+    // rompió en el camino». Que no esté es inequívoco.
+    const forma = cuerpoComoFormData({ descripcion: "x", prioridad: 1, foto: null });
+    expect(forma.has(CAMPO_DE_LA_FOTO)).toBe(false);
+    expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).toEqual({
+      descripcion: "x",
+      prioridad: 1,
+    });
+  });
+
+  it("la foto viaja con un nombre, que es de donde la ruta saca la extensión", () => {
+    const forma = cuerpoComoFormData({ foto });
+    const archivo = forma.get(CAMPO_DE_LA_FOTO);
+    expect(archivo).toBeInstanceOf(Blob);
+    // En `FormData` un `Blob` sin nombre viaja como "blob" y se pierde el tipo
+    // del archivo. Lo que importa es que llegue con algo: la ruta decide la
+    // extensión por el `type`, no por el nombre.
+    expect((archivo as File).name).not.toBe("");
   });
 });
 

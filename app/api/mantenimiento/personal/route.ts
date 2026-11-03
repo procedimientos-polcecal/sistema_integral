@@ -75,18 +75,38 @@ async function admitir() {
   return { user };
 }
 
-/** GET — el padrón vigente (los que no terminaron antes de hoy), con el nombre. */
-export async function GET() {
+/**
+ * GET — el padrón vigente (los que no terminaron antes de hoy), con el nombre.
+ * Con `?incluirBajas=1` vienen **todas** las filas, también las que ya
+ * terminaron.
+ *
+ * El parámetro no es una comodidad. La pantalla ofrece "Cambiar baja" sobre una
+ * fila que ya tiene `hasta`, y el `PATCH` necesita el `id` de la fila, que la
+ * pantalla sólo puede saber por este `GET`: mientras el filtro fuera siempre el
+ * vigente, **la fila desaparecía el día en que su `hasta` quedaba en el
+ * pasado**, y con ella el único camino para corregirla. El caso no es raro:
+ * alguien tipea la baja del mes pasado en vez de la del mes que viene, la
+ * persona se va del padrón, sus semanas pasadas se vacían, y desde la app no
+ * hay vuelta atrás.
+ */
+export async function GET(request: Request) {
   const permiso = await admitir();
   if (permiso.error) return permiso.error;
 
-  const { data, error } = await createAdminClient()
-    .from("mant_personal_taller")
-    .select("id, empleado_id, oficio, grupo, desde, hasta, empleados(nombre, apellido)")
-    .or(`hasta.is.null,hasta.gte.${hoyEnArgentina()}`)
-    .order("oficio")
-    .order("grupo")
-    .order("desde");
+  const incluirBajas = new URL(request.url).searchParams.get("incluirBajas") === "1";
+
+  // El `select()` va literal en las dos ramas: armado en una variable pierde la
+  // inferencia de tipos de Supabase.
+  const consulta = incluirBajas
+    ? createAdminClient()
+        .from("mant_personal_taller")
+        .select("id, empleado_id, oficio, grupo, desde, hasta, empleados(nombre, apellido)")
+    : createAdminClient()
+        .from("mant_personal_taller")
+        .select("id, empleado_id, oficio, grupo, desde, hasta, empleados(nombre, apellido)")
+        .or(`hasta.is.null,hasta.gte.${hoyEnArgentina()}`);
+
+  const { data, error } = await consulta.order("oficio").order("grupo").order("desde");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });

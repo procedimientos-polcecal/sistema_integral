@@ -2,6 +2,34 @@ import { describe, expect, it } from "vitest";
 import { avisosDeConteos, avisosDeRitmo } from "./avisos";
 
 describe("avisosDeConteos", () => {
+  it("los dos avisos de Seguridad e Higiene salen con sus títulos y links", () => {
+    const avisos = avisosDeConteos({ syhVencidas: 3, syhSinCompletar: 12 });
+    expect(avisos).toEqual([
+      { id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", cantidad: 3, href: "/seguridad-higiene/condiciones?estado=Vencida" },
+      { id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", cantidad: 12, href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
+    ]);
+  });
+
+  it("los de Seguridad e Higiene salen al final, después de todo lo demás", () => {
+    const avisos = avisosDeConteos({ syhSinCompletar: 1, trituracionSinPlanilla: 1, rrhhSinClasificar: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["rrhh-sin-clasificar", "trituracion-sin-planilla", "syh-sin-completar"]);
+  });
+
+  it("las fotos sin respaldar salen como su propio aviso, con id estable, y al final de todo", () => {
+    const avisos = avisosDeConteos({ syhFotosSinRespaldar: 2, syhSinCompletar: 1, rrhhSinClasificar: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["rrhh-sin-clasificar", "syh-sin-completar", "syh-fotos-sin-respaldar"]);
+    expect(avisos[2]).toEqual({
+      id: "syh-fotos-sin-respaldar",
+      titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive",
+      cantidad: 2,
+      href: "/seguridad-higiene",
+    });
+  });
+
+  it("con cero fotos atascadas no avisa", () => {
+    expect(avisosDeConteos({ syhFotosSinRespaldar: 0 })).toEqual([]);
+  });
+
   it("no genera avisos cuando está todo en cero", () => {
     expect(avisosDeConteos({ mantenimientoAtrasadas: 0, comprasEsperandoAprobacion: 0 })).toEqual([]);
   });

@@ -6,14 +6,16 @@ import { puedeAprobarOS } from "@/lib/compras/auth";
 import {
   leerValores, escribirCeldas, letraDeColumna, textoParaLaCelda,
 } from "@/lib/core/sheets";
-import { ALIAS_OS, claveDeEncabezado, puedeEscribirse, pestanaDeArea } from "@/lib/mantenimiento/os";
+import { ALIAS_OS, claveDeEncabezado, pestanaDeArea } from "@/lib/mantenimiento/os";
 import {
   dondeSeEscribeElEstado, esDenegacionDeOS, faltaLaJustificacion,
-  seguroParaElMaestro, POR_QUE_HACE_FALTA,
+  POR_QUE_HACE_FALTA,
 } from "@/lib/mantenimiento/denegacion";
 import {
   aprobarCorreriaFilas, esAprobacionDeOS, porQueNoSePuedeAprobar,
 } from "@/lib/mantenimiento/aprobacion";
+import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
+import { elPendienteDelIntentoDeOS, fechaDeOSParaLaPlanilla } from "@/lib/mantenimiento/pendienteDeLaOS";
 
 const PLANILLA = () => process.env.GOOGLE_SHEETS_OS_ID ?? "";
 
@@ -50,105 +52,6 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
-}
-
-/**
- * Escribe en la planilla lo que se cambió en la app.
- *
- * Best-effort a propósito: la app ya guardó: que Google esté caído o que la
- * planilla no esté compartida como editor no puede tirar abajo el cambio. Se
- * devuelve el problema para que la pantalla lo muestre.
- */
-async function escribirEnPlanilla(
-  orden: { os_number: number | null; sheets_tab: string | null; sheets_row: number | null },
-  campos: { clave: string; valor: string }[]
-): Promise<string | null> {
-  const planilla = PLANILLA();
-  const pestana = orden.sheets_tab;
-  const fila = orden.sheets_row;
-  if (!planilla || !pestana || !fila) return null;
-
-  // SERVICIOS es todo fórmula salvo dos columnas escritas a mano, y una de
-  // ellas es el estado maestro: el que lee el FILTER de cada pestaña de área y
-  // por lo tanto el que decide si la OS llega a su pestaña.
-  //
-  // Esto importa para denegar. Una OS que todavía no se aprobó vive sólo acá
-  // —son 11 hoy, justo las candidatas naturales a denegarse— y antes no se le
-  // escribía nada: la denegación quedaba en el sistema y la planilla seguía
-  // mostrándola por aprobar. Ahora se escribe el estado, y sólo el estado: el
-  // resto de la hoja es QUERY(IMPORTRANGE(...)) y escribir ahí no cambia el
-  // dato, rompe la fórmula y con ella toda la pestaña.
-  //
-  // Y no cualquier estado: `APROBADO` es el único que el FILTER de las pestañas
-  // levanta, y levantar una fila corre las de abajo mientras el seguimiento
-  // escrito a mano no se corre con ellas. Aprobar sigue siendo a mano en la
-  // planilla; denegar es seguro porque la OS ya estaba afuera y sigue afuera.
-  //
-  // `true` en el segundo argumento no es un dato: es la postura. Esta función
-  // **nunca aprueba**. Aprobar exige leer la pestaña del área para saber si la
-  // fila entraría en el medio, y eso pasa antes, en el PATCH, porque si no se
-  // puede escribir hay que abortar el cambio entero en vez de guardarlo igual.
-  // Acá, con `true`, cualquier `APROBADO` que llegue queda descartado.
-  const soloElEstado = dondeSeEscribeElEstado(pestana) === "maestro";
-  const escribibles = campos.filter((c) =>
-    soloElEstado
-      ? c.clave === "estado" && seguroParaElMaestro(c.valor, true)
-      : puedeEscribirse(c.clave)
-  );
-
-  if (soloElEstado && escribibles.length === 0) {
-    return "Esta OS todavía no está aprobada, así que en la planilla sólo se le puede escribir " +
-           "el estado, y aprobarla desde acá correría las filas de la pestaña de su área. " +
-           "Se guardó en el sistema.";
-  }
-
-  try {
-    const encabezado = (await leerValores(planilla, `${pestana}!1:1`))[0] ?? [];
-    const claves = encabezado.map(claveDeEncabezado);
-
-    // Que la fila siga siendo la de esta OS. El FILTER de la pestaña corre las
-    // filas cuando una orden entra o sale, y el seguimiento escrito a mano no
-    // se corre con ellas: escribir a ciegas se lo daría a otra orden.
-    const columnaNumero = claves.findIndex((h) =>
-      ALIAS_OS.os_number.some((a) => claveDeEncabezado(a) === h)
-    );
-    const enLaPlanilla = (await leerValores(
-      planilla, `${pestana}!A${fila}:Z${fila}`, { sinFormato: true }
-    ))[0] ?? [];
-
-    if (Number(enLaPlanilla[columnaNumero >= 0 ? columnaNumero : 0]) !== orden.os_number) {
-      return `La fila ${fila} de "${pestana}" ya no es la de la OS #${orden.os_number}. ` +
-             "Sincronizá las órdenes de servicio y volvé a intentar.";
-    }
-
-    const celdas = escribibles
-      .map((c) => ({
-        columna: claves.findIndex((h) =>
-          (ALIAS_OS[c.clave] ?? []).some((a) => claveDeEncabezado(a) === h)
-        ),
-        valor: c.valor,
-      }))
-      .filter((c) => c.columna >= 0)
-      .map((c) => ({ pestana, fila, columna: c.columna, valor: c.valor }));
-
-    // Que no se encuentre ninguna columna no puede terminar en un no-op mudo.
-    //
-    // Cada pestaña armó su encabezado a su manera y no todas traen las mismas
-    // columnas, así que saltear una que falta es lo esperado. Que falten todas
-    // no: significa que el encabezado no se parece a ninguno de los alias, y
-    // entonces el cambio quedó sólo en el sistema. Importa sobre todo al
-    // denegar en SERVICIOS, donde la única celda que se escribe es el estado.
-    if (celdas.length === 0) {
-      const cuales = escribibles.map((c) => c.clave).join(", ");
-      return `En "${pestana}" no se encontró la columna de ${cuales}, así que el cambio ` +
-             "no se pudo escribir en la planilla. Se guardó en el sistema.";
-    }
-
-    await escribirCeldas(planilla, celdas);
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
 }
 
 /**
@@ -244,9 +147,14 @@ async function aprobarEnElMaestro(
   return null;
 }
 
-/** Una fecha ISO como la escribe la planilla. */
-const fechaAR = (iso: string | null | undefined): string =>
-  iso ? new Date(String(iso).slice(0, 10) + "T12:00:00").toLocaleDateString("es-AR") : "";
+/**
+ * Una fecha ISO como la escribe la planilla.
+ *
+ * Vive en `pendienteDeLaOS.ts` y no acá: la cola reescribe estas mismas dos
+ * fechas, y dos cuentas distintas para la misma celda son dos formatos que
+ * nadie compara hasta que la planilla tiene las dos.
+ */
+const fechaAR = fechaDeOSParaLaPlanilla;
 
 /** PATCH — seguimiento de una OS: estado, fechas y proveedor. */
 export async function PATCH(request: Request) {
@@ -450,7 +358,23 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const planilla_error = await escribirEnPlanilla(data, enPlanilla);
+  const planilla_error = await escribirEnLaFilaDeLaOS(data, enPlanilla);
+
+  // Y si no llegó, queda anotado. No es sólo una cola de reintentos: es lo
+  // único que evita que `sincronizarOrdenesDeServicio` vuelva a leer las cinco
+  // columnas del seguimiento y pise con la celda vieja lo que se acaba de
+  // guardar. Qué se anota y qué no lo decide `elPendienteDelIntentoDeOS`, que
+  // tiene sus tests y el porqué en el encabezado de su archivo.
+  //
+  // No se limpia cuando sale bien, y es a propósito: este PATCH escribe sólo
+  // los campos que cambió, y un pendiente anterior puede ser por otros.
+  const pendiente = elPendienteDelIntentoDeOS(data, planilla_error);
+  if (pendiente) {
+    await admin
+      .from("ordenes_servicio")
+      .update({ sheets_pendiente: pendiente, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", id);
+  }
 
   return NextResponse.json({ data, planilla_error });
 }

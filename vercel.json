@@ -42,6 +42,14 @@
     {
       "path": "/api/cron/avisos-diarios",
       "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cron/produccion-molinos-sync",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/syh-respaldo-de-fotos",
+      "schedule": "30 4 * * *"
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { discriminaIva, esNotaDeCredito, nombreDelComprobante, numeroFormateado } from "./comprobante";
 import type { LineaDeFactura } from "./lineas";
+import { esLaLineaDelTotal } from "./lineaPorElTotal";
 
 /**
  * Armar el borrador de factura de proveedor que se crea en Odoo.
@@ -192,14 +193,25 @@ export function armarBorradorDeFactura(
   const impuestos = [[6, 0, conIva ? [contexto.impuestoId] : []]];
   const detalle = contexto.lineas ?? [];
 
+  /*
+   * La línea del total es la que guarda una factura cuyo detalle no se pudo
+   * leer, y **vale distinto que las demás**: en la tabla tiene el total del
+   * comprobante, porque es lo que dice el papel, pero acá tiene que salir por
+   * el neto — el IVA lo agrega Odoo con `tax_ids`. En una Factura A son 21
+   * puntos, así que confundirlas manda un borrador por 121 donde van 100.
+   *
+   * Las otras no: el detalle leído del PDF ya viene en netos.
+   */
+  const esLaDelTotal = esLaLineaDelTotal(detalle, total);
+
   const invoiceLines = detalle.length
     ? detalle.map((linea) => [
         0,
         0,
         {
           name: linea.descripcion,
-          quantity: linea.cantidad ?? 1,
-          price_unit: linea.precio_unitario ?? linea.total ?? 0,
+          quantity: esLaDelTotal ? 1 : (linea.cantidad ?? 1),
+          price_unit: esLaDelTotal ? neto : (linea.precio_unitario ?? linea.total ?? 0),
           tax_ids: impuestos,
           // Los tres opcionales van sólo si están: mandar `false` le borraría a
           // Odoo el valor que él mismo calcula por el producto o el proveedor.
@@ -210,7 +222,18 @@ export function armarBorradorDeFactura(
             : {}),
         },
       ])
-    : [[0, 0, { name: descripcion, quantity: 1, price_unit: neto, tax_ids: impuestos }]];
+    : [
+        [
+          0,
+          0,
+          {
+            name: descripcion,
+            quantity: 1,
+            price_unit: neto,
+            tax_ids: impuestos,
+          },
+        ],
+      ];
 
   return {
     ok: true,

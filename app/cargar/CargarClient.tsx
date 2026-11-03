@@ -36,13 +36,18 @@ import {
 } from "./catalogos";
 import { loQueDijo, mandarALaRuta, type Resultado } from "./envio";
 import FormularioAvisoOffline from "./FormularioAvisoOffline";
+import FormularioCondicionOffline from "./FormularioCondicionOffline";
+import { formularioQueSeVe, tiposQueSeOfrecen } from "@/lib/seguridadHigiene/glosarioOffline";
 import FormularioOTOffline from "./FormularioOTOffline";
 
 /** En qué estado quedó la lectura del teléfono al abrir la pantalla. */
 type Arranque = "leyendo" | "listo" | "sin-almacenamiento";
 
 /**
- * La pantalla que anda sin señal: dos formularios y lo que está esperando.
+ * La pantalla que anda sin señal: los formularios y lo que está esperando. Son
+ * dos —aviso y orden de trabajo— y un tercero, la condición insegura de
+ * Seguridad e Higiene, que sólo aparece si el teléfono tiene anotado que la
+ * persona puede cargarla.
  *
  * TODO SALE DEL TELÉFONO. Los desplegables son los que quedaron guardados en
  * IndexedDB, quién es la sesión también, y la cola es lo que todavía no pudo
@@ -261,7 +266,10 @@ export default function CargarClient() {
       // arreglar.
       void pedirVaciadoEnSegundoPlano();
       await releerLaCola();
-      return { estado: "encolada", motivo };
+      // `yaEntro` sale de la carga que se acaba de guardar y no de un
+      // parámetro: es el mismo dato, y el cartel lo necesita para no decir
+      // «todavía no tiene número» sobre una condición que ya tiene el suyo.
+      return { estado: "encolada", motivo, yaEntro: carga.yaEntro ?? null };
     },
     [releerLaCola],
   );
@@ -346,15 +354,27 @@ export default function CargarClient() {
         };
       }
       if (queHacer.accion === "rechazar") {
-        // El texto de la ruta, sin traducir.
+        // El texto de la ruta, sin traducir. Y, si la ruta dijo que la fila ya
+        // quedó escrita pese al fallo, eso viaja aparte: es lo que evita que
+        // el formulario quede listo para mandar un duplicado.
         return {
           estado: "rechazada",
           error: queHacer.error,
           fechaDelReloj: !laPusoUnaPersona,
+          yaEntro: queHacer.yaEntro ?? null,
         };
       }
       const salida = await encolar(
-        { ...carga, intentos: queHacer.intentos, ultimoError: queHacer.ultimoError },
+        {
+          ...carga,
+          intentos: queHacer.intentos,
+          ultimoError: queHacer.ultimoError,
+          // Si la ruta dijo que la fila ya quedó escrita pese al fallo —hoy
+          // sólo la condición cuya foto no se pudo guardar—, la carga nace
+          // sabiéndolo: es lo que después le saca el botón de corregir, que
+          // sobre una de éstas crearía una segunda fila.
+          ...(queHacer.yaEntro ? { yaEntro: queHacer.yaEntro } : {}),
+        },
         queHacer.ultimoError,
         !laPusoUnaPersona,
       );
@@ -399,14 +419,20 @@ export default function CargarClient() {
         // Queda tomada mientras sale, que es lo que evita que dos disparos
         // manden lo mismo. `puedeEmpujarla` lee esa marca, y
         // `MINUTOS_PARA_SOLTAR` la suelta si esto muere a mitad de camino.
-        await actualizarCarga(carga.clave, tomarLaCarga(carga, new Date()));
+        const tomada = tomarLaCarga(carga, new Date());
+        await actualizarCarga(carga.clave, tomada);
         await releerLaCola();
 
         // Todo lo que hay que hacer sale de `despuesDelIntento`: acá no se
         // vuelve a mirar la respuesta, porque volver a mirarla es volver a
         // decidir. `borrar-y-avisar` es un veredicto aparte justamente para que
-        // no se pueda borrar la carga sin decir lo que quedó a medias.
-        const queHacer = despuesDelIntento(await mandarALaRuta(carga.tipo, carga.cuerpo));
+        // no se pueda borrar la carga sin decir lo que quedó a medias. Va
+        // `tomada` y no `carga` porque el contador que decide el tope es el de
+        // **después** de este intento.
+        const queHacer = despuesDelIntento(await mandarALaRuta(carga.tipo, carga.cuerpo), {
+          ...carga,
+          ...tomada,
+        });
 
         if (queHacer.accion === "borrar") {
           await borrarCarga(carga.clave);
@@ -476,14 +502,21 @@ export default function CargarClient() {
   const sinSesion = arranque === "listo" && sesionResuelta && !sesion;
   const averiguandoQuienSos = arranque === "listo" && !sesionResuelta && !sesion;
   const deshabilitado = arranque !== "listo" || !sesion;
+  // Qué pestañas hay y cuál se ve. Se calcula acá y no se guarda en el estado:
+  // si el permiso se retira mientras la pantalla está abierta, la pestaña de
+  // condición desaparece y el formulario vuelve solo a uno que se pueda cargar.
+  const ofrecidos = tiposQueSeOfrecen(catalogos.puedeCargarCondiciones);
+  const formulario = formularioQueSeVe(queFormulario, ofrecidos);
 
   return (
     <main className="mx-auto w-full max-w-xl space-y-4 p-4">
       <header>
         <h1 className="text-lg font-bold text-slate-900">Cargar sin señal</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Un aviso o una orden de trabajo de Mantenimiento. Si no hay señal,
-          queda esperando acá abajo hasta que vuelva.
+          {catalogos.puedeCargarCondiciones
+            ? "Un aviso o una orden de trabajo de Mantenimiento, o una condición insegura. "
+            : "Un aviso o una orden de trabajo de Mantenimiento. "}
+          Si no hay señal, queda esperando acá abajo hasta que vuelva.
         </p>
       </header>
 
@@ -547,17 +580,22 @@ export default function CargarClient() {
       ) : (
         <>
           <div className="flex gap-2">
-            {(["aviso", "orden"] as const).map((tipo) => (
+            {/* La condición insegura sólo se ofrece si este teléfono tiene
+                anotado que la persona puede cargarla: `/cargar` no filtra por
+                módulo, y sin esto alguien sin Seguridad e Higiene sacaría la
+                carga y se comería un 403 cuando vuelva la señal. Sin la
+                anotación no se muestra: es lo seguro cuando no se sabe. */}
+            {ofrecidos.map((tipo) => (
               <button
                 key={tipo}
                 onClick={() => setQueFormulario(tipo)}
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${
-                  queFormulario === tipo
+                  formulario === tipo
                     ? "bg-slate-900 text-white"
                     : "border border-slate-300 bg-white text-slate-700"
                 }`}
               >
-                {tipo === "aviso" ? "Aviso" : "Orden de trabajo"}
+                {comoSeLlama(tipo)}
               </button>
             ))}
           </div>
@@ -566,7 +604,10 @@ export default function CargarClient() {
               aparece lleno sin motivo visible y quien lo mira puede creer que
               está cargando una segunda cosa — que es el duplicado que todo
               esto existe para evitar. */}
-          {borrador && (
+          {/* Sólo si el formulario de abajo es el de esa carga: con el permiso de
+              condiciones retirado, un borrador de condición no tiene formulario
+              y el cartel diría que se corrige algo que no se está corrigiendo. */}
+          {borrador && borrador.tipo === formulario && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <span className="min-w-0 flex-1">
                 Estás corrigiendo {conSuArticulo(borrador.tipo)} que quedó {concordado(borrador.tipo, "parad")}.
@@ -589,7 +630,7 @@ export default function CargarClient() {
               de la carga que se eligió corregir. Sube **sólo** al empezar o
               dejar una corrección: al guardar no, porque remontar ahí borraría
               el cartel que acaba de decir con qué número entró. */}
-          {queFormulario === "aviso" ? (
+          {formulario === "aviso" ? (
             <FormularioAvisoOffline
               key={generacion}
               equipos={catalogos.equipos}
@@ -600,7 +641,7 @@ export default function CargarClient() {
                 mandar("aviso", cuerpo, borrador?.tipo === "aviso" ? borrador.clave : null)
               }
             />
-          ) : (
+          ) : formulario === "orden" ? (
             <FormularioOTOffline
               key={generacion}
               equipos={catalogos.equipos}
@@ -610,6 +651,16 @@ export default function CargarClient() {
               borrador={borrador?.tipo === "orden" ? borrador.cuerpo : null}
               onMandar={(cuerpo) =>
                 mandar("orden", cuerpo, borrador?.tipo === "orden" ? borrador.clave : null)
+              }
+            />
+          ) : (
+            <FormularioCondicionOffline
+              key={generacion}
+              catalogos={catalogos}
+              deshabilitado={deshabilitado}
+              borrador={borrador?.tipo === "condicion" ? borrador.cuerpo : null}
+              onMandar={(cuerpo) =>
+                mandar("condicion", cuerpo, borrador?.tipo === "condicion" ? borrador.clave : null)
               }
             />
           )}
@@ -775,6 +826,41 @@ function LaCola({
                 </p>
               )}
 
+              {/* UNA CARGA QUE YA TIENE SU FILA ESCRITA, Y ES LA PRIMERA DE
+                  ESTE SISTEMA QUE PUEDE ESTARLO MIENTRAS SIGUE EN LA COLA.
+                  Pasa con la condición insegura cuya foto no se pudo guardar:
+                  se contesta un error a propósito, porque el `Blob` vive acá
+                  y sacar la carga de la cola lo pierde para siempre. Hay que
+                  decirlo con todas las letras, porque la lista entera está
+                  escrita sobre el supuesto contrario —«todavía no tiene
+                  número»— y alguien que lea eso va a cargarla de nuevo. */}
+              {/* Y QUÉ HACER DEPENDE DE SI SE REINTENTA SOLA, que es lo mismo
+                  que decir `estado`. No se vuelve a mirar el código HTTP acá:
+                  `estado` **es** el resultado de `clasificarFallo`, ya
+                  materializado por `despuesDelIntento`, y volver a decidirlo
+                  en la pantalla sería la misma regla escrita dos veces — que
+                  es justo de lo que este archivo se cuida. Decía siempre «para
+                  eso está Mandar ahora»: con una `parada` eso contradice al
+                  texto del servidor que está dos renglones más arriba, porque
+                  reintentar no la va a guardar nunca. */}
+              {carga.yaEntro && (
+                <p className="mt-1 text-xs text-amber-800">
+                  Esto ya entró con el número {carga.yaEntro}:{" "}
+                  <b>no lo cargues de nuevo</b>.{" "}
+                  {carga.estado === "parada" ? (
+                    <>
+                      Lo que falta es la foto, y <b>reintentar no la va a
+                      guardar</b>: mirá arriba qué dijo el servidor. Borrar
+                      esta carga <b>no borra la condición</b> — la foto se le
+                      puede agregar después desde su ficha, en Seguridad e
+                      Higiene.
+                    </>
+                  ) : (
+                    <>Lo que falta es la foto, y para eso está «Mandar ahora».</>
+                  )}
+                </p>
+              )}
+
               <div className="mt-2 flex flex-wrap gap-2">
                 {/* El botón se ofrece sobre las propias, incluidas las
                     paradas: que una parada no se reintente **sola** no quiere
@@ -803,8 +889,17 @@ function LaCola({
                     tirar lo escrito. Se ofrece sólo sobre las paradas propias:
                     una que **espera** va a salir sola y tocarla sería cambiarle
                     el cuerpo a algo que puede estar saliendo en este momento, y
-                    una ajena no se puede corregir en nombre de otro. */}
-                {!ajena && carga.estado === "parada" && editando !== carga.clave && (
+                    una ajena no se puede corregir en nombre de otro.
+
+                    **Y NO SE OFRECE SOBRE UNA QUE YA ENTRÓ.** Corregir le da a
+                    la carga una clave nueva a propósito —es otra carga, y la
+                    vieja puede haber quedado reservada del lado del
+                    servidor—, lo cual es correcto para todas menos para ésta:
+                    su fila **ya existe**, así que una clave nueva no cae en la
+                    rama de idempotencia y crea una segunda condición con la
+                    misma descripción y la misma foto. «Mandar ahora» sí reusa
+                    la clave, y es el camino que termina de subir la foto. */}
+                {!ajena && carga.estado === "parada" && !carga.yaEntro && editando !== carga.clave && (
                   <button
                     onClick={() => onEditar(carga)}
                     disabled={ocupada !== null}

@@ -3,11 +3,11 @@ import { esFechaIso } from "@/lib/core/fechas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { traerTodo } from "@/lib/core/paginado";
 import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
-import { estaVigente, type PersonaDelTaller } from "@/lib/mantenimiento/disponibilidad";
+import { estaVigente, TIPOS_QUE_NO_SON_FALTA, type PersonaDelTaller } from "@/lib/mantenimiento/disponibilidad";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
 import { altaDeAusencia, periodoEstaCerrado, TIPOS_DEL_ENCARGADO } from "@/lib/rrhh/altaDeAusencia";
 import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
@@ -30,9 +30,20 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
  * que separa al encargado de las fichas de los 70 empleados son los chequeos de
  * este archivo, y son dos:
  *
- *   1. **Nivel de edición en Mantenimiento** (`puedeEditarMantenimiento`).
+ *   1. **Admin de Mantenimiento** (`esAdminMantenimiento`).
  *   2. **La persona está en `mant_personal_taller` y vigente** todos los días
  *      del rango. Puede anotar la falta de uno de sus nueve y de nadie más.
+ *
+ * El primero **era `puedeEditarMantenimiento`** —o sea también `edicion`—
+ * porque así lo decía el diseño, escrito antes de que la pantalla quedara sólo
+ * para `admin`. Se angostó el 26/10/2026, y el motivo es que las dos mitades no
+ * coincidían: la pantalla, la entrada del menú y las otras cuatro rutas de la
+ * programación piden `admin`, así que `edicion` —el nivel de quien carga OT y
+ * ejecuciones, que es mucha más gente— tenía escritura con el cliente admin
+ * sobre `ausencias`, una tabla de RRHH que toca `calculos_diarios` y por ahí el
+ * sueldo, **sin ninguna pantalla que se la ofreciera ni menú que la revelara**.
+ * Superficie de escritura que nadie puede alcanzar por la interfaz no es una
+ * funcionalidad. La corrección del diseño está anotada en su propio documento.
  *
  * Y tres frenos más, que no son de permiso pero evitan daño:
  *
@@ -52,6 +63,11 @@ import { recalcularEmpleadoPeriodo } from "@/lib/rrhh/engine/recalcular";
  *   - **Corregir y borrar se auditan, y el registro va antes.** Si no entra, el
  *     cambio no se hace: lo que se pierde al corregir o borrar no se puede
  *     reconstruir después. Ver `problemaDeAuditoria()` más abajo.
+ *   - **El alta no acepta una ausencia que pise otra de la misma persona.** El
+ *     alta son dos toques y no pide confirmación, así que un doble toque dejaba
+ *     dos filas — y la grilla las muestra igual, porque `estaAusente` usa
+ *     `.some()`. Sacar la de más cuesta un borrado, y un borrado es una fila de
+ *     auditoría para siempre. Ver `problemaDeSuperposicion()`.
  *
  * El alta no la hace esta ruta: la hace `altaDeAusencia()` de
  * `lib/rrhh/altaDeAusencia.ts`, que es el mismo cuerpo que usa RRHH. Dar de alta
@@ -123,10 +139,10 @@ async function admitir() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: "No autorizado" }, { status: 401 }) };
-  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+  if (!(await esAdminMantenimiento(supabase, user.id))) {
     return {
       error: NextResponse.json(
-        { error: "Anotar una ausencia requiere nivel de edición en Mantenimiento" },
+        { error: "Anotar una ausencia requiere ser admin de Mantenimiento" },
         { status: 403 }
       ),
     };
@@ -220,6 +236,52 @@ async function problemaDePeriodoCerrado(
     );
   }
   return null;
+}
+
+/**
+ * Que no haya ya una ausencia de esa persona pisando esos días.
+ *
+ * No es prolijidad: el alta son dos toques y no pide confirmación —a propósito,
+ * porque las ausencias se cargan con 39 días de atraso y la pantalla sólo sirve
+ * si cuesta nada—, así que un doble toque o dos pestañas dejan **dos filas**.
+ * Y no se ve: la grilla pinta a la persona ausente igual, porque `estaAusente`
+ * usa `.some()`. Lo que se paga es después: cada una hay que borrarla por
+ * separado, y cada borrado escribe una fila de auditoría que no se saca nunca.
+ *
+ * La `TARDANZA` no cuenta, por la misma razón por la que no cuenta en la
+ * grilla: el que llega tarde vino a trabajar, y no es la misma novedad.
+ *
+ * Es sólo para el alta. El `PATCH` mueve una ausencia que ya existe y chocaría
+ * consigo misma; que un rango corregido pise otro es un caso distinto y lo
+ * resuelve quien corrige, mirando lo que ya cargó.
+ *
+ * Devuelve la respuesta de error, o null si no pisa nada.
+ */
+async function problemaDeSuperposicion(
+  db: SupabaseClient,
+  empleadoId: string,
+  desde: string,
+  hasta: string
+): Promise<NextResponse | null> {
+  const { data, error } = await db
+    .from("ausencias")
+    .select("fecha_desde, fecha_hasta, tipo")
+    .eq("empleado_id", empleadoId)
+    .lte("fecha_desde", hasta)
+    .gte("fecha_hasta", desde);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const pisa = (data ?? []).find((a) => !TIPOS_QUE_NO_SON_FALTA.includes(String(a.tipo)));
+  if (!pisa) return null;
+
+  return NextResponse.json(
+    {
+      error:
+        `Esa persona ya tiene una ausencia anotada del ${soloElDia(pisa.fecha_desde)} al ` +
+        `${soloElDia(pisa.fecha_hasta)}, que pisa esas fechas. Corregí esa en vez de anotar otra.`,
+    },
+    { status: 400 }
+  );
 }
 
 /** Los problemas del rango en sí. Vacío si está bien. */
@@ -503,6 +565,8 @@ export async function POST(request: Request) {
   if (noEsSuyo) return noEsSuyo;
   const cerrado = await problemaDePeriodoCerrado(db, empleadoId, dias);
   if (cerrado) return cerrado;
+  const pisa = await problemaDeSuperposicion(db, empleadoId, fechaDesde as string, fechaHasta as string);
+  if (pisa) return pisa;
 
   // `anioCorrespondiente` no viaja a propósito: sólo lo usa VACACIONES, que no
   // es uno de los cuatro tipos de acá.

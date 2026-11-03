@@ -9,6 +9,7 @@ import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { opcionesConUbicacion, type UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
+import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import RequerimientosClient from "./RequerimientosClient";
 
 export default async function RequerimientosPage({
@@ -112,6 +113,7 @@ export default async function RequerimientosPage({
       paginaInicial={paginaDeArranque(query)}
       sync={sync}
       umbralMontoAlto={umbralMontoAlto}
+      hayOdoo={hayCredencialesOdoo()}
     />
   );
 }

@@ -10,6 +10,7 @@ import { haceCuanto } from "@/lib/core/haceCuanto";
 import { fechaHora } from "@/lib/compras/constants";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 import { rangoQueIncluye } from "@/lib/rrhh/fichadas/rangoDeLista";
+import { diaDeLaSalida } from "@/lib/rrhh/fichadas/turnoDeNoche";
 import { DIAS_MAX_RANGO } from "@/lib/rrhh/lenox/rango";
 import { bloqueoPorUltimaSync, rangoPorDefecto, segundosDeEspera, textoDeEspera } from "@/lib/rrhh/lenox/pantalla";
 import AcreditadoDeFichada from "@/components/rrhh/AcreditadoDeFichada";
@@ -279,7 +280,13 @@ export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLi
         employeeId: form.employeeId,
         fecha: form.fecha,
         horaEntrada: `${form.fecha}T${form.horaEntrada}:00`,
-        horaSalida: form.horaSalida ? `${form.fecha}T${form.horaSalida}:00` : null,
+        // El día de la salida NO es siempre el de la entrada: en un turno de
+        // 20 a 4 es el siguiente. Este formulario tiene una sola fecha, así
+        // que lo decide `diaDeLaSalida` — un turno no termina antes de
+        // empezar. Es el mismo arreglo que el del modal de corrección.
+        horaSalida: form.horaSalida
+          ? `${diaDeLaSalida(form.fecha, form.horaEntrada, form.horaSalida)}T${form.horaSalida}:00`
+          : null,
       }),
     });
     setGuardandoManual(false);

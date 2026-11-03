@@ -1,7 +1,9 @@
 "use client";
 
 import Select from "@/components/Select";
-import { MODOS_DE_FALLA, CAUSAS_DE_FALLA, opcionesConLaActual } from "@/lib/mantenimiento/fallas";
+import {
+  MODOS_DE_FALLA, CAUSAS_DE_FALLA, opcionesConLaActual, LARGO_DEL_DETALLE,
+} from "@/lib/mantenimiento/fallas";
 
 /**
  * La falla que tuvo el equipo, al cerrar una OT.
@@ -108,6 +110,9 @@ export default function FallaDeLaOT({
           disabled={deshabilitado}
           className="input"
           placeholder="Ej: eje del lado motor"
+          // El mismo tope que valida la ruta: que no se pueda escribir de mas
+          // es mejor que escribir y que lo rechacen al guardar.
+          maxLength={LARGO_DEL_DETALLE}
         />
       </label>
     </div>

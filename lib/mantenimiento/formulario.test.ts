@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   indiceDeColumnas, laSerieEstaCongelada, maximoDeLaSerie, celdasDelAlta,
-  loQueSigueEnLaSerie, laFilaEstaLibre,
+  loQueSigueEnLaSerie, laFilaEstaLibre, celdaDeLaFechaComprometida,
 } from "./formulario";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
 /**
  * El encabezado real de «Respuestas de formulario», leido con la cuenta de
@@ -338,5 +339,44 @@ describe("el alta de una OT no deja entrar una formula", () => {
     expect(valorDe(r.celdas, 0)).toBe(2786);
     expect(typeof valorDe(r.celdas, 1)).toBe("number");
     expect(typeof valorDe(r.celdas, 26)).toBe("number");
+  });
+});
+
+/**
+ * Postergar una orden es reescribir SU celda de «Altas del sistema», porque la
+ * columna J del master es derrame y escribir ahí no queda.
+ */
+describe("la celda de la fecha comprometida", () => {
+  const ENC = ["N° OT", "Marca temporal", "DESCRIPCIÓN", "FECHA COMPROMETIDA"];
+  const FILAS = [ENC, [2896, 46320, "Sacamuestra", 46328], [2897, 46320, "Otra", 46328]];
+
+  it("encuentra la fila por el número de OT, no por la posición", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 2897, "2026-11-05");
+    expect(r).toEqual({ ok: true, fila: 3, columna: 3, valor: serialDelDia("2026-11-05") });
+  });
+
+  it("el valor va como serial y no como texto", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 2896, "2026-11-05");
+    expect(r.ok && typeof r.valor).toBe("number");
+  });
+
+  /**
+   * El caso que define el alcance: una OT del formulario no está en esta
+   * pestaña, y el mensaje tiene que decir por qué en vez de "no encontrada".
+   */
+  it("una OT que no creó el sistema no está, y lo explica", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 1234, "2026-11-05");
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("creó el sistema");
+  });
+
+  it("sin la columna en el encabezado no se escribe nada", () => {
+    const r = celdaDeLaFechaComprometida([["N° OT", "DESCRIPCIÓN"], [2896, "x"]], 2896, "2026-11-05");
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("FECHA COMPROMETIDA");
+  });
+
+  it("una fecha que no existe no se escribe", () => {
+    expect(celdaDeLaFechaComprometida(FILAS, 2896, "2026-02-30").ok).toBe(false);
   });
 });

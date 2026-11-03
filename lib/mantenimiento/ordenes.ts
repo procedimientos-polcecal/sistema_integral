@@ -84,6 +84,65 @@ const COL = {
 export const COLUMNA_OBSERVACION_PREVIA: number = COL.observacionPrevia;
 
 /**
+ * Las columnas del master que son **derrame** de los `IMPORTRANGE`, y la que
+ * calcula la propia planilla.
+ *
+ * ── POR QUÉ ESTO ESTÁ ACÁ Y NO EN UNA PANTALLA ──────────────────────────────
+ *
+ * Las columnas A a J y la S de la pestaña `OT` no tienen valor propio: son el
+ * derrame de cuatro `QUERY(IMPORTRANGE())` del libro de respuestas. Medido el
+ * 26/10/2026 sobre las filas de las OT 2896 y 2897: **ninguna de sus celdas de
+ * la A a la S tiene `userEnteredValue`**, o sea que no hay nada escrito ahí.
+ *
+ * Y eso tiene una consecuencia que no avisa: **escribir una corrección a mano
+ * en esas columnas no se guarda.** O bloquea el derrame con un `#REF!`, o el
+ * derrame la pisa al recalcular. Si entre las dos cosas pasa una
+ * sincronización, el sistema toma el valor nuevo y la siguiente lo devuelve al
+ * viejo — una fecha que se corrige y se descorrige sola, que es lo que se
+ * reportó ese día con la fecha de ejecución de la 2896 y la 2897.
+ *
+ * La L es otra cosa y por eso va aparte: no es derrame sino la fórmula de
+ * atrasado/al día del propio master. Tampoco se escribe, pero por otro motivo.
+ *
+ * El reparto vive **junto al mapa de columnas** a propósito. Una lista de
+ * «campos que no se pueden corregir» escrita en una pantalla se despega de la
+ * planilla el día que alguien mueve una columna, y lo haría en silencio: hay un
+ * test que exige que cada columna de `COL` esté en exactamente uno de los tres
+ * grupos, así que una columna nueva no puede quedarse sin clasificar.
+ */
+export const COLUMNAS_DE_DERRAME: readonly number[] = [
+  COL.otNumber, COL.fecha, COL.sector, COL.equipo, COL.especialidad,
+  COL.tipo, COL.quien, COL.descripcion, COL.repuesto, COL.fechaEjecucion,
+  COL.prioridad,
+];
+
+/** La que calcula la planilla sola. No se escribe, pero no es derrame. */
+export const COLUMNA_CALCULADA = 11;
+
+/** Las que sí son literales del master y el sistema puede escribir. */
+export const COLUMNAS_ESCRIBIBLES: readonly number[] = [
+  COL.fechaCierre, COL.estado, COL.contratista, COL.horas,
+  COL.operario1, COL.operario2, COL.operario3,
+  COL.frecuencia, COL.proximaFecha, COL.fotos,
+  COL.observaciones, COL.observacionPrevia,
+];
+
+/** Todas las columnas del mapa, para que el test pueda recorrerlas. */
+export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
+
+/**
+ * Cómo se nombran, para decírselo a quien mira la orden.
+ *
+ * El N° de OT no está: nadie va a querer corregirlo y nombrarlo sólo alarga la
+ * frase. Lo que importa es que estén los que una persona sí corrige.
+ */
+export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
+  "la fecha de la orden", "el sector", "el equipo", "la especialidad",
+  "el tipo", "quién lo realiza", "la descripción", "el repuesto",
+  "la fecha de ejecución", "la prioridad",
+];
+
+/**
  * El estado de la planilla, en el vocabulario del sistema.
  *
  * Lo que no se reconoce queda como "por hacer": es el estado del que se parte,
@@ -131,6 +190,18 @@ export interface OrdenLeida {
   fecha_ejecucion: string | null;
   fecha_cierre: string | null;
   estado: string;
+  /**
+   * La celda del estado **tal cual**, sin interpretar.
+   *
+   * `estado` pasa por `estadoDeTexto`, que a lo que no reconoce le pone «por
+   * hacer» — y eso incluye la celda vacía. Es lo correcto para importar: una
+   * orden sin clasificar es una orden que falta hacer. Pero borra la
+   * diferencia entre «la planilla dice Por hacer» y «la planilla no dice
+   * nada», y ésa es justamente la que hizo falta el 29/10/2026: ocho órdenes
+   * con el ESTADO en blanco que el contraste no podía ver, porque las leía
+   * como «por hacer» y el sistema también decía «por hacer».
+   */
+  estado_raw: string | null;
   contratista: string | null;
   horas: number | null;
   operario_1: string | null;
@@ -163,6 +234,7 @@ export function filaDeOrden(fila: unknown[], numeroFila: number): OrdenLeida | n
     fecha_ejecucion: fechaDeSheets(fila[COL.fechaEjecucion]),
     fecha_cierre: fechaDeSheets(fila[COL.fechaCierre]),
     estado: estadoDeTexto(fila[COL.estado]),
+    estado_raw: campo(fila[COL.estado]),
     contratista: campo(fila[COL.contratista]),
     horas: numero(fila[COL.horas]),
     operario_1: campo(fila[COL.operario1]),
@@ -303,6 +375,90 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
 }
 
 /**
+ * La orden **como la espera la tabla**: sin los campos que existen sólo para
+ * leer la planilla.
+ *
+ * ── POR QUÉ HACE FALTA UN FILTRO Y NO ALCANZA CON `...orden` ────────────────
+ *
+ * `OrdenLeida` fue uno a uno con las columnas de `ordenes_trabajo` desde que
+ * nació, y por eso la sincronización manda la orden entera al `upsert`. El
+ * 29/10/2026 entró `estado_raw` —la celda del ESTADO sin interpretar, que es
+ * lo que le faltaba al contraste para distinguir «dice Por hacer» de «no dice
+ * nada»— y con eso dejó de serlo. PostgREST no ignora un campo que no es
+ * columna: **corta el lote entero** con «Could not find the 'estado_raw'
+ * column of 'ordenes_trabajo' in the schema cache», así que la importación de
+ * OT no entró más hasta que se arregló.
+ *
+ * Y no lo vio nadie porque lo que se probó fue el parseo, que es puro y
+ * seguía bien. Lo que rompió es el empalme con la base, y eso no lo prueba
+ * ningún test del lado de acá.
+ *
+ * ── QUE NO SE GUARDE ES LA DECISIÓN, NO UN OLVIDO ──────────────────────────
+ *
+ * La celda cruda sirve durante la corrida, que es el único momento en que las
+ * dos versiones existen a la vez —la de la planilla y la del sistema—. Después
+ * los dos lados coinciden por construcción. Guardarla sería una columna que
+ * repite a `estado` en todas las filas menos en las ocho a las que les falta
+ * la fórmula, y que nadie volvería a leer.
+ *
+ * Vive **al lado de la interfaz** a propósito: lo que hay que acordarse al
+ * agregar un campo a `OrdenLeida` es si es columna o no, y ésta es la lista.
+ */
+export function paraLaBase(orden: OrdenLeida): Omit<OrdenLeida, "estado_raw"> {
+  // Nombrar `estado_raw` es justamente lo que lo saca del resto, así que el
+  // "no se usa" de acá es el efecto buscado y no un descuido.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { estado_raw, ...columnas } = orden;
+  return columnas;
+}
+
+/**
+ * El valor de una celda. Puede depender de en qué fila va a caer.
+ *
+ * Existe por la columna del estado: lo que se escribe para una orden «por
+ * hacer» es una fórmula que nombra a su propia fila —`=IF(J2276="","",L2276)`—
+ * y esa fila no se conoce acá, sino recién cuando `escribirEnLaFilaDeLaOT`
+ * busca la OT en el master. Una función es la forma de decir «esto lo completa
+ * quien sepa la fila» sin que `celdasParaRegistrar` tenga que recibirla.
+ */
+export type ValorDeCelda = string | ((fila: number) => string);
+
+/**
+ * Qué va en la columna **M (ESTADO)** para un estado del sistema.
+ *
+ * ── POR QUÉ «POR HACER» ES UNA FÓRMULA Y NO UNA PALABRA ─────────────────────
+ *
+ * Hasta el 29/10/2026 el sistema **no escribía nada** cuando la orden estaba
+ * por hacer, y el motivo que dejó escrito el código era que «la M trae
+ * `=IF(J="","",L)` y escribirla la reemplazaría por un literal». **Ese motivo
+ * era falso**, y medirlo lo dejó claro: la M no tiene fórmula de columna —de
+ * sus 2.299 celdas, 2.291 son literales («Realizado») y sólo cinco sueltas
+ * (M1266, M1269, M1368, M1682, M1770) llevan ese `=IF(...)`, puestas a mano de
+ * a una—. La que sí es una fórmula de verdad es la **L**: una sola
+ * `ARRAYFORMULA` en L3 que llena la columna entera.
+ *
+ * O sea que no escribir nada no dejaba la celda «calculándose»: la dejaba **en
+ * blanco**. Al 29/10/2026 había ocho órdenes así —2838, 2843, 2896, 2897,
+ * 2898, 2914, 2915 y 2928—, y dos de ellas ya mostraban «Atrasado» en la L con
+ * el ESTADO vacío al lado. Para quien mira la planilla, una orden sin estado.
+ *
+ * La fórmula arregla las dos puntas: la celda dice lo que la L calcula y **se
+ * actualiza sola** el día que la fecha se pasa, que es justo lo que el literal
+ * no hace. Y tiene una ventaja que el literal tampoco tiene: como nombra a su
+ * **propia** fila, sigue estando bien aunque el master se reordene —y se
+ * reordena, por N° de OT desde el 16/10/2026—, porque lo que lee es el J y el
+ * L que tenga al lado, sea de la orden que sea.
+ *
+ * Los demás estados van como palabra: «En proceso» y «Realizado» no se deducen
+ * de una fecha, así que ahí la L no sabe nada y la fórmula mentiría.
+ */
+export function celdaDeEstado(estado: string | null | undefined, fila: number): string {
+  if (!estado) return "";
+  if (estado === "POR_HACER") return `=IF(J${fila}="","",L${fila})`;
+  return EN_LA_PLANILLA[estado] ?? estado;
+}
+
+/**
  * Qué celdas hay que escribir en la planilla al registrar el trabajo.
  *
  * Sólo las que se pasaron: la planilla es la fuente y no se toca lo que nadie
@@ -315,19 +471,21 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
  * las observaciones— van por `textoParaLaCelda`. El estado sale de un
  * vocabulario cerrado, la fecha y las horas son número: ésos no se tocan,
  * porque prefijarlos los convertiría en texto y la planilla dejaría de poder
- * sumarlos.
+ * sumarlos. **Y el estado además puede ser una fórmula** —ver `celdaDeEstado`—,
+ * que es otra razón para que no lo toque `textoParaLaCelda`: le pondría el
+ * apóstrofo delante y la escribiría como texto.
  */
 export function celdasParaRegistrar(
   registro: RegistroDeOT
-): { letra: string; columna: number; valor: string }[] {
-  const celdas: { letra: string; columna: number; valor: string }[] = [];
+): { letra: string; columna: number; valor: ValorDeCelda }[] {
+  const celdas: { letra: string; columna: number; valor: ValorDeCelda }[] = [];
 
-  const sumar = (columna: number, valor: string) =>
+  const sumar = (columna: number, valor: ValorDeCelda) =>
     celdas.push({ letra: letra(columna), columna, valor });
 
   if (registro.estado !== undefined) {
     const v = registro.estado;
-    sumar(COL.estado, v ? EN_LA_PLANILLA[v] ?? v : "");
+    sumar(COL.estado, (fila) => celdaDeEstado(v, fila));
   }
   if (registro.fecha_cierre !== undefined) {
     sumar(COL.fechaCierre, fechaParaLaPlanilla(registro.fecha_cierre));

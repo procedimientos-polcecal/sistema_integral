@@ -9,10 +9,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ── QUÉ SE AUDITA Y QUÉ NO ──────────────────────────────────
  *
  * Las acciones **irreversibles**, no todo cambio de todo campo. El catálogo es
- * `ACCIONES` y hoy son nueve verbos sobre siete circuitos: postear un asiento
+ * `ACCIONES` y hoy son nueve verbos sobre ocho circuitos: postear un asiento
  * en Odoo, mover los permisos de un usuario, cerrar una liquidación, ajustar
  * stock, aprobar o denegar una compra, borrar una fila que la planilla espejada
- * dejó de tener, y corregir o borrar una ausencia (desde RRHH o desde el taller).
+ * dejó de tener, corregir o borrar una ausencia (desde RRHH o desde el taller),
+ * y cargar o reemplazar la referencia del ciclo del taller
+ * (`mant_programacion_referencia`, el octavo, del 26/10/2026: de esa fila sale
+ * la rotación de **todas** las semanas, así que moverla cambia lo que la
+ * pantalla dice de semanas que ya pasaron).
  *
  * Lo que ya tiene su propio registro no se duplica: el kardex de Inventario es
  * append-only con `creado_por` desde la 046, y `compras_historial` guarda cada
@@ -52,13 +56,15 @@ export const ACCIONES = [
   // que alguien pregunte donde fue a parar la OT 1843 no hay donde mirar.
   "borrar",
   // Lo escriben las dos rutas que tocan una ausencia —la de RRHH y la del
-  // encargado del taller— cuando alguien le cambia las fechas o el tipo. Es el
-  // único de los nueve que no es un acto de una sola dirección sino un cambio
-  // de un valor a otro, y por eso es el único que **necesita** `valor_anterior`
-  // y `valor_nuevo`: no hay historial de `ausencias`, y `calculos_diarios` se
-  // recalcula sobre las fechas nuevas, así que los días de los que la ausencia
-  // se fue vuelven a verse como si nunca hubiera pasado nada. Sin el par, el
-  // registro dice que alguien corrigió algo y no qué.
+  // encargado del taller— cuando alguien le cambia las fechas o el tipo, y la
+  // de la referencia del ciclo del taller. Es el único de los nueve que no es
+  // un acto de una sola dirección sino un cambio de un valor a otro, y por eso
+  // es el único que **necesita** `valor_anterior` y `valor_nuevo`: no hay
+  // historial de `ausencias`, y `calculos_diarios` se recalcula sobre las
+  // fechas nuevas, así que los días de los que la ausencia se fue vuelven a
+  // verse como si nunca hubiera pasado nada. Sin el par, el registro dice que
+  // alguien corrigió algo y no qué. Lo mismo del otro lado: reemplazar la
+  // referencia pisa la fila y no deja rastro de la rotación que mostraba antes.
   "corregir",
 ] as const;
 export type Accion = (typeof ACCIONES)[number];

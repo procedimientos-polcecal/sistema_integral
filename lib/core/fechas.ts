@@ -152,8 +152,11 @@ export function esMesValido(valor: unknown): valor is string {
  * interpole en un filtro de PostgREST (`.gte("fecha", v)`, `.or("...")`), así
  * que la forma sola no alcanza —`2026-02-30` cumple la regex— y por eso se
  * reconstruye la fecha y se comprueba que dé lo mismo. Estaba copiada
- * palabra por palabra en cuatro rutas de Mantenimiento; lo que merece
- * confianza vive acá, donde se puede probar.
+ * palabra por palabra en cinco rutas de Mantenimiento; lo que merece
+ * confianza vive acá, donde se puede probar. (Eran cuatro cuando se
+ * consolidó: la quinta, la de `programacion/route.ts`, se le había pasado a
+ * la pasada y se sumó el 26/10/2026 — que es justo lo que hace falta contar
+ * bien, porque el día que queden dos nadie se entera.)
  */
 export function esFechaIso(v: unknown): v is string {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;

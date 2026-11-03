@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   MODOS_DE_FALLA, CAUSAS_DE_FALLA, esModoDeFalla, esCausaDeFalla,
   etiquetaDeModo, etiquetaDeCausa, esquemaFalla, rankingDeFallas,
-  opcionesConLaActual,
+  opcionesConLaActual, LARGO_DEL_DETALLE,
   type OtConFalla,
 } from "@/lib/mantenimiento/fallas";
+import { validar } from "@/lib/core/validar";
 
 /** Una OT con falla, con lo mínimo y lo que cada test quiera cambiar. */
 const ot = (cambios: Partial<OtConFalla> = {}): OtConFalla => ({
@@ -69,6 +70,26 @@ describe("esquemaFalla", () => {
     expect(esquemaFalla.parse({ falla_detalle: "  eje lado motor  " }).falla_detalle).toBe("eje lado motor");
     expect(esquemaFalla.parse({ falla_detalle: "   " }).falla_detalle).toBeNull();
   });
+
+  it("el detalle tiene tope: es una línea, no un parte entero", () => {
+    // Sin tope, un párrafo pegado se guarda y después se dibuja debajo de cada
+    // OT en la ficha.
+    const r = esquemaFalla.safeParse({ falla_detalle: "x".repeat(LARGO_DEL_DETALLE + 1) });
+    expect(r.success).toBe(false);
+    expect(esquemaFalla.safeParse({ falla_detalle: "x".repeat(LARGO_DEL_DETALLE) }).success).toBe(true);
+  });
+
+  it("lo que no es texto se rechaza en castellano", () => {
+    // La pantalla nunca manda esto, pero la ruta es pública para quien tenga
+    // sesión: un número tiene que dar un mensaje del sistema, no el "Invalid
+    // input" que trae zod de fábrica.
+    const r = validar(esquemaFalla, { falla_modo: 42 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.problemas.join(" ")).toContain("texto");
+      expect(r.problemas.join(" ")).not.toContain("Invalid");
+    }
+  });
 });
 
 describe("rankingDeFallas", () => {
@@ -100,6 +121,16 @@ describe("rankingDeFallas", () => {
     // quebradura" y con causa "Rotura por fricción", el mismo modo aparecería
     // con dos nombres en la lista que existe justo para ver qué se repite.
     expect(r[0].titulo).toBe("Rotura");
+  });
+
+  it("dos claves que ya no están en el vocabulario no se llaman igual", () => {
+    // Las dos son desconocidas, pero son dos fallas distintas: titularlas a
+    // las dos «Sin clasificar» daría dos renglones con el mismo nombre.
+    const r = rankingDeFallas([
+      ot({ ot_number: 1, falla_modo: "SE_DESARMO", falla_causa: null }),
+      ot({ ot_number: 2, falla_modo: "SE_AFLOJO", falla_causa: null }),
+    ]);
+    expect(r.map((f) => f.titulo).sort()).toEqual(["SE_AFLOJO", "SE_DESARMO"]);
   });
 
   it("la que sólo tiene detalle entra como «Sin clasificar»", () => {

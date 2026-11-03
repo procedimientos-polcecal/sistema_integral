@@ -8,10 +8,15 @@ import {
   SESION,
   comoContesto,
   conSuArticulo,
+  cuerpoComoFormData,
   despuesDelIntento,
+  llevaArchivo,
   proximaAMandar,
   siNoSePudoAvisar,
   tomarLaCarga,
+  CAMPO_DEL_CUERPO,
+  CAMPO_DE_LA_FOTO,
+  INTENTOS_ANTES_DE_PARAR,
 } from "@/public/cola/colaOffline.js";
 import type { CargaEnCola } from "@/public/cola/colaOffline.js";
 // Sólo el mensaje, no la etiqueta del `sync`: `public/sw.js` no filtra por
@@ -276,7 +281,13 @@ function cargarSW(ventanas: Ventana[] = [], opciones: Opciones = {}) {
     // Las puras, de verdad: son las mismas reglas que corre la pantalla.
     comoContesto,
     conSuArticulo,
+    // Las dos de la foto también de verdad, y por el mismo motivo que las
+    // demás: lo que prueban los tests de abajo es que el aviso y la OT salen
+    // como salían y que la condición sale como multipart, y eso no se prueba
+    // contra una doble que conteste lo que uno quiera.
+    cuerpoComoFormData,
     despuesDelIntento,
+    llevaArchivo,
     proximaAMandar,
     siNoSePudoAvisar,
     tomarLaCarga,
@@ -1310,6 +1321,86 @@ describe("public/sw.js", () => {
     });
 
     /*
+     * ── LAS DOS FORMAS DE MANDAR UN CUERPO ─────────────────────────────────
+     *
+     * Desde el 30/10/2026 una carga que puede traer un archivo sale como
+     * `multipart/form-data`. **La promesa de ese cambio es que el aviso y la
+     * orden de trabajo salgan exactamente como salían**: son lo que la gente
+     * usa todos los días, y el `if` va alrededor de la construcción del
+     * pedido justamente para que su rama quede intacta.
+     *
+     * Estos tres tests son esa promesa escrita. El primero es el que importa:
+     * si alguien mete la condición adentro de la construcción del pedido en
+     * vez de alrededor, lo que se rompe es Mantenimiento y se nota acá.
+     */
+    const CONDICIONES = RUTA_DE.condicion;
+
+    /** El `init` del POST a esa ruta, tal como lo recibió `fetch`. */
+    function pedidoA(fetchDoble: { mock: { calls: unknown[][] } }, ruta: string) {
+      const llamada = fetchDoble.mock.calls.find(([url]) => url === ruta);
+      return llamada?.[1] as { method: string; headers: Record<string, string>; body: unknown };
+    }
+
+    for (const tipo of ["aviso", "orden"] as const) {
+      it(`el pedido de ${conSuArticulo(tipo)} sale igual que antes: JSON y su Content-Type`, async () => {
+        const ruta = RUTA_DE[tipo];
+        const cuerpo = { descripcion: "pérdida de aceite", clave: "k1" };
+        const { handlers, fetchDoble } = cargarSW([], {
+          cargas: [unaCarga({ tipo, cuerpo })],
+          red: async (url) =>
+            url === ruta ? contesta(200, { oa_number: "OA-1", ot_number: "OT-1" }) : RESPUESTA,
+        });
+        await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+
+        const init = pedidoA(fetchDoble, ruta);
+        expect(init.method).toBe("POST");
+        // Las cabeceras **completas** y no un `objectContaining`: lo que este
+        // test cuida es que no aparezca ni se vaya ninguna.
+        expect(init.headers).toEqual({
+          "Content-Type": "application/json",
+          [CABECERA_DEL_DISPARO]: DISPARO.fondo,
+        });
+        expect(init.body).toBe(JSON.stringify(cuerpo));
+        expect(init.body).not.toBeInstanceOf(FormData);
+      });
+    }
+
+    it("la condición sale como FormData, sin Content-Type, y la foto va aparte", async () => {
+      const foto = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [
+          unaCarga({
+            tipo: "condicion",
+            cuerpo: { descripcion: "falta la guarda", prioridad: 2, foto },
+          }),
+        ],
+        red: async (url) => (url === CONDICIONES ? contesta(200, { numero: "7" }) : RESPUESTA),
+      });
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+
+      const init = pedidoA(fetchDoble, CONDICIONES);
+      expect(init.method).toBe("POST");
+      // **SIN `Content-Type`**: lo pone el navegador, con el `boundary` que
+      // separa las partes. Escrito a mano queda sin boundary y el servidor no
+      // puede partir el cuerpo — un 400 definitivo sobre una carga que estaba
+      // bien.
+      expect(init.headers).toEqual({ [CABECERA_DEL_DISPARO]: DISPARO.fondo });
+
+      const forma = init.body as FormData;
+      expect(forma).toBeInstanceOf(FormData);
+      // El cuerpo entero en un campo de JSON, sin la foto adentro: ahí un
+      // `Blob` se serializa como `{}`, sin error y sin aviso.
+      expect(JSON.parse(String(forma.get(CAMPO_DEL_CUERPO)))).toEqual({
+        descripcion: "falta la guarda",
+        prioridad: 2,
+      });
+      expect(forma.get(CAMPO_DE_LA_FOTO)).toBeInstanceOf(Blob);
+
+      // Y entró: sale de la cola con el número que devolvió la ruta.
+      expect(cola.filas.size).toBe(0);
+    });
+
+    /*
      * DE DÓNDE SALIÓ LA CARGA, QUE ES LO QUE DECIDE SI HAY CORREO.
      *
      * El correo de una carga rechazada sale **sólo** cuando la mandó el
@@ -1380,6 +1471,68 @@ describe("public/sw.js", () => {
         JSON.stringify({ descripcion: "la de las ocho" }),
         JSON.stringify({ descripcion: "la de las doce" }),
       ]);
+    });
+
+    /*
+     * UNA CONDICIÓN TRABADA NO PUEDE TAPAR A LAS DE ATRÁS PARA SIEMPRE.
+     *
+     * El vaciado corta en el primer fallo y `proximaAMandar` ordena por
+     * `creadaEn`, así que la carga más vieja que falla bloquea la fila. Hasta
+     * el 30/10/2026 una carga permanentemente `esperando` era un accidente;
+     * con la foto de una condición insegura es un **resultado de diseño**: la
+     * ruta contesta error a propósito para no perder el `Blob`, y si lo que
+     * falla es Storage ese error es un 502, o sea pasajero, o sea para
+     * siempre. El aviso de Mantenimiento que alguien cargó esa mañana no salía
+     * hasta que una persona entrara a borrar la condición.
+     *
+     * El tope sólo aplica a las que ya entraron —su fila está escrita del otro
+     * lado, así que pararlas no pierde nada— y lo que prueba este test es la
+     * consecuencia, no el contador: **después del tope, la de atrás sale**.
+     */
+    it("una condición que ya entró y no sale deja de tapar a las de atrás", async () => {
+      const foto = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+      const { handlers, fetchDoble, cola } = cargarSW([], {
+        cargas: [
+          unaCarga({
+            clave: "trabada",
+            tipo: "condicion",
+            creadaEn: "2026-10-18T08:00:00.000Z",
+            cuerpo: { descripcion: "falta la guarda", foto },
+            // Cuatro intentos: éste es el quinto y es el que agota el tope.
+            intentos: INTENTOS_ANTES_DE_PARAR - 1,
+            yaEntro: "7",
+          }),
+          unaCarga({
+            clave: "el-aviso-de-la-mañana",
+            creadaEn: "2026-10-18T09:00:00.000Z",
+            cuerpo: { descripcion: "pérdida de aceite" },
+          }),
+        ],
+        red: async (url) => {
+          // Storage caído: la condición entra y la foto no, una y otra vez.
+          if (url === CONDICIONES) {
+            return contesta(502, { error: "faltó la foto", ya_entro: "7" });
+          }
+          if (url === AVISOS) return contesta(200, { oa_number: "OA-1" });
+          return RESPUESTA;
+        },
+      });
+
+      // Primer disparo: la trabada falla y corta el vaciado, como siempre.
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(cargasMandadas(fetchDoble)).toHaveLength(0);
+      const trabada = cola.filas.get("trabada")!;
+      expect(trabada.estado).toBe("parada");
+      // Y el texto deja de prometer el reintento que ya no va a pasar.
+      expect(trabada.ultimoError).toContain("deja de reintentarse sola");
+
+      // Segundo disparo: `proximaAMandar` saltea las `parada`, así que el
+      // aviso de la mañana sale. Es lo que antes no pasaba nunca.
+      await lanzar(handlers, "sync", { tag: "vaciar-la-cola" });
+      expect(cargasMandadas(fetchDoble)).toHaveLength(1);
+      expect(cola.filas.has("el-aviso-de-la-mañana")).toBe(false);
+      // La condición sigue ahí, con su número: no se perdió nada.
+      expect(cola.filas.get("trabada")?.yaEntro).toBe("7");
     });
 
     it("dos disparos a la vez no mandan la misma carga dos veces", async () => {

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { escribirCeldas } from "@/lib/core/sheets";
 import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
+import { escribirEnLaFilaDelAviso } from "@/lib/mantenimiento/planillaDelAviso";
+import { camposDelPendiente, elIntentoDelAviso } from "@/lib/mantenimiento/pendienteDelAviso";
 
 /**
  * Dejar un aviso apuntando a una orden de trabajo, de los dos lados.
@@ -27,6 +28,24 @@ import { COLUMNA_OT_ASIGNADA } from "@/lib/mantenimiento/avisos";
  * contesta, el enlace igual quedó hecho y se devuelve **lo que Google dijo,
  * sin traducir**, para que quien hizo la acción se entere de que la planilla
  * no lo sabe. Nunca un `console.warn`.
+ *
+ * ── Y SI NO LLEGA, QUEDA ANOTADO ────────────────────────────────────────────
+ *
+ * Desde el 29/10/2026. Antes el fallo iba sólo a la pantalla, y eso era un
+ * agujero igual al que tuvo el PATCH de las OT: `filaDeAviso` **vuelve a leer
+ * la columna `OT ASIGNADA`**, así que la sincronización siguiente pisaba
+ * `ot_asignada` con la celda vacía y la planilla no se enteraba nunca.
+ *
+ * Lo que lo hacía menos grave que en las OT —y conviene saberlo— es que
+ * `work_order_id` **no se importa** y es el que manda en `finalDelAviso`: la
+ * decisión nunca se perdió, el aviso siguió figurando con orden en el SdG. Lo
+ * que se perdía era que lo supiera quien mira la planilla y no entra al
+ * sistema. Medido el 26/10/2026, antes del arreglo: ningún aviso tenía
+ * `work_order_id` con la columna vacía.
+ *
+ * El pendiente se anota **por campo** (`sheets_pendiente_campos`), y ese
+ * detalle no es menor: el porqué está en el encabezado de
+ * `lib/mantenimiento/pendienteDelAviso.ts`.
  *
  * ── LAS DOS FALLAS NO SON LA MISMA, Y POR ESO VUELVEN SEPARADAS ─────────────
  *
@@ -78,24 +97,28 @@ export async function marcarElAviso(
         : {}),
     })
     .eq("id", avisoId)
-    .select("sheets_row")
+    .select("oa_number, sheets_row, sheets_pendiente_campos")
     .single();
 
   if (error) return { error: error.message, planillaError: null };
 
-  const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
-  const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
-  if (!planilla || !aviso?.sheets_row) return { error: null, planillaError: null };
+  const planillaError = await escribirEnLaFilaDelAviso(aviso, [
+    { columna: COLUMNA_OT_ASIGNADA, valor: String(otNumber) },
+  ]);
 
-  try {
-    await escribirCeldas(planilla, [{
-      pestana,
-      fila: aviso.sheets_row,
-      columna: COLUMNA_OT_ASIGNADA,
-      valor: String(otNumber),
-    }]);
-    return { error: null, planillaError: null };
-  } catch (e) {
-    return { error: null, planillaError: e instanceof Error ? e.message : String(e) };
-  }
+  // Y queda anotado. No es sólo una cola de reintentos: es lo único que evita
+  // que `sincronizarAvisos` vuelva a leer `OT ASIGNADA` y pise el enlace con la
+  // celda vacía. Qué se anota lo decide `elIntentoDelAviso`, con sus tests.
+  await admin
+    .from("avisos")
+    .update(
+      elIntentoDelAviso(
+        planillaError,
+        ["ot_asignada"],
+        camposDelPendiente(aviso.sheets_pendiente_campos)
+      )
+    )
+    .eq("id", avisoId);
+
+  return { error: null, planillaError };
 }

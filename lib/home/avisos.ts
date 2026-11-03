@@ -9,6 +9,7 @@ import { cantidadDelAviso, type Ritmo } from "./ritmo";
 export interface ConteosParaAvisos {
   rrhhSinClasificar: number;
   mantenimientoAtrasadas: number;
+  mantenimientoDivergencias: number;
   comprasEsperandoAprobacion: number;
   comprasConsultasAbiertas: number;
   inventarioSinPlanilla: number;
@@ -22,6 +23,9 @@ export interface ConteosParaAvisos {
   tallerVialSinEquipo: number;
   tallerVialSinService: number;
   trituracionSinPlanilla: number;
+  syhVencidas: number;
+  syhSinCompletar: number;
+  syhFotosSinRespaldar: number;
 }
 
 /**
@@ -35,6 +39,10 @@ export interface ConteosParaAvisos {
 const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href: string }[] = [
   { clave: "rrhhSinClasificar", id: "rrhh-sin-clasificar", titulo: "Ausencias sin clasificar", href: "/rrhh/asistencia?tab=dia" },
   { clave: "mantenimientoAtrasadas", id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", href: "/mantenimiento/ordenes?estado=ATRASADO" },
+  // Órdenes en las que el sistema y la planilla dicen cosas distintas. La
+  // tabla se rehace en cada sincronización, así que su tamaño es la
+  // divergencia de hoy y no un acumulado: lo que se arregla desaparece solo.
+  { clave: "mantenimientoDivergencias", id: "mant-divergencias", titulo: "Órdenes que dicen distinto en el sistema y en la planilla", href: "/mantenimiento/ordenes" },
   { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", href: "/compras/aprobaciones" },
   /*
    * Una pregunta de Mantenimiento por un repuesto que nadie contestó. Es el
@@ -97,6 +105,38 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    */
   { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", href: "/taller-vial/services" },
   { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", href: "/trituracion/partes" },
+  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", href: "/seguridad-higiene/condiciones?estado=Vencida" },
+  /*
+   * Es **un** aviso y no tres («sin evaluar», «sin asignar», «sin lugar»), a
+   * propósito. Una condición a la que le pusieron los cinco puntajes pero
+   * nunca le asignaron responsable ni fecha máxima **no puede vencer nunca** —no
+   * hay fecha que pase— y deja de ser «sin evaluar»: con un aviso por cada
+   * cosa, esa fila desaparecería de todos y del push para siempre. Juntos no
+   * hay por dónde escaparse. Cuenta lo mismo que `faltasPendientes`: las
+   * abiertas a las que les falta algo.
+   *
+   * Los href usan el vocabulario de los filtros de la pantalla (`Vencida`,
+   * `alguna`) y son lo que hacen los botones del encabezado de esa pantalla: lo
+   * ata `lib/seguridadHigiene/filtrosUrl.test.ts`.
+   */
+  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
+  /*
+   * La foto que lleva más de tres días sin copia en Drive: el respaldo está
+   * **atascado**, que no es lo mismo que «todavía no corrió el cron».
+   *
+   * Existe porque el cron (`syh-respaldo-de-fotos`) falla en silencio por
+   * diseño —la carpeta que falta, la carpeta en «Mi unidad», una foto que no
+   * sale— y el único rastro es una fila en `sincronizaciones` que ninguna
+   * pantalla lee. Las 52 fotos del Excel se perdieron exactamente así: un
+   * respaldo que no respalda y nadie se entera. Este aviso mira **el dato y no
+   * el log**: cuenta fotos, así que cubre los tres casos de una vez.
+   *
+   * **El umbral de tres días es lo que lo hace tolerable**, y no un detalle: el
+   * aviso sale también por push, y sin el umbral sonaría todas las mañanas con
+   * las fotos de ayer, que el cron de esta noche todavía no alcanzó. La cuenta
+   * está en `corteDeFotosAtascadas`, que tiene su test.
+   */
+  { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", href: "/seguridad-higiene" },
 ];
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
@@ -110,14 +150,14 @@ const NOMBRE: Record<Modulo, string> = {
   rrhh: "RRHH", mantenimiento: "Mantenimiento", remises: "Remises", compras: "Compras",
   inventario: "Inventario", produccion: "Producción", despacho: "Despacho",
   facturacion: "Facturación", cantera: "Cantera", calidad: "Calidad",
-  taller_vial: "Taller Vial", trituracion: "Trituración",
+  taller_vial: "Taller Vial", trituracion: "Trituración", seguridad_higiene: "Seguridad e Higiene",
 };
 
 const HREF: Record<Modulo, string> = {
   rrhh: "/rrhh", mantenimiento: "/mantenimiento", remises: "/remises", compras: "/compras",
   inventario: "/inventario", produccion: "/produccion", despacho: "/despacho",
   facturacion: "/facturacion", cantera: "/cantera", calidad: "/calidad",
-  taller_vial: "/taller-vial", trituracion: "/trituracion",
+  taller_vial: "/taller-vial", trituracion: "/trituracion", seguridad_higiene: "/seguridad-higiene",
 };
 
 /**

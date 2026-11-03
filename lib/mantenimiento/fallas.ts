@@ -99,17 +99,30 @@ export const etiquetaDeCausa = (clave: string | null | undefined): string | null
  * el conteo se muere en silencio, que es justo lo que estas dos listas existen
  * para evitar.
  */
+/**
+ * El detalle es una línea, no un parte.
+ *
+ * Se rechaza en vez de recortar: recortar pierde lo que alguien escribió sin
+ * decírselo, y abajo de cada OT de la ficha se dibuja entero.
+ */
+export const LARGO_DEL_DETALLE = 200;
+
+/*
+ * Un `z.string()` por fuera y no un `union`: con la unión, un valor que no es
+ * texto —un número por la ruta— da `invalid_union`, cuyo mensaje de fábrica es
+ * el "Invalid input" de zod, en inglés, y en este sistema nada en inglés llega
+ * a una pantalla. Así da `invalid_type`, que `problemaEnCastellano` ya traduce.
+ */
 const claveDe = (lista: readonly OpcionDeFalla[], que: string) =>
-  z.union([
-    z.literal(""), z.null(),
-    z.string().refine((v) => buscar(lista, v) !== null, `No es ${que} de la lista`),
-  ]).optional().transform((v) => (v ? v : null));
+  z.string().nullish()
+    .transform((v) => (v?.trim() ? v.trim() : null))
+    .refine((v) => v === null || buscar(lista, v) !== null, `No es ${que} de la lista`);
 
 export const esquemaFalla = z.object({
   falla_modo: claveDe(MODOS_DE_FALLA, "un modo de falla"),
   falla_causa: claveDe(CAUSAS_DE_FALLA, "una causa de falla"),
-  falla_detalle: z.union([z.string(), z.null()]).optional()
-    .transform((v) => (typeof v === "string" ? v.trim() || null : null)),
+  falla_detalle: z.string().max(LARGO_DEL_DETALLE).nullish()
+    .transform((v) => (v?.trim() ? v.trim() : null)),
 });
 
 /**
@@ -134,6 +147,16 @@ export function opcionesConLaActual(
   return [...lista, { clave, etiqueta: `${clave} (ya no está en la lista)`, corta: clave }];
 }
 
+/**
+ * Cuál de las dos fechas es la más nueva, como las compara todo este archivo:
+ * texto contra texto. Las fechas son `YYYY-MM-DD` y pasar por `Date` corre el
+ * día en un servidor en UTC. Una fecha nula nunca gana.
+ */
+const masReciente = (a: string | null, b: string | null): number => {
+  const x = a ?? "", y = b ?? "";
+  return x > y ? 1 : x < y ? -1 : 0;
+};
+
 /** Lo que el ranking necesita de una orden. */
 export interface OtConFalla {
   ot_number: number;
@@ -154,17 +177,29 @@ export interface FallaContada {
   ots: { numero: number; detalle: string | null; fecha: string | null }[];
 }
 
+/**
+ * Cómo se lee una clave: su forma corta, o la clave tal cual si el vocabulario
+ * dejó de tenerla. Dos claves retiradas distintas son dos fallas distintas, y
+ * llamarlas a las dos «Sin clasificar» daría dos renglones con el mismo
+ * nombre.
+ */
+function cortaDe(lista: readonly OpcionDeFalla[], clave: string | null): string | null {
+  const limpia = clave?.trim() || null;
+  if (!limpia) return null;
+  return buscar(lista, limpia)?.corta ?? limpia;
+}
+
 /** Cómo se lee una falla: el modo, el modo con su causa, o «Sin clasificar». */
 function tituloDe(modo: string | null, causa: string | null): string {
-  const m = buscar(MODOS_DE_FALLA, modo);
-  const c = buscar(CAUSAS_DE_FALLA, causa);
-  if (m && c) return `${m.corta} por ${c.corta}`;
-  // La misma forma corta que cuando tiene causa. Con la etiqueta entera, el
+  const m = cortaDe(MODOS_DE_FALLA, modo);
+  const c = cortaDe(CAUSAS_DE_FALLA, causa);
+  if (m && c) return `${m} por ${c}`;
+  // La misma forma corta que cuando tiene causa: con la etiqueta entera, el
   // mismo modo aparecería con dos nombres —"Rotura / quebradura" solo y
   // "Rotura por fricción" acompañado— en la lista que existe justo para ver
   // qué se repite.
-  if (m) return m.corta;
-  if (c) return `Por ${c.corta}`;
+  if (m) return m;
+  if (c) return `Por ${c}`;
   return "Sin clasificar";
 }
 
@@ -205,6 +240,6 @@ export function rankingDeFallas(ots: readonly OtConFalla[]): FallaContada[] {
   }
 
   return [...porClave.values()].sort(
-    (a, b) => b.veces - a.veces || (b.ultimaFecha ?? "").localeCompare(a.ultimaFecha ?? "")
+    (a, b) => b.veces - a.veces || masReciente(b.ultimaFecha, a.ultimaFecha)
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { TILES } from "./tiles";
 
 // El ícono default de Leaflet referencia rutas relativas que no resuelven
 // bien con el bundler de Next — se apunta directo al CDN, igual que hacía
@@ -13,15 +14,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
-
-const CARTO_TILES = {
-  url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-  opts: {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
-    maxZoom: 20,
-  },
-};
 
 const DEFAULT_CENTER: [number, number] = [-34.6037, -58.3816]; // Buenos Aires, fallback sin fábrica configurada
 
@@ -57,7 +49,7 @@ export default function PinMap({
     if (!elRef.current || mapRef.current) return;
     const center: [number, number] = lat != null && lng != null ? [lat, lng] : DEFAULT_CENTER;
     const map = L.map(elRef.current).setView(center, lat != null ? 15 : 12);
-    L.tileLayer(CARTO_TILES.url, CARTO_TILES.opts).addTo(map);
+    L.tileLayer(TILES.url, TILES.opts).addTo(map);
     if (lat != null && lng != null) {
       markerRef.current = L.marker([lat, lng]).addTo(map).bindPopup(popup ?? "").openPopup();
     }

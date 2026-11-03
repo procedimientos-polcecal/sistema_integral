@@ -32,13 +32,14 @@ interface Tarifa { id: string; valor: number | string; vigente_desde: string }
 const SLOTS = [1, 2, 3];
 
 export default function ConfiguracionClient({
-  operarios, contratistas, tipos, sectores, tarifas, esAdmin, puedeEditar,
+  operarios, contratistas, tipos, sectores, tarifas, razones, esAdmin, puedeEditar,
 }: {
   operarios: Operario[];
   contratistas: Contratista[];
   tipos: Tipo[];
   sectores: Sector[];
   tarifas: Tarifa[];
+  razones: Razon[];
   esAdmin: boolean;
   puedeEditar: boolean;
 }) {
@@ -75,6 +76,8 @@ export default function ConfiguracionClient({
 
       <TarifaDeLaHora tarifas={tarifas} esAdmin={esAdmin} llamar={llamar} />
 
+      <RazonesDePostergacion razones={razones} puedeEditar={puedeEditar} llamar={llamar} />
+
       <Contratistas contratistas={contratistas} puedeEditar={puedeEditar} llamar={llamar} />
 
       <ProveedoresSueltos puedeEditar={puedeEditar} />
@@ -103,6 +106,94 @@ export default function ConfiguracionClient({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Una razón por la que se posterga una OT. */
+interface Razon {
+  codigo: string;
+  etiqueta: string;
+  dias: number;
+  activa: boolean;
+  orden: number;
+}
+
+/**
+ * Cuántos días corre una OT según por qué se posterga.
+ *
+ * **Esto calibra, no inventa.** El código de cada razón es vocabulario cerrado
+ * del lado del servidor —de cada uno va a colgar una comprobación el día que la
+ * postergación automática entre—, así que acá no hay un botón de "agregar": se
+ * cambia la etiqueta, los días y si se ofrece o no. Una razón sin nada detrás
+ * sería un desplegable que no hace nada.
+ */
+function RazonesDePostergacion({
+  razones, puedeEditar, llamar,
+}: {
+  razones: Razon[];
+  puedeEditar: boolean;
+  llamar: (url: string, opciones: RequestInit) => Promise<boolean>;
+}) {
+  const [dias, setDias] = useState<Record<string, string>>({});
+
+  async function guardar(codigo: string, cambio: Record<string, unknown>) {
+    await llamar("/api/mantenimiento/razones-postergacion", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo, ...cambio }),
+    });
+  }
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold text-slate-700">Razones para postergar una OT</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Cuántos días se corre la fecha según por qué. El número viene puesto al postergar y
+          se puede cambiar ahí mismo; esto es lo que propone.
+        </p>
+      </div>
+
+      {razones.length === 0 ? (
+        <p className="text-sm text-slate-400">Todavía no hay razones cargadas.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {razones.map((r) => (
+            <li key={r.codigo} className="flex flex-wrap items-center gap-3 py-2">
+              <span className={`flex-1 min-w-0 text-sm ${r.activa ? "text-slate-800" : "text-slate-400 line-through"}`}>
+                {r.etiqueta}
+              </span>
+
+              {/* El ancho va en el `div` y no en el `input`: `.input` declara
+                  `width: 100%` fuera de toda capa y le gana a cualquier `w-*`
+                  que se le ponga al lado. */}
+              <div className="w-20 shrink-0">
+                <input
+                  type="number" min={1} max={90} className="input"
+                  value={dias[r.codigo] ?? String(r.dias)}
+                  disabled={!puedeEditar}
+                  onChange={(e) => setDias((d) => ({ ...d, [r.codigo]: e.target.value }))}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value);
+                    if (n !== r.dias && Number.isInteger(n)) guardar(r.codigo, { dias: n });
+                  }}
+                />
+              </div>
+              <span className="shrink-0 text-xs text-slate-400">días</span>
+
+              {puedeEditar && (
+                <button
+                  onClick={() => guardar(r.codigo, { activa: !r.activa })}
+                  className="shrink-0 text-xs text-slate-500 underline hover:text-slate-900"
+                >
+                  {r.activa ? "No ofrecerla" : "Ofrecerla"}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

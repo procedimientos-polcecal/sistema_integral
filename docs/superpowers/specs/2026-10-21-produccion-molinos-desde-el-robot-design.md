@@ -243,10 +243,20 @@ período.
 Cuando el robot no corta un turno, **los minutos y los kilos se acumulan en la
 fila siguiente**.
 
-Hay 16 filas de Filler 1 donde la marcha supera la duración teórica —una de
-**1.013 minutos en un bloque de 480**— y en 15 de las 16 hay turnos faltantes
+Hay 18 filas de Filler 1 donde la marcha supera la duración teórica —una de
+**1.013 minutos en un bloque de 480**— y en 14 de las 18 hay turnos faltantes
 inmediatamente antes cuya duración acumulada explica el exceso. En Filler 2
 pasa 4 veces.
+
+**Y la racha se corta en un día no operativo: no lo atraviesa.** Es la decisión
+más cara de este documento y la que más fácil se "simplifica" después, así que
+va con el número: contar las 24 horas de un domingo cerrado como tiempo
+disponible baja la utilización de Filler 1 de **85,3 % a 82,0 %** y convierte
+dos inconsistentes en acumulados. El motivo es que el día que la planta estuvo
+cerrada **no se sabe** cuánto de la marcha informada ocurrió entonces, así que
+esas horas no son disponibilidad: son una suposición. Cuando la racha corta y
+el exceso sigue sin explicarse, el turno queda `inconsistente` — para eso
+existe ese estado.
 
 Tratar esa fila como un turno normal da utilización arriba del 200 %. Tratar
 los faltantes como parada inventa horas que no existieron. **Las dos cosas están
@@ -265,10 +275,12 @@ Qué se hace, en este orden:
 **Un turno inconsistente pierde sus horas de los indicadores de tiempo
 —utilización, horas de marcha, horas no trabajadas— pero nunca sus toneladas.**
 Las toneladas las midió una balanza y el problema es del reloj; descartarlas
-sería perder producción real. Con la regla completa quedan **tres turnos
-inconsistentes de 797** en Filler 1 y **ninguno** en Filler 2. Los tres son
-rachas que cruzan un día no operativo, donde no hay manera honesta de decir
-cuánto tiempo estuvo disponible el molino.
+sería perder producción real. Con la regla completa quedan **cuatro turnos
+inconsistentes** en Filler 1 —`2026-05-26 3:59`, `2026-06-04 11:59`,
+`2026-08-10 11:59` y `2026-10-21 19:59`— y **ninguno** en Filler 2. Tres de los
+cuatro son rachas que cruzan un día no operativo, donde no hay manera honesta
+de decir cuánto tiempo estuvo disponible el molino; el cuarto es el exceso de
+18 minutos sin racha que lo explique.
 
 ### Y el corolario: el turno huérfano
 
@@ -527,7 +539,17 @@ Y el control de orden de magnitud, con la regla completa, sobre el archivo del
 | **Utilización** | **85,2 %** | **64,2 %** |
 | **Productividad** | **8,49 t/h** | **6,03 t/h** |
 | Días no operativos | 22 | 0 |
-| Turnos acumulados / inconsistentes / huérfanos | 14 / 3 / 44 | 2 / 0 / 3 |
+| Turnos acumulados / inconsistentes / huérfanos | 14 / 4 / 23 | 2 / 0 / 1 |
+
+**Los números de arriba son de un archivo con fecha, no constantes.** Se
+midieron sobre el zip del 19/10/2026; con el del 21/10 la utilización da 85,3 %
+y aparece un cuarto inconsistente. Lo que tiene que reproducirse es el **orden
+de magnitud y el reparto de estados**, no el decimal.
+
+Y una corrección anotada acá porque el error era fácil de cometer: los
+huérfanos son los que **ninguna racha absorbió**, no todos los turnos
+faltantes. Contados de la segunda manera dan 44 en vez de 23, y ese 44 estuvo
+en este documento hasta el 29/10/2026.
 
 Un resultado lejos de eso es un error de la importación, no una novedad de la
 planta. **La utilización de Filler 2 sube a 87 % si alguien marca sus 34 días en
