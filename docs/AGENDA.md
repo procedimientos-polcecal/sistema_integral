@@ -533,9 +533,26 @@ fila recién insertada, así que sola tumbaba todo alta hecha con la sesión de 
 cosas se ejercitó contra la base ni contra Google.** No había base local (la migración
 no está aplicada), Google valida el dominio del endpoint antes de abrir un canal, y
 las rutas y la pantalla no tienen tests en este repo. En cada punto va qué mirar y qué
-se vería si estuviera mal. **Ordenados por lo que más duele si falla en silencio.**
+se vería si estuviera mal. **Ordenados por lo que más duele si falla en silencio**, salvo los dos primeros, que
+son de orden de despliegue y van arriba porque se hacen antes que todo lo demás.
 
-1. **La pantalla nunca se abrió en un navegador.** Se verificó con `tsc`, el build,
+1. **El código y la migración van en la misma ventana, y la migración no puede llegar
+   después.** Si el código llega antes, `seguirALasOT` no puede leer `agenda_eventos` y deja
+   un fallo, y la sincronización de OT escribe **una segunda fila `mantenimiento / ordenes`
+   con `ok: false`**: la pantalla va a decir que la sincronización de OT falló aunque haya
+   importado bien. Y peor: `antesDeBorrar` contesta «no se pudo mirar si la orden tiene un
+   evento en la Agenda» para **todas** las OT candidatas, así que **el borrado de espejo de
+   OT deja de borrar** mientras tanto. Ninguna de las dos cosas dice que la causa es la
+   migración que falta: el mensaje es un error de PostgREST sobre una tabla, y se lee como
+   un problema de la planilla.
+2. **La campana consulta la Agenda en cada carga de página de todo el sistema**
+   (`contarDivergenciasSinVer` y `leerLaSaludDeLaAgenda`, desde `avisosDeUsuario`), así que
+   antes de la migración tira un error de PostgREST **por cada vista de cada usuario**. Está
+   atrapado y devuelve 0, de modo que nadie ve nada roto, pero el log se llena de
+   `agenda: no se pudieron contar las divergencias sin ver` y `agenda: no se pudo comprobar
+   la salud de la Agenda`. **Eso no es síntoma de otra cosa**: es la migración que falta, y
+   se va solo al aplicarla.
+3. **La pantalla nunca se abrió en un navegador.** Se verificó con `tsc`, el build,
    `revisar-responsive` y las funciones puras, no con la migración corrida. Lo primero
    que hay que mirar:
    - que `/agenda` cargue para alguien **sin Mantenimiento** (ni la lectura del número de
@@ -546,14 +563,14 @@ se vería si estuviera mal. **Ordenados por lo que más duele si falla en silenc
      que no terminó, el último mes y **todo lo divergido sin importar la fecha**;
    - el flujo completo de crear, editar y borrar, y que la pantalla se vea bien en el
      teléfono (donde la va a abrir la mitad del equipo).
-2. **Las tres comprobaciones de RLS, con sesiones reales y no en el editor SQL** (donde
+4. **Las tres comprobaciones de RLS, con sesiones reales y no en el editor SQL** (donde
    RLS no corre): crear un evento con la sesión del dueño **con `RETURNING`**; un `select`
    de cada tabla con un usuario ajeno al evento (no debe ver nada); y uno invitado (debe ver
    el evento y sus invitados). La ausencia de recursión (`42P17`) depende de que las
    funciones corran como el dueño de las tablas; **con `force row level security` la
    recursión vuelve**, y sin detección en planificación termina en `54001`. Si algo falla,
    falla en el primer `select`.
-3. **El `eq` sobre `timestamptz` de la anotación condicional** (`revisarLaCasilla`):
+5. **El `eq` sobre `timestamptz` de la anotación condicional** (`revisarLaCasilla`):
    compara `inicio_escrito` y `fin_escrito` contra el texto que se leyó. **Si el formato de
    fecha no resuelve, ni el barrido ni el webhook anotan nunca una divergencia, y el sistema
    se ve exactamente igual que si funcionara: todo verde, la campana en cero.** Es el
@@ -562,13 +579,13 @@ se vería si estuviera mal. **Ordenados por lo que más duele si falla en silenc
    último deja la corrida **roja** nombrando el `eq`. Primera cosa a mirar en
    `agenda / barrido`: «N divergencias detectadas, 0 anotadas». Para probarlo, borrar a
    mano un evento en Google y mirar si la fila queda con `divergencia`.
-4. **El plazo real que Google le da a un canal de `events.watch`.** `abrirCanal` devuelve
+6. **El plazo real que Google le da a un canal de `events.watch`.** `abrirCanal` devuelve
    el `vence` real y es el que manda, pero **no se midió** (no se puede desde local). El
    margen de renovación de 48 h y la frecuencia diaria del cron **descansan en que ese
    plazo sea bastante mayor que dos días**. Si un día Google devuelve uno más corto, el
    cron diario ya no alcanza y hay que cambiar la frecuencia. Mirar la columna `vence` de
    `agenda_canales` después de la primera corrida.
-5. **`abrirCanal` y `cerrarCanal` contra Google.** Sus tests fijan la lectura de la API
+7. **`abrirCanal` y `cerrarCanal` contra Google.** Sus tests fijan la lectura de la API
    (forma del cuerpo, `expiration` en ms), no una medición. Y **Google valida que el
    dominio esté verificado en el proyecto de Google Cloud** antes de abrir el canal: si no
    lo está, el mensaje queda anotado en `agenda / canales` tal cual, con la casilla. Con una
@@ -576,34 +593,50 @@ se vería si estuviera mal. **Ordenados por lo que más duele si falla en silenc
    quedaron sin abrir (no cae en `VERCEL_URL`). Comprobar también que el endpoint recibe lo
    de Google y no un 307: un `POST` sin headers a `/api/agenda/google` tiene que dar **401**,
    no 307.
-6. **El embed `ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente,
+8. **El embed `ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente,
    fecha_cierre, estado)`** del `select` de `seguirALasOT`. Por el `unique` de `ot_id`
    debería volver un objeto, y el código acepta objeto o arreglo; pero no se vio. Si el
    embed no resolviera, ningún evento seguiría a su OT y nada lo diría.
-7. **El formato de `fecha_ejecucion`.** El código asume `AAAA-MM-DD` (la columna es `date`
+9. **El formato de `fecha_ejecucion`.** El código asume `AAAA-MM-DD` (la columna es `date`
    en la migración `005`, pero varias tablas de Mantenimiento las creó un delta aplicado a
    mano, así que el tipo real de producción no se leyó). Una fecha mal formada se avisa en
    `aviso` y no se escribe; mirar los `aviso` de la primera sincronización.
-8. **Que los `aviso` y los `google_pendiente` de la primera sincronización sean cero o
+10. **Que los `aviso` y los `google_pendiente` de la primera sincronización sean cero o
    se expliquen.** La primera corrida de `sincronizarOrdenes` con eventos de OT existentes
    es la que ejercita `seguirALasOT` y el borrado de espejo con Google real.
-9. **El horario que Google devuelve contra el que se escribió.** `mismoMomento` está
+11. **El horario que Google devuelve contra el que se escribió.** `mismoMomento` está
    probado con los formatos que se *esperan* (`-03:00`, `Z`, sin zona). Si Google devolviera
    otro (fracciones, otra zona del calendario), cada eco saldría «movido» y cada OT
    mandada sonaría: **mirar que la primera OT mandada al calendario no produzca una
    divergencia sola** a los pocos segundos.
-10. **El push de la divergencia** —que llegue, que la `url` abra `/agenda` y no el inicio,
+12. **El push de la divergencia** —que llegue, que la `url` abra `/agenda` y no el inicio,
     y que no suene dos veces por el mismo cambio—. Se probó con el payload plano contra el
     contrato (`lib/core/sw.test.ts` es el que tiene que seguir en verde), no en un
     teléfono.
-11. **La falsa alarma del primer día de `agenda-pasos-caidos`.** Es comportamiento correcto
+13. **La falsa alarma del primer día de `agenda-pasos-caidos`.** Es comportamiento correcto
     (ver arriba), pero conviene avisarle a quien administra para que no la tome por un
     fallo.
-12. **La cuota de Calendar con la tormenta de ecos.** El cálculo (~400 lecturas) está
+14. **La cuota de Calendar con la tormenta de ecos.** El cálculo (~400 lecturas) está
     medido sobre 26 OT, no observado. Si muerde, aparece en `agenda / aviso_de_google`.
-13. **Si el `PATCH` resetea los RSVP** (ver arriba): sólo se ve con un evento de prueba en
+15. **Si el `PATCH` resetea los RSVP** (ver arriba): sólo se ve con un evento de prueba en
     el calendario de otra persona.
+16. **El estado «pendiente + divergencia»**: una fila de `agenda_eventos` con `google_pendiente`
+    **y** `divergencia` puestas a la vez. Se llega así si `moverElEvento` escribió horario +
+    pendiente, Google aceptó, y `anotarEnLaFila` falló las dos veces: queda `escrito` viejo,
+    Google nuevo y el pendiente. Esa noche el barrido compara viejo contra nuevo, da
+    `movido` y manda un push por un movimiento que nadie hizo. **Qué significa: esa escritura
+    ya no se reintenta nunca**, porque `quePendientesReintentar` salta lo divergido (a
+    propósito, para no pisar lo que una persona hizo en Google). Desde el 03/11/2026
+    `revisarLaCasilla` lo nombra en `fallos` —la fila de `agenda / barrido` o `agenda /
+    aviso_de_google` sale en rojo con el id del evento y la casilla— y la tarjeta de la
+    Agenda dice que no se reintenta. **No se arregla filtrando `google_pendiente` fuera del
+    `select` de la revisión**: abriría el agujero por el otro lado (si además una persona
+    movió el evento, el reintento la pisaría). Es un estado que merece su propia vuelta de
+    diseño, no un parche: acá sólo se dejó de ocultarlo. Para mirarlo a mano:
+    `select id, casilla, divergencia, google_pendiente from agenda_eventos where
+    google_pendiente is not null and divergencia is not null;`
 
 Antes de todo eso, el orden es: **aplicar `20261102102403_agenda_schema.sql`** (y la
-`20261018134754` si falta), hacer las comprobaciones de RLS, correr el cron a mano
+`20261018134754` si falta) **en la misma ventana que el despliegue del código** (puntos 1
+y 2), hacer las comprobaciones de RLS, correr el cron a mano
 (`/api/cron/agenda` con el `CRON_SECRET`) y leer las tres filas de `sincronizaciones`.
