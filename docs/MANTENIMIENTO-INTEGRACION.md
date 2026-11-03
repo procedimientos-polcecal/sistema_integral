@@ -2229,6 +2229,22 @@ Al lado está **«Elegir los N que se ven»**, que es lo que convierte el filtro
 una forma de juntar: se filtra por sector, se eligen todos, se juntan. Los
 renglones que ya son OT no entran en esa selección.
 
+**Y uno por equipo, que parece la gemela y no lo es** (03/11/2026). Lista sólo
+los equipos que esa carga tiene —no los 269 del catálogo—, se combina con el de
+sector y con los chips, y su razón de ser es la opción «— sin equipo —», que
+contesta de un vistazo cuántas líneas quedaron sin máquina. La diferencia que
+hay que tener presente: **sin sector un renglón no genera, y sin equipo genera
+igual** —`enOrdenes` no pide el equipo—. O sea que «sin equipo» no es una cola
+de trabajo pendiente sino una pregunta: esas horas no van a sumar al costo ni al
+MTBF de ninguna máquina. La pantalla lo dice cuando se elige ese filtro, para
+que nadie lo lea como algo que hay que completar antes de generar.
+
+Y la trampa que no se ve desde el filtro: **un grupo sólo conserva el equipo si
+todos sus renglones apuntan al mismo**. Juntar uno con equipo y uno sin deja la
+OT sin equipo —quedarse con el único que hay le daría al MTBF de esa máquina las
+horas de las otras tareas—, así que filtrar por equipo y juntar lo que queda a
+la vista no garantiza que la orden salga con él.
+
 #### Generar una sola OT sin juntar nada (03/11/2026)
 
 El botón de abajo genera **todo lo que puede salir**, y con el Excel eso no era

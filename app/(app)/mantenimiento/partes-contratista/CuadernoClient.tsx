@@ -237,6 +237,8 @@ export default function CuadernoClient({
   const [filtro, setFiltro] = useState<IdDeFiltro>("todos");
   /** "" todos · "sin" los que no tienen sector · si no, el id del sector. */
   const [sectorFiltrado, setSectorFiltrado] = useState<string>("");
+  /** Lo mismo con el equipo. Los dos se combinan entre sí y con los chips. */
+  const [equipoFiltrado, setEquipoFiltrado] = useState<string>("");
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
   const [renglonActivo, setRenglonActivo] = useState<string | null>(null);
   const [fotoElegida, setFotoElegida] = useState<string | null>(null);
@@ -419,10 +421,35 @@ export default function CuadernoClient({
 
   const sinSector = renglones.filter((r) => !r.sector_id).length;
 
+  /**
+   * Los equipos que de verdad hay en esta carga, por el mismo motivo que los
+   * sectores: la planta tiene cientos y acá aparecen unos pocos.
+   *
+   * **No es la gemela del de sector, y conviene saberlo**: sin sector un
+   * renglón **no genera**, y sin equipo genera igual —`enOrdenes` no lo pide—.
+   * O sea que «sin equipo» no es una cola de trabajo pendiente sino una
+   * pregunta: esas horas no van a sumar al costo ni al MTBF de ninguna máquina.
+   */
+  const equiposDeLaCarga = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const r of renglones) if (r.equipo_id) cuenta.set(r.equipo_id, (cuenta.get(r.equipo_id) ?? 0) + 1);
+    return [...cuenta]
+      .map(([id, n]) => {
+        const e = equipoPorId.get(id);
+        return { id, nombre: e ? (e.code ? `${e.code} · ${e.name}` : e.name) : "(equipo que ya no está)", n };
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [renglones, equipoPorId]);
+
+  const sinEquipo = renglones.filter((r) => !r.equipo_id).length;
+
   const pasaElSector = (r: Renglon) =>
     sectorFiltrado === "" ? true : sectorFiltrado === "sin" ? !r.sector_id : r.sector_id === sectorFiltrado;
 
-  const visibles = renglones.filter(filtroActual.pasa).filter(pasaElSector);
+  const pasaElEquipo = (r: Renglon) =>
+    equipoFiltrado === "" ? true : equipoFiltrado === "sin" ? !r.equipo_id : r.equipo_id === equipoFiltrado;
+
+  const visibles = renglones.filter(filtroActual.pasa).filter(pasaElSector).filter(pasaElEquipo);
 
   /** Los que se ven y todavía se pueden juntar: los que ya son OT no entran. */
   const elegiblesALaVista = visibles.filter((r) => !r.orden_trabajo_id);
@@ -1400,9 +1427,9 @@ export default function CuadernoClient({
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               {filtros.map((f) => {
-                // La cuenta del chip ya mira el sector elegido: si no, diría
-                // «Sin sector (35)» mientras abajo se ven tres.
-                const n = renglones.filter(f.pasa).filter(pasaElSector).length;
+                // La cuenta del chip ya mira el sector y el equipo elegidos: si
+                // no, diría «Sin sector (35)» mientras abajo se ven tres.
+                const n = renglones.filter(f.pasa).filter(pasaElSector).filter(pasaElEquipo).length;
                 const marcado = f.id === filtro;
                 return (
                   <button
@@ -1422,7 +1449,9 @@ export default function CuadernoClient({
             </div>
 
             {/* Filtrar por sector es lo que hace manejable juntar: se ve de a un
-                sector por vez y se eligen todos los que quedan a la vista. */}
+                sector por vez y se eligen todos los que quedan a la vista. El
+                de equipo es para la otra pregunta —cuántas líneas no tienen
+                ninguno— y los dos se combinan entre sí y con los chips. */}
             <div className="flex flex-wrap items-end gap-2">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-slate-500">Sector</span>
@@ -1442,6 +1471,24 @@ export default function CuadernoClient({
                 </div>
               </label>
 
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Equipo</span>
+                <div className="w-full sm:w-72">
+                  <Select
+                    value={equipoFiltrado}
+                    onChange={(e) => setEquipoFiltrado(e.target.value)}
+                    aria-label="Filtrar por equipo"
+                    className={CLASE_CAMPO}
+                  >
+                    <option value="">Todos los equipos ({renglones.length})</option>
+                    {sinEquipo > 0 && <option value="sin">— sin equipo — ({sinEquipo})</option>}
+                    {equiposDeLaCarga.map((e) => (
+                      <option key={e.id} value={e.id}>{e.nombre} ({e.n})</option>
+                    ))}
+                  </Select>
+                </div>
+              </label>
+
               {puedeEditar && elegiblesALaVista.length > 0 && (
                 <button
                   type="button"
@@ -1452,16 +1499,29 @@ export default function CuadernoClient({
                 </button>
               )}
 
-              {sectorFiltrado !== "" && (
+              {(sectorFiltrado !== "" || equipoFiltrado !== "") && (
                 <button
                   type="button"
-                  onClick={() => setSectorFiltrado("")}
+                  onClick={() => { setSectorFiltrado(""); setEquipoFiltrado(""); }}
                   className="px-2 py-2 text-sm text-slate-500 underline"
                 >
-                  Quitar el filtro de sector
+                  {sectorFiltrado !== "" && equipoFiltrado !== ""
+                    ? "Quitar los dos filtros"
+                    : `Quitar el filtro de ${sectorFiltrado !== "" ? "sector" : "equipo"}`}
                 </button>
               )}
             </div>
+
+            {/* Sin equipo un renglón genera igual —no es lo mismo que sin
+                sector—, así que se dice qué se pierde en vez de dejar creer que
+                es algo que falta completar antes de generar. */}
+            {equipoFiltrado === "sin" && (
+              <p className="text-xs text-slate-500">
+                Un renglón sin equipo <strong>genera la OT igual</strong>: el equipo no es obligatorio,
+                a diferencia del sector. Lo que se pierde es que esas horas no suman al costo ni al
+                MTBF de ninguna máquina.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
