@@ -529,6 +529,73 @@ export default function CuadernoClient({
     [gruposElegidos, renglones]
   );
 
+  /**
+   * Las órdenes que saldrían de lo elegido. Sale de `enOrdenes` —la misma
+   * cuenta que corre el servidor— y no de la selección: elegir un renglón
+   * juntado pide **su grupo entero**, porque media orden no existe, y un
+   * renglón que todavía no puede generar no aparece acá en vez de prometer
+   * una orden que la ruta va a negar.
+   */
+  const ordenesDeLoElegido = useMemo(
+    () => salida.ordenes.filter((o) => o.renglon_ids.some((id) => seleccion.has(id))),
+    [salida.ordenes, seleccion]
+  );
+
+  /** Los elegidos que no salen todavía: sin sector, sin fecha, o sin horas ni precio. */
+  const elegidosQueNoSalen = useMemo(() => {
+    const cubiertos = new Set(ordenesDeLoElegido.flatMap((o) => o.renglon_ids));
+    return elegidos.filter((r) => !r.orden_trabajo_id && !cubiertos.has(r.id)).length;
+  }, [ordenesDeLoElegido, elegidos]);
+
+  /**
+   * Sacar un renglón de la carga. **Borra la fila**, que no es lo mismo que
+   * separar: existe para la tarea que ya tiene su OT cargada a mano y que no
+   * hay que volver a crear. El porqué completo está en la ruta.
+   */
+  async function sacarRenglon(r: Renglon) {
+    const horas = Number(r.horas) || 0;
+    const ok = await confirm({
+      title: "Sacar el renglón de la carga",
+      message:
+        `Se borra${r.linea ? ` el renglón de la línea ${r.linea}` : " el renglón"}: «${r.tarea.trim()}»` +
+        `${horas > 0 ? `, ${verHoras(horas)} h` : ""}${Number(r.costo) > 0 ? ` y $${costoParaElCampo(r.costo)}` : ""}. ` +
+        `Es para la tarea que ya tiene su orden de trabajo cargada a mano y no hay que volver a crear: ` +
+        `sacarla es decir que esas horas no se facturan desde acá. ` +
+        `No se deshace —queda registrado quién la sacó y qué decía—, y para recuperarla hay que ` +
+        `volver a cargar ${deExcel ? "la planilla" : "la foto"} en otra carga.`,
+      confirmText: "Sacar el renglón", cancelText: "Volver", danger: true,
+    });
+    if (!ok) return;
+
+    setError(""); setAviso(""); setOcupado(true);
+    try {
+      const res = await fetch(`/api/mantenimiento/cuaderno/renglones/${encodeURIComponent(r.id)}`, {
+        method: "DELETE",
+      });
+      const cuerpo = await leerJson<{ ok?: boolean; decia?: string; aviso?: string | null }>(res);
+      if (!res.ok || !cuerpo.ok) {
+        setError(cuerpo.error ?? `No se pudo sacar el renglón (HTTP ${res.status}).`);
+        return;
+      }
+      tocarRenglones((rs) => rs.filter((x) => x.id !== r.id));
+      setSeleccion((sel) => {
+        if (!sel.has(r.id)) return sel;
+        const n = new Set(sel);
+        n.delete(r.id);
+        return n;
+      });
+      setRenglonActivo((a) => (a === r.id ? null : a));
+      setAviso(
+        `Se sacó el renglón: ${cuerpo.decia ?? r.tarea.trim()}.` +
+        (cuerpo.aviso ? ` ${cuerpo.aviso}` : "")
+      );
+    } catch (e) {
+      setError(`No se pudo sacar el renglón: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function juntar(ids: string[]) {
     setError(""); setAviso(""); setOcupado(true);
     try {
@@ -856,10 +923,14 @@ export default function CuadernoClient({
 
   // ── Generar las órdenes ───────────────────────────────────
 
-  async function pedirGenerar(simular: boolean, confirmarDuplicados = false) {
+  async function pedirGenerar(simular: boolean, confirmarDuplicados = false, claves: string[] | null = null) {
     const res = await fetch("/api/mantenimiento/cuaderno/generar", {
       method: "POST", headers: JSON_HEADERS,
-      body: JSON.stringify({ cuaderno_id: cargaId, simular, confirmar_duplicados: confirmarDuplicados }),
+      body: JSON.stringify({
+        cuaderno_id: cargaId, simular, confirmar_duplicados: confirmarDuplicados,
+        // Sin claves sale todo, que es lo que hace el botón de abajo.
+        ...(claves ? { claves } : {}),
+      }),
     });
     const cuerpo = await leerJson<
       Partial<ResultadoDeGenerar> & { ordenes?: OrdenDelPlan[]; duplicados?: { aviso: string } | null }
@@ -877,19 +948,28 @@ export default function CuadernoClient({
    * Y si lo que calcula el servidor no coincide con lo que esta pantalla
    * muestra, no se genera: alguien más tocó la carga, y confirmar un número
    * que ya no es el que se ve es lo que esta pantalla existe para evitar.
+   *
+   * Con `claves` sale **sólo eso** —es el botón de la selección— y sin ellas
+   * sale todo. Las dos puntas filtran con la misma lista, así que la
+   * comparación de arriba sigue comparando lo mismo contra lo mismo.
    */
-  async function generar() {
+  async function generar(claves: string[] | null = null) {
     if (cargaId === NUEVA) return;
     setError(""); setAviso(""); setResultado(null); setOcupado(true);
     try {
-      const previa = await pedirGenerar(true);
+      const previa = await pedirGenerar(true, false, claves);
       if (previa.error || !previa.ordenes) {
         setError(previa.error ?? "La vista previa no llegó.");
         return;
       }
 
+      const elegidas = claves ? new Set(claves) : null;
       const delServidor = new Set(previa.ordenes.map((o) => `${o.clave}|${o.accion}`));
-      const deLaPantalla = new Set(salida.ordenes.map((o) => `${o.clave}|${o.accion}`));
+      const deLaPantalla = new Set(
+        salida.ordenes
+          .filter((o) => !elegidas || elegidas.has(o.clave))
+          .map((o) => `${o.clave}|${o.accion}`)
+      );
       const coincide =
         delServidor.size === deLaPantalla.size && [...delServidor].every((k) => deLaPantalla.has(k));
       if (!coincide) {
@@ -939,10 +1019,27 @@ export default function CuadernoClient({
       // una decisión que se toma mirando el aviso, en el mismo cartel.
       const duplicados = previa.duplicados?.aviso ?? null;
 
+      // **Lo que entra sin haber sido elegido, dicho antes de escribir.** Un
+      // renglón juntado arrastra a sus compañeros: la orden sale con el total
+      // del grupo, y media orden sería peor que no tener este botón.
+      const deMas = elegidas
+        ? [...new Set(entran.flatMap((o) => salida.ordenes.find((g) => g.clave === o.clave)?.renglon_ids ?? []))]
+            .filter((id) => !seleccion.has(id)).length
+        : 0;
+      const loElegido = elegidas
+        ? `Sale sólo lo que elegíste. ` +
+          (deMas > 0
+            ? `Entran también ${deMas} ${deMas === 1 ? "renglón que no elegíste porque está" : "renglones que no elegíste porque están"} juntados con los que sí. `
+            : "")
+        : "";
+
       const ok = await confirm({
-        title: duplicados ? "Ese período ya tiene órdenes cargadas" : "Generar las órdenes de trabajo",
+        title: duplicados
+          ? "Ese período ya tiene órdenes cargadas"
+          : elegidas ? "Generar las órdenes de lo elegido" : "Generar las órdenes de trabajo",
         message:
           (duplicados ? `${duplicados} ` : "") +
+          loElegido +
           `Se van a escribir en la planilla de producción: ${nuevas} órdenes nuevas` +
           `${sumadas > 0 ? ` y ${sumadas} que suman a una que ya existe` : ""}, con ${verHoras(horas)} h` +
           `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}.` +
@@ -1601,6 +1698,7 @@ export default function CuadernoClient({
                       onGuardar={(c) => guardar(r.id, c)}
                       onCambiarSector={(s) => cambiarSector(r, s)}
                       onConfirmarSector={() => confirmarSector(r)}
+                      onSacar={() => sacarRenglon(r)}
                       onError={setError}
                     />
                   );
@@ -1620,7 +1718,18 @@ export default function CuadernoClient({
                     </p>
                   )}
                   {elegidos.length === 1 && (
-                    <p className="mt-1 text-xs text-slate-500">Elegí al menos dos renglones para juntarlos.</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Elegí al menos dos renglones para juntarlos. Para una sola OT no hace falta juntar:
+                      alcanza con generar.
+                    </p>
+                  )}
+                  {elegidosQueNoSalen > 0 && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      {elegidosQueNoSalen === 1
+                        ? "Uno de los elegidos todavía no sale como OT"
+                        : `${elegidosQueNoSalen} de los elegidos todavía no salen como OT`}
+                      : les falta el sector, la fecha, o las horas y el precio.
+                    </p>
                   )}
                   {problemasDeJuntar.length > 0 && (
                     <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-rose-700">
@@ -1640,6 +1749,22 @@ export default function CuadernoClient({
                       className="rounded bg-slate-800 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                     >
                       Juntar en una OT
+                    </button>
+                    {/* Generar sin juntar. Juntar es para cuando dos renglones son
+                        la misma tarea; usarlo como el botón de «generá éste» mezclaba
+                        horas de tareas distintas en una sola orden. */}
+                    <button
+                      type="button"
+                      onClick={() => generar(ordenesDeLoElegido.map((o) => o.clave))}
+                      disabled={ocupado || ordenesDeLoElegido.length === 0}
+                      className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                      title="Escribe en la planilla sólo las órdenes de lo elegido"
+                    >
+                      {ocupado
+                        ? "Generando…"
+                        : ordenesDeLoElegido.length === 1
+                          ? "Generar la OT de lo elegido"
+                          : `Generar ${ordenesDeLoElegido.length} OT de lo elegido`}
                     </button>
                     <button
                       type="button"
@@ -1677,7 +1802,7 @@ export default function CuadernoClient({
               <div className="mt-3">
                 <button
                   type="button"
-                  onClick={generar}
+                  onClick={() => generar()}
                   disabled={ocupado || salida.ordenes.every((o) => o.accion === "denunciar")}
                   className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                 >
@@ -1833,6 +1958,8 @@ interface PropsDeFila {
   onGuardar: (cambios: Record<string, unknown>) => Promise<boolean>;
   onCambiarSector: (sectorId: string) => Promise<void>;
   onConfirmarSector: () => Promise<void>;
+  /** Borra el renglón de la carga. Pide confirmación arriba; acá sólo se ofrece. */
+  onSacar: () => Promise<void>;
   onError: (mensaje: string) => void;
 }
 
@@ -1841,7 +1968,7 @@ type Borrador = { fecha?: string; fecha_hasta?: string; tarea?: string; horas?: 
 function FilaDelRenglon({
   r, activo, marcado, puedeEditar, opcionesDeSector, opcionesDeEquipo, equipo, equipoAparte, etiquetaDeEquipo,
   nombreDelSector, conRango, pagina, hermanosEnPropuesta, integrantesDelGrupo,
-  onActivar, onMarcar, onGuardar, onCambiarSector, onConfirmarSector, onError,
+  onActivar, onMarcar, onGuardar, onCambiarSector, onConfirmarSector, onSacar, onError,
 }: PropsDeFila) {
   // Lo que se está tipeando, hasta que se sale del campo. Se muestra el borrador
   // si lo hay y, si no, lo que tiene el renglón: así un guardado que falla vuelve
@@ -2035,6 +2162,19 @@ function FilaDelRenglon({
           {r.linea ? ` · línea ${r.linea}` : ""}
           {r.lugar_raw ? ` · lugar: «${r.lugar_raw}»` : ""}
         </p>
+        {/* Sacar el renglón de la carga. Está acá abajo y chico a propósito: es
+            lo único irreversible de esta fila, y no se pone al lado de los campos
+            que se tocan todo el tiempo. Un renglón ya convertido no se saca. */}
+        {!bloqueado && (
+          <button
+            type="button"
+            onClick={onSacar}
+            className="shrink-0 self-end text-xs text-rose-700 underline"
+            title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
+          >
+            Sacar
+          </button>
+        )}
       </div>
 
       {/* Etiquetas */}

@@ -516,3 +516,91 @@ del mes, y lo que hay que atrapar es el dígito de más (106 → 1060).
 - **Un rango de días no se puede verificar.** Que una tarea diga del 24 al 31 es
   palabra de quien la anotó; el sistema sólo puede ver que el orden sea el
   correcto.
+
+## Generar de a una, y sacar lo que ya está cargado (03/11/2026)
+
+Dos pedidos que llegaron juntos al estrenar el Excel con el mes real, y que
+salen del mismo lugar: **con el Excel casi todo sale solo**, y el módulo estaba
+armado para el cuaderno manuscrito, donde casi nada sale solo.
+
+Medido sobre la carga real de octubre: de los 63 renglones, **46 ya salían como
+su propia OT y ninguno estaba juntado**; los otros 17 esperan el sector.
+
+### «No tengo la opción de generar una OT sin juntar»
+
+El malentendido que revela es el que había que cerrar: **juntar no es el camino
+para generar una sola**. Juntar existe para cuando dos renglones son la misma
+tarea de días distintos; usarlo como el botón de «generá éste» mete horas de
+tareas distintas en una orden, que es lo que el módulo evita. Lo que faltaba no
+era poder juntar de a uno: era poder **generar** de a uno.
+
+El único botón que había genera todo lo que puede salir. Con 46 órdenes listas
+contra un mes que ya tiene 91 OT de PIPARO cargadas a mano, eso no es una
+opción que alguien vaya a apretar.
+
+La ruta acepta `claves` —la `clave` de cada orden: el `grupo_id`, o `solo:<id>`
+si es un renglón suelto— y la barra de la selección tiene su propio botón. Las
+decisiones:
+
+- **El filtro cae sobre los grupos y no sobre los renglones.** `enOrdenes` corre
+  con la carga entera y las claves se eligen después. Elegir un renglón juntado
+  saca su grupo entero: una orden con la mitad de las horas de su grupo sería
+  peor que no tener el botón. Los compañeros que entran sin haber sido elegidos
+  se cuentan en el cartel antes de escribir.
+- **El tope de 25 y el freno de duplicados se cuentan después del filtro.**
+  Generar de a uno pasa por el mismo freno que generar de a 46; lo que cambia es
+  cuántas órdenes mira ese freno.
+- **La comparación pantalla-contra-servidor sigue en pie**, porque las dos
+  puntas filtran con la misma lista de claves. Era la defensa que impedía
+  confirmar un número que ya no es el que se ve, y un filtro aplicado de un solo
+  lado la habría roto sin romper nada visible.
+- **Se dice cuántos de los elegidos no salen todavía.** Un botón que dijera
+  «Generar 3» con 8 elegidos y no explicara los otros 5 es la clase de número
+  que nadie vuelve a creer.
+
+### «Que pueda borrar una línea, porque alguna capaz ya tiene OT creada»
+
+Es el caso real de octubre. Hasta ahora no había qué hacer con esas filas:
+dejarlas sin generar deja la carga eternamente en `EN_CHEQUEO` con renglones que
+nadie sabe por qué no salieron, y el freno de duplicados avisa que el período
+está cargado pero avisar no alcanza.
+
+- **Ruta propia (`cuaderno/renglones/[id]`), no el `DELETE` de `/renglones`**,
+  que saca el `grupo_id` y deja el renglón vivo. Un `DELETE` que según el cuerpo
+  desagrupa o destruye es la clase de ambigüedad que se paga una sola vez y
+  cara.
+- **No se saca el que ya es una orden del sistema**, ni el que está en un grupo
+  que ya generó. Lo segundo lo decide `sePuedeSeparar` —la misma función que usa
+  separar, no una copia—: sacarlo le cambiaría el total a una orden ya escrita
+  en la planilla.
+- **Se audita con `borrar`, y es el primero que escribe una persona.** Hasta acá
+  ese verbo lo escribían sólo las sincronizaciones. El argumento no es «borrar
+  es grave» sino cuál pregunta queda sin respuesta: el archivo de origen sigue
+  en el bucket, así que **qué decía** se contesta sin la tabla; **quién lo sacó
+  y cuándo** no. Y estas filas son con lo que se le paga al contratista: una que
+  desaparece es una hora que no se factura por el criterio de una persona. El
+  registro va **antes** del borrado —si no entra, no se borra—, que es el orden
+  que fijó `borradoDeEspejo.ts`.
+- **El estado de la carga se recalcula al sacar**, no sólo al generar: sacar el
+  último pendiente puede dejarla `GENERADA`. Por eso `actualizarElEstado` se
+  mudó de la ruta de generación a `lib/mantenimiento/cuadernoEstado.ts`.
+
+### Lo que se comprobó
+
+- `enOrdenes` sobre los 63 renglones reales: 46 órdenes, **las 46 sueltas**, 0
+  grupos, 17 pendientes y todos por `sin_sector`. Es lo que hace necesario el
+  botón.
+- El check vivo de `auditoria.accion` incluye `borrar`, y `filaDeAuditoria` acepta
+  el evento tal como lo arma la ruta: no hace falta ninguna migración.
+- `node scripts/que-cuelga-de.mjs mant_cuadernos_renglones` → **nada apunta a esa
+  tabla por clave foránea**, así que borrar una fila no se lleva nada en cascada.
+- El camino entero del borrado, sobre una carga de mentira creada y limpiada para
+  eso: el `delete` con la guarda `orden_trabajo_id is null` borra 1, el estado
+  queda `EN_CHEQUEO` con un pendiente y pasa a `GENERADA` cuando no queda ninguno.
+
+### El riesgo que queda asumido
+
+**Sacar un renglón es palabra de quien lo saca.** El sistema no puede comprobar
+que la OT cargada a mano cubra de verdad esa tarea: no hay nada que las ate, y
+el cruce por fecha y contratista es justo lo que el freno de duplicados ya hace
+sin poder decidir. Lo que queda es el registro de quién lo decidió.

@@ -10,8 +10,9 @@ import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/orde
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
-  enOrdenes, estadoDeLaCarga, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
+  enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
+import { actualizarElEstado } from "@/lib/mantenimiento/cuadernoEstado";
 import {
   valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
   type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
@@ -91,6 +92,24 @@ import {
  * de la misma carga, o de otra del mismo contratista, **no se frena contra lo
  * que generó el sistema**: está enlazado a renglones de algún cuaderno.
  *
+ * ── GENERAR SÓLO ALGUNAS: `claves` ──────────────────────────────────
+ *
+ * Sin `claves` sale todo lo que puede salir, que es lo de siempre. Con
+ * `claves` salen **sólo esas** —la `clave` de un grupo: su `grupo_id`, o
+ * `solo:<id>` si es un renglón suelto—. Existe porque la alternativa, para
+ * sacar una sola OT, era juntar el renglón con algo: juntar es para cuando dos
+ * renglones son la misma tarea, y usarlo como el botón de «generar éste»
+ * mezclaba horas de tareas distintas en una orden.
+ *
+ * El filtro cae sobre **los grupos, no sobre los renglones**: `enOrdenes` corre
+ * con la carga entera y recién después se eligen las claves. Elegir un renglón
+ * de un grupo saca el grupo entero, con los compañeros que no se eligieron, y
+ * la vista previa los muestra: una orden con la mitad de las horas de su grupo
+ * sería peor que no tener este filtro.
+ *
+ * El tope de 25 y el freno de duplicados se cuentan **después** del filtro, o
+ * sea sobre lo que de verdad se va a escribir.
+ *
  * ── SIN AUDITORÍA, A PROPÓSITO ──────────────────────────────────────────────
  *
  * La lista de acciones que pasan por `auditar()` es corta y deliberada, y la
@@ -106,6 +125,13 @@ import {
  */
 
 const TOPE_POR_CORRIDA = 25;
+
+/**
+ * Cuántas claves se aceptan en un pedido. No van a ningún `.in()` —se filtran
+ * en memoria—, así que no es el límite de PostgREST: es para que un cuerpo
+ * absurdo no entre, nada más. Una carga de un mes no pasa de un par de cientos.
+ */
+const TOPE_DE_CLAVES = 500;
 
 /**
  * Cuánto puede tardar la función, y cuándo dejar de empezar órdenes nuevas.
@@ -157,6 +183,19 @@ export async function POST(request: Request) {
   const simular = body?.simular === true;
   // El freno de los duplicados se levanta con esto, y sólo esto.
   const confirmarDuplicados = body?.confirmar_duplicados === true;
+  // Qué claves salen. Ausente o vacío quiere decir «todas», que es lo de
+  // siempre: el botón de abajo de la pantalla no manda nada.
+  const crudas = body?.claves;
+  if (crudas !== undefined && (!Array.isArray(crudas) || !crudas.every((c) => typeof c === "string" && c.trim() !== ""))) {
+    return NextResponse.json({ error: "«claves» tiene que ser una lista de claves de orden." }, { status: 400 });
+  }
+  const claves = Array.isArray(crudas) ? [...new Set((crudas as string[]).map((c) => c.trim()))] : null;
+  if (claves && claves.length > TOPE_DE_CLAVES) {
+    return NextResponse.json(
+      { error: `Se pueden pedir hasta ${TOPE_DE_CLAVES} órdenes por vez.` },
+      { status: 400 }
+    );
+  }
 
   if (!cuaderno_id) {
     return NextResponse.json({ error: "Falta decir de qué carga" }, { status: 400 });
@@ -196,8 +235,21 @@ export async function POST(request: Request) {
     );
     const renglones = filas as unknown as RenglonDelCuaderno[];
 
-    const plan = await armarElPlan(admin, renglones, contratista);
+    const plan = await armarElPlan(admin, renglones, contratista, claves);
     const pendientes = pendientesDeOrdenes(renglones);
+
+    // Pidieron claves y ninguna salió como orden. Decirlo es la diferencia
+    // entre «no había nada» y «lo que elegías todavía no puede generar».
+    if (claves && plan.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Lo que elegíste no sale como orden de trabajo todavía: le falta el sector, la fecha, " +
+            "o las horas y el precio. Mirá el motivo en la lista de renglones.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Sobre lo que **entra en esta corrida**: es lo que se va a crear de verdad.
     const duplicados = await buscarPosiblesDuplicados(
@@ -300,7 +352,9 @@ export async function POST(request: Request) {
     // cuenta—: se dice en `problemas` para que no pase por silencio.
     if (creadas.length + actualizadas.length > 0) {
       const falloElEstado = await actualizarElEstado(admin, cuaderno_id);
-      if (falloElEstado) problemas.push(falloElEstado);
+      if (falloElEstado) {
+        problemas.push(`Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${falloElEstado}`);
+      }
     }
 
     const quedaron = plan.filter((p) => p.grupo.accion !== "denunciar" && !p.entra).length + sinEmpezar;
@@ -308,32 +362,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ creadas, actualizadas, problemas, quedaron, pendientes });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
-  }
-}
-
-/**
- * Recalcula `mant_cuadernos.estado` desde los renglones y lo escribe. Devuelve
- * el motivo si no pudo, sin traducir.
- */
-async function actualizarElEstado(admin: Admin, cuadernoId: string): Promise<string | null> {
-  try {
-    const filas = await traerTodo<{ orden_trabajo_id: string | null }>((d, h) =>
-      admin
-        .from("mant_cuadernos_renglones")
-        .select("orden_trabajo_id")
-        .eq("cuaderno_id", cuadernoId)
-        .order("id")
-        .range(d, h)
-    );
-    const { error } = await admin
-      .from("mant_cuadernos")
-      .update({ estado: estadoDeLaCarga(filas) })
-      .eq("id", cuadernoId);
-    return error
-      ? `Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${error.message}`
-      : null;
-  } catch (e) {
-    return `Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
@@ -349,9 +377,14 @@ async function actualizarElEstado(admin: Admin, cuadernoId: string): Promise<str
 async function armarElPlan(
   admin: Admin,
   renglones: readonly RenglonDelCuaderno[],
-  contratista: string
+  contratista: string,
+  /** Sólo estas claves, o null por todas. Ver «Generar sólo algunas». */
+  claves: readonly string[] | null
 ): Promise<ItemDelPlan[]> {
-  const grupos = enOrdenes(renglones);
+  // `enOrdenes` corre con la carga entera y el filtro cae después: un grupo se
+  // arma con todos sus renglones o no se arma.
+  const elegidas = claves ? new Set(claves) : null;
+  const grupos = enOrdenes(renglones).filter((g) => !elegidas || elegidas.has(g.clave));
 
   const sectorIds = [...new Set(grupos.map((g) => g.sector_id).filter((s): s is string => !!s))];
   const equipoIds = [...new Set(grupos.map((g) => g.equipo_id).filter((e): e is string => !!e))];

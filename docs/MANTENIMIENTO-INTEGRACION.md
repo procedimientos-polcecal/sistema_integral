@@ -2229,6 +2229,81 @@ Al lado está **«Elegir los N que se ven»**, que es lo que convierte el filtro
 una forma de juntar: se filtra por sector, se eligen todos, se juntan. Los
 renglones que ya son OT no entran en esa selección.
 
+#### Generar una sola OT sin juntar nada (03/11/2026)
+
+El botón de abajo genera **todo lo que puede salir**, y con el Excel eso no era
+lo que hacía falta. Medido sobre la carga real de octubre: de los 63 renglones,
+**46 ya salían como su propia OT y ninguno estaba juntado**; los otros 17 esperan
+el sector. O sea que el único botón ofrecía escribir 46 órdenes de una, contra
+un mes que ya tiene 91 OT de PIPARO cargadas a mano.
+
+La pregunta que llegó fue «no tengo la opción de generar una OT sin juntar», y
+revela el malentendido que había que cerrar: **juntar no es el camino para
+generar una sola**. Juntar es para cuando dos renglones son la misma tarea;
+usarlo como el botón de «generá éste» mete horas de tareas distintas en una
+orden, que es exactamente lo que el módulo evita.
+
+Así que la generación acepta `claves` —la `clave` de cada orden: el `grupo_id`,
+o `solo:<id>` si es un renglón suelto— y la barra de la selección tiene su
+propio botón. Tres cosas que no se deducen del código:
+
+- **El filtro cae sobre los grupos, no sobre los renglones.** `enOrdenes` corre
+  con la carga entera y recién después se eligen las claves. Elegir un renglón
+  juntado saca **su grupo entero**, con los compañeros que no se eligieron, y el
+  cartel los cuenta antes de escribir: una orden con la mitad de las horas de su
+  grupo sería peor que no tener el botón.
+- **El tope de 25 y el freno de duplicados se cuentan después del filtro**, o sea
+  sobre lo que de verdad se va a escribir. Generar de a uno pasa por el mismo
+  freno que generar de a 46.
+- **La comparación pantalla-contra-servidor sigue en pie.** Las dos puntas
+  filtran con la misma lista de claves, así que lo que compara es lo mismo
+  contra lo mismo. Si no coincide, no se genera.
+
+Y lo que la pantalla dice de más: cuántos de los elegidos **no salen todavía**
+(sin sector, sin fecha, o sin horas ni precio). Un botón que dijera «Generar 3»
+con 8 elegidos y no explicara los 5 restantes es la clase de número que nadie
+vuelve a creer.
+
+#### Sacar un renglón de la carga (03/11/2026)
+
+La otra mitad del mismo pedido: «que pueda borrar una línea, porque alguna de
+esas capaz ya tiene OT creada». Es el caso real de octubre —la planilla trae
+tareas cuya orden ya está escrita a mano— y hasta ahora no había qué hacer con
+ellas: dejarlas sin generar deja la carga eternamente en `EN_CHEQUEO` con
+renglones que nadie sabe por qué no salieron.
+
+Vive en `app/api/mantenimiento/cuaderno/renglones/[id]` y **no en el `DELETE` de
+`/renglones`**, que saca el `grupo_id` y deja el renglón vivo. Son dos cosas
+distintas: un `DELETE` que según el cuerpo desagrupa o destruye es la clase de
+ambigüedad que se paga una sola vez y cara.
+
+Lo que no se deduce del código:
+
+- **No se saca el que ya es una orden de trabajo del sistema**, ni el que está
+  en un grupo que ya generó. Lo segundo lo decide `sePuedeSeparar`, la misma
+  función que usa separar y no una copia: sacarlo le cambiaría el total a una
+  orden ya escrita en la planilla.
+- **Se audita, con el verbo `borrar`, y es el primero que escribe una persona.**
+  Hasta acá ese verbo lo escribían sólo las sincronizaciones
+  (`lib/core/borradoDeEspejo.ts`). El argumento no es «borrar es grave» sino
+  cuál pregunta queda sin respuesta: el archivo de origen sigue en el bucket,
+  así que **qué decía** se contesta sin la tabla; **quién lo sacó y cuándo** no.
+  Y estas filas son con lo que se le paga al contratista, así que una que
+  desaparece es una hora que no se factura por el criterio de una persona.
+  El registro se escribe **antes** del borrado —si no entra, no se borra—,
+  que es el orden que fijó `borradoDeEspejo.ts`.
+- **El estado de la carga se recalcula al sacar**, no sólo al generar: sacar el
+  último pendiente puede dejarla `GENERADA`. Por eso `actualizarElEstado` se
+  mudó de la ruta de generación a `lib/mantenimiento/cuadernoEstado.ts`: con una
+  copia en cada ruta, el día que la regla cambie una de las dos la sigue
+  diciendo vieja.
+- **Nada cuelga de `mant_cuadernos_renglones` por clave foránea** (comprobado
+  con `node scripts/que-cuelga-de.mjs`), así que borrar una fila no se lleva
+  nada en cascada.
+
+El botón va chico y abajo en el renglón, no al lado de los campos que se tocan
+todo el tiempo: es lo único irreversible de esa fila.
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
