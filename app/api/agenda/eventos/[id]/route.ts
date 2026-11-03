@@ -6,7 +6,7 @@ import {
   aInstanteISO, esquemaDeCambio, eventoParaGoogle, idDeGoogleDe, invitadosLimpios,
 } from "@/lib/agenda/pedido";
 import {
-  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parPendiente,
+  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parPendiente, avisoDeUnBorradoFallido,
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados, sacarInvitados, diferenciaDeInvitados } from "@/lib/agenda/invitados";
 import { cargarEvento, rechazoDeEventoDeOT, anotarEnLaFila, POR_SI_YA_ESCRIBIO } from "@/lib/agenda/cargar";
@@ -240,12 +240,18 @@ export async function DELETE(
   });
   if (enGoogle.pendiente) {
     // La fila se queda: es lo único que sabe dónde está el evento vivo.
-    await anotarEnLaFila(supabase, id, columnasDespuesDeEscribir(enGoogle, new Date().toISOString()));
+    //
+    // **El fallo va a `aviso` y no a `google_pendiente`.** Un pendiente es «falta
+    // escribir esto» y el cron de la Agenda lo reintenta escribiendo: sobre un
+    // evento que la persona quiso borrar mandaría una modificación a los
+    // invitados. En `aviso` queda a la vista y nadie lo levanta solo.
+    const sinAnotar = await anotarEnLaFila(supabase, id, { aviso: avisoDeUnBorradoFallido(enGoogle.pendiente) });
     return NextResponse.json(
       {
         error:
           `No se borró: Google no pudo borrar el evento, y si se borrara la fila quedaría vivo en el ` +
-          `calendario de los invitados sin que nada lo nombre. Google dijo: ${enGoogle.pendiente}`,
+          `calendario de los invitados sin que nada lo nombre. Google dijo: ${enGoogle.pendiente}` +
+          (sinAnotar ? ` Ojo: tampoco se pudo dejar anotado el fallo en el evento (${sinAnotar}).` : ""),
       },
       { status: 502 }
     );

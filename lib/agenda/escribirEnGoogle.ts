@@ -242,6 +242,21 @@ export function columnasDespuesDeEscribir(
 }
 
 /**
+ * Lo que se anota en `aviso` cuando **Google rechazó borrar** un evento que una
+ * persona quiso borrar (la ruta `DELETE` de la Agenda).
+ *
+ * **Va a `aviso` y NUNCA a `google_pendiente`**, igual que el borrado de espejo
+ * de las OT (`borrarLosEventosDeLasOT`). `google_pendiente` significa «falta
+ * escribir esto en Google» y el cron de la Agenda lo reintenta escribiendo: sobre
+ * un evento que se quería borrar mandaría una modificación a los invitados. En
+ * `aviso` la fila queda a la vista, con lo que dijo Google sin traducir, y quien
+ * quiso borrarlo vuelve a intentarlo. El cron **no levanta `aviso` nunca**.
+ */
+export function avisoDeUnBorradoFallido(dijoGoogle: string): string {
+  return `No se pudo borrar el evento en Google, así que sigue vivo en el calendario de los invitados. Google dijo: ${dijoGoogle || SIN_MENSAJE}`;
+}
+
+/**
  * Lo que hay que decirle a quien hizo la acción cuando la escritura a Google no
  * quedó bien, o `null` si quedó bien. **La respuesta de la ruta lo lleva
  * siempre**: el evento está guardado en el SdG y eso, sin esta frase, parecería

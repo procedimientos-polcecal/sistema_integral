@@ -33,9 +33,29 @@ import { parDivergencia } from "./escribirEnGoogle";
  *    divergencia (ver `queDivergio`), y con un `syncToken` habría que filtrarlos
  *    a mano uno por uno.
  *
- * El costo asumido: cada aviso son tantas lecturas como eventos futuros tenga la
- * casilla, y las propias escrituras del SdG también avisan (el eco). Si algún
- * día eso no entra en la cuota de Google, se cambia con esto a la vista.
+ * El costo asumido, **medido y no un miedo**: cada aviso son tantas lecturas como
+ * eventos futuros tenga la casilla, y las propias escrituras del SdG también
+ * avisan (el eco). Al 03/11/2026 hay 26 OT con fecha de ejecución futura, así
+ * que una sincronización que mueva veinte son veinte avisos, cada uno releyendo
+ * unos veinte eventos: unas 400 lecturas contra una cuota de Calendar del orden
+ * del millón diario. No es un problema.
+ *
+ * **Y por eso NO hay debounce, y no hay que ponerlo «por las dudas».** Uno en
+ * memoria (una función serverless no tiene otra cosa) podría saltear un cambio
+ * real que llegue justo después de una revisión, y un cambio que no se detecta
+ * no vuelve a detectarse. Si la cuota algún día muerde, lo dice
+ * `sincronizaciones` (`agenda / aviso_de_google`, con la casilla) y se decide
+ * con el número nuevo.
+ *
+ * ── EL AVISO ES EL MOVIMIENTO; EL BARRIDO ES LA RED ─────────────────────────
+ *
+ * El webhook sólo se entera de lo que pasa mientras el canal vive. Un canal
+ * recién abierto o ya vencido **no revisa lo que pasó mientras no estaba**, y un
+ * cambio hecho en esa ventana no se detectaría nunca más. Por eso el cron diario
+ * recorre `revisarLaCasilla` para todas las casillas (`barrerLasCasillas`): es la
+ * misma idea del resumen diario de avisos, que cuenta el movimiento y los lunes
+ * manda los totales, porque algo que dejó de moverse no se nombra nunca más si
+ * sólo se cuenta el movimiento.
  *
  * ── UN CANAL MUERTO NO SE DISTINGUE DE UNO SANO ─────────────────────────────
  *
@@ -229,6 +249,14 @@ async function abrirUno(
   }
 }
 
+/** Las casillas de los usuarios activos: los calendarios que la Agenda mira. */
+async function casillasActivas(supabase: SupabaseClient): Promise<string[]> {
+  const usuarios = await traerTodo<{ email: string | null }>((desde, hasta) =>
+    supabase.from("usuarios").select("email").eq("activo", true).order("id").range(desde, hasta)
+  );
+  return usuarios.map((u) => u.email ?? "").filter((e) => e.trim() !== "");
+}
+
 /**
  * Deja un canal vivo por cada usuario activo. **No tira por un canal**: cada
  * casilla va por su cuenta y lo que falle vuelve en `fallos`, nombrada.
@@ -243,10 +271,7 @@ export async function ponerAlDiaLosCanales(
 ): Promise<DeLosCanales> {
   const r: DeLosCanales = { abiertos: [], renovados: [], fallos: [] };
 
-  const usuarios = await traerTodo<{ email: string | null }>((desde, hasta) =>
-    supabase.from("usuarios").select("email").eq("activo", true).order("id").range(desde, hasta)
-  );
-  const casillas = usuarios.map((u) => u.email ?? "").filter((e) => e.trim() !== "");
+  const casillas = await casillasActivas(supabase);
 
   const canales = await traerTodo<{ casilla: string; canal_id: string; recurso_id: string; vence: string }>(
     (desde, hasta) =>
@@ -392,4 +417,55 @@ export async function revisarLaCasilla(
     nuevas.push({ evento_id: f.id, divergencia });
   }
   return nuevas;
+}
+
+// ── El barrido diario ───────────────────────────────────────────────────────
+
+export interface DelBarrido {
+  casillas: number;
+  /** Las que acaban de divergir. Ya están anotadas en la fila, igual que las del aviso de Google. */
+  divergencias: { casilla: string; evento_id: string; divergencia: Divergencia }[];
+  /** Una frase por fallo, con la casilla nombrada. */
+  fallos: string[];
+}
+
+/**
+ * Revisa **todas** las casillas activas contra Google, como si cada una hubiera
+ * avisado: es la red que cubre lo que un canal no vio (ver el encabezado). Escribe
+ * la divergencia exactamente igual que el webhook, porque usa la misma
+ * `revisarLaCasilla`, así que **no hace falta nada de la Tarea 10 para que
+ * quede**: la campana la levanta de la fila.
+ *
+ * **Nunca tira por una casilla**: cada una va por su cuenta y lo que falle vuelve
+ * en `fallos` nombrándola. Con `presupuestoMs` corta antes de que Vercel mate la
+ * función, y **lo dice**: las casillas que no se alcanzaron a mirar van nombradas.
+ * El orden es el de `usuarios`, así que si se cortara seguido se miraría siempre
+ * a las mismas primero y habría que rotarlas. Tira sólo si no puede leer
+ * `usuarios`.
+ */
+export async function barrerLasCasillas(
+  supabase: SupabaseClient,
+  ahora: Date = new Date(),
+  presupuestoMs: number = 120_000
+): Promise<DelBarrido> {
+  const casillas = [...new Set((await casillasActivas(supabase)).map(comoCasilla))];
+  const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [] };
+  const empezo = Date.now();
+
+  for (let i = 0; i < casillas.length; i++) {
+    const casilla = casillas[i];
+    if (Date.now() - empezo > presupuestoMs) {
+      r.fallos.push(`Se cortó el barrido por tiempo: no se miraron ${casillas.slice(i).join(", ")}.`);
+      break;
+    }
+    r.casillas++;
+    try {
+      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora)) {
+        r.divergencias.push({ casilla, ...d });
+      }
+    } catch (e) {
+      r.fallos.push(`${casilla}: no se pudo revisar en el barrido: ${textoDe(e)}`);
+    }
+  }
+  return r;
 }

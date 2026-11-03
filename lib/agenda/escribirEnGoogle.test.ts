@@ -12,7 +12,7 @@ import {
   crearEvento, actualizarEvento, restaurarEvento, borrarEvento, leerEvento,
 } from "@/lib/core/calendar";
 import {
-  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, destrabar, parPendiente, parDivergencia, parEscrito, type FilaDivergida,
+  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, destrabar, parPendiente, parDivergencia, parEscrito, avisoDeUnBorradoFallido, type FilaDivergida,
 } from "./escribirEnGoogle";
 
 const EVENTO = {
@@ -467,5 +467,17 @@ describe("destrabar", () => {
     if (r.ok) return;
     expect(r.estado).toBe(502);
     expect(r.error).toContain("Google dijo: 503");
+  });
+});
+
+describe("avisoDeUnBorradoFallido", () => {
+  it("lleva lo que dijo Google sin traducir y dice que el evento sigue vivo", () => {
+    const a = avisoDeUnBorradoFallido("Google respondió 503");
+    expect(a).toContain("Google respondió 503");
+    expect(a).toMatch(/sigue vivo/);
+  });
+
+  it("nunca queda vacío", () => {
+    expect(avisoDeUnBorradoFallido("")).toMatch(/Google falló sin dar un mensaje/);
   });
 });

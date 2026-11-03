@@ -8,7 +8,7 @@ vi.mock("@/lib/core/calendar", () => ({
 
 import { abrirCanal, cerrarCanal, leerEvento } from "@/lib/core/calendar";
 import {
-  canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales,
+  canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales, barrerLasCasillas,
   ANTICIPO_DE_RENOVACION_MS,
 } from "./canales";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
@@ -420,5 +420,93 @@ describe("ponerAlDiaLosCanales", () => {
       agenda_canales: [{ id: "c1", casilla: "ana@polcecal.com", canal_id: "x", recurso_id: "y", vence: enHoras(24 * 6) }],
     });
     expect(await ponerAlDiaLosCanales(base.cliente, undefined, AHORA)).toEqual({ abiertos: [], renovados: [], fallos: [] });
+  });
+});
+
+// ── barrerLasCasillas ───────────────────────────────────────────────────────
+
+describe("barrerLasCasillas", () => {
+  it("revisa a todos los usuarios activos y anota lo que un canal no vio, igual que el webhook", async () => {
+    const base = baseEnMemoria({
+      usuarios: [
+        { id: "u1", email: CASILLA, activo: true },
+        { id: "u2", email: "ana@polcecal.com", activo: true },
+        { id: "u3", email: "baja@polcecal.com", activo: false },
+      ],
+      agenda_eventos: [
+        evento("1"),
+        evento("2", { casilla: "ana@polcecal.com", google_event_id: "g2" }),
+        evento("3", { casilla: "baja@polcecal.com", google_event_id: "g3" }),
+      ],
+    });
+    vi.mocked(leerEvento).mockImplementation(async (_c, id) =>
+      id === "g2" ? { id, ...IGUAL, inicio: "2026-11-04T10:00:00-03:00", fin: "2026-11-04T11:30:00-03:00" } : { id, ...IGUAL }
+    );
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.casillas).toBe(2);
+    expect(r.divergencias).toEqual([{ casilla: "ana@polcecal.com", evento_id: "2", divergencia: "movido" }]);
+    expect(r.fallos).toEqual([]);
+    // La misma escritura que el webhook: el par entero.
+    expect(base.tablas.agenda_eventos[1]).toMatchObject({ divergencia: "movido", divergencia_el: AHORA.toISOString() });
+    // Al de un usuario dado de baja no se lo mira.
+    expect(leerEvento).not.toHaveBeenCalledWith("baja@polcecal.com", expect.anything());
+  });
+
+  it("lo que ya estaba divergido no vuelve a marcarse: el barrido diario no reabre una alerta vista", async () => {
+    const vieja = "2026-11-02T10:00:00+00:00";
+    const base = baseEnMemoria({
+      usuarios: [{ id: "u1", email: CASILLA, activo: true }],
+      agenda_eventos: [evento("1", { divergencia: "borrado", divergencia_el: vieja })],
+    });
+    vi.mocked(leerEvento).mockResolvedValue(null);
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.divergencias).toEqual([]);
+    expect(base.tablas.agenda_eventos[0].divergencia_el).toBe(vieja);
+  });
+
+  it("una casilla que falla no corta a las otras, y el fallo la nombra", async () => {
+    const base = baseEnMemoria({
+      usuarios: [
+        { id: "u1", email: CASILLA, activo: true },
+        { id: "u2", email: "ana@polcecal.com", activo: true },
+      ],
+      agenda_eventos: [evento("1"), evento("2", { casilla: "ana@polcecal.com", google_event_id: "g2" })],
+    });
+    vi.mocked(leerEvento).mockImplementation(async (casilla) => {
+      if (casilla === CASILLA) throw new Error("Google respondió 503");
+      return null;
+    });
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.divergencias).toEqual([{ casilla: "ana@polcecal.com", evento_id: "2", divergencia: "borrado" }]);
+    expect(r.fallos).toHaveLength(1);
+    expect(r.fallos[0]).toContain(CASILLA);
+    expect(r.fallos[0]).toContain("503");
+  });
+
+  it("si se acaba el tiempo lo dice, con las casillas que no se miraron", async () => {
+    const base = baseEnMemoria({
+      usuarios: [
+        { id: "u1", email: CASILLA, activo: true },
+        { id: "u2", email: "ana@polcecal.com", activo: true },
+      ],
+      agenda_eventos: [],
+    });
+
+    const r = await barrerLasCasillas(base.cliente, AHORA, -1);
+
+    expect(r.casillas).toBe(0);
+    expect(r.fallos[0]).toContain(CASILLA);
+    expect(r.fallos[0]).toContain("ana@polcecal.com");
+  });
+
+  it("tira si no puede leer usuarios: no se miró nada", async () => {
+    const base = baseEnMemoria({ usuarios: [] }, { falla: { usuarios: { select: "sin base" } } });
+    await expect(barrerLasCasillas(base.cliente, AHORA)).rejects.toThrow(/sin base/);
   });
 });

@@ -266,6 +266,10 @@ el login lo intercepta y la Agenda deja de enterarse sin ningún error.
 las 5 UTC, renueva los canales que vencen en menos de 48 horas y registra cada fallo
 con el nombre de la casilla. Si el cartel de la última sincronización de
 `agenda / canales` está en rojo, esa casilla dejó de avisar o está por dejarlo.
+Además, el mismo cron **barre todas las casillas** (`agenda / barrido`): un canal
+recién abierto o vencido no vio lo que pasó mientras no estaba, y sin el barrido
+ese cambio no se detectaría nunca más. El aviso de Google es el movimiento y el
+barrido es la red.
 
 ## Asistente de IA
 
